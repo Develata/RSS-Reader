@@ -8,8 +8,8 @@ description: "极简个人 RSS 阅读器 MVP 的实现任务列表"
 **输入**：来自 `/specs/001-minimal-rss-reader/` 的设计文档  
 **前置条件**：`plan.md`、`spec.md`、`research.md`、`data-model.md`、`contracts/`、`quickstart.md`
 
-**测试**：本功能涉及解析、持久化、导入导出和状态流转，因此包含自动化测试；涉及 UI 行
-为，因此包含桌面/Web/Android 的手工验证任务。
+**测试**：本功能涉及解析、持久化、Web 本地存储、导入导出和状态流转，因此包含自动化
+测试；涉及 UI 行为，因此包含桌面/Web/Android 的手工验证任务。
 
 **组织方式**：任务按用户故事分组，确保每个故事都可以独立实现、独立验证和独立交付。
 
@@ -56,18 +56,22 @@ description: "极简个人 RSS 阅读器 MVP 的实现任务列表"
 - [ ] T014 创建基础设施导出入口 `crates/rssr-infra/src/lib.rs`
 - [ ] T015 [P] 创建 SQLite schema 与迁移 `migrations/0001_initial.sql`
 - [ ] T016 [P] 实现数据库模块骨架 `crates/rssr-infra/src/db/mod.rs`
-- [ ] T017 [P] 实现订阅抓取客户端骨架 `crates/rssr-infra/src/fetch/mod.rs`
-- [ ] T018 [P] 实现 RSS/Atom 解析模块骨架 `crates/rssr-infra/src/parser/mod.rs`
-- [ ] T019 [P] 实现 OPML 模块骨架 `crates/rssr-infra/src/opml/mod.rs`
-- [ ] T020 [P] 实现配置交换模块骨架 `crates/rssr-infra/src/config_sync/mod.rs`
-- [ ] T021 创建应用服务导出入口 `crates/rssr-application/src/lib.rs`
-- [ ] T022 [P] 创建订阅应用服务骨架 `crates/rssr-application/src/feed_service.rs`
-- [ ] T023 [P] 创建文章应用服务骨架 `crates/rssr-application/src/entry_service.rs`
-- [ ] T024 [P] 创建设置应用服务骨架 `crates/rssr-application/src/settings_service.rs`
-- [ ] T025 [P] 创建导入导出应用服务骨架 `crates/rssr-application/src/import_export_service.rs`
-- [ ] T026 配置日志与错误处理基础设施 `crates/rssr-app/src/main.rs`
-- [ ] T027 [P] 添加数据库迁移与仓储验证测试 `tests/integration/test_sqlite_bootstrap.rs`
-- [ ] T028 [P] 添加解析与去重基础验证测试 `tests/integration/test_feed_parse_dedup.rs`
+- [ ] T017 [P] 实现存储后端抽象 `crates/rssr-infra/src/db/storage_backend.rs`
+- [ ] T018 [P] 实现原生 SQLite 持久化后端 `crates/rssr-infra/src/db/sqlite_native.rs`
+- [ ] T019 [P] 实现 Web wasm SQLite + IndexedDB 持久化后端 `crates/rssr-infra/src/db/sqlite_web.rs`
+- [ ] T020 [P] 实现订阅抓取客户端骨架 `crates/rssr-infra/src/fetch/mod.rs`
+- [ ] T021 [P] 实现 RSS/Atom 解析模块骨架 `crates/rssr-infra/src/parser/mod.rs`
+- [ ] T022 [P] 实现 OPML 模块骨架 `crates/rssr-infra/src/opml/mod.rs`
+- [ ] T023 [P] 实现配置交换模块骨架 `crates/rssr-infra/src/config_sync/mod.rs`
+- [ ] T024 创建应用服务导出入口 `crates/rssr-application/src/lib.rs`
+- [ ] T025 [P] 创建订阅应用服务骨架 `crates/rssr-application/src/feed_service.rs`
+- [ ] T026 [P] 创建文章应用服务骨架 `crates/rssr-application/src/entry_service.rs`
+- [ ] T027 [P] 创建设置应用服务骨架 `crates/rssr-application/src/settings_service.rs`
+- [ ] T028 [P] 创建导入导出应用服务骨架 `crates/rssr-application/src/import_export_service.rs`
+- [ ] T029 配置日志与错误处理基础设施 `crates/rssr-app/src/main.rs`
+- [ ] T030 [P] 添加数据库迁移与仓储验证测试 `tests/integration/test_sqlite_bootstrap.rs`
+- [ ] T031 [P] 添加解析与去重基础验证测试 `tests/integration/test_feed_parse_dedup.rs`
+- [ ] T032 [P] 添加 Web 本地持久化验证测试 `tests/integration/test_web_sqlite_persistence.rs`
 
 **检查点**：基础能力已具备，用户故事实现可以开始。
 
@@ -82,24 +86,24 @@ feed 之外的远端服务。
 
 ### 用户故事 1 的验证
 
-- [ ] T029 [P] [US1] 添加订阅抓取与文章入库集成测试 `tests/integration/test_feed_refresh_flow.rs`
-- [ ] T030 [P] [US1] 添加阅读列表与阅读页手工验证说明 `specs/001-minimal-rss-reader/quickstart.md`
+- [ ] T033 [P] [US1] 添加订阅抓取与文章入库集成测试 `tests/integration/test_feed_refresh_flow.rs`
+- [ ] T034 [P] [US1] 添加阅读列表与阅读页手工验证说明 `specs/001-minimal-rss-reader/quickstart.md`
 
 ### 用户故事 1 的实现
 
-- [ ] T031 [P] [US1] 实现订阅源 SQLite 仓储 `crates/rssr-infra/src/db/feed_repository.rs`
-- [ ] T032 [P] [US1] 实现文章 SQLite 仓储与去重更新逻辑 `crates/rssr-infra/src/db/entry_repository.rs`
-- [ ] T033 [P] [US1] 实现条件请求抓取逻辑 `crates/rssr-infra/src/fetch/client.rs`
-- [ ] T034 [P] [US1] 实现 RSS/Atom 解析与字段归一化 `crates/rssr-infra/src/parser/feed_parser.rs`
-- [ ] T035 [US1] 实现添加订阅与刷新用例 `crates/rssr-application/src/feed_service.rs`
-- [ ] T036 [US1] 实现文章列表与阅读用例 `crates/rssr-application/src/entry_service.rs`
-- [ ] T037 [P] [US1] 实现应用路由与页面骨架 `crates/rssr-app/src/router.rs`
-- [ ] T038 [P] [US1] 实现订阅侧栏页面 `crates/rssr-app/src/pages/feeds_page.rs`
-- [ ] T039 [P] [US1] 实现文章列表页面 `crates/rssr-app/src/pages/entries_page.rs`
-- [ ] T040 [P] [US1] 实现阅读页 `crates/rssr-app/src/pages/reader_page.rs`
-- [ ] T041 [US1] 接线应用初始化与本地数据库启动流程 `crates/rssr-app/src/app.rs`
-- [ ] T042 [US1] 添加刷新错误反馈与空状态处理 `crates/rssr-app/src/components/status_banner.rs`
-- [ ] T043 [US1] 确认订阅刷新和文章列表性能满足计划目标 `tests/manual/us1-performance-checklist.md`
+- [ ] T035 [P] [US1] 实现订阅源 SQLite 仓储 `crates/rssr-infra/src/db/feed_repository.rs`
+- [ ] T036 [P] [US1] 实现文章 SQLite 仓储与去重更新逻辑 `crates/rssr-infra/src/db/entry_repository.rs`
+- [ ] T037 [P] [US1] 实现条件请求抓取逻辑 `crates/rssr-infra/src/fetch/client.rs`
+- [ ] T038 [P] [US1] 实现 RSS/Atom 解析与字段归一化 `crates/rssr-infra/src/parser/feed_parser.rs`
+- [ ] T039 [US1] 实现添加订阅与刷新用例 `crates/rssr-application/src/feed_service.rs`
+- [ ] T040 [US1] 实现文章列表与阅读用例 `crates/rssr-application/src/entry_service.rs`
+- [ ] T041 [P] [US1] 实现应用路由与页面骨架 `crates/rssr-app/src/router.rs`
+- [ ] T042 [P] [US1] 实现订阅侧栏页面 `crates/rssr-app/src/pages/feeds_page.rs`
+- [ ] T043 [P] [US1] 实现文章列表页面 `crates/rssr-app/src/pages/entries_page.rs`
+- [ ] T044 [P] [US1] 实现阅读页 `crates/rssr-app/src/pages/reader_page.rs`
+- [ ] T045 [US1] 接线应用初始化与原生/Web 数据库启动流程 `crates/rssr-app/src/app.rs`
+- [ ] T046 [US1] 添加刷新错误反馈与空状态处理 `crates/rssr-app/src/components/status_banner.rs`
+- [ ] T047 [US1] 确认订阅刷新和文章列表性能满足计划目标 `tests/manual/us1-performance-checklist.md`
 
 **检查点**：此时用户故事 1 应完整可用，并可独立演示为 MVP。
 
@@ -114,18 +118,18 @@ feed 之外的远端服务。
 
 ### 用户故事 2 的验证
 
-- [ ] T044 [P] [US2] 添加已读收藏状态与标题搜索集成测试 `tests/integration/test_entry_state_and_search.rs`
-- [ ] T045 [P] [US2] 添加桌面快捷键与筛选交互手工验证说明 `tests/manual/us2-interaction-checklist.md`
+- [ ] T048 [P] [US2] 添加已读收藏状态与标题搜索集成测试 `tests/integration/test_entry_state_and_search.rs`
+- [ ] T049 [P] [US2] 添加桌面快捷键与筛选交互手工验证说明 `tests/manual/us2-interaction-checklist.md`
 
 ### 用户故事 2 的实现
 
-- [ ] T046 [P] [US2] 扩展文章仓储以支持状态更新和标题搜索 `crates/rssr-infra/src/db/entry_repository.rs`
-- [ ] T047 [US2] 实现已读、收藏、筛选和标题搜索用例 `crates/rssr-application/src/entry_service.rs`
-- [ ] T048 [P] [US2] 实现文章列表筛选与搜索组件 `crates/rssr-app/src/components/entry_filters.rs`
-- [ ] T049 [P] [US2] 在文章列表中接入已读/收藏交互 `crates/rssr-app/src/pages/entries_page.rs`
-- [ ] T050 [P] [US2] 在阅读页中接入已读/收藏交互 `crates/rssr-app/src/pages/reader_page.rs`
-- [ ] T051 [US2] 实现桌面快捷键支持 `crates/rssr-app/src/hooks/use_reader_shortcuts.rs`
-- [ ] T052 [US2] 确认状态切换、筛选和搜索在 10,000 篇文章规模下保持响应 `tests/manual/us2-performance-checklist.md`
+- [ ] T050 [P] [US2] 扩展文章仓储以支持状态更新和标题搜索 `crates/rssr-infra/src/db/entry_repository.rs`
+- [ ] T051 [US2] 实现已读、收藏、筛选和标题搜索用例 `crates/rssr-application/src/entry_service.rs`
+- [ ] T052 [P] [US2] 实现文章列表筛选与搜索组件 `crates/rssr-app/src/components/entry_filters.rs`
+- [ ] T053 [P] [US2] 在文章列表中接入已读/收藏交互 `crates/rssr-app/src/pages/entries_page.rs`
+- [ ] T054 [P] [US2] 在阅读页中接入已读/收藏交互 `crates/rssr-app/src/pages/reader_page.rs`
+- [ ] T055 [US2] 实现桌面快捷键支持 `crates/rssr-app/src/hooks/use_reader_shortcuts.rs`
+- [ ] T056 [US2] 确认状态切换、筛选和搜索在 10,000 篇文章规模下保持响应 `tests/manual/us2-performance-checklist.md`
 
 **检查点**：此时用户故事 1 和 2 都应可独立工作。
 
@@ -140,21 +144,21 @@ feed 之外的远端服务。
 
 ### 用户故事 3 的验证
 
-- [ ] T053 [P] [US3] 添加配置包导入导出测试 `tests/integration/test_config_package_io.rs`
-- [ ] T054 [P] [US3] 添加 OPML 互操作测试 `tests/integration/test_opml_interop.rs`
-- [ ] T055 [P] [US3] 添加配置交换手工验证说明 `tests/manual/us3-config-exchange-checklist.md`
+- [ ] T057 [P] [US3] 添加配置包导入导出测试 `tests/integration/test_config_package_io.rs`
+- [ ] T058 [P] [US3] 添加 OPML 互操作测试 `tests/integration/test_opml_interop.rs`
+- [ ] T059 [P] [US3] 添加配置交换手工验证说明 `tests/manual/us3-config-exchange-checklist.md`
 
 ### 用户故事 3 的实现
 
-- [ ] T056 [P] [US3] 实现配置包序列化与校验 `crates/rssr-infra/src/config_sync/file_format.rs`
-- [ ] T057 [P] [US3] 实现 WebDAV 配置上传下载客户端 `crates/rssr-infra/src/config_sync/webdav.rs`
-- [ ] T058 [P] [US3] 实现 OPML 导入导出逻辑 `crates/rssr-infra/src/opml/mod.rs`
-- [ ] T059 [US3] 实现配置导入导出与远端交换用例 `crates/rssr-application/src/import_export_service.rs`
-- [ ] T060 [US3] 实现用户偏好设置读写用例 `crates/rssr-application/src/settings_service.rs`
-- [ ] T061 [P] [US3] 实现设置页面 `crates/rssr-app/src/pages/settings_page.rs`
-- [ ] T062 [P] [US3] 接入 OPML 与配置包导入导出入口 `crates/rssr-app/src/pages/feeds_page.rs`
-- [ ] T063 [P] [US3] 接入 WebDAV 配置交换入口 `crates/rssr-app/src/pages/settings_page.rs`
-- [ ] T064 [US3] 确认远端配置交换只包含订阅源和偏好设置 `tests/manual/us3-boundary-checklist.md`
+- [ ] T060 [P] [US3] 实现配置包序列化与语义校验 `crates/rssr-infra/src/config_sync/file_format.rs`
+- [ ] T061 [P] [US3] 实现 WebDAV 配置上传下载客户端 `crates/rssr-infra/src/config_sync/webdav.rs`
+- [ ] T062 [P] [US3] 实现 OPML 导入导出逻辑 `crates/rssr-infra/src/opml/mod.rs`
+- [ ] T063 [US3] 实现配置导入导出与远端交换用例 `crates/rssr-application/src/import_export_service.rs`
+- [ ] T064 [US3] 实现用户偏好设置读写用例 `crates/rssr-application/src/settings_service.rs`
+- [ ] T065 [P] [US3] 实现设置页面 `crates/rssr-app/src/pages/settings_page.rs`
+- [ ] T066 [P] [US3] 接入 OPML 与配置包导入导出入口 `crates/rssr-app/src/pages/feeds_page.rs`
+- [ ] T067 [P] [US3] 接入 WebDAV 配置交换入口 `crates/rssr-app/src/pages/settings_page.rs`
+- [ ] T068 [US3] 确认远端配置交换只包含订阅源和偏好设置 `tests/manual/us3-boundary-checklist.md`
 
 **检查点**：此时所有用户故事都应可独立工作。
 
@@ -164,11 +168,11 @@ feed 之外的远端服务。
 
 **目的**：补齐文档、体验验证和发布前整理。
 
-- [ ] T065 [P] 更新快速开始与使用说明 `specs/001-minimal-rss-reader/quickstart.md`
-- [ ] T066 清理跨 crate 公共接口与无用抽象 `crates/rssr-application/src/lib.rs`
-- [ ] T067 [P] 补充高风险回归测试 `tests/integration/test_regression_smoke.rs`
-- [ ] T068 [P] 验证配置包 schema 与实现保持一致 `specs/001-minimal-rss-reader/contracts/config-package.schema.json`
-- [ ] T069 运行并记录完整手工验收结果 `tests/manual/final-acceptance-checklist.md`
+- [ ] T069 [P] 更新快速开始与使用说明 `specs/001-minimal-rss-reader/quickstart.md`
+- [ ] T070 清理跨 crate 公共接口与无用抽象 `crates/rssr-application/src/lib.rs`
+- [ ] T071 [P] 补充高风险回归测试 `tests/integration/test_regression_smoke.rs`
+- [ ] T072 [P] 验证配置包 schema 与实现保持一致 `specs/001-minimal-rss-reader/contracts/config-package.schema.json`
+- [ ] T073 运行并记录完整手工验收结果 `tests/manual/final-acceptance-checklist.md`
 
 ---
 
@@ -199,7 +203,7 @@ feed 之外的远端服务。
 ### 并行机会
 
 - Phase 1 中的 crate 配置和工具配置可并行。
-- Phase 2 中的领域模型、抓取、解析、OPML 和配置交换骨架可并行。
+- Phase 2 中的领域模型、原生 SQLite、Web 持久化、抓取、解析、OPML 和配置交换骨架可并行。
 - 用户故事 1 中的订阅页、文章列表页和阅读页页面实现可并行。
 - 用户故事 2 中的筛选组件、快捷键和阅读页状态操作可并行。
 - 用户故事 3 中的 OPML、配置包和 WebDAV 模块可并行。
@@ -210,14 +214,14 @@ feed 之外的远端服务。
 
 ```bash
 # 一起启动用户故事 1 的基础实现：
-Task: "T031 [US1] 实现订阅源 SQLite 仓储 `crates/rssr-infra/src/db/feed_repository.rs`"
-Task: "T033 [US1] 实现条件请求抓取逻辑 `crates/rssr-infra/src/fetch/client.rs`"
-Task: "T034 [US1] 实现 RSS/Atom 解析与字段归一化 `crates/rssr-infra/src/parser/feed_parser.rs`"
+Task: "T035 [US1] 实现订阅源 SQLite 仓储 `crates/rssr-infra/src/db/feed_repository.rs`"
+Task: "T037 [US1] 实现条件请求抓取逻辑 `crates/rssr-infra/src/fetch/client.rs`"
+Task: "T038 [US1] 实现 RSS/Atom 解析与字段归一化 `crates/rssr-infra/src/parser/feed_parser.rs`"
 
 # 一起启动用户故事 1 的 UI 页面：
-Task: "T038 [US1] 实现订阅侧栏页面 `crates/rssr-app/src/pages/feeds_page.rs`"
-Task: "T039 [US1] 实现文章列表页面 `crates/rssr-app/src/pages/entries_page.rs`"
-Task: "T040 [US1] 实现阅读页 `crates/rssr-app/src/pages/reader_page.rs`"
+Task: "T042 [US1] 实现订阅侧栏页面 `crates/rssr-app/src/pages/feeds_page.rs`"
+Task: "T043 [US1] 实现文章列表页面 `crates/rssr-app/src/pages/entries_page.rs`"
+Task: "T044 [US1] 实现阅读页 `crates/rssr-app/src/pages/reader_page.rs`"
 ```
 
 ---
@@ -229,7 +233,7 @@ Task: "T040 [US1] 实现阅读页 `crates/rssr-app/src/pages/reader_page.rs`"
 1. 完成 Phase 1：初始化 workspace 和 crate。
 2. 完成 Phase 2：建好领域模型、存储、抓取、解析和应用服务骨架。
 3. 完成 Phase 3：实现订阅添加、刷新、文章列表和阅读页。
-4. 停下来执行 `T029`、`T030`、`T043`，验证 MVP 已可独立交付。
+4. 停下来执行 `T033`、`T034`、`T047`，验证 MVP 已可独立交付。
 
 ### 增量交付
 
@@ -247,7 +251,7 @@ Task: "T040 [US1] 实现阅读页 `crates/rssr-app/src/pages/reader_page.rs`"
 
 ## 备注
 
-- 共 69 个任务，全部符合 `- [ ] Txxx ...` 格式。
+- 共 73 个任务，全部符合 `- [ ] Txxx ...` 格式。
 - 用户故事任务均带 `[US1]`、`[US2]`、`[US3]` 标签。
 - 所有实现任务均包含明确文件路径，可直接执行。
 - 推荐 MVP 范围为 Phase 1 到 Phase 3。

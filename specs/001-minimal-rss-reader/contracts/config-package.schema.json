@@ -16,6 +16,8 @@
     },
     "feeds": {
       "type": "array",
+      "uniqueItems": true,
+      "$comment": "Schema 只能阻止完全相同的重复项。导入器仍必须按规范化 URL 执行唯一性校验并拒绝重复 feed。",
       "items": {
         "type": "object",
         "additionalProperties": false,

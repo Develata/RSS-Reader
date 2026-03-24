@@ -47,7 +47,8 @@
 |------|------|------|
 | id | 本地整数主键 | SQLite 主键 |
 | feed_id | 外键 | 关联订阅源 |
-| external_id | 文本 | 源内稳定标识 |
+| external_id | 文本，可空 | 源内稳定标识 |
+| dedup_key | 文本 | 持久化去重键 |
 | url | 文本，可空 | 原文链接 |
 | title | 文本 | 标题 |
 | author | 文本，可空 | 作者 |
@@ -67,14 +68,15 @@
 
 ### 校验规则
 
-- `(feed_id, external_id)` 必须唯一。
+- `(feed_id, dedup_key)` 必须唯一。
+- `dedup_key` 必须按以下优先级持久化生成：`external_id` → `url` → 归一化标题 + 发布时间。
 - `title` 不能为空；若源站缺失标题，需在应用层生成可用占位标题。
 - `content_html` 与 `content_text` 至少应有一种可用于阅读或搜索。
 
 ### 状态变化
 
 - 新建：首次抓取到该文章。
-- 更新：源站内容变化时更新摘要、正文、源端更新时间和内容摘要。
+- 更新：源站内容变化时更新摘要、正文、源端更新时间和内容摘要；同一 `dedup_key` 命中时不得新建重复记录。
 - 已读切换：`is_read` 与 `read_at` 联动。
 - 收藏切换：`is_starred` 与 `starred_at` 联动。
 
@@ -114,7 +116,7 @@
 ### 校验规则
 
 - `version` 必须是已支持版本。
-- `feeds` 中相同 URL 不得重复。
+- `feeds` 中相同规范 URL 不得重复，导入器在 schema 通过后仍必须执行语义去重校验。
 - 不允许包含文章正文、已读状态、收藏状态或搜索索引。
 
 ## 关系
@@ -127,7 +129,7 @@
 ## 索引与约束建议
 
 - `feeds.url` 唯一索引
-- `entries(feed_id, external_id)` 唯一索引
+- `entries(feed_id, dedup_key)` 唯一索引
 - `entries(feed_id, published_at DESC)` 索引
 - `entries(published_at DESC)` 索引
 - `entries(is_read, published_at DESC)` 索引
@@ -140,3 +142,4 @@
 - 配置交换永远是“覆盖式配置更新”，不是文章级合并。
 - 文章列表默认按发布时间倒序。
 - 标题搜索只作用于本地文章标题。
+- Web 端与原生端共享同一份 SQLite schema，只是持久化适配层不同。
