@@ -27,6 +27,7 @@ pub enum StartupView {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UserSettings {
     pub theme: ThemeMode,
     pub list_density: ListDensity,
@@ -48,6 +49,7 @@ impl Default for UserSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConfigFeed {
     pub url: String,
     pub title: Option<String>,
@@ -55,6 +57,7 @@ pub struct ConfigFeed {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConfigPackage {
     pub version: u32,
     pub exported_at: OffsetDateTime,

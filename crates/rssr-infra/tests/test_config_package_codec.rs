@@ -47,6 +47,26 @@ fn config_package_decode_rejects_invalid_feed_url() {
     assert!(error.to_string().contains("无效的 feed URL"), "unexpected error: {error:#}");
 }
 
+#[test]
+fn config_package_decode_rejects_unknown_top_level_property() {
+    let mut raw = serde_json::to_value(sample_package()).expect("serialize sample package");
+    raw["unexpected"] = json!(true);
+    let raw = serde_json::to_string(&raw).expect("encode invalid package");
+
+    let error = decode_config_package(&raw).expect_err("unknown top-level field must fail");
+    assert!(error.to_string().contains("unknown field"), "unexpected error: {error:#}");
+}
+
+#[test]
+fn config_package_decode_rejects_unknown_nested_property() {
+    let mut raw = serde_json::to_value(sample_package()).expect("serialize sample package");
+    raw["settings"]["unexpected"] = json!(true);
+    let raw = serde_json::to_string(&raw).expect("encode invalid package");
+
+    let error = decode_config_package(&raw).expect_err("unknown nested field must fail");
+    assert!(error.to_string().contains("unknown field"), "unexpected error: {error:#}");
+}
+
 fn sample_package() -> ConfigPackage {
     ConfigPackage {
         version: 1,
