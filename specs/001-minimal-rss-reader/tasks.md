@@ -156,9 +156,10 @@ feed 之外的远端服务。
 - [ ] T063 [US3] 实现配置导入导出与远端交换用例 `crates/rssr-application/src/import_export_service.rs`
 - [ ] T064 [US3] 实现用户偏好设置读写用例 `crates/rssr-application/src/settings_service.rs`
 - [ ] T065 [P] [US3] 实现设置页面 `crates/rssr-app/src/pages/settings_page.rs`
-- [ ] T066 [P] [US3] 接入 OPML 与配置包导入导出入口 `crates/rssr-app/src/pages/feeds_page.rs`
-- [ ] T067 [P] [US3] 接入 WebDAV 配置交换入口 `crates/rssr-app/src/pages/settings_page.rs`
-- [ ] T068 [US3] 确认远端配置交换只包含订阅源和偏好设置 `tests/manual/us3-boundary-checklist.md`
+- [ ] T066 [US3] 实现浅色/深色/跟随系统主题应用逻辑 `crates/rssr-app/src/theme/mod.rs`
+- [ ] T067 [P] [US3] 接入 OPML 与配置包导入导出入口 `crates/rssr-app/src/pages/feeds_page.rs`
+- [ ] T068 [P] [US3] 接入 WebDAV 配置交换入口 `crates/rssr-app/src/pages/settings_page.rs`
+- [ ] T069 [US3] 确认远端配置交换只包含订阅源和偏好设置，并验证主题设置能实际生效 `tests/manual/us3-boundary-checklist.md`
 
 **检查点**：此时所有用户故事都应可独立工作。
 
@@ -168,11 +169,11 @@ feed 之外的远端服务。
 
 **目的**：补齐文档、体验验证和发布前整理。
 
-- [ ] T069 [P] 更新快速开始与使用说明 `specs/001-minimal-rss-reader/quickstart.md`
-- [ ] T070 清理跨 crate 公共接口与无用抽象 `crates/rssr-application/src/lib.rs`
-- [ ] T071 [P] 补充高风险回归测试 `tests/integration/test_regression_smoke.rs`
-- [ ] T072 [P] 验证配置包 schema 与实现保持一致 `specs/001-minimal-rss-reader/contracts/config-package.schema.json`
-- [ ] T073 运行并记录完整手工验收结果 `tests/manual/final-acceptance-checklist.md`
+- [ ] T070 [P] 更新快速开始与使用说明 `specs/001-minimal-rss-reader/quickstart.md`
+- [ ] T071 清理跨 crate 公共接口与无用抽象 `crates/rssr-application/src/lib.rs`
+- [ ] T072 [P] 补充高风险回归测试 `tests/integration/test_regression_smoke.rs`
+- [ ] T073 [P] 验证配置包 schema 与实现保持一致 `specs/001-minimal-rss-reader/contracts/config-package.schema.json`
+- [ ] T074 运行并记录完整手工验收结果 `tests/manual/final-acceptance-checklist.md`
 
 ---
 
@@ -251,7 +252,7 @@ Task: "T044 [US1] 实现阅读页 `crates/rssr-app/src/pages/reader_page.rs`"
 
 ## 备注
 
-- 共 73 个任务，全部符合 `- [ ] Txxx ...` 格式。
+- 共 74 个任务，全部符合 `- [ ] Txxx ...` 格式。
 - 用户故事任务均带 `[US1]`、`[US2]`、`[US3]` 标签。
 - 所有实现任务均包含明确文件路径，可直接执行。
 - 推荐 MVP 范围为 Phase 1 到 Phase 3。

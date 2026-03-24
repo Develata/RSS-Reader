@@ -170,12 +170,29 @@ extract_plan_field() {
     local field_pattern="$1"
     local plan_file="$2"
     
-    grep "^\*\*${field_pattern}\*\*: " "$plan_file" 2>/dev/null | \
+    grep -E "^\*\*${field_pattern}\*\*[:：] " "$plan_file" 2>/dev/null | \
         head -1 | \
-        sed "s|^\*\*${field_pattern}\*\*: ||" | \
+        sed -E "s|^\*\*${field_pattern}\*\*[:：] ||" | \
         sed 's/^[ \t]*//;s/[ \t]*$//' | \
         grep -v "NEEDS CLARIFICATION" | \
         grep -v "^N/A$" || echo ""
+}
+
+extract_plan_field_multi() {
+    local plan_file="$1"
+    shift
+
+    local field_name
+    for field_name in "$@"; do
+        local value
+        value=$(extract_plan_field "$field_name" "$plan_file")
+        if [[ -n "$value" ]]; then
+            echo "$value"
+            return 0
+        fi
+    done
+
+    echo ""
 }
 
 parse_plan_data() {
@@ -193,10 +210,10 @@ parse_plan_data() {
     
     log_info "Parsing plan data from $plan_file"
     
-    NEW_LANG=$(extract_plan_field "Language/Version" "$plan_file")
-    NEW_FRAMEWORK=$(extract_plan_field "Primary Dependencies" "$plan_file")
-    NEW_DB=$(extract_plan_field "Storage" "$plan_file")
-    NEW_PROJECT_TYPE=$(extract_plan_field "Project Type" "$plan_file")
+    NEW_LANG=$(extract_plan_field_multi "$plan_file" "Language/Version" "语言/版本")
+    NEW_FRAMEWORK=$(extract_plan_field_multi "$plan_file" "Primary Dependencies" "主要依赖")
+    NEW_DB=$(extract_plan_field_multi "$plan_file" "Storage" "存储")
+    NEW_PROJECT_TYPE=$(extract_plan_field_multi "$plan_file" "Project Type" "项目类型")
     
     # Log what we found
     if [[ -n "$NEW_LANG" ]]; then
