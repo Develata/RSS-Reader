@@ -1,8 +1,3 @@
-#[derive(Debug, Clone, Default)]
-pub struct FeedParser;
+pub mod feed_parser;
 
-impl FeedParser {
-    pub fn new() -> Self {
-        Self
-    }
-}
+pub use feed_parser::{FeedParser, ParsedEntry, ParsedFeed};

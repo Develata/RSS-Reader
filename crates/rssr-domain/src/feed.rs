@@ -8,6 +8,8 @@ pub struct Feed {
     pub title: Option<String>,
     pub site_url: Option<Url>,
     pub description: Option<String>,
+    pub icon_url: Option<Url>,
+    pub folder: Option<String>,
     pub etag: Option<String>,
     pub last_modified: Option<String>,
     pub last_fetched_at: Option<OffsetDateTime>,

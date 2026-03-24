@@ -1,8 +1,3 @@
-#[derive(Debug, Clone, Default)]
-pub struct FetchClient;
+pub mod client;
 
-impl FetchClient {
-    pub fn new() -> Self {
-        Self
-    }
-}
+pub use client::{FetchClient, FetchRequest, FetchResult, HttpMetadata};

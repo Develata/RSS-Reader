@@ -63,6 +63,10 @@ mod tests {
             Ok(self.feeds.clone())
         }
 
+        async fn get_feed(&self, feed_id: i64) -> rssr_domain::Result<Option<Feed>> {
+            Ok(self.feeds.iter().find(|feed| feed.id == feed_id).cloned())
+        }
+
         async fn list_summaries(&self) -> rssr_domain::Result<Vec<FeedSummary>> {
             Ok(Vec::new())
         }
@@ -92,6 +96,8 @@ mod tests {
             title: Some("Example".to_string()),
             site_url: None,
             description: None,
+            icon_url: None,
+            folder: Some("Tech".to_string()),
             etag: None,
             last_modified: None,
             last_fetched_at: None,
@@ -107,6 +113,8 @@ mod tests {
             title: Some("Deleted".to_string()),
             site_url: None,
             description: None,
+            icon_url: None,
+            folder: Some("Archive".to_string()),
             etag: None,
             last_modified: None,
             last_fetched_at: None,

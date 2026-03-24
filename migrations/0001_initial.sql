@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS feeds (
     site_url TEXT,
     description TEXT,
     icon_url TEXT,
+    folder TEXT,
     etag TEXT,
     last_modified TEXT,
     last_fetched_at TEXT,
