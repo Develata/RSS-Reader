@@ -169,10 +169,26 @@ validate_environment() {
 extract_plan_field() {
     local field_pattern="$1"
     local plan_file="$2"
-    
-    grep -E "^\*\*${field_pattern}\*\*[:：] " "$plan_file" 2>/dev/null | \
-        head -1 | \
-        sed -E "s|^\*\*${field_pattern}\*\*[:：] ||" | \
+
+    local prefix_ascii="**${field_pattern}**: "
+    local prefix_fullwidth="**${field_pattern}**："
+    local line=""
+
+    while IFS= read -r current_line; do
+        case "$current_line" in
+            "$prefix_ascii"*)
+                line="${current_line#"$prefix_ascii"}"
+                break
+                ;;
+            "$prefix_fullwidth"*)
+                line="${current_line#"$prefix_fullwidth"}"
+                line="${line# }"
+                break
+                ;;
+        esac
+    done < "$plan_file"
+
+    printf '%s\n' "$line" | \
         sed 's/^[ \t]*//;s/[ \t]*$//' | \
         grep -v "NEEDS CLARIFICATION" | \
         grep -v "^N/A$" || echo ""
