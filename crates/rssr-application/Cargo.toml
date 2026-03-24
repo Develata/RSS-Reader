@@ -10,3 +10,5 @@ anyhow.workspace = true
 async-trait.workspace = true
 rssr-domain = { path = "../rssr-domain" }
 time.workspace = true
+tokio.workspace = true
+url.workspace = true

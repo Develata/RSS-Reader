@@ -24,7 +24,7 @@ serde_json = "1"
 sqlx = { version = "0.8", default-features = false, features = ["macros", "migrate", "runtime-tokio-rustls", "sqlite", "time"] }
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
-time = { version = "0.3", features = ["formatting", "macros", "parsing", "serde"] }
+time = { version = "0.3", features = ["formatting", "macros", "parsing", "serde", "serde-human-readable"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = { version = "2", features = ["serde"] }

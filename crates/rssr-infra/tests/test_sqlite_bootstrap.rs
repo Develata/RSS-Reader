@@ -1,4 +1,6 @@
-use rssr_infra::db::{migrate, sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend};
+use rssr_infra::db::{
+    migrate, sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
+};
 use sqlx::Row;
 
 #[tokio::test]

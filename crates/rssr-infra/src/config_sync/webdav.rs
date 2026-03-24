@@ -6,9 +6,6 @@ pub struct WebDavConfigSync {
 
 impl WebDavConfigSync {
     pub fn new(endpoint: impl Into<String>, remote_path: impl Into<String>) -> Self {
-        Self {
-            endpoint: endpoint.into(),
-            remote_path: remote_path.into(),
-        }
+        Self { endpoint: endpoint.into(), remote_path: remote_path.into() }
     }
 }

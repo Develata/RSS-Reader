@@ -1372,6 +1372,8 @@ dependencies = [
  "async-trait",
  "rssr-domain",
  "time",
+ "tokio",
+ "url",
 ]
 
 [[package]]

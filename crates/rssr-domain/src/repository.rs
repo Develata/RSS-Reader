@@ -11,6 +11,7 @@ pub trait HealthRepository {
 #[async_trait::async_trait]
 pub trait FeedRepository: Send + Sync {
     async fn upsert_subscription(&self, new_feed: &NewFeedSubscription) -> crate::Result<Feed>;
+    async fn list_feeds(&self) -> crate::Result<Vec<Feed>>;
     async fn list_summaries(&self) -> crate::Result<Vec<FeedSummary>>;
 }
 

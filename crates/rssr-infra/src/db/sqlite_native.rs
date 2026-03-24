@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::db::{create_sqlite_pool, migrate, storage_backend::StorageBackend, SqlitePool};
+use crate::db::{SqlitePool, create_sqlite_pool, migrate, storage_backend::StorageBackend};
 
 #[derive(Debug, Clone)]
 pub struct NativeSqliteBackend {
@@ -9,9 +9,7 @@ pub struct NativeSqliteBackend {
 
 impl NativeSqliteBackend {
     pub fn new(database_url: impl Into<String>) -> Self {
-        Self {
-            database_url: database_url.into(),
-        }
+        Self { database_url: database_url.into() }
     }
 }
 
