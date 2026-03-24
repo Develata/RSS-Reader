@@ -1,0 +1,11 @@
+[package]
+name = "rssr-application"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+rssr-domain = { path = "../rssr-domain" }
+

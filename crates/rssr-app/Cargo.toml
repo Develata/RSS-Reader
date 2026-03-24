@@ -1,0 +1,14 @@
+[package]
+name = "rssr-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+dioxus.workspace = true
+dioxus-router.workspace = true
+rssr-application = { path = "../rssr-application" }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
