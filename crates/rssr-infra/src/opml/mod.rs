@@ -1,7 +1,7 @@
 #[derive(Debug, Clone, Default)]
-pub struct FeedParser;
+pub struct OpmlCodec;
 
-impl FeedParser {
+impl OpmlCodec {
     pub fn new() -> Self {
         Self
     }

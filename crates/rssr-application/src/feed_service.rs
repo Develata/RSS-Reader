@@ -1,10 +1,23 @@
-use crate::dto::AppHealth;
+use std::sync::Arc;
 
-pub struct FeedService;
+use anyhow::Result;
+use rssr_domain::{FeedRepository, FeedSummary, NewFeedSubscription};
 
-impl FeedService {
-    pub fn health(&self) -> AppHealth {
-        AppHealth { ready: true }
-    }
+pub struct FeedService {
+    repository: Arc<dyn FeedRepository>,
 }
 
+impl FeedService {
+    pub fn new(repository: Arc<dyn FeedRepository>) -> Self {
+        Self { repository }
+    }
+
+    pub async fn add_subscription(&self, new_feed: &NewFeedSubscription) -> Result<()> {
+        self.repository.upsert_subscription(new_feed).await?;
+        Ok(())
+    }
+
+    pub async fn list_feeds(&self) -> Result<Vec<FeedSummary>> {
+        Ok(self.repository.list_summaries().await?)
+    }
+}

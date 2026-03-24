@@ -1,11 +1,23 @@
-use rssr_domain::HealthRepository;
+pub mod sqlite_native;
+pub mod sqlite_web;
+pub mod storage_backend;
 
-#[derive(Debug, Default)]
-pub struct InMemoryHealthRepository;
+use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
 
-impl HealthRepository for InMemoryHealthRepository {
-    fn is_ready(&self) -> bool {
-        true
-    }
+pub type SqlitePool = Pool<Sqlite>;
+
+pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../migrations");
+
+pub async fn create_sqlite_pool(database_url: &str) -> anyhow::Result<SqlitePool> {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(database_url)
+        .await?;
+
+    Ok(pool)
 }
 
+pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
+    MIGRATOR.run(pool).await?;
+    Ok(())
+}

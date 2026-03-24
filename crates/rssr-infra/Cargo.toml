@@ -6,5 +6,14 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
 rssr-domain = { path = "../rssr-domain" }
-
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
