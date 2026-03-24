@@ -50,3 +50,10 @@ specs/
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
+
+## Active Technologies
+- Rust 稳定版（Edition 2024） + Dioxus、dioxus-router、tokio、sqlx、reqwest、feed-rs、quick-xml、serde、serde_json、thiserror、anyhow、tracing、time、url、wasm SQLite 持久化适配层 (001-minimal-rss-reader)
+- 桌面端和 Android 使用本地 SQLite；Web 使用 wasm SQLite，并将数据库文件持久化到 IndexedDB；配置交换使用本地配置文件与 OPML/JSON 导入导出文件 (001-minimal-rss-reader)
+
+## Recent Changes
+- 001-minimal-rss-reader: Added Rust 稳定版（Edition 2024） + Dioxus、dioxus-router、tokio、sqlx、reqwest、feed-rs、quick-xml、serde、serde_json、thiserror、anyhow、tracing、time、url、wasm SQLite 持久化适配层
