@@ -89,7 +89,7 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 - [X] T029 [P] [US1] 实现空状态与错误提示组件 `crates/rssr-app/src/components/status_banner.rs`
 - [X] T030 [US1] 接线应用启动、初始加载与后端选择流程 `crates/rssr-app/src/app.rs`
 - [X] T031 [US1] 更新页面导出入口以纳入 MVP 页面结构 `crates/rssr-app/src/pages/mod.rs`
-- [ ] T032 [US1] 记录 MVP 刷新与阅读性能检查结果 `tests/manual/us1-performance-checklist.md`
+- [X] T032 [US1] 记录 MVP 刷新与阅读性能检查结果 `tests/manual/us1-performance-checklist.md`
 
 **检查点**：此时用户故事 1 应完整可用，并可独立演示为 MVP。
 
