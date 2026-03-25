@@ -24,7 +24,11 @@ impl ImportExportService {
             .await?
             .into_iter()
             .filter(|feed| !feed.is_deleted)
-            .map(|feed| ConfigFeed { url: feed.url.to_string(), title: feed.title, folder: None })
+            .map(|feed| ConfigFeed {
+                url: feed.url.to_string(),
+                title: feed.title,
+                folder: feed.folder,
+            })
             .collect();
 
         let settings = self.settings_repository.load().await?;
@@ -136,5 +140,6 @@ mod tests {
         assert_eq!(exported.feeds.len(), 1);
         assert_eq!(exported.feeds[0].url, "https://example.com/feed.xml");
         assert_eq!(exported.feeds[0].title.as_deref(), Some("Example"));
+        assert_eq!(exported.feeds[0].folder.as_deref(), Some("Tech"));
     }
 }

@@ -86,9 +86,18 @@ impl AppServices {
 
     pub async fn refresh_all(&self) -> anyhow::Result<()> {
         let feeds = self.feed_repository.list_feeds().await.context("读取订阅列表失败")?;
+        let mut errors = Vec::new();
         for feed in feeds {
-            self.refresh_feed(feed.id).await?;
+            if let Err(error) = self.refresh_feed(feed.id).await {
+                tracing::warn!(feed_id = feed.id, error = %error, "刷新订阅失败");
+                errors.push(format!("{}: {error}", feed.url));
+            }
         }
+
+        if !errors.is_empty() {
+            anyhow::bail!("部分订阅刷新失败: {}", errors.join(" | "));
+        }
+
         Ok(())
     }
 
@@ -125,6 +134,10 @@ impl AppServices {
             }
             FetchResult::Fetched { body, metadata } => {
                 let parsed = self.parser.parse(&body).context("解析订阅失败")?;
+                self.feed_repository
+                    .update_feed_metadata(feed.id, &parsed)
+                    .await
+                    .context("更新订阅元数据失败")?;
                 self.entry_repository
                     .upsert_entries(feed.id, &parsed.entries)
                     .await

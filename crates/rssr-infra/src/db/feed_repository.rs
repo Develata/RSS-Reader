@@ -6,6 +6,7 @@ use time::OffsetDateTime;
 use url::Url;
 
 use crate::db::SqlitePool;
+use crate::parser::ParsedFeed;
 
 #[derive(Clone)]
 pub struct SqliteFeedRepository {
@@ -46,6 +47,38 @@ impl SqliteFeedRepository {
         .bind(&now)
         .bind(last_success)
         .bind(fetch_error)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(DomainError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    pub async fn update_feed_metadata(
+        &self,
+        feed_id: i64,
+        parsed_feed: &ParsedFeed,
+    ) -> DomainResult<()> {
+        let now = now_rfc3339();
+        let result = sqlx::query(
+            r#"
+            UPDATE feeds
+            SET title = COALESCE(?2, title),
+                site_url = COALESCE(?3, site_url),
+                description = COALESCE(?4, description),
+                updated_at = ?5
+            WHERE id = ?1
+            "#,
+        )
+        .bind(feed_id)
+        .bind(parsed_feed.title.as_deref())
+        .bind(parsed_feed.site_url.as_ref().map(Url::as_str))
+        .bind(parsed_feed.description.as_deref())
+        .bind(&now)
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_error)?;

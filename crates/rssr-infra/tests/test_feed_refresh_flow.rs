@@ -62,6 +62,20 @@ async fn refresh_flow_stores_feed_and_deduplicated_entries() {
     assert_eq!(feeds.len(), 1);
     assert_eq!(feeds[0].unread_count, 1);
 
+    feed_repository
+        .update_feed_metadata(feed.id, &parsed)
+        .await
+        .expect("persist parsed feed metadata");
+
+    let stored_feed = feed_repository
+        .get_feed(feed.id)
+        .await
+        .expect("read stored feed")
+        .expect("feed must exist");
+    assert_eq!(stored_feed.title.as_deref(), Some("Example Feed"));
+    assert_eq!(stored_feed.description.as_deref(), Some("Example description"));
+    assert_eq!(stored_feed.site_url.as_ref().map(|url| url.as_str()), Some("https://example.com/"));
+
     let entries =
         entry_repository.list_entries(&EntryQuery::default()).await.expect("list entries");
     assert_eq!(entries.len(), 1);

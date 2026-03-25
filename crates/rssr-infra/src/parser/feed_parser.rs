@@ -59,7 +59,7 @@ fn normalize_entry(entry: FeedRsEntry) -> anyhow::Result<ParsedEntry> {
     let author = entry.authors.first().map(|author| author.name.clone());
     let summary = entry.summary.as_ref().map(text_content);
     let content_html = entry.content.as_ref().and_then(|content| content.body.clone());
-    let content_text = summary.clone().or_else(|| content_html.clone());
+    let content_text = summary.clone();
     ensure!(content_html.is_some() || content_text.is_some(), "文章 `{title}` 缺少可用正文");
 
     let published_at = entry.published.map(to_offset_datetime);

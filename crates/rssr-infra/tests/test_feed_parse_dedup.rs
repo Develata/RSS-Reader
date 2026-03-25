@@ -23,6 +23,21 @@ const SAMPLE_FEED: &str = r#"
 </rss>
 "#;
 
+const HTML_ONLY_FEED: &str = r#"
+<rss version="2.0">
+  <channel>
+    <title>HTML Feed</title>
+    <item>
+      <guid>entry-html</guid>
+      <title>HTML entry</title>
+      <link>https://example.com/html</link>
+      <content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/"><![CDATA[<p>Hello <strong>HTML</strong></p>]]></content:encoded>
+      <pubDate>Tue, 25 Mar 2026 10:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"#;
+
 #[test]
 fn parser_normalizes_feed_and_generates_stable_dedup_keys() {
     let parser = FeedParser::new();
@@ -33,4 +48,20 @@ fn parser_normalizes_feed_and_generates_stable_dedup_keys() {
     assert_eq!(parsed.entries[0].dedup_key, "entry-1");
     assert_eq!(parsed.entries[1].dedup_key, "https://example.com/hello");
     assert_eq!(parsed.entries[0].title, "Hello World");
+}
+
+#[test]
+fn parser_keeps_html_only_entries_in_content_html() {
+    let parser = FeedParser::new();
+    let parsed = parser.parse(HTML_ONLY_FEED).expect("parse html-only feed");
+
+    assert_eq!(parsed.entries.len(), 1);
+    assert!(
+        parsed.entries[0]
+            .content_html
+            .as_deref()
+            .unwrap_or_default()
+            .contains("<strong>HTML</strong>")
+    );
+    assert!(parsed.entries[0].content_text.is_none());
 }
