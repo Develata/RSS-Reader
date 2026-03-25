@@ -9,6 +9,7 @@ authors.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 rssr-domain = { path = "../rssr-domain" }
+serde_json.workspace = true
 time.workspace = true
 tokio.workspace = true
 url.workspace = true

@@ -126,14 +126,14 @@ feed 之外的远端服务。
 
 - [X] T035 [P] [US3] 添加配置包导入导出集成测试 `crates/rssr-infra/tests/test_config_package_io.rs`
 - [X] T036 [P] [US3] 添加 OPML 互操作测试 `crates/rssr-infra/tests/test_opml_interop.rs`
-- [ ] T037 [P] [US3] 添加配置交换手工验证说明 `tests/manual/us3-config-exchange-checklist.md`
+- [X] T037 [P] [US3] 添加配置交换手工验证说明 `tests/manual/us3-config-exchange-checklist.md`
 
 ### 用户故事 3 的实现
 
 - [X] T038 [P] [US3] 实现配置包文件读写与导入辅助逻辑 `crates/rssr-infra/src/config_sync/file_format.rs`
 - [X] T039 [P] [US3] 实现 WebDAV 配置上传下载客户端 `crates/rssr-infra/src/config_sync/webdav.rs`
 - [X] T040 [P] [US3] 实现 OPML 导入导出逻辑 `crates/rssr-infra/src/opml/mod.rs`
-- [ ] T041 [US3] 在导入导出服务中实现配置导入、导出和远端交换用例 `crates/rssr-application/src/import_export_service.rs`
+- [X] T041 [US3] 在导入导出服务中实现配置导入、导出和远端交换用例 `crates/rssr-application/src/import_export_service.rs`
 - [X] T042 [US3] 在设置服务中实现偏好设置读写与主题设置持久化 `crates/rssr-application/src/settings_service.rs`
 - [ ] T043 [P] [US3] 实现设置页面 `crates/rssr-app/src/pages/settings_page.rs`
 - [ ] T044 [US3] 实现浅色、深色和跟随系统主题逻辑 `crates/rssr-app/src/theme/mod.rs`
