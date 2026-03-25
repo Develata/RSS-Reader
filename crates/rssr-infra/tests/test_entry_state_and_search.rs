@@ -44,6 +44,7 @@ async fn entry_repository_updates_state_and_supports_search() {
         .upsert_subscription(&NewFeedSubscription {
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
+            folder: None,
         })
         .await
         .expect("create feed");

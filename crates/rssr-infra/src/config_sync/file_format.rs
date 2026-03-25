@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, fs, path::Path};
 
 use anyhow::{anyhow, ensure};
 use rssr_domain::ConfigPackage;
@@ -12,6 +12,17 @@ pub fn decode_config_package(raw: &str) -> anyhow::Result<ConfigPackage> {
     let package: ConfigPackage = serde_json::from_str(raw)?;
     validate_config_package(&package)?;
     Ok(package)
+}
+
+pub fn read_config_package(path: impl AsRef<Path>) -> anyhow::Result<ConfigPackage> {
+    let raw = fs::read_to_string(path)?;
+    decode_config_package(&raw)
+}
+
+pub fn write_config_package(path: impl AsRef<Path>, package: &ConfigPackage) -> anyhow::Result<()> {
+    let raw = encode_config_package(package)?;
+    fs::write(path, raw)?;
+    Ok(())
 }
 
 pub fn validate_config_package(package: &ConfigPackage) -> anyhow::Result<()> {

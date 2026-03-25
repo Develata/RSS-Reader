@@ -10,6 +10,7 @@ anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 feed-rs.workspace = true
+quick-xml.workspace = true
 reqwest.workspace = true
 rssr-domain = { path = "../rssr-domain" }
 serde.workspace = true
@@ -21,3 +22,6 @@ time.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 url.workspace = true
+
+[dev-dependencies]
+rssr-application = { path = "../rssr-application" }

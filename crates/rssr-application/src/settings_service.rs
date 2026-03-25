@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use rssr_domain::{SettingsRepository, UserSettings};
 
 pub struct SettingsService {
@@ -17,6 +17,11 @@ impl SettingsService {
     }
 
     pub async fn save(&self, settings: &UserSettings) -> Result<()> {
+        ensure!(settings.refresh_interval_minutes >= 1, "刷新间隔必须大于等于 1 分钟");
+        ensure!(
+            (0.8..=1.5).contains(&settings.reader_font_scale),
+            "阅读字号缩放必须在 0.8 到 1.5 之间"
+        );
         Ok(self.repository.save(settings).await?)
     }
 }

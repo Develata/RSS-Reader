@@ -122,16 +122,18 @@ impl FeedRepository for SqliteFeedRepository {
 
         sqlx::query(
             r#"
-            INSERT INTO feeds (url, title, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?3)
+            INSERT INTO feeds (url, title, folder, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?4)
             ON CONFLICT(url) DO UPDATE SET
                 title = COALESCE(excluded.title, feeds.title),
+                folder = COALESCE(excluded.folder, feeds.folder),
                 is_deleted = 0,
                 updated_at = excluded.updated_at
             "#,
         )
         .bind(new_feed.url.as_str())
         .bind(new_feed.title.as_deref())
+        .bind(new_feed.folder.as_deref())
         .bind(&now)
         .execute(&self.pool)
         .await
@@ -144,6 +146,30 @@ impl FeedRepository for SqliteFeedRepository {
             .map_err(map_sqlx_error)?;
 
         Self::row_to_feed(row).await
+    }
+
+    async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> DomainResult<()> {
+        let now = now_rfc3339();
+        let result = sqlx::query(
+            r#"
+            UPDATE feeds
+            SET is_deleted = ?2,
+                updated_at = ?3
+            WHERE id = ?1
+            "#,
+        )
+        .bind(feed_id)
+        .bind(if is_deleted { 1_i64 } else { 0_i64 })
+        .bind(&now)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(DomainError::NotFound);
+        }
+
+        Ok(())
     }
 
     async fn list_feeds(&self) -> DomainResult<Vec<Feed>> {

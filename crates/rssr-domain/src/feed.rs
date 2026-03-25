@@ -31,4 +31,5 @@ pub struct FeedSummary {
 pub struct NewFeedSubscription {
     pub url: Url,
     pub title: Option<String>,
+    pub folder: Option<String>,
 }

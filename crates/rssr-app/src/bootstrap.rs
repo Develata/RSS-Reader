@@ -88,7 +88,7 @@ impl AppServices {
         let url = Url::parse(raw_url).context("订阅 URL 不合法")?;
         let feed = self
             .feed_service
-            .add_subscription(&NewFeedSubscription { url, title: None })
+            .add_subscription(&NewFeedSubscription { url, title: None, folder: None })
             .await
             .context("保存订阅失败")?;
         self.refresh_feed(feed.id).await.context("首次刷新订阅失败")?;

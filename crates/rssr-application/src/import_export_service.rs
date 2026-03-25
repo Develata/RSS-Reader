@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
-use anyhow::Result;
-use rssr_domain::{ConfigFeed, ConfigPackage, FeedRepository, SettingsRepository};
+use anyhow::{Context, Result, ensure};
+use rssr_domain::{
+    ConfigFeed, ConfigPackage, FeedRepository, NewFeedSubscription, SettingsRepository,
+};
 use time::OffsetDateTime;
+use url::Url;
 
 pub struct ImportExportService {
     feed_repository: Arc<dyn FeedRepository>,
@@ -35,6 +38,46 @@ impl ImportExportService {
 
         Ok(ConfigPackage { version: 1, exported_at: OffsetDateTime::now_utc(), feeds, settings })
     }
+
+    pub async fn import_config_package(&self, package: &ConfigPackage) -> Result<()> {
+        validate_settings(&package.settings)?;
+
+        let current_feeds = self.feed_repository.list_feeds().await?;
+        let mut imported_urls = Vec::with_capacity(package.feeds.len());
+
+        for feed in &package.feeds {
+            let url =
+                Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?;
+            imported_urls.push(url.clone());
+
+            self.feed_repository
+                .upsert_subscription(&NewFeedSubscription {
+                    url,
+                    title: feed.title.clone(),
+                    folder: feed.folder.clone(),
+                })
+                .await?;
+        }
+
+        for feed in current_feeds {
+            if !imported_urls.iter().any(|url| *url == feed.url) {
+                self.feed_repository.set_deleted(feed.id, true).await?;
+            }
+        }
+
+        self.settings_repository.save(&package.settings).await?;
+
+        Ok(())
+    }
+}
+
+fn validate_settings(settings: &rssr_domain::UserSettings) -> Result<()> {
+    ensure!(settings.refresh_interval_minutes >= 1, "刷新间隔必须大于等于 1 分钟");
+    ensure!(
+        (0.8..=1.5).contains(&settings.reader_font_scale),
+        "阅读字号缩放必须在 0.8 到 1.5 之间"
+    );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -61,6 +104,10 @@ mod tests {
             _new_feed: &NewFeedSubscription,
         ) -> rssr_domain::Result<Feed> {
             Err(DomainError::Persistence("not used in test".into()))
+        }
+
+        async fn set_deleted(&self, _feed_id: i64, _is_deleted: bool) -> rssr_domain::Result<()> {
+            Ok(())
         }
 
         async fn list_feeds(&self) -> rssr_domain::Result<Vec<Feed>> {
