@@ -1,4 +1,4 @@
-use anyhow::{Context, ensure};
+use anyhow::Context;
 use feed_rs::model::{Entry as FeedRsEntry, Feed as FeedRsFeed, Text};
 use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
@@ -46,21 +46,26 @@ impl FeedParser {
 
         let mut entries = Vec::with_capacity(feed.entries.len());
         for entry in feed.entries {
-            entries.push(normalize_entry(entry)?);
+            if let Some(parsed_entry) = normalize_entry(entry)? {
+                entries.push(parsed_entry);
+            }
         }
 
         Ok(ParsedFeed { title, site_url, description, entries })
     }
 }
 
-fn normalize_entry(entry: FeedRsEntry) -> anyhow::Result<ParsedEntry> {
+fn normalize_entry(entry: FeedRsEntry) -> anyhow::Result<Option<ParsedEntry>> {
     let title = text_value(entry.title.as_ref()).unwrap_or_else(|| "Untitled entry".to_string());
     let url = entry.links.first().and_then(|link| Url::parse(link.href.as_str()).ok());
     let author = entry.authors.first().map(|author| author.name.clone());
     let summary = entry.summary.as_ref().map(text_content);
     let content_html = entry.content.as_ref().and_then(|content| content.body.clone());
     let content_text = summary.clone();
-    ensure!(content_html.is_some() || content_text.is_some(), "文章 `{title}` 缺少可用正文");
+    if content_html.is_none() && content_text.is_none() {
+        tracing::warn!(entry_title = %title, "跳过缺少 summary 和 content 的 feed 条目");
+        return Ok(None);
+    }
 
     let published_at = entry.published.map(to_offset_datetime);
     let updated_at_source = entry.updated.map(to_offset_datetime);
@@ -80,7 +85,7 @@ fn normalize_entry(entry: FeedRsEntry) -> anyhow::Result<ParsedEntry> {
         dedup_key_fallback(&title, published_at)
     };
 
-    Ok(ParsedEntry {
+    Ok(Some(ParsedEntry {
         external_id,
         dedup_key,
         url,
@@ -91,7 +96,7 @@ fn normalize_entry(entry: FeedRsEntry) -> anyhow::Result<ParsedEntry> {
         content_text,
         published_at,
         updated_at_source,
-    })
+    }))
 }
 
 fn dedup_key_fallback(title: &str, published_at: Option<OffsetDateTime>) -> String {

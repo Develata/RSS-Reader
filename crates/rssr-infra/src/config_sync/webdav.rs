@@ -19,7 +19,12 @@ impl WebDavConfigSync {
     }
 
     pub fn remote_url(&self) -> Result<Url> {
-        self.endpoint
+        let mut collection = self.endpoint.clone();
+        if !collection.path().ends_with('/') {
+            collection.set_path(&format!("{}/", collection.path()));
+        }
+
+        collection
             .join(self.remote_path.trim_start_matches('/'))
             .context("拼接 WebDAV 远端路径失败")
     }
@@ -64,6 +69,17 @@ mod tests {
     #[test]
     fn remote_url_joins_endpoint_and_path() {
         let sync = WebDavConfigSync::new("https://dav.example.com/base/", "config/state.json")
+            .expect("create webdav config");
+
+        assert_eq!(
+            sync.remote_url().expect("resolve remote url").as_str(),
+            "https://dav.example.com/base/config/state.json"
+        );
+    }
+
+    #[test]
+    fn remote_url_treats_endpoint_as_collection_without_trailing_slash() {
+        let sync = WebDavConfigSync::new("https://dav.example.com/base", "config/state.json")
             .expect("create webdav config");
 
         assert_eq!(

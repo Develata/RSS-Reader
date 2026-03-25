@@ -27,14 +27,15 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     title.set(entry.title);
                     is_read.set(entry.is_read);
                     is_starred.set(entry.is_starred);
-                    match entry.content_text.or(entry.summary) {
-                        Some(text) => {
+                    match select_reader_body(entry.content_html, entry.content_text, entry.summary)
+                    {
+                        ReaderBody::Html(html) => {
+                            body_html.set(Some(html));
+                            body_text.set(String::new());
+                        }
+                        ReaderBody::Text(text) => {
                             body_text.set(text);
                             body_html.set(None);
-                        }
-                        None => {
-                            body_html.set(entry.content_html);
-                            body_text.set("暂无正文".to_string());
                         }
                     }
                     published_at.set(
@@ -103,6 +104,64 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     }
                 }
             }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ReaderBody {
+    Html(String),
+    Text(String),
+}
+
+fn select_reader_body(
+    content_html: Option<String>,
+    content_text: Option<String>,
+    summary: Option<String>,
+) -> ReaderBody {
+    if let Some(html) = content_html.as_deref().and_then(sanitize_remote_html) {
+        return ReaderBody::Html(html);
+    }
+
+    ReaderBody::Text(content_text.or(summary).unwrap_or_else(|| "暂无正文".to_string()))
+}
+
+fn sanitize_remote_html(raw: &str) -> Option<String> {
+    let sanitized = ammonia::clean(raw);
+    let trimmed = sanitized.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ReaderBody, select_reader_body};
+
+    #[test]
+    fn reader_prefers_full_html_over_summary_text() {
+        let body = select_reader_body(
+            Some("<article><p>Full body</p></article>".to_string()),
+            Some("Summary teaser".to_string()),
+            Some("Summary teaser".to_string()),
+        );
+
+        assert_eq!(body, ReaderBody::Html("<article><p>Full body</p></article>".to_string()));
+    }
+
+    #[test]
+    fn reader_sanitizes_remote_html() {
+        let body = select_reader_body(
+            Some(r#"<p onclick="alert(1)">Hello</p><script>alert(2)</script>"#.to_string()),
+            None,
+            None,
+        );
+
+        match body {
+            ReaderBody::Html(html) => {
+                assert!(html.contains("<p>Hello</p>"));
+                assert!(!html.contains("onclick"));
+                assert!(!html.contains("<script"));
+            }
+            ReaderBody::Text(_) => panic!("expected html body"),
         }
     }
 }
