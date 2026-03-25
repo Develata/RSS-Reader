@@ -8,11 +8,13 @@ use rssr_domain::{
 use rssr_infra::{
     config_sync::file_format::{decode_config_package, encode_config_package},
     db::{
-        feed_repository::SqliteFeedRepository, migrate,
+        entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
         settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,
         storage_backend::StorageBackend,
     },
+    parser::ParsedEntry,
 };
+use sqlx::Row;
 use time::OffsetDateTime;
 use url::Url;
 
@@ -23,6 +25,7 @@ async fn config_package_roundtrip_restores_feeds_and_settings() {
     migrate(&export_pool).await.expect("migrate export sqlite");
 
     let export_feed_repository = Arc::new(SqliteFeedRepository::new(export_pool.clone()));
+    let export_entry_repository = Arc::new(SqliteEntryRepository::new(export_pool.clone()));
     let export_settings_repository = Arc::new(SqliteSettingsRepository::new(export_pool));
 
     export_feed_repository
@@ -53,6 +56,7 @@ async fn config_package_roundtrip_restores_feeds_and_settings() {
 
     let export_service = ImportExportService::new(
         export_feed_repository.clone(),
+        export_entry_repository,
         export_settings_repository.clone(),
     );
     let exported = export_service.export_config().await.expect("export config");
@@ -64,9 +68,11 @@ async fn config_package_roundtrip_restores_feeds_and_settings() {
     migrate(&import_pool).await.expect("migrate import sqlite");
 
     let import_feed_repository = Arc::new(SqliteFeedRepository::new(import_pool.clone()));
+    let import_entry_repository = Arc::new(SqliteEntryRepository::new(import_pool.clone()));
     let import_settings_repository = Arc::new(SqliteSettingsRepository::new(import_pool));
     let import_service = ImportExportService::new(
         import_feed_repository.clone(),
+        import_entry_repository,
         import_settings_repository.clone(),
     );
 
@@ -88,8 +94,10 @@ async fn config_import_overwrites_local_feed_membership() {
     migrate(&pool).await.expect("migrate sqlite");
 
     let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
+    let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
     let settings_repository = Arc::new(SqliteSettingsRepository::new(pool));
-    let service = ImportExportService::new(feed_repository.clone(), settings_repository);
+    let service =
+        ImportExportService::new(feed_repository.clone(), entry_repository, settings_repository);
 
     feed_repository
         .upsert_subscription(&NewFeedSubscription {
@@ -117,4 +125,84 @@ async fn config_import_overwrites_local_feed_membership() {
     assert_eq!(feeds.len(), 1);
     assert_eq!(feeds[0].url.as_str(), "https://fresh.example.com/feed.xml");
     assert_eq!(feeds[0].folder.as_deref(), Some("Inbox"));
+}
+
+#[tokio::test]
+async fn config_import_removes_dropped_feed_entries_and_clears_metadata() {
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let pool = backend.connect().await.expect("connect sqlite");
+    migrate(&pool).await.expect("migrate sqlite");
+
+    let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
+    let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
+    let settings_repository = Arc::new(SqliteSettingsRepository::new(pool.clone()));
+    let service = ImportExportService::new(
+        feed_repository.clone(),
+        entry_repository.clone(),
+        settings_repository,
+    );
+
+    let retained_feed = feed_repository
+        .upsert_subscription(&NewFeedSubscription {
+            url: Url::parse("https://example.com/feed.xml").expect("valid url"),
+            title: Some("Legacy".to_string()),
+            folder: Some("Archive".to_string()),
+        })
+        .await
+        .expect("create retained feed");
+    let dropped_feed = feed_repository
+        .upsert_subscription(&NewFeedSubscription {
+            url: Url::parse("https://stale.example.com/rss").expect("valid url"),
+            title: Some("Stale".to_string()),
+            folder: None,
+        })
+        .await
+        .expect("create dropped feed");
+
+    entry_repository
+        .upsert_entries(
+            dropped_feed.id,
+            &[ParsedEntry {
+                external_id: "stale-entry".to_string(),
+                dedup_key: "stale-entry".to_string(),
+                url: Some(Url::parse("https://stale.example.com/article").expect("valid url")),
+                title: "Old article".to_string(),
+                author: None,
+                summary: Some("old".to_string()),
+                content_html: None,
+                content_text: Some("old".to_string()),
+                published_at: Some(OffsetDateTime::UNIX_EPOCH),
+                updated_at_source: None,
+            }],
+        )
+        .await
+        .expect("insert stale entry");
+
+    service
+        .import_config_package(&ConfigPackage {
+            version: 1,
+            exported_at: OffsetDateTime::UNIX_EPOCH,
+            feeds: vec![ConfigFeed {
+                url: retained_feed.url.to_string(),
+                title: None,
+                folder: None,
+            }],
+            settings: UserSettings::default(),
+        })
+        .await
+        .expect("import config package");
+
+    let feeds = feed_repository.list_feeds().await.expect("list feeds");
+    assert_eq!(feeds.len(), 1);
+    assert_eq!(feeds[0].url, retained_feed.url);
+    assert_eq!(feeds[0].title, None);
+    assert_eq!(feeds[0].folder, None);
+
+    let remaining_entries = sqlx::query("SELECT COUNT(*) AS count FROM entries WHERE feed_id = ?1")
+        .bind(dropped_feed.id)
+        .fetch_one(&pool)
+        .await
+        .expect("count entries")
+        .get::<i64, _>("count");
+    assert_eq!(remaining_entries, 0);
 }

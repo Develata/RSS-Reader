@@ -9,6 +9,15 @@ use crate::{
 
 #[component]
 pub fn EntriesPage() -> Element {
+    entries_page_content(None)
+}
+
+#[component]
+pub fn FeedEntriesPage(feed_id: i64) -> Element {
+    entries_page_content(Some(feed_id))
+}
+
+fn entries_page_content(feed_id: Option<i64>) -> Element {
     let mut entries = use_signal(Vec::<EntrySummary>::new);
     let mut search = use_signal(String::new);
     let mut unread_only = use_signal(|| false);
@@ -21,10 +30,11 @@ pub fn EntriesPage() -> Element {
         match AppServices::shared().await {
             Ok(services) => match services
                 .list_entries(&EntryQuery {
+                    feed_id,
                     unread_only: unread_only(),
                     starred_only: starred_only(),
                     search_title: (!search().trim().is_empty()).then(|| search()),
-                    ..EntryQuery::default()
+                    limit: None,
                 })
                 .await
             {
@@ -41,8 +51,18 @@ pub fn EntriesPage() -> Element {
     rsx! {
         section { class: "page page-entries",
             AppNav {}
-            h2 { "文章" }
-            p { class: "page-intro", "文章按发布时间倒序展示。选择一篇即可进入阅读页。" }
+            h2 { if feed_id.is_some() { "订阅文章" } else { "文章" } }
+            p {
+                class: "page-intro",
+                if feed_id.is_some() {
+                    "当前只显示所选订阅的文章。选择一篇即可进入阅读页。"
+                } else {
+                    "文章按发布时间倒序展示。选择一篇即可进入阅读页。"
+                }
+            }
+            if feed_id.is_some() {
+                Link { class: "button secondary", to: AppRoute::EntriesPage {}, "返回全部文章" }
+            }
             EntryFilters {
                 search: search(),
                 unread_only: unread_only(),
@@ -53,7 +73,14 @@ pub fn EntriesPage() -> Element {
             }
             StatusBanner { message: status(), tone: "info".to_string() }
             if entries().is_empty() {
-                StatusBanner { message: "没有可显示的文章，先去订阅页添加并刷新 feed。".to_string(), tone: "info".to_string() }
+                StatusBanner {
+                    message: if feed_id.is_some() {
+                        "这个订阅下还没有可显示的文章，先尝试刷新该 feed。".to_string()
+                    } else {
+                        "没有可显示的文章，先去订阅页添加并刷新 feed。".to_string()
+                    },
+                    tone: "info".to_string()
+                }
             } else {
                 ul { class: "entry-list",
                     for entry in entries() {

@@ -216,6 +216,15 @@ impl EntryRepository for SqliteEntryRepository {
     async fn set_starred(&self, entry_id: i64, is_starred: bool) -> DomainResult<()> {
         self.update_entry_flags(entry_id, "is_starred", "starred_at", is_starred).await
     }
+
+    async fn delete_for_feed(&self, feed_id: i64) -> DomainResult<()> {
+        sqlx::query("DELETE FROM entries WHERE feed_id = ?1")
+            .bind(feed_id)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
+        Ok(())
+    }
 }
 
 fn map_sqlx_error(error: sqlx::Error) -> DomainError {

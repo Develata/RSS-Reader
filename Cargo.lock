@@ -2075,16 +2075,25 @@ version = "0.1.0"
 dependencies = [
  "ammonia",
  "anyhow",
+ "chrono",
  "dioxus",
  "dioxus-router",
+ "feed-rs",
+ "quick-xml",
+ "reqwest",
  "rssr-application",
  "rssr-domain",
  "rssr-infra",
+ "serde",
+ "serde_json",
+ "sha2",
  "time",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "url",
+ "uuid",
+ "web-sys",
 ]
 
 [[package]]

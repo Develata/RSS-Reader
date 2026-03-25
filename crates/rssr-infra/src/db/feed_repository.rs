@@ -125,8 +125,14 @@ impl FeedRepository for SqliteFeedRepository {
             INSERT INTO feeds (url, title, folder, created_at, updated_at)
             VALUES (?1, ?2, ?3, ?4, ?4)
             ON CONFLICT(url) DO UPDATE SET
-                title = COALESCE(excluded.title, feeds.title),
-                folder = COALESCE(excluded.folder, feeds.folder),
+                title = CASE
+                    WHEN excluded.title IS NULL THEN feeds.title
+                    ELSE NULLIF(excluded.title, '')
+                END,
+                folder = CASE
+                    WHEN excluded.folder IS NULL THEN feeds.folder
+                    ELSE NULLIF(excluded.folder, '')
+                END,
                 is_deleted = 0,
                 updated_at = excluded.updated_at
             "#,

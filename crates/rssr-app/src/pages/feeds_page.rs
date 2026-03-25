@@ -1,7 +1,10 @@
 use dioxus::prelude::*;
+use dioxus_router::prelude::Link;
 use rssr_domain::FeedSummary;
 
-use crate::{app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner};
+use crate::{
+    app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner, router::AppRoute,
+};
 
 #[component]
 pub fn FeedsPage() -> Element {
@@ -191,8 +194,36 @@ pub fn FeedsPage() -> Element {
                 ul { class: "feed-list",
                     for feed in feeds() {
                         li { class: "feed-card", key: "{feed.id}",
-                            div { class: "feed-card__title", "{feed.title}" }
+                            Link {
+                                class: "feed-card__title",
+                                to: AppRoute::FeedEntriesPage { feed_id: feed.id },
+                                "{feed.title}"
+                            }
                             div { class: "feed-card__meta", "未读 {feed.unread_count}" }
+                            div { class: "entry-card__actions",
+                                button {
+                                    class: "button secondary",
+                                    onclick: move |_| {
+                                        let mut status = status;
+                                        let mut reload_tick = reload_tick;
+                                        let feed_title = feed.title.clone();
+                                        let feed_id = feed.id;
+                                        spawn(async move {
+                                            match AppServices::shared().await {
+                                                Ok(services) => match services.refresh_feed(feed_id).await {
+                                                    Ok(()) => {
+                                                        status.set(format!("已刷新订阅：{}", feed_title));
+                                                        reload_tick += 1;
+                                                    }
+                                                    Err(err) => status.set(format!("刷新订阅失败：{err}")),
+                                                },
+                                                Err(err) => status.set(format!("初始化应用失败：{err}")),
+                                            }
+                                        });
+                                    },
+                                    "刷新此订阅"
+                                }
+                            }
                         }
                     }
                 }
