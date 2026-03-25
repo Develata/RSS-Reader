@@ -20,6 +20,8 @@ local.properties
 
 # Logs and runtime files
 *.log
+*.db
+*.sqlite
 *.sqlite-shm
 *.sqlite-wal
 
