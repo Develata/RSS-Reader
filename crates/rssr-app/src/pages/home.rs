@@ -1,14 +1,40 @@
 use dioxus::prelude::*;
 
-use crate::app::AppNav;
+use crate::{app::AppNav, bootstrap::AppServices};
 
 #[component]
 pub fn HomePage() -> Element {
+    let mut feed_count = use_signal(|| 0_usize);
+    let mut entry_count = use_signal(|| 0_usize);
+    let mut error = use_signal(|| None::<String>);
+
+    let _ = use_resource(move || async move {
+        match AppServices::shared().await {
+            Ok(services) => {
+                match services.list_feeds().await {
+                    Ok(feeds) => feed_count.set(feeds.len()),
+                    Err(err) => error.set(Some(err.to_string())),
+                }
+
+                match services.list_entries(&rssr_domain::EntryQuery::default()).await {
+                    Ok(entries) => entry_count.set(entries.len()),
+                    Err(err) => error.set(Some(err.to_string())),
+                }
+            }
+            Err(err) => error.set(Some(err.to_string())),
+        }
+    });
+
     rsx! {
         section {
             AppNav {}
             h2 { "首页" }
-            p { "这里会展示阅读器的默认入口视图。" }
+            p { "当前 MVP 已接入真实 SQLite 数据源。" }
+            p { "订阅数：{feed_count}" }
+            p { "文章数：{entry_count}" }
+            if let Some(message) = error() {
+                p { class: "error", "{message}" }
+            }
         }
     }
 }

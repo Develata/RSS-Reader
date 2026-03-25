@@ -1903,11 +1903,16 @@ dependencies = [
 name = "rssr-app"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "dioxus",
  "dioxus-router",
  "rssr-application",
+ "rssr-domain",
+ "rssr-infra",
+ "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

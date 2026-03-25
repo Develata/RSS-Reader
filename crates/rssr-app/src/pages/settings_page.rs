@@ -8,7 +8,7 @@ pub fn SettingsPage() -> Element {
         section {
             AppNav {}
             h2 { "设置" }
-            p { "这里会展示主题、导入导出和配置交换设置。" }
+            p { "主题、导入导出和配置交换入口会在 US3 接入。" }
         }
     }
 }

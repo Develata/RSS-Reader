@@ -22,6 +22,8 @@ pub fn AppNav() -> Element {
             " · "
             Link { to: AppRoute::FeedsPage {}, "订阅" }
             " · "
+            Link { to: AppRoute::EntriesPage {}, "文章" }
+            " · "
             Link { to: AppRoute::SettingsPage {}, "设置" }
         }
     }
