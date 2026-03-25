@@ -6,9 +6,13 @@ use crate::router::{AppRoute, RoutableApp};
 #[allow(non_snake_case)]
 pub fn App() -> Element {
     rsx! {
+        style { {include_str!("../../../assets/styles.css")} }
         div { class: "app-shell",
-            h1 { "RSS Reader" }
-            p { "极简个人 RSS 阅读器项目骨架" }
+            header { class: "app-header",
+                p { class: "app-eyebrow", "Local-first RSS" }
+                h1 { "RSS Reader" }
+                p { class: "app-subtitle", "极简、快速、以本地 SQLite 为事实来源的个人阅读器。" }
+            }
             RoutableApp {}
         }
     }
@@ -17,14 +21,11 @@ pub fn App() -> Element {
 #[component]
 pub fn AppNav() -> Element {
     rsx! {
-        nav {
-            Link { to: AppRoute::HomePage {}, "首页" }
-            " · "
-            Link { to: AppRoute::FeedsPage {}, "订阅" }
-            " · "
-            Link { to: AppRoute::EntriesPage {}, "文章" }
-            " · "
-            Link { to: AppRoute::SettingsPage {}, "设置" }
+        nav { class: "app-nav",
+            Link { class: "app-nav__link", to: AppRoute::HomePage {}, "首页" }
+            Link { class: "app-nav__link", to: AppRoute::FeedsPage {}, "订阅" }
+            Link { class: "app-nav__link", to: AppRoute::EntriesPage {}, "文章" }
+            Link { class: "app-nav__link", to: AppRoute::SettingsPage {}, "设置" }
         }
     }
 }

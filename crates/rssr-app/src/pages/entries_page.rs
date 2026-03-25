@@ -25,19 +25,19 @@ pub fn EntriesPage() -> Element {
     });
 
     rsx! {
-        section {
+        section { class: "page page-entries",
             AppNav {}
             h2 { "文章" }
+            p { class: "page-intro", "文章按发布时间倒序展示。选择一篇即可进入阅读页。" }
             StatusBanner { message: status(), tone: "info".to_string() }
             if entries().is_empty() {
                 StatusBanner { message: "没有可显示的文章，先去订阅页添加并刷新 feed。".to_string(), tone: "info".to_string() }
             } else {
-                ul {
+                ul { class: "entry-list",
                     for entry in entries() {
-                        li { key: "{entry.id}",
-                            Link { to: AppRoute::ReaderPage { entry_id: entry.id }, "{entry.title}" }
-                            " · "
-                            span { "{entry.feed_title}" }
+                        li { class: "entry-card", key: "{entry.id}",
+                            Link { class: "entry-card__title", to: AppRoute::ReaderPage { entry_id: entry.id }, "{entry.title}" }
+                            div { class: "entry-card__meta", "{entry.feed_title}" }
                         }
                     }
                 }

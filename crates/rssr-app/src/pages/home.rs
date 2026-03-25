@@ -26,12 +26,20 @@ pub fn HomePage() -> Element {
     });
 
     rsx! {
-        section {
+        section { class: "page page-home",
             AppNav {}
             h2 { "首页" }
-            p { "当前 MVP 已接入真实 SQLite 数据源。" }
-            p { "订阅数：{feed_count}" }
-            p { "文章数：{entry_count}" }
+            p { class: "page-intro", "当前 MVP 已接入真实 SQLite 数据源，可以直接添加订阅、刷新内容并进入阅读页。" }
+            div { class: "stats-grid",
+                div { class: "stat-card",
+                    div { class: "stat-card__label", "订阅数" }
+                    div { class: "stat-card__value", "{feed_count}" }
+                }
+                div { class: "stat-card",
+                    div { class: "stat-card__label", "文章数" }
+                    div { class: "stat-card__value", "{entry_count}" }
+                }
+            }
             if let Some(message) = error() {
                 StatusBanner { message, tone: "error".to_string() }
             }
