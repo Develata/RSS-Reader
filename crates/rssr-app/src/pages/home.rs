@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::{app::AppNav, bootstrap::AppServices};
+use crate::{app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner};
 
 #[component]
 pub fn HomePage() -> Element {
@@ -33,7 +33,7 @@ pub fn HomePage() -> Element {
             p { "订阅数：{feed_count}" }
             p { "文章数：{entry_count}" }
             if let Some(message) = error() {
-                p { class: "error", "{message}" }
+                StatusBanner { message, tone: "error".to_string() }
             }
         }
     }

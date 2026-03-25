@@ -1,5 +1,6 @@
 mod app;
 mod bootstrap;
+mod components;
 mod pages;
 mod router;
 

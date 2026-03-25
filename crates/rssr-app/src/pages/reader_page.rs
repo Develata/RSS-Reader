@@ -1,12 +1,14 @@
 use dioxus::prelude::*;
+use time::format_description::well_known::Rfc3339;
 
-use crate::{app::AppNav, bootstrap::AppServices};
+use crate::{app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner};
 
 #[component]
 pub fn ReaderPage(entry_id: i64) -> Element {
     let mut title = use_signal(|| "正在加载…".to_string());
     let mut body = use_signal(String::new);
     let mut source = use_signal(String::new);
+    let mut published_at = use_signal(|| "未知发布时间".to_string());
     let mut error = use_signal(|| None::<String>);
 
     let _ = use_resource(move || async move {
@@ -20,6 +22,12 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                             .or(entry.summary)
                             .or(entry.content_html)
                             .unwrap_or_else(|| "暂无正文".to_string()),
+                    );
+                    published_at.set(
+                        entry
+                            .published_at
+                            .and_then(|value| value.format(&Rfc3339).ok())
+                            .unwrap_or_else(|| "未知发布时间".to_string()),
                     );
                     source.set(
                         entry
@@ -40,8 +48,9 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             AppNav {}
             h2 { "{title}" }
             p { "来源：{source}" }
+            p { "发布时间：{published_at}" }
             if let Some(message) = error() {
-                p { class: "error", "{message}" }
+                StatusBanner { message, tone: "error".to_string() }
             } else {
                 pre { "{body}" }
             }

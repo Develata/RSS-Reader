@@ -12,6 +12,7 @@ dioxus-router.workspace = true
 rssr-application = { path = "../rssr-application" }
 rssr-domain = { path = "../rssr-domain" }
 rssr-infra = { path = "../rssr-infra" }
+time.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

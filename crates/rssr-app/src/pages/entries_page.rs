@@ -2,7 +2,9 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::Link;
 use rssr_domain::{EntryQuery, EntrySummary};
 
-use crate::{app::AppNav, bootstrap::AppServices, router::AppRoute};
+use crate::{
+    app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner, router::AppRoute,
+};
 
 #[component]
 pub fn EntriesPage() -> Element {
@@ -26,13 +28,17 @@ pub fn EntriesPage() -> Element {
         section {
             AppNav {}
             h2 { "文章" }
-            p { "{status}" }
-            ul {
-                for entry in entries() {
-                    li { key: "{entry.id}",
-                        Link { to: AppRoute::ReaderPage { entry_id: entry.id }, "{entry.title}" }
-                        " · "
-                        span { "{entry.feed_title}" }
+            StatusBanner { message: status(), tone: "info".to_string() }
+            if entries().is_empty() {
+                StatusBanner { message: "没有可显示的文章，先去订阅页添加并刷新 feed。".to_string(), tone: "info".to_string() }
+            } else {
+                ul {
+                    for entry in entries() {
+                        li { key: "{entry.id}",
+                            Link { to: AppRoute::ReaderPage { entry_id: entry.id }, "{entry.title}" }
+                            " · "
+                            span { "{entry.feed_title}" }
+                        }
                     }
                 }
             }

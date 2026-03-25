@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use rssr_domain::FeedSummary;
 
-use crate::{app::AppNav, bootstrap::AppServices};
+use crate::{app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner};
 
 #[component]
 pub fn FeedsPage() -> Element {
@@ -25,7 +25,7 @@ pub fn FeedsPage() -> Element {
         section {
             AppNav {}
             h2 { "订阅" }
-            p { "{status}" }
+            StatusBanner { message: status(), tone: "info".to_string() }
             input {
                 value: "{feed_url}",
                 placeholder: "https://example.com/feed.xml",
@@ -40,7 +40,8 @@ pub fn FeedsPage() -> Element {
                         match AppServices::shared().await {
                             Ok(services) => match services.add_subscription(&url).await {
                                 Ok(()) => {
-                                    status.set("订阅已保存。".to_string());
+                                    status.set("订阅已保存并完成首次刷新。".to_string());
+                                    feed_url.set(String::new());
                                     reload_tick += 1;
                                 }
                                 Err(err) => status.set(format!("保存订阅失败：{err}")),
@@ -70,9 +71,13 @@ pub fn FeedsPage() -> Element {
                 },
                 "刷新全部"
             }
-            ul {
-                for feed in feeds() {
-                    li { key: "{feed.id}", "{feed.title}（未读 {feed.unread_count}）" }
+            if feeds().is_empty() {
+                StatusBanner { message: "还没有订阅，先添加一个 feed URL。".to_string(), tone: "info".to_string() }
+            } else {
+                ul {
+                    for feed in feeds() {
+                        li { key: "{feed.id}", "{feed.title}（未读 {feed.unread_count}）" }
+                    }
                 }
             }
         }

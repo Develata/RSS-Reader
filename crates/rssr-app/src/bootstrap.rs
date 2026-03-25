@@ -78,10 +78,13 @@ impl AppServices {
 
     pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
         let url = Url::parse(raw_url).context("订阅 URL 不合法")?;
-        self.feed_service
+        let feed = self
+            .feed_service
             .add_subscription(&NewFeedSubscription { url, title: None })
             .await
-            .context("保存订阅失败")
+            .context("保存订阅失败")?;
+        self.refresh_feed(feed.id).await.context("首次刷新订阅失败")?;
+        Ok(())
     }
 
     pub async fn refresh_all(&self) -> anyhow::Result<()> {
