@@ -1,13 +1,28 @@
 use dioxus::prelude::*;
 
-use crate::router::{AppRoute, RoutableApp};
+use crate::{
+    bootstrap::AppServices,
+    router::{AppRoute, RoutableApp},
+    theme::{ThemeController, theme_class},
+};
 
 #[component]
 #[allow(non_snake_case)]
 pub fn App() -> Element {
+    let mut settings = use_signal(AppServices::default_settings);
+    use_context_provider(|| ThemeController { settings });
+
+    let _ = use_resource(move || async move {
+        if let Ok(services) = AppServices::shared().await {
+            if let Ok(loaded) = services.load_settings().await {
+                settings.set(loaded);
+            }
+        }
+    });
+
     rsx! {
         style { {include_str!("../../../assets/styles.css")} }
-        div { class: "app-shell",
+        div { class: "app-shell {theme_class(settings().theme)}",
             header { class: "app-header",
                 p { class: "app-eyebrow", "Local-first RSS" }
                 h1 { "RSS Reader" }

@@ -4,16 +4,21 @@ mod imp {
 
     use anyhow::Context;
     use rssr_application::{
-        entry_service::EntryService, feed_service::FeedService, settings_service::SettingsService,
+        entry_service::EntryService, feed_service::FeedService,
+        import_export_service::ImportExportService, settings_service::SettingsService,
     };
-    use rssr_domain::{Entry, EntryQuery, FeedRepository, FeedSummary, NewFeedSubscription};
+    use rssr_domain::{
+        Entry, EntryQuery, FeedRepository, FeedSummary, NewFeedSubscription, UserSettings,
+    };
     use rssr_infra::{
+        config_sync::webdav::WebDavConfigSync,
         db::{
             entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository,
             settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,
             storage_backend::StorageBackend,
         },
         fetch::{FetchClient, FetchRequest, FetchResult},
+        opml::OpmlCodec,
         parser::FeedParser,
     };
     use tokio::sync::OnceCell;
@@ -26,10 +31,11 @@ mod imp {
         entry_repository: Arc<SqliteEntryRepository>,
         feed_service: FeedService,
         entry_service: EntryService,
-        #[allow(dead_code)]
         settings_service: SettingsService,
+        import_export_service: ImportExportService,
         fetch_client: FetchClient,
         parser: FeedParser,
+        opml_codec: OpmlCodec,
     }
 
     impl AppServices {
@@ -49,15 +55,24 @@ mod imp {
                     Ok(Arc::new(Self {
                         feed_service: FeedService::new(feed_repository.clone()),
                         entry_service: EntryService::new(entry_repository.clone()),
-                        settings_service: SettingsService::new(settings_repository),
+                        settings_service: SettingsService::new(settings_repository.clone()),
+                        import_export_service: ImportExportService::new(
+                            feed_repository.clone(),
+                            settings_repository,
+                        ),
                         feed_repository,
                         entry_repository,
                         fetch_client: FetchClient::new(),
                         parser: FeedParser::new(),
+                        opml_codec: OpmlCodec::new(),
                     }))
                 })
                 .await
                 .map(Arc::clone)
+        }
+
+        pub fn default_settings() -> UserSettings {
+            UserSettings::default()
         }
 
         pub async fn list_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {
@@ -81,6 +96,14 @@ mod imp {
 
         pub async fn set_starred(&self, entry_id: i64, is_starred: bool) -> anyhow::Result<()> {
             self.entry_service.set_starred(entry_id, is_starred).await
+        }
+
+        pub async fn load_settings(&self) -> anyhow::Result<UserSettings> {
+            self.settings_service.load().await
+        }
+
+        pub async fn save_settings(&self, settings: &UserSettings) -> anyhow::Result<()> {
+            self.settings_service.save(settings).await
         }
 
         pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
@@ -167,6 +190,59 @@ mod imp {
 
             Ok(())
         }
+
+        pub async fn export_config_json(&self) -> anyhow::Result<String> {
+            self.import_export_service.export_config_json().await
+        }
+
+        pub async fn import_config_json(&self, raw: &str) -> anyhow::Result<()> {
+            self.import_export_service.import_config_json(raw).await
+        }
+
+        pub async fn export_opml(&self) -> anyhow::Result<String> {
+            let package = self.import_export_service.export_config().await?;
+            self.opml_codec.encode(&package.feeds)
+        }
+
+        pub async fn import_opml(&self, raw: &str) -> anyhow::Result<()> {
+            let feeds = self.opml_codec.decode(raw)?;
+            for feed in feeds {
+                let url = Url::parse(&feed.url).context("OPML 中存在无效订阅 URL")?;
+                self.feed_service
+                    .add_subscription(&NewFeedSubscription {
+                        url,
+                        title: feed.title,
+                        folder: feed.folder,
+                    })
+                    .await?;
+            }
+            Ok(())
+        }
+
+        pub async fn push_remote_config(
+            &self,
+            endpoint: &str,
+            remote_path: &str,
+        ) -> anyhow::Result<()> {
+            let remote = WebDavConfigSync::new(endpoint, remote_path)?;
+            let raw = self.import_export_service.export_config_json().await?;
+            remote.upload_text(&raw).await
+        }
+
+        pub async fn pull_remote_config(
+            &self,
+            endpoint: &str,
+            remote_path: &str,
+        ) -> anyhow::Result<bool> {
+            let remote = WebDavConfigSync::new(endpoint, remote_path)?;
+            match remote.download_text().await? {
+                Some(raw) => {
+                    self.import_export_service.import_config_json(&raw).await?;
+                    Ok(true)
+                }
+                None => Ok(false),
+            }
+        }
     }
 }
 
@@ -174,7 +250,7 @@ mod imp {
 mod imp {
     use std::sync::Arc;
 
-    use rssr_domain::{Entry, EntryQuery, FeedSummary};
+    use rssr_domain::{Entry, EntryQuery, FeedSummary, UserSettings};
     use tokio::sync::OnceCell;
 
     static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -184,6 +260,10 @@ mod imp {
     impl AppServices {
         pub async fn shared() -> anyhow::Result<Arc<Self>> {
             Ok(Arc::clone(APP_SERVICES.get_or_init(|| async { Arc::new(Self) }).await))
+        }
+
+        pub fn default_settings() -> UserSettings {
+            UserSettings::default()
         }
 
         pub async fn list_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {
@@ -209,11 +289,51 @@ mod imp {
             anyhow::bail!("Web 平台存储后端尚未完成接线")
         }
 
+        pub async fn load_settings(&self) -> anyhow::Result<UserSettings> {
+            Ok(UserSettings::default())
+        }
+
+        pub async fn save_settings(&self, _settings: &UserSettings) -> anyhow::Result<()> {
+            anyhow::bail!("Web 平台存储后端尚未完成接线")
+        }
+
         pub async fn add_subscription(&self, _raw_url: &str) -> anyhow::Result<()> {
             anyhow::bail!("Web 平台存储后端尚未完成接线")
         }
 
         pub async fn refresh_all(&self) -> anyhow::Result<()> {
+            anyhow::bail!("Web 平台存储后端尚未完成接线")
+        }
+
+        pub async fn export_config_json(&self) -> anyhow::Result<String> {
+            anyhow::bail!("Web 平台存储后端尚未完成接线")
+        }
+
+        pub async fn import_config_json(&self, _raw: &str) -> anyhow::Result<()> {
+            anyhow::bail!("Web 平台存储后端尚未完成接线")
+        }
+
+        pub async fn export_opml(&self) -> anyhow::Result<String> {
+            anyhow::bail!("Web 平台存储后端尚未完成接线")
+        }
+
+        pub async fn import_opml(&self, _raw: &str) -> anyhow::Result<()> {
+            anyhow::bail!("Web 平台存储后端尚未完成接线")
+        }
+
+        pub async fn push_remote_config(
+            &self,
+            _endpoint: &str,
+            _remote_path: &str,
+        ) -> anyhow::Result<()> {
+            anyhow::bail!("Web 平台存储后端尚未完成接线")
+        }
+
+        pub async fn pull_remote_config(
+            &self,
+            _endpoint: &str,
+            _remote_path: &str,
+        ) -> anyhow::Result<bool> {
             anyhow::bail!("Web 平台存储后端尚未完成接线")
         }
     }

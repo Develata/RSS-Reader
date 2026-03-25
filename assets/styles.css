@@ -10,6 +10,30 @@
   --shadow: 0 18px 48px rgba(63, 38, 18, 0.08);
 }
 
+.theme-light {
+  --bg: #f4efe6;
+  --panel: rgba(255, 250, 242, 0.86);
+  --panel-strong: #fffaf2;
+  --ink: #1f1a17;
+  --muted: #6f6257;
+  --line: rgba(62, 42, 27, 0.14);
+  --accent: #b04a2f;
+  --accent-strong: #8a351d;
+  --shadow: 0 18px 48px rgba(63, 38, 18, 0.08);
+}
+
+.theme-dark {
+  --bg: #141414;
+  --panel: rgba(28, 28, 28, 0.9);
+  --panel-strong: #1c1c1c;
+  --ink: #f3efe8;
+  --muted: #b8aba0;
+  --line: rgba(255, 255, 255, 0.08);
+  --accent: #d27853;
+  --accent-strong: #ef9d78;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -22,6 +46,29 @@ body {
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.7), transparent 32%),
     linear-gradient(180deg, #efe4d6 0%, #f8f3eb 38%, #f3ede4 100%);
+}
+
+.theme-dark {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 32%),
+    linear-gradient(180deg, #151515 0%, #1d1d1d 38%, #191919 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .theme-system {
+    --bg: #141414;
+    --panel: rgba(28, 28, 28, 0.9);
+    --panel-strong: #1c1c1c;
+    --ink: #f3efe8;
+    --muted: #b8aba0;
+    --line: rgba(255, 255, 255, 0.08);
+    --accent: #d27853;
+    --accent-strong: #ef9d78;
+    --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+    background:
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 32%),
+      linear-gradient(180deg, #151515 0%, #1d1d1d 38%, #191919 100%);
+  }
 }
 
 a {
@@ -169,12 +216,55 @@ input {
   margin: 18px 0 22px;
 }
 
+.exchange-grid,
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.exchange-card,
+.settings-card {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--panel-strong);
+}
+
+.exchange-card h3,
+.settings-card h3 {
+  margin: 0 0 12px;
+}
+
 .text-input {
   width: 100%;
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.7);
+}
+
+.text-area,
+.select-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink);
+}
+
+.text-area {
+  min-height: 180px;
+  resize: vertical;
+}
+
+.field-label {
+  display: block;
+  margin: 12px 0 8px;
+  color: var(--muted);
+  font-size: 0.92rem;
 }
 
 .button {
@@ -188,6 +278,14 @@ input {
 
 .button.secondary {
   background: #2f251e;
+}
+
+.inline-actions {
+  display: grid;
+  grid-auto-flow: column;
+  justify-content: start;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .feed-list,
