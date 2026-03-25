@@ -115,7 +115,7 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 - [X] T038 [P] [US2] 在文章列表页接入已读/收藏和筛选搜索交互 `crates/rssr-app/src/pages/entries_page.rs`
 - [X] T039 [P] [US2] 在阅读页接入已读/收藏切换交互与安全 HTML 渲染 `crates/rssr-app/src/pages/reader_page.rs`
 - [X] T040 [US2] 实现桌面快捷键 hook `crates/rssr-app/src/hooks/use_reader_shortcuts.rs`
-- [ ] T041 [US2] 记录 10,000 篇文章规模下的状态切换与搜索性能结果 `tests/manual/us2-performance-checklist.md`
+- [X] T041 [US2] 记录 10,000 篇文章规模下的状态切换与搜索性能结果 `tests/manual/us2-performance-checklist.md`
 
 **检查点**：此时用户故事 1 和 2 都应可独立工作。
 
@@ -145,7 +145,7 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 - [X] T051 [US3] 实现浅色、深色和跟随系统主题逻辑 `crates/rssr-app/src/theme/mod.rs`
 - [X] T052 [P] [US3] 在订阅页接入 OPML 与配置包导入导出入口 `crates/rssr-app/src/pages/feeds_page.rs`
 - [X] T053 [P] [US3] 在设置页接入 WebDAV 配置交换入口 `crates/rssr-app/src/pages/settings_page.rs`
-- [ ] T054 [US3] 记录配置交换边界与主题生效手工验证结果 `tests/manual/us3-boundary-checklist.md`
+- [X] T054 [US3] 记录配置交换边界与主题生效手工验证结果 `tests/manual/us3-boundary-checklist.md`
 
 **检查点**：此时所有用户故事都应可独立工作。
 
@@ -160,7 +160,7 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 - [X] T057 [P] 补充高风险回归冒烟测试 `crates/rssr-infra/tests/test_regression_smoke.rs`
 - [X] T058 [P] 验证配置包 schema、导入器和导出器保持一致 `specs/001-minimal-rss-reader/contracts/config-package.schema.json`
 - [X] T059 验证 wasm 目标构建与 Web 本地持久化接线 `crates/rssr-app/src/bootstrap.rs`
-- [ ] T060 运行并记录完整手工验收结果 `tests/manual/final-acceptance-checklist.md`
+- [X] T060 运行并记录完整手工验收结果 `tests/manual/final-acceptance-checklist.md`
 
 ---
 
