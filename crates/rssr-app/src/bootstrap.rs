@@ -76,6 +76,14 @@ impl AppServices {
         self.entry_service.get_entry(entry_id).await
     }
 
+    pub async fn set_read(&self, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
+        self.entry_service.set_read(entry_id, is_read).await
+    }
+
+    pub async fn set_starred(&self, entry_id: i64, is_starred: bool) -> anyhow::Result<()> {
+        self.entry_service.set_starred(entry_id, is_starred).await
+    }
+
     pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
         let url = Url::parse(raw_url).context("订阅 URL 不合法")?;
         let feed = self

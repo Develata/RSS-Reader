@@ -19,4 +19,12 @@ impl EntryService {
     pub async fn get_entry(&self, entry_id: i64) -> Result<Option<Entry>> {
         Ok(self.repository.get_entry(entry_id).await?)
     }
+
+    pub async fn set_read(&self, entry_id: i64, is_read: bool) -> Result<()> {
+        Ok(self.repository.set_read(entry_id, is_read).await?)
+    }
+
+    pub async fn set_starred(&self, entry_id: i64, is_starred: bool) -> Result<()> {
+        Ok(self.repository.set_starred(entry_id, is_starred).await?)
+    }
 }

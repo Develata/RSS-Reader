@@ -20,6 +20,8 @@ pub trait FeedRepository: Send + Sync {
 pub trait EntryRepository: Send + Sync {
     async fn list_entries(&self, query: &EntryQuery) -> crate::Result<Vec<EntrySummary>>;
     async fn get_entry(&self, entry_id: i64) -> crate::Result<Option<Entry>>;
+    async fn set_read(&self, entry_id: i64, is_read: bool) -> crate::Result<()>;
+    async fn set_starred(&self, entry_id: i64, is_starred: bool) -> crate::Result<()>;
 }
 
 #[async_trait::async_trait]

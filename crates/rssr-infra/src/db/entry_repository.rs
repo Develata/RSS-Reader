@@ -113,6 +113,34 @@ impl SqliteEntryRepository {
             updated_at: parse_datetime(row.try_get("updated_at").map_err(map_sqlx_error)?)?,
         })
     }
+
+    async fn update_entry_flags(
+        &self,
+        entry_id: i64,
+        field: &str,
+        timestamp_field: &str,
+        enabled: bool,
+    ) -> DomainResult<()> {
+        let now = enabled.then(now_rfc3339);
+        let sql = format!(
+            "UPDATE entries SET {field} = ?2, {timestamp_field} = ?3, updated_at = ?4 WHERE id = ?1"
+        );
+
+        let result = sqlx::query(&sql)
+            .bind(entry_id)
+            .bind(if enabled { 1_i64 } else { 0_i64 })
+            .bind(now.as_deref())
+            .bind(now_rfc3339())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(DomainError::NotFound);
+        }
+
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -179,6 +207,14 @@ impl EntryRepository for SqliteEntryRepository {
             Some(row) => Ok(Some(Self::row_to_entry(row).await?)),
             None => Ok(None),
         }
+    }
+
+    async fn set_read(&self, entry_id: i64, is_read: bool) -> DomainResult<()> {
+        self.update_entry_flags(entry_id, "is_read", "read_at", is_read).await
+    }
+
+    async fn set_starred(&self, entry_id: i64, is_starred: bool) -> DomainResult<()> {
+        self.update_entry_flags(entry_id, "is_starred", "starred_at", is_starred).await
     }
 }
 
