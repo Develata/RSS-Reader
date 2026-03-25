@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rss-reader.local/contracts/config-package.schema.json",
+  "title": "RSS Reader Config Package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "exported_at", "feeds", "settings"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "feeds": {
+      "type": "array",
+      "uniqueItems": true,
+      "$comment": "Schema 只能阻止完全相同的重复项。导入器仍必须按规范化 URL 执行唯一性校验并拒绝重复 feed。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "title": {
+            "type": ["string", "null"]
+          },
+          "folder": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "theme",
+        "list_density",
+        "startup_view",
+        "refresh_interval_minutes",
+        "reader_font_scale"
+      ],
+      "properties": {
+        "theme": {
+          "type": "string",
+          "enum": ["light", "dark", "system"]
+        },
+        "list_density": {
+          "type": "string",
+          "enum": ["comfortable", "compact"]
+        },
+        "startup_view": {
+          "type": "string",
+          "enum": ["all", "last_feed"]
+        },
+        "refresh_interval_minutes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reader_font_scale": {
+          "type": "number",
+          "minimum": 0.8,
+          "maximum": 1.5
+        }
+      }
+    }
+  }
+}

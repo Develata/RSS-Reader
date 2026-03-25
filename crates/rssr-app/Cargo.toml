@@ -1,0 +1,34 @@
+[package]
+name = "rssr-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+ammonia.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+dioxus-router.workspace = true
+feed-rs.workspace = true
+quick-xml.workspace = true
+rssr-application = { path = "../rssr-application" }
+rssr-domain = { path = "../rssr-domain" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+dioxus = { workspace = true, features = ["desktop"] }
+rssr-infra = { path = "../rssr-infra" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+dioxus = { workspace = true, features = ["web"] }
+reqwest.workspace = true
+uuid = { version = "1", features = ["js"] }
+web-sys = { version = "0.3", features = ["Window", "Storage"] }

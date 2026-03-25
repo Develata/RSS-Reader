@@ -1,0 +1,18 @@
+[package]
+name = "rssr-application"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+rssr-domain = { path = "../rssr-domain" }
+serde_json.workspace = true
+time.workspace = true
+tokio.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread"] }
