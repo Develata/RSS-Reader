@@ -156,9 +156,9 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 **目的**：补齐文档、体验验证、Web 支持与发布前整理。
 
 - [X] T055 [P] 更新快速开始与实际实现保持一致 `specs/001-minimal-rss-reader/quickstart.md`
-- [ ] T056 清理跨 crate 公共接口与无用抽象 `crates/rssr-application/src/lib.rs`
+- [X] T056 清理跨 crate 公共接口与无用抽象 `crates/rssr-application/src/lib.rs`
 - [X] T057 [P] 补充高风险回归冒烟测试 `crates/rssr-infra/tests/test_regression_smoke.rs`
-- [ ] T058 [P] 验证配置包 schema、导入器和导出器保持一致 `specs/001-minimal-rss-reader/contracts/config-package.schema.json`
+- [X] T058 [P] 验证配置包 schema、导入器和导出器保持一致 `specs/001-minimal-rss-reader/contracts/config-package.schema.json`
 - [X] T059 验证 wasm 目标构建与 Web 本地持久化接线 `crates/rssr-app/src/bootstrap.rs`
 - [ ] T060 运行并记录完整手工验收结果 `tests/manual/final-acceptance-checklist.md`
 
