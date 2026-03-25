@@ -9,7 +9,6 @@ authors.workspace = true
 ammonia.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
-dioxus.workspace = true
 dioxus-router.workspace = true
 feed-rs.workspace = true
 quick-xml.workspace = true
@@ -25,9 +24,11 @@ tracing-subscriber.workspace = true
 url.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+dioxus = { workspace = true, features = ["desktop"] }
 rssr-infra = { path = "../rssr-infra" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+dioxus = { workspace = true, features = ["web"] }
 reqwest.workspace = true
 uuid = { version = "1", features = ["js"] }
 web-sys = { version = "0.3", features = ["Window", "Storage"] }
