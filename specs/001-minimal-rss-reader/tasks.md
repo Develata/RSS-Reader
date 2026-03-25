@@ -42,18 +42,18 @@ description: "极简个人 RSS 阅读器 MVP 的剩余实现任务列表"
 
 **⚠️ 关键**：本阶段完成前，不得开始任何新的用户故事 UI 接线。
 
-- [ ] T001 实现订阅源 SQLite 仓储 `crates/rssr-infra/src/db/feed_repository.rs`
-- [ ] T002 [P] 实现文章 SQLite 仓储与去重更新逻辑 `crates/rssr-infra/src/db/entry_repository.rs`
-- [ ] T003 [P] 实现用户偏好 SQLite 仓储 `crates/rssr-infra/src/db/settings_repository.rs`
-- [ ] T004 [P] 在数据库模块导出仓储实现 `crates/rssr-infra/src/db/mod.rs`
-- [ ] T005 [P] 实现条件请求抓取客户端与请求头处理 `crates/rssr-infra/src/fetch/client.rs`
-- [ ] T006 [P] 在抓取模块导出客户端与抓取结果模型 `crates/rssr-infra/src/fetch/mod.rs`
-- [ ] T007 [P] 实现 RSS/Atom 解析与字段归一化 `crates/rssr-infra/src/parser/feed_parser.rs`
-- [ ] T008 [P] 在解析模块导出解析入口与归一化结果 `crates/rssr-infra/src/parser/mod.rs`
-- [ ] T009 [P] 定义应用装配与共享运行时上下文 `crates/rssr-app/src/bootstrap.rs`
-- [ ] T010 添加订阅刷新流程集成测试 `crates/rssr-infra/tests/test_feed_refresh_flow.rs`
-- [ ] T011 [P] 添加解析与去重回归测试 `crates/rssr-infra/tests/test_feed_parse_dedup.rs`
-- [ ] T012 [P] 添加设置仓储持久化测试 `crates/rssr-infra/tests/test_settings_repository.rs`
+- [X] T001 实现订阅源 SQLite 仓储 `crates/rssr-infra/src/db/feed_repository.rs`
+- [X] T002 [P] 实现文章 SQLite 仓储与去重更新逻辑 `crates/rssr-infra/src/db/entry_repository.rs`
+- [X] T003 [P] 实现用户偏好 SQLite 仓储 `crates/rssr-infra/src/db/settings_repository.rs`
+- [X] T004 [P] 在数据库模块导出仓储实现 `crates/rssr-infra/src/db/mod.rs`
+- [X] T005 [P] 实现条件请求抓取客户端与请求头处理 `crates/rssr-infra/src/fetch/client.rs`
+- [X] T006 [P] 在抓取模块导出客户端与抓取结果模型 `crates/rssr-infra/src/fetch/mod.rs`
+- [X] T007 [P] 实现 RSS/Atom 解析与字段归一化 `crates/rssr-infra/src/parser/feed_parser.rs`
+- [X] T008 [P] 在解析模块导出解析入口与归一化结果 `crates/rssr-infra/src/parser/mod.rs`
+- [X] T009 [P] 定义应用装配与共享运行时上下文 `crates/rssr-app/src/bootstrap.rs`
+- [X] T010 添加订阅刷新流程集成测试 `crates/rssr-infra/tests/test_feed_refresh_flow.rs`
+- [X] T011 [P] 添加解析与去重回归测试 `crates/rssr-infra/tests/test_feed_parse_dedup.rs`
+- [X] T012 [P] 添加设置仓储持久化测试 `crates/rssr-infra/tests/test_settings_repository.rs`
 
 **检查点**：本地仓储、抓取、解析和应用装配已经具备，用户故事实现可开始。
 
@@ -68,21 +68,21 @@ feed 之外的远端服务。
 
 ### 用户故事 1 的验证
 
-- [ ] T013 [P] [US1] 添加订阅、刷新和文章入库端到端测试 `crates/rssr-infra/tests/test_feed_refresh_flow.rs`
+- [X] T013 [P] [US1] 添加订阅、刷新和文章入库端到端测试 `crates/rssr-infra/tests/test_feed_refresh_flow.rs`
 - [ ] T014 [P] [US1] 补充列表与阅读主流程手工验证说明 `tests/manual/us1-reading-checklist.md`
 
 ### 用户故事 1 的实现
 
-- [ ] T015 [US1] 在订阅服务中实现添加订阅与刷新用例 `crates/rssr-application/src/feed_service.rs`
-- [ ] T016 [US1] 在文章服务中实现文章列表与阅读详情查询 `crates/rssr-application/src/entry_service.rs`
-- [ ] T017 [P] [US1] 定义列表与阅读页 DTO `crates/rssr-application/src/dto.rs`
-- [ ] T018 [P] [US1] 扩展路由以支持订阅页、文章列表页和阅读页 `crates/rssr-app/src/router.rs`
-- [ ] T019 [P] [US1] 实现订阅栏页面 `crates/rssr-app/src/pages/feeds_page.rs`
-- [ ] T020 [P] [US1] 实现文章列表页面 `crates/rssr-app/src/pages/entries_page.rs`
-- [ ] T021 [P] [US1] 实现阅读页 `crates/rssr-app/src/pages/reader_page.rs`
-- [ ] T022 [P] [US1] 实现空状态与错误提示组件 `crates/rssr-app/src/components/status_banner.rs`
-- [ ] T023 [US1] 接线应用启动、原生/Web 后端选择与初始加载流程 `crates/rssr-app/src/app.rs`
-- [ ] T024 [US1] 更新页面导出入口以纳入 MVP 页面结构 `crates/rssr-app/src/pages/mod.rs`
+- [X] T015 [US1] 在订阅服务中实现添加订阅与刷新用例 `crates/rssr-application/src/feed_service.rs`
+- [X] T016 [US1] 在文章服务中实现文章列表与阅读详情查询 `crates/rssr-application/src/entry_service.rs`
+- [X] T017 [P] [US1] 定义列表与阅读页 DTO `crates/rssr-application/src/dto.rs`
+- [X] T018 [P] [US1] 扩展路由以支持订阅页、文章列表页和阅读页 `crates/rssr-app/src/router.rs`
+- [X] T019 [P] [US1] 实现订阅栏页面 `crates/rssr-app/src/pages/feeds_page.rs`
+- [X] T020 [P] [US1] 实现文章列表页面 `crates/rssr-app/src/pages/entries_page.rs`
+- [X] T021 [P] [US1] 实现阅读页 `crates/rssr-app/src/pages/reader_page.rs`
+- [X] T022 [P] [US1] 实现空状态与错误提示组件 `crates/rssr-app/src/components/status_banner.rs`
+- [X] T023 [US1] 接线应用启动、原生/Web 后端选择与初始加载流程 `crates/rssr-app/src/app.rs`
+- [X] T024 [US1] 更新页面导出入口以纳入 MVP 页面结构 `crates/rssr-app/src/pages/mod.rs`
 - [ ] T025 [US1] 记录 MVP 刷新与阅读性能检查结果 `tests/manual/us1-performance-checklist.md`
 
 **检查点**：此时用户故事 1 应完整可用，并可独立演示为 MVP。
@@ -98,17 +98,17 @@ feed 之外的远端服务。
 
 ### 用户故事 2 的验证
 
-- [ ] T026 [P] [US2] 添加已读、收藏与标题搜索集成测试 `crates/rssr-infra/tests/test_entry_state_and_search.rs`
+- [X] T026 [P] [US2] 添加已读、收藏与标题搜索集成测试 `crates/rssr-infra/tests/test_entry_state_and_search.rs`
 - [ ] T027 [P] [US2] 添加桌面快捷键与筛选交互手工验证说明 `tests/manual/us2-interaction-checklist.md`
 
 ### 用户故事 2 的实现
 
-- [ ] T028 [US2] 扩展文章仓储以支持状态更新、筛选和标题搜索 `crates/rssr-infra/src/db/entry_repository.rs`
-- [ ] T029 [US2] 在文章服务中实现已读、收藏、筛选和搜索用例 `crates/rssr-application/src/entry_service.rs`
-- [ ] T030 [P] [US2] 实现文章筛选与搜索组件 `crates/rssr-app/src/components/entry_filters.rs`
-- [ ] T031 [P] [US2] 在文章列表页接入已读/收藏和筛选搜索交互 `crates/rssr-app/src/pages/entries_page.rs`
-- [ ] T032 [P] [US2] 在阅读页接入已读/收藏切换交互 `crates/rssr-app/src/pages/reader_page.rs`
-- [ ] T033 [US2] 实现桌面快捷键 hook `crates/rssr-app/src/hooks/use_reader_shortcuts.rs`
+- [X] T028 [US2] 扩展文章仓储以支持状态更新、筛选和标题搜索 `crates/rssr-infra/src/db/entry_repository.rs`
+- [X] T029 [US2] 在文章服务中实现已读、收藏、筛选和搜索用例 `crates/rssr-application/src/entry_service.rs`
+- [X] T030 [P] [US2] 实现文章筛选与搜索组件 `crates/rssr-app/src/components/entry_filters.rs`
+- [X] T031 [P] [US2] 在文章列表页接入已读/收藏和筛选搜索交互 `crates/rssr-app/src/pages/entries_page.rs`
+- [X] T032 [P] [US2] 在阅读页接入已读/收藏切换交互 `crates/rssr-app/src/pages/reader_page.rs`
+- [X] T033 [US2] 实现桌面快捷键 hook `crates/rssr-app/src/hooks/use_reader_shortcuts.rs`
 - [ ] T034 [US2] 记录 10,000 篇文章规模下的状态切换与搜索性能结果 `tests/manual/us2-performance-checklist.md`
 
 **检查点**：此时用户故事 1 和 2 都应可独立工作。

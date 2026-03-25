@@ -1,7 +1,10 @@
 use dioxus::prelude::*;
 use time::format_description::well_known::Rfc3339;
 
-use crate::{app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner};
+use crate::{
+    app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner,
+    hooks::use_reader_shortcuts::use_reader_shortcuts,
+};
 
 #[component]
 pub fn ReaderPage(entry_id: i64) -> Element {
@@ -14,6 +17,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
     let mut is_starred = use_signal(|| false);
     let reload_tick = use_signal(|| 0_u64);
     let mut error = use_signal(|| None::<String>);
+    let shortcuts = use_reader_shortcuts(entry_id, is_read, is_starred, reload_tick);
 
     let _ = use_resource(move || async move {
         let _ = reload_tick();
@@ -54,11 +58,12 @@ pub fn ReaderPage(entry_id: i64) -> Element {
     });
 
     rsx! {
-        article { class: "reader-page",
+        article { class: "reader-page", tabindex: 0, onkeydown: move |event| shortcuts.call(event),
             AppNav {}
             h2 { "{title}" }
             p { class: "reader-meta", "来源：{source}" }
             p { class: "reader-meta", "发布时间：{published_at}" }
+            p { class: "reader-meta", "快捷键：`M` 切换已读，`F` 切换收藏" }
             div { class: "entry-card__actions",
                 button {
                     class: "button secondary",
