@@ -24,9 +24,7 @@ fn main() {
 
     let config = dioxus::desktop::Config::new().with_window(window);
 
-    LaunchBuilder::new()
-        .with_cfg(config)
-        .launch(app::App);
+    LaunchBuilder::new().with_cfg(config).launch(app::App);
 }
 
 #[cfg(target_arch = "wasm32")]

@@ -59,7 +59,11 @@ pub fn ReaderPage(entry_id: i64) -> Element {
     });
 
     rsx! {
-        article { class: "reader-page", tabindex: 0, onkeydown: move |event| shortcuts.call(event),
+        article {
+            class: "reader-page",
+            "data-page": "reader",
+            tabindex: 0,
+            onkeydown: move |event| shortcuts.call(event),
             AppNav {}
             h2 { "{title}" }
             p { class: "reader-meta", "来源：{source}" }
@@ -68,6 +72,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             div { class: "entry-card__actions",
                 button {
                     class: "button secondary",
+                    "data-action": "mark-read",
                     onclick: move |_| {
                         let mut reload_tick = reload_tick;
                         spawn(async move {
@@ -81,6 +86,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 }
                 button {
                     class: "button secondary",
+                    "data-action": "toggle-starred",
                     onclick: move |_| {
                         let mut reload_tick = reload_tick;
                         spawn(async move {

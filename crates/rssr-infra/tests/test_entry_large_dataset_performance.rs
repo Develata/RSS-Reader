@@ -1,11 +1,9 @@
 use std::time::Instant;
 
 use rssr_domain::{EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription};
-use rssr_infra::{
-    db::{
-        entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
-        sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
-    },
+use rssr_infra::db::{
+    entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
+    sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
 };
 use sqlx::QueryBuilder;
 use time::{Duration, OffsetDateTime};
@@ -64,10 +62,8 @@ async fn entry_repository_handles_large_dataset_queries() {
     }
 
     let start = Instant::now();
-    let all_entries = entry_repository
-        .list_entries(&EntryQuery::default())
-        .await
-        .expect("list entries");
+    let all_entries =
+        entry_repository.list_entries(&EntryQuery::default()).await.expect("list entries");
     let list_all_ms = start.elapsed().as_millis();
     assert_eq!(all_entries.len(), 10_000);
 

@@ -16,6 +16,10 @@ impl FeedService {
         Ok(self.repository.upsert_subscription(new_feed).await?)
     }
 
+    pub async fn remove_subscription(&self, feed_id: i64) -> Result<()> {
+        Ok(self.repository.set_deleted(feed_id, true).await?)
+    }
+
     pub async fn list_feeds(&self) -> Result<Vec<FeedSummary>> {
         Ok(self.repository.list_summaries().await?)
     }

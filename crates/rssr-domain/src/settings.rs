@@ -34,6 +34,8 @@ pub struct UserSettings {
     pub startup_view: StartupView,
     pub refresh_interval_minutes: u32,
     pub reader_font_scale: f32,
+    #[serde(default)]
+    pub custom_css: String,
 }
 
 impl Default for UserSettings {
@@ -44,6 +46,7 @@ impl Default for UserSettings {
             startup_view: StartupView::All,
             refresh_interval_minutes: 30,
             reader_font_scale: 1.0,
+            custom_css: String::new(),
         }
     }
 }

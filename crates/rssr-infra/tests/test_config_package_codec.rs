@@ -82,6 +82,7 @@ fn sample_package() -> ConfigPackage {
             startup_view: StartupView::All,
             refresh_interval_minutes: 15,
             reader_font_scale: 1.1,
+            custom_css: ".feed-card { border-radius: 12px; }".to_string(),
         },
     }
 }

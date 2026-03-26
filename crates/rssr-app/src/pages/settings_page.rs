@@ -25,7 +25,7 @@ pub fn SettingsPage() -> Element {
     });
 
     rsx! {
-        section { class: "page page-settings",
+        section { class: "page page-settings", "data-page": "settings",
             AppNav {}
             h2 { "设置" }
             StatusBanner { message: status(), tone: "info".to_string() }
@@ -35,6 +35,7 @@ pub fn SettingsPage() -> Element {
                     label { class: "field-label", "主题" }
                     select {
                         class: "select-input",
+                        "data-action": "theme-mode",
                         value: "{theme_value(draft().theme)}",
                         onchange: move |event| {
                             let mut next = draft();
@@ -48,6 +49,7 @@ pub fn SettingsPage() -> Element {
                     label { class: "field-label", "列表密度" }
                     select {
                         class: "select-input",
+                        "data-action": "list-density",
                         value: "{density_value(draft().list_density)}",
                         onchange: move |event| {
                             let mut next = draft();
@@ -60,6 +62,7 @@ pub fn SettingsPage() -> Element {
                     label { class: "field-label", "启动视图" }
                     select {
                         class: "select-input",
+                        "data-action": "startup-view",
                         value: "{startup_value(draft().startup_view)}",
                         onchange: move |event| {
                             let mut next = draft();
@@ -72,6 +75,7 @@ pub fn SettingsPage() -> Element {
                     label { class: "field-label", "刷新间隔（分钟）" }
                     input {
                         class: "text-input",
+                        "data-action": "refresh-interval",
                         value: "{draft().refresh_interval_minutes}",
                         oninput: move |event| {
                             if let Ok(minutes) = event.value().parse::<u32>() {
@@ -84,6 +88,7 @@ pub fn SettingsPage() -> Element {
                     label { class: "field-label", "阅读字号缩放" }
                     input {
                         class: "text-input",
+                        "data-action": "reader-font-scale",
                         value: "{draft().reader_font_scale}",
                         oninput: move |event| {
                             if let Ok(scale) = event.value().parse::<f32>() {
@@ -93,8 +98,21 @@ pub fn SettingsPage() -> Element {
                             }
                         }
                     }
+                    label { class: "field-label", "自定义 CSS" }
+                    textarea {
+                        class: "text-area",
+                        "data-action": "custom-css",
+                        value: "{draft().custom_css}",
+                        placeholder: "[data-page=\"reader\"] .reader-body {{ max-width: 72ch; }}",
+                        oninput: move |event| {
+                            let mut next = draft();
+                            next.custom_css = event.value();
+                            draft.set(next);
+                        }
+                    }
                     button {
                         class: "button",
+                        "data-action": "save-settings",
                         onclick: move |_| {
                             let next = draft();
                             let mut status = status;
@@ -119,6 +137,7 @@ pub fn SettingsPage() -> Element {
                     label { class: "field-label", "Endpoint" }
                     input {
                         class: "text-input",
+                        "data-action": "webdav-endpoint",
                         value: "{endpoint}",
                         placeholder: "https://dav.example.com/base/",
                         oninput: move |event| endpoint.set(event.value())
@@ -126,6 +145,7 @@ pub fn SettingsPage() -> Element {
                     label { class: "field-label", "Remote Path" }
                     input {
                         class: "text-input",
+                        "data-action": "webdav-remote-path",
                         value: "{remote_path}",
                         placeholder: "config/rss-reader.json",
                         oninput: move |event| remote_path.set(event.value())
@@ -133,6 +153,7 @@ pub fn SettingsPage() -> Element {
                     div { class: "inline-actions",
                         button {
                             class: "button secondary",
+                            "data-action": "push-webdav",
                             onclick: move |_| {
                                 let endpoint = endpoint();
                                 let remote_path = remote_path();
@@ -151,6 +172,7 @@ pub fn SettingsPage() -> Element {
                         }
                         button {
                             class: "button secondary",
+                            "data-action": "pull-webdav",
                             onclick: move |_| {
                                 let endpoint = endpoint();
                                 let remote_path = remote_path();

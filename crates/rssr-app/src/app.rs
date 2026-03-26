@@ -22,6 +22,9 @@ pub fn App() -> Element {
 
     rsx! {
         style { {include_str!("../../../assets/styles.css")} }
+        if !settings().custom_css.trim().is_empty() {
+            style { id: "user-custom-css", "{settings().custom_css}" }
+        }
         div { class: "app-shell {theme_class(settings().theme)}",
             header { class: "app-header",
                 p { class: "app-eyebrow", "Local-first RSS" }
@@ -37,10 +40,10 @@ pub fn App() -> Element {
 pub fn AppNav() -> Element {
     rsx! {
         nav { class: "app-nav",
-            Link { class: "app-nav__link", to: AppRoute::HomePage {}, "首页" }
-            Link { class: "app-nav__link", to: AppRoute::FeedsPage {}, "订阅" }
-            Link { class: "app-nav__link", to: AppRoute::EntriesPage {}, "文章" }
-            Link { class: "app-nav__link", to: AppRoute::SettingsPage {}, "设置" }
+            Link { class: "app-nav__link", "data-nav": "home", to: AppRoute::HomePage {}, "首页" }
+            Link { class: "app-nav__link", "data-nav": "feeds", to: AppRoute::FeedsPage {}, "订阅" }
+            Link { class: "app-nav__link", "data-nav": "entries", to: AppRoute::EntriesPage {}, "文章" }
+            Link { class: "app-nav__link", "data-nav": "settings", to: AppRoute::SettingsPage {}, "设置" }
         }
     }
 }

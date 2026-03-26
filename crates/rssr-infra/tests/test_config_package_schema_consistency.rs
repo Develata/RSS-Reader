@@ -37,7 +37,8 @@ fn config_package_schema_matches_runtime_contract() {
             "list_density",
             "startup_view",
             "refresh_interval_minutes",
-            "reader_font_scale"
+            "reader_font_scale",
+            "custom_css"
         ])
     );
     assert_eq!(
@@ -55,6 +56,7 @@ fn config_package_schema_matches_runtime_contract() {
     assert_eq!(settings["properties"]["refresh_interval_minutes"]["minimum"], 1);
     assert_eq!(settings["properties"]["reader_font_scale"]["minimum"], 0.8);
     assert_eq!(settings["properties"]["reader_font_scale"]["maximum"], 1.5);
+    assert_eq!(settings["properties"]["custom_css"]["type"], "string");
 }
 
 #[test]
@@ -73,6 +75,7 @@ fn encoded_config_package_uses_schema_field_names_and_enum_values() {
             startup_view: StartupView::LastFeed,
             refresh_interval_minutes: 15,
             reader_font_scale: 1.2,
+            custom_css: "[data-page=\"reader\"] .reader-body { max-width: 70ch; }".to_string(),
         },
     };
 
@@ -89,6 +92,10 @@ fn encoded_config_package_uses_schema_field_names_and_enum_values() {
     assert_eq!(json["settings"]["startup_view"], "last_feed");
     assert_eq!(json["settings"]["refresh_interval_minutes"], 15);
     assert_eq!(json["settings"]["reader_font_scale"], 1.2);
+    assert_eq!(
+        json["settings"]["custom_css"],
+        "[data-page=\"reader\"] .reader-body { max-width: 70ch; }"
+    );
 
     let decoded = decode_config_package(&encoded).expect("encoded package should decode");
     assert_eq!(decoded, package);

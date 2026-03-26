@@ -13,6 +13,7 @@ pub fn EntryFilters(
         div { class: "entry-filters",
             input {
                 class: "text-input",
+                "data-action": "search-title",
                 value: "{search}",
                 placeholder: "按标题搜索",
                 oninput: move |event| on_search.call(event.value())
@@ -20,6 +21,7 @@ pub fn EntryFilters(
             label { class: "entry-filters__toggle",
                 input {
                     r#type: "checkbox",
+                    "data-action": "filter-unread",
                     checked: unread_only,
                     onchange: move |event| on_toggle_unread.call(event.checked())
                 }
@@ -28,6 +30,7 @@ pub fn EntryFilters(
             label { class: "entry-filters__toggle",
                 input {
                     r#type: "checkbox",
+                    "data-action": "filter-starred",
                     checked: starred_only,
                     onchange: move |event| on_toggle_starred.call(event.checked())
                 }

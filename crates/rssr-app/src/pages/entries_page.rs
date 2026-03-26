@@ -48,7 +48,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     });
 
     rsx! {
-        section { class: "page page-entries",
+        section { class: "page page-entries", "data-page": "entries",
             AppNav {}
             h2 { if feed_id.is_some() { "订阅文章" } else { "文章" } }
             p {
@@ -60,7 +60,12 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                 }
             }
             if feed_id.is_some() {
-                Link { class: "button secondary", to: AppRoute::EntriesPage {}, "返回全部文章" }
+                Link {
+                    class: "button secondary",
+                    "data-nav": "entries",
+                    to: AppRoute::EntriesPage {},
+                    "返回全部文章"
+                }
             }
             EntryFilters {
                 search: search(),
@@ -93,6 +98,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             div { class: "entry-card__actions",
                                 button {
                                     class: "button secondary",
+                                    "data-action": "mark-read",
                                     onclick: move |_| {
                                         let mut reload_tick = reload_tick;
                                         spawn(async move {
@@ -106,6 +112,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 }
                                 button {
                                     class: "button secondary",
+                                    "data-action": "toggle-starred",
                                     onclick: move |_| {
                                         let mut reload_tick = reload_tick;
                                         spawn(async move {

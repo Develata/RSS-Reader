@@ -26,7 +26,7 @@ pub fn FeedsPage() -> Element {
     });
 
     rsx! {
-        section { class: "page page-feeds",
+        section { class: "page page-feeds", "data-page": "feeds",
             AppNav {}
             h2 { "订阅" }
             p { class: "page-intro", "把 feed URL 保存到本地库，并立即执行首次刷新。" }
@@ -34,12 +34,14 @@ pub fn FeedsPage() -> Element {
             div { class: "feed-form",
                 input {
                     class: "text-input",
+                    "data-action": "feed-url-input",
                     value: "{feed_url}",
                     placeholder: "https://example.com/feed.xml",
                     oninput: move |event| feed_url.set(event.value())
                 }
                 button {
                     class: "button",
+                    "data-action": "add-feed",
                     onclick: move |_| {
                         let url = feed_url();
                         let mut status = status;
@@ -62,6 +64,7 @@ pub fn FeedsPage() -> Element {
                 }
                 button {
                     class: "button secondary",
+                    "data-action": "refresh-all",
                     onclick: move |_| {
                         let mut status = status;
                         let mut reload_tick = reload_tick;
@@ -86,6 +89,7 @@ pub fn FeedsPage() -> Element {
                     h3 { "配置包 JSON" }
                     textarea {
                         class: "text-area",
+                        "data-action": "config-text",
                         value: "{config_text}",
                         placeholder: "{{\n  \"version\": 1,\n  ...\n}}",
                         oninput: move |event| config_text.set(event.value())
@@ -93,6 +97,7 @@ pub fn FeedsPage() -> Element {
                     div { class: "inline-actions",
                         button {
                             class: "button secondary",
+                            "data-action": "export-config",
                             onclick: move |_| {
                                 let mut config_text = config_text;
                                 let mut status = status;
@@ -113,6 +118,7 @@ pub fn FeedsPage() -> Element {
                         }
                         button {
                             class: "button secondary",
+                            "data-action": "import-config",
                             onclick: move |_| {
                                 let raw = config_text();
                                 let mut status = status;
@@ -138,6 +144,7 @@ pub fn FeedsPage() -> Element {
                     h3 { "OPML" }
                     textarea {
                         class: "text-area",
+                        "data-action": "opml-text",
                         value: "{opml_text}",
                         placeholder: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
                         oninput: move |event| opml_text.set(event.value())
@@ -145,6 +152,7 @@ pub fn FeedsPage() -> Element {
                     div { class: "inline-actions",
                         button {
                             class: "button secondary",
+                            "data-action": "export-opml",
                             onclick: move |_| {
                                 let mut opml_text = opml_text;
                                 let mut status = status;
@@ -165,6 +173,7 @@ pub fn FeedsPage() -> Element {
                         }
                         button {
                             class: "button secondary",
+                            "data-action": "import-opml",
                             onclick: move |_| {
                                 let raw = opml_text();
                                 let mut status = status;
@@ -195,6 +204,7 @@ pub fn FeedsPage() -> Element {
                         li { class: "feed-card", key: "{feed.id}",
                             Link {
                                 class: "feed-card__title",
+                                "data-nav": "feed-entries",
                                 to: AppRoute::FeedEntriesPage { feed_id: feed.id },
                                 "{feed.title}"
                             }
@@ -202,6 +212,7 @@ pub fn FeedsPage() -> Element {
                             div { class: "entry-card__actions",
                                 button {
                                     class: "button secondary",
+                                    "data-action": "refresh-feed",
                                     onclick: move |_| {
                                         let mut status = status;
                                         let mut reload_tick = reload_tick;

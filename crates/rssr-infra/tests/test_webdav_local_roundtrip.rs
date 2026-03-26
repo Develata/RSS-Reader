@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use rssr_application::import_export_service::{ImportExportService, RemoteConfigStore};
-use rssr_domain::{FeedRepository, NewFeedSubscription, SettingsRepository, ThemeMode, UserSettings};
+use rssr_domain::{
+    FeedRepository, NewFeedSubscription, SettingsRepository, ThemeMode, UserSettings,
+};
 use rssr_infra::{
     config_sync::webdav::WebDavConfigSync,
     db::{
@@ -153,11 +155,10 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
         }
     });
 
-    let remote = WebDavRemote(WebDavConfigSync::new(
-        format!("http://{}/base", addr),
-        "config/rss-reader.json",
-    )
-    .expect("create webdav sync"));
+    let remote = WebDavRemote(
+        WebDavConfigSync::new(format!("http://{}/base", addr), "config/rss-reader.json")
+            .expect("create webdav sync"),
+    );
 
     service.push_remote_config(&remote).await.expect("push config");
 

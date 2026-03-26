@@ -44,7 +44,8 @@
         "list_density",
         "startup_view",
         "refresh_interval_minutes",
-        "reader_font_scale"
+        "reader_font_scale",
+        "custom_css"
       ],
       "properties": {
         "theme": {
@@ -67,6 +68,9 @@
           "type": "number",
           "minimum": 0.8,
           "maximum": 1.5
+        },
+        "custom_css": {
+          "type": "string"
         }
       }
     }

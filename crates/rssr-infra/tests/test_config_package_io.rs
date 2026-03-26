@@ -51,6 +51,7 @@ async fn config_package_roundtrip_restores_feeds_and_settings() {
         startup_view: StartupView::LastFeed,
         refresh_interval_minutes: 15,
         reader_font_scale: 1.2,
+        custom_css: "[data-page=\"feeds\"] .feed-card { order: 2; }".to_string(),
     };
     export_settings_repository.save(&expected_settings).await.expect("save settings");
 
