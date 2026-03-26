@@ -117,6 +117,7 @@ RSS Reader 的界面需要同时满足两个目标：
 - 用户可在设置页编辑并保存 `custom_css`
 - 应用启动时会在默认样式之后注入用户 CSS
 - `custom_css` 已进入设置持久化、配置导入导出和 schema 契约
+- 主题作者可参考 [theme-author-selector-reference.md](./theme-author-selector-reference.md)
 
 ### 已实现的 CLI 命令
 
