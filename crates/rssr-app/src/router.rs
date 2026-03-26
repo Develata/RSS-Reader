@@ -1,5 +1,4 @@
 use dioxus::prelude::*;
-use dioxus_router::components::Router;
 
 use crate::pages::{
     entries_page::{EntriesPage, FeedEntriesPage},
@@ -9,7 +8,7 @@ use crate::pages::{
     settings_page::SettingsPage,
 };
 
-#[derive(Debug, Clone, dioxus_router::prelude::Routable, PartialEq)]
+#[derive(Debug, Clone, Routable, PartialEq)]
 pub enum AppRoute {
     #[route("/", HomePage)]
     HomePage {},
