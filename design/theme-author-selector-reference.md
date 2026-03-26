@@ -107,6 +107,8 @@
 - `[data-action="refresh-interval"]`
 - `[data-action="reader-font-scale"]`
 - `[data-action="custom-css"]`
+- `[data-action="import-custom-css-file"]`
+- `[data-action="export-custom-css-file"]`
 - `[data-action="apply-theme-newsprint"]`
 - `[data-action="apply-theme-forest-desk"]`
 - `[data-action="apply-theme-midnight-ledger"]`

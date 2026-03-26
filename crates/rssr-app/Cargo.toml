@@ -14,6 +14,7 @@ feed-rs.workspace = true
 quick-xml.workspace = true
 rssr-application = { path = "../rssr-application" }
 rssr-domain = { path = "../rssr-domain" }
+rfd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

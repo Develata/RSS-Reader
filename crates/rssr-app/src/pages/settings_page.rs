@@ -110,6 +110,50 @@ pub fn SettingsPage() -> Element {
                             draft.set(next);
                         }
                     }
+                    div { class: "inline-actions",
+                        button {
+                            class: "button secondary",
+                            "data-action": "import-custom-css-file",
+                            onclick: move |_| {
+                                let mut draft = draft;
+                                let mut status = status;
+                                spawn(async move {
+                                    match pick_css_file_contents().await {
+                                        Ok(Some(raw)) => {
+                                            let mut next = draft();
+                                            next.custom_css = raw;
+                                            draft.set(next);
+                                            status.set("已从文件载入自定义 CSS。点击“保存设置”即可生效。".to_string());
+                                        }
+                                        Ok(None) => status.set("已取消载入 CSS 文件。".to_string()),
+                                        Err(err) => status.set(format!("载入 CSS 文件失败：{err}")),
+                                    }
+                                });
+                            },
+                            "导入主题文件"
+                        }
+                        button {
+                            class: "button secondary",
+                            "data-action": "export-custom-css-file",
+                            onclick: move |_| {
+                                let raw = draft().custom_css;
+                                let mut status = status;
+                                spawn(async move {
+                                    if raw.trim().is_empty() {
+                                        status.set("当前没有可导出的自定义 CSS。".to_string());
+                                        return;
+                                    }
+
+                                    match save_css_file(&raw).await {
+                                        Ok(true) => status.set("已导出当前自定义 CSS。".to_string()),
+                                        Ok(false) => status.set("已取消导出 CSS 文件。".to_string()),
+                                        Err(err) => status.set(format!("导出 CSS 文件失败：{err}")),
+                                    }
+                                });
+                            },
+                            "导出当前 CSS"
+                        }
+                    }
                     p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。载入后点击“保存设置”生效。" }
                     div { class: "preset-grid",
                         button {
@@ -306,4 +350,32 @@ fn forest_desk_theme_css() -> &'static str {
 
 fn midnight_ledger_theme_css() -> &'static str {
     include_str!("../../../../assets/themes/midnight-ledger.css")
+}
+
+async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
+    let file = rfd::AsyncFileDialog::new().add_filter("CSS", &["css"]).pick_file().await;
+
+    let Some(file) = file else {
+        return Ok(None);
+    };
+
+    let bytes = file.read().await;
+    let raw =
+        String::from_utf8(bytes).map_err(|err| anyhow::anyhow!("CSS 文件不是有效 UTF-8：{err}"))?;
+    Ok(Some(raw))
+}
+
+async fn save_css_file(raw: &str) -> anyhow::Result<bool> {
+    let file = rfd::AsyncFileDialog::new()
+        .set_file_name("rss-reader-theme.css")
+        .add_filter("CSS", &["css"])
+        .save_file()
+        .await;
+
+    let Some(file) = file else {
+        return Ok(false);
+    };
+
+    file.write(raw.as_bytes()).await?;
+    Ok(true)
 }
