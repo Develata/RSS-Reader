@@ -107,6 +107,10 @@
 - `[data-action="refresh-interval"]`
 - `[data-action="reader-font-scale"]`
 - `[data-action="custom-css"]`
+- `[data-action="apply-theme-newsprint"]`
+- `[data-action="apply-theme-forest-desk"]`
+- `[data-action="apply-theme-midnight-ledger"]`
+- `[data-action="clear-custom-css"]`
 - `[data-action="save-settings"]`
 - `[data-action="webdav-endpoint"]`
 - `[data-action="webdav-remote-path"]`

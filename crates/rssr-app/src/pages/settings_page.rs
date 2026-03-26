@@ -110,6 +110,53 @@ pub fn SettingsPage() -> Element {
                             draft.set(next);
                         }
                     }
+                    p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。载入后点击“保存设置”生效。" }
+                    div { class: "preset-grid",
+                        button {
+                            class: "button secondary",
+                            "data-action": "apply-theme-newsprint",
+                            onclick: move |_| {
+                                let mut next = draft();
+                                next.custom_css = newsprint_theme_css().to_string();
+                                draft.set(next);
+                                status.set("已载入示例主题：Newsprint。点击“保存设置”即可生效。".to_string());
+                            },
+                            "Newsprint"
+                        }
+                        button {
+                            class: "button secondary",
+                            "data-action": "apply-theme-forest-desk",
+                            onclick: move |_| {
+                                let mut next = draft();
+                                next.custom_css = forest_desk_theme_css().to_string();
+                                draft.set(next);
+                                status.set("已载入示例主题：Forest Desk。点击“保存设置”即可生效。".to_string());
+                            },
+                            "Forest Desk"
+                        }
+                        button {
+                            class: "button secondary",
+                            "data-action": "apply-theme-midnight-ledger",
+                            onclick: move |_| {
+                                let mut next = draft();
+                                next.custom_css = midnight_ledger_theme_css().to_string();
+                                draft.set(next);
+                                status.set("已载入示例主题：Midnight Ledger。点击“保存设置”即可生效。".to_string());
+                            },
+                            "Midnight Ledger"
+                        }
+                        button {
+                            class: "button secondary danger-outline",
+                            "data-action": "clear-custom-css",
+                            onclick: move |_| {
+                                let mut next = draft();
+                                next.custom_css.clear();
+                                draft.set(next);
+                                status.set("已清空自定义 CSS。点击“保存设置”即可生效。".to_string());
+                            },
+                            "清空 CSS"
+                        }
+                    }
                     button {
                         class: "button",
                         "data-action": "save-settings",
@@ -247,4 +294,16 @@ fn parse_startup_view(raw: &str) -> StartupView {
         "last_feed" => StartupView::LastFeed,
         _ => StartupView::All,
     }
+}
+
+fn newsprint_theme_css() -> &'static str {
+    include_str!("../../../../assets/themes/newsprint.css")
+}
+
+fn forest_desk_theme_css() -> &'static str {
+    include_str!("../../../../assets/themes/forest-desk.css")
+}
+
+fn midnight_ledger_theme_css() -> &'static str {
+    include_str!("../../../../assets/themes/midnight-ledger.css")
 }
