@@ -5,7 +5,8 @@ mod imp {
     use anyhow::Context;
     use rssr_application::{EntryService, FeedService, ImportExportService, SettingsService};
     use rssr_domain::{
-        Entry, EntryQuery, FeedRepository, FeedSummary, NewFeedSubscription, UserSettings,
+        Entry, EntryQuery, EntryRepository, FeedRepository, FeedSummary, NewFeedSubscription,
+        UserSettings,
     };
     use rssr_infra::{
         config_sync::webdav::WebDavConfigSync,
@@ -112,6 +113,12 @@ mod imp {
                 .await
                 .context("保存订阅失败")?;
             self.refresh_feed(feed.id).await.context("首次刷新订阅失败")?;
+            Ok(())
+        }
+
+        pub async fn remove_feed(&self, feed_id: i64) -> anyhow::Result<()> {
+            self.entry_repository.delete_for_feed(feed_id).await.context("删除订阅文章失败")?;
+            self.feed_service.remove_subscription(feed_id).await.context("删除订阅失败")?;
             Ok(())
         }
 
@@ -538,6 +545,19 @@ mod imp {
             save_state(&state)?;
             drop(state);
             self.refresh_feed(feed_id).await
+        }
+
+        pub async fn remove_feed(&self, feed_id: i64) -> anyhow::Result<()> {
+            let mut state = self.state.lock().expect("lock state");
+            let feed = state
+                .feeds
+                .iter_mut()
+                .find(|feed| feed.id == feed_id && !feed.is_deleted)
+                .context("订阅不存在")?;
+            feed.is_deleted = true;
+            feed.updated_at = OffsetDateTime::now_utc();
+            state.entries.retain(|entry| entry.feed_id != feed_id);
+            save_state(&state)
         }
 
         pub async fn refresh_all(&self) -> anyhow::Result<()> {
