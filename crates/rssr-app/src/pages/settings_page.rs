@@ -10,6 +10,8 @@ use crate::{
 pub fn SettingsPage() -> Element {
     let mut theme = use_context::<ThemeController>();
     let mut draft = use_signal(|| (theme.settings)());
+    let mut preset_choice =
+        use_signal(|| detect_preset_key(&(theme.settings)().custom_css).to_string());
     let mut endpoint = use_signal(String::new);
     let mut remote_path = use_signal(|| "config/rss-reader.json".to_string());
     let mut status = use_signal(|| "在这里管理主题、阅读偏好和远端配置交换。".to_string());
@@ -17,7 +19,10 @@ pub fn SettingsPage() -> Element {
     let _ = use_resource(move || async move {
         match AppServices::shared().await {
             Ok(services) => match services.load_settings().await {
-                Ok(settings) => draft.set(settings),
+                Ok(settings) => {
+                    preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
+                    draft.set(settings);
+                }
                 Err(err) => status.set(format!("读取设置失败：{err}")),
             },
             Err(err) => status.set(format!("初始化应用失败：{err}")),
@@ -107,8 +112,14 @@ pub fn SettingsPage() -> Element {
                         oninput: move |event| {
                             let mut next = draft();
                             next.custom_css = event.value();
+                            preset_choice.set(detect_preset_key(&next.custom_css).to_string());
                             draft.set(next);
                         }
+                    }
+                    p {
+                        class: "page-intro",
+                        "data-action": "current-custom-css-source",
+                        "当前样式来源：{custom_css_source_label(&draft().custom_css)}"
                     }
                     div { class: "inline-actions",
                         button {
@@ -122,6 +133,7 @@ pub fn SettingsPage() -> Element {
                                         Ok(Some(raw)) => {
                                             let mut next = draft();
                                             next.custom_css = raw;
+                                            preset_choice.set(detect_preset_key(&next.custom_css).to_string());
                                             draft.set(next);
                                             status.set("已从文件载入自定义 CSS。点击“保存设置”即可生效。".to_string());
                                         }
@@ -154,6 +166,42 @@ pub fn SettingsPage() -> Element {
                             "导出当前 CSS"
                         }
                     }
+                    label { class: "field-label", "内置主题预设" }
+                    div { class: "inline-actions",
+                        select {
+                            class: "select-input",
+                            "data-action": "preset-theme-select",
+                            value: "{preset_choice}",
+                            onchange: move |event| preset_choice.set(event.value()),
+                            option { value: "none", "无预设" }
+                            option { value: "newsprint", "Newsprint" }
+                            option { value: "forest-desk", "Forest Desk" }
+                            option { value: "midnight-ledger", "Midnight Ledger" }
+                        }
+                        button {
+                            class: "button secondary",
+                            "data-action": "apply-selected-theme",
+                            onclick: move |_| {
+                                let choice = preset_choice();
+                                if choice == "none" {
+                                    let mut next = draft();
+                                    next.custom_css.clear();
+                                    draft.set(next);
+                                    status.set("已清空自定义 CSS。点击“保存设置”即可生效。".to_string());
+                                    return;
+                                }
+                                let mut next = draft();
+                                next.custom_css = preset_css(choice.as_str()).to_string();
+                                preset_choice.set(choice.clone());
+                                draft.set(next);
+                                status.set(format!(
+                                    "已载入示例主题：{}。点击“保存设置”即可生效。",
+                                    preset_display_name(choice.as_str())
+                                ));
+                            },
+                            "载入所选主题"
+                        }
+                    }
                     p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。载入后点击“保存设置”生效。" }
                     div { class: "preset-grid",
                         button {
@@ -162,6 +210,7 @@ pub fn SettingsPage() -> Element {
                             onclick: move |_| {
                                 let mut next = draft();
                                 next.custom_css = newsprint_theme_css().to_string();
+                                preset_choice.set("newsprint".to_string());
                                 draft.set(next);
                                 status.set("已载入示例主题：Newsprint。点击“保存设置”即可生效。".to_string());
                             },
@@ -173,6 +222,7 @@ pub fn SettingsPage() -> Element {
                             onclick: move |_| {
                                 let mut next = draft();
                                 next.custom_css = forest_desk_theme_css().to_string();
+                                preset_choice.set("forest-desk".to_string());
                                 draft.set(next);
                                 status.set("已载入示例主题：Forest Desk。点击“保存设置”即可生效。".to_string());
                             },
@@ -184,6 +234,7 @@ pub fn SettingsPage() -> Element {
                             onclick: move |_| {
                                 let mut next = draft();
                                 next.custom_css = midnight_ledger_theme_css().to_string();
+                                preset_choice.set("midnight-ledger".to_string());
                                 draft.set(next);
                                 status.set("已载入示例主题：Midnight Ledger。点击“保存设置”即可生效。".to_string());
                             },
@@ -195,6 +246,7 @@ pub fn SettingsPage() -> Element {
                             onclick: move |_| {
                                 let mut next = draft();
                                 next.custom_css.clear();
+                                preset_choice.set("none".to_string());
                                 draft.set(next);
                                 status.set("已清空自定义 CSS。点击“保存设置”即可生效。".to_string());
                             },
@@ -350,6 +402,51 @@ fn forest_desk_theme_css() -> &'static str {
 
 fn midnight_ledger_theme_css() -> &'static str {
     include_str!("../../../../assets/themes/midnight-ledger.css")
+}
+
+fn preset_css(key: &str) -> &'static str {
+    match key {
+        "none" => "",
+        "forest-desk" => forest_desk_theme_css(),
+        "midnight-ledger" => midnight_ledger_theme_css(),
+        _ => newsprint_theme_css(),
+    }
+}
+
+fn preset_display_name(key: &str) -> &'static str {
+    match key {
+        "forest-desk" => "Forest Desk",
+        "midnight-ledger" => "Midnight Ledger",
+        _ => "Newsprint",
+    }
+}
+
+fn detect_preset_key(raw: &str) -> &'static str {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        "none"
+    } else if trimmed == forest_desk_theme_css().trim() {
+        "forest-desk"
+    } else if trimmed == midnight_ledger_theme_css().trim() {
+        "midnight-ledger"
+    } else {
+        "newsprint"
+    }
+}
+
+fn custom_css_source_label(raw: &str) -> &'static str {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        "未启用自定义 CSS"
+    } else if trimmed == newsprint_theme_css().trim() {
+        "内置主题：Newsprint"
+    } else if trimmed == forest_desk_theme_css().trim() {
+        "内置主题：Forest Desk"
+    } else if trimmed == midnight_ledger_theme_css().trim() {
+        "内置主题：Midnight Ledger"
+    } else {
+        "自定义主题"
+    }
 }
 
 async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
