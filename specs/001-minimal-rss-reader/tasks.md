@@ -48,14 +48,14 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 - [X] T005 实现订阅源 SQLite 仓储 `crates/rssr-infra/src/db/feed_repository.rs`
 - [X] T006 [P] 实现文章 SQLite 仓储与去重更新逻辑 `crates/rssr-infra/src/db/entry_repository.rs`
 - [X] T007 [P] 实现用户偏好 SQLite 仓储 `crates/rssr-infra/src/db/settings_repository.rs`
-- [X] T008 [P] 导出数据库模块与连接辅助逻辑 `crates/rssr-infra/src/db/mod.rs`
+- [X] T008 [P] 导出数据库模块与连接辅助逻辑 `crates/rssr-infra/src/db.rs`
 - [X] T009 [P] 实现原生 SQLite 后端 `crates/rssr-infra/src/db/sqlite_native.rs`
 - [X] T010 [P] 实现 Web SQLite 后端与持久化占位桥接 `crates/rssr-infra/src/db/sqlite_web.rs`
 - [X] T011 [P] 定义存储后端抽象 `crates/rssr-infra/src/db/storage_backend.rs`
 - [X] T012 [P] 实现条件请求抓取客户端与请求头处理 `crates/rssr-infra/src/fetch/client.rs`
-- [X] T013 [P] 导出抓取模块入口与结果模型 `crates/rssr-infra/src/fetch/mod.rs`
+- [X] T013 [P] 导出抓取模块入口与结果模型 `crates/rssr-infra/src/fetch.rs`
 - [X] T014 [P] 实现 RSS/Atom 解析、去重键归一化和稀疏条目容错 `crates/rssr-infra/src/parser/feed_parser.rs`
-- [X] T015 [P] 导出解析模块入口与归一化结果 `crates/rssr-infra/src/parser/mod.rs`
+- [X] T015 [P] 导出解析模块入口与归一化结果 `crates/rssr-infra/src/parser.rs`
 - [X] T016 定义应用装配、wasm/native 编译路径和共享运行时上下文 `crates/rssr-app/src/bootstrap.rs`
 - [X] T017 添加订阅刷新流程集成测试 `crates/rssr-infra/tests/test_feed_refresh_flow.rs`
 - [X] T018 [P] 添加解析、HTML 保留与去重回归测试 `crates/rssr-infra/tests/test_feed_parse_dedup.rs`
@@ -88,7 +88,7 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 - [X] T028 [P] [US1] 实现阅读页并优先展示完整正文 `crates/rssr-app/src/pages/reader_page.rs`
 - [X] T029 [P] [US1] 实现空状态与错误提示组件 `crates/rssr-app/src/components/status_banner.rs`
 - [X] T030 [US1] 接线应用启动、初始加载与后端选择流程 `crates/rssr-app/src/app.rs`
-- [X] T031 [US1] 更新页面导出入口以纳入 MVP 页面结构 `crates/rssr-app/src/pages/mod.rs`
+- [X] T031 [US1] 更新页面导出入口以纳入 MVP 页面结构 `crates/rssr-app/src/pages.rs`
 - [X] T032 [US1] 记录 MVP 刷新与阅读性能检查结果 `tests/manual/us1-performance-checklist.md`
 
 **检查点**：此时用户故事 1 应完整可用，并可独立演示为 MVP。
@@ -138,11 +138,11 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 
 - [X] T045 [P] [US3] 实现配置包文件读写与 schema 辅助校验 `crates/rssr-infra/src/config_sync/file_format.rs`
 - [X] T046 [P] [US3] 实现 WebDAV 配置上传下载客户端与路径拼接修正 `crates/rssr-infra/src/config_sync/webdav.rs`
-- [X] T047 [P] [US3] 实现 OPML 导入导出逻辑 `crates/rssr-infra/src/opml/mod.rs`
+- [X] T047 [P] [US3] 实现 OPML 导入导出逻辑 `crates/rssr-infra/src/opml.rs`
 - [X] T048 [US3] 在导入导出服务中实现配置导入、导出和远端交换用例 `crates/rssr-application/src/import_export_service.rs`
 - [X] T049 [US3] 在设置服务中实现偏好设置读写与主题设置持久化 `crates/rssr-application/src/settings_service.rs`
 - [X] T050 [P] [US3] 实现设置页面 `crates/rssr-app/src/pages/settings_page.rs`
-- [X] T051 [US3] 实现浅色、深色和跟随系统主题逻辑 `crates/rssr-app/src/theme/mod.rs`
+- [X] T051 [US3] 实现浅色、深色和跟随系统主题逻辑 `crates/rssr-app/src/theme.rs`
 - [X] T052 [P] [US3] 在订阅页接入 OPML 与配置包导入导出入口 `crates/rssr-app/src/pages/feeds_page.rs`
 - [X] T053 [P] [US3] 在设置页接入 WebDAV 配置交换入口 `crates/rssr-app/src/pages/settings_page.rs`
 - [X] T054 [US3] 记录配置交换边界与主题生效手工验证结果 `tests/manual/us3-boundary-checklist.md`
@@ -229,7 +229,7 @@ Task: "T040 [US2] 实现桌面快捷键 hook `crates/rssr-app/src/hooks/use_read
 # 一起启动用户故事 3 的基础设施任务：
 Task: "T045 [P] [US3] 实现配置包文件读写与 schema 辅助校验 `crates/rssr-infra/src/config_sync/file_format.rs`"
 Task: "T046 [P] [US3] 实现 WebDAV 配置上传下载客户端与路径拼接修正 `crates/rssr-infra/src/config_sync/webdav.rs`"
-Task: "T047 [P] [US3] 实现 OPML 导入导出逻辑 `crates/rssr-infra/src/opml/mod.rs`"
+Task: "T047 [P] [US3] 实现 OPML 导入导出逻辑 `crates/rssr-infra/src/opml.rs`"
 
 # 一起启动 UI 接线任务：
 Task: "T050 [P] [US3] 实现设置页面 `crates/rssr-app/src/pages/settings_page.rs`"
