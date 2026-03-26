@@ -290,6 +290,20 @@ textarea {
   background: #2f251e;
 }
 
+.button.danger {
+  background: #9c2f21;
+}
+
+.button.danger-outline {
+  background: rgba(255, 233, 226, 0.9);
+  color: #8d2d1f;
+  border: 1px solid rgba(141, 45, 31, 0.18);
+}
+
+.button:hover {
+  filter: brightness(1.04);
+}
+
 .inline-actions {
   display: grid;
   grid-auto-flow: column;

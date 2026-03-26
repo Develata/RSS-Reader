@@ -75,6 +75,71 @@ RSS Reader 的界面需要同时满足两个目标：
 
 ---
 
+## 当前实现状态
+
+截至当前版本，这套设计已经部分落地，并且以下能力已经真实实现：
+
+### 已实现的样式接口
+
+- 页面级接口：
+  - `data-page="home"`
+  - `data-page="feeds"`
+  - `data-page="entries"`
+  - `data-page="reader"`
+  - `data-page="settings"`
+- 导航级接口：
+  - `data-nav="home"`
+  - `data-nav="feeds"`
+  - `data-nav="entries"`
+  - `data-nav="settings"`
+  - `data-nav="feed-entries"`
+- 命令级接口：
+  - `data-action="add-feed"`
+  - `data-action="remove-feed"`
+  - `data-action="refresh-feed"`
+  - `data-action="refresh-all"`
+  - `data-action="export-config"`
+  - `data-action="import-config"`
+  - `data-action="export-opml"`
+  - `data-action="import-opml"`
+  - `data-action="save-settings"`
+  - `data-action="push-webdav"`
+  - `data-action="pull-webdav"`
+  - `data-action="mark-read"`
+  - `data-action="toggle-starred"`
+  - `data-action="search-title"`
+  - `data-action="filter-unread"`
+  - `data-action="filter-starred"`
+
+### 已实现的用户 CSS 能力
+
+- 默认样式由 `assets/styles.css` 提供
+- 用户可在设置页编辑并保存 `custom_css`
+- 应用启动时会在默认样式之后注入用户 CSS
+- `custom_css` 已进入设置持久化、配置导入导出和 schema 契约
+
+### 已实现的 CLI 命令
+
+当前 `crates/rssr-cli/` 已提供这些命令：
+
+- `rssr-cli list-feeds`
+- `rssr-cli add-feed <url>`
+- `rssr-cli remove-feed <feed-id>`
+- `rssr-cli refresh --all`
+- `rssr-cli refresh --feed-id <id>`
+- `rssr-cli export-config [--output <path>]`
+- `rssr-cli import-config <file>`
+- `rssr-cli export-opml [--output <path>]`
+- `rssr-cli import-opml <file>`
+- `rssr-cli show-settings`
+- `rssr-cli save-settings ...`
+- `rssr-cli push-webdav <endpoint> <remote-path>`
+- `rssr-cli pull-webdav <endpoint> <remote-path>`
+
+这些 CLI 命令与 UI 按钮共享同一套应用服务语义，不通过 spawn 子进程互相调用。
+
+---
+
 ## 推荐架构
 
 ## 分层职责

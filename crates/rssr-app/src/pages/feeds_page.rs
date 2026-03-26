@@ -10,6 +10,7 @@ pub fn FeedsPage() -> Element {
     let mut feed_url = use_signal(String::new);
     let mut config_text = use_signal(String::new);
     let mut opml_text = use_signal(String::new);
+    let pending_delete_feed = use_signal(|| None::<i64>);
     let reload_tick = use_signal(|| 0_u64);
     let mut feeds = use_signal(Vec::<FeedSummary>::new);
     let mut status = use_signal(|| "输入一个 feed URL 后点击添加。".to_string());
@@ -204,6 +205,7 @@ pub fn FeedsPage() -> Element {
                         {
                             let refresh_feed_title = feed.title.clone();
                             let delete_feed_title = feed.title.clone();
+                            let is_delete_pending = pending_delete_feed() == Some(feed.id);
                             rsx! {
                                 li { class: "feed-card", key: "{feed.id}",
                                     Link {
@@ -238,27 +240,40 @@ pub fn FeedsPage() -> Element {
                                             "刷新此订阅"
                                         }
                                         button {
-                                            class: "button secondary",
+                                            class: if is_delete_pending { "button danger" } else { "button secondary danger-outline" },
                                             "data-action": "remove-feed",
                                             onclick: move |_| {
                                                 let mut status = status;
                                                 let mut reload_tick = reload_tick;
+                                                let mut pending_delete_feed = pending_delete_feed;
                                                 let feed_title = delete_feed_title.clone();
                                                 let feed_id = feed.id;
-                                                spawn(async move {
-                                                    match AppServices::shared().await {
-                                                        Ok(services) => match services.remove_feed(feed_id).await {
-                                                            Ok(()) => {
-                                                                status.set(format!("已删除订阅：{}", feed_title));
-                                                                reload_tick += 1;
+                                                if pending_delete_feed() != Some(feed_id) {
+                                                    pending_delete_feed.set(Some(feed_id));
+                                                    status.set(format!("再次点击即可删除订阅：{}", feed_title));
+                                                } else {
+                                                    spawn(async move {
+                                                        match AppServices::shared().await {
+                                                            Ok(services) => match services.remove_feed(feed_id).await {
+                                                                Ok(()) => {
+                                                                    pending_delete_feed.set(None);
+                                                                    status.set(format!("已删除订阅：{}", feed_title));
+                                                                    reload_tick += 1;
+                                                                }
+                                                                Err(err) => {
+                                                                    pending_delete_feed.set(None);
+                                                                    status.set(format!("删除订阅失败：{err}"));
+                                                                }
+                                                            },
+                                                            Err(err) => {
+                                                                pending_delete_feed.set(None);
+                                                                status.set(format!("初始化应用失败：{err}"));
                                                             }
-                                                            Err(err) => status.set(format!("删除订阅失败：{err}")),
-                                                        },
-                                                        Err(err) => status.set(format!("初始化应用失败：{err}")),
-                                                    }
-                                                });
+                                                        }
+                                                    });
+                                                }
                                             },
-                                            "删除订阅"
+                                            if is_delete_pending { "确认删除" } else { "删除订阅" }
                                         }
                                     }
                                 }
