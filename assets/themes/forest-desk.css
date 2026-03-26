@@ -1,0 +1,55 @@
+:root {
+  --bg: #e6efe8;
+  --panel: rgba(244, 249, 244, 0.88);
+  --panel-strong: #f7fbf7;
+  --ink: #1a2a21;
+  --muted: #587060;
+  --line: rgba(28, 77, 49, 0.18);
+  --accent: #236846;
+  --accent-strong: #184e34;
+  --shadow: 0 22px 60px rgba(26, 61, 39, 0.10);
+}
+
+body {
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.62), transparent 26%),
+    radial-gradient(circle at bottom left, rgba(153, 188, 166, 0.22), transparent 24%),
+    linear-gradient(180deg, #edf5ef 0%, #e5efe7 45%, #dde8df 100%);
+}
+
+.app-shell {
+  width: min(1120px, calc(100vw - 36px));
+}
+
+.app-header {
+  background: linear-gradient(135deg, rgba(252, 255, 252, 0.96), rgba(226, 241, 230, 0.90));
+}
+
+.app-nav [data-nav="settings"] {
+  margin-left: auto;
+}
+
+.button {
+  border-radius: 999px;
+}
+
+.button.secondary {
+  background: #244234;
+}
+
+[data-page="feeds"] .feed-form {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+[data-page="feeds"] .feed-form [data-action="refresh-all"] {
+  justify-self: start;
+}
+
+[data-page="reader"] .reader-body {
+  max-width: 68ch;
+  margin: 0 auto;
+}
+
+[data-page="settings"] .settings-grid {
+  grid-template-columns: 1.25fr 0.95fr;
+}

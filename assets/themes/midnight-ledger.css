@@ -1,0 +1,68 @@
+:root {
+  --bg: #0f1518;
+  --panel: rgba(18, 24, 28, 0.88);
+  --panel-strong: #141c21;
+  --ink: #eef5f7;
+  --muted: #9fb5bc;
+  --line: rgba(255, 255, 255, 0.08);
+  --accent: #4fb7b1;
+  --accent-strong: #7ce0da;
+  --shadow: 0 22px 64px rgba(0, 0, 0, 0.30);
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(79, 183, 177, 0.12), transparent 24%),
+    radial-gradient(circle at bottom right, rgba(124, 224, 218, 0.08), transparent 22%),
+    linear-gradient(180deg, #0f1518 0%, #12191d 45%, #10171b 100%);
+}
+
+.app-header {
+  background: linear-gradient(135deg, rgba(21, 30, 35, 0.96), rgba(17, 24, 28, 0.90));
+}
+
+.app-header h1,
+.page h2 {
+  letter-spacing: -0.04em;
+}
+
+.app-nav__link {
+  background: rgba(24, 33, 39, 0.72);
+}
+
+.app-nav__link:hover {
+  background: rgba(35, 48, 55, 0.94);
+  border-color: rgba(79, 183, 177, 0.32);
+}
+
+.button.secondary {
+  background: #223038;
+}
+
+.button.danger {
+  background: #8e3a44;
+}
+
+.feed-card,
+.entry-card,
+.exchange-card,
+.settings-card,
+.stat-card,
+.reader-page {
+  border-radius: 18px;
+}
+
+[data-page="home"] .stats-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+[data-page="entries"] .entry-card__meta,
+[data-page="reader"] .reader-meta {
+  color: #b8cbd1;
+}
+
+[data-page="reader"] .reader-body {
+  max-width: 70ch;
+  margin: 0 auto;
+  font-size: 1.1rem;
+}

@@ -1,0 +1,61 @@
+:root {
+  --bg: #efe6d6;
+  --panel: rgba(252, 248, 239, 0.92);
+  --panel-strong: #fbf7ee;
+  --ink: #241d16;
+  --muted: #716556;
+  --line: rgba(68, 53, 36, 0.22);
+  --accent: #8b3d2b;
+  --accent-strong: #6f2e20;
+  --shadow: 0 12px 28px rgba(49, 36, 24, 0.08);
+}
+
+[data-page="reader"] .reader-body {
+  max-width: 74ch;
+  margin: 0 auto;
+  font-size: 1.08rem;
+  line-height: 1.92;
+}
+
+.app-shell {
+  width: min(1180px, calc(100vw - 40px));
+}
+
+.app-header,
+.page,
+.reader-page {
+  border-radius: 12px;
+}
+
+.app-nav {
+  gap: 8px;
+}
+
+.app-nav__link {
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.88rem;
+}
+
+[data-page="home"] .stats-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+[data-page="feeds"] .feed-list,
+[data-page="entries"] .entry-list {
+  gap: 10px;
+}
+
+.feed-card,
+.entry-card,
+.exchange-card,
+.settings-card,
+.stat-card {
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+[data-action="remove-feed"] {
+  min-width: 7.5rem;
+}

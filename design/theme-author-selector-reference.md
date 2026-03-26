@@ -14,6 +14,10 @@
 - 其次使用稳定组件 class
 - 尽量避免依赖深层后代选择器，如 `.page > div > div > button`
 - 如果只想改某个页面，先用 `data-page` 限定作用域
+- 如果想从现成主题开始，优先参考：
+  - `assets/themes/newsprint.css`
+  - `assets/themes/forest-desk.css`
+  - `assets/themes/midnight-ledger.css`
 
 推荐写法：
 
@@ -228,6 +232,28 @@
   font-size: 1.12rem;
   line-height: 1.9;
 }
+```
+
+## 将示例主题应用到应用中
+
+### 在设置页中使用
+
+1. 打开对应的主题文件
+2. 复制 CSS 内容
+3. 粘贴到“设置”页的“自定义 CSS”
+4. 点击“保存设置”
+
+### 用 CLI 应用
+
+```bash
+cargo run -p rssr-cli -- save-settings --custom-css-file assets/themes/newsprint.css
+```
+
+也可以换成：
+
+```bash
+cargo run -p rssr-cli -- save-settings --custom-css-file assets/themes/forest-desk.css
+cargo run -p rssr-cli -- save-settings --custom-css-file assets/themes/midnight-ledger.css
 ```
 
 ## 兼容性说明
