@@ -112,6 +112,9 @@
 - `[data-action="export-custom-css-file"]`
 - `[data-action="preset-theme-select"]`
 - `[data-action="apply-selected-theme"]`
+- `[data-action="theme-gallery"]`
+- `[data-action="theme-card"]`
+- `[data-action="apply-theme-card"]`
 - `[data-action="apply-theme-newsprint"]`
 - `[data-action="apply-theme-forest-desk"]`
 - `[data-action="apply-theme-midnight-ledger"]`
@@ -171,6 +174,14 @@
 - `.button.danger`
 - `.button.danger-outline`
 - `.inline-actions`
+- `.theme-gallery`
+- `.theme-card`
+- `.theme-card.is-active`
+- `.theme-card__title`
+- `.theme-card__description`
+- `.theme-card__notes`
+- `.theme-card__swatches`
+- `.theme-card__swatch`
 
 ## 可用 CSS 变量
 

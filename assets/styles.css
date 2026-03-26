@@ -319,6 +319,50 @@ textarea {
   margin: 12px 0 16px;
 }
 
+.theme-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.theme-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06));
+}
+
+.theme-card.is-active {
+  border-color: rgba(176, 74, 47, 0.35);
+  box-shadow: 0 0 0 1px rgba(176, 74, 47, 0.12);
+}
+
+.theme-card__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.theme-card__description,
+.theme-card__notes {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.theme-card__swatches {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+
+.theme-card__swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
 .feed-list,
 .entry-list {
   display: grid;

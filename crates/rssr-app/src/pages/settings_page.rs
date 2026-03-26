@@ -202,6 +202,52 @@ pub fn SettingsPage() -> Element {
                             "载入所选主题"
                         }
                     }
+                    div { class: "theme-gallery", "data-action": "theme-gallery",
+                        for preset in builtin_theme_presets() {
+                            {
+                                let is_active = detect_preset_key(&draft().custom_css) == preset.key;
+                                let preset_key = preset.key.to_string();
+                                let preset_name = preset.name;
+                                let preset_description = preset.description;
+                                let preset_notes = preset.notes;
+                                let preset_swatches = preset.swatches;
+                                rsx! {
+                                    article {
+                                        class: if is_active { "theme-card is-active" } else { "theme-card" },
+                                        key: "{preset.key}",
+                                        "data-action": "theme-card",
+                                        "data-theme-preset": "{preset.key}",
+                                        h4 { class: "theme-card__title", "{preset_name}" }
+                                        p { class: "theme-card__description", "{preset_description}" }
+                                        div { class: "theme-card__swatches",
+                                            for swatch in preset_swatches {
+                                                span {
+                                                    class: "theme-card__swatch",
+                                                    style: "background:{swatch}",
+                                                }
+                                            }
+                                        }
+                                        p { class: "theme-card__notes", "{preset_notes}" }
+                                        button {
+                                            class: if is_active { "button" } else { "button secondary" },
+                                            "data-action": "apply-theme-card",
+                                            onclick: move |_| {
+                                                let mut next = draft();
+                                                next.custom_css = preset_css(preset_key.as_str()).to_string();
+                                                preset_choice.set(preset_key.clone());
+                                                draft.set(next);
+                                                status.set(format!(
+                                                    "已从主题卡片载入：{}。点击“保存设置”即可生效。",
+                                                    preset_name
+                                                ));
+                                            },
+                                            if is_active { "当前已选" } else { "使用这套主题" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。载入后点击“保存设置”生效。" }
                     div { class: "preset-grid",
                         button {
@@ -447,6 +493,41 @@ fn custom_css_source_label(raw: &str) -> &'static str {
     } else {
         "自定义主题"
     }
+}
+
+#[derive(Clone, Copy)]
+struct BuiltinThemePreset {
+    key: &'static str,
+    name: &'static str,
+    description: &'static str,
+    notes: &'static str,
+    swatches: [&'static str; 3],
+}
+
+fn builtin_theme_presets() -> [BuiltinThemePreset; 3] {
+    [
+        BuiltinThemePreset {
+            key: "newsprint",
+            name: "Newsprint",
+            description: "偏纸面和报刊感，标题更有旧式出版物气质。",
+            notes: "更窄圆角、两列统计卡片、阅读页更长的正文版心。",
+            swatches: ["#efe6d6", "#8b3d2b", "#241d16"],
+        },
+        BuiltinThemePreset {
+            key: "forest-desk",
+            name: "Forest Desk",
+            description: "轻盈的绿色工作台风格，界面更清爽、留白更多。",
+            notes: "按钮更圆，设置页更像左右工作区，适合白天阅读。",
+            swatches: ["#e6efe8", "#236846", "#1a2a21"],
+        },
+        BuiltinThemePreset {
+            key: "midnight-ledger",
+            name: "Midnight Ledger",
+            description: "深色账本风，强调夜间阅读和更稳的对比。",
+            notes: "深底配冷色强调，卡片层次更明显，正文更沉浸。",
+            swatches: ["#0f1518", "#4fb7b1", "#eef5f7"],
+        },
+    ]
 }
 
 async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
