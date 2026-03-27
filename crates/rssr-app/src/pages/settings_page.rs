@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use rssr_domain::{ListDensity, StartupView, ThemeMode};
+use rssr_domain::{ListDensity, StartupView, ThemeMode, UserSettings};
 
 use crate::{
     app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner,
@@ -134,8 +134,14 @@ pub fn SettingsPage() -> Element {
                                             let mut next = draft();
                                             next.custom_css = raw;
                                             preset_choice.set(detect_preset_key(&next.custom_css).to_string());
+                                            let applied = next.clone();
                                             draft.set(next);
-                                            status.set("已从文件载入自定义 CSS。点击“保存设置”即可生效。".to_string());
+                                            apply_settings_immediately(
+                                                theme,
+                                                status,
+                                                applied,
+                                                "已从文件载入并应用自定义 CSS。".to_string(),
+                                            );
                                         }
                                         Ok(None) => status.set("已取消载入 CSS 文件。".to_string()),
                                         Err(err) => status.set(format!("载入 CSS 文件失败：{err}")),
@@ -187,18 +193,27 @@ pub fn SettingsPage() -> Element {
                                 if choice == "none" {
                                     let mut next = draft();
                                     next.custom_css.clear();
+                                    let applied = next.clone();
                                     draft.set(next);
-                                    status.set("已清空自定义 CSS。点击“保存设置”即可生效。".to_string());
+                                    apply_settings_immediately(
+                                        theme,
+                                        status,
+                                        applied,
+                                        "已清空自定义 CSS。".to_string(),
+                                    );
                                     return;
                                 }
                                 let mut next = draft();
                                 next.custom_css = preset_css(choice.as_str()).to_string();
                                 preset_choice.set(choice.clone());
+                                let applied = next.clone();
                                 draft.set(next);
-                                status.set(format!(
-                                    "已载入示例主题：{}。点击“保存设置”即可生效。",
-                                    preset_display_name(choice.as_str())
-                                ));
+                                apply_settings_immediately(
+                                    theme,
+                                    status,
+                                    applied,
+                                    format!("已应用示例主题：{}。", preset_display_name(choice.as_str())),
+                                );
                             },
                             "载入所选主题"
                         }
@@ -208,6 +223,7 @@ pub fn SettingsPage() -> Element {
                             {
                                 let is_active = detect_preset_key(&draft().custom_css) == preset.key;
                                 let preset_key = preset.key.to_string();
+                                let remove_preset_key = preset_key.clone();
                                 let preset_name = preset.name;
                                 let preset_description = preset.description;
                                 let preset_notes = preset.notes;
@@ -236,20 +252,45 @@ pub fn SettingsPage() -> Element {
                                                 let mut next = draft();
                                                 next.custom_css = preset_css(preset_key.as_str()).to_string();
                                                 preset_choice.set(preset_key.clone());
+                                                let applied = next.clone();
                                                 draft.set(next);
-                                                status.set(format!(
-                                                    "已从主题卡片载入：{}。点击“保存设置”即可生效。",
-                                                    preset_name
-                                                ));
+                                                apply_settings_immediately(
+                                                    theme,
+                                                    status,
+                                                    applied,
+                                                    format!("已从主题卡片应用：{}。", preset_name),
+                                                );
                                             },
                                             if is_active { "当前已选" } else { "使用这套主题" }
+                                        }
+                                        button {
+                                            class: "button secondary danger-outline",
+                                            "data-action": "remove-theme-card",
+                                            onclick: move |_| {
+                                                if detect_preset_key(&draft().custom_css) != remove_preset_key.as_str() {
+                                                    status.set(format!("当前并未启用主题：{}。", preset_name));
+                                                    return;
+                                                }
+                                                let mut next = draft();
+                                                next.custom_css.clear();
+                                                preset_choice.set("none".to_string());
+                                                let applied = next.clone();
+                                                draft.set(next);
+                                                apply_settings_immediately(
+                                                    theme,
+                                                    status,
+                                                    applied,
+                                                    format!("已移除主题：{}。", preset_name),
+                                                );
+                                            },
+                                            "移除这套主题"
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                    p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。载入后点击“保存设置”生效。" }
+                    p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。预置主题会立即生效并自动保存；手动编辑 CSS 后再点击“保存设置”。" }
                     div { class: "preset-grid",
                         button {
                             class: "button secondary",
@@ -258,8 +299,14 @@ pub fn SettingsPage() -> Element {
                                 let mut next = draft();
                                 next.custom_css = atlas_sidebar_theme_css().to_string();
                                 preset_choice.set("atlas-sidebar".to_string());
+                                let applied = next.clone();
                                 draft.set(next);
-                                status.set("已载入示例主题：Atlas Sidebar。点击“保存设置”即可生效。".to_string());
+                                apply_settings_immediately(
+                                    theme,
+                                    status,
+                                    applied,
+                                    "已应用示例主题：Atlas Sidebar。".to_string(),
+                                );
                             },
                             "Atlas Sidebar"
                         }
@@ -270,8 +317,14 @@ pub fn SettingsPage() -> Element {
                                 let mut next = draft();
                                 next.custom_css = newsprint_theme_css().to_string();
                                 preset_choice.set("newsprint".to_string());
+                                let applied = next.clone();
                                 draft.set(next);
-                                status.set("已载入示例主题：Newsprint。点击“保存设置”即可生效。".to_string());
+                                apply_settings_immediately(
+                                    theme,
+                                    status,
+                                    applied,
+                                    "已应用示例主题：Newsprint。".to_string(),
+                                );
                             },
                             "Newsprint"
                         }
@@ -282,8 +335,14 @@ pub fn SettingsPage() -> Element {
                                 let mut next = draft();
                                 next.custom_css = forest_desk_theme_css().to_string();
                                 preset_choice.set("forest-desk".to_string());
+                                let applied = next.clone();
                                 draft.set(next);
-                                status.set("已载入示例主题：Forest Desk。点击“保存设置”即可生效。".to_string());
+                                apply_settings_immediately(
+                                    theme,
+                                    status,
+                                    applied,
+                                    "已应用示例主题：Forest Desk。".to_string(),
+                                );
                             },
                             "Forest Desk"
                         }
@@ -294,8 +353,14 @@ pub fn SettingsPage() -> Element {
                                 let mut next = draft();
                                 next.custom_css = midnight_ledger_theme_css().to_string();
                                 preset_choice.set("midnight-ledger".to_string());
+                                let applied = next.clone();
                                 draft.set(next);
-                                status.set("已载入示例主题：Midnight Ledger。点击“保存设置”即可生效。".to_string());
+                                apply_settings_immediately(
+                                    theme,
+                                    status,
+                                    applied,
+                                    "已应用示例主题：Midnight Ledger。".to_string(),
+                                );
                             },
                             "Midnight Ledger"
                         }
@@ -306,8 +371,14 @@ pub fn SettingsPage() -> Element {
                                 let mut next = draft();
                                 next.custom_css.clear();
                                 preset_choice.set("none".to_string());
+                                let applied = next.clone();
                                 draft.set(next);
-                                status.set("已清空自定义 CSS。点击“保存设置”即可生效。".to_string());
+                                apply_settings_immediately(
+                                    theme,
+                                    status,
+                                    applied,
+                                    "已清空自定义 CSS。".to_string(),
+                                );
                             },
                             "清空 CSS"
                         }
@@ -516,6 +587,31 @@ fn custom_css_source_label(raw: &str) -> &'static str {
     } else {
         "自定义主题"
     }
+}
+
+fn apply_settings_immediately(
+    mut theme: ThemeController,
+    mut status: Signal<String>,
+    next: UserSettings,
+    success_message: String,
+) {
+    let previous = (theme.settings)();
+    theme.settings.set(next.clone());
+    spawn(async move {
+        match AppServices::shared().await {
+            Ok(services) => match services.save_settings(&next).await {
+                Ok(()) => status.set(success_message),
+                Err(err) => {
+                    theme.settings.set(previous);
+                    status.set(format!("保存设置失败：{err}"));
+                }
+            },
+            Err(err) => {
+                theme.settings.set(previous);
+                status.set(format!("初始化应用失败：{err}"));
+            }
+        }
+    });
 }
 
 #[derive(Clone, Copy)]

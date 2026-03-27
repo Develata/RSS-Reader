@@ -116,6 +116,7 @@
 - `[data-action="theme-gallery"]`
 - `[data-action="theme-card"]`
 - `[data-action="apply-theme-card"]`
+- `[data-action="remove-theme-card"]`
 - `[data-action="apply-theme-atlas-sidebar"]`
 - `[data-action="apply-theme-newsprint"]`
 - `[data-action="apply-theme-forest-desk"]`
@@ -257,6 +258,9 @@
 ```
 
 ## 将示例主题应用到应用中
+
+- 通过设置页的主题卡片或“载入所选主题”按钮应用内置主题时，主题会立即生效并自动保存。
+- `移除这套主题` 只会移除当前卡片对应的内置主题；如果当前并未启用该主题，只会提示，不会清空其它自定义 CSS。
 
 ### 在设置页中使用
 
