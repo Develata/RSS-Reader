@@ -9,8 +9,14 @@ mod theme;
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
     use dioxus::prelude::LaunchBuilder;
+    use tracing_subscriber::EnvFilter;
 
-    tracing_subscriber::fmt().with_env_filter("info").init();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("info,dioxus_desktop::edits=off")),
+        )
+        .init();
     let window = dioxus::desktop::WindowBuilder::new()
         .with_title("RSS Reader")
         .with_inner_size(dioxus::desktop::LogicalSize::new(1280.0, 900.0))
@@ -29,6 +35,13 @@ fn main() {
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
-    tracing_subscriber::fmt().with_env_filter("info").init();
+    use tracing_subscriber::EnvFilter;
+
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("info,dioxus_desktop::edits=off")),
+        )
+        .init();
     dioxus::launch(app::App);
 }
