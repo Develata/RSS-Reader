@@ -122,6 +122,7 @@ RSS Reader 的界面需要同时满足两个目标：
 - 应用启动时会在默认样式之后注入用户 CSS
 - `custom_css` 已进入设置持久化、配置导入导出和 schema 契约
 - 仓库内置了示例主题，可直接作为自定义 CSS 的起点：
+  - `assets/themes/atlas-sidebar.css`
   - `assets/themes/newsprint.css`
   - `assets/themes/forest-desk.css`
   - `assets/themes/midnight-ledger.css`

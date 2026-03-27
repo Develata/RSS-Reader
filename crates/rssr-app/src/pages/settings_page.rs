@@ -174,6 +174,7 @@ pub fn SettingsPage() -> Element {
                             value: "{preset_choice}",
                             onchange: move |event| preset_choice.set(event.value()),
                             option { value: "none", "无预设" }
+                            option { value: "atlas-sidebar", "Atlas Sidebar" }
                             option { value: "newsprint", "Newsprint" }
                             option { value: "forest-desk", "Forest Desk" }
                             option { value: "midnight-ledger", "Midnight Ledger" }
@@ -250,6 +251,18 @@ pub fn SettingsPage() -> Element {
                     }
                     p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。载入后点击“保存设置”生效。" }
                     div { class: "preset-grid",
+                        button {
+                            class: "button secondary",
+                            "data-action": "apply-theme-atlas-sidebar",
+                            onclick: move |_| {
+                                let mut next = draft();
+                                next.custom_css = atlas_sidebar_theme_css().to_string();
+                                preset_choice.set("atlas-sidebar".to_string());
+                                draft.set(next);
+                                status.set("已载入示例主题：Atlas Sidebar。点击“保存设置”即可生效。".to_string());
+                            },
+                            "Atlas Sidebar"
+                        }
                         button {
                             class: "button secondary",
                             "data-action": "apply-theme-newsprint",
@@ -442,6 +455,10 @@ fn newsprint_theme_css() -> &'static str {
     include_str!("../../../../assets/themes/newsprint.css")
 }
 
+fn atlas_sidebar_theme_css() -> &'static str {
+    include_str!("../../../../assets/themes/atlas-sidebar.css")
+}
+
 fn forest_desk_theme_css() -> &'static str {
     include_str!("../../../../assets/themes/forest-desk.css")
 }
@@ -453,6 +470,7 @@ fn midnight_ledger_theme_css() -> &'static str {
 fn preset_css(key: &str) -> &'static str {
     match key {
         "none" => "",
+        "atlas-sidebar" => atlas_sidebar_theme_css(),
         "forest-desk" => forest_desk_theme_css(),
         "midnight-ledger" => midnight_ledger_theme_css(),
         _ => newsprint_theme_css(),
@@ -461,6 +479,7 @@ fn preset_css(key: &str) -> &'static str {
 
 fn preset_display_name(key: &str) -> &'static str {
     match key {
+        "atlas-sidebar" => "Atlas Sidebar",
         "forest-desk" => "Forest Desk",
         "midnight-ledger" => "Midnight Ledger",
         _ => "Newsprint",
@@ -471,6 +490,8 @@ fn detect_preset_key(raw: &str) -> &'static str {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         "none"
+    } else if trimmed == atlas_sidebar_theme_css().trim() {
+        "atlas-sidebar"
     } else if trimmed == forest_desk_theme_css().trim() {
         "forest-desk"
     } else if trimmed == midnight_ledger_theme_css().trim() {
@@ -484,6 +505,8 @@ fn custom_css_source_label(raw: &str) -> &'static str {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         "未启用自定义 CSS"
+    } else if trimmed == atlas_sidebar_theme_css().trim() {
+        "内置主题：Atlas Sidebar"
     } else if trimmed == newsprint_theme_css().trim() {
         "内置主题：Newsprint"
     } else if trimmed == forest_desk_theme_css().trim() {
@@ -504,8 +527,15 @@ struct BuiltinThemePreset {
     swatches: [&'static str; 3],
 }
 
-fn builtin_theme_presets() -> [BuiltinThemePreset; 3] {
+fn builtin_theme_presets() -> [BuiltinThemePreset; 4] {
     [
+        BuiltinThemePreset {
+            key: "atlas-sidebar",
+            name: "Atlas Sidebar",
+            description: "把应用改成更接近侧栏工作台的布局，导航和内容区彻底分栏。",
+            notes: "头部变成左侧信息栏，页面导航垂直停靠，整体更像编辑器或知识库工具。",
+            swatches: ["#f1efe8", "#b24c3d", "#1f2430"],
+        },
         BuiltinThemePreset {
             key: "newsprint",
             name: "Newsprint",

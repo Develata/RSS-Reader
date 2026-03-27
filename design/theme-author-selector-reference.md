@@ -15,6 +15,7 @@
 - 尽量避免依赖深层后代选择器，如 `.page > div > div > button`
 - 如果只想改某个页面，先用 `data-page` 限定作用域
 - 如果想从现成主题开始，优先参考：
+  - `assets/themes/atlas-sidebar.css`
   - `assets/themes/newsprint.css`
   - `assets/themes/forest-desk.css`
   - `assets/themes/midnight-ledger.css`
@@ -115,6 +116,7 @@
 - `[data-action="theme-gallery"]`
 - `[data-action="theme-card"]`
 - `[data-action="apply-theme-card"]`
+- `[data-action="apply-theme-atlas-sidebar"]`
 - `[data-action="apply-theme-newsprint"]`
 - `[data-action="apply-theme-forest-desk"]`
 - `[data-action="apply-theme-midnight-ledger"]`
