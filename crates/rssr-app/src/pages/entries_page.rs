@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use rssr_domain::{EntryQuery, EntrySummary};
+use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::components::entry_filters::EntryFilters;
 use crate::{
@@ -92,6 +93,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             Link { class: "entry-card__title", to: AppRoute::ReaderPage { entry_id: entry.id }, "{entry.title}" }
                             div { class: "entry-card__meta",
                                 "{entry.feed_title}"
+                                if let Some(date) = format_entry_date_utc(entry.published_at) { " · {date}" }
                                 if entry.is_read { " · 已读" } else { " · 未读" }
                                 if entry.is_starred { " · 已收藏" }
                             }
@@ -131,4 +133,11 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             }
         }
     }
+}
+
+fn format_entry_date_utc(published_at: Option<OffsetDateTime>) -> Option<String> {
+    const ENTRY_DATE_FORMAT: &[time::format_description::FormatItem<'static>] =
+        format_description!("[year]-[month]-[day]");
+
+    published_at.and_then(|value| value.to_offset(UtcOffset::UTC).format(ENTRY_DATE_FORMAT).ok())
 }

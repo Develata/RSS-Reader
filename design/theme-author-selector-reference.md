@@ -100,6 +100,12 @@
 - `[data-action="mark-read"]`
 - `[data-action="toggle-starred"]`
 
+说明：
+
+- 这两个 hook 同时会出现在文章列表和阅读页，用于“标已读/未读”和“收藏/取消收藏”
+- 如果只想改阅读页里的按钮，建议加上 `[data-page="reader"]` 作为作用域
+- 如果只想改文章列表里的按钮，建议加上 `[data-page="entries"]` 作为作用域
+
 ### 设置页
 
 - `[data-action="theme-mode"]`
@@ -254,6 +260,38 @@
   margin: 0 auto;
   font-size: 1.12rem;
   line-height: 1.9;
+}
+```
+
+### 5. 自定义“已读 / 收藏”按钮样式
+
+```css
+[data-page="reader"] [data-action="mark-read"],
+[data-page="reader"] [data-action="toggle-starred"] {
+  border-radius: 999px;
+  padding: 10px 14px;
+  min-width: 5.5rem;
+  font-weight: 700;
+}
+
+[data-page="reader"] [data-action="mark-read"] {
+  background: #0f766e;
+  color: #f7fffd;
+}
+
+[data-page="reader"] [data-action="toggle-starred"] {
+  background: #f59e0b;
+  color: #241d16;
+}
+```
+
+如果你想改布局而不只是改颜色，也可以直接改它们所在的操作区：
+
+```css
+[data-page="reader"] .entry-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 ```
 

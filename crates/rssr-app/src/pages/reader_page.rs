@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use time::format_description::well_known::Rfc3339;
+use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::{
     app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner,
@@ -39,9 +39,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         }
                     }
                     published_at.set(
-                        entry
-                            .published_at
-                            .and_then(|value| value.format(&Rfc3339).ok())
+                        format_reader_datetime_utc(entry.published_at)
                             .unwrap_or_else(|| "未知发布时间".to_string()),
                     );
                     source.set(
@@ -138,9 +136,19 @@ fn sanitize_remote_html(raw: &str) -> Option<String> {
     (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
 
+fn format_reader_datetime_utc(published_at: Option<OffsetDateTime>) -> Option<String> {
+    const READER_DATETIME_FORMAT: &[time::format_description::FormatItem<'static>] =
+        format_description!("[year]-[month]-[day] [hour]:[minute] UTC");
+
+    published_at
+        .and_then(|value| value.to_offset(UtcOffset::UTC).format(READER_DATETIME_FORMAT).ok())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ReaderBody, select_reader_body};
+    use time::OffsetDateTime;
+
+    use super::{ReaderBody, format_reader_datetime_utc, select_reader_body};
 
     #[test]
     fn reader_prefers_full_html_over_summary_text() {
@@ -169,5 +177,17 @@ mod tests {
             }
             ReaderBody::Text(_) => panic!("expected html body"),
         }
+    }
+
+    #[test]
+    fn reader_formats_published_time_in_utc_without_seconds() {
+        let published_at =
+            OffsetDateTime::parse("2026-03-29T19:45:33+08:00", &time::format_description::well_known::Rfc3339)
+                .expect("parse rfc3339");
+
+        assert_eq!(
+            format_reader_datetime_utc(Some(published_at)).as_deref(),
+            Some("2026-03-29 11:45 UTC")
+        );
     }
 }
