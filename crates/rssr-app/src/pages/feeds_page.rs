@@ -55,7 +55,15 @@ pub fn FeedsPage() -> Element {
                                         feed_url.set(String::new());
                                         reload_tick += 1;
                                     }
-                                    Err(err) => status.set(format!("保存订阅失败：{err}")),
+                                    Err(err) => {
+                                        if err.to_string().contains("首次刷新订阅失败") {
+                                            status.set(format!("订阅已保存，但首次刷新失败：{err}"));
+                                            feed_url.set(String::new());
+                                            reload_tick += 1;
+                                        } else {
+                                            status.set(format!("保存订阅失败：{err}"));
+                                        }
+                                    }
                                 },
                                 Err(err) => status.set(format!("初始化应用失败：{err}")),
                             }

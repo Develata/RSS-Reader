@@ -6,7 +6,7 @@ mod imp {
     use rssr_application::{EntryService, FeedService, ImportExportService, SettingsService};
     use rssr_domain::{
         Entry, EntryQuery, EntryRepository, FeedRepository, FeedSummary, NewFeedSubscription,
-        UserSettings,
+        UserSettings, normalize_feed_url,
     };
     use rssr_infra::{
         config_sync::webdav::WebDavConfigSync,
@@ -106,7 +106,7 @@ mod imp {
         }
 
         pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
-            let url = Url::parse(raw_url).context("订阅 URL 不合法")?;
+            let url = normalize_feed_url(&Url::parse(raw_url).context("订阅 URL 不合法")?);
             let feed = self
                 .feed_service
                 .add_subscription(&NewFeedSubscription { url, title: None, folder: None })
@@ -213,8 +213,10 @@ mod imp {
             let feeds = self.opml_codec.decode(raw)?;
             let current_feeds = self.feed_repository.list_feeds().await?;
             for feed in feeds {
-                let url = Url::parse(&feed.url).context("OPML 中存在无效订阅 URL")?;
-                let existed = current_feeds.iter().any(|current| current.url == url);
+                let url =
+                    normalize_feed_url(&Url::parse(&feed.url).context("OPML 中存在无效订阅 URL")?);
+                let existed =
+                    current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
                 self.feed_service
                     .add_subscription(&NewFeedSubscription {
                         url,
@@ -266,6 +268,7 @@ mod imp {
 
     use anyhow::{Context, ensure};
     use feed_rs::model::{Entry as FeedRsEntry, Feed as FeedRsFeed, Text};
+    use js_sys::Date;
     use quick_xml::{
         Reader, Writer,
         encoding::Decoder,
@@ -274,6 +277,7 @@ mod imp {
     use reqwest::{StatusCode, header};
     use rssr_domain::{
         ConfigFeed, ConfigPackage, Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings,
+        normalize_feed_url,
     };
     use serde::{Deserialize, Serialize};
     use sha2::{Digest, Sha256};
@@ -475,7 +479,7 @@ mod imp {
 
         pub async fn set_read(&self, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
             let mut state = self.state.lock().expect("lock state");
-            let now = OffsetDateTime::now_utc();
+            let now = web_now_utc();
             let entry = state
                 .entries
                 .iter_mut()
@@ -489,7 +493,7 @@ mod imp {
 
         pub async fn set_starred(&self, entry_id: i64, is_starred: bool) -> anyhow::Result<()> {
             let mut state = self.state.lock().expect("lock state");
-            let now = OffsetDateTime::now_utc();
+            let now = web_now_utc();
             let entry = state
                 .entries
                 .iter_mut()
@@ -513,9 +517,9 @@ mod imp {
         }
 
         pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
-            let url = Url::parse(raw_url).context("订阅 URL 不合法")?;
+            let url = normalize_feed_url(&Url::parse(raw_url).context("订阅 URL 不合法")?);
             let mut state = self.state.lock().expect("lock state");
-            let now = OffsetDateTime::now_utc();
+            let now = web_now_utc();
             if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.url == url.as_str()) {
                 feed.is_deleted = false;
                 feed.updated_at = now;
@@ -544,7 +548,7 @@ mod imp {
                 state.feeds.iter().find(|feed| feed.url == url.as_str()).expect("feed exists").id;
             save_state(&state)?;
             drop(state);
-            self.refresh_feed(feed_id).await
+            self.refresh_feed(feed_id).await.context("首次刷新订阅失败")
         }
 
         pub async fn remove_feed(&self, feed_id: i64) -> anyhow::Result<()> {
@@ -555,7 +559,7 @@ mod imp {
                 .find(|feed| feed.id == feed_id && !feed.is_deleted)
                 .context("订阅不存在")?;
             feed.is_deleted = true;
-            feed.updated_at = OffsetDateTime::now_utc();
+            feed.updated_at = web_now_utc();
             state.entries.retain(|entry| entry.feed_id != feed_id);
             save_state(&state)
         }
@@ -583,28 +587,25 @@ mod imp {
         }
 
         pub async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-            let (url, etag, last_modified) = {
+            let url = {
                 let state = self.state.lock().expect("lock state");
                 let feed = state
                     .feeds
                     .iter()
                     .find(|feed| feed.id == feed_id && !feed.is_deleted)
                     .context("订阅不存在")?;
-                (feed.url.clone(), feed.etag.clone(), feed.last_modified.clone())
+                feed.url.clone()
             };
 
-            let mut request = self.client.get(&url).header(
+            let request = self.client.get(&url).header(
                 header::ACCEPT,
                 "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
             );
-            if let Some(etag) = &etag {
-                request = request.header(header::IF_NONE_MATCH, etag);
-            }
-            if let Some(last_modified) = &last_modified {
-                request = request.header(header::IF_MODIFIED_SINCE, last_modified);
-            }
 
-            let response = request.send().await.context("发送 feed 抓取请求失败")?;
+            let response = request
+                .send()
+                .await
+                .context("发送 feed 抓取请求失败（浏览器环境下通常是目标站点未开放 CORS 或当前网络不可达）")?;
             let metadata = (
                 response
                     .headers()
@@ -620,7 +621,7 @@ mod imp {
 
             if response.status() == StatusCode::NOT_MODIFIED {
                 let mut state = self.state.lock().expect("lock state");
-                let now = OffsetDateTime::now_utc();
+                let now = web_now_utc();
                 let feed =
                     state.feeds.iter_mut().find(|feed| feed.id == feed_id).context("订阅不存在")?;
                 feed.etag = metadata.0;
@@ -641,7 +642,7 @@ mod imp {
             let parsed = parse_feed(&body).context("解析订阅失败")?;
 
             let mut state = self.state.lock().expect("lock state");
-            let now = OffsetDateTime::now_utc();
+            let now = web_now_utc();
             let feed =
                 state.feeds.iter_mut().find(|feed| feed.id == feed_id).context("订阅不存在")?;
             if parsed.title.is_some() {
@@ -682,10 +683,12 @@ mod imp {
             let mut imported_urls = HashSet::new();
 
             for feed in package.feeds {
-                let url = Url::parse(&feed.url)
-                    .with_context(|| format!("无效的订阅 URL：{}", feed.url))?;
+                let url = normalize_feed_url(
+                    &Url::parse(&feed.url)
+                        .with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
+                );
                 imported_urls.insert(url.to_string());
-                let now = OffsetDateTime::now_utc();
+                let now = web_now_utc();
                 if let Some(existing) =
                     state.feeds.iter_mut().find(|current| current.url == url.as_str())
                 {
@@ -718,7 +721,12 @@ mod imp {
 
             let removed_feed_ids = current_urls
                 .into_iter()
-                .filter_map(|(id, url)| (!imported_urls.contains(&url)).then_some(id))
+                .filter_map(|(id, url)| {
+                    let normalized = normalize_feed_url(
+                        &Url::parse(&url).expect("persisted feed url should stay valid"),
+                    );
+                    (!imported_urls.contains(normalized.as_str())).then_some(id)
+                })
                 .collect::<Vec<_>>();
             for feed_id in &removed_feed_ids {
                 if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == *feed_id) {
@@ -738,9 +746,11 @@ mod imp {
             let feeds = decode_opml(raw)?;
             let mut state = self.state.lock().expect("lock state");
             for feed in feeds {
-                let url = Url::parse(&feed.url)
-                    .with_context(|| format!("无效的订阅 URL：{}", feed.url))?;
-                let now = OffsetDateTime::now_utc();
+                let url = normalize_feed_url(
+                    &Url::parse(&feed.url)
+                        .with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
+                );
+                let now = web_now_utc();
                 if let Some(existing) =
                     state.feeds.iter_mut().find(|current| current.url == url.as_str())
                 {
@@ -814,7 +824,7 @@ mod imp {
             let state = self.state.lock().expect("lock state");
             Ok(ConfigPackage {
                 version: 1,
-                exported_at: OffsetDateTime::now_utc(),
+                exported_at: web_now_utc(),
                 feeds: state
                     .feeds
                     .iter()
@@ -891,7 +901,7 @@ mod imp {
                 entry.content_text.as_deref(),
                 Some(&entry.title),
             );
-            let now = OffsetDateTime::now_utc();
+            let now = web_now_utc();
             if let Some(existing) = state
                 .entries
                 .iter_mut()
@@ -941,6 +951,12 @@ mod imp {
             }
         }
         Ok(())
+    }
+
+    fn web_now_utc() -> OffsetDateTime {
+        let millis = Date::now() as i128;
+        OffsetDateTime::from_unix_timestamp_nanos(millis * 1_000_000)
+            .expect("browser timestamp should fit in OffsetDateTime")
     }
 
     fn parse_feed(raw: &str) -> anyhow::Result<ParsedFeed> {
@@ -1065,9 +1081,10 @@ mod imp {
         validate_settings(&package.settings)?;
         let mut seen_urls = HashSet::new();
         for feed in &package.feeds {
-            let mut normalized =
-                Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?;
-            normalized.set_fragment(None);
+            let normalized = normalize_feed_url(
+                &Url::parse(&feed.url)
+                    .with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
+            );
             ensure!(
                 seen_urls.insert(normalized.to_string()),
                 "配置包中包含重复的 feed URL：{}",

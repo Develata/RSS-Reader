@@ -27,6 +27,19 @@ fn config_package_decode_rejects_duplicate_feed_urls() {
 }
 
 #[test]
+fn config_package_decode_rejects_duplicate_feed_urls_after_normalization() {
+    let mut raw = serde_json::to_value(sample_package()).expect("serialize sample package");
+    raw["feeds"] = json!([
+        { "url": "https://example.com/feed.xml#fragment", "title": "A", "folder": null },
+        { "url": "https://example.com:443/feed.xml", "title": "B", "folder": null }
+    ]);
+    let raw = serde_json::to_string(&raw).expect("encode invalid package");
+
+    let error = decode_config_package(&raw).expect_err("normalized duplicate urls must fail");
+    assert!(error.to_string().contains("重复的 feed URL"), "unexpected error: {error:#}");
+}
+
+#[test]
 fn config_package_decode_rejects_invalid_setting_ranges() {
     let mut raw = serde_json::to_value(sample_package()).expect("serialize sample package");
     raw["settings"]["refresh_interval_minutes"] = json!(0);

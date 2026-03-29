@@ -1,5 +1,6 @@
 use rssr_domain::{
     DomainError, Feed, FeedRepository, FeedSummary, NewFeedSubscription, Result as DomainResult,
+    normalize_feed_url,
 };
 use sqlx::Row;
 use time::OffsetDateTime;
@@ -119,6 +120,7 @@ impl SqliteFeedRepository {
 impl FeedRepository for SqliteFeedRepository {
     async fn upsert_subscription(&self, new_feed: &NewFeedSubscription) -> DomainResult<Feed> {
         let now = now_rfc3339();
+        let normalized_url = normalize_feed_url(&new_feed.url);
 
         sqlx::query(
             r#"
@@ -137,7 +139,7 @@ impl FeedRepository for SqliteFeedRepository {
                 updated_at = excluded.updated_at
             "#,
         )
-        .bind(new_feed.url.as_str())
+        .bind(normalized_url.as_str())
         .bind(new_feed.title.as_deref())
         .bind(new_feed.folder.as_deref())
         .bind(&now)
@@ -146,7 +148,7 @@ impl FeedRepository for SqliteFeedRepository {
         .map_err(map_sqlx_error)?;
 
         let row = sqlx::query("SELECT * FROM feeds WHERE url = ?1")
-            .bind(new_feed.url.as_str())
+            .bind(normalized_url.as_str())
             .fetch_one(&self.pool)
             .await
             .map_err(map_sqlx_error)?;

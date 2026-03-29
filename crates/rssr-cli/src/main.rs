@@ -5,7 +5,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use rssr_application::{FeedService, ImportExportService, SettingsService};
 use rssr_domain::{
     EntryRepository, Feed, FeedRepository, ListDensity, NewFeedSubscription, StartupView,
-    ThemeMode, UserSettings,
+    ThemeMode, UserSettings, normalize_feed_url,
 };
 use rssr_infra::{
     config_sync::webdav::WebDavConfigSync,
@@ -251,7 +251,7 @@ impl CliServices {
         folder: Option<String>,
         refresh: bool,
     ) -> anyhow::Result<()> {
-        let url = Url::parse(&raw_url).context("订阅 URL 不合法")?;
+        let url = normalize_feed_url(&Url::parse(&raw_url).context("订阅 URL 不合法")?);
         let feed = self
             .feed_service
             .add_subscription(&NewFeedSubscription { url, title, folder })
@@ -364,8 +364,10 @@ impl CliServices {
         let feeds = self.opml_codec.decode(raw)?;
         let current_feeds = self.feed_repository.list_feeds().await?;
         for feed in feeds {
-            let url = Url::parse(&feed.url).context("OPML 中存在无效订阅 URL")?;
-            let existed = current_feeds.iter().any(|current| current.url == url);
+            let url =
+                normalize_feed_url(&Url::parse(&feed.url).context("OPML 中存在无效订阅 URL")?);
+            let existed =
+                current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
             self.feed_service
                 .add_subscription(&NewFeedSubscription {
                     url,

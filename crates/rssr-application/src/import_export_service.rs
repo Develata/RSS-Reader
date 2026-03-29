@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 use rssr_domain::{
     ConfigFeed, ConfigPackage, EntryRepository, FeedRepository, NewFeedSubscription,
     SettingsRepository,
+    normalize_feed_url,
 };
 use time::OffsetDateTime;
 use url::Url;
@@ -55,9 +56,11 @@ impl ImportExportService {
         let mut imported_urls = Vec::with_capacity(package.feeds.len());
 
         for feed in &package.feeds {
-            let url =
-                Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?;
-            let existed = current_feeds.iter().any(|current| current.url == url);
+            let url = normalize_feed_url(
+                &Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
+            );
+            let existed =
+                current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
             imported_urls.push(url.clone());
 
             self.feed_repository
@@ -70,7 +73,10 @@ impl ImportExportService {
         }
 
         for feed in current_feeds {
-            if !imported_urls.iter().any(|url| *url == feed.url) {
+            if !imported_urls
+                .iter()
+                .any(|url| *url == normalize_feed_url(&feed.url))
+            {
                 self.entry_repository.delete_for_feed(feed.id).await?;
                 self.feed_repository.set_deleted(feed.id, true).await?;
             }
@@ -115,9 +121,9 @@ fn validate_config_package(package: &ConfigPackage) -> Result<()> {
 
     let mut seen_urls = std::collections::HashSet::new();
     for feed in &package.feeds {
-        let mut normalized =
-            Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?;
-        normalized.set_fragment(None);
+        let normalized = normalize_feed_url(
+            &Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
+        );
         ensure!(
             seen_urls.insert(normalized.to_string()),
             "配置包中包含重复的 feed URL：{}",

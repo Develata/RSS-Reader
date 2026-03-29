@@ -4494,6 +4494,7 @@ dependencies = [
  "dioxus",
  "dioxus-router",
  "feed-rs",
+ "js-sys",
  "quick-xml 0.37.5",
  "reqwest",
  "rfd",

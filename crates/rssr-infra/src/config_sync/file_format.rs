@@ -1,7 +1,7 @@
 use std::{collections::HashSet, fs, path::Path};
 
 use anyhow::{anyhow, ensure};
-use rssr_domain::ConfigPackage;
+use rssr_domain::{ConfigPackage, normalize_feed_url as normalize_domain_feed_url};
 use url::Url;
 
 pub fn encode_config_package(package: &ConfigPackage) -> anyhow::Result<String> {
@@ -35,7 +35,7 @@ pub fn validate_config_package(package: &ConfigPackage) -> anyhow::Result<()> {
 
     let mut normalized_urls = HashSet::new();
     for feed in &package.feeds {
-        let normalized = normalize_feed_url(&feed.url)?;
+        let normalized = normalize_feed_url_string(&feed.url)?;
         ensure!(
             normalized_urls.insert(normalized.clone()),
             "配置包中包含重复的 feed URL：{normalized}"
@@ -45,8 +45,7 @@ pub fn validate_config_package(package: &ConfigPackage) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn normalize_feed_url(raw: &str) -> anyhow::Result<String> {
-    let mut url = Url::parse(raw).map_err(|err| anyhow!("无效的 feed URL `{raw}`: {err}"))?;
-    url.set_fragment(None);
-    Ok(url.to_string())
+fn normalize_feed_url_string(raw: &str) -> anyhow::Result<String> {
+    let url = Url::parse(raw).map_err(|err| anyhow!("无效的 feed URL `{raw}`: {err}"))?;
+    Ok(normalize_domain_feed_url(&url).to_string())
 }
