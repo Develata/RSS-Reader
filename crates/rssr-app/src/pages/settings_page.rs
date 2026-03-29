@@ -207,6 +207,7 @@ pub fn SettingsPage() -> Element {
                             value: "{preset_choice}",
                             onchange: move |event| preset_choice.set(event.value()),
                             option { value: "none", "无预设" }
+                            option { value: "custom", "自定义主题" }
                             option { value: "atlas-sidebar", "Atlas Sidebar" }
                             option { value: "newsprint", "Newsprint" }
                             option { value: "forest-desk", "Forest Desk" }
@@ -228,6 +229,14 @@ pub fn SettingsPage() -> Element {
                                         status_tone,
                                         applied,
                                         "已清空自定义 CSS。".to_string(),
+                                    );
+                                    return;
+                                }
+                                if choice == "custom" {
+                                    set_status_info(
+                                        status,
+                                        status_tone,
+                                        "当前是自定义主题，请直接编辑 CSS 或从文件导入。".to_string(),
                                     );
                                     return;
                                 }
@@ -592,18 +601,20 @@ fn preset_css(key: &str) -> &'static str {
     match key {
         "none" => "",
         "atlas-sidebar" => atlas_sidebar_theme_css(),
+        "newsprint" => newsprint_theme_css(),
         "forest-desk" => forest_desk_theme_css(),
         "midnight-ledger" => midnight_ledger_theme_css(),
-        _ => newsprint_theme_css(),
+        _ => "",
     }
 }
 
 fn preset_display_name(key: &str) -> &'static str {
     match key {
         "atlas-sidebar" => "Atlas Sidebar",
+        "newsprint" => "Newsprint",
         "forest-desk" => "Forest Desk",
         "midnight-ledger" => "Midnight Ledger",
-        _ => "Newsprint",
+        _ => "自定义主题",
     }
 }
 
@@ -613,12 +624,14 @@ fn detect_preset_key(raw: &str) -> &'static str {
         "none"
     } else if trimmed == atlas_sidebar_theme_css().trim() {
         "atlas-sidebar"
+    } else if trimmed == newsprint_theme_css().trim() {
+        "newsprint"
     } else if trimmed == forest_desk_theme_css().trim() {
         "forest-desk"
     } else if trimmed == midnight_ledger_theme_css().trim() {
         "midnight-ledger"
     } else {
-        "newsprint"
+        "custom"
     }
 }
 
@@ -788,4 +801,25 @@ async fn save_css_file(raw: &str) -> anyhow::Result<bool> {
     let _ = web_sys::Url::revoke_object_url(&object_url);
 
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        custom_css_source_label, detect_preset_key, forest_desk_theme_css, newsprint_theme_css,
+    };
+
+    #[test]
+    fn detect_preset_key_keeps_unknown_css_as_custom() {
+        let custom = ":root { --panel: #123456; }\n[data-page=\"reader\"] { gap: 99px; }";
+        assert_eq!(detect_preset_key(custom), "custom");
+        assert_eq!(custom_css_source_label(custom), "自定义主题");
+    }
+
+    #[test]
+    fn detect_preset_key_matches_builtin_presets_exactly() {
+        assert_eq!(detect_preset_key(""), "none");
+        assert_eq!(detect_preset_key(newsprint_theme_css()), "newsprint");
+        assert_eq!(detect_preset_key(forest_desk_theme_css()), "forest-desk");
+    }
 }
