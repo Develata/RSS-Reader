@@ -13,16 +13,17 @@ pub fn FeedsPage() -> Element {
     let pending_delete_feed = use_signal(|| None::<i64>);
     let reload_tick = use_signal(|| 0_u64);
     let mut feeds = use_signal(Vec::<FeedSummary>::new);
-    let mut status = use_signal(|| "输入一个 feed URL 后点击添加。".to_string());
+    let status = use_signal(|| "输入一个 feed URL 后点击添加。".to_string());
+    let status_tone = use_signal(|| "info".to_string());
 
     let _ = use_resource(move || async move {
         let _ = reload_tick();
         match AppServices::shared().await {
             Ok(services) => match services.list_feeds().await {
                 Ok(items) => feeds.set(items),
-                Err(err) => status.set(format!("读取订阅失败：{err}")),
+                Err(err) => set_status_error(status, status_tone, format!("读取订阅失败：{err}")),
             },
-            Err(err) => status.set(format!("初始化应用失败：{err}")),
+            Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
         }
     });
 
@@ -31,7 +32,7 @@ pub fn FeedsPage() -> Element {
             AppNav {}
             h2 { "订阅" }
             p { class: "page-intro", "把 feed URL 保存到本地库，并立即执行首次刷新。" }
-            StatusBanner { message: status(), tone: "info".to_string() }
+            StatusBanner { message: status(), tone: status_tone() }
             div { class: "feed-form",
                 input {
                     class: "text-input",
@@ -45,27 +46,26 @@ pub fn FeedsPage() -> Element {
                     "data-action": "add-feed",
                     onclick: move |_| {
                         let url = feed_url();
-                        let mut status = status;
                         let mut reload_tick = reload_tick;
                         spawn(async move {
                             match AppServices::shared().await {
                                 Ok(services) => match services.add_subscription(&url).await {
                                     Ok(()) => {
-                                        status.set("订阅已保存并完成首次刷新。".to_string());
+                                        set_status_info(status, status_tone, "订阅已保存并完成首次刷新。".to_string());
                                         feed_url.set(String::new());
                                         reload_tick += 1;
                                     }
                                     Err(err) => {
                                         if err.to_string().contains("首次刷新订阅失败") {
-                                            status.set(format!("订阅已保存，但首次刷新失败：{err}"));
+                                            set_status_error(status, status_tone, format!("订阅已保存，但首次刷新失败：{err}"));
                                             feed_url.set(String::new());
                                             reload_tick += 1;
                                         } else {
-                                            status.set(format!("保存订阅失败：{err}"));
+                                            set_status_error(status, status_tone, format!("保存订阅失败：{err}"));
                                         }
                                     }
                                 },
-                                Err(err) => status.set(format!("初始化应用失败：{err}")),
+                                Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                             }
                         });
                     },
@@ -75,18 +75,17 @@ pub fn FeedsPage() -> Element {
                     class: "button secondary",
                     "data-action": "refresh-all",
                     onclick: move |_| {
-                        let mut status = status;
                         let mut reload_tick = reload_tick;
                         spawn(async move {
                             match AppServices::shared().await {
                                 Ok(services) => match services.refresh_all().await {
                                     Ok(()) => {
-                                        status.set("刷新完成。".to_string());
+                                        set_status_info(status, status_tone, "刷新完成。".to_string());
                                         reload_tick += 1;
                                     }
-                                    Err(err) => status.set(format!("刷新失败：{err}")),
+                                    Err(err) => set_status_error(status, status_tone, format!("刷新失败：{err}")),
                                 },
-                                Err(err) => status.set(format!("初始化应用失败：{err}")),
+                                Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                             }
                         });
                     },
@@ -109,17 +108,16 @@ pub fn FeedsPage() -> Element {
                             "data-action": "export-config",
                             onclick: move |_| {
                                 let mut config_text = config_text;
-                                let mut status = status;
                                 spawn(async move {
                                     match AppServices::shared().await {
                                         Ok(services) => match services.export_config_json().await {
                                             Ok(raw) => {
                                                 config_text.set(raw);
-                                                status.set("已导出配置包 JSON。".to_string());
+                                                set_status_info(status, status_tone, "已导出配置包 JSON。".to_string());
                                             }
-                                            Err(err) => status.set(format!("导出配置包失败：{err}")),
+                                            Err(err) => set_status_error(status, status_tone, format!("导出配置包失败：{err}")),
                                         },
-                                        Err(err) => status.set(format!("初始化应用失败：{err}")),
+                                        Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                                     }
                                 });
                             },
@@ -130,18 +128,17 @@ pub fn FeedsPage() -> Element {
                             "data-action": "import-config",
                             onclick: move |_| {
                                 let raw = config_text();
-                                let mut status = status;
                                 let mut reload_tick = reload_tick;
                                 spawn(async move {
                                     match AppServices::shared().await {
                                         Ok(services) => match services.import_config_json(&raw).await {
                                             Ok(()) => {
-                                                status.set("配置包已导入。".to_string());
+                                                set_status_info(status, status_tone, "配置包已导入。".to_string());
                                                 reload_tick += 1;
                                             }
-                                            Err(err) => status.set(format!("导入配置包失败：{err}")),
+                                            Err(err) => set_status_error(status, status_tone, format!("导入配置包失败：{err}")),
                                         },
-                                        Err(err) => status.set(format!("初始化应用失败：{err}")),
+                                        Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                                     }
                                 });
                             },
@@ -164,17 +161,16 @@ pub fn FeedsPage() -> Element {
                             "data-action": "export-opml",
                             onclick: move |_| {
                                 let mut opml_text = opml_text;
-                                let mut status = status;
                                 spawn(async move {
                                     match AppServices::shared().await {
                                         Ok(services) => match services.export_opml().await {
                                             Ok(raw) => {
                                                 opml_text.set(raw);
-                                                status.set("已导出 OPML。".to_string());
+                                                set_status_info(status, status_tone, "已导出 OPML。".to_string());
                                             }
-                                            Err(err) => status.set(format!("导出 OPML 失败：{err}")),
+                                            Err(err) => set_status_error(status, status_tone, format!("导出 OPML 失败：{err}")),
                                         },
-                                        Err(err) => status.set(format!("初始化应用失败：{err}")),
+                                        Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                                     }
                                 });
                             },
@@ -185,18 +181,17 @@ pub fn FeedsPage() -> Element {
                             "data-action": "import-opml",
                             onclick: move |_| {
                                 let raw = opml_text();
-                                let mut status = status;
                                 let mut reload_tick = reload_tick;
                                 spawn(async move {
                                     match AppServices::shared().await {
                                         Ok(services) => match services.import_opml(&raw).await {
                                             Ok(()) => {
-                                                status.set("OPML 已导入。".to_string());
+                                                set_status_info(status, status_tone, "OPML 已导入。".to_string());
                                                 reload_tick += 1;
                                             }
-                                            Err(err) => status.set(format!("导入 OPML 失败：{err}")),
+                                            Err(err) => set_status_error(status, status_tone, format!("导入 OPML 失败：{err}")),
                                         },
-                                        Err(err) => status.set(format!("初始化应用失败：{err}")),
+                                        Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                                     }
                                 });
                             },
@@ -228,7 +223,6 @@ pub fn FeedsPage() -> Element {
                                             class: "button secondary",
                                             "data-action": "refresh-feed",
                                             onclick: move |_| {
-                                                let mut status = status;
                                                 let mut reload_tick = reload_tick;
                                                 let feed_title = refresh_feed_title.clone();
                                                 let feed_id = feed.id;
@@ -236,12 +230,12 @@ pub fn FeedsPage() -> Element {
                                                     match AppServices::shared().await {
                                                         Ok(services) => match services.refresh_feed(feed_id).await {
                                                             Ok(()) => {
-                                                                status.set(format!("已刷新订阅：{}", feed_title));
+                                                                set_status_info(status, status_tone, format!("已刷新订阅：{}", feed_title));
                                                                 reload_tick += 1;
                                                             }
-                                                            Err(err) => status.set(format!("刷新订阅失败：{err}")),
+                                                            Err(err) => set_status_error(status, status_tone, format!("刷新订阅失败：{err}")),
                                                         },
-                                                        Err(err) => status.set(format!("初始化应用失败：{err}")),
+                                                        Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                                                     }
                                                 });
                                             },
@@ -251,31 +245,30 @@ pub fn FeedsPage() -> Element {
                                             class: if is_delete_pending { "button danger" } else { "button secondary danger-outline" },
                                             "data-action": "remove-feed",
                                             onclick: move |_| {
-                                                let mut status = status;
                                                 let mut reload_tick = reload_tick;
                                                 let mut pending_delete_feed = pending_delete_feed;
                                                 let feed_title = delete_feed_title.clone();
                                                 let feed_id = feed.id;
                                                 if pending_delete_feed() != Some(feed_id) {
                                                     pending_delete_feed.set(Some(feed_id));
-                                                    status.set(format!("再次点击即可删除订阅：{}", feed_title));
+                                                    set_status_info(status, status_tone, format!("再次点击即可删除订阅：{}", feed_title));
                                                 } else {
                                                     spawn(async move {
                                                         match AppServices::shared().await {
                                                             Ok(services) => match services.remove_feed(feed_id).await {
                                                                 Ok(()) => {
                                                                     pending_delete_feed.set(None);
-                                                                    status.set(format!("已删除订阅：{}", feed_title));
+                                                                    set_status_info(status, status_tone, format!("已删除订阅：{}", feed_title));
                                                                     reload_tick += 1;
                                                                 }
                                                                 Err(err) => {
                                                                     pending_delete_feed.set(None);
-                                                                    status.set(format!("删除订阅失败：{err}"));
+                                                                    set_status_error(status, status_tone, format!("删除订阅失败：{err}"));
                                                                 }
                                                             },
                                                             Err(err) => {
                                                                 pending_delete_feed.set(None);
-                                                                status.set(format!("初始化应用失败：{err}"));
+                                                                set_status_error(status, status_tone, format!("初始化应用失败：{err}"));
                                                             }
                                                         }
                                                     });
@@ -292,4 +285,14 @@ pub fn FeedsPage() -> Element {
             }
         }
     }
+}
+
+fn set_status_info(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
+    status.set(message);
+    status_tone.set("info".to_string());
+}
+
+fn set_status_error(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
+    status.set(message);
+    status_tone.set("error".to_string());
 }
