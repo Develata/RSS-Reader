@@ -141,7 +141,7 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 - [X] T047 [P] [US3] 实现 OPML 导入导出逻辑 `crates/rssr-infra/src/opml.rs`
 - [X] T048 [US3] 在导入导出服务中实现配置导入、导出和远端交换用例 `crates/rssr-application/src/import_export_service.rs`
 - [X] T049 [US3] 在设置服务中实现偏好设置读写、主题设置与 `custom_css` 持久化 `crates/rssr-application/src/settings_service.rs`
-- [X] T050 [P] [US3] 实现设置页面，并接入自定义 CSS 编辑/导入导出、预置主题切换、主题卡片和当前样式来源显示 `crates/rssr-app/src/pages/settings_page.rs`
+- [X] T050 [P] [US3] 实现设置页面，并接入自定义 CSS 编辑/导入导出、预置主题切换、主题卡片、当前样式来源显示以及 GitHub 仓库入口 `crates/rssr-app/src/pages/settings_page.rs`
 - [X] T051 [US3] 实现浅色、深色和跟随系统主题逻辑 `crates/rssr-app/src/theme.rs`
 - [X] T052 [P] [US3] 在订阅页接入 OPML 与配置包导入导出入口 `crates/rssr-app/src/pages/feeds_page.rs`
 - [X] T053 [P] [US3] 在设置页接入 WebDAV 配置交换入口 `crates/rssr-app/src/pages/settings_page.rs`
@@ -155,7 +155,7 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 
 **目的**：补齐文档、体验验证、Web 支持与发布前整理。
 
-- [X] T055 [P] 更新快速开始与实际实现保持一致 `specs/001-minimal-rss-reader/quickstart.md`
+- [X] T055 [P] 更新快速开始与实际实现保持一致，并保持紧凑导航与轻量仓库入口的产品决策文档同步 `specs/001-minimal-rss-reader/quickstart.md`
 - [X] T056 清理跨 crate 公共接口与无用抽象 `crates/rssr-application/src/lib.rs`
 - [X] T057 [P] 补充高风险回归冒烟测试 `crates/rssr-infra/tests/test_regression_smoke.rs`
 - [X] T058 [P] 验证配置包 schema、导入器和导出器保持一致 `specs/001-minimal-rss-reader/contracts/config-package.schema.json`

@@ -13,7 +13,8 @@ Dioxus 0.7.3，桌面端与 Web 端共用同一套 Rust 行为逻辑；补充设
 `design/frontend-command-and-styling-philosophy.md`，作为后续 CLI 与样式扩展的
 补充约束，但不改变本 feature 的 MVP 边界。设置页额外承载一组克制的主题切换能力：
 用户可编辑或导入自定义 CSS、导出当前 CSS，并通过预置主题按钮、主题下拉与主题卡片
-快速切换样式；不引入实时预览模式。
+快速切换样式；不引入实时预览模式。整体导航采用紧凑头部，不保留大面积品牌展示块，
+并在设置页提供一个轻量 GitHub 仓库入口，方便用户回到开源项目主页。
 
 ## 技术上下文
 
@@ -104,7 +105,8 @@ tests/
 `rssr-infra` 实现 SQLite、Web 端 wasm SQLite 持久化、HTTP、RSS/Atom 解析、
 OPML 与配置交换。样式与命令系统的长期演进原则单独记录在 `design/` 目录，但实现仍
 以这些 crate 边界为准。主题切换的公开 hook、class 和 CSS 变量接口由
-`design/theme-author-selector-reference.md` 约束。
+`design/theme-author-selector-reference.md` 约束。导航头保持工具化与低干扰风格，
+仓库入口作为设置页中的次级动作暴露，而不是在主阅读区域占据版面。
 
 ## 复杂度追踪
 
