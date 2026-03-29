@@ -165,6 +165,8 @@ pub fn SettingsPage() -> Element {
                                             draft.set(next);
                                             apply_settings_immediately(
                                                 theme,
+                                                draft,
+                                                preset_choice,
                                                 status,
                                                 status_tone,
                                                 applied,
@@ -225,6 +227,8 @@ pub fn SettingsPage() -> Element {
                                     draft.set(next);
                                     apply_settings_immediately(
                                         theme,
+                                        draft,
+                                        preset_choice,
                                         status,
                                         status_tone,
                                         applied,
@@ -247,6 +251,8 @@ pub fn SettingsPage() -> Element {
                                 draft.set(next);
                                 apply_settings_immediately(
                                     theme,
+                                    draft,
+                                    preset_choice,
                                     status,
                                     status_tone,
                                     applied,
@@ -294,6 +300,8 @@ pub fn SettingsPage() -> Element {
                                                 draft.set(next);
                                                 apply_settings_immediately(
                                                     theme,
+                                                    draft,
+                                                    preset_choice,
                                                     status,
                                                     status_tone,
                                                     applied,
@@ -317,6 +325,8 @@ pub fn SettingsPage() -> Element {
                                                 draft.set(next);
                                                 apply_settings_immediately(
                                                     theme,
+                                                    draft,
+                                                    preset_choice,
                                                     status,
                                                     status_tone,
                                                     applied,
@@ -343,6 +353,8 @@ pub fn SettingsPage() -> Element {
                                 draft.set(next);
                                 apply_settings_immediately(
                                     theme,
+                                    draft,
+                                    preset_choice,
                                     status,
                                     status_tone,
                                     applied,
@@ -362,6 +374,8 @@ pub fn SettingsPage() -> Element {
                                 draft.set(next);
                                 apply_settings_immediately(
                                     theme,
+                                    draft,
+                                    preset_choice,
                                     status,
                                     status_tone,
                                     applied,
@@ -381,6 +395,8 @@ pub fn SettingsPage() -> Element {
                                 draft.set(next);
                                 apply_settings_immediately(
                                     theme,
+                                    draft,
+                                    preset_choice,
                                     status,
                                     status_tone,
                                     applied,
@@ -400,6 +416,8 @@ pub fn SettingsPage() -> Element {
                                 draft.set(next);
                                 apply_settings_immediately(
                                     theme,
+                                    draft,
+                                    preset_choice,
                                     status,
                                     status_tone,
                                     applied,
@@ -419,6 +437,8 @@ pub fn SettingsPage() -> Element {
                                 draft.set(next);
                                 apply_settings_immediately(
                                     theme,
+                                    draft,
+                                    preset_choice,
                                     status,
                                     status_tone,
                                     applied,
@@ -654,24 +674,31 @@ fn custom_css_source_label(raw: &str) -> &'static str {
 
 fn apply_settings_immediately(
     mut theme: ThemeController,
+    mut draft: Signal<UserSettings>,
+    mut preset_choice: Signal<String>,
     status: Signal<String>,
     status_tone: Signal<String>,
     next: UserSettings,
     success_message: String,
 ) {
     let previous = (theme.settings)();
+    let previous_preset = detect_preset_key(&previous.custom_css).to_string();
     theme.settings.set(next.clone());
     spawn(async move {
         match AppServices::shared().await {
             Ok(services) => match services.save_settings(&next).await {
                 Ok(()) => set_status_info(status, status_tone, success_message),
                 Err(err) => {
-                    theme.settings.set(previous);
+                    theme.settings.set(previous.clone());
+                    draft.set(previous);
+                    preset_choice.set(previous_preset);
                     set_status_error(status, status_tone, format!("保存设置失败：{err}"));
                 }
             },
             Err(err) => {
-                theme.settings.set(previous);
+                theme.settings.set(previous.clone());
+                draft.set(previous);
+                preset_choice.set(previous_preset);
                 set_status_error(status, status_tone, format!("初始化应用失败：{err}"));
             }
         }
