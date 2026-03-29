@@ -99,7 +99,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --version 0.7.3
+        run: cargo install dioxus-cli --version 0.7.3 --locked
 
       - name: Build web bundle
         run: dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist

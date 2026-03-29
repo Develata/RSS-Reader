@@ -32,7 +32,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --version 0.7.3
+        run: cargo install dioxus-cli --version 0.7.3 --locked
 
       - name: Format check
         run: cargo fmt --all --check

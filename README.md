@@ -51,7 +51,7 @@ tests/
 
 ```bash
 rustup target add wasm32-unknown-unknown
-cargo install dioxus-cli --version 0.7.3
+cargo install dioxus-cli --version 0.7.3 --locked
 ```
 
 ### Run desktop app

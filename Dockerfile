@@ -1,7 +1,7 @@
-FROM rust:1.87-bookworm AS builder
+FROM rust:1.88-bookworm AS builder
 
 RUN rustup target add wasm32-unknown-unknown
-RUN cargo install dioxus-cli --version 0.7.3
+RUN cargo install dioxus-cli --version 0.7.3 --locked
 
 WORKDIR /app
 
