@@ -28,7 +28,7 @@ fn main() {
         .with_maximizable(true)
         .with_closable(true);
 
-    let config = dioxus::desktop::Config::new().with_window(window);
+    let config = dioxus::desktop::Config::new().with_window(window).with_menu(None);
 
     LaunchBuilder::new().with_cfg(config).launch(app::App);
 }
