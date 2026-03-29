@@ -92,7 +92,7 @@ textarea {
 .app-shell {
   width: min(1080px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 20px 0 56px;
+  padding: 12px 0 56px;
 }
 
 .app-nav-shell {
@@ -100,12 +100,13 @@ textarea {
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
-  margin: 0 0 18px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: rgba(255, 250, 242, 0.78);
-  box-shadow: var(--shadow);
+  margin: 0 0 12px;
+  padding: 6px 8px;
+  border: 1px solid rgba(62, 42, 27, 0.09);
+  border-radius: 16px;
+  background: rgba(255, 250, 242, 0.46);
+  box-shadow: none;
+  backdrop-filter: blur(4px);
 }
 
 .app-nav {
@@ -116,10 +117,10 @@ textarea {
 }
 
 .app-nav__link {
-  padding: 10px 16px;
+  padding: 8px 14px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(255, 250, 242, 0.72);
+  background: rgba(255, 250, 242, 0.58);
   transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
@@ -130,7 +131,7 @@ textarea {
 }
 
 .page {
-  margin-top: 20px;
+  margin-top: 10px;
   padding: 28px;
   border: 1px solid var(--line);
   border-radius: 28px;
@@ -486,7 +487,7 @@ textarea {
 @media (max-width: 720px) {
   .app-shell {
     width: min(100vw - 20px, 1080px);
-    padding-top: 18px;
+    padding-top: 12px;
   }
 
   .app-nav-shell,
@@ -499,7 +500,7 @@ textarea {
   .app-nav-shell {
     align-items: flex-start;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
   }
 
   .feed-form {
