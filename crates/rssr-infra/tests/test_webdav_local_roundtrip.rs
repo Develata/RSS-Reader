@@ -124,30 +124,40 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
                         "PUT" => {
                             *server_body.lock().await = Some(body.to_string());
                             stream
-                                .write_all(b"HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n")
+                                .write_all(
+                                    b"HTTP/1.1 201 Created\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+                                )
                                 .await
                                 .expect("write put response");
+                            let _ = stream.shutdown().await;
                         }
                         "GET" => {
                             if let Some(payload) = server_body.lock().await.clone() {
                                 let response = format!(
-                                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                                    "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
                                     payload.len(),
                                     payload
                                 );
                                 stream.write_all(response.as_bytes()).await.expect("write get response");
+                                let _ = stream.shutdown().await;
                             } else {
                                 stream
-                                    .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
+                                    .write_all(
+                                        b"HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+                                    )
                                     .await
                                     .expect("write 404 response");
+                                let _ = stream.shutdown().await;
                             }
                         }
                         _ => {
                             stream
-                                .write_all(b"HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\n\r\n")
+                                .write_all(
+                                    b"HTTP/1.1 405 Method Not Allowed\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+                                )
                                 .await
                                 .expect("write 405 response");
+                            let _ = stream.shutdown().await;
                         }
                     }
                 }

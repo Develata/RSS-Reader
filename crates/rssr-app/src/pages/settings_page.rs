@@ -16,18 +16,19 @@ pub fn SettingsPage() -> Element {
         use_signal(|| detect_preset_key(&(theme.settings)().custom_css).to_string());
     let mut endpoint = use_signal(String::new);
     let mut remote_path = use_signal(|| "config/rss-reader.json".to_string());
-    let mut status = use_signal(|| "在这里管理主题、阅读偏好和远端配置交换。".to_string());
+    let status = use_signal(|| "在这里管理主题、阅读偏好和远端配置交换。".to_string());
+    let status_tone = use_signal(|| "info".to_string());
 
     let _ = use_resource(move || async move {
         match AppServices::shared().await {
-            Ok(services) => match services.load_settings().await {
-                Ok(settings) => {
-                    preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
-                    draft.set(settings);
-                }
-                Err(err) => status.set(format!("读取设置失败：{err}")),
-            },
-            Err(err) => status.set(format!("初始化应用失败：{err}")),
+                Ok(services) => match services.load_settings().await {
+                    Ok(settings) => {
+                        preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
+                        draft.set(settings);
+                    }
+                    Err(err) => set_status_error(status, status_tone, format!("读取设置失败：{err}")),
+                },
+            Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
         }
     });
 
@@ -40,13 +41,13 @@ pub fn SettingsPage() -> Element {
                     class: "icon-link-button",
                     "data-action": "open-github-repo",
                     r#type: "button",
-                    aria_label: "打开项目 GitHub 仓库",
-                    title: "打开项目 GitHub 仓库",
-                    onclick: move |_| {
-                        if let Err(err) = open_repository_url() {
-                            status.set(format!("打开 GitHub 仓库失败：{err}"));
-                        }
-                    },
+                        aria_label: "打开项目 GitHub 仓库",
+                        title: "打开项目 GitHub 仓库",
+                        onclick: move |_| {
+                            if let Err(err) = open_repository_url() {
+                                set_status_error(status, status_tone, format!("打开 GitHub 仓库失败：{err}"));
+                            }
+                        },
                     svg {
                         xmlns: "http://www.w3.org/2000/svg",
                         view_box: "0 0 24 24",
@@ -60,7 +61,7 @@ pub fn SettingsPage() -> Element {
                     }
                 }
             }
-            StatusBanner { message: status(), tone: "info".to_string() }
+            StatusBanner { message: status(), tone: status_tone() }
             div { class: "settings-grid",
                 div { class: "settings-card",
                     h3 { "阅读外观" }
@@ -154,7 +155,6 @@ pub fn SettingsPage() -> Element {
                             "data-action": "import-custom-css-file",
                             onclick: move |_| {
                                 let mut draft = draft;
-                                let mut status = status;
                                 spawn(async move {
                                     match pick_css_file_contents().await {
                                         Ok(Some(raw)) => {
@@ -166,12 +166,13 @@ pub fn SettingsPage() -> Element {
                                             apply_settings_immediately(
                                                 theme,
                                                 status,
+                                                status_tone,
                                                 applied,
                                                 "已从文件载入并应用自定义 CSS。".to_string(),
                                             );
                                         }
-                                        Ok(None) => status.set("已取消载入 CSS 文件。".to_string()),
-                                        Err(err) => status.set(format!("载入 CSS 文件失败：{err}")),
+                                        Ok(None) => set_status_info(status, status_tone, "已取消载入 CSS 文件。".to_string()),
+                                        Err(err) => set_status_error(status, status_tone, format!("载入 CSS 文件失败：{err}")),
                                     }
                                 });
                             },
@@ -182,17 +183,16 @@ pub fn SettingsPage() -> Element {
                             "data-action": "export-custom-css-file",
                             onclick: move |_| {
                                 let raw = draft().custom_css;
-                                let mut status = status;
                                 spawn(async move {
                                     if raw.trim().is_empty() {
-                                        status.set("当前没有可导出的自定义 CSS。".to_string());
+                                        set_status_info(status, status_tone, "当前没有可导出的自定义 CSS。".to_string());
                                         return;
                                     }
 
                                     match save_css_file(&raw).await {
-                                        Ok(true) => status.set("已导出当前自定义 CSS。".to_string()),
-                                        Ok(false) => status.set("已取消导出 CSS 文件。".to_string()),
-                                        Err(err) => status.set(format!("导出 CSS 文件失败：{err}")),
+                                        Ok(true) => set_status_info(status, status_tone, "已导出当前自定义 CSS。".to_string()),
+                                        Ok(false) => set_status_info(status, status_tone, "已取消导出 CSS 文件。".to_string()),
+                                        Err(err) => set_status_error(status, status_tone, format!("导出 CSS 文件失败：{err}")),
                                     }
                                 });
                             },
@@ -225,6 +225,7 @@ pub fn SettingsPage() -> Element {
                                     apply_settings_immediately(
                                         theme,
                                         status,
+                                        status_tone,
                                         applied,
                                         "已清空自定义 CSS。".to_string(),
                                     );
@@ -238,6 +239,7 @@ pub fn SettingsPage() -> Element {
                                 apply_settings_immediately(
                                     theme,
                                     status,
+                                    status_tone,
                                     applied,
                                     format!("已应用示例主题：{}。", preset_display_name(choice.as_str())),
                                 );
@@ -284,6 +286,7 @@ pub fn SettingsPage() -> Element {
                                                 apply_settings_immediately(
                                                     theme,
                                                     status,
+                                                    status_tone,
                                                     applied,
                                                     format!("已从主题卡片应用：{}。", preset_name),
                                                 );
@@ -295,7 +298,7 @@ pub fn SettingsPage() -> Element {
                                             "data-action": "remove-theme-card",
                                             onclick: move |_| {
                                                 if detect_preset_key(&draft().custom_css) != remove_preset_key.as_str() {
-                                                    status.set(format!("当前并未启用主题：{}。", preset_name));
+                                                    set_status_info(status, status_tone, format!("当前并未启用主题：{}。", preset_name));
                                                     return;
                                                 }
                                                 let mut next = draft();
@@ -306,6 +309,7 @@ pub fn SettingsPage() -> Element {
                                                 apply_settings_immediately(
                                                     theme,
                                                     status,
+                                                    status_tone,
                                                     applied,
                                                     format!("已移除主题：{}。", preset_name),
                                                 );
@@ -331,6 +335,7 @@ pub fn SettingsPage() -> Element {
                                 apply_settings_immediately(
                                     theme,
                                     status,
+                                    status_tone,
                                     applied,
                                     "已应用示例主题：Atlas Sidebar。".to_string(),
                                 );
@@ -349,6 +354,7 @@ pub fn SettingsPage() -> Element {
                                 apply_settings_immediately(
                                     theme,
                                     status,
+                                    status_tone,
                                     applied,
                                     "已应用示例主题：Newsprint。".to_string(),
                                 );
@@ -367,6 +373,7 @@ pub fn SettingsPage() -> Element {
                                 apply_settings_immediately(
                                     theme,
                                     status,
+                                    status_tone,
                                     applied,
                                     "已应用示例主题：Forest Desk。".to_string(),
                                 );
@@ -385,6 +392,7 @@ pub fn SettingsPage() -> Element {
                                 apply_settings_immediately(
                                     theme,
                                     status,
+                                    status_tone,
                                     applied,
                                     "已应用示例主题：Midnight Ledger。".to_string(),
                                 );
@@ -403,6 +411,7 @@ pub fn SettingsPage() -> Element {
                                 apply_settings_immediately(
                                     theme,
                                     status,
+                                    status_tone,
                                     applied,
                                     "已清空自定义 CSS。".to_string(),
                                 );
@@ -412,20 +421,19 @@ pub fn SettingsPage() -> Element {
                     }
                     button {
                         class: "button",
-                        "data-action": "save-settings",
-                        onclick: move |_| {
-                            let next = draft();
-                            let mut status = status;
-                            spawn(async move {
-                                match AppServices::shared().await {
+                            "data-action": "save-settings",
+                            onclick: move |_| {
+                                let next = draft();
+                                spawn(async move {
+                                    match AppServices::shared().await {
                                     Ok(services) => match services.save_settings(&next).await {
                                         Ok(()) => {
                                             theme.settings.set(next);
-                                            status.set("设置已保存。".to_string());
+                                            set_status_info(status, status_tone, "设置已保存。".to_string());
                                         }
-                                        Err(err) => status.set(format!("保存设置失败：{err}")),
+                                        Err(err) => set_status_error(status, status_tone, format!("保存设置失败：{err}")),
                                     },
-                                    Err(err) => status.set(format!("初始化应用失败：{err}")),
+                                    Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                                 }
                             });
                         },
@@ -457,14 +465,13 @@ pub fn SettingsPage() -> Element {
                             onclick: move |_| {
                                 let endpoint = endpoint();
                                 let remote_path = remote_path();
-                                let mut status = status;
                                 spawn(async move {
                                     match AppServices::shared().await {
                                         Ok(services) => match services.push_remote_config(&endpoint, &remote_path).await {
-                                            Ok(()) => status.set("配置已上传到 WebDAV。".to_string()),
-                                            Err(err) => status.set(format!("上传配置失败：{err}")),
+                                            Ok(()) => set_status_info(status, status_tone, "配置已上传到 WebDAV。".to_string()),
+                                            Err(err) => set_status_error(status, status_tone, format!("上传配置失败：{err}")),
                                         },
-                                        Err(err) => status.set(format!("初始化应用失败：{err}")),
+                                        Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                                     }
                                 });
                             },
@@ -476,23 +483,23 @@ pub fn SettingsPage() -> Element {
                             onclick: move |_| {
                                 let endpoint = endpoint();
                                 let remote_path = remote_path();
-                                let mut status = status;
                                 let mut draft = draft;
                                 spawn(async move {
                                     match AppServices::shared().await {
                                         Ok(services) => match services.pull_remote_config(&endpoint, &remote_path).await {
                                             Ok(true) => match services.load_settings().await {
                                                 Ok(settings) => {
+                                                    preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
                                                     draft.set(settings.clone());
                                                     theme.settings.set(settings);
-                                                    status.set("已从 WebDAV 下载并导入配置。".to_string());
+                                                    set_status_info(status, status_tone, "已从 WebDAV 下载并导入配置。".to_string());
                                                 }
-                                                Err(err) => status.set(format!("导入后读取设置失败：{err}")),
+                                                Err(err) => set_status_error(status, status_tone, format!("导入后读取设置失败：{err}")),
                                             },
-                                            Ok(false) => status.set("远端配置不存在。".to_string()),
-                                            Err(err) => status.set(format!("下载配置失败：{err}")),
+                                            Ok(false) => set_status_info(status, status_tone, "远端配置不存在。".to_string()),
+                                            Err(err) => set_status_error(status, status_tone, format!("下载配置失败：{err}")),
                                         },
-                                        Err(err) => status.set(format!("初始化应用失败：{err}")),
+                                        Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                                     }
                                 });
                             },
@@ -634,7 +641,8 @@ fn custom_css_source_label(raw: &str) -> &'static str {
 
 fn apply_settings_immediately(
     mut theme: ThemeController,
-    mut status: Signal<String>,
+    status: Signal<String>,
+    status_tone: Signal<String>,
     next: UserSettings,
     success_message: String,
 ) {
@@ -643,18 +651,28 @@ fn apply_settings_immediately(
     spawn(async move {
         match AppServices::shared().await {
             Ok(services) => match services.save_settings(&next).await {
-                Ok(()) => status.set(success_message),
+                Ok(()) => set_status_info(status, status_tone, success_message),
                 Err(err) => {
                     theme.settings.set(previous);
-                    status.set(format!("保存设置失败：{err}"));
+                    set_status_error(status, status_tone, format!("保存设置失败：{err}"));
                 }
             },
             Err(err) => {
                 theme.settings.set(previous);
-                status.set(format!("初始化应用失败：{err}"));
+                set_status_error(status, status_tone, format!("初始化应用失败：{err}"));
             }
         }
     });
+}
+
+fn set_status_info(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
+    status.set(message);
+    status_tone.set("info".to_string());
+}
+
+fn set_status_error(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
+    status.set(message);
+    status_tone.set("error".to_string());
 }
 
 #[derive(Clone, Copy)]
