@@ -3,8 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result, ensure};
 use rssr_domain::{
     ConfigFeed, ConfigPackage, EntryRepository, FeedRepository, NewFeedSubscription,
-    SettingsRepository,
-    normalize_feed_url,
+    SettingsRepository, normalize_feed_url,
 };
 use time::OffsetDateTime;
 use url::Url;
@@ -73,10 +72,7 @@ impl ImportExportService {
         }
 
         for feed in current_feeds {
-            if !imported_urls
-                .iter()
-                .any(|url| *url == normalize_feed_url(&feed.url))
-            {
+            if !imported_urls.iter().any(|url| *url == normalize_feed_url(&feed.url)) {
                 self.entry_repository.delete_for_feed(feed.id).await?;
                 self.feed_repository.set_deleted(feed.id, true).await?;
             }

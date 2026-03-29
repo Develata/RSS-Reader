@@ -181,9 +181,11 @@ mod tests {
 
     #[test]
     fn reader_formats_published_time_in_utc_without_seconds() {
-        let published_at =
-            OffsetDateTime::parse("2026-03-29T19:45:33+08:00", &time::format_description::well_known::Rfc3339)
-                .expect("parse rfc3339");
+        let published_at = OffsetDateTime::parse(
+            "2026-03-29T19:45:33+08:00",
+            &time::format_description::well_known::Rfc3339,
+        )
+        .expect("parse rfc3339");
 
         assert_eq!(
             format_reader_datetime_utc(Some(published_at)).as_deref(),

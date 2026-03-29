@@ -602,10 +602,9 @@ mod imp {
                 "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
             );
 
-            let response = request
-                .send()
-                .await
-                .context("发送 feed 抓取请求失败（浏览器环境下通常是目标站点未开放 CORS 或当前网络不可达）")?;
+            let response = request.send().await.context(
+                "发送 feed 抓取请求失败（浏览器环境下通常是目标站点未开放 CORS 或当前网络不可达）",
+            )?;
             let metadata = (
                 response
                     .headers()
@@ -1082,8 +1081,7 @@ mod imp {
         let mut seen_urls = HashSet::new();
         for feed in &package.feeds {
             let normalized = normalize_feed_url(
-                &Url::parse(&feed.url)
-                    .with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
+                &Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
             );
             ensure!(
                 seen_urls.insert(normalized.to_string()),

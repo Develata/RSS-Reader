@@ -21,13 +21,13 @@ pub fn SettingsPage() -> Element {
 
     let _ = use_resource(move || async move {
         match AppServices::shared().await {
-                Ok(services) => match services.load_settings().await {
-                    Ok(settings) => {
-                        preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
-                        draft.set(settings);
-                    }
-                    Err(err) => set_status_error(status, status_tone, format!("读取设置失败：{err}")),
-                },
+            Ok(services) => match services.load_settings().await {
+                Ok(settings) => {
+                    preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
+                    draft.set(settings);
+                }
+                Err(err) => set_status_error(status, status_tone, format!("读取设置失败：{err}")),
+            },
             Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
         }
     });
@@ -543,9 +543,7 @@ pub fn SettingsPage() -> Element {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn open_repository_url() -> Result<(), String> {
-    webbrowser::open(REPOSITORY_URL)
-        .map(|_| ())
-        .map_err(|err| err.to_string())
+    webbrowser::open(REPOSITORY_URL).map(|_| ()).map_err(|err| err.to_string())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -791,12 +789,8 @@ async fn save_css_file(raw: &str) -> anyhow::Result<bool> {
     use js_sys::wasm_bindgen::{JsCast, JsValue};
 
     let window = web_sys::window().ok_or_else(|| anyhow::anyhow!("浏览器窗口不可用"))?;
-    let document = window
-        .document()
-        .ok_or_else(|| anyhow::anyhow!("浏览器文档不可用"))?;
-    let body = document
-        .body()
-        .ok_or_else(|| anyhow::anyhow!("浏览器页面 body 不可用"))?;
+    let document = window.document().ok_or_else(|| anyhow::anyhow!("浏览器文档不可用"))?;
+    let body = document.body().ok_or_else(|| anyhow::anyhow!("浏览器页面 body 不可用"))?;
 
     let parts = js_sys::Array::new();
     parts.push(&JsValue::from_str(raw));
@@ -821,8 +815,7 @@ async fn save_css_file(raw: &str) -> anyhow::Result<bool> {
         .set_property("display", "none")
         .map_err(|err| anyhow::anyhow!("设置下载节点样式失败: {err:?}"))?;
 
-    body.append_child(&anchor)
-        .map_err(|err| anyhow::anyhow!("插入下载节点失败: {err:?}"))?;
+    body.append_child(&anchor).map_err(|err| anyhow::anyhow!("插入下载节点失败: {err:?}"))?;
     anchor.click();
     let _ = body.remove_child(&anchor);
     let _ = web_sys::Url::revoke_object_url(&object_url);
