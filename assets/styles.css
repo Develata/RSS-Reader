@@ -92,48 +92,27 @@ textarea {
 .app-shell {
   width: min(1080px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 32px 0 56px;
+  padding: 20px 0 56px;
 }
 
-.app-header {
-  padding: 28px 28px 22px;
+.app-nav-shell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 28px;
-  background: linear-gradient(135deg, rgba(255, 251, 245, 0.96), rgba(246, 236, 222, 0.86));
+  border-radius: 20px;
+  background: rgba(255, 250, 242, 0.78);
   box-shadow: var(--shadow);
-}
-
-.app-header h1 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(2.25rem, 4vw, 4rem);
-  line-height: 0.96;
-  letter-spacing: -0.05em;
-}
-
-.app-eyebrow {
-  margin: 0 0 10px;
-  color: var(--accent);
-  font-family: var(--font-display);
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.app-subtitle {
-  max-width: 52rem;
-  margin: 14px 0 0;
-  color: var(--muted);
-  font-size: 1.02rem;
-  line-height: 1.6;
 }
 
 .app-nav {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin: 0 0 24px;
+  margin: 0;
 }
 
 .app-nav__link {
@@ -164,6 +143,39 @@ textarea {
   margin: 0 0 18px;
   font-size: 2rem;
   letter-spacing: -0.03em;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.page-header h2 {
+  margin: 0;
+}
+
+.icon-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 250, 242, 0.72);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.icon-link-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(176, 74, 47, 0.35);
+  background: rgba(255, 250, 242, 0.96);
 }
 
 .page-intro {
@@ -422,9 +434,33 @@ textarea {
 .reader-html canvas,
 .reader-html svg,
 .reader-html picture {
-  display: block;
+  display: inline-block;
   max-width: 100%;
   height: auto;
+  vertical-align: middle;
+}
+
+.reader-html p > img:only-child,
+.reader-html div > img:only-child,
+.reader-html a > img:only-child,
+.reader-html figure img,
+.reader-html picture:only-child,
+.reader-html p > picture:only-child,
+.reader-html figure picture {
+  display: block;
+}
+
+.reader-html img.emoji,
+.reader-html img.wp-smiley,
+.reader-html img[alt][draggable="false"],
+.reader-html img[src*="s.w.org/images/core/emoji/"] {
+  display: inline-block;
+  width: 1.35em;
+  height: 1.35em;
+  max-width: 1.35em;
+  max-height: 1.35em;
+  margin: 0 0.08em;
+  vertical-align: -0.22em;
 }
 
 .reader-html figure {
@@ -453,11 +489,17 @@ textarea {
     padding-top: 18px;
   }
 
-  .app-header,
+  .app-nav-shell,
   .page,
   .reader-page {
     padding: 22px;
     border-radius: 22px;
+  }
+
+  .app-nav-shell {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
   }
 
   .feed-form {

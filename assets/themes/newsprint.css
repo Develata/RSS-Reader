@@ -21,7 +21,7 @@
   width: min(1180px, calc(100vw - 40px));
 }
 
-.app-header,
+.app-nav-shell,
 .page,
 .reader-page {
   border-radius: 12px;

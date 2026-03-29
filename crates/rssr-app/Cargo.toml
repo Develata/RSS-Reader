@@ -27,6 +27,7 @@ url.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus = { workspace = true, features = ["desktop"] }
 rssr-infra = { path = "../rssr-infra" }
+webbrowser.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, features = ["web"] }

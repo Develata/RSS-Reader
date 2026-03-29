@@ -18,28 +18,7 @@ body {
 }
 
 .app-shell {
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 24px;
   width: min(1480px, calc(100vw - 36px));
-  align-items: start;
-}
-
-.app-header {
-  position: sticky;
-  top: 24px;
-  min-height: calc(100vh - 48px);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 34px 30px;
-  border-radius: 32px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(237, 233, 224, 0.92));
-}
-
-.app-header h1 {
-  font-size: clamp(2.6rem, 4vw, 4.6rem);
-  line-height: 0.92;
 }
 
 .page,
@@ -53,18 +32,28 @@ body {
   gap: 18px 24px;
 }
 
-.page > .app-nav {
+.page > .app-nav-shell {
   grid-column: 1;
   grid-row: 1 / span 12;
   position: sticky;
   top: 24px;
-  display: grid;
-  grid-auto-flow: row;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   align-content: start;
+  align-self: start;
+  padding: 24px 22px;
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(237, 233, 224, 0.92));
 }
 
-.page > .app-nav .app-nav__link {
+.page > .app-nav-shell .app-nav {
+  display: grid;
+  width: 100%;
+  gap: 10px;
+}
+
+.page > .app-nav-shell .app-nav__link {
   border-radius: 18px;
   text-align: center;
   background: rgba(255, 255, 255, 0.92);
@@ -89,14 +78,31 @@ body {
   gap: 18px 24px;
 }
 
-.reader-page > .app-nav {
+.reader-page > .app-nav-shell {
   grid-column: 1;
   grid-row: 1 / span 6;
   position: sticky;
   top: 24px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   align-content: start;
+  align-self: start;
+  padding: 24px 22px;
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(237, 233, 224, 0.92));
+}
+
+.reader-page > .app-nav-shell .app-nav {
+  display: grid;
+  width: 100%;
+  gap: 10px;
+}
+
+.reader-page > .app-nav-shell .app-nav__link {
+  border-radius: 18px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .reader-page > h2,
@@ -126,20 +132,19 @@ body {
 }
 
 @media (max-width: 960px) {
-  .app-shell,
   .page,
   .reader-page {
     display: block;
   }
 
-  .app-header {
+  .page > .app-nav-shell,
+  .reader-page > .app-nav-shell {
     position: static;
-    min-height: auto;
     margin-bottom: 20px;
   }
 
-  .page > .app-nav,
-  .reader-page > .app-nav {
+  .page > .app-nav-shell .app-nav,
+  .reader-page > .app-nav-shell .app-nav {
     position: static;
     display: flex;
     flex-wrap: wrap;

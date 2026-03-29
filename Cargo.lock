@@ -4511,6 +4511,7 @@ dependencies = [
  "url",
  "uuid",
  "web-sys",
+ "webbrowser",
 ]
 
 [[package]]

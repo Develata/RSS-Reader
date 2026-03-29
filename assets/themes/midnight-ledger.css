@@ -17,11 +17,10 @@ body {
     linear-gradient(180deg, #0f1518 0%, #12191d 45%, #10171b 100%);
 }
 
-.app-header {
+.app-nav-shell {
   background: linear-gradient(135deg, rgba(21, 30, 35, 0.96), rgba(17, 24, 28, 0.90));
 }
 
-.app-header h1,
 .page h2 {
   letter-spacing: -0.04em;
 }

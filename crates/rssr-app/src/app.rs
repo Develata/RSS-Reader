@@ -26,11 +26,6 @@ pub fn App() -> Element {
             style { id: "user-custom-css", "{settings().custom_css}" }
         }
         div { class: "app-shell {theme_class(settings().theme)}",
-            header { class: "app-header",
-                p { class: "app-eyebrow", "Local-first RSS" }
-                h1 { "RSS Reader" }
-                p { class: "app-subtitle", "极简、快速、以本地 SQLite 为事实来源的个人阅读器。" }
-            }
             RoutableApp {}
         }
     }
@@ -39,11 +34,13 @@ pub fn App() -> Element {
 #[component]
 pub fn AppNav() -> Element {
     rsx! {
-        nav { class: "app-nav",
-            Link { class: "app-nav__link", "data-nav": "home", to: AppRoute::HomePage {}, "首页" }
-            Link { class: "app-nav__link", "data-nav": "feeds", to: AppRoute::FeedsPage {}, "订阅" }
-            Link { class: "app-nav__link", "data-nav": "entries", to: AppRoute::EntriesPage {}, "文章" }
-            Link { class: "app-nav__link", "data-nav": "settings", to: AppRoute::SettingsPage {}, "设置" }
+        nav { class: "app-nav-shell",
+            div { class: "app-nav",
+                Link { class: "app-nav__link", "data-nav": "home", to: AppRoute::HomePage {}, "首页" }
+                Link { class: "app-nav__link", "data-nav": "feeds", to: AppRoute::FeedsPage {}, "订阅" }
+                Link { class: "app-nav__link", "data-nav": "entries", to: AppRoute::EntriesPage {}, "文章" }
+                Link { class: "app-nav__link", "data-nav": "settings", to: AppRoute::SettingsPage {}, "设置" }
+            }
         }
     }
 }
