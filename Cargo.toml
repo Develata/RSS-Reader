@@ -13,7 +13,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 authors = ["Develata"]
-repository = "https://example.invalid/RSS-Reader"
+repository = "https://github.com/Develata/RSS-Reader"
 
 [workspace.dependencies]
 ammonia = "4"
