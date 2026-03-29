@@ -401,6 +401,7 @@ textarea {
   color: #2c221d;
   line-height: 1.8;
   font-size: 1.06rem;
+  overflow-wrap: anywhere;
 }
 
 .reader-body pre {
@@ -408,8 +409,42 @@ textarea {
   font-family: inherit;
 }
 
+.reader-html {
+  max-width: 100%;
+}
+
 .reader-html p:first-child {
   margin-top: 0;
+}
+
+.reader-html img,
+.reader-html video,
+.reader-html canvas,
+.reader-html svg,
+.reader-html picture {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.reader-html figure {
+  max-width: 100%;
+  margin: 1.2rem 0;
+}
+
+.reader-html iframe,
+.reader-html embed,
+.reader-html object {
+  display: block;
+  width: min(100%, 100%);
+  max-width: 100%;
+}
+
+.reader-html table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 @media (max-width: 720px) {
