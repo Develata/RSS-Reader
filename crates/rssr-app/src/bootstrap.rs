@@ -694,7 +694,8 @@ mod imp {
                 feed.url.clone()
             };
 
-            let request = self.client.get(&url).header(
+            let request_url = web_refresh_request_url(&url)?;
+            let request = self.client.get(&request_url).header(
                 header::ACCEPT,
                 "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
             );
@@ -735,16 +736,7 @@ mod imp {
                 .text()
                 .await
                 .context("读取 feed 响应正文失败")?;
-            let mut parsed = parse_feed(&body).context("解析订阅失败")?;
-            for entry in &mut parsed.entries {
-                if let Some(content_html) = entry.content_html.take() {
-                    entry.content_html = Some(
-                        localize_html_images(&self.client, &content_html, entry.url.as_ref())
-                            .await
-                            .unwrap_or(content_html),
-                    );
-                }
-            }
+            let parsed = parse_feed(&body).context("解析订阅失败")?;
 
             let mut state = self.state.lock().expect("lock state");
             let now = web_now_utc();
@@ -968,6 +960,15 @@ mod imp {
             .set_item(STORAGE_KEY, &serde_json::to_string(state)?)
             .map_err(|_| anyhow::anyhow!("写入浏览器本地存储失败"))?;
         Ok(())
+    }
+
+    fn web_refresh_request_url(raw: &str) -> anyhow::Result<String> {
+        let mut url = Url::parse(raw).with_context(|| format!("订阅 URL 不合法：{raw}"))?;
+        if matches!(url.scheme(), "http" | "https") {
+            url.query_pairs_mut()
+                .append_pair("_rssr_fetch", &js_sys::Date::now().round().to_string());
+        }
+        Ok(url.to_string())
     }
 
     fn to_domain_entry(entry: &PersistedEntry) -> anyhow::Result<Entry> {
