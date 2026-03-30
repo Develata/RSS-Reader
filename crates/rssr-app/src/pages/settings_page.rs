@@ -756,32 +756,49 @@ fn builtin_theme_presets() -> [BuiltinThemePreset; 4] {
 }
 
 async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
-    let file = rfd::AsyncFileDialog::new().add_filter("CSS", &["css"]).pick_file().await;
+    #[cfg(target_os = "android")]
+    {
+        anyhow::bail!("Android 端暂未接入系统文件选择器，请先手动粘贴 CSS 内容。");
+    }
 
-    let Some(file) = file else {
-        return Ok(None);
-    };
+    #[cfg(not(target_os = "android"))]
+    {
+        let file = rfd::AsyncFileDialog::new().add_filter("CSS", &["css"]).pick_file().await;
 
-    let bytes = file.read().await;
-    let raw =
-        String::from_utf8(bytes).map_err(|err| anyhow::anyhow!("CSS 文件不是有效 UTF-8：{err}"))?;
-    Ok(Some(raw))
+        let Some(file) = file else {
+            return Ok(None);
+        };
+
+        let bytes = file.read().await;
+        let raw = String::from_utf8(bytes)
+            .map_err(|err| anyhow::anyhow!("CSS 文件不是有效 UTF-8：{err}"))?;
+        Ok(Some(raw))
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn save_css_file(raw: &str) -> anyhow::Result<bool> {
-    let file = rfd::AsyncFileDialog::new()
-        .set_file_name("rss-reader-theme.css")
-        .add_filter("CSS", &["css"])
-        .save_file()
-        .await;
+    #[cfg(target_os = "android")]
+    {
+        let _ = raw;
+        anyhow::bail!("Android 端暂未接入系统文件保存器，请先复制 CSS 内容后手动保存。");
+    }
 
-    let Some(file) = file else {
-        return Ok(false);
-    };
+    #[cfg(not(target_os = "android"))]
+    {
+        let file = rfd::AsyncFileDialog::new()
+            .set_file_name("rss-reader-theme.css")
+            .add_filter("CSS", &["css"])
+            .save_file()
+            .await;
 
-    file.write(raw.as_bytes()).await?;
-    Ok(true)
+        let Some(file) = file else {
+            return Ok(false);
+        };
+
+        file.write(raw.as_bytes()).await?;
+        Ok(true)
+    }
 }
 
 #[cfg(target_arch = "wasm32")]

@@ -1,0 +1,15 @@
+[application]
+name = "RSS Reader"
+default_platform = "desktop"
+out_dir = "dist"
+
+[bundle]
+identifier = "io.github.develata.rssreader"
+publisher = "Develata"
+
+[web.app]
+title = "RSS Reader"
+
+[android]
+min_sdk = 24
+target_sdk = 34

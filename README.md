@@ -72,6 +72,51 @@ GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 GSK_RENDERER=cairo WEBKIT_DISABLE_DMABUF
 dx serve --platform web --package rssr-app
 ```
 
+### Build Android debug APK
+
+Install the Android Rust targets:
+
+```bash
+rustup target add aarch64-linux-android x86_64-linux-android
+```
+
+Required local tooling:
+- JDK 21
+- Android SDK command line tools
+- Android NDK
+- Android platform tools
+- Android platform 33
+- Android build-tools 34.0.0
+
+Example environment:
+
+```bash
+export JAVA_HOME="$HOME/.local/jdks/temurin-21"
+export ANDROID_SDK_ROOT="$HOME/.local/android-sdk"
+export ANDROID_HOME="$ANDROID_SDK_ROOT"
+export ANDROID_NDK_HOME="$(find "$ANDROID_SDK_ROOT/ndk" -maxdepth 1 -mindepth 1 -type d | sort | tail -n 1)"
+export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+export PATH="$JAVA_HOME/bin:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+```
+
+Validate the Android target:
+
+```bash
+cargo check -p rssr-app --target aarch64-linux-android
+```
+
+Build a debug APK:
+
+```bash
+dx bundle --platform android --package rssr-app --release --debug-symbols false
+```
+
+Output:
+
+```text
+target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk
+```
+
 ### Run CLI
 
 ```bash
@@ -126,15 +171,19 @@ The release workflow publishes:
 - `rssr-cli-macos-x86_64.tar.gz`
 - `rssr-app-macos-aarch64.tar.gz`
 - `rssr-cli-macos-aarch64.tar.gz`
+- `rssr-app-android-debug.apk`
 - `rssr-app-web.tar.gz`
 
 Current automatic release targets are:
 - Windows desktop
 - Linux desktop
 - macOS desktop
+- Android debug APK
 - Web static bundle
 
-`dx serve` supports additional platform modes, but not all of them map cleanly to end-user GitHub Release assets. Mobile, server, and liveview targets are not yet published as release attachments.
+The Android artifact is currently an unsigned debug APK for installation testing. Signed release APK / AAB packaging is still tracked separately.
+
+`dx serve` supports additional platform modes, but not all of them map cleanly to end-user GitHub Release assets. iOS, server, and liveview targets are not yet published as release attachments.
 
 Tag a release to trigger it:
 

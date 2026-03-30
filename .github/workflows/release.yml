@@ -15,6 +15,67 @@ permissions:
   contents: write
 
 jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;34.0.0" \
+            "ndk;27.3.13750724"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli --version 0.7.3 --locked
+
+      - name: Prefetch Gradle distribution
+        run: |
+          mkdir -p "$HOME/.gradle/wrapper/dists/gradle-9.1.0-bin/9agqghryom9wkf8r80qlhnts3"
+          curl -L --fail --retry 3 --retry-delay 2 \
+            -o "$HOME/.gradle/wrapper/dists/gradle-9.1.0-bin/9agqghryom9wkf8r80qlhnts3/gradle-9.1.0-bin.zip" \
+            https://services.gradle.org/distributions/gradle-9.1.0-bin.zip
+
+      - name: Build Android debug APK
+        run: |
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/27.3.13750724"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          dx bundle --platform android --package rssr-app --release --debug-symbols false
+
+      - name: Archive Android APK
+        run: |
+          mkdir -p release-assets
+          cp target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk \
+             release-assets/rssr-app-android-debug.apk
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: release-assets/*
+
   build-windows:
     runs-on: windows-latest
     steps:
@@ -157,6 +218,7 @@ jobs:
   publish-release:
     runs-on: ubuntu-latest
     needs:
+      - build-android
       - build-windows
       - build-linux
       - build-macos
@@ -173,5 +235,6 @@ jobs:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
           files: |
+            release-assets/**/*.apk
             release-assets/**/*.zip
             release-assets/**/*.tar.gz

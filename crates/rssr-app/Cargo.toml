@@ -14,7 +14,6 @@ feed-rs.workspace = true
 quick-xml.workspace = true
 rssr-application = { path = "../rssr-application" }
 rssr-domain = { path = "../rssr-domain" }
-rfd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -24,8 +23,14 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
 dioxus = { workspace = true, features = ["desktop"] }
+rfd.workspace = true
+rssr-infra = { path = "../rssr-infra" }
+webbrowser.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+dioxus = { workspace = true, features = ["mobile"] }
 rssr-infra = { path = "../rssr-infra" }
 webbrowser.workspace = true
 
