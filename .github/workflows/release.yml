@@ -17,6 +17,12 @@ permissions:
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_RELEASE_READY: >-
+        ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' &&
+            secrets.ANDROID_KEYSTORE_PASSWORD != '' &&
+            secrets.ANDROID_KEY_ALIAS != '' &&
+            secrets.ANDROID_KEY_PASSWORD != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -64,11 +70,56 @@ jobs:
           export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
           dx bundle --platform android --package rssr-app --release --debug-symbols false
 
-      - name: Archive Android APK
+      - name: Prepare Android release signing
+        if: env.ANDROID_RELEASE_READY == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          cd target/dx/rssr-app/release/android/app
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > release-keystore.jks
+          cat <<'EOF' >> app/build.gradle.kts
+
+          android {
+              signingConfigs {
+                  create("release") {
+                      storeFile = rootProject.file("release-keystore.jks")
+                      storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                      keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                      keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+                  }
+              }
+              buildTypes {
+                  getByName("release") {
+                      signingConfig = signingConfigs.getByName("release")
+                  }
+              }
+          }
+          EOF
+
+      - name: Build Android release APK and AAB
+        if: env.ANDROID_RELEASE_READY == 'true'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/27.3.13750724"
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          cd target/dx/rssr-app/release/android/app
+          ./gradlew assembleRelease bundleRelease --no-daemon --console=plain
+
+      - name: Archive Android artifacts
         run: |
           mkdir -p release-assets
           cp target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk \
              release-assets/rssr-app-android-debug.apk
+          if [ "$ANDROID_RELEASE_READY" = "true" ]; then
+            cp target/dx/rssr-app/release/android/app/app/build/outputs/apk/release/app-release.apk \
+              release-assets/rssr-app-android-release.apk
+            cp target/dx/rssr-app/release/android/app/app/build/outputs/bundle/release/app-release.aab \
+              release-assets/rssr-app-android-release.aab
+          fi
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4

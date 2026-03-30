@@ -12,7 +12,9 @@
 当前状态：
 - 共享 Rust 业务逻辑已存在，可复用
 - Desktop / Web / CLI 已完成
-- Android 仅作为架构目标存在，尚未落地宿主工程、打包链与签名流程
+- Android Debug APK 已可本地构建，且仓库已具备 Android target smoke check
+- GitHub Release 已能发布 Android debug APK
+- Android 正式签名 APK / AAB 仍依赖 keystore secrets 与最终真机验收
 
 ## 当前缺口
 
@@ -63,6 +65,9 @@
 - 本地能成功构建 Debug APK
 - APK 能安装到模拟器或真机
 - 启动后不崩溃
+
+当前进度：
+- 已完成
 
 ### Phase 2：补齐 Android 运行时适配
 
@@ -134,6 +139,10 @@
 完成标准：
 - 本地可稳定产出签名后的 Release APK 或 AAB
 
+当前进度：
+- 已部分完成：GitHub workflow 已支持在 secrets 存在时构建 release APK / AAB
+- 仍需实际 keystore、真实签名验证和产物安装验收
+
 ### Phase 5：接入 GitHub 自动发布
 
 目标：
@@ -153,6 +162,11 @@
 
 完成标准：
 - 打 tag 后，GitHub Release 自动附带 Android 产物
+
+当前进度：
+- 已部分完成：debug APK 已进入 GitHub Release 产物
+- 若配置 Android signing secrets，可额外发布 release APK / AAB
+- 仍需补充正式签名产物的验收记录
 
 ## 建议的 GitHub Release 产物策略
 
@@ -188,12 +202,15 @@
 
 ## 当前结论
 
-离“Android 安装包可自动发布”还有一整轮专项工程工作。
-
-更务实的下一步不是直接改现有 `release.yml`，而是先开启一个 Android follow-up feature，只追求：
+Android 已经从“仅有架构目标”推进到：
 
 - 本地 Debug APK 可构建
-- 可安装
-- 可启动
+- GitHub Release 可附带 debug APK
+- 若 secrets 齐备，可进一步构建 release APK / AAB
 
-等这一阶段稳定后，再接 GitHub Release 自动发包。
+当前更务实的剩余重点是：
+
+- 真机/模拟器安装与启动回归
+- Android 文件导入导出体验补齐
+- keystore 签名链的真实验收
+- release APK / AAB 的最终发布验证

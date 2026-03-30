@@ -174,6 +174,10 @@ The release workflow publishes:
 - `rssr-app-android-debug.apk`
 - `rssr-app-web.tar.gz`
 
+If Android signing secrets are configured, the release workflow also publishes:
+- `rssr-app-android-release.apk`
+- `rssr-app-android-release.aab`
+
 Current automatic release targets are:
 - Windows desktop
 - Linux desktop
@@ -181,7 +185,13 @@ Current automatic release targets are:
 - Android debug APK
 - Web static bundle
 
-The Android artifact is currently an unsigned debug APK for installation testing. Signed release APK / AAB packaging is still tracked separately.
+The Android pipeline always publishes an unsigned debug APK for installation testing. If signing secrets are configured, it also publishes a signed release APK and AAB.
+
+Android signing secrets expected by GitHub Actions:
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
 
 `dx serve` supports additional platform modes, but not all of them map cleanly to end-user GitHub Release assets. iOS, server, and liveview targets are not yet published as release attachments.
 
