@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ANDROID_NDK_VERSION: 27.3.13750724
+      ANDROID_API_LEVEL: 34
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,12 +53,14 @@ jobs:
         run: |
           ANDROID_NDK_DIR="$(find "$ANDROID_SDK_ROOT/ndk" -mindepth 1 -maxdepth 1 -type d | sort | tail -n1)"
           test -n "$ANDROID_NDK_DIR"
+          ANDROID_LLVM_BIN="$ANDROID_NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_DIR" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_NDK_DIR" >> "$GITHUB_ENV"
-          echo "$ANDROID_NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
-          echo "CC_aarch64_linux_android=$ANDROID_NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-clang" >> "$GITHUB_ENV"
-          echo "AR_aarch64_linux_android=$ANDROID_NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" >> "$GITHUB_ENV"
+          echo "$ANDROID_LLVM_BIN" >> "$GITHUB_PATH"
+          echo "CC_aarch64_linux_android=$ANDROID_LLVM_BIN/aarch64-linux-android${ANDROID_API_LEVEL}-clang" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=$ANDROID_LLVM_BIN/llvm-ar" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_LLVM_BIN/aarch64-linux-android${ANDROID_API_LEVEL}-clang" >> "$GITHUB_ENV"
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
