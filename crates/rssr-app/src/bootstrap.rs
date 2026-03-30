@@ -40,8 +40,14 @@ mod imp {
         pub async fn shared() -> anyhow::Result<Arc<Self>> {
             APP_SERVICES
                 .get_or_try_init(|| async {
-                    let backend: Box<dyn StorageBackend> =
-                        Box::new(NativeSqliteBackend::new("sqlite:rss-reader.db?mode=rwc"));
+                    let native_backend = NativeSqliteBackend::from_default_location()
+                        .context("确定本地数据库位置失败")?;
+                    tracing::info!(
+                        backend = native_backend.label(),
+                        database = %native_backend.database_label(),
+                        "初始化桌面端本地数据库"
+                    );
+                    let backend: Box<dyn StorageBackend> = Box::new(native_backend);
 
                     let pool = backend.connect().await.context("连接本地数据库失败")?;
                     backend.migrate(&pool).await.context("执行数据库迁移失败")?;

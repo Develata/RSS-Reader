@@ -23,8 +23,8 @@ use url::Url;
 #[derive(Parser, Debug)]
 #[command(name = "rssr", about = "RSS Reader command-line interface")]
 struct Cli {
-    #[arg(long, default_value = "sqlite:rss-reader.db?mode=rwc")]
-    database_url: String,
+    #[arg(long)]
+    database_url: Option<String>,
 
     #[command(subcommand)]
     command: Command,
@@ -133,7 +133,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
     let cli = Cli::parse();
-    let services = CliServices::new(&cli.database_url).await?;
+    let services = CliServices::new(cli.database_url.as_deref()).await?;
 
     match cli.command {
         Command::ListFeeds => print_feeds(&services.list_feeds().await?),
@@ -215,8 +215,19 @@ struct CliServices {
 }
 
 impl CliServices {
-    async fn new(database_url: &str) -> anyhow::Result<Self> {
-        let backend: Box<dyn StorageBackend> = Box::new(NativeSqliteBackend::new(database_url));
+    async fn new(database_url: Option<&str>) -> anyhow::Result<Self> {
+        let native_backend = match database_url {
+            Some(database_url) => NativeSqliteBackend::new(database_url),
+            None => {
+                NativeSqliteBackend::from_default_location().context("确定本地数据库位置失败")?
+            }
+        };
+        tracing::info!(
+            backend = native_backend.label(),
+            database = %native_backend.database_label(),
+            "初始化 CLI 本地数据库"
+        );
+        let backend: Box<dyn StorageBackend> = Box::new(native_backend);
         let pool = backend.connect().await.context("连接本地数据库失败")?;
         backend.migrate(&pool).await.context("执行数据库迁移失败")?;
 
