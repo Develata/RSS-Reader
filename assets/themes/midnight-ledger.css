@@ -1,24 +1,25 @@
 :root {
-  --bg: #0f1518;
-  --panel: rgba(18, 24, 28, 0.88);
-  --panel-strong: #141c21;
+  --bg: #0e1417;
+  --panel: rgba(16, 23, 27, 0.9);
+  --panel-strong: #131b20;
   --ink: #eef5f7;
-  --muted: #9fb5bc;
-  --line: rgba(255, 255, 255, 0.08);
-  --accent: #4fb7b1;
-  --accent-strong: #7ce0da;
-  --shadow: 0 22px 64px rgba(0, 0, 0, 0.30);
+  --muted: #a2b8bf;
+  --line: rgba(255, 255, 255, 0.07);
+  --accent: #53c0bb;
+  --accent-strong: #83e4df;
+  --shadow: 0 26px 70px rgba(0, 0, 0, 0.34);
 }
 
 body {
   background:
-    radial-gradient(circle at top left, rgba(79, 183, 177, 0.12), transparent 24%),
-    radial-gradient(circle at bottom right, rgba(124, 224, 218, 0.08), transparent 22%),
-    linear-gradient(180deg, #0f1518 0%, #12191d 45%, #10171b 100%);
+    radial-gradient(circle at top left, rgba(83, 192, 187, 0.12), transparent 22%),
+    radial-gradient(circle at bottom right, rgba(89, 122, 170, 0.1), transparent 20%),
+    linear-gradient(180deg, #0f1518 0%, #11181c 46%, #0f1519 100%);
 }
 
 .app-nav-shell {
-  background: linear-gradient(135deg, rgba(21, 30, 35, 0.96), rgba(17, 24, 28, 0.90));
+  background: linear-gradient(135deg, rgba(20, 29, 34, 0.96), rgba(16, 23, 27, 0.92));
+  border-color: rgba(120, 170, 184, 0.08);
 }
 
 .page h2 {
@@ -26,20 +27,31 @@ body {
 }
 
 .app-nav__link {
-  background: rgba(24, 33, 39, 0.72);
+  background: rgba(24, 34, 40, 0.78);
 }
 
 .app-nav__link:hover {
-  background: rgba(35, 48, 55, 0.94);
-  border-color: rgba(79, 183, 177, 0.32);
+  background: rgba(34, 46, 53, 0.96);
+  border-color: rgba(83, 192, 187, 0.28);
+}
+
+.page,
+.reader-page {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+    var(--panel);
 }
 
 .button.secondary {
-  background: #223038;
+  background: #23323b;
 }
 
 .button.danger {
   background: #8e3a44;
+}
+
+.button {
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .feed-card,
@@ -47,8 +59,24 @@ body {
 .exchange-card,
 .settings-card,
 .stat-card,
-.reader-page {
+.reader-page,
+.theme-card {
   border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    var(--panel-strong);
+}
+
+.theme-card.is-active {
+  box-shadow:
+    0 0 0 1px rgba(83, 192, 187, 0.16),
+    0 18px 34px rgba(0, 0, 0, 0.18);
+}
+
+.feed-card__title,
+.entry-card__title {
+  color: #f4fbfd;
+  line-height: 1.32;
 }
 
 [data-page="home"] .stats-grid {
@@ -64,4 +92,12 @@ body {
   max-width: 70ch;
   margin: 0 auto;
   font-size: 1.1rem;
+  color: #e7f0f2;
+}
+
+.text-input,
+.text-area,
+.select-input {
+  background: rgba(20, 28, 33, 0.9);
+  color: var(--ink);
 }

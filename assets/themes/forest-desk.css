@@ -1,40 +1,88 @@
 :root {
-  --bg: #e6efe8;
-  --panel: rgba(244, 249, 244, 0.88);
-  --panel-strong: #f7fbf7;
-  --ink: #1a2a21;
-  --muted: #587060;
-  --line: rgba(28, 77, 49, 0.18);
-  --accent: #236846;
-  --accent-strong: #184e34;
-  --shadow: 0 22px 60px rgba(26, 61, 39, 0.10);
+  --bg: #e3ece4;
+  --panel: rgba(245, 250, 245, 0.9);
+  --panel-strong: #f8fcf8;
+  --ink: #18271f;
+  --muted: #547060;
+  --line: rgba(29, 84, 52, 0.16);
+  --accent: #226946;
+  --accent-strong: #174d33;
+  --shadow: 0 24px 56px rgba(28, 67, 42, 0.09);
 }
 
 body {
   background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.62), transparent 26%),
-    radial-gradient(circle at bottom left, rgba(153, 188, 166, 0.22), transparent 24%),
-    linear-gradient(180deg, #edf5ef 0%, #e5efe7 45%, #dde8df 100%);
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.62), transparent 24%),
+    radial-gradient(circle at bottom left, rgba(146, 180, 158, 0.2), transparent 22%),
+    linear-gradient(180deg, #edf5ef 0%, #e4ede5 44%, #dce6dd 100%);
 }
 
 .app-shell {
-  width: min(1120px, calc(100vw - 36px));
+  width: min(1140px, calc(100vw - 34px));
 }
 
 .app-nav-shell {
-  background: linear-gradient(135deg, rgba(252, 255, 252, 0.96), rgba(226, 241, 230, 0.90));
+  background: linear-gradient(135deg, rgba(252, 255, 252, 0.97), rgba(228, 241, 232, 0.92));
+  border-color: rgba(32, 92, 58, 0.12);
+  box-shadow: 0 10px 24px rgba(38, 79, 53, 0.05);
 }
 
 .app-nav [data-nav="settings"] {
   margin-left: auto;
 }
 
+.app-nav__link {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.app-nav__link:hover {
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.page,
+.reader-page {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.02)),
+    var(--panel);
+}
+
+.page-header h2,
+.page h2 {
+  letter-spacing: -0.045em;
+}
+
 .button {
   border-radius: 999px;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.08);
 }
 
 .button.secondary {
-  background: #244234;
+  background: #244737;
+}
+
+.text-input,
+.text-area,
+.select-input {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.stat-card,
+.feed-card,
+.entry-card,
+.exchange-card,
+.settings-card,
+.theme-card {
+  box-shadow: 0 8px 22px rgba(24, 65, 42, 0.04);
+}
+
+.feed-card__title,
+.entry-card__title {
+  line-height: 1.32;
+}
+
+.entry-card__meta,
+.reader-meta {
+  color: #50695a;
 }
 
 [data-page="feeds"] .feed-form {
@@ -48,8 +96,22 @@ body {
 [data-page="reader"] .reader-body {
   max-width: 68ch;
   margin: 0 auto;
+  font-size: 1.04rem;
+  line-height: 1.86;
 }
 
 [data-page="settings"] .settings-grid {
   grid-template-columns: 1.25fr 0.95fr;
+}
+
+.theme-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.08)),
+    rgba(247, 251, 247, 0.92);
+}
+
+.theme-card.is-active {
+  box-shadow:
+    0 10px 28px rgba(28, 74, 49, 0.07),
+    0 0 0 1px rgba(34, 105, 70, 0.12);
 }

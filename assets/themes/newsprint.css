@@ -1,30 +1,40 @@
 :root {
-  --bg: #efe6d6;
-  --panel: rgba(252, 248, 239, 0.92);
-  --panel-strong: #fbf7ee;
+  --bg: #ece1cf;
+  --panel: rgba(252, 248, 239, 0.95);
+  --panel-strong: #fdf9f1;
   --ink: #241d16;
-  --muted: #716556;
-  --line: rgba(68, 53, 36, 0.22);
-  --accent: #8b3d2b;
-  --accent-strong: #6f2e20;
-  --shadow: 0 12px 28px rgba(49, 36, 24, 0.08);
+  --muted: #6f6253;
+  --line: rgba(82, 61, 41, 0.18);
+  --accent: #8f3f2b;
+  --accent-strong: #6d2f20;
+  --shadow: 0 16px 36px rgba(54, 36, 21, 0.08);
 }
 
-[data-page="reader"] .reader-body {
-  max-width: 74ch;
-  margin: 0 auto;
-  font-size: 1.08rem;
-  line-height: 1.92;
+body {
+  background:
+    linear-gradient(90deg, rgba(131, 93, 58, 0.05) 0, rgba(131, 93, 58, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 26%),
+    linear-gradient(180deg, #f0e5d4 0%, #ebe0cf 42%, #e4d6c1 100%);
+  background-size: 22px 22px, auto, auto;
 }
 
 .app-shell {
-  width: min(1180px, calc(100vw - 40px));
+  width: min(1100px, calc(100vw - 38px));
+  padding-top: 10px;
 }
 
 .app-nav-shell,
 .page,
 .reader-page {
-  border-radius: 12px;
+  border-radius: 10px;
+  border-color: rgba(67, 50, 33, 0.16);
+  box-shadow: none;
+}
+
+.app-nav-shell {
+  padding: 8px 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(245, 236, 221, 0.92));
 }
 
 .app-nav {
@@ -33,9 +43,89 @@
 
 .app-nav__link {
   border-radius: 8px;
+  background: rgba(255, 252, 247, 0.72);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 0.88rem;
+  letter-spacing: 0.06em;
+  font-size: 0.82rem;
+}
+
+.app-nav__link:hover {
+  background: rgba(255, 252, 247, 0.98);
+  border-color: rgba(143, 63, 43, 0.28);
+}
+
+.page,
+.reader-page {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0) 28%),
+    var(--panel);
+}
+
+.page h2,
+.reader-page h2 {
+  letter-spacing: -0.05em;
+}
+
+.stat-card,
+.feed-card,
+.entry-card,
+.exchange-card,
+.settings-card,
+.theme-card {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.feed-card,
+.entry-card,
+.exchange-card,
+.settings-card {
+  border-style: solid;
+}
+
+.feed-card__title,
+.entry-card__title {
+  font-family: var(--font-display);
+  font-size: 1.16rem;
+  line-height: 1.28;
+}
+
+.entry-card__meta,
+.feed-card__meta,
+.reader-meta {
+  color: #6c5d4f;
+}
+
+.button {
+  border-radius: 8px;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.button.secondary {
+  background: #362a22;
+}
+
+.button.danger-outline {
+  background: rgba(255, 240, 235, 0.95);
+}
+
+.text-input,
+.text-area,
+.select-input {
+  border-radius: 8px;
+  background: rgba(255, 253, 249, 0.84);
+}
+
+.theme-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.05)),
+    rgba(253, 249, 241, 0.82);
+}
+
+.theme-card.is-active {
+  box-shadow: inset 0 0 0 1px rgba(143, 63, 43, 0.16);
 }
 
 [data-page="home"] .stats-grid {
@@ -47,15 +137,15 @@
   gap: 10px;
 }
 
-.feed-card,
-.entry-card,
-.exchange-card,
-.settings-card,
-.stat-card {
-  border-radius: 10px;
-  box-shadow: none;
+[data-page="reader"] .reader-body {
+  max-width: 72ch;
+  margin: 0 auto;
+  color: #2b211a;
+  font-size: 1.07rem;
+  line-height: 1.92;
 }
 
-[data-action="remove-feed"] {
-  min-width: 7.5rem;
+[data-page="reader"] .reader-html p,
+[data-page="reader"] .reader-html li {
+  hanging-punctuation: first last;
 }
