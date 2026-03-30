@@ -8,7 +8,9 @@ mod theme;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    use dioxus::prelude::LaunchBuilder;
+#![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
+
+use dioxus::prelude::LaunchBuilder;
     use tracing_subscriber::EnvFilter;
 
     tracing_subscriber::fmt()
