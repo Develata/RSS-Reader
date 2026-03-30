@@ -54,6 +54,7 @@ specs/001-minimal-rss-reader/
 └── tasks.md
 
 docs/
+├── android-release-roadmap.md
 └── design/
     ├── frontend-command-and-styling-philosophy.md
     └── theme-author-selector-reference.md
@@ -107,7 +108,9 @@ tests/
 OPML 与配置交换。样式与命令系统的长期演进原则单独记录在 `docs/design/` 目录，但实现仍
 以这些 crate 边界为准。主题切换的公开 hook、class 和 CSS 变量接口由
 `docs/design/theme-author-selector-reference.md` 约束。导航头保持工具化与低干扰风格，
-仓库入口作为设置页中的次级动作暴露，而不是在主阅读区域占据版面。
+仓库入口作为设置页中的次级动作暴露，而不是在主阅读区域占据版面。Android 安装包与
+自动发布能力单独作为后续发布路线，记录在 `docs/android-release-roadmap.md`，避免
+和当前 MVP 的桌面/Web 交付范围混淆。
 
 ## 复杂度追踪
 

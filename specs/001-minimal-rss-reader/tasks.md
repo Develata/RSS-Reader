@@ -10,7 +10,8 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 **前置条件**：`plan.md`、`spec.md`、`research.md`、`data-model.md`、`contracts/`、`quickstart.md`
 
 **测试**：本功能涉及解析、持久化、导入导出、状态流转和 Web 本地存储，因此包含自动化
-测试；涉及桌面/Web/Android 交互，因此包含手工验证任务。
+测试；涉及桌面/Web 交互，因此包含手工验证任务。Android 安装包与移动端发布链作为后续
+路线，单独记录在 `docs/android-release-roadmap.md`，不计入当前任务清单。
 
 **组织方式**：任务按用户故事分组，确保每个故事都可以独立实现、独立验证和独立交付。
 
