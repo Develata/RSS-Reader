@@ -21,14 +21,27 @@ pub fn ReaderPage(entry_id: i64) -> Element {
     let mut is_read = use_signal(|| false);
     let mut is_starred = use_signal(|| false);
     let reload_tick = use_signal(|| 0_u64);
-    let status = use_signal(String::new);
-    let status_tone = use_signal(|| "info".to_string());
+    let mut status = use_signal(String::new);
+    let mut status_tone = use_signal(|| "info".to_string());
     let mut error = use_signal(|| None::<String>);
     let shortcuts =
         use_reader_shortcuts(entry_id, is_read, is_starred, reload_tick, status, status_tone);
+    let reload_version = reload_tick();
 
-    let _ = use_resource(move || async move {
-        let _ = reload_tick();
+    let _ = use_resource(use_reactive!(|(entry_id, reload_version)| async move {
+        let _ = reload_version;
+        title.set("正在加载…".to_string());
+        body_text.set(String::new());
+        body_html.set(None);
+        source.set(String::new());
+        published_at.set("未知发布时间".to_string());
+        navigation_state.set(ReaderNavigation::default());
+        is_read.set(false);
+        is_starred.set(false);
+        status.set(String::new());
+        status_tone.set("info".to_string());
+        error.set(None);
+
         match AppServices::shared().await {
             Ok(services) => match services.get_entry(entry_id).await {
                 Ok(Some(entry)) => {
@@ -50,7 +63,8 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         format_reader_datetime_utc(entry.published_at)
                             .unwrap_or_else(|| "未知发布时间".to_string()),
                     );
-                    navigation_state.set(services.reader_navigation(entry_id).await.unwrap_or_default());
+                    navigation_state
+                        .set(services.reader_navigation(entry_id).await.unwrap_or_default());
                     source.set(
                         entry
                             .url
@@ -63,7 +77,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             },
             Err(err) => error.set(Some(err.to_string())),
         }
-    });
+    }));
 
     rsx! {
         article {
