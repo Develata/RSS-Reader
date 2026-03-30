@@ -24,6 +24,14 @@ mod imp {
 
     static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct ReaderNavigation {
+        pub previous_unread_entry_id: Option<i64>,
+        pub next_unread_entry_id: Option<i64>,
+        pub previous_feed_entry_id: Option<i64>,
+        pub next_feed_entry_id: Option<i64>,
+    }
+
     pub struct AppServices {
         feed_repository: Arc<SqliteFeedRepository>,
         entry_repository: Arc<SqliteEntryRepository>,
@@ -93,6 +101,37 @@ mod imp {
 
         pub async fn get_entry(&self, entry_id: i64) -> anyhow::Result<Option<Entry>> {
             self.entry_service.get_entry(entry_id).await
+        }
+
+        pub async fn reader_navigation(&self, current_entry_id: i64) -> anyhow::Result<ReaderNavigation> {
+            let Some(current_entry) = self.entry_service.get_entry(current_entry_id).await? else {
+                return Ok(ReaderNavigation::default());
+            };
+
+            let global_entries = self.entry_service.list_entries(&EntryQuery::default()).await?;
+            let mut navigation = ReaderNavigation::default();
+
+            if let Some(index) = global_entries.iter().position(|entry| entry.id == current_entry_id) {
+                navigation.previous_unread_entry_id =
+                    global_entries[..index].iter().rev().find(|entry| !entry.is_read).map(|entry| entry.id);
+                navigation.next_unread_entry_id =
+                    global_entries[index + 1..].iter().find(|entry| !entry.is_read).map(|entry| entry.id);
+            }
+
+            let feed_entries = self
+                .entry_service
+                .list_entries(&EntryQuery {
+                    feed_id: Some(current_entry.feed_id),
+                    ..EntryQuery::default()
+                })
+                .await?;
+            if let Some(index) = feed_entries.iter().position(|entry| entry.id == current_entry_id) {
+                navigation.previous_feed_entry_id =
+                    index.checked_sub(1).and_then(|value| feed_entries.get(value)).map(|entry| entry.id);
+                navigation.next_feed_entry_id = feed_entries.get(index + 1).map(|entry| entry.id);
+            }
+
+            Ok(navigation)
         }
 
         pub async fn set_read(&self, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
@@ -295,6 +334,14 @@ mod imp {
     static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
     const STORAGE_KEY: &str = "rssr-web-state-v1";
 
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct ReaderNavigation {
+        pub previous_unread_entry_id: Option<i64>,
+        pub next_unread_entry_id: Option<i64>,
+        pub previous_feed_entry_id: Option<i64>,
+        pub next_feed_entry_id: Option<i64>,
+    }
+
     #[derive(Debug, Default, Serialize, Deserialize)]
     struct PersistedState {
         next_feed_id: i64,
@@ -481,6 +528,36 @@ mod imp {
                 .find(|entry| entry.id == entry_id)
                 .map(to_domain_entry)
                 .transpose()?)
+        }
+
+        pub async fn reader_navigation(&self, current_entry_id: i64) -> anyhow::Result<ReaderNavigation> {
+            let Some(current_entry) = self.get_entry(current_entry_id).await? else {
+                return Ok(ReaderNavigation::default());
+            };
+
+            let global_entries = self.list_entries(&EntryQuery::default()).await?;
+            let mut navigation = ReaderNavigation::default();
+
+            if let Some(index) = global_entries.iter().position(|entry| entry.id == current_entry_id) {
+                navigation.previous_unread_entry_id =
+                    global_entries[..index].iter().rev().find(|entry| !entry.is_read).map(|entry| entry.id);
+                navigation.next_unread_entry_id =
+                    global_entries[index + 1..].iter().find(|entry| !entry.is_read).map(|entry| entry.id);
+            }
+
+            let feed_entries = self
+                .list_entries(&EntryQuery {
+                    feed_id: Some(current_entry.feed_id),
+                    ..EntryQuery::default()
+                })
+                .await?;
+            if let Some(index) = feed_entries.iter().position(|entry| entry.id == current_entry_id) {
+                navigation.previous_feed_entry_id =
+                    index.checked_sub(1).and_then(|value| feed_entries.get(value)).map(|entry| entry.id);
+                navigation.next_feed_entry_id = feed_entries.get(index + 1).map(|entry| entry.id);
+            }
+
+            Ok(navigation)
         }
 
         pub async fn set_read(&self, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
@@ -1241,4 +1318,4 @@ mod imp {
     }
 }
 
-pub use imp::AppServices;
+pub use imp::{AppServices, ReaderNavigation};

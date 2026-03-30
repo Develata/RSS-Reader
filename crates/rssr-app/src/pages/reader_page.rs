@@ -2,22 +2,30 @@ use dioxus::prelude::*;
 use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::{
-    app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner,
+    app::AppNav,
+    bootstrap::{AppServices, ReaderNavigation},
     hooks::use_reader_shortcuts::use_reader_shortcuts,
+    components::status_banner::StatusBanner,
+    router::AppRoute,
 };
 
 #[component]
 pub fn ReaderPage(entry_id: i64) -> Element {
+    let navigator = use_navigator();
     let mut title = use_signal(|| "正在加载…".to_string());
     let mut body_text = use_signal(String::new);
     let mut body_html = use_signal(|| None::<String>);
     let mut source = use_signal(String::new);
     let mut published_at = use_signal(|| "未知发布时间".to_string());
+    let mut navigation_state = use_signal(ReaderNavigation::default);
     let mut is_read = use_signal(|| false);
     let mut is_starred = use_signal(|| false);
     let reload_tick = use_signal(|| 0_u64);
+    let status = use_signal(String::new);
+    let status_tone = use_signal(|| "info".to_string());
     let mut error = use_signal(|| None::<String>);
-    let shortcuts = use_reader_shortcuts(entry_id, is_read, is_starred, reload_tick);
+    let shortcuts =
+        use_reader_shortcuts(entry_id, is_read, is_starred, reload_tick, status, status_tone);
 
     let _ = use_resource(move || async move {
         let _ = reload_tick();
@@ -42,6 +50,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         format_reader_datetime_utc(entry.published_at)
                             .unwrap_or_else(|| "未知发布时间".to_string()),
                     );
+                    navigation_state.set(services.reader_navigation(entry_id).await.unwrap_or_default());
                     source.set(
                         entry
                             .url
@@ -64,6 +73,14 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             onkeydown: move |event| shortcuts.call(event),
             AppNav {}
             h2 { "{title}" }
+            div { class: "inline-actions",
+                button {
+                    class: "button secondary",
+                    "data-nav": "back",
+                    onclick: move |_| navigator.go_back(),
+                    "返回上一页"
+                }
+            }
             p { class: "reader-meta", "来源：{source}" }
             p { class: "reader-meta", "发布时间：{published_at}" }
             p { class: "reader-meta", "快捷键：`M` 切换已读，`F` 切换收藏" }
@@ -74,9 +91,31 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     onclick: move |_| {
                         let mut reload_tick = reload_tick;
                         spawn(async move {
-                            if let Ok(services) = AppServices::shared().await {
-                                let _ = services.set_read(entry_id, !is_read()).await;
-                                reload_tick += 1;
+                            match AppServices::shared().await {
+                                Ok(services) => match services.set_read(entry_id, !is_read()).await {
+                                    Ok(()) => {
+                                        set_status_info(
+                                            status,
+                                            status_tone,
+                                            if is_read() {
+                                                "已将当前文章标记为未读。".to_string()
+                                            } else {
+                                                "已将当前文章标记为已读。".to_string()
+                                            },
+                                        );
+                                        reload_tick += 1;
+                                    }
+                                    Err(err) => set_status_error(
+                                        status,
+                                        status_tone,
+                                        format!("更新已读状态失败：{err}"),
+                                    ),
+                                },
+                                Err(err) => set_status_error(
+                                    status,
+                                    status_tone,
+                                    format!("初始化应用失败：{err}"),
+                                ),
                             }
                         });
                     },
@@ -88,9 +127,31 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     onclick: move |_| {
                         let mut reload_tick = reload_tick;
                         spawn(async move {
-                            if let Ok(services) = AppServices::shared().await {
-                                let _ = services.set_starred(entry_id, !is_starred()).await;
-                                reload_tick += 1;
+                            match AppServices::shared().await {
+                                Ok(services) => match services.set_starred(entry_id, !is_starred()).await {
+                                    Ok(()) => {
+                                        set_status_info(
+                                            status,
+                                            status_tone,
+                                            if is_starred() {
+                                                "已取消收藏当前文章。".to_string()
+                                            } else {
+                                                "已收藏当前文章。".to_string()
+                                            },
+                                        );
+                                        reload_tick += 1;
+                                    }
+                                    Err(err) => set_status_error(
+                                        status,
+                                        status_tone,
+                                        format!("更新收藏状态失败：{err}"),
+                                    ),
+                                },
+                                Err(err) => set_status_error(
+                                    status,
+                                    status_tone,
+                                    format!("初始化应用失败：{err}"),
+                                ),
                             }
                         });
                     },
@@ -100,11 +161,48 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             if let Some(message) = error() {
                 StatusBanner { message, tone: "error".to_string() }
             } else {
+                if !status().is_empty() {
+                    StatusBanner { message: status(), tone: status_tone() }
+                }
                 div { class: "reader-body",
                     if let Some(html) = body_html() {
                         div { class: "reader-html", dangerous_inner_html: "{html}" }
                     } else {
                         pre { "{body_text}" }
+                    }
+                }
+                div { class: "inline-actions",
+                    if let Some(previous_unread_entry_id) = navigation_state().previous_unread_entry_id {
+                        button {
+                            class: "button secondary",
+                            "data-nav": "previous-unread-entry",
+                            onclick: move |_| { navigator.push(AppRoute::ReaderPage { entry_id: previous_unread_entry_id }); },
+                            "上一篇未读"
+                        }
+                    }
+                    if let Some(next_unread_entry_id) = navigation_state().next_unread_entry_id {
+                        button {
+                            class: "button",
+                            "data-nav": "next-unread-entry",
+                            onclick: move |_| { navigator.push(AppRoute::ReaderPage { entry_id: next_unread_entry_id }); },
+                            "下一篇未读"
+                        }
+                    }
+                    if let Some(previous_feed_entry_id) = navigation_state().previous_feed_entry_id {
+                        button {
+                            class: "button secondary",
+                            "data-nav": "previous-feed-entry",
+                            onclick: move |_| { navigator.push(AppRoute::ReaderPage { entry_id: previous_feed_entry_id }); },
+                            "上一篇同订阅文章"
+                        }
+                    }
+                    if let Some(next_feed_entry_id) = navigation_state().next_feed_entry_id {
+                        button {
+                            class: "button secondary",
+                            "data-nav": "next-feed-entry",
+                            onclick: move |_| { navigator.push(AppRoute::ReaderPage { entry_id: next_feed_entry_id }); },
+                            "下一篇同订阅文章"
+                        }
                     }
                 }
             }
@@ -142,6 +240,16 @@ fn format_reader_datetime_utc(published_at: Option<OffsetDateTime>) -> Option<St
 
     published_at
         .and_then(|value| value.to_offset(UtcOffset::UTC).format(READER_DATETIME_FORMAT).ok())
+}
+
+fn set_status_info(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
+    status.set(message);
+    status_tone.set("info".to_string());
+}
+
+fn set_status_error(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
+    status.set(message);
+    status_tone.set("error".to_string());
 }
 
 #[cfg(test)]
