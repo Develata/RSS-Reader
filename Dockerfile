@@ -14,12 +14,12 @@ COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir /app/target/web-dist
+    dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir /app/web-dist
 
 FROM nginx:1.27-alpine
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /app/target/web-dist/public /usr/share/nginx/html
+COPY --from=builder /app/web-dist/public /usr/share/nginx/html
 
 EXPOSE 80
 
