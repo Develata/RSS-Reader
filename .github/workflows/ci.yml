@@ -26,7 +26,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
+          targets: wasm32-unknown-unknown,aarch64-linux-android
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -42,6 +42,9 @@ jobs:
 
       - name: Wasm target check
         run: cargo check -p rssr-app --target wasm32-unknown-unknown
+
+      - name: Android target smoke check
+        run: cargo check -p rssr-app --target aarch64-linux-android
 
       - name: CLI smoke
         run: cargo run -p rssr-cli -- --help

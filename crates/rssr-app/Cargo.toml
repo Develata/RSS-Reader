@@ -38,5 +38,6 @@ webbrowser.workspace = true
 dioxus = { workspace = true, features = ["web"] }
 js-sys = "0.3"
 reqwest.workspace = true
+rfd.workspace = true
 uuid = { version = "1", features = ["js"] }
 web-sys = { version = "0.3", features = ["Blob", "BlobPropertyBag", "CssStyleDeclaration", "Document", "Element", "HtmlAnchorElement", "HtmlElement", "Node", "Storage", "Url", "Window"] }

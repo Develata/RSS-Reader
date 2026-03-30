@@ -21,8 +21,8 @@ Dioxus 0.7.3，桌面端与 Web 端共用同一套 Rust 行为逻辑；补充设
 **语言/版本**：Rust 稳定版（Edition 2024）  
 **主要依赖**：Dioxus 0.7.3、dioxus-router 0.7.3、tokio、sqlx、reqwest、feed-rs、quick-xml、serde、serde_json、thiserror、anyhow、tracing、time、url、wasm SQLite 持久化适配层  
 **存储**：桌面端使用本地 SQLite；Web 使用 wasm SQLite，并将数据库文件持久化到 IndexedDB；配置交换使用本地配置文件与 OPML/JSON 导入导出文件  
-**测试**：`cargo test --workspace`、仓储/解析集成测试、导入导出测试、桌面/Web 手工验证  
-**目标平台**：Windows、macOS、Web；Android 保留为架构目标，但不作为本次 MVP 的交付门禁  
+**测试**：`cargo test --workspace`、仓储/解析集成测试、导入导出测试、桌面/Web 手工验证、Android target smoke check 与本地 Debug APK 构建验证  
+**目标平台**：Windows、macOS、Web；Android 已具备 Debug APK 构建路径，但正式签名发布仍不作为本次 MVP 的交付门禁  
 **项目类型**：单用户客户端应用、共享 Rust workspace  
 **性能目标**：快速启动、顺滑列表滚动、订阅增量刷新、10,000 篇文章规模下搜索和筛选保持响应  
 **约束**：本地优先、仅配置同步、单用户、无服务端依赖、Web 必须具备本地持久化、UI 保持克制、避免过度异步复杂度  
@@ -108,9 +108,10 @@ tests/
 OPML 与配置交换。样式与命令系统的长期演进原则单独记录在 `docs/design/` 目录，但实现仍
 以这些 crate 边界为准。主题切换的公开 hook、class 和 CSS 变量接口由
 `docs/design/theme-author-selector-reference.md` 约束。导航头保持工具化与低干扰风格，
-仓库入口作为设置页中的次级动作暴露，而不是在主阅读区域占据版面。Android 安装包与
-自动发布能力单独作为后续发布路线，记录在 `docs/android-release-roadmap.md`，避免
-和当前 MVP 的桌面/Web 交付范围混淆。
+仓库入口作为设置页中的次级动作暴露，而不是在主阅读区域占据版面。Android 当前已补
+齐 Dioxus 移动端入口、`Dioxus.toml` 配置和 Debug APK 构建链路，用于后续移动端验
+证；正式签名发布能力仍单独记录在 `docs/android-release-roadmap.md`，避免和当前
+MVP 的桌面/Web 交付范围混淆。
 
 ## 复杂度追踪
 

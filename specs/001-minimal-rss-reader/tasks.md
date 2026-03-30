@@ -10,8 +10,9 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 **前置条件**：`plan.md`、`spec.md`、`research.md`、`data-model.md`、`contracts/`、`quickstart.md`
 
 **测试**：本功能涉及解析、持久化、导入导出、状态流转和 Web 本地存储，因此包含自动化
-测试；涉及桌面/Web 交互，因此包含手工验证任务。Android 安装包与移动端发布链作为后续
-路线，单独记录在 `docs/android-release-roadmap.md`，不计入当前任务清单。
+测试；涉及桌面/Web 交互，因此包含手工验证任务。当前仓库已补充 Android target smoke
+check 与 Debug APK 构建路径，用于移动端跟进验证；Android 正式签名发布链仍作为后续路
+线，单独记录在 `docs/android-release-roadmap.md`，不计入当前任务清单。
 
 **组织方式**：任务按用户故事分组，确保每个故事都可以独立实现、独立验证和独立交付。
 
@@ -160,7 +161,7 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 - [X] T056 清理跨 crate 公共接口与无用抽象 `crates/rssr-application/src/lib.rs`
 - [X] T057 [P] 补充高风险回归冒烟测试 `crates/rssr-infra/tests/test_regression_smoke.rs`
 - [X] T058 [P] 验证配置包 schema、导入器和导出器保持一致 `specs/001-minimal-rss-reader/contracts/config-package.schema.json`
-- [X] T059 验证 wasm 目标构建与 Web 本地持久化接线 `crates/rssr-app/src/bootstrap.rs`
+- [X] T059 验证 wasm 目标构建、Android target smoke check 与多端本地持久化接线 `crates/rssr-app/src/bootstrap.rs`
 - [X] T060 运行并记录完整手工验收结果 `tests/manual/final-acceptance-checklist.md`
 
 ---
