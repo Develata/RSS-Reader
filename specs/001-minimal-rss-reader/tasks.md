@@ -12,7 +12,7 @@ description: "极简个人 RSS 阅读器 MVP 的可执行实现任务列表"
 **测试**：本功能涉及解析、持久化、导入导出、状态流转和 Web 本地存储，因此包含自动化
 测试；涉及桌面/Web 交互，因此包含手工验证任务。当前仓库已补充 Android target smoke
 check 与 Debug APK 构建路径，用于移动端跟进验证；Android 正式签名发布链仍作为后续路
-线，单独记录在 `docs/android-release-roadmap.md`，不计入当前任务清单。正文缓存策略同
+线，单独记录在 `docs/roadmaps/android-release-roadmap.md`，不计入当前任务清单。正文缓存策略同
 样已明确：缓存边界保持在 feed 已提供的 HTML/文本内容内；正文静态图片资源本地化作为后
 续阅读体验增强路线，单独在设计文档中约束，不在当前任务清单里伪造为已完成。
 

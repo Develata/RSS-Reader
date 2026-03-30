@@ -4,8 +4,8 @@ use time::{OffsetDateTime, UtcOffset, macros::format_description};
 use crate::{
     app::AppNav,
     bootstrap::{AppServices, ReaderNavigation},
-    hooks::use_reader_shortcuts::use_reader_shortcuts,
     components::status_banner::StatusBanner,
+    hooks::use_reader_shortcuts::use_reader_shortcuts,
     router::AppRoute,
 };
 

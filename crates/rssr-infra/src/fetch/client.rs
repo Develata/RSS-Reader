@@ -94,8 +94,10 @@ impl BodyAssetLocalizer {
             return Ok(html.to_string());
         }
 
-        let src_regex = Regex::new(r#"(?is)(<img\b[^>]*?\bsrc\s*=\s*)(?P<quote>['"])(?P<src>[^'"]+)(?P=quote)"#)
-            .expect("valid image src regex");
+        let src_regex = Regex::new(
+            r#"(?is)(<img\b[^>]*?\bsrc\s*=\s*)(?P<quote>['"])(?P<src>[^'"]+)(?P=quote)"#,
+        )
+        .expect("valid image src regex");
 
         let mut sources = BTreeSet::new();
         for captures in src_regex.captures_iter(html) {
@@ -143,11 +145,7 @@ impl BodyAssetLocalizer {
                 if let Some(rewritten) = localized.get(raw) {
                     format!("{prefix}{quote}{rewritten}{quote}")
                 } else {
-                    captures
-                        .get(0)
-                        .map(|value| value.as_str())
-                        .unwrap_or_default()
-                        .to_string()
+                    captures.get(0).map(|value| value.as_str()).unwrap_or_default().to_string()
                 }
             })
             .into_owned())
@@ -176,19 +174,13 @@ impl BodyAssetLocalizer {
             return Ok(None);
         };
 
-        let bytes = response
-            .bytes()
-            .await
-            .with_context(|| format!("读取正文图片失败: {url}"))?;
+        let bytes = response.bytes().await.with_context(|| format!("读取正文图片失败: {url}"))?;
         if bytes.len() > max_bytes {
             tracing::warn!(asset_url = %url, byte_len = bytes.len(), "正文图片过大，跳过本地化");
             return Ok(None);
         }
 
-        Ok(Some(format!(
-            "data:{content_type};base64,{}",
-            BASE64.encode(bytes)
-        )))
+        Ok(Some(format!("data:{content_type};base64,{}", BASE64.encode(bytes))))
     }
 }
 
@@ -197,9 +189,8 @@ fn should_skip_asset(raw: &str) -> bool {
 }
 
 fn resolve_asset_url(raw: &str, base_url: Option<&Url>) -> Option<Url> {
-    let resolved = Url::parse(raw)
-        .ok()
-        .or_else(|| base_url.and_then(|base| base.join(raw).ok()))?;
+    let resolved =
+        Url::parse(raw).ok().or_else(|| base_url.and_then(|base| base.join(raw).ok()))?;
     matches!(resolved.scheme(), "http" | "https").then_some(resolved)
 }
 

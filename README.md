@@ -1,30 +1,142 @@
 # RSS Reader
 
-A local-first RSS reader built with Rust and Dioxus.
+一个本地优先、面向个人使用的极简 RSS 阅读器。  
+它优先解决“顺手订阅、稳定刷新、舒服阅读、可离线查看、易于迁移”这些实际问题，而不是做成一个厚重的平台。
 
-This project prioritizes practical reading workflows over branding or heavy infrastructure:
-- desktop app for day-to-day use
-- web build for browser testing and static deployment
-- local SQLite persistence
-- JSON / OPML config exchange
-- optional WebDAV config sync
-- custom CSS theming with preset themes
-- companion CLI for feed and settings automation
+[English README](./docs/README.en.md) | [文档索引](./docs/README.md) | [MIT License](./LICENSE)
 
-## What ships today
+## 项目定位
 
-- `rssr-app`
-  - Dioxus desktop app
-  - Dioxus web app
-- `rssr-cli`
-  - add/remove feeds
-  - refresh feeds
-  - import/export config JSON
-  - import/export OPML
-  - inspect/save settings
-  - push/pull WebDAV config
+RSS Reader 是一个以 Rust 为核心、基于 Dioxus 构建的跨平台阅读器，当前重点覆盖：
 
-## Repository layout
+- 桌面端日常阅读
+- Web 端浏览器验证与静态部署
+- Android Debug APK 构建与后续移动端演进
+- 本地 SQLite 持久化
+- JSON / OPML 配置交换
+- 可选 WebDAV 配置同步
+- CLI 自动化与自定义 CSS 主题
+
+## 当前能力
+
+### 阅读与订阅
+
+- 添加 / 删除 RSS feed
+- 刷新单个订阅或全部订阅
+- 文章列表、阅读页、已读 / 收藏 / 搜索
+- 阅读页支持：
+  - 返回上一页
+  - 上一篇未读 / 下一篇未读
+  - 上一篇同订阅文章 / 下一篇同订阅文章
+
+### 本地优先
+
+- 桌面端使用本地 SQLite
+- Web 使用 wasm SQLite，并持久化到浏览器存储
+- feed 提供多少正文，就缓存多少正文
+- 桌面端 / Android 会尽量把正文中的图片资源本地化进缓存 HTML
+- Web 端正文也会缓存，但图片本地化受浏览器 CORS 约束
+
+### 配置与迁移
+
+- 导入 / 导出配置包 JSON
+- 导入 / 导出 OPML
+- WebDAV 上传 / 下载配置
+- 自定义 CSS 主题、主题卡片、预置主题切换
+
+### 自动化
+
+- `rssr-cli` 可用于：
+  - 列出订阅
+  - 添加 / 删除 feed
+  - 刷新订阅
+  - 导入 / 导出配置
+  - 导入 / 导出 OPML
+  - 查看 / 保存设置
+  - 推送 / 拉取 WebDAV 配置
+
+## 平台状态
+
+| 平台 | 当前状态 |
+| --- | --- |
+| Windows Desktop | 可发布 |
+| Linux Desktop | 可发布 |
+| macOS Desktop | 可发布 |
+| Web | 可发布 |
+| Android Debug APK | 已接入 |
+| Android Signed Release APK / AAB | 已有 workflow，待 secrets 与正式验收 |
+
+## 快速开始
+
+### 本地开发
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install dioxus-cli --version 0.7.3 --locked
+cargo run -p rssr-app
+```
+
+### Web 运行
+
+```bash
+dx serve --platform web --package rssr-app
+```
+
+注意：
+
+- Web 端远端 feed 是否能抓取，取决于目标站点是否允许跨域请求
+- 有些 feed 在 desktop / Android 正常，在 Web 会被浏览器 CORS 限制拦住
+
+### 验证
+
+```bash
+cargo fmt --all
+cargo test --workspace
+cargo check -p rssr-app --target wasm32-unknown-unknown
+```
+
+## 发布与交付
+
+### GitHub Release 产物
+
+当前 release workflow 会发布：
+
+- Windows desktop
+- Linux desktop
+- macOS desktop
+- Web 静态包
+- Android debug APK
+
+如果配置了 Android signing secrets，还会额外发布：
+
+- Android release APK
+- Android release AAB
+
+### Docker / Compose
+
+仓库包含 Web 版本的容器化部署支持：
+
+```bash
+docker build -t rss-reader-web .
+docker compose up --build
+```
+
+默认访问：
+
+```text
+http://127.0.0.1:8080
+```
+
+## 文档导航
+
+更完整的说明放在 [`docs/`](./docs/README.md)：
+
+- [英文 README](./docs/README.en.md)
+- [设计文档索引](./docs/design/README.md)
+- [Android 发布路线图](./docs/roadmaps/android-release-roadmap.md)
+- [测试与回归索引](./docs/testing/README.md)
+
+## 仓库结构
 
 ```text
 crates/
@@ -41,230 +153,6 @@ specs/
 tests/
 ```
 
-## Local development
+## 开源协议
 
-### Prerequisites
-
-- Rust stable
-- `wasm32-unknown-unknown` target for web builds
-- Dioxus CLI `0.7.3`
-
-```bash
-rustup target add wasm32-unknown-unknown
-cargo install dioxus-cli --version 0.7.3 --locked
-```
-
-### Run desktop app
-
-```bash
-cargo run -p rssr-app
-```
-
-If you are running under WSLg and see `libEGL` / `MESA` warnings, try:
-
-```bash
-GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 GSK_RENDERER=cairo WEBKIT_DISABLE_DMABUF_RENDERER=1 cargo run -p rssr-app
-```
-
-### Run web app
-
-```bash
-dx serve --platform web --package rssr-app
-```
-
-Notes:
-- browser builds can only refresh remote feeds that allow cross-origin requests
-- some feeds will work on desktop/mobile but fail in web due to CORS
-- the web build now adds a cache-busting query when refreshing feeds to avoid browser `304` cache behavior blocking updates
-
-### Build Android debug APK
-
-Install the Android Rust targets:
-
-```bash
-rustup target add aarch64-linux-android x86_64-linux-android
-```
-
-Required local tooling:
-- JDK 21
-- Android SDK command line tools
-- Android NDK
-- Android platform tools
-- Android platform 33
-- Android build-tools 34.0.0
-
-Example environment:
-
-```bash
-export JAVA_HOME="$HOME/.local/jdks/temurin-21"
-export ANDROID_SDK_ROOT="$HOME/.local/android-sdk"
-export ANDROID_HOME="$ANDROID_SDK_ROOT"
-export ANDROID_NDK_HOME="$(find "$ANDROID_SDK_ROOT/ndk" -maxdepth 1 -mindepth 1 -type d | sort | tail -n 1)"
-export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
-export PATH="$JAVA_HOME/bin:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-```
-
-Validate the Android target:
-
-```bash
-cargo check -p rssr-app --target aarch64-linux-android
-```
-
-Build a debug APK:
-
-```bash
-dx bundle --platform android --package rssr-app --release --debug-symbols false
-```
-
-Output:
-
-```text
-target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk
-```
-
-### Run CLI
-
-```bash
-cargo run -p rssr-cli -- --help
-```
-
-Examples:
-
-```bash
-cargo run -p rssr-cli -- list-feeds
-cargo run -p rssr-cli -- add-feed https://example.com/feed.xml
-cargo run -p rssr-cli -- export-config --output ./config.json
-cargo run -p rssr-cli -- save-settings --custom-css-file ./assets/themes/newsprint.css
-```
-
-## Verification
-
-```bash
-cargo fmt --all
-cargo test --workspace
-cargo check -p rssr-app --target wasm32-unknown-unknown
-```
-
-## Desktop packaging
-
-### Windows
-
-Build on a Windows host:
-
-```powershell
-cargo build --release -p rssr-app
-```
-
-Output:
-
-```text
-target\release\rssr-app.exe
-```
-
-Notes:
-- the desktop app is a native Windows executable
-- Microsoft WebView2 Runtime is typically required on the target machine
-
-### GitHub Release artifacts
-
-The release workflow publishes:
-- `rssr-app-windows-x86_64.zip`
-- `rssr-cli-windows-x86_64.zip`
-- `rssr-app-linux-x86_64.tar.gz`
-- `rssr-cli-linux-x86_64.tar.gz`
-- `rssr-app-macos-x86_64.tar.gz`
-- `rssr-cli-macos-x86_64.tar.gz`
-- `rssr-app-macos-aarch64.tar.gz`
-- `rssr-cli-macos-aarch64.tar.gz`
-- `rssr-app-android-debug.apk`
-- `rssr-app-web.tar.gz`
-
-If Android signing secrets are configured, the release workflow also publishes:
-- `rssr-app-android-release.apk`
-- `rssr-app-android-release.aab`
-
-Current automatic release targets are:
-- Windows desktop
-- Linux desktop
-- macOS desktop
-- Android debug APK
-- Web static bundle
-
-The Android pipeline always publishes an unsigned debug APK for installation testing. If signing secrets are configured, it also publishes a signed release APK and AAB.
-
-Android signing secrets expected by GitHub Actions:
-- `ANDROID_KEYSTORE_BASE64`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
-
-`dx serve` supports additional platform modes, but not all of them map cleanly to end-user GitHub Release assets. iOS, server, and liveview targets are not yet published as release attachments.
-
-Tag a release to trigger it:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-## Docker and docker compose
-
-Docker support is for the web build.
-
-The image bundles the web app and serves it with Nginx.
-
-### Local image build
-
-```bash
-docker build -t rss-reader-web .
-```
-
-### Local compose run
-
-```bash
-docker compose up --build
-```
-
-Then open:
-
-```text
-http://127.0.0.1:8080
-```
-
-The compose file is also compatible with the GitHub-published image:
-
-```text
-ghcr.io/develata/rss-reader:latest
-```
-
-## CI/CD
-
-This repository includes three GitHub Actions workflows:
-
-- `ci.yml`
-  - formatting
-  - workspace tests
-  - wasm target check
-  - web bundle verification
-- `release.yml`
-  - builds release artifacts on tags
-  - publishes GitHub Release assets
-- `docker.yml`
-  - builds and pushes a GHCR image
-
-## Theming and docs
-
-Design and theming docs live under [`docs/`](./docs):
-
-- [frontend styling philosophy](./docs/design/frontend-command-and-styling-philosophy.md)
-- [theme selector reference](./docs/design/theme-author-selector-reference.md)
-- [manual regression notes](./docs/回归手动测试.md)
-
-Reading cache behavior:
-- the reader caches whatever body HTML/text the feed already provides
-- desktop and Android can also localize many body images into cached HTML for better offline reading
-- web builds are limited by browser CORS rules, so remote body images may stay on their original URLs even when the article body itself is cached locally
-
-## License
-
-MIT
+本项目使用 [MIT License](./LICENSE)。

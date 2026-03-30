@@ -56,7 +56,12 @@ specs/001-minimal-rss-reader/
 └── tasks.md
 
 docs/
-├── android-release-roadmap.md
+├── README.md
+├── README.en.md
+├── roadmaps/
+│   └── android-release-roadmap.md
+├── testing/
+│   └── manual-regression.md
 └── design/
     ├── frontend-command-and-styling-philosophy.md
     └── theme-author-selector-reference.md
@@ -113,7 +118,7 @@ OPML 与配置交换。样式与命令系统的长期演进原则单独记录在
 `docs/design/theme-author-selector-reference.md` 约束。导航头保持工具化与低干扰风格，
 仓库入口作为设置页中的次级动作暴露，而不是在主阅读区域占据版面。Android 当前已补
 齐 Dioxus 移动端入口、`Dioxus.toml` 配置和 Debug APK 构建链路，用于后续移动端验
-证；正式签名发布能力仍单独记录在 `docs/android-release-roadmap.md`，避免和当前
+证；正式签名发布能力仍单独记录在 `docs/roadmaps/android-release-roadmap.md`，避免和当前
 MVP 的桌面/Web 交付范围混淆。
 
 ## 复杂度追踪

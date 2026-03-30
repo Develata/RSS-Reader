@@ -105,7 +105,10 @@ mod imp {
             self.entry_service.get_entry(entry_id).await
         }
 
-        pub async fn reader_navigation(&self, current_entry_id: i64) -> anyhow::Result<ReaderNavigation> {
+        pub async fn reader_navigation(
+            &self,
+            current_entry_id: i64,
+        ) -> anyhow::Result<ReaderNavigation> {
             let Some(current_entry) = self.entry_service.get_entry(current_entry_id).await? else {
                 return Ok(ReaderNavigation::default());
             };
@@ -113,11 +116,18 @@ mod imp {
             let global_entries = self.entry_service.list_entries(&EntryQuery::default()).await?;
             let mut navigation = ReaderNavigation::default();
 
-            if let Some(index) = global_entries.iter().position(|entry| entry.id == current_entry_id) {
-                navigation.previous_unread_entry_id =
-                    global_entries[..index].iter().rev().find(|entry| !entry.is_read).map(|entry| entry.id);
-                navigation.next_unread_entry_id =
-                    global_entries[index + 1..].iter().find(|entry| !entry.is_read).map(|entry| entry.id);
+            if let Some(index) =
+                global_entries.iter().position(|entry| entry.id == current_entry_id)
+            {
+                navigation.previous_unread_entry_id = global_entries[..index]
+                    .iter()
+                    .rev()
+                    .find(|entry| !entry.is_read)
+                    .map(|entry| entry.id);
+                navigation.next_unread_entry_id = global_entries[index + 1..]
+                    .iter()
+                    .find(|entry| !entry.is_read)
+                    .map(|entry| entry.id);
             }
 
             let feed_entries = self
@@ -127,9 +137,12 @@ mod imp {
                     ..EntryQuery::default()
                 })
                 .await?;
-            if let Some(index) = feed_entries.iter().position(|entry| entry.id == current_entry_id) {
-                navigation.previous_feed_entry_id =
-                    index.checked_sub(1).and_then(|value| feed_entries.get(value)).map(|entry| entry.id);
+            if let Some(index) = feed_entries.iter().position(|entry| entry.id == current_entry_id)
+            {
+                navigation.previous_feed_entry_id = index
+                    .checked_sub(1)
+                    .and_then(|value| feed_entries.get(value))
+                    .map(|entry| entry.id);
                 navigation.next_feed_entry_id = feed_entries.get(index + 1).map(|entry| entry.id);
             }
 
@@ -544,7 +557,10 @@ mod imp {
                 .transpose()?)
         }
 
-        pub async fn reader_navigation(&self, current_entry_id: i64) -> anyhow::Result<ReaderNavigation> {
+        pub async fn reader_navigation(
+            &self,
+            current_entry_id: i64,
+        ) -> anyhow::Result<ReaderNavigation> {
             let Some(current_entry) = self.get_entry(current_entry_id).await? else {
                 return Ok(ReaderNavigation::default());
             };
@@ -552,11 +568,18 @@ mod imp {
             let global_entries = self.list_entries(&EntryQuery::default()).await?;
             let mut navigation = ReaderNavigation::default();
 
-            if let Some(index) = global_entries.iter().position(|entry| entry.id == current_entry_id) {
-                navigation.previous_unread_entry_id =
-                    global_entries[..index].iter().rev().find(|entry| !entry.is_read).map(|entry| entry.id);
-                navigation.next_unread_entry_id =
-                    global_entries[index + 1..].iter().find(|entry| !entry.is_read).map(|entry| entry.id);
+            if let Some(index) =
+                global_entries.iter().position(|entry| entry.id == current_entry_id)
+            {
+                navigation.previous_unread_entry_id = global_entries[..index]
+                    .iter()
+                    .rev()
+                    .find(|entry| !entry.is_read)
+                    .map(|entry| entry.id);
+                navigation.next_unread_entry_id = global_entries[index + 1..]
+                    .iter()
+                    .find(|entry| !entry.is_read)
+                    .map(|entry| entry.id);
             }
 
             let feed_entries = self
@@ -565,9 +588,12 @@ mod imp {
                     ..EntryQuery::default()
                 })
                 .await?;
-            if let Some(index) = feed_entries.iter().position(|entry| entry.id == current_entry_id) {
-                navigation.previous_feed_entry_id =
-                    index.checked_sub(1).and_then(|value| feed_entries.get(value)).map(|entry| entry.id);
+            if let Some(index) = feed_entries.iter().position(|entry| entry.id == current_entry_id)
+            {
+                navigation.previous_feed_entry_id = index
+                    .checked_sub(1)
+                    .and_then(|value| feed_entries.get(value))
+                    .map(|entry| entry.id);
                 navigation.next_feed_entry_id = feed_entries.get(index + 1).map(|entry| entry.id);
             }
 
@@ -1081,8 +1107,10 @@ mod imp {
             return Ok(html.to_string());
         }
 
-        let src_regex = Regex::new(r#"(?is)(<img\b[^>]*?\bsrc\s*=\s*)(?P<quote>['"])(?P<src>[^'"]+)(?P=quote)"#)
-            .expect("valid image src regex");
+        let src_regex = Regex::new(
+            r#"(?is)(<img\b[^>]*?\bsrc\s*=\s*)(?P<quote>['"])(?P<src>[^'"]+)(?P=quote)"#,
+        )
+        .expect("valid image src regex");
         let mut sources = std::collections::BTreeSet::new();
         for captures in src_regex.captures_iter(html) {
             let Some(src_match) = captures.name("src") else {
@@ -1129,11 +1157,7 @@ mod imp {
                 if let Some(rewritten) = localized.get(raw) {
                     format!("{prefix}{quote}{rewritten}{quote}")
                 } else {
-                    captures
-                        .get(0)
-                        .map(|value| value.as_str())
-                        .unwrap_or_default()
-                        .to_string()
+                    captures.get(0).map(|value| value.as_str()).unwrap_or_default().to_string()
                 }
             })
             .into_owned())
@@ -1161,19 +1185,13 @@ mod imp {
             return Ok(None);
         };
 
-        let bytes = response
-            .bytes()
-            .await
-            .with_context(|| format!("读取正文图片失败: {url}"))?;
+        let bytes = response.bytes().await.with_context(|| format!("读取正文图片失败: {url}"))?;
         if bytes.len() > max_bytes {
             tracing::warn!(asset_url = %url, byte_len = bytes.len(), "正文图片过大，跳过本地化");
             return Ok(None);
         }
 
-        Ok(Some(format!(
-            "data:{content_type};base64,{}",
-            BASE64.encode(bytes)
-        )))
+        Ok(Some(format!("data:{content_type};base64,{}", BASE64.encode(bytes))))
     }
 
     fn should_skip_asset(raw: &str) -> bool {
@@ -1181,9 +1199,8 @@ mod imp {
     }
 
     fn resolve_asset_url(raw: &str, base_url: Option<&Url>) -> Option<Url> {
-        let resolved = Url::parse(raw)
-            .ok()
-            .or_else(|| base_url.and_then(|base| base.join(raw).ok()))?;
+        let resolved =
+            Url::parse(raw).ok().or_else(|| base_url.and_then(|base| base.join(raw).ok()))?;
         matches!(resolved.scheme(), "http" | "https").then_some(resolved)
     }
 
