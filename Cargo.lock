@@ -4561,7 +4561,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
- "dirs",
  "feed-rs",
  "quick-xml 0.37.5",
  "reqwest",

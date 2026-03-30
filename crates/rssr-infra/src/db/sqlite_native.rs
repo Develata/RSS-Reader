@@ -71,12 +71,10 @@ impl StorageBackend for NativeSqliteBackend {
 }
 
 fn default_database_path() -> anyhow::Result<PathBuf> {
-    let base_dir = dirs::data_local_dir()
-        .or_else(dirs::data_dir)
-        .or_else(dirs::home_dir)
-        .context("无法定位本地数据目录")?;
+    let executable_path = std::env::current_exe().context("无法定位可执行文件路径")?;
+    let base_dir = executable_path.parent().context("无法定位可执行文件所在目录")?;
 
-    Ok(database_path_in_base_dir(&base_dir))
+    Ok(database_path_in_base_dir(base_dir))
 }
 
 fn database_path_in_base_dir(base_dir: &Path) -> PathBuf {

@@ -286,6 +286,7 @@ jobs:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
           files: |
+            release-assets/**/*.aab
             release-assets/**/*.apk
             release-assets/**/*.zip
             release-assets/**/*.tar.gz
