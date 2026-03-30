@@ -217,7 +217,20 @@ git push origin v0.1.0
 
 Docker support is for the web build.
 
-The image bundles the web app and serves it with Nginx.
+The image bundles the web app and serves it with `nginx:alpine`.
+
+Nginx is used only as:
+
+- a static file server inside the Docker web image
+- an SPA fallback handler for client-side routing
+- a small and stable low-memory container entrypoint
+
+It is **not** a runtime dependency of the desktop app, CLI, Android build, or local development workflow.
+
+You do not need Nginx for:
+
+- `cargo run -p rssr-app`
+- `dx serve --platform web --package rssr-app`
 
 ### Local image build
 

@@ -15,6 +15,13 @@
 - [前端命令与样式设计哲学](./design/frontend-command-and-styling-philosophy.md)
 - [主题作者选择器参考](./design/theme-author-selector-reference.md)
 
+其中：
+
+- `frontend-command-and-styling-philosophy.md`
+  - 解释样式与行为的边界、主题系统和缓存策略
+- `theme-author-selector-reference.md`
+  - 面向主题作者，也可直接提供给 AI，用来生成一份新的自定义 CSS
+
 ## 路线图
 
 - [路线图索引](./roadmaps/README.md)

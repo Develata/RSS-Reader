@@ -7,6 +7,13 @@
 - [前端命令与样式设计哲学](./frontend-command-and-styling-philosophy.md)
 - [主题作者选择器参考](./theme-author-selector-reference.md)
 
+## 使用建议
+
+- 如果你在改交互边界、命令面或样式策略，先读：
+  - [前端命令与样式设计哲学](./frontend-command-and-styling-philosophy.md)
+- 如果你要手写主题，或者希望让 AI 根据文档直接生成一份 CSS，优先读：
+  - [主题作者选择器参考](./theme-author-selector-reference.md)
+
 ## 适合先读什么
 
 1. [前端命令与样式设计哲学](./frontend-command-and-styling-philosophy.md)

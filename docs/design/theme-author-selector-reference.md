@@ -7,6 +7,7 @@
 - 让主题作者优先依赖稳定 hook，而不是内部 DOM 层级
 - 降低页面重构时对主题兼容性的破坏
 - 提供一份“可直接开写”的 selector 速查表
+- 让 AI 在只拿到这份文档时，也能生成一份可直接使用的主题 CSS
 
 ## 使用约定
 
@@ -35,6 +36,85 @@
   order: 10;
 }
 ```
+
+## AI 生成主题的最小约定
+
+如果这份文档被直接喂给 AI，用来生成一份新的主题 CSS，建议把输出约束成下面这样：
+
+- 输出一份完整、可直接保存为 `.css` 的样式文件
+- 默认先覆写 `:root` 里的变量，再做少量结构性覆盖
+- 不修改行为，只改视觉和布局
+- 不依赖未知 DOM 层级
+- 优先作用在：
+  - `:root`
+  - `[data-page="..."]`
+  - `[data-action="..."]`
+  - `[data-nav="..."]`
+  - 本文列出的稳定组件 class
+- 避免默认隐藏关键功能入口
+  - 例如 `add-feed`、`refresh-all`、`save-settings`、`mark-read`
+- 如果需要重排页面，应当通过 `flex`、`grid`、`order`、`gap`、`max-width`、`margin` 完成
+- 不要使用远端 `@import` 字体或第三方资源，除非用户明确要求
+
+推荐让 AI 输出时遵循这个结构：
+
+```css
+:root {
+  /* 变量层 */
+}
+
+/* 全局壳层与导航 */
+.app-shell { ... }
+.app-nav { ... }
+
+/* 页面级布局 */
+[data-page="feeds"] { ... }
+[data-page="entries"] { ... }
+[data-page="reader"] { ... }
+[data-page="settings"] { ... }
+
+/* 关键操作按钮 */
+[data-action="add-feed"] { ... }
+[data-action="mark-read"] { ... }
+[data-action="toggle-starred"] { ... }
+[data-action="save-settings"] { ... }
+```
+
+## 页面结构心智模型
+
+把当前应用理解成 5 个稳定页面和 3 层公共结构会更容易产出主题：
+
+- 公共结构
+  - `.app-shell`
+  - `.app-header`
+  - `.app-nav`
+- 页面
+  - 首页：统计与概览
+  - 订阅页：feed 管理 + 导入导出
+  - 文章页：文章列表 + 筛选 + 列表动作
+  - 阅读页：正文阅读 + 元信息 + 上下篇导航
+  - 设置页：主题/阅读选项 + WebDAV
+
+如果用户要求“整体改版”，推荐优先修改：
+
+- `.app-shell`
+- `.app-header`
+- `.page`
+- `.settings-grid`
+- `.exchange-grid`
+- `.entry-list`
+- `.reader-body`
+
+如果用户要求“只换皮不改布局”，推荐优先修改：
+
+- `:root`
+- `.button`
+- `.status-banner`
+- `.text-input`
+- `.select-input`
+- `.settings-card`
+- `.feed-card`
+- `.entry-card`
 
 ## 页面级 hook
 
@@ -210,6 +290,31 @@
 
 主题作者可以优先覆写这些变量，而不是整份 CSS 全改。
 
+建议理解方式：
+
+- `--bg`
+  - 整个应用的外层背景
+- `--panel`
+  - 普通卡片、输入框、列表项背景
+- `--panel-strong`
+  - 更强调的卡片或操作面板
+- `--ink`
+  - 主要正文和标题颜色
+- `--muted`
+  - 次级说明文字
+- `--line`
+  - 细边框、分隔线
+- `--accent`
+  - 主操作按钮、高亮链接、活动态
+- `--accent-strong`
+  - 主操作 hover / active / 更强调状态
+- `--shadow`
+  - 卡片和面板阴影
+- `--font-display`
+  - 标题字体
+- `--font-ui`
+  - 普通 UI 字体
+
 示例：
 
 ```css
@@ -294,6 +399,58 @@
   gap: 8px;
 }
 ```
+
+### 6. 生成一套“完全不同布局”的主题
+
+下面这类写法适合把应用改成更偏工具型或侧栏型布局：
+
+```css
+.app-shell {
+  max-width: 1400px;
+}
+
+.app-header {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  align-items: start;
+}
+
+.app-nav {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+[data-page="settings"] .settings-grid,
+[data-page="feeds"] .exchange-grid {
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+```
+
+这种改法仍然是安全的，因为它依赖的是公共壳层和稳定 class，而不是临时 DOM 层级。
+
+## 主题生成检查表
+
+无论是人工写主题还是让 AI 生成主题，最后都建议快速检查：
+
+- 是否只依赖了稳定 hook/class
+- 是否保留了导航入口
+- 是否保留了关键命令按钮
+- 是否没有把正文区压得过窄
+- 是否没有让按钮文字与背景对比不足
+- 是否没有让输入框和状态提示不可见
+- 是否在移动端仍然能滚动与阅读
+- 是否没有依赖仓库里不存在的字体或图片资源
+
+## 给 AI 的直接提示模板
+
+如果你想让另一个 AI 只根据本文档生成主题，可以直接给它这样的指令：
+
+> 为 RSS Reader 生成一份完整的自定义主题 CSS。
+> 只允许使用本文档中列出的 `data-page`、`data-nav`、`data-action`、稳定组件 class 和 CSS 变量。
+> 不要修改行为，不要假设额外 DOM。
+> 优先覆写变量，再少量重排布局。
+> 保留导航、订阅、保存设置、标已读、收藏等关键按钮的可见性。
+> 输出一个可直接保存为 `.css` 文件的结果。
 
 ## 将示例主题应用到应用中
 
