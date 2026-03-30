@@ -15,7 +15,7 @@ mod imp {
             settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,
             storage_backend::StorageBackend,
         },
-        fetch::{FetchClient, FetchRequest, FetchResult},
+        fetch::{BodyAssetLocalizer, FetchClient, FetchRequest, FetchResult},
         opml::OpmlCodec,
         parser::FeedParser,
     };
@@ -40,6 +40,7 @@ mod imp {
         settings_service: SettingsService,
         import_export_service: ImportExportService,
         fetch_client: FetchClient,
+        body_asset_localizer: BodyAssetLocalizer,
         parser: FeedParser,
         opml_codec: OpmlCodec,
     }
@@ -76,6 +77,7 @@ mod imp {
                         feed_repository,
                         entry_repository,
                         fetch_client: FetchClient::new(),
+                        body_asset_localizer: BodyAssetLocalizer::new(),
                         parser: FeedParser::new(),
                         opml_codec: OpmlCodec::new(),
                     }))
@@ -216,7 +218,17 @@ mod imp {
                         .context("更新订阅抓取状态失败")?;
                 }
                 FetchResult::Fetched { body, metadata } => {
-                    let parsed = self.parser.parse(&body).context("解析订阅失败")?;
+                    let mut parsed = self.parser.parse(&body).context("解析订阅失败")?;
+                    for entry in &mut parsed.entries {
+                        if let Some(content_html) = entry.content_html.take() {
+                            entry.content_html = Some(
+                                self.body_asset_localizer
+                                    .localize_html_images(&content_html, entry.url.as_ref())
+                                    .await
+                                    .unwrap_or(content_html),
+                            );
+                        }
+                    }
                     self.feed_repository
                         .update_feed_metadata(feed.id, &parsed)
                         .await
@@ -312,6 +324,7 @@ mod imp {
     };
 
     use anyhow::{Context, ensure};
+    use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
     use feed_rs::model::{Entry as FeedRsEntry, Feed as FeedRsFeed, Text};
     use js_sys::Date;
     use quick_xml::{
@@ -319,6 +332,7 @@ mod imp {
         encoding::Decoder,
         events::{BytesDecl, BytesEnd, BytesStart, Event},
     };
+    use regex::Regex;
     use reqwest::{StatusCode, header};
     use rssr_domain::{
         ConfigFeed, ConfigPackage, Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings,
@@ -721,7 +735,16 @@ mod imp {
                 .text()
                 .await
                 .context("读取 feed 响应正文失败")?;
-            let parsed = parse_feed(&body).context("解析订阅失败")?;
+            let mut parsed = parse_feed(&body).context("解析订阅失败")?;
+            for entry in &mut parsed.entries {
+                if let Some(content_html) = entry.content_html.take() {
+                    entry.content_html = Some(
+                        localize_html_images(&self.client, &content_html, entry.url.as_ref())
+                            .await
+                            .unwrap_or(content_html),
+                    );
+                }
+            }
 
             let mut state = self.state.lock().expect("lock state");
             let now = web_now_utc();
@@ -1043,6 +1066,129 @@ mod imp {
 
     fn parse_feed(raw: &str) -> anyhow::Result<ParsedFeed> {
         normalize_feed(feed_rs::parser::parse(raw.as_bytes()).context("解析 RSS/Atom feed 失败")?)
+    }
+
+    async fn localize_html_images(
+        client: &reqwest::Client,
+        html: &str,
+        base_url: Option<&Url>,
+    ) -> anyhow::Result<String> {
+        const MAX_IMAGES_PER_ENTRY: usize = 16;
+        const MAX_IMAGE_BYTES: usize = 2 * 1024 * 1024;
+
+        if !html.contains("<img") {
+            return Ok(html.to_string());
+        }
+
+        let src_regex = Regex::new(r#"(?is)(<img\b[^>]*?\bsrc\s*=\s*)(?P<quote>['"])(?P<src>[^'"]+)(?P=quote)"#)
+            .expect("valid image src regex");
+        let mut sources = std::collections::BTreeSet::new();
+        for captures in src_regex.captures_iter(html) {
+            let Some(src_match) = captures.name("src") else {
+                continue;
+            };
+            if sources.len() >= MAX_IMAGES_PER_ENTRY {
+                break;
+            }
+            let raw = src_match.as_str().trim();
+            if should_skip_asset(raw) {
+                continue;
+            }
+            if let Some(resolved) = resolve_asset_url(raw, base_url) {
+                sources.insert((raw.to_string(), resolved));
+            }
+        }
+
+        if sources.is_empty() {
+            return Ok(html.to_string());
+        }
+
+        let mut localized = std::collections::BTreeMap::new();
+        for (raw, resolved) in sources {
+            match fetch_image_as_data_url(client, &resolved, MAX_IMAGE_BYTES).await {
+                Ok(Some(data_url)) => {
+                    localized.insert(raw, data_url);
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    tracing::warn!(asset_url = %resolved, error = %error, "正文图片本地化失败，保留远端地址");
+                }
+            }
+        }
+
+        if localized.is_empty() {
+            return Ok(html.to_string());
+        }
+
+        Ok(src_regex
+            .replace_all(html, |captures: &regex::Captures<'_>| {
+                let prefix = captures.get(1).map(|value| value.as_str()).unwrap_or_default();
+                let quote = captures.name("quote").map(|value| value.as_str()).unwrap_or("\"");
+                let raw = captures.name("src").map(|value| value.as_str()).unwrap_or_default();
+                if let Some(rewritten) = localized.get(raw) {
+                    format!("{prefix}{quote}{rewritten}{quote}")
+                } else {
+                    captures
+                        .get(0)
+                        .map(|value| value.as_str())
+                        .unwrap_or_default()
+                        .to_string()
+                }
+            })
+            .into_owned())
+    }
+
+    async fn fetch_image_as_data_url(
+        client: &reqwest::Client,
+        url: &Url,
+        max_bytes: usize,
+    ) -> anyhow::Result<Option<String>> {
+        let response = client
+            .get(url.clone())
+            .send()
+            .await
+            .with_context(|| format!("抓取正文图片失败: {url}"))?
+            .error_for_status()
+            .with_context(|| format!("正文图片返回非成功状态: {url}"))?;
+
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(normalize_image_content_type);
+        let Some(content_type) = content_type else {
+            return Ok(None);
+        };
+
+        let bytes = response
+            .bytes()
+            .await
+            .with_context(|| format!("读取正文图片失败: {url}"))?;
+        if bytes.len() > max_bytes {
+            tracing::warn!(asset_url = %url, byte_len = bytes.len(), "正文图片过大，跳过本地化");
+            return Ok(None);
+        }
+
+        Ok(Some(format!(
+            "data:{content_type};base64,{}",
+            BASE64.encode(bytes)
+        )))
+    }
+
+    fn should_skip_asset(raw: &str) -> bool {
+        raw.is_empty() || raw.starts_with("data:") || raw.starts_with("blob:")
+    }
+
+    fn resolve_asset_url(raw: &str, base_url: Option<&Url>) -> Option<Url> {
+        let resolved = Url::parse(raw)
+            .ok()
+            .or_else(|| base_url.and_then(|base| base.join(raw).ok()))?;
+        matches!(resolved.scheme(), "http" | "https").then_some(resolved)
+    }
+
+    fn normalize_image_content_type(raw: &str) -> Option<String> {
+        let mime = raw.split(';').next()?.trim().to_ascii_lowercase();
+        mime.starts_with("image/").then_some(mime)
     }
 
     fn normalize_feed(feed: FeedRsFeed) -> anyhow::Result<ParsedFeed> {

@@ -19,6 +19,7 @@ repository = "https://github.com/Develata/RSS-Reader"
 ammonia = "4"
 anyhow = "1"
 async-trait = "0.1"
+base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "4", features = ["derive"] }
 dioxus = { version = "0.7.3", features = ["router"] }
@@ -26,6 +27,7 @@ dioxus-router = "0.7.3"
 feed-rs = "2"
 getrandom = { version = "0.2", features = ["js"] }
 quick-xml = "0.37"
+regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "rustls-tls"] }
 rfd = "0.17"
 serde = { version = "1", features = ["derive"] }

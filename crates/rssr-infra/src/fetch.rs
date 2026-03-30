@@ -1,3 +1,3 @@
 pub mod client;
 
-pub use client::{FetchClient, FetchRequest, FetchResult, HttpMetadata};
+pub use client::{BodyAssetLocalizer, FetchClient, FetchRequest, FetchResult, HttpMetadata};
