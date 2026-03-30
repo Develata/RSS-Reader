@@ -122,7 +122,19 @@ The release workflow publishes:
 - `rssr-cli-windows-x86_64.zip`
 - `rssr-app-linux-x86_64.tar.gz`
 - `rssr-cli-linux-x86_64.tar.gz`
+- `rssr-app-macos-x86_64.tar.gz`
+- `rssr-cli-macos-x86_64.tar.gz`
+- `rssr-app-macos-aarch64.tar.gz`
+- `rssr-cli-macos-aarch64.tar.gz`
 - `rssr-app-web.tar.gz`
+
+Current automatic release targets are:
+- Windows desktop
+- Linux desktop
+- macOS desktop
+- Web static bundle
+
+`dx serve` supports additional platform modes, but not all of them map cleanly to end-user GitHub Release assets. Mobile, server, and liveview targets are not yet published as release attachments.
 
 Tag a release to trigger it:
 
