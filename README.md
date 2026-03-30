@@ -72,6 +72,11 @@ GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 GSK_RENDERER=cairo WEBKIT_DISABLE_DMABUF
 dx serve --platform web --package rssr-app
 ```
 
+Notes:
+- browser builds can only refresh remote feeds that allow cross-origin requests
+- some feeds will work on desktop/mobile but fail in web due to CORS
+- the web build now adds a cache-busting query when refreshing feeds to avoid browser `304` cache behavior blocking updates
+
 ### Build Android debug APK
 
 Install the Android Rust targets:
@@ -254,6 +259,11 @@ Design and theming docs live under [`docs/`](./docs):
 - [frontend styling philosophy](./docs/design/frontend-command-and-styling-philosophy.md)
 - [theme selector reference](./docs/design/theme-author-selector-reference.md)
 - [manual regression notes](./docs/回归手动测试.md)
+
+Reading cache behavior:
+- the reader caches whatever body HTML/text the feed already provides
+- desktop and Android can also localize many body images into cached HTML for better offline reading
+- web builds are limited by browser CORS rules, so remote body images may stay on their original URLs even when the article body itself is cached locally
 
 ## License
 
