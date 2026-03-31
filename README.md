@@ -285,7 +285,7 @@ docker compose up --build
 默认访问：
 
 ```text
-http://127.0.0.1:8080
+http://127.0.0.1:8039
 ```
 
 也支持通过环境变量覆盖镜像名和端口：
@@ -303,7 +303,7 @@ docker compose up
 如果你不想在本地重新构建镜像，可以直接拉取 GitHub Actions 发布的镜像：
 
 ```bash
-docker run --rm -p 8080:80 ghcr.io/develata/rss-reader:latest
+docker run --rm -p 8039:80 ghcr.io/develata/rss-reader:latest
 ```
 
 ### `docker-compose.yml` 模板
@@ -315,7 +315,7 @@ services:
   rss-reader:
     image: ghcr.io/develata/rss-reader:latest
     ports:
-      - "8080:80"
+      - "8039:80"
     restart: unless-stopped
 ```
 

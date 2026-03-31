@@ -247,7 +247,7 @@ docker compose up --build
 Then open:
 
 ```text
-http://127.0.0.1:8080
+http://127.0.0.1:8039
 ```
 
 The compose file is also compatible with the GitHub-published image:
