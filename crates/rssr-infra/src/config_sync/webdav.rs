@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use reqwest::{Client, StatusCode};
+use reqwest::{Client, StatusCode, header};
 use url::Url;
 
 #[derive(Debug, Clone)]
@@ -33,6 +33,7 @@ impl WebDavConfigSync {
         let response = self
             .client
             .put(self.remote_url()?)
+            .header(header::CONNECTION, "close")
             .header("content-type", "application/json")
             .body(body.to_string())
             .send()
@@ -47,8 +48,13 @@ impl WebDavConfigSync {
     }
 
     pub async fn download_text(&self) -> Result<Option<String>> {
-        let response =
-            self.client.get(self.remote_url()?).send().await.context("从 WebDAV 下载配置失败")?;
+        let response = self
+            .client
+            .get(self.remote_url()?)
+            .header(header::CONNECTION, "close")
+            .send()
+            .await
+            .context("从 WebDAV 下载配置失败")?;
 
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(None);
