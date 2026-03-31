@@ -218,7 +218,7 @@ cargo check -p rssr-app --target aarch64-linux-android
 
 桌面端使用本地 SQLite。
 
-默认数据库会自动创建在应用可写的数据目录里。首次启动时程序会自动：
+默认数据库会自动创建在可执行文件同目录下的 `RSS-Reader/rss-reader.db`。首次启动时程序会自动：
 
 - 创建数据目录
 - 创建 SQLite 数据库
