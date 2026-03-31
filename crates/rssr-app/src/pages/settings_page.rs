@@ -102,8 +102,10 @@ pub fn SettingsPage() -> Element {
             div { class: "settings-grid",
                 div { class: "settings-card",
                     h3 { "阅读外观" }
-                    label { class: "field-label", "主题" }
+                    label { class: "field-label", r#for: "settings-theme-mode", "主题" }
                     select {
+                        id: "settings-theme-mode",
+                        name: "theme_mode",
                         class: "select-input",
                         "data-action": "theme-mode",
                         value: "{theme_value(draft().theme)}",
@@ -116,8 +118,10 @@ pub fn SettingsPage() -> Element {
                         option { value: "light", "浅色" }
                         option { value: "dark", "深色" }
                     }
-                    label { class: "field-label", "列表密度" }
+                    label { class: "field-label", r#for: "settings-list-density", "列表密度" }
                     select {
+                        id: "settings-list-density",
+                        name: "list_density",
                         class: "select-input",
                         "data-action": "list-density",
                         value: "{density_value(draft().list_density)}",
@@ -129,8 +133,10 @@ pub fn SettingsPage() -> Element {
                         option { value: "comfortable", "舒适" }
                         option { value: "compact", "紧凑" }
                     }
-                    label { class: "field-label", "启动视图" }
+                    label { class: "field-label", r#for: "settings-startup-view", "启动视图" }
                     select {
+                        id: "settings-startup-view",
+                        name: "startup_view",
                         class: "select-input",
                         "data-action": "startup-view",
                         value: "{startup_value(draft().startup_view)}",
@@ -142,8 +148,10 @@ pub fn SettingsPage() -> Element {
                         option { value: "all", "全部文章" }
                         option { value: "last_feed", "上次订阅" }
                     }
-                    label { class: "field-label", "刷新间隔（分钟）" }
+                    label { class: "field-label", r#for: "settings-refresh-interval", "刷新间隔（分钟）" }
                     input {
+                        id: "settings-refresh-interval",
+                        name: "refresh_interval_minutes",
                         class: "text-input",
                         "data-action": "refresh-interval",
                         value: "{draft().refresh_interval_minutes}",
@@ -155,8 +163,10 @@ pub fn SettingsPage() -> Element {
                             }
                         }
                     }
-                    label { class: "field-label", "阅读字号缩放" }
+                    label { class: "field-label", r#for: "settings-reader-font-scale", "阅读字号缩放" }
                     input {
+                        id: "settings-reader-font-scale",
+                        name: "reader_font_scale",
                         class: "text-input",
                         "data-action": "reader-font-scale",
                         value: "{draft().reader_font_scale}",
@@ -168,8 +178,10 @@ pub fn SettingsPage() -> Element {
                             }
                         }
                     }
-                    label { class: "field-label", "自定义 CSS" }
+                    label { class: "field-label", r#for: "settings-custom-css", "自定义 CSS" }
                     textarea {
+                        id: "settings-custom-css",
+                        name: "custom_css",
                         class: "text-area",
                         "data-action": "custom-css",
                         value: "{draft().custom_css}",
@@ -227,9 +239,11 @@ pub fn SettingsPage() -> Element {
                         }
                     }
                     {file_import_input}
-                    label { class: "field-label", "内置主题预设" }
+                    label { class: "field-label", r#for: "settings-preset-theme", "内置主题预设" }
                     div { class: "inline-actions",
                         select {
+                            id: "settings-preset-theme",
+                            name: "preset_theme",
                             class: "select-input",
                             "data-action": "preset-theme-select",
                             value: "{preset_choice}",
@@ -505,16 +519,20 @@ pub fn SettingsPage() -> Element {
                 }
                 div { class: "settings-card",
                     h3 { "WebDAV 配置交换" }
-                    label { class: "field-label", "Endpoint" }
+                    label { class: "field-label", r#for: "settings-webdav-endpoint", "Endpoint" }
                     input {
+                        id: "settings-webdav-endpoint",
+                        name: "webdav_endpoint",
                         class: "text-input",
                         "data-action": "webdav-endpoint",
                         value: "{endpoint}",
                         placeholder: "https://dav.example.com/base/",
                         oninput: move |event| endpoint.set(event.value())
                     }
-                    label { class: "field-label", "Remote Path" }
+                    label { class: "field-label", r#for: "settings-webdav-remote-path", "Remote Path" }
                     input {
+                        id: "settings-webdav-remote-path",
+                        name: "webdav_remote_path",
                         class: "text-input",
                         "data-action": "webdav-remote-path",
                         value: "{remote_path}",
