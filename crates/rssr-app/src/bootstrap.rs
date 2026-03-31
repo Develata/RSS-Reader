@@ -1,6 +1,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
     use std::sync::Arc;
+    use std::time::Duration;
 
     use anyhow::Context;
     use rssr_application::{EntryService, FeedService, ImportExportService, SettingsService};
@@ -15,9 +16,9 @@ mod imp {
             settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,
             storage_backend::StorageBackend,
         },
-        fetch::{FetchClient, FetchRequest, FetchResult},
+        fetch::{BodyAssetLocalizer, FetchClient, FetchRequest, FetchResult},
         opml::OpmlCodec,
-        parser::FeedParser,
+        parser::{FeedParser, feed_parser::ParsedEntry},
     };
     use tokio::sync::OnceCell;
     use url::Url;
@@ -40,11 +41,15 @@ mod imp {
         settings_service: SettingsService,
         import_export_service: ImportExportService,
         fetch_client: FetchClient,
+        body_asset_localizer: BodyAssetLocalizer,
         parser: FeedParser,
         opml_codec: OpmlCodec,
     }
 
     impl AppServices {
+        const MAX_BACKGROUND_LOCALIZED_ENTRIES: usize = 5;
+        const LOCALIZE_TIMEOUT: Duration = Duration::from_secs(5);
+
         pub async fn shared() -> anyhow::Result<Arc<Self>> {
             APP_SERVICES
                 .get_or_try_init(|| async {
@@ -76,6 +81,7 @@ mod imp {
                         feed_repository,
                         entry_repository,
                         fetch_client: FetchClient::new(),
+                        body_asset_localizer: BodyAssetLocalizer::new(),
                         parser: FeedParser::new(),
                         opml_codec: OpmlCodec::new(),
                     }))
@@ -230,6 +236,7 @@ mod imp {
                 }
                 FetchResult::Fetched { body, metadata } => {
                     let parsed = self.parser.parse(&body).context("解析订阅失败")?;
+                    let entries_for_localize = parsed.entries.clone();
                     self.feed_repository
                         .update_feed_metadata(feed.id, &parsed)
                         .await
@@ -248,10 +255,73 @@ mod imp {
                         )
                         .await
                         .context("更新订阅抓取状态失败")?;
+
+                    self.spawn_background_image_localization(feed.id, entries_for_localize);
                 }
             }
 
             Ok(())
+        }
+
+        fn spawn_background_image_localization(&self, feed_id: i64, entries: Vec<ParsedEntry>) {
+            let entry_repository = self.entry_repository.clone();
+            let localizer = self.body_asset_localizer.clone();
+
+            tokio::spawn(async move {
+                let mut localized_entries = Vec::new();
+
+                for mut entry in entries.into_iter() {
+                    if localized_entries.len() >= Self::MAX_BACKGROUND_LOCALIZED_ENTRIES {
+                        break;
+                    }
+
+                    let Some(content_html) = entry.content_html.take() else {
+                        continue;
+                    };
+
+                    let original_html = content_html;
+                    let localized_html = match tokio::time::timeout(
+                        Self::LOCALIZE_TIMEOUT,
+                        localizer.localize_html_images(&original_html, entry.url.as_ref()),
+                    )
+                    .await
+                    {
+                        Ok(Ok(localized_html)) if localized_html != original_html => localized_html,
+                        Ok(Ok(_)) => continue,
+                        Ok(Err(error)) => {
+                            tracing::warn!(
+                                feed_id,
+                                entry_url = ?entry.url,
+                                error = %error,
+                                "后台正文图片本地化失败，保留原始 HTML"
+                            );
+                            continue;
+                        }
+                        Err(_) => {
+                            tracing::warn!(
+                                feed_id,
+                                entry_url = ?entry.url,
+                                timeout_secs = Self::LOCALIZE_TIMEOUT.as_secs(),
+                                "后台正文图片本地化超时，跳过当前文章"
+                            );
+                            continue;
+                        }
+                    };
+
+                    entry.content_html = Some(localized_html);
+                    localized_entries.push(entry);
+                }
+
+                if localized_entries.is_empty() {
+                    return;
+                }
+
+                if let Err(error) =
+                    entry_repository.upsert_entries(feed_id, &localized_entries).await
+                {
+                    tracing::warn!(feed_id, error = %error, "写回后台本地化后的正文失败");
+                }
+            });
         }
 
         pub async fn export_config_json(&self) -> anyhow::Result<String> {
