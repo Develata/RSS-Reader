@@ -27,10 +27,14 @@ pub fn SettingsPage() -> Element {
             style: "display:none",
             r#type: "file",
             accept: ".css,text/css",
-            onchange: move |_| {
+            onchange: move |event| {
+                let Some(file) = event.files().into_iter().next() else {
+                    return;
+                };
+
                 spawn(async move {
-                    match read_css_file_from_browser().await {
-                        Ok(Some(raw)) => apply_custom_css_from_raw(
+                    match file.read_string().await {
+                        Ok(raw) => apply_custom_css_from_raw(
                             theme,
                             draft,
                             preset_choice,
@@ -39,9 +43,6 @@ pub fn SettingsPage() -> Element {
                             raw,
                             "已从文件载入并应用自定义 CSS。".to_string(),
                         ),
-                        Ok(None) => {
-                            set_status_info(status, status_tone, "已取消载入 CSS 文件。".to_string())
-                        }
                         Err(err) => set_status_error(
                             status,
                             status_tone,
@@ -49,12 +50,44 @@ pub fn SettingsPage() -> Element {
                         ),
                     }
                 });
-            }
+            },
         }
     };
 
     #[cfg(not(target_arch = "wasm32"))]
     let file_import_input = rsx! {};
+
+    #[cfg(target_arch = "wasm32")]
+    let import_css_trigger = rsx! {
+        button {
+            class: "button secondary",
+            "data-action": "import-custom-css-file",
+            onclick: move |_| {
+                if let Err(err) = trigger_css_file_input_in_browser() {
+                    set_status_error(status, status_tone, format!("载入 CSS 文件失败：{err}"));
+                }
+            },
+            "导入主题文件"
+        }
+    };
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let import_css_trigger = rsx! {
+        button {
+            class: "button secondary",
+            "data-action": "import-custom-css-file",
+            onclick: move |_| {
+                import_css_file(
+                    theme,
+                    draft,
+                    preset_choice,
+                    status,
+                    status_tone,
+                );
+            },
+            "导入主题文件"
+        }
+    };
 
     let _ = use_resource(move || async move {
         match AppServices::shared().await {
@@ -199,20 +232,7 @@ pub fn SettingsPage() -> Element {
                         "当前样式来源：{custom_css_source_label(&draft().custom_css)}"
                     }
                     div { class: "inline-actions",
-                        button {
-                            class: "button secondary",
-                            "data-action": "import-custom-css-file",
-                            onclick: move |_| {
-                                import_css_file(
-                                    theme,
-                                    draft,
-                                    preset_choice,
-                                    status,
-                                    status_tone,
-                                );
-                            },
-                            "导入主题文件"
-                        }
+                        {import_css_trigger}
                         button {
                             class: "button secondary",
                             "data-action": "apply-custom-css",
@@ -829,6 +849,7 @@ async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn import_css_file(
     theme: ThemeController,
     draft: Signal<UserSettings>,
@@ -836,14 +857,6 @@ fn import_css_file(
     status: Signal<String>,
     status_tone: Signal<String>,
 ) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let _ = (theme, draft, preset_choice);
-        if let Err(err) = open_css_file_picker_in_browser() {
-            set_status_error(status, status_tone, format!("载入 CSS 文件失败：{err}"));
-        }
-    }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
         spawn(async move {
@@ -866,6 +879,23 @@ fn import_css_file(
             }
         });
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn trigger_css_file_input_in_browser() -> anyhow::Result<()> {
+    use js_sys::wasm_bindgen::JsCast;
+
+    let window = web_sys::window().ok_or_else(|| anyhow::anyhow!("浏览器窗口不可用"))?;
+    let document = window.document().ok_or_else(|| anyhow::anyhow!("浏览器文档不可用"))?;
+    let input = document
+        .get_element_by_id("custom-css-file-input")
+        .ok_or_else(|| anyhow::anyhow!("未找到 CSS 文件输入节点"))?
+        .dyn_into::<web_sys::HtmlInputElement>()
+        .map_err(|_| anyhow::anyhow!("CSS 文件输入节点类型不匹配"))?;
+    input.set_value("");
+    input.click();
+
+    Ok(())
 }
 
 fn apply_custom_css_from_raw(
@@ -1048,51 +1078,6 @@ fn save_css_file_in_browser(raw: &str) -> anyhow::Result<()> {
     let _ = web_sys::Url::revoke_object_url(&object_url);
 
     Ok(())
-}
-
-#[cfg(target_arch = "wasm32")]
-fn open_css_file_picker_in_browser() -> anyhow::Result<()> {
-    use js_sys::wasm_bindgen::JsCast;
-
-    let window = web_sys::window().ok_or_else(|| anyhow::anyhow!("浏览器窗口不可用"))?;
-    let document = window.document().ok_or_else(|| anyhow::anyhow!("浏览器文档不可用"))?;
-    let input = document
-        .get_element_by_id("custom-css-file-input")
-        .ok_or_else(|| anyhow::anyhow!("未找到 CSS 文件输入节点"))?
-        .dyn_into::<web_sys::HtmlInputElement>()
-        .map_err(|_| anyhow::anyhow!("CSS 文件输入节点类型不匹配"))?;
-
-    input.set_value("");
-    input.click();
-
-    Ok(())
-}
-
-#[cfg(target_arch = "wasm32")]
-async fn read_css_file_from_browser() -> anyhow::Result<Option<String>> {
-    use js_sys::wasm_bindgen::JsCast;
-
-    let window = web_sys::window().ok_or_else(|| anyhow::anyhow!("浏览器窗口不可用"))?;
-    let document = window.document().ok_or_else(|| anyhow::anyhow!("浏览器文档不可用"))?;
-    let input = document
-        .get_element_by_id("custom-css-file-input")
-        .ok_or_else(|| anyhow::anyhow!("未找到 CSS 文件输入节点"))?
-        .dyn_into::<web_sys::HtmlInputElement>()
-        .map_err(|_| anyhow::anyhow!("CSS 文件输入节点类型不匹配"))?;
-
-    let Some(files) = input.files() else {
-        return Ok(None);
-    };
-    if files.length() == 0 {
-        return Ok(None);
-    }
-
-    let file = files.item(0).ok_or_else(|| anyhow::anyhow!("未读取到选中的 CSS 文件"))?;
-    let blob = gloo_file::Blob::from(file);
-    let raw = gloo_file::futures::read_as_text(&blob)
-        .await
-        .map_err(|err| anyhow::anyhow!("读取 CSS 文件失败：{err}"))?;
-    Ok(Some(raw))
 }
 
 #[cfg(test)]
