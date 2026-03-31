@@ -19,6 +19,43 @@ pub fn SettingsPage() -> Element {
     let status = use_signal(|| "在这里管理主题、阅读偏好和远端配置交换。".to_string());
     let status_tone = use_signal(|| "info".to_string());
 
+    #[cfg(target_arch = "wasm32")]
+    let file_import_input = rsx! {
+        input {
+            id: "custom-css-file-input",
+            class: "sr-only-file-input",
+            style: "display:none",
+            r#type: "file",
+            accept: ".css,text/css",
+            onchange: move |_| {
+                spawn(async move {
+                    match read_css_file_from_browser().await {
+                        Ok(Some(raw)) => apply_custom_css_from_raw(
+                            theme,
+                            draft,
+                            preset_choice,
+                            status,
+                            status_tone,
+                            raw,
+                            "已从文件载入并应用自定义 CSS。".to_string(),
+                        ),
+                        Ok(None) => {
+                            set_status_info(status, status_tone, "已取消载入 CSS 文件。".to_string())
+                        }
+                        Err(err) => set_status_error(
+                            status,
+                            status_tone,
+                            format!("载入 CSS 文件失败：{err}"),
+                        ),
+                    }
+                });
+            }
+        }
+    };
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let file_import_input = rsx! {};
+
     let _ = use_resource(move || async move {
         match AppServices::shared().await {
             Ok(services) => match services.load_settings().await {
@@ -154,53 +191,42 @@ pub fn SettingsPage() -> Element {
                             class: "button secondary",
                             "data-action": "import-custom-css-file",
                             onclick: move |_| {
-                                let mut draft = draft;
-                                spawn(async move {
-                                    match pick_css_file_contents().await {
-                                        Ok(Some(raw)) => {
-                                            let mut next = draft();
-                                            next.custom_css = raw;
-                                            preset_choice.set(detect_preset_key(&next.custom_css).to_string());
-                                            let applied = next.clone();
-                                            draft.set(next);
-                                            apply_settings_immediately(
-                                                theme,
-                                                draft,
-                                                preset_choice,
-                                                status,
-                                                status_tone,
-                                                applied,
-                                                "已从文件载入并应用自定义 CSS。".to_string(),
-                                            );
-                                        }
-                                        Ok(None) => set_status_info(status, status_tone, "已取消载入 CSS 文件。".to_string()),
-                                        Err(err) => set_status_error(status, status_tone, format!("载入 CSS 文件失败：{err}")),
-                                    }
-                                });
+                                import_css_file(
+                                    theme,
+                                    draft,
+                                    preset_choice,
+                                    status,
+                                    status_tone,
+                                );
                             },
                             "导入主题文件"
                         }
                         button {
                             class: "button secondary",
+                            "data-action": "apply-custom-css",
+                            onclick: move |_| {
+                                apply_custom_css_from_raw(
+                                    theme,
+                                    draft,
+                                    preset_choice,
+                                    status,
+                                    status_tone,
+                                    draft().custom_css,
+                                    "已应用当前输入框中的自定义 CSS。".to_string(),
+                                );
+                            },
+                            "应用当前 CSS"
+                        }
+                        button {
+                            class: "button secondary",
                             "data-action": "export-custom-css-file",
                             onclick: move |_| {
-                                let raw = draft().custom_css;
-                                spawn(async move {
-                                    if raw.trim().is_empty() {
-                                        set_status_info(status, status_tone, "当前没有可导出的自定义 CSS。".to_string());
-                                        return;
-                                    }
-
-                                    match save_css_file(&raw).await {
-                                        Ok(true) => set_status_info(status, status_tone, "已导出当前自定义 CSS。".to_string()),
-                                        Ok(false) => set_status_info(status, status_tone, "已取消导出 CSS 文件。".to_string()),
-                                        Err(err) => set_status_error(status, status_tone, format!("导出 CSS 文件失败：{err}")),
-                                    }
-                                });
+                                export_css_file(draft().custom_css, status, status_tone);
                             },
                             "导出当前 CSS"
                         }
                     }
+                    {file_import_input}
                     label { class: "field-label", "内置主题预设" }
                     div { class: "inline-actions",
                         select {
@@ -340,7 +366,7 @@ pub fn SettingsPage() -> Element {
                             }
                         }
                     }
-                    p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。预置主题会立即生效并自动保存；手动编辑 CSS 后再点击“保存设置”。" }
+                    p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。预置主题会立即生效并自动保存；手动编辑 CSS 后请点击“应用当前 CSS”。" }
                     div { class: "preset-grid",
                         button {
                             class: "button secondary",
@@ -453,6 +479,14 @@ pub fn SettingsPage() -> Element {
                             "data-action": "save-settings",
                             onclick: move |_| {
                                 let next = draft();
+                                if let Err(err) = validate_custom_css(&next.custom_css) {
+                                    set_status_error(
+                                        status,
+                                        status_tone,
+                                        format!("自定义 CSS 格式无效：{err}"),
+                                    );
+                                    return;
+                                }
                                 spawn(async move {
                                     match AppServices::shared().await {
                                     Ok(services) => match services.save_settings(&next).await {
@@ -755,6 +789,7 @@ fn builtin_theme_presets() -> [BuiltinThemePreset; 4] {
     ]
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
     #[cfg(target_os = "android")]
     {
@@ -773,6 +808,163 @@ async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
         let raw = String::from_utf8(bytes)
             .map_err(|err| anyhow::anyhow!("CSS 文件不是有效 UTF-8：{err}"))?;
         Ok(Some(raw))
+    }
+}
+
+fn import_css_file(
+    theme: ThemeController,
+    draft: Signal<UserSettings>,
+    preset_choice: Signal<String>,
+    status: Signal<String>,
+    status_tone: Signal<String>,
+) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (theme, draft, preset_choice);
+        if let Err(err) = open_css_file_picker_in_browser() {
+            set_status_error(status, status_tone, format!("载入 CSS 文件失败：{err}"));
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        spawn(async move {
+            match pick_css_file_contents().await {
+                Ok(Some(raw)) => apply_custom_css_from_raw(
+                    theme,
+                    draft,
+                    preset_choice,
+                    status,
+                    status_tone,
+                    raw,
+                    "已从文件载入并应用自定义 CSS。".to_string(),
+                ),
+                Ok(None) => {
+                    set_status_info(status, status_tone, "已取消载入 CSS 文件。".to_string())
+                }
+                Err(err) => {
+                    set_status_error(status, status_tone, format!("载入 CSS 文件失败：{err}"))
+                }
+            }
+        });
+    }
+}
+
+fn apply_custom_css_from_raw(
+    theme: ThemeController,
+    mut draft: Signal<UserSettings>,
+    mut preset_choice: Signal<String>,
+    status: Signal<String>,
+    status_tone: Signal<String>,
+    raw: String,
+    success_message: String,
+) {
+    if let Err(err) = validate_custom_css(&raw) {
+        set_status_error(status, status_tone, format!("自定义 CSS 格式无效：{err}"));
+        return;
+    }
+
+    let mut next = draft();
+    next.custom_css = raw;
+    preset_choice.set(detect_preset_key(&next.custom_css).to_string());
+    let applied = next.clone();
+    draft.set(next);
+    apply_settings_immediately(
+        theme,
+        draft,
+        preset_choice,
+        status,
+        status_tone,
+        applied,
+        success_message,
+    );
+}
+
+fn validate_custom_css(raw: &str) -> Result<(), &'static str> {
+    let mut stack = Vec::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut in_comment = false;
+    let mut escaped = false;
+    let mut chars = raw.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if in_comment {
+            if ch == '*' && chars.peek() == Some(&'/') {
+                let _ = chars.next();
+                in_comment = false;
+            }
+            continue;
+        }
+
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' if in_single_quote || in_double_quote => escaped = true,
+            '\'' if !in_double_quote => in_single_quote = !in_single_quote,
+            '"' if !in_single_quote => in_double_quote = !in_double_quote,
+            '/' if !in_single_quote && !in_double_quote && chars.peek() == Some(&'*') => {
+                let _ = chars.next();
+                in_comment = true;
+            }
+            '{' | '(' | '[' if !in_single_quote && !in_double_quote => stack.push(ch),
+            '}' | ')' | ']' if !in_single_quote && !in_double_quote => {
+                let Some(open) = stack.pop() else {
+                    return Err("存在未匹配的右括号或右花括号");
+                };
+                if !matches!((open, ch), ('{', '}') | ('(', ')') | ('[', ']')) {
+                    return Err("括号或花括号没有正确配对");
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if in_comment {
+        return Err("注释没有正确闭合");
+    }
+    if in_single_quote || in_double_quote {
+        return Err("字符串引号没有正确闭合");
+    }
+    if !stack.is_empty() {
+        return Err("存在未闭合的括号或花括号");
+    }
+
+    Ok(())
+}
+
+fn export_css_file(raw: String, status: Signal<String>, status_tone: Signal<String>) {
+    if raw.trim().is_empty() {
+        set_status_info(status, status_tone, "当前没有可导出的自定义 CSS。".to_string());
+        return;
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        match save_css_file_in_browser(&raw) {
+            Ok(()) => set_status_info(status, status_tone, "已导出当前自定义 CSS。".to_string()),
+            Err(err) => set_status_error(status, status_tone, format!("导出 CSS 文件失败：{err}")),
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        spawn(async move {
+            match save_css_file(&raw).await {
+                Ok(true) => {
+                    set_status_info(status, status_tone, "已导出当前自定义 CSS。".to_string())
+                }
+                Ok(false) => {
+                    set_status_info(status, status_tone, "已取消导出 CSS 文件。".to_string())
+                }
+                Err(err) => {
+                    set_status_error(status, status_tone, format!("导出 CSS 文件失败：{err}"))
+                }
+            }
+        });
     }
 }
 
@@ -802,7 +994,7 @@ async fn save_css_file(raw: &str) -> anyhow::Result<bool> {
 }
 
 #[cfg(target_arch = "wasm32")]
-async fn save_css_file(raw: &str) -> anyhow::Result<bool> {
+fn save_css_file_in_browser(raw: &str) -> anyhow::Result<()> {
     use js_sys::wasm_bindgen::{JsCast, JsValue};
 
     let window = web_sys::window().ok_or_else(|| anyhow::anyhow!("浏览器窗口不可用"))?;
@@ -837,7 +1029,52 @@ async fn save_css_file(raw: &str) -> anyhow::Result<bool> {
     let _ = body.remove_child(&anchor);
     let _ = web_sys::Url::revoke_object_url(&object_url);
 
-    Ok(true)
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn open_css_file_picker_in_browser() -> anyhow::Result<()> {
+    use js_sys::wasm_bindgen::JsCast;
+
+    let window = web_sys::window().ok_or_else(|| anyhow::anyhow!("浏览器窗口不可用"))?;
+    let document = window.document().ok_or_else(|| anyhow::anyhow!("浏览器文档不可用"))?;
+    let input = document
+        .get_element_by_id("custom-css-file-input")
+        .ok_or_else(|| anyhow::anyhow!("未找到 CSS 文件输入节点"))?
+        .dyn_into::<web_sys::HtmlInputElement>()
+        .map_err(|_| anyhow::anyhow!("CSS 文件输入节点类型不匹配"))?;
+
+    input.set_value("");
+    input.click();
+
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn read_css_file_from_browser() -> anyhow::Result<Option<String>> {
+    use js_sys::wasm_bindgen::JsCast;
+
+    let window = web_sys::window().ok_or_else(|| anyhow::anyhow!("浏览器窗口不可用"))?;
+    let document = window.document().ok_or_else(|| anyhow::anyhow!("浏览器文档不可用"))?;
+    let input = document
+        .get_element_by_id("custom-css-file-input")
+        .ok_or_else(|| anyhow::anyhow!("未找到 CSS 文件输入节点"))?
+        .dyn_into::<web_sys::HtmlInputElement>()
+        .map_err(|_| anyhow::anyhow!("CSS 文件输入节点类型不匹配"))?;
+
+    let Some(files) = input.files() else {
+        return Ok(None);
+    };
+    if files.length() == 0 {
+        return Ok(None);
+    }
+
+    let file = files.item(0).ok_or_else(|| anyhow::anyhow!("未读取到选中的 CSS 文件"))?;
+    let blob = gloo_file::Blob::from(file);
+    let raw = gloo_file::futures::read_as_text(&blob)
+        .await
+        .map_err(|err| anyhow::anyhow!("读取 CSS 文件失败：{err}"))?;
+    Ok(Some(raw))
 }
 
 #[cfg(test)]
