@@ -82,15 +82,20 @@ impl BodyAssetLocalizer {
         Self { inner: reqwest::Client::new() }
     }
 
+    pub fn max_images_per_entry() -> usize {
+        4
+    }
+
     pub async fn localize_html_images(
         &self,
         html: &str,
         base_url: Option<&Url>,
     ) -> anyhow::Result<String> {
-        const MAX_IMAGES_PER_ENTRY: usize = 16;
-        const MAX_IMAGE_BYTES: usize = 2 * 1024 * 1024;
+        const MAX_IMAGE_BYTES: usize = 512 * 1024;
+        const MAX_TOTAL_IMAGE_BYTES: usize = 1024 * 1024;
+        const MAX_HTML_BYTES: usize = 256 * 1024;
 
-        if !html.contains("<img") {
+        if !html.contains("<img") || html.len() > MAX_HTML_BYTES {
             return Ok(html.to_string());
         }
 
@@ -104,7 +109,7 @@ impl BodyAssetLocalizer {
             let Some(src_match) = captures.name("src") else {
                 continue;
             };
-            if sources.len() >= MAX_IMAGES_PER_ENTRY {
+            if sources.len() >= Self::max_images_per_entry() {
                 break;
             }
             let raw = src_match.as_str().trim();
@@ -121,10 +126,21 @@ impl BodyAssetLocalizer {
         }
 
         let mut localized = BTreeMap::new();
+        let mut total_localized_bytes = 0_usize;
         for (raw, resolved) in sources {
             match self.fetch_image_as_data_url(&resolved, MAX_IMAGE_BYTES).await {
-                Ok(Some(data_url)) => {
+                Ok(Some((data_url, byte_len))) => {
+                    if total_localized_bytes + byte_len > MAX_TOTAL_IMAGE_BYTES {
+                        tracing::warn!(
+                            asset_url = %resolved,
+                            byte_len,
+                            total_localized_bytes,
+                            "正文图片累计体积过大，跳过剩余本地化"
+                        );
+                        break;
+                    }
                     localized.insert(raw, data_url);
+                    total_localized_bytes += byte_len;
                 }
                 Ok(None) => {}
                 Err(error) => {
@@ -155,7 +171,7 @@ impl BodyAssetLocalizer {
         &self,
         url: &Url,
         max_bytes: usize,
-    ) -> anyhow::Result<Option<String>> {
+    ) -> anyhow::Result<Option<(String, usize)>> {
         let response = self
             .inner
             .get(url.clone())
@@ -180,7 +196,8 @@ impl BodyAssetLocalizer {
             return Ok(None);
         }
 
-        Ok(Some(format!("data:{content_type};base64,{}", BASE64.encode(bytes))))
+        let byte_len = bytes.len();
+        Ok(Some((format!("data:{content_type};base64,{}", BASE64.encode(bytes)), byte_len)))
     }
 }
 
