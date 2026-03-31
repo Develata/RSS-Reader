@@ -2,6 +2,7 @@
 members = [
     "crates/rssr-app",
     "crates/rssr-cli",
+    "crates/rssr-web",
     "crates/rssr-application",
     "crates/rssr-domain",
     "crates/rssr-infra",
@@ -19,6 +20,7 @@ repository = "https://github.com/Develata/RSS-Reader"
 ammonia = "4"
 anyhow = "1"
 async-trait = "0.1"
+axum = { version = "0.8", features = ["form", "http1", "tokio"] }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "4", features = ["derive"] }
@@ -26,6 +28,7 @@ dioxus = { version = "0.7.3", features = ["router"] }
 dioxus-router = "0.7.3"
 feed-rs = "2"
 getrandom = { version = "0.2", features = ["js"] }
+hmac = "0.12"
 quick-xml = "0.37"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "rustls-tls"] }
@@ -37,7 +40,9 @@ sqlx = { version = "0.8", default-features = false, features = ["macros", "migra
 thiserror = "2"
 tokio = { version = "1", default-features = false, features = ["macros", "sync", "time"] }
 time = { version = "0.3", features = ["formatting", "macros", "parsing", "serde", "serde-human-readable"] }
+tower-http = { version = "0.6", features = ["fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = { version = "2", features = ["serde"] }
+urlencoding = "2"
 webbrowser = "1"

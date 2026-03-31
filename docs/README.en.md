@@ -32,6 +32,7 @@ This project focuses on practical reading workflows instead of branding-heavy UI
 crates/
 ├── rssr-app/
 ├── rssr-cli/
+├── rssr-web/
 ├── rssr-application/
 ├── rssr-domain/
 └── rssr-infra/
@@ -217,17 +218,18 @@ git push origin v0.1.0
 
 Docker support is for the web build.
 
-The image bundles the web app and serves it with `nginx:alpine`.
+The published image runs a small `rssr-web` process.
 
-Nginx is used only as:
+It handles:
 
-- a static file server inside the Docker web image
-- an SPA fallback handler for client-side routing
-- a small and stable low-memory container entrypoint
+- a username/password login page
+- server-side credential validation
+- signed `HttpOnly` session cookies
+- serving the Dioxus web bundle only after login
 
 It is **not** a runtime dependency of the desktop app, CLI, Android build, or local development workflow.
 
-You do not need Nginx for:
+You do not need this deployment-time web service for:
 
 - `cargo run -p rssr-app`
 - `dx serve --platform web --package rssr-app`
@@ -237,6 +239,9 @@ You do not need Nginx for:
 The default [docker-compose.yml](../docker-compose.yml) is a pull-only deployment template for the image published to GHCR:
 
 ```bash
+export RSS_READER_WEB_USERNAME=admin
+export RSS_READER_WEB_PASSWORD='replace-this-with-a-strong-password'
+export RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters'
 docker compose up -d
 ```
 
@@ -249,6 +254,9 @@ http://127.0.0.1:8039
 Override the image tag or host port if needed:
 
 ```bash
+RSS_READER_WEB_USERNAME=admin \
+RSS_READER_WEB_PASSWORD='replace-this-with-a-strong-password' \
+RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters' \
 RSS_READER_IMAGE=ghcr.io/develata/rss-reader:latest \
 RSS_READER_PORT=8090 \
 docker compose up -d
@@ -257,8 +265,18 @@ docker compose up -d
 You can also run the image directly:
 
 ```bash
-docker run --rm -p 8039:80 ghcr.io/develata/rss-reader:latest
+docker run --rm \
+  -p 8039:8080 \
+  -e RSS_READER_WEB_USERNAME=admin \
+  -e RSS_READER_WEB_PASSWORD='replace-this-with-a-strong-password' \
+  -e RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters' \
+  ghcr.io/develata/rss-reader:latest
 ```
+
+Notes:
+- `RSS_READER_WEB_SESSION_SECRET` should be a random string with at least 32 characters
+- if the container is exposed behind HTTPS, set `RSS_READER_WEB_SECURE_COOKIE=true`
+- for local HTTP testing you can keep it at the default `false`
 
 ### Local image build
 

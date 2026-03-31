@@ -262,15 +262,16 @@ Web 端使用 wasm SQLite，并把数据库持久化到浏览器存储中。
 
 仓库包含 **Web 版本** 的容器化部署支持。
 
-这里使用 `nginx:alpine` 只作为：
+当前镜像运行的是一个很薄的 `rssr-web` 服务进程，它负责：
 
-- Docker 镜像里的静态文件服务器
-- Web SPA 的路由回退处理器
-- 一个足够轻量、稳定、低内存的容器入口
+- 显示用户名 / 密码登录页
+- 在服务端校验凭据
+- 签发 `HttpOnly` 会话 cookie
+- 登录后再提供 Dioxus Web 静态资源与 SPA 路由回退
 
-它 **不是** 桌面端、CLI、Android 或本地开发运行所需的依赖；只有 Web 静态部署镜像里才会用到它。
+它 **不是** 桌面端、CLI、Android 或本地开发运行所需的依赖；只有 Docker / GHCR 的 Web 部署镜像才会用到它。
 
-如果你本地开发或运行原生版本，完全不需要 Nginx：
+如果你本地开发或运行原生版本，完全不需要这层部署服务：
 
 - 桌面端：`cargo run -p rssr-app`
 - Web 开发：`dx serve --platform web --package rssr-app`
@@ -280,6 +281,9 @@ Web 端使用 wasm SQLite，并把数据库持久化到浏览器存储中。
 默认的 [docker-compose.yml](./docker-compose.yml) 是“直接拉取 GitHub Container Registry 镜像”的部署模板，不会在本地重新构建镜像：
 
 ```bash
+export RSS_READER_WEB_USERNAME=admin
+export RSS_READER_WEB_PASSWORD='请改成你自己的强密码'
+export RSS_READER_WEB_SESSION_SECRET='至少32字符的随机长串'
 docker compose up -d
 ```
 
@@ -292,6 +296,9 @@ http://127.0.0.1:8039
 也支持通过环境变量覆盖镜像名和端口：
 
 ```bash
+RSS_READER_WEB_USERNAME=admin \
+RSS_READER_WEB_PASSWORD='请改成你自己的强密码' \
+RSS_READER_WEB_SESSION_SECRET='至少32字符的随机长串' \
 RSS_READER_IMAGE=ghcr.io/develata/rss-reader:latest \
 RSS_READER_PORT=8090 \
 docker compose up -d
@@ -300,8 +307,20 @@ docker compose up -d
 如果你不想用 compose，也可以直接运行镜像：
 
 ```bash
-docker run --rm -p 8039:80 ghcr.io/develata/rss-reader:latest
+docker run --rm \
+  -p 8039:8080 \
+  -e RSS_READER_WEB_USERNAME=admin \
+  -e RSS_READER_WEB_PASSWORD='请改成你自己的强密码' \
+  -e RSS_READER_WEB_SESSION_SECRET='至少32字符的随机长串' \
+  ghcr.io/develata/rss-reader:latest
 ```
+
+说明：
+
+- `RSS_READER_WEB_SESSION_SECRET` 请使用长度至少 32 的随机字符串
+- 如果这个容器最终会挂在 HTTPS 反向代理后面，建议额外设置：
+  - `RSS_READER_WEB_SECURE_COOKIE=true`
+- 本地 HTTP 测试时可保持默认 `false`
 
 ### 本地构建镜像
 
@@ -327,8 +346,13 @@ docker build -t rss-reader-web .
 services:
   rss-reader:
     image: ghcr.io/develata/rss-reader:latest
+    environment:
+      RSS_READER_WEB_USERNAME: admin
+      RSS_READER_WEB_PASSWORD: "please-change-this-password"
+      RSS_READER_WEB_SESSION_SECRET: "replace-with-a-random-secret-at-least-32-chars"
+      RSS_READER_WEB_SECURE_COOKIE: "false"
     ports:
-      - "8039:80"
+      - "8039:8080"
     restart: unless-stopped
 ```
 
@@ -338,8 +362,13 @@ services:
 services:
   rss-reader:
     image: ghcr.io/develata/rss-reader:latest
+    environment:
+      RSS_READER_WEB_USERNAME: admin
+      RSS_READER_WEB_PASSWORD: "please-change-this-password"
+      RSS_READER_WEB_SESSION_SECRET: "replace-with-a-random-secret-at-least-32-chars"
+      RSS_READER_WEB_SECURE_COOKIE: "true"
     ports:
-      - "8090:80"
+      - "8090:8080"
     restart: unless-stopped
 ```
 
@@ -347,8 +376,8 @@ services:
 
 推荐使用 Docker 的场景：
 
-- 想部署 Web 版本到服务器
-- 想快速拉起一个静态 Web 实例
+- 想部署带登录门禁的 Web 版本到服务器
+- 想快速拉起一个受保护的浏览器入口
 - 不想安装 Rust / Dioxus CLI
 
 不推荐使用 Docker 的场景：
@@ -372,6 +401,7 @@ services:
 crates/
 ├── rssr-app/
 ├── rssr-cli/
+├── rssr-web/
 ├── rssr-application/
 ├── rssr-domain/
 └── rssr-infra/

@@ -1,11 +1,17 @@
 services:
   rss-reader:
     image: ${RSS_READER_IMAGE:-ghcr.io/develata/rss-reader:latest}
+    environment:
+      RSS_READER_WEB_USERNAME: ${RSS_READER_WEB_USERNAME:?RSS_READER_WEB_USERNAME is required}
+      RSS_READER_WEB_PASSWORD: ${RSS_READER_WEB_PASSWORD:?RSS_READER_WEB_PASSWORD is required}
+      RSS_READER_WEB_SESSION_SECRET: ${RSS_READER_WEB_SESSION_SECRET:?RSS_READER_WEB_SESSION_SECRET is required}
+      RSS_READER_WEB_SECURE_COOKIE: ${RSS_READER_WEB_SECURE_COOKIE:-false}
+      RSS_READER_WEB_SESSION_TTL_HOURS: ${RSS_READER_WEB_SESSION_TTL_HOURS:-12}
     ports:
-      - "${RSS_READER_PORT:-8039}:80"
+      - "${RSS_READER_PORT:-8039}:8080"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

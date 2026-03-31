@@ -16,14 +16,30 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
     dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir /app/web-dist
 
-FROM nginx:1.27-alpine
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build -p rssr-web --release \
+    && cp /app/target/release/rssr-web /app/rssr-web
 
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /app/web-dist/public /usr/share/nginx/html
+FROM debian:bookworm-slim
 
-EXPOSE 80
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --create-home --home-dir /app rssr
+
+COPY --from=builder /app/rssr-web /usr/local/bin/rssr-web
+COPY --from=builder /app/web-dist/public /app/public
+
+ENV RSS_READER_WEB_BIND=0.0.0.0:8080
+ENV RSS_READER_WEB_STATIC_DIR=/app/public
+
+USER rssr
+
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["rssr-web"]
