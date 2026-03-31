@@ -71,10 +71,31 @@ impl StorageBackend for NativeSqliteBackend {
 }
 
 fn default_database_path() -> anyhow::Result<PathBuf> {
-    let executable_path = std::env::current_exe().context("无法定位可执行文件路径")?;
-    let base_dir = executable_path.parent().context("无法定位可执行文件所在目录")?;
+    #[cfg(target_os = "android")]
+    {
+        let base_dir = android_data_base_dir()?;
+        return Ok(database_path_in_base_dir(&base_dir));
+    }
 
-    Ok(database_path_in_base_dir(base_dir))
+    #[cfg(not(target_os = "android"))]
+    {
+        let executable_path = std::env::current_exe().context("无法定位可执行文件路径")?;
+        let base_dir = executable_path.parent().context("无法定位可执行文件所在目录")?;
+
+        Ok(database_path_in_base_dir(base_dir))
+    }
+}
+
+#[cfg(target_os = "android")]
+fn android_data_base_dir() -> anyhow::Result<PathBuf> {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
+        .or_else(|| {
+            let fallback = std::env::temp_dir();
+            (!fallback.as_os_str().is_empty()).then_some(fallback)
+        })
+        .context("Android 环境未提供可写的 HOME 目录")
 }
 
 fn database_path_in_base_dir(base_dir: &Path) -> PathBuf {
