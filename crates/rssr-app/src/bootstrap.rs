@@ -1,7 +1,6 @@
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
     use std::sync::Arc;
-    use std::time::Duration;
 
     use anyhow::Context;
     use rssr_application::{EntryService, FeedService, ImportExportService, SettingsService};
@@ -16,7 +15,7 @@ mod imp {
             settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,
             storage_backend::StorageBackend,
         },
-        fetch::{BodyAssetLocalizer, FetchClient, FetchRequest, FetchResult},
+        fetch::{FetchClient, FetchRequest, FetchResult},
         opml::OpmlCodec,
         parser::FeedParser,
     };
@@ -41,15 +40,11 @@ mod imp {
         settings_service: SettingsService,
         import_export_service: ImportExportService,
         fetch_client: FetchClient,
-        body_asset_localizer: BodyAssetLocalizer,
         parser: FeedParser,
         opml_codec: OpmlCodec,
     }
 
     impl AppServices {
-        const MAX_LOCALIZED_ENTRIES_PER_REFRESH: usize = 5;
-        const LOCALIZE_TIMEOUT: Duration = Duration::from_secs(5);
-
         pub async fn shared() -> anyhow::Result<Arc<Self>> {
             APP_SERVICES
                 .get_or_try_init(|| async {
@@ -81,7 +76,6 @@ mod imp {
                         feed_repository,
                         entry_repository,
                         fetch_client: FetchClient::new(),
-                        body_asset_localizer: BodyAssetLocalizer::new(),
                         parser: FeedParser::new(),
                         opml_codec: OpmlCodec::new(),
                     }))
@@ -235,48 +229,7 @@ mod imp {
                         .context("更新订阅抓取状态失败")?;
                 }
                 FetchResult::Fetched { body, metadata } => {
-                    let mut parsed = self.parser.parse(&body).context("解析订阅失败")?;
-                    let mut localized_entries = 0_usize;
-                    for entry in &mut parsed.entries {
-                        if let Some(content_html) = entry.content_html.take() {
-                            if localized_entries >= Self::MAX_LOCALIZED_ENTRIES_PER_REFRESH {
-                                entry.content_html = Some(content_html);
-                                continue;
-                            }
-
-                            let original_html = content_html;
-                            let localized_html = match tokio::time::timeout(
-                                Self::LOCALIZE_TIMEOUT,
-                                self.body_asset_localizer
-                                    .localize_html_images(&original_html, entry.url.as_ref()),
-                            )
-                            .await
-                            {
-                                Ok(Ok(localized_html)) => {
-                                    localized_entries += 1;
-                                    localized_html
-                                }
-                                Ok(Err(error)) => {
-                                    tracing::warn!(
-                                        entry_url = ?entry.url,
-                                        error = %error,
-                                        "正文图片本地化失败，保留原始 HTML"
-                                    );
-                                    original_html
-                                }
-                                Err(_) => {
-                                    tracing::warn!(
-                                        entry_url = ?entry.url,
-                                        timeout_secs = Self::LOCALIZE_TIMEOUT.as_secs(),
-                                        "正文图片本地化超时，保留原始 HTML"
-                                    );
-                                    original_html
-                                }
-                            };
-
-                            entry.content_html = Some(localized_html);
-                        }
-                    }
+                    let parsed = self.parser.parse(&body).context("解析订阅失败")?;
                     self.feed_repository
                         .update_feed_metadata(feed.id, &parsed)
                         .await
