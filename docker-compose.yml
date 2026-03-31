@@ -1,9 +1,6 @@
 services:
   rss-reader:
     image: ${RSS_READER_IMAGE:-ghcr.io/develata/rss-reader:latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
     ports:
       - "${RSS_READER_PORT:-8039}:80"
     restart: unless-stopped

@@ -1,0 +1,5 @@
+services:
+  rss-reader:
+    build:
+      context: .
+      dockerfile: Dockerfile

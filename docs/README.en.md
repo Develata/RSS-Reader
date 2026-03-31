@@ -115,7 +115,7 @@ cargo check -p rssr-app --target aarch64-linux-android
 Build a debug APK:
 
 ```bash
-dx bundle --platform android --package rssr-app --release --debug-symbols false
+dx bundle --platform android --package rssr-app --target aarch64-linux-android --release --debug-symbols false
 ```
 
 Output:
@@ -232,16 +232,12 @@ You do not need Nginx for:
 - `cargo run -p rssr-app`
 - `dx serve --platform web --package rssr-app`
 
-### Local image build
+### Pull and run the published image
+
+The default [docker-compose.yml](../docker-compose.yml) is a pull-only deployment template for the image published to GHCR:
 
 ```bash
-docker build -t rss-reader-web .
-```
-
-### Local compose run
-
-```bash
-docker compose up --build
+docker compose up -d
 ```
 
 Then open:
@@ -250,11 +246,27 @@ Then open:
 http://127.0.0.1:8039
 ```
 
-The compose file is also compatible with the GitHub-published image:
+Override the image tag or host port if needed:
 
-```text
-ghcr.io/develata/rss-reader:latest
+```bash
+RSS_READER_IMAGE=ghcr.io/develata/rss-reader:latest \
+RSS_READER_PORT=8090 \
+docker compose up -d
 ```
+
+You can also run the image directly:
+
+```bash
+docker run --rm -p 8039:80 ghcr.io/develata/rss-reader:latest
+```
+
+### Local image build
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+```
+
+This keeps the same compose defaults, but overrides the service to build from the current workspace instead of pulling from GHCR.
 
 ## CI/CD
 

@@ -275,11 +275,12 @@ Web 端使用 wasm SQLite，并把数据库持久化到浏览器存储中。
 - 桌面端：`cargo run -p rssr-app`
 - Web 开发：`dx serve --platform web --package rssr-app`
 
-### 直接本地构建镜像
+### 直接拉取 GitHub 镜像运行
+
+默认的 [docker-compose.yml](./docker-compose.yml) 是“直接拉取 GitHub Container Registry 镜像”的部署模板，不会在本地重新构建镜像：
 
 ```bash
-docker build -t rss-reader-web .
-docker compose up --build
+docker compose up -d
 ```
 
 默认访问：
@@ -293,18 +294,30 @@ http://127.0.0.1:8039
 ```bash
 RSS_READER_IMAGE=ghcr.io/develata/rss-reader:latest \
 RSS_READER_PORT=8090 \
-docker compose up
+docker compose up -d
 ```
 
-容器内会带基础健康检查，适合本地部署和简单服务器场景。
-
-### 直接使用 GitHub Container Registry 镜像
-
-如果你不想在本地重新构建镜像，可以直接拉取 GitHub Actions 发布的镜像：
+如果你不想用 compose，也可以直接运行镜像：
 
 ```bash
 docker run --rm -p 8039:80 ghcr.io/develata/rss-reader:latest
 ```
+
+### 本地构建镜像
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+```
+
+这会在保留 compose 默认端口配置的同时，覆盖成“从当前工作区构建镜像”。
+
+如果你只想手动验证 Dockerfile，也可以直接：
+
+```bash
+docker build -t rss-reader-web .
+```
+
+容器内会带基础健康检查，适合本地部署和简单服务器场景。
 
 ### `docker-compose.yml` 模板
 
