@@ -7,6 +7,7 @@ mod hooks;
 mod pages;
 mod router;
 mod theme;
+mod web_auth;
 
 use tracing_subscriber::EnvFilter;
 
