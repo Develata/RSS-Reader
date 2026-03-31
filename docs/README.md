@@ -1,48 +1,69 @@
 # 文档索引
 
-这里是 RSS Reader 的文档入口。  
-根目录 [`README.md`](../README.md) 面向仓库首页；这里收纳更细的设计、路线图与测试说明。
+这里是 RSS Reader 的细化文档入口。
+根目录 [README.md](../README.md) 面向仓库首页与快速使用，这里则收纳长期设计、平台路线图和测试说明。
 
-## 快速入口
+## 从哪里开始
 
-- [英文 README](./README.en.md)
-- [Android 发布路线图](./roadmaps/android-release-roadmap.md)
-- [手工回归清单](./testing/manual-regression.md)
+如果你是第一次进入仓库，建议按这个顺序阅读：
 
-## 设计文档
+1. [根 README](../README.md)
+2. [英文 README](./README.en.md)
+3. [前端命令与样式设计哲学](./design/frontend-command-and-styling-philosophy.md)
+
+如果你已经知道自己要做什么，可以直接走下面的分流：
+
+- 想改主题或让 AI 生成 CSS：
+  - [主题作者选择器参考](./design/theme-author-selector-reference.md)
+- 想理解当前交互边界、缓存策略和样式体系：
+  - [前端命令与样式设计哲学](./design/frontend-command-and-styling-philosophy.md)
+- 想准备 Android 发包或验收：
+  - [Android 安装包落地清单](./roadmaps/android-release-roadmap.md)
+- 想跑一轮人工验证：
+  - [手工回归测试清单](./testing/manual-regression.md)
+
+## 文档分区
+
+### 设计文档
 
 - [设计文档索引](./design/README.md)
 - [前端命令与样式设计哲学](./design/frontend-command-and-styling-philosophy.md)
 - [主题作者选择器参考](./design/theme-author-selector-reference.md)
 
-其中：
+这组文档主要回答：
 
-- `frontend-command-and-styling-philosophy.md`
-  - 解释样式与行为的边界、主题系统和缓存策略
-- `theme-author-selector-reference.md`
-  - 面向主题作者，也可直接提供给 AI，用来生成一份新的自定义 CSS
+- 行为与样式边界怎么划分
+- 哪些 selector / hook 可以长期依赖
+- 怎样在不碰 Rust 逻辑的前提下自定义主题
+- 怎样把这套接口直接交给 AI 生成 CSS
 
-## 路线图
+### 路线图
 
 - [路线图索引](./roadmaps/README.md)
 - [Android 安装包落地清单](./roadmaps/android-release-roadmap.md)
 
-## 测试与回归
+这组文档主要回答：
+
+- 哪些平台能力已经落地
+- 哪些还在持续推进
+- 下一步发布链和验收重点在哪里
+
+### 测试与回归
 
 - [测试与回归索引](./testing/README.md)
 - [手工回归测试清单](./testing/manual-regression.md)
+
+这组文档主要回答：
+
+- Web / desktop 应该如何做手工回归
+- 回归结果怎么记录
+- 当前哪些交互最值得重点观察
 
 ## 文档组织约定
 
 - `docs/design/`
   - 长期设计原则、接口边界、样式/交互约束
 - `docs/roadmaps/`
-  - 尚未完全落地的平台或发布路线
+  - 尚未完全并入当前稳定交付范围、但已进入规划或部分落地的平台路线
 - `docs/testing/`
   - 手工验证、回归记录、测试说明
-
-如果你只是第一次进入仓库，建议先读：
-
-1. [根 README](../README.md)
-2. [英文 README](./README.en.md)
-3. [前端命令与样式设计哲学](./design/frontend-command-and-styling-philosophy.md)

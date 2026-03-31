@@ -20,11 +20,9 @@
 
 ### 代码与工程
 
-- 缺少 Android 宿主工程
-  - `AndroidManifest.xml`
-  - `build.gradle(.kts)`
-  - `settings.gradle(.kts)`
-  - `gradle.properties`
+- 仓库中没有长期维护的 Android 宿主工程目录
+  - 当前主要依赖 Dioxus 在打包阶段生成 Android 工程骨架
+  - 这降低了仓库复杂度，但也意味着对生成模板和打包链的稳定性更敏感
 - 缺少 Android 平台入口与 Dioxus 移动端接线
 - 缺少 Android 数据库默认路径策略验证
 - 缺少 Android 文件导入导出与系统分享/文件选择方案
