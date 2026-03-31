@@ -5,6 +5,7 @@
 ## 当前文档
 
 - [手工回归测试清单](./manual-regression.md)
+- [全局浏览器回归报告](./global-browser-regression.md)
 
 ## 建议怎么使用
 
