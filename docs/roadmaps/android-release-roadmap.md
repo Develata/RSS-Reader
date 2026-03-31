@@ -171,11 +171,11 @@
 ## 建议的 GitHub Release 产物策略
 
 优先建议：
-- `rssr-app-android-arm64-v8a.apk`
-- `rssr-app-android-release.aab`
+- `rssr-app-android-arm64-v8a-debug.apk`
+- `rssr-app-android-arm64-v8a-release.aab`
 
 可选：
-- `rssr-app-android-x86_64.apk`
+- `rssr-app-android-x86_64-debug.apk`
   - 主要供模拟器或开发环境使用
   - 不一定需要面向普通用户发布
 

@@ -66,7 +66,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -83,7 +83,8 @@ jobs:
 
       - name: Build Android debug APK
         run: |
-          dx bundle --platform android --package rssr-app --release --debug-symbols false
+          rm -rf target/dx/rssr-app/release/android
+          dx bundle --platform android --package rssr-app --target aarch64-linux-android --release --debug-symbols false
 
       - name: Prepare Android release signing
         if: env.ANDROID_RELEASE_READY == 'true'
@@ -125,12 +126,12 @@ jobs:
         run: |
           mkdir -p release-assets
           cp target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk \
-             release-assets/rssr-app-android-debug.apk
+             release-assets/rssr-app-android-arm64-v8a-debug.apk
           if [ "$ANDROID_RELEASE_READY" = "true" ]; then
             cp target/dx/rssr-app/release/android/app/app/build/outputs/apk/release/app-release.apk \
-              release-assets/rssr-app-android-release.apk
+              release-assets/rssr-app-android-arm64-v8a-release.apk
             cp target/dx/rssr-app/release/android/app/app/build/outputs/bundle/release/app-release.aab \
-              release-assets/rssr-app-android-release.aab
+              release-assets/rssr-app-android-arm64-v8a-release.aab
           fi
 
       - name: Upload Android artifact

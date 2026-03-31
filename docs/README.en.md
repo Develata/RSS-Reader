@@ -179,13 +179,13 @@ The release workflow publishes:
 - `rssr-cli-macos-x86_64.tar.gz`
 - `rssr-app-macos-aarch64.tar.gz`
 - `rssr-cli-macos-aarch64.tar.gz`
-- `rssr-app-android-debug.apk`
+- `rssr-app-android-arm64-v8a-debug.apk`
 - `rssr-app-web.tar.gz`
 
 If Android signing secrets are configured, the release workflow also publishes:
 
-- `rssr-app-android-release.apk`
-- `rssr-app-android-release.aab`
+- `rssr-app-android-arm64-v8a-release.apk`
+- `rssr-app-android-arm64-v8a-release.aab`
 
 Current automatic release targets are:
 
@@ -195,7 +195,7 @@ Current automatic release targets are:
 - Android debug APK
 - Web static bundle
 
-The Android pipeline always publishes an unsigned debug APK for installation testing. If signing secrets are configured, it also publishes a signed release APK and AAB.
+The Android pipeline always publishes an unsigned `arm64-v8a` debug APK for installation testing on modern devices. If signing secrets are configured, it also publishes a signed `arm64-v8a` release APK and AAB.
 
 Android signing secrets expected by GitHub Actions:
 
