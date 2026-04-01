@@ -1,4 +1,3 @@
-use crate::web_auth;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{
@@ -752,9 +751,9 @@ async fn web_fetch_feed_response(
     let request_urls = web_refresh_request_urls(raw)?;
     let mut last_error = None;
 
-    for (index, request_url) in request_urls.iter().enumerate() {
+    for (index, request) in request_urls.iter().enumerate() {
         let response = client
-            .get(request_url)
+            .get(&request.url)
             .header(
                 header::ACCEPT,
                 "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
@@ -767,7 +766,8 @@ async fn web_fetch_feed_response(
                 if should_fallback_web_feed_request(
                     index,
                     request_urls.len(),
-                    response.status(),
+                    request,
+                    &response,
                 ) =>
             {
                 continue;
@@ -790,32 +790,45 @@ async fn web_fetch_feed_response(
 fn should_fallback_web_feed_request(
     index: usize,
     total: usize,
-    status: reqwest::StatusCode,
+    request: &WebFeedRequest,
+    response: &reqwest::Response,
 ) -> bool {
     index + 1 < total
-        && matches!(
-            status,
+        && (matches!(
+            response.status(),
             reqwest::StatusCode::NOT_FOUND
                 | reqwest::StatusCode::UNAUTHORIZED
                 | reqwest::StatusCode::FORBIDDEN
                 | reqwest::StatusCode::METHOD_NOT_ALLOWED
-        )
+        ) || request.kind == WebFeedRequestKind::Proxy
+            && response.status().is_success()
+            && looks_like_proxy_login_or_spa_shell(response))
 }
 
-fn web_refresh_request_urls(raw: &str) -> anyhow::Result<Vec<String>> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WebFeedRequestKind {
+    Proxy,
+    Direct,
+}
+
+#[derive(Debug, Clone)]
+struct WebFeedRequest {
+    url: String,
+    kind: WebFeedRequestKind,
+}
+
+fn web_refresh_request_urls(raw: &str) -> anyhow::Result<Vec<WebFeedRequest>> {
     let mut url = Url::parse(raw).with_context(|| format!("订阅 URL 不合法：{raw}"))?;
     if matches!(url.scheme(), "http" | "https") {
         url.query_pairs_mut().append_pair("_rssr_fetch", &js_sys::Date::now().round().to_string());
     }
     let mut request_urls = Vec::new();
 
-    if web_auth::has_server_gate_cookie()
-        && let Some(proxy_url) = web_feed_proxy_request_url(url.as_str())
-    {
-        request_urls.push(proxy_url);
+    if let Some(proxy_url) = web_feed_proxy_request_url(url.as_str()) {
+        request_urls.push(WebFeedRequest { url: proxy_url, kind: WebFeedRequestKind::Proxy });
     }
 
-    request_urls.push(url.to_string());
+    request_urls.push(WebFeedRequest { url: url.to_string(), kind: WebFeedRequestKind::Direct });
     Ok(request_urls)
 }
 
@@ -827,6 +840,21 @@ fn web_feed_proxy_request_url(feed_url: &str) -> Option<String> {
     proxy_url.set_query(None);
     proxy_url.query_pairs_mut().append_pair("url", feed_url);
     Some(proxy_url.to_string())
+}
+
+fn looks_like_proxy_login_or_spa_shell(response: &reqwest::Response) -> bool {
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if content_type.starts_with("text/html") || content_type.starts_with("application/xhtml+xml") {
+        return true;
+    }
+
+    response.url().path().starts_with("/login")
 }
 
 fn to_domain_entry(entry: &PersistedEntry) -> anyhow::Result<Entry> {

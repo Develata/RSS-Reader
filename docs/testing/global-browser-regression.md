@@ -6,10 +6,16 @@
 ## 测试环境
 
 - 时间：2026-04-01
-- 运行方式：`dx bundle --platform web --package rssr-app --release --out-dir target/web-e2e` 后，通过本地 SPA fallback 静态服务访问 `http://127.0.0.1:8054`
+- 运行方式：
+  - `dx bundle --platform web --package rssr-app --release --out-dir target/web-e2e`
+  - 静态 bundle 通过本地 SPA fallback 服务访问 `http://127.0.0.1:8054`
+  - `rssr-web` 通过本地服务访问 `http://127.0.0.1:8060`
 - 浏览器：Chrome MCP
-- 主要远端 feed：`https://github.blog/feed/`
+- 主要远端 feed：
+  - `https://github.blog/feed/`
+  - `https://www.ruanyifeng.com/blog/atom.xml`
 - WebDAV 测试端点：`http://127.0.0.1:8052/config.json`
+- 移动端视口：`390 x 844`
 
 ## 结论
 
@@ -18,6 +24,8 @@
 
 - wasm 端运行时不再因为 `tracing_subscriber` 的时间格式化而 panic
 - 本地 Web 登录页不再出现“密码框不在 form 内”的浏览器告警
+- `rssr-web` 部署态下，CORS 受限的 Atom/RSS 源可通过同源 `/feed-proxy` 成功导入
+- 小窗口下的导航、订阅页、文章页、阅读页和设置页都保持可用，无关键布局破坏
 
 ## 通过项
 
@@ -26,6 +34,7 @@
 - [x] 后续重新打开页面会进入登录页，输入已设置的用户名/密码后可正常进入应用。
 - [x] `订阅 / 文章 / 设置` 路由切换正常。
 - [x] 远端 feed `https://github.blog/feed/` 可添加并完成首次刷新。
+- [x] 通过 `rssr-web` 访问时，`https://www.ruanyifeng.com/blog/atom.xml` 可成功导入并完成首次刷新。
 - [x] 订阅页 `刷新全部` 可正常执行并更新状态。
 - [x] 订阅页两步确认删除订阅可正常工作。
 - [x] `导出配置` 可生成 JSON 配置包。
@@ -47,6 +56,7 @@
 - [x] WebDAV `下载配置` 可正常恢复远端保存的设置。
 - [x] 设置页表单字段具备关联标签，浏览器 Console 不再出现缺失 label / id / name 的 issue。
 - [x] 本轮复测结束时，浏览器 Console 仅保留正常业务 `INFO` 日志，没有新的 panic、`unreachable` 或表单结构告警。
+- [x] 在 `390 x 844` 小窗口视口下，顶部导航、订阅页、文章页、阅读页、设置页均可正常交互。
 
 ## 说明
 
@@ -58,4 +68,5 @@
   - [x] 登录后 SPA 路由仍可正常访问
   - [x] `/logout` 可清除会话并回到登录页
 - Desktop、CLI、Android 不在本报告范围内。
-- Web 端远端 feed 与正文图片仍受浏览器 CORS 约束；这属于平台边界，不影响本轮通过结论。
+- 纯静态 Web (`dx serve` / 仅托管 bundle) 仍受浏览器 CORS 约束；像阮一峰这类源需要通过 `rssr-web` 的同源代理访问。
+- Web 端正文图片仍受浏览器 CORS 约束；这属于平台边界，不影响本轮通过结论。

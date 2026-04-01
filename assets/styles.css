@@ -51,8 +51,9 @@ body {
   color: var(--ink);
   font-family: var(--font-ui);
   background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.7), transparent 32%),
-    linear-gradient(180deg, #efe4d6 0%, #f8f3eb 38%, #f3ede4 100%);
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.78), transparent 28%),
+    radial-gradient(circle at top right, rgba(201, 181, 159, 0.16), transparent 24%),
+    linear-gradient(180deg, #f2e9dc 0%, #f9f5ef 36%, #f5efe7 100%);
 }
 
 .theme-dark {
@@ -93,7 +94,7 @@ textarea {
 .app-shell {
   width: min(1080px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 12px 0 56px;
+  padding: 14px 0 56px;
 }
 
 .app-shell.density-compact {
@@ -107,43 +108,57 @@ textarea {
   justify-content: flex-start;
   gap: 12px;
   margin: 0 0 12px;
-  padding: 6px 8px;
-  border: 1px solid rgba(62, 42, 27, 0.09);
-  border-radius: 16px;
-  background: rgba(255, 250, 242, 0.46);
-  box-shadow: none;
-  backdrop-filter: blur(4px);
+  padding: 8px 10px;
+  border: 1px solid rgba(62, 42, 27, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 250, 242, 0.68);
+  box-shadow: 0 10px 24px rgba(63, 38, 18, 0.04);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 10px;
+  z-index: 10;
 }
 
 .app-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   margin: 0;
 }
 
 .app-nav__link {
-  padding: 8px 14px;
-  border: 1px solid var(--line);
+  padding: 9px 15px;
+  border: 1px solid rgba(62, 42, 27, 0.08);
   border-radius: 999px;
-  background: rgba(255, 250, 242, 0.58);
-  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+  background: rgba(255, 252, 247, 0.72);
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .app-nav__link:hover {
   transform: translateY(-1px);
   border-color: rgba(176, 74, 47, 0.35);
-  background: rgba(255, 250, 242, 0.96);
+  background: rgba(255, 250, 242, 0.98);
+  box-shadow: 0 8px 16px rgba(63, 38, 18, 0.06);
+}
+
+.app-nav__link[aria-current="page"] {
+  background: rgba(255, 248, 241, 0.98);
+  border-color: rgba(176, 74, 47, 0.26);
+  box-shadow: inset 0 0 0 1px rgba(176, 74, 47, 0.06);
 }
 
 .page {
   margin-top: 10px;
-  padding: 28px;
-  border: 1px solid var(--line);
-  border-radius: 28px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(8px);
+  padding: 28px 30px;
+  border: 1px solid rgba(62, 42, 27, 0.09);
+  border-radius: 30px;
+  background: linear-gradient(180deg, rgba(255, 251, 246, 0.9), rgba(255, 248, 240, 0.82));
+  box-shadow: 0 18px 40px rgba(63, 38, 18, 0.07);
+  backdrop-filter: blur(12px);
 }
 
 .app-shell.density-compact .page,
@@ -207,9 +222,9 @@ textarea {
 .feed-card,
 .entry-card {
   padding: 18px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(62, 42, 27, 0.09);
   border-radius: 22px;
-  background: var(--panel-strong);
+  background: rgba(255, 251, 246, 0.82);
 }
 
 .app-shell.density-compact .stat-card,
@@ -279,9 +294,9 @@ textarea {
 .exchange-card,
 .settings-card {
   padding: 18px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(62, 42, 27, 0.09);
   border-radius: 22px;
-  background: var(--panel-strong);
+  background: rgba(255, 251, 246, 0.84);
 }
 
 .exchange-card h3,
@@ -292,19 +307,27 @@ textarea {
 .text-input {
   width: 100%;
   padding: 14px 16px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(62, 42, 27, 0.09);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .text-area,
 .select-input {
   width: 100%;
   padding: 14px 16px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(62, 42, 27, 0.09);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.82);
   color: var(--ink);
+}
+
+.text-input:focus,
+.text-area:focus,
+.select-input:focus {
+  outline: none;
+  border-color: rgba(176, 74, 47, 0.32);
+  box-shadow: 0 0 0 4px rgba(176, 74, 47, 0.08);
 }
 
 .text-area {
@@ -327,18 +350,20 @@ textarea {
   padding: 14px 18px;
   border: 0;
   border-radius: 16px;
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
   color: #fff8f2;
   cursor: pointer;
   text-align: center;
+  box-shadow: 0 10px 22px rgba(122, 56, 35, 0.18);
 }
 
 .button.secondary {
-  background: #2f251e;
+  background: rgba(47, 37, 30, 0.92);
+  box-shadow: 0 10px 18px rgba(28, 21, 17, 0.1);
 }
 
 .button.danger {
-  background: #9c2f21;
+  background: linear-gradient(180deg, #b43d2d, #8f271b);
 }
 
 .button.danger-outline {
@@ -348,7 +373,8 @@ textarea {
 }
 
 .button:hover {
-  filter: brightness(1.04);
+  filter: brightness(1.03);
+  transform: translateY(-1px);
 }
 
 .inline-actions {
@@ -388,8 +414,8 @@ textarea {
   align-items: baseline;
   justify-content: space-between;
   gap: 10px 16px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(62, 42, 27, 0.1);
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(62, 42, 27, 0.08);
 }
 
 .entry-group__title {
@@ -495,7 +521,7 @@ textarea {
 }
 
 .entry-card--reading {
-  padding: 16px 0 18px;
+  padding: 18px 0 20px;
   border-width: 0 0 1px;
   border-radius: 0;
   background: transparent;
@@ -566,12 +592,12 @@ textarea {
 
 .reader-page {
   margin-top: 20px;
-  padding: 42px 52px 48px;
-  border: 1px solid rgba(62, 42, 27, 0.1);
+  padding: 40px 48px 46px;
+  border: 1px solid rgba(62, 42, 27, 0.08);
   border-radius: 32px;
   background:
     linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(255, 250, 243, 0.95));
-  box-shadow: 0 22px 56px rgba(63, 38, 18, 0.08);
+  box-shadow: 0 22px 56px rgba(63, 38, 18, 0.07);
 }
 
 .reader-header {
@@ -614,7 +640,7 @@ textarea {
   padding: 14px 18px;
   border: 1px solid rgba(62, 42, 27, 0.08);
   border-radius: 18px;
-  background: rgba(255, 250, 242, 0.64);
+  background: rgba(255, 250, 242, 0.72);
 }
 
 .reader-body {
@@ -795,7 +821,7 @@ textarea {
 @media (max-width: 720px) {
   .app-shell {
     width: min(100vw - 16px, 1080px);
-    padding: 8px 0 40px;
+    padding: 10px 0 34px;
   }
 
   .app-nav-shell,
@@ -806,15 +832,13 @@ textarea {
   }
 
   .app-nav-shell {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
+    gap: 10px;
   }
 
   .app-nav {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
 
@@ -874,7 +898,7 @@ textarea {
 
   .reader-page {
     margin-top: 14px;
-    padding: 24px 22px 28px;
+    padding: 24px 20px 28px;
   }
 
   .reader-title {
@@ -911,15 +935,21 @@ textarea {
     width: min(100vw - 12px, 1080px);
   }
 
-  .app-nav {
-    grid-template-columns: 1fr;
-  }
-
   .app-nav-shell,
   .page,
   .reader-page {
-    padding: 16px;
+    padding: 16px 14px;
     border-radius: 18px;
+  }
+
+  .app-nav {
+    gap: 6px;
+  }
+
+  .app-nav__link {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 0.95rem;
   }
 
   .page h2 {

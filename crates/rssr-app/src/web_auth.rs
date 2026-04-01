@@ -95,17 +95,6 @@ pub async fn verify_server_gate() -> bool {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn has_server_gate_cookie() -> bool {
-    server_gate_present()
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[allow(dead_code)]
-pub fn has_server_gate_cookie() -> bool {
-    false
-}
-
-#[cfg(target_arch = "wasm32")]
 pub fn local_auth_state() -> WebAuthState {
     let Some(credentials) = load_credentials() else {
         return WebAuthState::NeedsSetup;
