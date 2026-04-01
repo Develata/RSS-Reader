@@ -7,6 +7,9 @@ use crate::{
     web_auth::{WebAuthState, auth_state, configured_username, login, setup_credentials},
 };
 
+const APP_NAME: &str = "RSS-Reader";
+const WEB_AUTH_MARKUP: &str = include_str!("../../../assets/branding/rssr-mark.svg");
+
 #[component]
 #[allow(non_snake_case)]
 pub fn App() -> Element {
@@ -77,7 +80,7 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
 
     let title = match state {
         WebAuthState::NeedsSetup => "初始化 Web 登录",
-        WebAuthState::NeedsLogin => "登录 RSS Reader",
+        WebAuthState::NeedsLogin => "登录 RSS-Reader",
         WebAuthState::Authenticated => unreachable!(),
     };
     let intro = match state {
@@ -94,6 +97,10 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
     rsx! {
         div { class: "web-auth-shell",
             div { class: "web-auth-card",
+                div { class: "web-auth-brand",
+                    div { class: "web-auth-brand__mark", dangerous_inner_html: "{WEB_AUTH_MARKUP}" }
+                    p { class: "web-auth-brand__name", "{APP_NAME}" }
+                }
                 h1 { class: "web-auth-card__title", "{title}" }
                 p { class: "web-auth-card__intro", "{intro}" }
                 p {

@@ -1,4 +1,4 @@
-# RSS Reader
+# RSS-Reader
 
 A local-first RSS reader built with Rust and Dioxus.
 
@@ -172,21 +172,21 @@ Notes:
 
 The release workflow publishes:
 
-- `rssr-app-windows-x86_64.zip`
+- `RSS-Reader-windows-x86_64.zip`
 - `rssr-cli-windows-x86_64.zip`
-- `rssr-app-linux-x86_64.tar.gz`
+- `RSS-Reader-linux-x86_64.tar.gz`
 - `rssr-cli-linux-x86_64.tar.gz`
-- `rssr-app-macos-x86_64.tar.gz`
+- `RSS-Reader-macos-x86_64.tar.gz`
 - `rssr-cli-macos-x86_64.tar.gz`
-- `rssr-app-macos-aarch64.tar.gz`
+- `RSS-Reader-macos-aarch64.tar.gz`
 - `rssr-cli-macos-aarch64.tar.gz`
-- `rssr-app-android-arm64-v8a-debug.apk`
-- `rssr-app-web.tar.gz`
+- `RSS-Reader-android-arm64-v8a-debug.apk`
+- `RSS-Reader-web.tar.gz`
 
 If Android signing secrets are configured, the release workflow also publishes:
 
-- `rssr-app-android-arm64-v8a-release.apk`
-- `rssr-app-android-arm64-v8a-release.aab`
+- `RSS-Reader-android-arm64-v8a-release.apk`
+- `RSS-Reader-android-arm64-v8a-release.aab`
 
 Current automatic release targets are:
 

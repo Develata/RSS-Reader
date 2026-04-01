@@ -21,6 +21,8 @@ use tracing_subscriber::EnvFilter;
 type HmacSha256 = Hmac<Sha256>;
 
 const SESSION_COOKIE: &str = "rssr_web_session";
+const APP_NAME: &str = "RSS-Reader";
+const WEB_LOGIN_MARKUP: &str = include_str!("../../../assets/branding/rssr-mark.svg");
 
 #[derive(Clone)]
 struct AppState {
@@ -156,7 +158,7 @@ async fn show_login(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RSS Reader 登录</title>
+  <title>{} 登录</title>
   <style>
     :root {{
       color-scheme: light;
@@ -189,6 +191,28 @@ async fn show_login(
       border-radius: 20px;
       box-shadow: var(--shadow);
       padding: 28px;
+    }}
+    .brand {{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }}
+    .brand-mark {{
+      width: 56px;
+      height: 56px;
+      flex: 0 0 auto;
+    }}
+    .brand-mark svg {{
+      display: block;
+      width: 100%;
+      height: 100%;
+    }}
+    .brand-name {{
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
     }}
     h1 {{ margin: 0 0 8px; font-size: 1.8rem; }}
     p {{ margin: 0 0 16px; color: var(--muted); line-height: 1.6; }}
@@ -225,7 +249,11 @@ async fn show_login(
 </head>
 <body>
   <main class="login-shell">
-    <h1>登录 RSS Reader</h1>
+    <div class="brand">
+      <div class="brand-mark">{}</div>
+      <p class="brand-name">{}</p>
+    </div>
+    <h1>登录 {}</h1>
     <p>这个 Web 部署启用了登录保护。输入部署者提供的用户名和密码后，才能进入阅读器。</p>
     <div class="error">{}</div>
     <form method="post" action="/login" autocomplete="on">
@@ -242,6 +270,10 @@ async fn show_login(
   </main>
 </body>
 </html>"#,
+        APP_NAME,
+        WEB_LOGIN_MARKUP,
+        APP_NAME,
+        APP_NAME,
         error_message,
         html_escape(next),
         secure_note

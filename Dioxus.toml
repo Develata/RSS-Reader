@@ -1,5 +1,5 @@
 [application]
-name = "RSS Reader"
+name = "RSS-Reader"
 default_platform = "desktop"
 out_dir = "dist"
 
@@ -8,7 +8,7 @@ identifier = "io.github.develata.rssreader"
 publisher = "Develata"
 
 [web.app]
-title = "RSS Reader"
+title = "RSS-Reader"
 
 [android]
 min_sdk = 24

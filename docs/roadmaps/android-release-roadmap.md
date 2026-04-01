@@ -169,11 +169,11 @@
 ## 建议的 GitHub Release 产物策略
 
 优先建议：
-- `rssr-app-android-arm64-v8a-debug.apk`
-- `rssr-app-android-arm64-v8a-release.aab`
+- `RSS-Reader-android-arm64-v8a-debug.apk`
+- `RSS-Reader-android-arm64-v8a-release.aab`
 
 可选：
-- `rssr-app-android-x86_64-debug.apk`
+- `RSS-Reader-android-x86_64-debug.apk`
   - 主要供模拟器或开发环境使用
   - 不一定需要面向普通用户发布
 

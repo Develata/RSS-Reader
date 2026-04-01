@@ -500,6 +500,33 @@ textarea {
   padding: 28px;
 }
 
+.web-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.web-auth-brand__mark {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+}
+
+.web-auth-brand__mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.web-auth-brand__name {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
 .web-auth-card__title {
   margin: 0 0 10px;
 }

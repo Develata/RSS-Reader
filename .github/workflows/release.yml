@@ -126,12 +126,12 @@ jobs:
         run: |
           mkdir -p release-assets
           cp target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk \
-             release-assets/rssr-app-android-arm64-v8a-debug.apk
+             release-assets/RSS-Reader-android-arm64-v8a-debug.apk
           if [ "$ANDROID_RELEASE_READY" = "true" ]; then
             cp target/dx/rssr-app/release/android/app/app/build/outputs/apk/release/app-release.apk \
-              release-assets/rssr-app-android-arm64-v8a-release.apk
+              release-assets/RSS-Reader-android-arm64-v8a-release.apk
             cp target/dx/rssr-app/release/android/app/app/build/outputs/bundle/release/app-release.aab \
-              release-assets/rssr-app-android-arm64-v8a-release.aab
+              release-assets/RSS-Reader-android-arm64-v8a-release.aab
           fi
 
       - name: Upload Android artifact
@@ -161,7 +161,9 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release-assets | Out-Null
-          Compress-Archive -Path target/release/rssr-app.exe -DestinationPath release-assets/rssr-app-windows-x86_64.zip
+          New-Item -ItemType Directory -Force staging/RSS-Reader | Out-Null
+          Copy-Item target/release/rssr-app.exe staging/RSS-Reader/RSS-Reader.exe
+          Compress-Archive -Path staging/RSS-Reader/* -DestinationPath release-assets/RSS-Reader-windows-x86_64.zip
           Compress-Archive -Path target/release/rssr-cli.exe -DestinationPath release-assets/rssr-cli-windows-x86_64.zip
 
       - name: Upload Windows artifacts
@@ -200,7 +202,9 @@ jobs:
       - name: Archive Linux binaries
         run: |
           mkdir -p release-assets
-          tar -C target/release -czf release-assets/rssr-app-linux-x86_64.tar.gz rssr-app
+          mkdir -p staging/RSS-Reader
+          cp target/release/rssr-app staging/RSS-Reader/RSS-Reader
+          tar -C staging/RSS-Reader -czf release-assets/RSS-Reader-linux-x86_64.tar.gz RSS-Reader
           tar -C target/release -czf release-assets/rssr-cli-linux-x86_64.tar.gz rssr-cli
 
       - name: Upload Linux artifacts
@@ -232,7 +236,7 @@ jobs:
       - name: Archive web bundle
         run: |
           mkdir -p release-assets
-          tar -C target/web-dist -czf release-assets/rssr-app-web.tar.gz public
+          tar -C target/web-dist -czf release-assets/RSS-Reader-web.tar.gz public
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
@@ -270,7 +274,9 @@ jobs:
       - name: Archive macOS binaries
         run: |
           mkdir -p release-assets
-          tar -C target/${{ matrix.target }}/release -czf release-assets/rssr-app-${{ matrix.suffix }}.tar.gz rssr-app
+          mkdir -p staging/RSS-Reader-${{ matrix.suffix }}
+          cp target/${{ matrix.target }}/release/rssr-app staging/RSS-Reader-${{ matrix.suffix }}/RSS-Reader
+          tar -C staging/RSS-Reader-${{ matrix.suffix }} -czf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz RSS-Reader
           tar -C target/${{ matrix.target }}/release -czf release-assets/rssr-cli-${{ matrix.suffix }}.tar.gz rssr-cli
 
       - name: Upload macOS artifacts

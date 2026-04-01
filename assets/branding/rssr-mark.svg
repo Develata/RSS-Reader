@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">RSS-Reader mark</title>
+  <desc id="desc">A minimal rounded-square mark with the letters RSSR.</desc>
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="#fff9f0" stroke="#3b2b20" stroke-width="6"/>
+  <path d="M28 34h72" stroke="#c96a2b" stroke-width="8" stroke-linecap="round"/>
+  <text
+    x="64"
+    y="80"
+    text-anchor="middle"
+    font-size="34"
+    font-weight="800"
+    letter-spacing="1.5"
+    fill="#241a14"
+    font-family="Segoe UI, Helvetica Neue, Arial, PingFang SC, Microsoft YaHei, sans-serif"
+  >
+    RSSR
+  </text>
+</svg>

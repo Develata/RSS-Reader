@@ -21,7 +21,7 @@ use rssr_infra::{
 use url::Url;
 
 #[derive(Parser, Debug)]
-#[command(name = "rssr", about = "RSS Reader command-line interface")]
+#[command(name = "rssr", about = "RSS-Reader command-line interface")]
 struct Cli {
     #[arg(long)]
     database_url: Option<String>,

@@ -28,7 +28,7 @@ fn main() {
     init_tracing();
 
     let window = WindowBuilder::new()
-        .with_title("RSS Reader")
+        .with_title("RSS-Reader")
         .with_inner_size(LogicalSize::new(1280.0, 900.0))
         .with_visible(true)
         .with_focused(true)
