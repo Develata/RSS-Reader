@@ -134,7 +134,10 @@ pub fn SettingsPage() -> Element {
             StatusBanner { message: status(), tone: status_tone() }
             div { class: "settings-grid",
                 div { class: "settings-card",
-                    h3 { "阅读外观" }
+                    div { class: "settings-card__header",
+                        h3 { "阅读外观" }
+                        p { class: "settings-card__intro", "这里决定阅读器的外观、节奏和默认进入方式。样式会尽量即时生效，避免反复保存试错。" }
+                    }
                     label { class: "field-label", r#for: "settings-theme-mode", "主题" }
                     select {
                         id: "settings-theme-mode",
@@ -553,7 +556,10 @@ pub fn SettingsPage() -> Element {
                     }
                 }
                 div { class: "settings-card",
-                    h3 { "WebDAV 配置交换" }
+                    div { class: "settings-card__header",
+                        h3 { "WebDAV 配置交换" }
+                        p { class: "settings-card__intro", "这里只负责配置同步，不上传文章正文和本地阅读状态。保持交换边界简单，能减少跨平台故障。" }
+                    }
                     label { class: "field-label", r#for: "settings-webdav-endpoint", "Endpoint" }
                     input {
                         id: "settings-webdav-endpoint",

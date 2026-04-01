@@ -205,6 +205,23 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     }
                 }
             }
+            div { class: "entry-overview",
+                div { class: "entry-overview__metric",
+                    span { class: "entry-overview__label", "当前结果" }
+                    strong { class: "entry-overview__value", "{visible_entries.len()}" }
+                }
+                div { class: "entry-overview__metric",
+                    span { class: "entry-overview__label", "归档文章" }
+                    strong { class: "entry-overview__value", "{archived_count}" }
+                }
+                div { class: "entry-overview__metric entry-overview__metric--hint",
+                    span { class: "entry-overview__label", "当前组织" }
+                    strong {
+                        class: "entry-overview__value",
+                        if grouping_mode() == EntryGroupingMode::Time { "按时间" } else { "按来源" }
+                    }
+                }
+            }
             EntryFilters {
                 search: search(),
                 unread_only: unread_only(),
