@@ -98,7 +98,7 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
     let mut username = use_signal(String::new);
     let mut password = use_signal(String::new);
     let mut status =
-        use_signal(|| "Web 端当前启用了本地登录门禁。首次使用请先设置用户名和密码。".to_string());
+        use_signal(|| "当前处于本地浏览器保护模式。首次使用请先设置用户名和密码。".to_string());
     let mut status_tone = use_signal(|| "info".to_string());
 
     use_effect(move || {
@@ -117,8 +117,12 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
         WebAuthState::Authenticated | WebAuthState::PendingServerProbe => unreachable!(),
     };
     let intro = match state {
-        WebAuthState::NeedsSetup => "首次进入这个浏览器环境时，需要先设置一组本地用户名和密码。",
-        WebAuthState::NeedsLogin => "请输入先前设置的用户名和密码，解锁当前浏览器里的阅读器数据。",
+        WebAuthState::NeedsSetup => {
+            "当前只在本地浏览器使用场景下启用了数据保护。首次进入这个浏览器环境时，需要先设置一组本地用户名和密码。"
+        }
+        WebAuthState::NeedsLogin => {
+            "请输入先前设置的用户名和密码，解锁当前浏览器里的本地阅读器数据。"
+        }
         WebAuthState::Authenticated | WebAuthState::PendingServerProbe => unreachable!(),
     };
     let submit_label = match state {
@@ -200,7 +204,7 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
                 }
                 p {
                     class: "web-auth-card__note",
-                    "说明：这层登录门禁用于浏览器本地使用场景与开发态验证。对外部署时，真正的安全门禁仍应使用 rssr-web 服务端登录。"
+                    "说明：这层门禁只用于 localhost 等本地浏览器场景下保护本地数据。对外部署时，真正的访问控制仍应由 rssr-web 服务端登录承担。"
                 }
             }
         }

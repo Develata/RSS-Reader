@@ -67,6 +67,10 @@ pub fn auth_state() -> WebAuthState {
         return WebAuthState::PendingServerProbe;
     }
 
+    if !local_web_auth_enabled() {
+        return WebAuthState::Authenticated;
+    }
+
     local_auth_state()
 }
 
@@ -263,4 +267,39 @@ fn server_gate_present() -> bool {
         .map(str::trim)
         .filter_map(|entry| entry.split_once('='))
         .any(|(name, value)| name == SERVER_GATE_COOKIE && value == "1")
+}
+
+#[cfg(target_arch = "wasm32")]
+fn local_web_auth_enabled() -> bool {
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    let Ok(hostname) = window.location().hostname() else {
+        return false;
+    };
+    is_local_protection_host(&hostname)
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+fn is_local_protection_host(hostname: &str) -> bool {
+    let hostname = hostname.trim().to_ascii_lowercase();
+    matches!(hostname.as_str(), "localhost" | "127.0.0.1" | "::1" | "[::1]")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_local_protection_host;
+
+    #[test]
+    fn local_web_auth_only_applies_to_loopback_hosts() {
+        assert!(is_local_protection_host("localhost"));
+        assert!(is_local_protection_host("LOCALHOST"));
+        assert!(is_local_protection_host("127.0.0.1"));
+        assert!(is_local_protection_host("::1"));
+        assert!(is_local_protection_host("[::1]"));
+
+        assert!(!is_local_protection_host("rss-reader.example.com"));
+        assert!(!is_local_protection_host("192.168.1.10"));
+        assert!(!is_local_protection_host("0.0.0.0"));
+    }
 }
