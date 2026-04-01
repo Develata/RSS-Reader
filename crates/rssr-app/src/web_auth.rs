@@ -1,12 +1,16 @@
 #[cfg(target_arch = "wasm32")]
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 #[cfg(target_arch = "wasm32")]
+use js_sys::wasm_bindgen::JsCast;
+#[cfg(target_arch = "wasm32")]
 use sha2::{Digest, Sha256};
 
 #[cfg(target_arch = "wasm32")]
 const AUTH_CONFIG_KEY: &str = "rssr-web-auth-config-v1";
 #[cfg(target_arch = "wasm32")]
 const AUTH_SESSION_KEY: &str = "rssr-web-auth-session-v1";
+#[cfg(target_arch = "wasm32")]
+const SERVER_GATE_COOKIE: &str = "rssr_web_gate";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WebAuthState {
@@ -58,6 +62,10 @@ impl StoredCredentials {
 
 #[cfg(target_arch = "wasm32")]
 pub fn auth_state() -> WebAuthState {
+    if server_gate_present() {
+        return WebAuthState::Authenticated;
+    }
+
     let Some(credentials) = load_credentials() else {
         return WebAuthState::NeedsSetup;
     };
@@ -187,4 +195,25 @@ fn session_storage_set(key: &str, value: &str) -> Result<(), String> {
         .map_err(|err| format!("读取会话存储失败：{err:?}"))?
         .ok_or_else(|| "浏览器不支持 sessionStorage。".to_string())?;
     storage.set_item(key, value).map_err(|err| format!("写入会话存储失败：{err:?}"))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn server_gate_present() -> bool {
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    let Some(document) = window.document() else {
+        return false;
+    };
+    let Ok(html_document) = document.dyn_into::<web_sys::HtmlDocument>() else {
+        return false;
+    };
+    let Ok(cookie_string) = html_document.cookie() else {
+        return false;
+    };
+    cookie_string
+        .split(';')
+        .map(str::trim)
+        .filter_map(|entry| entry.split_once('='))
+        .any(|(name, value)| name == SERVER_GATE_COOKIE && value == "1")
 }

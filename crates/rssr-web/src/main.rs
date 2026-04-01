@@ -21,6 +21,7 @@ use tracing_subscriber::EnvFilter;
 type HmacSha256 = Hmac<Sha256>;
 
 const SESSION_COOKIE: &str = "rssr_web_session";
+const GATE_COOKIE: &str = "rssr_web_gate";
 const APP_NAME: &str = "RSS-Reader";
 const WEB_LOGIN_MARKUP: &str = include_str!("../../../assets/branding/rssr-mark.svg");
 
@@ -311,6 +312,10 @@ async fn handle_login(
         HeaderValue::from_str(&session_cookie_header(&token, &state.config))
             .expect("valid session cookie"),
     );
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        HeaderValue::from_str(&gate_cookie_header(&state.config)).expect("valid gate cookie"),
+    );
     response
 }
 
@@ -319,6 +324,11 @@ async fn handle_logout(State(state): State<AppState>) -> impl IntoResponse {
     response.headers_mut().append(
         header::SET_COOKIE,
         HeaderValue::from_str(&logout_cookie_header(&state.config)).expect("valid logout cookie"),
+    );
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        HeaderValue::from_str(&logout_gate_cookie_header(&state.config))
+            .expect("valid logout gate cookie"),
     );
     response
 }
@@ -408,6 +418,17 @@ fn session_cookie_header(token: &str, config: &AuthConfig) -> String {
 fn logout_cookie_header(config: &AuthConfig) -> String {
     let secure = if config.secure_cookie { "; Secure" } else { "" };
     format!("{SESSION_COOKIE}=deleted; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure}")
+}
+
+fn gate_cookie_header(config: &AuthConfig) -> String {
+    let max_age = config.session_ttl.whole_seconds();
+    let secure = if config.secure_cookie { "; Secure" } else { "" };
+    format!("{GATE_COOKIE}=1; Path=/; SameSite=Lax; Max-Age={max_age}{secure}")
+}
+
+fn logout_gate_cookie_header(config: &AuthConfig) -> String {
+    let secure = if config.secure_cookie { "; Secure" } else { "" };
+    format!("{GATE_COOKIE}=deleted; Path=/; SameSite=Lax; Max-Age=0{secure}")
 }
 
 fn extract_cookie<'a>(headers: &'a axum::http::HeaderMap, name: &str) -> Option<&'a str> {
