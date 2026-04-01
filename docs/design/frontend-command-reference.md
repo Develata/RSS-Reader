@@ -37,6 +37,9 @@
 - 标记已读 / 未读
 - 切换收藏
 - 按标题搜索
+- 按来源浏览 / 分组
+- 按时间浏览 / 分组
+- 查看归档文章
 - 仅未读筛选
 - 仅收藏筛选
 - 返回上一页
@@ -95,7 +98,6 @@
 
 页面级作用域应长期保持稳定：
 
-- `data-page="home"`
 - `data-page="feeds"`
 - `data-page="entries"`
 - `data-page="reader"`
@@ -139,6 +141,9 @@
 - `data-action="mark-read"`
 - `data-action="toggle-starred"`
 - `data-action="search-title"`
+- `data-action="group-by-source"`
+- `data-action="group-by-time"`
+- `data-action="toggle-archived"`
 - `data-action="filter-unread"`
 - `data-action="filter-starred"`
 
