@@ -115,15 +115,14 @@
 
 ## 页面结构心智模型
 
-把当前应用理解成 5 个稳定页面和 3 层公共结构会更容易产出主题：
+把当前应用理解成 4 个稳定页面和 3 层公共结构会更容易产出主题：
 
 - 公共结构
   - `.app-shell`
   - `.app-header`
   - `.app-nav`
 - 页面
-  - 首页：统计与概览
-  - 订阅页：feed 管理 + 导入导出
+  - 订阅页：feed 管理 + 统计概览 + 导入导出
   - 文章页：文章列表 + 筛选 + 列表动作
   - 阅读页：正文阅读 + 元信息 + 上下篇导航
   - 设置页：主题/阅读选项 + WebDAV
@@ -151,7 +150,6 @@
 
 ## 页面级 hook
 
-- `[data-page="home"]`
 - `[data-page="feeds"]`
 - `[data-page="entries"]`
 - `[data-page="reader"]`
@@ -164,7 +162,6 @@
 
 ## 导航 hook
 
-- `[data-nav="home"]`
 - `[data-nav="feeds"]`
 - `[data-nav="entries"]`
 - `[data-nav="settings"]`
@@ -258,7 +255,6 @@
 - `.app-nav`
 - `.app-nav__link`
 - `.page`
-- `.page-home`
 - `.page-feeds`
 - `.page-entries`
 - `.page-settings`

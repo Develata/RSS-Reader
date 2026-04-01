@@ -112,7 +112,6 @@
 
 导航语义标记应长期保持稳定：
 
-- `data-nav="home"`
 - `data-nav="feeds"`
 - `data-nav="entries"`
 - `data-nav="settings"`
