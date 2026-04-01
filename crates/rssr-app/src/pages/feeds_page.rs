@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use rssr_domain::FeedSummary;
+use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::{
     app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner, router::AppRoute,
@@ -243,7 +244,14 @@ pub fn FeedsPage() -> Element {
                                         to: AppRoute::FeedEntriesPage { feed_id: feed.id },
                                         "{feed.title}"
                                     }
-                                    div { class: "feed-card__meta", "未读 {feed.unread_count}" }
+                                    p { class: "feed-card__url", "{feed.url}" }
+                                    div { class: "feed-card__meta-group",
+                                        p { class: "feed-card__meta", "本地文章 {feed.entry_count} · 未读 {feed.unread_count}" }
+                                        p { class: "feed-card__meta", "{feed_refresh_status_text(&feed)}" }
+                                        if let Some(error) = &feed.fetch_error {
+                                            p { class: "feed-card__meta feed-card__meta--error", "最近失败：{error}" }
+                                        }
+                                    }
                                     div { class: "entry-card__actions",
                                         button {
                                             class: "button secondary",
@@ -321,4 +329,36 @@ fn set_status_info(mut status: Signal<String>, mut status_tone: Signal<String>, 
 fn set_status_error(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
     status.set(message);
     status_tone.set("error".to_string());
+}
+
+fn feed_refresh_status_text(feed: &FeedSummary) -> String {
+    match (feed.last_success_at, feed.last_fetched_at) {
+        (Some(last_success_at), Some(last_fetched_at)) if last_fetched_at > last_success_at => {
+            format!(
+                "最近尝试：{} · 最近成功：{}",
+                format_feed_datetime_utc(Some(last_fetched_at))
+                    .unwrap_or_else(|| "未知".to_string()),
+                format_feed_datetime_utc(Some(last_success_at))
+                    .unwrap_or_else(|| "未知".to_string())
+            )
+        }
+        (Some(last_success_at), _) => format!(
+            "最近成功：{}",
+            format_feed_datetime_utc(Some(last_success_at)).unwrap_or_else(|| "未知".to_string())
+        ),
+        (None, Some(last_fetched_at)) => format!(
+            "最近尝试：{}",
+            format_feed_datetime_utc(Some(last_fetched_at)).unwrap_or_else(|| "未知".to_string())
+        ),
+        (None, None) => "尚未刷新".to_string(),
+    }
+}
+
+fn format_feed_datetime_utc(value: Option<OffsetDateTime>) -> Option<String> {
+    const FEED_DATE_TIME_FORMAT: &[time::format_description::FormatItem<'static>] =
+        format_description!("[year]-[month]-[day] [hour]:[minute] UTC");
+
+    value.and_then(|timestamp| {
+        timestamp.to_offset(UtcOffset::UTC).format(FEED_DATE_TIME_FORMAT).ok()
+    })
 }

@@ -451,6 +451,29 @@ textarea {
   font-weight: 700;
 }
 
+.feed-card__url {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  word-break: break-all;
+}
+
+.feed-card__meta-group {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.feed-card__meta {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.feed-card__meta--error {
+  color: #8d2d1f;
+}
+
 .entry-card__meta {
   margin-top: 8px;
 }

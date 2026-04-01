@@ -257,7 +257,7 @@ impl AppServices {
             .context("读取订阅失败")?
             .context("订阅不存在")?;
 
-        let response = self
+        let response = match self
             .fetch_client
             .fetch(&FetchRequest {
                 url: feed.url.to_string(),
@@ -265,7 +265,17 @@ impl AppServices {
                 last_modified: feed.last_modified.clone(),
             })
             .await
-            .with_context(|| format!("抓取订阅失败: {}", feed.url))?;
+        {
+            Ok(response) => response,
+            Err(error) => {
+                let message = format!("抓取订阅失败: {error}");
+                let _ = self
+                    .feed_repository
+                    .update_fetch_state(feed.id, None, None, Some(&message), false)
+                    .await;
+                return Err(error).with_context(|| format!("抓取订阅失败: {}", feed.url));
+            }
+        };
 
         match response {
             FetchResult::NotModified(metadata) => {
@@ -281,16 +291,56 @@ impl AppServices {
                     .context("更新订阅抓取状态失败")?;
             }
             FetchResult::Fetched { body, metadata } => {
-                let parsed = self.parser.parse(&body).context("解析订阅失败")?;
+                let parsed = match self.parser.parse(&body) {
+                    Ok(parsed) => parsed,
+                    Err(error) => {
+                        let message = format!("解析订阅失败: {error}");
+                        let _ = self
+                            .feed_repository
+                            .update_fetch_state(
+                                feed.id,
+                                metadata.etag.as_deref(),
+                                metadata.last_modified.as_deref(),
+                                Some(&message),
+                                false,
+                            )
+                            .await;
+                        return Err(error).context("解析订阅失败");
+                    }
+                };
                 let entries_for_localize = parsed.entries.clone();
-                self.feed_repository
-                    .update_feed_metadata(feed.id, &parsed)
-                    .await
-                    .context("更新订阅元数据失败")?;
-                self.entry_repository
-                    .upsert_entries(feed.id, &parsed.entries)
-                    .await
-                    .context("写入文章失败")?;
+                if let Err(error) =
+                    self.feed_repository.update_feed_metadata(feed.id, &parsed).await
+                {
+                    let message = format!("更新订阅元数据失败: {error}");
+                    let _ = self
+                        .feed_repository
+                        .update_fetch_state(
+                            feed.id,
+                            metadata.etag.as_deref(),
+                            metadata.last_modified.as_deref(),
+                            Some(&message),
+                            false,
+                        )
+                        .await;
+                    return Err(error).context("更新订阅元数据失败");
+                }
+                if let Err(error) =
+                    self.entry_repository.upsert_entries(feed.id, &parsed.entries).await
+                {
+                    let message = format!("写入文章失败: {error}");
+                    let _ = self
+                        .feed_repository
+                        .update_fetch_state(
+                            feed.id,
+                            metadata.etag.as_deref(),
+                            metadata.last_modified.as_deref(),
+                            Some(&message),
+                            false,
+                        )
+                        .await;
+                    return Err(error).context("写入文章失败");
+                }
                 self.feed_repository
                     .update_fetch_state(
                         feed.id,

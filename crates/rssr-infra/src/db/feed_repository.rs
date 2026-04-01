@@ -213,11 +213,16 @@ impl FeedRepository for SqliteFeedRepository {
             r#"
             SELECT feeds.id,
                    COALESCE(feeds.title, feeds.url) AS title,
-                   COALESCE(SUM(CASE WHEN entries.is_read = 0 THEN 1 ELSE 0 END), 0) AS unread_count
+                   feeds.url AS url,
+                   COALESCE(SUM(CASE WHEN entries.is_read = 0 THEN 1 ELSE 0 END), 0) AS unread_count,
+                   COUNT(entries.id) AS entry_count,
+                   feeds.last_fetched_at AS last_fetched_at,
+                   feeds.last_success_at AS last_success_at,
+                   feeds.fetch_error AS fetch_error
             FROM feeds
             LEFT JOIN entries ON entries.feed_id = feeds.id
             WHERE feeds.is_deleted = 0
-            GROUP BY feeds.id, feeds.title, feeds.url
+            GROUP BY feeds.id, feeds.title, feeds.url, feeds.last_fetched_at, feeds.last_success_at, feeds.fetch_error
             ORDER BY title ASC
             "#,
         )
@@ -230,7 +235,12 @@ impl FeedRepository for SqliteFeedRepository {
             .map(|row| FeedSummary {
                 id: row.get("id"),
                 title: row.get("title"),
+                url: row.get("url"),
                 unread_count: row.get::<i64, _>("unread_count") as u32,
+                entry_count: row.get::<i64, _>("entry_count") as u32,
+                last_fetched_at: parse_optional_datetime(row.get("last_fetched_at")).ok().flatten(),
+                last_success_at: parse_optional_datetime(row.get("last_success_at")).ok().flatten(),
+                fetch_error: row.get("fetch_error"),
             })
             .collect())
     }

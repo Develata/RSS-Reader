@@ -24,7 +24,12 @@ pub struct Feed {
 pub struct FeedSummary {
     pub id: i64,
     pub title: String,
+    pub url: String,
     pub unread_count: u32,
+    pub entry_count: u32,
+    pub last_fetched_at: Option<OffsetDateTime>,
+    pub last_success_at: Option<OffsetDateTime>,
+    pub fetch_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

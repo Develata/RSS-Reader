@@ -149,11 +149,17 @@ impl AppServices {
             .map(|feed| FeedSummary {
                 id: feed.id,
                 title: feed.title.clone().unwrap_or_else(|| feed.url.clone()),
+                url: feed.url.clone(),
                 unread_count: state
                     .entries
                     .iter()
                     .filter(|entry| entry.feed_id == feed.id && !entry.is_read)
                     .count() as u32,
+                entry_count: state.entries.iter().filter(|entry| entry.feed_id == feed.id).count()
+                    as u32,
+                last_fetched_at: feed.last_fetched_at,
+                last_success_at: feed.last_success_at,
+                fetch_error: feed.fetch_error.clone(),
             })
             .collect::<Vec<_>>();
         feeds.sort_by(|left, right| left.title.cmp(&right.title));
@@ -425,7 +431,20 @@ impl AppServices {
             feed.url.clone()
         };
 
-        let response = web_fetch_feed_response(&self.client, &url).await?;
+        let response = match web_fetch_feed_response(&self.client, &url).await {
+            Ok(response) => response,
+            Err(error) => {
+                let mut state = self.state.lock().expect("lock state");
+                let now = web_now_utc();
+                if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
+                    feed.last_fetched_at = Some(now);
+                    feed.fetch_error = Some(format!("抓取订阅失败: {error}"));
+                    feed.updated_at = now;
+                    let _ = save_state(&state);
+                }
+                return Err(error);
+            }
+        };
         let metadata = (
             response
                 .headers()
@@ -453,13 +472,47 @@ impl AppServices {
             return save_state(&state);
         }
 
-        let body = response
-            .error_for_status()
-            .context("feed 抓取返回非成功状态")?
-            .text()
-            .await
-            .context("读取 feed 响应正文失败")?;
-        let parsed = parse_feed(&body).context("解析订阅失败")?;
+        let body = match response.error_for_status() {
+            Ok(response) => match response.text().await {
+                Ok(body) => body,
+                Err(error) => {
+                    let mut state = self.state.lock().expect("lock state");
+                    let now = web_now_utc();
+                    if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
+                        feed.last_fetched_at = Some(now);
+                        feed.fetch_error = Some(format!("读取 feed 响应正文失败: {error}"));
+                        feed.updated_at = now;
+                        let _ = save_state(&state);
+                    }
+                    return Err(error).context("读取 feed 响应正文失败");
+                }
+            },
+            Err(error) => {
+                let mut state = self.state.lock().expect("lock state");
+                let now = web_now_utc();
+                if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
+                    feed.last_fetched_at = Some(now);
+                    feed.fetch_error = Some(format!("feed 抓取返回非成功状态: {error}"));
+                    feed.updated_at = now;
+                    let _ = save_state(&state);
+                }
+                return Err(error).context("feed 抓取返回非成功状态");
+            }
+        };
+        let parsed = match parse_feed(&body) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                let mut state = self.state.lock().expect("lock state");
+                let now = web_now_utc();
+                if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
+                    feed.last_fetched_at = Some(now);
+                    feed.fetch_error = Some(format!("解析订阅失败: {error}"));
+                    feed.updated_at = now;
+                    let _ = save_state(&state);
+                }
+                return Err(error).context("解析订阅失败");
+            }
+        };
 
         let mut state = self.state.lock().expect("lock state");
         let now = web_now_utc();
