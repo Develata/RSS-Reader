@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use crate::{
     bootstrap::AppServices,
     router::{AppRoute, RoutableApp},
-    theme::{ThemeController, theme_class},
+    theme::{ThemeController, density_class, theme_class},
     web_auth::{
         WebAuthState, auth_state, configured_username, local_auth_state, login, setup_credentials,
         verify_server_gate,
@@ -47,7 +47,9 @@ pub fn App() -> Element {
             style { id: "user-custom-css", "{settings().custom_css}" }
         }
         if auth() == WebAuthState::Authenticated {
-            div { class: "app-shell {theme_class(settings().theme)}",
+            div {
+                class: "app-shell {theme_class(settings().theme)} {density_class(settings().list_density)}",
+                style: "--reader-font-scale: {settings().reader_font_scale};",
                 RoutableApp {}
             }
         } else if auth() == WebAuthState::PendingServerProbe {

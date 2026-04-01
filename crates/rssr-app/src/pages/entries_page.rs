@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use rssr_domain::{EntryQuery, EntrySummary, UserSettings, is_entry_archived};
+use rssr_domain::{EntryQuery, EntrySummary, StartupView, UserSettings, is_entry_archived};
 use std::collections::BTreeMap;
 use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
@@ -19,6 +19,63 @@ struct EntryGroup {
     title: String,
     subtitle: String,
     entries: Vec<EntrySummary>,
+}
+
+#[component]
+pub fn StartupPage() -> Element {
+    let navigator = use_navigator();
+    let status = use_signal(|| "正在准备你的阅读入口…".to_string());
+    let status_tone = use_signal(|| "info".to_string());
+
+    let _ = use_resource(move || async move {
+        match AppServices::shared().await {
+            Ok(services) => {
+                let settings = match services.load_settings().await {
+                    Ok(settings) => settings,
+                    Err(err) => {
+                        set_status_error(status, status_tone, format!("读取设置失败：{err}"));
+                        navigator.replace(AppRoute::EntriesPage {});
+                        return;
+                    }
+                };
+
+                let target = match settings.startup_view {
+                    StartupView::All => AppRoute::EntriesPage {},
+                    StartupView::LastFeed => {
+                        let last_feed_id = services.load_last_opened_feed_id().await.ok().flatten();
+                        let feed_exists = match last_feed_id {
+                            Some(feed_id) => services
+                                .list_feeds()
+                                .await
+                                .map(|feeds| feeds.iter().any(|feed| feed.id == feed_id))
+                                .unwrap_or(false),
+                            None => false,
+                        };
+
+                        if let Some(feed_id) = last_feed_id.filter(|_| feed_exists) {
+                            AppRoute::FeedEntriesPage { feed_id }
+                        } else {
+                            AppRoute::EntriesPage {}
+                        }
+                    }
+                };
+
+                navigator.replace(target);
+            }
+            Err(err) => {
+                set_status_error(status, status_tone, format!("初始化应用失败：{err}"));
+                navigator.replace(AppRoute::EntriesPage {});
+            }
+        }
+    });
+
+    rsx! {
+        section { class: "page page-entries", "data-page": "entries",
+            AppNav {}
+            h2 { "文章" }
+            StatusBanner { message: status(), tone: status_tone() }
+        }
+    }
 }
 
 #[component]
@@ -42,6 +99,14 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let reload_tick = use_signal(|| 0_u64);
     let status = use_signal(|| "正在加载文章列表…".to_string());
     let status_tone = use_signal(|| "info".to_string());
+
+    let _ = use_resource(move || async move {
+        if let Some(feed_id) = feed_id
+            && let Ok(services) = AppServices::shared().await
+        {
+            let _ = services.remember_last_opened_feed_id(feed_id).await;
+        }
+    });
 
     let _ = use_resource(move || async move {
         let _ = reload_tick();

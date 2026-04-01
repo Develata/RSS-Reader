@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::pages::{
-    entries_page::{EntriesPage, FeedEntriesPage},
+    entries_page::{FeedEntriesPage, StartupPage},
     feeds_page::FeedsPage,
     reader_page::ReaderPage,
     settings_page::SettingsPage,
@@ -9,7 +9,7 @@ use crate::pages::{
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 pub enum AppRoute {
-    #[route("/", EntriesPage)]
+    #[route("/", StartupPage)]
     #[route("/entries", EntriesPage)]
     EntriesPage {},
     #[route("/feeds", FeedsPage)]

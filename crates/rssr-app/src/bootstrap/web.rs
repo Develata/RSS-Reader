@@ -47,6 +47,7 @@ struct PersistedState {
     feeds: Vec<PersistedFeed>,
     entries: Vec<PersistedEntry>,
     settings: UserSettings,
+    last_opened_feed_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -310,6 +311,16 @@ impl AppServices {
         save_state(&state)
     }
 
+    pub async fn load_last_opened_feed_id(&self) -> anyhow::Result<Option<i64>> {
+        Ok(self.state.lock().expect("lock state").last_opened_feed_id)
+    }
+
+    pub async fn remember_last_opened_feed_id(&self, feed_id: i64) -> anyhow::Result<()> {
+        let mut state = self.state.lock().expect("lock state");
+        state.last_opened_feed_id = Some(feed_id);
+        save_state(&state)
+    }
+
     pub fn ensure_auto_refresh_started(self: &Arc<Self>) {
         if self.auto_refresh_started.swap(true, Ordering::SeqCst) {
             return;
@@ -395,6 +406,9 @@ impl AppServices {
         feed.is_deleted = true;
         feed.updated_at = web_now_utc();
         state.entries.retain(|entry| entry.feed_id != feed_id);
+        if state.last_opened_feed_id == Some(feed_id) {
+            state.last_opened_feed_id = None;
+        }
         save_state(&state)
     }
 

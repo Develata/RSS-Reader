@@ -1,3 +1,4 @@
+pub mod app_state_repository;
 pub mod entry_repository;
 pub mod feed_repository;
 pub mod settings_repository;

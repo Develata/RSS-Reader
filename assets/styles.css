@@ -14,6 +14,7 @@
   --font-ui: "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC",
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei",
     "Helvetica Neue", Arial, sans-serif;
+  --reader-font-scale: 1;
 }
 
 .theme-light {
@@ -95,6 +96,11 @@ textarea {
   padding: 12px 0 56px;
 }
 
+.app-shell.density-compact {
+  width: min(1040px, calc(100vw - 28px));
+  padding-top: 10px;
+}
+
 .app-nav-shell {
   display: flex;
   align-items: center;
@@ -138,6 +144,11 @@ textarea {
   background: var(--panel);
   box-shadow: var(--shadow);
   backdrop-filter: blur(8px);
+}
+
+.app-shell.density-compact .page,
+.app-shell.density-compact .reader-page {
+  padding: 24px;
 }
 
 .page h2 {
@@ -201,6 +212,15 @@ textarea {
   background: var(--panel-strong);
 }
 
+.app-shell.density-compact .stat-card,
+.app-shell.density-compact .feed-card,
+.app-shell.density-compact .entry-card,
+.app-shell.density-compact .exchange-card,
+.app-shell.density-compact .settings-card {
+  padding: 14px;
+  border-radius: 18px;
+}
+
 .stat-card__label,
 .entry-card__meta,
 .feed-card__meta {
@@ -237,6 +257,15 @@ textarea {
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 12px;
   margin: 18px 0 22px;
+}
+
+.app-shell.density-compact .feed-form,
+.app-shell.density-compact .exchange-grid,
+.app-shell.density-compact .settings-grid,
+.app-shell.density-compact .entry-groups,
+.app-shell.density-compact .feed-list,
+.app-shell.density-compact .entry-list {
+  gap: 10px;
 }
 
 .exchange-grid,
@@ -380,6 +409,10 @@ textarea {
   flex: 0 1 auto;
 }
 
+.app-shell.density-compact .entry-group__header {
+  padding-bottom: 8px;
+}
+
 .preset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -470,6 +503,14 @@ textarea {
   line-height: 1.55;
 }
 
+.app-shell.density-compact .feed-card__meta,
+.app-shell.density-compact .entry-card__meta,
+.app-shell.density-compact .page-intro,
+.app-shell.density-compact .field-label,
+.app-shell.density-compact .entry-group__meta {
+  font-size: 0.88rem;
+}
+
 .feed-card__meta--error {
   color: #8d2d1f;
 }
@@ -495,7 +536,7 @@ textarea {
 .reader-body {
   color: #2c221d;
   line-height: 1.8;
-  font-size: 1.06rem;
+  font-size: calc(1.06rem * var(--reader-font-scale, 1));
   overflow-wrap: anywhere;
 }
 

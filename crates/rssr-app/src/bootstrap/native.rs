@@ -13,6 +13,7 @@ use rssr_domain::{
 use rssr_infra::{
     config_sync::webdav::WebDavConfigSync,
     db::{
+        app_state_repository::SqliteAppStateRepository,
         entry_repository::{
             LocalizedEntryUpdate, SqliteEntryRepository, compute_entry_content_hash,
         },
@@ -42,6 +43,7 @@ pub struct ReaderNavigation {
 pub struct AppServices {
     feed_repository: Arc<SqliteFeedRepository>,
     entry_repository: Arc<SqliteEntryRepository>,
+    app_state_repository: Arc<SqliteAppStateRepository>,
     feed_service: FeedService,
     entry_service: EntryService,
     settings_service: SettingsService,
@@ -75,7 +77,8 @@ impl AppServices {
 
                 let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
                 let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
-                let settings_repository = Arc::new(SqliteSettingsRepository::new(pool));
+                let settings_repository = Arc::new(SqliteSettingsRepository::new(pool.clone()));
+                let app_state_repository = Arc::new(SqliteAppStateRepository::new(pool));
 
                 Ok(Arc::new(Self {
                     feed_service: FeedService::new(feed_repository.clone()),
@@ -88,6 +91,7 @@ impl AppServices {
                     ),
                     feed_repository,
                     entry_repository,
+                    app_state_repository,
                     fetch_client: FetchClient::new(),
                     body_asset_localizer: BodyAssetLocalizer::new(),
                     parser: FeedParser::new(),
@@ -175,6 +179,14 @@ impl AppServices {
         self.settings_service.save(settings).await
     }
 
+    pub async fn load_last_opened_feed_id(&self) -> anyhow::Result<Option<i64>> {
+        self.app_state_repository.load_last_opened_feed_id().await.map_err(Into::into)
+    }
+
+    pub async fn remember_last_opened_feed_id(&self, feed_id: i64) -> anyhow::Result<()> {
+        self.app_state_repository.save_last_opened_feed_id(Some(feed_id)).await.map_err(Into::into)
+    }
+
     pub fn ensure_auto_refresh_started(self: &Arc<Self>) {
         if self.auto_refresh_started.swap(true, Ordering::SeqCst) {
             return;
@@ -229,6 +241,12 @@ impl AppServices {
     pub async fn remove_feed(&self, feed_id: i64) -> anyhow::Result<()> {
         self.entry_repository.delete_for_feed(feed_id).await.context("删除订阅文章失败")?;
         self.feed_service.remove_subscription(feed_id).await.context("删除订阅失败")?;
+        if self.load_last_opened_feed_id().await? == Some(feed_id) {
+            self.app_state_repository
+                .save_last_opened_feed_id(None)
+                .await
+                .context("清理上次打开的订阅记录失败")?;
+        }
         Ok(())
     }
 
