@@ -1,8 +1,13 @@
 use rssr_domain::{EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription};
 use rssr_infra::{
     db::{
-        entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
-        sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
+        entry_repository::{
+            LocalizedEntryUpdate, SqliteEntryRepository, compute_entry_content_hash,
+        },
+        feed_repository::SqliteFeedRepository,
+        migrate,
+        sqlite_native::NativeSqliteBackend,
+        storage_backend::StorageBackend,
     },
     parser::FeedParser,
 };
@@ -81,4 +86,87 @@ async fn refresh_flow_stores_feed_and_deduplicated_entries() {
         entry_repository.list_entries(&EntryQuery::default()).await.expect("list entries");
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].title, "Hello World Updated");
+}
+
+#[tokio::test]
+async fn localized_writeback_does_not_override_newer_refresh_content() {
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let pool = backend.connect().await.expect("connect sqlite memory");
+    migrate(&pool).await.expect("run migrations");
+
+    let feed_repository = SqliteFeedRepository::new(pool.clone());
+    let entry_repository = SqliteEntryRepository::new(pool.clone());
+
+    let feed = feed_repository
+        .upsert_subscription(&NewFeedSubscription {
+            url: Url::parse("https://example.com/feed.xml").expect("valid url"),
+            title: Some("Example Feed".to_string()),
+            folder: None,
+        })
+        .await
+        .expect("create feed");
+
+    let first_html = "<p>old</p>";
+    let first_hash =
+        compute_entry_content_hash(Some(first_html), Some("summary"), Some("Entry")).unwrap();
+    entry_repository
+        .upsert_entries(
+            feed.id,
+            &[rssr_infra::parser::feed_parser::ParsedEntry {
+                external_id: "entry-1".to_string(),
+                dedup_key: "entry-1".to_string(),
+                url: Some(Url::parse("https://example.com/entry-1").unwrap()),
+                title: "Entry".to_string(),
+                author: None,
+                summary: Some("summary".to_string()),
+                content_html: Some(first_html.to_string()),
+                content_text: Some("summary".to_string()),
+                published_at: None,
+                updated_at_source: None,
+            }],
+        )
+        .await
+        .expect("insert first revision");
+
+    let newer_html = "<p>new</p>";
+    entry_repository
+        .upsert_entries(
+            feed.id,
+            &[rssr_infra::parser::feed_parser::ParsedEntry {
+                external_id: "entry-1".to_string(),
+                dedup_key: "entry-1".to_string(),
+                url: Some(Url::parse("https://example.com/entry-1").unwrap()),
+                title: "Entry".to_string(),
+                author: None,
+                summary: Some("summary".to_string()),
+                content_html: Some(newer_html.to_string()),
+                content_text: Some("summary".to_string()),
+                published_at: None,
+                updated_at_source: None,
+            }],
+        )
+        .await
+        .expect("insert newer revision");
+
+    let localized_old_html = "<p>old<img src=\"data:image/png;base64,xxx\"></p>";
+    let localized_old_hash =
+        compute_entry_content_hash(Some(localized_old_html), Some("summary"), Some("Entry"))
+            .unwrap();
+    let updated = entry_repository
+        .update_localized_html_if_hash_matches(
+            feed.id,
+            &LocalizedEntryUpdate {
+                dedup_key: "entry-1",
+                expected_content_hash: &first_hash,
+                localized_html: localized_old_html,
+                localized_content_hash: &localized_old_hash,
+            },
+        )
+        .await
+        .expect("attempt localized writeback");
+
+    assert!(!updated, "stale localization should not overwrite newer content");
+
+    let stored = entry_repository.get_entry(1).await.expect("load entry").expect("entry exists");
+    assert_eq!(stored.content_html.as_deref(), Some(newer_html));
 }

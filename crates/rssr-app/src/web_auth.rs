@@ -15,6 +15,7 @@ const SERVER_GATE_COOKIE: &str = "rssr_web_gate";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WebAuthState {
     Authenticated,
+    PendingServerProbe,
     NeedsSetup,
     NeedsLogin,
 }
@@ -63,9 +64,34 @@ impl StoredCredentials {
 #[cfg(target_arch = "wasm32")]
 pub fn auth_state() -> WebAuthState {
     if server_gate_present() {
-        return WebAuthState::Authenticated;
+        return WebAuthState::PendingServerProbe;
     }
 
+    local_auth_state()
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn verify_server_gate() -> bool {
+    if !server_gate_present() {
+        return false;
+    }
+
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    let Ok(origin) = window.location().origin() else {
+        return false;
+    };
+    let probe_url = format!("{origin}/session-probe");
+
+    match reqwest::Client::new().get(probe_url).send().await {
+        Ok(response) => response.status() == reqwest::StatusCode::NO_CONTENT,
+        Err(_) => false,
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn local_auth_state() -> WebAuthState {
     let Some(credentials) = load_credentials() else {
         return WebAuthState::NeedsSetup;
     };
@@ -77,6 +103,16 @@ pub fn auth_state() -> WebAuthState {
     } else {
         WebAuthState::NeedsLogin
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn verify_server_gate() -> bool {
+    false
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn local_auth_state() -> WebAuthState {
+    WebAuthState::Authenticated
 }
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -14,6 +14,14 @@ pub struct SqliteEntryRepository {
     pool: SqlitePool,
 }
 
+#[derive(Debug, Clone)]
+pub struct LocalizedEntryUpdate<'a> {
+    pub dedup_key: &'a str,
+    pub expected_content_hash: &'a str,
+    pub localized_html: &'a str,
+    pub localized_content_hash: &'a str,
+}
+
 impl SqliteEntryRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
@@ -81,6 +89,36 @@ impl SqliteEntryRepository {
         }
 
         Ok(inserted_or_updated)
+    }
+
+    pub async fn update_localized_html_if_hash_matches(
+        &self,
+        feed_id: i64,
+        update: &LocalizedEntryUpdate<'_>,
+    ) -> DomainResult<bool> {
+        let now = now_rfc3339();
+        let result = sqlx::query(
+            r#"
+            UPDATE entries
+            SET content_html = ?4,
+                content_hash = ?5,
+                updated_at = ?6
+            WHERE feed_id = ?1
+              AND dedup_key = ?2
+              AND content_hash = ?3
+            "#,
+        )
+        .bind(feed_id)
+        .bind(update.dedup_key)
+        .bind(update.expected_content_hash)
+        .bind(update.localized_html)
+        .bind(update.localized_content_hash)
+        .bind(&now)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        Ok(result.rows_affected() > 0)
     }
 
     async fn row_to_entry(row: sqlx::sqlite::SqliteRow) -> DomainResult<Entry> {
@@ -241,6 +279,14 @@ fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>) -> 
         }
     }
     used.then(|| format!("{:x}", hasher.finalize()))
+}
+
+pub fn compute_entry_content_hash(
+    html: Option<&str>,
+    text: Option<&str>,
+    title: Option<&str>,
+) -> Option<String> {
+    hash_content(html, text, title)
 }
 
 fn format_optional_datetime(value: Option<OffsetDateTime>) -> DomainResult<Option<String>> {

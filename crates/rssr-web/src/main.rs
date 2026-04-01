@@ -66,6 +66,7 @@ async fn main() -> Result<()> {
     );
 
     let protected = Router::new()
+        .route("/session-probe", get(session_probe))
         .fallback_service(
             ServeDir::new(config.static_dir.clone())
                 .not_found_service(ServeFile::new(config.static_dir.join("index.html"))),
@@ -335,6 +336,10 @@ async fn handle_logout(State(state): State<AppState>) -> impl IntoResponse {
 
 async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, "ok")
+}
+
+async fn session_probe() -> impl IntoResponse {
+    StatusCode::NO_CONTENT
 }
 
 async fn require_auth(State(state): State<AppState>, request: Request, next: Next) -> Response {

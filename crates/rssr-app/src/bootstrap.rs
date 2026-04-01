@@ -12,8 +12,12 @@ mod imp {
     use rssr_infra::{
         config_sync::webdav::WebDavConfigSync,
         db::{
-            entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository,
-            settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,
+            entry_repository::{
+                LocalizedEntryUpdate, SqliteEntryRepository, compute_entry_content_hash,
+            },
+            feed_repository::SqliteFeedRepository,
+            settings_repository::SqliteSettingsRepository,
+            sqlite_native::NativeSqliteBackend,
             storage_backend::StorageBackend,
         },
         fetch::{BodyAssetLocalizer, FetchClient, FetchRequest, FetchResult},
@@ -268,18 +272,25 @@ mod imp {
             let localizer = self.body_asset_localizer.clone();
 
             tokio::spawn(async move {
-                let mut localized_entries = Vec::new();
+                let mut localized_count = 0_usize;
 
-                for mut entry in entries.into_iter() {
-                    if localized_entries.len() >= Self::MAX_BACKGROUND_LOCALIZED_ENTRIES {
+                for entry in entries.into_iter() {
+                    if localized_count >= Self::MAX_BACKGROUND_LOCALIZED_ENTRIES {
                         break;
                     }
 
-                    let Some(content_html) = entry.content_html.take() else {
+                    let Some(original_html) = entry.content_html.clone() else {
                         continue;
                     };
 
-                    let original_html = content_html;
+                    let Some(expected_content_hash) = compute_entry_content_hash(
+                        Some(&original_html),
+                        entry.content_text.as_deref(),
+                        Some(&entry.title),
+                    ) else {
+                        continue;
+                    };
+
                     let localized_html = match tokio::time::timeout(
                         Self::LOCALIZE_TIMEOUT,
                         localizer.localize_html_images(&original_html, entry.url.as_ref()),
@@ -308,18 +319,44 @@ mod imp {
                         }
                     };
 
-                    entry.content_html = Some(localized_html);
-                    localized_entries.push(entry);
-                }
+                    let Some(localized_content_hash) = compute_entry_content_hash(
+                        Some(&localized_html),
+                        entry.content_text.as_deref(),
+                        Some(&entry.title),
+                    ) else {
+                        continue;
+                    };
 
-                if localized_entries.is_empty() {
-                    return;
-                }
+                    let update = LocalizedEntryUpdate {
+                        dedup_key: &entry.dedup_key,
+                        expected_content_hash: &expected_content_hash,
+                        localized_html: &localized_html,
+                        localized_content_hash: &localized_content_hash,
+                    };
 
-                if let Err(error) =
-                    entry_repository.upsert_entries(feed_id, &localized_entries).await
-                {
-                    tracing::warn!(feed_id, error = %error, "写回后台本地化后的正文失败");
+                    match entry_repository
+                        .update_localized_html_if_hash_matches(feed_id, &update)
+                        .await
+                    {
+                        Ok(true) => {
+                            localized_count += 1;
+                        }
+                        Ok(false) => {
+                            tracing::debug!(
+                                feed_id,
+                                dedup_key = %entry.dedup_key,
+                                "跳过后台正文图片本地化写回：文章内容已被更新"
+                            );
+                        }
+                        Err(error) => {
+                            tracing::warn!(
+                                feed_id,
+                                dedup_key = %entry.dedup_key,
+                                error = %error,
+                                "写回后台本地化后的正文失败"
+                            );
+                        }
+                    }
                 }
             });
         }
