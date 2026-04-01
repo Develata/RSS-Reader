@@ -86,8 +86,10 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             tabindex: 0,
             onkeydown: move |event| shortcuts.call(event),
             AppNav {}
-            h2 { "{title}" }
-            div { class: "inline-actions",
+            header { class: "reader-header",
+                h2 { class: "reader-title", "{title}" }
+            }
+            div { class: "reader-toolbar inline-actions",
                 button {
                     class: "button secondary",
                     "data-nav": "back",
@@ -95,10 +97,12 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     "返回上一页"
                 }
             }
-            p { class: "reader-meta", "来源：{source}" }
-            p { class: "reader-meta", "发布时间：{published_at}" }
-            p { class: "reader-meta", "快捷键：`M` 切换已读，`F` 切换收藏" }
-            div { class: "entry-card__actions",
+            div { class: "reader-meta-block",
+                p { class: "reader-meta", "来源：{source}" }
+                p { class: "reader-meta", "发布时间：{published_at}" }
+                p { class: "reader-meta", "快捷键：`M` 切换已读，`F` 切换收藏" }
+            }
+            div { class: "reader-actions entry-card__actions",
                 button {
                     class: "button secondary",
                     "data-action": "mark-read",
@@ -185,7 +189,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         pre { "{body_text}" }
                     }
                 }
-                div { class: "inline-actions",
+                div { class: "reader-pagination inline-actions",
                     if let Some(previous_unread_entry_id) = navigation_state().previous_unread_entry_id {
                         button {
                             class: "button secondary",

@@ -365,6 +365,12 @@ textarea {
   margin: 18px 0 12px;
 }
 
+.reading-header {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
 .entry-groups {
   display: grid;
   gap: 22px;
@@ -383,7 +389,7 @@ textarea {
   justify-content: space-between;
   gap: 10px 16px;
   padding-bottom: 10px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgba(62, 42, 27, 0.1);
 }
 
 .entry-group__title {
@@ -477,11 +483,40 @@ textarea {
   margin-top: 0;
 }
 
+.entry-list--grouped .entry-card--reading + .entry-card--reading {
+  margin-top: -2px;
+}
+
 .feed-card__title,
 .entry-card__title {
   display: block;
   font-size: 1.08rem;
   font-weight: 700;
+}
+
+.entry-card--reading {
+  padding: 16px 0 18px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.entry-card--reading:first-child {
+  padding-top: 0;
+}
+
+.entry-card--reading:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.entry-card--reading .entry-card__title {
+  font-family: var(--font-display);
+  font-size: 1.16rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.4;
 }
 
 .feed-card__url {
@@ -519,30 +554,82 @@ textarea {
   margin-top: 8px;
 }
 
+.entry-card--reading .entry-card__meta {
+  margin-top: 6px;
+  line-height: 1.65;
+}
+
+.entry-card--reading .entry-card__actions {
+  margin-top: 12px;
+  gap: 10px;
+}
+
 .reader-page {
   margin-top: 20px;
-  padding: 34px;
-  border: 1px solid var(--line);
-  border-radius: 28px;
-  background: rgba(255, 252, 247, 0.92);
-  box-shadow: var(--shadow);
+  padding: 42px 52px 48px;
+  border: 1px solid rgba(62, 42, 27, 0.1);
+  border-radius: 32px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(255, 250, 243, 0.95));
+  box-shadow: 0 22px 56px rgba(63, 38, 18, 0.08);
+}
+
+.reader-header {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.reader-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3vw, 2.7rem);
+  line-height: 1.14;
+  letter-spacing: -0.04em;
+}
+
+.reader-toolbar {
+  margin-top: 0;
+  margin-bottom: 14px;
+}
+
+.reader-meta-block {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(62, 42, 27, 0.1);
 }
 
 .reader-meta {
-  margin: 8px 0 18px;
+  margin: 0;
   color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.reader-actions {
+  margin-top: 0;
+  margin-bottom: 24px;
+  padding: 14px 18px;
+  border: 1px solid rgba(62, 42, 27, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 250, 242, 0.64);
 }
 
 .reader-body {
   color: #2c221d;
-  line-height: 1.8;
-  font-size: calc(1.06rem * var(--reader-font-scale, 1));
+  max-width: 72ch;
+  margin: 0 auto;
+  line-height: 1.9;
+  font-size: calc(1.08rem * var(--reader-font-scale, 1));
   overflow-wrap: anywhere;
 }
 
 .reader-body pre {
   white-space: pre-wrap;
   font-family: inherit;
+  line-height: inherit;
 }
 
 .reader-html {
@@ -551,6 +638,34 @@ textarea {
 
 .reader-html p:first-child {
   margin-top: 0;
+}
+
+.reader-html p,
+.reader-body pre {
+  margin: 0 0 1.2em;
+}
+
+.reader-html h1,
+.reader-html h2,
+.reader-html h3,
+.reader-html h4 {
+  margin: 1.9em 0 0.7em;
+  font-family: var(--font-display);
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+
+.reader-html blockquote {
+  margin: 1.4em 0;
+  padding: 0.2em 0 0.2em 1em;
+  border-left: 3px solid rgba(176, 74, 47, 0.22);
+  color: #5f5046;
+}
+
+.reader-html ul,
+.reader-html ol {
+  padding-left: 1.5em;
+  line-height: 1.8;
 }
 
 .reader-html img,
@@ -605,6 +720,12 @@ textarea {
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
+}
+
+.reader-pagination {
+  margin-top: 30px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(62, 42, 27, 0.1);
 }
 
 .web-auth-shell {
@@ -753,15 +874,31 @@ textarea {
 
   .reader-page {
     margin-top: 14px;
+    padding: 24px 22px 28px;
   }
 
-  .reader-meta {
-    margin: 6px 0 14px;
+  .reader-title {
+    font-size: 1.8rem;
+  }
+
+  .reader-meta-block {
+    margin-bottom: 18px;
+    padding-bottom: 14px;
   }
 
   .reader-body {
     font-size: 1rem;
     line-height: 1.75;
+  }
+
+  .reader-actions {
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+
+  .reader-pagination {
+    margin-top: 24px;
+    padding-top: 18px;
   }
 
   .theme-card__swatches {
@@ -791,5 +928,9 @@ textarea {
 
   .reader-body {
     font-size: 0.97rem;
+  }
+
+  .reader-title {
+    font-size: 1.6rem;
   }
 }

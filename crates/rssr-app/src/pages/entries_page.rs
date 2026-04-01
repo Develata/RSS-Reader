@@ -150,13 +150,15 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     rsx! {
         section { class: "page page-entries", "data-page": "entries",
             AppNav {}
-            h2 { if feed_id.is_some() { "订阅文章" } else { "文章" } }
-            p {
-                class: "page-intro",
-                if feed_id.is_some() {
-                    "当前只显示所选订阅的文章。你仍然可以按时间或按来源组织当前结果，然后继续进入阅读页。"
-                } else {
-                    "文章默认按时间组织展示。你也可以切换为按来源浏览，然后继续进入阅读页。"
+            div { class: "reading-header",
+                h2 { if feed_id.is_some() { "订阅文章" } else { "文章" } }
+                p {
+                    class: "page-intro",
+                    if feed_id.is_some() {
+                        "当前只显示所选订阅的文章。你仍然可以按时间或按来源组织当前结果，然后继续进入阅读页。"
+                    } else {
+                        "文章默认按时间组织展示。你也可以切换为按来源浏览，然后继续进入阅读页。"
+                    }
                 }
             }
             if feed_id.is_some() {
@@ -246,7 +248,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                         let read_title = entry.title.clone();
                                         let starred_title = entry.title.clone();
                                         rsx! {
-                                            li { class: "entry-card", key: "{entry.id}",
+                                            li { class: "entry-card entry-card--reading", key: "{entry.id}",
                                                 Link {
                                                     class: "entry-card__title",
                                                     to: AppRoute::ReaderPage { entry_id: entry.id },
