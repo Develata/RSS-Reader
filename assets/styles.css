@@ -291,12 +291,17 @@ textarea {
 }
 
 .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
   padding: 14px 18px;
   border: 0;
   border-radius: 16px;
   background: var(--accent);
   color: #fff8f2;
   cursor: pointer;
+  text-align: center;
 }
 
 .button.secondary {
@@ -323,6 +328,17 @@ textarea {
   justify-content: start;
   gap: 12px;
   margin-top: 12px;
+}
+
+.entry-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.entry-card__actions > * {
+  flex: 0 1 auto;
 }
 
 .preset-grid {
@@ -550,14 +566,14 @@ textarea {
 
 @media (max-width: 720px) {
   .app-shell {
-    width: min(100vw - 20px, 1080px);
-    padding-top: 12px;
+    width: min(100vw - 16px, 1080px);
+    padding: 8px 0 40px;
   }
 
   .app-nav-shell,
   .page,
   .reader-page {
-    padding: 22px;
+    padding: 18px;
     border-radius: 22px;
   }
 
@@ -567,7 +583,101 @@ textarea {
     gap: 8px;
   }
 
+  .app-nav {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .app-nav__link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 44px;
+    text-align: center;
+  }
+
+  .page h2 {
+    font-size: 1.7rem;
+  }
+
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .page-header .icon-link-button {
+    align-self: flex-end;
+  }
+
   .feed-form {
     grid-template-columns: 1fr;
+  }
+
+  .exchange-grid,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-actions {
+    grid-auto-flow: row;
+    grid-template-columns: 1fr;
+  }
+
+  .inline-actions > * {
+    width: 100%;
+  }
+
+  .entry-card__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .entry-card__actions > * {
+    width: 100%;
+  }
+
+  .reader-page {
+    margin-top: 14px;
+  }
+
+  .reader-meta {
+    margin: 6px 0 14px;
+  }
+
+  .reader-body {
+    font-size: 1rem;
+    line-height: 1.75;
+  }
+
+  .theme-card__swatches {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell {
+    width: min(100vw - 12px, 1080px);
+  }
+
+  .app-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .app-nav-shell,
+  .page,
+  .reader-page {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .page h2 {
+    font-size: 1.5rem;
+  }
+
+  .reader-body {
+    font-size: 0.97rem;
   }
 }
