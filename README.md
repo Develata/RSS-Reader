@@ -131,6 +131,7 @@ dx serve --platform web --package rssr-app
 - 有些 feed 在 desktop / Android 正常，在 Web 会被浏览器 CORS 限制拦住
 - 如果你通过 `rssr-web` 部署 Web 版本，服务端会代抓 feed，所以像 `https://www.ruanyifeng.com/blog/atom.xml` 这类会被浏览器 CORS 拦住的源也能正常订阅
 - Web 端为避免浏览器缓存导致“刷新看起来没生效”，会在刷新 feed 时附加 cache-busting 参数
+- `https://blogs.nvidia.com/feed/` 这类源在浏览器里通常可直接使用；`https://www.ruanyifeng.com/blog/atom.xml` 这类源请优先通过 `rssr-web` / Docker 部署方式验证
 
 ### 验证
 
@@ -279,6 +280,27 @@ Web 端使用 wasm SQLite，并把数据库持久化到浏览器存储中。
 
 - 桌面端：`cargo run -p rssr-app`
 - Web 开发：`dx serve --platform web --package rssr-app`
+
+如果你要验证 Web 部署态的完整能力，尤其是：
+
+- 用户名 / 密码登录
+- 同源 `/feed-proxy`
+- CORS 受限源（例如 `https://www.ruanyifeng.com/blog/atom.xml`）
+
+推荐直接本地运行 `rssr-web`：
+
+```bash
+dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e
+
+RSS_READER_WEB_BIND=127.0.0.1:8060 \
+RSS_READER_WEB_STATIC_DIR=target/web-e2e/public \
+RSS_READER_WEB_USERNAME=admin \
+RSS_READER_WEB_PASSWORD=adminadmin \
+RSS_READER_WEB_SESSION_SECRET=01234567890123456789012345678901 \
+cargo run -p rssr-web
+```
+
+然后访问 `http://127.0.0.1:8060/login`，用 `admin / adminadmin` 登录后测试 feed 导入与刷新。
 
 ### 直接拉取 GitHub 镜像运行
 

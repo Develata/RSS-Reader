@@ -13,6 +13,7 @@
 - 浏览器：Chrome MCP
 - 主要远端 feed：
   - `https://github.blog/feed/`
+  - `https://blogs.nvidia.com/feed/`
   - `https://www.ruanyifeng.com/blog/atom.xml`
 - WebDAV 测试端点：`http://127.0.0.1:8052/config.json`
 - 移动端视口：`390 x 844`
@@ -34,6 +35,7 @@
 - [x] 后续重新打开页面会进入登录页，输入已设置的用户名/密码后可正常进入应用。
 - [x] `订阅 / 文章 / 设置` 路由切换正常。
 - [x] 远端 feed `https://github.blog/feed/` 可添加并完成首次刷新。
+- [x] 远端 feed `https://blogs.nvidia.com/feed/` 在浏览器直连模式下可添加并完成首次刷新。
 - [x] 通过 `rssr-web` 访问时，`https://www.ruanyifeng.com/blog/atom.xml` 可成功导入并完成首次刷新。
 - [x] 订阅页 `刷新全部` 可正常执行并更新状态。
 - [x] 订阅页两步确认删除订阅可正常工作。
@@ -69,4 +71,5 @@
   - [x] `/logout` 可清除会话并回到登录页
 - Desktop、CLI、Android 不在本报告范围内。
 - 纯静态 Web (`dx serve` / 仅托管 bundle) 仍受浏览器 CORS 约束；像阮一峰这类源需要通过 `rssr-web` 的同源代理访问。
+- 纯静态 Web 下，像 `https://blogs.nvidia.com/feed/` 这类开放 CORS 的 feed 通常可直接使用；是否成功仍取决于目标站点的响应头策略。
 - Web 端正文图片仍受浏览器 CORS 约束；这属于平台边界，不影响本轮通过结论。

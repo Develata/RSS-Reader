@@ -25,6 +25,9 @@
   - `dx serve --platform web --package rssr-app`
 - CLI:
   - `cargo run -p rssr-cli -- --help`
+- Web 部署态:
+  - `dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e`
+  - `RSS_READER_WEB_BIND=127.0.0.1:8060 RSS_READER_WEB_STATIC_DIR=target/web-e2e/public RSS_READER_WEB_USERNAME=admin RSS_READER_WEB_PASSWORD=adminadmin RSS_READER_WEB_SESSION_SECRET=01234567890123456789012345678901 cargo run -p rssr-web`
 
 ## 4. 核心使用流程
 
@@ -47,6 +50,7 @@
 4. 进入阅读页，切换已读/收藏状态并重启应用验证持久化。
 5. 在阅读页确认完整 HTML 正文优先展示，且危险脚本不会被直接渲染。
 6. 修改设置中的 `list_density`、`startup_view`、`reader_font_scale`，确认都真实影响界面和启动路径。
+7. 如需验证 CORS 受限源，在 `rssr-web` 部署态下测试 `https://www.ruanyifeng.com/blog/atom.xml`，并在纯浏览器模式下确认这类源会受到 CORS 限制。
 
 ## 6. 验证配置交换
 

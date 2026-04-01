@@ -952,7 +952,22 @@ fn web_now_utc() -> OffsetDateTime {
 }
 
 fn parse_feed(raw: &str) -> anyhow::Result<ParsedFeed> {
+    if looks_like_html_response_body(raw) {
+        anyhow::bail!(
+            "当前响应不是 XML feed，而是 HTML 页面（通常说明当前部署未启用 feed 代理，或请求被登录页/静态壳页面拦截）"
+        );
+    }
     normalize_feed(feed_rs::parser::parse(raw.as_bytes()).context("解析 RSS/Atom feed 失败")?)
+}
+
+fn looks_like_html_response_body(raw: &str) -> bool {
+    let trimmed = raw.trim_start_matches('\u{feff}').trim_start();
+    let head = trimmed.chars().take(256).collect::<String>().to_ascii_lowercase();
+
+    head.starts_with("<!doctype html")
+        || head.starts_with("<html")
+        || head.starts_with("<head")
+        || head.starts_with("<body")
 }
 
 fn normalize_feed(feed: FeedRsFeed) -> anyhow::Result<ParsedFeed> {
