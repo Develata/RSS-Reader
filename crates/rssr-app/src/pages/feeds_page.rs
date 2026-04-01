@@ -13,16 +13,32 @@ pub fn FeedsPage() -> Element {
     let pending_delete_feed = use_signal(|| None::<i64>);
     let reload_tick = use_signal(|| 0_u64);
     let mut feeds = use_signal(Vec::<FeedSummary>::new);
+    let mut feed_count = use_signal(|| 0_usize);
+    let mut entry_count = use_signal(|| 0_usize);
     let status = use_signal(|| "输入一个 feed URL 后点击添加。".to_string());
     let status_tone = use_signal(|| "info".to_string());
 
     let _ = use_resource(move || async move {
         let _ = reload_tick();
         match AppServices::shared().await {
-            Ok(services) => match services.list_feeds().await {
-                Ok(items) => feeds.set(items),
-                Err(err) => set_status_error(status, status_tone, format!("读取订阅失败：{err}")),
-            },
+            Ok(services) => {
+                match services.list_feeds().await {
+                    Ok(items) => {
+                        feed_count.set(items.len());
+                        feeds.set(items);
+                    }
+                    Err(err) => {
+                        set_status_error(status, status_tone, format!("读取订阅失败：{err}"));
+                    }
+                }
+
+                match services.list_entries(&rssr_domain::EntryQuery::default()).await {
+                    Ok(entries) => entry_count.set(entries.len()),
+                    Err(err) => {
+                        set_status_error(status, status_tone, format!("读取文章统计失败：{err}"));
+                    }
+                }
+            }
             Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
         }
     });
@@ -32,6 +48,16 @@ pub fn FeedsPage() -> Element {
             AppNav {}
             h2 { "订阅" }
             p { class: "page-intro", "把 feed URL 保存到本地库，并立即执行首次刷新。" }
+            div { class: "stats-grid",
+                div { class: "stat-card",
+                    div { class: "stat-card__label", "订阅数" }
+                    div { class: "stat-card__value", "{feed_count}" }
+                }
+                div { class: "stat-card",
+                    div { class: "stat-card__label", "文章数" }
+                    div { class: "stat-card__value", "{entry_count}" }
+                }
+            }
             StatusBanner { message: status(), tone: status_tone() }
             div { class: "feed-form",
                 input {

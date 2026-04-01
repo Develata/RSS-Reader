@@ -3,19 +3,17 @@ use dioxus::prelude::*;
 use crate::pages::{
     entries_page::{EntriesPage, FeedEntriesPage},
     feeds_page::FeedsPage,
-    home::HomePage,
     reader_page::ReaderPage,
     settings_page::SettingsPage,
 };
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 pub enum AppRoute {
-    #[route("/", HomePage)]
-    HomePage {},
-    #[route("/feeds", FeedsPage)]
-    FeedsPage {},
+    #[route("/", EntriesPage)]
     #[route("/entries", EntriesPage)]
     EntriesPage {},
+    #[route("/feeds", FeedsPage)]
+    FeedsPage {},
     #[route("/feeds/:feed_id/entries", FeedEntriesPage)]
     FeedEntriesPage { feed_id: i64 },
     #[route("/entries/:entry_id", ReaderPage)]

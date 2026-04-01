@@ -65,7 +65,6 @@ pub fn AppNav() -> Element {
     rsx! {
         nav { class: "app-nav-shell",
             div { class: "app-nav",
-                Link { class: "app-nav__link", "data-nav": "home", to: AppRoute::HomePage {}, "首页" }
                 Link { class: "app-nav__link", "data-nav": "feeds", to: AppRoute::FeedsPage {}, "订阅" }
                 Link { class: "app-nav__link", "data-nav": "entries", to: AppRoute::EntriesPage {}, "文章" }
                 Link { class: "app-nav__link", "data-nav": "settings", to: AppRoute::SettingsPage {}, "设置" }
