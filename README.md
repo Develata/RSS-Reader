@@ -129,6 +129,7 @@ dx serve --platform web --package rssr-app
 
 - Web 端远端 feed 是否能抓取，取决于目标站点是否允许跨域请求
 - 有些 feed 在 desktop / Android 正常，在 Web 会被浏览器 CORS 限制拦住
+- 如果你通过 `rssr-web` 部署 Web 版本，服务端会代抓 feed，所以像 `https://www.ruanyifeng.com/blog/atom.xml` 这类会被浏览器 CORS 拦住的源也能正常订阅
 - Web 端为避免浏览器缓存导致“刷新看起来没生效”，会在刷新 feed 时附加 cache-busting 参数
 
 ### 验证

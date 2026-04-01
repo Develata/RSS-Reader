@@ -309,6 +309,7 @@ This repository includes three GitHub Actions workflows:
 - the reader caches whatever body HTML/text the feed already provides
 - desktop and Android can localize many body images into cached HTML for better offline reading
 - web builds are limited by browser CORS rules, so remote body images may stay on their original URLs even when the article body itself is cached locally
+- when the web app is deployed through `rssr-web`, the server can proxy feed fetches, so feeds such as `https://www.ruanyifeng.com/blog/atom.xml` still work even though a plain browser build would hit CORS
 
 ## Docs
 

@@ -48,6 +48,11 @@ struct LoginQuery {
 }
 
 #[derive(Deserialize)]
+struct FeedProxyQuery {
+    url: String,
+}
+
+#[derive(Deserialize)]
 struct LoginForm {
     username: String,
     password: String,
@@ -67,6 +72,7 @@ async fn main() -> Result<()> {
 
     let protected = Router::new()
         .route("/session-probe", get(session_probe))
+        .route("/feed-proxy", get(feed_proxy))
         .fallback_service(
             ServeDir::new(config.static_dir.clone())
                 .not_found_service(ServeFile::new(config.static_dir.join("index.html"))),
@@ -135,6 +141,14 @@ fn load_config() -> Result<AuthConfig> {
 
 fn required_env(name: &str) -> Result<String> {
     env::var(name).map_err(|_| anyhow!("缺少环境变量：{name}"))
+}
+
+fn parse_proxy_feed_url(raw: &str) -> Result<String, String> {
+    let url = reqwest::Url::parse(raw).map_err(|_| "feed URL 不合法。".to_string())?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("只允许代理 http/https feed URL。".to_string());
+    }
+    Ok(url.to_string())
 }
 
 async fn show_login(
@@ -342,6 +356,53 @@ async fn session_probe() -> impl IntoResponse {
     StatusCode::NO_CONTENT
 }
 
+async fn feed_proxy(Query(query): Query<FeedProxyQuery>) -> impl IntoResponse {
+    let upstream_url = match parse_proxy_feed_url(&query.url) {
+        Ok(url) => url,
+        Err(err) => return (StatusCode::BAD_REQUEST, err).into_response(),
+    };
+
+    let response = match reqwest::Client::new()
+        .get(upstream_url)
+        .header(
+            header::ACCEPT,
+            "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
+        )
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => {
+            return (StatusCode::BAD_GATEWAY, format!("feed 代理请求失败：{err}")).into_response();
+        }
+    };
+
+    let status = response.status();
+    let content_type = response.headers().get(header::CONTENT_TYPE).cloned();
+    let etag = response.headers().get(header::ETAG).cloned();
+    let last_modified = response.headers().get(header::LAST_MODIFIED).cloned();
+    let body = match response.bytes().await {
+        Ok(body) => body,
+        Err(err) => {
+            return (StatusCode::BAD_GATEWAY, format!("读取 feed 代理响应失败：{err}"))
+                .into_response();
+        }
+    };
+
+    let mut proxied = Response::builder().status(status);
+    if let Some(value) = content_type {
+        proxied = proxied.header(header::CONTENT_TYPE, value);
+    }
+    if let Some(value) = etag {
+        proxied = proxied.header(header::ETAG, value);
+    }
+    if let Some(value) = last_modified {
+        proxied = proxied.header(header::LAST_MODIFIED, value);
+    }
+
+    proxied.body(axum::body::Body::from(body)).expect("valid proxied feed response")
+}
+
 async fn require_auth(State(state): State<AppState>, request: Request, next: Next) -> Response {
     if let Some(cookie_value) = extract_cookie(request.headers(), SESSION_COOKIE) {
         if session_is_valid(&state.config, cookie_value) {
@@ -495,5 +556,13 @@ mod tests {
         assert_eq!(sanitize_next(Some("https://evil.example")), "/");
         assert_eq!(sanitize_next(Some("//evil.example")), "/");
         assert_eq!(sanitize_next(Some("/entries/1")), "/entries/1");
+    }
+
+    #[test]
+    fn parse_proxy_feed_url_only_allows_http_and_https() {
+        assert!(parse_proxy_feed_url("https://example.com/feed.xml").is_ok());
+        assert!(parse_proxy_feed_url("http://example.com/feed.xml").is_ok());
+        assert!(parse_proxy_feed_url("file:///tmp/feed.xml").is_err());
+        assert!(parse_proxy_feed_url("javascript:alert(1)").is_err());
     }
 }

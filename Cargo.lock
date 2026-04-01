@@ -4681,6 +4681,7 @@ dependencies = [
  "axum",
  "base64",
  "hmac",
+ "reqwest",
  "serde",
  "sha2",
  "time",

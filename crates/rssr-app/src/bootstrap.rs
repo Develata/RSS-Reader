@@ -426,6 +426,7 @@ mod imp {
 
 #[cfg(target_arch = "wasm32")]
 mod imp {
+    use crate::web_auth;
     use std::{
         collections::{BTreeMap, HashSet},
         sync::{Arc, Mutex},
@@ -813,15 +814,7 @@ mod imp {
                 feed.url.clone()
             };
 
-            let request_url = web_refresh_request_url(&url)?;
-            let request = self.client.get(&request_url).header(
-                header::ACCEPT,
-                "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
-            );
-
-            let response = request.send().await.context(
-                "发送 feed 抓取请求失败（浏览器环境下通常是目标站点未开放 CORS 或当前网络不可达）",
-            )?;
+            let response = web_fetch_feed_response(&self.client, &url).await?;
             let metadata = (
                 response
                     .headers()
@@ -1081,13 +1074,89 @@ mod imp {
         Ok(())
     }
 
-    fn web_refresh_request_url(raw: &str) -> anyhow::Result<String> {
+    async fn web_fetch_feed_response(
+        client: &reqwest::Client,
+        raw: &str,
+    ) -> anyhow::Result<reqwest::Response> {
+        let request_urls = web_refresh_request_urls(raw)?;
+        let mut last_error = None;
+
+        for (index, request_url) in request_urls.iter().enumerate() {
+            let response = client
+                .get(request_url)
+                .header(
+                    header::ACCEPT,
+                    "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
+                )
+                .send()
+                .await;
+
+            match response {
+                Ok(response)
+                    if should_fallback_web_feed_request(
+                        index,
+                        request_urls.len(),
+                        response.status(),
+                    ) =>
+                {
+                    continue;
+                }
+                Ok(response) => return Ok(response),
+                Err(error) => last_error = Some(error),
+            }
+        }
+
+        let error = last_error.map(anyhow::Error::from).unwrap_or_else(|| {
+            anyhow::anyhow!(
+                "发送 feed 抓取请求失败（浏览器环境下通常是目标站点未开放 CORS、当前部署未启用 feed 代理，或当前网络不可达）"
+            )
+        });
+        Err(error).context(
+            "发送 feed 抓取请求失败（浏览器环境下通常是目标站点未开放 CORS、当前部署未启用 feed 代理，或当前网络不可达）",
+        )
+    }
+
+    fn should_fallback_web_feed_request(
+        index: usize,
+        total: usize,
+        status: reqwest::StatusCode,
+    ) -> bool {
+        index + 1 < total
+            && matches!(
+                status,
+                reqwest::StatusCode::NOT_FOUND
+                    | reqwest::StatusCode::UNAUTHORIZED
+                    | reqwest::StatusCode::FORBIDDEN
+                    | reqwest::StatusCode::METHOD_NOT_ALLOWED
+            )
+    }
+
+    fn web_refresh_request_urls(raw: &str) -> anyhow::Result<Vec<String>> {
         let mut url = Url::parse(raw).with_context(|| format!("订阅 URL 不合法：{raw}"))?;
         if matches!(url.scheme(), "http" | "https") {
             url.query_pairs_mut()
                 .append_pair("_rssr_fetch", &js_sys::Date::now().round().to_string());
         }
-        Ok(url.to_string())
+        let mut request_urls = Vec::new();
+
+        if web_auth::has_server_gate_cookie()
+            && let Some(proxy_url) = web_feed_proxy_request_url(url.as_str())
+        {
+            request_urls.push(proxy_url);
+        }
+
+        request_urls.push(url.to_string());
+        Ok(request_urls)
+    }
+
+    fn web_feed_proxy_request_url(feed_url: &str) -> Option<String> {
+        let window = web_sys::window()?;
+        let origin = window.location().origin().ok()?;
+        let mut proxy_url = Url::parse(&origin).ok()?;
+        proxy_url.set_path("/feed-proxy");
+        proxy_url.set_query(None);
+        proxy_url.query_pairs_mut().append_pair("url", feed_url);
+        Some(proxy_url.to_string())
     }
 
     fn to_domain_entry(entry: &PersistedEntry) -> anyhow::Result<Entry> {
