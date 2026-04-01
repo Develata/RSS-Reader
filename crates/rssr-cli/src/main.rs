@@ -100,6 +100,8 @@ struct SaveSettingsArgs {
     #[arg(long)]
     refresh_interval_minutes: Option<u32>,
     #[arg(long)]
+    archive_after_months: Option<u32>,
+    #[arg(long)]
     reader_font_scale: Option<f32>,
     #[arg(long)]
     custom_css: Option<String>,
@@ -441,6 +443,10 @@ fn apply_settings_patch(settings: &mut UserSettings, args: SaveSettingsArgs) -> 
 
     if let Some(refresh_interval_minutes) = args.refresh_interval_minutes {
         settings.refresh_interval_minutes = refresh_interval_minutes;
+    }
+
+    if let Some(archive_after_months) = args.archive_after_months {
+        settings.archive_after_months = archive_after_months;
     }
 
     if let Some(reader_font_scale) = args.reader_font_scale {

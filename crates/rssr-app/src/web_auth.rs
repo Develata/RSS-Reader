@@ -96,6 +96,7 @@ pub fn has_server_gate_cookie() -> bool {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[allow(dead_code)]
 pub fn has_server_gate_cookie() -> bool {
     false
 }

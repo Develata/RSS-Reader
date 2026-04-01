@@ -37,6 +37,7 @@ fn config_package_schema_matches_runtime_contract() {
             "list_density",
             "startup_view",
             "refresh_interval_minutes",
+            "archive_after_months",
             "reader_font_scale",
             "custom_css"
         ])
@@ -54,6 +55,7 @@ fn config_package_schema_matches_runtime_contract() {
         serde_json::json!(["all", "last_feed"])
     );
     assert_eq!(settings["properties"]["refresh_interval_minutes"]["minimum"], 1);
+    assert_eq!(settings["properties"]["archive_after_months"]["minimum"], 1);
     assert_eq!(settings["properties"]["reader_font_scale"]["minimum"], 0.8);
     assert_eq!(settings["properties"]["reader_font_scale"]["maximum"], 1.5);
     assert_eq!(settings["properties"]["custom_css"]["type"], "string");
@@ -74,6 +76,7 @@ fn encoded_config_package_uses_schema_field_names_and_enum_values() {
             list_density: ListDensity::Compact,
             startup_view: StartupView::LastFeed,
             refresh_interval_minutes: 15,
+            archive_after_months: 3,
             reader_font_scale: 1.2,
             custom_css: "[data-page=\"reader\"] .reader-body { max-width: 70ch; }".to_string(),
         },
@@ -91,6 +94,7 @@ fn encoded_config_package_uses_schema_field_names_and_enum_values() {
     assert_eq!(json["settings"]["list_density"], "compact");
     assert_eq!(json["settings"]["startup_view"], "last_feed");
     assert_eq!(json["settings"]["refresh_interval_minutes"], 15);
+    assert_eq!(json["settings"]["archive_after_months"], 3);
     assert_eq!(json["settings"]["reader_font_scale"], 1.2);
     assert_eq!(
         json["settings"]["custom_css"],

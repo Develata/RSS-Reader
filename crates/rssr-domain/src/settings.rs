@@ -33,6 +33,8 @@ pub struct UserSettings {
     pub list_density: ListDensity,
     pub startup_view: StartupView,
     pub refresh_interval_minutes: u32,
+    #[serde(default = "default_archive_after_months")]
+    pub archive_after_months: u32,
     pub reader_font_scale: f32,
     #[serde(default)]
     pub custom_css: String,
@@ -45,10 +47,15 @@ impl Default for UserSettings {
             list_density: ListDensity::Comfortable,
             startup_view: StartupView::All,
             refresh_interval_minutes: 30,
+            archive_after_months: default_archive_after_months(),
             reader_font_scale: 1.0,
             custom_css: String::new(),
         }
     }
+}
+
+const fn default_archive_after_months() -> u32 {
+    3
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -44,6 +44,7 @@
         "list_density",
         "startup_view",
         "refresh_interval_minutes",
+        "archive_after_months",
         "reader_font_scale",
         "custom_css"
       ],
@@ -61,6 +62,10 @@
           "enum": ["all", "last_feed"]
         },
         "refresh_interval_minutes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "archive_after_months": {
           "type": "integer",
           "minimum": 1
         },

@@ -120,7 +120,7 @@ body {
   line-height: 1.32;
 }
 
-[data-page="home"] .stats-grid {
+[data-page="feeds"] .stats-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 

@@ -79,6 +79,7 @@
 - 更新：源站内容变化时更新摘要、正文、源端更新时间和内容摘要；同一 `dedup_key` 命中时不得新建重复记录。
 - 已读切换：`is_read` 与 `read_at` 联动。
 - 收藏切换：`is_starred` 与 `starred_at` 联动。
+- 归档判定：归档属于基于发布时间和用户阈值实时计算的阅读组织状态，不作为单独持久化字段写入数据库。
 
 ## 实体 3：用户偏好设置（UserSettings）
 
@@ -92,12 +93,14 @@
 | list_density | 枚举 | `comfortable` / `compact` |
 | startup_view | 枚举 | `all` / `last_feed` |
 | refresh_interval_minutes | 整数 | 刷新间隔 |
+| archive_after_months | 整数 | 自动归档阈值，默认 `3` |
 | reader_font_scale | 浮点数 | 阅读字号缩放 |
-| updated_at | 时间 | 最后更新时间 |
+| custom_css | 文本 | 用户自定义主题 CSS，可为空 |
 
 ### 校验规则
 
 - `refresh_interval_minutes` 必须大于 0。
+- `archive_after_months` 必须大于 0。
 - `reader_font_scale` 必须处于可接受范围，例如 `0.8` 到 `1.5`。
 
 ## 实体 4：配置包（ConfigPackage）
@@ -141,5 +144,6 @@
 - 移除订阅源不等于启动完整同步删除。
 - 配置交换永远是“覆盖式配置更新”，不是文章级合并。
 - 文章列表默认按发布时间倒序。
+- 文章列表默认隐藏超过自动归档阈值的旧文章，但这些文章仍保留在本地库中，可重新显示和阅读。
 - 标题搜索只作用于本地文章标题。
 - Web 端与原生端共享同一份 SQLite schema，只是持久化适配层不同。

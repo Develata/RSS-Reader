@@ -94,6 +94,7 @@ fn sample_package() -> ConfigPackage {
             list_density: ListDensity::Compact,
             startup_view: StartupView::All,
             refresh_interval_minutes: 15,
+            archive_after_months: 3,
             reader_font_scale: 1.1,
             custom_css: ".feed-card { border-radius: 12px; }".to_string(),
         },

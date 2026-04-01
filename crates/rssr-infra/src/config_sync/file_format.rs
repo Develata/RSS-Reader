@@ -28,6 +28,7 @@ pub fn write_config_package(path: impl AsRef<Path>, package: &ConfigPackage) -> 
 pub fn validate_config_package(package: &ConfigPackage) -> anyhow::Result<()> {
     ensure!(package.version >= 1, "配置包版本必须大于等于 1");
     ensure!(package.settings.refresh_interval_minutes >= 1, "刷新间隔必须大于等于 1 分钟");
+    ensure!(package.settings.archive_after_months >= 1, "自动归档阈值必须大于等于 1 个月");
     ensure!(
         (0.8..=1.5).contains(&package.settings.reader_font_scale),
         "阅读字号缩放必须在 0.8 到 1.5 之间"

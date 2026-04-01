@@ -16,8 +16,9 @@ async fn settings_repository_persists_and_loads_settings() {
         list_density: ListDensity::Compact,
         startup_view: StartupView::LastFeed,
         refresh_interval_minutes: 45,
+        archive_after_months: 6,
         reader_font_scale: 1.2,
-        custom_css: "[data-page=\"home\"] { opacity: 0.95; }".to_string(),
+        custom_css: "[data-page=\"feeds\"] { opacity: 0.95; }".to_string(),
     };
 
     repository.save(&settings).await.expect("save settings");
@@ -52,5 +53,6 @@ async fn settings_repository_loads_legacy_settings_without_custom_css() {
     let loaded = repository.load().await.expect("load legacy settings");
 
     assert_eq!(loaded.custom_css, "");
+    assert_eq!(loaded.archive_after_months, 3);
     assert_eq!(loaded.theme, ThemeMode::Light);
 }

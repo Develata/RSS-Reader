@@ -3,7 +3,7 @@ pub mod feed;
 pub mod repository;
 pub mod settings;
 
-pub use entry::{Entry, EntryQuery, EntrySummary};
+pub use entry::{Entry, EntryQuery, EntrySummary, is_entry_archived};
 pub use feed::{Feed, FeedSummary, NewFeedSubscription, normalize_feed_url};
 pub use repository::{EntryRepository, FeedRepository, HealthRepository, SettingsRepository};
 pub use settings::{ConfigFeed, ConfigPackage, ListDensity, StartupView, ThemeMode, UserSettings};

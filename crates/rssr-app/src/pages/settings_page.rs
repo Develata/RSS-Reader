@@ -196,6 +196,21 @@ pub fn SettingsPage() -> Element {
                             }
                         }
                     }
+                    label { class: "field-label", r#for: "settings-archive-after-months", "自动归档阈值（月）" }
+                    input {
+                        id: "settings-archive-after-months",
+                        name: "archive_after_months",
+                        class: "text-input",
+                        "data-action": "archive-after-months",
+                        value: "{draft().archive_after_months}",
+                        oninput: move |event| {
+                            if let Ok(months) = event.value().parse::<u32>() {
+                                let mut next = draft();
+                                next.archive_after_months = months;
+                                draft.set(next);
+                            }
+                        }
+                    }
                     label { class: "field-label", r#for: "settings-reader-font-scale", "阅读字号缩放" }
                     input {
                         id: "settings-reader-font-scale",
