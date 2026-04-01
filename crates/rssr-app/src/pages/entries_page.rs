@@ -21,6 +21,13 @@ struct EntryGroup {
     entries: Vec<EntrySummary>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EntryGroupNavItem {
+    id: String,
+    title: String,
+    subtitle: String,
+}
+
 #[component]
 pub fn StartupPage() -> Element {
     let navigator = use_navigator();
@@ -96,6 +103,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let mut show_archived = use_signal(|| false);
     let mut grouping_mode = use_signal(|| EntryGroupingMode::Time);
     let mut archive_after_months = use_signal(|| UserSettings::default().archive_after_months);
+    let mut sidebar_collapsed = use_signal(|| false);
+    let mut sidebar_open = use_signal(|| false);
     let reload_tick = use_signal(|| 0_u64);
     let status = use_signal(|| "正在加载文章列表…".to_string());
     let status_tone = use_signal(|| "info".to_string());
@@ -146,211 +155,298 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
         })
         .collect::<Vec<_>>();
     let grouped_entries = group_entries(&visible_entries, grouping_mode());
+    let group_nav = build_group_nav_items(&grouped_entries);
+    let sidebar_button_label = if sidebar_open() { "收起目录" } else { "展开目录" };
+    let desktop_toggle_label = if sidebar_collapsed() { "展开侧栏" } else { "收起侧栏" };
 
     rsx! {
         section { class: "page page-entries", "data-page": "entries",
             AppNav {}
-            div { class: "reading-header",
-                h2 { if feed_id.is_some() { "订阅文章" } else { "文章" } }
-                p {
-                    class: "page-intro",
-                    if feed_id.is_some() {
-                        "当前只显示所选订阅的文章。你仍然可以按时间或按来源组织当前结果，然后继续进入阅读页。"
+            div { class: "entries-layout",
+                if sidebar_open() {
+                    button {
+                        class: "entries-sidebar__backdrop",
+                        "data-action": "close-entry-directory",
+                        "aria-label": "关闭文章目录",
+                        onclick: move |_| sidebar_open.set(false),
+                    }
+                }
+                aside {
+                    class: if sidebar_collapsed() {
+                        "entries-sidebar is-collapsed"
+                    } else if sidebar_open() {
+                        "entries-sidebar is-open"
                     } else {
-                        "文章默认按时间组织展示。你也可以切换为按来源浏览，然后继续进入阅读页。"
-                    }
-                }
-            }
-            if feed_id.is_some() {
-                Link {
-                    class: "button secondary",
-                    "data-nav": "entries",
-                    to: AppRoute::EntriesPage {},
-                    "返回全部文章"
-                }
-            }
-            div { class: "entry-organize-bar",
-                label { class: "field-label", r#for: "entry-grouping-mode", "组织方式" }
-                select {
-                    id: "entry-grouping-mode",
-                    class: "select-input",
-                    "data-action": if grouping_mode() == EntryGroupingMode::Time { "group-by-time" } else { "group-by-source" },
-                    value: match grouping_mode() {
-                        EntryGroupingMode::Time => "time",
-                        EntryGroupingMode::Source => "source",
+                        "entries-sidebar"
                     },
-                    onchange: move |event| {
-                        grouping_mode.set(match event.value().as_str() {
-                            "source" => EntryGroupingMode::Source,
-                            _ => EntryGroupingMode::Time,
-                        });
-                    },
-                    option { value: "time", "按时间" }
-                    option { value: "source", "按来源" }
-                }
-                label { class: "entry-filters__toggle",
-                    input {
-                        r#type: "checkbox",
-                        "data-action": "toggle-archived",
-                        checked: show_archived(),
-                        onchange: move |event| show_archived.set(event.checked())
-                    }
-                    span { "显示已归档文章" }
-                }
-                p { class: "page-intro",
-                    if show_archived() {
-                        "当前同时显示归档文章。"
-                    } else {
-                        "默认隐藏超过 {archive_after_months()} 个月的归档文章。"
-                    }
-                }
-            }
-            div { class: "entry-overview",
-                div { class: "entry-overview__metric",
-                    span { class: "entry-overview__label", "当前结果" }
-                    strong { class: "entry-overview__value", "{visible_entries.len()}" }
-                }
-                div { class: "entry-overview__metric",
-                    span { class: "entry-overview__label", "归档文章" }
-                    strong { class: "entry-overview__value", "{archived_count}" }
-                }
-                div { class: "entry-overview__metric entry-overview__metric--hint",
-                    span { class: "entry-overview__label", "当前组织" }
-                    strong {
-                        class: "entry-overview__value",
-                        if grouping_mode() == EntryGroupingMode::Time { "按时间" } else { "按来源" }
-                    }
-                }
-            }
-            EntryFilters {
-                search: search(),
-                unread_only: unread_only(),
-                starred_only: starred_only(),
-                on_search: move |value| search.set(value),
-                on_toggle_unread: move |value| unread_only.set(value),
-                on_toggle_starred: move |value| starred_only.set(value),
-            }
-            StatusBanner { message: status(), tone: status_tone() }
-            if archived_count > 0 && !show_archived() {
-                StatusBanner {
-                    message: format!("当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。", archived_count),
-                    tone: "info".to_string()
-                }
-            }
-            if entries().is_empty() {
-                StatusBanner {
-                    message: if feed_id.is_some() {
-                        "这个订阅下还没有可显示的文章，先尝试刷新该 feed。".to_string()
-                    } else {
-                        "没有可显示的文章，先去订阅页添加并刷新 feed。".to_string()
-                    },
-                    tone: "info".to_string()
-                }
-            } else if visible_entries.is_empty() {
-                StatusBanner {
-                    message: "当前结果中的文章都已被自动归档，勾选“显示已归档文章”即可查看。".to_string(),
-                    tone: "info".to_string()
-                }
-            } else {
-                div { class: "entry-groups",
-                    for group in grouped_entries {
-                        section { class: "entry-group", key: "{group.title}",
-                            div { class: "entry-group__header",
-                                h3 { class: "entry-group__title", "{group.title}" }
-                                p { class: "entry-group__meta", "{group.subtitle}" }
+                    "data-role": "entry-directory",
+                    div { class: "entries-sidebar__header",
+                        div {
+                            h3 { class: "entries-sidebar__title", "文章目录" }
+                            p {
+                                class: "entries-sidebar__description",
+                                if grouping_mode() == EntryGroupingMode::Time {
+                                    "按月份聚合当前结果，帮助你顺着时间线持续阅读。"
+                                } else {
+                                    "按来源聚合当前结果，帮助你围绕同一信息源连续阅读。"
+                                }
                             }
-                            ul { class: "entry-list entry-list--grouped",
-                                for entry in group.entries {
-                                    {
-                                        let read_title = entry.title.clone();
-                                        let starred_title = entry.title.clone();
-                                        rsx! {
-                                            li { class: "entry-card entry-card--reading", key: "{entry.id}",
-                                                Link {
-                                                    class: "entry-card__title",
-                                                    to: AppRoute::ReaderPage { entry_id: entry.id },
-                                                    "{entry.title}"
-                                                }
-                                                div { class: "entry-card__meta",
-                                                    "{entry.feed_title}"
-                                                    if let Some(date) = format_entry_date_utc(entry.published_at) { " · {date}" }
-                                                    if entry.is_read { " · 已读" } else { " · 未读" }
-                                                    if entry.is_starred { " · 已收藏" }
-                                                }
-                                                div { class: "entry-card__actions",
-                                                    button {
-                                                        class: "button secondary",
-                                                        "data-action": "mark-read",
-                                                        onclick: move |_| {
-                                                            let mut reload_tick = reload_tick;
-                                                            let title = read_title.clone();
-                                                            spawn(async move {
-                                                                match AppServices::shared().await {
-                                                                    Ok(services) => match services.set_read(entry.id, !entry.is_read).await {
-                                                                        Ok(()) => {
-                                                                            set_status_info(
+                        }
+                        div { class: "entries-sidebar__toggles",
+                            button {
+                                class: "button secondary entries-sidebar__toggle entries-sidebar__toggle--desktop",
+                                "data-action": if sidebar_collapsed() { "expand-entry-directory" } else { "collapse-entry-directory" },
+                                onclick: move |_| sidebar_collapsed.set(!sidebar_collapsed()),
+                                "{desktop_toggle_label}"
+                            }
+                            button {
+                                class: "button secondary entries-sidebar__toggle entries-sidebar__toggle--mobile",
+                                "data-action": "close-entry-directory",
+                                onclick: move |_| sidebar_open.set(false),
+                                "关闭"
+                            }
+                        }
+                    }
+                    if !sidebar_collapsed() {
+                        div { class: "entries-sidebar__meta",
+                            div { class: "entries-sidebar__metric",
+                                span { class: "entries-sidebar__metric-label", "目录分组" }
+                                strong { class: "entries-sidebar__metric-value", "{group_nav.len()}" }
+                            }
+                            div { class: "entries-sidebar__metric",
+                                span { class: "entries-sidebar__metric-label", "当前结果" }
+                                strong { class: "entries-sidebar__metric-value", "{visible_entries.len()}" }
+                            }
+                        }
+                        if group_nav.is_empty() {
+                            p { class: "entries-sidebar__empty", "当前没有可导航的文章分组。" }
+                        } else {
+                            nav { class: "entries-sidebar__nav", "aria-label": "文章目录导航",
+                                for item in group_nav {
+                                    a {
+                                        class: "entries-sidebar__link",
+                                        href: "#{item.id}",
+                                        onclick: move |_| sidebar_open.set(false),
+                                        span { class: "entries-sidebar__link-title", "{item.title}" }
+                                        span { class: "entries-sidebar__link-meta", "{item.subtitle}" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                div { class: "entries-main",
+                    div { class: "reading-header",
+                        h2 { if feed_id.is_some() { "订阅文章" } else { "文章" } }
+                        p {
+                            class: "page-intro",
+                            if feed_id.is_some() {
+                                "当前只显示所选订阅的文章。你仍然可以按时间或按来源组织当前结果，然后继续进入阅读页。"
+                            } else {
+                                "文章默认按时间组织展示。你也可以切换为按来源浏览，然后继续进入阅读页。"
+                            }
+                        }
+                    }
+                    div { class: "entries-main__controls",
+                        if feed_id.is_some() {
+                            Link {
+                                class: "button secondary",
+                                "data-nav": "entries",
+                                to: AppRoute::EntriesPage {},
+                                "返回全部文章"
+                            }
+                        }
+                        button {
+                            class: "button secondary entries-main__directory-trigger",
+                            "data-action": if sidebar_open() { "close-entry-directory" } else { "open-entry-directory" },
+                            onclick: move |_| sidebar_open.set(!sidebar_open()),
+                            "{sidebar_button_label}"
+                        }
+                    }
+                    div { class: "entry-organize-bar",
+                        label { class: "field-label", r#for: "entry-grouping-mode", "组织方式" }
+                        select {
+                            id: "entry-grouping-mode",
+                            class: "select-input",
+                            "data-action": if grouping_mode() == EntryGroupingMode::Time { "group-by-time" } else { "group-by-source" },
+                            value: match grouping_mode() {
+                                EntryGroupingMode::Time => "time",
+                                EntryGroupingMode::Source => "source",
+                            },
+                            onchange: move |event| {
+                                grouping_mode.set(match event.value().as_str() {
+                                    "source" => EntryGroupingMode::Source,
+                                    _ => EntryGroupingMode::Time,
+                                });
+                            },
+                            option { value: "time", "按时间" }
+                            option { value: "source", "按来源" }
+                        }
+                        label { class: "entry-filters__toggle",
+                            input {
+                                r#type: "checkbox",
+                                "data-action": "toggle-archived",
+                                checked: show_archived(),
+                                onchange: move |event| show_archived.set(event.checked())
+                            }
+                            span { "显示已归档文章" }
+                        }
+                        p { class: "page-intro",
+                            if show_archived() {
+                                "当前同时显示归档文章。"
+                            } else {
+                                "默认隐藏超过 {archive_after_months()} 个月的归档文章。"
+                            }
+                        }
+                    }
+                    div { class: "entry-overview",
+                        div { class: "entry-overview__metric",
+                            span { class: "entry-overview__label", "当前结果" }
+                            strong { class: "entry-overview__value", "{visible_entries.len()}" }
+                        }
+                        div { class: "entry-overview__metric",
+                            span { class: "entry-overview__label", "归档文章" }
+                            strong { class: "entry-overview__value", "{archived_count}" }
+                        }
+                        div { class: "entry-overview__metric entry-overview__metric--hint",
+                            span { class: "entry-overview__label", "当前组织" }
+                            strong {
+                                class: "entry-overview__value",
+                                if grouping_mode() == EntryGroupingMode::Time { "按时间" } else { "按来源" }
+                            }
+                        }
+                    }
+                    EntryFilters {
+                        search: search(),
+                        unread_only: unread_only(),
+                        starred_only: starred_only(),
+                        on_search: move |value| search.set(value),
+                        on_toggle_unread: move |value| unread_only.set(value),
+                        on_toggle_starred: move |value| starred_only.set(value),
+                    }
+                    StatusBanner { message: status(), tone: status_tone() }
+                    if archived_count > 0 && !show_archived() {
+                        StatusBanner {
+                            message: format!("当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。", archived_count),
+                            tone: "info".to_string()
+                        }
+                    }
+                    if entries().is_empty() {
+                        StatusBanner {
+                            message: if feed_id.is_some() {
+                                "这个订阅下还没有可显示的文章，先尝试刷新该 feed。".to_string()
+                            } else {
+                                "没有可显示的文章，先去订阅页添加并刷新 feed。".to_string()
+                            },
+                            tone: "info".to_string()
+                        }
+                    } else if visible_entries.is_empty() {
+                        StatusBanner {
+                            message: "当前结果中的文章都已被自动归档，勾选“显示已归档文章”即可查看。".to_string(),
+                            tone: "info".to_string()
+                        }
+                    } else {
+                        div { class: "entry-groups",
+                            for group in grouped_entries {
+                                section { class: "entry-group", key: "{group.title}", id: "{group_anchor_id(&group.title)}",
+                                    div { class: "entry-group__header",
+                                        h3 { class: "entry-group__title", "{group.title}" }
+                                        p { class: "entry-group__meta", "{group.subtitle}" }
+                                    }
+                                    ul { class: "entry-list entry-list--grouped",
+                                        for entry in group.entries {
+                                            {
+                                                let read_title = entry.title.clone();
+                                                let starred_title = entry.title.clone();
+                                                rsx! {
+                                                    li { class: "entry-card entry-card--reading", key: "{entry.id}",
+                                                        Link {
+                                                            class: "entry-card__title",
+                                                            to: AppRoute::ReaderPage { entry_id: entry.id },
+                                                            "{entry.title}"
+                                                        }
+                                                        div { class: "entry-card__meta",
+                                                            "{entry.feed_title}"
+                                                            if let Some(date) = format_entry_date_utc(entry.published_at) { " · {date}" }
+                                                            if entry.is_read { " · 已读" } else { " · 未读" }
+                                                            if entry.is_starred { " · 已收藏" }
+                                                        }
+                                                        div { class: "entry-card__actions",
+                                                            button {
+                                                                class: "button secondary",
+                                                                "data-action": "mark-read",
+                                                                onclick: move |_| {
+                                                                    let mut reload_tick = reload_tick;
+                                                                    let title = read_title.clone();
+                                                                    spawn(async move {
+                                                                        match AppServices::shared().await {
+                                                                            Ok(services) => match services.set_read(entry.id, !entry.is_read).await {
+                                                                                Ok(()) => {
+                                                                                    set_status_info(
+                                                                                        status,
+                                                                                        status_tone,
+                                                                                        format!(
+                                                                                            "已将《{}》{}。",
+                                                                                            title,
+                                                                                            if entry.is_read { "标记为未读" } else { "标记为已读" }
+                                                                                        ),
+                                                                                    );
+                                                                                    reload_tick += 1;
+                                                                                }
+                                                                                Err(err) => set_status_error(
+                                                                                    status,
+                                                                                    status_tone,
+                                                                                    format!("更新已读状态失败：{err}"),
+                                                                                ),
+                                                                            },
+                                                                            Err(err) => set_status_error(
                                                                                 status,
                                                                                 status_tone,
-                                                                                format!(
-                                                                                    "已将《{}》{}。",
-                                                                                    title,
-                                                                                    if entry.is_read { "标记为未读" } else { "标记为已读" }
-                                                                                ),
-                                                                            );
-                                                                            reload_tick += 1;
+                                                                                format!("初始化应用失败：{err}"),
+                                                                            ),
                                                                         }
-                                                                        Err(err) => set_status_error(
-                                                                            status,
-                                                                            status_tone,
-                                                                            format!("更新已读状态失败：{err}"),
-                                                                        ),
-                                                                    },
-                                                                    Err(err) => set_status_error(
-                                                                        status,
-                                                                        status_tone,
-                                                                        format!("初始化应用失败：{err}"),
-                                                                    ),
-                                                                }
-                                                            });
-                                                        },
-                                                        if entry.is_read { "标未读" } else { "标已读" }
-                                                    }
-                                                    button {
-                                                        class: "button secondary",
-                                                        "data-action": "toggle-starred",
-                                                        onclick: move |_| {
-                                                            let mut reload_tick = reload_tick;
-                                                            let title = starred_title.clone();
-                                                            spawn(async move {
-                                                                match AppServices::shared().await {
-                                                                    Ok(services) => match services.set_starred(entry.id, !entry.is_starred).await {
-                                                                        Ok(()) => {
-                                                                            set_status_info(
+                                                                    });
+                                                                },
+                                                                if entry.is_read { "标未读" } else { "标已读" }
+                                                            }
+                                                            button {
+                                                                class: "button secondary",
+                                                                "data-action": "toggle-starred",
+                                                                onclick: move |_| {
+                                                                    let mut reload_tick = reload_tick;
+                                                                    let title = starred_title.clone();
+                                                                    spawn(async move {
+                                                                        match AppServices::shared().await {
+                                                                            Ok(services) => match services.set_starred(entry.id, !entry.is_starred).await {
+                                                                                Ok(()) => {
+                                                                                    set_status_info(
+                                                                                        status,
+                                                                                        status_tone,
+                                                                                        format!(
+                                                                                            "已{}《{}》。",
+                                                                                            if entry.is_starred { "取消收藏" } else { "收藏" },
+                                                                                            title
+                                                                                        ),
+                                                                                    );
+                                                                                    reload_tick += 1;
+                                                                                }
+                                                                                Err(err) => set_status_error(
+                                                                                    status,
+                                                                                    status_tone,
+                                                                                    format!("更新收藏状态失败：{err}"),
+                                                                                ),
+                                                                            },
+                                                                            Err(err) => set_status_error(
                                                                                 status,
                                                                                 status_tone,
-                                                                                format!(
-                                                                                    "已{}《{}》。",
-                                                                                    if entry.is_starred { "取消收藏" } else { "收藏" },
-                                                                                    title
-                                                                                ),
-                                                                            );
-                                                                            reload_tick += 1;
+                                                                                format!("初始化应用失败：{err}"),
+                                                                            ),
                                                                         }
-                                                                        Err(err) => set_status_error(
-                                                                            status,
-                                                                            status_tone,
-                                                                            format!("更新收藏状态失败：{err}"),
-                                                                        ),
-                                                                    },
-                                                                    Err(err) => set_status_error(
-                                                                        status,
-                                                                        status_tone,
-                                                                        format!("初始化应用失败：{err}"),
-                                                                    ),
-                                                                }
-                                                            });
-                                                        },
-                                                        if entry.is_starred { "取消收藏" } else { "收藏" }
+                                                                    });
+                                                                },
+                                                                if entry.is_starred { "取消收藏" } else { "收藏" }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -457,6 +553,33 @@ fn group_entries_by_source(entries: &[EntrySummary]) -> Vec<EntryGroup> {
     });
 
     grouped.into_iter().map(|(_, group)| group).collect()
+}
+
+fn build_group_nav_items(groups: &[EntryGroup]) -> Vec<EntryGroupNavItem> {
+    groups
+        .iter()
+        .map(|group| EntryGroupNavItem {
+            id: group_anchor_id(&group.title),
+            title: group.title.clone(),
+            subtitle: group.subtitle.clone(),
+        })
+        .collect()
+}
+
+fn group_anchor_id(title: &str) -> String {
+    let slug = title
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else if ch.is_whitespace() || matches!(ch, '-' | '_' | '/' | '.') {
+                '-'
+            } else {
+                ch
+            }
+        })
+        .collect::<String>();
+    format!("entry-group-{}", slug.trim_matches('-'))
 }
 
 fn set_status_info(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
