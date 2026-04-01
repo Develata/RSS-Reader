@@ -30,6 +30,8 @@ local.properties
 .vscode/
 *.swp
 *.swo
+__pycache__/
+*.pyc
 
 # OS files
 .DS_Store
