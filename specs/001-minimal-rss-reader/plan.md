@@ -10,12 +10,15 @@
 配置交换。实现采用单一 Rust workspace，按 UI、应用服务、领域模型、基础设施四层
 划分，确保首版保持本地优先、性能敏感、边界清晰，并且不引入完整同步系统。界面基于
 Dioxus 0.7.3，桌面端与 Web 端共用同一套 Rust 行为逻辑；补充设计原则记录在
-`docs/design/frontend-command-and-styling-philosophy.md`，作为后续 CLI 与样式扩展的
-补充约束，但不改变本 feature 的 MVP 边界。正文缓存边界限定为 feed 已提供的 HTML /
-文本内容，不默认抓取站点原网页；阅读体验增强优先通过正文静态资源本地化实现。设置页额外承载一组克制的主题切换能力：
-用户可编辑或导入自定义 CSS、导出当前 CSS，并通过预置主题按钮、主题下拉与主题卡片
-快速切换样式；不引入实时预览模式。整体导航采用紧凑头部，不保留大面积品牌展示块，
-并在设置页提供一个轻量 GitHub 仓库入口，方便用户回到开源项目主页。
+`docs/design/functional-design-philosophy.md` 与
+`docs/design/frontend-command-reference.md`，作为后续 CLI、样式扩展和界面接口演进的
+补充约束，但不改变本 feature 的 MVP 边界。产品功能收敛在订阅、阅读、基本设置和基础
+配置交换之内，不引入 AI 文本加工或其它偏离阅读器本质的能力。正文缓存边界限定为 feed
+已提供的 HTML / 文本内容，不默认抓取站点原网页；阅读体验增强优先通过正文静态资源本
+地化实现。设置页额外承载一组克制的主题切换能力：用户可编辑或导入自定义 CSS、导出当前
+CSS，并通过预置主题按钮、主题下拉与主题卡片快速切换样式；不引入实时预览模式。整体
+导航采用紧凑头部，不保留大面积品牌展示块，并在设置页提供一个轻量 GitHub 仓库入口，
+方便用户回到开源项目主页。
 
 ## 技术上下文
 
@@ -23,7 +26,7 @@ Dioxus 0.7.3，桌面端与 Web 端共用同一套 Rust 行为逻辑；补充设
 **主要依赖**：Dioxus 0.7.3、dioxus-router 0.7.3、tokio、sqlx、reqwest、feed-rs、quick-xml、serde、serde_json、thiserror、anyhow、tracing、time、url、wasm SQLite 持久化适配层  
 **存储**：桌面端使用本地 SQLite；Web 使用 wasm SQLite，并将数据库文件持久化到 IndexedDB；配置交换使用本地配置文件与 OPML/JSON 导入导出文件  
 **测试**：`cargo test --workspace`、仓储/解析集成测试、导入导出测试、桌面/Web 手工验证、Android target smoke check 与本地 Debug APK 构建验证  
-**目标平台**：Windows、macOS、Web；Android 已具备 Debug APK 构建路径，但正式签名发布仍不作为本次 MVP 的交付门禁  
+**目标平台**：Windows、macOS、Web；移动端当前以 Android 为首个稳定落地点；同时保留 CLI 入口与 Docker Compose / GHCR Web 部署形态；Android 正式签名发布仍不作为本次 MVP 的交付门禁
 **项目类型**：单用户客户端应用、共享 Rust workspace  
 **性能目标**：快速启动、顺滑列表滚动、订阅增量刷新、10,000 篇文章规模下搜索和筛选保持响应  
 **约束**：本地优先、仅配置同步、单用户、无服务端依赖、Web 必须具备本地持久化、UI 保持克制、避免过度异步复杂度  
@@ -63,7 +66,8 @@ docs/
 ├── testing/
 │   └── manual-regression.md
 └── design/
-    ├── frontend-command-and-styling-philosophy.md
+    ├── frontend-command-reference.md
+    ├── functional-design-philosophy.md
     └── theme-author-selector-reference.md
 ```
 
@@ -113,13 +117,15 @@ tests/
 `rssr-application` 编排用例与状态；`rssr-domain` 定义核心模型与 trait；
 `rssr-infra` 实现 SQLite、Web 端 wasm SQLite 持久化、HTTP、RSS/Atom 解析、
 OPML 与配置交换。样式与命令系统的长期演进原则单独记录在 `docs/design/` 目录，但实现仍
-以这些 crate 边界为准。正文缓存与静态资源本地化也应沿这些 crate 边界演进：资源抓取、
-缓存落盘和 HTML 引用改写由 Rust 应用层与基础设施层负责，而不是在 UI 层临时处理。主题切换的公开 hook、class 和 CSS 变量接口由
-`docs/design/theme-author-selector-reference.md` 约束。导航头保持工具化与低干扰风格，
-仓库入口作为设置页中的次级动作暴露，而不是在主阅读区域占据版面。Android 当前已补
-齐 Dioxus 移动端入口、`Dioxus.toml` 配置和 Debug APK 构建链路，用于后续移动端验
-证；正式签名发布能力仍单独记录在 `docs/roadmaps/android-release-roadmap.md`，避免和当前
-MVP 的桌面/Web 交付范围混淆。
+以这些 crate 边界为准：`functional-design-philosophy.md` 负责说明产品范围、
+交互边界和设计原则，`frontend-command-reference.md` 负责说明当前稳定命令面与公开界面
+接口。正文缓存与静态资源本地化也应沿这些 crate 边界演进：资源抓取、缓存落盘和 HTML 引
+用改写由 Rust 应用层与基础设施层负责，而不是在 UI 层临时处理。主题切换的公开 hook、
+class 和 CSS 变量接口由 `docs/design/theme-author-selector-reference.md` 约束。导航头保
+持工具化与低干扰风格，仓库入口作为设置页中的次级动作暴露，而不是在主阅读区域占据版
+面。Android 当前已补齐 Dioxus 移动端入口、`Dioxus.toml` 配置和 Debug APK 构建链路，
+用作移动端首个稳定落地点；正式签名发布能力仍单独记录在
+`docs/roadmaps/android-release-roadmap.md`，避免和当前 MVP 的桌面/Web 交付范围混淆。
 
 ## 复杂度追踪
 

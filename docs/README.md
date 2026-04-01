@@ -9,14 +9,16 @@
 
 1. [根 README](../README.md)
 2. [英文 README](./README.en.md)
-3. [前端命令与样式设计哲学](./design/frontend-command-and-styling-philosophy.md)
+3. [功能设计哲学](./design/functional-design-philosophy.md)
 
 如果你已经知道自己要做什么，可以直接走下面的分流：
 
 - 想改主题或让 AI 生成 CSS：
   - [主题作者选择器参考](./design/theme-author-selector-reference.md)
-- 想理解当前交互边界、缓存策略和样式体系：
-  - [前端命令与样式设计哲学](./design/frontend-command-and-styling-philosophy.md)
+- 想理解当前产品边界、缓存策略和样式体系：
+  - [功能设计哲学](./design/functional-design-philosophy.md)
+- 想确认当前前端命令面和稳定界面接口：
+  - [前端命令与界面接口清单](./design/frontend-command-reference.md)
 - 想准备 Android 发包或验收：
   - [Android 安装包落地清单](./roadmaps/android-release-roadmap.md)
 - 想跑一轮人工验证：
@@ -27,12 +29,15 @@
 ### 设计文档
 
 - [设计文档索引](./design/README.md)
-- [前端命令与样式设计哲学](./design/frontend-command-and-styling-philosophy.md)
+- [功能设计哲学](./design/functional-design-philosophy.md)
+- [前端命令与界面接口清单](./design/frontend-command-reference.md)
 - [主题作者选择器参考](./design/theme-author-selector-reference.md)
 
 这组文档主要回答：
 
 - 行为与样式边界怎么划分
+- 产品功能边界为什么只围绕订阅、阅读、基本设置和基础配置交换
+- 当前前端命令面和界面接口有哪些稳定约束
 - 哪些 selector / hook 可以长期依赖
 - 怎样在不碰 Rust 逻辑的前提下自定义主题
 - 怎样把这套接口直接交给 AI 生成 CSS

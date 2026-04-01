@@ -317,7 +317,8 @@ See the docs index:
 
 - [docs index](./README.md)
 - [design index](./design/README.md)
-- [frontend styling philosophy](./design/frontend-command-and-styling-philosophy.md)
+- [functional design philosophy](./design/functional-design-philosophy.md)
+- [frontend command and interface reference](./design/frontend-command-reference.md)
 - [theme selector reference](./design/theme-author-selector-reference.md)
 - [testing index](./testing/README.md)
 - [Android release roadmap](./roadmaps/android-release-roadmap.md)

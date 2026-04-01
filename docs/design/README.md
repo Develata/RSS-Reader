@@ -1,10 +1,11 @@
 # 设计文档
 
-这个目录收纳 RSS-Reader 的长期设计原则、公开样式接口与主题编写约定。
+这个目录收纳 RSS-Reader 的长期设计原则、公开命令与界面接口，以及主题编写约定。
 
 ## 当前文档
 
-- [前端命令与样式设计哲学](./frontend-command-and-styling-philosophy.md)
+- [功能设计哲学](./functional-design-philosophy.md)
+- [前端命令与界面接口清单](./frontend-command-reference.md)
 - [主题作者选择器参考](./theme-author-selector-reference.md)
 
 ## 先读哪一份
@@ -12,19 +13,21 @@
 如果你在做这些事，可以直接按下面选：
 
 - 想理解界面为什么这样分层、Rust 和 CSS 的边界怎么划：
-  - [前端命令与样式设计哲学](./frontend-command-and-styling-philosophy.md)
+  - [功能设计哲学](./functional-design-philosophy.md)
+- 想确认目前有哪些前端命令、页面接口和 `data-action` 可以长期依赖：
+  - [前端命令与界面接口清单](./frontend-command-reference.md)
 - 想手写主题，或把一份文档直接丢给 AI 生成 CSS：
   - [主题作者选择器参考](./theme-author-selector-reference.md)
 
 ## 两份文档分别解决什么问题
 
-### 前端命令与样式设计哲学
+### 功能设计哲学
 
 关注：
 
+- 产品功能边界为什么要收敛在订阅、阅读、基本设置和基础配置交换
 - 行为由 Rust 控制、样式由 CSS 控制
-- CLI / UI 共用应用服务
-- 稳定样式接口如何定义
+- GUI / CLI / Docker Compose 形态如何保持同一产品边界
 - 正文缓存与图片本地化的边界
 
 适合：
@@ -32,6 +35,20 @@
 - 改交互边界
 - 改主题系统
 - 判断某类改动应该落在 UI、应用服务还是基础设施层
+
+### 前端命令与界面接口清单
+
+关注：
+
+- 当前有哪些前端命令应长期保持稳定
+- 哪些 `data-page` / `data-nav` / `data-action` 可公开依赖
+- 哪些组件 class 和状态接口适合主题和 AI 使用
+
+适合：
+
+- 对齐 UI 命令面
+- 检查某次改动有没有越过产品功能边界
+- 给 AI 或主题作者提供稳定接口约束
 
 ### 主题作者选择器参考
 

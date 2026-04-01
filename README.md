@@ -197,7 +197,8 @@ cargo check -p rssr-app --target aarch64-linux-android
 
 如果你想自定义外观但不想手写 CSS，可以先读：
 
-- [前端命令与样式设计哲学](./docs/design/frontend-command-and-styling-philosophy.md)
+- [功能设计哲学](./docs/design/functional-design-philosophy.md)
+- [前端命令与界面接口清单](./docs/design/frontend-command-reference.md)
 - [主题作者选择器参考](./docs/design/theme-author-selector-reference.md)
 
 ### 4. 导入导出
