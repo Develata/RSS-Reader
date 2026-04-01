@@ -95,6 +95,10 @@ fn WebAuthLoadingGate() -> Element {
 
 #[component]
 fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Element {
+    if matches!(state, WebAuthState::Authenticated | WebAuthState::PendingServerProbe) {
+        return rsx! { WebAuthLoadingGate {} };
+    }
+
     let mut username = use_signal(String::new);
     let mut password = use_signal(String::new);
     let mut status =
@@ -114,7 +118,7 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
     let title = match state {
         WebAuthState::NeedsSetup => "初始化 Web 登录",
         WebAuthState::NeedsLogin => "登录 RSS-Reader",
-        WebAuthState::Authenticated | WebAuthState::PendingServerProbe => unreachable!(),
+        WebAuthState::Authenticated | WebAuthState::PendingServerProbe => "验证登录状态",
     };
     let intro = match state {
         WebAuthState::NeedsSetup => {
@@ -123,12 +127,14 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
         WebAuthState::NeedsLogin => {
             "请输入先前设置的用户名和密码，解锁当前浏览器里的本地阅读器数据。"
         }
-        WebAuthState::Authenticated | WebAuthState::PendingServerProbe => unreachable!(),
+        WebAuthState::Authenticated | WebAuthState::PendingServerProbe => {
+            "正在确认当前登录状态，请稍候。"
+        }
     };
     let submit_label = match state {
         WebAuthState::NeedsSetup => "保存并进入",
         WebAuthState::NeedsLogin => "登录",
-        WebAuthState::Authenticated | WebAuthState::PendingServerProbe => unreachable!(),
+        WebAuthState::Authenticated | WebAuthState::PendingServerProbe => "继续",
     };
 
     rsx! {
@@ -161,7 +167,7 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
                                 status.set("验证通过，正在进入阅读器。".to_string());
                                 status_tone.set("info".to_string());
                                 password.set(String::new());
-                                on_authenticated.call(());
+                                complete_web_auth_transition(on_authenticated);
                             }
                             Err(err) => {
                                 status.set(err);
@@ -209,4 +215,20 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
             }
         }
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn complete_web_auth_transition(on_authenticated: EventHandler<()>) {
+    if let Some(window) = web_sys::window()
+        && window.location().reload().is_ok()
+    {
+        return;
+    }
+
+    on_authenticated.call(());
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn complete_web_auth_transition(on_authenticated: EventHandler<()>) {
+    on_authenticated.call(());
 }

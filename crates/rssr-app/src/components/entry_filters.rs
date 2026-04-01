@@ -11,7 +11,14 @@ pub fn EntryFilters(
 ) -> Element {
     rsx! {
         div { class: "entry-filters",
+            label {
+                class: "sr-only",
+                r#for: "entry-search-title",
+                "按标题搜索"
+            }
             input {
+                id: "entry-search-title",
+                name: "search_title",
                 class: "text-input",
                 "data-action": "search-title",
                 value: "{search}",
@@ -20,6 +27,7 @@ pub fn EntryFilters(
             }
             label { class: "entry-filters__toggle",
                 input {
+                    name: "filter_unread",
                     r#type: "checkbox",
                     "data-action": "filter-unread",
                     checked: unread_only,
@@ -29,6 +37,7 @@ pub fn EntryFilters(
             }
             label { class: "entry-filters__toggle",
                 input {
+                    name: "filter_starred",
                     r#type: "checkbox",
                     "data-action": "filter-starred",
                     checked: starred_only,

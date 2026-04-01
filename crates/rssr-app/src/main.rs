@@ -9,8 +9,17 @@ mod router;
 mod theme;
 mod web_auth;
 
+#[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::EnvFilter;
 
+#[cfg(target_arch = "wasm32")]
+fn init_tracing() {
+    let mut builder = tracing_wasm::WASMLayerConfigBuilder::new();
+    builder.set_max_level(tracing::Level::INFO);
+    tracing_wasm::set_as_global_default_with_config(builder.build());
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn init_tracing() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -64,6 +73,7 @@ fn main() {
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
+    console_error_panic_hook::set_once();
     init_tracing();
     dioxus::launch(app::App);
 }

@@ -134,7 +134,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
         }
     });
 
-    let now = OffsetDateTime::now_utc();
+    let now = current_time_utc();
     let archived_count = entries()
         .iter()
         .filter(|entry| is_entry_archived(entry.published_at, archive_after_months(), now))
@@ -450,6 +450,20 @@ fn set_status_info(mut status: Signal<String>, mut status_tone: Signal<String>, 
 fn set_status_error(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
     status.set(message);
     status_tone.set("error".to_string());
+}
+
+#[cfg(target_arch = "wasm32")]
+fn current_time_utc() -> OffsetDateTime {
+    let millis = js_sys::Date::now();
+    let seconds = (millis / 1_000.0).floor() as i64;
+    let nanos = ((millis % 1_000.0) * 1_000_000.0).round() as i64;
+    OffsetDateTime::from_unix_timestamp(seconds).expect("valid unix timestamp")
+        + time::Duration::nanoseconds(nanos)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn current_time_utc() -> OffsetDateTime {
+    OffsetDateTime::now_utc()
 }
 
 #[cfg(test)]

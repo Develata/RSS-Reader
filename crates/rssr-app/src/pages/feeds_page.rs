@@ -61,7 +61,14 @@ pub fn FeedsPage() -> Element {
             }
             StatusBanner { message: status(), tone: status_tone() }
             div { class: "feed-form",
+                label {
+                    class: "sr-only",
+                    r#for: "feed-url-input",
+                    "订阅地址"
+                }
                 input {
+                    id: "feed-url-input",
+                    name: "feed_url",
                     class: "text-input",
                     "data-action": "feed-url-input",
                     value: "{feed_url}",
@@ -122,7 +129,14 @@ pub fn FeedsPage() -> Element {
             div { class: "exchange-grid",
                 div { class: "exchange-card",
                     h3 { "配置包 JSON" }
+                    label {
+                        class: "sr-only",
+                        r#for: "config-text",
+                        "配置包 JSON 文本"
+                    }
                     textarea {
+                        id: "config-text",
+                        name: "config_text",
                         class: "text-area",
                         "data-action": "config-text",
                         value: "{config_text}",
@@ -175,7 +189,14 @@ pub fn FeedsPage() -> Element {
                 }
                 div { class: "exchange-card",
                     h3 { "OPML" }
+                    label {
+                        class: "sr-only",
+                        r#for: "opml-text",
+                        "OPML 文本"
+                    }
                     textarea {
+                        id: "opml-text",
+                        name: "opml_text",
                         class: "text-area",
                         "data-action": "opml-text",
                         value: "{opml_text}",
