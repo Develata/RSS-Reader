@@ -13,12 +13,19 @@ use crate::{
 const APP_NAME: &str = "RSS-Reader";
 const WEB_AUTH_MARKUP: &str = include_str!("../../../assets/branding/rssr-mark.svg");
 
+#[derive(Clone, Copy)]
+pub struct AppUiState {
+    pub entry_search: Signal<String>,
+}
+
 #[component]
 #[allow(non_snake_case)]
 pub fn App() -> Element {
     let mut settings = use_signal(AppServices::default_settings);
     let mut auth = use_signal(auth_state);
+    let entry_search = use_signal(String::new);
     use_context_provider(|| ThemeController { settings });
+    use_context_provider(|| AppUiState { entry_search });
 
     let _ = use_resource(move || async move {
         let current_auth = auth();
@@ -65,8 +72,34 @@ pub fn App() -> Element {
 
 #[component]
 pub fn AppNav() -> Element {
+    let mut ui = use_context::<AppUiState>();
+    let navigator = use_navigator();
+
     rsx! {
         nav { class: "app-nav-shell",
+            Link { class: "app-nav__brand", to: AppRoute::EntriesPage {}, "{APP_NAME}" }
+            form {
+                class: "app-nav__search",
+                onsubmit: move |event| {
+                    event.prevent_default();
+                    navigator.push(AppRoute::EntriesPage {});
+                },
+                label {
+                    class: "app-nav__search-icon",
+                    r#for: "app-nav-search-input",
+                    "⌕"
+                }
+                input {
+                    id: "app-nav-search-input",
+                    class: "app-nav__search-input",
+                    r#type: "search",
+                    placeholder: "搜索文章标题",
+                    value: "{(ui.entry_search)()}",
+                    onfocus: move |_| { navigator.push(AppRoute::EntriesPage {}); },
+                    oninput: move |event| ui.entry_search.set(event.value()),
+                }
+                span { class: "app-nav__search-hint", "Enter" }
+            }
             div { class: "app-nav",
                 Link { class: "app-nav__link", "data-nav": "feeds", to: AppRoute::FeedsPage {}, "订阅" }
                 Link { class: "app-nav__link", "data-nav": "entries", to: AppRoute::EntriesPage {}, "文章" }

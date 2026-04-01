@@ -102,80 +102,6 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 p { class: "reader-meta", "发布时间：{published_at}" }
                 p { class: "reader-meta", "快捷键：`M` 切换已读，`F` 切换收藏" }
             }
-            div { class: "reader-actions entry-card__actions",
-                button {
-                    class: "button secondary",
-                    "data-action": "mark-read",
-                    onclick: move |_| {
-                        let mut reload_tick = reload_tick;
-                        spawn(async move {
-                            match AppServices::shared().await {
-                                Ok(services) => match services.set_read(entry_id, !is_read()).await {
-                                    Ok(()) => {
-                                        set_status_info(
-                                            status,
-                                            status_tone,
-                                            if is_read() {
-                                                "已将当前文章标记为未读。".to_string()
-                                            } else {
-                                                "已将当前文章标记为已读。".to_string()
-                                            },
-                                        );
-                                        reload_tick += 1;
-                                    }
-                                    Err(err) => set_status_error(
-                                        status,
-                                        status_tone,
-                                        format!("更新已读状态失败：{err}"),
-                                    ),
-                                },
-                                Err(err) => set_status_error(
-                                    status,
-                                    status_tone,
-                                    format!("初始化应用失败：{err}"),
-                                ),
-                            }
-                        });
-                    },
-                    if is_read() { "标记为未读" } else { "标记为已读" }
-                }
-                button {
-                    class: "button secondary",
-                    "data-action": "toggle-starred",
-                    onclick: move |_| {
-                        let mut reload_tick = reload_tick;
-                        spawn(async move {
-                            match AppServices::shared().await {
-                                Ok(services) => match services.set_starred(entry_id, !is_starred()).await {
-                                    Ok(()) => {
-                                        set_status_info(
-                                            status,
-                                            status_tone,
-                                            if is_starred() {
-                                                "已取消收藏当前文章。".to_string()
-                                            } else {
-                                                "已收藏当前文章。".to_string()
-                                            },
-                                        );
-                                        reload_tick += 1;
-                                    }
-                                    Err(err) => set_status_error(
-                                        status,
-                                        status_tone,
-                                        format!("更新收藏状态失败：{err}"),
-                                    ),
-                                },
-                                Err(err) => set_status_error(
-                                    status,
-                                    status_tone,
-                                    format!("初始化应用失败：{err}"),
-                                ),
-                            }
-                        });
-                    },
-                    if is_starred() { "取消收藏" } else { "收藏文章" }
-                }
-            }
             if let Some(message) = error() {
                 StatusBanner { message, tone: "error".to_string() }
             } else {
@@ -189,23 +115,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         pre { "{body_text}" }
                     }
                 }
-                div { class: "reader-pagination inline-actions",
-                    if let Some(previous_unread_entry_id) = navigation_state().previous_unread_entry_id {
-                        button {
-                            class: "button secondary",
-                            "data-nav": "previous-unread-entry",
-                            onclick: move |_| { navigator.push(AppRoute::ReaderPage { entry_id: previous_unread_entry_id }); },
-                            "上一篇未读"
-                        }
-                    }
-                    if let Some(next_unread_entry_id) = navigation_state().next_unread_entry_id {
-                        button {
-                            class: "button",
-                            "data-nav": "next-unread-entry",
-                            onclick: move |_| { navigator.push(AppRoute::ReaderPage { entry_id: next_unread_entry_id }); },
-                            "下一篇未读"
-                        }
-                    }
+                div { class: "reader-pagination reader-pagination--context inline-actions",
                     if let Some(previous_feed_entry_id) = navigation_state().previous_feed_entry_id {
                         button {
                             class: "button secondary",
@@ -221,6 +131,118 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                             onclick: move |_| { navigator.push(AppRoute::ReaderPage { entry_id: next_feed_entry_id }); },
                             "下一篇同订阅文章"
                         }
+                    }
+                }
+                nav { class: "reader-bottom-bar", "aria-label": "阅读快捷操作",
+                    button {
+                        class: if previous_action_target(navigation_state()).is_some() {
+                            "reader-bottom-bar__button"
+                        } else {
+                            "reader-bottom-bar__button is-disabled"
+                        },
+                        disabled: previous_action_target(navigation_state()).is_none(),
+                        "data-nav": "previous-entry",
+                        onclick: move |_| {
+                            if let Some(target) = previous_action_target(navigation_state()) {
+                                navigator.push(AppRoute::ReaderPage { entry_id: target });
+                            }
+                        },
+                        span { class: "reader-bottom-bar__icon", "‹" }
+                        span { class: "reader-bottom-bar__label", "上一篇" }
+                    }
+                    button {
+                        class: "reader-bottom-bar__button",
+                        "data-action": "mark-read",
+                        onclick: move |_| {
+                            let mut reload_tick = reload_tick;
+                            spawn(async move {
+                                match AppServices::shared().await {
+                                    Ok(services) => match services.set_read(entry_id, !is_read()).await {
+                                        Ok(()) => {
+                                            set_status_info(
+                                                status,
+                                                status_tone,
+                                                if is_read() {
+                                                    "已将当前文章标记为未读。".to_string()
+                                                } else {
+                                                    "已将当前文章标记为已读。".to_string()
+                                                },
+                                            );
+                                            reload_tick += 1;
+                                        }
+                                        Err(err) => set_status_error(
+                                            status,
+                                            status_tone,
+                                            format!("更新已读状态失败：{err}"),
+                                        ),
+                                    },
+                                    Err(err) => set_status_error(
+                                        status,
+                                        status_tone,
+                                        format!("初始化应用失败：{err}"),
+                                    ),
+                                }
+                            });
+                        },
+                        span { class: "reader-bottom-bar__icon", if is_read() { "○" } else { "✓" } }
+                        span { class: "reader-bottom-bar__label", if is_read() { "未读" } else { "已读" } }
+                    }
+                    button {
+                        class: if is_starred() {
+                            "reader-bottom-bar__button is-active"
+                        } else {
+                            "reader-bottom-bar__button"
+                        },
+                        "data-action": "toggle-starred",
+                        onclick: move |_| {
+                            let mut reload_tick = reload_tick;
+                            spawn(async move {
+                                match AppServices::shared().await {
+                                    Ok(services) => match services.set_starred(entry_id, !is_starred()).await {
+                                        Ok(()) => {
+                                            set_status_info(
+                                                status,
+                                                status_tone,
+                                                if is_starred() {
+                                                    "已取消收藏当前文章。".to_string()
+                                                } else {
+                                                    "已收藏当前文章。".to_string()
+                                                },
+                                            );
+                                            reload_tick += 1;
+                                        }
+                                        Err(err) => set_status_error(
+                                            status,
+                                            status_tone,
+                                            format!("更新收藏状态失败：{err}"),
+                                        ),
+                                    },
+                                    Err(err) => set_status_error(
+                                        status,
+                                        status_tone,
+                                        format!("初始化应用失败：{err}"),
+                                    ),
+                                }
+                            });
+                        },
+                        span { class: "reader-bottom-bar__icon", if is_starred() { "★" } else { "☆" } }
+                        span { class: "reader-bottom-bar__label", "收藏" }
+                    }
+                    button {
+                        class: if next_action_target(navigation_state()).is_some() {
+                            "reader-bottom-bar__button"
+                        } else {
+                            "reader-bottom-bar__button is-disabled"
+                        },
+                        disabled: next_action_target(navigation_state()).is_none(),
+                        "data-nav": "next-entry",
+                        onclick: move |_| {
+                            if let Some(target) = next_action_target(navigation_state()) {
+                                navigator.push(AppRoute::ReaderPage { entry_id: target });
+                            }
+                        },
+                        span { class: "reader-bottom-bar__icon", "›" }
+                        span { class: "reader-bottom-bar__label", "下一篇" }
                     }
                 }
             }
@@ -258,6 +280,14 @@ fn format_reader_datetime_utc(published_at: Option<OffsetDateTime>) -> Option<St
 
     published_at
         .and_then(|value| value.to_offset(UtcOffset::UTC).format(READER_DATETIME_FORMAT).ok())
+}
+
+fn previous_action_target(navigation: ReaderNavigation) -> Option<i64> {
+    navigation.previous_unread_entry_id.or(navigation.previous_feed_entry_id)
+}
+
+fn next_action_target(navigation: ReaderNavigation) -> Option<i64> {
+    navigation.next_unread_entry_id.or(navigation.next_feed_entry_id)
 }
 
 fn set_status_info(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
