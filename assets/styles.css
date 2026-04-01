@@ -268,6 +268,12 @@ textarea {
   margin-top: 24px;
 }
 
+.stats-grid--airy .stat-card {
+  background:
+    linear-gradient(180deg, rgba(245, 250, 255, 0.54), rgba(255, 250, 242, 0.76));
+  box-shadow: 0 10px 24px rgba(67, 90, 111, 0.04);
+}
+
 .stat-card,
 .feed-card,
 .entry-card {
@@ -321,7 +327,58 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 12px;
+  margin: 0;
+}
+
+.feed-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(240px, 0.8fr);
+  gap: 16px;
   margin: 18px 0 22px;
+}
+
+.feed-compose-card,
+.feed-workbench__note {
+  padding: 18px;
+  border: 1px solid rgba(62, 42, 27, 0.09);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 247, 0.8), rgba(245, 250, 255, 0.42));
+  box-shadow: 0 12px 28px rgba(67, 90, 111, 0.04);
+}
+
+.feed-compose-card__header {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.feed-compose-card__header h3,
+.feed-workbench__note h3,
+.exchange-header h3 {
+  margin: 0;
+}
+
+.feed-compose-card__intro {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+  font-size: 0.94rem;
+}
+
+.feed-workbench__note {
+  align-content: start;
+}
+
+.exchange-header {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  margin-bottom: 14px;
+}
+
+.exchange-header--saved {
+  margin-top: 24px;
 }
 
 .app-shell.density-compact .feed-form,
@@ -1163,6 +1220,10 @@ textarea {
   }
 
   .feed-form {
+    grid-template-columns: 1fr;
+  }
+
+  .feed-workbench {
     grid-template-columns: 1fr;
   }
 

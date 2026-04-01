@@ -47,9 +47,11 @@ pub fn FeedsPage() -> Element {
     rsx! {
         section { class: "page page-feeds", "data-page": "feeds",
             AppNav {}
-            h2 { "订阅" }
-            p { class: "page-intro", "把 feed URL 保存到本地库，并立即执行首次刷新。" }
-            div { class: "stats-grid",
+            div { class: "reading-header reading-header--feeds",
+                h2 { "订阅" }
+                p { class: "page-intro", "把 feed URL 保存到本地库，并立即执行首次刷新。订阅管理保持克制，配置交换保持直白可恢复。" }
+            }
+            div { class: "stats-grid stats-grid--airy",
                 div { class: "stat-card",
                     div { class: "stat-card__label", "订阅数" }
                     div { class: "stat-card__value", "{feed_count}" }
@@ -60,75 +62,94 @@ pub fn FeedsPage() -> Element {
                 }
             }
             StatusBanner { message: status(), tone: status_tone() }
-            div { class: "feed-form",
-                label {
-                    class: "sr-only",
-                    r#for: "feed-url-input",
-                    "订阅地址"
-                }
-                input {
-                    id: "feed-url-input",
-                    name: "feed_url",
-                    class: "text-input",
-                    "data-action": "feed-url-input",
-                    value: "{feed_url}",
-                    placeholder: "https://example.com/feed.xml",
-                    oninput: move |event| feed_url.set(event.value())
-                }
-                button {
-                    class: "button",
-                    "data-action": "add-feed",
-                    onclick: move |_| {
-                        let url = feed_url();
-                        let mut reload_tick = reload_tick;
-                        spawn(async move {
-                            match AppServices::shared().await {
-                                Ok(services) => match services.add_subscription(&url).await {
-                                    Ok(()) => {
-                                        set_status_info(status, status_tone, "订阅已保存并完成首次刷新。".to_string());
-                                        feed_url.set(String::new());
-                                        reload_tick += 1;
+            div { class: "feed-workbench",
+                div { class: "feed-compose-card",
+                    div { class: "feed-compose-card__header",
+                        h3 { "新增订阅" }
+                        p { class: "feed-compose-card__intro", "支持常见 RSS / Atom 地址，保存后立即执行首次刷新。" }
+                    }
+                    div { class: "feed-form",
+                        label {
+                            class: "sr-only",
+                            r#for: "feed-url-input",
+                            "订阅地址"
+                        }
+                        input {
+                            id: "feed-url-input",
+                            name: "feed_url",
+                            class: "text-input",
+                            "data-action": "feed-url-input",
+                            value: "{feed_url}",
+                            placeholder: "https://example.com/feed.xml",
+                            oninput: move |event| feed_url.set(event.value())
+                        }
+                        button {
+                            class: "button",
+                            "data-action": "add-feed",
+                            onclick: move |_| {
+                                let url = feed_url();
+                                let mut reload_tick = reload_tick;
+                                spawn(async move {
+                                    match AppServices::shared().await {
+                                        Ok(services) => match services.add_subscription(&url).await {
+                                            Ok(()) => {
+                                                set_status_info(status, status_tone, "订阅已保存并完成首次刷新。".to_string());
+                                                feed_url.set(String::new());
+                                                reload_tick += 1;
+                                            }
+                                            Err(err) => {
+                                                if err.to_string().contains("首次刷新订阅失败") {
+                                                    set_status_error(status, status_tone, format!("订阅已保存，但首次刷新失败：{err}"));
+                                                    feed_url.set(String::new());
+                                                    reload_tick += 1;
+                                                } else {
+                                                    set_status_error(status, status_tone, format!("保存订阅失败：{err}"));
+                                                }
+                                            }
+                                        },
+                                        Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                                     }
-                                    Err(err) => {
-                                        if err.to_string().contains("首次刷新订阅失败") {
-                                            set_status_error(status, status_tone, format!("订阅已保存，但首次刷新失败：{err}"));
-                                            feed_url.set(String::new());
-                                            reload_tick += 1;
-                                        } else {
-                                            set_status_error(status, status_tone, format!("保存订阅失败：{err}"));
-                                        }
+                                });
+                            },
+                            "添加订阅"
+                        }
+                        button {
+                            class: "button secondary",
+                            "data-action": "refresh-all",
+                            onclick: move |_| {
+                                let mut reload_tick = reload_tick;
+                                spawn(async move {
+                                    match AppServices::shared().await {
+                                        Ok(services) => match services.refresh_all().await {
+                                            Ok(()) => {
+                                                set_status_info(status, status_tone, "刷新完成。".to_string());
+                                                reload_tick += 1;
+                                            }
+                                            Err(err) => set_status_error(status, status_tone, format!("刷新失败：{err}")),
+                                        },
+                                        Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
                                     }
-                                },
-                                Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
-                            }
-                        });
-                    },
-                    "添加订阅"
+                                });
+                            },
+                            "刷新全部"
+                        }
+                    }
                 }
-                button {
-                    class: "button secondary",
-                    "data-action": "refresh-all",
-                    onclick: move |_| {
-                        let mut reload_tick = reload_tick;
-                        spawn(async move {
-                            match AppServices::shared().await {
-                                Ok(services) => match services.refresh_all().await {
-                                    Ok(()) => {
-                                        set_status_info(status, status_tone, "刷新完成。".to_string());
-                                        reload_tick += 1;
-                                    }
-                                    Err(err) => set_status_error(status, status_tone, format!("刷新失败：{err}")),
-                                },
-                                Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
-                            }
-                        });
-                    },
-                    "刷新全部"
+                div { class: "feed-workbench__note",
+                    h3 { "当前工作方式" }
+                    p { class: "page-intro", "订阅页只做两件事：管理 feed 源，以及做最基础的配置交换。阅读组织和连续阅读留在文章页与阅读页。"}
                 }
+            }
+            div { class: "exchange-header" ,
+                h3 { "配置交换" }
+                p { class: "page-intro", "配置包 JSON 与 OPML 只交换设置和订阅来源，不处理正文内容。"}
             }
             div { class: "exchange-grid",
                 div { class: "exchange-card",
-                    h3 { "配置包 JSON" }
+                    div { class: "settings-card__header",
+                        h3 { "配置包 JSON" }
+                        p { class: "settings-card__intro", "适合完整迁移当前设置与订阅列表。"}
+                    }
                     label {
                         class: "sr-only",
                         r#for: "config-text",
@@ -188,7 +209,10 @@ pub fn FeedsPage() -> Element {
                     }
                 }
                 div { class: "exchange-card",
-                    h3 { "OPML" }
+                    div { class: "settings-card__header",
+                        h3 { "OPML" }
+                        p { class: "settings-card__intro", "适合与其它阅读器交换订阅来源。"}
+                    }
                     label {
                         class: "sr-only",
                         r#for: "opml-text",
@@ -251,6 +275,10 @@ pub fn FeedsPage() -> Element {
             if feeds().is_empty() {
                 StatusBanner { message: "还没有订阅，先添加一个 feed URL。".to_string(), tone: "info".to_string() }
             } else {
+                div { class: "exchange-header exchange-header--saved",
+                    h3 { "已保存订阅" }
+                    p { class: "page-intro", "每个订阅都显示来源地址、本地文章数、最近刷新结果与错误信息。"}
+                }
                 ul { class: "feed-list",
                     for feed in feeds() {
                         {

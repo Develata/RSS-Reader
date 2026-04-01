@@ -18,12 +18,37 @@ pub struct AppUiState {
     pub entry_search: Signal<String>,
 }
 
+fn initial_entry_search() -> String {
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(window) = web_sys::window()
+            && let Ok(Some(storage)) = window.local_storage()
+            && let Ok(Some(value)) = storage.get_item("rssr-entry-search")
+        {
+            return value;
+        }
+    }
+
+    String::new()
+}
+
+fn remember_entry_search(_value: &str) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(window) = web_sys::window()
+            && let Ok(Some(storage)) = window.local_storage()
+        {
+            let _ = storage.set_item("rssr-entry-search", _value);
+        }
+    }
+}
+
 #[component]
 #[allow(non_snake_case)]
 pub fn App() -> Element {
     let mut settings = use_signal(AppServices::default_settings);
     let mut auth = use_signal(auth_state);
-    let entry_search = use_signal(String::new);
+    let entry_search = use_signal(initial_entry_search);
     use_context_provider(|| ThemeController { settings });
     use_context_provider(|| AppUiState { entry_search });
 
@@ -96,7 +121,11 @@ pub fn AppNav() -> Element {
                     placeholder: "搜索文章标题",
                     value: "{(ui.entry_search)()}",
                     onfocus: move |_| { navigator.push(AppRoute::EntriesPage {}); },
-                    oninput: move |event| ui.entry_search.set(event.value()),
+                    oninput: move |event| {
+                        let value = event.value();
+                        remember_entry_search(&value);
+                        ui.entry_search.set(value);
+                    },
                 }
                 span { class: "app-nav__search-hint", "Enter" }
             }
