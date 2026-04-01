@@ -63,6 +63,7 @@ const fn default_archive_after_months() -> u32 {
 pub struct ConfigFeed {
     pub url: String,
     pub title: Option<String>,
+    // 为了保留 OPML / 配置交换中的原始分组信息，仍然继续序列化该字段。
     pub folder: Option<String>,
 }
 
