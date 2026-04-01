@@ -6,7 +6,7 @@ out_dir = "dist"
 [bundle]
 identifier = "io.github.develata.rssreader"
 publisher = "Develata"
-icon = ["icons/icon.png", "icons/icon.ico"]
+icon = ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"]
 
 [web.app]
 title = "RSS-Reader"

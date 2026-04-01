@@ -85,6 +85,7 @@ jobs:
         run: |
           rm -rf target/dx/rssr-app/release/android
           dx bundle --platform android --package rssr-app --target aarch64-linux-android --release --debug-symbols false
+          python3 scripts/prepare_android_bundle.py target/dx/rssr-app/release/android/app/app/src/main
 
       - name: Prepare Android release signing
         if: env.ANDROID_RELEASE_READY == 'true'
