@@ -41,9 +41,11 @@ webbrowser.workspace = true
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus = { workspace = true, features = ["web"] }
 gloo-file = { version = "0.3", features = ["futures"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
 reqwest.workspace = true
 uuid = { version = "1", features = ["js"] }
+wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["Blob", "BlobPropertyBag", "CssStyleDeclaration", "Document", "Element", "Event", "EventTarget", "File", "FileList", "HtmlAnchorElement", "HtmlDocument", "HtmlElement", "HtmlInputElement", "Location", "Node", "Storage", "Url", "Window"] }
 
 [target.'cfg(windows)'.build-dependencies]

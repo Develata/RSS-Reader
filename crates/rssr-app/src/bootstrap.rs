@@ -1,6 +1,9 @@
 #[cfg(not(target_arch = "wasm32"))]
 mod imp {
-    use std::sync::Arc;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
     use std::time::Duration;
 
     use anyhow::Context;
@@ -24,6 +27,7 @@ mod imp {
         opml::OpmlCodec,
         parser::{FeedParser, feed_parser::ParsedEntry},
     };
+    use time::OffsetDateTime;
     use tokio::sync::OnceCell;
     use url::Url;
 
@@ -48,11 +52,13 @@ mod imp {
         body_asset_localizer: BodyAssetLocalizer,
         parser: FeedParser,
         opml_codec: OpmlCodec,
+        auto_refresh_started: AtomicBool,
     }
 
     impl AppServices {
         const MAX_BACKGROUND_LOCALIZED_ENTRIES: usize = 5;
         const LOCALIZE_TIMEOUT: Duration = Duration::from_secs(5);
+        const AUTO_REFRESH_POLL_INTERVAL: Duration = Duration::from_secs(30);
 
         pub async fn shared() -> anyhow::Result<Arc<Self>> {
             APP_SERVICES
@@ -88,6 +94,7 @@ mod imp {
                         body_asset_localizer: BodyAssetLocalizer::new(),
                         parser: FeedParser::new(),
                         opml_codec: OpmlCodec::new(),
+                        auto_refresh_started: AtomicBool::new(false),
                     }))
                 })
                 .await
@@ -171,6 +178,46 @@ mod imp {
 
         pub async fn save_settings(&self, settings: &UserSettings) -> anyhow::Result<()> {
             self.settings_service.save(settings).await
+        }
+
+        pub fn ensure_auto_refresh_started(self: &Arc<Self>) {
+            if self.auto_refresh_started.swap(true, Ordering::SeqCst) {
+                return;
+            }
+
+            let services = Arc::clone(self);
+            tokio::spawn(async move {
+                let mut last_refresh_started_at = None;
+
+                loop {
+                    let settings = match services.load_settings().await {
+                        Ok(settings) => settings,
+                        Err(error) => {
+                            tracing::warn!(error = %error, "读取自动刷新设置失败，稍后重试");
+                            tokio::time::sleep(Self::AUTO_REFRESH_POLL_INTERVAL).await;
+                            continue;
+                        }
+                    };
+
+                    let now = OffsetDateTime::now_utc();
+                    if super::should_trigger_auto_refresh(
+                        last_refresh_started_at,
+                        settings.refresh_interval_minutes,
+                        now,
+                    ) {
+                        tracing::info!(
+                            refresh_interval_minutes = settings.refresh_interval_minutes,
+                            "触发后台自动刷新全部订阅"
+                        );
+                        if let Err(error) = services.refresh_all().await {
+                            tracing::warn!(error = %error, "后台自动刷新失败");
+                        }
+                        last_refresh_started_at = Some(now);
+                    }
+
+                    tokio::time::sleep(Self::AUTO_REFRESH_POLL_INTERVAL).await;
+                }
+            });
         }
 
         pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
@@ -429,7 +476,11 @@ mod imp {
     use crate::web_auth;
     use std::{
         collections::{BTreeMap, HashSet},
-        sync::{Arc, Mutex},
+        sync::{
+            Arc, Mutex,
+            atomic::{AtomicBool, Ordering},
+        },
+        time::Duration,
     };
 
     use anyhow::{Context, ensure};
@@ -451,6 +502,7 @@ mod imp {
     use tokio::sync::OnceCell;
     use url::Url;
     use web_sys::window;
+    use wasm_bindgen_futures::spawn_local;
 
     static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
     const STORAGE_KEY: &str = "rssr-web-state-v1";
@@ -540,15 +592,19 @@ mod imp {
     pub struct AppServices {
         state: Mutex<PersistedState>,
         client: reqwest::Client,
+        auto_refresh_started: AtomicBool,
     }
 
     impl AppServices {
+        const AUTO_REFRESH_POLL_INTERVAL: Duration = Duration::from_secs(30);
+
         pub async fn shared() -> anyhow::Result<Arc<Self>> {
             APP_SERVICES
                 .get_or_try_init(|| async {
                     Ok(Arc::new(Self {
                         state: Mutex::new(load_state().unwrap_or_default()),
                         client: reqwest::Client::new(),
+                        auto_refresh_started: AtomicBool::new(false),
                     }))
                 })
                 .await
@@ -731,6 +787,46 @@ mod imp {
             let mut state = self.state.lock().expect("lock state");
             state.settings = settings.clone();
             save_state(&state)
+        }
+
+        pub fn ensure_auto_refresh_started(self: &Arc<Self>) {
+            if self.auto_refresh_started.swap(true, Ordering::SeqCst) {
+                return;
+            }
+
+            let services = Arc::clone(self);
+            spawn_local(async move {
+                let mut last_refresh_started_at = None;
+
+                loop {
+                    let settings = match services.load_settings().await {
+                        Ok(settings) => settings,
+                        Err(error) => {
+                            tracing::warn!(error = %error, "读取自动刷新设置失败，稍后重试");
+                            gloo_timers::future::sleep(Self::AUTO_REFRESH_POLL_INTERVAL).await;
+                            continue;
+                        }
+                    };
+
+                    let now = web_now_utc();
+                    if super::should_trigger_auto_refresh(
+                        last_refresh_started_at,
+                        settings.refresh_interval_minutes,
+                        now,
+                    ) {
+                        tracing::info!(
+                            refresh_interval_minutes = settings.refresh_interval_minutes,
+                            "触发后台自动刷新全部订阅"
+                        );
+                        if let Err(error) = services.refresh_all().await {
+                            tracing::warn!(error = %error, "后台自动刷新失败");
+                        }
+                        last_refresh_started_at = Some(now);
+                    }
+
+                    gloo_timers::future::sleep(Self::AUTO_REFRESH_POLL_INTERVAL).await;
+                }
+            });
         }
 
         pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
@@ -1532,3 +1628,38 @@ mod imp {
 }
 
 pub use imp::{AppServices, ReaderNavigation};
+
+fn should_trigger_auto_refresh(
+    last_refresh_started_at: Option<time::OffsetDateTime>,
+    refresh_interval_minutes: u32,
+    now: time::OffsetDateTime,
+) -> bool {
+    match last_refresh_started_at {
+        None => true,
+        Some(last_refresh_started_at) => {
+            now >= last_refresh_started_at + time::Duration::minutes(refresh_interval_minutes as i64)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_trigger_auto_refresh;
+    use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+
+    #[test]
+    fn auto_refresh_triggers_immediately_when_never_run() {
+        let now = OffsetDateTime::parse("2026-04-01T12:00:00Z", &Rfc3339).expect("parse now");
+        assert!(should_trigger_auto_refresh(None, 30, now));
+    }
+
+    #[test]
+    fn auto_refresh_waits_until_interval_has_elapsed() {
+        let last = OffsetDateTime::parse("2026-04-01T12:00:00Z", &Rfc3339).expect("parse last");
+        let before = OffsetDateTime::parse("2026-04-01T12:29:59Z", &Rfc3339).expect("parse before");
+        let after = OffsetDateTime::parse("2026-04-01T12:30:00Z", &Rfc3339).expect("parse after");
+
+        assert!(!should_trigger_auto_refresh(Some(last), 30, before));
+        assert!(should_trigger_auto_refresh(Some(last), 30, after));
+    }
+}

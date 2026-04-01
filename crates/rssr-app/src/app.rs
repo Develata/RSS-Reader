@@ -36,6 +36,7 @@ pub fn App() -> Element {
                 if let Ok(loaded) = services.load_settings().await {
                     settings.set(loaded);
                 }
+                services.ensure_auto_refresh_started();
             }
         }
     });
