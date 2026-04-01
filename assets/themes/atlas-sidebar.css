@@ -144,11 +144,51 @@ body {
 }
 
 .button {
-  border-radius: 999px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #c65c49 0%, #9b3f31 100%);
+  color: #fff8f4;
+  box-shadow:
+    0 12px 22px -14px rgba(155, 63, 49, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.button:hover {
+  background: linear-gradient(135deg, #d26a55 0%, #ab4939 100%);
+  box-shadow:
+    0 16px 26px -16px rgba(155, 63, 49, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
 }
 
 .button.secondary {
-  background: #243042;
+  background: linear-gradient(135deg, #334053 0%, #263243 100%);
+  color: #f8fafc;
+  box-shadow:
+    0 10px 18px -16px rgba(36, 48, 66, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.button.secondary:hover {
+  background: linear-gradient(135deg, #39485d 0%, #2c3a4c 100%);
+}
+
+.button.danger {
+  background: linear-gradient(135deg, #c74a42 0%, #9f2d28 100%);
+  box-shadow:
+    0 12px 22px -14px rgba(159, 45, 40, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.button.danger-outline {
+  background: rgba(255, 243, 239, 0.96);
+  color: #9a392f;
+  border: 1px solid rgba(155, 63, 49, 0.16);
+  box-shadow: none;
+}
+
+.button.danger-outline:hover {
+  background: rgba(255, 248, 245, 0.99);
 }
 
 .feed-card__title,

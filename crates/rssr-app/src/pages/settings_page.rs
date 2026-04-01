@@ -272,7 +272,7 @@ pub fn SettingsPage() -> Element {
                             option { value: "custom", "自定义主题" }
                             option { value: "atlas-sidebar", "Atlas Sidebar" }
                             option { value: "newsprint", "Newsprint" }
-                            option { value: "forest-desk", "Forest Desk" }
+                            option { value: "forest-desk", "Amethyst Glass" }
                             option { value: "midnight-ledger", "Midnight Ledger" }
                         }
                         button {
@@ -460,10 +460,10 @@ pub fn SettingsPage() -> Element {
                                     status,
                                     status_tone,
                                     applied,
-                                    "已应用示例主题：Forest Desk。".to_string(),
+                                    "已应用示例主题：Amethyst Glass。".to_string(),
                                 );
                             },
-                            "Forest Desk"
+                            "Amethyst Glass"
                         }
                         button {
                             class: "button secondary",
@@ -702,7 +702,7 @@ fn preset_display_name(key: &str) -> &'static str {
     match key {
         "atlas-sidebar" => "Atlas Sidebar",
         "newsprint" => "Newsprint",
-        "forest-desk" => "Forest Desk",
+        "forest-desk" => "Amethyst Glass",
         "midnight-ledger" => "Midnight Ledger",
         _ => "自定义主题",
     }
@@ -734,7 +734,7 @@ fn custom_css_source_label(raw: &str) -> &'static str {
     } else if trimmed == newsprint_theme_css().trim() {
         "内置主题：Newsprint"
     } else if trimmed == forest_desk_theme_css().trim() {
-        "内置主题：Forest Desk"
+        "内置主题：Amethyst Glass"
     } else if trimmed == midnight_ledger_theme_css().trim() {
         "内置主题：Midnight Ledger"
     } else {
@@ -812,10 +812,10 @@ fn builtin_theme_presets() -> [BuiltinThemePreset; 4] {
         },
         BuiltinThemePreset {
             key: "forest-desk",
-            name: "Forest Desk",
-            description: "轻盈的绿色工作台风格，界面更清爽、留白更多。",
-            notes: "按钮更圆，设置页更像左右工作区，适合白天阅读。",
-            swatches: ["#e6efe8", "#236846", "#1a2a21"],
+            name: "Amethyst Glass",
+            description: "紫蓝渐变和高通透毛玻璃，界面更梦幻，也更轻盈。",
+            notes: "发光药丸按钮、玻璃面板和更宽松的阅读排版，适合沉浸式浏览。",
+            swatches: ["#e0c3fc", "#8b5cf6", "#1f2937"],
         },
         BuiltinThemePreset {
             key: "midnight-ledger",
