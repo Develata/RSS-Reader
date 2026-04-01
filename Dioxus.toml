@@ -6,6 +6,7 @@ out_dir = "dist"
 [bundle]
 identifier = "io.github.develata.rssreader"
 publisher = "Develata"
+icon = ["icons/icon.png", "icons/icon.ico"]
 
 [web.app]
 title = "RSS-Reader"
@@ -13,3 +14,6 @@ title = "RSS-Reader"
 [android]
 min_sdk = 24
 target_sdk = 34
+
+[bundle.windows]
+icon_path = "icons/icon.ico"

@@ -22,13 +22,16 @@ fn init_tracing() {
 
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
 fn main() {
-    use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
+    use dioxus::desktop::{Config, LogicalSize, WindowBuilder, tao::window::Icon};
     use dioxus::prelude::LaunchBuilder;
+    use image::ImageFormat;
 
     init_tracing();
 
+    let window_icon = load_window_icon();
     let window = WindowBuilder::new()
         .with_title("RSS-Reader")
+        .with_window_icon(window_icon)
         .with_inner_size(LogicalSize::new(1280.0, 900.0))
         .with_visible(true)
         .with_focused(true)
@@ -40,6 +43,17 @@ fn main() {
 
     let config = Config::new().with_window(window).with_menu(None);
     LaunchBuilder::new().with_cfg(config).launch(app::App);
+
+    fn load_window_icon() -> Option<Icon> {
+        let image = image::load_from_memory_with_format(
+            include_bytes!("../../../icons/icon.png"),
+            ImageFormat::Png,
+        )
+        .ok()?
+        .into_rgba8();
+        let (width, height) = image.dimensions();
+        Icon::from_rgba(image.into_raw(), width, height).ok()
+    }
 }
 
 #[cfg(target_os = "android")]

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+build = "build.rs"
 
 [dependencies]
 ammonia.workspace = true
@@ -27,6 +28,7 @@ url.workspace = true
 
 [target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
 dioxus = { workspace = true, features = ["desktop"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 rfd.workspace = true
 rssr-infra = { path = "../rssr-infra" }
 webbrowser.workspace = true
@@ -43,3 +45,6 @@ js-sys = "0.3"
 reqwest.workspace = true
 uuid = { version = "1", features = ["js"] }
 web-sys = { version = "0.3", features = ["Blob", "BlobPropertyBag", "CssStyleDeclaration", "Document", "Element", "Event", "EventTarget", "File", "FileList", "HtmlAnchorElement", "HtmlDocument", "HtmlElement", "HtmlInputElement", "Node", "Storage", "Url", "Window"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
