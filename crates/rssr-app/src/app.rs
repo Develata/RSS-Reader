@@ -102,7 +102,13 @@ pub fn AppNav() -> Element {
 
     rsx! {
         nav { class: "app-nav-shell",
-            Link { class: "app-nav__brand", to: AppRoute::EntriesPage {}, "{APP_NAME}" }
+            Link {
+                class: "app-nav__brand",
+                to: AppRoute::EntriesPage {},
+                aria_label: APP_NAME,
+                span { class: "app-nav__brand-mark", "R" }
+                span { class: "app-nav__brand-name", "{APP_NAME}" }
+            }
             form {
                 class: "app-nav__search",
                 onsubmit: move |event| {
