@@ -16,6 +16,7 @@ const WEB_AUTH_MARKUP: &str = include_str!("../../../assets/branding/rssr-mark.s
 #[derive(Clone, Copy)]
 pub struct AppUiState {
     pub entry_search: Signal<String>,
+    pub nav_hidden: Signal<bool>,
 }
 
 fn initial_entry_search() -> String {
@@ -43,14 +44,40 @@ fn remember_entry_search(_value: &str) {
     }
 }
 
+fn initial_nav_hidden() -> bool {
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(window) = web_sys::window()
+            && let Ok(Some(storage)) = window.local_storage()
+            && let Ok(Some(value)) = storage.get_item("rssr-nav-hidden")
+        {
+            return value == "1";
+        }
+    }
+
+    false
+}
+
+fn remember_nav_hidden(_hidden: bool) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(window) = web_sys::window()
+            && let Ok(Some(storage)) = window.local_storage()
+        {
+            let _ = storage.set_item("rssr-nav-hidden", if _hidden { "1" } else { "0" });
+        }
+    }
+}
+
 #[component]
 #[allow(non_snake_case)]
 pub fn App() -> Element {
     let mut settings = use_signal(AppServices::default_settings);
     let mut auth = use_signal(auth_state);
     let entry_search = use_signal(initial_entry_search);
+    let nav_hidden = use_signal(initial_nav_hidden);
     use_context_provider(|| ThemeController { settings });
-    use_context_provider(|| AppUiState { entry_search });
+    use_context_provider(|| AppUiState { entry_search, nav_hidden });
 
     use_resource(move || async move {
         let current_auth = auth();
@@ -100,6 +127,23 @@ pub fn AppNav() -> Element {
     let mut ui = use_context::<AppUiState>();
     let navigator = use_navigator();
 
+    if (ui.nav_hidden)() {
+        return rsx! {
+            div { class: "app-nav-reveal",
+                button {
+                    class: "app-nav-reveal__button",
+                    "data-action": "show-top-nav",
+                    onclick: move |_| {
+                        remember_nav_hidden(false);
+                        ui.nav_hidden.set(false);
+                    },
+                    span { class: "app-nav-reveal__icon", "≡" }
+                    span { class: "app-nav-reveal__label", "显示导航" }
+                }
+            }
+        };
+    }
+
     rsx! {
         nav { class: "app-nav-shell",
             Link {
@@ -139,6 +183,18 @@ pub fn AppNav() -> Element {
                 Link { class: "app-nav__link", "data-nav": "feeds", to: AppRoute::FeedsPage {}, "订阅" }
                 Link { class: "app-nav__link", "data-nav": "entries", to: AppRoute::EntriesPage {}, "文章" }
                 Link { class: "app-nav__link", "data-nav": "settings", to: AppRoute::SettingsPage {}, "设置" }
+            }
+            button {
+                class: "app-nav__collapse",
+                "data-action": "hide-top-nav",
+                r#type: "button",
+                aria_label: "收起顶部导航",
+                title: "收起顶部导航",
+                onclick: move |_| {
+                    remember_nav_hidden(true);
+                    ui.nav_hidden.set(true);
+                },
+                "×"
             }
         }
     }
