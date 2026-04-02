@@ -3,13 +3,15 @@ use rssr_domain::{ListDensity, StartupView, ThemeMode, UserSettings};
 
 use crate::{
     app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner,
-    theme::ThemeController,
+    hooks::use_mobile_back_navigation::use_mobile_back_navigation, theme::ThemeController,
 };
 
 const REPOSITORY_URL: &str = "https://github.com/Develata/RSS-Reader";
 
 #[component]
 pub fn SettingsPage() -> Element {
+    use_mobile_back_navigation(Some(crate::router::AppRoute::EntriesPage {}));
+
     let mut theme = use_context::<ThemeController>();
     let mut draft = use_signal(|| (theme.settings)());
     let mut preset_choice =

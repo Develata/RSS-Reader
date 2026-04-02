@@ -5,12 +5,15 @@ use crate::{
     app::AppNav,
     bootstrap::{AppServices, ReaderNavigation},
     components::status_banner::StatusBanner,
+    hooks::use_mobile_back_navigation::use_mobile_back_navigation,
     hooks::use_reader_shortcuts::use_reader_shortcuts,
     router::AppRoute,
 };
 
 #[component]
 pub fn ReaderPage(entry_id: i64) -> Element {
+    use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
+
     let navigator = use_navigator();
     let mut title = use_signal(|| "正在加载…".to_string());
     let mut body_text = use_signal(String::new);

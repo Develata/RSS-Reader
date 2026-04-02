@@ -3,11 +3,14 @@ use rssr_domain::FeedSummary;
 use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::{
-    app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner, router::AppRoute,
+    app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner,
+    hooks::use_mobile_back_navigation::use_mobile_back_navigation, router::AppRoute,
 };
 
 #[component]
 pub fn FeedsPage() -> Element {
+    use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
+
     let mut feed_url = use_signal(String::new);
     let mut config_text = use_signal(String::new);
     let mut opml_text = use_signal(String::new);

@@ -8,6 +8,7 @@ use crate::{
     app::{AppNav, AppUiState},
     bootstrap::AppServices,
     components::status_banner::StatusBanner,
+    hooks::use_mobile_back_navigation::use_mobile_back_navigation,
     router::AppRoute,
 };
 
@@ -99,6 +100,8 @@ pub fn FeedEntriesPage(feed_id: i64) -> Element {
 }
 
 fn entries_page_content(feed_id: Option<i64>) -> Element {
+    use_mobile_back_navigation(feed_id.map(|_| AppRoute::FeedsPage {}));
+
     let mut ui = use_context::<AppUiState>();
     let mut entries = use_signal(Vec::<EntrySummary>::new);
     let mut unread_only = use_signal(|| false);
