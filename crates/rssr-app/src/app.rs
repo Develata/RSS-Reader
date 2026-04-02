@@ -138,7 +138,6 @@ pub fn AppNav() -> Element {
                         ui.nav_hidden.set(false);
                     },
                     span { class: "app-nav-reveal__icon", "≡" }
-                    span { class: "app-nav-reveal__label", "显示导航" }
                 }
             }
         };
@@ -146,12 +145,31 @@ pub fn AppNav() -> Element {
 
     rsx! {
         nav { class: "app-nav-shell",
-            Link {
-                class: "app-nav__brand",
-                to: AppRoute::EntriesPage {},
-                aria_label: APP_NAME,
-                span { class: "app-nav__brand-mark", "R" }
-                span { class: "app-nav__brand-name", "{APP_NAME}" }
+            div { class: "app-nav__topline",
+                Link {
+                    class: "app-nav__brand",
+                    to: AppRoute::EntriesPage {},
+                    aria_label: APP_NAME,
+                    span { class: "app-nav__brand-mark", "R" }
+                    span { class: "app-nav__brand-name", "{APP_NAME}" }
+                }
+                div { class: "app-nav",
+                    Link { class: "app-nav__link", "data-nav": "feeds", to: AppRoute::FeedsPage {}, "订阅" }
+                    Link { class: "app-nav__link", "data-nav": "entries", to: AppRoute::EntriesPage {}, "文章" }
+                    Link { class: "app-nav__link", "data-nav": "settings", to: AppRoute::SettingsPage {}, "设置" }
+                }
+                button {
+                    class: "app-nav__collapse",
+                    "data-action": "hide-top-nav",
+                    r#type: "button",
+                    aria_label: "收起顶部导航",
+                    title: "收起顶部导航",
+                    onclick: move |_| {
+                        remember_nav_hidden(true);
+                        ui.nav_hidden.set(true);
+                    },
+                    "×"
+                }
             }
             form {
                 class: "app-nav__search",
@@ -178,23 +196,6 @@ pub fn AppNav() -> Element {
                     },
                 }
                 span { class: "app-nav__search-hint", "Enter" }
-            }
-            div { class: "app-nav",
-                Link { class: "app-nav__link", "data-nav": "feeds", to: AppRoute::FeedsPage {}, "订阅" }
-                Link { class: "app-nav__link", "data-nav": "entries", to: AppRoute::EntriesPage {}, "文章" }
-                Link { class: "app-nav__link", "data-nav": "settings", to: AppRoute::SettingsPage {}, "设置" }
-            }
-            button {
-                class: "app-nav__collapse",
-                "data-action": "hide-top-nav",
-                r#type: "button",
-                aria_label: "收起顶部导航",
-                title: "收起顶部导航",
-                onclick: move |_| {
-                    remember_nav_hidden(true);
-                    ui.nav_hidden.set(true);
-                },
-                "×"
             }
         }
     }

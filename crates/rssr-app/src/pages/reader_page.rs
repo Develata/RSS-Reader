@@ -103,7 +103,6 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             div { class: "reader-meta-block",
                 p { class: "reader-meta", "来源：{source}" }
                 p { class: "reader-meta", "发布时间：{published_at}" }
-                p { class: "reader-meta", "快捷键：`M` 切换已读，`F` 切换收藏" }
             }
             if let Some(message) = error() {
                 StatusBanner { message, tone: "error".to_string() }
@@ -151,7 +150,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                             }
                         },
                         span { class: "reader-bottom-bar__icon", "‹" }
-                        span { class: "reader-bottom-bar__label", "上一篇" }
+                        span { class: "reader-bottom-bar__label", "上一未读" }
                     }
                     button {
                         class: "reader-bottom-bar__button",
@@ -188,7 +187,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                             });
                         },
                         span { class: "reader-bottom-bar__icon", if is_read() { "○" } else { "✓" } }
-                        span { class: "reader-bottom-bar__label", if is_read() { "未读" } else { "已读" } }
+                        span { class: "reader-bottom-bar__label", if is_read() { "未读（M）" } else { "已读（M）" } }
                     }
                     button {
                         class: if is_starred() {
@@ -229,7 +228,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                             });
                         },
                         span { class: "reader-bottom-bar__icon", if is_starred() { "★" } else { "☆" } }
-                        span { class: "reader-bottom-bar__label", "收藏" }
+                        span { class: "reader-bottom-bar__label", "收藏（F）" }
                     }
                     button {
                         class: if next_action_target(navigation_state()).is_some() {
@@ -245,7 +244,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                             }
                         },
                         span { class: "reader-bottom-bar__icon", "›" }
-                        span { class: "reader-bottom-bar__label", "下一篇" }
+                        span { class: "reader-bottom-bar__label", "下一未读" }
                     }
                 }
             }

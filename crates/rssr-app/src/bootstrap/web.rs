@@ -1252,17 +1252,8 @@ mod tests {
 
     #[test]
     fn web_title_search_is_case_insensitive() {
-        assert!(title_matches_search(
-            "Roche Scales NVIDIA AI Factories",
-            "sca"
-        ));
-        assert!(title_matches_search(
-            "Roche Scales NVIDIA AI Factories",
-            "SCA"
-        ));
-        assert!(!title_matches_search(
-            "Roche Scales NVIDIA AI Factories",
-            "xyz"
-        ));
+        assert!(title_matches_search("Roche Scales NVIDIA AI Factories", "sca"));
+        assert!(title_matches_search("Roche Scales NVIDIA AI Factories", "SCA"));
+        assert!(!title_matches_search("Roche Scales NVIDIA AI Factories", "xyz"));
     }
 }

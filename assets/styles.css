@@ -103,10 +103,8 @@ textarea {
 }
 
 .app-nav-shell {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  display: grid;
+  gap: 8px;
   margin: 0 0 10px;
   padding: 8px 12px;
   border: 1px solid rgba(62, 42, 27, 0.08);
@@ -131,9 +129,10 @@ textarea {
 .app-nav-reveal__button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   min-height: 36px;
-  padding: 8px 12px;
+  min-width: 36px;
+  padding: 8px;
   border: 1px solid rgba(62, 42, 27, 0.08);
   border-radius: 999px;
   background: rgba(255, 250, 242, 0.76);
@@ -147,9 +146,11 @@ textarea {
   line-height: 1;
 }
 
-.app-nav-reveal__label {
-  font-size: 0.84rem;
-  font-weight: 600;
+.app-nav__topline {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
 }
 
 .app-nav__brand {
@@ -186,7 +187,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-width: min(100%, 250px);
+  width: 100%;
   padding: 0 10px;
   border: 1px solid rgba(62, 42, 27, 0.08);
   border-radius: 14px;
@@ -227,9 +228,9 @@ textarea {
 
 .app-nav {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
-  margin: 0 0 0 auto;
+  min-width: 0;
+  justify-content: center;
 }
 
 .app-nav__collapse {
@@ -1319,25 +1320,24 @@ textarea {
   }
 
   .app-nav-shell {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 8px;
     padding: 8px 10px;
     border-radius: 16px;
   }
 
+  .app-nav__topline {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
   .app-nav__search {
-    grid-column: 2;
     min-width: 0;
   }
 
   .app-nav {
-    grid-column: 1 / -1;
-    width: 100%;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
-    margin-left: 0;
   }
 
   .app-nav__link {
@@ -1564,11 +1564,8 @@ textarea {
 
   .app-nav-reveal__button {
     min-height: 32px;
-    padding: 7px 10px;
-  }
-
-  .app-nav {
-    gap: 5px;
+    min-width: 32px;
+    padding: 7px;
   }
 
   .app-nav__brand {
