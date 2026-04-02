@@ -417,11 +417,89 @@ textarea {
   margin-bottom: 14px;
 }
 
+.reading-header--settings {
+  margin-bottom: 8px;
+  padding: 20px 22px;
+  border: 1px solid rgba(78, 103, 128, 0.08);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(244, 250, 255, 0.82), rgba(255, 252, 248, 0.78));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 14px 34px rgba(67, 90, 111, 0.04);
+}
+
 .settings-card__intro {
   margin: 0;
   color: var(--muted);
   line-height: 1.65;
   font-size: 0.94rem;
+}
+
+.settings-card__section {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(62, 42, 27, 0.07);
+}
+
+.settings-card__section:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-card__section--theme-lab {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid rgba(78, 103, 128, 0.08);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(244, 249, 255, 0.72), rgba(255, 250, 244, 0.72));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 10px 24px rgba(67, 90, 111, 0.04);
+}
+
+.settings-card__section-header {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-card__section-title {
+  margin: 0;
+  font-size: 1.02rem;
+  letter-spacing: -0.02em;
+}
+
+.settings-card__section-intro {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.68;
+}
+
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.settings-form-grid > div {
+  min-width: 0;
+}
+
+.settings-card__actions {
+  margin-top: 4px;
+}
+
+.settings-card__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(62, 42, 27, 0.07);
 }
 
 .text-input {
@@ -1232,6 +1310,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .settings-form-grid {
+    grid-template-columns: 1fr;
+  }
+
   .entry-overview {
     grid-template-columns: 1fr;
   }
@@ -1304,6 +1386,16 @@ textarea {
   .entry-filters {
     grid-template-columns: 1fr;
     padding: 14px 16px;
+  }
+
+  .reading-header--settings {
+    padding: 18px 16px;
+    border-radius: 20px;
+  }
+
+  .settings-card__section--theme-lab {
+    padding: 16px;
+    border-radius: 18px;
   }
 
   .inline-actions {
@@ -1461,5 +1553,13 @@ textarea {
     min-height: 64px;
     padding: 11px 12px;
     border-radius: 14px;
+  }
+
+  .reading-header--settings {
+    padding: 16px 14px;
+  }
+
+  .settings-card__section--theme-lab {
+    padding: 14px;
   }
 }

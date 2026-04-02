@@ -100,7 +100,7 @@ impl BodyAssetLocalizer {
         }
 
         let src_regex = Regex::new(
-            r#"(?is)(<img\b[^>]*?\bsrc\s*=\s*)(?P<quote>['"])(?P<src>[^'"]+)(?P=quote)"#,
+            r#"(?is)(<img\b[^>]*?\bsrc\s*=\s*)(?P<quote>['"])(?P<src>[^'"]+)(?P<closing>['"])"#,
         )
         .expect("valid image src regex");
 

@@ -19,7 +19,7 @@ pub fn FeedsPage() -> Element {
     let status = use_signal(|| "输入一个 feed URL 后点击添加。".to_string());
     let status_tone = use_signal(|| "info".to_string());
 
-    let _ = use_resource(move || async move {
+    use_resource(move || async move {
         let _ = reload_tick();
         match AppServices::shared().await {
             Ok(services) => {

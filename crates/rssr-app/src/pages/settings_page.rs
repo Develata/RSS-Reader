@@ -89,7 +89,7 @@ pub fn SettingsPage() -> Element {
         }
     };
 
-    let _ = use_resource(move || async move {
+    use_resource(move || async move {
         match AppServices::shared().await {
             Ok(services) => match services.load_settings().await {
                 Ok(settings) => {
@@ -131,6 +131,9 @@ pub fn SettingsPage() -> Element {
                     }
                 }
             }
+            div { class: "reading-header reading-header--settings",
+                p { class: "page-intro", "设置页只负责两类事情：整理阅读体验，以及做最基础的配置交换。我们尽量让修改即时可见，减少反复试错。" }
+            }
             StatusBanner { message: status(), tone: status_tone() }
             div { class: "settings-grid",
                 div { class: "settings-card",
@@ -138,169 +141,331 @@ pub fn SettingsPage() -> Element {
                         h3 { "阅读外观" }
                         p { class: "settings-card__intro", "这里决定阅读器的外观、节奏和默认进入方式。样式会尽量即时生效，避免反复保存试错。" }
                     }
-                    label { class: "field-label", r#for: "settings-theme-mode", "主题" }
-                    select {
-                        id: "settings-theme-mode",
-                        name: "theme_mode",
-                        class: "select-input",
-                        "data-action": "theme-mode",
-                        value: "{theme_value(draft().theme)}",
-                        onchange: move |event| {
-                            let mut next = draft();
-                            next.theme = parse_theme_mode(&event.value());
-                            draft.set(next);
-                        },
-                        option { value: "system", "跟随系统" }
-                        option { value: "light", "浅色" }
-                        option { value: "dark", "深色" }
-                    }
-                    label { class: "field-label", r#for: "settings-list-density", "列表密度" }
-                    select {
-                        id: "settings-list-density",
-                        name: "list_density",
-                        class: "select-input",
-                        "data-action": "list-density",
-                        value: "{density_value(draft().list_density)}",
-                        onchange: move |event| {
-                            let mut next = draft();
-                            next.list_density = parse_list_density(&event.value());
-                            draft.set(next);
-                        },
-                        option { value: "comfortable", "舒适" }
-                        option { value: "compact", "紧凑" }
-                    }
-                    label { class: "field-label", r#for: "settings-startup-view", "启动视图" }
-                    select {
-                        id: "settings-startup-view",
-                        name: "startup_view",
-                        class: "select-input",
-                        "data-action": "startup-view",
-                        value: "{startup_value(draft().startup_view)}",
-                        onchange: move |event| {
-                            let mut next = draft();
-                            next.startup_view = parse_startup_view(&event.value());
-                            draft.set(next);
-                        },
-                        option { value: "all", "全部文章" }
-                        option { value: "last_feed", "上次订阅" }
-                    }
-                    label { class: "field-label", r#for: "settings-refresh-interval", "刷新间隔（分钟）" }
-                    input {
-                        id: "settings-refresh-interval",
-                        name: "refresh_interval_minutes",
-                        class: "text-input",
-                        "data-action": "refresh-interval",
-                        value: "{draft().refresh_interval_minutes}",
-                        oninput: move |event| {
-                            if let Ok(minutes) = event.value().parse::<u32>() {
-                                let mut next = draft();
-                                next.refresh_interval_minutes = minutes;
-                                draft.set(next);
+                    div { class: "settings-card__section",
+                        div { class: "settings-card__section-header",
+                            h4 { class: "settings-card__section-title", "阅读节奏" }
+                            p { class: "settings-card__section-intro", "这些设置决定你进入应用后的默认节奏，以及文章与列表的阅读密度。" }
+                        }
+                        div { class: "settings-form-grid",
+                            div {
+                                label { class: "field-label", r#for: "settings-theme-mode", "主题" }
+                                select {
+                                    id: "settings-theme-mode",
+                                    name: "theme_mode",
+                                    class: "select-input",
+                                    "data-action": "theme-mode",
+                                    value: "{theme_value(draft().theme)}",
+                                    onchange: move |event| {
+                                        let mut next = draft();
+                                        next.theme = parse_theme_mode(&event.value());
+                                        draft.set(next);
+                                    },
+                                    option { value: "system", "跟随系统" }
+                                    option { value: "light", "浅色" }
+                                    option { value: "dark", "深色" }
+                                }
+                            }
+                            div {
+                                label { class: "field-label", r#for: "settings-list-density", "列表密度" }
+                                select {
+                                    id: "settings-list-density",
+                                    name: "list_density",
+                                    class: "select-input",
+                                    "data-action": "list-density",
+                                    value: "{density_value(draft().list_density)}",
+                                    onchange: move |event| {
+                                        let mut next = draft();
+                                        next.list_density = parse_list_density(&event.value());
+                                        draft.set(next);
+                                    },
+                                    option { value: "comfortable", "舒适" }
+                                    option { value: "compact", "紧凑" }
+                                }
+                            }
+                            div {
+                                label { class: "field-label", r#for: "settings-startup-view", "启动视图" }
+                                select {
+                                    id: "settings-startup-view",
+                                    name: "startup_view",
+                                    class: "select-input",
+                                    "data-action": "startup-view",
+                                    value: "{startup_value(draft().startup_view)}",
+                                    onchange: move |event| {
+                                        let mut next = draft();
+                                        next.startup_view = parse_startup_view(&event.value());
+                                        draft.set(next);
+                                    },
+                                    option { value: "all", "全部文章" }
+                                    option { value: "last_feed", "上次订阅" }
+                                }
+                            }
+                            div {
+                                label { class: "field-label", r#for: "settings-refresh-interval", "刷新间隔（分钟）" }
+                                input {
+                                    id: "settings-refresh-interval",
+                                    name: "refresh_interval_minutes",
+                                    class: "text-input",
+                                    "data-action": "refresh-interval",
+                                    value: "{draft().refresh_interval_minutes}",
+                                    oninput: move |event| {
+                                        if let Ok(minutes) = event.value().parse::<u32>() {
+                                            let mut next = draft();
+                                            next.refresh_interval_minutes = minutes;
+                                            draft.set(next);
+                                        }
+                                    }
+                                }
+                            }
+                            div {
+                                label { class: "field-label", r#for: "settings-archive-after-months", "自动归档阈值（月）" }
+                                input {
+                                    id: "settings-archive-after-months",
+                                    name: "archive_after_months",
+                                    class: "text-input",
+                                    "data-action": "archive-after-months",
+                                    value: "{draft().archive_after_months}",
+                                    oninput: move |event| {
+                                        if let Ok(months) = event.value().parse::<u32>() {
+                                            let mut next = draft();
+                                            next.archive_after_months = months;
+                                            draft.set(next);
+                                        }
+                                    }
+                                }
+                            }
+                            div {
+                                label { class: "field-label", r#for: "settings-reader-font-scale", "阅读字号缩放" }
+                                input {
+                                    id: "settings-reader-font-scale",
+                                    name: "reader_font_scale",
+                                    class: "text-input",
+                                    "data-action": "reader-font-scale",
+                                    value: "{draft().reader_font_scale}",
+                                    oninput: move |event| {
+                                        if let Ok(scale) = event.value().parse::<f32>() {
+                                            let mut next = draft();
+                                            next.reader_font_scale = scale;
+                                            draft.set(next);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
-                    label { class: "field-label", r#for: "settings-archive-after-months", "自动归档阈值（月）" }
-                    input {
-                        id: "settings-archive-after-months",
-                        name: "archive_after_months",
-                        class: "text-input",
-                        "data-action": "archive-after-months",
-                        value: "{draft().archive_after_months}",
-                        oninput: move |event| {
-                            if let Ok(months) = event.value().parse::<u32>() {
+                    div { class: "settings-card__section settings-card__section--theme-lab",
+                        div { class: "settings-card__section-header",
+                            h4 { class: "settings-card__section-title", "主题实验室" }
+                            p { class: "settings-card__section-intro", "直接导入、编辑或导出 CSS。这里优先服务阅读体验，而不是做复杂的主题系统。" }
+                        }
+                        label { class: "field-label", r#for: "settings-custom-css", "自定义 CSS" }
+                        textarea {
+                            id: "settings-custom-css",
+                            name: "custom_css",
+                            class: "text-area",
+                            "data-action": "custom-css",
+                            value: "{draft().custom_css}",
+                            placeholder: "[data-page=\"reader\"] .reader-body {{ max-width: 72ch; }}",
+                            oninput: move |event| {
                                 let mut next = draft();
-                                next.archive_after_months = months;
+                                next.custom_css = event.value();
+                                preset_choice.set(detect_preset_key(&next.custom_css).to_string());
                                 draft.set(next);
                             }
                         }
-                    }
-                    label { class: "field-label", r#for: "settings-reader-font-scale", "阅读字号缩放" }
-                    input {
-                        id: "settings-reader-font-scale",
-                        name: "reader_font_scale",
-                        class: "text-input",
-                        "data-action": "reader-font-scale",
-                        value: "{draft().reader_font_scale}",
-                        oninput: move |event| {
-                            if let Ok(scale) = event.value().parse::<f32>() {
-                                let mut next = draft();
-                                next.reader_font_scale = scale;
-                                draft.set(next);
+                        p {
+                            class: "page-intro",
+                            "data-action": "current-custom-css-source",
+                            "当前样式来源：{custom_css_source_label(&draft().custom_css)}"
+                        }
+                        div { class: "inline-actions settings-card__actions",
+                            {import_css_trigger}
+                            button {
+                                class: "button secondary",
+                                "data-action": "apply-custom-css",
+                                onclick: move |_| {
+                                    apply_custom_css_from_raw(
+                                        theme,
+                                        draft,
+                                        preset_choice,
+                                        status,
+                                        status_tone,
+                                        draft().custom_css,
+                                        "已应用当前输入框中的自定义 CSS。".to_string(),
+                                    );
+                                },
+                                "应用当前 CSS"
                             }
-                        }
-                    }
-                    label { class: "field-label", r#for: "settings-custom-css", "自定义 CSS" }
-                    textarea {
-                        id: "settings-custom-css",
-                        name: "custom_css",
-                        class: "text-area",
-                        "data-action": "custom-css",
-                        value: "{draft().custom_css}",
-                        placeholder: "[data-page=\"reader\"] .reader-body {{ max-width: 72ch; }}",
-                        oninput: move |event| {
-                            let mut next = draft();
-                            next.custom_css = event.value();
-                            preset_choice.set(detect_preset_key(&next.custom_css).to_string());
-                            draft.set(next);
-                        }
-                    }
-                    p {
-                        class: "page-intro",
-                        "data-action": "current-custom-css-source",
-                        "当前样式来源：{custom_css_source_label(&draft().custom_css)}"
-                    }
-                    div { class: "inline-actions",
-                        {import_css_trigger}
-                        button {
-                            class: "button secondary",
-                            "data-action": "apply-custom-css",
-                            onclick: move |_| {
-                                apply_custom_css_from_raw(
-                                    theme,
-                                    draft,
-                                    preset_choice,
-                                    status,
-                                    status_tone,
-                                    draft().custom_css,
-                                    "已应用当前输入框中的自定义 CSS。".to_string(),
-                                );
-                            },
-                            "应用当前 CSS"
-                        }
-                        button {
-                            class: "button secondary",
-                            "data-action": "export-custom-css-file",
-                            onclick: move |_| {
-                                export_css_file(draft().custom_css, status, status_tone);
-                            },
-                            "导出当前 CSS"
+                            button {
+                                class: "button secondary",
+                                "data-action": "export-custom-css-file",
+                                onclick: move |_| {
+                                    export_css_file(draft().custom_css, status, status_tone);
+                                },
+                                "导出当前 CSS"
+                            }
                         }
                     }
                     {file_import_input}
-                    label { class: "field-label", r#for: "settings-preset-theme", "内置主题预设" }
-                    div { class: "inline-actions",
-                        select {
-                            id: "settings-preset-theme",
-                            name: "preset_theme",
-                            class: "select-input",
-                            "data-action": "preset-theme-select",
-                            value: "{preset_choice}",
-                            onchange: move |event| preset_choice.set(event.value()),
-                            option { value: "none", "无预设" }
-                            option { value: "custom", "自定义主题" }
-                            option { value: "atlas-sidebar", "Atlas Sidebar" }
-                            option { value: "newsprint", "Newsprint" }
-                            option { value: "forest-desk", "Amethyst Glass" }
-                            option { value: "midnight-ledger", "Midnight Ledger" }
+                    div { class: "settings-card__section",
+                        div { class: "settings-card__section-header",
+                            h4 { class: "settings-card__section-title", "内置主题预设" }
+                            p { class: "settings-card__section-intro", "可以快速回到内置风格，也可以把它们当成你自己 CSS 的起点。" }
                         }
-                        button {
-                            class: "button secondary",
-                            "data-action": "apply-selected-theme",
-                            onclick: move |_| {
-                                let choice = preset_choice();
-                                if choice == "none" {
+                        div { class: "inline-actions settings-card__actions" ,
+                            select {
+                                id: "settings-preset-theme",
+                                name: "preset_theme",
+                                class: "select-input",
+                                "data-action": "preset-theme-select",
+                                value: "{preset_choice}",
+                                onchange: move |event| preset_choice.set(event.value()),
+                                option { value: "none", "无预设" }
+                                option { value: "custom", "自定义主题" }
+                                option { value: "atlas-sidebar", "Atlas Sidebar" }
+                                option { value: "newsprint", "Newsprint" }
+                                option { value: "forest-desk", "Amethyst Glass" }
+                                option { value: "midnight-ledger", "Midnight Ledger" }
+                            }
+                            button {
+                                class: "button secondary",
+                                "data-action": "apply-selected-theme",
+                                onclick: move |_| {
+                                    let choice = preset_choice();
+                                    if choice == "none" {
+                                        let mut next = draft();
+                                        next.custom_css.clear();
+                                        let applied = next.clone();
+                                        draft.set(next);
+                                        apply_settings_immediately(
+                                            theme,
+                                            draft,
+                                            preset_choice,
+                                            status,
+                                            status_tone,
+                                            applied,
+                                            "已清空自定义 CSS。".to_string(),
+                                        );
+                                        return;
+                                    }
+                                    if choice == "custom" {
+                                        set_status_info(
+                                            status,
+                                            status_tone,
+                                            "当前是自定义主题，请直接编辑 CSS 或从文件导入。".to_string(),
+                                        );
+                                        return;
+                                    }
+                                    let mut next = draft();
+                                    next.custom_css = preset_css(choice.as_str()).to_string();
+                                    preset_choice.set(choice.clone());
+                                    let applied = next.clone();
+                                    draft.set(next);
+                                    apply_settings_immediately(
+                                        theme,
+                                        draft,
+                                        preset_choice,
+                                        status,
+                                        status_tone,
+                                        applied,
+                                        format!("已应用示例主题：{}。", preset_display_name(choice.as_str())),
+                                    );
+                                },
+                                "载入所选主题"
+                            }
+                        }
+                        p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。预置主题会立即生效并自动保存；手动编辑 CSS 后请点击“应用当前 CSS”。" }
+                        div { class: "preset-grid",
+                            button {
+                                class: "button secondary",
+                                "data-action": "apply-theme-atlas-sidebar",
+                                onclick: move |_| {
+                                    let mut next = draft();
+                                    next.custom_css = atlas_sidebar_theme_css().to_string();
+                                    preset_choice.set("atlas-sidebar".to_string());
+                                    let applied = next.clone();
+                                    draft.set(next);
+                                    apply_settings_immediately(
+                                        theme,
+                                        draft,
+                                        preset_choice,
+                                        status,
+                                        status_tone,
+                                        applied,
+                                        "已应用示例主题：Atlas Sidebar。".to_string(),
+                                    );
+                                },
+                                "Atlas Sidebar"
+                            }
+                            button {
+                                class: "button secondary",
+                                "data-action": "apply-theme-newsprint",
+                                onclick: move |_| {
+                                    let mut next = draft();
+                                    next.custom_css = newsprint_theme_css().to_string();
+                                    preset_choice.set("newsprint".to_string());
+                                    let applied = next.clone();
+                                    draft.set(next);
+                                    apply_settings_immediately(
+                                        theme,
+                                        draft,
+                                        preset_choice,
+                                        status,
+                                        status_tone,
+                                        applied,
+                                        "已应用示例主题：Newsprint。".to_string(),
+                                    );
+                                },
+                                "Newsprint"
+                            }
+                            button {
+                                class: "button secondary",
+                                "data-action": "apply-theme-forest-desk",
+                                onclick: move |_| {
+                                    let mut next = draft();
+                                    next.custom_css = forest_desk_theme_css().to_string();
+                                    preset_choice.set("forest-desk".to_string());
+                                    let applied = next.clone();
+                                    draft.set(next);
+                                    apply_settings_immediately(
+                                        theme,
+                                        draft,
+                                        preset_choice,
+                                        status,
+                                        status_tone,
+                                        applied,
+                                        "已应用示例主题：Amethyst Glass。".to_string(),
+                                    );
+                                },
+                                "Amethyst Glass"
+                            }
+                            button {
+                                class: "button secondary",
+                                "data-action": "apply-theme-midnight-ledger",
+                                onclick: move |_| {
+                                    let mut next = draft();
+                                    next.custom_css = midnight_ledger_theme_css().to_string();
+                                    preset_choice.set("midnight-ledger".to_string());
+                                    let applied = next.clone();
+                                    draft.set(next);
+                                    apply_settings_immediately(
+                                        theme,
+                                        draft,
+                                        preset_choice,
+                                        status,
+                                        status_tone,
+                                        applied,
+                                        "已应用示例主题：Midnight Ledger。".to_string(),
+                                    );
+                                },
+                                "Midnight Ledger"
+                            }
+                            button {
+                                class: "button secondary danger-outline",
+                                "data-action": "clear-custom-css",
+                                onclick: move |_| {
                                     let mut next = draft();
                                     next.custom_css.clear();
+                                    preset_choice.set("none".to_string());
                                     let applied = next.clone();
                                     draft.set(next);
                                     apply_settings_immediately(
@@ -312,247 +477,118 @@ pub fn SettingsPage() -> Element {
                                         applied,
                                         "已清空自定义 CSS。".to_string(),
                                     );
-                                    return;
-                                }
-                                if choice == "custom" {
-                                    set_status_info(
-                                        status,
-                                        status_tone,
-                                        "当前是自定义主题，请直接编辑 CSS 或从文件导入。".to_string(),
-                                    );
-                                    return;
-                                }
-                                let mut next = draft();
-                                next.custom_css = preset_css(choice.as_str()).to_string();
-                                preset_choice.set(choice.clone());
-                                let applied = next.clone();
-                                draft.set(next);
-                                apply_settings_immediately(
-                                    theme,
-                                    draft,
-                                    preset_choice,
-                                    status,
-                                    status_tone,
-                                    applied,
-                                    format!("已应用示例主题：{}。", preset_display_name(choice.as_str())),
-                                );
-                            },
-                            "载入所选主题"
+                                },
+                                "清空 CSS"
+                            }
                         }
-                    }
-                    div { class: "theme-gallery", "data-action": "theme-gallery",
-                        for preset in builtin_theme_presets() {
-                            {
-                                let is_active = detect_preset_key(&draft().custom_css) == preset.key;
-                                let preset_key = preset.key.to_string();
-                                let remove_preset_key = preset_key.clone();
-                                let preset_name = preset.name;
-                                let preset_description = preset.description;
-                                let preset_notes = preset.notes;
-                                let preset_swatches = preset.swatches;
-                                rsx! {
-                                    article {
-                                        class: if is_active { "theme-card is-active" } else { "theme-card" },
-                                        key: "{preset.key}",
-                                        "data-action": "theme-card",
-                                        "data-theme-preset": "{preset.key}",
-                                        h4 { class: "theme-card__title", "{preset_name}" }
-                                        p { class: "theme-card__description", "{preset_description}" }
-                                        div { class: "theme-card__swatches",
-                                            for swatch in preset_swatches {
-                                                span {
-                                                    class: "theme-card__swatch",
-                                                    style: "background:{swatch}",
+                        div { class: "theme-gallery", "data-action": "theme-gallery",
+                            for preset in builtin_theme_presets() {
+                                {
+                                    let is_active = detect_preset_key(&draft().custom_css) == preset.key;
+                                    let preset_key = preset.key.to_string();
+                                    let remove_preset_key = preset_key.clone();
+                                    let preset_name = preset.name;
+                                    let preset_description = preset.description;
+                                    let preset_notes = preset.notes;
+                                    let preset_swatches = preset.swatches;
+                                    rsx! {
+                                        article {
+                                            class: if is_active { "theme-card is-active" } else { "theme-card" },
+                                            key: "{preset.key}",
+                                            "data-action": "theme-card",
+                                            "data-theme-preset": "{preset.key}",
+                                            h4 { class: "theme-card__title", "{preset_name}" }
+                                            p { class: "theme-card__description", "{preset_description}" }
+                                            div { class: "theme-card__swatches",
+                                                for swatch in preset_swatches {
+                                                    span {
+                                                        class: "theme-card__swatch",
+                                                        style: "background:{swatch}",
+                                                    }
                                                 }
                                             }
-                                        }
-                                        p { class: "theme-card__notes", "{preset_notes}" }
-                                        button {
-                                            class: if is_active { "button" } else { "button secondary" },
-                                            "data-action": "apply-theme-card",
-                                            onclick: move |_| {
-                                                let mut next = draft();
-                                                next.custom_css = preset_css(preset_key.as_str()).to_string();
-                                                preset_choice.set(preset_key.clone());
-                                                let applied = next.clone();
-                                                draft.set(next);
-                                                apply_settings_immediately(
-                                                    theme,
-                                                    draft,
-                                                    preset_choice,
-                                                    status,
-                                                    status_tone,
-                                                    applied,
-                                                    format!("已从主题卡片应用：{}。", preset_name),
-                                                );
-                                            },
-                                            if is_active { "当前已选" } else { "使用这套主题" }
-                                        }
-                                        button {
-                                            class: "button secondary danger-outline",
-                                            "data-action": "remove-theme-card",
-                                            onclick: move |_| {
-                                                if detect_preset_key(&draft().custom_css) != remove_preset_key.as_str() {
-                                                    set_status_info(status, status_tone, format!("当前并未启用主题：{}。", preset_name));
-                                                    return;
-                                                }
-                                                let mut next = draft();
-                                                next.custom_css.clear();
-                                                preset_choice.set("none".to_string());
-                                                let applied = next.clone();
-                                                draft.set(next);
-                                                apply_settings_immediately(
-                                                    theme,
-                                                    draft,
-                                                    preset_choice,
-                                                    status,
-                                                    status_tone,
-                                                    applied,
-                                                    format!("已移除主题：{}。", preset_name),
-                                                );
-                                            },
-                                            "移除这套主题"
+                                            p { class: "theme-card__notes", "{preset_notes}" }
+                                            button {
+                                                class: if is_active { "button" } else { "button secondary" },
+                                                "data-action": "apply-theme-card",
+                                                onclick: move |_| {
+                                                    let mut next = draft();
+                                                    next.custom_css = preset_css(preset_key.as_str()).to_string();
+                                                    preset_choice.set(preset_key.clone());
+                                                    let applied = next.clone();
+                                                    draft.set(next);
+                                                    apply_settings_immediately(
+                                                        theme,
+                                                        draft,
+                                                        preset_choice,
+                                                        status,
+                                                        status_tone,
+                                                        applied,
+                                                        format!("已从主题卡片应用：{}。", preset_name),
+                                                    );
+                                                },
+                                                if is_active { "当前已选" } else { "使用这套主题" }
+                                            }
+                                            button {
+                                                class: "button secondary danger-outline",
+                                                "data-action": "remove-theme-card",
+                                                onclick: move |_| {
+                                                    if detect_preset_key(&draft().custom_css) != remove_preset_key.as_str() {
+                                                        set_status_info(status, status_tone, format!("当前并未启用主题：{}。", preset_name));
+                                                        return;
+                                                    }
+                                                    let mut next = draft();
+                                                    next.custom_css.clear();
+                                                    preset_choice.set("none".to_string());
+                                                    let applied = next.clone();
+                                                    draft.set(next);
+                                                    apply_settings_immediately(
+                                                        theme,
+                                                        draft,
+                                                        preset_choice,
+                                                        status,
+                                                        status_tone,
+                                                        applied,
+                                                        format!("已移除主题：{}。", preset_name),
+                                                    );
+                                                },
+                                                "移除这套主题"
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                    p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。预置主题会立即生效并自动保存；手动编辑 CSS 后请点击“应用当前 CSS”。" }
-                    div { class: "preset-grid",
+                    div { class: "settings-card__footer" ,
                         button {
-                            class: "button secondary",
-                            "data-action": "apply-theme-atlas-sidebar",
-                            onclick: move |_| {
-                                let mut next = draft();
-                                next.custom_css = atlas_sidebar_theme_css().to_string();
-                                preset_choice.set("atlas-sidebar".to_string());
-                                let applied = next.clone();
-                                draft.set(next);
-                                apply_settings_immediately(
-                                    theme,
-                                    draft,
-                                    preset_choice,
-                                    status,
-                                    status_tone,
-                                    applied,
-                                    "已应用示例主题：Atlas Sidebar。".to_string(),
-                                );
+                            class: "button",
+                                "data-action": "save-settings",
+                                onclick: move |_| {
+                                    let next = draft();
+                                    if let Err(err) = validate_custom_css(&next.custom_css) {
+                                        set_status_error(
+                                            status,
+                                            status_tone,
+                                            format!("自定义 CSS 格式无效：{err}"),
+                                        );
+                                        return;
+                                    }
+                                    spawn(async move {
+                                        match AppServices::shared().await {
+                                        Ok(services) => match services.save_settings(&next).await {
+                                            Ok(()) => {
+                                                theme.settings.set(next);
+                                                set_status_info(status, status_tone, "设置已保存。".to_string());
+                                            }
+                                            Err(err) => set_status_error(status, status_tone, format!("保存设置失败：{err}")),
+                                        },
+                                        Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
+                                    }
+                                });
                             },
-                            "Atlas Sidebar"
+                            "保存设置"
                         }
-                        button {
-                            class: "button secondary",
-                            "data-action": "apply-theme-newsprint",
-                            onclick: move |_| {
-                                let mut next = draft();
-                                next.custom_css = newsprint_theme_css().to_string();
-                                preset_choice.set("newsprint".to_string());
-                                let applied = next.clone();
-                                draft.set(next);
-                                apply_settings_immediately(
-                                    theme,
-                                    draft,
-                                    preset_choice,
-                                    status,
-                                    status_tone,
-                                    applied,
-                                    "已应用示例主题：Newsprint。".to_string(),
-                                );
-                            },
-                            "Newsprint"
-                        }
-                        button {
-                            class: "button secondary",
-                            "data-action": "apply-theme-forest-desk",
-                            onclick: move |_| {
-                                let mut next = draft();
-                                next.custom_css = forest_desk_theme_css().to_string();
-                                preset_choice.set("forest-desk".to_string());
-                                let applied = next.clone();
-                                draft.set(next);
-                                apply_settings_immediately(
-                                    theme,
-                                    draft,
-                                    preset_choice,
-                                    status,
-                                    status_tone,
-                                    applied,
-                                    "已应用示例主题：Amethyst Glass。".to_string(),
-                                );
-                            },
-                            "Amethyst Glass"
-                        }
-                        button {
-                            class: "button secondary",
-                            "data-action": "apply-theme-midnight-ledger",
-                            onclick: move |_| {
-                                let mut next = draft();
-                                next.custom_css = midnight_ledger_theme_css().to_string();
-                                preset_choice.set("midnight-ledger".to_string());
-                                let applied = next.clone();
-                                draft.set(next);
-                                apply_settings_immediately(
-                                    theme,
-                                    draft,
-                                    preset_choice,
-                                    status,
-                                    status_tone,
-                                    applied,
-                                    "已应用示例主题：Midnight Ledger。".to_string(),
-                                );
-                            },
-                            "Midnight Ledger"
-                        }
-                        button {
-                            class: "button secondary danger-outline",
-                            "data-action": "clear-custom-css",
-                            onclick: move |_| {
-                                let mut next = draft();
-                                next.custom_css.clear();
-                                preset_choice.set("none".to_string());
-                                let applied = next.clone();
-                                draft.set(next);
-                                apply_settings_immediately(
-                                    theme,
-                                    draft,
-                                    preset_choice,
-                                    status,
-                                    status_tone,
-                                    applied,
-                                    "已清空自定义 CSS。".to_string(),
-                                );
-                            },
-                            "清空 CSS"
-                        }
-                    }
-                    button {
-                        class: "button",
-                            "data-action": "save-settings",
-                            onclick: move |_| {
-                                let next = draft();
-                                if let Err(err) = validate_custom_css(&next.custom_css) {
-                                    set_status_error(
-                                        status,
-                                        status_tone,
-                                        format!("自定义 CSS 格式无效：{err}"),
-                                    );
-                                    return;
-                                }
-                                spawn(async move {
-                                    match AppServices::shared().await {
-                                    Ok(services) => match services.save_settings(&next).await {
-                                        Ok(()) => {
-                                            theme.settings.set(next);
-                                            set_status_info(status, status_tone, "设置已保存。".to_string());
-                                        }
-                                        Err(err) => set_status_error(status, status_tone, format!("保存设置失败：{err}")),
-                                    },
-                                    Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
-                                }
-                            });
-                        },
-                        "保存设置"
                     }
                 }
                 div { class: "settings-card",
@@ -560,27 +596,44 @@ pub fn SettingsPage() -> Element {
                         h3 { "WebDAV 配置交换" }
                         p { class: "settings-card__intro", "这里只负责配置同步，不上传文章正文和本地阅读状态。保持交换边界简单，能减少跨平台故障。" }
                     }
-                    label { class: "field-label", r#for: "settings-webdav-endpoint", "Endpoint" }
-                    input {
-                        id: "settings-webdav-endpoint",
-                        name: "webdav_endpoint",
-                        class: "text-input",
-                        "data-action": "webdav-endpoint",
-                        value: "{endpoint}",
-                        placeholder: "https://dav.example.com/base/",
-                        oninput: move |event| endpoint.set(event.value())
+                    div { class: "settings-card__section" ,
+                        div { class: "settings-card__section-header",
+                            h4 { class: "settings-card__section-title", "远端配置端点" }
+                            p { class: "settings-card__section-intro", "填写 WebDAV 基础地址和远端文件路径。这里只有配置，不包含文章库。"}
+                        }
+                        div { class: "settings-form-grid" ,
+                            div {
+                                label { class: "field-label", r#for: "settings-webdav-endpoint", "Endpoint" }
+                                input {
+                                    id: "settings-webdav-endpoint",
+                                    name: "webdav_endpoint",
+                                    class: "text-input",
+                                    "data-action": "webdav-endpoint",
+                                    value: "{endpoint}",
+                                    placeholder: "https://dav.example.com/base/",
+                                    oninput: move |event| endpoint.set(event.value())
+                                }
+                            }
+                            div {
+                                label { class: "field-label", r#for: "settings-webdav-remote-path", "Remote Path" }
+                                input {
+                                    id: "settings-webdav-remote-path",
+                                    name: "webdav_remote_path",
+                                    class: "text-input",
+                                    "data-action": "webdav-remote-path",
+                                    value: "{remote_path}",
+                                    placeholder: "config/rss-reader.json",
+                                    oninput: move |event| remote_path.set(event.value())
+                                }
+                            }
+                        }
                     }
-                    label { class: "field-label", r#for: "settings-webdav-remote-path", "Remote Path" }
-                    input {
-                        id: "settings-webdav-remote-path",
-                        name: "webdav_remote_path",
-                        class: "text-input",
-                        "data-action": "webdav-remote-path",
-                        value: "{remote_path}",
-                        placeholder: "config/rss-reader.json",
-                        oninput: move |event| remote_path.set(event.value())
-                    }
-                    div { class: "inline-actions",
+                    div { class: "settings-card__section" ,
+                        div { class: "settings-card__section-header",
+                            h4 { class: "settings-card__section-title", "同步动作" }
+                            p { class: "settings-card__section-intro", "上传会覆盖远端配置，下载会用远端配置替换当前本地配置。"}
+                        }
+                    div { class: "inline-actions settings-card__actions",
                         button {
                             class: "button secondary",
                             "data-action": "push-webdav",
@@ -627,6 +680,7 @@ pub fn SettingsPage() -> Element {
                             },
                             "下载配置"
                         }
+                    }
                     }
                 }
             }

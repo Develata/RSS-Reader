@@ -28,7 +28,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
         use_reader_shortcuts(entry_id, is_read, is_starred, reload_tick, status, status_tone);
     let reload_version = reload_tick();
 
-    let _ = use_resource(use_reactive!(|(entry_id, reload_version)| async move {
+    use_resource(use_reactive!(|(entry_id, reload_version)| async move {
         let _ = reload_version;
         title.set("正在加载…".to_string());
         body_text.set(String::new());

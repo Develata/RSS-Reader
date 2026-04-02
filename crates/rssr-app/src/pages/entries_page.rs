@@ -37,7 +37,7 @@ pub fn StartupPage() -> Element {
     let status = use_signal(|| "正在准备你的阅读入口…".to_string());
     let status_tone = use_signal(|| "info".to_string());
 
-    let _ = use_resource(move || async move {
+    use_resource(move || async move {
         match AppServices::shared().await {
             Ok(services) => {
                 let settings = match services.load_settings().await {
@@ -111,7 +111,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let status = use_signal(|| "正在加载文章列表…".to_string());
     let status_tone = use_signal(|| "info".to_string());
 
-    let _ = use_resource(move || async move {
+    use_resource(move || async move {
         if let Some(feed_id) = feed_id
             && let Ok(services) = AppServices::shared().await
         {
@@ -119,7 +119,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
         }
     });
 
-    let _ = use_resource(move || async move {
+    use_resource(move || async move {
         let _ = reload_tick();
         match AppServices::shared().await {
             Ok(services) => match services

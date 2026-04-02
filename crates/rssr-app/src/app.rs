@@ -52,7 +52,7 @@ pub fn App() -> Element {
     use_context_provider(|| ThemeController { settings });
     use_context_provider(|| AppUiState { entry_search });
 
-    let _ = use_resource(move || async move {
+    use_resource(move || async move {
         let current_auth = auth();
         if current_auth == WebAuthState::PendingServerProbe {
             if verify_server_gate().await {
@@ -63,13 +63,13 @@ pub fn App() -> Element {
             return;
         }
 
-        if current_auth == WebAuthState::Authenticated {
-            if let Ok(services) = AppServices::shared().await {
-                if let Ok(loaded) = services.load_settings().await {
-                    settings.set(loaded);
-                }
-                services.ensure_auto_refresh_started();
+        if current_auth == WebAuthState::Authenticated
+            && let Ok(services) = AppServices::shared().await
+        {
+            if let Ok(loaded) = services.load_settings().await {
+                settings.set(loaded);
             }
+            services.ensure_auto_refresh_started();
         }
     });
 
@@ -168,12 +168,12 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
     let mut status_tone = use_signal(|| "info".to_string());
 
     use_effect(move || {
-        if state == WebAuthState::NeedsLogin && username().is_empty() {
-            if let Some(default_username) = configured_username() {
-                if !default_username.is_empty() {
-                    username.set(default_username);
-                }
-            }
+        if state == WebAuthState::NeedsLogin
+            && username().is_empty()
+            && let Some(default_username) = configured_username()
+            && !default_username.is_empty()
+        {
+            username.set(default_username);
         }
     });
 

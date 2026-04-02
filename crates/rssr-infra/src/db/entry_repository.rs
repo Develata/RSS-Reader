@@ -272,11 +272,9 @@ fn map_sqlx_error(error: sqlx::Error) -> DomainError {
 fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>) -> Option<String> {
     let mut hasher = Sha256::new();
     let mut used = false;
-    for part in [title, text, html] {
-        if let Some(part) = part {
-            hasher.update(part.as_bytes());
-            used = true;
-        }
+    for part in [title, text, html].into_iter().flatten() {
+        hasher.update(part.as_bytes());
+        used = true;
     }
     used.then(|| format!("{:x}", hasher.finalize()))
 }

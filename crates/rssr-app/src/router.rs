@@ -8,6 +8,7 @@ use crate::pages::{
 };
 
 #[derive(Debug, Clone, Routable, PartialEq)]
+#[allow(clippy::enum_variant_names)]
 pub enum AppRoute {
     #[route("/", StartupPage)]
     StartupPage {},
