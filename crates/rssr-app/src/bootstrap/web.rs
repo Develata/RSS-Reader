@@ -17,8 +17,8 @@ use quick_xml::{
 };
 use reqwest::{StatusCode, header};
 use rssr_domain::{
-    ConfigFeed, ConfigPackage, Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings,
-    normalize_feed_url,
+    ConfigFeed, ConfigPackage, Entry, EntryQuery, EntrySummary, FeedSummary, ReadFilter,
+    StarredFilter, UserSettings, normalize_feed_url,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -183,11 +183,20 @@ impl AppServices {
                 {
                     return false;
                 }
-                if query.unread_only && entry.is_read {
+                if !query.feed_ids.is_empty() && !query.feed_ids.contains(&entry.feed_id) {
                     return false;
                 }
-                if query.starred_only && !entry.is_starred {
-                    return false;
+                match query.read_filter {
+                    ReadFilter::All => {}
+                    ReadFilter::UnreadOnly if entry.is_read => return false,
+                    ReadFilter::ReadOnly if !entry.is_read => return false,
+                    _ => {}
+                }
+                match query.starred_filter {
+                    StarredFilter::All => {}
+                    StarredFilter::StarredOnly if !entry.is_starred => return false,
+                    StarredFilter::UnstarredOnly if entry.is_starred => return false,
+                    _ => {}
                 }
                 if let Some(search) = &query.search_title
                     && !title_matches_search(&entry.title, search)

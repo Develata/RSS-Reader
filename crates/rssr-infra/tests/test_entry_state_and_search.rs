@@ -1,4 +1,6 @@
-use rssr_domain::{EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription};
+use rssr_domain::{
+    EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription, ReadFilter, StarredFilter,
+};
 use rssr_infra::{
     db::{
         entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
@@ -61,16 +63,34 @@ async fn entry_repository_updates_state_and_supports_search() {
     entry_repository.set_starred(entry_id, true).await.expect("set starred");
 
     let unread = entry_repository
-        .list_entries(&EntryQuery { unread_only: true, ..EntryQuery::default() })
+        .list_entries(&EntryQuery { read_filter: ReadFilter::UnreadOnly, ..EntryQuery::default() })
         .await
         .expect("list unread");
     assert_eq!(unread.len(), 1);
 
+    let read = entry_repository
+        .list_entries(&EntryQuery { read_filter: ReadFilter::ReadOnly, ..EntryQuery::default() })
+        .await
+        .expect("list read");
+    assert_eq!(read.len(), 1);
+
     let starred = entry_repository
-        .list_entries(&EntryQuery { starred_only: true, ..EntryQuery::default() })
+        .list_entries(&EntryQuery {
+            starred_filter: StarredFilter::StarredOnly,
+            ..EntryQuery::default()
+        })
         .await
         .expect("list starred");
     assert_eq!(starred.len(), 1);
+
+    let unstarred = entry_repository
+        .list_entries(&EntryQuery {
+            starred_filter: StarredFilter::UnstarredOnly,
+            ..EntryQuery::default()
+        })
+        .await
+        .expect("list unstarred");
+    assert_eq!(unstarred.len(), 1);
 
     let searched = entry_repository
         .list_entries(&EntryQuery {

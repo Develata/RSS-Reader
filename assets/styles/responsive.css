@@ -148,6 +148,17 @@
     padding: 14px 16px;
   }
 
+  .entry-filters__source-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  }
+
+  .entry-source-group__header,
+  .entry-date-group__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .reading-header--settings {
     padding: 18px 16px;
   }

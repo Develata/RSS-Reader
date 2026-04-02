@@ -36,11 +36,28 @@ pub struct EntrySummary {
     pub is_starred: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ReadFilter {
+    #[default]
+    All,
+    UnreadOnly,
+    ReadOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StarredFilter {
+    #[default]
+    All,
+    StarredOnly,
+    UnstarredOnly,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct EntryQuery {
     pub feed_id: Option<i64>,
-    pub unread_only: bool,
-    pub starred_only: bool,
+    pub read_filter: ReadFilter,
+    pub starred_filter: StarredFilter,
+    pub feed_ids: Vec<i64>,
     pub search_title: Option<String>,
     pub limit: Option<u32>,
 }

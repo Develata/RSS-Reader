@@ -1,5 +1,6 @@
 use rssr_domain::{
-    DomainError, Entry, EntryQuery, EntryRepository, EntrySummary, Result as DomainResult,
+    DomainError, Entry, EntryQuery, EntryRepository, EntrySummary, ReadFilter,
+    Result as DomainResult, StarredFilter,
 };
 use sha2::{Digest, Sha256};
 use sqlx::{QueryBuilder, Row, Sqlite};
@@ -202,11 +203,31 @@ impl EntryRepository for SqliteEntryRepository {
         if let Some(feed_id) = query.feed_id {
             qb.push(" AND entries.feed_id = ").push_bind(feed_id);
         }
-        if query.unread_only {
-            qb.push(" AND entries.is_read = 0");
+        if !query.feed_ids.is_empty() {
+            qb.push(" AND entries.feed_id IN (");
+            let mut separated = qb.separated(", ");
+            for feed_id in &query.feed_ids {
+                separated.push_bind(feed_id);
+            }
+            qb.push(")");
         }
-        if query.starred_only {
-            qb.push(" AND entries.is_starred = 1");
+        match query.read_filter {
+            ReadFilter::All => {}
+            ReadFilter::UnreadOnly => {
+                qb.push(" AND entries.is_read = 0");
+            }
+            ReadFilter::ReadOnly => {
+                qb.push(" AND entries.is_read = 1");
+            }
+        }
+        match query.starred_filter {
+            StarredFilter::All => {}
+            StarredFilter::StarredOnly => {
+                qb.push(" AND entries.is_starred = 1");
+            }
+            StarredFilter::UnstarredOnly => {
+                qb.push(" AND entries.is_starred = 0");
+            }
         }
         if let Some(search) = &query.search_title {
             qb.push(" AND entries.title LIKE ")

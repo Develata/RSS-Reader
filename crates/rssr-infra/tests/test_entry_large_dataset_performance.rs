@@ -1,6 +1,8 @@
 use std::time::Instant;
 
-use rssr_domain::{EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription};
+use rssr_domain::{
+    EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription, ReadFilter, StarredFilter,
+};
 use rssr_infra::db::{
     entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
     sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
@@ -83,7 +85,7 @@ async fn entry_repository_handles_large_dataset_queries() {
 
     let start = Instant::now();
     let unread_entries = entry_repository
-        .list_entries(&EntryQuery { unread_only: true, ..EntryQuery::default() })
+        .list_entries(&EntryQuery { read_filter: ReadFilter::UnreadOnly, ..EntryQuery::default() })
         .await
         .expect("list unread");
     let unread_ms = start.elapsed().as_millis();
@@ -91,7 +93,10 @@ async fn entry_repository_handles_large_dataset_queries() {
 
     let start = Instant::now();
     let starred_entries = entry_repository
-        .list_entries(&EntryQuery { starred_only: true, ..EntryQuery::default() })
+        .list_entries(&EntryQuery {
+            starred_filter: StarredFilter::StarredOnly,
+            ..EntryQuery::default()
+        })
         .await
         .expect("list starred");
     let starred_ms = start.elapsed().as_millis();
