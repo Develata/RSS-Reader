@@ -8,14 +8,17 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+argon2.workspace = true
 axum.workspace = true
 base64.workspace = true
+clap.workspace = true
 hmac.workspace = true
+rand_core.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 sha2.workspace = true
 time.workspace = true
-tokio = { workspace = true, features = ["fs", "net", "rt-multi-thread", "signal"] }
+tokio = { workspace = true, features = ["fs", "net", "rt-multi-thread", "signal", "sync"] }
 tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

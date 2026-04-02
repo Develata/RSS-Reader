@@ -19,6 +19,7 @@ repository = "https://github.com/Develata/RSS-Reader"
 [workspace.dependencies]
 ammonia = "4"
 anyhow = "1"
+argon2 = "0.5"
 async-trait = "0.1"
 axum = { version = "0.8", features = ["form", "http1", "tokio"] }
 base64 = "0.22"
@@ -30,6 +31,7 @@ feed-rs = "2"
 getrandom = { version = "0.2", features = ["js"] }
 hmac = "0.12"
 quick-xml = "0.37"
+rand_core = { version = "0.6", features = ["getrandom"] }
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "rustls-tls"] }
 rfd = "0.17"

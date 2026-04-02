@@ -243,7 +243,7 @@ The default [docker-compose.yml](../docker-compose.yml) is a pull-only deploymen
 
 ```bash
 export RSS_READER_WEB_USERNAME=admin
-export RSS_READER_WEB_PASSWORD='replace-this-with-a-strong-password'
+export RSS_READER_WEB_PASSWORD_HASH='replace-this-with-an-argon2-password-hash'
 export RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters'
 docker compose up -d
 ```
@@ -258,7 +258,7 @@ Override the image tag or host port if needed:
 
 ```bash
 RSS_READER_WEB_USERNAME=admin \
-RSS_READER_WEB_PASSWORD='replace-this-with-a-strong-password' \
+RSS_READER_WEB_PASSWORD_HASH='replace-this-with-an-argon2-password-hash' \
 RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters' \
 RSS_READER_IMAGE=ghcr.io/develata/rss-reader:latest \
 RSS_READER_PORT=8090 \
@@ -271,15 +271,24 @@ You can also run the image directly:
 docker run --rm \
   -p 8039:8080 \
   -e RSS_READER_WEB_USERNAME=admin \
-  -e RSS_READER_WEB_PASSWORD='replace-this-with-a-strong-password' \
+  -e RSS_READER_WEB_PASSWORD_HASH='replace-this-with-an-argon2-password-hash' \
   -e RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters' \
   ghcr.io/develata/rss-reader:latest
 ```
 
 Notes:
+- generate a password hash with:
+
+```bash
+cargo run -p rssr-web -- --print-password-hash 'replace-this-with-a-strong-password'
+```
+
+- production deployments should use `RSS_READER_WEB_PASSWORD_HASH`, not a plaintext password
 - `RSS_READER_WEB_SESSION_SECRET` should be a random string with at least 32 characters
-- if the container is exposed behind HTTPS, set `RSS_READER_WEB_SECURE_COOKIE=true`
-- for local HTTP testing you can keep it at the default `false`
+- production deployments should also set:
+  - `RSS_READER_WEB_ENV=production`
+  - `RSS_READER_WEB_SECURE_COOKIE=true`
+- local HTTP testing can keep `RSS_READER_WEB_ENV=development`
 
 ### Local image build
 

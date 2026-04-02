@@ -292,10 +292,12 @@ Web 端使用 wasm SQLite，并把数据库持久化到浏览器存储中。
 ```bash
 dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e
 
+cargo run -p rssr-web -- --print-password-hash adminadmin
+
 RSS_READER_WEB_BIND=127.0.0.1:8060 \
 RSS_READER_WEB_STATIC_DIR=target/web-e2e/public \
 RSS_READER_WEB_USERNAME=admin \
-RSS_READER_WEB_PASSWORD=adminadmin \
+RSS_READER_WEB_PASSWORD_HASH='<把上一步输出粘贴到这里>' \
 RSS_READER_WEB_SESSION_SECRET=01234567890123456789012345678901 \
 cargo run -p rssr-web
 ```
@@ -308,7 +310,7 @@ cargo run -p rssr-web
 
 ```bash
 export RSS_READER_WEB_USERNAME=admin
-export RSS_READER_WEB_PASSWORD='请改成你自己的强密码'
+export RSS_READER_WEB_PASSWORD_HASH='请替换成 Argon2 密码哈希'
 export RSS_READER_WEB_SESSION_SECRET='至少32字符的随机长串'
 docker compose up -d
 ```
@@ -323,7 +325,7 @@ http://127.0.0.1:8039
 
 ```bash
 RSS_READER_WEB_USERNAME=admin \
-RSS_READER_WEB_PASSWORD='请改成你自己的强密码' \
+RSS_READER_WEB_PASSWORD_HASH='请替换成 Argon2 密码哈希' \
 RSS_READER_WEB_SESSION_SECRET='至少32字符的随机长串' \
 RSS_READER_IMAGE=ghcr.io/develata/rss-reader:latest \
 RSS_READER_PORT=8090 \
@@ -336,17 +338,26 @@ docker compose up -d
 docker run --rm \
   -p 8039:8080 \
   -e RSS_READER_WEB_USERNAME=admin \
-  -e RSS_READER_WEB_PASSWORD='请改成你自己的强密码' \
+  -e RSS_READER_WEB_PASSWORD_HASH='请替换成 Argon2 密码哈希' \
   -e RSS_READER_WEB_SESSION_SECRET='至少32字符的随机长串' \
   ghcr.io/develata/rss-reader:latest
 ```
 
 说明：
 
+- 推荐先生成密码哈希：
+
+```bash
+cargo run -p rssr-web -- --print-password-hash '请改成你自己的强密码'
+```
+
+- 部署环境请使用 `RSS_READER_WEB_PASSWORD_HASH`，不要继续保存明文密码
 - `RSS_READER_WEB_SESSION_SECRET` 请使用长度至少 32 的随机字符串
-- 如果这个容器最终会挂在 HTTPS 反向代理后面，建议额外设置：
+- 生产环境建议同时设置：
+  - `RSS_READER_WEB_ENV=production`
   - `RSS_READER_WEB_SECURE_COOKIE=true`
-- 本地 HTTP 测试时可保持默认 `false`
+- 如果启用了 `RSS_READER_WEB_ENV=production`，但没有开启 `RSS_READER_WEB_SECURE_COOKIE=true`，服务会拒绝启动
+- 本地 HTTP 测试时可保持 `RSS_READER_WEB_ENV=development`
 
 ### 本地构建镜像
 
@@ -374,8 +385,9 @@ services:
     image: ghcr.io/develata/rss-reader:latest
     environment:
       RSS_READER_WEB_USERNAME: admin
-      RSS_READER_WEB_PASSWORD: "please-change-this-password"
+      RSS_READER_WEB_PASSWORD_HASH: "$argon2id$..."
       RSS_READER_WEB_SESSION_SECRET: "replace-with-a-random-secret-at-least-32-chars"
+      RSS_READER_WEB_ENV: "development"
       RSS_READER_WEB_SECURE_COOKIE: "false"
     ports:
       - "8039:8080"
@@ -390,8 +402,9 @@ services:
     image: ghcr.io/develata/rss-reader:latest
     environment:
       RSS_READER_WEB_USERNAME: admin
-      RSS_READER_WEB_PASSWORD: "please-change-this-password"
+      RSS_READER_WEB_PASSWORD_HASH: "$argon2id$..."
       RSS_READER_WEB_SESSION_SECRET: "replace-with-a-random-secret-at-least-32-chars"
+      RSS_READER_WEB_ENV: "production"
       RSS_READER_WEB_SECURE_COOKIE: "true"
     ports:
       - "8090:8080"

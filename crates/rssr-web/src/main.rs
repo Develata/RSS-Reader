@@ -1,22 +1,36 @@
-use std::{env, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    env,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    path::PathBuf,
+    sync::Arc,
+};
 
 use anyhow::{Context, Result, anyhow, ensure};
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 use axum::{
     Form, Router,
     extract::{Query, Request, State},
-    http::{HeaderValue, StatusCode, header},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     middleware::{self, Next},
     response::{Html, IntoResponse, Redirect, Response},
     routing::get,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use clap::Parser;
 use hmac::{Hmac, Mac};
+use rand_core::OsRng;
 use serde::Deserialize;
 use sha2::Sha256;
 use time::{Duration, OffsetDateTime};
+use tokio::sync::Mutex;
 use tower_http::services::{ServeDir, ServeFile};
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
+
+const DEFAULT_LOGIN_RATE_LIMIT_WINDOW_MINUTES: i64 = 15;
+const DEFAULT_LOGIN_RATE_LIMIT_BLOCK_MINUTES: i64 = 15;
+const DEFAULT_LOGIN_RATE_LIMIT_MAX_FAILURES: u32 = 5;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -25,9 +39,16 @@ const GATE_COOKIE: &str = "rssr_web_gate";
 const APP_NAME: &str = "RSS-Reader";
 const WEB_LOGIN_MARKUP: &str = include_str!("../../../assets/branding/rssr-mark.svg");
 
+#[derive(Parser, Debug)]
+struct Cli {
+    #[arg(long, value_name = "PASSWORD")]
+    print_password_hash: Option<String>,
+}
+
 #[derive(Clone)]
 struct AppState {
     config: Arc<AuthConfig>,
+    login_throttle: Arc<Mutex<HashMap<String, LoginThrottleState>>>,
 }
 
 #[derive(Clone)]
@@ -35,10 +56,37 @@ struct AuthConfig {
     bind_addr: SocketAddr,
     static_dir: PathBuf,
     username: String,
-    password: String,
+    password_policy: PasswordPolicy,
     session_secret: Vec<u8>,
     secure_cookie: bool,
     session_ttl: Duration,
+    login_rate_limit: LoginRateLimit,
+}
+
+#[derive(Clone)]
+enum PasswordPolicy {
+    Argon2Hash(String),
+    PlaintextDev(String),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WebEnvironment {
+    Development,
+    Production,
+}
+
+#[derive(Clone)]
+struct LoginRateLimit {
+    max_failures: u32,
+    window: Duration,
+    block_for: Duration,
+}
+
+#[derive(Clone, Debug)]
+struct LoginThrottleState {
+    failures: u32,
+    window_started_at: OffsetDateTime,
+    blocked_until: Option<OffsetDateTime>,
 }
 
 #[derive(Deserialize, Default)]
@@ -62,8 +110,16 @@ struct LoginForm {
 #[tokio::main]
 async fn main() -> Result<()> {
     init_tracing();
+    let cli = Cli::parse();
+
+    if let Some(password) = cli.print_password_hash {
+        println!("{}", generate_password_hash(&password)?);
+        return Ok(());
+    }
 
     let config = Arc::new(load_config()?);
+    let app_state =
+        AppState { config: config.clone(), login_throttle: Arc::new(Mutex::new(HashMap::new())) };
     ensure!(
         config.static_dir.join("index.html").exists(),
         "静态资源目录缺少 index.html：{}",
@@ -77,14 +133,14 @@ async fn main() -> Result<()> {
             ServeDir::new(config.static_dir.clone())
                 .not_found_service(ServeFile::new(config.static_dir.join("index.html"))),
         )
-        .layer(middleware::from_fn_with_state(AppState { config: config.clone() }, require_auth));
+        .layer(middleware::from_fn_with_state(app_state.clone(), require_auth));
 
     let app = Router::new()
         .route("/login", get(show_login).post(handle_login))
         .route("/logout", get(handle_logout))
         .route("/healthz", get(healthz))
         .merge(protected)
-        .with_state(AppState { config: config.clone() });
+        .with_state(app_state);
 
     info!("starting rssr-web on {}", config.bind_addr);
     let listener = tokio::net::TcpListener::bind(config.bind_addr)
@@ -113,9 +169,14 @@ fn load_config() -> Result<AuthConfig> {
         env::var("RSS_READER_WEB_STATIC_DIR").unwrap_or_else(|_| "/app/public".to_string()),
     );
     let username = required_env("RSS_READER_WEB_USERNAME")?;
-    let password = required_env("RSS_READER_WEB_PASSWORD")?;
+    let password_policy = load_password_policy()?;
     let session_secret = required_env("RSS_READER_WEB_SESSION_SECRET")?;
     ensure!(session_secret.len() >= 32, "RSS_READER_WEB_SESSION_SECRET 至少需要 32 个字符");
+    let environment = env::var("RSS_READER_WEB_ENV")
+        .ok()
+        .map(parse_environment)
+        .transpose()?
+        .unwrap_or(WebEnvironment::Development);
     let secure_cookie = env::var("RSS_READER_WEB_SECURE_COOKIE")
         .ok()
         .map(|raw| matches!(raw.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
@@ -127,15 +188,27 @@ fn load_config() -> Result<AuthConfig> {
         .context("解析 RSS_READER_WEB_SESSION_TTL_HOURS 失败")?
         .unwrap_or(12);
     ensure!(session_ttl_hours > 0, "会话时长必须大于 0");
+    let login_rate_limit = load_login_rate_limit()?;
+
+    if environment == WebEnvironment::Production {
+        ensure!(secure_cookie, "生产环境必须开启 RSS_READER_WEB_SECURE_COOKIE=true。");
+        ensure!(
+            matches!(password_policy, PasswordPolicy::Argon2Hash(_)),
+            "生产环境必须使用 RSS_READER_WEB_PASSWORD_HASH，禁止继续使用明文 RSS_READER_WEB_PASSWORD。"
+        );
+    } else if matches!(password_policy, PasswordPolicy::PlaintextDev(_)) {
+        warn!("rssr-web 正在使用明文 RSS_READER_WEB_PASSWORD，仅建议用于本地开发。");
+    }
 
     Ok(AuthConfig {
         bind_addr,
         static_dir,
         username,
-        password,
+        password_policy,
         session_secret: session_secret.into_bytes(),
         secure_cookie,
         session_ttl: Duration::hours(session_ttl_hours),
+        login_rate_limit,
     })
 }
 
@@ -143,12 +216,173 @@ fn required_env(name: &str) -> Result<String> {
     env::var(name).map_err(|_| anyhow!("缺少环境变量：{name}"))
 }
 
-fn parse_proxy_feed_url(raw: &str) -> Result<String, String> {
+fn parse_proxy_feed_url(raw: &str) -> Result<reqwest::Url, String> {
     let url = reqwest::Url::parse(raw).map_err(|_| "feed URL 不合法。".to_string())?;
     if !matches!(url.scheme(), "http" | "https") {
         return Err("只允许代理 http/https feed URL。".to_string());
     }
-    Ok(url.to_string())
+    Ok(url)
+}
+
+fn parse_environment(raw: String) -> Result<WebEnvironment> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "dev" | "development" | "local" => Ok(WebEnvironment::Development),
+        "prod" | "production" => Ok(WebEnvironment::Production),
+        _ => Err(anyhow!("RSS_READER_WEB_ENV 只能是 development 或 production")),
+    }
+}
+
+fn load_password_policy() -> Result<PasswordPolicy> {
+    let password_hash = env::var("RSS_READER_WEB_PASSWORD_HASH").ok();
+    let password = env::var("RSS_READER_WEB_PASSWORD").ok();
+
+    if let Some(hash) = password_hash {
+        validate_password_hash(&hash)?;
+        return Ok(PasswordPolicy::Argon2Hash(hash));
+    }
+
+    if let Some(password) = password {
+        ensure!(password.len() >= 8, "RSS_READER_WEB_PASSWORD 至少需要 8 个字符");
+        return Ok(PasswordPolicy::PlaintextDev(password));
+    }
+
+    Err(anyhow!(
+        "缺少环境变量：RSS_READER_WEB_PASSWORD_HASH（推荐）或 RSS_READER_WEB_PASSWORD（仅开发环境）"
+    ))
+}
+
+fn load_login_rate_limit() -> Result<LoginRateLimit> {
+    let max_failures = env::var("RSS_READER_WEB_LOGIN_MAX_FAILURES")
+        .ok()
+        .map(|raw| raw.parse::<u32>())
+        .transpose()
+        .context("解析 RSS_READER_WEB_LOGIN_MAX_FAILURES 失败")?
+        .unwrap_or(DEFAULT_LOGIN_RATE_LIMIT_MAX_FAILURES);
+    ensure!(max_failures > 0, "RSS_READER_WEB_LOGIN_MAX_FAILURES 必须大于 0");
+
+    let window_minutes = env::var("RSS_READER_WEB_LOGIN_WINDOW_MINUTES")
+        .ok()
+        .map(|raw| raw.parse::<i64>())
+        .transpose()
+        .context("解析 RSS_READER_WEB_LOGIN_WINDOW_MINUTES 失败")?
+        .unwrap_or(DEFAULT_LOGIN_RATE_LIMIT_WINDOW_MINUTES);
+    ensure!(window_minutes > 0, "RSS_READER_WEB_LOGIN_WINDOW_MINUTES 必须大于 0");
+
+    let block_minutes = env::var("RSS_READER_WEB_LOGIN_BLOCK_MINUTES")
+        .ok()
+        .map(|raw| raw.parse::<i64>())
+        .transpose()
+        .context("解析 RSS_READER_WEB_LOGIN_BLOCK_MINUTES 失败")?
+        .unwrap_or(DEFAULT_LOGIN_RATE_LIMIT_BLOCK_MINUTES);
+    ensure!(block_minutes > 0, "RSS_READER_WEB_LOGIN_BLOCK_MINUTES 必须大于 0");
+
+    Ok(LoginRateLimit {
+        max_failures,
+        window: Duration::minutes(window_minutes),
+        block_for: Duration::minutes(block_minutes),
+    })
+}
+
+fn validate_password_hash(raw: &str) -> Result<()> {
+    PasswordHash::new(raw)
+        .map_err(|_| anyhow!("RSS_READER_WEB_PASSWORD_HASH 不是合法的 Argon2 哈希"))?;
+    Ok(())
+}
+
+fn generate_password_hash(password: &str) -> Result<String> {
+    ensure!(password.len() >= 8, "密码至少需要 8 个字符");
+    let salt = SaltString::generate(&mut OsRng);
+    let hash = Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|_| anyhow!("生成密码哈希失败"))?;
+    Ok(hash.to_string())
+}
+
+fn validate_proxy_host(url: &reqwest::Url) -> Result<(String, u16), String> {
+    let host = url.host_str().ok_or_else(|| "feed URL 缺少主机名。".to_string())?;
+
+    if host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost") {
+        return Err("出于安全原因，禁止代理 localhost 地址。".to_string());
+    }
+
+    let port =
+        url.port_or_known_default().ok_or_else(|| "无法确定 feed URL 的端口。".to_string())?;
+
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return if is_disallowed_proxy_ip(ip) {
+            Err("出于安全原因，禁止代理内网或本地地址。".to_string())
+        } else {
+            Ok((host.to_string(), port))
+        };
+    }
+
+    if host.ends_with(".local") {
+        return Err("出于安全原因，禁止代理 .local 内网域名。".to_string());
+    }
+
+    Ok((host.to_string(), port))
+}
+
+async fn validate_proxy_target(raw: &str) -> Result<reqwest::Url, String> {
+    let url = parse_proxy_feed_url(raw)?;
+    let (host, port) = validate_proxy_host(&url)?;
+    let resolved = tokio::net::lookup_host((host.as_str(), port))
+        .await
+        .map_err(|_| "无法解析 feed 主机名。".to_string())?;
+
+    if resolved.map(|addr| addr.ip()).any(is_disallowed_proxy_ip) {
+        return Err("出于安全原因，禁止代理内网或本地地址。".to_string());
+    }
+
+    Ok(url)
+}
+
+fn is_disallowed_proxy_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_broadcast()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+                || is_documentation_ipv4(ip)
+                || is_shared_address_space_ipv4(ip)
+                || is_benchmark_ipv4(ip)
+                || ip == Ipv4Addr::new(169, 254, 169, 254)
+        }
+        IpAddr::V6(ip) => {
+            ip.is_loopback()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+                || ip.is_unique_local()
+                || ip.is_unicast_link_local()
+                || is_documentation_ipv6(ip)
+                || ip == Ipv6Addr::LOCALHOST
+        }
+    }
+}
+
+fn is_documentation_ipv4(ip: Ipv4Addr) -> bool {
+    matches!(
+        (ip.octets()[0], ip.octets()[1], ip.octets()[2]),
+        (192, 0, 2) | (198, 51, 100) | (203, 0, 113)
+    )
+}
+
+fn is_shared_address_space_ipv4(ip: Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    octets[0] == 100 && (64..=127).contains(&octets[1])
+}
+
+fn is_benchmark_ipv4(ip: Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    octets[0] == 198 && (octets[1] == 18 || octets[1] == 19)
+}
+
+fn is_documentation_ipv6(ip: Ipv6Addr) -> bool {
+    let octets = ip.octets();
+    octets[0] == 0x20 && octets[1] == 0x01 && octets[2] == 0x0d && octets[3] == 0xb8
 }
 
 async fn show_login(
@@ -159,6 +393,7 @@ async fn show_login(
     let error_message = match query.error.as_deref() {
         Some("invalid_credentials") => "用户名或密码错误。",
         Some("session_expired") => "登录已过期，请重新登录。",
+        Some("rate_limited") => "登录尝试过于频繁，请稍后再试。",
         _ => "",
     };
 
@@ -298,16 +533,31 @@ async fn show_login(
 
 async fn handle_login(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> impl IntoResponse {
     let next = sanitize_next(form.next.as_deref());
-    if !credentials_match(&state.config, &form.username, &form.password) {
+    let rate_limit_key = rate_limit_key(&headers, &form.username);
+
+    if login_attempt_is_blocked(&state, &rate_limit_key).await {
         return Redirect::to(&format!(
-            "/login?error=invalid_credentials&next={}",
+            "/login?error=rate_limited&next={}",
             urlencoding::encode(next)
         ))
         .into_response();
     }
+
+    if !credentials_match(&state.config, &form.username, &form.password) {
+        let blocked = record_login_failure(&state, &rate_limit_key).await;
+        return Redirect::to(&format!(
+            "/login?error={}&next={}",
+            if blocked { "rate_limited" } else { "invalid_credentials" },
+            urlencoding::encode(next)
+        ))
+        .into_response();
+    }
+
+    clear_login_failures(&state, &rate_limit_key).await;
 
     let expires_at = OffsetDateTime::now_utc() + state.config.session_ttl;
     let token = match build_session_token(&state.config, expires_at.unix_timestamp()) {
@@ -357,24 +607,14 @@ async fn session_probe() -> impl IntoResponse {
 }
 
 async fn feed_proxy(Query(query): Query<FeedProxyQuery>) -> impl IntoResponse {
-    let upstream_url = match parse_proxy_feed_url(&query.url) {
+    let upstream_url = match validate_proxy_target(&query.url).await {
         Ok(url) => url,
         Err(err) => return (StatusCode::BAD_REQUEST, err).into_response(),
     };
 
-    let response = match reqwest::Client::new()
-        .get(upstream_url)
-        .header(
-            header::ACCEPT,
-            "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
-        )
-        .send()
-        .await
-    {
+    let response = match fetch_proxied_feed(upstream_url).await {
         Ok(response) => response,
-        Err(err) => {
-            return (StatusCode::BAD_GATEWAY, format!("feed 代理请求失败：{err}")).into_response();
-        }
+        Err(err) => return (StatusCode::BAD_GATEWAY, err).into_response(),
     };
 
     let status = response.status();
@@ -403,6 +643,42 @@ async fn feed_proxy(Query(query): Query<FeedProxyQuery>) -> impl IntoResponse {
     proxied.body(axum::body::Body::from(body)).expect("valid proxied feed response")
 }
 
+async fn fetch_proxied_feed(initial_url: reqwest::Url) -> Result<reqwest::Response, String> {
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|err| format!("初始化 feed 代理客户端失败：{err}"))?;
+    let mut current_url = initial_url;
+
+    for _ in 0..5 {
+        let response = client
+            .get(current_url.clone())
+            .header(
+                header::ACCEPT,
+                "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
+            )
+            .send()
+            .await
+            .map_err(|err| format!("feed 代理请求失败：{err}"))?;
+
+        if !response.status().is_redirection() {
+            return Ok(response);
+        }
+
+        let Some(location) = response.headers().get(header::LOCATION) else {
+            return Err("feed 代理收到重定向，但响应缺少 Location 头。".to_string());
+        };
+        let location =
+            location.to_str().map_err(|_| "feed 代理收到无法解析的重定向地址。".to_string())?;
+        let redirected = current_url
+            .join(location)
+            .map_err(|_| "feed 代理收到非法的重定向地址。".to_string())?;
+        current_url = validate_proxy_target(redirected.as_str()).await?;
+    }
+
+    Err("feed 代理重定向次数过多。".to_string())
+}
+
 async fn require_auth(State(state): State<AppState>, request: Request, next: Next) -> Response {
     if let Some(cookie_value) = extract_cookie(request.headers(), SESSION_COOKIE) {
         if session_is_valid(&state.config, cookie_value) {
@@ -426,7 +702,21 @@ async fn require_auth(State(state): State<AppState>, request: Request, next: Nex
 }
 
 fn credentials_match(config: &AuthConfig, username: &str, password: &str) -> bool {
-    username == config.username && password == config.password
+    if username.trim() != config.username {
+        return false;
+    }
+
+    match &config.password_policy {
+        PasswordPolicy::Argon2Hash(hash) => verify_password_hash(hash, password),
+        PasswordPolicy::PlaintextDev(expected) => expected == password,
+    }
+}
+
+fn verify_password_hash(hash: &str, password: &str) -> bool {
+    let Ok(parsed) = PasswordHash::new(hash) else {
+        return false;
+    };
+    Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok()
 }
 
 fn build_session_token(config: &AuthConfig, expires_at: i64) -> Result<String> {
@@ -492,6 +782,82 @@ fn gate_cookie_header(config: &AuthConfig) -> String {
     format!("{GATE_COOKIE}=1; Path=/; SameSite=Lax; Max-Age={max_age}{secure}")
 }
 
+fn rate_limit_key(headers: &HeaderMap, username: &str) -> String {
+    let client = forwarded_ip(headers).unwrap_or("unknown");
+    format!("{}|{}", client, username.trim().to_ascii_lowercase())
+}
+
+fn forwarded_ip(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(',').next())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            headers
+                .get("x-real-ip")
+                .and_then(|value| value.to_str().ok())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        })
+}
+
+async fn login_attempt_is_blocked(state: &AppState, key: &str) -> bool {
+    let now = OffsetDateTime::now_utc();
+    let mut throttle = state.login_throttle.lock().await;
+    cleanup_rate_limit_entries(&mut throttle, now, &state.config.login_rate_limit);
+    throttle
+        .get(key)
+        .and_then(|entry| entry.blocked_until)
+        .is_some_and(|blocked_until| blocked_until > now)
+}
+
+async fn record_login_failure(state: &AppState, key: &str) -> bool {
+    let now = OffsetDateTime::now_utc();
+    let mut throttle = state.login_throttle.lock().await;
+    cleanup_rate_limit_entries(&mut throttle, now, &state.config.login_rate_limit);
+    let entry = throttle.entry(key.to_string()).or_insert(LoginThrottleState {
+        failures: 0,
+        window_started_at: now,
+        blocked_until: None,
+    });
+
+    if now - entry.window_started_at > state.config.login_rate_limit.window {
+        entry.failures = 0;
+        entry.window_started_at = now;
+        entry.blocked_until = None;
+    }
+
+    entry.failures += 1;
+    if entry.failures >= state.config.login_rate_limit.max_failures {
+        entry.blocked_until = Some(now + state.config.login_rate_limit.block_for);
+        true
+    } else {
+        false
+    }
+}
+
+async fn clear_login_failures(state: &AppState, key: &str) {
+    let mut throttle = state.login_throttle.lock().await;
+    throttle.remove(key);
+}
+
+fn cleanup_rate_limit_entries(
+    throttle: &mut HashMap<String, LoginThrottleState>,
+    now: OffsetDateTime,
+    config: &LoginRateLimit,
+) {
+    throttle.retain(|_, entry| {
+        if let Some(blocked_until) = entry.blocked_until
+            && blocked_until > now
+        {
+            return true;
+        }
+        now - entry.window_started_at <= config.window
+    });
+}
+
 fn logout_gate_cookie_header(config: &AuthConfig) -> String {
     let secure = if config.secure_cookie { "; Secure" } else { "" };
     format!("{GATE_COOKIE}=deleted; Path=/; SameSite=Lax; Max-Age=0{secure}")
@@ -536,10 +902,15 @@ mod tests {
             bind_addr: "127.0.0.1:8039".parse().unwrap(),
             static_dir: PathBuf::from("/tmp"),
             username: "demo".to_string(),
-            password: "secret".to_string(),
+            password_policy: PasswordPolicy::PlaintextDev("secret123".to_string()),
             session_secret: b"01234567890123456789012345678901".to_vec(),
             secure_cookie: false,
             session_ttl: Duration::hours(12),
+            login_rate_limit: LoginRateLimit {
+                max_failures: 5,
+                window: Duration::minutes(15),
+                block_for: Duration::minutes(15),
+            },
         }
     }
 
@@ -564,5 +935,51 @@ mod tests {
         assert!(parse_proxy_feed_url("http://example.com/feed.xml").is_ok());
         assert!(parse_proxy_feed_url("file:///tmp/feed.xml").is_err());
         assert!(parse_proxy_feed_url("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn proxy_validation_rejects_local_targets() {
+        assert!(
+            validate_proxy_host(&reqwest::Url::parse("http://127.0.0.1/feed.xml").unwrap())
+                .is_err()
+        );
+        assert!(
+            validate_proxy_host(&reqwest::Url::parse("http://localhost/feed.xml").unwrap())
+                .is_err()
+        );
+        assert!(
+            validate_proxy_host(
+                &reqwest::Url::parse("http://169.254.169.254/latest/meta-data").unwrap()
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn generated_argon2_hash_verifies() {
+        let hash = generate_password_hash("adminadmin").expect("hash");
+        assert!(verify_password_hash(&hash, "adminadmin"));
+        assert!(!verify_password_hash(&hash, "wrong-password"));
+    }
+
+    #[test]
+    fn rate_limit_blocks_after_repeated_failures() {
+        let mut entries = HashMap::new();
+        let config = LoginRateLimit {
+            max_failures: 2,
+            window: Duration::minutes(15),
+            block_for: Duration::minutes(15),
+        };
+        let now = OffsetDateTime::now_utc();
+        entries.insert(
+            "client".to_string(),
+            LoginThrottleState {
+                failures: 2,
+                window_started_at: now,
+                blocked_until: Some(now + config.block_for),
+            },
+        );
+        cleanup_rate_limit_entries(&mut entries, now, &config);
+        assert!(entries.contains_key("client"));
     }
 }
