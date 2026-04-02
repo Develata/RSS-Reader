@@ -10,6 +10,7 @@
 1. [根 README](../README.md)
 2. [英文 README](./README.en.md)
 3. [功能设计哲学](./design/functional-design-philosophy.md)
+4. [贡献说明](../CONTRIBUTING.md)
 
 如果你已经知道自己要做什么，可以直接走下面的分流：
 
@@ -23,6 +24,8 @@
   - [Android 安装包落地清单](./roadmaps/android-release-roadmap.md)
 - 想跑一轮人工验证：
   - [手工回归测试清单](./testing/manual-regression.md)
+- 想提交代码或补文档：
+  - [贡献说明](../CONTRIBUTING.md)
 
 ## 文档分区
 

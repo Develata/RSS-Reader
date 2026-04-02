@@ -1,5 +1,7 @@
 # RSS-Reader
 
+[Repository README](../README.md) | [Contributing](../CONTRIBUTING.md)
+
 A local-first RSS reader built with Rust and Dioxus.
 
 This project focuses on practical reading workflows instead of branding-heavy UI or backend-heavy infrastructure:
@@ -79,6 +81,38 @@ Notes:
 - browser builds can only refresh remote feeds that allow cross-origin requests
 - some feeds work on desktop/mobile but fail in web due to CORS
 - the web build adds a cache-busting query when refreshing feeds to avoid browser `304` cache behavior blocking updates
+
+### Change the web login username and password manually
+
+`rssr-web` reads its login settings from environment variables:
+
+- `RSS_READER_WEB_USERNAME`
+- `RSS_READER_WEB_PASSWORD_HASH`
+- `RSS_READER_WEB_SESSION_SECRET`
+
+Recommended flow:
+
+1. Generate a new Argon2 password hash:
+
+```bash
+cargo run -p rssr-web -- --print-password-hash 'replace-this-with-a-strong-password'
+```
+
+2. Export the new values before starting `rssr-web` or `docker compose`:
+
+```bash
+export RSS_READER_WEB_USERNAME='replace-this-with-your-username'
+export RSS_READER_WEB_PASSWORD_HASH='paste-the-argon2-hash-here'
+export RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters'
+```
+
+3. Restart the service.
+
+Notes:
+
+- changing `RSS_READER_WEB_PASSWORD_HASH` invalidates the old password immediately
+- changing `RSS_READER_WEB_USERNAME` means the login page must use the new username
+- changing `RSS_READER_WEB_SESSION_SECRET` invalidates all existing sessions
 
 ### Build Android debug APK
 

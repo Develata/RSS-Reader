@@ -27,7 +27,8 @@
   - `cargo run -p rssr-cli -- --help`
 - Web 部署态:
   - `dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e`
-  - `RSS_READER_WEB_BIND=127.0.0.1:8060 RSS_READER_WEB_STATIC_DIR=target/web-e2e/public RSS_READER_WEB_USERNAME=admin RSS_READER_WEB_PASSWORD=adminadmin RSS_READER_WEB_SESSION_SECRET=01234567890123456789012345678901 cargo run -p rssr-web`
+  - `cargo run -p rssr-web -- --print-password-hash adminadmin`
+  - `RSS_READER_WEB_BIND=127.0.0.1:8060 RSS_READER_WEB_STATIC_DIR=target/web-e2e/public RSS_READER_WEB_USERNAME=admin RSS_READER_WEB_PASSWORD_HASH='<将上一步输出粘贴到这里>' RSS_READER_WEB_SESSION_SECRET=01234567890123456789012345678901 cargo run -p rssr-web`
 
 ## 4. 核心使用流程
 

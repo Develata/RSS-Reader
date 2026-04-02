@@ -3,7 +3,7 @@
 一个本地优先、面向个人使用的极简 RSS 阅读器。  
 它优先解决“顺手订阅、稳定刷新、舒服阅读、可离线查看、易于迁移”这些实际问题，而不是做成一个厚重的平台。
 
-[English README](./docs/README.en.md) | [文档索引](./docs/README.md) | [MIT License](./LICENSE)
+[English README](./docs/README.en.md) | [文档索引](./docs/README.md) | [贡献说明](./CONTRIBUTING.md) | [MIT License](./LICENSE)
 
 ## 为什么做这个项目
 
@@ -303,6 +303,49 @@ cargo run -p rssr-web
 ```
 
 然后访问 `http://127.0.0.1:8060/login`，用 `admin / adminadmin` 登录后测试 feed 导入与刷新。
+
+### 手动修改 Web 登录用户名 / 密码
+
+`rssr-web` 的登录账号由环境变量控制，最常用的就是这三项：
+
+- `RSS_READER_WEB_USERNAME`
+- `RSS_READER_WEB_PASSWORD_HASH`
+- `RSS_READER_WEB_SESSION_SECRET`
+
+推荐按下面的顺序手动修改：
+
+1. 先生成一个新的 Argon2 密码哈希：
+
+```bash
+cargo run -p rssr-web -- --print-password-hash '请换成你自己的强密码'
+```
+
+2. 然后在启动 `rssr-web` 或 `docker compose` 之前，替换环境变量：
+
+```bash
+export RSS_READER_WEB_USERNAME='请换成你的用户名'
+export RSS_READER_WEB_PASSWORD_HASH='把上一步输出的 Argon2 哈希粘贴到这里'
+export RSS_READER_WEB_SESSION_SECRET='至少32字符的随机长串'
+```
+
+3. 重新启动服务：
+
+```bash
+cargo run -p rssr-web
+```
+
+或者：
+
+```bash
+docker compose up -d
+```
+
+补充说明：
+
+- `RSS_READER_WEB_PASSWORD_HASH` 变了以后，旧密码会立即失效
+- `RSS_READER_WEB_USERNAME` 变了以后，登录页就必须使用新用户名
+- `RSS_READER_WEB_SESSION_SECRET` 变了以后，旧会话 cookie 会失效，用户需要重新登录
+- 部署环境不要再保存明文密码，优先只保留 Argon2 哈希
 
 ### 直接拉取 GitHub 镜像运行
 
