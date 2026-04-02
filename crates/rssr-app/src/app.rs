@@ -12,6 +12,19 @@ use crate::{
 
 const APP_NAME: &str = "RSS-Reader";
 const WEB_AUTH_MARKUP: &str = include_str!("../../../assets/branding/rssr-mark.svg");
+const APP_STYLESHEET: &str = concat!(
+    include_str!("../../../assets/styles/tokens.css"),
+    "\n",
+    include_str!("../../../assets/styles/shell.css"),
+    "\n",
+    include_str!("../../../assets/styles/workspaces.css"),
+    "\n",
+    include_str!("../../../assets/styles/entries.css"),
+    "\n",
+    include_str!("../../../assets/styles/reader.css"),
+    "\n",
+    include_str!("../../../assets/styles/responsive.css"),
+);
 
 #[derive(Clone, Copy)]
 pub struct AppUiState {
@@ -101,7 +114,7 @@ pub fn App() -> Element {
     });
 
     rsx! {
-        style { {include_str!("../../../assets/styles.css")} }
+        style { {APP_STYLESHEET} }
         if auth() == WebAuthState::Authenticated && !settings().custom_css.trim().is_empty() {
             style { id: "user-custom-css", "{settings().custom_css}" }
         }
