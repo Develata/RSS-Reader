@@ -1082,9 +1082,9 @@ textarea {
   vertical-align: middle;
 }
 
-.reader-html p > img:only-child,
-.reader-html div > img:only-child,
-.reader-html a > img:only-child,
+.reader-html p > img:only-child:not(.emoji):not(.wp-smiley):not([src*="s.w.org/images/core/emoji/"]),
+.reader-html div > img:only-child:not(.emoji):not(.wp-smiley):not([src*="s.w.org/images/core/emoji/"]),
+.reader-html a > img:only-child:not(.emoji):not(.wp-smiley):not([src*="s.w.org/images/core/emoji/"]),
 .reader-html figure img,
 .reader-html picture:only-child,
 .reader-html p > picture:only-child,
