@@ -81,4 +81,14 @@ async fn entry_repository_updates_state_and_supports_search() {
         .expect("search title");
     assert_eq!(searched.len(), 1);
     assert_eq!(searched[0].title, "Rust News");
+
+    let searched_case_insensitive = entry_repository
+        .list_entries(&EntryQuery {
+            search_title: Some("rust".to_string()),
+            ..EntryQuery::default()
+        })
+        .await
+        .expect("search title case insensitive");
+    assert_eq!(searched_case_insensitive.len(), 1);
+    assert_eq!(searched_case_insensitive[0].title, "Rust News");
 }

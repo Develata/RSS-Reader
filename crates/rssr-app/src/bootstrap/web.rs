@@ -190,7 +190,7 @@ impl AppServices {
                     return false;
                 }
                 if let Some(search) = &query.search_title
-                    && !entry.title.contains(search)
+                    && !title_matches_search(&entry.title, search)
                 {
                     return false;
                 }
@@ -723,6 +723,10 @@ impl AppServices {
     }
 }
 
+fn title_matches_search(title: &str, search: &str) -> bool {
+    title.to_lowercase().contains(&search.to_lowercase())
+}
+
 fn load_state() -> anyhow::Result<PersistedState> {
     let Some(storage) = window().and_then(|window| window.local_storage().ok()).flatten() else {
         return Ok(PersistedState::default());
@@ -1239,5 +1243,26 @@ impl OutlineAttrs {
             }
         }
         Ok(Self { text, title, xml_url })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::title_matches_search;
+
+    #[test]
+    fn web_title_search_is_case_insensitive() {
+        assert!(title_matches_search(
+            "Roche Scales NVIDIA AI Factories",
+            "sca"
+        ));
+        assert!(title_matches_search(
+            "Roche Scales NVIDIA AI Factories",
+            "SCA"
+        ));
+        assert!(!title_matches_search(
+            "Roche Scales NVIDIA AI Factories",
+            "xyz"
+        ));
     }
 }

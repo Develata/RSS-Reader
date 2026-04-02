@@ -209,7 +209,9 @@ impl EntryRepository for SqliteEntryRepository {
             qb.push(" AND entries.is_starred = 1");
         }
         if let Some(search) = &query.search_title {
-            qb.push(" AND entries.title LIKE ").push_bind(format!("%{search}%"));
+            qb.push(" AND entries.title LIKE ")
+                .push_bind(format!("%{search}%"))
+                .push(" COLLATE NOCASE");
         }
 
         qb.push(" ORDER BY COALESCE(entries.published_at, entries.created_at) DESC");
