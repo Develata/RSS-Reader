@@ -67,9 +67,6 @@ pub fn SettingsPage() -> Element {
                     }
                 }
             }
-            div { class: "reading-header reading-header--settings",
-                p { class: "page-intro", "设置页只负责两类事情：整理阅读体验，以及做最基础的配置交换。我们尽量让修改即时可见，减少反复试错。" }
-            }
             StatusBanner { message: status(), tone: status_tone() }
             div { class: "settings-grid",
                 AppearanceSettingsCard {

@@ -56,7 +56,6 @@ pub fn FeedsPage() -> Element {
             AppNav {}
             div { class: "reading-header reading-header--feeds",
                 h2 { "订阅" }
-                p { class: "page-intro", "把 feed URL 保存到本地库，并立即执行首次刷新。订阅管理保持克制，配置交换保持直白可恢复。" }
             }
             div { class: "stats-grid stats-grid--airy",
                 div { class: "stat-card",

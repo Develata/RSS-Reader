@@ -38,6 +38,10 @@
   border-bottom: 1px solid rgba(62, 42, 27, 0.08);
 }
 
+.reading-header--feeds {
+  margin-bottom: 12px;
+}
+
 .entries-back-link {
   margin-bottom: 16px;
 }
