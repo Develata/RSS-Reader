@@ -3,13 +3,17 @@ services:
     image: ${RSS_READER_IMAGE:-ghcr.io/develata/rss-reader:latest}
     environment:
       RSS_READER_WEB_USERNAME: ${RSS_READER_WEB_USERNAME:?RSS_READER_WEB_USERNAME is required}
-      RSS_READER_WEB_PASSWORD_HASH: ${RSS_READER_WEB_PASSWORD_HASH:?RSS_READER_WEB_PASSWORD_HASH is required}
-      RSS_READER_WEB_SESSION_SECRET: ${RSS_READER_WEB_SESSION_SECRET:?RSS_READER_WEB_SESSION_SECRET is required}
+      RSS_READER_WEB_PASSWORD_HASH: ${RSS_READER_WEB_PASSWORD_HASH:-}
+      RSS_READER_WEB_PASSWORD: ${RSS_READER_WEB_PASSWORD:-}
+      RSS_READER_WEB_SESSION_SECRET: ${RSS_READER_WEB_SESSION_SECRET:-}
+      RSS_READER_WEB_AUTH_STATE_FILE: ${RSS_READER_WEB_AUTH_STATE_FILE:-/app/auth/auth.json}
       RSS_READER_WEB_ENV: ${RSS_READER_WEB_ENV:-development}
       RSS_READER_WEB_SECURE_COOKIE: ${RSS_READER_WEB_SECURE_COOKIE:-false}
       RSS_READER_WEB_SESSION_TTL_HOURS: ${RSS_READER_WEB_SESSION_TTL_HOURS:-12}
     ports:
       - "${RSS_READER_PORT:-8039}:8080"
+    volumes:
+      - rss-reader-auth:/app/auth
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
@@ -17,3 +21,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  rss-reader-auth:

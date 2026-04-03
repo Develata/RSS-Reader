@@ -279,8 +279,9 @@ The default [docker-compose.yml](../docker-compose.yml) is a pull-only deploymen
 
 ```bash
 export RSS_READER_WEB_USERNAME=admin
-export RSS_READER_WEB_PASSWORD_HASH='replace-this-with-an-argon2-password-hash'
+export RSS_READER_WEB_PASSWORD='replace-this-with-a-strong-password'
 export RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters'
+export RSS_READER_WEB_AUTH_STATE_FILE='/app/auth/auth.json'
 docker compose up -d
 ```
 
@@ -319,7 +320,8 @@ Notes:
 cargo run -p rssr-web -- --print-password-hash 'replace-this-with-a-strong-password'
 ```
 
-- production deployments should use `RSS_READER_WEB_PASSWORD_HASH`, not a plaintext password
+- `rssr-web` can bootstrap an Argon2 hash from `RSS_READER_WEB_PASSWORD` and persist it to `RSS_READER_WEB_AUTH_STATE_FILE`
+- production deployments should still prefer `RSS_READER_WEB_PASSWORD_HASH`, or remove the plaintext password after the first successful bootstrap
 - `RSS_READER_WEB_SESSION_SECRET` should be a random string with at least 32 characters
 - production deployments should also set:
   - `RSS_READER_WEB_ENV=production`

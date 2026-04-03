@@ -27,7 +27,9 @@ FROM debian:bookworm-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --create-home --home-dir /app rssr
+    && useradd --system --create-home --home-dir /app rssr \
+    && mkdir -p /app/auth \
+    && chown -R rssr:rssr /app
 
 COPY --from=builder /app/rssr-web /usr/local/bin/rssr-web
 COPY --from=builder /app/web-dist/public /app/public

@@ -361,13 +361,17 @@ services:
     image: ghcr.io/develata/rss-reader:latest
     environment:
       RSS_READER_WEB_USERNAME: ${RSS_READER_WEB_USERNAME}
-      RSS_READER_WEB_PASSWORD_HASH: ${RSS_READER_WEB_PASSWORD_HASH}
-      RSS_READER_WEB_SESSION_SECRET: ${RSS_READER_WEB_SESSION_SECRET}
+      RSS_READER_WEB_PASSWORD_HASH: ${RSS_READER_WEB_PASSWORD_HASH:-}
+      RSS_READER_WEB_PASSWORD: ${RSS_READER_WEB_PASSWORD:-}
+      RSS_READER_WEB_SESSION_SECRET: ${RSS_READER_WEB_SESSION_SECRET:-}
+      RSS_READER_WEB_AUTH_STATE_FILE: ${RSS_READER_WEB_AUTH_STATE_FILE:-/app/auth/auth.json}
       RSS_READER_WEB_ENV: ${RSS_READER_WEB_ENV:-development}
       RSS_READER_WEB_SECURE_COOKIE: ${RSS_READER_WEB_SECURE_COOKIE:-false}
       RSS_READER_WEB_SESSION_TTL_HOURS: ${RSS_READER_WEB_SESSION_TTL_HOURS:-12}
     ports:
       - "${RSS_READER_PORT:-8039}:8080"
+    volumes:
+      - rss-reader-auth:/app/auth
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
@@ -375,14 +379,17 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  rss-reader-auth:
 ```
 
 ### 配套 `.env` 模板
 
 ```dotenv
 RSS_READER_WEB_USERNAME=admin
-RSS_READER_WEB_PASSWORD_HASH=$argon2id$...
-RSS_READER_WEB_SESSION_SECRET=replace-with-a-random-secret-at-least-32-chars
+RSS_READER_WEB_PASSWORD=adminadmin
+RSS_READER_WEB_AUTH_STATE_FILE=/app/auth/auth.json
 RSS_READER_WEB_ENV=development
 RSS_READER_WEB_SECURE_COOKIE=false
 RSS_READER_PORT=8039
@@ -407,17 +414,21 @@ http://127.0.0.1:8039
 - 必填：
   - `RSS_READER_WEB_USERNAME`
     - Web 登录用户名
-  - `RSS_READER_WEB_SESSION_SECRET`
-    - 用来签发和校验会话 cookie 的密钥
-    - 至少 32 个字符
 - 二选一：
   - `RSS_READER_WEB_PASSWORD_HASH`
     - Argon2 密码哈希
     - 推荐正式部署使用
   - `RSS_READER_WEB_PASSWORD`
     - 明文密码
-    - 仅建议本地开发 / 临时测试使用
+    - 可用于首次启动时自动生成哈希并持久化
 - 可选：
+  - `RSS_READER_WEB_AUTH_STATE_FILE`
+    - 持久化保存 Argon2 哈希和 session secret 的认证状态文件路径
+    - 默认是当前用户主目录下的 `.rssr-web-auth.json`
+  - `RSS_READER_WEB_SESSION_SECRET`
+    - 用来签发和校验会话 cookie 的密钥
+    - 如果不填，程序会在首次启动时自动生成并写入 `RSS_READER_WEB_AUTH_STATE_FILE`
+    - 如果显式填写，长度至少 32 个字符
   - `RSS_READER_WEB_ENV`
     - `development` 或 `production`
     - 默认 `development`
@@ -445,20 +456,29 @@ services:
     environment:
       RSS_READER_WEB_USERNAME: admin
       RSS_READER_WEB_PASSWORD: adminadmin
-      RSS_READER_WEB_SESSION_SECRET: replace-with-a-random-secret-at-least-32-chars
+      RSS_READER_WEB_AUTH_STATE_FILE: /app/auth/auth.json
       RSS_READER_WEB_ENV: development
       RSS_READER_WEB_SECURE_COOKIE: "false"
       RSS_READER_WEB_SESSION_TTL_HOURS: "12"
     ports:
       - "8039:8080"
+    volumes:
+      - rss-reader-auth:/app/auth
     restart: unless-stopped
+
+volumes:
+  rss-reader-auth:
 ```
 
 说明：
 
 - 这种方式只适合本地开发、临时测试、局域网自用
-- 程序会直接使用明文密码校验登录
-- 它**不会自动把明文密码写回成哈希配置**
+- 首次启动时，程序会自动生成 Argon2 哈希并写入 `RSS_READER_WEB_AUTH_STATE_FILE`
+- 首次启动时，如果你没有填写 `RSS_READER_WEB_SESSION_SECRET`，程序也会自动生成一个随机 secret 并写入同一个状态文件
+- 之后即使移除 `RSS_READER_WEB_PASSWORD`，只要认证状态文件和卷还在，仍然可以继续登录
+- 更稳的做法是：
+  - 首次启动成功后，删除明文 `RSS_READER_WEB_PASSWORD`
+  - 只保留认证状态文件或改成显式 `RSS_READER_WEB_PASSWORD_HASH`
 
 ### 正式部署版 compose 模板
 
@@ -471,19 +491,26 @@ services:
     environment:
       RSS_READER_WEB_USERNAME: admin
       RSS_READER_WEB_PASSWORD_HASH: "$argon2id$..."
-      RSS_READER_WEB_SESSION_SECRET: "replace-with-a-random-secret-at-least-32-chars"
+      RSS_READER_WEB_AUTH_STATE_FILE: "/app/auth/auth.json"
       RSS_READER_WEB_ENV: "production"
       RSS_READER_WEB_SECURE_COOKIE: "true"
       RSS_READER_WEB_SESSION_TTL_HOURS: "12"
     ports:
       - "8039:8080"
+    volumes:
+      - rss-reader-auth:/app/auth
     restart: unless-stopped
+
+volumes:
+  rss-reader-auth:
 ```
 
 如果你只想直接填密码，然后让程序自动生成哈希，需要注意：
 
-- 当前 `rssr-web` **不支持**“启动时自动把明文密码转成哈希并写回配置”
-- 正式部署前，仍然需要先手动生成一次哈希：
+- 当前 `rssr-web` 已支持“首次启动时自动把明文密码转成 Argon2 哈希，并写入认证状态文件”
+- `RSS_READER_WEB_SESSION_SECRET` 也支持首次自动生成并写入认证状态文件
+- 但它**不会自动把哈希回填到 `.env`、`compose.yaml` 或容器平台变量面板**
+- 如果你想把配置彻底切换到显式哈希，仍然可以手动生成：
 
 ```bash
 cargo run -p rssr-web -- --print-password-hash '请换成你自己的强密码'
@@ -494,7 +521,8 @@ cargo run -p rssr-web -- --print-password-hash '请换成你自己的强密码'
 原因很简单：
 
 - 服务可以生成哈希
-- 但它并不知道你希望把哈希写回哪里
+- 也可以生成 session secret
+- 但它并不知道你希望把这些值写回哪里
   - `.env`
   - `compose.yaml`
   - CI/CD secret
@@ -502,8 +530,12 @@ cargo run -p rssr-web -- --print-password-hash '请换成你自己的强密码'
 
 所以现在的设计是：
 
-- 本地开发：可以直接用 `RSS_READER_WEB_PASSWORD`
-- 正式部署：手动生成哈希，使用 `RSS_READER_WEB_PASSWORD_HASH`
+- 本地开发：可以直接用 `RSS_READER_WEB_PASSWORD`，程序会自动生成并持久化哈希
+- 本地开发：如果不填 `RSS_READER_WEB_SESSION_SECRET`，程序也会自动生成并持久化
+- 正式部署：
+  - 最稳的是直接使用 `RSS_READER_WEB_PASSWORD_HASH`
+  - 最稳的 session secret 方式仍然是由你自己提供一个高熵随机值
+  - 也可以先用 `RSS_READER_WEB_PASSWORD` 启动一次，让程序生成并持久化哈希，再移除明文密码
 
 也支持通过环境变量覆盖镜像名和端口：
 
