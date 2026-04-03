@@ -1,15 +1,16 @@
 use anyhow::Context;
+use js_sys::Date;
 use rssr_domain::Entry;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use url::Url;
-use web_sys::window;
+use web_sys::{Storage, window};
 
 use super::{ParsedEntry, feed::hash_content, web_now_utc};
 
 pub(super) const STORAGE_KEY: &str = "rssr-web-state-v1";
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub(super) struct PersistedState {
     pub(super) next_feed_id: i64,
     pub(super) next_entry_id: i64,
@@ -62,25 +63,61 @@ pub(super) struct PersistedEntry {
     pub(super) updated_at: OffsetDateTime,
 }
 
-pub(super) fn load_state() -> anyhow::Result<PersistedState> {
+pub(super) struct LoadedState {
+    pub(super) state: PersistedState,
+    pub(super) warning: Option<String>,
+}
+
+pub(super) fn load_state() -> LoadedState {
     let Some(storage) = window().and_then(|window| window.local_storage().ok()).flatten() else {
-        return Ok(PersistedState::default());
+        return LoadedState { state: PersistedState::default(), warning: None };
     };
-    match storage.get_item(STORAGE_KEY).map_err(|_| anyhow::anyhow!("读取浏览器本地存储失败"))?
-    {
-        Some(raw) => Ok(serde_json::from_str(&raw).context("解析浏览器本地状态失败")?),
-        None => Ok(PersistedState::default()),
+
+    let raw = match storage.get_item(STORAGE_KEY) {
+        Ok(Some(raw)) => raw,
+        Ok(None) => {
+            return LoadedState { state: PersistedState::default(), warning: None };
+        }
+        Err(_) => {
+            return LoadedState {
+                state: PersistedState::default(),
+                warning: Some("读取浏览器本地存储失败，已使用空状态启动。".to_string()),
+            };
+        }
+    };
+
+    match serde_json::from_str(&raw).context("解析浏览器本地状态失败") {
+        Ok(state) => LoadedState { state, warning: None },
+        Err(error) => {
+            backup_corrupt_state(&storage, &raw);
+            let _ = storage.remove_item(STORAGE_KEY);
+            LoadedState {
+                state: PersistedState::default(),
+                warning: Some(format!(
+                    "浏览器本地状态已损坏，已保留损坏副本并使用空状态启动：{error}"
+                )),
+            }
+        }
     }
 }
 
-pub(super) fn save_state(state: &PersistedState) -> anyhow::Result<()> {
+pub(super) fn save_state_snapshot(state: PersistedState) -> anyhow::Result<()> {
+    save_serialized_state(serde_json::to_string(&state)?)
+}
+
+fn save_serialized_state(raw: String) -> anyhow::Result<()> {
     let Some(storage) = window().and_then(|window| window.local_storage().ok()).flatten() else {
         return Ok(());
     };
     storage
-        .set_item(STORAGE_KEY, &serde_json::to_string(state)?)
+        .set_item(STORAGE_KEY, &raw)
         .map_err(|_| anyhow::anyhow!("写入浏览器本地存储失败"))?;
     Ok(())
+}
+
+fn backup_corrupt_state(storage: &Storage, raw: &str) {
+    let backup_key = format!("{STORAGE_KEY}-corrupt-{}", Date::now() as i64);
+    let _ = storage.set_item(&backup_key, raw);
 }
 
 pub(super) fn to_domain_entry(entry: &PersistedEntry) -> anyhow::Result<Entry> {

@@ -33,7 +33,8 @@ use self::{
     },
     feed::{ParsedEntry, parse_feed, web_fetch_feed_response},
     state::{
-        PersistedFeed, PersistedState, load_state, save_state, to_domain_entry, upsert_entries,
+        PersistedFeed, PersistedState, load_state, save_state_snapshot, to_domain_entry,
+        upsert_entries,
     },
 };
 
@@ -59,8 +60,12 @@ impl AppServices {
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES
             .get_or_try_init(|| async {
+                let loaded = load_state();
+                if let Some(warning) = loaded.warning.as_deref() {
+                    tracing::warn!(warning = warning, "Web 本地状态恢复时发现异常");
+                }
                 Ok(Arc::new(Self {
-                    state: Mutex::new(load_state().unwrap_or_default()),
+                    state: Mutex::new(loaded.state),
                     client: reqwest::Client::new(),
                     auto_refresh_started: AtomicBool::new(false),
                 }))
@@ -215,25 +220,37 @@ impl AppServices {
     }
 
     pub async fn set_read(&self, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
-        let mut state = self.state.lock().expect("lock state");
-        let now = web_now_utc();
-        let entry =
-            state.entries.iter_mut().find(|entry| entry.id == entry_id).context("文章不存在")?;
-        entry.is_read = is_read;
-        entry.read_at = is_read.then_some(now);
-        entry.updated_at = now;
-        save_state(&state)
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            let now = web_now_utc();
+            let entry = state
+                .entries
+                .iter_mut()
+                .find(|entry| entry.id == entry_id)
+                .context("文章不存在")?;
+            entry.is_read = is_read;
+            entry.read_at = is_read.then_some(now);
+            entry.updated_at = now;
+            state.clone()
+        };
+        save_state_snapshot(snapshot)
     }
 
     pub async fn set_starred(&self, entry_id: i64, is_starred: bool) -> anyhow::Result<()> {
-        let mut state = self.state.lock().expect("lock state");
-        let now = web_now_utc();
-        let entry =
-            state.entries.iter_mut().find(|entry| entry.id == entry_id).context("文章不存在")?;
-        entry.is_starred = is_starred;
-        entry.starred_at = is_starred.then_some(now);
-        entry.updated_at = now;
-        save_state(&state)
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            let now = web_now_utc();
+            let entry = state
+                .entries
+                .iter_mut()
+                .find(|entry| entry.id == entry_id)
+                .context("文章不存在")?;
+            entry.is_starred = is_starred;
+            entry.starred_at = is_starred.then_some(now);
+            entry.updated_at = now;
+            state.clone()
+        };
+        save_state_snapshot(snapshot)
     }
 
     pub async fn load_settings(&self) -> anyhow::Result<UserSettings> {
@@ -242,9 +259,12 @@ impl AppServices {
 
     pub async fn save_settings(&self, settings: &UserSettings) -> anyhow::Result<()> {
         validate_settings(settings)?;
-        let mut state = self.state.lock().expect("lock state");
-        state.settings = settings.clone();
-        save_state(&state)
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            state.settings = settings.clone();
+            state.clone()
+        };
+        save_state_snapshot(snapshot)
     }
 
     pub async fn load_last_opened_feed_id(&self) -> anyhow::Result<Option<i64>> {
@@ -252,9 +272,12 @@ impl AppServices {
     }
 
     pub async fn remember_last_opened_feed_id(&self, feed_id: i64) -> anyhow::Result<()> {
-        let mut state = self.state.lock().expect("lock state");
-        state.last_opened_feed_id = Some(feed_id);
-        save_state(&state)
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            state.last_opened_feed_id = Some(feed_id);
+            state.clone()
+        };
+        save_state_snapshot(snapshot)
     }
 
     pub fn ensure_auto_refresh_started(self: &Arc<Self>) {
@@ -328,26 +351,31 @@ impl AppServices {
             }
             let feed_id =
                 state.feeds.iter().find(|feed| feed.url == url.as_str()).expect("feed exists").id;
-            save_state(&state)?;
+            let snapshot = state.clone();
+            drop(state);
+            save_state_snapshot(snapshot)?;
             feed_id
         };
         self.refresh_feed(feed_id).await.context("首次刷新订阅失败")
     }
 
     pub async fn remove_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        let mut state = self.state.lock().expect("lock state");
-        let feed = state
-            .feeds
-            .iter_mut()
-            .find(|feed| feed.id == feed_id && !feed.is_deleted)
-            .context("订阅不存在")?;
-        feed.is_deleted = true;
-        feed.updated_at = web_now_utc();
-        state.entries.retain(|entry| entry.feed_id != feed_id);
-        if state.last_opened_feed_id == Some(feed_id) {
-            state.last_opened_feed_id = None;
-        }
-        save_state(&state)
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            let feed = state
+                .feeds
+                .iter_mut()
+                .find(|feed| feed.id == feed_id && !feed.is_deleted)
+                .context("订阅不存在")?;
+            feed.is_deleted = true;
+            feed.updated_at = web_now_utc();
+            state.entries.retain(|entry| entry.feed_id != feed_id);
+            if state.last_opened_feed_id == Some(feed_id) {
+                state.last_opened_feed_id = None;
+            }
+            state.clone()
+        };
+        save_state_snapshot(snapshot)
     }
 
     pub async fn refresh_all(&self) -> anyhow::Result<()> {
@@ -386,14 +414,17 @@ impl AppServices {
         let response = match web_fetch_feed_response(&self.client, &url).await {
             Ok(response) => response,
             Err(error) => {
-                let mut state = self.state.lock().expect("lock state");
-                let now = web_now_utc();
-                if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
-                    feed.last_fetched_at = Some(now);
-                    feed.fetch_error = Some(format!("抓取订阅失败: {error}"));
-                    feed.updated_at = now;
-                    let _ = save_state(&state);
-                }
+                let snapshot = {
+                    let mut state = self.state.lock().expect("lock state");
+                    let now = web_now_utc();
+                    if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
+                        feed.last_fetched_at = Some(now);
+                        feed.fetch_error = Some(format!("抓取订阅失败: {error}"));
+                        feed.updated_at = now;
+                    }
+                    state.clone()
+                };
+                let _ = save_state_snapshot(snapshot);
                 return Err(error);
             }
         };
@@ -411,82 +442,104 @@ impl AppServices {
         );
 
         if response.status() == StatusCode::NOT_MODIFIED {
-            let mut state = self.state.lock().expect("lock state");
-            let now = web_now_utc();
-            let feed =
-                state.feeds.iter_mut().find(|feed| feed.id == feed_id).context("订阅不存在")?;
-            feed.etag = metadata.0;
-            feed.last_modified = metadata.1;
-            feed.last_fetched_at = Some(now);
-            feed.last_success_at = Some(now);
-            feed.fetch_error = None;
-            feed.updated_at = now;
-            return save_state(&state);
+            let snapshot = {
+                let mut state = self.state.lock().expect("lock state");
+                let now = web_now_utc();
+                let feed = state
+                    .feeds
+                    .iter_mut()
+                    .find(|feed| feed.id == feed_id)
+                    .context("订阅不存在")?;
+                feed.etag = metadata.0;
+                feed.last_modified = metadata.1;
+                feed.last_fetched_at = Some(now);
+                feed.last_success_at = Some(now);
+                feed.fetch_error = None;
+                feed.updated_at = now;
+                state.clone()
+            };
+            return save_state_snapshot(snapshot);
         }
 
         let body = match response.error_for_status() {
             Ok(response) => match response.text().await {
                 Ok(body) => body,
                 Err(error) => {
-                    let mut state = self.state.lock().expect("lock state");
-                    let now = web_now_utc();
-                    if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
-                        feed.last_fetched_at = Some(now);
-                        feed.fetch_error = Some(format!("读取 feed 响应正文失败: {error}"));
-                        feed.updated_at = now;
-                        let _ = save_state(&state);
-                    }
+                    let snapshot = {
+                        let mut state = self.state.lock().expect("lock state");
+                        let now = web_now_utc();
+                        if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
+                            feed.last_fetched_at = Some(now);
+                            feed.fetch_error = Some(format!("读取 feed 响应正文失败: {error}"));
+                            feed.updated_at = now;
+                        }
+                        state.clone()
+                    };
+                    let _ = save_state_snapshot(snapshot);
                     return Err(error).context("读取 feed 响应正文失败");
                 }
             },
             Err(error) => {
-                let mut state = self.state.lock().expect("lock state");
-                let now = web_now_utc();
-                if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
-                    feed.last_fetched_at = Some(now);
-                    feed.fetch_error = Some(format!("feed 抓取返回非成功状态: {error}"));
-                    feed.updated_at = now;
-                    let _ = save_state(&state);
-                }
+                let snapshot = {
+                    let mut state = self.state.lock().expect("lock state");
+                    let now = web_now_utc();
+                    if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
+                        feed.last_fetched_at = Some(now);
+                        feed.fetch_error = Some(format!("feed 抓取返回非成功状态: {error}"));
+                        feed.updated_at = now;
+                    }
+                    state.clone()
+                };
+                let _ = save_state_snapshot(snapshot);
                 return Err(error).context("feed 抓取返回非成功状态");
             }
         };
         let parsed = match parse_feed(&body) {
             Ok(parsed) => parsed,
             Err(error) => {
-                let mut state = self.state.lock().expect("lock state");
-                let now = web_now_utc();
-                if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
-                    feed.last_fetched_at = Some(now);
-                    feed.fetch_error = Some(format!("解析订阅失败: {error}"));
-                    feed.updated_at = now;
-                    let _ = save_state(&state);
-                }
+                let snapshot = {
+                    let mut state = self.state.lock().expect("lock state");
+                    let now = web_now_utc();
+                    if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
+                        feed.last_fetched_at = Some(now);
+                        feed.fetch_error = Some(format!("解析订阅失败: {error}"));
+                        feed.updated_at = now;
+                    }
+                    state.clone()
+                };
+                let _ = save_state_snapshot(snapshot);
                 return Err(error).context("解析订阅失败");
             }
         };
 
-        let mut state = self.state.lock().expect("lock state");
-        let now = web_now_utc();
-        let feed = state.feeds.iter_mut().find(|feed| feed.id == feed_id).context("订阅不存在")?;
-        if parsed.title.is_some() {
-            feed.title = parsed.title;
-        }
-        if parsed.site_url.is_some() {
-            feed.site_url = parsed.site_url.map(|url| url.to_string());
-        }
-        if parsed.description.is_some() {
-            feed.description = parsed.description;
-        }
-        feed.etag = metadata.0;
-        feed.last_modified = metadata.1;
-        feed.last_fetched_at = Some(now);
-        feed.last_success_at = Some(now);
-        feed.fetch_error = None;
-        feed.updated_at = now;
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            let now = web_now_utc();
+            let feed = state
+                .feeds
+                .iter_mut()
+                .find(|feed| feed.id == feed_id)
+                .context("订阅不存在")?;
+            if parsed.title.is_some() {
+                feed.title = parsed.title;
+            }
+            if parsed.site_url.is_some() {
+                feed.site_url = parsed.site_url.map(|url| url.to_string());
+            }
+            if parsed.description.is_some() {
+                feed.description = parsed.description;
+            }
+            feed.etag = metadata.0;
+            feed.last_modified = metadata.1;
+            feed.last_fetched_at = Some(now);
+            feed.last_success_at = Some(now);
+            feed.fetch_error = None;
+            feed.updated_at = now;
 
-        upsert_entries(&mut state, feed_id, parsed.entries)?;
-        save_state(&state)
+            upsert_entries(&mut state, feed_id, parsed.entries)?;
+            state.clone()
+        };
+        save_state_snapshot(snapshot)
     }
 
     pub async fn export_config_json(&self) -> anyhow::Result<String> {
@@ -497,68 +550,81 @@ impl AppServices {
         let package: ConfigPackage = serde_json::from_str(raw)?;
         validate_config_package(&package)?;
 
-        let mut state = self.state.lock().expect("lock state");
-        let current_urls = state
-            .feeds
-            .iter()
-            .filter(|feed| !feed.is_deleted)
-            .map(|feed| (feed.id, feed.url.clone()))
-            .collect::<Vec<_>>();
-        let mut imported_urls = HashSet::new();
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            let current_urls = state
+                .feeds
+                .iter()
+                .filter(|feed| !feed.is_deleted)
+                .map(|feed| (feed.id, feed.url.clone()))
+                .collect::<Vec<_>>();
+            let mut imported_urls = HashSet::new();
 
-        for feed in package.feeds {
-            let url = normalize_feed_url(
-                &Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
-            );
-            imported_urls.insert(url.to_string());
-            let now = web_now_utc();
-            if let Some(existing) =
-                state.feeds.iter_mut().find(|current| current.url == url.as_str())
-            {
-                existing.title = import_field(feed.title, true);
-                existing.folder = import_field(feed.folder, true);
-                existing.is_deleted = false;
-                existing.updated_at = now;
-            } else {
-                state.next_feed_id += 1;
-                let feed_id = state.next_feed_id;
-                state.feeds.push(PersistedFeed {
-                    id: feed_id,
-                    url: url.to_string(),
-                    title: feed.title,
-                    site_url: None,
-                    description: None,
-                    icon_url: None,
-                    folder: feed.folder,
-                    etag: None,
-                    last_modified: None,
-                    last_fetched_at: None,
-                    last_success_at: None,
-                    fetch_error: None,
-                    is_deleted: false,
-                    created_at: now,
-                    updated_at: now,
-                });
-            }
-        }
-
-        let removed_feed_ids = current_urls
-            .into_iter()
-            .filter_map(|(id, url)| {
-                let normalized = normalize_feed_url(
-                    &Url::parse(&url).expect("persisted feed url should stay valid"),
+            for feed in package.feeds {
+                let url = normalize_feed_url(
+                    &Url::parse(&feed.url)
+                        .with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
                 );
-                (!imported_urls.contains(normalized.as_str())).then_some(id)
-            })
-            .collect::<Vec<_>>();
-        for feed_id in &removed_feed_ids {
-            if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == *feed_id) {
-                feed.is_deleted = true;
+                imported_urls.insert(url.to_string());
+                let now = web_now_utc();
+                if let Some(existing) =
+                    state.feeds.iter_mut().find(|current| current.url == url.as_str())
+                {
+                    existing.title = import_field(feed.title, true);
+                    existing.folder = import_field(feed.folder, true);
+                    existing.is_deleted = false;
+                    existing.updated_at = now;
+                } else {
+                    state.next_feed_id += 1;
+                    let feed_id = state.next_feed_id;
+                    state.feeds.push(PersistedFeed {
+                        id: feed_id,
+                        url: url.to_string(),
+                        title: feed.title,
+                        site_url: None,
+                        description: None,
+                        icon_url: None,
+                        folder: feed.folder,
+                        etag: None,
+                        last_modified: None,
+                        last_fetched_at: None,
+                        last_success_at: None,
+                        fetch_error: None,
+                        is_deleted: false,
+                        created_at: now,
+                        updated_at: now,
+                    });
+                }
             }
-        }
-        state.entries.retain(|entry| !removed_feed_ids.contains(&entry.feed_id));
-        state.settings = package.settings;
-        save_state(&state)
+
+            let removed_feed_ids = current_urls
+                .into_iter()
+                .filter_map(|(id, url)| match Url::parse(&url) {
+                    Ok(parsed) => {
+                        let normalized = normalize_feed_url(&parsed);
+                        (!imported_urls.contains(normalized.as_str())).then_some(id)
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            feed_id = id,
+                            invalid_url = %url,
+                            error = %error,
+                            "导入配置时发现损坏的已持久化订阅 URL，已将其标记为移除"
+                        );
+                        Some(id)
+                    }
+                })
+                .collect::<Vec<_>>();
+            for feed_id in &removed_feed_ids {
+                if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == *feed_id) {
+                    feed.is_deleted = true;
+                }
+            }
+            state.entries.retain(|entry| !removed_feed_ids.contains(&entry.feed_id));
+            state.settings = package.settings;
+            state.clone()
+        };
+        save_state_snapshot(snapshot)
     }
 
     pub async fn export_opml(&self) -> anyhow::Result<String> {
@@ -567,42 +633,46 @@ impl AppServices {
 
     pub async fn import_opml(&self, raw: &str) -> anyhow::Result<()> {
         let feeds = decode_opml(raw)?;
-        let mut state = self.state.lock().expect("lock state");
-        for feed in feeds {
-            let url = normalize_feed_url(
-                &Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
-            );
-            let now = web_now_utc();
-            if let Some(existing) =
-                state.feeds.iter_mut().find(|current| current.url == url.as_str())
-            {
-                existing.title = import_field(feed.title, true);
-                existing.folder = import_field(feed.folder, true);
-                existing.is_deleted = false;
-                existing.updated_at = now;
-            } else {
-                state.next_feed_id += 1;
-                let feed_id = state.next_feed_id;
-                state.feeds.push(PersistedFeed {
-                    id: feed_id,
-                    url: url.to_string(),
-                    title: feed.title,
-                    site_url: None,
-                    description: None,
-                    icon_url: None,
-                    folder: feed.folder,
-                    etag: None,
-                    last_modified: None,
-                    last_fetched_at: None,
-                    last_success_at: None,
-                    fetch_error: None,
-                    is_deleted: false,
-                    created_at: now,
-                    updated_at: now,
-                });
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            for feed in feeds {
+                let url = normalize_feed_url(
+                    &Url::parse(&feed.url)
+                        .with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
+                );
+                let now = web_now_utc();
+                if let Some(existing) =
+                    state.feeds.iter_mut().find(|current| current.url == url.as_str())
+                {
+                    existing.title = import_field(feed.title, true);
+                    existing.folder = import_field(feed.folder, true);
+                    existing.is_deleted = false;
+                    existing.updated_at = now;
+                } else {
+                    state.next_feed_id += 1;
+                    let feed_id = state.next_feed_id;
+                    state.feeds.push(PersistedFeed {
+                        id: feed_id,
+                        url: url.to_string(),
+                        title: feed.title,
+                        site_url: None,
+                        description: None,
+                        icon_url: None,
+                        folder: feed.folder,
+                        etag: None,
+                        last_modified: None,
+                        last_fetched_at: None,
+                        last_success_at: None,
+                        fetch_error: None,
+                        is_deleted: false,
+                        created_at: now,
+                        updated_at: now,
+                    });
+                }
             }
-        }
-        save_state(&state)
+            state.clone()
+        };
+        save_state_snapshot(snapshot)
     }
 
     pub async fn push_remote_config(
