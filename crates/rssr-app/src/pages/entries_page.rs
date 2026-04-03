@@ -173,6 +173,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let mut archive_after_months = use_signal(|| UserSettings::default().archive_after_months);
     let mut mobile_directory_open = use_signal(|| false);
     let mut expanded_directory_sources = use_signal(BTreeSet::<String>::new);
+    let mut controls_hidden = use_signal(initial_entry_controls_hidden);
     let reload_tick = use_signal(|| 0_u64);
     let status = use_signal(|| "正在加载文章列表…".to_string());
     let status_tone = use_signal(|| "info".to_string());
@@ -247,7 +248,19 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             div { class: "entries-layout",
                 div { class: "entries-main",
                     div { class: "reading-header reading-header--entries",
-                        h2 { if feed_id.is_some() { "订阅文章" } else { "文章" } }
+                        div { class: "reading-header__row",
+                            h2 { if feed_id.is_some() { "订阅文章" } else { "文章" } }
+                            button {
+                                class: "button secondary entry-controls-toggle",
+                                "data-action": if controls_hidden() { "show-entry-controls" } else { "hide-entry-controls" },
+                                onclick: move |_| {
+                                    let next = !controls_hidden();
+                                    remember_entry_controls_hidden(next);
+                                    controls_hidden.set(next);
+                                },
+                                if controls_hidden() { "显示筛选与组织" } else { "收起筛选与组织" }
+                            }
+                        }
                         p {
                             class: "page-intro",
                             if feed_id.is_some() {
@@ -267,100 +280,117 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             }
                         }
                     }
-                    div { class: "entry-organize-bar entry-organize-bar--airy",
-                        label { class: "field-label", r#for: "entry-grouping-mode", "组织方式" }
-                        select {
-                            id: "entry-grouping-mode",
-                            class: "select-input",
-                            "data-action": if grouping_mode() == EntryGroupingMode::Time { "group-by-time" } else { "group-by-source" },
-                            value: match grouping_mode() {
-                                EntryGroupingMode::Time => "time",
-                                EntryGroupingMode::Source => "source",
-                            },
-                            onchange: move |event| {
-                                grouping_mode.set(match event.value().as_str() {
-                                    "source" => EntryGroupingMode::Source,
-                                    _ => EntryGroupingMode::Time,
-                                });
-                            },
-                            option { value: "time", "按时间" }
-                            option { value: "source", "按来源" }
-                        }
-                        label { class: "entry-filters__toggle",
-                            input {
-                                r#type: "checkbox",
-                                "data-action": "toggle-archived",
-                                checked: show_archived(),
-                                onchange: move |event| show_archived.set(event.checked())
-                            }
-                            span { "显示已归档文章" }
-                        }
-                        p { class: "page-intro",
-                            if show_archived() {
-                                "当前同时显示归档文章。"
-                            } else {
-                                "默认隐藏超过 {archive_after_months()} 个月的归档文章。"
+                    if controls_hidden() {
+                        div { class: "entry-controls-reveal",
+                            span { class: "entry-controls-reveal__label", "阅读控制已收起" }
+                            button {
+                                class: "button secondary",
+                                "data-action": "show-entry-controls",
+                                onclick: move |_| {
+                                    remember_entry_controls_hidden(false);
+                                    controls_hidden.set(false);
+                                },
+                                "显示筛选与组织"
                             }
                         }
-                    }
-                    div { class: "entry-overview entry-overview--airy",
-                        div { class: "entry-overview__metric",
-                            span { class: "entry-overview__label", "当前结果" }
-                            strong { class: "entry-overview__value", "{visible_entries.len()}" }
-                        }
-                        div { class: "entry-overview__metric",
-                            span { class: "entry-overview__label", "归档文章" }
-                            strong { class: "entry-overview__value", "{archived_count}" }
-                        }
-                        div { class: "entry-overview__metric entry-overview__metric--hint",
-                            span { class: "entry-overview__label", "当前组织" }
-                            strong {
-                                class: "entry-overview__value",
-                                if grouping_mode() == EntryGroupingMode::Time { "按时间" } else { "按来源" }
-                            }
-                        }
-                    }
-                    if !group_nav_items.is_empty() {
-                        button {
-                            class: "button secondary entry-mobile-directory-toggle",
-                            "data-action": if mobile_directory_open() { "close-entry-directory" } else { "open-entry-directory" },
-                            onclick: move |_| mobile_directory_open.set(!mobile_directory_open()),
-                            if mobile_directory_open() { "收起目录" } else { "目录" }
-                        }
-                        nav {
-                            class: if mobile_directory_open() {
-                                "entry-top-directory is-open"
-                            } else {
-                                "entry-top-directory"
-                            },
-                            "aria-label": "文章目录",
-                            for item in &group_nav_items {
-                                a {
-                                    class: "entry-top-directory__chip",
-                                    href: format!("#{}", item.anchor_id),
-                                    onclick: move |_| mobile_directory_open.set(false),
-                                    span { class: "entry-top-directory__title", "{item.title}" }
-                                    span { class: "entry-top-directory__meta", "{item.subtitle}" }
+                    } else {
+                        div { class: "entry-controls-panel",
+                            div { class: "entry-organize-bar entry-organize-bar--airy",
+                                label { class: "field-label", r#for: "entry-grouping-mode", "组织方式" }
+                                select {
+                                    id: "entry-grouping-mode",
+                                    class: "select-input",
+                                    "data-action": if grouping_mode() == EntryGroupingMode::Time { "group-by-time" } else { "group-by-source" },
+                                    value: match grouping_mode() {
+                                        EntryGroupingMode::Time => "time",
+                                        EntryGroupingMode::Source => "source",
+                                    },
+                                    onchange: move |event| {
+                                        grouping_mode.set(match event.value().as_str() {
+                                            "source" => EntryGroupingMode::Source,
+                                            _ => EntryGroupingMode::Time,
+                                        });
+                                    },
+                                    option { value: "time", "按时间" }
+                                    option { value: "source", "按来源" }
+                                }
+                                label { class: "entry-filters__toggle",
+                                    input {
+                                        r#type: "checkbox",
+                                        "data-action": "toggle-archived",
+                                        checked: show_archived(),
+                                        onchange: move |event| show_archived.set(event.checked())
+                                    }
+                                    span { "显示已归档文章" }
+                                }
+                                p { class: "page-intro",
+                                    if show_archived() {
+                                        "当前同时显示归档文章。"
+                                    } else {
+                                        "默认隐藏超过 {archive_after_months()} 个月的归档文章。"
+                                    }
                                 }
                             }
-                        }
-                    }
-                    EntryFilters {
-                        search: (ui.entry_search)(),
-                        read_filter: read_filter(),
-                        starred_filter: starred_filter(),
-                        available_sources: source_filter_options.clone(),
-                        selected_feed_ids: selected_feed_ids(),
-                        on_search: move |value| ui.entry_search.set(value),
-                        on_change_read_filter: move |value| read_filter.set(value),
-                        on_change_starred_filter: move |value| starred_filter.set(value),
-                        on_change_selected_feed_ids: move |value| selected_feed_ids.set(value),
-                    }
-                    StatusBanner { message: status(), tone: status_tone() }
-                    if archived_count > 0 && !show_archived() {
-                        StatusBanner {
-                            message: format!("当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。", archived_count),
-                            tone: "info".to_string()
+                            div { class: "entry-overview entry-overview--airy",
+                                div { class: "entry-overview__metric",
+                                    span { class: "entry-overview__label", "当前结果" }
+                                    strong { class: "entry-overview__value", "{visible_entries.len()}" }
+                                }
+                                div { class: "entry-overview__metric",
+                                    span { class: "entry-overview__label", "归档文章" }
+                                    strong { class: "entry-overview__value", "{archived_count}" }
+                                }
+                                div { class: "entry-overview__metric entry-overview__metric--hint",
+                                    span { class: "entry-overview__label", "当前组织" }
+                                    strong {
+                                        class: "entry-overview__value",
+                                        if grouping_mode() == EntryGroupingMode::Time { "按时间" } else { "按来源" }
+                                    }
+                                }
+                            }
+                            if !group_nav_items.is_empty() {
+                                button {
+                                    class: "button secondary entry-mobile-directory-toggle",
+                                    "data-action": if mobile_directory_open() { "close-entry-directory" } else { "open-entry-directory" },
+                                    onclick: move |_| mobile_directory_open.set(!mobile_directory_open()),
+                                    if mobile_directory_open() { "收起目录" } else { "目录" }
+                                }
+                                nav {
+                                    class: if mobile_directory_open() {
+                                        "entry-top-directory is-open"
+                                    } else {
+                                        "entry-top-directory"
+                                    },
+                                    "aria-label": "文章目录",
+                                    for item in &group_nav_items {
+                                        a {
+                                            class: "entry-top-directory__chip",
+                                            href: format!("#{}", item.anchor_id),
+                                            onclick: move |_| mobile_directory_open.set(false),
+                                            span { class: "entry-top-directory__title", "{item.title}" }
+                                            span { class: "entry-top-directory__meta", "{item.subtitle}" }
+                                        }
+                                    }
+                                }
+                            }
+                            EntryFilters {
+                                search: (ui.entry_search)(),
+                                read_filter: read_filter(),
+                                starred_filter: starred_filter(),
+                                available_sources: source_filter_options.clone(),
+                                selected_feed_ids: selected_feed_ids(),
+                                on_search: move |value| ui.entry_search.set(value),
+                                on_change_read_filter: move |value| read_filter.set(value),
+                                on_change_starred_filter: move |value| starred_filter.set(value),
+                                on_change_selected_feed_ids: move |value| selected_feed_ids.set(value),
+                            }
+                            StatusBanner { message: status(), tone: status_tone() }
+                            if archived_count > 0 && !show_archived() {
+                                StatusBanner {
+                                    message: format!("当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。", archived_count),
+                                    tone: "info".to_string()
+                                }
+                            }
                         }
                     }
                     if entries().is_empty() {
@@ -901,6 +931,31 @@ fn current_time_utc() -> OffsetDateTime {
 #[cfg(not(target_arch = "wasm32"))]
 fn current_time_utc() -> OffsetDateTime {
     OffsetDateTime::now_utc()
+}
+
+fn initial_entry_controls_hidden() -> bool {
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(window) = web_sys::window()
+            && let Ok(Some(storage)) = window.local_storage()
+            && let Ok(Some(value)) = storage.get_item("rssr-entry-controls-hidden")
+        {
+            return value == "1";
+        }
+    }
+
+    false
+}
+
+fn remember_entry_controls_hidden(hidden: bool) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(window) = web_sys::window()
+            && let Ok(Some(storage)) = window.local_storage()
+        {
+            let _ = storage.set_item("rssr-entry-controls-hidden", if hidden { "1" } else { "0" });
+        }
+    }
 }
 
 #[cfg(test)]

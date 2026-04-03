@@ -159,6 +159,17 @@
     flex-direction: column;
   }
 
+  .reading-header__row,
+  .entry-controls-reveal {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .entry-controls-toggle,
+  .entry-controls-reveal .button {
+    width: 100%;
+  }
+
   .reading-header--settings {
     padding: 18px 16px;
   }
