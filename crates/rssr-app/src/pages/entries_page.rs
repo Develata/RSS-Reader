@@ -23,22 +23,7 @@ enum EntryGroupingMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct EntryGroup {
-    title: String,
-    subtitle: String,
-    entries: Vec<EntrySummary>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 struct EntryMonthGroup {
-    anchor_id: String,
-    title: String,
-    subtitle: String,
-    sources: Vec<EntryMonthSourceGroup>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct EntryMonthSourceGroup {
     anchor_id: String,
     title: String,
     subtitle: String,
@@ -46,7 +31,31 @@ struct EntryMonthSourceGroup {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct EntrySourceGroup {
+    anchor_id: String,
+    title: String,
+    subtitle: String,
+    months: Vec<EntrySourceMonthGroup>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EntrySourceMonthGroup {
+    anchor_id: String,
+    title: String,
+    subtitle: String,
+    entries: Vec<EntrySummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct EntryDateGroup {
+    anchor_id: String,
+    title: String,
+    subtitle: String,
+    sources: Vec<EntryDateSourceGroup>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EntryDateSourceGroup {
     anchor_id: String,
     title: String,
     subtitle: String,
@@ -65,7 +74,7 @@ struct EntryDirectoryMonth {
     anchor_id: String,
     title: String,
     subtitle: String,
-    sources: Vec<EntryDirectorySource>,
+    dates: Vec<EntryDirectoryDate>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,7 +82,7 @@ struct EntryDirectorySource {
     anchor_id: String,
     title: String,
     subtitle: String,
-    dates: Vec<EntryDirectoryDate>,
+    months: Vec<EntryDirectoryMonth>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -223,9 +232,10 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     } else {
         feeds().into_iter().map(|feed| (feed.id, feed.title)).collect::<Vec<_>>()
     };
-    let source_grouped_entries = group_entries_by_source(&visible_entries);
+    let source_grouped_entries = group_entries_by_source_tree(&visible_entries);
     let time_grouped_entries = group_entries_by_time_tree(&visible_entries);
     let directory_months = build_directory_months(&time_grouped_entries);
+    let directory_sources = build_directory_sources(&source_grouped_entries);
     let group_nav_items = match grouping_mode() {
         EntryGroupingMode::Time => build_month_nav_items(&time_grouped_entries),
         EntryGroupingMode::Source => build_group_nav_items(&source_grouped_entries),
@@ -376,20 +386,20 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                             h3 { class: "entry-group__title", "{month.title}" }
                                             p { class: "entry-group__meta", "{month.subtitle}" }
                                         }
-                                        for source in month.sources {
-                                            section { class: "entry-source-group", key: "{source.anchor_id}", id: "{source.anchor_id}",
-                                                div { class: "entry-source-group__header",
-                                                    h4 { class: "entry-source-group__title", "{source.title}" }
-                                                    p { class: "entry-source-group__meta", "{source.subtitle}" }
+                                        for date_group in month.dates {
+                                            section { class: "entry-date-group", key: "{date_group.anchor_id}", id: "{date_group.anchor_id}",
+                                                div { class: "entry-date-group__header",
+                                                    h4 { class: "entry-date-group__title", "{date_group.title}" }
+                                                    p { class: "entry-date-group__meta", "{date_group.subtitle}" }
                                                 }
-                                                for date_group in source.dates {
-                                                    section { class: "entry-date-group", key: "{date_group.anchor_id}", id: "{date_group.anchor_id}",
-                                                        div { class: "entry-date-group__header",
-                                                            h5 { class: "entry-date-group__title", "{date_group.title}" }
-                                                            p { class: "entry-date-group__meta", "{date_group.subtitle}" }
+                                                for source in date_group.sources {
+                                                    section { class: "entry-source-group", key: "{source.anchor_id}", id: "{source.anchor_id}",
+                                                        div { class: "entry-source-group__header",
+                                                            h5 { class: "entry-source-group__title", "{source.title}" }
+                                                            p { class: "entry-source-group__meta", "{source.subtitle}" }
                                                         }
                                                         ul { class: "entry-list entry-list--grouped",
-                                                            for entry in date_group.entries {
+                                                            for entry in source.entries {
                                                                 { render_entry_card(entry, reload_tick, status, status_tone) }
                                                             }
                                                         }
@@ -406,9 +416,17 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                             h3 { class: "entry-group__title", "{group.title}" }
                                             p { class: "entry-group__meta", "{group.subtitle}" }
                                         }
-                                        ul { class: "entry-list entry-list--grouped",
-                                            for entry in group.entries {
-                                                { render_entry_card(entry, reload_tick, status, status_tone) }
+                                        for month in group.months {
+                                            section { class: "entry-date-group", key: "{month.anchor_id}", id: "{month.anchor_id}",
+                                                div { class: "entry-date-group__header",
+                                                    h4 { class: "entry-date-group__title", "{month.title}" }
+                                                    p { class: "entry-date-group__meta", "{month.subtitle}" }
+                                                }
+                                                ul { class: "entry-list entry-list--grouped",
+                                                    for entry in month.entries {
+                                                        { render_entry_card(entry, reload_tick, status, status_tone) }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -431,44 +449,12 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                             span { class: "entry-directory-rail__link-meta", "{month.subtitle}" }
                                         }
                                         div { class: "entry-directory-rail__children",
-                                            for source in month.sources {
-                                                {
-                                                    let anchor_id = source.anchor_id.clone();
-                                                    let is_open = expanded_directory_sources().contains(&anchor_id);
-                                                    let toggle_anchor = anchor_id.clone();
-                                                    rsx! {
-                                                        div { class: "entry-directory-rail__subsection", key: "{anchor_id}",
-                                                            button {
-                                                                class: if is_open {
-                                                                    "entry-directory-rail__toggle is-open"
-                                                                } else {
-                                                                    "entry-directory-rail__toggle"
-                                                                },
-                                                                "data-action": if is_open { "collapse-directory-source" } else { "expand-directory-source" },
-                                                                onclick: move |_| {
-                                                                    let mut next = expanded_directory_sources();
-                                                                    if !next.insert(toggle_anchor.clone()) {
-                                                                        next.remove(&toggle_anchor);
-                                                                    }
-                                                                    expanded_directory_sources.set(next);
-                                                                },
-                                                                span { class: "entry-directory-rail__toggle-text", "{source.title}" }
-                                                                span { class: "entry-directory-rail__toggle-meta", "{source.subtitle}" }
-                                                            }
-                                                            if is_open {
-                                                                div { class: "entry-directory-rail__grandchildren",
-                                                                    for date in source.dates {
-                                                                        a {
-                                                                            class: "entry-directory-rail__link entry-directory-rail__link--date",
-                                                                            href: format!("#{}", date.anchor_id),
-                                                                            span { class: "entry-directory-rail__link-title", "{date.title}" }
-                                                                            span { class: "entry-directory-rail__link-meta", "{date.subtitle}" }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
+                                            for date in month.dates {
+                                                a {
+                                                    class: "entry-directory-rail__link entry-directory-rail__link--date",
+                                                    href: format!("#{}", date.anchor_id),
+                                                    span { class: "entry-directory-rail__link-title", "{date.title}" }
+                                                    span { class: "entry-directory-rail__link-meta", "{date.subtitle}" }
                                                 }
                                             }
                                         }
@@ -477,12 +463,44 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             }
                         } else {
                             nav { class: "entry-directory-rail__nav", "aria-label": "文章目录导航",
-                                for item in group_nav_items {
-                                    a {
-                                        class: "entry-directory-rail__link",
-                                        href: format!("#{}", item.anchor_id),
-                                        span { class: "entry-directory-rail__link-title", "{item.title}" }
-                                        span { class: "entry-directory-rail__link-meta", "{item.subtitle}" }
+                                for source in directory_sources {
+                                    {
+                                        let anchor_id = source.anchor_id.clone();
+                                        let is_open = expanded_directory_sources().contains(&anchor_id);
+                                        let toggle_anchor = anchor_id.clone();
+                                        rsx! {
+                                            div { class: "entry-directory-rail__subsection", key: "{anchor_id}",
+                                                button {
+                                                    class: if is_open {
+                                                        "entry-directory-rail__toggle is-open"
+                                                    } else {
+                                                        "entry-directory-rail__toggle"
+                                                    },
+                                                    "data-action": if is_open { "collapse-directory-source" } else { "expand-directory-source" },
+                                                    onclick: move |_| {
+                                                        let mut next = expanded_directory_sources();
+                                                        if !next.insert(toggle_anchor.clone()) {
+                                                            next.remove(&toggle_anchor);
+                                                        }
+                                                        expanded_directory_sources.set(next);
+                                                    },
+                                                    span { class: "entry-directory-rail__toggle-text", "{source.title}" }
+                                                    span { class: "entry-directory-rail__toggle-meta", "{source.subtitle}" }
+                                                }
+                                                if is_open {
+                                                    div { class: "entry-directory-rail__grandchildren",
+                                                        for month in source.months {
+                                                            a {
+                                                                class: "entry-directory-rail__link",
+                                                                href: format!("#{}", month.anchor_id),
+                                                                span { class: "entry-directory-rail__link-title", "{month.title}" }
+                                                                span { class: "entry-directory-rail__link-meta", "{month.subtitle}" }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -605,7 +623,7 @@ fn render_entry_card(
 
 fn group_entries_by_time_tree(entries: &[EntrySummary]) -> Vec<EntryMonthGroup> {
     let mut groups: BTreeMap<(i32, u8), Vec<EntrySummary>> = BTreeMap::new();
-    let mut undated_sources: BTreeMap<String, Vec<EntrySummary>> = BTreeMap::new();
+    let mut undated_entries = Vec::new();
 
     for entry in entries {
         if let Some(published_at) = entry.published_at {
@@ -615,7 +633,7 @@ fn group_entries_by_time_tree(entries: &[EntrySummary]) -> Vec<EntryMonthGroup> 
                 .or_default()
                 .push(entry.clone());
         } else {
-            undated_sources.entry(entry.feed_title.clone()).or_default().push(entry.clone());
+            undated_entries.push(entry.clone());
         }
     }
 
@@ -631,13 +649,12 @@ fn group_entries_by_time_tree(entries: &[EntrySummary]) -> Vec<EntryMonthGroup> 
                 anchor_id: group_anchor_id(&title),
                 title,
                 subtitle: format!("{} 篇文章", items.len()),
-                sources: group_month_sources(&items),
+                dates: group_date_buckets(&items),
             }
         })
         .collect::<Vec<_>>();
 
-    if !undated_sources.is_empty() {
-        let mut undated_entries = undated_sources.into_values().flatten().collect::<Vec<_>>();
+    if !undated_entries.is_empty() {
         undated_entries.sort_by_key(|entry| {
             std::cmp::Reverse(entry.published_at.unwrap_or(OffsetDateTime::UNIX_EPOCH))
         });
@@ -646,35 +663,49 @@ fn group_entries_by_time_tree(entries: &[EntrySummary]) -> Vec<EntryMonthGroup> 
             anchor_id: group_anchor_id(&title),
             title,
             subtitle: format!("{} 篇文章", undated_entries.len()),
-            sources: group_month_sources(&undated_entries),
+            dates: group_date_buckets(&undated_entries),
         });
     }
 
     grouped
 }
 
-fn group_month_sources(entries: &[EntrySummary]) -> Vec<EntryMonthSourceGroup> {
+fn group_entries_by_source_tree(entries: &[EntrySummary]) -> Vec<EntrySourceGroup> {
     let mut groups: BTreeMap<String, Vec<EntrySummary>> = BTreeMap::new();
+    let mut latest_seen: BTreeMap<String, Option<OffsetDateTime>> = BTreeMap::new();
 
     for entry in entries {
         groups.entry(entry.feed_title.clone()).or_default().push(entry.clone());
+        let latest = latest_seen.entry(entry.feed_title.clone()).or_insert(None);
+        if latest.is_none() || entry.published_at > *latest {
+            *latest = entry.published_at;
+        }
     }
 
-    groups
+    let mut grouped = groups
         .into_iter()
         .map(|(feed_title, mut items)| {
             items.sort_by_key(|entry| {
                 std::cmp::Reverse(entry.published_at.unwrap_or(OffsetDateTime::UNIX_EPOCH))
             });
-            let anchor_id = group_anchor_id(&format!("{}-{}", feed_title, items[0].id));
-            EntryMonthSourceGroup {
-                anchor_id,
-                title: feed_title,
-                subtitle: format!("{} 篇文章", items.len()),
-                dates: group_date_buckets(&items),
-            }
+            let latest = latest_seen.get(&feed_title).and_then(|value| *value);
+            (
+                latest,
+                EntrySourceGroup {
+                    anchor_id: group_anchor_id(&feed_title),
+                    title: feed_title,
+                    subtitle: format!("{} 篇文章", items.len()),
+                    months: group_source_months(&items),
+                },
+            )
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    grouped.sort_by(|(left_latest, left_group), (right_latest, right_group)| {
+        right_latest.cmp(left_latest).then_with(|| left_group.title.cmp(&right_group.title))
+    });
+
+    grouped.into_iter().map(|(_, group)| group).collect()
 }
 
 fn group_date_buckets(entries: &[EntrySummary]) -> Vec<EntryDateGroup> {
@@ -698,47 +729,85 @@ fn group_date_buckets(entries: &[EntrySummary]) -> Vec<EntryDateGroup> {
                 anchor_id,
                 title: date,
                 subtitle: format!("{} 篇文章", items.len()),
+                sources: group_date_sources(&items),
+            }
+        })
+        .collect()
+}
+
+fn group_date_sources(entries: &[EntrySummary]) -> Vec<EntryDateSourceGroup> {
+    let mut groups: BTreeMap<String, Vec<EntrySummary>> = BTreeMap::new();
+
+    for entry in entries {
+        groups.entry(entry.feed_title.clone()).or_default().push(entry.clone());
+    }
+
+    groups
+        .into_iter()
+        .map(|(feed_title, mut items)| {
+            items.sort_by_key(|entry| {
+                std::cmp::Reverse(entry.published_at.unwrap_or(OffsetDateTime::UNIX_EPOCH))
+            });
+            let anchor_id = group_anchor_id(&format!("{}-{}", feed_title, items[0].id));
+            EntryDateSourceGroup {
+                anchor_id,
+                title: feed_title,
+                subtitle: format!("{} 篇文章", items.len()),
                 entries: items,
             }
         })
         .collect()
 }
 
-fn group_entries_by_source(entries: &[EntrySummary]) -> Vec<EntryGroup> {
-    let mut groups: BTreeMap<String, Vec<EntrySummary>> = BTreeMap::new();
-    let mut latest_seen: BTreeMap<String, Option<OffsetDateTime>> = BTreeMap::new();
+fn group_source_months(entries: &[EntrySummary]) -> Vec<EntrySourceMonthGroup> {
+    let mut groups: BTreeMap<(i32, u8), Vec<EntrySummary>> = BTreeMap::new();
+    let mut undated_entries = Vec::new();
 
     for entry in entries {
-        groups.entry(entry.feed_title.clone()).or_default().push(entry.clone());
-        let latest = latest_seen.entry(entry.feed_title.clone()).or_insert(None);
-        if latest.is_none() || entry.published_at > *latest {
-            *latest = entry.published_at;
+        if let Some(published_at) = entry.published_at {
+            let published_at = published_at.to_offset(UtcOffset::UTC);
+            groups
+                .entry((published_at.year(), published_at.month() as u8))
+                .or_default()
+                .push(entry.clone());
+        } else {
+            undated_entries.push(entry.clone());
         }
     }
 
-    let mut grouped = groups
+    let mut months = groups
         .into_iter()
-        .map(|(feed_title, mut items)| {
+        .rev()
+        .map(|((year, month), mut items)| {
             items.sort_by_key(|entry| {
                 std::cmp::Reverse(entry.published_at.unwrap_or(OffsetDateTime::UNIX_EPOCH))
             });
-            let latest = latest_seen.get(&feed_title).and_then(|value| *value);
-            (
-                latest,
-                EntryGroup {
-                    title: feed_title,
-                    subtitle: format!("{} 篇文章", items.len()),
-                    entries: items,
-                },
-            )
+            let title = format!("{year} 年 {month:02} 月");
+            let anchor_id = group_anchor_id(&format!("{}-{}", title, items[0].id));
+            EntrySourceMonthGroup {
+                anchor_id,
+                title,
+                subtitle: format!("{} 篇文章", items.len()),
+                entries: items,
+            }
         })
         .collect::<Vec<_>>();
 
-    grouped.sort_by(|(left_latest, left_group), (right_latest, right_group)| {
-        right_latest.cmp(left_latest).then_with(|| left_group.title.cmp(&right_group.title))
-    });
+    if !undated_entries.is_empty() {
+        undated_entries.sort_by_key(|entry| {
+            std::cmp::Reverse(entry.published_at.unwrap_or(OffsetDateTime::UNIX_EPOCH))
+        });
+        let title = "未标注日期".to_string();
+        let anchor_id = group_anchor_id(&format!("{}-{}", title, undated_entries[0].id));
+        months.push(EntrySourceMonthGroup {
+            anchor_id,
+            title,
+            subtitle: format!("{} 篇文章", undated_entries.len()),
+            entries: undated_entries,
+        });
+    }
 
-    grouped.into_iter().map(|(_, group)| group).collect()
+    months
 }
 
 fn build_month_nav_items(groups: &[EntryMonthGroup]) -> Vec<EntryGroupNavItem> {
@@ -759,35 +828,47 @@ fn build_directory_months(groups: &[EntryMonthGroup]) -> Vec<EntryDirectoryMonth
             anchor_id: month.anchor_id.clone(),
             title: month.title.clone(),
             subtitle: month.subtitle.clone(),
-            sources: month
-                .sources
+            dates: month
+                .dates
                 .iter()
-                .map(|source| EntryDirectorySource {
-                    anchor_id: source.anchor_id.clone(),
-                    title: source.title.clone(),
-                    subtitle: source.subtitle.clone(),
-                    dates: source
-                        .dates
-                        .iter()
-                        .map(|date| EntryDirectoryDate {
-                            anchor_id: date.anchor_id.clone(),
-                            title: date.title.clone(),
-                            subtitle: date.subtitle.clone(),
-                        })
-                        .collect(),
+                .map(|date| EntryDirectoryDate {
+                    anchor_id: date.anchor_id.clone(),
+                    title: date.title.clone(),
+                    subtitle: date.subtitle.clone(),
                 })
                 .collect(),
         })
         .collect()
 }
 
-fn build_group_nav_items(groups: &[EntryGroup]) -> Vec<EntryGroupNavItem> {
+fn build_group_nav_items(groups: &[EntrySourceGroup]) -> Vec<EntryGroupNavItem> {
     groups
         .iter()
         .map(|group| EntryGroupNavItem {
-            anchor_id: group_anchor_id(&group.title),
+            anchor_id: group.anchor_id.clone(),
             title: group.title.clone(),
             subtitle: group.subtitle.clone(),
+        })
+        .collect()
+}
+
+fn build_directory_sources(groups: &[EntrySourceGroup]) -> Vec<EntryDirectorySource> {
+    groups
+        .iter()
+        .map(|group| EntryDirectorySource {
+            anchor_id: group.anchor_id.clone(),
+            title: group.title.clone(),
+            subtitle: group.subtitle.clone(),
+            months: group
+                .months
+                .iter()
+                .map(|month| EntryDirectoryMonth {
+                    anchor_id: month.anchor_id.clone(),
+                    title: month.title.clone(),
+                    subtitle: month.subtitle.clone(),
+                    dates: Vec::new(),
+                })
+                .collect(),
         })
         .collect()
 }
@@ -824,7 +905,7 @@ fn current_time_utc() -> OffsetDateTime {
 
 #[cfg(test)]
 mod tests {
-    use super::{group_entries_by_source, group_entries_by_time_tree};
+    use super::{group_entries_by_source_tree, group_entries_by_time_tree};
     use rssr_domain::EntrySummary;
     use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -854,9 +935,9 @@ mod tests {
 
         assert_eq!(groups.len(), 3);
         assert_eq!(groups[0].title, "2026 年 04 月");
-        assert_eq!(groups[0].sources[0].title, "Beta");
-        assert_eq!(groups[0].sources[0].dates[0].title, "2026-04-02");
-        assert_eq!(groups[0].sources[0].dates[0].entries[0].title, "April two");
+        assert_eq!(groups[0].dates[0].title, "2026-04-02");
+        assert_eq!(groups[0].dates[0].sources[0].title, "Beta");
+        assert_eq!(groups[0].dates[0].sources[0].entries[0].title, "April two");
         assert_eq!(groups[1].title, "2026 年 03 月");
         assert_eq!(groups[2].title, "未标注日期");
     }
@@ -869,11 +950,11 @@ mod tests {
             entry(3, "Alpha", "Newest alpha", Some("2026-04-01T08:00:00Z")),
         ];
 
-        let groups = group_entries_by_source(&entries);
+        let groups = group_entries_by_source_tree(&entries);
 
         assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].title, "Beta");
         assert_eq!(groups[1].title, "Alpha");
-        assert_eq!(groups[1].entries[0].title, "Newest alpha");
+        assert_eq!(groups[1].months[0].entries[0].title, "Newest alpha");
     }
 }

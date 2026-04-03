@@ -31,10 +31,9 @@ use self::{
         decode_opml, encode_opml, import_field, remote_url, validate_config_package,
         validate_settings,
     },
-    feed::{ParsedEntry, ParsedFeed, parse_feed, web_fetch_feed_response},
+    feed::{ParsedEntry, parse_feed, web_fetch_feed_response},
     state::{
-        PersistedEntry, PersistedFeed, PersistedState, load_state, save_state, to_domain_entry,
-        upsert_entries,
+        PersistedFeed, PersistedState, load_state, save_state, to_domain_entry, upsert_entries,
     },
 };
 
@@ -172,12 +171,7 @@ impl AppServices {
 
     pub async fn get_entry(&self, entry_id: i64) -> anyhow::Result<Option<Entry>> {
         let state = self.state.lock().expect("lock state");
-        Ok(state
-            .entries
-            .iter()
-            .find(|entry| entry.id == entry_id)
-            .map(to_domain_entry)
-            .transpose()?)
+        state.entries.iter().find(|entry| entry.id == entry_id).map(to_domain_entry).transpose()
     }
 
     pub async fn reader_navigation(
@@ -305,36 +299,38 @@ impl AppServices {
 
     pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
         let url = normalize_feed_url(&Url::parse(raw_url).context("订阅 URL 不合法")?);
-        let mut state = self.state.lock().expect("lock state");
-        let now = web_now_utc();
-        if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.url == url.as_str()) {
-            feed.is_deleted = false;
-            feed.updated_at = now;
-        } else {
-            state.next_feed_id += 1;
-            let feed_id = state.next_feed_id;
-            state.feeds.push(PersistedFeed {
-                id: feed_id,
-                url: url.to_string(),
-                title: None,
-                site_url: None,
-                description: None,
-                icon_url: None,
-                folder: None,
-                etag: None,
-                last_modified: None,
-                last_fetched_at: None,
-                last_success_at: None,
-                fetch_error: None,
-                is_deleted: false,
-                created_at: now,
-                updated_at: now,
-            });
-        }
-        let feed_id =
-            state.feeds.iter().find(|feed| feed.url == url.as_str()).expect("feed exists").id;
-        save_state(&state)?;
-        drop(state);
+        let feed_id = {
+            let mut state = self.state.lock().expect("lock state");
+            let now = web_now_utc();
+            if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.url == url.as_str()) {
+                feed.is_deleted = false;
+                feed.updated_at = now;
+            } else {
+                state.next_feed_id += 1;
+                let feed_id = state.next_feed_id;
+                state.feeds.push(PersistedFeed {
+                    id: feed_id,
+                    url: url.to_string(),
+                    title: None,
+                    site_url: None,
+                    description: None,
+                    icon_url: None,
+                    folder: None,
+                    etag: None,
+                    last_modified: None,
+                    last_fetched_at: None,
+                    last_success_at: None,
+                    fetch_error: None,
+                    is_deleted: false,
+                    created_at: now,
+                    updated_at: now,
+                });
+            }
+            let feed_id =
+                state.feeds.iter().find(|feed| feed.url == url.as_str()).expect("feed exists").id;
+            save_state(&state)?;
+            feed_id
+        };
         self.refresh_feed(feed_id).await.context("首次刷新订阅失败")
     }
 

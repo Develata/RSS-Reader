@@ -5,7 +5,7 @@ use time::OffsetDateTime;
 use url::Url;
 use web_sys::window;
 
-use super::{ParsedEntry, web_now_utc};
+use super::{ParsedEntry, feed::hash_content, web_now_utc};
 
 pub(super) const STORAGE_KEY: &str = "rssr-web-state-v1";
 
@@ -114,7 +114,7 @@ pub(super) fn upsert_entries(
     entries: Vec<ParsedEntry>,
 ) -> anyhow::Result<()> {
     for entry in entries {
-        let content_hash = super::hash_content(
+        let content_hash = hash_content(
             entry.content_html.as_deref(),
             entry.content_text.as_deref(),
             Some(&entry.title),

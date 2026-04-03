@@ -267,11 +267,9 @@ pub(super) fn hash_content(
 ) -> Option<String> {
     let mut hasher = Sha256::new();
     let mut used = false;
-    for part in [title, text, html] {
-        if let Some(part) = part {
-            hasher.update(part.as_bytes());
-            used = true;
-        }
+    for part in [title, text, html].into_iter().flatten() {
+        hasher.update(part.as_bytes());
+        used = true;
     }
     used.then(|| format!("{:x}", hasher.finalize()))
 }

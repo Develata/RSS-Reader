@@ -180,16 +180,8 @@ fn validate_credentials(username: &str, password: &str) -> Result<(), String> {
 
 #[cfg(target_arch = "wasm32")]
 fn generate_salt(username: &str) -> String {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let seed = format!("{}:{}", username.trim(), js_sys::Date::now());
-        return URL_SAFE_NO_PAD.encode(Sha256::digest(seed.as_bytes()));
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        URL_SAFE_NO_PAD.encode(Sha256::digest(username.trim().as_bytes()))
-    }
+    let seed = format!("{}:{}", username.trim(), js_sys::Date::now());
+    URL_SAFE_NO_PAD.encode(Sha256::digest(seed.as_bytes()))
 }
 
 #[cfg(target_arch = "wasm32")]
