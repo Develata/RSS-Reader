@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -17,6 +17,7 @@ mod state;
 use anyhow::Context;
 use js_sys::Date;
 use reqwest::{StatusCode, header};
+pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::{
     ConfigFeed, ConfigPackage, Entry, EntryQuery, EntrySummary, FeedSummary, ReadFilter,
     StarredFilter, UserSettings, normalize_feed_url,
@@ -33,20 +34,12 @@ use self::{
     },
     feed::{ParsedEntry, parse_feed, web_fetch_feed_response},
     state::{
-        PersistedFeed, PersistedState, load_state, save_state_snapshot, to_domain_entry,
-        upsert_entries,
+        PersistedEntry, PersistedFeed, PersistedState, load_state, save_state_snapshot,
+        to_domain_entry, upsert_entries,
     },
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct ReaderNavigation {
-    pub previous_unread_entry_id: Option<i64>,
-    pub next_unread_entry_id: Option<i64>,
-    pub previous_feed_entry_id: Option<i64>,
-    pub next_feed_entry_id: Option<i64>,
-}
 
 pub struct AppServices {
     state: Mutex<PersistedState>,
@@ -80,6 +73,14 @@ impl AppServices {
 
     pub async fn list_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {
         let state = self.state.lock().expect("lock state");
+        let mut counts_by_feed = HashMap::<i64, (u32, u32)>::new();
+        for entry in &state.entries {
+            let counts = counts_by_feed.entry(entry.feed_id).or_insert((0, 0));
+            counts.0 += 1;
+            if !entry.is_read {
+                counts.1 += 1;
+            }
+        }
         let mut feeds = state
             .feeds
             .iter()
@@ -88,13 +89,8 @@ impl AppServices {
                 id: feed.id,
                 title: feed.title.clone().unwrap_or_else(|| feed.url.clone()),
                 url: feed.url.clone(),
-                unread_count: state
-                    .entries
-                    .iter()
-                    .filter(|entry| entry.feed_id == feed.id && !entry.is_read)
-                    .count() as u32,
-                entry_count: state.entries.iter().filter(|entry| entry.feed_id == feed.id).count()
-                    as u32,
+                unread_count: counts_by_feed.get(&feed.id).map(|(_, unread)| *unread).unwrap_or(0),
+                entry_count: counts_by_feed.get(&feed.id).map(|(all, _)| *all).unwrap_or(0),
                 last_fetched_at: feed.last_fetched_at,
                 last_success_at: feed.last_success_at,
                 fetch_error: feed.fetch_error.clone(),
@@ -106,14 +102,19 @@ impl AppServices {
 
     pub async fn list_entries(&self, query: &EntryQuery) -> anyhow::Result<Vec<EntrySummary>> {
         let state = self.state.lock().expect("lock state");
+        let allowed_feed_ids = (!query.feed_ids.is_empty())
+            .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
+        let active_feed_titles = state
+            .feeds
+            .iter()
+            .filter(|feed| !feed.is_deleted)
+            .map(|feed| (feed.id, feed.title.clone().unwrap_or_else(|| feed.url.clone())))
+            .collect::<HashMap<_, _>>();
         let mut items = state
             .entries
             .iter()
             .filter(|entry| {
-                let Some(feed) = state.feeds.iter().find(|feed| feed.id == entry.feed_id) else {
-                    return false;
-                };
-                if feed.is_deleted {
+                if !active_feed_titles.contains_key(&entry.feed_id) {
                     return false;
                 }
                 if let Some(feed_id) = query.feed_id
@@ -121,7 +122,9 @@ impl AppServices {
                 {
                     return false;
                 }
-                if !query.feed_ids.is_empty() && !query.feed_ids.contains(&entry.feed_id) {
+                if let Some(allowed_feed_ids) = &allowed_feed_ids
+                    && !allowed_feed_ids.contains(&entry.feed_id)
+                {
                     return false;
                 }
                 match query.read_filter {
@@ -147,19 +150,7 @@ impl AppServices {
                 id: entry.id,
                 feed_id: entry.feed_id,
                 title: entry.title.clone(),
-                feed_title: state
-                    .feeds
-                    .iter()
-                    .find(|feed| feed.id == entry.feed_id)
-                    .and_then(|feed| feed.title.clone())
-                    .unwrap_or_else(|| {
-                        state
-                            .feeds
-                            .iter()
-                            .find(|feed| feed.id == entry.feed_id)
-                            .map(|feed| feed.url.clone())
-                            .unwrap_or_default()
-                    }),
+                feed_title: active_feed_titles.get(&entry.feed_id).cloned().unwrap_or_default(),
                 published_at: entry.published_at,
                 is_read: entry.is_read,
                 is_starred: entry.is_starred,
@@ -183,37 +174,48 @@ impl AppServices {
         &self,
         current_entry_id: i64,
     ) -> anyhow::Result<ReaderNavigation> {
-        let Some(current_entry) = self.get_entry(current_entry_id).await? else {
+        let state = self.state.lock().expect("lock state");
+        let active_feed_ids = state
+            .feeds
+            .iter()
+            .filter(|feed| !feed.is_deleted)
+            .map(|feed| feed.id)
+            .collect::<HashSet<_>>();
+        let Some(current_entry) = state
+            .entries
+            .iter()
+            .find(|entry| entry.id == current_entry_id && active_feed_ids.contains(&entry.feed_id))
+        else {
             return Ok(ReaderNavigation::default());
         };
 
-        let global_entries = self.list_entries(&EntryQuery::default()).await?;
+        let mut ordered_entries = state
+            .entries
+            .iter()
+            .filter(|entry| active_feed_ids.contains(&entry.feed_id))
+            .collect::<Vec<_>>();
+        ordered_entries.sort_by(|left, right| compare_entry_order(left, right));
         let mut navigation = ReaderNavigation::default();
 
-        if let Some(index) = global_entries.iter().position(|entry| entry.id == current_entry_id) {
-            navigation.previous_unread_entry_id = global_entries[..index]
+        if let Some(index) = ordered_entries.iter().position(|entry| entry.id == current_entry_id) {
+            navigation.previous_unread_entry_id = ordered_entries[..index]
                 .iter()
                 .rev()
                 .find(|entry| !entry.is_read)
                 .map(|entry| entry.id);
-            navigation.next_unread_entry_id = global_entries[index + 1..]
+            navigation.next_unread_entry_id = ordered_entries[index + 1..]
                 .iter()
                 .find(|entry| !entry.is_read)
                 .map(|entry| entry.id);
-        }
-
-        let feed_entries = self
-            .list_entries(&EntryQuery {
-                feed_id: Some(current_entry.feed_id),
-                ..EntryQuery::default()
-            })
-            .await?;
-        if let Some(index) = feed_entries.iter().position(|entry| entry.id == current_entry_id) {
-            navigation.previous_feed_entry_id = index
-                .checked_sub(1)
-                .and_then(|value| feed_entries.get(value))
+            navigation.previous_feed_entry_id = ordered_entries[..index]
+                .iter()
+                .rev()
+                .find(|entry| entry.feed_id == current_entry.feed_id)
                 .map(|entry| entry.id);
-            navigation.next_feed_entry_id = feed_entries.get(index + 1).map(|entry| entry.id);
+            navigation.next_feed_entry_id = ordered_entries[index + 1..]
+                .iter()
+                .find(|entry| entry.feed_id == current_entry.feed_id)
+                .map(|entry| entry.id);
         }
 
         Ok(navigation)
@@ -445,11 +447,8 @@ impl AppServices {
             let snapshot = {
                 let mut state = self.state.lock().expect("lock state");
                 let now = web_now_utc();
-                let feed = state
-                    .feeds
-                    .iter_mut()
-                    .find(|feed| feed.id == feed_id)
-                    .context("订阅不存在")?;
+                let feed =
+                    state.feeds.iter_mut().find(|feed| feed.id == feed_id).context("订阅不存在")?;
                 feed.etag = metadata.0;
                 feed.last_modified = metadata.1;
                 feed.last_fetched_at = Some(now);
@@ -515,11 +514,8 @@ impl AppServices {
         let snapshot = {
             let mut state = self.state.lock().expect("lock state");
             let now = web_now_utc();
-            let feed = state
-                .feeds
-                .iter_mut()
-                .find(|feed| feed.id == feed_id)
-                .context("订阅不存在")?;
+            let feed =
+                state.feeds.iter_mut().find(|feed| feed.id == feed_id).context("订阅不存在")?;
             if parsed.title.is_some() {
                 feed.title = parsed.title;
             }
@@ -734,6 +730,10 @@ impl AppServices {
 
 fn title_matches_search(title: &str, search: &str) -> bool {
     title.to_lowercase().contains(&search.to_lowercase())
+}
+
+fn compare_entry_order(left: &PersistedEntry, right: &PersistedEntry) -> std::cmp::Ordering {
+    right.published_at.cmp(&left.published_at).then(right.id.cmp(&left.id))
 }
 
 fn web_now_utc() -> OffsetDateTime {

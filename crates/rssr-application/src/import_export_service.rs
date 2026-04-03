@@ -199,6 +199,13 @@ mod tests {
             Ok(None)
         }
 
+        async fn reader_navigation(
+            &self,
+            _current_entry_id: i64,
+        ) -> rssr_domain::Result<rssr_domain::EntryNavigation> {
+            Ok(rssr_domain::EntryNavigation::default())
+        }
+
         async fn set_read(&self, _entry_id: i64, _is_read: bool) -> rssr_domain::Result<()> {
             Ok(())
         }
@@ -330,6 +337,13 @@ mod tests {
 
         async fn get_entry(&self, _entry_id: i64) -> rssr_domain::Result<Option<Entry>> {
             Ok(None)
+        }
+
+        async fn reader_navigation(
+            &self,
+            _current_entry_id: i64,
+        ) -> rssr_domain::Result<rssr_domain::EntryNavigation> {
+            Ok(rssr_domain::EntryNavigation::default())
         }
 
         async fn set_read(&self, _entry_id: i64, _is_read: bool) -> rssr_domain::Result<()> {

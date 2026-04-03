@@ -1,5 +1,5 @@
 use crate::{
-    entry::{Entry, EntryQuery, EntrySummary},
+    entry::{Entry, EntryNavigation, EntryQuery, EntrySummary},
     feed::{Feed, FeedSummary, NewFeedSubscription},
     settings::UserSettings,
 };
@@ -21,6 +21,7 @@ pub trait FeedRepository: Send + Sync {
 pub trait EntryRepository: Send + Sync {
     async fn list_entries(&self, query: &EntryQuery) -> crate::Result<Vec<EntrySummary>>;
     async fn get_entry(&self, entry_id: i64) -> crate::Result<Option<Entry>>;
+    async fn reader_navigation(&self, current_entry_id: i64) -> crate::Result<EntryNavigation>;
     async fn set_read(&self, entry_id: i64, is_read: bool) -> crate::Result<()>;
     async fn set_starred(&self, entry_id: i64, is_starred: bool) -> crate::Result<()>;
     async fn delete_for_feed(&self, feed_id: i64) -> crate::Result<()>;

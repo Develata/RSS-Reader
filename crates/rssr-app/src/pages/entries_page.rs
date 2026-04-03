@@ -957,10 +957,7 @@ fn remember_entry_controls_hidden(_hidden: bool) {
         if let Some(window) = web_sys::window()
             && let Ok(Some(storage)) = window.local_storage()
         {
-            let _ = storage.set_item(
-                "rssr-entry-controls-hidden",
-                if _hidden { "1" } else { "0" },
-            );
+            let _ = storage.set_item("rssr-entry-controls-hidden", if _hidden { "1" } else { "0" });
         }
     }
 }

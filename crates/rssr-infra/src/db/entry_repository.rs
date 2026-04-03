@@ -1,5 +1,5 @@
 use rssr_domain::{
-    DomainError, Entry, EntryQuery, EntryRepository, EntrySummary, ReadFilter,
+    DomainError, Entry, EntryNavigation, EntryQuery, EntryRepository, EntrySummary, ReadFilter,
     Result as DomainResult, StarredFilter,
 };
 use sha2::{Digest, Sha256};
@@ -122,6 +122,63 @@ impl SqliteEntryRepository {
         Ok(result.rows_affected() > 0)
     }
 
+    async fn find_adjacent_entry_id(
+        &self,
+        feed_id: Option<i64>,
+        unread_only: bool,
+        current_sort_at: &str,
+        current_entry_id: i64,
+        previous_in_desc_order: bool,
+    ) -> DomainResult<Option<i64>> {
+        let mut qb = QueryBuilder::<Sqlite>::new(
+            r#"
+            SELECT entries.id
+            FROM entries
+            JOIN feeds ON feeds.id = entries.feed_id
+            WHERE feeds.is_deleted = 0
+            "#,
+        );
+
+        if let Some(feed_id) = feed_id {
+            qb.push(" AND entries.feed_id = ").push_bind(feed_id);
+        }
+        if unread_only {
+            qb.push(" AND entries.is_read = 0");
+        }
+
+        if previous_in_desc_order {
+            qb.push(" AND (COALESCE(entries.published_at, entries.created_at) > ")
+                .push_bind(current_sort_at)
+                .push(" OR (COALESCE(entries.published_at, entries.created_at) = ")
+                .push_bind(current_sort_at)
+                .push(" AND entries.id > ")
+                .push_bind(current_entry_id)
+                .push("))")
+                .push(
+                    " ORDER BY COALESCE(entries.published_at, entries.created_at) ASC, entries.id ASC",
+                );
+        } else {
+            qb.push(" AND (COALESCE(entries.published_at, entries.created_at) < ")
+                .push_bind(current_sort_at)
+                .push(" OR (COALESCE(entries.published_at, entries.created_at) = ")
+                .push_bind(current_sort_at)
+                .push(" AND entries.id < ")
+                .push_bind(current_entry_id)
+                .push("))")
+                .push(
+                    " ORDER BY COALESCE(entries.published_at, entries.created_at) DESC, entries.id DESC",
+                );
+        }
+
+        qb.push(" LIMIT 1");
+
+        qb.build()
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_error)
+            .map(|row| row.map(|row| row.get("id")))
+    }
+
     async fn row_to_entry(row: sqlx::sqlite::SqliteRow) -> DomainResult<Entry> {
         Ok(Entry {
             id: row.try_get("id").map_err(map_sqlx_error)?,
@@ -235,7 +292,9 @@ impl EntryRepository for SqliteEntryRepository {
                 .push(" COLLATE NOCASE");
         }
 
-        qb.push(" ORDER BY COALESCE(entries.published_at, entries.created_at) DESC");
+        qb.push(
+            " ORDER BY COALESCE(entries.published_at, entries.created_at) DESC, entries.id DESC",
+        );
         if let Some(limit) = query.limit {
             qb.push(" LIMIT ").push_bind(limit as i64);
         }
@@ -268,6 +327,44 @@ impl EntryRepository for SqliteEntryRepository {
             Some(row) => Ok(Some(Self::row_to_entry(row).await?)),
             None => Ok(None),
         }
+    }
+
+    async fn reader_navigation(&self, current_entry_id: i64) -> DomainResult<EntryNavigation> {
+        let Some(current_row) = sqlx::query(
+            r#"
+            SELECT entries.feed_id,
+                   COALESCE(entries.published_at, entries.created_at) AS sort_at
+            FROM entries
+            JOIN feeds ON feeds.id = entries.feed_id
+            WHERE entries.id = ?1
+              AND feeds.is_deleted = 0
+            "#,
+        )
+        .bind(current_entry_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?
+        else {
+            return Ok(EntryNavigation::default());
+        };
+
+        let feed_id: i64 = current_row.get("feed_id");
+        let sort_at: String = current_row.get("sort_at");
+
+        Ok(EntryNavigation {
+            previous_unread_entry_id: self
+                .find_adjacent_entry_id(None, true, &sort_at, current_entry_id, true)
+                .await?,
+            next_unread_entry_id: self
+                .find_adjacent_entry_id(None, true, &sort_at, current_entry_id, false)
+                .await?,
+            previous_feed_entry_id: self
+                .find_adjacent_entry_id(Some(feed_id), false, &sort_at, current_entry_id, true)
+                .await?,
+            next_feed_entry_id: self
+                .find_adjacent_entry_id(Some(feed_id), false, &sort_at, current_entry_id, false)
+                .await?,
+        })
     }
 
     async fn set_read(&self, entry_id: i64, is_read: bool) -> DomainResult<()> {

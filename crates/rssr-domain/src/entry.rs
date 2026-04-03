@@ -37,6 +37,14 @@ pub struct EntrySummary {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct EntryNavigation {
+    pub previous_unread_entry_id: Option<i64>,
+    pub next_unread_entry_id: Option<i64>,
+    pub previous_feed_entry_id: Option<i64>,
+    pub next_feed_entry_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ReadFilter {
     #[default]
     All,

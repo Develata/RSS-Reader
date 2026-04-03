@@ -109,9 +109,7 @@ fn save_serialized_state(raw: String) -> anyhow::Result<()> {
     let Some(storage) = window().and_then(|window| window.local_storage().ok()).flatten() else {
         return Ok(());
     };
-    storage
-        .set_item(STORAGE_KEY, &raw)
-        .map_err(|_| anyhow::anyhow!("写入浏览器本地存储失败"))?;
+    storage.set_item(STORAGE_KEY, &raw).map_err(|_| anyhow::anyhow!("写入浏览器本地存储失败"))?;
     Ok(())
 }
 
