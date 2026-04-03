@@ -8,6 +8,7 @@ use crate::{
     hooks::use_mobile_back_navigation::use_mobile_back_navigation,
     hooks::use_reader_shortcuts::use_reader_shortcuts,
     router::AppRoute,
+    status::{set_status_error, set_status_info},
 };
 
 #[component]
@@ -290,16 +291,6 @@ fn previous_action_target(navigation: ReaderNavigation) -> Option<i64> {
 
 fn next_action_target(navigation: ReaderNavigation) -> Option<i64> {
     navigation.next_unread_entry_id.or(navigation.next_feed_entry_id)
-}
-
-fn set_status_info(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
-    status.set(message);
-    status_tone.set("info".to_string());
-}
-
-fn set_status_error(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
-    status.set(message);
-    status_tone.set("error".to_string());
 }
 
 #[cfg(test)]

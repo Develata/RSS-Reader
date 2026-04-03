@@ -13,6 +13,7 @@ use crate::{
     components::status_banner::StatusBanner,
     hooks::use_mobile_back_navigation::use_mobile_back_navigation,
     router::AppRoute,
+    status::{set_status_error, set_status_info},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -805,16 +806,6 @@ fn group_anchor_id(title: &str) -> String {
         })
         .collect::<String>();
     format!("entry-group-{}", slug.trim_matches('-'))
-}
-
-fn set_status_info(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
-    status.set(message);
-    status_tone.set("info".to_string());
-}
-
-fn set_status_error(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
-    status.set(message);
-    status_tone.set("error".to_string());
 }
 
 #[cfg(target_arch = "wasm32")]

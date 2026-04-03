@@ -3,8 +3,12 @@ use rssr_domain::FeedSummary;
 use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::{
-    app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner,
-    hooks::use_mobile_back_navigation::use_mobile_back_navigation, router::AppRoute,
+    app::AppNav,
+    bootstrap::AppServices,
+    components::status_banner::StatusBanner,
+    hooks::use_mobile_back_navigation::use_mobile_back_navigation,
+    router::AppRoute,
+    status::{set_status_error, set_status_info},
 };
 
 #[component]
@@ -371,16 +375,6 @@ pub fn FeedsPage() -> Element {
             }
         }
     }
-}
-
-fn set_status_info(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
-    status.set(message);
-    status_tone.set("info".to_string());
-}
-
-fn set_status_error(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
-    status.set(message);
-    status_tone.set("error".to_string());
 }
 
 fn feed_refresh_status_text(feed: &FeedSummary) -> String {

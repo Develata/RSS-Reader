@@ -2,8 +2,12 @@ use dioxus::prelude::*;
 use rssr_domain::{ListDensity, StartupView, ThemeMode, UserSettings};
 
 use crate::{
-    app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner,
-    hooks::use_mobile_back_navigation::use_mobile_back_navigation, theme::ThemeController,
+    app::AppNav,
+    bootstrap::AppServices,
+    components::status_banner::StatusBanner,
+    hooks::use_mobile_back_navigation::use_mobile_back_navigation,
+    status::{set_status_error, set_status_info},
+    theme::ThemeController,
 };
 
 const REPOSITORY_URL: &str = "https://github.com/Develata/RSS-Reader";
@@ -850,16 +854,6 @@ fn apply_settings_immediately(
             }
         }
     });
-}
-
-fn set_status_info(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
-    status.set(message);
-    status_tone.set("info".to_string());
-}
-
-fn set_status_error(mut status: Signal<String>, mut status_tone: Signal<String>, message: String) {
-    status.set(message);
-    status_tone.set("error".to_string());
 }
 
 #[derive(Clone, Copy)]

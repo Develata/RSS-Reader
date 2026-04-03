@@ -3,6 +3,7 @@ use dioxus::prelude::*;
 use crate::{
     bootstrap::AppServices,
     router::{AppRoute, RoutableApp},
+    status::{set_status_error, set_status_info},
     theme::{ThemeController, density_class, theme_class},
     web_auth::{
         WebAuthState, auth_state, configured_username, local_auth_state, login, setup_credentials,
@@ -243,9 +244,9 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
 
     let mut username = use_signal(String::new);
     let mut password = use_signal(String::new);
-    let mut status =
+    let status =
         use_signal(|| "当前处于本地浏览器保护模式。首次使用请先设置用户名和密码。".to_string());
-    let mut status_tone = use_signal(|| "info".to_string());
+    let status_tone = use_signal(|| "info".to_string());
 
     use_effect(move || {
         if state == WebAuthState::NeedsLogin
@@ -306,14 +307,12 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
 
                         match result {
                             Ok(()) => {
-                                status.set("验证通过，正在进入阅读器。".to_string());
-                                status_tone.set("info".to_string());
+                                set_status_info(status, status_tone, "验证通过，正在进入阅读器。");
                                 password.set(String::new());
                                 complete_web_auth_transition(on_authenticated);
                             }
                             Err(err) => {
-                                status.set(err);
-                                status_tone.set("error".to_string());
+                                set_status_error(status, status_tone, err);
                             }
                         }
                     },

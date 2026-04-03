@@ -6,6 +6,7 @@ mod components;
 mod hooks;
 mod pages;
 mod router;
+mod status;
 mod theme;
 mod web_auth;
 
