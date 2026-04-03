@@ -948,16 +948,19 @@ fn initial_entry_controls_hidden() -> bool {
         }
     }
 
-    false
+    true
 }
 
-fn remember_entry_controls_hidden(hidden: bool) {
+fn remember_entry_controls_hidden(_hidden: bool) {
     #[cfg(target_arch = "wasm32")]
     {
         if let Some(window) = web_sys::window()
             && let Ok(Some(storage)) = window.local_storage()
         {
-            let _ = storage.set_item("rssr-entry-controls-hidden", if hidden { "1" } else { "0" });
+            let _ = storage.set_item(
+                "rssr-entry-controls-hidden",
+                if _hidden { "1" } else { "0" },
+            );
         }
     }
 }
