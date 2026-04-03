@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     env, fs,
+    io::Write,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::PathBuf,
     sync::Arc,
@@ -61,6 +62,7 @@ struct AuthConfig {
     password_policy: PasswordPolicy,
     session_secret: Vec<u8>,
     secure_cookie: bool,
+    trust_proxy_headers: bool,
     session_ttl: Duration,
     login_rate_limit: LoginRateLimit,
 }
@@ -191,6 +193,10 @@ fn load_config() -> Result<AuthConfig> {
         .ok()
         .map(|raw| matches!(raw.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
         .unwrap_or(false);
+    let trust_proxy_headers = env::var("RSS_READER_WEB_TRUST_PROXY_HEADERS")
+        .ok()
+        .map(|raw| matches!(raw.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        .unwrap_or(false);
     let session_ttl_hours = env::var("RSS_READER_WEB_SESSION_TTL_HOURS")
         .ok()
         .map(|raw| raw.parse::<i64>())
@@ -222,6 +228,7 @@ fn load_config() -> Result<AuthConfig> {
         password_policy,
         session_secret: session_secret.into_bytes(),
         secure_cookie,
+        trust_proxy_headers,
         session_ttl: Duration::hours(session_ttl_hours),
         login_rate_limit,
     })
@@ -391,9 +398,38 @@ fn persist_auth_state(
     let payload =
         serde_json::to_string_pretty(&PersistedAuthState { password_hash, session_secret })
             .context("序列化认证状态文件失败")?;
-    fs::write(auth_state_file, payload)
-        .with_context(|| format!("写入认证状态文件失败：{}", auth_state_file.display()))?;
+    write_auth_state_file(auth_state_file, &payload)?;
     Ok(())
+}
+
+fn write_auth_state_file(auth_state_file: &std::path::Path, payload: &str) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::fs::OpenOptions;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(auth_state_file)
+            .with_context(|| format!("写入认证状态文件失败：{}", auth_state_file.display()))?;
+        file.write_all(payload.as_bytes())
+            .with_context(|| format!("写入认证状态文件失败：{}", auth_state_file.display()))?;
+        file.sync_all()
+            .with_context(|| format!("同步认证状态文件失败：{}", auth_state_file.display()))?;
+        fs::set_permissions(auth_state_file, fs::Permissions::from_mode(0o600))
+            .with_context(|| format!("收紧认证状态文件权限失败：{}", auth_state_file.display()))?;
+        Ok(())
+    }
+
+    #[cfg(not(unix))]
+    {
+        fs::write(auth_state_file, payload)
+            .with_context(|| format!("写入认证状态文件失败：{}", auth_state_file.display()))?;
+        Ok(())
+    }
 }
 
 fn load_login_rate_limit() -> Result<LoginRateLimit> {
@@ -688,7 +724,7 @@ async fn handle_login(
     Form(form): Form<LoginForm>,
 ) -> impl IntoResponse {
     let next = sanitize_next(form.next.as_deref());
-    let rate_limit_key = rate_limit_key(&headers, &form.username);
+    let rate_limit_key = rate_limit_key(&state.config, &headers, &form.username);
 
     if login_attempt_is_blocked(&state, &rate_limit_key).await {
         return Redirect::to(&format!(
@@ -940,12 +976,16 @@ fn gate_cookie_header(config: &AuthConfig) -> String {
     format!("{GATE_COOKIE}=1; Path=/; SameSite=Lax; Max-Age={max_age}{secure}")
 }
 
-fn rate_limit_key(headers: &HeaderMap, username: &str) -> String {
-    let client = forwarded_ip(headers).unwrap_or("unknown");
+fn rate_limit_key(config: &AuthConfig, headers: &HeaderMap, username: &str) -> String {
+    let client = forwarded_ip(config, headers).unwrap_or("direct");
     format!("{}|{}", client, username.trim().to_ascii_lowercase())
 }
 
-fn forwarded_ip(headers: &HeaderMap) -> Option<&str> {
+fn forwarded_ip<'a>(config: &AuthConfig, headers: &'a HeaderMap) -> Option<&'a str> {
+    if !config.trust_proxy_headers {
+        return None;
+    }
+
     headers
         .get("x-forwarded-for")
         .and_then(|value| value.to_str().ok())
@@ -1065,6 +1105,7 @@ mod tests {
             ),
             session_secret: b"01234567890123456789012345678901".to_vec(),
             secure_cookie: false,
+            trust_proxy_headers: false,
             session_ttl: Duration::hours(12),
             login_rate_limit: LoginRateLimit {
                 max_failures: 5,
@@ -1195,6 +1236,52 @@ mod tests {
 
         let secret = resolve_session_secret(&auth_file).expect("secret");
         assert_eq!(secret, "01234567890123456789012345678901");
+
+        let _ = std::fs::remove_file(auth_file);
+    }
+
+    #[test]
+    fn rate_limit_key_ignores_proxy_headers_by_default() {
+        let config = sample_config();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", HeaderValue::from_static("203.0.113.10"));
+        headers.insert("x-real-ip", HeaderValue::from_static("198.51.100.2"));
+
+        let key = rate_limit_key(&config, &headers, "admin");
+
+        assert_eq!(key, "direct|admin");
+    }
+
+    #[test]
+    fn rate_limit_key_uses_forwarded_headers_when_trusted() {
+        let mut config = sample_config();
+        config.trust_proxy_headers = true;
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", HeaderValue::from_static("203.0.113.10, 198.51.100.2"));
+
+        let key = rate_limit_key(&config, &headers, "admin");
+
+        assert_eq!(key, "203.0.113.10|admin");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persisted_auth_state_file_uses_owner_only_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let auth_file = std::env::temp_dir().join(format!(
+            "rssr-web-auth-{}-{}.json",
+            std::process::id(),
+            OffsetDateTime::now_utc().unix_timestamp_nanos()
+        ));
+        let hash = generate_password_hash("adminadmin").expect("hash");
+
+        persist_auth_state(&auth_file, Some(&hash), Some("01234567890123456789012345678901"))
+            .expect("persist");
+
+        let mode = fs::metadata(&auth_file).expect("metadata").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
 
         let _ = std::fs::remove_file(auth_file);
     }

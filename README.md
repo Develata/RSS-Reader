@@ -373,6 +373,7 @@ services:
       RSS_READER_WEB_AUTH_STATE_FILE: ${RSS_READER_WEB_AUTH_STATE_FILE:-/app/auth/auth.json}
       RSS_READER_WEB_ENV: ${RSS_READER_WEB_ENV:-development}
       RSS_READER_WEB_SECURE_COOKIE: ${RSS_READER_WEB_SECURE_COOKIE:-false}
+      RSS_READER_WEB_TRUST_PROXY_HEADERS: ${RSS_READER_WEB_TRUST_PROXY_HEADERS:-false}
       RSS_READER_WEB_SESSION_TTL_HOURS: ${RSS_READER_WEB_SESSION_TTL_HOURS:-12}
     ports:
       - "${RSS_READER_PORT:-8039}:8080"
@@ -398,6 +399,7 @@ RSS_READER_WEB_PASSWORD=adminadmin
 RSS_READER_WEB_AUTH_STATE_FILE=/app/auth/auth.json
 RSS_READER_WEB_ENV=development
 RSS_READER_WEB_SECURE_COOKIE=false
+RSS_READER_WEB_TRUST_PROXY_HEADERS=false
 RSS_READER_PORT=8039
 ```
 
@@ -419,6 +421,7 @@ docker compose up -d
 
 后续只要这个认证状态文件还在，单纯重启 `rssr-web` / Docker **不会**触发“首次登录重新设置账号密码”。
 重启只会重新读取环境变量，并继续使用已经持久化的哈希与 secret。
+在 Unix/Linux 环境下，认证状态文件会以仅当前用户可读写的权限写入。
 
 默认访问：
 
@@ -454,6 +457,10 @@ http://127.0.0.1:8039
   - `RSS_READER_WEB_SECURE_COOKIE`
     - `true` 时 cookie 只通过 HTTPS 发送
     - 默认 `false`
+  - `RSS_READER_WEB_TRUST_PROXY_HEADERS`
+    - 是否信任 `X-Forwarded-For` / `X-Real-IP`
+    - 默认 `false`
+    - 只有在 `rssr-web` 明确部署在你自己的反向代理后面时才建议开启
   - `RSS_READER_WEB_SESSION_TTL_HOURS`
     - 登录会话有效期，单位小时
     - 默认 `12`
@@ -485,6 +492,7 @@ services:
       RSS_READER_WEB_AUTH_STATE_FILE: /app/auth/auth.json
       RSS_READER_WEB_ENV: development
       RSS_READER_WEB_SECURE_COOKIE: "false"
+      RSS_READER_WEB_TRUST_PROXY_HEADERS: "false"
       RSS_READER_WEB_SESSION_TTL_HOURS: "12"
     ports:
       - "8039:8080"
@@ -521,6 +529,7 @@ services:
       RSS_READER_WEB_AUTH_STATE_FILE: "/app/auth/auth.json"
       RSS_READER_WEB_ENV: "production"
       RSS_READER_WEB_SECURE_COOKIE: "true"
+      RSS_READER_WEB_TRUST_PROXY_HEADERS: "true"
       RSS_READER_WEB_SESSION_TTL_HOURS: "12"
     ports:
       - "8039:8080"
@@ -563,6 +572,7 @@ cargo run -p rssr-web -- --print-password-hash '请换成你自己的强密码'
   - 最稳的是直接使用 `RSS_READER_WEB_PASSWORD_HASH`
   - 最稳的 session secret 方式仍然是由你自己提供一个高熵随机值
   - 也可以先用 `RSS_READER_WEB_PASSWORD` 启动一次，让程序生成并持久化哈希，再移除明文密码
+  - 只有在服务明确运行在你控制的反向代理后面时，才建议设置 `RSS_READER_WEB_TRUST_PROXY_HEADERS=true`
 
 如果你想手动轮换登录配置：
 
@@ -610,9 +620,13 @@ cargo run -p rssr-web -- --print-password-hash '请改成你自己的强密码'
 
 - 部署环境请使用 `RSS_READER_WEB_PASSWORD_HASH`，不要继续保存明文密码
 - `RSS_READER_WEB_SESSION_SECRET` 请使用长度至少 32 的随机字符串
+- `RSS_READER_WEB_TRUST_PROXY_HEADERS` 默认应保持 `false`
+- 只有当 `rssr-web` 部署在你自己可控的反向代理后面时，才建议设为 `true`
 - 生产环境建议同时设置：
   - `RSS_READER_WEB_ENV=production`
   - `RSS_READER_WEB_SECURE_COOKIE=true`
+- 如果启用了反向代理并希望限速按真实客户端 IP 生效，可再设置：
+  - `RSS_READER_WEB_TRUST_PROXY_HEADERS=true`
 - 如果启用了 `RSS_READER_WEB_ENV=production`，但没有开启 `RSS_READER_WEB_SECURE_COOKIE=true`，服务会拒绝启动
 - 本地 HTTP 测试时可保持 `RSS_READER_WEB_ENV=development`
 
