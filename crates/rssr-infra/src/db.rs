@@ -3,7 +3,6 @@ pub mod entry_repository;
 pub mod feed_repository;
 pub mod settings_repository;
 pub mod sqlite_native;
-pub mod sqlite_web;
 pub mod storage_backend;
 
 use sqlx::{Pool, Sqlite, sqlite::SqlitePoolOptions};
