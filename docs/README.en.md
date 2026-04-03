@@ -152,6 +152,8 @@ Build a debug APK:
 ```bash
 dx bundle --platform android --package rssr-app --target aarch64-linux-android --release --debug-symbols false
 python3 scripts/prepare_android_bundle.py target/dx/rssr-app/release/android/app/app/src/main
+cd target/dx/rssr-app/release/android/app
+./gradlew assembleDebug --no-daemon --console=plain
 ```
 
 Output:
@@ -160,7 +162,7 @@ Output:
 target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The extra patch step rewrites the generated Android launcher resources so the packaged app name and icon stay aligned with the desktop release (`RSS-Reader` / `RSSR`).
+The extra patch step rewrites the generated Android launcher resources so the packaged app name and icon stay aligned with the desktop release (`RSS-Reader` / `RSSR`). Because the patch modifies the generated Gradle project, you must rebuild the APK after patching or the old default launcher assets will remain in the packaged output.
 
 ### Run CLI
 

@@ -114,6 +114,10 @@ pub fn App() -> Element {
     });
 
     rsx! {
+        document::Meta {
+            name: "viewport",
+            content: "width=device-width, initial-scale=1, viewport-fit=cover"
+        }
         style { {APP_STYLESHEET} }
         if auth() == WebAuthState::Authenticated && !settings().custom_css.trim().is_empty() {
             style { id: "user-custom-css", "{settings().custom_css}" }

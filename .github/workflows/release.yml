@@ -86,6 +86,16 @@ jobs:
           rm -rf target/dx/rssr-app/release/android
           dx bundle --platform android --package rssr-app --target aarch64-linux-android --release --debug-symbols false
           python3 scripts/prepare_android_bundle.py target/dx/rssr-app/release/android/app/app/src/main
+          cd target/dx/rssr-app/release/android/app
+          ./gradlew assembleDebug --no-daemon --console=plain
+          cd -
+
+      - name: Validate Android debug APK branding
+        run: |
+          APK_PATH="$(find target/dx/rssr-app/release/android -path '*outputs/apk/debug/*.apk' | head -n1)"
+          test -n "$APK_PATH"
+          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" | grep "application-label:'RSS-Reader'"
+          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" | grep 'application-icon-.*rssr_launcher'
 
       - name: Prepare Android release signing
         if: env.ANDROID_RELEASE_READY == 'true'
