@@ -22,7 +22,7 @@ pub fn SettingsPage() -> Element {
         use_signal(|| detect_preset_key(&(theme.settings)().custom_css).to_string());
     let endpoint = use_signal(String::new);
     let remote_path = use_signal(|| "config/rss-reader.json".to_string());
-    let status = use_signal(|| "在这里管理主题、阅读偏好和远端配置交换。".to_string());
+    let status = use_signal(String::new);
     let status_tone = use_signal(|| "info".to_string());
 
     use_resource(move || async move {

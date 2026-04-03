@@ -22,12 +22,10 @@ pub(crate) fn WebDavSettingsCard(
         div { class: "settings-card",
             div { class: "settings-card__header",
                 h3 { "WebDAV 配置交换" }
-                p { class: "settings-card__intro", "这里只负责配置同步，不上传文章正文和本地阅读状态。保持交换边界简单，能减少跨平台故障。" }
             }
             div { class: "settings-card__section",
                 div { class: "settings-card__section-header",
                     h4 { class: "settings-card__section-title", "远端配置端点" }
-                    p { class: "settings-card__section-intro", "填写 WebDAV 基础地址和远端文件路径。这里只有配置，不包含文章库。" }
                 }
                 div { class: "settings-form-grid",
                     div {
@@ -59,7 +57,6 @@ pub(crate) fn WebDavSettingsCard(
             div { class: "settings-card__section",
                 div { class: "settings-card__section-header",
                     h4 { class: "settings-card__section-title", "同步动作" }
-                    p { class: "settings-card__section-intro", "上传会覆盖远端配置，下载会用远端配置替换当前本地配置。" }
                 }
                 div { class: "inline-actions settings-card__actions",
                     button {

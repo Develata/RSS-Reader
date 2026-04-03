@@ -7,7 +7,6 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
         div { class: "settings-card__section",
             div { class: "settings-card__section-header",
                 h4 { class: "settings-card__section-title", "阅读节奏" }
-                p { class: "settings-card__section-intro", "这些设置决定你进入应用后的默认节奏，以及文章与列表的阅读密度。" }
             }
             div { class: "settings-form-grid",
                 div {

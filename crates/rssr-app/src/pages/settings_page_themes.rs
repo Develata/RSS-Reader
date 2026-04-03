@@ -79,7 +79,6 @@ pub(crate) fn ThemeSettingsSections(
         div { class: "settings-card__section settings-card__section--theme-lab",
             div { class: "settings-card__section-header",
                 h4 { class: "settings-card__section-title", "主题实验室" }
-                p { class: "settings-card__section-intro", "直接导入、编辑或导出 CSS。这里优先服务阅读体验，而不是做复杂的主题系统。" }
             }
             label { class: "field-label", r#for: "settings-custom-css", "自定义 CSS" }
             textarea {
@@ -133,7 +132,6 @@ pub(crate) fn ThemeSettingsSections(
         div { class: "settings-card__section",
             div { class: "settings-card__section-header",
                 h4 { class: "settings-card__section-title", "内置主题预设" }
-                p { class: "settings-card__section-intro", "可以快速回到内置风格，也可以把它们当成你自己 CSS 的起点。" }
             }
             div { class: "inline-actions settings-card__actions",
                 select {
@@ -193,7 +191,6 @@ pub(crate) fn ThemeSettingsSections(
                     "载入所选主题"
                 }
             }
-            p { class: "page-intro", "可直接载入内置示例主题，或清空当前自定义 CSS。预置主题会立即生效并自动保存；手动编辑 CSS 后请点击“应用当前 CSS”。" }
             div { class: "preset-grid",
                 button {
                     class: "button secondary",

@@ -68,11 +68,10 @@ pub fn FeedsPage() -> Element {
                 }
             }
             StatusBanner { message: status(), tone: status_tone() }
-            div { class: "feed-workbench",
+            div { class: "feed-workbench feed-workbench--single",
                 div { class: "feed-compose-card",
                     div { class: "feed-compose-card__header",
                         h3 { "新增订阅" }
-                        p { class: "feed-compose-card__intro", "支持常见 RSS / Atom 地址，保存后立即执行首次刷新。" }
                     }
                     div { class: "feed-form",
                         label {
@@ -141,20 +140,14 @@ pub fn FeedsPage() -> Element {
                         }
                     }
                 }
-                div { class: "feed-workbench__note",
-                    h3 { "当前工作方式" }
-                    p { class: "page-intro", "订阅页只做两件事：管理 feed 源，以及做最基础的配置交换。阅读组织和连续阅读留在文章页与阅读页。"}
-                }
             }
             div { class: "exchange-header" ,
                 h3 { "配置交换" }
-                p { class: "page-intro", "配置包 JSON 与 OPML 只交换设置和订阅来源，不处理正文内容。"}
             }
             div { class: "exchange-grid",
                 div { class: "exchange-card",
                     div { class: "settings-card__header",
                         h3 { "配置包 JSON" }
-                        p { class: "settings-card__intro", "适合完整迁移当前设置与订阅列表。"}
                     }
                     label {
                         class: "sr-only",
@@ -217,7 +210,6 @@ pub fn FeedsPage() -> Element {
                 div { class: "exchange-card",
                     div { class: "settings-card__header",
                         h3 { "OPML" }
-                        p { class: "settings-card__intro", "适合与其它阅读器交换订阅来源。"}
                     }
                     label {
                         class: "sr-only",
@@ -283,7 +275,6 @@ pub fn FeedsPage() -> Element {
             } else {
                 div { class: "exchange-header exchange-header--saved",
                     h3 { "已保存订阅" }
-                    p { class: "page-intro", "每个订阅都显示来源地址、本地文章数、最近刷新结果与错误信息。"}
                 }
                 ul { class: "feed-list",
                     for feed in feeds() {

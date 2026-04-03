@@ -12,6 +12,10 @@
   margin: 18px 0 22px;
 }
 
+.feed-workbench--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .feed-compose-card,
 .feed-workbench__note {
   padding: 18px;
