@@ -285,6 +285,19 @@ export RSS_READER_WEB_AUTH_STATE_FILE='/app/auth/auth.json'
 docker compose up -d
 ```
 
+On the first boot, if you only provide:
+
+- `RSS_READER_WEB_USERNAME`
+- `RSS_READER_WEB_PASSWORD`
+
+`rssr-web` will automatically:
+
+- generate an Argon2 password hash
+- generate a random session secret
+- persist both values to `RSS_READER_WEB_AUTH_STATE_FILE`
+
+As long as that auth state file remains available, restarting `rssr-web` or Docker will **not** trigger a first-time credential setup flow again. Restarts simply reload the persisted auth state.
+
 Then open:
 
 ```text
@@ -321,12 +334,20 @@ cargo run -p rssr-web -- --print-password-hash 'replace-this-with-a-strong-passw
 ```
 
 - `rssr-web` can bootstrap an Argon2 hash from `RSS_READER_WEB_PASSWORD` and persist it to `RSS_READER_WEB_AUTH_STATE_FILE`
+- if `RSS_READER_WEB_SESSION_SECRET` is missing, `rssr-web` can also generate and persist a random session secret to `RSS_READER_WEB_AUTH_STATE_FILE`
+- generated values are persisted to the auth state file, but are not written back into `.env`, `compose.yaml`, or your hosting control panel
 - production deployments should still prefer `RSS_READER_WEB_PASSWORD_HASH`, or remove the plaintext password after the first successful bootstrap
 - `RSS_READER_WEB_SESSION_SECRET` should be a random string with at least 32 characters
 - production deployments should also set:
   - `RSS_READER_WEB_ENV=production`
   - `RSS_READER_WEB_SECURE_COOKIE=true`
 - local HTTP testing can keep `RSS_READER_WEB_ENV=development`
+
+To rotate credentials later:
+
+1. change `RSS_READER_WEB_USERNAME` to change the login name
+2. change `RSS_READER_WEB_PASSWORD` or `RSS_READER_WEB_PASSWORD_HASH` to replace the password
+3. change `RSS_READER_WEB_SESSION_SECRET`, or delete `RSS_READER_WEB_AUTH_STATE_FILE`, to invalidate existing sessions
 
 ### Local image build
 

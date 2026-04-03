@@ -401,6 +401,19 @@ RSS_READER_PORT=8039
 docker compose up -d
 ```
 
+首次启动时，如果你只提供：
+
+- `RSS_READER_WEB_USERNAME`
+- `RSS_READER_WEB_PASSWORD`
+
+程序会自动做两件事，并写入 `RSS_READER_WEB_AUTH_STATE_FILE`：
+
+- 生成 Argon2 密码哈希
+- 生成随机 `session secret`
+
+后续只要这个认证状态文件还在，单纯重启 `rssr-web` / Docker **不会**触发“首次登录重新设置账号密码”。
+重启只会重新读取环境变量，并继续使用已经持久化的哈希与 secret。
+
 默认访问：
 
 ```text
@@ -445,6 +458,13 @@ http://127.0.0.1:8039
     - 自定义镜像名
     - 默认 `ghcr.io/develata/rss-reader:latest`
 
+额外说明：
+
+- `RSS_READER_WEB_PASSWORD_HASH` 和 `RSS_READER_WEB_PASSWORD` 是二选一
+- 如果两者都不填，但认证状态文件里已经有哈希，程序会继续使用那个已持久化哈希
+- `RSS_READER_WEB_SESSION_SECRET` 如果不填，程序会优先复用认证状态文件里的 secret；只有首次缺失时才会自动生成
+- 程序会把生成结果写入认证状态文件，但**不会**自动回填到 `.env`、`compose.yaml` 或容器平台变量面板
+
 ### 本地开发版 compose 模板
 
 如果你只是想尽快在本地跑起来，可以直接使用明文密码：
@@ -476,6 +496,7 @@ volumes:
 - 首次启动时，程序会自动生成 Argon2 哈希并写入 `RSS_READER_WEB_AUTH_STATE_FILE`
 - 首次启动时，如果你没有填写 `RSS_READER_WEB_SESSION_SECRET`，程序也会自动生成一个随机 secret 并写入同一个状态文件
 - 之后即使移除 `RSS_READER_WEB_PASSWORD`，只要认证状态文件和卷还在，仍然可以继续登录
+- 后续重启容器不会再次进入“首次设置”流程；除非你删除认证状态文件或显式更换用户名/密码/secret
 - 更稳的做法是：
   - 首次启动成功后，删除明文 `RSS_READER_WEB_PASSWORD`
   - 只保留认证状态文件或改成显式 `RSS_READER_WEB_PASSWORD_HASH`
@@ -536,6 +557,20 @@ cargo run -p rssr-web -- --print-password-hash '请换成你自己的强密码'
   - 最稳的是直接使用 `RSS_READER_WEB_PASSWORD_HASH`
   - 最稳的 session secret 方式仍然是由你自己提供一个高熵随机值
   - 也可以先用 `RSS_READER_WEB_PASSWORD` 启动一次，让程序生成并持久化哈希，再移除明文密码
+
+如果你想手动轮换登录配置：
+
+1. 改用户名：
+   - 修改 `RSS_READER_WEB_USERNAME`
+   - 重启服务
+2. 改密码：
+   - 重新填写 `RSS_READER_WEB_PASSWORD`
+   - 或生成新的 `RSS_READER_WEB_PASSWORD_HASH`
+   - 重启服务
+3. 让所有旧登录态失效：
+   - 修改 `RSS_READER_WEB_SESSION_SECRET`
+   - 或删除 `RSS_READER_WEB_AUTH_STATE_FILE`
+   - 重启服务
 
 也支持通过环境变量覆盖镜像名和端口：
 
