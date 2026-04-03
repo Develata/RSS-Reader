@@ -349,12 +349,48 @@ docker compose up -d
 
 ### 直接拉取 GitHub 镜像运行
 
-默认的 [docker-compose.yml](./docker-compose.yml) 是“直接拉取 GitHub Container Registry 镜像”的部署模板，不会在本地重新构建镜像：
+默认的 [docker-compose.yml](./docker-compose.yml) 是“直接拉取 GitHub Container Registry 镜像”的部署模板，不会在本地重新构建镜像。
+
+如果你是从零开始在服务器上部署，最实用的方式是直接准备一个 `.env` 和一个 `compose.yaml`。
+
+### 最小 `compose.yaml` 模板
+
+```yaml
+services:
+  rss-reader:
+    image: ghcr.io/develata/rss-reader:latest
+    environment:
+      RSS_READER_WEB_USERNAME: ${RSS_READER_WEB_USERNAME}
+      RSS_READER_WEB_PASSWORD_HASH: ${RSS_READER_WEB_PASSWORD_HASH}
+      RSS_READER_WEB_SESSION_SECRET: ${RSS_READER_WEB_SESSION_SECRET}
+      RSS_READER_WEB_ENV: ${RSS_READER_WEB_ENV:-development}
+      RSS_READER_WEB_SECURE_COOKIE: ${RSS_READER_WEB_SECURE_COOKIE:-false}
+      RSS_READER_WEB_SESSION_TTL_HOURS: ${RSS_READER_WEB_SESSION_TTL_HOURS:-12}
+    ports:
+      - "${RSS_READER_PORT:-8039}:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+```
+
+### 配套 `.env` 模板
+
+```dotenv
+RSS_READER_WEB_USERNAME=admin
+RSS_READER_WEB_PASSWORD_HASH=$argon2id$...
+RSS_READER_WEB_SESSION_SECRET=replace-with-a-random-secret-at-least-32-chars
+RSS_READER_WEB_ENV=development
+RSS_READER_WEB_SECURE_COOKIE=false
+RSS_READER_PORT=8039
+```
+
+准备好这两个文件后，直接启动：
 
 ```bash
-export RSS_READER_WEB_USERNAME=admin
-export RSS_READER_WEB_PASSWORD_HASH='请替换成 Argon2 密码哈希'
-export RSS_READER_WEB_SESSION_SECRET='至少32字符的随机长串'
 docker compose up -d
 ```
 
@@ -363,6 +399,111 @@ docker compose up -d
 ```text
 http://127.0.0.1:8039
 ```
+
+### 这些环境变量分别是什么
+
+`rssr-web` 常用环境变量可以分成三类：
+
+- 必填：
+  - `RSS_READER_WEB_USERNAME`
+    - Web 登录用户名
+  - `RSS_READER_WEB_SESSION_SECRET`
+    - 用来签发和校验会话 cookie 的密钥
+    - 至少 32 个字符
+- 二选一：
+  - `RSS_READER_WEB_PASSWORD_HASH`
+    - Argon2 密码哈希
+    - 推荐正式部署使用
+  - `RSS_READER_WEB_PASSWORD`
+    - 明文密码
+    - 仅建议本地开发 / 临时测试使用
+- 可选：
+  - `RSS_READER_WEB_ENV`
+    - `development` 或 `production`
+    - 默认 `development`
+  - `RSS_READER_WEB_SECURE_COOKIE`
+    - `true` 时 cookie 只通过 HTTPS 发送
+    - 默认 `false`
+  - `RSS_READER_WEB_SESSION_TTL_HOURS`
+    - 登录会话有效期，单位小时
+    - 默认 `12`
+  - `RSS_READER_PORT`
+    - Docker 对外暴露端口
+    - 默认 `8039`
+  - `RSS_READER_IMAGE`
+    - 自定义镜像名
+    - 默认 `ghcr.io/develata/rss-reader:latest`
+
+### 本地开发版 compose 模板
+
+如果你只是想尽快在本地跑起来，可以直接使用明文密码：
+
+```yaml
+services:
+  rss-reader:
+    image: ghcr.io/develata/rss-reader:latest
+    environment:
+      RSS_READER_WEB_USERNAME: admin
+      RSS_READER_WEB_PASSWORD: adminadmin
+      RSS_READER_WEB_SESSION_SECRET: replace-with-a-random-secret-at-least-32-chars
+      RSS_READER_WEB_ENV: development
+      RSS_READER_WEB_SECURE_COOKIE: "false"
+      RSS_READER_WEB_SESSION_TTL_HOURS: "12"
+    ports:
+      - "8039:8080"
+    restart: unless-stopped
+```
+
+说明：
+
+- 这种方式只适合本地开发、临时测试、局域网自用
+- 程序会直接使用明文密码校验登录
+- 它**不会自动把明文密码写回成哈希配置**
+
+### 正式部署版 compose 模板
+
+如果你要正式部署到服务器，推荐只使用 Argon2 哈希：
+
+```yaml
+services:
+  rss-reader:
+    image: ghcr.io/develata/rss-reader:latest
+    environment:
+      RSS_READER_WEB_USERNAME: admin
+      RSS_READER_WEB_PASSWORD_HASH: "$argon2id$..."
+      RSS_READER_WEB_SESSION_SECRET: "replace-with-a-random-secret-at-least-32-chars"
+      RSS_READER_WEB_ENV: "production"
+      RSS_READER_WEB_SECURE_COOKIE: "true"
+      RSS_READER_WEB_SESSION_TTL_HOURS: "12"
+    ports:
+      - "8039:8080"
+    restart: unless-stopped
+```
+
+如果你只想直接填密码，然后让程序自动生成哈希，需要注意：
+
+- 当前 `rssr-web` **不支持**“启动时自动把明文密码转成哈希并写回配置”
+- 正式部署前，仍然需要先手动生成一次哈希：
+
+```bash
+cargo run -p rssr-web -- --print-password-hash '请换成你自己的强密码'
+```
+
+- 然后把输出粘贴到 `RSS_READER_WEB_PASSWORD_HASH`
+
+原因很简单：
+
+- 服务可以生成哈希
+- 但它并不知道你希望把哈希写回哪里
+  - `.env`
+  - `compose.yaml`
+  - CI/CD secret
+  - 容器平台变量面板
+
+所以现在的设计是：
+
+- 本地开发：可以直接用 `RSS_READER_WEB_PASSWORD`
+- 正式部署：手动生成哈希，使用 `RSS_READER_WEB_PASSWORD_HASH`
 
 也支持通过环境变量覆盖镜像名和端口：
 
@@ -417,42 +558,6 @@ docker build -t rss-reader-web .
 ```
 
 容器内会带基础健康检查，适合本地部署和简单服务器场景。
-
-### `docker-compose.yml` 模板
-
-下面这个模板适合“直接拉取 GitHub 生成的镜像”：
-
-```yaml
-services:
-  rss-reader:
-    image: ghcr.io/develata/rss-reader:latest
-    environment:
-      RSS_READER_WEB_USERNAME: admin
-      RSS_READER_WEB_PASSWORD_HASH: "$argon2id$..."
-      RSS_READER_WEB_SESSION_SECRET: "replace-with-a-random-secret-at-least-32-chars"
-      RSS_READER_WEB_ENV: "development"
-      RSS_READER_WEB_SECURE_COOKIE: "false"
-    ports:
-      - "8039:8080"
-    restart: unless-stopped
-```
-
-如果你希望自定义端口：
-
-```yaml
-services:
-  rss-reader:
-    image: ghcr.io/develata/rss-reader:latest
-    environment:
-      RSS_READER_WEB_USERNAME: admin
-      RSS_READER_WEB_PASSWORD_HASH: "$argon2id$..."
-      RSS_READER_WEB_SESSION_SECRET: "replace-with-a-random-secret-at-least-32-chars"
-      RSS_READER_WEB_ENV: "production"
-      RSS_READER_WEB_SECURE_COOKIE: "true"
-    ports:
-      - "8090:8080"
-    restart: unless-stopped
-```
 
 ### 什么时候用 Docker，什么时候不用
 
