@@ -250,16 +250,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     div { class: "reading-header reading-header--entries",
                         div { class: "reading-header__row",
                             h2 { if feed_id.is_some() { "订阅文章" } else { "文章" } }
-                            button {
-                                class: "button secondary entry-controls-toggle",
-                                "data-action": if controls_hidden() { "show-entry-controls" } else { "hide-entry-controls" },
-                                onclick: move |_| {
-                                    let next = !controls_hidden();
-                                    remember_entry_controls_hidden(next);
-                                    controls_hidden.set(next);
-                                },
-                                if controls_hidden() { "显示筛选与组织" } else { "收起筛选与组织" }
-                            }
                         }
                         p {
                             class: "page-intro",
@@ -281,16 +271,17 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                         }
                     }
                     if controls_hidden() {
-                        div { class: "entry-controls-reveal",
-                            span { class: "entry-controls-reveal__label", "阅读控制已收起" }
+                        div { class: "entry-controls-reveal entry-controls-reveal--compact",
                             button {
-                                class: "button secondary",
+                                class: "entry-controls-toggle entry-controls-toggle--flat",
                                 "data-action": "show-entry-controls",
+                                title: "显示筛选与组织",
+                                "aria-label": "显示筛选与组织",
                                 onclick: move |_| {
                                     remember_entry_controls_hidden(false);
                                     controls_hidden.set(false);
                                 },
-                                "显示筛选与组织"
+                                span { class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--down", aria_hidden: "true" }
                             }
                         }
                     } else {
@@ -389,6 +380,19 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 StatusBanner {
                                     message: format!("当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。", archived_count),
                                     tone: "info".to_string()
+                                }
+                            }
+                            div { class: "entry-controls-reveal entry-controls-reveal--compact",
+                                button {
+                                    class: "entry-controls-toggle entry-controls-toggle--flat",
+                                    "data-action": "hide-entry-controls",
+                                    title: "收起筛选与组织",
+                                    "aria-label": "收起筛选与组织",
+                                    onclick: move |_| {
+                                        remember_entry_controls_hidden(true);
+                                        controls_hidden.set(true);
+                                    },
+                                    span { class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--up", aria_hidden: "true" }
                                 }
                             }
                         }

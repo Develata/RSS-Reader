@@ -165,8 +165,7 @@
     flex-direction: column;
   }
 
-  .entry-controls-toggle,
-  .entry-controls-reveal .button {
+  .entry-controls-reveal .entry-controls-toggle {
     width: 100%;
   }
 
