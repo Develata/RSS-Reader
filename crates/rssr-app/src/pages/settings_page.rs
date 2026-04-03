@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
 use super::{
-    settings_page_appearance::{AppearanceSettingsCard, detect_preset_key},
-    settings_page_sync::WebDavSettingsCard,
+    settings_page_appearance::AppearanceSettingsCard, settings_page_sync::WebDavSettingsCard,
+    settings_page_themes::detect_preset_key,
 };
 use crate::{
     app::AppNav, bootstrap::AppServices, components::status_banner::StatusBanner,

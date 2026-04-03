@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use rssr_domain::UserSettings;
 
-use super::settings_page_appearance::detect_preset_key;
+use super::settings_page_themes::detect_preset_key;
 use crate::{
     bootstrap::AppServices,
     status::{set_status_error, set_status_info},
