@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use rssr_domain::{ListDensity, UserSettings};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct ThemeController {
     pub settings: Signal<UserSettings>,
 }
