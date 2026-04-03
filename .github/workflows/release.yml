@@ -14,6 +14,9 @@ on:
 permissions:
   contents: write
 
+env:
+  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
 jobs:
   build-android:
     runs-on: ubuntu-latest
@@ -28,6 +31,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       - name: Install Java
         uses: actions/setup-java@v4
@@ -133,6 +138,17 @@ jobs:
           cd target/dx/rssr-app/release/android/app
           ./gradlew assembleRelease bundleRelease --no-daemon --console=plain
 
+      - name: Validate Android release branding
+        if: env.ANDROID_RELEASE_READY == 'true'
+        run: |
+          RELEASE_APK_PATH="$(find target/dx/rssr-app/release/android -path '*outputs/apk/release/*.apk' | head -n1)"
+          RELEASE_AAB_PATH="$(find target/dx/rssr-app/release/android -path '*outputs/bundle/release/*.aab' | head -n1)"
+          test -n "$RELEASE_APK_PATH"
+          test -n "$RELEASE_AAB_PATH"
+          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$RELEASE_APK_PATH" | grep "application-label:'RSS-Reader'"
+          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$RELEASE_APK_PATH" | grep 'application-icon-.*rssr_launcher'
+          unzip -l "$RELEASE_AAB_PATH" | grep 'rssr_launcher'
+
       - name: Archive Android artifacts
         run: |
           mkdir -p release-assets
@@ -156,6 +172,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -188,6 +206,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       - name: Install system dependencies
         run: |
@@ -229,6 +249,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -268,6 +290,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -277,17 +301,21 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Build macOS binaries
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli --version 0.7.3 --locked
+
+      - name: Build macOS app bundle and CLI
         run: |
-          cargo build --release --target ${{ matrix.target }} -p rssr-app
+          rm -rf target/macos-bundle/${{ matrix.suffix }}
+          dx bundle --platform desktop --package-types macos --package rssr-app --target ${{ matrix.target }} --release --out-dir target/macos-bundle/${{ matrix.suffix }}
           cargo build --release --target ${{ matrix.target }} -p rssr-cli
 
-      - name: Archive macOS binaries
+      - name: Archive macOS artifacts
         run: |
           mkdir -p release-assets
-          mkdir -p staging/RSS-Reader-${{ matrix.suffix }}
-          cp target/${{ matrix.target }}/release/rssr-app staging/RSS-Reader-${{ matrix.suffix }}/RSS-Reader
-          tar -C staging/RSS-Reader-${{ matrix.suffix }} -czf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz RSS-Reader
+          APP_BUNDLE_PATH="$(find target/macos-bundle/${{ matrix.suffix }} -maxdepth 1 -name 'RSS-Reader.app' | head -n1)"
+          test -n "$APP_BUNDLE_PATH"
+          tar -C "$(dirname "$APP_BUNDLE_PATH")" -czf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz RSS-Reader.app
           tar -C target/${{ matrix.target }}/release -czf release-assets/rssr-cli-${{ matrix.suffix }}.tar.gz rssr-cli
 
       - name: Upload macOS artifacts
@@ -314,7 +342,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
-          target_commitish: ${{ github.sha }}
           files: |
             release-assets/**/*.aab
             release-assets/**/*.apk
