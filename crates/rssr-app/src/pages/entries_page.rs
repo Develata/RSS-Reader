@@ -255,8 +255,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             class: "page-intro",
                             if feed_id.is_some() {
                                 "当前只显示所选订阅的文章。你仍然可以按时间或按来源组织当前结果，然后继续进入阅读页。"
-                            } else {
-                                "文章默认按时间组织展示。你也可以切换为按来源浏览，然后继续进入阅读页。"
                             }
                         }
                     }
