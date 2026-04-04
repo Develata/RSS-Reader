@@ -1,10 +1,9 @@
-use std::{
-    collections::HashSet,
-    sync::{Arc, Mutex, atomic::AtomicBool},
-};
+use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 #[path = "web/config.rs"]
 mod config;
+#[path = "web/exchange.rs"]
+mod exchange;
 #[path = "web/feed.rs"]
 mod feed;
 #[path = "web/query.rs"]
@@ -16,20 +15,18 @@ mod state;
 
 use anyhow::Context;
 use js_sys::Date;
-use reqwest::StatusCode;
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::{
-    ConfigFeed, ConfigPackage, Entry, EntryQuery, EntrySummary, FeedSummary, ReadFilter,
-    StarredFilter, UserSettings, normalize_feed_url,
-};
+use rssr_domain::{Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings, normalize_feed_url};
 use time::OffsetDateTime;
 use tokio::sync::OnceCell;
 use url::Url;
 
 use self::{
-    config::{
-        decode_opml, encode_opml, import_field, remote_url, validate_config_package,
-        validate_settings,
+    config::validate_settings,
+    exchange::{
+        export_config_json as export_exchange_json, export_opml as export_exchange_opml,
+        import_config_json as import_exchange_json, import_opml as import_exchange_opml,
+        pull_remote_config as pull_exchange_remote, push_remote_config as push_exchange_remote,
     },
     query::{
         get_entry as query_get_entry, list_entries as query_list_entries,
@@ -227,136 +224,19 @@ impl AppServices {
     }
 
     pub async fn export_config_json(&self) -> anyhow::Result<String> {
-        Ok(serde_json::to_string_pretty(&self.export_config()?)?)
+        export_exchange_json(self)
     }
 
     pub async fn import_config_json(&self, raw: &str) -> anyhow::Result<()> {
-        let package: ConfigPackage = serde_json::from_str(raw)?;
-        validate_config_package(&package)?;
-
-        let snapshot = {
-            let mut state = self.state.lock().expect("lock state");
-            let current_urls = state
-                .feeds
-                .iter()
-                .filter(|feed| !feed.is_deleted)
-                .map(|feed| (feed.id, feed.url.clone()))
-                .collect::<Vec<_>>();
-            let mut imported_urls = HashSet::new();
-
-            for feed in package.feeds {
-                let url = normalize_feed_url(
-                    &Url::parse(&feed.url)
-                        .with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
-                );
-                imported_urls.insert(url.to_string());
-                let now = web_now_utc();
-                if let Some(existing) =
-                    state.feeds.iter_mut().find(|current| current.url == url.as_str())
-                {
-                    existing.title = import_field(feed.title, true);
-                    existing.folder = import_field(feed.folder, true);
-                    existing.is_deleted = false;
-                    existing.updated_at = now;
-                } else {
-                    state.next_feed_id += 1;
-                    let feed_id = state.next_feed_id;
-                    state.feeds.push(PersistedFeed {
-                        id: feed_id,
-                        url: url.to_string(),
-                        title: feed.title,
-                        site_url: None,
-                        description: None,
-                        icon_url: None,
-                        folder: feed.folder,
-                        etag: None,
-                        last_modified: None,
-                        last_fetched_at: None,
-                        last_success_at: None,
-                        fetch_error: None,
-                        is_deleted: false,
-                        created_at: now,
-                        updated_at: now,
-                    });
-                }
-            }
-
-            let removed_feed_ids = current_urls
-                .into_iter()
-                .filter_map(|(id, url)| match Url::parse(&url) {
-                    Ok(parsed) => {
-                        let normalized = normalize_feed_url(&parsed);
-                        (!imported_urls.contains(normalized.as_str())).then_some(id)
-                    }
-                    Err(error) => {
-                        tracing::warn!(
-                            feed_id = id,
-                            invalid_url = %url,
-                            error = %error,
-                            "导入配置时发现损坏的已持久化订阅 URL，已将其标记为移除"
-                        );
-                        Some(id)
-                    }
-                })
-                .collect::<Vec<_>>();
-            for feed_id in &removed_feed_ids {
-                if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == *feed_id) {
-                    feed.is_deleted = true;
-                }
-            }
-            state.entries.retain(|entry| !removed_feed_ids.contains(&entry.feed_id));
-            state.settings = package.settings;
-            state.clone()
-        };
-        save_state_snapshot(snapshot)
+        import_exchange_json(self, raw)
     }
 
     pub async fn export_opml(&self) -> anyhow::Result<String> {
-        encode_opml(&self.export_config()?.feeds)
+        export_exchange_opml(self)
     }
 
     pub async fn import_opml(&self, raw: &str) -> anyhow::Result<()> {
-        let feeds = decode_opml(raw)?;
-        let snapshot = {
-            let mut state = self.state.lock().expect("lock state");
-            for feed in feeds {
-                let url = normalize_feed_url(
-                    &Url::parse(&feed.url)
-                        .with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
-                );
-                let now = web_now_utc();
-                if let Some(existing) =
-                    state.feeds.iter_mut().find(|current| current.url == url.as_str())
-                {
-                    existing.title = import_field(feed.title, true);
-                    existing.folder = import_field(feed.folder, true);
-                    existing.is_deleted = false;
-                    existing.updated_at = now;
-                } else {
-                    state.next_feed_id += 1;
-                    let feed_id = state.next_feed_id;
-                    state.feeds.push(PersistedFeed {
-                        id: feed_id,
-                        url: url.to_string(),
-                        title: feed.title,
-                        site_url: None,
-                        description: None,
-                        icon_url: None,
-                        folder: feed.folder,
-                        etag: None,
-                        last_modified: None,
-                        last_fetched_at: None,
-                        last_success_at: None,
-                        fetch_error: None,
-                        is_deleted: false,
-                        created_at: now,
-                        updated_at: now,
-                    });
-                }
-            }
-            state.clone()
-        };
-        save_state_snapshot(snapshot)
+        import_exchange_opml(self, raw)
     }
 
     pub async fn push_remote_config(
@@ -364,17 +244,7 @@ impl AppServices {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<()> {
-        let url = remote_url(endpoint, remote_path)?;
-        self.client
-            .put(url)
-            .header("content-type", "application/json")
-            .body(self.export_config_json().await?)
-            .send()
-            .await
-            .context("上传配置到 WebDAV 失败")?
-            .error_for_status()
-            .context("WebDAV 上传失败")?;
-        Ok(())
+        push_exchange_remote(self, endpoint, remote_path).await
     }
 
     pub async fn pull_remote_config(
@@ -382,37 +252,7 @@ impl AppServices {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<bool> {
-        let response = self
-            .client
-            .get(remote_url(endpoint, remote_path)?)
-            .send()
-            .await
-            .context("从 WebDAV 下载配置失败")?;
-        if response.status() == StatusCode::NOT_FOUND {
-            return Ok(false);
-        }
-        let raw = response.error_for_status().context("WebDAV 下载失败")?.text().await?;
-        self.import_config_json(&raw).await?;
-        Ok(true)
-    }
-
-    fn export_config(&self) -> anyhow::Result<ConfigPackage> {
-        let state = self.state.lock().expect("lock state");
-        Ok(ConfigPackage {
-            version: 1,
-            exported_at: web_now_utc(),
-            feeds: state
-                .feeds
-                .iter()
-                .filter(|feed| !feed.is_deleted)
-                .map(|feed| ConfigFeed {
-                    url: feed.url.clone(),
-                    title: feed.title.clone(),
-                    folder: feed.folder.clone(),
-                })
-                .collect(),
-            settings: state.settings.clone(),
-        })
+        pull_exchange_remote(self, endpoint, remote_path).await
     }
 }
 

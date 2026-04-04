@@ -20,7 +20,7 @@ pub fn FeedsPage() -> Element {
     let mut feeds = use_signal(Vec::<FeedSummary>::new);
     let mut feed_count = use_signal(|| 0_usize);
     let mut entry_count = use_signal(|| 0_usize);
-    let status = use_signal(|| "输入一个 feed URL 后点击添加。".to_string());
+    let status = use_signal(String::new);
     let status_tone = use_signal(|| "info".to_string());
 
     use_resource(move || async move {
