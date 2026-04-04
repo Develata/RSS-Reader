@@ -1,16 +1,21 @@
 use dioxus::prelude::*;
 use rssr_domain::{
-    EntryGroupingPreference, EntryQuery, EntrySummary, FeedSummary, ReadFilter, StarredFilter,
-    StartupView, UserSettings, is_entry_archived,
+    EntryQuery, EntrySummary, FeedSummary, ReadFilter, StarredFilter, StartupView, UserSettings,
+    is_entry_archived,
 };
 use std::collections::BTreeSet;
-use time::{OffsetDateTime, UtcOffset, macros::format_description};
+use time::OffsetDateTime;
 
+use super::entries_page_cards::render_entry_card;
+use super::entries_page_controls::{
+    EntryControlsProps, EntryGroupingMode, entry_grouping_mode_from_preference,
+    grouping_mode_preference, initial_entry_controls_hidden, map_selected_feed_urls_to_ids,
+    render_entry_controls, render_entry_directory,
+};
 use super::entries_page_groups::{
     build_directory_months, build_directory_sources, build_group_nav_items, build_month_nav_items,
     group_anchor_id, group_entries_by_source_tree, group_entries_by_time_tree,
 };
-use crate::components::entry_filters::EntryFilters;
 use crate::{
     app::{AppNav, AppUiState},
     bootstrap::AppServices,
@@ -19,12 +24,6 @@ use crate::{
     router::AppRoute,
     status::{set_status_error, set_status_info},
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum EntryGroupingMode {
-    Time,
-    Source,
-}
 
 #[component]
 pub fn StartupPage() -> Element {
@@ -96,7 +95,7 @@ pub fn FeedEntriesPage(feed_id: i64) -> Element {
 fn entries_page_content(feed_id: Option<i64>) -> Element {
     use_mobile_back_navigation(feed_id.map(|_| AppRoute::FeedsPage {}));
 
-    let mut ui = use_context::<AppUiState>();
+    let ui = use_context::<AppUiState>();
     let mut entries = use_signal(Vec::<EntrySummary>::new);
     let mut feeds = use_signal(Vec::<FeedSummary>::new);
     let mut read_filter = use_signal(ReadFilter::default);
@@ -107,9 +106,9 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
         entry_grouping_mode_from_preference(UserSettings::default().entry_grouping_mode)
     });
     let mut archive_after_months = use_signal(|| UserSettings::default().archive_after_months);
-    let mut mobile_directory_open = use_signal(|| false);
-    let mut expanded_directory_sources = use_signal(BTreeSet::<String>::new);
-    let mut controls_hidden = use_signal(initial_entry_controls_hidden);
+    let mobile_directory_open = use_signal(|| false);
+    let expanded_directory_sources = use_signal(BTreeSet::<String>::new);
+    let controls_hidden = use_signal(initial_entry_controls_hidden);
     let reload_tick = use_signal(|| 0_u64);
     let status = use_signal(|| "正在加载文章列表…".to_string());
     let status_tone = use_signal(|| "info".to_string());
@@ -266,139 +265,23 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             }
                         }
                     }
-                    if controls_hidden() {
-                        div { class: "entry-controls-reveal entry-controls-reveal--compact",
-                            button {
-                                class: "entry-controls-toggle entry-controls-toggle--flat",
-                                "data-action": "show-entry-controls",
-                                title: "显示筛选与组织",
-                                "aria-label": "显示筛选与组织",
-                                onclick: move |_| {
-                                    remember_entry_controls_hidden(false);
-                                    controls_hidden.set(false);
-                                },
-                                span { class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--down", aria_hidden: "true" }
-                            }
-                        }
-                    } else {
-                        div { class: "entry-controls-panel",
-                            div { class: "entry-organize-bar entry-organize-bar--airy",
-                                label { class: "field-label", r#for: "entry-grouping-mode", "组织方式" }
-                                select {
-                                    id: "entry-grouping-mode",
-                                    class: "select-input",
-                                    "data-action": if grouping_mode() == EntryGroupingMode::Time { "group-by-time" } else { "group-by-source" },
-                                    value: match grouping_mode() {
-                                        EntryGroupingMode::Time => "time",
-                                        EntryGroupingMode::Source => "source",
-                                    },
-                                    onchange: move |event| {
-                                        grouping_mode.set(match event.value().as_str() {
-                                            "source" => EntryGroupingMode::Source,
-                                            _ => EntryGroupingMode::Time,
-                                        });
-                                    },
-                                    option { value: "time", "按时间" }
-                                    option { value: "source", "按来源" }
-                                }
-                                label { class: "entry-filters__toggle",
-                                    input {
-                                        r#type: "checkbox",
-                                        "data-action": "toggle-archived",
-                                        checked: show_archived(),
-                                        onchange: move |event| show_archived.set(event.checked())
-                                    }
-                                    span { "显示已归档文章" }
-                                }
-                                p { class: "page-intro",
-                                    if show_archived() {
-                                        "当前同时显示归档文章。"
-                                    } else {
-                                        "默认隐藏超过 {archive_after_months()} 个月的归档文章。"
-                                    }
-                                }
-                            }
-                            div { class: "entry-overview entry-overview--airy",
-                                div { class: "entry-overview__metric",
-                                    span { class: "entry-overview__label", "当前结果" }
-                                    strong { class: "entry-overview__value", "{visible_entries.len()}" }
-                                }
-                                div { class: "entry-overview__metric",
-                                    span { class: "entry-overview__label", "归档文章" }
-                                    strong { class: "entry-overview__value", "{archived_count}" }
-                                }
-                                div { class: "entry-overview__metric entry-overview__metric--hint",
-                                    span { class: "entry-overview__label", "当前组织" }
-                                    strong {
-                                        class: "entry-overview__value",
-                                        if grouping_mode() == EntryGroupingMode::Time { "按时间" } else { "按来源" }
-                                    }
-                                }
-                            }
-                            if !group_nav_items.is_empty() {
-                                button {
-                                    class: "button secondary entry-mobile-directory-toggle",
-                                    "data-action": if mobile_directory_open() { "close-entry-directory" } else { "open-entry-directory" },
-                                    onclick: move |_| mobile_directory_open.set(!mobile_directory_open()),
-                                    if mobile_directory_open() { "收起目录" } else { "目录" }
-                                }
-                                nav {
-                                    class: if mobile_directory_open() {
-                                        "entry-top-directory is-open"
-                                    } else {
-                                        "entry-top-directory"
-                                    },
-                                    "aria-label": "文章目录",
-                                    for item in &group_nav_items {
-                                        button {
-                                            class: "entry-top-directory__chip",
-                                            r#type: "button",
-                                            onclick: {
-                                                let anchor_id = item.anchor_id.clone();
-                                                move |_| {
-                                                    scroll_to_entry_group(&anchor_id);
-                                                    mobile_directory_open.set(false);
-                                                }
-                                            },
-                                            span { class: "entry-top-directory__title", "{item.title}" }
-                                            span { class: "entry-top-directory__meta", "{item.subtitle}" }
-                                        }
-                                    }
-                                }
-                            }
-                            EntryFilters {
-                                search: (ui.entry_search)(),
-                                read_filter: read_filter(),
-                                starred_filter: starred_filter(),
-                                available_sources: source_filter_options.clone(),
-                                selected_feed_urls: selected_feed_urls(),
-                                on_search: move |value| ui.entry_search.set(value),
-                                on_change_read_filter: move |value| read_filter.set(value),
-                                on_change_starred_filter: move |value| starred_filter.set(value),
-                                on_change_selected_feed_urls: move |value| selected_feed_urls.set(value),
-                            }
-                            StatusBanner { message: status(), tone: status_tone() }
-                            if archived_count > 0 && !show_archived() {
-                                StatusBanner {
-                                    message: format!("当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。", archived_count),
-                                    tone: "info".to_string()
-                                }
-                            }
-                            div { class: "entry-controls-reveal entry-controls-reveal--compact",
-                                button {
-                                    class: "entry-controls-toggle entry-controls-toggle--flat",
-                                    "data-action": "hide-entry-controls",
-                                    title: "收起筛选与组织",
-                                    "aria-label": "收起筛选与组织",
-                                    onclick: move |_| {
-                                        remember_entry_controls_hidden(true);
-                                        controls_hidden.set(true);
-                                    },
-                                    span { class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--up", aria_hidden: "true" }
-                                }
-                            }
-                        }
-                    }
+                    { render_entry_controls(EntryControlsProps {
+                        ui,
+                        controls_hidden,
+                        grouping_mode,
+                        show_archived,
+                        archive_after_months,
+                        visible_entries: &visible_entries,
+                        archived_count,
+                        source_filter_options: &source_filter_options,
+                        read_filter,
+                        starred_filter,
+                        selected_feed_urls,
+                        mobile_directory_open,
+                        group_nav_items: &group_nav_items,
+                        status,
+                        status_tone,
+                    }) }
                     if entries().is_empty() {
                         StatusBanner {
                             message: if feed_id.is_some() {
@@ -472,224 +355,12 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     }
                 }
                 if !group_nav_items.is_empty() {
-                    aside { class: "entry-directory-rail",
-                        h3 { class: "entry-directory-rail__title", "目录" }
-                        if grouping_mode() == EntryGroupingMode::Time {
-                            nav { class: "entry-directory-rail__nav", "aria-label": "文章目录导航",
-                                for month in directory_months {
-                                    div { class: "entry-directory-rail__section", key: "{month.anchor_id}",
-                                        button {
-                                            class: "entry-directory-rail__link entry-directory-rail__link--month",
-                                            r#type: "button",
-                                            onclick: {
-                                                let anchor_id = month.anchor_id.clone();
-                                                move |_| scroll_to_entry_group(&anchor_id)
-                                            },
-                                            span { class: "entry-directory-rail__link-title", "{month.title}" }
-                                            span { class: "entry-directory-rail__link-meta", "{month.subtitle}" }
-                                        }
-                                        div { class: "entry-directory-rail__children",
-                                            for date in month.dates {
-                                                button {
-                                                    class: "entry-directory-rail__link entry-directory-rail__link--date",
-                                                    r#type: "button",
-                                                    onclick: {
-                                                        let anchor_id = date.anchor_id.clone();
-                                                        move |_| scroll_to_entry_group(&anchor_id)
-                                                    },
-                                                    span { class: "entry-directory-rail__link-title", "{date.title}" }
-                                                    span { class: "entry-directory-rail__link-meta", "{date.subtitle}" }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            nav { class: "entry-directory-rail__nav", "aria-label": "文章目录导航",
-                                for source in directory_sources {
-                                    {
-                                        let anchor_id = source.anchor_id.clone();
-                                        let is_open = expanded_directory_sources().contains(&anchor_id);
-                                        let toggle_anchor = anchor_id.clone();
-                                        rsx! {
-                                            div { class: "entry-directory-rail__subsection", key: "{anchor_id}",
-                                                button {
-                                                    class: if is_open {
-                                                        "entry-directory-rail__toggle is-open"
-                                                    } else {
-                                                        "entry-directory-rail__toggle"
-                                                    },
-                                                    "data-action": if is_open { "collapse-directory-source" } else { "expand-directory-source" },
-                                                    onclick: move |_| {
-                                                        let mut next = expanded_directory_sources();
-                                                        if !next.insert(toggle_anchor.clone()) {
-                                                            next.remove(&toggle_anchor);
-                                                        }
-                                                        expanded_directory_sources.set(next);
-                                                    },
-                                                    span { class: "entry-directory-rail__toggle-text", "{source.title}" }
-                                                    span { class: "entry-directory-rail__toggle-meta", "{source.subtitle}" }
-                                                }
-                                                if is_open {
-                                                    div { class: "entry-directory-rail__grandchildren",
-                                                        for month in source.months {
-                                                            button {
-                                                                class: "entry-directory-rail__link",
-                                                                r#type: "button",
-                                                                onclick: {
-                                                                    let anchor_id = month.anchor_id.clone();
-                                                                    move |_| scroll_to_entry_group(&anchor_id)
-                                                                },
-                                                                span { class: "entry-directory-rail__link-title", "{month.title}" }
-                                                                span { class: "entry-directory-rail__link-meta", "{month.subtitle}" }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn format_entry_date_utc(published_at: Option<OffsetDateTime>) -> Option<String> {
-    const ENTRY_DATE_FORMAT: &[time::format_description::FormatItem<'static>] =
-        format_description!("[year]-[month]-[day]");
-
-    published_at.and_then(|value| value.to_offset(UtcOffset::UTC).format(ENTRY_DATE_FORMAT).ok())
-}
-
-fn entry_grouping_mode_from_preference(preference: EntryGroupingPreference) -> EntryGroupingMode {
-    match preference {
-        EntryGroupingPreference::Time => EntryGroupingMode::Time,
-        EntryGroupingPreference::Source => EntryGroupingMode::Source,
-    }
-}
-
-fn grouping_mode_preference(mode: EntryGroupingMode) -> EntryGroupingPreference {
-    match mode {
-        EntryGroupingMode::Time => EntryGroupingPreference::Time,
-        EntryGroupingMode::Source => EntryGroupingPreference::Source,
-    }
-}
-
-fn map_selected_feed_urls_to_ids(feeds: &[FeedSummary], selected_feed_urls: &[String]) -> Vec<i64> {
-    if selected_feed_urls.is_empty() {
-        return Vec::new();
-    }
-
-    let selected = selected_feed_urls.iter().map(String::as_str).collect::<BTreeSet<_>>();
-    feeds
-        .iter()
-        .filter(|feed| selected.contains(feed.url.as_str()))
-        .map(|feed| feed.id)
-        .collect::<Vec<_>>()
-}
-
-fn render_entry_card(
-    entry: EntrySummary,
-    reload_tick: Signal<u64>,
-    status: Signal<String>,
-    status_tone: Signal<String>,
-) -> Element {
-    let read_title = entry.title.clone();
-    let starred_title = entry.title.clone();
-
-    rsx! {
-        li { class: "entry-card entry-card--reading", key: "{entry.id}",
-            Link {
-                class: "entry-card__title",
-                to: AppRoute::ReaderPage { entry_id: entry.id },
-                "{entry.title}"
-            }
-            div { class: "entry-card__meta",
-                "{entry.feed_title}"
-                if let Some(date) = format_entry_date_utc(entry.published_at) { " · {date}" }
-                if entry.is_read { " · 已读" } else { " · 未读" }
-                if entry.is_starred { " · 已收藏" }
-            }
-            div { class: "entry-card__actions",
-                button {
-                    class: "button secondary",
-                    "data-action": "mark-read",
-                    onclick: move |_| {
-                        let mut reload_tick = reload_tick;
-                        let title = read_title.clone();
-                        spawn(async move {
-                            match AppServices::shared().await {
-                                Ok(services) => match services.set_read(entry.id, !entry.is_read).await {
-                                    Ok(()) => {
-                                        set_status_info(
-                                            status,
-                                            status_tone,
-                                            format!(
-                                                "已将《{}》{}。",
-                                                title,
-                                                if entry.is_read { "标记为未读" } else { "标记为已读" }
-                                            ),
-                                        );
-                                        reload_tick += 1;
-                                    }
-                                    Err(err) => set_status_error(
-                                        status,
-                                        status_tone,
-                                        format!("更新已读状态失败：{err}"),
-                                    ),
-                                },
-                                Err(err) => set_status_error(
-                                    status,
-                                    status_tone,
-                                    format!("初始化应用失败：{err}"),
-                                ),
-                            }
-                        });
-                    },
-                    if entry.is_read { "标未读" } else { "标已读" }
-                }
-                button {
-                    class: "button secondary",
-                    "data-action": "toggle-starred",
-                    onclick: move |_| {
-                        let mut reload_tick = reload_tick;
-                        let title = starred_title.clone();
-                        spawn(async move {
-                            match AppServices::shared().await {
-                                Ok(services) => match services.set_starred(entry.id, !entry.is_starred).await {
-                                    Ok(()) => {
-                                        set_status_info(
-                                            status,
-                                            status_tone,
-                                            format!(
-                                                "已{}《{}》。",
-                                                if entry.is_starred { "取消收藏" } else { "收藏" },
-                                                title
-                                            ),
-                                        );
-                                        reload_tick += 1;
-                                    }
-                                    Err(err) => set_status_error(
-                                        status,
-                                        status_tone,
-                                        format!("更新收藏状态失败：{err}"),
-                                    ),
-                                },
-                                Err(err) => set_status_error(
-                                    status,
-                                    status_tone,
-                                    format!("初始化应用失败：{err}"),
-                                ),
-                            }
-                        });
-                    },
-                    if entry.is_starred { "取消收藏" } else { "收藏" }
+                    { render_entry_directory(
+                        grouping_mode(),
+                        &directory_months,
+                        &directory_sources,
+                        expanded_directory_sources,
+                    ) }
                 }
             }
         }
@@ -708,44 +379,4 @@ fn current_time_utc() -> OffsetDateTime {
 #[cfg(not(target_arch = "wasm32"))]
 fn current_time_utc() -> OffsetDateTime {
     OffsetDateTime::now_utc()
-}
-
-fn initial_entry_controls_hidden() -> bool {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-            && let Ok(Some(value)) = storage.get_item("rssr-entry-controls-hidden")
-        {
-            return value == "1";
-        }
-    }
-
-    true
-}
-
-fn remember_entry_controls_hidden(_hidden: bool) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-        {
-            let _ = storage.set_item("rssr-entry-controls-hidden", if _hidden { "1" } else { "0" });
-        }
-    }
-}
-
-fn scroll_to_entry_group(anchor_id: &str) {
-    let Ok(anchor_id_json) = serde_json::to_string(anchor_id) else {
-        return;
-    };
-
-    document::eval(&format!(
-        r#"
-        const element = document.getElementById({anchor_id_json});
-        if (element) {{
-            element.scrollIntoView({{ behavior: "smooth", block: "start" }});
-        }}
-        "#
-    ));
 }
