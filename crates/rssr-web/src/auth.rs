@@ -1,14 +1,9 @@
-use std::{
-    collections::HashMap,
-    env, fs,
-    io::Write,
-    net::SocketAddr,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+mod config;
+mod rate_limit;
+mod session;
 
-use anyhow::{Context, Result, anyhow, ensure};
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
+use std::{collections::HashMap, sync::Arc};
+
 use axum::{
     Form,
     extract::{Query, Request, State},
@@ -16,75 +11,28 @@ use axum::{
     middleware::Next,
     response::{Html, IntoResponse, Redirect, Response},
 };
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use hmac::{Hmac, Mac};
-use rand_core::{OsRng, RngCore};
-use serde::{Deserialize, Serialize};
-use sha2::Sha256;
-use time::{Duration, OffsetDateTime};
+use serde::Deserialize;
+use time::OffsetDateTime;
 use tokio::sync::Mutex;
-use tracing::{info, warn};
 
-const DEFAULT_LOGIN_RATE_LIMIT_WINDOW_MINUTES: i64 = 15;
-const DEFAULT_LOGIN_RATE_LIMIT_BLOCK_MINUTES: i64 = 15;
-const DEFAULT_LOGIN_RATE_LIMIT_MAX_FAILURES: u32 = 5;
-const DEFAULT_AUTH_STATE_FILE_NAME: &str = ".rssr-web-auth.json";
-const SESSION_COOKIE: &str = "rssr_web_session";
-const GATE_COOKIE: &str = "rssr_web_gate";
+use self::config::verify_credentials;
+pub(crate) use self::config::{AuthConfig, generate_password_hash, load_config};
+use self::rate_limit::{
+    LoginThrottleState, clear_login_failures, login_attempt_is_blocked, rate_limit_key,
+    record_login_failure,
+};
+use self::session::{
+    SESSION_COOKIE, build_session_token, extract_cookie, gate_cookie_header, logout_cookie_header,
+    logout_gate_cookie_header, session_cookie_header, session_is_valid,
+};
+
 const APP_NAME: &str = "RSS-Reader";
 const WEB_LOGIN_MARKUP: &str = include_str!("../../../assets/branding/rssr-mark.svg");
-
-type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) config: Arc<AuthConfig>,
     pub(crate) login_throttle: Arc<Mutex<HashMap<String, LoginThrottleState>>>,
-}
-
-#[derive(Clone)]
-pub(crate) struct AuthConfig {
-    pub(crate) bind_addr: SocketAddr,
-    pub(crate) static_dir: PathBuf,
-    pub(crate) username: String,
-    password_policy: PasswordPolicy,
-    session_secret: Vec<u8>,
-    pub(crate) secure_cookie: bool,
-    trust_proxy_headers: bool,
-    session_ttl: Duration,
-    login_rate_limit: LoginRateLimit,
-}
-
-#[derive(Clone)]
-enum PasswordPolicy {
-    Argon2Hash(String),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum WebEnvironment {
-    Development,
-    Production,
-}
-
-#[derive(Clone)]
-struct LoginRateLimit {
-    max_failures: u32,
-    window: Duration,
-    block_for: Duration,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct LoginThrottleState {
-    failures: u32,
-    window_started_at: OffsetDateTime,
-    blocked_until: Option<OffsetDateTime>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct PersistedAuthState {
-    password_hash: String,
-    #[serde(default)]
-    session_secret: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -98,307 +46,6 @@ pub(crate) struct LoginForm {
     username: String,
     password: String,
     next: Option<String>,
-}
-
-pub(crate) fn load_config() -> Result<AuthConfig> {
-    let bind_addr = env::var("RSS_READER_WEB_BIND")
-        .unwrap_or_else(|_| "0.0.0.0:80".to_string())
-        .parse()
-        .context("解析 RSS_READER_WEB_BIND 失败")?;
-    let static_dir = PathBuf::from(
-        env::var("RSS_READER_WEB_STATIC_DIR").unwrap_or_else(|_| "/app/public".to_string()),
-    );
-    let auth_state_file = resolve_auth_state_file();
-    let username = required_env("RSS_READER_WEB_USERNAME")?;
-    let password_policy = load_password_policy(&username, &auth_state_file)?;
-    let session_secret = resolve_session_secret(&auth_state_file)?;
-    ensure!(session_secret.len() >= 32, "RSS_READER_WEB_SESSION_SECRET 至少需要 32 个字符");
-    let environment = env::var("RSS_READER_WEB_ENV")
-        .ok()
-        .map(parse_environment)
-        .transpose()?
-        .unwrap_or(WebEnvironment::Development);
-    let secure_cookie = env::var("RSS_READER_WEB_SECURE_COOKIE")
-        .ok()
-        .map(|raw| matches!(raw.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
-        .unwrap_or(false);
-    let trust_proxy_headers = env::var("RSS_READER_WEB_TRUST_PROXY_HEADERS")
-        .ok()
-        .map(|raw| matches!(raw.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
-        .unwrap_or(false);
-    let session_ttl_hours = env::var("RSS_READER_WEB_SESSION_TTL_HOURS")
-        .ok()
-        .map(|raw| raw.parse::<i64>())
-        .transpose()
-        .context("解析 RSS_READER_WEB_SESSION_TTL_HOURS 失败")?
-        .unwrap_or(12);
-    ensure!(session_ttl_hours > 0, "会话时长必须大于 0");
-    let login_rate_limit = load_login_rate_limit()?;
-
-    if environment == WebEnvironment::Production {
-        ensure!(secure_cookie, "生产环境必须开启 RSS_READER_WEB_SECURE_COOKIE=true。");
-        ensure!(
-            matches!(password_policy, PasswordPolicy::Argon2Hash(_)),
-            "生产环境必须使用 Argon2 密码哈希（可来自 RSS_READER_WEB_PASSWORD_HASH、首次启动自动生成，或认证状态文件）。"
-        );
-    } else if env::var("RSS_READER_WEB_PASSWORD").is_ok()
-        && env::var("RSS_READER_WEB_PASSWORD_HASH").is_err()
-    {
-        warn!(
-            auth_state_file = %auth_state_file.display(),
-            "rssr-web 正在使用明文 RSS_READER_WEB_PASSWORD 启动，并会自动生成 Argon2 哈希写入认证状态文件；建议后续移除明文密码配置。"
-        );
-    }
-
-    Ok(AuthConfig {
-        bind_addr,
-        static_dir,
-        username,
-        password_policy,
-        session_secret: session_secret.into_bytes(),
-        secure_cookie,
-        trust_proxy_headers,
-        session_ttl: Duration::hours(session_ttl_hours),
-        login_rate_limit,
-    })
-}
-
-fn required_env(name: &str) -> Result<String> {
-    env::var(name).map_err(|_| anyhow!("缺少环境变量：{name}"))
-}
-
-fn optional_env(name: &str) -> Option<String> {
-    env::var(name).ok().and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_string())
-    })
-}
-
-fn resolve_auth_state_file() -> PathBuf {
-    env::var("RSS_READER_WEB_AUTH_STATE_FILE").map(PathBuf::from).unwrap_or_else(|_| {
-        env::var("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join(DEFAULT_AUTH_STATE_FILE_NAME)
-    })
-}
-
-fn parse_environment(raw: String) -> Result<WebEnvironment> {
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "dev" | "development" | "local" => Ok(WebEnvironment::Development),
-        "prod" | "production" => Ok(WebEnvironment::Production),
-        _ => Err(anyhow!("RSS_READER_WEB_ENV 只能是 development 或 production")),
-    }
-}
-
-fn load_password_policy(username: &str, auth_state_file: &Path) -> Result<PasswordPolicy> {
-    resolve_password_policy(
-        username,
-        optional_env("RSS_READER_WEB_PASSWORD_HASH"),
-        optional_env("RSS_READER_WEB_PASSWORD"),
-        auth_state_file,
-    )
-}
-
-fn resolve_session_secret(auth_state_file: &Path) -> Result<String> {
-    if let Some(session_secret) = optional_env("RSS_READER_WEB_SESSION_SECRET") {
-        ensure!(session_secret.len() >= 32, "RSS_READER_WEB_SESSION_SECRET 至少需要 32 个字符");
-        persist_auth_state(auth_state_file, None, Some(&session_secret))?;
-        return Ok(session_secret);
-    }
-
-    if let Some(state) = load_persisted_auth_state(auth_state_file)?
-        && let Some(session_secret) = state.session_secret
-    {
-        ensure!(session_secret.len() >= 32, "认证状态文件中的 session secret 长度不足 32 个字符");
-        return Ok(session_secret);
-    }
-
-    let generated = generate_session_secret();
-    persist_auth_state(auth_state_file, None, Some(&generated))?;
-    info!(
-        auth_state_file = %auth_state_file.display(),
-        "已自动生成并持久化 RSS_READER_WEB_SESSION_SECRET"
-    );
-    Ok(generated)
-}
-
-fn resolve_password_policy(
-    username: &str,
-    password_hash: Option<String>,
-    password: Option<String>,
-    auth_state_file: &Path,
-) -> Result<PasswordPolicy> {
-    if let Some(hash) = password_hash {
-        validate_password_hash(&hash)?;
-        persist_auth_state(auth_state_file, Some(&hash), None)?;
-        return Ok(PasswordPolicy::Argon2Hash(hash));
-    }
-
-    if let Some(password) = password {
-        ensure!(password.len() >= 8, "RSS_READER_WEB_PASSWORD 至少需要 8 个字符");
-
-        if let Some(persisted_hash) = load_persisted_password_hash(auth_state_file)?
-            && verify_password_hash(&persisted_hash, &password)
-        {
-            return Ok(PasswordPolicy::Argon2Hash(persisted_hash));
-        }
-
-        let generated_hash = generate_password_hash(&password)?;
-        persist_auth_state(auth_state_file, Some(&generated_hash), None)?;
-        info!(
-            username = username,
-            auth_state_file = %auth_state_file.display(),
-            "已根据 RSS_READER_WEB_PASSWORD 自动生成并持久化密码哈希"
-        );
-        return Ok(PasswordPolicy::Argon2Hash(generated_hash));
-    }
-
-    if let Some(persisted_hash) = load_persisted_password_hash(auth_state_file)? {
-        return Ok(PasswordPolicy::Argon2Hash(persisted_hash));
-    }
-
-    Err(anyhow!(
-        "缺少环境变量：RSS_READER_WEB_PASSWORD_HASH、RSS_READER_WEB_PASSWORD，且认证状态文件中也没有可用的密码哈希"
-    ))
-}
-
-fn load_persisted_password_hash(auth_state_file: &Path) -> Result<Option<String>> {
-    let Some(state) = load_persisted_auth_state(auth_state_file)? else {
-        return Ok(None);
-    };
-    validate_password_hash(&state.password_hash)?;
-    Ok(Some(state.password_hash))
-}
-
-fn load_persisted_auth_state(auth_state_file: &Path) -> Result<Option<PersistedAuthState>> {
-    if !auth_state_file.exists() {
-        return Ok(None);
-    }
-
-    let raw = fs::read_to_string(auth_state_file)
-        .with_context(|| format!("读取认证状态文件失败：{}", auth_state_file.display()))?;
-    let state: PersistedAuthState = serde_json::from_str(&raw)
-        .with_context(|| format!("解析认证状态文件失败：{}", auth_state_file.display()))?;
-    Ok(Some(state))
-}
-
-fn persist_auth_state(
-    auth_state_file: &Path,
-    password_hash: Option<&str>,
-    session_secret: Option<&str>,
-) -> Result<()> {
-    if let Some(password_hash) = password_hash {
-        validate_password_hash(password_hash)?;
-    }
-    if let Some(session_secret) = session_secret {
-        ensure!(session_secret.len() >= 32, "RSS_READER_WEB_SESSION_SECRET 至少需要 32 个字符");
-    }
-
-    if let Some(parent) = auth_state_file.parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("创建认证状态目录失败：{}", parent.display()))?;
-    }
-
-    let existing = load_persisted_auth_state(auth_state_file)?;
-    let password_hash = password_hash
-        .map(ToOwned::to_owned)
-        .or_else(|| existing.as_ref().map(|state| state.password_hash.clone()))
-        .ok_or_else(|| anyhow!("写入认证状态文件失败：缺少密码哈希"))?;
-    let session_secret = session_secret
-        .map(ToOwned::to_owned)
-        .or_else(|| existing.and_then(|state| state.session_secret));
-
-    let payload =
-        serde_json::to_string_pretty(&PersistedAuthState { password_hash, session_secret })
-            .context("序列化认证状态文件失败")?;
-    write_auth_state_file(auth_state_file, &payload)?;
-    Ok(())
-}
-
-fn write_auth_state_file(auth_state_file: &Path, payload: &str) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::fs::OpenOptions;
-        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(auth_state_file)
-            .with_context(|| format!("写入认证状态文件失败：{}", auth_state_file.display()))?;
-        file.write_all(payload.as_bytes())
-            .with_context(|| format!("写入认证状态文件失败：{}", auth_state_file.display()))?;
-        file.sync_all()
-            .with_context(|| format!("同步认证状态文件失败：{}", auth_state_file.display()))?;
-        fs::set_permissions(auth_state_file, fs::Permissions::from_mode(0o600))
-            .with_context(|| format!("收紧认证状态文件权限失败：{}", auth_state_file.display()))?;
-        Ok(())
-    }
-
-    #[cfg(not(unix))]
-    {
-        fs::write(auth_state_file, payload)
-            .with_context(|| format!("写入认证状态文件失败：{}", auth_state_file.display()))?;
-        Ok(())
-    }
-}
-
-fn load_login_rate_limit() -> Result<LoginRateLimit> {
-    let max_failures = env::var("RSS_READER_WEB_LOGIN_MAX_FAILURES")
-        .ok()
-        .map(|raw| raw.parse::<u32>())
-        .transpose()
-        .context("解析 RSS_READER_WEB_LOGIN_MAX_FAILURES 失败")?
-        .unwrap_or(DEFAULT_LOGIN_RATE_LIMIT_MAX_FAILURES);
-    ensure!(max_failures > 0, "RSS_READER_WEB_LOGIN_MAX_FAILURES 必须大于 0");
-
-    let window_minutes = env::var("RSS_READER_WEB_LOGIN_WINDOW_MINUTES")
-        .ok()
-        .map(|raw| raw.parse::<i64>())
-        .transpose()
-        .context("解析 RSS_READER_WEB_LOGIN_WINDOW_MINUTES 失败")?
-        .unwrap_or(DEFAULT_LOGIN_RATE_LIMIT_WINDOW_MINUTES);
-    ensure!(window_minutes > 0, "RSS_READER_WEB_LOGIN_WINDOW_MINUTES 必须大于 0");
-
-    let block_minutes = env::var("RSS_READER_WEB_LOGIN_BLOCK_MINUTES")
-        .ok()
-        .map(|raw| raw.parse::<i64>())
-        .transpose()
-        .context("解析 RSS_READER_WEB_LOGIN_BLOCK_MINUTES 失败")?
-        .unwrap_or(DEFAULT_LOGIN_RATE_LIMIT_BLOCK_MINUTES);
-    ensure!(block_minutes > 0, "RSS_READER_WEB_LOGIN_BLOCK_MINUTES 必须大于 0");
-
-    Ok(LoginRateLimit {
-        max_failures,
-        window: Duration::minutes(window_minutes),
-        block_for: Duration::minutes(block_minutes),
-    })
-}
-
-fn validate_password_hash(raw: &str) -> Result<()> {
-    PasswordHash::new(raw)
-        .map_err(|_| anyhow!("RSS_READER_WEB_PASSWORD_HASH 不是合法的 Argon2 哈希"))?;
-    Ok(())
-}
-
-pub(crate) fn generate_password_hash(password: &str) -> Result<String> {
-    ensure!(password.len() >= 8, "密码至少需要 8 个字符");
-    let salt = SaltString::generate(&mut OsRng);
-    let hash = Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|_| anyhow!("生成密码哈希失败"))?;
-    Ok(hash.to_string())
-}
-
-fn generate_session_secret() -> String {
-    let mut bytes = [0_u8; 32];
-    OsRng.fill_bytes(&mut bytes);
-    URL_SAFE_NO_PAD.encode(bytes)
 }
 
 pub(crate) async fn show_login(
@@ -563,7 +210,7 @@ pub(crate) async fn handle_login(
         .into_response();
     }
 
-    if !credentials_match(&state.config, &form.username, &form.password) {
+    if !verify_credentials(&state.config, &form.username, &form.password) {
         let blocked = record_login_failure(&state, &rate_limit_key).await;
         return Redirect::to(&format!(
             "/login?error={}&next={}",
@@ -644,185 +291,6 @@ pub(crate) async fn require_auth(
     Redirect::to(&format!("/login?next={}", urlencoding::encode(target))).into_response()
 }
 
-fn credentials_match(config: &AuthConfig, username: &str, password: &str) -> bool {
-    if username.trim() != config.username {
-        return false;
-    }
-
-    match &config.password_policy {
-        PasswordPolicy::Argon2Hash(hash) => verify_password_hash(hash, password),
-    }
-}
-
-fn verify_password_hash(hash: &str, password: &str) -> bool {
-    let Ok(parsed) = PasswordHash::new(hash) else {
-        return false;
-    };
-    Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok()
-}
-
-fn build_session_token(config: &AuthConfig, expires_at: i64) -> Result<String> {
-    let payload = format!("{}:{expires_at}", config.username);
-    let mut mac =
-        HmacSha256::new_from_slice(&config.session_secret).context("初始化会话签名器失败")?;
-    mac.update(payload.as_bytes());
-    let signature = mac.finalize().into_bytes();
-    Ok(format!(
-        "{}.{}",
-        URL_SAFE_NO_PAD.encode(payload.as_bytes()),
-        URL_SAFE_NO_PAD.encode(signature)
-    ))
-}
-
-fn session_is_valid(config: &AuthConfig, cookie_value: &str) -> bool {
-    let Some((payload_part, signature_part)) = cookie_value.split_once('.') else {
-        return false;
-    };
-    let Ok(payload_bytes) = URL_SAFE_NO_PAD.decode(payload_part) else {
-        return false;
-    };
-    let Ok(signature_bytes) = URL_SAFE_NO_PAD.decode(signature_part) else {
-        return false;
-    };
-    let Ok(payload) = String::from_utf8(payload_bytes) else {
-        return false;
-    };
-    let Some((username, expires_raw)) = payload.rsplit_once(':') else {
-        return false;
-    };
-    if username != config.username {
-        return false;
-    }
-    let Ok(expires_at) = expires_raw.parse::<i64>() else {
-        return false;
-    };
-    if OffsetDateTime::now_utc().unix_timestamp() > expires_at {
-        return false;
-    }
-
-    let Ok(mut mac) = HmacSha256::new_from_slice(&config.session_secret) else {
-        return false;
-    };
-    mac.update(payload.as_bytes());
-    mac.verify_slice(&signature_bytes).is_ok()
-}
-
-fn session_cookie_header(token: &str, config: &AuthConfig) -> String {
-    let max_age = config.session_ttl.whole_seconds();
-    let secure = if config.secure_cookie { "; Secure" } else { "" };
-    format!("{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure}")
-}
-
-fn logout_cookie_header(config: &AuthConfig) -> String {
-    let secure = if config.secure_cookie { "; Secure" } else { "" };
-    format!("{SESSION_COOKIE}=deleted; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure}")
-}
-
-fn gate_cookie_header(config: &AuthConfig) -> String {
-    let max_age = config.session_ttl.whole_seconds();
-    let secure = if config.secure_cookie { "; Secure" } else { "" };
-    format!("{GATE_COOKIE}=1; Path=/; SameSite=Lax; Max-Age={max_age}{secure}")
-}
-
-fn logout_gate_cookie_header(config: &AuthConfig) -> String {
-    let secure = if config.secure_cookie { "; Secure" } else { "" };
-    format!("{GATE_COOKIE}=deleted; Path=/; SameSite=Lax; Max-Age=0{secure}")
-}
-
-fn rate_limit_key(config: &AuthConfig, headers: &HeaderMap, username: &str) -> String {
-    let client = forwarded_ip(config, headers).unwrap_or("direct");
-    format!("{}|{}", client, username.trim().to_ascii_lowercase())
-}
-
-fn forwarded_ip<'a>(config: &AuthConfig, headers: &'a HeaderMap) -> Option<&'a str> {
-    if !config.trust_proxy_headers {
-        return None;
-    }
-
-    headers
-        .get("x-forwarded-for")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.split(',').next())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .or_else(|| {
-            headers
-                .get("x-real-ip")
-                .and_then(|value| value.to_str().ok())
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-        })
-}
-
-async fn login_attempt_is_blocked(state: &AppState, key: &str) -> bool {
-    let now = OffsetDateTime::now_utc();
-    let mut throttle = state.login_throttle.lock().await;
-    cleanup_rate_limit_entries(&mut throttle, now, &state.config.login_rate_limit);
-    throttle
-        .get(key)
-        .and_then(|entry| entry.blocked_until)
-        .is_some_and(|blocked_until| blocked_until > now)
-}
-
-async fn record_login_failure(state: &AppState, key: &str) -> bool {
-    let now = OffsetDateTime::now_utc();
-    let mut throttle = state.login_throttle.lock().await;
-    cleanup_rate_limit_entries(&mut throttle, now, &state.config.login_rate_limit);
-    let entry = throttle.entry(key.to_string()).or_insert(LoginThrottleState {
-        failures: 0,
-        window_started_at: now,
-        blocked_until: None,
-    });
-
-    if now - entry.window_started_at > state.config.login_rate_limit.window {
-        entry.failures = 0;
-        entry.window_started_at = now;
-        entry.blocked_until = None;
-    }
-
-    entry.failures += 1;
-    if entry.failures >= state.config.login_rate_limit.max_failures {
-        entry.blocked_until = Some(now + state.config.login_rate_limit.block_for);
-        true
-    } else {
-        false
-    }
-}
-
-async fn clear_login_failures(state: &AppState, key: &str) {
-    let mut throttle = state.login_throttle.lock().await;
-    throttle.remove(key);
-}
-
-fn cleanup_rate_limit_entries(
-    throttle: &mut HashMap<String, LoginThrottleState>,
-    now: OffsetDateTime,
-    config: &LoginRateLimit,
-) {
-    throttle.retain(|_, entry| {
-        if let Some(blocked_until) = entry.blocked_until
-            && blocked_until > now
-        {
-            return true;
-        }
-        now - entry.window_started_at <= config.window
-    });
-}
-
-fn extract_cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
-    headers
-        .get(header::COOKIE)?
-        .to_str()
-        .ok()?
-        .split(';')
-        .filter_map(|part| {
-            let trimmed = part.trim();
-            let (cookie_name, cookie_value) = trimmed.split_once('=')?;
-            (cookie_name == name).then_some(cookie_value)
-        })
-        .next()
-}
-
 fn sanitize_next(next: Option<&str>) -> &str {
     match next {
         Some(path) if path.starts_with('/') && !path.starts_with("//") => path,
@@ -841,7 +309,24 @@ fn html_escape(raw: impl AsRef<str>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, path::PathBuf};
+
     use super::*;
+    use crate::auth::config::{LoginRateLimit, PasswordPolicy, verify_password_hash};
+    use crate::auth::rate_limit::cleanup_rate_limit_entries;
+    use time::Duration;
+
+    unsafe fn set_test_var(name: &str, value: impl AsRef<std::ffi::OsStr>) {
+        unsafe {
+            std::env::set_var(name, value);
+        }
+    }
+
+    unsafe fn remove_test_var(name: &str) {
+        unsafe {
+            std::env::remove_var(name);
+        }
+    }
 
     fn sample_config() -> AuthConfig {
         AuthConfig {
@@ -893,18 +378,18 @@ mod tests {
             OffsetDateTime::now_utc().unix_timestamp_nanos()
         ));
 
-        let policy =
-            resolve_password_policy("admin", None, Some("adminadmin".to_string()), &auth_file)
-                .expect("policy");
+        let config =
+            load_config_from_test_file(&auth_file, Some("adminadmin"), None).expect("config");
+        match config.password_policy {
+            PasswordPolicy::Argon2Hash(hash) => {
+                assert!(verify_password_hash(&hash, "adminadmin"));
+            }
+        }
 
-        let PasswordPolicy::Argon2Hash(hash) = policy;
-        assert!(verify_password_hash(&hash, "adminadmin"));
+        let persisted = fs::read_to_string(&auth_file).expect("persisted auth state should exist");
+        assert!(persisted.contains("password_hash"));
 
-        let persisted =
-            load_persisted_password_hash(&auth_file).expect("persisted").expect("hash exists");
-        assert!(verify_password_hash(&persisted, "adminadmin"));
-
-        let _ = std::fs::remove_file(auth_file);
+        let _ = fs::remove_file(auth_file);
     }
 
     #[test]
@@ -915,14 +400,21 @@ mod tests {
             OffsetDateTime::now_utc().unix_timestamp_nanos()
         ));
         let hash = generate_password_hash("adminadmin").expect("hash");
-        persist_auth_state(&auth_file, Some(&hash), None).expect("persist");
+        let session_secret = "01234567890123456789012345678901";
+        fs::write(
+            &auth_file,
+            format!("{{\"password_hash\":\"{}\",\"session_secret\":\"{}\"}}", hash, session_secret),
+        )
+        .expect("write auth state");
 
-        let policy = resolve_password_policy("admin", None, None, &auth_file).expect("policy");
+        let config = load_config_from_test_file(&auth_file, None, None).expect("config");
+        match config.password_policy {
+            PasswordPolicy::Argon2Hash(persisted) => {
+                assert!(verify_password_hash(&persisted, "adminadmin"));
+            }
+        }
 
-        let PasswordPolicy::Argon2Hash(persisted) = policy;
-        assert!(verify_password_hash(&persisted, "adminadmin"));
-
-        let _ = std::fs::remove_file(auth_file);
+        let _ = fs::remove_file(auth_file);
     }
 
     #[test]
@@ -933,16 +425,16 @@ mod tests {
             OffsetDateTime::now_utc().unix_timestamp_nanos()
         ));
         let hash = generate_password_hash("adminadmin").expect("hash");
-        persist_auth_state(&auth_file, Some(&hash), None).expect("persist");
+        fs::write(&auth_file, format!("{{\"password_hash\":\"{}\"}}", hash))
+            .expect("write auth state");
 
-        let secret = resolve_session_secret(&auth_file).expect("secret");
-        assert!(secret.len() >= 32);
+        let config = load_config_from_test_file(&auth_file, None, None).expect("config");
+        assert!(config.session_secret.len() >= 32);
 
-        let persisted =
-            load_persisted_auth_state(&auth_file).expect("state").expect("state exists");
-        assert_eq!(persisted.session_secret.as_deref(), Some(secret.as_str()));
+        let persisted = fs::read_to_string(&auth_file).expect("read persisted state");
+        assert!(persisted.contains("session_secret"));
 
-        let _ = std::fs::remove_file(auth_file);
+        let _ = fs::remove_file(auth_file);
     }
 
     #[test]
@@ -953,13 +445,22 @@ mod tests {
             OffsetDateTime::now_utc().unix_timestamp_nanos()
         ));
         let hash = generate_password_hash("adminadmin").expect("hash");
-        persist_auth_state(&auth_file, Some(&hash), Some("01234567890123456789012345678901"))
-            .expect("persist");
+        fs::write(
+            &auth_file,
+            format!(
+                "{{\"password_hash\":\"{}\",\"session_secret\":\"01234567890123456789012345678901\"}}",
+                hash
+            ),
+        )
+        .expect("write auth state");
 
-        let secret = resolve_session_secret(&auth_file).expect("secret");
-        assert_eq!(secret, "01234567890123456789012345678901");
+        let config = load_config_from_test_file(&auth_file, None, None).expect("config");
+        assert_eq!(
+            String::from_utf8(config.session_secret).expect("utf8"),
+            "01234567890123456789012345678901"
+        );
 
-        let _ = std::fs::remove_file(auth_file);
+        let _ = fs::remove_file(auth_file);
     }
 
     #[test]
@@ -998,14 +499,21 @@ mod tests {
             OffsetDateTime::now_utc().unix_timestamp_nanos()
         ));
         let hash = generate_password_hash("adminadmin").expect("hash");
+        fs::write(
+            &auth_file,
+            format!(
+                "{{\"password_hash\":\"{}\",\"session_secret\":\"01234567890123456789012345678901\"}}",
+                hash
+            ),
+        )
+        .expect("write auth state");
 
-        persist_auth_state(&auth_file, Some(&hash), Some("01234567890123456789012345678901"))
-            .expect("persist");
+        let _ = load_config_from_test_file(&auth_file, None, None).expect("config");
 
         let mode = fs::metadata(&auth_file).expect("metadata").permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
 
-        let _ = std::fs::remove_file(auth_file);
+        let _ = fs::remove_file(auth_file);
     }
 
     #[test]
@@ -1027,5 +535,45 @@ mod tests {
         );
         cleanup_rate_limit_entries(&mut entries, now, &config);
         assert!(entries.contains_key("client"));
+    }
+
+    fn load_config_from_test_file(
+        auth_state_file: &std::path::Path,
+        plaintext_password: Option<&str>,
+        password_hash: Option<&str>,
+    ) -> anyhow::Result<AuthConfig> {
+        unsafe {
+            set_test_var("RSS_READER_WEB_BIND", "127.0.0.1:8039");
+            set_test_var("RSS_READER_WEB_STATIC_DIR", "/tmp");
+            set_test_var("RSS_READER_WEB_USERNAME", "admin");
+            set_test_var("RSS_READER_WEB_AUTH_STATE_FILE", auth_state_file);
+            remove_test_var("RSS_READER_WEB_SESSION_SECRET");
+            remove_test_var("RSS_READER_WEB_PASSWORD");
+            remove_test_var("RSS_READER_WEB_PASSWORD_HASH");
+        }
+
+        if let Some(password) = plaintext_password {
+            unsafe {
+                set_test_var("RSS_READER_WEB_PASSWORD", password);
+            }
+        }
+        if let Some(hash) = password_hash {
+            unsafe {
+                set_test_var("RSS_READER_WEB_PASSWORD_HASH", hash);
+            }
+        }
+
+        let result = load_config();
+
+        unsafe {
+            remove_test_var("RSS_READER_WEB_BIND");
+            remove_test_var("RSS_READER_WEB_STATIC_DIR");
+            remove_test_var("RSS_READER_WEB_USERNAME");
+            remove_test_var("RSS_READER_WEB_AUTH_STATE_FILE");
+            remove_test_var("RSS_READER_WEB_PASSWORD");
+            remove_test_var("RSS_READER_WEB_PASSWORD_HASH");
+        }
+
+        result
     }
 }
