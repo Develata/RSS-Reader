@@ -68,8 +68,12 @@ fn main() {
 
 #[cfg(target_os = "android")]
 fn main() {
+    use dioxus::mobile::{Config, WindowCloseBehaviour};
+    use dioxus::prelude::LaunchBuilder;
+
     init_tracing();
-    dioxus::launch(app::App);
+    let config = Config::new().with_close_behaviour(WindowCloseBehaviour::WindowHides);
+    LaunchBuilder::new().with_cfg(config).launch(app::App);
 }
 
 #[cfg(target_arch = "wasm32")]

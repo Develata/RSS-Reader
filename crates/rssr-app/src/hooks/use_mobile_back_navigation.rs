@@ -6,7 +6,7 @@ use dioxus::mobile::{
         event::{ElementState, Event as TaoEvent, WindowEvent as TaoWindowEvent},
         keyboard::{Key as TaoKey, KeyCode as TaoKeyCode},
     },
-    use_wry_event_handler,
+    use_window, use_wry_event_handler,
 };
 #[cfg(target_os = "android")]
 use dioxus::prelude::*;
@@ -16,35 +16,58 @@ pub fn use_mobile_back_navigation(fallback_route: Option<AppRoute>) {
     {
         let navigator = use_navigator();
         let history = history();
+        let window = use_window();
 
         use_wry_event_handler(move |event, _| {
-            let TaoEvent::WindowEvent {
-                event: TaoWindowEvent::KeyboardInput { event, .. }, ..
-            } = event
-            else {
-                return;
+            let navigate_within_app = || {
+                if history.can_go_back() {
+                    navigator.go_back();
+                    return true;
+                }
+
+                if let Some(target) = fallback_route.clone() {
+                    let target_path = target.to_string();
+                    if history.current_route() != target_path {
+                        navigator.replace(target);
+                        return true;
+                    }
+                }
+
+                false
             };
 
-            if event.state != ElementState::Pressed
-                || event.repeat
-                || !matches!(
-                    (event.physical_key, &event.logical_key),
-                    (TaoKeyCode::BrowserBack, _) | (_, TaoKey::GoBack) | (_, TaoKey::Escape)
-                )
-            {
-                return;
-            }
+            match event {
+                TaoEvent::WindowEvent {
+                    event: TaoWindowEvent::KeyboardInput { event, .. },
+                    ..
+                } => {
+                    if event.state != ElementState::Pressed
+                        || event.repeat
+                        || !matches!(
+                            (event.physical_key, &event.logical_key),
+                            (TaoKeyCode::BrowserBack, _)
+                                | (_, TaoKey::GoBack)
+                                | (_, TaoKey::Escape)
+                        )
+                    {
+                        return;
+                    }
 
-            if history.can_go_back() {
-                navigator.go_back();
-                return;
-            }
-
-            if let Some(target) = fallback_route.clone() {
-                let target_path = target.to_string();
-                if history.current_route() != target_path {
-                    navigator.replace(target);
+                    let _ = navigate_within_app();
                 }
+                TaoEvent::WindowEvent { event: TaoWindowEvent::CloseRequested, .. } => {
+                    if !navigate_within_app() {
+                        return;
+                    }
+
+                    let window = window.clone();
+                    spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(16)).await;
+                        window.set_visible(true);
+                        let _ = window.set_focus();
+                    });
+                }
+                _ => {}
             }
         });
     }
