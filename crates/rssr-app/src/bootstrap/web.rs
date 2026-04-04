@@ -6,6 +6,8 @@ mod config;
 mod exchange;
 #[path = "web/feed.rs"]
 mod feed;
+#[path = "web/mutations.rs"]
+mod mutations;
 #[path = "web/query.rs"]
 mod query;
 #[path = "web/refresh.rs"]
@@ -28,6 +30,12 @@ use self::{
         import_config_json as import_exchange_json, import_opml as import_exchange_opml,
         pull_remote_config as pull_exchange_remote, push_remote_config as push_exchange_remote,
     },
+    mutations::{
+        add_subscription as add_subscription_state,
+        remember_last_opened_feed_id as remember_feed_id, remove_feed as remove_feed_state,
+        save_settings as save_settings_state, set_read as set_entry_read,
+        set_starred as set_entry_starred,
+    },
     query::{
         get_entry as query_get_entry, list_entries as query_list_entries,
         list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
@@ -36,7 +44,7 @@ use self::{
         ensure_auto_refresh_started as start_auto_refresh, refresh_all as run_refresh_all,
         refresh_feed as run_refresh_feed,
     },
-    state::{PersistedFeed, PersistedState, load_state, save_state_snapshot},
+    state::{PersistedState, load_state},
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -93,37 +101,11 @@ impl AppServices {
     }
 
     pub async fn set_read(&self, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
-        let snapshot = {
-            let mut state = self.state.lock().expect("lock state");
-            let now = web_now_utc();
-            let entry = state
-                .entries
-                .iter_mut()
-                .find(|entry| entry.id == entry_id)
-                .context("文章不存在")?;
-            entry.is_read = is_read;
-            entry.read_at = is_read.then_some(now);
-            entry.updated_at = now;
-            state.clone()
-        };
-        save_state_snapshot(snapshot)
+        set_entry_read(self, entry_id, is_read)
     }
 
     pub async fn set_starred(&self, entry_id: i64, is_starred: bool) -> anyhow::Result<()> {
-        let snapshot = {
-            let mut state = self.state.lock().expect("lock state");
-            let now = web_now_utc();
-            let entry = state
-                .entries
-                .iter_mut()
-                .find(|entry| entry.id == entry_id)
-                .context("文章不存在")?;
-            entry.is_starred = is_starred;
-            entry.starred_at = is_starred.then_some(now);
-            entry.updated_at = now;
-            state.clone()
-        };
-        save_state_snapshot(snapshot)
+        set_entry_starred(self, entry_id, is_starred)
     }
 
     pub async fn load_settings(&self) -> anyhow::Result<UserSettings> {
@@ -131,13 +113,7 @@ impl AppServices {
     }
 
     pub async fn save_settings(&self, settings: &UserSettings) -> anyhow::Result<()> {
-        validate_settings(settings)?;
-        let snapshot = {
-            let mut state = self.state.lock().expect("lock state");
-            state.settings = settings.clone();
-            state.clone()
-        };
-        save_state_snapshot(snapshot)
+        save_settings_state(self, settings)
     }
 
     pub async fn load_last_opened_feed_id(&self) -> anyhow::Result<Option<i64>> {
@@ -145,12 +121,7 @@ impl AppServices {
     }
 
     pub async fn remember_last_opened_feed_id(&self, feed_id: i64) -> anyhow::Result<()> {
-        let snapshot = {
-            let mut state = self.state.lock().expect("lock state");
-            state.last_opened_feed_id = Some(feed_id);
-            state.clone()
-        };
-        save_state_snapshot(snapshot)
+        remember_feed_id(self, feed_id)
     }
 
     pub fn ensure_auto_refresh_started(self: &Arc<Self>) {
@@ -159,60 +130,12 @@ impl AppServices {
 
     pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
         let url = normalize_feed_url(&Url::parse(raw_url).context("订阅 URL 不合法")?);
-        let feed_id = {
-            let mut state = self.state.lock().expect("lock state");
-            let now = web_now_utc();
-            if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.url == url.as_str()) {
-                feed.is_deleted = false;
-                feed.updated_at = now;
-            } else {
-                state.next_feed_id += 1;
-                let feed_id = state.next_feed_id;
-                state.feeds.push(PersistedFeed {
-                    id: feed_id,
-                    url: url.to_string(),
-                    title: None,
-                    site_url: None,
-                    description: None,
-                    icon_url: None,
-                    folder: None,
-                    etag: None,
-                    last_modified: None,
-                    last_fetched_at: None,
-                    last_success_at: None,
-                    fetch_error: None,
-                    is_deleted: false,
-                    created_at: now,
-                    updated_at: now,
-                });
-            }
-            let feed_id =
-                state.feeds.iter().find(|feed| feed.url == url.as_str()).expect("feed exists").id;
-            let snapshot = state.clone();
-            drop(state);
-            save_state_snapshot(snapshot)?;
-            feed_id
-        };
+        let feed_id = add_subscription_state(self, &url)?;
         self.refresh_feed(feed_id).await.context("首次刷新订阅失败")
     }
 
     pub async fn remove_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        let snapshot = {
-            let mut state = self.state.lock().expect("lock state");
-            let feed = state
-                .feeds
-                .iter_mut()
-                .find(|feed| feed.id == feed_id && !feed.is_deleted)
-                .context("订阅不存在")?;
-            feed.is_deleted = true;
-            feed.updated_at = web_now_utc();
-            state.entries.retain(|entry| entry.feed_id != feed_id);
-            if state.last_opened_feed_id == Some(feed_id) {
-                state.last_opened_feed_id = None;
-            }
-            state.clone()
-        };
-        save_state_snapshot(snapshot)
+        remove_feed_state(self, feed_id)
     }
 
     pub async fn refresh_all(&self) -> anyhow::Result<()> {
