@@ -11,7 +11,7 @@ runs:
   steps:
     - name: Cache Dioxus CLI
       id: cache-dioxus-cli
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cargo/bin/dx
