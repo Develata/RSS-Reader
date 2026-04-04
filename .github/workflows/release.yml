@@ -351,17 +351,13 @@ jobs:
         with:
           version: ${{ env.DIOXUS_CLI_VERSION }}
 
-      - name: Normalize macOS bundle icon paths
+      - name: Stage crate-local icon paths for macOS bundler
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          workspace = Path.cwd()
-          config = workspace / "Dioxus.toml"
-          text = config.read_text(encoding="utf-8")
-          text = text.replace('icon = ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"]', f'icon = ["{workspace / "icons" / "icon.png"}", "{workspace / "icons" / "icon.ico"}", "{workspace / "icons" / "icon.icns"}"]')
-          text = text.replace('icon_path = "icons/icon.ico"', f'icon_path = "{workspace / "icons" / "icon.ico"}"')
-          config.write_text(text, encoding="utf-8")
-          PY
+          rm -rf crates/rssr-app/icons
+          mkdir -p crates/rssr-app/icons
+          cp icons/icon.png crates/rssr-app/icons/icon.png
+          cp icons/icon.ico crates/rssr-app/icons/icon.ico
+          cp icons/icon.icns crates/rssr-app/icons/icon.icns
 
       - name: Build macOS app bundle and CLI
         run: |
