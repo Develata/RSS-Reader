@@ -314,7 +314,7 @@ jobs:
       - name: Smoke-check web artifact
         run: |
           tar -tzf release-assets/RSS-Reader-web.tar.gz | grep '^public/index.html$'
-          tar -tzf release-assets/RSS-Reader-web.tar.gz | grep '^public/wasm/rssr-app_bg.wasm$'
+          tar -tzf release-assets/RSS-Reader-web.tar.gz | grep -E '^public/assets/rssr-app_bg-.*\.wasm$'
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
@@ -368,9 +368,12 @@ jobs:
       - name: Archive macOS artifacts
         run: |
           mkdir -p release-assets
-          APP_BUNDLE_PATH="$(find target/macos-bundle/${{ matrix.suffix }} -maxdepth 1 -name 'RSS-Reader.app' | head -n1)"
+          APP_BUNDLE_PATH="$(find target/macos-bundle/${{ matrix.suffix }} -type d -name '*.app' | head -n1)"
           test -n "$APP_BUNDLE_PATH"
-          tar -C "$(dirname "$APP_BUNDLE_PATH")" -czf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz RSS-Reader.app
+          mkdir -p target/macos-archive/${{ matrix.suffix }}
+          rm -rf target/macos-archive/${{ matrix.suffix }}/RSS-Reader.app
+          cp -R "$APP_BUNDLE_PATH" target/macos-archive/${{ matrix.suffix }}/RSS-Reader.app
+          tar -C target/macos-archive/${{ matrix.suffix }} -czf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz RSS-Reader.app
           tar -C target/${{ matrix.target }}/release -czf release-assets/rssr-cli-${{ matrix.suffix }}.tar.gz rssr-cli
 
       - name: Smoke-check macOS artifacts
