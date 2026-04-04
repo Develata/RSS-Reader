@@ -16,6 +16,11 @@ permissions:
 
 env:
   RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+  DIOXUS_CLI_VERSION: 0.7.3
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-android:
@@ -64,9 +69,6 @@ jobs:
           echo "CC_aarch64_linux_android=$ANDROID_LLVM_BIN/aarch64-linux-android${ANDROID_API_LEVEL}-clang" >> "$GITHUB_ENV"
           echo "AR_aarch64_linux_android=$ANDROID_LLVM_BIN/llvm-ar" >> "$GITHUB_ENV"
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_LLVM_BIN/aarch64-linux-android${ANDROID_API_LEVEL}-clang" >> "$GITHUB_ENV"
-          echo "CC_x86_64_linux_android=$ANDROID_LLVM_BIN/x86_64-linux-android${ANDROID_API_LEVEL}-clang" >> "$GITHUB_ENV"
-          echo "AR_x86_64_linux_android=$ANDROID_LLVM_BIN/llvm-ar" >> "$GITHUB_ENV"
-          echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$ANDROID_LLVM_BIN/x86_64-linux-android${ANDROID_API_LEVEL}-clang" >> "$GITHUB_ENV"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -76,8 +78,10 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --version 0.7.3 --locked
+      - name: Setup Dioxus CLI
+        uses: ./.github/actions/setup-dioxus-cli
+        with:
+          version: ${{ env.DIOXUS_CLI_VERSION }}
 
       - name: Prefetch Gradle distribution
         run: |
@@ -161,6 +165,16 @@ jobs:
               release-assets/RSS-Reader-android-arm64-v8a-release.aab
           fi
 
+      - name: Smoke-check archived Android artifacts
+        run: |
+          test -f release-assets/RSS-Reader-android-arm64-v8a-debug.apk
+          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging release-assets/RSS-Reader-android-arm64-v8a-debug.apk | grep "application-label:'RSS-Reader'"
+          if [ "$ANDROID_RELEASE_READY" = "true" ]; then
+            test -f release-assets/RSS-Reader-android-arm64-v8a-release.apk
+            test -f release-assets/RSS-Reader-android-arm64-v8a-release.aab
+            unzip -l release-assets/RSS-Reader-android-arm64-v8a-release.aab | grep 'rssr_launcher'
+          fi
+
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
@@ -194,6 +208,16 @@ jobs:
           Copy-Item target/release/rssr-app.exe staging/RSS-Reader/RSS-Reader.exe
           Compress-Archive -Path staging/RSS-Reader/* -DestinationPath release-assets/RSS-Reader-windows-x86_64.zip
           Compress-Archive -Path target/release/rssr-cli.exe -DestinationPath release-assets/rssr-cli-windows-x86_64.zip
+
+      - name: Smoke-check Windows artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force verify/app | Out-Null
+          New-Item -ItemType Directory -Force verify/cli | Out-Null
+          Expand-Archive -Path release-assets/RSS-Reader-windows-x86_64.zip -DestinationPath verify/app -Force
+          Expand-Archive -Path release-assets/rssr-cli-windows-x86_64.zip -DestinationPath verify/cli -Force
+          if (-not (Test-Path verify/app/RSS-Reader.exe)) { throw "missing RSS-Reader.exe in Windows app archive" }
+          if (-not (Test-Path verify/cli/rssr-cli.exe)) { throw "missing rssr-cli.exe in Windows CLI archive" }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -238,6 +262,11 @@ jobs:
           tar -C staging/RSS-Reader -czf release-assets/RSS-Reader-linux-x86_64.tar.gz RSS-Reader
           tar -C target/release -czf release-assets/rssr-cli-linux-x86_64.tar.gz rssr-cli
 
+      - name: Smoke-check Linux artifacts
+        run: |
+          tar -tzf release-assets/RSS-Reader-linux-x86_64.tar.gz | grep '^RSS-Reader$'
+          tar -tzf release-assets/rssr-cli-linux-x86_64.tar.gz | grep '^rssr-cli$'
+
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -260,8 +289,10 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --version 0.7.3 --locked
+      - name: Setup Dioxus CLI
+        uses: ./.github/actions/setup-dioxus-cli
+        with:
+          version: ${{ env.DIOXUS_CLI_VERSION }}
 
       - name: Build web bundle
         run: dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
@@ -270,6 +301,11 @@ jobs:
         run: |
           mkdir -p release-assets
           tar -C target/web-dist -czf release-assets/RSS-Reader-web.tar.gz public
+
+      - name: Smoke-check web artifact
+        run: |
+          tar -tzf release-assets/RSS-Reader-web.tar.gz | grep '^public/index.html$'
+          tar -tzf release-assets/RSS-Reader-web.tar.gz | grep '^public/wasm/rssr-app_bg.wasm$'
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
@@ -301,8 +337,10 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --version 0.7.3 --locked
+      - name: Setup Dioxus CLI
+        uses: ./.github/actions/setup-dioxus-cli
+        with:
+          version: ${{ env.DIOXUS_CLI_VERSION }}
 
       - name: Normalize macOS bundle icon paths
         run: |
@@ -329,6 +367,11 @@ jobs:
           test -n "$APP_BUNDLE_PATH"
           tar -C "$(dirname "$APP_BUNDLE_PATH")" -czf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz RSS-Reader.app
           tar -C target/${{ matrix.target }}/release -czf release-assets/rssr-cli-${{ matrix.suffix }}.tar.gz rssr-cli
+
+      - name: Smoke-check macOS artifacts
+        run: |
+          tar -tzf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz | grep '^RSS-Reader.app/Contents/Info.plist$'
+          tar -tzf release-assets/rssr-cli-${{ matrix.suffix }}.tar.gz | grep '^rssr-cli$'
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4

@@ -6,12 +6,13 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test-and-build:
+  lint-and-test:
     runs-on: ubuntu-latest
-    env:
-      ANDROID_NDK_VERSION: 27.3.13750724
-      ANDROID_API_LEVEL: 34
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,8 +29,60 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --all --check
+
+      - name: Workspace tests
+        run: cargo test --workspace
+
+      - name: CLI smoke
+        run: cargo run -p rssr-cli -- --help
+
+  web-smoke:
+    runs-on: ubuntu-latest
+    env:
+      DIOXUS_CLI_VERSION: 0.7.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown,aarch64-linux-android
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Setup Dioxus CLI
+        uses: ./.github/actions/setup-dioxus-cli
+        with:
+          version: ${{ env.DIOXUS_CLI_VERSION }}
+
+      - name: Wasm target check
+        run: cargo check -p rssr-app --target wasm32-unknown-unknown
+
+      - name: Web bundle smoke
+        run: dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
+
+  android-smoke:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_NDK_VERSION: 27.3.13750724
+      ANDROID_API_LEVEL: 34
+      DIOXUS_CLI_VERSION: 0.7.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
 
       - name: Install Java
         uses: actions/setup-java@v4
@@ -65,17 +118,10 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --version 0.7.3 --locked
-
-      - name: Format check
-        run: cargo fmt --all --check
-
-      - name: Workspace tests
-        run: cargo test --workspace
-
-      - name: Wasm target check
-        run: cargo check -p rssr-app --target wasm32-unknown-unknown
+      - name: Setup Dioxus CLI
+        uses: ./.github/actions/setup-dioxus-cli
+        with:
+          version: ${{ env.DIOXUS_CLI_VERSION }}
 
       - name: Android target smoke check
         run: cargo check -p rssr-app --target aarch64-linux-android
@@ -94,9 +140,3 @@ jobs:
           ! unzip -l "$APK_PATH" | grep 'lib/x86_64/libdioxusmain.so'
           "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" | grep "application-label:'RSS-Reader'"
           "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" | grep 'application-icon-.*rssr_launcher'
-
-      - name: CLI smoke
-        run: cargo run -p rssr-cli -- --help
-
-      - name: Web bundle smoke
-        run: dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist

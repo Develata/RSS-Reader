@@ -1,0 +1,29 @@
+name: Setup Dioxus CLI
+description: Cache and install the pinned Dioxus CLI version
+
+inputs:
+  version:
+    description: Dioxus CLI version to install
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Cache Dioxus CLI
+      id: cache-dioxus-cli
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/dx
+          ~/.cargo/.crates.toml
+          ~/.cargo/.crates2.json
+        key: ${{ runner.os }}-dioxus-cli-${{ inputs.version }}
+
+    - name: Install Dioxus CLI
+      if: steps.cache-dioxus-cli.outputs.cache-hit != 'true'
+      shell: bash
+      run: cargo install dioxus-cli --version "${{ inputs.version }}" --locked
+
+    - name: Verify Dioxus CLI
+      shell: bash
+      run: dx --version
