@@ -1,22 +1,22 @@
 use std::{
-    collections::{HashMap, HashSet},
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::Duration,
+    collections::HashSet,
+    sync::{Arc, Mutex, atomic::AtomicBool},
 };
 
 #[path = "web/config.rs"]
 mod config;
 #[path = "web/feed.rs"]
 mod feed;
+#[path = "web/query.rs"]
+mod query;
+#[path = "web/refresh.rs"]
+mod refresh;
 #[path = "web/state.rs"]
 mod state;
 
 use anyhow::Context;
 use js_sys::Date;
-use reqwest::{StatusCode, header};
+use reqwest::StatusCode;
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::{
     ConfigFeed, ConfigPackage, Entry, EntryQuery, EntrySummary, FeedSummary, ReadFilter,
@@ -25,18 +25,21 @@ use rssr_domain::{
 use time::OffsetDateTime;
 use tokio::sync::OnceCell;
 use url::Url;
-use wasm_bindgen_futures::spawn_local;
 
 use self::{
     config::{
         decode_opml, encode_opml, import_field, remote_url, validate_config_package,
         validate_settings,
     },
-    feed::{ParsedEntry, parse_feed, web_fetch_feed_response},
-    state::{
-        PersistedEntry, PersistedFeed, PersistedState, load_state, save_state_snapshot,
-        to_domain_entry, upsert_entries,
+    query::{
+        get_entry as query_get_entry, list_entries as query_list_entries,
+        list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
     },
+    refresh::{
+        ensure_auto_refresh_started as start_auto_refresh, refresh_all as run_refresh_all,
+        refresh_feed as run_refresh_feed,
+    },
+    state::{PersistedFeed, PersistedState, load_state, save_state_snapshot},
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -71,101 +74,17 @@ impl AppServices {
 
     pub async fn list_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {
         let state = self.state.lock().expect("lock state");
-        let mut counts_by_feed = HashMap::<i64, (u32, u32)>::new();
-        for entry in &state.entries {
-            let counts = counts_by_feed.entry(entry.feed_id).or_insert((0, 0));
-            counts.0 += 1;
-            if !entry.is_read {
-                counts.1 += 1;
-            }
-        }
-        let mut feeds = state
-            .feeds
-            .iter()
-            .filter(|feed| !feed.is_deleted)
-            .map(|feed| FeedSummary {
-                id: feed.id,
-                title: feed.title.clone().unwrap_or_else(|| feed.url.clone()),
-                url: feed.url.clone(),
-                unread_count: counts_by_feed.get(&feed.id).map(|(_, unread)| *unread).unwrap_or(0),
-                entry_count: counts_by_feed.get(&feed.id).map(|(all, _)| *all).unwrap_or(0),
-                last_fetched_at: feed.last_fetched_at,
-                last_success_at: feed.last_success_at,
-                fetch_error: feed.fetch_error.clone(),
-            })
-            .collect::<Vec<_>>();
-        feeds.sort_by(|left, right| left.title.cmp(&right.title));
-        Ok(feeds)
+        Ok(query_list_feeds(&state))
     }
 
     pub async fn list_entries(&self, query: &EntryQuery) -> anyhow::Result<Vec<EntrySummary>> {
         let state = self.state.lock().expect("lock state");
-        let allowed_feed_ids = (!query.feed_ids.is_empty())
-            .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
-        let active_feed_titles = state
-            .feeds
-            .iter()
-            .filter(|feed| !feed.is_deleted)
-            .map(|feed| (feed.id, feed.title.clone().unwrap_or_else(|| feed.url.clone())))
-            .collect::<HashMap<_, _>>();
-        let mut items = state
-            .entries
-            .iter()
-            .filter(|entry| {
-                if !active_feed_titles.contains_key(&entry.feed_id) {
-                    return false;
-                }
-                if let Some(feed_id) = query.feed_id
-                    && entry.feed_id != feed_id
-                {
-                    return false;
-                }
-                if let Some(allowed_feed_ids) = &allowed_feed_ids
-                    && !allowed_feed_ids.contains(&entry.feed_id)
-                {
-                    return false;
-                }
-                match query.read_filter {
-                    ReadFilter::All => {}
-                    ReadFilter::UnreadOnly if entry.is_read => return false,
-                    ReadFilter::ReadOnly if !entry.is_read => return false,
-                    _ => {}
-                }
-                match query.starred_filter {
-                    StarredFilter::All => {}
-                    StarredFilter::StarredOnly if !entry.is_starred => return false,
-                    StarredFilter::UnstarredOnly if entry.is_starred => return false,
-                    _ => {}
-                }
-                if let Some(search) = &query.search_title
-                    && !title_matches_search(&entry.title, search)
-                {
-                    return false;
-                }
-                true
-            })
-            .map(|entry| EntrySummary {
-                id: entry.id,
-                feed_id: entry.feed_id,
-                title: entry.title.clone(),
-                feed_title: active_feed_titles.get(&entry.feed_id).cloned().unwrap_or_default(),
-                published_at: entry.published_at,
-                is_read: entry.is_read,
-                is_starred: entry.is_starred,
-            })
-            .collect::<Vec<_>>();
-        items.sort_by(|left, right| {
-            right.published_at.cmp(&left.published_at).then(right.id.cmp(&left.id))
-        });
-        if let Some(limit) = query.limit {
-            items.truncate(limit as usize);
-        }
-        Ok(items)
+        Ok(query_list_entries(&state, query))
     }
 
     pub async fn get_entry(&self, entry_id: i64) -> anyhow::Result<Option<Entry>> {
         let state = self.state.lock().expect("lock state");
-        state.entries.iter().find(|entry| entry.id == entry_id).map(to_domain_entry).transpose()
+        query_get_entry(&state, entry_id)
     }
 
     pub async fn reader_navigation(
@@ -173,50 +92,7 @@ impl AppServices {
         current_entry_id: i64,
     ) -> anyhow::Result<ReaderNavigation> {
         let state = self.state.lock().expect("lock state");
-        let active_feed_ids = state
-            .feeds
-            .iter()
-            .filter(|feed| !feed.is_deleted)
-            .map(|feed| feed.id)
-            .collect::<HashSet<_>>();
-        let Some(current_entry) = state
-            .entries
-            .iter()
-            .find(|entry| entry.id == current_entry_id && active_feed_ids.contains(&entry.feed_id))
-        else {
-            return Ok(ReaderNavigation::default());
-        };
-
-        let mut ordered_entries = state
-            .entries
-            .iter()
-            .filter(|entry| active_feed_ids.contains(&entry.feed_id))
-            .collect::<Vec<_>>();
-        ordered_entries.sort_by(|left, right| compare_entry_order(left, right));
-        let mut navigation = ReaderNavigation::default();
-
-        if let Some(index) = ordered_entries.iter().position(|entry| entry.id == current_entry_id) {
-            navigation.previous_unread_entry_id = ordered_entries[..index]
-                .iter()
-                .rev()
-                .find(|entry| !entry.is_read)
-                .map(|entry| entry.id);
-            navigation.next_unread_entry_id = ordered_entries[index + 1..]
-                .iter()
-                .find(|entry| !entry.is_read)
-                .map(|entry| entry.id);
-            navigation.previous_feed_entry_id = ordered_entries[..index]
-                .iter()
-                .rev()
-                .find(|entry| entry.feed_id == current_entry.feed_id)
-                .map(|entry| entry.id);
-            navigation.next_feed_entry_id = ordered_entries[index + 1..]
-                .iter()
-                .find(|entry| entry.feed_id == current_entry.feed_id)
-                .map(|entry| entry.id);
-        }
-
-        Ok(navigation)
+        Ok(query_reader_navigation(&state, current_entry_id))
     }
 
     pub async fn set_read(&self, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
@@ -281,48 +157,7 @@ impl AppServices {
     }
 
     pub fn ensure_auto_refresh_started(self: &Arc<Self>) {
-        if self.auto_refresh_started.swap(true, Ordering::SeqCst) {
-            return;
-        }
-
-        let services = Arc::clone(self);
-        spawn_local(async move {
-            let mut last_refresh_started_at = None;
-
-            loop {
-                let settings = match services.load_settings().await {
-                    Ok(settings) => settings,
-                    Err(error) => {
-                        tracing::warn!(error = %error, "读取自动刷新设置失败，稍后重试");
-                        gloo_timers::future::sleep(Duration::from_secs(30)).await;
-                        continue;
-                    }
-                };
-
-                let now = web_now_utc();
-                if super::should_trigger_auto_refresh(
-                    last_refresh_started_at,
-                    settings.refresh_interval_minutes,
-                    now,
-                ) {
-                    tracing::info!(
-                        refresh_interval_minutes = settings.refresh_interval_minutes,
-                        "触发后台自动刷新全部订阅"
-                    );
-                    if let Err(error) = services.refresh_all().await {
-                        tracing::warn!(error = %error, "后台自动刷新失败");
-                    }
-                    last_refresh_started_at = Some(now);
-                }
-
-                let wait_for = super::auto_refresh_wait_duration(
-                    last_refresh_started_at,
-                    settings.refresh_interval_minutes,
-                    web_now_utc(),
-                );
-                gloo_timers::future::sleep(wait_for).await;
-            }
-        });
+        start_auto_refresh(self);
     }
 
     pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
@@ -384,161 +219,11 @@ impl AppServices {
     }
 
     pub async fn refresh_all(&self) -> anyhow::Result<()> {
-        let feed_ids = {
-            let state = self.state.lock().expect("lock state");
-            state
-                .feeds
-                .iter()
-                .filter(|feed| !feed.is_deleted)
-                .map(|feed| feed.id)
-                .collect::<Vec<_>>()
-        };
-        let mut errors = Vec::new();
-        for feed_id in feed_ids {
-            if let Err(error) = self.refresh_feed(feed_id).await {
-                errors.push(error.to_string());
-            }
-        }
-        if !errors.is_empty() {
-            anyhow::bail!("部分订阅刷新失败: {}", errors.join(" | "));
-        }
-        Ok(())
+        run_refresh_all(self).await
     }
 
     pub async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        let url = {
-            let state = self.state.lock().expect("lock state");
-            let feed = state
-                .feeds
-                .iter()
-                .find(|feed| feed.id == feed_id && !feed.is_deleted)
-                .context("订阅不存在")?;
-            feed.url.clone()
-        };
-
-        let response = match web_fetch_feed_response(&self.client, &url).await {
-            Ok(response) => response,
-            Err(error) => {
-                let snapshot = {
-                    let mut state = self.state.lock().expect("lock state");
-                    let now = web_now_utc();
-                    if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
-                        feed.last_fetched_at = Some(now);
-                        feed.fetch_error = Some(format!("抓取订阅失败: {error}"));
-                        feed.updated_at = now;
-                    }
-                    state.clone()
-                };
-                let _ = save_state_snapshot(snapshot);
-                return Err(error);
-            }
-        };
-        let metadata = (
-            response
-                .headers()
-                .get(header::ETAG)
-                .and_then(|value| value.to_str().ok())
-                .map(ToOwned::to_owned),
-            response
-                .headers()
-                .get(header::LAST_MODIFIED)
-                .and_then(|value| value.to_str().ok())
-                .map(ToOwned::to_owned),
-        );
-
-        if response.status() == StatusCode::NOT_MODIFIED {
-            let snapshot = {
-                let mut state = self.state.lock().expect("lock state");
-                let now = web_now_utc();
-                let feed =
-                    state.feeds.iter_mut().find(|feed| feed.id == feed_id).context("订阅不存在")?;
-                feed.etag = metadata.0;
-                feed.last_modified = metadata.1;
-                feed.last_fetched_at = Some(now);
-                feed.last_success_at = Some(now);
-                feed.fetch_error = None;
-                feed.updated_at = now;
-                state.clone()
-            };
-            return save_state_snapshot(snapshot);
-        }
-
-        let body = match response.error_for_status() {
-            Ok(response) => match response.text().await {
-                Ok(body) => body,
-                Err(error) => {
-                    let snapshot = {
-                        let mut state = self.state.lock().expect("lock state");
-                        let now = web_now_utc();
-                        if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
-                            feed.last_fetched_at = Some(now);
-                            feed.fetch_error = Some(format!("读取 feed 响应正文失败: {error}"));
-                            feed.updated_at = now;
-                        }
-                        state.clone()
-                    };
-                    let _ = save_state_snapshot(snapshot);
-                    return Err(error).context("读取 feed 响应正文失败");
-                }
-            },
-            Err(error) => {
-                let snapshot = {
-                    let mut state = self.state.lock().expect("lock state");
-                    let now = web_now_utc();
-                    if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
-                        feed.last_fetched_at = Some(now);
-                        feed.fetch_error = Some(format!("feed 抓取返回非成功状态: {error}"));
-                        feed.updated_at = now;
-                    }
-                    state.clone()
-                };
-                let _ = save_state_snapshot(snapshot);
-                return Err(error).context("feed 抓取返回非成功状态");
-            }
-        };
-        let parsed = match parse_feed(&body) {
-            Ok(parsed) => parsed,
-            Err(error) => {
-                let snapshot = {
-                    let mut state = self.state.lock().expect("lock state");
-                    let now = web_now_utc();
-                    if let Some(feed) = state.feeds.iter_mut().find(|feed| feed.id == feed_id) {
-                        feed.last_fetched_at = Some(now);
-                        feed.fetch_error = Some(format!("解析订阅失败: {error}"));
-                        feed.updated_at = now;
-                    }
-                    state.clone()
-                };
-                let _ = save_state_snapshot(snapshot);
-                return Err(error).context("解析订阅失败");
-            }
-        };
-
-        let snapshot = {
-            let mut state = self.state.lock().expect("lock state");
-            let now = web_now_utc();
-            let feed =
-                state.feeds.iter_mut().find(|feed| feed.id == feed_id).context("订阅不存在")?;
-            if parsed.title.is_some() {
-                feed.title = parsed.title;
-            }
-            if parsed.site_url.is_some() {
-                feed.site_url = parsed.site_url.map(|url| url.to_string());
-            }
-            if parsed.description.is_some() {
-                feed.description = parsed.description;
-            }
-            feed.etag = metadata.0;
-            feed.last_modified = metadata.1;
-            feed.last_fetched_at = Some(now);
-            feed.last_success_at = Some(now);
-            feed.fetch_error = None;
-            feed.updated_at = now;
-
-            upsert_entries(&mut state, feed_id, parsed.entries)?;
-            state.clone()
-        };
-        save_state_snapshot(snapshot)
+        run_refresh_feed(self, feed_id).await
     }
 
     pub async fn export_config_json(&self) -> anyhow::Result<String> {
@@ -731,14 +416,6 @@ impl AppServices {
     }
 }
 
-fn title_matches_search(title: &str, search: &str) -> bool {
-    title.to_lowercase().contains(&search.to_lowercase())
-}
-
-fn compare_entry_order(left: &PersistedEntry, right: &PersistedEntry) -> std::cmp::Ordering {
-    right.published_at.cmp(&left.published_at).then(right.id.cmp(&left.id))
-}
-
 fn web_now_utc() -> OffsetDateTime {
     let millis = Date::now() as i128;
     OffsetDateTime::from_unix_timestamp_nanos(millis * 1_000_000)
@@ -747,7 +424,7 @@ fn web_now_utc() -> OffsetDateTime {
 
 #[cfg(test)]
 mod tests {
-    use super::title_matches_search;
+    use super::query::title_matches_search;
 
     #[test]
     fn web_title_search_is_case_insensitive() {
