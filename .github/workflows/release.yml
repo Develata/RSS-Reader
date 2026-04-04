@@ -304,6 +304,18 @@ jobs:
       - name: Install Dioxus CLI
         run: cargo install dioxus-cli --version 0.7.3 --locked
 
+      - name: Normalize macOS bundle icon paths
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          workspace = Path.cwd()
+          config = workspace / "Dioxus.toml"
+          text = config.read_text(encoding="utf-8")
+          text = text.replace('icon = ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"]', f'icon = ["{workspace / "icons" / "icon.png"}", "{workspace / "icons" / "icon.ico"}", "{workspace / "icons" / "icon.icns"}"]')
+          text = text.replace('icon_path = "icons/icon.ico"', f'icon_path = "{workspace / "icons" / "icon.ico"}"')
+          config.write_text(text, encoding="utf-8")
+          PY
+
       - name: Build macOS app bundle and CLI
         run: |
           rm -rf target/macos-bundle/${{ matrix.suffix }}
