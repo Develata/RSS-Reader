@@ -28,8 +28,15 @@ pub fn ReaderPage(entry_id: i64) -> Element {
     let mut status = use_signal(String::new);
     let mut status_tone = use_signal(|| "info".to_string());
     let mut error = use_signal(|| None::<String>);
-    let shortcuts =
-        use_reader_shortcuts(entry_id, is_read, is_starred, reload_tick, status, status_tone);
+    let shortcuts = use_reader_shortcuts(
+        entry_id,
+        navigation_state,
+        is_read,
+        is_starred,
+        reload_tick,
+        status,
+        status_tone,
+    );
     let reload_version = reload_tick();
 
     use_resource(use_reactive!(|(entry_id, reload_version)| async move {
