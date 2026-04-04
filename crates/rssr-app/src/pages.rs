@@ -1,4 +1,5 @@
 pub mod entries_page;
+mod entries_page_groups;
 pub mod feeds_page;
 pub mod reader_page;
 pub mod settings_page;
