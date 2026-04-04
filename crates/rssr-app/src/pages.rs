@@ -3,6 +3,7 @@ mod entries_page_cards;
 mod entries_page_controls;
 mod entries_page_groups;
 pub mod feeds_page;
+mod feeds_page_sections;
 pub mod reader_page;
 pub mod settings_page;
 mod settings_page_appearance;
