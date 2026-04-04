@@ -48,8 +48,6 @@ pub struct AppServices {
 }
 
 impl AppServices {
-    const AUTO_REFRESH_POLL_INTERVAL: Duration = Duration::from_secs(30);
-
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES
             .get_or_try_init(|| async {
@@ -296,7 +294,7 @@ impl AppServices {
                     Ok(settings) => settings,
                     Err(error) => {
                         tracing::warn!(error = %error, "读取自动刷新设置失败，稍后重试");
-                        gloo_timers::future::sleep(Self::AUTO_REFRESH_POLL_INTERVAL).await;
+                        gloo_timers::future::sleep(Duration::from_secs(30)).await;
                         continue;
                     }
                 };
@@ -317,7 +315,12 @@ impl AppServices {
                     last_refresh_started_at = Some(now);
                 }
 
-                gloo_timers::future::sleep(Self::AUTO_REFRESH_POLL_INTERVAL).await;
+                let wait_for = super::auto_refresh_wait_duration(
+                    last_refresh_started_at,
+                    settings.refresh_interval_minutes,
+                    web_now_utc(),
+                );
+                gloo_timers::future::sleep(wait_for).await;
             }
         });
     }

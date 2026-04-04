@@ -29,6 +29,7 @@ use rssr_infra::{
 };
 use time::OffsetDateTime;
 use tokio::sync::OnceCell;
+use tokio::task::JoinSet;
 use url::Url;
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -51,7 +52,8 @@ pub struct AppServices {
 impl AppServices {
     const MAX_BACKGROUND_LOCALIZED_ENTRIES: usize = 5;
     const LOCALIZE_TIMEOUT: Duration = Duration::from_secs(5);
-    const AUTO_REFRESH_POLL_INTERVAL: Duration = Duration::from_secs(30);
+    const AUTO_REFRESH_RETRY_DELAY: Duration = Duration::from_secs(30);
+    const REFRESH_ALL_CONCURRENCY: usize = 4;
 
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES
@@ -160,7 +162,7 @@ impl AppServices {
                     Ok(settings) => settings,
                     Err(error) => {
                         tracing::warn!(error = %error, "读取自动刷新设置失败，稍后重试");
-                        tokio::time::sleep(Self::AUTO_REFRESH_POLL_INTERVAL).await;
+                        tokio::time::sleep(Self::AUTO_REFRESH_RETRY_DELAY).await;
                         continue;
                     }
                 };
@@ -181,7 +183,12 @@ impl AppServices {
                     last_refresh_started_at = Some(now);
                 }
 
-                tokio::time::sleep(Self::AUTO_REFRESH_POLL_INTERVAL).await;
+                let wait_for = super::auto_refresh_wait_duration(
+                    last_refresh_started_at,
+                    settings.refresh_interval_minutes,
+                    OffsetDateTime::now_utc(),
+                );
+                tokio::time::sleep(wait_for).await;
             }
         });
     }
@@ -209,13 +216,41 @@ impl AppServices {
         Ok(())
     }
 
-    pub async fn refresh_all(&self) -> anyhow::Result<()> {
+    pub async fn refresh_all(self: &Arc<Self>) -> anyhow::Result<()> {
         let feeds = self.feed_repository.list_feeds().await.context("读取订阅列表失败")?;
         let mut errors = Vec::new();
-        for feed in feeds {
-            if let Err(error) = self.refresh_feed(feed.id).await {
-                tracing::warn!(feed_id = feed.id, error = %error, "刷新订阅失败");
-                errors.push(format!("{}: {error}", feed.url));
+
+        let mut feed_iter = feeds.into_iter();
+        let mut in_flight = JoinSet::new();
+
+        loop {
+            while in_flight.len() < Self::REFRESH_ALL_CONCURRENCY {
+                let Some(feed) = feed_iter.next() else {
+                    break;
+                };
+                let services = Arc::clone(self);
+                in_flight.spawn(async move {
+                    let result = services.refresh_feed(feed.id).await;
+                    (feed.url, feed.id, result)
+                });
+            }
+
+            let Some(result) = in_flight.join_next().await else {
+                break;
+            };
+
+            match result {
+                Ok((_url, feed_id, Ok(()))) => {
+                    tracing::debug!(feed_id, "刷新订阅成功");
+                }
+                Ok((url, feed_id, Err(error))) => {
+                    tracing::warn!(feed_id, error = %error, "刷新订阅失败");
+                    errors.push(format!("{url}: {error}"));
+                }
+                Err(error) => {
+                    tracing::warn!(error = %error, "刷新订阅任务意外结束");
+                    errors.push(format!("后台刷新任务异常结束: {error}"));
+                }
             }
         }
 

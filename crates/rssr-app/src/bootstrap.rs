@@ -8,6 +8,25 @@ mod imp;
 
 pub use imp::{AppServices, ReaderNavigation};
 
+fn auto_refresh_wait_duration(
+    last_refresh_started_at: Option<time::OffsetDateTime>,
+    refresh_interval_minutes: u32,
+    now: time::OffsetDateTime,
+) -> std::time::Duration {
+    match last_refresh_started_at {
+        None => std::time::Duration::ZERO,
+        Some(last_refresh_started_at) => {
+            let next_refresh_at =
+                last_refresh_started_at + time::Duration::minutes(refresh_interval_minutes as i64);
+            if now >= next_refresh_at {
+                std::time::Duration::ZERO
+            } else {
+                (next_refresh_at - now).try_into().unwrap_or(std::time::Duration::ZERO)
+            }
+        }
+    }
+}
+
 fn should_trigger_auto_refresh(
     last_refresh_started_at: Option<time::OffsetDateTime>,
     refresh_interval_minutes: u32,
@@ -24,7 +43,7 @@ fn should_trigger_auto_refresh(
 
 #[cfg(test)]
 mod tests {
-    use super::should_trigger_auto_refresh;
+    use super::{auto_refresh_wait_duration, should_trigger_auto_refresh};
     use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
     #[test]
@@ -41,5 +60,28 @@ mod tests {
 
         assert!(!should_trigger_auto_refresh(Some(last), 30, before));
         assert!(should_trigger_auto_refresh(Some(last), 30, after));
+    }
+
+    #[test]
+    fn auto_refresh_wait_duration_is_zero_when_never_run() {
+        let now = OffsetDateTime::parse("2026-04-01T12:00:00Z", &Rfc3339).expect("parse now");
+        assert_eq!(auto_refresh_wait_duration(None, 30, now), std::time::Duration::ZERO);
+    }
+
+    #[test]
+    fn auto_refresh_wait_duration_returns_remaining_interval() {
+        let last = OffsetDateTime::parse("2026-04-01T12:00:00Z", &Rfc3339).expect("parse last");
+        let now = OffsetDateTime::parse("2026-04-01T12:10:00Z", &Rfc3339).expect("parse now");
+        assert_eq!(
+            auto_refresh_wait_duration(Some(last), 30, now),
+            std::time::Duration::from_secs(20 * 60)
+        );
+    }
+
+    #[test]
+    fn auto_refresh_wait_duration_is_zero_after_due_time() {
+        let last = OffsetDateTime::parse("2026-04-01T12:00:00Z", &Rfc3339).expect("parse last");
+        let now = OffsetDateTime::parse("2026-04-01T12:31:00Z", &Rfc3339).expect("parse now");
+        assert_eq!(auto_refresh_wait_duration(Some(last), 30, now), std::time::Duration::ZERO);
     }
 }
