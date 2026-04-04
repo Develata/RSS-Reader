@@ -262,17 +262,6 @@ fn group_source_months(entries: &[EntrySummary]) -> Vec<EntrySourceMonthGroup> {
     months
 }
 
-pub(crate) fn build_month_nav_items(groups: &[EntryMonthGroup]) -> Vec<EntryGroupNavItem> {
-    groups
-        .iter()
-        .map(|group| EntryGroupNavItem {
-            anchor_id: group.anchor_id.clone(),
-            title: group.title.clone(),
-            subtitle: group.subtitle.clone(),
-        })
-        .collect()
-}
-
 pub(crate) fn build_directory_months(groups: &[EntryMonthGroup]) -> Vec<EntryDirectoryMonth> {
     groups
         .iter()
@@ -293,7 +282,7 @@ pub(crate) fn build_directory_months(groups: &[EntryMonthGroup]) -> Vec<EntryDir
         .collect()
 }
 
-pub(crate) fn build_group_nav_items(groups: &[EntrySourceGroup]) -> Vec<EntryGroupNavItem> {
+pub(crate) fn build_month_nav_items(groups: &[EntryMonthGroup]) -> Vec<EntryGroupNavItem> {
     groups
         .iter()
         .map(|group| EntryGroupNavItem {
@@ -321,6 +310,17 @@ pub(crate) fn build_directory_sources(groups: &[EntrySourceGroup]) -> Vec<EntryD
                     dates: Vec::new(),
                 })
                 .collect(),
+        })
+        .collect()
+}
+
+pub(crate) fn build_group_nav_items(groups: &[EntrySourceGroup]) -> Vec<EntryGroupNavItem> {
+    groups
+        .iter()
+        .map(|group| EntryGroupNavItem {
+            anchor_id: group.anchor_id.clone(),
+            title: group.title.clone(),
+            subtitle: group.subtitle.clone(),
         })
         .collect()
 }

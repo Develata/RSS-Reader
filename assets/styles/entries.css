@@ -246,10 +246,6 @@
   display: none;
 }
 
-.entry-mobile-directory-toggle {
-  display: none;
-}
-
 .entry-directory-rail {
   position: sticky;
   top: 92px;

@@ -92,21 +92,8 @@
     display: none;
   }
 
-  .entry-mobile-directory-toggle {
-    display: inline-flex;
-    justify-self: start;
-    margin: 0 0 10px;
-    min-height: 42px;
-    padding: 10px 16px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.72);
-    color: var(--ink);
-    box-shadow: none;
-    border: 1px solid rgba(62, 42, 27, 0.08);
-  }
-
   .entry-top-directory {
-    display: none;
+    display: grid;
     grid-auto-flow: column;
     grid-auto-columns: minmax(156px, 68vw);
     gap: 10px;
@@ -114,10 +101,6 @@
     margin: 0 0 14px;
     padding: 2px 2px 8px;
     scrollbar-width: thin;
-  }
-
-  .entry-top-directory.is-open {
-    display: grid;
   }
 
   .entry-top-directory__chip {

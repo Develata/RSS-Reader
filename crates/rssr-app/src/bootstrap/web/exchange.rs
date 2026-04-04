@@ -6,9 +6,10 @@ use rssr_domain::{ConfigFeed, ConfigPackage, normalize_feed_url};
 use url::Url;
 
 use super::{
-    AppServices, PersistedFeed,
+    AppServices,
     config::{decode_opml, encode_opml, import_field, remote_url, validate_config_package},
-    save_state_snapshot, web_now_utc,
+    state::{PersistedFeed, save_state_snapshot},
+    web_now_utc,
 };
 
 pub(super) fn export_config_json(services: &AppServices) -> anyhow::Result<String> {

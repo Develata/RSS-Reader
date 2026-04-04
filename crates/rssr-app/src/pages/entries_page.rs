@@ -106,7 +106,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
         entry_grouping_mode_from_preference(UserSettings::default().entry_grouping_mode)
     });
     let mut archive_after_months = use_signal(|| UserSettings::default().archive_after_months);
-    let mobile_directory_open = use_signal(|| false);
     let expanded_directory_sources = use_signal(BTreeSet::<String>::new);
     let controls_hidden = use_signal(initial_entry_controls_hidden);
     let reload_tick = use_signal(|| 0_u64);
@@ -271,7 +270,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                         read_filter,
                         starred_filter,
                         selected_feed_urls,
-                        mobile_directory_open,
                         group_nav_items: &group_nav_items,
                         status,
                         status_tone,

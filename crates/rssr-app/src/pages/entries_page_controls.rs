@@ -27,7 +27,6 @@ pub(super) struct EntryControlsProps<'a> {
     pub read_filter: Signal<ReadFilter>,
     pub starred_filter: Signal<StarredFilter>,
     pub selected_feed_urls: Signal<Vec<String>>,
-    pub mobile_directory_open: Signal<bool>,
     pub group_nav_items: &'a [EntryGroupNavItem],
     pub status: Signal<String>,
     pub status_tone: Signal<String>,
@@ -46,7 +45,6 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
         mut read_filter,
         mut starred_filter,
         mut selected_feed_urls,
-        mut mobile_directory_open,
         group_nav_items,
         status,
         status_tone,
@@ -123,29 +121,14 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
                     }
                 }
                 if !group_nav_items.is_empty() {
-                    button {
-                        class: "button secondary entry-mobile-directory-toggle",
-                        "data-action": if mobile_directory_open() { "close-entry-directory" } else { "open-entry-directory" },
-                        onclick: move |_| mobile_directory_open.set(!mobile_directory_open()),
-                        if mobile_directory_open() { "收起目录" } else { "目录" }
-                    }
-                    nav {
-                        class: if mobile_directory_open() {
-                            "entry-top-directory is-open"
-                        } else {
-                            "entry-top-directory"
-                        },
-                        "aria-label": "文章目录",
+                    nav { class: "entry-top-directory", "aria-label": "文章目录",
                         for item in group_nav_items {
                             button {
                                 class: "entry-top-directory__chip",
                                 r#type: "button",
                                 onclick: {
                                     let anchor_id = item.anchor_id.clone();
-                                    move |_| {
-                                        scroll_to_entry_group(&anchor_id);
-                                        mobile_directory_open.set(false);
-                                    }
+                                    move |_| scroll_to_entry_group(&anchor_id)
                                 },
                                 span { class: "entry-top-directory__title", "{item.title}" }
                                 span { class: "entry-top-directory__meta", "{item.subtitle}" }
@@ -358,9 +341,25 @@ pub(super) fn scroll_to_entry_group(anchor_id: &str) {
 
     document::eval(&format!(
         r#"
-        const element = document.getElementById({anchor_id_json});
-        if (element) {{
-            element.scrollIntoView({{ behavior: "smooth", block: "start" }});
+        const targetId = {anchor_id_json};
+        const scrollToTarget = () => {{
+            const element = document.getElementById(targetId);
+            if (!element) {{
+                return false;
+            }}
+
+            if (window.location.hash !== `#${{targetId}}`) {{
+                window.location.hash = targetId;
+            }}
+
+            element.scrollIntoView({{ behavior: "smooth", block: "start", inline: "nearest" }});
+            return true;
+        }};
+
+        if (!scrollToTarget()) {{
+            requestAnimationFrame(scrollToTarget);
+        }} else {{
+            requestAnimationFrame(scrollToTarget);
         }}
         "#
     ));

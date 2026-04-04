@@ -6,7 +6,10 @@ use time::OffsetDateTime;
 use url::Url;
 use web_sys::{Storage, window};
 
-use super::{ParsedEntry, feed::hash_content, web_now_utc};
+use super::{
+    feed::{ParsedEntry, hash_content},
+    web_now_utc,
+};
 
 pub(super) const STORAGE_KEY: &str = "rssr-web-state-v1";
 

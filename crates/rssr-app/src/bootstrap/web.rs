@@ -24,7 +24,6 @@ use tokio::sync::OnceCell;
 use url::Url;
 
 use self::{
-    config::validate_settings,
     exchange::{
         export_config_json as export_exchange_json, export_opml as export_exchange_opml,
         import_config_json as import_exchange_json, import_opml as import_exchange_opml,

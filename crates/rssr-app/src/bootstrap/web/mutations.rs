@@ -3,7 +3,10 @@ use rssr_domain::{UserSettings, normalize_feed_url};
 use url::Url;
 
 use super::{
-    AppServices, PersistedFeed, config::validate_settings, save_state_snapshot, web_now_utc,
+    AppServices,
+    config::validate_settings,
+    state::{PersistedFeed, save_state_snapshot},
+    web_now_utc,
 };
 
 pub(super) fn set_read(services: &AppServices, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
