@@ -61,23 +61,6 @@ pub(crate) fn detect_preset_key(raw: &str) -> &'static str {
     }
 }
 
-pub(super) fn custom_css_source_label(raw: &str) -> &'static str {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        "未启用自定义 CSS"
-    } else if trimmed == atlas_sidebar_theme_css().trim() {
-        "内置主题：Atlas Sidebar"
-    } else if trimmed == newsprint_theme_css().trim() {
-        "内置主题：Newsprint"
-    } else if trimmed == forest_desk_theme_css().trim() {
-        "内置主题：Amethyst Glass"
-    } else if trimmed == midnight_ledger_theme_css().trim() {
-        "内置主题：Midnight Ledger"
-    } else {
-        "自定义主题"
-    }
-}
-
 pub(super) fn apply_builtin_theme(
     theme: ThemeController,
     mut draft: Signal<UserSettings>,
@@ -140,8 +123,6 @@ pub(super) fn apply_settings_immediately(
 pub(super) struct BuiltinThemePreset {
     pub key: &'static str,
     pub name: &'static str,
-    pub description: &'static str,
-    pub notes: &'static str,
     pub swatches: [&'static str; 3],
 }
 
@@ -150,29 +131,21 @@ pub(super) fn builtin_theme_presets() -> [BuiltinThemePreset; 4] {
         BuiltinThemePreset {
             key: "atlas-sidebar",
             name: "Atlas Sidebar",
-            description: "把应用改成更接近侧栏工作台的布局，导航和内容区彻底分栏。",
-            notes: "头部变成左侧信息栏，页面导航垂直停靠，整体更像编辑器或知识库工具。",
             swatches: ["#f1efe8", "#b24c3d", "#1f2430"],
         },
         BuiltinThemePreset {
             key: "newsprint",
             name: "Newsprint",
-            description: "偏纸面和报刊感，标题更有旧式出版物气质。",
-            notes: "更窄圆角、两列统计卡片、阅读页更长的正文版心。",
             swatches: ["#efe6d6", "#8b3d2b", "#241d16"],
         },
         BuiltinThemePreset {
             key: "forest-desk",
             name: "Amethyst Glass",
-            description: "紫蓝渐变和高通透毛玻璃，界面更梦幻，也更轻盈。",
-            notes: "发光药丸按钮、玻璃面板和更宽松的阅读排版，适合沉浸式浏览。",
             swatches: ["#e0c3fc", "#8b5cf6", "#1f2937"],
         },
         BuiltinThemePreset {
             key: "midnight-ledger",
             name: "Midnight Ledger",
-            description: "深色账本风，强调夜间阅读和更稳的对比。",
-            notes: "深底配冷色强调，卡片层次更明显，正文更沉浸。",
             swatches: ["#0f1518", "#4fb7b1", "#eef5f7"],
         },
     ]
@@ -422,15 +395,12 @@ fn save_css_file_in_browser(raw: &str) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        custom_css_source_label, detect_preset_key, forest_desk_theme_css, newsprint_theme_css,
-    };
+    use super::{detect_preset_key, forest_desk_theme_css, newsprint_theme_css};
 
     #[test]
     fn detect_preset_key_keeps_unknown_css_as_custom() {
         let custom = ":root { --panel: #123456; }\n[data-page=\"reader\"] { gap: 99px; }";
         assert_eq!(detect_preset_key(custom), "custom");
-        assert_eq!(custom_css_source_label(custom), "自定义主题");
     }
 
     #[test]

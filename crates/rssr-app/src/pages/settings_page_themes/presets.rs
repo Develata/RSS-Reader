@@ -137,8 +137,6 @@ pub(super) fn ThemePresetSections(
                         let preset_key = preset.key.to_string();
                         let remove_preset_key = preset_key.clone();
                         let preset_name = preset.name;
-                        let preset_description = preset.description;
-                        let preset_notes = preset.notes;
                         let preset_swatches = preset.swatches;
                         rsx! {
                             article {
@@ -147,7 +145,6 @@ pub(super) fn ThemePresetSections(
                                 "data-action": "theme-card",
                                 "data-theme-preset": "{preset.key}",
                                 h4 { class: "theme-card__title", "{preset_name}" }
-                                p { class: "theme-card__description", "{preset_description}" }
                                 div { class: "theme-card__swatches",
                                     for swatch in preset_swatches {
                                         span {
@@ -156,7 +153,6 @@ pub(super) fn ThemePresetSections(
                                         }
                                     }
                                 }
-                                p { class: "theme-card__notes", "{preset_notes}" }
                                 button {
                                     class: if is_active { "button" } else { "button secondary" },
                                     "data-action": "apply-theme-card",

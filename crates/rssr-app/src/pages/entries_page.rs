@@ -193,9 +193,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let time_grouped_entries = group_entries_by_time_tree(&visible_entries);
     let directory_months = build_directory_months(&time_grouped_entries);
     let directory_sources = build_directory_sources(&source_grouped_entries);
-    let page_intro = feed_id.map(
-        |_| "当前只显示所选订阅的文章。你仍然可以按时间或按来源组织当前结果，然后继续进入阅读页。",
-    );
     let group_nav_items = match grouping_mode() {
         EntryGroupingMode::Time => build_month_nav_items(&time_grouped_entries),
         EntryGroupingMode::Source => build_group_nav_items(&source_grouped_entries),
@@ -250,9 +247,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     div { class: "reading-header reading-header--entries",
                         div { class: "reading-header__row",
                             h2 { if feed_id.is_some() { "订阅文章" } else { "文章" } }
-                        }
-                        if let Some(intro) = page_intro {
-                            p { class: "page-intro", "{intro}" }
                         }
                     }
                     if feed_id.is_some() {

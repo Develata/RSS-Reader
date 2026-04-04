@@ -3,7 +3,7 @@ use rssr_domain::UserSettings;
 
 use crate::theme::ThemeController;
 
-use super::support::{apply_custom_css_from_raw, custom_css_source_label, export_css_file};
+use super::support::{apply_custom_css_from_raw, export_css_file};
 
 #[component]
 pub(super) fn ThemeLabSection(
@@ -100,11 +100,6 @@ pub(super) fn ThemeLabSection(
                     preset_choice.set(super::detect_preset_key(&next.custom_css).to_string());
                     draft.set(next);
                 }
-            }
-            p {
-                class: "page-intro",
-                "data-action": "current-custom-css-source",
-                "当前样式来源：{custom_css_source_label(&draft().custom_css)}"
             }
             div { class: "inline-actions settings-card__actions",
                 {import_css_trigger}
