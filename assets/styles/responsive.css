@@ -124,10 +124,15 @@
     display: grid;
     gap: 4px;
     min-height: 72px;
+    width: 100%;
     padding: 12px 14px;
     border: 1px solid rgba(62, 42, 27, 0.08);
     border-radius: 16px;
     background: rgba(245, 250, 255, 0.6);
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
     box-shadow: 0 8px 20px rgba(63, 38, 18, 0.04);
   }
 

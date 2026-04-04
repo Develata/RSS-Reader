@@ -284,12 +284,24 @@
   gap: 3px;
   padding: 7px 0;
   color: var(--muted);
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
   transition: color 120ms ease, transform 120ms ease;
 }
 
 .entry-directory-rail__link:hover {
   color: var(--ink);
   transform: translateX(1px);
+}
+
+.entry-directory-rail__link:focus-visible,
+.entry-top-directory__chip:focus-visible {
+  outline: 2px solid rgba(109, 76, 53, 0.28);
+  outline-offset: 3px;
 }
 
 .entry-directory-rail__link-title {

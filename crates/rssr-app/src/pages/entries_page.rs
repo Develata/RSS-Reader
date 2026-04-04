@@ -286,10 +286,16 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                     },
                                     "aria-label": "文章目录",
                                     for item in &group_nav_items {
-                                        a {
+                                        button {
                                             class: "entry-top-directory__chip",
-                                            href: format!("#{}", item.anchor_id),
-                                            onclick: move |_| mobile_directory_open.set(false),
+                                            r#type: "button",
+                                            onclick: {
+                                                let anchor_id = item.anchor_id.clone();
+                                                move |_| {
+                                                    scroll_to_entry_group(&anchor_id);
+                                                    mobile_directory_open.set(false);
+                                                }
+                                            },
                                             span { class: "entry-top-directory__title", "{item.title}" }
                                             span { class: "entry-top-directory__meta", "{item.subtitle}" }
                                         }
@@ -408,17 +414,25 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             nav { class: "entry-directory-rail__nav", "aria-label": "文章目录导航",
                                 for month in directory_months {
                                     div { class: "entry-directory-rail__section", key: "{month.anchor_id}",
-                                        a {
+                                        button {
                                             class: "entry-directory-rail__link entry-directory-rail__link--month",
-                                            href: format!("#{}", month.anchor_id),
+                                            r#type: "button",
+                                            onclick: {
+                                                let anchor_id = month.anchor_id.clone();
+                                                move |_| scroll_to_entry_group(&anchor_id)
+                                            },
                                             span { class: "entry-directory-rail__link-title", "{month.title}" }
                                             span { class: "entry-directory-rail__link-meta", "{month.subtitle}" }
                                         }
                                         div { class: "entry-directory-rail__children",
                                             for date in month.dates {
-                                                a {
+                                                button {
                                                     class: "entry-directory-rail__link entry-directory-rail__link--date",
-                                                    href: format!("#{}", date.anchor_id),
+                                                    r#type: "button",
+                                                    onclick: {
+                                                        let anchor_id = date.anchor_id.clone();
+                                                        move |_| scroll_to_entry_group(&anchor_id)
+                                                    },
                                                     span { class: "entry-directory-rail__link-title", "{date.title}" }
                                                     span { class: "entry-directory-rail__link-meta", "{date.subtitle}" }
                                                 }
@@ -456,9 +470,13 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                 if is_open {
                                                     div { class: "entry-directory-rail__grandchildren",
                                                         for month in source.months {
-                                                            a {
+                                                            button {
                                                                 class: "entry-directory-rail__link",
-                                                                href: format!("#{}", month.anchor_id),
+                                                                r#type: "button",
+                                                                onclick: {
+                                                                    let anchor_id = month.anchor_id.clone();
+                                                                    move |_| scroll_to_entry_group(&anchor_id)
+                                                                },
                                                                 span { class: "entry-directory-rail__link-title", "{month.title}" }
                                                                 span { class: "entry-directory-rail__link-meta", "{month.subtitle}" }
                                                             }
@@ -624,4 +642,19 @@ fn remember_entry_controls_hidden(_hidden: bool) {
             let _ = storage.set_item("rssr-entry-controls-hidden", if _hidden { "1" } else { "0" });
         }
     }
+}
+
+fn scroll_to_entry_group(anchor_id: &str) {
+    let Ok(anchor_id_json) = serde_json::to_string(anchor_id) else {
+        return;
+    };
+
+    document::eval(&format!(
+        r#"
+        const element = document.getElementById({anchor_id_json});
+        if (element) {{
+            element.scrollIntoView({{ behavior: "smooth", block: "start" }});
+        }}
+        "#
+    ));
 }
