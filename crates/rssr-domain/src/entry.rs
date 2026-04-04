@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use time::{Date, Month, OffsetDateTime, PrimitiveDateTime, UtcOffset};
 use url::Url;
 
@@ -44,7 +45,8 @@ pub struct EntryNavigation {
     pub next_feed_entry_id: Option<i64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ReadFilter {
     #[default]
     All,
@@ -52,7 +54,8 @@ pub enum ReadFilter {
     ReadOnly,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum StarredFilter {
     #[default]
     All,

@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use rssr_application::import_export_service::ImportExportService;
 use rssr_domain::{
-    ConfigFeed, ConfigPackage, FeedRepository, ListDensity, NewFeedSubscription,
-    SettingsRepository, StartupView, ThemeMode, UserSettings,
+    ConfigFeed, ConfigPackage, EntryGroupingPreference, FeedRepository, ListDensity,
+    NewFeedSubscription, ReadFilter, SettingsRepository, StarredFilter, StartupView, ThemeMode,
+    UserSettings,
 };
 use rssr_infra::{
     config_sync::file_format::{decode_config_package, encode_config_package},
@@ -52,6 +53,11 @@ async fn config_package_roundtrip_restores_feeds_and_settings() {
         refresh_interval_minutes: 15,
         archive_after_months: 3,
         reader_font_scale: 1.2,
+        entry_grouping_mode: EntryGroupingPreference::Source,
+        show_archived_entries: true,
+        entry_read_filter: ReadFilter::UnreadOnly,
+        entry_starred_filter: StarredFilter::StarredOnly,
+        entry_filtered_feed_urls: vec!["https://example.com/feed.xml".to_string()],
         custom_css: "[data-page=\"feeds\"] .feed-card { order: 2; }".to_string(),
     };
     export_settings_repository.save(&expected_settings).await.expect("save settings");

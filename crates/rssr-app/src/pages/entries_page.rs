@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use rssr_domain::{
-    EntryQuery, EntrySummary, FeedSummary, ReadFilter, StarredFilter, StartupView, UserSettings,
-    is_entry_archived,
+    EntryGroupingPreference, EntryQuery, EntrySummary, FeedSummary, ReadFilter, StarredFilter,
+    StartupView, UserSettings, is_entry_archived,
 };
 use std::collections::BTreeSet;
 use time::{OffsetDateTime, UtcOffset, macros::format_description};
@@ -101,9 +101,11 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let mut feeds = use_signal(Vec::<FeedSummary>::new);
     let mut read_filter = use_signal(ReadFilter::default);
     let mut starred_filter = use_signal(StarredFilter::default);
-    let mut selected_feed_ids = use_signal(Vec::<i64>::new);
-    let mut show_archived = use_signal(|| false);
-    let mut grouping_mode = use_signal(|| EntryGroupingMode::Time);
+    let mut selected_feed_urls = use_signal(Vec::<String>::new);
+    let mut show_archived = use_signal(|| UserSettings::default().show_archived_entries);
+    let mut grouping_mode = use_signal(|| {
+        entry_grouping_mode_from_preference(UserSettings::default().entry_grouping_mode)
+    });
     let mut archive_after_months = use_signal(|| UserSettings::default().archive_after_months);
     let mut mobile_directory_open = use_signal(|| false);
     let mut expanded_directory_sources = use_signal(BTreeSet::<String>::new);
@@ -111,12 +113,32 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let reload_tick = use_signal(|| 0_u64);
     let status = use_signal(|| "正在加载文章列表…".to_string());
     let status_tone = use_signal(|| "info".to_string());
+    let mut preferences_loaded = use_signal(|| false);
 
     use_resource(move || async move {
         if let Some(feed_id) = feed_id
             && let Ok(services) = AppServices::shared().await
         {
             let _ = services.remember_last_opened_feed_id(feed_id).await;
+        }
+    });
+
+    use_resource(move || async move {
+        match AppServices::shared().await {
+            Ok(services) => match services.load_settings().await {
+                Ok(settings) => {
+                    archive_after_months.set(settings.archive_after_months);
+                    read_filter.set(settings.entry_read_filter);
+                    starred_filter.set(settings.entry_starred_filter);
+                    selected_feed_urls.set(settings.entry_filtered_feed_urls);
+                    show_archived.set(settings.show_archived_entries);
+                    grouping_mode
+                        .set(entry_grouping_mode_from_preference(settings.entry_grouping_mode));
+                    preferences_loaded.set(true);
+                }
+                Err(err) => set_status_error(status, status_tone, format!("读取设置失败：{err}")),
+            },
+            Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
         }
     });
 
@@ -128,7 +150,11 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     feed_id,
                     read_filter: read_filter(),
                     starred_filter: starred_filter(),
-                    feed_ids: if feed_id.is_some() { Vec::new() } else { selected_feed_ids() },
+                    feed_ids: if feed_id.is_some() {
+                        Vec::new()
+                    } else {
+                        map_selected_feed_urls_to_ids(&feeds(), &selected_feed_urls())
+                    },
                     search_title: (!(ui.entry_search)().trim().is_empty())
                         .then(|| (ui.entry_search)()),
                     limit: None,
@@ -138,9 +164,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                 Ok(items) => {
                     if let Ok(feed_items) = services.list_feeds().await {
                         feeds.set(feed_items);
-                    }
-                    if let Ok(settings) = services.load_settings().await {
-                        archive_after_months.set(settings.archive_after_months);
                     }
                     set_status_info(status, status_tone, format!("共 {} 篇文章。", items.len()));
                     entries.set(items);
@@ -165,7 +188,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let source_filter_options = if feed_id.is_some() {
         Vec::new()
     } else {
-        feeds().into_iter().map(|feed| (feed.id, feed.title)).collect::<Vec<_>>()
+        feeds().into_iter().map(|feed| (feed.id, feed.title, feed.url)).collect::<Vec<_>>()
     };
     let source_grouped_entries = group_entries_by_source_tree(&visible_entries);
     let time_grouped_entries = group_entries_by_time_tree(&visible_entries);
@@ -178,6 +201,47 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
         EntryGroupingMode::Time => build_month_nav_items(&time_grouped_entries),
         EntryGroupingMode::Source => build_group_nav_items(&source_grouped_entries),
     };
+
+    use_effect(move || {
+        if !preferences_loaded() {
+            return;
+        }
+
+        let next_grouping = grouping_mode_preference(grouping_mode());
+        let next_show_archived = show_archived();
+        let next_read_filter = read_filter();
+        let next_starred_filter = starred_filter();
+        let next_feed_urls = selected_feed_urls();
+
+        spawn(async move {
+            match AppServices::shared().await {
+                Ok(services) => match services.load_settings().await {
+                    Ok(mut settings) => {
+                        let changed = settings.entry_grouping_mode != next_grouping
+                            || settings.show_archived_entries != next_show_archived
+                            || settings.entry_read_filter != next_read_filter
+                            || settings.entry_starred_filter != next_starred_filter
+                            || settings.entry_filtered_feed_urls != next_feed_urls;
+
+                        if !changed {
+                            return;
+                        }
+
+                        settings.entry_grouping_mode = next_grouping;
+                        settings.show_archived_entries = next_show_archived;
+                        settings.entry_read_filter = next_read_filter;
+                        settings.entry_starred_filter = next_starred_filter;
+                        settings.entry_filtered_feed_urls = next_feed_urls;
+                        if let Err(err) = services.save_settings(&settings).await {
+                            tracing::warn!(error = %err, "保存文章页偏好失败");
+                        }
+                    }
+                    Err(err) => tracing::warn!(error = %err, "读取文章页偏好失败"),
+                },
+                Err(err) => tracing::warn!(error = %err, "初始化应用失败，无法保存文章页偏好"),
+            }
+        });
+    });
 
     rsx! {
         section { class: "page page-entries", "data-page": "entries",
@@ -307,11 +371,11 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 read_filter: read_filter(),
                                 starred_filter: starred_filter(),
                                 available_sources: source_filter_options.clone(),
-                                selected_feed_ids: selected_feed_ids(),
+                                selected_feed_urls: selected_feed_urls(),
                                 on_search: move |value| ui.entry_search.set(value),
                                 on_change_read_filter: move |value| read_filter.set(value),
                                 on_change_starred_filter: move |value| starred_filter.set(value),
-                                on_change_selected_feed_ids: move |value| selected_feed_ids.set(value),
+                                on_change_selected_feed_urls: move |value| selected_feed_urls.set(value),
                             }
                             StatusBanner { message: status(), tone: status_tone() }
                             if archived_count > 0 && !show_archived() {
@@ -501,6 +565,33 @@ fn format_entry_date_utc(published_at: Option<OffsetDateTime>) -> Option<String>
         format_description!("[year]-[month]-[day]");
 
     published_at.and_then(|value| value.to_offset(UtcOffset::UTC).format(ENTRY_DATE_FORMAT).ok())
+}
+
+fn entry_grouping_mode_from_preference(preference: EntryGroupingPreference) -> EntryGroupingMode {
+    match preference {
+        EntryGroupingPreference::Time => EntryGroupingMode::Time,
+        EntryGroupingPreference::Source => EntryGroupingMode::Source,
+    }
+}
+
+fn grouping_mode_preference(mode: EntryGroupingMode) -> EntryGroupingPreference {
+    match mode {
+        EntryGroupingMode::Time => EntryGroupingPreference::Time,
+        EntryGroupingMode::Source => EntryGroupingPreference::Source,
+    }
+}
+
+fn map_selected_feed_urls_to_ids(feeds: &[FeedSummary], selected_feed_urls: &[String]) -> Vec<i64> {
+    if selected_feed_urls.is_empty() {
+        return Vec::new();
+    }
+
+    let selected = selected_feed_urls.iter().map(String::as_str).collect::<BTreeSet<_>>();
+    feeds
+        .iter()
+        .filter(|feed| selected.contains(feed.url.as_str()))
+        .map(|feed| feed.id)
+        .collect::<Vec<_>>()
 }
 
 fn render_entry_card(

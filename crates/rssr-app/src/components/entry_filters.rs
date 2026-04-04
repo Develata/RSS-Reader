@@ -6,12 +6,12 @@ pub fn EntryFilters(
     search: String,
     read_filter: ReadFilter,
     starred_filter: StarredFilter,
-    available_sources: Vec<(i64, String)>,
-    selected_feed_ids: Vec<i64>,
+    available_sources: Vec<(i64, String, String)>,
+    selected_feed_urls: Vec<String>,
     on_search: EventHandler<String>,
     on_change_read_filter: EventHandler<ReadFilter>,
     on_change_starred_filter: EventHandler<StarredFilter>,
-    on_change_selected_feed_ids: EventHandler<Vec<i64>>,
+    on_change_selected_feed_urls: EventHandler<Vec<String>>,
 ) -> Element {
     rsx! {
         div { class: "entry-filters",
@@ -97,17 +97,21 @@ pub fn EntryFilters(
                 div { class: "entry-filters__sources",
                     p { class: "entry-filters__sources-label", "按来源筛选" }
                     div { class: "entry-filters__source-grid",
-                        for (feed_id, title) in available_sources {
+                        for (_feed_id, title, url) in available_sources {
                             {
-                                let is_selected = selected_feed_ids.contains(&feed_id);
-                                let next_selected_feed_ids = if is_selected {
-                                    selected_feed_ids.iter().copied().filter(|id| *id != feed_id).collect::<Vec<_>>()
+                                let is_selected = selected_feed_urls.contains(&url);
+                                let next_selected_feed_urls = if is_selected {
+                                    selected_feed_urls
+                                        .iter()
+                                        .filter(|current| **current != url)
+                                        .cloned()
+                                        .collect::<Vec<_>>()
                                 } else {
-                                    let mut ids = selected_feed_ids.clone();
-                                    ids.push(feed_id);
-                                    ids.sort_unstable();
-                                    ids.dedup();
-                                    ids
+                                    let mut urls = selected_feed_urls.clone();
+                                    urls.push(url.clone());
+                                    urls.sort();
+                                    urls.dedup();
+                                    urls
                                 };
                                 rsx! {
                                     label {
@@ -120,7 +124,7 @@ pub fn EntryFilters(
                                             class: "sr-only",
                                             r#type: "checkbox",
                                             checked: is_selected,
-                                            onchange: move |_| on_change_selected_feed_ids.call(next_selected_feed_ids.clone())
+                                            onchange: move |_| on_change_selected_feed_urls.call(next_selected_feed_urls.clone())
                                         }
                                         span { "{title}" }
                                     }

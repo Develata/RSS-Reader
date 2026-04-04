@@ -33,6 +33,15 @@ pub(super) fn validate_settings(settings: &UserSettings) -> anyhow::Result<()> {
         (0.8..=1.5).contains(&settings.reader_font_scale),
         "阅读字号缩放必须在 0.8 到 1.5 之间"
     );
+    let mut normalized_urls = HashSet::new();
+    for raw in &settings.entry_filtered_feed_urls {
+        let normalized =
+            normalize_feed_url(&Url::parse(raw).with_context(|| format!("无效的订阅 URL：{raw}"))?);
+        ensure!(
+            normalized_urls.insert(normalized.to_string()),
+            "来源筛选中包含重复的订阅 URL：{raw}"
+        );
+    }
     Ok(())
 }
 

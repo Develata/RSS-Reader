@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
+use crate::entry::{ReadFilter, StarredFilter};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeMode {
@@ -26,6 +28,14 @@ pub enum StartupView {
     LastFeed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EntryGroupingPreference {
+    #[default]
+    Time,
+    Source,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UserSettings {
@@ -36,6 +46,11 @@ pub struct UserSettings {
     #[serde(default = "default_archive_after_months")]
     pub archive_after_months: u32,
     pub reader_font_scale: f32,
+    pub entry_grouping_mode: EntryGroupingPreference,
+    pub show_archived_entries: bool,
+    pub entry_read_filter: ReadFilter,
+    pub entry_starred_filter: StarredFilter,
+    pub entry_filtered_feed_urls: Vec<String>,
     #[serde(default)]
     pub custom_css: String,
 }
@@ -49,6 +64,11 @@ impl Default for UserSettings {
             refresh_interval_minutes: 30,
             archive_after_months: default_archive_after_months(),
             reader_font_scale: 1.0,
+            entry_grouping_mode: EntryGroupingPreference::Time,
+            show_archived_entries: false,
+            entry_read_filter: ReadFilter::All,
+            entry_starred_filter: StarredFilter::All,
+            entry_filtered_feed_urls: Vec::new(),
             custom_css: String::new(),
         }
     }

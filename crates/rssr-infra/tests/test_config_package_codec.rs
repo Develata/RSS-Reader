@@ -1,4 +1,7 @@
-use rssr_domain::{ConfigFeed, ConfigPackage, ListDensity, StartupView, ThemeMode, UserSettings};
+use rssr_domain::{
+    ConfigFeed, ConfigPackage, EntryGroupingPreference, ListDensity, ReadFilter, StarredFilter,
+    StartupView, ThemeMode, UserSettings,
+};
 use rssr_infra::config_sync::file_format::{decode_config_package, encode_config_package};
 use serde_json::json;
 use time::OffsetDateTime;
@@ -96,6 +99,11 @@ fn sample_package() -> ConfigPackage {
             refresh_interval_minutes: 15,
             archive_after_months: 3,
             reader_font_scale: 1.1,
+            entry_grouping_mode: EntryGroupingPreference::Source,
+            show_archived_entries: true,
+            entry_read_filter: ReadFilter::UnreadOnly,
+            entry_starred_filter: StarredFilter::UnstarredOnly,
+            entry_filtered_feed_urls: vec!["https://example.com/feed.xml".to_string()],
             custom_css: ".feed-card { border-radius: 12px; }".to_string(),
         },
     }

@@ -162,7 +162,7 @@ Output:
 target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The extra patch step rewrites the generated Android launcher resources so the packaged app name and icon stay aligned with the desktop release (`RSS-Reader` / `RSSR`). Because the patch modifies the generated Gradle project, you must rebuild the APK after patching or the old default launcher assets will remain in the packaged output.
+The extra patch step rewrites the generated Android launcher resources and SDK levels so the packaged app name, icon, and privacy-related Android target level stay aligned with the desktop release (`RSS-Reader` / `RSSR`) and the current Android target. Because the patch modifies the generated Gradle project, you must rebuild the APK after patching or the old default launcher assets and SDK settings will remain in the packaged output.
 
 ### Run CLI
 

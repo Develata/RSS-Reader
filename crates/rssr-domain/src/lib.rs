@@ -8,6 +8,7 @@ pub use entry::{
 };
 pub use feed::{Feed, FeedSummary, NewFeedSubscription, normalize_feed_url};
 pub use repository::{EntryRepository, FeedRepository, HealthRepository, SettingsRepository};
+pub use settings::EntryGroupingPreference;
 pub use settings::{ConfigFeed, ConfigPackage, ListDensity, StartupView, ThemeMode, UserSettings};
 
 pub type Result<T> = std::result::Result<T, DomainError>;

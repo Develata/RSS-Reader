@@ -1,4 +1,7 @@
-use rssr_domain::{ListDensity, SettingsRepository, StartupView, ThemeMode, UserSettings};
+use rssr_domain::{
+    EntryGroupingPreference, ListDensity, ReadFilter, SettingsRepository, StarredFilter,
+    StartupView, ThemeMode, UserSettings,
+};
 use rssr_infra::db::{
     migrate, settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,
     storage_backend::StorageBackend,
@@ -18,6 +21,11 @@ async fn settings_repository_persists_and_loads_settings() {
         refresh_interval_minutes: 45,
         archive_after_months: 6,
         reader_font_scale: 1.2,
+        entry_grouping_mode: EntryGroupingPreference::Source,
+        show_archived_entries: true,
+        entry_read_filter: ReadFilter::UnreadOnly,
+        entry_starred_filter: StarredFilter::StarredOnly,
+        entry_filtered_feed_urls: vec!["https://example.com/feed.xml".to_string()],
         custom_css: "[data-page=\"feeds\"] { opacity: 0.95; }".to_string(),
     };
 
@@ -42,6 +50,11 @@ async fn settings_repository_loads_legacy_settings_without_custom_css() {
             "list_density":"comfortable",
             "startup_view":"all",
             "refresh_interval_minutes":30,
+            "entry_grouping_mode":"time",
+            "show_archived_entries":false,
+            "entry_read_filter":"all",
+            "entry_starred_filter":"all",
+            "entry_filtered_feed_urls":[],
             "reader_font_scale":1.0
         }"#,
     )

@@ -46,6 +46,11 @@
         "refresh_interval_minutes",
         "archive_after_months",
         "reader_font_scale",
+        "entry_grouping_mode",
+        "show_archived_entries",
+        "entry_read_filter",
+        "entry_starred_filter",
+        "entry_filtered_feed_urls",
         "custom_css"
       ],
       "properties": {
@@ -73,6 +78,29 @@
           "type": "number",
           "minimum": 0.8,
           "maximum": 1.5
+        },
+        "entry_grouping_mode": {
+          "type": "string",
+          "enum": ["time", "source"]
+        },
+        "show_archived_entries": {
+          "type": "boolean"
+        },
+        "entry_read_filter": {
+          "type": "string",
+          "enum": ["all", "unread_only", "read_only"]
+        },
+        "entry_starred_filter": {
+          "type": "string",
+          "enum": ["all", "starred_only", "unstarred_only"]
+        },
+        "entry_filtered_feed_urls": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          },
+          "uniqueItems": true
         },
         "custom_css": {
           "type": "string"

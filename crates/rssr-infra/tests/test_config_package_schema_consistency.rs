@@ -1,4 +1,7 @@
-use rssr_domain::{ConfigFeed, ConfigPackage, ListDensity, StartupView, ThemeMode, UserSettings};
+use rssr_domain::{
+    ConfigFeed, ConfigPackage, EntryGroupingPreference, ListDensity, ReadFilter, StarredFilter,
+    StartupView, ThemeMode, UserSettings,
+};
 use rssr_infra::config_sync::file_format::{decode_config_package, encode_config_package};
 use serde_json::Value;
 use time::OffsetDateTime;
@@ -39,6 +42,11 @@ fn config_package_schema_matches_runtime_contract() {
             "refresh_interval_minutes",
             "archive_after_months",
             "reader_font_scale",
+            "entry_grouping_mode",
+            "show_archived_entries",
+            "entry_read_filter",
+            "entry_starred_filter",
+            "entry_filtered_feed_urls",
             "custom_css"
         ])
     );
@@ -54,10 +62,24 @@ fn config_package_schema_matches_runtime_contract() {
         settings["properties"]["startup_view"]["enum"],
         serde_json::json!(["all", "last_feed"])
     );
+    assert_eq!(
+        settings["properties"]["entry_grouping_mode"]["enum"],
+        serde_json::json!(["time", "source"])
+    );
+    assert_eq!(
+        settings["properties"]["entry_read_filter"]["enum"],
+        serde_json::json!(["all", "unread_only", "read_only"])
+    );
+    assert_eq!(
+        settings["properties"]["entry_starred_filter"]["enum"],
+        serde_json::json!(["all", "starred_only", "unstarred_only"])
+    );
     assert_eq!(settings["properties"]["refresh_interval_minutes"]["minimum"], 1);
     assert_eq!(settings["properties"]["archive_after_months"]["minimum"], 1);
     assert_eq!(settings["properties"]["reader_font_scale"]["minimum"], 0.8);
     assert_eq!(settings["properties"]["reader_font_scale"]["maximum"], 1.5);
+    assert_eq!(settings["properties"]["show_archived_entries"]["type"], "boolean");
+    assert_eq!(settings["properties"]["entry_filtered_feed_urls"]["type"], "array");
     assert_eq!(settings["properties"]["custom_css"]["type"], "string");
 }
 
@@ -78,6 +100,11 @@ fn encoded_config_package_uses_schema_field_names_and_enum_values() {
             refresh_interval_minutes: 15,
             archive_after_months: 3,
             reader_font_scale: 1.2,
+            entry_grouping_mode: EntryGroupingPreference::Source,
+            show_archived_entries: true,
+            entry_read_filter: ReadFilter::UnreadOnly,
+            entry_starred_filter: StarredFilter::UnstarredOnly,
+            entry_filtered_feed_urls: vec!["https://example.com/feed.xml".to_string()],
             custom_css: "[data-page=\"reader\"] .reader-body { max-width: 70ch; }".to_string(),
         },
     };
@@ -96,6 +123,14 @@ fn encoded_config_package_uses_schema_field_names_and_enum_values() {
     assert_eq!(json["settings"]["refresh_interval_minutes"], 15);
     assert_eq!(json["settings"]["archive_after_months"], 3);
     assert_eq!(json["settings"]["reader_font_scale"], 1.2);
+    assert_eq!(json["settings"]["entry_grouping_mode"], "source");
+    assert_eq!(json["settings"]["show_archived_entries"], true);
+    assert_eq!(json["settings"]["entry_read_filter"], "unread_only");
+    assert_eq!(json["settings"]["entry_starred_filter"], "unstarred_only");
+    assert_eq!(
+        json["settings"]["entry_filtered_feed_urls"],
+        serde_json::json!(["https://example.com/feed.xml"])
+    );
     assert_eq!(
         json["settings"]["custom_css"],
         "[data-page=\"reader\"] .reader-body { max-width: 70ch; }"
