@@ -4,7 +4,7 @@ use crate::router::AppRoute;
 use dioxus::mobile::{
     tao::{
         event::{ElementState, Event as TaoEvent, WindowEvent as TaoWindowEvent},
-        keyboard::KeyCode as TaoKeyCode,
+        keyboard::{Key as TaoKey, KeyCode as TaoKeyCode},
     },
     use_wry_event_handler,
 };
@@ -27,7 +27,10 @@ pub fn use_mobile_back_navigation(fallback_route: Option<AppRoute>) {
 
             if event.state != ElementState::Pressed
                 || event.repeat
-                || event.physical_key != TaoKeyCode::BrowserBack
+                || !matches!(
+                    (event.physical_key, &event.logical_key),
+                    (TaoKeyCode::BrowserBack, _) | (_, TaoKey::GoBack) | (_, TaoKey::Escape)
+                )
             {
                 return;
             }
