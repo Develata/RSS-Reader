@@ -259,22 +259,38 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Build Linux binaries
+      - name: Setup Dioxus CLI
+        uses: ./.github/actions/setup-dioxus-cli
+        with:
+          version: ${{ env.DIOXUS_CLI_VERSION }}
+
+      - name: Stage crate-local icon paths for Linux bundler
         run: |
-          cargo build --release -p rssr-app
+          rm -rf crates/rssr-app/icons
+          mkdir -p crates/rssr-app/icons
+          cp icons/icon.png crates/rssr-app/icons/icon.png
+          cp icons/icon.ico crates/rssr-app/icons/icon.ico
+          cp icons/icon.icns crates/rssr-app/icons/icon.icns
+
+      - name: Build Linux app bundle and CLI
+        run: |
+          rm -rf target/linux-bundle
+          dx bundle --platform desktop --package-types deb --package rssr-app --release --out-dir target/linux-bundle
           cargo build --release -p rssr-cli
 
-      - name: Archive Linux binaries
+      - name: Archive Linux artifacts
         run: |
           mkdir -p release-assets
-          mkdir -p staging/RSS-Reader
-          cp target/release/rssr-app staging/RSS-Reader/RSS-Reader
-          tar -C staging/RSS-Reader -czf release-assets/RSS-Reader-linux-x86_64.tar.gz RSS-Reader
+          APP_DEB_PATH="$(find target/linux-bundle -maxdepth 1 -name '*.deb' | head -n1)"
+          test -n "$APP_DEB_PATH"
+          cp "$APP_DEB_PATH" release-assets/RSS-Reader-linux-x86_64.deb
           tar -C target/release -czf release-assets/rssr-cli-linux-x86_64.tar.gz rssr-cli
 
       - name: Smoke-check Linux artifacts
         run: |
-          tar -tzf release-assets/RSS-Reader-linux-x86_64.tar.gz | grep '^RSS-Reader$'
+          test -f release-assets/RSS-Reader-linux-x86_64.deb
+          dpkg-deb -f release-assets/RSS-Reader-linux-x86_64.deb Package | grep '^io.github.develata.rssreader$\|^rss-reader$'
+          dpkg-deb -c release-assets/RSS-Reader-linux-x86_64.deb | grep '/usr/bin/rssr-app$\|/usr/bin/RSS-Reader$'
           tar -tzf release-assets/rssr-cli-linux-x86_64.tar.gz | grep '^rssr-cli$'
 
       - name: Upload Linux artifacts
@@ -412,5 +428,6 @@ jobs:
           files: |
             release-assets/**/*.aab
             release-assets/**/*.apk
+            release-assets/**/*.deb
             release-assets/**/*.zip
             release-assets/**/*.tar.gz
