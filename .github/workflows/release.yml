@@ -290,8 +290,9 @@ jobs:
       - name: Smoke-check Linux artifacts
         run: |
           test -f release-assets/RSS-Reader-linux-x86_64.deb
-          dpkg-deb -f release-assets/RSS-Reader-linux-x86_64.deb Package | grep '^io.github.develata.rssreader$\|^rss-reader$'
-          dpkg-deb -c release-assets/RSS-Reader-linux-x86_64.deb | grep '/usr/bin/rssr-app$\|/usr/bin/RSS-Reader$'
+          dpkg-deb -f release-assets/RSS-Reader-linux-x86_64.deb Package | grep '^rssr-app$\|^rss-reader$\|^io.github.develata.rssreader$'
+          dpkg-deb -c release-assets/RSS-Reader-linux-x86_64.deb | grep 'usr/bin/rssr-app$\|usr/bin/RSS-Reader$\|usr/bin/rss-reader$'
+          dpkg-deb -c release-assets/RSS-Reader-linux-x86_64.deb | grep 'usr/share/applications/.*\.desktop$'
           tar -tzf release-assets/rssr-cli-linux-x86_64.tar.gz | grep '^rssr-cli$'
 
       - name: Upload Linux artifacts
