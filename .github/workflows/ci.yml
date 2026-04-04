@@ -17,6 +17,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cleanup runner
+        uses: ./.github/actions/cleanup-github-runner
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -50,6 +53,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cleanup runner
+        uses: ./.github/actions/cleanup-github-runner
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -78,6 +84,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Cleanup runner
+        uses: ./.github/actions/cleanup-github-runner
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

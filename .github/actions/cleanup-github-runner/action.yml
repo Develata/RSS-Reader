@@ -1,0 +1,38 @@
+name: Cleanup GitHub Runner
+description: Reclaim disk space on fresh GitHub-hosted runners before heavy builds
+
+inputs:
+  prune-docker:
+    description: Whether to prune Docker images and builder cache
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Show disk usage before cleanup
+      if: runner.os == 'Linux'
+      shell: bash
+      run: df -h
+
+    - name: Remove unused preinstalled toolchains
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/share/dotnet || true
+        sudo rm -rf /opt/ghc || true
+        sudo rm -rf /usr/local/share/boost || true
+        sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}/CodeQL" || true
+        sudo rm -rf /usr/local/julia* || true
+
+    - name: Prune Docker caches
+      if: runner.os == 'Linux' && inputs.prune-docker == 'true'
+      shell: bash
+      run: |
+        docker system prune -af || true
+        docker builder prune -af || true
+
+    - name: Show disk usage after cleanup
+      if: runner.os == 'Linux'
+      shell: bash
+      run: df -h
