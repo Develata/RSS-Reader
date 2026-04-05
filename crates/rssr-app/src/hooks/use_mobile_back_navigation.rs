@@ -18,6 +18,15 @@ pub fn use_mobile_back_navigation(fallback_route: Option<AppRoute>) {
         let history = history();
         let window = use_window();
 
+        let restore_window_interactivity = move || {
+            let window = window.clone();
+            spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(16)).await;
+                window.set_visible(true);
+                let _ = window.set_focus();
+            });
+        };
+
         use_wry_event_handler(move |event, _| {
             let navigate_within_app = || {
                 if history.can_go_back() {
@@ -60,12 +69,11 @@ pub fn use_mobile_back_navigation(fallback_route: Option<AppRoute>) {
                         return;
                     }
 
-                    let window = window.clone();
-                    spawn(async move {
-                        tokio::time::sleep(std::time::Duration::from_millis(16)).await;
-                        window.set_visible(true);
-                        let _ = window.set_focus();
-                    });
+                    restore_window_interactivity();
+                }
+                TaoEvent::Resumed => restore_window_interactivity(),
+                TaoEvent::WindowEvent { event: TaoWindowEvent::Focused(true), .. } => {
+                    restore_window_interactivity();
                 }
                 _ => {}
             }
