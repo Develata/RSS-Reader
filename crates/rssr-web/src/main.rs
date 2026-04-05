@@ -8,10 +8,11 @@ use axum::{
     Router,
     http::{HeaderValue, StatusCode, header},
     middleware,
-    response::IntoResponse,
+    response::{Html, IntoResponse},
     routing::get,
 };
 use clap::Parser;
+use tokio::fs;
 use tokio::sync::Mutex;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
@@ -53,6 +54,12 @@ async fn main() -> Result<()> {
     );
 
     let protected = Router::new()
+        .route("/", get(serve_app_shell))
+        .route("/entries", get(serve_app_shell))
+        .route("/entries/{entry_id}", get(serve_app_shell))
+        .route("/feeds", get(serve_app_shell))
+        .route("/feeds/{feed_id}/entries", get(serve_app_shell))
+        .route("/settings", get(serve_app_shell))
         .route("/session-probe", get(session_probe))
         .route("/feed-proxy", get(feed_proxy))
         .fallback_service(
@@ -89,6 +96,25 @@ fn init_tracing() {
 
 async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, "ok")
+}
+
+async fn serve_app_shell(
+    axum::extract::State(state): axum::extract::State<AppState>,
+) -> impl IntoResponse {
+    let index_path = state.config.static_dir.join("index.html");
+    match fs::read_to_string(&index_path).await {
+        Ok(index_html) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8"))],
+            Html(index_html),
+        )
+            .into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("读取前端入口失败：{} ({err})", index_path.display()),
+        )
+            .into_response(),
+    }
 }
 
 async fn favicon() -> impl IntoResponse {
