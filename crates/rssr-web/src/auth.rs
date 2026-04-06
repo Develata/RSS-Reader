@@ -1,4 +1,5 @@
 mod config;
+mod persisted_state;
 mod rate_limit;
 mod session;
 

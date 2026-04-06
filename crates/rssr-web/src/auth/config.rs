@@ -1,6 +1,5 @@
 use std::{
     env, fs,
-    io::Write,
     net::SocketAddr,
     path::{Path, PathBuf},
 };
@@ -9,14 +8,16 @@ use anyhow::{Context, Result, anyhow, ensure};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use rand_core::{OsRng, RngCore};
-use serde::{Deserialize, Serialize};
 use time::Duration;
 use tracing::{info, warn};
+
+use super::persisted_state::{
+    PersistedAuthState, load_persisted_auth_state, persist_auth_state, resolve_auth_state_file,
+};
 
 const DEFAULT_LOGIN_RATE_LIMIT_WINDOW_MINUTES: i64 = 15;
 const DEFAULT_LOGIN_RATE_LIMIT_BLOCK_MINUTES: i64 = 15;
 const DEFAULT_LOGIN_RATE_LIMIT_MAX_FAILURES: u32 = 5;
-const DEFAULT_AUTH_STATE_FILE_NAME: &str = ".rssr-web-auth.json";
 
 #[derive(Clone)]
 pub(crate) struct AuthConfig {
@@ -47,13 +48,6 @@ pub(crate) struct LoginRateLimit {
     pub(crate) max_failures: u32,
     pub(crate) window: Duration,
     pub(crate) block_for: Duration,
-}
-
-#[derive(Serialize, Deserialize)]
-struct PersistedAuthState {
-    password_hash: String,
-    #[serde(default)]
-    session_secret: Option<String>,
 }
 
 pub(crate) fn load_config() -> Result<AuthConfig> {
@@ -156,15 +150,6 @@ fn optional_env(name: &str) -> Option<String> {
     })
 }
 
-fn resolve_auth_state_file() -> PathBuf {
-    env::var("RSS_READER_WEB_AUTH_STATE_FILE").map(PathBuf::from).unwrap_or_else(|_| {
-        env::var("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join(DEFAULT_AUTH_STATE_FILE_NAME)
-    })
-}
-
 fn parse_environment(raw: String) -> Result<WebEnvironment> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "dev" | "development" | "local" => Ok(WebEnvironment::Development),
@@ -185,7 +170,7 @@ fn load_password_policy(username: &str, auth_state_file: &Path) -> Result<Passwo
 fn resolve_session_secret(auth_state_file: &Path) -> Result<String> {
     if let Some(session_secret) = optional_env("RSS_READER_WEB_SESSION_SECRET") {
         ensure!(session_secret.len() >= 32, "RSS_READER_WEB_SESSION_SECRET 至少需要 32 个字符");
-        persist_auth_state(auth_state_file, None, Some(&session_secret))?;
+        persist_auth_state_with_merge(auth_state_file, None, Some(&session_secret))?;
         return Ok(session_secret);
     }
 
@@ -197,7 +182,7 @@ fn resolve_session_secret(auth_state_file: &Path) -> Result<String> {
     }
 
     let generated = generate_session_secret();
-    persist_auth_state(auth_state_file, None, Some(&generated))?;
+    persist_auth_state_with_merge(auth_state_file, None, Some(&generated))?;
     info!(
         auth_state_file = %auth_state_file.display(),
         "已自动生成并持久化 RSS_READER_WEB_SESSION_SECRET"
@@ -213,7 +198,7 @@ fn resolve_password_policy(
 ) -> Result<PasswordPolicy> {
     if let Some(hash) = password_hash {
         validate_password_hash(&hash)?;
-        persist_auth_state(auth_state_file, Some(&hash), None)?;
+        persist_auth_state_with_merge(auth_state_file, Some(&hash), None)?;
         return Ok(PasswordPolicy::Argon2Hash(hash));
     }
 
@@ -227,7 +212,7 @@ fn resolve_password_policy(
         }
 
         let generated_hash = generate_password_hash(&password)?;
-        persist_auth_state(auth_state_file, Some(&generated_hash), None)?;
+        persist_auth_state_with_merge(auth_state_file, Some(&generated_hash), None)?;
         info!(
             username = username,
             auth_state_file = %auth_state_file.display(),
@@ -253,21 +238,7 @@ fn load_persisted_password_hash(auth_state_file: &Path) -> Result<Option<String>
     Ok(Some(state.password_hash))
 }
 
-fn load_persisted_auth_state(auth_state_file: &Path) -> Result<Option<PersistedAuthState>> {
-    if !auth_state_file.exists() {
-        return Ok(None);
-    }
-
-    enforce_auth_state_file_permissions(auth_state_file)?;
-
-    let raw = fs::read_to_string(auth_state_file)
-        .with_context(|| format!("读取认证状态文件失败：{}", auth_state_file.display()))?;
-    let state: PersistedAuthState = serde_json::from_str(&raw)
-        .with_context(|| format!("解析认证状态文件失败：{}", auth_state_file.display()))?;
-    Ok(Some(state))
-}
-
-fn persist_auth_state(
+fn persist_auth_state_with_merge(
     auth_state_file: &Path,
     password_hash: Option<&str>,
     session_secret: Option<&str>,
@@ -295,53 +266,7 @@ fn persist_auth_state(
         .map(ToOwned::to_owned)
         .or_else(|| existing.and_then(|state| state.session_secret));
 
-    let payload =
-        serde_json::to_string_pretty(&PersistedAuthState { password_hash, session_secret })
-            .context("序列化认证状态文件失败")?;
-    write_auth_state_file(auth_state_file, &payload)?;
-    Ok(())
-}
-
-fn enforce_auth_state_file_permissions(auth_state_file: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        fs::set_permissions(auth_state_file, fs::Permissions::from_mode(0o600))
-            .with_context(|| format!("收紧认证状态文件权限失败：{}", auth_state_file.display()))?;
-    }
-
-    Ok(())
-}
-
-fn write_auth_state_file(auth_state_file: &Path, payload: &str) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::fs::OpenOptions;
-        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(auth_state_file)
-            .with_context(|| format!("写入认证状态文件失败：{}", auth_state_file.display()))?;
-        file.write_all(payload.as_bytes())
-            .with_context(|| format!("写入认证状态文件失败：{}", auth_state_file.display()))?;
-        file.sync_all()
-            .with_context(|| format!("同步认证状态文件失败：{}", auth_state_file.display()))?;
-        fs::set_permissions(auth_state_file, fs::Permissions::from_mode(0o600))
-            .with_context(|| format!("收紧认证状态文件权限失败：{}", auth_state_file.display()))?;
-        Ok(())
-    }
-
-    #[cfg(not(unix))]
-    {
-        fs::write(auth_state_file, payload)
-            .with_context(|| format!("写入认证状态文件失败：{}", auth_state_file.display()))?;
-        Ok(())
-    }
+    persist_auth_state(auth_state_file, &PersistedAuthState { password_hash, session_secret })
 }
 
 fn load_login_rate_limit() -> Result<LoginRateLimit> {
