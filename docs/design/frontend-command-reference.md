@@ -7,6 +7,7 @@
 它回答的是“现在有哪些命令和接口可以长期依赖”，而不是“为什么这样设计”。功能边界与设计原则本身见：
 
 - [功能设计哲学](./functional-design-philosophy.md)
+- [Headless Active Interface 设计目标](./headless-active-interface.md)
 
 ---
 
@@ -21,9 +22,18 @@
 
 超出这四类的命令，不应进入当前前端命令面。
 
+同时，命令面应持续朝以下目标演进：
+
+- 命令先于视图定义
+- UI 只是命令的一个触发器
+- CLI、快捷键与未来命令面板复用同一命令语义
+
 ---
 
 ## 当前 UI 命令面
+
+> 说明：下面列的是当前已经对外暴露的 UI 语义面；后续 headless 重构会把它们逐步迁移为统
+> 一的 Rust 命令层，但不应改变这些公开语义。
 
 ### 订阅相关
 
@@ -70,6 +80,8 @@
 
 当前 `rssr-cli` 与 UI 共用同一套应用服务语义。
 
+长期目标不是删除 CLI，而是让 CLI 变成同一命令面的命令行外壳。
+
 ### 订阅相关
 
 - `rssr-cli list-feeds`
@@ -107,6 +119,7 @@
 
 - 限定样式作用域
 - 让用户 CSS 和 AI 生成 CSS 避免跨页污染
+- 允许视图壳在不改行为逻辑的情况下自由重排
 
 ---
 
@@ -120,6 +133,11 @@
 - `data-nav="feed-entries"`
 
 这些标记只表达导航语义，不承载业务副作用。
+
+长期要求：
+
+- 导航必须可被视图壳、命令面板和未来快捷键系统复用
+- 导航语义不应依赖某个具体按钮位置
 
 ---
 
@@ -146,12 +164,56 @@
 - `data-action="toggle-archived"`
 - `data-action="filter-unread"`
 - `data-action="filter-starred"`
+- `data-action="filter-read"`
+- `data-action="filter-unstarred"`
+- `data-action="apply-custom-css"`
+- `data-action="export-custom-css-file"`
+- `data-action="import-custom-css-file"`
+- `data-action="preset-theme-select"`
+- `data-action="apply-selected-theme"`
+- `data-action="clear-custom-css"`
+- `data-action="open-github-repo"`
+- `data-action="show-top-nav"`
+- `data-action="hide-top-nav"`
 
 如果未来需要新增命令，应优先保持这个命名风格：
 
 - 使用短语义英文
 - 使用 kebab-case
 - 一个动作只表达一个清晰业务语义
+
+## Headless 命令面迁移要求
+
+后续重构中，`data-action` 的职责应逐步收敛为：
+
+- 公开语义标记
+- CSS / AI / 自动化可依赖的稳定选择器
+- 与统一 Rust 命令定义的一对一映射
+
+而不是：
+
+- 业务逻辑本体
+- 页面私有临时点击逻辑
+- DOM 结构的替代命名
+
+推荐最终形成以下命令族：
+
+- Feed commands
+- Entry commands
+- Settings commands
+- Config exchange commands
+- Navigation commands
+- UI shell commands
+
+这组命令族的目标，是让同一语义能够被：
+
+- GUI
+- CLI
+- 快捷键
+- 命令面板
+- 未来的表格 / 工作台视图
+
+共同复用。
 
 ---
 
@@ -202,5 +264,7 @@
   - 先看 [功能设计哲学](./functional-design-philosophy.md)
 - 想确认某个按钮、页面或导航接口是否可长期依赖：
   - 看这份清单
+- 想理解这些接口以后如何被提升为真正的 headless 命令面：
+  - 看 [Headless Active Interface 设计目标](./headless-active-interface.md)
 - 想写主题或让 AI 生成 CSS：
   - 再看 [主题作者选择器参考](./theme-author-selector-reference.md)

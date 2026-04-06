@@ -20,6 +20,8 @@
   - [功能设计哲学](./design/functional-design-philosophy.md)
 - 想确认当前前端命令面和稳定界面接口：
   - [前端命令与界面接口清单](./design/frontend-command-reference.md)
+- 想理解即将进行的完全 headless active interface 重构：
+  - [Headless Active Interface 设计目标](./design/headless-active-interface.md)
 - 想准备 Android 发包或验收：
   - [Android 安装包落地清单](./roadmaps/android-release-roadmap.md)
 - 想跑一轮人工验证：
@@ -33,6 +35,7 @@
 
 - [设计文档索引](./design/README.md)
 - [功能设计哲学](./design/functional-design-philosophy.md)
+- [Headless Active Interface 设计目标](./design/headless-active-interface.md)
 - [前端命令与界面接口清单](./design/frontend-command-reference.md)
 - [主题作者选择器参考](./design/theme-author-selector-reference.md)
 
@@ -41,6 +44,7 @@
 - 行为与样式边界怎么划分
 - 产品功能边界为什么只围绕订阅、阅读、基本设置和基础配置交换
 - 当前前端命令面和界面接口有哪些稳定约束
+- 前端如何从语义化 UI 演进到完全 headless 的命令面
 - 哪些 selector / hook 可以长期依赖
 - 怎样在不碰 Rust 逻辑的前提下自定义主题
 - 怎样把这套接口直接交给 AI 生成 CSS
@@ -60,11 +64,13 @@
 
 - [测试与回归索引](./testing/README.md)
 - [手工回归测试清单](./testing/manual-regression.md)
+- [Headless 重构视觉等价验收](./testing/headless-refactor-equivalence.md)
 
 这组文档主要回答：
 
 - Web / desktop 应该如何做手工回归
 - 回归结果怎么记录
+- 模块级 headless 重构如何做 Chrome MCP 视觉等价验收
 - 当前哪些交互最值得重点观察
 
 ## 文档组织约定
