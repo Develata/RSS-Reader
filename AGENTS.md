@@ -49,6 +49,20 @@ specs/
 - `001-minimal-rss-reader`：新增极简个人 RSS 阅读器 MVP 的规格、计划、数据模型、契约和快速开始文档
 
 <!-- MANUAL ADDITIONS START -->
+## Agent 交接记录要求
+
+- 每次 agent 完成一次可交付工作后，MUST 在 `docs/handoffs/` 新增或更新一份固定格式的交接记录。
+- 记录文件名 MUST 使用 `YYYY-MM-DD-<slug>.md` 格式，除非该次工作明确归并到同日已有记录。
+- 记录内容 MUST 至少包含：
+  - 工作摘要与背景
+  - 受影响模块与平台
+  - 关键代码/文档/workflow 变更
+  - 已执行的验证/验收命令与结果
+  - 当前状态、风险、待跟进项
+  - 相关 commit、tag 或 worktree 状态
+- 如果该次工作尚未提交，记录中 MUST 明确写出 `commit: pending` 或等价状态。
+- 未补 `docs/handoffs/` 记录的工作，不应视为完整交付。
+- 记录规范与模板以 `docs/handoffs/README.md` 和 `docs/handoffs/TEMPLATE.md` 为准。
 <!-- MANUAL ADDITIONS END -->
 
 ## Active Technologies
