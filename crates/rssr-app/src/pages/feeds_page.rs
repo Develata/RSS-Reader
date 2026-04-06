@@ -15,6 +15,7 @@ pub fn FeedsPage() -> Element {
     let feed_url = use_signal(String::new);
     let config_text = use_signal(String::new);
     let opml_text = use_signal(String::new);
+    let pending_config_import = use_signal(|| false);
     let pending_delete_feed = use_signal(|| None::<i64>);
     let reload_tick = use_signal(|| 0_u64);
     let mut feeds = use_signal(Vec::<FeedSummary>::new);
@@ -66,7 +67,14 @@ pub fn FeedsPage() -> Element {
             }
             StatusBanner { message: status(), tone: status_tone() }
             FeedComposeSection { feed_url, reload_tick, status, status_tone }
-            ConfigExchangeSection { config_text, opml_text, reload_tick, status, status_tone }
+            ConfigExchangeSection {
+                config_text,
+                opml_text,
+                pending_config_import,
+                reload_tick,
+                status,
+                status_tone,
+            }
             SavedFeedsSection { feeds, pending_delete_feed, reload_tick, status, status_tone }
         }
     }

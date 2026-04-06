@@ -18,6 +18,8 @@ pub(crate) fn WebDavSettingsCard(
     status: Signal<String>,
     status_tone: Signal<String>,
 ) -> Element {
+    let mut pending_remote_pull = use_signal(|| false);
+
     rsx! {
         div { class: "settings-card",
             div { class: "settings-card__header",
@@ -78,9 +80,18 @@ pub(crate) fn WebDavSettingsCard(
                         "上传配置"
                     }
                     button {
-                        class: "button secondary",
+                        class: if pending_remote_pull() { "button danger" } else { "button secondary" },
                         "data-action": "pull-webdav",
                         onclick: move |_| {
+                            if !pending_remote_pull() {
+                                pending_remote_pull.set(true);
+                                set_status_info(
+                                    status,
+                                    status_tone,
+                                    "从 WebDAV 下载配置会覆盖当前订阅集合，并清理缺失订阅的本地文章；再次点击才会执行。",
+                                );
+                                return;
+                            }
                             let endpoint = endpoint();
                             let remote_path = remote_path();
                             let mut draft = draft;
@@ -89,21 +100,34 @@ pub(crate) fn WebDavSettingsCard(
                                     Ok(services) => match services.pull_remote_config(&endpoint, &remote_path).await {
                                         Ok(true) => match services.load_settings().await {
                                             Ok(settings) => {
+                                                pending_remote_pull.set(false);
                                                 preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
                                                 draft.set(settings.clone());
                                                 theme.settings.set(settings);
                                                 set_status_info(status, status_tone, "已从 WebDAV 下载并导入配置。");
                                             }
-                                            Err(err) => set_status_error(status, status_tone, format!("导入后读取设置失败：{err}")),
+                                            Err(err) => {
+                                                pending_remote_pull.set(false);
+                                                set_status_error(status, status_tone, format!("导入后读取设置失败：{err}"));
+                                            }
                                         },
-                                        Ok(false) => set_status_info(status, status_tone, "远端配置不存在。"),
-                                        Err(err) => set_status_error(status, status_tone, format!("下载配置失败：{err}")),
+                                        Ok(false) => {
+                                            pending_remote_pull.set(false);
+                                            set_status_info(status, status_tone, "远端配置不存在。");
+                                        }
+                                        Err(err) => {
+                                            pending_remote_pull.set(false);
+                                            set_status_error(status, status_tone, format!("下载配置失败：{err}"));
+                                        }
                                     },
-                                    Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
+                                    Err(err) => {
+                                        pending_remote_pull.set(false);
+                                        set_status_error(status, status_tone, format!("初始化应用失败：{err}"));
+                                    }
                                 }
                             });
                         },
-                        "下载配置"
+                        if pending_remote_pull() { "确认下载并覆盖" } else { "下载配置" }
                     }
                 }
             }
