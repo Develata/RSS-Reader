@@ -102,17 +102,21 @@ struct WebFeedRequest {
 }
 
 fn web_refresh_request_urls(raw: &str) -> anyhow::Result<Vec<WebFeedRequest>> {
-    let mut url = Url::parse(raw).with_context(|| format!("订阅 URL 不合法：{raw}"))?;
-    if matches!(url.scheme(), "http" | "https") {
-        url.query_pairs_mut().append_pair("_rssr_fetch", &js_sys::Date::now().round().to_string());
-    }
+    let url = Url::parse(raw).with_context(|| format!("订阅 URL 不合法：{raw}"))?;
     let mut request_urls = Vec::new();
 
     if let Some(proxy_url) = web_feed_proxy_request_url(url.as_str()) {
         request_urls.push(WebFeedRequest { url: proxy_url, kind: WebFeedRequestKind::Proxy });
     }
 
-    request_urls.push(WebFeedRequest { url: url.to_string(), kind: WebFeedRequestKind::Direct });
+    let mut direct_url = url;
+    if matches!(direct_url.scheme(), "http" | "https") {
+        direct_url
+            .query_pairs_mut()
+            .append_pair("_rssr_fetch", &js_sys::Date::now().round().to_string());
+    }
+    request_urls
+        .push(WebFeedRequest { url: direct_url.to_string(), kind: WebFeedRequestKind::Direct });
     Ok(request_urls)
 }
 
