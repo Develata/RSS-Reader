@@ -3,7 +3,13 @@ use rssr_domain::UserSettings;
 
 use crate::theme::ThemeController;
 
-use super::support::{apply_custom_css_from_raw, export_css_file};
+use super::{theme_apply::apply_custom_css_from_raw, theme_io::export_css_file};
+
+#[cfg(not(target_arch = "wasm32"))]
+use super::theme_io::import_css_file;
+
+#[cfg(target_arch = "wasm32")]
+use super::theme_io::trigger_css_file_input_in_browser;
 
 #[component]
 pub(super) fn ThemeLabSection(
@@ -57,7 +63,7 @@ pub(super) fn ThemeLabSection(
             class: "button secondary",
             "data-action": "import-custom-css-file",
             onclick: move |_| {
-                if let Err(err) = super::support::trigger_css_file_input_in_browser() {
+                if let Err(err) = trigger_css_file_input_in_browser() {
                     crate::status::set_status_error(
                         status,
                         status_tone,
@@ -75,7 +81,7 @@ pub(super) fn ThemeLabSection(
             class: "button secondary",
             "data-action": "import-custom-css-file",
             onclick: move |_| {
-                super::support::import_css_file(theme, draft, preset_choice, status, status_tone);
+                import_css_file(theme, draft, preset_choice, status, status_tone);
             },
             "导入主题文件"
         }

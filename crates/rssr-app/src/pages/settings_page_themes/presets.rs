@@ -3,9 +3,9 @@ use rssr_domain::UserSettings;
 
 use crate::{status::set_status_info, theme::ThemeController};
 
-use super::support::{
-    apply_builtin_theme, apply_settings_immediately, builtin_theme_presets, detect_preset_key,
-    preset_css, preset_display_name,
+use super::{
+    theme_apply::{apply_builtin_theme, apply_settings_immediately},
+    theme_preset::{builtin_theme_presets, detect_preset_key, preset_css, preset_display_name},
 };
 
 #[component]

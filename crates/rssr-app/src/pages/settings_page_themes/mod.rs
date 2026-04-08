@@ -1,6 +1,9 @@
 mod lab;
 mod presets;
-mod support;
+mod theme_apply;
+mod theme_io;
+mod theme_preset;
+mod theme_validation;
 
 use dioxus::prelude::*;
 use rssr_domain::UserSettings;
@@ -11,9 +14,11 @@ use crate::{
     theme::ThemeController,
 };
 
-use self::{lab::ThemeLabSection, presets::ThemePresetSections, support::validate_custom_css};
+use self::{
+    lab::ThemeLabSection, presets::ThemePresetSections, theme_validation::validate_custom_css,
+};
 
-pub(crate) use self::support::detect_preset_key;
+pub(crate) use self::theme_preset::detect_preset_key;
 
 #[component]
 pub(crate) fn ThemeSettingsSections(
