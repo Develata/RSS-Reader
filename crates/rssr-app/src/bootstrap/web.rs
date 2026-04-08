@@ -19,11 +19,7 @@ use rssr_infra::application_adapters::browser::{
         BrowserFeedRepository, BrowserOpmlCodec, BrowserRefreshStore, BrowserRemoteConfigStore,
         BrowserSettingsRepository,
     },
-    query::{
-        get_entry as query_get_entry, list_entries as query_list_entries,
-        list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
-    },
-    state::{PersistedState, load_state},
+    state::load_state,
 };
 use tokio::sync::OnceCell;
 
@@ -39,8 +35,8 @@ use self::{
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
 pub struct AppServices {
-    state: Arc<Mutex<PersistedState>>,
     client: reqwest::Client,
+    feed_service: FeedService,
     entry_service: EntryService,
     settings_service: SettingsService,
     app_state_adapter: Arc<BrowserAppStateAdapter>,
@@ -71,8 +67,8 @@ impl AppServices {
                     Arc::new(BrowserRefreshStore::new(state.clone())),
                 );
                 Ok(Arc::new(Self {
-                    state: state.clone(),
                     client,
+                    feed_service: feed_service.clone(),
                     entry_service: EntryService::new(entry_repository.clone()),
                     settings_service: SettingsService::new(settings_repository.clone()),
                     app_state_adapter: app_state_adapter.clone(),
@@ -101,26 +97,22 @@ impl AppServices {
     }
 
     pub async fn list_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {
-        let state = self.state.lock().expect("lock state");
-        Ok(query_list_feeds(&state))
+        self.feed_service.list_feeds().await
     }
 
     pub async fn list_entries(&self, query: &EntryQuery) -> anyhow::Result<Vec<EntrySummary>> {
-        let state = self.state.lock().expect("lock state");
-        Ok(query_list_entries(&state, query))
+        self.entry_service.list_entries(query).await
     }
 
     pub async fn get_entry(&self, entry_id: i64) -> anyhow::Result<Option<Entry>> {
-        let state = self.state.lock().expect("lock state");
-        query_get_entry(&state, entry_id)
+        self.entry_service.get_entry(entry_id).await
     }
 
     pub async fn reader_navigation(
         &self,
         current_entry_id: i64,
     ) -> anyhow::Result<ReaderNavigation> {
-        let state = self.state.lock().expect("lock state");
-        Ok(query_reader_navigation(&state, current_entry_id))
+        self.entry_service.reader_navigation(current_entry_id).await
     }
 
     pub async fn set_read(&self, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
