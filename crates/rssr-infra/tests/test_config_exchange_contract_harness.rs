@@ -707,8 +707,8 @@ async fn contract_import_rejects_invalid_settings_boundary() -> Result<()> {
             UserSettings::default(),
         )
         .await?;
-        let mut invalid_settings = UserSettings::default();
-        invalid_settings.refresh_interval_minutes = 0;
+        let invalid_settings =
+            UserSettings { refresh_interval_minutes: 0, ..UserSettings::default() };
 
         let error = fixture
             .service

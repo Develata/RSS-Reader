@@ -389,7 +389,9 @@ mod tests {
     fn reader_treats_html_like_summary_as_html_fallback() {
         let body = select_reader_body(
             None,
-            Some("<p>Summary fallback</p><a href=\"https://example.com\">Read more</a>".to_string()),
+            Some(
+                "<p>Summary fallback</p><a href=\"https://example.com\">Read more</a>".to_string(),
+            ),
             None,
         );
 
