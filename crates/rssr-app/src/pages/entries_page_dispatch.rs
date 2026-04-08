@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use crate::bootstrap::AppServices;
 
-use super::entries_page_commands::{EntriesPageCommand, EntriesPageCommandOutcome, error, info};
+use super::entries_page_commands::{
+    EntriesPageCommand, EntriesPageCommandOutcome, error, info, silent,
+};
 
 pub(crate) async fn execute_command(command: EntriesPageCommand) -> EntriesPageCommandOutcome {
     match command {
@@ -38,6 +40,40 @@ pub(crate) async fn execute_command(command: EntriesPageCommand) -> EntriesPageC
                 Err(err) => error(err, false),
             }
         }
+        EntriesPageCommand::SaveBrowsingPreferences {
+            grouping_mode,
+            show_archived,
+            read_filter,
+            starred_filter,
+            selected_feed_urls,
+        } => match shared_services().await {
+            Ok(services) => match services.load_settings().await {
+                Ok(mut settings) => {
+                    let changed = settings.entry_grouping_mode != grouping_mode
+                        || settings.show_archived_entries != show_archived
+                        || settings.entry_read_filter != read_filter
+                        || settings.entry_starred_filter != starred_filter
+                        || settings.entry_filtered_feed_urls != selected_feed_urls;
+
+                    if !changed {
+                        return silent(false);
+                    }
+
+                    settings.entry_grouping_mode = grouping_mode;
+                    settings.show_archived_entries = show_archived;
+                    settings.entry_read_filter = read_filter;
+                    settings.entry_starred_filter = starred_filter;
+                    settings.entry_filtered_feed_urls = selected_feed_urls;
+
+                    match services.save_settings(&settings).await {
+                        Ok(()) => silent(false),
+                        Err(err) => error(format!("保存文章页偏好失败：{err}"), false),
+                    }
+                }
+                Err(err) => error(format!("读取文章页偏好失败：{err}"), false),
+            },
+            Err(err) => error(err, false),
+        },
     }
 }
 

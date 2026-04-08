@@ -220,34 +220,19 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
         let next_read_filter = read_filter();
         let next_starred_filter = starred_filter();
         let next_feed_urls = selected_feed_urls();
+        let bindings = bindings;
 
         spawn(async move {
-            match AppServices::shared().await {
-                Ok(services) => match services.load_settings().await {
-                    Ok(mut settings) => {
-                        let changed = settings.entry_grouping_mode != next_grouping
-                            || settings.show_archived_entries != next_show_archived
-                            || settings.entry_read_filter != next_read_filter
-                            || settings.entry_starred_filter != next_starred_filter
-                            || settings.entry_filtered_feed_urls != next_feed_urls;
-
-                        if !changed {
-                            return;
-                        }
-
-                        settings.entry_grouping_mode = next_grouping;
-                        settings.show_archived_entries = next_show_archived;
-                        settings.entry_read_filter = next_read_filter;
-                        settings.entry_starred_filter = next_starred_filter;
-                        settings.entry_filtered_feed_urls = next_feed_urls;
-                        if let Err(err) = services.save_settings(&settings).await {
-                            tracing::warn!(error = %err, "保存文章页偏好失败");
-                        }
-                    }
-                    Err(err) => tracing::warn!(error = %err, "读取文章页偏好失败"),
-                },
-                Err(err) => tracing::warn!(error = %err, "初始化应用失败，无法保存文章页偏好"),
-            }
+            let outcome =
+                execute_entries_page_command(EntriesPageCommand::SaveBrowsingPreferences {
+                    grouping_mode: next_grouping,
+                    show_archived: next_show_archived,
+                    read_filter: next_read_filter,
+                    starred_filter: next_starred_filter,
+                    selected_feed_urls: next_feed_urls,
+                })
+                .await;
+            bindings.apply_command_outcome(outcome);
         });
     });
 

@@ -19,8 +19,12 @@ impl EntriesPageBindings {
     }
 
     pub(crate) fn apply_command_outcome(mut self, outcome: EntriesPageCommandOutcome) {
-        self.status.set(outcome.status_message);
-        self.status_tone.set(outcome.status_tone.to_string());
+        if let Some(message) = outcome.status_message {
+            self.status.set(message);
+        }
+        if let Some(tone) = outcome.status_tone {
+            self.status_tone.set(tone.to_string());
+        }
         if outcome.reload {
             let mut reload_tick = self.reload_tick;
             reload_tick += 1;
