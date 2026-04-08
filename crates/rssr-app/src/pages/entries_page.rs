@@ -16,6 +16,10 @@ use super::entries_page_groups::{
     build_directory_months, build_directory_sources, build_group_nav_items, build_month_nav_items,
     group_anchor_id, group_entries_by_source_tree, group_entries_by_time_tree,
 };
+pub(crate) use super::{
+    entries_page_bindings::EntriesPageBindings, entries_page_commands::EntriesPageCommand,
+    entries_page_dispatch::execute_command as execute_entries_page_command,
+};
 use crate::{
     app::{AppNav, AppUiState},
     bootstrap::AppServices,
@@ -112,6 +116,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let status = use_signal(|| "正在加载文章列表…".to_string());
     let status_tone = use_signal(|| "info".to_string());
     let mut preferences_loaded = use_signal(|| false);
+    let bindings = EntriesPageBindings::new(reload_tick, status, status_tone);
 
     use_resource(move || async move {
         if let Some(feed_id) = feed_id
@@ -322,7 +327,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                         }
                                                         ul { class: "entry-list entry-list--grouped",
                                                             for entry in source.entries {
-                                                                { render_entry_card(entry, reload_tick, status, status_tone) }
+                                                                { render_entry_card(entry, bindings) }
                                                             }
                                                         }
                                                     }
@@ -346,7 +351,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                 }
                                                 ul { class: "entry-list entry-list--grouped",
                                                     for entry in month.entries {
-                                                        { render_entry_card(entry, reload_tick, status, status_tone) }
+                                                        { render_entry_card(entry, bindings) }
                                                     }
                                                 }
                                             }

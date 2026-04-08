@@ -3,17 +3,11 @@ use rssr_domain::EntrySummary;
 use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::{
-    bootstrap::AppServices,
+    pages::entries_page::{EntriesPageBindings, EntriesPageCommand, execute_entries_page_command},
     router::AppRoute,
-    status::{set_status_error, set_status_info},
 };
 
-pub(super) fn render_entry_card(
-    entry: EntrySummary,
-    reload_tick: Signal<u64>,
-    status: Signal<String>,
-    status_tone: Signal<String>,
-) -> Element {
+pub(super) fn render_entry_card(entry: EntrySummary, bindings: EntriesPageBindings) -> Element {
     let read_title = entry.title.clone();
     let starred_title = entry.title.clone();
 
@@ -35,35 +29,14 @@ pub(super) fn render_entry_card(
                     class: "button secondary",
                     "data-action": "mark-read",
                     onclick: move |_| {
-                        let mut reload_tick = reload_tick;
-                        let title = read_title.clone();
+                        let command = EntriesPageCommand::ToggleRead {
+                            entry_id: entry.id,
+                            entry_title: read_title.clone(),
+                            currently_read: entry.is_read,
+                        };
                         spawn(async move {
-                            match AppServices::shared().await {
-                                Ok(services) => match services.set_read(entry.id, !entry.is_read).await {
-                                    Ok(()) => {
-                                        set_status_info(
-                                            status,
-                                            status_tone,
-                                            format!(
-                                                "已将《{}》{}。",
-                                                title,
-                                                if entry.is_read { "标记为未读" } else { "标记为已读" }
-                                            ),
-                                        );
-                                        reload_tick += 1;
-                                    }
-                                    Err(err) => set_status_error(
-                                        status,
-                                        status_tone,
-                                        format!("更新已读状态失败：{err}"),
-                                    ),
-                                },
-                                Err(err) => set_status_error(
-                                    status,
-                                    status_tone,
-                                    format!("初始化应用失败：{err}"),
-                                ),
-                            }
+                            let outcome = execute_entries_page_command(command).await;
+                            bindings.apply_command_outcome(outcome);
                         });
                     },
                     if entry.is_read { "标未读" } else { "标已读" }
@@ -72,35 +45,14 @@ pub(super) fn render_entry_card(
                     class: "button secondary",
                     "data-action": "toggle-starred",
                     onclick: move |_| {
-                        let mut reload_tick = reload_tick;
-                        let title = starred_title.clone();
+                        let command = EntriesPageCommand::ToggleStarred {
+                            entry_id: entry.id,
+                            entry_title: starred_title.clone(),
+                            currently_starred: entry.is_starred,
+                        };
                         spawn(async move {
-                            match AppServices::shared().await {
-                                Ok(services) => match services.set_starred(entry.id, !entry.is_starred).await {
-                                    Ok(()) => {
-                                        set_status_info(
-                                            status,
-                                            status_tone,
-                                            format!(
-                                                "已{}《{}》。",
-                                                if entry.is_starred { "取消收藏" } else { "收藏" },
-                                                title
-                                            ),
-                                        );
-                                        reload_tick += 1;
-                                    }
-                                    Err(err) => set_status_error(
-                                        status,
-                                        status_tone,
-                                        format!("更新收藏状态失败：{err}"),
-                                    ),
-                                },
-                                Err(err) => set_status_error(
-                                    status,
-                                    status_tone,
-                                    format!("初始化应用失败：{err}"),
-                                ),
-                            }
+                            let outcome = execute_entries_page_command(command).await;
+                            bindings.apply_command_outcome(outcome);
                         });
                     },
                     if entry.is_starred { "取消收藏" } else { "收藏" }

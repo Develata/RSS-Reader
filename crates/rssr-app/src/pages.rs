@@ -1,6 +1,9 @@
 pub mod entries_page;
+mod entries_page_bindings;
 mod entries_page_cards;
+mod entries_page_commands;
 mod entries_page_controls;
+mod entries_page_dispatch;
 mod entries_page_groups;
 pub mod feeds_page;
 mod feeds_page_sections;
