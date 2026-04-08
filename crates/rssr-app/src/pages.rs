@@ -25,4 +25,8 @@ pub mod settings_page;
 mod settings_page_appearance;
 mod settings_page_preferences;
 mod settings_page_sync;
+mod settings_page_sync_effect;
+mod settings_page_sync_runtime;
+mod settings_page_sync_session;
+mod settings_page_sync_state;
 mod settings_page_themes;

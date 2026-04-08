@@ -20,8 +20,6 @@ pub fn SettingsPage() -> Element {
     let mut draft = use_signal(|| (theme.settings)());
     let mut preset_choice =
         use_signal(|| detect_preset_key(&(theme.settings)().custom_css).to_string());
-    let endpoint = use_signal(String::new);
-    let remote_path = use_signal(|| "config/rss-reader.json".to_string());
     let status = use_signal(String::new);
     let status_tone = use_signal(|| "info".to_string());
 
@@ -80,8 +78,6 @@ pub fn SettingsPage() -> Element {
                     theme,
                     draft,
                     preset_choice,
-                    endpoint,
-                    remote_path,
                     status,
                     status_tone,
                 }

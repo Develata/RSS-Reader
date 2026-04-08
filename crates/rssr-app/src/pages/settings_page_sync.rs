@@ -1,11 +1,11 @@
 use dioxus::prelude::*;
 use rssr_domain::UserSettings;
 
-use super::settings_page_themes::detect_preset_key;
-use crate::{
-    bootstrap::AppServices,
-    status::{set_status_error, set_status_info},
-    theme::ThemeController,
+use crate::theme::ThemeController;
+
+use super::{
+    settings_page_sync_session::SettingsPageSyncSession,
+    settings_page_sync_state::SettingsPageSyncState,
 };
 
 #[component]
@@ -13,12 +13,13 @@ pub(crate) fn WebDavSettingsCard(
     theme: ThemeController,
     draft: Signal<UserSettings>,
     preset_choice: Signal<String>,
-    endpoint: Signal<String>,
-    remote_path: Signal<String>,
     status: Signal<String>,
     status_tone: Signal<String>,
 ) -> Element {
-    let mut pending_remote_pull = use_signal(|| false);
+    let state = use_signal(SettingsPageSyncState::new);
+    let session =
+        SettingsPageSyncSession::new(state, theme, draft, preset_choice, status, status_tone);
+    let snapshot = session.snapshot();
 
     rsx! {
         div { class: "settings-card",
@@ -37,9 +38,9 @@ pub(crate) fn WebDavSettingsCard(
                             name: "webdav_endpoint",
                             class: "text-input",
                             "data-action": "webdav-endpoint",
-                            value: "{endpoint}",
+                            value: "{snapshot.endpoint}",
                             placeholder: "https://dav.example.com/base/",
-                            oninput: move |event| endpoint.set(event.value())
+                            oninput: move |event| session.set_endpoint(event.value())
                         }
                     }
                     div {
@@ -49,9 +50,9 @@ pub(crate) fn WebDavSettingsCard(
                             name: "webdav_remote_path",
                             class: "text-input",
                             "data-action": "webdav-remote-path",
-                            value: "{remote_path}",
+                            value: "{snapshot.remote_path}",
                             placeholder: "config/rss-reader.json",
-                            oninput: move |event| remote_path.set(event.value())
+                            oninput: move |event| session.set_remote_path(event.value())
                         }
                     }
                 }
@@ -64,70 +65,18 @@ pub(crate) fn WebDavSettingsCard(
                     button {
                         class: "button secondary",
                         "data-action": "push-webdav",
-                        onclick: move |_| {
-                            let endpoint = endpoint();
-                            let remote_path = remote_path();
-                            spawn(async move {
-                                match AppServices::shared().await {
-                                    Ok(services) => match services.push_remote_config(&endpoint, &remote_path).await {
-                                        Ok(()) => set_status_info(status, status_tone, "配置已上传到 WebDAV。"),
-                                        Err(err) => set_status_error(status, status_tone, format!("上传配置失败：{err}")),
-                                    },
-                                    Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
-                                }
-                            });
-                        },
+                        onclick: move |_| session.push(),
                         "上传配置"
                     }
                     button {
-                        class: if pending_remote_pull() { "button danger" } else { "button secondary" },
-                        "data-action": "pull-webdav",
-                        onclick: move |_| {
-                            if !pending_remote_pull() {
-                                pending_remote_pull.set(true);
-                                set_status_info(
-                                    status,
-                                    status_tone,
-                                    "从 WebDAV 下载配置会覆盖当前订阅集合，并清理缺失订阅的本地文章；再次点击才会执行。",
-                                );
-                                return;
-                            }
-                            let endpoint = endpoint();
-                            let remote_path = remote_path();
-                            let mut draft = draft;
-                            spawn(async move {
-                                match AppServices::shared().await {
-                                    Ok(services) => match services.pull_remote_config(&endpoint, &remote_path).await {
-                                        Ok(true) => match services.load_settings().await {
-                                            Ok(settings) => {
-                                                pending_remote_pull.set(false);
-                                                preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
-                                                draft.set(settings.clone());
-                                                theme.settings.set(settings);
-                                                set_status_info(status, status_tone, "已从 WebDAV 下载并导入配置。");
-                                            }
-                                            Err(err) => {
-                                                pending_remote_pull.set(false);
-                                                set_status_error(status, status_tone, format!("导入后读取设置失败：{err}"));
-                                            }
-                                        },
-                                        Ok(false) => {
-                                            pending_remote_pull.set(false);
-                                            set_status_info(status, status_tone, "远端配置不存在。");
-                                        }
-                                        Err(err) => {
-                                            pending_remote_pull.set(false);
-                                            set_status_error(status, status_tone, format!("下载配置失败：{err}"));
-                                        }
-                                    },
-                                    Err(err) => {
-                                        pending_remote_pull.set(false);
-                                        set_status_error(status, status_tone, format!("初始化应用失败：{err}"));
-                                    }
-                                }
-                            });
+                        class: if snapshot.pending_remote_pull {
+                            "button danger"
+                        } else {
+                            "button secondary"
                         },
-                        if pending_remote_pull() { "确认下载并覆盖" } else { "下载配置" }
+                        "data-action": "pull-webdav",
+                        onclick: move |_| session.pull(),
+                        if snapshot.pending_remote_pull { "确认下载并覆盖" } else { "下载配置" }
                     }
                 }
             }
