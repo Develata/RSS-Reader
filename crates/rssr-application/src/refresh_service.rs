@@ -2,8 +2,10 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use time::OffsetDateTime;
-use tokio::task::JoinSet;
 use url::Url;
+
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::task::JoinSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RefreshTarget {
@@ -139,7 +141,8 @@ impl RefreshAllOutcome {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait FeedRefreshSourcePort: Send + Sync {
     async fn refresh(&self, target: &RefreshTarget) -> Result<FeedRefreshSourceOutput>;
 }
@@ -169,8 +172,21 @@ impl RefreshService {
 
     pub async fn refresh_all(&self, input: RefreshAllInput) -> Result<RefreshAllOutcome> {
         let targets = self.store.list_targets().await.context("读取订阅列表失败")?;
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = input;
+            let mut outcomes = Vec::with_capacity(targets.len());
+            for target in targets {
+                outcomes.push(self.refresh_target(target).await?);
+            }
+            return Ok(RefreshAllOutcome { feeds: outcomes });
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
         let max_concurrency = input.max_concurrency.max(1);
 
+        #[cfg(not(target_arch = "wasm32"))]
         if max_concurrency == 1 {
             let mut outcomes = Vec::with_capacity(targets.len());
             for target in targets {
@@ -179,30 +195,35 @@ impl RefreshService {
             return Ok(RefreshAllOutcome { feeds: outcomes });
         }
 
-        let mut outcomes = Vec::with_capacity(targets.len());
-        let mut target_iter = targets.into_iter();
-        let mut in_flight = JoinSet::new();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut outcomes = Vec::with_capacity(targets.len());
+            let mut target_iter = targets.into_iter();
+            let mut in_flight = JoinSet::new();
 
-        loop {
-            while in_flight.len() < max_concurrency {
-                let Some(target) = target_iter.next() else {
+            loop {
+                while in_flight.len() < max_concurrency {
+                    let Some(target) = target_iter.next() else {
+                        break;
+                    };
+                    let service = self.clone();
+                    in_flight.spawn(async move { service.refresh_target(target).await });
+                }
+
+                let Some(result) = in_flight.join_next().await else {
                     break;
                 };
-                let service = self.clone();
-                in_flight.spawn(async move { service.refresh_target(target).await });
+
+                match result {
+                    Ok(outcome) => outcomes.push(outcome?),
+                    Err(error) => {
+                        return Err(anyhow::Error::new(error).context("后台刷新任务意外结束"));
+                    }
+                }
             }
 
-            let Some(result) = in_flight.join_next().await else {
-                break;
-            };
-
-            match result {
-                Ok(outcome) => outcomes.push(outcome?),
-                Err(error) => return Err(anyhow::Error::new(error).context("后台刷新任务意外结束")),
-            }
+            Ok(RefreshAllOutcome { feeds: outcomes })
         }
-
-        Ok(RefreshAllOutcome { feeds: outcomes })
     }
 
     async fn refresh_target(&self, target: RefreshTarget) -> Result<RefreshFeedOutcome> {
@@ -284,7 +305,8 @@ mod tests {
         outputs: Mutex<Vec<FeedRefreshSourceOutput>>,
     }
 
-    #[async_trait::async_trait]
+    #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
     impl FeedRefreshSourcePort for SourceStub {
         async fn refresh(&self, _target: &RefreshTarget) -> Result<FeedRefreshSourceOutput> {
             Ok(self.outputs.lock().expect("lock outputs").remove(0))

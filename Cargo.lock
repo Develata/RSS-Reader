@@ -4621,6 +4621,7 @@ version = "0.1.0"
 dependencies = [
  "ammonia",
  "anyhow",
+ "async-trait",
  "base64",
  "chrono",
  "console_error_panic_hook",

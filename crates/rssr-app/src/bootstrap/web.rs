@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
+#[path = "web/adapters.rs"]
+mod adapters;
 #[path = "web/config.rs"]
 mod config;
 #[path = "web/exchange.rs"]
@@ -17,40 +19,44 @@ mod state;
 
 use anyhow::Context;
 use js_sys::Date;
+use rssr_application::{
+    AddSubscriptionInput, FeedService, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome,
+    RefreshFeedResult, RefreshService, RemoveSubscriptionInput, SubscriptionWorkflow,
+};
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::{Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings, normalize_feed_url};
+use rssr_domain::{Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings};
 use time::OffsetDateTime;
 use tokio::sync::OnceCell;
-use url::Url;
 
 use self::{
+    adapters::{
+        BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRefreshSource,
+        BrowserFeedRepository, BrowserRefreshStore,
+    },
     exchange::{
         export_config_json as export_exchange_json, export_opml as export_exchange_opml,
         import_config_json as import_exchange_json, import_opml as import_exchange_opml,
         pull_remote_config as pull_exchange_remote, push_remote_config as push_exchange_remote,
     },
     mutations::{
-        add_subscription as add_subscription_state,
-        remember_last_opened_feed_id as remember_feed_id, remove_feed as remove_feed_state,
-        save_settings as save_settings_state, set_read as set_entry_read,
-        set_starred as set_entry_starred,
+        remember_last_opened_feed_id as remember_feed_id, save_settings as save_settings_state,
+        set_read as set_entry_read, set_starred as set_entry_starred,
     },
     query::{
         get_entry as query_get_entry, list_entries as query_list_entries,
         list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
     },
-    refresh::{
-        ensure_auto_refresh_started as start_auto_refresh, refresh_all as run_refresh_all,
-        refresh_feed as run_refresh_feed,
-    },
+    refresh::ensure_auto_refresh_started as start_auto_refresh,
     state::{PersistedState, load_state},
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
 pub struct AppServices {
-    state: Mutex<PersistedState>,
+    state: Arc<Mutex<PersistedState>>,
     client: reqwest::Client,
+    refresh_service: RefreshService,
+    subscription_workflow: SubscriptionWorkflow,
     auto_refresh_started: AtomicBool,
 }
 
@@ -62,9 +68,25 @@ impl AppServices {
                 if let Some(warning) = loaded.warning.as_deref() {
                     tracing::warn!(warning = warning, "Web 本地状态恢复时发现异常");
                 }
+                let state = Arc::new(Mutex::new(loaded.state));
+                let client = reqwest::Client::new();
+                let feed_service = FeedService::new(
+                    Arc::new(BrowserFeedRepository::new(state.clone())),
+                    Arc::new(BrowserEntryRepository::new(state.clone())),
+                );
+                let refresh_service = RefreshService::new(
+                    Arc::new(BrowserFeedRefreshSource::new(client.clone())),
+                    Arc::new(BrowserRefreshStore::new(state.clone())),
+                );
                 Ok(Arc::new(Self {
-                    state: Mutex::new(loaded.state),
-                    client: reqwest::Client::new(),
+                    state: state.clone(),
+                    client,
+                    refresh_service: refresh_service.clone(),
+                    subscription_workflow: SubscriptionWorkflow::new(
+                        feed_service,
+                        refresh_service,
+                        Arc::new(BrowserAppStateAdapter::new(state)),
+                    ),
                     auto_refresh_started: AtomicBool::new(false),
                 }))
             })
@@ -128,21 +150,33 @@ impl AppServices {
     }
 
     pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
-        let url = normalize_feed_url(&Url::parse(raw_url).context("订阅 URL 不合法")?);
-        let feed_id = add_subscription_state(self, &url)?;
-        self.refresh_feed(feed_id).await.context("首次刷新订阅失败")
+        let outcome = self
+            .subscription_workflow
+            .add_subscription_and_refresh(&AddSubscriptionInput {
+                url: raw_url.to_string(),
+                title: None,
+                folder: None,
+            })
+            .await
+            .context("保存订阅失败")?;
+        self.handle_refresh_outcome(outcome.refresh).context("首次刷新订阅失败")
     }
 
     pub async fn remove_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        remove_feed_state(self, feed_id)
+        self.subscription_workflow
+            .remove_subscription(RemoveSubscriptionInput { feed_id, purge_entries: true })
+            .await
+            .context("删除订阅失败")
     }
 
     pub async fn refresh_all(&self) -> anyhow::Result<()> {
-        run_refresh_all(self).await
+        let outcome = self.refresh_service.refresh_all(RefreshAllInput::default()).await?;
+        self.handle_refresh_all_outcome(outcome)
     }
 
     pub async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        run_refresh_feed(self, feed_id).await
+        let outcome = self.refresh_service.refresh_feed(feed_id).await?;
+        self.handle_refresh_outcome(outcome)
     }
 
     pub async fn export_config_json(&self) -> anyhow::Result<String> {
@@ -175,6 +209,38 @@ impl AppServices {
         remote_path: &str,
     ) -> anyhow::Result<bool> {
         pull_exchange_remote(self, endpoint, remote_path).await
+    }
+
+    fn handle_refresh_all_outcome(&self, outcome: RefreshAllOutcome) -> anyhow::Result<()> {
+        let mut errors = Vec::new();
+
+        for feed in outcome.feeds {
+            match feed.result {
+                RefreshFeedResult::Updated { .. } => {
+                    tracing::debug!(feed_id = feed.feed_id, "刷新订阅成功");
+                }
+                RefreshFeedResult::NotModified => {
+                    tracing::debug!(feed_id = feed.feed_id, "订阅未变化");
+                }
+                RefreshFeedResult::Failed { message } => {
+                    tracing::warn!(feed_id = feed.feed_id, error = %message, "刷新订阅失败");
+                    errors.push(format!("{}: {message}", feed.url));
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            anyhow::bail!("部分订阅刷新失败: {}", errors.join(" | "))
+        }
+    }
+
+    fn handle_refresh_outcome(&self, outcome: RefreshFeedOutcome) -> anyhow::Result<()> {
+        match outcome.result {
+            RefreshFeedResult::Updated { .. } | RefreshFeedResult::NotModified => Ok(()),
+            RefreshFeedResult::Failed { message } => anyhow::bail!("{}: {message}", outcome.url),
+        }
     }
 }
 

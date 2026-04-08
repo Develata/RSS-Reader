@@ -1,0 +1,483 @@
+use std::sync::{Arc, Mutex};
+
+use anyhow::{Context, Result};
+use reqwest::{StatusCode, header};
+use rssr_application::{
+    AppStatePort, FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate,
+    ParsedEntryData, ParsedFeedUpdate, RefreshCommit, RefreshFailure, RefreshHttpMetadata,
+    RefreshStorePort, RefreshTarget,
+};
+use rssr_domain::{
+    DomainError, Entry, EntryNavigation, EntryQuery, EntryRepository, EntrySummary, Feed,
+    FeedRepository, FeedSummary, NewFeedSubscription, normalize_feed_url,
+};
+
+use super::{
+    feed::{ParsedEntry, ParsedFeed, parse_feed, web_fetch_feed_response},
+    query::{
+        get_entry as query_get_entry, list_entries as query_list_entries,
+        list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
+    },
+    state::{PersistedFeed, PersistedState, save_state_snapshot, upsert_entries},
+    web_now_utc,
+};
+
+#[derive(Clone)]
+pub(super) struct BrowserFeedRepository {
+    state: Arc<Mutex<PersistedState>>,
+}
+
+impl BrowserFeedRepository {
+    pub(super) fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+        Self { state }
+    }
+}
+
+#[async_trait::async_trait]
+impl FeedRepository for BrowserFeedRepository {
+    async fn upsert_subscription(
+        &self,
+        new_feed: &NewFeedSubscription,
+    ) -> rssr_domain::Result<Feed> {
+        let normalized_url = normalize_feed_url(&new_feed.url);
+        let normalized_title = normalize_optional_text(new_feed.title.clone());
+        let normalized_folder = normalize_optional_text(new_feed.folder.clone());
+
+        let (feed, snapshot) = {
+            let mut state = self.state.lock().expect("lock state");
+            let now = web_now_utc();
+
+            if let Some(feed) =
+                state.feeds.iter_mut().find(|feed| feed.url == normalized_url.as_str())
+            {
+                if new_feed.title.is_some() {
+                    feed.title = normalized_title.clone();
+                }
+                if new_feed.folder.is_some() {
+                    feed.folder = normalized_folder.clone();
+                }
+                feed.is_deleted = false;
+                feed.updated_at = now;
+                (feed.clone(), state.clone())
+            } else {
+                state.next_feed_id += 1;
+                let persisted = PersistedFeed {
+                    id: state.next_feed_id,
+                    url: normalized_url.to_string(),
+                    title: normalized_title,
+                    site_url: None,
+                    description: None,
+                    icon_url: None,
+                    folder: normalized_folder,
+                    etag: None,
+                    last_modified: None,
+                    last_fetched_at: None,
+                    last_success_at: None,
+                    fetch_error: None,
+                    is_deleted: false,
+                    created_at: now,
+                    updated_at: now,
+                };
+                state.feeds.push(persisted.clone());
+                (persisted, state.clone())
+            }
+        };
+
+        save_state_snapshot(snapshot).map_err(map_persistence_error)?;
+        persisted_feed_to_domain(&feed)
+    }
+
+    async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> rssr_domain::Result<()> {
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            let feed = state
+                .feeds
+                .iter_mut()
+                .find(|feed| feed.id == feed_id)
+                .ok_or(DomainError::NotFound)?;
+            feed.is_deleted = is_deleted;
+            feed.updated_at = web_now_utc();
+            state.clone()
+        };
+
+        save_state_snapshot(snapshot).map_err(map_persistence_error)
+    }
+
+    async fn list_feeds(&self) -> rssr_domain::Result<Vec<Feed>> {
+        let state = self.state.lock().expect("lock state");
+        state.feeds.iter().filter(|feed| !feed.is_deleted).map(persisted_feed_to_domain).collect()
+    }
+
+    async fn get_feed(&self, feed_id: i64) -> rssr_domain::Result<Option<Feed>> {
+        let state = self.state.lock().expect("lock state");
+        state
+            .feeds
+            .iter()
+            .find(|feed| feed.id == feed_id && !feed.is_deleted)
+            .map(persisted_feed_to_domain)
+            .transpose()
+    }
+
+    async fn list_summaries(&self) -> rssr_domain::Result<Vec<FeedSummary>> {
+        let state = self.state.lock().expect("lock state");
+        Ok(query_list_feeds(&state))
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct BrowserEntryRepository {
+    state: Arc<Mutex<PersistedState>>,
+}
+
+impl BrowserEntryRepository {
+    pub(super) fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+        Self { state }
+    }
+}
+
+#[async_trait::async_trait]
+impl EntryRepository for BrowserEntryRepository {
+    async fn list_entries(&self, query: &EntryQuery) -> rssr_domain::Result<Vec<EntrySummary>> {
+        let state = self.state.lock().expect("lock state");
+        Ok(query_list_entries(&state, query))
+    }
+
+    async fn get_entry(&self, entry_id: i64) -> rssr_domain::Result<Option<Entry>> {
+        let state = self.state.lock().expect("lock state");
+        query_get_entry(&state, entry_id).map_err(map_persistence_error)
+    }
+
+    async fn reader_navigation(
+        &self,
+        current_entry_id: i64,
+    ) -> rssr_domain::Result<EntryNavigation> {
+        let state = self.state.lock().expect("lock state");
+        Ok(query_reader_navigation(&state, current_entry_id))
+    }
+
+    async fn set_read(&self, entry_id: i64, is_read: bool) -> rssr_domain::Result<()> {
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            let now = web_now_utc();
+            let entry = state
+                .entries
+                .iter_mut()
+                .find(|entry| entry.id == entry_id)
+                .ok_or(DomainError::NotFound)?;
+            entry.is_read = is_read;
+            entry.read_at = is_read.then_some(now);
+            entry.updated_at = now;
+            state.clone()
+        };
+
+        save_state_snapshot(snapshot).map_err(map_persistence_error)
+    }
+
+    async fn set_starred(&self, entry_id: i64, is_starred: bool) -> rssr_domain::Result<()> {
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            let now = web_now_utc();
+            let entry = state
+                .entries
+                .iter_mut()
+                .find(|entry| entry.id == entry_id)
+                .ok_or(DomainError::NotFound)?;
+            entry.is_starred = is_starred;
+            entry.starred_at = is_starred.then_some(now);
+            entry.updated_at = now;
+            state.clone()
+        };
+
+        save_state_snapshot(snapshot).map_err(map_persistence_error)
+    }
+
+    async fn delete_for_feed(&self, feed_id: i64) -> rssr_domain::Result<()> {
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            state.entries.retain(|entry| entry.feed_id != feed_id);
+            state.clone()
+        };
+
+        save_state_snapshot(snapshot).map_err(map_persistence_error)
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct BrowserAppStateAdapter {
+    state: Arc<Mutex<PersistedState>>,
+}
+
+impl BrowserAppStateAdapter {
+    pub(super) fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+        Self { state }
+    }
+}
+
+#[async_trait::async_trait]
+impl AppStatePort for BrowserAppStateAdapter {
+    async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            if state.last_opened_feed_id != Some(feed_id) {
+                return Ok(());
+            }
+            state.last_opened_feed_id = None;
+            state.clone()
+        };
+
+        save_state_snapshot(snapshot)
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct BrowserFeedRefreshSource {
+    client: reqwest::Client,
+}
+
+impl BrowserFeedRefreshSource {
+    pub(super) fn new(client: reqwest::Client) -> Self {
+        Self { client }
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl FeedRefreshSourcePort for BrowserFeedRefreshSource {
+    async fn refresh(&self, target: &RefreshTarget) -> Result<FeedRefreshSourceOutput> {
+        let response = match web_fetch_feed_response(&self.client, target.url.as_str()).await {
+            Ok(response) => response,
+            Err(error) => {
+                return Ok(FeedRefreshSourceOutput::Failed(RefreshFailure {
+                    message: format!("抓取订阅失败: {error}"),
+                    metadata: None,
+                }));
+            }
+        };
+
+        let metadata = RefreshHttpMetadata {
+            etag: response
+                .headers()
+                .get(header::ETAG)
+                .and_then(|value| value.to_str().ok())
+                .map(ToOwned::to_owned),
+            last_modified: response
+                .headers()
+                .get(header::LAST_MODIFIED)
+                .and_then(|value| value.to_str().ok())
+                .map(ToOwned::to_owned),
+        };
+
+        if response.status() == StatusCode::NOT_MODIFIED {
+            return Ok(FeedRefreshSourceOutput::NotModified(metadata));
+        }
+
+        let body = match response.error_for_status() {
+            Ok(response) => response.text().await.context("读取 feed 响应正文失败")?,
+            Err(error) => {
+                return Ok(FeedRefreshSourceOutput::Failed(RefreshFailure {
+                    message: format!("feed 抓取返回非成功状态: {error}"),
+                    metadata: Some(metadata),
+                }));
+            }
+        };
+
+        match parse_feed(&body) {
+            Ok(parsed) => Ok(FeedRefreshSourceOutput::Updated(FeedRefreshUpdate {
+                metadata,
+                feed: map_parsed_feed(parsed),
+            })),
+            Err(error) => Ok(FeedRefreshSourceOutput::Failed(RefreshFailure {
+                message: format!("解析订阅失败: {error}"),
+                metadata: Some(metadata),
+            })),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct BrowserRefreshStore {
+    state: Arc<Mutex<PersistedState>>,
+}
+
+impl BrowserRefreshStore {
+    pub(super) fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+        Self { state }
+    }
+}
+
+#[async_trait::async_trait]
+impl RefreshStorePort for BrowserRefreshStore {
+    async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
+        let state = self.state.lock().expect("lock state");
+        state
+            .feeds
+            .iter()
+            .filter(|feed| !feed.is_deleted)
+            .map(|feed| {
+                Ok(RefreshTarget {
+                    feed_id: feed.id,
+                    url: rssr_domain::normalize_feed_url(
+                        &url::Url::parse(&feed.url).map_err(map_persistence_error)?,
+                    ),
+                    etag: feed.etag.clone(),
+                    last_modified: feed.last_modified.clone(),
+                })
+            })
+            .collect()
+    }
+
+    async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
+        let state = self.state.lock().expect("lock state");
+        state
+            .feeds
+            .iter()
+            .find(|feed| feed.id == feed_id && !feed.is_deleted)
+            .map(|feed| {
+                Ok(RefreshTarget {
+                    feed_id: feed.id,
+                    url: rssr_domain::normalize_feed_url(
+                        &url::Url::parse(&feed.url).map_err(map_persistence_error)?,
+                    ),
+                    etag: feed.etag.clone(),
+                    last_modified: feed.last_modified.clone(),
+                })
+            })
+            .transpose()
+    }
+
+    async fn commit(&self, feed_id: i64, commit: RefreshCommit) -> Result<()> {
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            let now = web_now_utc();
+            let feed =
+                state.feeds.iter_mut().find(|feed| feed.id == feed_id).context("订阅不存在")?;
+
+            match commit {
+                RefreshCommit::NotModified { metadata } => {
+                    feed.etag = metadata.etag;
+                    feed.last_modified = metadata.last_modified;
+                    feed.last_fetched_at = Some(now);
+                    feed.last_success_at = Some(now);
+                    feed.fetch_error = None;
+                    feed.updated_at = now;
+                }
+                RefreshCommit::Updated { update } => {
+                    if update.feed.title.is_some() {
+                        feed.title = update.feed.title;
+                    }
+                    if update.feed.site_url.is_some() {
+                        feed.site_url = update.feed.site_url.map(|url| url.to_string());
+                    }
+                    if update.feed.description.is_some() {
+                        feed.description = update.feed.description;
+                    }
+                    feed.etag = update.metadata.etag;
+                    feed.last_modified = update.metadata.last_modified;
+                    feed.last_fetched_at = Some(now);
+                    feed.last_success_at = Some(now);
+                    feed.fetch_error = None;
+                    feed.updated_at = now;
+                    upsert_entries(
+                        &mut state,
+                        feed_id,
+                        map_application_entries(update.feed.entries),
+                    )?;
+                }
+                RefreshCommit::Failed { failure } => {
+                    if let Some(metadata) = failure.metadata {
+                        feed.etag = metadata.etag;
+                        feed.last_modified = metadata.last_modified;
+                    }
+                    feed.last_fetched_at = Some(now);
+                    feed.fetch_error = Some(failure.message);
+                    feed.updated_at = now;
+                }
+            }
+
+            state.clone()
+        };
+
+        save_state_snapshot(snapshot)
+    }
+}
+
+fn persisted_feed_to_domain(feed: &PersistedFeed) -> rssr_domain::Result<Feed> {
+    Ok(Feed {
+        id: feed.id,
+        url: url::Url::parse(&feed.url).map_err(map_persistence_error)?,
+        title: feed.title.clone(),
+        site_url: feed
+            .site_url
+            .as_ref()
+            .map(|raw| url::Url::parse(raw).map_err(map_persistence_error))
+            .transpose()?,
+        description: feed.description.clone(),
+        icon_url: feed
+            .icon_url
+            .as_ref()
+            .map(|raw| url::Url::parse(raw).map_err(map_persistence_error))
+            .transpose()?,
+        folder: feed.folder.clone(),
+        etag: feed.etag.clone(),
+        last_modified: feed.last_modified.clone(),
+        last_fetched_at: feed.last_fetched_at,
+        last_success_at: feed.last_success_at,
+        fetch_error: feed.fetch_error.clone(),
+        is_deleted: feed.is_deleted,
+        created_at: feed.created_at,
+        updated_at: feed.updated_at,
+    })
+}
+
+fn map_parsed_feed(parsed: ParsedFeed) -> ParsedFeedUpdate {
+    ParsedFeedUpdate {
+        title: parsed.title,
+        site_url: parsed.site_url,
+        description: parsed.description,
+        entries: parsed.entries.into_iter().map(map_parsed_entry).collect(),
+    }
+}
+
+fn map_parsed_entry(entry: ParsedEntry) -> ParsedEntryData {
+    ParsedEntryData {
+        external_id: entry.external_id,
+        dedup_key: entry.dedup_key,
+        url: entry.url,
+        title: entry.title,
+        author: entry.author,
+        summary: entry.summary,
+        content_html: entry.content_html,
+        content_text: entry.content_text,
+        published_at: entry.published_at,
+        updated_at_source: entry.updated_at_source,
+    }
+}
+
+fn map_application_entries(entries: Vec<ParsedEntryData>) -> Vec<ParsedEntry> {
+    entries
+        .into_iter()
+        .map(|entry| ParsedEntry {
+            external_id: entry.external_id,
+            dedup_key: entry.dedup_key,
+            url: entry.url,
+            title: entry.title,
+            author: entry.author,
+            summary: entry.summary,
+            content_html: entry.content_html,
+            content_text: entry.content_text,
+            published_at: entry.published_at,
+            updated_at_source: entry.updated_at_source,
+        })
+        .collect()
+}
+
+fn normalize_optional_text(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        (!trimmed.is_empty()).then_some(trimmed)
+    })
+}
+
+fn map_persistence_error(error: impl std::fmt::Display) -> DomainError {
+    DomainError::Persistence(error.to_string())
+}
