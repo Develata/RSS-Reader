@@ -6,25 +6,8 @@ use quick_xml::{
     encoding::Decoder,
     events::{BytesDecl, BytesEnd, BytesStart, Event},
 };
-use rssr_domain::{ConfigFeed, ConfigPackage, UserSettings, normalize_feed_url};
+use rssr_domain::{ConfigFeed, UserSettings, normalize_feed_url};
 use url::Url;
-
-pub(super) fn validate_config_package(package: &ConfigPackage) -> anyhow::Result<()> {
-    ensure!(package.version >= 1, "配置包版本必须大于等于 1");
-    validate_settings(&package.settings)?;
-    let mut seen_urls = HashSet::new();
-    for feed in &package.feeds {
-        let normalized = normalize_feed_url(
-            &Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
-        );
-        ensure!(
-            seen_urls.insert(normalized.to_string()),
-            "配置包中包含重复的 feed URL：{}",
-            feed.url
-        );
-    }
-    Ok(())
-}
 
 pub(super) fn validate_settings(settings: &UserSettings) -> anyhow::Result<()> {
     ensure!(settings.refresh_interval_minutes >= 1, "刷新间隔必须大于等于 1 分钟");
@@ -43,10 +26,6 @@ pub(super) fn validate_settings(settings: &UserSettings) -> anyhow::Result<()> {
         );
     }
     Ok(())
-}
-
-pub(super) fn import_field(value: Option<String>, existed: bool) -> Option<String> {
-    if existed { value.or(Some(String::new())) } else { value }
 }
 
 pub(super) fn remote_url(endpoint: &str, remote_path: &str) -> anyhow::Result<Url> {

@@ -4,6 +4,8 @@ use std::sync::{Arc, Mutex, atomic::AtomicBool};
 mod config;
 #[path = "web/exchange.rs"]
 mod exchange;
+#[path = "web/exchange_adapter.rs"]
+mod exchange_adapter;
 #[path = "web/feed.rs"]
 mod feed;
 #[path = "web/mutations.rs"]
@@ -20,7 +22,8 @@ mod state;
 use anyhow::Context;
 use js_sys::Date;
 use rssr_application::{
-    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RefreshService,
+    ImportExportService, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
+    RefreshService,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::{Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings, normalize_feed_url};
@@ -34,6 +37,7 @@ use self::{
         import_config_json as import_exchange_json, import_opml as import_exchange_opml,
         pull_remote_config as pull_exchange_remote, push_remote_config as push_exchange_remote,
     },
+    exchange_adapter::build_import_export_service,
     mutations::{
         add_subscription as add_subscription_state,
         remember_last_opened_feed_id as remember_feed_id, remove_feed as remove_feed_state,
@@ -55,6 +59,7 @@ pub struct AppServices {
     state: Arc<Mutex<PersistedState>>,
     client: reqwest::Client,
     refresh_service: RefreshService,
+    import_export_service: ImportExportService,
     auto_refresh_started: AtomicBool,
 }
 
@@ -68,8 +73,11 @@ impl AppServices {
                 }
                 let state = Arc::new(Mutex::new(loaded.state));
                 let client = reqwest::Client::new();
+                let refresh_service = build_refresh_service(state.clone(), client.clone());
+                let import_export_service = build_import_export_service(state.clone());
                 Ok(Arc::new(Self {
-                    refresh_service: build_refresh_service(state.clone(), client.clone()),
+                    refresh_service,
+                    import_export_service,
                     state,
                     client,
                     auto_refresh_started: AtomicBool::new(false),
@@ -156,19 +164,19 @@ impl AppServices {
     }
 
     pub async fn export_config_json(&self) -> anyhow::Result<String> {
-        export_exchange_json(self)
+        export_exchange_json(self).await
     }
 
     pub async fn import_config_json(&self, raw: &str) -> anyhow::Result<()> {
-        import_exchange_json(self, raw)
+        import_exchange_json(self, raw).await
     }
 
     pub async fn export_opml(&self) -> anyhow::Result<String> {
-        export_exchange_opml(self)
+        export_exchange_opml(self).await
     }
 
     pub async fn import_opml(&self, raw: &str) -> anyhow::Result<()> {
-        import_exchange_opml(self, raw)
+        import_exchange_opml(self, raw).await
     }
 
     pub async fn push_remote_config(
