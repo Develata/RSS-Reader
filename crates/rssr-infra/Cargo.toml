@@ -31,8 +31,14 @@ sqlx = { version = "0.8", default-features = false, features = ["macros", "migra
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json"] }
+uuid = { version = "1", features = ["js"] }
 web-sys = { version = "0.3", features = ["Location", "Storage", "Window"] }
 
 [dev-dependencies]
 rssr-application = { path = "../rssr-application" }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }

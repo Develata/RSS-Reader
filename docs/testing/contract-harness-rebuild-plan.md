@@ -98,6 +98,24 @@
 
 每个 harness 内应继续拆分多个 focused test，而不是一个巨型 end-to-end 脚本。
 
+### 5. 接受 host / wasm 分层，而不是强行一份测试吃掉所有 target
+
+当前主线里：
+
+- SQLite / native adapter 主要在 `cfg(not(target_arch = "wasm32"))`
+- browser adapter 主要在 `cfg(target_arch = "wasm32")`
+
+这意味着旧分支里那种“同一份 host 测试同时跑 sqlite fixture 与 browser fixture”的结构，当前主线不能直接复刻。
+
+更合理的重建方式是：
+
+- host harness：
+  - 先保证共享 use case + sqlite adapter 的 contract 基线
+- wasm/browser harness：
+  - 单独为 browser fixture 设计 target-specific 测试基座
+
+不要为了追求形式上的“一个文件测完全部实现”而去回退当前主线的模块边界。
+
 ## 分阶段重建顺序
 
 ### 阶段 1：refresh contract harness
@@ -121,6 +139,11 @@
 - `NotModified` 分支
 - refresh failure 写回
 - `refresh_all` 顺序与结果聚合
+
+当前进度：
+
+- 已完成 host / sqlite baseline
+- browser fixture 尚未开始
 
 ### 阶段 2：subscription contract harness
 
@@ -159,6 +182,22 @@
 - browser fixture：
   - 直接基于 `PersistedState`
   - 用当前 `Browser*` adapters 组装 `RefreshStorePort`
+  - 但实现形式应拆成单独的 wasm/browser harness，而不是和 host harness 强塞到同一个 test target
+
+当前入口设计：
+
+- host baseline：
+  - `cargo test -p rssr-infra --test test_refresh_contract_harness`
+- wasm/browser harness 编译入口：
+  - `cargo test -p rssr-infra --target wasm32-unknown-unknown --test wasm_refresh_contract_harness --no-run`
+- 后续 browser 实际执行入口建议：
+  - `wasm-pack test --headless --chrome crates/rssr-infra --test wasm_refresh_contract_harness`
+
+当前最小 browser 基座建议先覆盖：
+
+- `BrowserRefreshStore::list_targets`
+- `BrowserRefreshStore::commit(NotModified)`
+- browser localStorage 写回是否成功
 
 ### subscription harness
 
@@ -203,9 +242,17 @@
 
 ## 推荐执行顺序
 
-1. 先重建 refresh harness
-2. 再重建 subscription harness
-3. 最后重建 config exchange harness
+1. 先完成 refresh harness 的 host / sqlite baseline
+2. 再补 browser / wasm harness 的测试基座
+3. 之后按同样模式推进 subscription harness
+4. 最后推进 config exchange harness
+
+## 当前阶段判断
+
+截至当前主线：
+
+- `refresh contract harness` 已有 host / sqlite baseline
+- browser fixture 的下一步重点，不是继续往同一份 host harness 里塞逻辑，而是先明确 wasm/browser 测试基座怎么建
 
 ## 当前结论
 
