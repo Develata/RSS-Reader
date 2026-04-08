@@ -130,7 +130,12 @@
 - `data-nav="feeds"`
 - `data-nav="entries"`
 - `data-nav="settings"`
+- `data-nav="back"`
 - `data-nav="feed-entries"`
+- `data-nav="previous-feed-entry"`
+- `data-nav="next-feed-entry"`
+- `data-nav="previous-unread-entry"`
+- `data-nav="next-unread-entry"`
 
 这些标记只表达导航语义，不承载业务副作用。
 
@@ -195,6 +200,7 @@
 - 业务逻辑本体
 - 页面私有临时点击逻辑
 - DOM 结构的替代命名
+- 容器或展示位本身的标签
 
 推荐最终形成以下命令族：
 
@@ -272,6 +278,21 @@
 - 自动化定位输入控件
 - 用户 CSS 和极端重排时保留语义锚点
 - 区分“持续输入值”和“触发一次动作”
+
+---
+
+## 容器与展示位边界
+
+容器、画廊、卡片壳、列表包裹层等展示位不应再使用 `data-action`。
+
+它们可以使用：
+
+- 稳定 class
+- `data-page`
+- `data-theme-preset`
+- 其它明确描述数据载荷的 attribute
+
+但不应伪装成“动作接口”。
 
 ---
 

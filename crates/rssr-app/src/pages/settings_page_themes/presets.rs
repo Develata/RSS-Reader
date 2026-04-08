@@ -134,7 +134,7 @@ pub(super) fn ThemePresetSections(
                     "清空 CSS"
                 }
             }
-            div { class: "theme-gallery", "data-action": "theme-preset-gallery",
+            div { class: "theme-gallery",
                 for preset in builtin_theme_presets() {
                     {
                         let is_active = detect_preset_key(&draft().custom_css) == preset.key;
@@ -146,7 +146,6 @@ pub(super) fn ThemePresetSections(
                             article {
                                 class: if is_active { "theme-card is-active" } else { "theme-card" },
                                 key: "{preset.key}",
-                                "data-action": "theme-preset-card",
                                 "data-theme-preset": "{preset.key}",
                                 h4 { class: "theme-card__title", "{preset_name}" }
                                 div { class: "theme-card__swatches",

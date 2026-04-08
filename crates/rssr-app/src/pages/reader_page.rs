@@ -86,7 +86,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                             "reader-bottom-bar__button is-disabled"
                         },
                         disabled: session.previous_action_target().is_none(),
-                        "data-nav": "previous-entry",
+                        "data-nav": "previous-unread-entry",
                         onclick: move |_| {
                             if let Some(target) = session.previous_action_target() {
                                 navigator.push(AppRoute::ReaderPage { entry_id: target });
@@ -124,7 +124,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                             "reader-bottom-bar__button is-disabled"
                         },
                         disabled: session.next_action_target().is_none(),
-                        "data-nav": "next-entry",
+                        "data-nav": "next-unread-entry",
                         onclick: move |_| {
                             if let Some(target) = session.next_action_target() {
                                 navigator.push(AppRoute::ReaderPage { entry_id: target });
