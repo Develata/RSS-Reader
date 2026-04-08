@@ -1,32 +1,13 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
-use anyhow::{Context, ensure};
+use anyhow::Context;
 use quick_xml::{
     Reader, Writer,
     encoding::Decoder,
     events::{BytesDecl, BytesEnd, BytesStart, Event},
 };
-use rssr_domain::{ConfigFeed, UserSettings, normalize_feed_url};
+use rssr_domain::ConfigFeed;
 use url::Url;
-
-pub fn validate_settings(settings: &UserSettings) -> anyhow::Result<()> {
-    ensure!(settings.refresh_interval_minutes >= 1, "刷新间隔必须大于等于 1 分钟");
-    ensure!(settings.archive_after_months >= 1, "自动归档阈值必须大于等于 1 个月");
-    ensure!(
-        (0.8..=1.5).contains(&settings.reader_font_scale),
-        "阅读字号缩放必须在 0.8 到 1.5 之间"
-    );
-    let mut normalized_urls = HashSet::new();
-    for raw in &settings.entry_filtered_feed_urls {
-        let normalized =
-            normalize_feed_url(&Url::parse(raw).with_context(|| format!("无效的订阅 URL：{raw}"))?);
-        ensure!(
-            normalized_urls.insert(normalized.to_string()),
-            "来源筛选中包含重复的订阅 URL：{raw}"
-        );
-    }
-    Ok(())
-}
 
 pub fn remote_url(endpoint: &str, remote_path: &str) -> anyhow::Result<Url> {
     let mut collection = Url::parse(endpoint).context("无效的 WebDAV endpoint")?;

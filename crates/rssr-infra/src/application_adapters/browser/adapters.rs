@@ -214,6 +214,20 @@ impl BrowserAppStateAdapter {
         Self { state }
     }
 
+    pub fn load_last_opened_feed_id(&self) -> Result<Option<i64>> {
+        Ok(self.state.lock().expect("lock state").last_opened_feed_id)
+    }
+
+    pub fn save_last_opened_feed_id(&self, feed_id: Option<i64>) -> Result<()> {
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            state.last_opened_feed_id = feed_id;
+            state.clone()
+        };
+
+        save_state_snapshot(snapshot)
+    }
+
     fn clear_last_opened_feed_if_matches_impl(&self, feed_id: i64) -> Result<()> {
         let snapshot = {
             let mut state = self.state.lock().expect("lock state");

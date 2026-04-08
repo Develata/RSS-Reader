@@ -2,16 +2,14 @@ use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 #[path = "web/exchange.rs"]
 mod exchange;
-#[path = "web/mutations.rs"]
-mod mutations;
 #[path = "web/refresh.rs"]
 mod refresh;
 
 use anyhow::Context;
 use rssr_application::{
-    AddSubscriptionInput, FeedService, ImportExportService, RefreshAllInput, RefreshAllOutcome,
-    RefreshFeedOutcome, RefreshFeedResult, RefreshService, RemoveSubscriptionInput,
-    SubscriptionWorkflow,
+    AddSubscriptionInput, EntryService, FeedService, ImportExportService, RefreshAllInput,
+    RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RefreshService,
+    RemoveSubscriptionInput, SettingsService, SubscriptionWorkflow,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::{Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings};
@@ -35,10 +33,6 @@ use self::{
         import_config_json as import_exchange_json, import_opml as import_exchange_opml,
         pull_remote_config as pull_exchange_remote, push_remote_config as push_exchange_remote,
     },
-    mutations::{
-        remember_last_opened_feed_id as remember_feed_id, save_settings as save_settings_state,
-        set_read as set_entry_read, set_starred as set_entry_starred,
-    },
     refresh::ensure_auto_refresh_started as start_auto_refresh,
 };
 
@@ -47,6 +41,9 @@ static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 pub struct AppServices {
     state: Arc<Mutex<PersistedState>>,
     client: reqwest::Client,
+    entry_service: EntryService,
+    settings_service: SettingsService,
+    app_state_adapter: Arc<BrowserAppStateAdapter>,
     refresh_service: RefreshService,
     subscription_workflow: SubscriptionWorkflow,
     import_export_service: ImportExportService,
@@ -76,6 +73,9 @@ impl AppServices {
                 Ok(Arc::new(Self {
                     state: state.clone(),
                     client,
+                    entry_service: EntryService::new(entry_repository.clone()),
+                    settings_service: SettingsService::new(settings_repository.clone()),
+                    app_state_adapter: app_state_adapter.clone(),
                     refresh_service: refresh_service.clone(),
                     subscription_workflow: SubscriptionWorkflow::new(
                         feed_service,
@@ -124,27 +124,27 @@ impl AppServices {
     }
 
     pub async fn set_read(&self, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
-        set_entry_read(self, entry_id, is_read)
+        self.entry_service.set_read(entry_id, is_read).await
     }
 
     pub async fn set_starred(&self, entry_id: i64, is_starred: bool) -> anyhow::Result<()> {
-        set_entry_starred(self, entry_id, is_starred)
+        self.entry_service.set_starred(entry_id, is_starred).await
     }
 
     pub async fn load_settings(&self) -> anyhow::Result<UserSettings> {
-        Ok(self.state.lock().expect("lock state").settings.clone())
+        self.settings_service.load().await
     }
 
     pub async fn save_settings(&self, settings: &UserSettings) -> anyhow::Result<()> {
-        save_settings_state(self, settings)
+        self.settings_service.save(settings).await
     }
 
     pub async fn load_last_opened_feed_id(&self) -> anyhow::Result<Option<i64>> {
-        Ok(self.state.lock().expect("lock state").last_opened_feed_id)
+        self.app_state_adapter.load_last_opened_feed_id()
     }
 
     pub async fn remember_last_opened_feed_id(&self, feed_id: i64) -> anyhow::Result<()> {
-        remember_feed_id(self, feed_id)
+        self.app_state_adapter.save_last_opened_feed_id(Some(feed_id))
     }
 
     pub fn ensure_auto_refresh_started(self: &Arc<Self>) {
