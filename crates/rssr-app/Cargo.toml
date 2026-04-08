@@ -9,6 +9,7 @@ build = "build.rs"
 [dependencies]
 ammonia.workspace = true
 anyhow.workspace = true
+async-trait.workspace = true
 base64.workspace = true
 chrono.workspace = true
 dioxus-router.workspace = true

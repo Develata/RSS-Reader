@@ -12,11 +12,16 @@ mod mutations;
 mod query;
 #[path = "web/refresh.rs"]
 mod refresh;
+#[path = "web/refresh_adapter.rs"]
+mod refresh_adapter;
 #[path = "web/state.rs"]
 mod state;
 
 use anyhow::Context;
 use js_sys::Date;
+use rssr_application::{
+    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RefreshService,
+};
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::{Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings, normalize_feed_url};
 use time::OffsetDateTime;
@@ -39,18 +44,17 @@ use self::{
         get_entry as query_get_entry, list_entries as query_list_entries,
         list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
     },
-    refresh::{
-        ensure_auto_refresh_started as start_auto_refresh, refresh_all as run_refresh_all,
-        refresh_feed as run_refresh_feed,
-    },
+    refresh::ensure_auto_refresh_started as start_auto_refresh,
+    refresh_adapter::build_refresh_service,
     state::{PersistedState, load_state},
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
 pub struct AppServices {
-    state: Mutex<PersistedState>,
+    state: Arc<Mutex<PersistedState>>,
     client: reqwest::Client,
+    refresh_service: RefreshService,
     auto_refresh_started: AtomicBool,
 }
 
@@ -62,9 +66,12 @@ impl AppServices {
                 if let Some(warning) = loaded.warning.as_deref() {
                     tracing::warn!(warning = warning, "Web 本地状态恢复时发现异常");
                 }
+                let state = Arc::new(Mutex::new(loaded.state));
+                let client = reqwest::Client::new();
                 Ok(Arc::new(Self {
-                    state: Mutex::new(loaded.state),
-                    client: reqwest::Client::new(),
+                    refresh_service: build_refresh_service(state.clone(), client.clone()),
+                    state,
+                    client,
                     auto_refresh_started: AtomicBool::new(false),
                 }))
             })
@@ -138,11 +145,14 @@ impl AppServices {
     }
 
     pub async fn refresh_all(&self) -> anyhow::Result<()> {
-        run_refresh_all(self).await
+        let outcome =
+            self.refresh_service.refresh_all(RefreshAllInput { max_concurrency: 1 }).await?;
+        self.handle_refresh_all_outcome(outcome)
     }
 
     pub async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        run_refresh_feed(self, feed_id).await
+        let outcome = self.refresh_service.refresh_feed(feed_id).await?;
+        self.handle_refresh_outcome(outcome)
     }
 
     pub async fn export_config_json(&self) -> anyhow::Result<String> {
@@ -175,6 +185,27 @@ impl AppServices {
         remote_path: &str,
     ) -> anyhow::Result<bool> {
         pull_exchange_remote(self, endpoint, remote_path).await
+    }
+
+    fn handle_refresh_all_outcome(&self, outcome: RefreshAllOutcome) -> anyhow::Result<()> {
+        let failures = outcome
+            .failures()
+            .into_iter()
+            .map(|feed| format!("{}: {}", feed.url, feed.failure_message().unwrap_or("刷新失败")))
+            .collect::<Vec<_>>();
+
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            anyhow::bail!("部分订阅刷新失败: {}", failures.join(" | "));
+        }
+    }
+
+    fn handle_refresh_outcome(&self, outcome: RefreshFeedOutcome) -> anyhow::Result<()> {
+        match outcome.result {
+            RefreshFeedResult::Failed { message } => anyhow::bail!("{}: {message}", outcome.url),
+            RefreshFeedResult::NotModified | RefreshFeedResult::Updated { .. } => Ok(()),
+        }
     }
 }
 
