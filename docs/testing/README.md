@@ -7,6 +7,8 @@
 - [手工回归测试清单](./manual-regression.md)
 - [全局浏览器回归报告](./global-browser-regression.md)
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
+- [主线验证矩阵](./mainline-validation-matrix.md)
+- [环境限制索引](./environment-limitations.md)
 
 ## 建议怎么使用
 

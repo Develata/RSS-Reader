@@ -15,6 +15,22 @@ pub(crate) fn select_reader_body(
         return ReaderBody::Html(html);
     }
 
+    if let Some(html) = content_text
+        .as_deref()
+        .filter(|raw| looks_like_html_fragment(raw))
+        .and_then(sanitize_remote_html)
+    {
+        return ReaderBody::Html(html);
+    }
+
+    if let Some(html) = summary
+        .as_deref()
+        .filter(|raw| looks_like_html_fragment(raw))
+        .and_then(sanitize_remote_html)
+    {
+        return ReaderBody::Html(html);
+    }
+
     ReaderBody::Text(content_text.or(summary).unwrap_or_else(|| "暂无正文".to_string()))
 }
 
@@ -22,6 +38,40 @@ pub(crate) fn sanitize_remote_html(raw: &str) -> Option<String> {
     let sanitized = ammonia::clean(raw);
     let trimmed = sanitized.trim();
     (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
+fn looks_like_html_fragment(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    if !(trimmed.starts_with('<') && trimmed.contains('>')) {
+        return false;
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    [
+        "<p",
+        "<div",
+        "<article",
+        "<section",
+        "<blockquote",
+        "<ul",
+        "<ol",
+        "<li",
+        "<a ",
+        "<img",
+        "<br",
+        "<hr",
+        "<h1",
+        "<h2",
+        "<h3",
+        "<h4",
+        "<h5",
+        "<h6",
+        "<table",
+        "<pre",
+        "<code",
+    ]
+    .iter()
+    .any(|tag| lower.contains(tag))
 }
 
 pub(crate) fn format_reader_datetime_utc(published_at: Option<OffsetDateTime>) -> Option<String> {
@@ -62,6 +112,25 @@ mod tests {
                 assert!(html.contains("<p>Hello</p>"));
                 assert!(!html.contains("onclick"));
                 assert!(!html.contains("<script"));
+            }
+            ReaderBody::Text(_) => panic!("expected html body"),
+        }
+    }
+
+    #[test]
+    fn reader_treats_html_like_summary_as_html_fallback() {
+        let body = select_reader_body(
+            None,
+            Some(
+                "<p>Summary fallback</p><a href=\"https://example.com\">Read more</a>".to_string(),
+            ),
+            None,
+        );
+
+        match body {
+            ReaderBody::Html(html) => {
+                assert!(html.contains("<p>Summary fallback</p>"));
+                assert!(html.contains("Read more"));
             }
             ReaderBody::Text(_) => panic!("expected html body"),
         }
