@@ -3,7 +3,7 @@ use rssr_domain::EntrySummary;
 use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::{
-    pages::entries_page::{EntriesPageBindings, EntriesPageCommand, execute_entries_page_command},
+    pages::entries_page::{EntriesPageBindings, EntriesPageEffect, execute_entries_page_effect},
     router::AppRoute,
 };
 
@@ -29,14 +29,14 @@ pub(super) fn render_entry_card(entry: EntrySummary, bindings: EntriesPageBindin
                     class: "button secondary",
                     "data-action": "mark-read",
                     onclick: move |_| {
-                        let command = EntriesPageCommand::ToggleRead {
+                        let effect = EntriesPageEffect::ToggleRead {
                             entry_id: entry.id,
                             entry_title: read_title.clone(),
                             currently_read: entry.is_read,
                         };
                         spawn(async move {
-                            let outcome = execute_entries_page_command(command).await;
-                            bindings.apply_command_outcome(outcome);
+                            let outcome = execute_entries_page_effect(effect).await;
+                            bindings.apply_runtime_outcome(outcome);
                         });
                     },
                     if entry.is_read { "标未读" } else { "标已读" }
@@ -45,14 +45,14 @@ pub(super) fn render_entry_card(entry: EntrySummary, bindings: EntriesPageBindin
                     class: "button secondary",
                     "data-action": "toggle-starred",
                     onclick: move |_| {
-                        let command = EntriesPageCommand::ToggleStarred {
+                        let effect = EntriesPageEffect::ToggleStarred {
                             entry_id: entry.id,
                             entry_title: starred_title.clone(),
                             currently_starred: entry.is_starred,
                         };
                         spawn(async move {
-                            let outcome = execute_entries_page_command(command).await;
-                            bindings.apply_command_outcome(outcome);
+                            let outcome = execute_entries_page_effect(effect).await;
+                            bindings.apply_runtime_outcome(outcome);
                         });
                     },
                     if entry.is_starred { "取消收藏" } else { "收藏" }

@@ -1,10 +1,15 @@
 pub mod entries_page;
 mod entries_page_bindings;
 mod entries_page_cards;
-mod entries_page_commands;
 mod entries_page_controls;
-mod entries_page_dispatch;
+mod entries_page_effect;
 mod entries_page_groups;
+mod entries_page_intent;
+mod entries_page_presenter;
+mod entries_page_queries;
+mod entries_page_reducer;
+mod entries_page_runtime;
+mod entries_page_state;
 pub mod feeds_page;
 mod feeds_page_sections;
 pub mod reader_page;
