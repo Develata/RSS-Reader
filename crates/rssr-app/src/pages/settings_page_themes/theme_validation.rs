@@ -1,4 +1,4 @@
-pub(super) fn validate_custom_css(raw: &str) -> Result<(), &'static str> {
+pub(crate) fn validate_custom_css(raw: &str) -> Result<(), &'static str> {
     let mut stack = Vec::new();
     let mut in_single_quote = false;
     let mut in_double_quote = false;
