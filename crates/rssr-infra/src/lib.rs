@@ -1,3 +1,4 @@
+pub mod application_adapters;
 pub mod config_sync;
 pub mod db;
 pub mod fetch;

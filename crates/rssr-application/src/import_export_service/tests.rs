@@ -1,14 +1,52 @@
 use std::sync::{Arc, Mutex};
 
 use rssr_domain::{
-    ConfigFeed, ConfigPackage, DomainError, Entry, EntryQuery, EntryRepository, FeedRepository,
-    SettingsRepository, UserSettings,
-    feed::{Feed, FeedSummary, NewFeedSubscription},
+    ConfigFeed, ConfigPackage, Entry, EntryNavigation, EntryQuery, EntryRepository, Feed,
+    FeedRepository, FeedSummary, NewFeedSubscription, SettingsRepository, UserSettings,
 };
 use time::OffsetDateTime;
 use url::Url;
 
-use super::{ImportExportService, RemoteConfigStore};
+use super::{FeedRemovalCleanupPort, ImportExportService, OpmlCodecPort, RemoteConfigStore};
+
+struct StubRemoteConfigStore {
+    payload: Mutex<Option<String>>,
+}
+
+#[async_trait::async_trait]
+impl RemoteConfigStore for StubRemoteConfigStore {
+    async fn upload_config(&self, raw: &str) -> anyhow::Result<()> {
+        *self.payload.lock().expect("lock payload") = Some(raw.to_string());
+        Ok(())
+    }
+
+    async fn download_config(&self) -> anyhow::Result<Option<String>> {
+        Ok(self.payload.lock().expect("lock payload").clone())
+    }
+}
+
+#[derive(Default)]
+struct RecordingOpmlCodec {
+    decoded: Mutex<Vec<ConfigFeed>>,
+    encoded_feeds: Mutex<Vec<ConfigFeed>>,
+}
+
+impl RecordingOpmlCodec {
+    fn with_decoded(feeds: Vec<ConfigFeed>) -> Self {
+        Self { decoded: Mutex::new(feeds), encoded_feeds: Mutex::new(Vec::new()) }
+    }
+}
+
+impl OpmlCodecPort for RecordingOpmlCodec {
+    fn encode(&self, feeds: &[ConfigFeed]) -> anyhow::Result<String> {
+        *self.encoded_feeds.lock().expect("lock encoded feeds") = feeds.to_vec();
+        Ok("<opml />".to_string())
+    }
+
+    fn decode(&self, _raw: &str) -> anyhow::Result<Vec<ConfigFeed>> {
+        Ok(self.decoded.lock().expect("lock decoded feeds").clone())
+    }
+}
 
 struct StubFeedRepository {
     feeds: Vec<Feed>,
@@ -20,7 +58,7 @@ impl FeedRepository for StubFeedRepository {
         &self,
         _new_feed: &NewFeedSubscription,
     ) -> rssr_domain::Result<Feed> {
-        Err(DomainError::Persistence("not used in test".into()))
+        panic!("upsert_subscription should not be used in this test");
     }
 
     async fn set_deleted(&self, _feed_id: i64, _is_deleted: bool) -> rssr_domain::Result<()> {
@@ -58,8 +96,8 @@ impl EntryRepository for StubEntryRepository {
     async fn reader_navigation(
         &self,
         _current_entry_id: i64,
-    ) -> rssr_domain::Result<rssr_domain::EntryNavigation> {
-        Ok(rssr_domain::EntryNavigation::default())
+    ) -> rssr_domain::Result<EntryNavigation> {
+        Ok(EntryNavigation::default())
     }
 
     async fn set_read(&self, _entry_id: i64, _is_read: bool) -> rssr_domain::Result<()> {
@@ -90,19 +128,16 @@ impl SettingsRepository for StubSettingsRepository {
     }
 }
 
-struct StubRemoteConfigStore {
-    payload: Mutex<Option<String>>,
+#[derive(Default)]
+struct RecordingFeedRemovalCleanup {
+    removed_feed_ids: Mutex<Vec<i64>>,
 }
 
 #[async_trait::async_trait]
-impl RemoteConfigStore for StubRemoteConfigStore {
-    async fn upload_config(&self, raw: &str) -> anyhow::Result<()> {
-        *self.payload.lock().expect("lock payload") = Some(raw.to_string());
+impl FeedRemovalCleanupPort for RecordingFeedRemovalCleanup {
+    async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> anyhow::Result<()> {
+        self.removed_feed_ids.lock().expect("lock removed ids").push(feed_id);
         Ok(())
-    }
-
-    async fn download_config(&self) -> anyhow::Result<Option<String>> {
-        Ok(self.payload.lock().expect("lock payload").clone())
     }
 }
 
@@ -152,9 +187,7 @@ impl FeedRepository for MemoryFeedRepository {
 
     async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> rssr_domain::Result<()> {
         let mut feeds = self.feeds.lock().expect("lock feeds");
-        let Some(feed) = feeds.iter_mut().find(|feed| feed.id == feed_id) else {
-            return Err(DomainError::NotFound);
-        };
+        let feed = feeds.iter_mut().find(|feed| feed.id == feed_id).expect("feed exists");
         feed.is_deleted = is_deleted;
         Ok(())
     }
@@ -192,8 +225,8 @@ impl EntryRepository for MemoryEntryRepository {
     async fn reader_navigation(
         &self,
         _current_entry_id: i64,
-    ) -> rssr_domain::Result<rssr_domain::EntryNavigation> {
-        Ok(rssr_domain::EntryNavigation::default())
+    ) -> rssr_domain::Result<EntryNavigation> {
+        Ok(EntryNavigation::default())
     }
 
     async fn set_read(&self, _entry_id: i64, _is_read: bool) -> rssr_domain::Result<()> {
@@ -229,45 +262,48 @@ impl SettingsRepository for MemorySettingsRepository {
 #[tokio::test]
 async fn export_config_contains_active_feeds_and_settings() {
     let now = OffsetDateTime::UNIX_EPOCH;
-    let active_feed = Feed {
-        id: 1,
-        url: Url::parse("https://example.com/feed.xml").expect("valid url"),
-        title: Some("Example".to_string()),
-        site_url: None,
-        description: None,
-        icon_url: None,
-        folder: Some("Tech".to_string()),
-        etag: None,
-        last_modified: None,
-        last_fetched_at: None,
-        last_success_at: None,
-        fetch_error: None,
-        is_deleted: false,
-        created_at: now,
-        updated_at: now,
-    };
-    let deleted_feed = Feed {
-        id: 2,
-        url: Url::parse("https://example.com/deleted.xml").expect("valid url"),
-        title: Some("Deleted".to_string()),
-        site_url: None,
-        description: None,
-        icon_url: None,
-        folder: Some("Archive".to_string()),
-        etag: None,
-        last_modified: None,
-        last_fetched_at: None,
-        last_success_at: None,
-        fetch_error: None,
-        is_deleted: true,
-        created_at: now,
-        updated_at: now,
-    };
-
     let service = ImportExportService::new(
-        Arc::new(StubFeedRepository { feeds: vec![active_feed, deleted_feed] }),
+        Arc::new(StubFeedRepository {
+            feeds: vec![
+                Feed {
+                    id: 1,
+                    url: Url::parse("https://example.com/feed.xml").expect("valid url"),
+                    title: Some("Example".to_string()),
+                    site_url: None,
+                    description: None,
+                    icon_url: None,
+                    folder: Some("Tech".to_string()),
+                    etag: None,
+                    last_modified: None,
+                    last_fetched_at: None,
+                    last_success_at: None,
+                    fetch_error: None,
+                    is_deleted: false,
+                    created_at: now,
+                    updated_at: now,
+                },
+                Feed {
+                    id: 2,
+                    url: Url::parse("https://example.com/deleted.xml").expect("valid url"),
+                    title: Some("Deleted".to_string()),
+                    site_url: None,
+                    description: None,
+                    icon_url: None,
+                    folder: Some("Archive".to_string()),
+                    etag: None,
+                    last_modified: None,
+                    last_fetched_at: None,
+                    last_success_at: None,
+                    fetch_error: None,
+                    is_deleted: true,
+                    created_at: now,
+                    updated_at: now,
+                },
+            ],
+        }),
         Arc::new(StubEntryRepository),
         Arc::new(StubSettingsRepository { settings: UserSettings::default() }),
+        Arc::new(RecordingOpmlCodec::default()),
     );
 
     let exported = service.export_config().await.expect("export config");
@@ -282,8 +318,6 @@ async fn export_config_contains_active_feeds_and_settings() {
 #[tokio::test]
 async fn remote_config_roundtrip_uses_json_payload() {
     let now = OffsetDateTime::UNIX_EPOCH;
-    let entry_repository =
-        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) });
     let service = ImportExportService::new(
         Arc::new(MemoryFeedRepository {
             feeds: Mutex::new(vec![Feed {
@@ -304,8 +338,9 @@ async fn remote_config_roundtrip_uses_json_payload() {
                 updated_at: now,
             }]),
         }),
-        entry_repository.clone(),
+        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) }),
         Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
+        Arc::new(RecordingOpmlCodec::default()),
     );
     let remote = StubRemoteConfigStore { payload: Mutex::new(None) };
 
@@ -367,27 +402,30 @@ async fn import_config_clears_removed_feed_entries_and_metadata() {
     });
     let entry_repository =
         Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) });
-    let service = ImportExportService::new(
+    let cleanup = Arc::new(RecordingFeedRemovalCleanup::default());
+    let service = ImportExportService::new_with_feed_removal_cleanup(
         feed_repository.clone(),
         entry_repository.clone(),
         Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
+        Arc::new(RecordingOpmlCodec::default()),
+        cleanup.clone(),
     );
 
-    let package = ConfigPackage {
-        version: 1,
-        exported_at: OffsetDateTime::UNIX_EPOCH,
-        feeds: vec![ConfigFeed {
-            url: "https://example.com/feed.xml".to_string(),
-            title: None,
-            folder: None,
-        }],
-        settings: UserSettings::default(),
-    };
-
-    service.import_config_package(&package).await.expect("import package");
+    service
+        .import_config_package(&ConfigPackage {
+            version: 1,
+            exported_at: OffsetDateTime::UNIX_EPOCH,
+            feeds: vec![ConfigFeed {
+                url: "https://example.com/feed.xml".to_string(),
+                title: None,
+                folder: None,
+            }],
+            settings: UserSettings::default(),
+        })
+        .await
+        .expect("import package");
 
     let feeds = feed_repository.list_feeds().await.expect("list feeds");
-    assert_eq!(feeds.len(), 2);
     let retained = feeds.iter().find(|feed| feed.id == 1).expect("retained feed exists");
     let removed = feeds.iter().find(|feed| feed.id == 2).expect("removed feed exists");
     assert_eq!(retained.title, None);
@@ -397,4 +435,143 @@ async fn import_config_clears_removed_feed_entries_and_metadata() {
         entry_repository.deleted_feed_ids.lock().expect("lock deleted ids").as_slice(),
         &[2]
     );
+    assert_eq!(cleanup.removed_feed_ids.lock().expect("lock removed ids").as_slice(), &[2]);
+}
+
+#[tokio::test]
+async fn pull_remote_config_cleans_up_removed_feed_app_state() {
+    let now = OffsetDateTime::UNIX_EPOCH;
+    let feed_repository = Arc::new(MemoryFeedRepository {
+        feeds: Mutex::new(vec![
+            Feed {
+                id: 1,
+                url: Url::parse("https://example.com/feed.xml").expect("valid url"),
+                title: Some("Example".to_string()),
+                site_url: None,
+                description: None,
+                icon_url: None,
+                folder: Some("Tech".to_string()),
+                etag: None,
+                last_modified: None,
+                last_fetched_at: None,
+                last_success_at: None,
+                fetch_error: None,
+                is_deleted: false,
+                created_at: now,
+                updated_at: now,
+            },
+            Feed {
+                id: 2,
+                url: Url::parse("https://stale.example.com/rss").expect("valid url"),
+                title: Some("Stale".to_string()),
+                site_url: None,
+                description: None,
+                icon_url: None,
+                folder: None,
+                etag: None,
+                last_modified: None,
+                last_fetched_at: None,
+                last_success_at: None,
+                fetch_error: None,
+                is_deleted: false,
+                created_at: now,
+                updated_at: now,
+            },
+        ]),
+    });
+    let entry_repository =
+        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) });
+    let cleanup = Arc::new(RecordingFeedRemovalCleanup::default());
+    let service = ImportExportService::new_with_feed_removal_cleanup(
+        feed_repository,
+        entry_repository.clone(),
+        Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
+        Arc::new(RecordingOpmlCodec::default()),
+        cleanup.clone(),
+    );
+    let remote = StubRemoteConfigStore {
+        payload: Mutex::new(Some(
+            serde_json::to_string(&ConfigPackage {
+                version: 1,
+                exported_at: OffsetDateTime::UNIX_EPOCH,
+                feeds: vec![ConfigFeed {
+                    url: "https://example.com/feed.xml".to_string(),
+                    title: None,
+                    folder: None,
+                }],
+                settings: UserSettings::default(),
+            })
+            .expect("serialize package"),
+        )),
+    };
+
+    let pulled = service.pull_remote_config(&remote).await.expect("pull remote config");
+
+    assert!(pulled);
+    assert_eq!(
+        entry_repository.deleted_feed_ids.lock().expect("lock deleted ids").as_slice(),
+        &[2]
+    );
+    assert_eq!(cleanup.removed_feed_ids.lock().expect("lock removed ids").as_slice(), &[2]);
+}
+
+#[tokio::test]
+async fn export_opml_uses_config_export_as_source_of_truth() {
+    let codec = Arc::new(RecordingOpmlCodec::default());
+    let now = OffsetDateTime::UNIX_EPOCH;
+    let service = ImportExportService::new(
+        Arc::new(StubFeedRepository {
+            feeds: vec![Feed {
+                id: 1,
+                url: Url::parse("https://example.com/feed.xml").expect("valid url"),
+                title: Some("Example".to_string()),
+                site_url: None,
+                description: None,
+                icon_url: None,
+                folder: Some("Tech".to_string()),
+                etag: None,
+                last_modified: None,
+                last_fetched_at: None,
+                last_success_at: None,
+                fetch_error: None,
+                is_deleted: false,
+                created_at: now,
+                updated_at: now,
+            }],
+        }),
+        Arc::new(StubEntryRepository),
+        Arc::new(StubSettingsRepository { settings: UserSettings::default() }),
+        codec.clone(),
+    );
+
+    let raw = service.export_opml().await.expect("export opml");
+
+    assert_eq!(raw, "<opml />");
+    assert_eq!(codec.encoded_feeds.lock().expect("lock encoded feeds").len(), 1);
+    assert_eq!(
+        codec.encoded_feeds.lock().expect("lock encoded feeds")[0].url,
+        "https://example.com/feed.xml"
+    );
+}
+
+#[tokio::test]
+async fn import_opml_upserts_normalized_feeds() {
+    let feed_repository = Arc::new(MemoryFeedRepository { feeds: Mutex::new(Vec::new()) });
+    let service = ImportExportService::new(
+        feed_repository.clone(),
+        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) }),
+        Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
+        Arc::new(RecordingOpmlCodec::with_decoded(vec![ConfigFeed {
+            url: "https://example.com:443/feed.xml#top".to_string(),
+            title: Some("Example".to_string()),
+            folder: Some("Tech".to_string()),
+        }])),
+    );
+
+    service.import_opml("<opml />").await.expect("import opml");
+
+    let feeds = feed_repository.list_feeds().await.expect("list feeds");
+    assert_eq!(feeds.len(), 1);
+    assert_eq!(feeds[0].url.as_str(), "https://example.com/feed.xml");
+    assert_eq!(feeds[0].folder.as_deref(), Some("Tech"));
 }

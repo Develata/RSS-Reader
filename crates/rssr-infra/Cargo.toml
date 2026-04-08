@@ -13,6 +13,7 @@ chrono.workspace = true
 feed-rs.workspace = true
 quick-xml.workspace = true
 regex.workspace = true
+rssr-application = { path = "../rssr-application" }
 rssr-domain = { path = "../rssr-domain" }
 serde.workspace = true
 serde_json.workspace = true
@@ -32,5 +33,4 @@ reqwest = { version = "0.12", default-features = false, features = ["charset", "
 sqlx = { version = "0.8", default-features = false, features = ["macros", "migrate", "runtime-tokio", "sqlite", "time"] }
 
 [dev-dependencies]
-rssr-application = { path = "../rssr-application" }
 tokio = { workspace = true, features = ["rt-multi-thread"] }
