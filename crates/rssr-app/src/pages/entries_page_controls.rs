@@ -52,7 +52,7 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
 
     rsx! {
         if controls_hidden() {
-            div { class: "entry-controls-reveal entry-controls-reveal--compact",
+            div { class: "entry-controls-reveal",
                 button {
                     class: "entry-controls-toggle entry-controls-toggle--flat",
                     "data-action": "show-entry-controls",
@@ -67,7 +67,7 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
             }
         } else {
             div { class: "entry-controls-panel",
-                div { class: "entry-organize-bar entry-organize-bar--airy",
+                div { class: "entry-organize-bar",
                     label { class: "field-label", r#for: "entry-grouping-mode", "组织方式" }
                     select {
                         id: "entry-grouping-mode",
@@ -103,7 +103,7 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
                         }
                     }
                 }
-                div { class: "entry-overview entry-overview--airy",
+                div { class: "entry-overview",
                     div { class: "entry-overview__metric",
                         span { class: "entry-overview__label", "当前结果" }
                         strong { class: "entry-overview__value", "{visible_entries.len()}" }
@@ -112,7 +112,7 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
                         span { class: "entry-overview__label", "归档文章" }
                         strong { class: "entry-overview__value", "{archived_count}" }
                     }
-                    div { class: "entry-overview__metric entry-overview__metric--hint",
+                    div { class: "entry-overview__metric", "data-tone": "summary",
                         span { class: "entry-overview__label", "当前组织" }
                         strong {
                             class: "entry-overview__value",
@@ -154,7 +154,7 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
                         tone: "info".to_string()
                     }
                 }
-                div { class: "entry-controls-reveal entry-controls-reveal--compact",
+                div { class: "entry-controls-reveal",
                     button {
                         class: "entry-controls-toggle entry-controls-toggle--flat",
                         "data-action": "hide-entry-controls",
@@ -222,11 +222,8 @@ pub(super) fn render_entry_directory(
                             rsx! {
                                 div { class: "entry-directory-rail__subsection", key: "{anchor_id}",
                                     button {
-                                        class: if is_open {
-                                            "entry-directory-rail__toggle is-open"
-                                        } else {
-                                            "entry-directory-rail__toggle"
-                                        },
+                                        class: "entry-directory-rail__toggle",
+                                        aria_expanded: if is_open { "true" } else { "false" },
                                         "data-action": if is_open { "collapse-directory-source" } else { "expand-directory-source" },
                                         onclick: move |_| {
                                             let mut next = expanded_directory_sources();
