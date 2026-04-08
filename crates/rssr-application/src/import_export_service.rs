@@ -99,7 +99,7 @@ impl ImportExportService {
 
         let settings = self.settings_repository.load().await?;
 
-        Ok(ConfigPackage { version: 1, exported_at: OffsetDateTime::now_utc(), feeds, settings })
+        Ok(ConfigPackage { version: 1, exported_at: export_time_utc(), feeds, settings })
     }
 
     pub async fn import_config_package(&self, package: &ConfigPackage) -> Result<()> {
@@ -190,5 +190,19 @@ impl ImportExportService {
         self.entry_repository.delete_for_feed(feed_id).await?;
         self.feed_repository.set_deleted(feed_id, true).await?;
         self.feed_removal_cleanup.clear_last_opened_feed_if_matches(feed_id).await
+    }
+}
+
+fn export_time_utc() -> OffsetDateTime {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let millis = js_sys::Date::now() as i128;
+        return OffsetDateTime::from_unix_timestamp_nanos(millis * 1_000_000)
+            .expect("browser timestamp should fit in OffsetDateTime");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        OffsetDateTime::now_utc()
     }
 }
