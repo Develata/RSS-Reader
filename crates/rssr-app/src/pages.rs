@@ -18,6 +18,7 @@ mod reader_page_effect;
 mod reader_page_intent;
 mod reader_page_reducer;
 mod reader_page_runtime;
+mod reader_page_session;
 mod reader_page_state;
 mod reader_page_support;
 pub mod settings_page;
