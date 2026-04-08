@@ -143,6 +143,17 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     use_resource(move || async move {
         let _ = reload_tick();
         match AppServices::shared().await {
+            Ok(services) => match services.list_feeds().await {
+                Ok(items) => feeds.set(items),
+                Err(err) => set_status_error(status, status_tone, format!("读取订阅失败：{err}")),
+            },
+            Err(err) => set_status_error(status, status_tone, format!("初始化应用失败：{err}")),
+        }
+    });
+
+    use_resource(move || async move {
+        let _ = reload_tick();
+        match AppServices::shared().await {
             Ok(services) => match services
                 .list_entries(&EntryQuery {
                     feed_id,
@@ -160,9 +171,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                 .await
             {
                 Ok(items) => {
-                    if let Ok(feed_items) = services.list_feeds().await {
-                        feeds.set(feed_items);
-                    }
                     set_status_info(status, status_tone, format!("共 {} 篇文章。", items.len()));
                     entries.set(items);
                 }

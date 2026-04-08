@@ -35,6 +35,24 @@ pub(crate) fn FeedComposeSection(
                         "data-action": "feed-url-input",
                         value: "{feed_url}",
                         placeholder: "https://example.com/feed.xml",
+                        onkeydown: move |event| {
+                            if !is_paste_shortcut(&event) {
+                                return;
+                            }
+
+                            event.prevent_default();
+                            spawn(async move {
+                                match paste_feed_url_from_clipboard().await {
+                                    Ok(Some(text)) => feed_url.set(text),
+                                    Ok(None) => {}
+                                    Err(err) => set_status_error(
+                                        status,
+                                        status_tone,
+                                        format!("读取系统剪贴板失败：{err}"),
+                                    ),
+                                }
+                            });
+                        },
                         oninput: move |event| feed_url.set(event.value())
                     }
                     button {
@@ -91,6 +109,27 @@ pub(crate) fn FeedComposeSection(
             }
         }
     }
+}
+
+fn is_paste_shortcut(event: &KeyboardEvent) -> bool {
+    let modifiers = event.modifiers();
+    let has_paste_modifier =
+        modifiers.contains(Modifiers::META) || modifiers.contains(Modifiers::CONTROL);
+    has_paste_modifier && event.key().to_string().eq_ignore_ascii_case("v")
+}
+
+async fn paste_feed_url_from_clipboard() -> Result<Option<String>, String> {
+    document::eval(
+        r#"
+        if (typeof navigator === "undefined" || !navigator.clipboard || !navigator.clipboard.readText) {
+            return null;
+        }
+        return navigator.clipboard.readText();
+        "#,
+    )
+    .join::<Option<String>>()
+    .await
+    .map_err(|err| err.to_string())
 }
 
 #[component]
