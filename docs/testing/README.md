@@ -9,6 +9,7 @@
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
 - [主线验证矩阵](./mainline-validation-matrix.md)
 - [环境限制索引](./environment-limitations.md)
+- [Contract Harness 重建计划](./contract-harness-rebuild-plan.md)
 
 ## 建议怎么使用
 

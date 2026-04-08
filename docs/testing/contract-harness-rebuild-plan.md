@@ -1,0 +1,212 @@
+# contract harness 重建计划
+
+这份文档用于指导把 `zheye-mainline-stabilization` 中有价值但已不适合直接移植的 3 份 contract harness 测试，按当前 `main` 的结构重建到主线。
+
+## 目标
+
+重建这 3 份测试：
+
+- `refresh contract harness`
+- `config exchange contract harness`
+- `subscription contract harness`
+
+重建后的目标不是复刻旧分支文件，而是验证**同一套 application contract** 在当前主线的两类实现上保持行为一致：
+
+- SQLite / native adapter
+- browser persisted-state adapter
+
+## 为什么不能直接抄旧分支
+
+旧分支中的 harness 建立在较早的结构之上，当前 `main` 已有这些关键变化：
+
+- Web/browser backend 已正式外移到 `rssr-infra/src/application_adapters/browser/`
+- `rssr-app/src/bootstrap/web/*` 已明显变薄，不再适合作为测试锚点
+- `native / cli / web` 都已经接到新的共享 use case
+- 页面层和 session 结构继续演进，不应被测试文件反向绑定
+
+因此，旧分支中的这些文件只能作为参考：
+
+- `crates/rssr-infra/tests/test_refresh_contract_harness.rs`
+- `crates/rssr-infra/tests/test_config_exchange_contract_harness.rs`
+- `crates/rssr-infra/tests/test_subscription_contract_harness.rs`
+
+## 当前主线可复用的落点
+
+### application 层
+
+- `crates/rssr-application/src/refresh_service.rs`
+- `crates/rssr-application/src/subscription_workflow.rs`
+- `crates/rssr-application/src/import_export_service.rs`
+
+### native / sqlite 适配
+
+- `crates/rssr-infra/src/application_adapters/refresh.rs`
+- `crates/rssr-infra/src/application_adapters/non_refresh.rs`
+- `crates/rssr-infra/src/db/*`
+
+### browser 适配
+
+- `crates/rssr-infra/src/application_adapters/browser/adapters.rs`
+- `crates/rssr-infra/src/application_adapters/browser/query.rs`
+- `crates/rssr-infra/src/application_adapters/browser/state.rs`
+- `crates/rssr-infra/src/application_adapters/browser/config.rs`
+- `crates/rssr-infra/src/application_adapters/browser/feed.rs`
+
+### 已有测试基线
+
+- `crates/rssr-infra/tests/test_application_refresh_store_adapter.rs`
+- `crates/rssr-infra/tests/test_feed_refresh_flow.rs`
+- `crates/rssr-infra/tests/test_config_package_io.rs`
+- `crates/rssr-infra/tests/test_settings_repository.rs`
+- `crates/rssr-infra/tests/test_webdav_local_roundtrip.rs`
+
+## 重建原则
+
+### 1. 只测 contract，不测页面
+
+新的 harness 必须围绕 application contract 组织，不能重新依赖：
+
+- `rssr-app` 页面组件
+- `bootstrap/web.rs`
+- session / bindings / presenter
+
+### 2. 一个行为，两种 fixture
+
+每份 harness 都应该同时跑：
+
+- SQLite fixture
+- browser-state fixture
+
+并在同一断言语义下验证：
+
+- 输入
+- 副作用
+- 输出
+
+### 3. browser fixture 应直接基于当前 browser adapter
+
+不要再复制旧分支里那套临时 browser model。优先基于当前主线已有实现：
+
+- `PersistedState`
+- `BrowserFeedRepository`
+- `BrowserEntryRepository`
+- `BrowserSettingsRepository`
+- `BrowserAppStateAdapter`
+- `BrowserOpmlCodec`
+
+### 4. 避免把所有场景塞进一份超大测试
+
+每个 harness 内应继续拆分多个 focused test，而不是一个巨型 end-to-end 脚本。
+
+## 分阶段重建顺序
+
+### 阶段 1：refresh contract harness
+
+优先级最高。
+
+原因：
+
+- `RefreshService` 是最核心的共享 use case 之一
+- 已有 `test_application_refresh_store_adapter.rs` 可作为起点
+- refresh 行为最适合同时验证 sqlite / browser-state
+
+建议新文件：
+
+- `crates/rssr-infra/tests/test_refresh_contract_harness.rs`
+
+最小覆盖：
+
+- 更新 feed metadata
+- 新文章写入
+- `NotModified` 分支
+- refresh failure 写回
+- `refresh_all` 顺序与结果聚合
+
+### 阶段 2：subscription contract harness
+
+建议新文件：
+
+- `crates/rssr-infra/tests/test_subscription_contract_harness.rs`
+
+最小覆盖：
+
+- 新增订阅
+- URL 规范化后的去重
+- 删除订阅时的软删除
+- 删除后 entry 清理
+- `last_opened_feed_id` 清理
+
+### 阶段 3：config exchange contract harness
+
+建议新文件：
+
+- `crates/rssr-infra/tests/test_config_exchange_contract_harness.rs`
+
+最小覆盖：
+
+- JSON export/import
+- OPML export/import
+- remote push/pull
+- 删除订阅后的配置同步
+- browser fixture 下 settings 与 last-opened state 的保持/清理
+
+## 每阶段的建议实现方式
+
+### refresh harness
+
+- SQLite fixture：
+  - 继续复用内存 sqlite + migrate
+- browser fixture：
+  - 直接基于 `PersistedState`
+  - 用当前 `Browser*` adapters 组装 `RefreshStorePort`
+
+### subscription harness
+
+- SQLite fixture：
+  - 复用 `SqliteAppStateAdapter`
+- browser fixture：
+  - 直接复用 `BrowserFeedRepository`
+  - `BrowserEntryRepository`
+  - `BrowserAppStateAdapter`
+
+### config exchange harness
+
+- SQLite fixture：
+  - 复用 `SqliteSettingsRepository`
+  - `SqliteAppStateAdapter`
+  - `InfraOpmlCodec`
+- browser fixture：
+  - 复用 `BrowserSettingsRepository`
+  - `BrowserAppStateAdapter`
+  - `BrowserOpmlCodec`
+  - 为 `RemoteConfigStore` 继续使用内存 fake 即可
+
+## 明确不要做的事
+
+- 不把旧分支的测试文件直接复制进当前主线
+- 不在 harness 里直接依赖 `rssr-app` 页面结构或 `data-action`
+- 不把 browser fixture 再实现成一套脱离主线的临时模型，除非当前 adapter 无法支持断言
+- 不把 `test_webdav_local_roundtrip` 的环境限制混进 contract harness 本体
+
+## 建议验收
+
+每一阶段完成后，至少执行：
+
+- `cargo fmt --all`
+- `cargo check -p rssr-infra`
+- `cargo test -p rssr-infra --test <对应 harness 文件>`
+- `git diff --check`
+
+阶段 3 额外建议：
+
+- `cargo test -p rssr-infra --test test_webdav_local_roundtrip`
+
+## 推荐执行顺序
+
+1. 先重建 refresh harness
+2. 再重建 subscription harness
+3. 最后重建 config exchange harness
+
+## 当前结论
+
+`zheye-mainline-stabilization` 的功能代码现在基本都已被当前 `main` 覆盖；剩下最值得持续吸收的工程资产，是这 3 份 contract harness 的测试思想，而不是它们的原始文件本身。
