@@ -50,5 +50,5 @@ uuid = { version = "1", features = ["js"] }
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["Blob", "BlobPropertyBag", "CssStyleDeclaration", "Document", "Element", "Event", "EventTarget", "File", "FileList", "HtmlAnchorElement", "HtmlDocument", "HtmlElement", "HtmlInputElement", "Location", "Node", "Storage", "Url", "Window"] }
 
-[target.'cfg(windows)'.build-dependencies]
+[build-dependencies]
 winresource = "0.1"

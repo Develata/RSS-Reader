@@ -7,12 +7,14 @@ use rssr_domain::{
     UserSettings,
 };
 use rssr_infra::{
+    application_adapters::InfraOpmlCodec,
     config_sync::file_format::{decode_config_package, encode_config_package},
     db::{
         entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
         settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,
         storage_backend::StorageBackend,
     },
+    opml::OpmlCodec,
     parser::ParsedEntry,
 };
 use sqlx::Row;
@@ -66,6 +68,7 @@ async fn config_package_roundtrip_restores_feeds_and_settings() {
         export_feed_repository.clone(),
         export_entry_repository,
         export_settings_repository.clone(),
+        Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
     );
     let exported = export_service.export_config().await.expect("export config");
     let encoded = encode_config_package(&exported).expect("encode config package");
@@ -82,6 +85,7 @@ async fn config_package_roundtrip_restores_feeds_and_settings() {
         import_feed_repository.clone(),
         import_entry_repository,
         import_settings_repository.clone(),
+        Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
     );
 
     import_service.import_config_package(&decoded).await.expect("import config package");
@@ -104,8 +108,12 @@ async fn config_import_overwrites_local_feed_membership() {
     let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
     let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
     let settings_repository = Arc::new(SqliteSettingsRepository::new(pool));
-    let service =
-        ImportExportService::new(feed_repository.clone(), entry_repository, settings_repository);
+    let service = ImportExportService::new(
+        feed_repository.clone(),
+        entry_repository,
+        settings_repository,
+        Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
+    );
 
     feed_repository
         .upsert_subscription(&NewFeedSubscription {
@@ -148,6 +156,7 @@ async fn config_import_removes_dropped_feed_entries_and_clears_metadata() {
         feed_repository.clone(),
         entry_repository.clone(),
         settings_repository,
+        Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
     );
 
     let retained_feed = feed_repository

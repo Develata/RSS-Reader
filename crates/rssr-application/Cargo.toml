@@ -11,7 +11,7 @@ async-trait.workspace = true
 rssr-domain = { path = "../rssr-domain" }
 serde_json.workspace = true
 time.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 url.workspace = true
 
 [dev-dependencies]

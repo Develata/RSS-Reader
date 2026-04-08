@@ -5,13 +5,17 @@ use std::sync::{
 use std::time::Duration;
 
 use anyhow::Context;
-use rssr_application::{EntryService, FeedService, ImportExportService, SettingsService};
-pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::{
-    Entry, EntryQuery, EntryRepository, FeedRepository, FeedSummary, NewFeedSubscription,
-    UserSettings, normalize_feed_url,
+use rssr_application::{
+    AddSubscriptionInput, EntryService, FeedService, ImportExportService, RefreshAllInput,
+    RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RefreshLocalizedEntry,
+    RefreshService, RemoveSubscriptionInput, SettingsService, SubscriptionWorkflow,
 };
+pub use rssr_domain::EntryNavigation as ReaderNavigation;
+use rssr_domain::{Entry, EntryQuery, FeedSummary, UserSettings};
 use rssr_infra::{
+    application_adapters::{
+        InfraFeedRefreshSource, InfraOpmlCodec, SqliteAppStateAdapter, SqliteRefreshStore,
+    },
     config_sync::webdav::WebDavConfigSync,
     db::{
         app_state_repository::SqliteAppStateRepository,
@@ -23,29 +27,25 @@ use rssr_infra::{
         sqlite_native::NativeSqliteBackend,
         storage_backend::StorageBackend,
     },
-    fetch::{BodyAssetLocalizer, FetchClient, FetchRequest, FetchResult},
+    fetch::{BodyAssetLocalizer, FetchClient},
     opml::OpmlCodec,
-    parser::{FeedParser, feed_parser::ParsedEntry},
+    parser::FeedParser,
 };
 use time::OffsetDateTime;
 use tokio::sync::OnceCell;
-use tokio::task::JoinSet;
-use url::Url;
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
 pub struct AppServices {
-    feed_repository: Arc<SqliteFeedRepository>,
     entry_repository: Arc<SqliteEntryRepository>,
     app_state_repository: Arc<SqliteAppStateRepository>,
     feed_service: FeedService,
     entry_service: EntryService,
     settings_service: SettingsService,
+    refresh_service: RefreshService,
+    subscription_workflow: SubscriptionWorkflow,
     import_export_service: ImportExportService,
-    fetch_client: FetchClient,
     body_asset_localizer: BodyAssetLocalizer,
-    parser: FeedParser,
-    opml_codec: OpmlCodec,
     auto_refresh_started: AtomicBool,
 }
 
@@ -74,23 +74,38 @@ impl AppServices {
                 let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
                 let settings_repository = Arc::new(SqliteSettingsRepository::new(pool.clone()));
                 let app_state_repository = Arc::new(SqliteAppStateRepository::new(pool));
+                let app_state_adapter =
+                    Arc::new(SqliteAppStateAdapter::new(app_state_repository.clone()));
+                let feed_service =
+                    FeedService::new(feed_repository.clone(), entry_repository.clone());
+                let refresh_service = RefreshService::new(
+                    Arc::new(InfraFeedRefreshSource::new(FetchClient::new(), FeedParser::new())),
+                    Arc::new(SqliteRefreshStore::new(
+                        feed_repository.clone(),
+                        entry_repository.clone(),
+                    )),
+                );
 
                 Ok(Arc::new(Self {
-                    feed_service: FeedService::new(feed_repository.clone()),
+                    feed_service: feed_service.clone(),
                     entry_service: EntryService::new(entry_repository.clone()),
                     settings_service: SettingsService::new(settings_repository.clone()),
-                    import_export_service: ImportExportService::new(
+                    refresh_service: refresh_service.clone(),
+                    subscription_workflow: SubscriptionWorkflow::new(
+                        feed_service,
+                        refresh_service,
+                        app_state_adapter.clone(),
+                    ),
+                    import_export_service: ImportExportService::new_with_feed_removal_cleanup(
                         feed_repository.clone(),
                         entry_repository.clone(),
                         settings_repository,
+                        Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
+                        app_state_adapter,
                     ),
-                    feed_repository,
                     entry_repository,
                     app_state_repository,
-                    fetch_client: FetchClient::new(),
                     body_asset_localizer: BodyAssetLocalizer::new(),
-                    parser: FeedParser::new(),
-                    opml_codec: OpmlCodec::new(),
                     auto_refresh_started: AtomicBool::new(false),
                 }))
             })
@@ -194,184 +209,43 @@ impl AppServices {
     }
 
     pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
-        let url = normalize_feed_url(&Url::parse(raw_url).context("订阅 URL 不合法")?);
-        let feed = self
-            .feed_service
-            .add_subscription(&NewFeedSubscription { url, title: None, folder: None })
+        let outcome = self
+            .subscription_workflow
+            .add_subscription_and_refresh(&AddSubscriptionInput {
+                url: raw_url.to_string(),
+                title: None,
+                folder: None,
+            })
             .await
             .context("保存订阅失败")?;
-        self.refresh_feed(feed.id).await.context("首次刷新订阅失败")?;
-        Ok(())
+        self.handle_refresh_outcome(outcome.refresh).context("首次刷新订阅失败")
     }
 
     pub async fn remove_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        self.entry_repository.delete_for_feed(feed_id).await.context("删除订阅文章失败")?;
-        self.feed_service.remove_subscription(feed_id).await.context("删除订阅失败")?;
-        if self.load_last_opened_feed_id().await? == Some(feed_id) {
-            self.app_state_repository
-                .save_last_opened_feed_id(None)
-                .await
-                .context("清理上次打开的订阅记录失败")?;
-        }
-        Ok(())
+        self.subscription_workflow
+            .remove_subscription(RemoveSubscriptionInput { feed_id, purge_entries: true })
+            .await
+            .context("删除订阅失败")
     }
 
     pub async fn refresh_all(self: &Arc<Self>) -> anyhow::Result<()> {
-        let feeds = self.feed_repository.list_feeds().await.context("读取订阅列表失败")?;
-        let mut errors = Vec::new();
-
-        let mut feed_iter = feeds.into_iter();
-        let mut in_flight = JoinSet::new();
-
-        loop {
-            while in_flight.len() < Self::REFRESH_ALL_CONCURRENCY {
-                let Some(feed) = feed_iter.next() else {
-                    break;
-                };
-                let services = Arc::clone(self);
-                in_flight.spawn(async move {
-                    let result = services.refresh_feed(feed.id).await;
-                    (feed.url, feed.id, result)
-                });
-            }
-
-            let Some(result) = in_flight.join_next().await else {
-                break;
-            };
-
-            match result {
-                Ok((_url, feed_id, Ok(()))) => {
-                    tracing::debug!(feed_id, "刷新订阅成功");
-                }
-                Ok((url, feed_id, Err(error))) => {
-                    tracing::warn!(feed_id, error = %error, "刷新订阅失败");
-                    errors.push(format!("{url}: {error}"));
-                }
-                Err(error) => {
-                    tracing::warn!(error = %error, "刷新订阅任务意外结束");
-                    errors.push(format!("后台刷新任务异常结束: {error}"));
-                }
-            }
-        }
-
-        if !errors.is_empty() {
-            anyhow::bail!("部分订阅刷新失败: {}", errors.join(" | "));
-        }
-
-        Ok(())
+        let outcome = self
+            .refresh_service
+            .refresh_all(RefreshAllInput { max_concurrency: Self::REFRESH_ALL_CONCURRENCY })
+            .await?;
+        self.handle_refresh_all_outcome(outcome)
     }
 
     pub async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        let feed = self
-            .feed_repository
-            .get_feed(feed_id)
-            .await
-            .context("读取订阅失败")?
-            .context("订阅不存在")?;
-
-        let response = match self
-            .fetch_client
-            .fetch(&FetchRequest {
-                url: feed.url.to_string(),
-                etag: feed.etag.clone(),
-                last_modified: feed.last_modified.clone(),
-            })
-            .await
-        {
-            Ok(response) => response,
-            Err(error) => {
-                let message = format!("抓取订阅失败: {error}");
-                let _ = self
-                    .feed_repository
-                    .update_fetch_state(feed.id, None, None, Some(&message), false)
-                    .await;
-                return Err(error).with_context(|| format!("抓取订阅失败: {}", feed.url));
-            }
-        };
-
-        match response {
-            FetchResult::NotModified(metadata) => {
-                self.feed_repository
-                    .update_fetch_state(
-                        feed.id,
-                        metadata.etag.as_deref(),
-                        metadata.last_modified.as_deref(),
-                        None,
-                        true,
-                    )
-                    .await
-                    .context("更新订阅抓取状态失败")?;
-            }
-            FetchResult::Fetched { body, metadata } => {
-                let parsed = match self.parser.parse(&body) {
-                    Ok(parsed) => parsed,
-                    Err(error) => {
-                        let message = format!("解析订阅失败: {error}");
-                        let _ = self
-                            .feed_repository
-                            .update_fetch_state(
-                                feed.id,
-                                metadata.etag.as_deref(),
-                                metadata.last_modified.as_deref(),
-                                Some(&message),
-                                false,
-                            )
-                            .await;
-                        return Err(error).context("解析订阅失败");
-                    }
-                };
-                let entries_for_localize = parsed.entries.clone();
-                if let Err(error) =
-                    self.feed_repository.update_feed_metadata(feed.id, &parsed).await
-                {
-                    let message = format!("更新订阅元数据失败: {error}");
-                    let _ = self
-                        .feed_repository
-                        .update_fetch_state(
-                            feed.id,
-                            metadata.etag.as_deref(),
-                            metadata.last_modified.as_deref(),
-                            Some(&message),
-                            false,
-                        )
-                        .await;
-                    return Err(error).context("更新订阅元数据失败");
-                }
-                if let Err(error) =
-                    self.entry_repository.upsert_entries(feed.id, &parsed.entries).await
-                {
-                    let message = format!("写入文章失败: {error}");
-                    let _ = self
-                        .feed_repository
-                        .update_fetch_state(
-                            feed.id,
-                            metadata.etag.as_deref(),
-                            metadata.last_modified.as_deref(),
-                            Some(&message),
-                            false,
-                        )
-                        .await;
-                    return Err(error).context("写入文章失败");
-                }
-                self.feed_repository
-                    .update_fetch_state(
-                        feed.id,
-                        metadata.etag.as_deref(),
-                        metadata.last_modified.as_deref(),
-                        None,
-                        true,
-                    )
-                    .await
-                    .context("更新订阅抓取状态失败")?;
-
-                self.spawn_background_image_localization(feed.id, entries_for_localize);
-            }
-        }
-
-        Ok(())
+        let outcome = self.refresh_service.refresh_feed(feed_id).await?;
+        self.handle_refresh_outcome(outcome)
     }
 
-    fn spawn_background_image_localization(&self, feed_id: i64, entries: Vec<ParsedEntry>) {
+    fn spawn_background_image_localization(
+        &self,
+        feed_id: i64,
+        entries: Vec<RefreshLocalizedEntry>,
+    ) {
         let entry_repository = self.entry_repository.clone();
         let localizer = self.body_asset_localizer.clone();
 
@@ -383,9 +257,7 @@ impl AppServices {
                     break;
                 }
 
-                let Some(original_html) = entry.content_html.clone() else {
-                    continue;
-                };
+                let original_html = entry.content_html.clone();
 
                 let Some(expected_content_hash) = compute_entry_content_hash(
                     Some(&original_html),
@@ -472,27 +344,11 @@ impl AppServices {
     }
 
     pub async fn export_opml(&self) -> anyhow::Result<String> {
-        let package = self.import_export_service.export_config().await?;
-        self.opml_codec.encode(&package.feeds)
+        self.import_export_service.export_opml().await
     }
 
     pub async fn import_opml(&self, raw: &str) -> anyhow::Result<()> {
-        let feeds = self.opml_codec.decode(raw)?;
-        let current_feeds = self.feed_repository.list_feeds().await?;
-        for feed in feeds {
-            let url =
-                normalize_feed_url(&Url::parse(&feed.url).context("OPML 中存在无效订阅 URL")?);
-            let existed =
-                current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
-            self.feed_service
-                .add_subscription(&NewFeedSubscription {
-                    url,
-                    title: import_field(feed.title, existed),
-                    folder: import_field(feed.folder, existed),
-                })
-                .await?;
-        }
-        Ok(())
+        self.import_export_service.import_opml(raw).await
     }
 
     pub async fn push_remote_config(
@@ -501,8 +357,7 @@ impl AppServices {
         remote_path: &str,
     ) -> anyhow::Result<()> {
         let remote = WebDavConfigSync::new(endpoint, remote_path)?;
-        let raw = self.import_export_service.export_config_json().await?;
-        remote.upload_text(&raw).await
+        self.import_export_service.push_remote_config(&remote).await
     }
 
     pub async fn pull_remote_config(
@@ -511,16 +366,43 @@ impl AppServices {
         remote_path: &str,
     ) -> anyhow::Result<bool> {
         let remote = WebDavConfigSync::new(endpoint, remote_path)?;
-        match remote.download_text().await? {
-            Some(raw) => {
-                self.import_export_service.import_config_json(&raw).await?;
-                Ok(true)
+        self.import_export_service.pull_remote_config(&remote).await
+    }
+
+    fn handle_refresh_all_outcome(&self, outcome: RefreshAllOutcome) -> anyhow::Result<()> {
+        let mut errors = Vec::new();
+
+        for feed in outcome.feeds {
+            match feed.result {
+                RefreshFeedResult::Updated { localization_entries, .. } => {
+                    tracing::debug!(feed_id = feed.feed_id, "刷新订阅成功");
+                    self.spawn_background_image_localization(feed.feed_id, localization_entries);
+                }
+                RefreshFeedResult::NotModified => {
+                    tracing::debug!(feed_id = feed.feed_id, "订阅未变化");
+                }
+                RefreshFeedResult::Failed { message } => {
+                    tracing::warn!(feed_id = feed.feed_id, error = %message, "刷新订阅失败");
+                    errors.push(format!("{}: {message}", feed.url));
+                }
             }
-            None => Ok(false),
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            anyhow::bail!("部分订阅刷新失败: {}", errors.join(" | "))
         }
     }
-}
 
-fn import_field(value: Option<String>, existed: bool) -> Option<String> {
-    if existed { value.or(Some(String::new())) } else { value }
+    fn handle_refresh_outcome(&self, outcome: RefreshFeedOutcome) -> anyhow::Result<()> {
+        match outcome.result {
+            RefreshFeedResult::Updated { localization_entries, .. } => {
+                self.spawn_background_image_localization(outcome.feed_id, localization_entries);
+                Ok(())
+            }
+            RefreshFeedResult::NotModified => Ok(()),
+            RefreshFeedResult::Failed { message } => anyhow::bail!("{}: {message}", outcome.url),
+        }
+    }
 }

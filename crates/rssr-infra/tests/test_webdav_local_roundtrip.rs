@@ -5,12 +5,14 @@ use rssr_domain::{
     FeedRepository, NewFeedSubscription, SettingsRepository, ThemeMode, UserSettings,
 };
 use rssr_infra::{
+    application_adapters::InfraOpmlCodec,
     config_sync::webdav::WebDavConfigSync,
     db::{
         entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
         settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,
         storage_backend::StorageBackend,
     },
+    opml::OpmlCodec,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -45,6 +47,7 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
         feed_repository.clone(),
         entry_repository,
         settings_repository.clone(),
+        Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
     );
 
     feed_repository

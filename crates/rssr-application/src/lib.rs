@@ -1,9 +1,22 @@
 pub mod entry_service;
 pub mod feed_service;
 pub mod import_export_service;
+pub mod refresh_service;
 pub mod settings_service;
+pub mod subscription_workflow;
 
 pub use entry_service::EntryService;
-pub use feed_service::FeedService;
-pub use import_export_service::ImportExportService;
+pub use feed_service::{AddSubscriptionInput, FeedService, RemoveSubscriptionInput};
+pub use import_export_service::{
+    FeedRemovalCleanupPort, ImportExportService, OpmlCodecPort, RemoteConfigStore,
+};
+pub use refresh_service::{
+    FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate, ParsedEntryData,
+    ParsedFeedUpdate, RefreshAllInput, RefreshAllOutcome, RefreshCommit, RefreshFailure,
+    RefreshFeedOutcome, RefreshFeedResult, RefreshHttpMetadata, RefreshLocalizedEntry,
+    RefreshService, RefreshStorePort, RefreshTarget,
+};
 pub use settings_service::SettingsService;
+pub use subscription_workflow::{
+    AddSubscriptionAndRefreshOutcome, AppStatePort, SubscriptionWorkflow,
+};

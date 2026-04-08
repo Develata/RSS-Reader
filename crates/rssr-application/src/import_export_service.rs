@@ -18,6 +18,8 @@ pub struct ImportExportService {
     feed_repository: Arc<dyn FeedRepository>,
     entry_repository: Arc<dyn EntryRepository>,
     settings_repository: Arc<dyn SettingsRepository>,
+    opml_codec: Arc<dyn OpmlCodecPort>,
+    feed_removal_cleanup: Arc<dyn FeedRemovalCleanupPort>,
 }
 
 #[async_trait::async_trait]
@@ -26,13 +28,56 @@ pub trait RemoteConfigStore: Send + Sync {
     async fn download_config(&self) -> Result<Option<String>>;
 }
 
+pub trait OpmlCodecPort: Send + Sync {
+    fn encode(&self, feeds: &[ConfigFeed]) -> Result<String>;
+    fn decode(&self, raw: &str) -> Result<Vec<ConfigFeed>>;
+}
+
+#[async_trait::async_trait]
+pub trait FeedRemovalCleanupPort: Send + Sync {
+    async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()>;
+}
+
+#[derive(Default)]
+struct NoopFeedRemovalCleanup;
+
+#[async_trait::async_trait]
+impl FeedRemovalCleanupPort for NoopFeedRemovalCleanup {
+    async fn clear_last_opened_feed_if_matches(&self, _feed_id: i64) -> Result<()> {
+        Ok(())
+    }
+}
+
 impl ImportExportService {
     pub fn new(
         feed_repository: Arc<dyn FeedRepository>,
         entry_repository: Arc<dyn EntryRepository>,
         settings_repository: Arc<dyn SettingsRepository>,
+        opml_codec: Arc<dyn OpmlCodecPort>,
     ) -> Self {
-        Self { feed_repository, entry_repository, settings_repository }
+        Self::new_with_feed_removal_cleanup(
+            feed_repository,
+            entry_repository,
+            settings_repository,
+            opml_codec,
+            Arc::new(NoopFeedRemovalCleanup),
+        )
+    }
+
+    pub fn new_with_feed_removal_cleanup(
+        feed_repository: Arc<dyn FeedRepository>,
+        entry_repository: Arc<dyn EntryRepository>,
+        settings_repository: Arc<dyn SettingsRepository>,
+        opml_codec: Arc<dyn OpmlCodecPort>,
+        feed_removal_cleanup: Arc<dyn FeedRemovalCleanupPort>,
+    ) -> Self {
+        Self {
+            feed_repository,
+            entry_repository,
+            settings_repository,
+            opml_codec,
+            feed_removal_cleanup,
+        }
     }
 
     pub async fn export_config(&self) -> Result<ConfigPackage> {
@@ -79,8 +124,7 @@ impl ImportExportService {
 
         for feed in current_feeds {
             if !imported_urls.iter().any(|url| *url == normalize_feed_url(&feed.url)) {
-                self.entry_repository.delete_for_feed(feed.id).await?;
-                self.feed_repository.set_deleted(feed.id, true).await?;
+                self.remove_feed_with_cleanup(feed.id).await?;
             }
         }
 
@@ -98,6 +142,33 @@ impl ImportExportService {
         self.import_config_package(&package).await
     }
 
+    pub async fn export_opml(&self) -> Result<String> {
+        self.opml_codec.encode(&self.export_config().await?.feeds)
+    }
+
+    pub async fn import_opml(&self, raw: &str) -> Result<()> {
+        let feeds = self.opml_codec.decode(raw)?;
+        let current_feeds = self.feed_repository.list_feeds().await?;
+
+        for feed in feeds {
+            let url = normalize_feed_url(
+                &Url::parse(&feed.url)
+                    .with_context(|| format!("OPML 中存在无效订阅 URL：{}", feed.url))?,
+            );
+            let existed =
+                current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
+            self.feed_repository
+                .upsert_subscription(&NewFeedSubscription {
+                    url,
+                    title: import_field(feed.title, existed),
+                    folder: import_field(feed.folder, existed),
+                })
+                .await?;
+        }
+
+        Ok(())
+    }
+
     pub async fn push_remote_config(&self, remote: &dyn RemoteConfigStore) -> Result<()> {
         remote.upload_config(&self.export_config_json().await?).await
     }
@@ -110,5 +181,11 @@ impl ImportExportService {
             }
             None => Ok(false),
         }
+    }
+
+    async fn remove_feed_with_cleanup(&self, feed_id: i64) -> Result<()> {
+        self.entry_repository.delete_for_feed(feed_id).await?;
+        self.feed_repository.set_deleted(feed_id, true).await?;
+        self.feed_removal_cleanup.clear_last_opened_feed_if_matches(feed_id).await
     }
 }

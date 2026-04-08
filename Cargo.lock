@@ -4672,6 +4672,7 @@ name = "rssr-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "clap",
  "rssr-application",
  "rssr-domain",
