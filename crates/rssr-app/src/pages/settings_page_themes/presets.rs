@@ -86,25 +86,29 @@ pub(super) fn ThemePresetSections(
             div { class: "preset-grid",
                 button {
                     class: "button secondary",
-                    "data-action": "apply-theme-atlas-sidebar",
+                    "data-action": "apply-theme-preset",
+                    "data-theme-preset": "atlas-sidebar",
                     onclick: move |_| apply_builtin_theme(theme, draft, preset_choice, status, status_tone, "atlas-sidebar", "Atlas Sidebar"),
                     "Atlas Sidebar"
                 }
                 button {
                     class: "button secondary",
-                    "data-action": "apply-theme-newsprint",
+                    "data-action": "apply-theme-preset",
+                    "data-theme-preset": "newsprint",
                     onclick: move |_| apply_builtin_theme(theme, draft, preset_choice, status, status_tone, "newsprint", "Newsprint"),
                     "Newsprint"
                 }
                 button {
                     class: "button secondary",
-                    "data-action": "apply-theme-forest-desk",
+                    "data-action": "apply-theme-preset",
+                    "data-theme-preset": "forest-desk",
                     onclick: move |_| apply_builtin_theme(theme, draft, preset_choice, status, status_tone, "forest-desk", "Amethyst Glass"),
                     "Amethyst Glass"
                 }
                 button {
                     class: "button secondary",
-                    "data-action": "apply-theme-midnight-ledger",
+                    "data-action": "apply-theme-preset",
+                    "data-theme-preset": "midnight-ledger",
                     onclick: move |_| apply_builtin_theme(theme, draft, preset_choice, status, status_tone, "midnight-ledger", "Midnight Ledger"),
                     "Midnight Ledger"
                 }
@@ -130,7 +134,7 @@ pub(super) fn ThemePresetSections(
                     "清空 CSS"
                 }
             }
-            div { class: "theme-gallery", "data-action": "theme-gallery",
+            div { class: "theme-gallery", "data-action": "theme-preset-gallery",
                 for preset in builtin_theme_presets() {
                     {
                         let is_active = detect_preset_key(&draft().custom_css) == preset.key;
@@ -142,7 +146,7 @@ pub(super) fn ThemePresetSections(
                             article {
                                 class: if is_active { "theme-card is-active" } else { "theme-card" },
                                 key: "{preset.key}",
-                                "data-action": "theme-card",
+                                "data-action": "theme-preset-card",
                                 "data-theme-preset": "{preset.key}",
                                 h4 { class: "theme-card__title", "{preset_name}" }
                                 div { class: "theme-card__swatches",
@@ -155,7 +159,8 @@ pub(super) fn ThemePresetSections(
                                 }
                                 button {
                                     class: if is_active { "button" } else { "button secondary" },
-                                    "data-action": "apply-theme-card",
+                                    "data-action": "apply-theme-preset",
+                                    "data-theme-preset": "{preset.key}",
                                     onclick: move |_| {
                                         let mut next = draft();
                                         next.custom_css = preset_css(preset_key.as_str()).to_string();
@@ -176,7 +181,8 @@ pub(super) fn ThemePresetSections(
                                 }
                                 button {
                                     class: "button secondary danger-outline",
-                                    "data-action": "remove-theme-card",
+                                    "data-action": "remove-theme-preset",
+                                    "data-theme-preset": "{preset.key}",
                                     onclick: move |_| {
                                         if detect_preset_key(&draft().custom_css) != remove_preset_key.as_str() {
                                             set_status_info(status, status_tone, format!("当前并未启用主题：{}。", preset_name));

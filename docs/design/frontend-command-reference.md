@@ -171,6 +171,8 @@
 - `data-action="import-custom-css-file"`
 - `data-action="preset-theme-select"`
 - `data-action="apply-selected-theme"`
+- `data-action="apply-theme-preset"`
+- `data-action="remove-theme-preset"`
 - `data-action="clear-custom-css"`
 - `data-action="open-github-repo"`
 - `data-action="show-top-nav"`
