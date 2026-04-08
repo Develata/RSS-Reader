@@ -191,7 +191,8 @@
 - wasm/browser harness 编译入口：
   - `cargo test -p rssr-infra --target wasm32-unknown-unknown --test wasm_refresh_contract_harness --no-run`
 - 后续 browser 实际执行入口建议：
-  - `wasm-pack test --headless --chrome crates/rssr-infra --test wasm_refresh_contract_harness`
+  - `bash scripts/setup_chrome_for_testing.sh`
+  - `bash scripts/run_wasm_refresh_contract_harness.sh`
 
 当前最小 browser 基座建议先覆盖：
 
@@ -239,6 +240,27 @@
 阶段 3 额外建议：
 
 - `cargo test -p rssr-infra --test test_webdav_local_roundtrip`
+
+## 当前执行入口
+
+### host / sqlite refresh contract harness
+
+- `cargo test -p rssr-infra --test test_refresh_contract_harness`
+
+### wasm / browser refresh contract harness
+
+- `bash scripts/setup_chrome_for_testing.sh`
+- `bash scripts/run_wasm_refresh_contract_harness.sh`
+
+当前仓库不再使用：
+
+- `wasm-pack test --headless --chrome crates/rssr-infra ...`
+
+原因：
+
+- `rssr-infra/tests/` 中仍包含大量 native-only integration tests
+- `wasm-pack test` 会把整 crate 的 integration tests 一起拖进 wasm target
+- 正确入口应只编译并执行 `wasm_refresh_contract_harness` 单个 `.wasm` 产物
 
 ## 推荐执行顺序
 

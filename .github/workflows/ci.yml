@@ -8,6 +8,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  WASM_BINDGEN_CLI_VERSION: 0.2.114
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -77,6 +78,37 @@ jobs:
 
       - name: Web bundle smoke
         run: dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
+
+  wasm-browser-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Cleanup runner
+        uses: ./.github/actions/cleanup-github-runner
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl python3 unzip
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-bindgen test runner
+        run: cargo install wasm-bindgen-cli --version "${WASM_BINDGEN_CLI_VERSION}" --locked
+
+      - name: Setup Chrome for Testing
+        run: bash scripts/setup_chrome_for_testing.sh
+
+      - name: Run wasm refresh contract harness
+        run: bash scripts/run_wasm_refresh_contract_harness.sh
 
   android-smoke:
     runs-on: ubuntu-latest

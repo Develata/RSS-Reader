@@ -21,6 +21,9 @@
   - 重点看 feed 刷新、浏览器 Console 和持久化行为
 - 如果是逐模块推进 headless active interface 重构：
   - 先按 [Headless 重构视觉等价验收](./headless-refactor-equivalence.md) 走基线与复测
+- 如果是执行 browser contract harness：
+  - 先看 [环境限制索引](./environment-limitations.md)
+  - 再按 [Contract Harness 重建计划](./contract-harness-rebuild-plan.md) 里的脚本入口执行
 
 ## 当前覆盖重点
 

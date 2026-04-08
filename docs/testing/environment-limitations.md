@@ -76,6 +76,27 @@
   - 记录为宿主环境备注，不单独阻塞主线功能验证
   - 如需确认是否为应用回归，应在非 WSLg 桌面环境复验相同步骤
 
+### 4. WSL2 下的 ChromeDriver 绑定异常
+
+- 受影响入口：
+  - `bash scripts/run_wasm_refresh_contract_harness.sh`
+  - `wasm-bindgen-test-runner <wasm_refresh_contract_harness.wasm>`
+- 触发环境：
+  - WSL2 Ubuntu
+  - Chrome for Testing + chromedriver 本地 headless WebDriver
+- 现象：
+  - `chromedriver` 启动时反复输出 `bind() failed: Cannot assign requested address (99)`
+  - `wasm-bindgen-test-runner` 最终报 `driver failed to start`
+- 为什么不算代码回归：
+  - `.wasm` 测试产物本身可以成功编译生成
+  - 问题发生在 WSL2 的本机 WebDriver 绑定阶段，而不是 refresh harness 断言逻辑
+  - 后续应优先以非 WSL 的 Linux CI runner 作为真实 browser harness 执行环境
+- 规避方式 / 复验方式：
+  - WSL2 下可先执行：
+    - `cargo test -p rssr-infra --target wasm32-unknown-unknown --test wasm_refresh_contract_harness --no-run`
+  - 真实 browser 执行应优先放到 GitHub Actions `ubuntu-latest`
+  - 如需本地复验，优先在非 WSL Linux 宿主上执行同一脚本
+
 ## 与 handoff 的关系
 
 - 本页负责长期维护的环境限制索引
