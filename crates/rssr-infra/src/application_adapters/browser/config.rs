@@ -9,7 +9,7 @@ use quick_xml::{
 use rssr_domain::{ConfigFeed, UserSettings, normalize_feed_url};
 use url::Url;
 
-pub(super) fn validate_settings(settings: &UserSettings) -> anyhow::Result<()> {
+pub fn validate_settings(settings: &UserSettings) -> anyhow::Result<()> {
     ensure!(settings.refresh_interval_minutes >= 1, "刷新间隔必须大于等于 1 分钟");
     ensure!(settings.archive_after_months >= 1, "自动归档阈值必须大于等于 1 个月");
     ensure!(
@@ -28,7 +28,7 @@ pub(super) fn validate_settings(settings: &UserSettings) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn remote_url(endpoint: &str, remote_path: &str) -> anyhow::Result<Url> {
+pub fn remote_url(endpoint: &str, remote_path: &str) -> anyhow::Result<Url> {
     let mut collection = Url::parse(endpoint).context("无效的 WebDAV endpoint")?;
     if !collection.path().ends_with('/') {
         collection.set_path(&format!("{}/", collection.path()));
@@ -36,7 +36,7 @@ pub(super) fn remote_url(endpoint: &str, remote_path: &str) -> anyhow::Result<Ur
     collection.join(remote_path.trim_start_matches('/')).context("拼接 WebDAV 远端路径失败")
 }
 
-pub(super) fn encode_opml(feeds: &[ConfigFeed]) -> anyhow::Result<String> {
+pub fn encode_opml(feeds: &[ConfigFeed]) -> anyhow::Result<String> {
     let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
     writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
     let mut opml = BytesStart::new("opml");
@@ -82,7 +82,7 @@ fn write_feed_outline(writer: &mut Writer<Vec<u8>>, feed: &ConfigFeed) -> anyhow
     Ok(())
 }
 
-pub(super) fn decode_opml(raw: &str) -> anyhow::Result<Vec<ConfigFeed>> {
+pub fn decode_opml(raw: &str) -> anyhow::Result<Vec<ConfigFeed>> {
     let mut reader = Reader::from_str(raw);
     reader.config_mut().trim_text(true);
     let mut feeds = Vec::new();

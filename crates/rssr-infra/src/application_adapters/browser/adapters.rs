@@ -16,21 +16,21 @@ use rssr_domain::{
 use super::{
     config::{decode_opml, encode_opml, remote_url},
     feed::{ParsedEntry, ParsedFeed, parse_feed, web_fetch_feed_response},
+    now_utc,
     query::{
         get_entry as query_get_entry, list_entries as query_list_entries,
         list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
     },
     state::{PersistedFeed, PersistedState, save_state_snapshot, upsert_entries},
-    web_now_utc,
 };
 
 #[derive(Clone)]
-pub(super) struct BrowserFeedRepository {
+pub struct BrowserFeedRepository {
     state: Arc<Mutex<PersistedState>>,
 }
 
 impl BrowserFeedRepository {
-    pub(super) fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+    pub fn new(state: Arc<Mutex<PersistedState>>) -> Self {
         Self { state }
     }
 }
@@ -47,7 +47,7 @@ impl FeedRepository for BrowserFeedRepository {
 
         let (feed, snapshot) = {
             let mut state = self.state.lock().expect("lock state");
-            let now = web_now_utc();
+            let now = now_utc();
 
             if let Some(feed) =
                 state.feeds.iter_mut().find(|feed| feed.url == normalized_url.as_str())
@@ -98,7 +98,7 @@ impl FeedRepository for BrowserFeedRepository {
                 .find(|feed| feed.id == feed_id)
                 .ok_or(DomainError::NotFound)?;
             feed.is_deleted = is_deleted;
-            feed.updated_at = web_now_utc();
+            feed.updated_at = now_utc();
             state.clone()
         };
 
@@ -127,12 +127,12 @@ impl FeedRepository for BrowserFeedRepository {
 }
 
 #[derive(Clone)]
-pub(super) struct BrowserEntryRepository {
+pub struct BrowserEntryRepository {
     state: Arc<Mutex<PersistedState>>,
 }
 
 impl BrowserEntryRepository {
-    pub(super) fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+    pub fn new(state: Arc<Mutex<PersistedState>>) -> Self {
         Self { state }
     }
 }
@@ -160,7 +160,7 @@ impl EntryRepository for BrowserEntryRepository {
     async fn set_read(&self, entry_id: i64, is_read: bool) -> rssr_domain::Result<()> {
         let snapshot = {
             let mut state = self.state.lock().expect("lock state");
-            let now = web_now_utc();
+            let now = now_utc();
             let entry = state
                 .entries
                 .iter_mut()
@@ -178,7 +178,7 @@ impl EntryRepository for BrowserEntryRepository {
     async fn set_starred(&self, entry_id: i64, is_starred: bool) -> rssr_domain::Result<()> {
         let snapshot = {
             let mut state = self.state.lock().expect("lock state");
-            let now = web_now_utc();
+            let now = now_utc();
             let entry = state
                 .entries
                 .iter_mut()
@@ -205,12 +205,12 @@ impl EntryRepository for BrowserEntryRepository {
 }
 
 #[derive(Clone)]
-pub(super) struct BrowserAppStateAdapter {
+pub struct BrowserAppStateAdapter {
     state: Arc<Mutex<PersistedState>>,
 }
 
 impl BrowserAppStateAdapter {
-    pub(super) fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+    pub fn new(state: Arc<Mutex<PersistedState>>) -> Self {
         Self { state }
     }
 
@@ -244,12 +244,12 @@ impl FeedRemovalCleanupPort for BrowserAppStateAdapter {
 }
 
 #[derive(Clone)]
-pub(super) struct BrowserSettingsRepository {
+pub struct BrowserSettingsRepository {
     state: Arc<Mutex<PersistedState>>,
 }
 
 impl BrowserSettingsRepository {
-    pub(super) fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+    pub fn new(state: Arc<Mutex<PersistedState>>) -> Self {
         Self { state }
     }
 }
@@ -272,7 +272,7 @@ impl SettingsRepository for BrowserSettingsRepository {
 }
 
 #[derive(Clone, Default)]
-pub(super) struct BrowserOpmlCodec;
+pub struct BrowserOpmlCodec;
 
 impl OpmlCodecPort for BrowserOpmlCodec {
     fn encode(&self, feeds: &[rssr_domain::ConfigFeed]) -> Result<String> {
@@ -285,14 +285,14 @@ impl OpmlCodecPort for BrowserOpmlCodec {
 }
 
 #[derive(Clone)]
-pub(super) struct BrowserRemoteConfigStore {
+pub struct BrowserRemoteConfigStore {
     client: reqwest::Client,
     endpoint: String,
     remote_path: String,
 }
 
 impl BrowserRemoteConfigStore {
-    pub(super) fn new(client: reqwest::Client, endpoint: &str, remote_path: &str) -> Self {
+    pub fn new(client: reqwest::Client, endpoint: &str, remote_path: &str) -> Self {
         Self { client, endpoint: endpoint.to_string(), remote_path: remote_path.to_string() }
     }
 }
@@ -329,12 +329,12 @@ impl RemoteConfigStore for BrowserRemoteConfigStore {
 }
 
 #[derive(Clone)]
-pub(super) struct BrowserFeedRefreshSource {
+pub struct BrowserFeedRefreshSource {
     client: reqwest::Client,
 }
 
 impl BrowserFeedRefreshSource {
-    pub(super) fn new(client: reqwest::Client) -> Self {
+    pub fn new(client: reqwest::Client) -> Self {
         Self { client }
     }
 }
@@ -394,12 +394,12 @@ impl FeedRefreshSourcePort for BrowserFeedRefreshSource {
 }
 
 #[derive(Clone)]
-pub(super) struct BrowserRefreshStore {
+pub struct BrowserRefreshStore {
     state: Arc<Mutex<PersistedState>>,
 }
 
 impl BrowserRefreshStore {
-    pub(super) fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+    pub fn new(state: Arc<Mutex<PersistedState>>) -> Self {
         Self { state }
     }
 }
@@ -447,7 +447,7 @@ impl RefreshStorePort for BrowserRefreshStore {
     async fn commit(&self, feed_id: i64, commit: RefreshCommit) -> Result<()> {
         let snapshot = {
             let mut state = self.state.lock().expect("lock state");
-            let now = web_now_utc();
+            let now = now_utc();
             let feed =
                 state.feeds.iter_mut().find(|feed| feed.id == feed_id).context("订阅不存在")?;
 

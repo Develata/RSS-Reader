@@ -1,12 +1,15 @@
 use anyhow::Context;
 use rssr_domain::UserSettings;
+use rssr_infra::application_adapters::browser::{
+    config::validate_settings, now_utc, state::save_state_snapshot,
+};
 
-use super::{AppServices, config::validate_settings, state::save_state_snapshot, web_now_utc};
+use super::AppServices;
 
 pub(super) fn set_read(services: &AppServices, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
     let snapshot = {
         let mut state = services.state.lock().expect("lock state");
-        let now = web_now_utc();
+        let now = now_utc();
         let entry =
             state.entries.iter_mut().find(|entry| entry.id == entry_id).context("文章不存在")?;
         entry.is_read = is_read;
@@ -24,7 +27,7 @@ pub(super) fn set_starred(
 ) -> anyhow::Result<()> {
     let snapshot = {
         let mut state = services.state.lock().expect("lock state");
-        let now = web_now_utc();
+        let now = now_utc();
         let entry =
             state.entries.iter_mut().find(|entry| entry.id == entry_id).context("文章不存在")?;
         entry.is_starred = is_starred;

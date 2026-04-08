@@ -7,28 +7,28 @@ use time::OffsetDateTime;
 use url::Url;
 
 #[derive(Debug, Clone)]
-pub(super) struct ParsedFeed {
-    pub(super) title: Option<String>,
-    pub(super) site_url: Option<Url>,
-    pub(super) description: Option<String>,
-    pub(super) entries: Vec<ParsedEntry>,
+pub struct ParsedFeed {
+    pub title: Option<String>,
+    pub site_url: Option<Url>,
+    pub description: Option<String>,
+    pub entries: Vec<ParsedEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct ParsedEntry {
-    pub(super) external_id: String,
-    pub(super) dedup_key: String,
-    pub(super) url: Option<Url>,
-    pub(super) title: String,
-    pub(super) author: Option<String>,
-    pub(super) summary: Option<String>,
-    pub(super) content_html: Option<String>,
-    pub(super) content_text: Option<String>,
-    pub(super) published_at: Option<OffsetDateTime>,
-    pub(super) updated_at_source: Option<OffsetDateTime>,
+pub struct ParsedEntry {
+    pub external_id: String,
+    pub dedup_key: String,
+    pub url: Option<Url>,
+    pub title: String,
+    pub author: Option<String>,
+    pub summary: Option<String>,
+    pub content_html: Option<String>,
+    pub content_text: Option<String>,
+    pub published_at: Option<OffsetDateTime>,
+    pub updated_at_source: Option<OffsetDateTime>,
 }
 
-pub(super) async fn web_fetch_feed_response(
+pub async fn web_fetch_feed_response(
     client: &reqwest::Client,
     raw: &str,
 ) -> anyhow::Result<reqwest::Response> {
@@ -145,7 +145,7 @@ fn looks_like_proxy_login_or_spa_shell(response: &reqwest::Response) -> bool {
     response.url().path().starts_with("/login")
 }
 
-pub(super) fn parse_feed(raw: &str) -> anyhow::Result<ParsedFeed> {
+pub fn parse_feed(raw: &str) -> anyhow::Result<ParsedFeed> {
     if looks_like_html_response_body(raw) {
         anyhow::bail!(
             "当前响应不是 XML feed，而是 HTML 页面（通常说明当前部署未启用 feed 代理，或请求被登录页/静态壳页面拦截）"
@@ -264,11 +264,7 @@ where
     OffsetDateTime::from_unix_timestamp(value.timestamp()).expect("valid unix timestamp")
 }
 
-pub(super) fn hash_content(
-    html: Option<&str>,
-    text: Option<&str>,
-    title: Option<&str>,
-) -> Option<String> {
+pub fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>) -> Option<String> {
     let mut hasher = Sha256::new();
     let mut used = false;
     for part in [title, text, html].into_iter().flatten() {

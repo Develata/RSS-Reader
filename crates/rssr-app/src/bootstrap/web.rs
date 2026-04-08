@@ -1,24 +1,13 @@
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
-#[path = "web/adapters.rs"]
-mod adapters;
-#[path = "web/config.rs"]
-mod config;
 #[path = "web/exchange.rs"]
 mod exchange;
-#[path = "web/feed.rs"]
-mod feed;
 #[path = "web/mutations.rs"]
 mod mutations;
-#[path = "web/query.rs"]
-mod query;
 #[path = "web/refresh.rs"]
 mod refresh;
-#[path = "web/state.rs"]
-mod state;
 
 use anyhow::Context;
-use js_sys::Date;
 use rssr_application::{
     AddSubscriptionInput, FeedService, ImportExportService, RefreshAllInput, RefreshAllOutcome,
     RefreshFeedOutcome, RefreshFeedResult, RefreshService, RemoveSubscriptionInput,
@@ -26,15 +15,21 @@ use rssr_application::{
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::{Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings};
-use time::OffsetDateTime;
-use tokio::sync::OnceCell;
-
-use self::{
+use rssr_infra::application_adapters::browser::{
     adapters::{
         BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRefreshSource,
         BrowserFeedRepository, BrowserOpmlCodec, BrowserRefreshStore, BrowserRemoteConfigStore,
         BrowserSettingsRepository,
     },
+    query::{
+        get_entry as query_get_entry, list_entries as query_list_entries,
+        list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
+    },
+    state::{PersistedState, load_state},
+};
+use tokio::sync::OnceCell;
+
+use self::{
     exchange::{
         export_config_json as export_exchange_json, export_opml as export_exchange_opml,
         import_config_json as import_exchange_json, import_opml as import_exchange_opml,
@@ -44,12 +39,7 @@ use self::{
         remember_last_opened_feed_id as remember_feed_id, save_settings as save_settings_state,
         set_read as set_entry_read, set_starred as set_entry_starred,
     },
-    query::{
-        get_entry as query_get_entry, list_entries as query_list_entries,
-        list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
-    },
     refresh::ensure_auto_refresh_started as start_auto_refresh,
-    state::{PersistedState, load_state},
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -263,16 +253,9 @@ impl AppServices {
         }
     }
 }
-
-fn web_now_utc() -> OffsetDateTime {
-    let millis = Date::now() as i128;
-    OffsetDateTime::from_unix_timestamp_nanos(millis * 1_000_000)
-        .expect("browser timestamp should fit in OffsetDateTime")
-}
-
 #[cfg(test)]
 mod tests {
-    use super::query::title_matches_search;
+    use rssr_infra::application_adapters::browser::query::title_matches_search;
 
     #[test]
     fn web_title_search_is_case_insensitive() {

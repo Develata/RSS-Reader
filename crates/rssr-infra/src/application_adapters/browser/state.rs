@@ -8,70 +8,70 @@ use web_sys::{Storage, window};
 
 use super::{
     feed::{ParsedEntry, hash_content},
-    web_now_utc,
+    now_utc,
 };
 
-pub(super) const STORAGE_KEY: &str = "rssr-web-state-v1";
+pub const STORAGE_KEY: &str = "rssr-web-state-v1";
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub(super) struct PersistedState {
-    pub(super) next_feed_id: i64,
-    pub(super) next_entry_id: i64,
-    pub(super) feeds: Vec<PersistedFeed>,
-    pub(super) entries: Vec<PersistedEntry>,
-    pub(super) settings: rssr_domain::UserSettings,
-    pub(super) last_opened_feed_id: Option<i64>,
+pub struct PersistedState {
+    pub next_feed_id: i64,
+    pub next_entry_id: i64,
+    pub feeds: Vec<PersistedFeed>,
+    pub entries: Vec<PersistedEntry>,
+    pub settings: rssr_domain::UserSettings,
+    pub last_opened_feed_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct PersistedFeed {
-    pub(super) id: i64,
-    pub(super) url: String,
-    pub(super) title: Option<String>,
-    pub(super) site_url: Option<String>,
-    pub(super) description: Option<String>,
-    pub(super) icon_url: Option<String>,
-    pub(super) folder: Option<String>,
-    pub(super) etag: Option<String>,
-    pub(super) last_modified: Option<String>,
-    pub(super) last_fetched_at: Option<OffsetDateTime>,
-    pub(super) last_success_at: Option<OffsetDateTime>,
-    pub(super) fetch_error: Option<String>,
-    pub(super) is_deleted: bool,
-    pub(super) created_at: OffsetDateTime,
-    pub(super) updated_at: OffsetDateTime,
+pub struct PersistedFeed {
+    pub id: i64,
+    pub url: String,
+    pub title: Option<String>,
+    pub site_url: Option<String>,
+    pub description: Option<String>,
+    pub icon_url: Option<String>,
+    pub folder: Option<String>,
+    pub etag: Option<String>,
+    pub last_modified: Option<String>,
+    pub last_fetched_at: Option<OffsetDateTime>,
+    pub last_success_at: Option<OffsetDateTime>,
+    pub fetch_error: Option<String>,
+    pub is_deleted: bool,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct PersistedEntry {
-    pub(super) id: i64,
-    pub(super) feed_id: i64,
-    pub(super) external_id: String,
-    pub(super) dedup_key: String,
-    pub(super) url: Option<String>,
-    pub(super) title: String,
-    pub(super) author: Option<String>,
-    pub(super) summary: Option<String>,
-    pub(super) content_html: Option<String>,
-    pub(super) content_text: Option<String>,
-    pub(super) published_at: Option<OffsetDateTime>,
-    pub(super) updated_at_source: Option<OffsetDateTime>,
-    pub(super) first_seen_at: OffsetDateTime,
-    pub(super) content_hash: Option<String>,
-    pub(super) is_read: bool,
-    pub(super) is_starred: bool,
-    pub(super) read_at: Option<OffsetDateTime>,
-    pub(super) starred_at: Option<OffsetDateTime>,
-    pub(super) created_at: OffsetDateTime,
-    pub(super) updated_at: OffsetDateTime,
+pub struct PersistedEntry {
+    pub id: i64,
+    pub feed_id: i64,
+    pub external_id: String,
+    pub dedup_key: String,
+    pub url: Option<String>,
+    pub title: String,
+    pub author: Option<String>,
+    pub summary: Option<String>,
+    pub content_html: Option<String>,
+    pub content_text: Option<String>,
+    pub published_at: Option<OffsetDateTime>,
+    pub updated_at_source: Option<OffsetDateTime>,
+    pub first_seen_at: OffsetDateTime,
+    pub content_hash: Option<String>,
+    pub is_read: bool,
+    pub is_starred: bool,
+    pub read_at: Option<OffsetDateTime>,
+    pub starred_at: Option<OffsetDateTime>,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
 }
 
-pub(super) struct LoadedState {
-    pub(super) state: PersistedState,
-    pub(super) warning: Option<String>,
+pub struct LoadedState {
+    pub state: PersistedState,
+    pub warning: Option<String>,
 }
 
-pub(super) fn load_state() -> LoadedState {
+pub fn load_state() -> LoadedState {
     let Some(storage) = window().and_then(|window| window.local_storage().ok()).flatten() else {
         return LoadedState { state: PersistedState::default(), warning: None };
     };
@@ -104,7 +104,7 @@ pub(super) fn load_state() -> LoadedState {
     }
 }
 
-pub(super) fn save_state_snapshot(state: PersistedState) -> anyhow::Result<()> {
+pub fn save_state_snapshot(state: PersistedState) -> anyhow::Result<()> {
     save_serialized_state(serde_json::to_string(&state)?)
 }
 
@@ -121,7 +121,7 @@ fn backup_corrupt_state(storage: &Storage, raw: &str) {
     let _ = storage.set_item(&backup_key, raw);
 }
 
-pub(super) fn to_domain_entry(entry: &PersistedEntry) -> anyhow::Result<Entry> {
+pub fn to_domain_entry(entry: &PersistedEntry) -> anyhow::Result<Entry> {
     Ok(Entry {
         id: entry.id,
         feed_id: entry.feed_id,
@@ -146,7 +146,7 @@ pub(super) fn to_domain_entry(entry: &PersistedEntry) -> anyhow::Result<Entry> {
     })
 }
 
-pub(super) fn upsert_entries(
+pub fn upsert_entries(
     state: &mut PersistedState,
     feed_id: i64,
     entries: Vec<ParsedEntry>,
@@ -157,7 +157,7 @@ pub(super) fn upsert_entries(
             entry.content_text.as_deref(),
             Some(&entry.title),
         );
-        let now = web_now_utc();
+        let now = now_utc();
         if let Some(existing) = state
             .entries
             .iter_mut()

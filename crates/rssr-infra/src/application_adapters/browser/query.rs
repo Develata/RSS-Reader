@@ -6,7 +6,7 @@ use rssr_domain::{
 
 use super::state::{PersistedEntry, PersistedState, to_domain_entry};
 
-pub(super) fn list_feeds(state: &PersistedState) -> Vec<FeedSummary> {
+pub fn list_feeds(state: &PersistedState) -> Vec<FeedSummary> {
     let mut counts_by_feed = HashMap::<i64, (u32, u32)>::new();
     for entry in &state.entries {
         let counts = counts_by_feed.entry(entry.feed_id).or_insert((0, 0));
@@ -35,7 +35,7 @@ pub(super) fn list_feeds(state: &PersistedState) -> Vec<FeedSummary> {
     feeds
 }
 
-pub(super) fn list_entries(state: &PersistedState, query: &EntryQuery) -> Vec<EntrySummary> {
+pub fn list_entries(state: &PersistedState, query: &EntryQuery) -> Vec<EntrySummary> {
     let allowed_feed_ids = (!query.feed_ids.is_empty())
         .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
     let active_feed_titles = state
@@ -101,11 +101,11 @@ pub(super) fn list_entries(state: &PersistedState, query: &EntryQuery) -> Vec<En
     items
 }
 
-pub(super) fn get_entry(state: &PersistedState, entry_id: i64) -> anyhow::Result<Option<Entry>> {
+pub fn get_entry(state: &PersistedState, entry_id: i64) -> anyhow::Result<Option<Entry>> {
     state.entries.iter().find(|entry| entry.id == entry_id).map(to_domain_entry).transpose()
 }
 
-pub(super) fn reader_navigation(state: &PersistedState, current_entry_id: i64) -> EntryNavigation {
+pub fn reader_navigation(state: &PersistedState, current_entry_id: i64) -> EntryNavigation {
     let active_feed_ids = state
         .feeds
         .iter()
@@ -150,7 +150,7 @@ pub(super) fn reader_navigation(state: &PersistedState, current_entry_id: i64) -
     navigation
 }
 
-pub(super) fn title_matches_search(title: &str, search: &str) -> bool {
+pub fn title_matches_search(title: &str, search: &str) -> bool {
     title.to_lowercase().contains(&search.to_lowercase())
 }
 

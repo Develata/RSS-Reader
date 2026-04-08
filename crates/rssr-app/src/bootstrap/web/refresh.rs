@@ -3,9 +3,10 @@ use std::{
     time::Duration,
 };
 
+use rssr_infra::application_adapters::browser::now_utc;
 use wasm_bindgen_futures::spawn_local;
 
-use super::{AppServices, web_now_utc};
+use super::AppServices;
 
 pub(super) fn ensure_auto_refresh_started(services: &Arc<AppServices>) {
     if services.auto_refresh_started.swap(true, Ordering::SeqCst) {
@@ -26,7 +27,7 @@ pub(super) fn ensure_auto_refresh_started(services: &Arc<AppServices>) {
                 }
             };
 
-            let now = web_now_utc();
+            let now = now_utc();
             if super::super::should_trigger_auto_refresh(
                 last_refresh_started_at,
                 settings.refresh_interval_minutes,
@@ -45,7 +46,7 @@ pub(super) fn ensure_auto_refresh_started(services: &Arc<AppServices>) {
             let wait_for = super::super::auto_refresh_wait_duration(
                 last_refresh_started_at,
                 settings.refresh_interval_minutes,
-                web_now_utc(),
+                now_utc(),
             );
             gloo_timers::future::sleep(wait_for).await;
         }

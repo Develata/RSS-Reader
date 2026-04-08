@@ -1,6 +1,10 @@
 pub mod application_adapters;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod config_sync;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod db;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod fetch;
 pub mod opml;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod parser;

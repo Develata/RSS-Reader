@@ -46,6 +46,7 @@ gloo-file = { version = "0.3", features = ["futures"] }
 gloo-timers = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
 reqwest.workspace = true
+rssr-infra = { path = "../rssr-infra" }
 tracing-wasm = "0.2"
 uuid = { version = "1", features = ["js"] }
 wasm-bindgen-futures = "0.4"
