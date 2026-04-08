@@ -27,8 +27,5 @@ pub(crate) async fn execute_settings_page_save_effect(
 }
 
 fn error(message: impl Into<String>) -> SettingsPageSaveRuntimeOutcome {
-    SettingsPageSaveRuntimeOutcome {
-        status_message: message.into(),
-        saved_settings: None,
-    }
+    SettingsPageSaveRuntimeOutcome { status_message: message.into(), saved_settings: None }
 }

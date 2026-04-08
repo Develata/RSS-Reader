@@ -1,5 +1,5 @@
-use dioxus::prelude::*;
 use crate::status::{set_status_error, set_status_info};
+use dioxus::prelude::*;
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
