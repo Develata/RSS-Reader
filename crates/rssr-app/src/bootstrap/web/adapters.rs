@@ -4,15 +4,17 @@ use anyhow::{Context, Result};
 use reqwest::{StatusCode, header};
 use rssr_application::{
     AppStatePort, FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate,
-    ParsedEntryData, ParsedFeedUpdate, RefreshCommit, RefreshFailure, RefreshHttpMetadata,
-    RefreshStorePort, RefreshTarget,
+    FeedRemovalCleanupPort, OpmlCodecPort, ParsedEntryData, ParsedFeedUpdate, RefreshCommit,
+    RefreshFailure, RefreshHttpMetadata, RefreshStorePort, RefreshTarget, RemoteConfigStore,
 };
 use rssr_domain::{
     DomainError, Entry, EntryNavigation, EntryQuery, EntryRepository, EntrySummary, Feed,
-    FeedRepository, FeedSummary, NewFeedSubscription, normalize_feed_url,
+    FeedRepository, FeedSummary, NewFeedSubscription, SettingsRepository, UserSettings,
+    normalize_feed_url,
 };
 
 use super::{
+    config::{decode_opml, encode_opml, remote_url},
     feed::{ParsedEntry, ParsedFeed, parse_feed, web_fetch_feed_response},
     query::{
         get_entry as query_get_entry, list_entries as query_list_entries,
@@ -211,11 +213,8 @@ impl BrowserAppStateAdapter {
     pub(super) fn new(state: Arc<Mutex<PersistedState>>) -> Self {
         Self { state }
     }
-}
 
-#[async_trait::async_trait]
-impl AppStatePort for BrowserAppStateAdapter {
-    async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
+    fn clear_last_opened_feed_if_matches_impl(&self, feed_id: i64) -> Result<()> {
         let snapshot = {
             let mut state = self.state.lock().expect("lock state");
             if state.last_opened_feed_id != Some(feed_id) {
@@ -226,6 +225,106 @@ impl AppStatePort for BrowserAppStateAdapter {
         };
 
         save_state_snapshot(snapshot)
+    }
+}
+
+#[async_trait::async_trait]
+impl AppStatePort for BrowserAppStateAdapter {
+    async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
+        self.clear_last_opened_feed_if_matches_impl(feed_id)
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl FeedRemovalCleanupPort for BrowserAppStateAdapter {
+    async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
+        self.clear_last_opened_feed_if_matches_impl(feed_id)
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct BrowserSettingsRepository {
+    state: Arc<Mutex<PersistedState>>,
+}
+
+impl BrowserSettingsRepository {
+    pub(super) fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+        Self { state }
+    }
+}
+
+#[async_trait::async_trait]
+impl SettingsRepository for BrowserSettingsRepository {
+    async fn load(&self) -> rssr_domain::Result<UserSettings> {
+        Ok(self.state.lock().expect("lock state").settings.clone())
+    }
+
+    async fn save(&self, settings: &UserSettings) -> rssr_domain::Result<()> {
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            state.settings = settings.clone();
+            state.clone()
+        };
+
+        save_state_snapshot(snapshot).map_err(map_persistence_error)
+    }
+}
+
+#[derive(Clone, Default)]
+pub(super) struct BrowserOpmlCodec;
+
+impl OpmlCodecPort for BrowserOpmlCodec {
+    fn encode(&self, feeds: &[rssr_domain::ConfigFeed]) -> Result<String> {
+        encode_opml(feeds)
+    }
+
+    fn decode(&self, raw: &str) -> Result<Vec<rssr_domain::ConfigFeed>> {
+        decode_opml(raw)
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct BrowserRemoteConfigStore {
+    client: reqwest::Client,
+    endpoint: String,
+    remote_path: String,
+}
+
+impl BrowserRemoteConfigStore {
+    pub(super) fn new(client: reqwest::Client, endpoint: &str, remote_path: &str) -> Self {
+        Self { client, endpoint: endpoint.to_string(), remote_path: remote_path.to_string() }
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl RemoteConfigStore for BrowserRemoteConfigStore {
+    async fn upload_config(&self, raw: &str) -> Result<()> {
+        self.client
+            .put(remote_url(&self.endpoint, &self.remote_path)?)
+            .header("content-type", "application/json")
+            .body(raw.to_string())
+            .send()
+            .await
+            .context("上传配置到 WebDAV 失败")?
+            .error_for_status()
+            .context("WebDAV 上传失败")?;
+        Ok(())
+    }
+
+    async fn download_config(&self) -> Result<Option<String>> {
+        let response = self
+            .client
+            .get(remote_url(&self.endpoint, &self.remote_path)?)
+            .send()
+            .await
+            .context("从 WebDAV 下载配置失败")?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        let raw = response.error_for_status().context("WebDAV 下载失败")?.text().await?;
+        Ok(Some(raw))
     }
 }
 

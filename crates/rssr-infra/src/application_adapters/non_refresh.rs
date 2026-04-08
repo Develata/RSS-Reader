@@ -26,14 +26,16 @@ impl SqliteAppStateAdapter {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AppStatePort for SqliteAppStateAdapter {
     async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
         self.clear_last_opened_feed_if_matches_impl(feed_id).await
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl FeedRemovalCleanupPort for SqliteAppStateAdapter {
     async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
         self.clear_last_opened_feed_if_matches_impl(feed_id).await
@@ -61,7 +63,8 @@ impl OpmlCodecPort for InfraOpmlCodec {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl RemoteConfigStore for WebDavConfigSync {
     async fn upload_config(&self, raw: &str) -> Result<()> {
         self.upload_text(raw).await

@@ -22,7 +22,8 @@ pub struct ImportExportService {
     feed_removal_cleanup: Arc<dyn FeedRemovalCleanupPort>,
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait RemoteConfigStore: Send + Sync {
     async fn upload_config(&self, raw: &str) -> Result<()>;
     async fn download_config(&self) -> Result<Option<String>>;
@@ -33,7 +34,8 @@ pub trait OpmlCodecPort: Send + Sync {
     fn decode(&self, raw: &str) -> Result<Vec<ConfigFeed>>;
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait FeedRemovalCleanupPort: Send + Sync {
     async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()>;
 }
@@ -41,7 +43,8 @@ pub trait FeedRemovalCleanupPort: Send + Sync {
 #[derive(Default)]
 struct NoopFeedRemovalCleanup;
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl FeedRemovalCleanupPort for NoopFeedRemovalCleanup {
     async fn clear_last_opened_feed_if_matches(&self, _feed_id: i64) -> Result<()> {
         Ok(())

@@ -23,7 +23,8 @@ use url::Url;
 
 struct WebDavRemote(WebDavConfigSync);
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl RemoteConfigStore for WebDavRemote {
     async fn upload_config(&self, raw: &str) -> anyhow::Result<()> {
         self.0.upload_text(raw).await

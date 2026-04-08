@@ -20,8 +20,9 @@ mod state;
 use anyhow::Context;
 use js_sys::Date;
 use rssr_application::{
-    AddSubscriptionInput, FeedService, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome,
-    RefreshFeedResult, RefreshService, RemoveSubscriptionInput, SubscriptionWorkflow,
+    AddSubscriptionInput, FeedService, ImportExportService, RefreshAllInput, RefreshAllOutcome,
+    RefreshFeedOutcome, RefreshFeedResult, RefreshService, RemoveSubscriptionInput,
+    SubscriptionWorkflow,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::{Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings};
@@ -31,7 +32,8 @@ use tokio::sync::OnceCell;
 use self::{
     adapters::{
         BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRefreshSource,
-        BrowserFeedRepository, BrowserRefreshStore,
+        BrowserFeedRepository, BrowserOpmlCodec, BrowserRefreshStore, BrowserRemoteConfigStore,
+        BrowserSettingsRepository,
     },
     exchange::{
         export_config_json as export_exchange_json, export_opml as export_exchange_opml,
@@ -57,6 +59,7 @@ pub struct AppServices {
     client: reqwest::Client,
     refresh_service: RefreshService,
     subscription_workflow: SubscriptionWorkflow,
+    import_export_service: ImportExportService,
     auto_refresh_started: AtomicBool,
 }
 
@@ -70,10 +73,12 @@ impl AppServices {
                 }
                 let state = Arc::new(Mutex::new(loaded.state));
                 let client = reqwest::Client::new();
-                let feed_service = FeedService::new(
-                    Arc::new(BrowserFeedRepository::new(state.clone())),
-                    Arc::new(BrowserEntryRepository::new(state.clone())),
-                );
+                let feed_repository = Arc::new(BrowserFeedRepository::new(state.clone()));
+                let entry_repository = Arc::new(BrowserEntryRepository::new(state.clone()));
+                let settings_repository = Arc::new(BrowserSettingsRepository::new(state.clone()));
+                let app_state_adapter = Arc::new(BrowserAppStateAdapter::new(state.clone()));
+                let feed_service =
+                    FeedService::new(feed_repository.clone(), entry_repository.clone());
                 let refresh_service = RefreshService::new(
                     Arc::new(BrowserFeedRefreshSource::new(client.clone())),
                     Arc::new(BrowserRefreshStore::new(state.clone())),
@@ -85,7 +90,14 @@ impl AppServices {
                     subscription_workflow: SubscriptionWorkflow::new(
                         feed_service,
                         refresh_service,
-                        Arc::new(BrowserAppStateAdapter::new(state)),
+                        app_state_adapter.clone(),
+                    ),
+                    import_export_service: ImportExportService::new_with_feed_removal_cleanup(
+                        feed_repository,
+                        entry_repository,
+                        settings_repository,
+                        Arc::new(BrowserOpmlCodec),
+                        app_state_adapter,
                     ),
                     auto_refresh_started: AtomicBool::new(false),
                 }))
@@ -180,19 +192,19 @@ impl AppServices {
     }
 
     pub async fn export_config_json(&self) -> anyhow::Result<String> {
-        export_exchange_json(self)
+        export_exchange_json(&self.import_export_service).await
     }
 
     pub async fn import_config_json(&self, raw: &str) -> anyhow::Result<()> {
-        import_exchange_json(self, raw)
+        import_exchange_json(&self.import_export_service, raw).await
     }
 
     pub async fn export_opml(&self) -> anyhow::Result<String> {
-        export_exchange_opml(self)
+        export_exchange_opml(&self.import_export_service).await
     }
 
     pub async fn import_opml(&self, raw: &str) -> anyhow::Result<()> {
-        import_exchange_opml(self, raw)
+        import_exchange_opml(&self.import_export_service, raw).await
     }
 
     pub async fn push_remote_config(
@@ -200,7 +212,11 @@ impl AppServices {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<()> {
-        push_exchange_remote(self, endpoint, remote_path).await
+        push_exchange_remote(
+            &self.import_export_service,
+            &BrowserRemoteConfigStore::new(self.client.clone(), endpoint, remote_path),
+        )
+        .await
     }
 
     pub async fn pull_remote_config(
@@ -208,7 +224,11 @@ impl AppServices {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<bool> {
-        pull_exchange_remote(self, endpoint, remote_path).await
+        pull_exchange_remote(
+            &self.import_export_service,
+            &BrowserRemoteConfigStore::new(self.client.clone(), endpoint, remote_path),
+        )
+        .await
     }
 
     fn handle_refresh_all_outcome(&self, outcome: RefreshAllOutcome) -> anyhow::Result<()> {

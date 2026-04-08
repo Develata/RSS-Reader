@@ -13,7 +13,8 @@ struct StubRemoteConfigStore {
     payload: Mutex<Option<String>>,
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl RemoteConfigStore for StubRemoteConfigStore {
     async fn upload_config(&self, raw: &str) -> anyhow::Result<()> {
         *self.payload.lock().expect("lock payload") = Some(raw.to_string());
@@ -133,7 +134,8 @@ struct RecordingFeedRemovalCleanup {
     removed_feed_ids: Mutex<Vec<i64>>,
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl FeedRemovalCleanupPort for RecordingFeedRemovalCleanup {
     async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> anyhow::Result<()> {
         self.removed_feed_ids.lock().expect("lock removed ids").push(feed_id);
