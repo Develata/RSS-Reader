@@ -158,7 +158,6 @@
 - `data-action="pull-webdav"`
 - `data-action="mark-read"`
 - `data-action="toggle-starred"`
-- `data-action="search-title"`
 - `data-action="group-by-source"`
 - `data-action="group-by-time"`
 - `data-action="toggle-archived"`
@@ -169,7 +168,6 @@
 - `data-action="apply-custom-css"`
 - `data-action="export-custom-css-file"`
 - `data-action="import-custom-css-file"`
-- `data-action="preset-theme-select"`
 - `data-action="apply-selected-theme"`
 - `data-action="apply-theme-preset"`
 - `data-action="remove-theme-preset"`
@@ -241,6 +239,39 @@
 - `.text-input`
 - `.text-area`
 - `.select-input`
+
+---
+
+## 字段接口
+
+设置页中的输入字段不应伪装成命令。它们应暴露稳定的 `data-field`，而把真正触发副作用的
+按钮继续保留为 `data-action`。
+
+当前已稳定的设置页字段接口：
+
+- `data-field="theme-mode"`
+- `data-field="list-density"`
+- `data-field="startup-view"`
+- `data-field="refresh-interval"`
+- `data-field="archive-after-months"`
+- `data-field="reader-font-scale"`
+- `data-field="custom-css"`
+- `data-field="preset-theme-select"`
+- `data-field="webdav-endpoint"`
+- `data-field="webdav-remote-path"`
+
+其它已稳定的字段接口：
+
+- `data-field="feed-url-input"`
+- `data-field="config-text"`
+- `data-field="opml-text"`
+- `data-field="search-title"`
+
+字段接口用于：
+
+- 自动化定位输入控件
+- 用户 CSS 和极端重排时保留语义锚点
+- 区分“持续输入值”和“触发一次动作”
 
 ---
 

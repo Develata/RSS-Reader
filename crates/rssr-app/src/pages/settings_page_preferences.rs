@@ -15,7 +15,7 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         id: "settings-theme-mode",
                         name: "theme_mode",
                         class: "select-input",
-                        "data-action": "theme-mode",
+                        "data-field": "theme-mode",
                         value: "{theme_value(draft().theme)}",
                         onchange: move |event| {
                             let mut next = draft();
@@ -33,7 +33,7 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         id: "settings-list-density",
                         name: "list_density",
                         class: "select-input",
-                        "data-action": "list-density",
+                        "data-field": "list-density",
                         value: "{density_value(draft().list_density)}",
                         onchange: move |event| {
                             let mut next = draft();
@@ -50,7 +50,7 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         id: "settings-startup-view",
                         name: "startup_view",
                         class: "select-input",
-                        "data-action": "startup-view",
+                        "data-field": "startup-view",
                         value: "{startup_value(draft().startup_view)}",
                         onchange: move |event| {
                             let mut next = draft();
@@ -67,7 +67,7 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         id: "settings-refresh-interval",
                         name: "refresh_interval_minutes",
                         class: "text-input",
-                        "data-action": "refresh-interval",
+                        "data-field": "refresh-interval",
                         value: "{draft().refresh_interval_minutes}",
                         oninput: move |event| {
                             if let Ok(minutes) = event.value().parse::<u32>() {
@@ -84,7 +84,7 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         id: "settings-archive-after-months",
                         name: "archive_after_months",
                         class: "text-input",
-                        "data-action": "archive-after-months",
+                        "data-field": "archive-after-months",
                         value: "{draft().archive_after_months}",
                         oninput: move |event| {
                             if let Ok(months) = event.value().parse::<u32>() {
@@ -101,7 +101,7 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         id: "settings-reader-font-scale",
                         name: "reader_font_scale",
                         class: "text-input",
-                        "data-action": "reader-font-scale",
+                        "data-field": "reader-font-scale",
                         value: "{draft().reader_font_scale}",
                         oninput: move |event| {
                             if let Ok(scale) = event.value().parse::<f32>() {

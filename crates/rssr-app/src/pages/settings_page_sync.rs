@@ -37,7 +37,7 @@ pub(crate) fn WebDavSettingsCard(
                             id: "settings-webdav-endpoint",
                             name: "webdav_endpoint",
                             class: "text-input",
-                            "data-action": "webdav-endpoint",
+                            "data-field": "webdav-endpoint",
                             value: "{snapshot.endpoint}",
                             placeholder: "https://dav.example.com/base/",
                             oninput: move |event| session.set_endpoint(event.value())
@@ -49,7 +49,7 @@ pub(crate) fn WebDavSettingsCard(
                             id: "settings-webdav-remote-path",
                             name: "webdav_remote_path",
                             class: "text-input",
-                            "data-action": "webdav-remote-path",
+                            "data-field": "webdav-remote-path",
                             value: "{snapshot.remote_path}",
                             placeholder: "config/rss-reader.json",
                             oninput: move |event| session.set_remote_path(event.value())

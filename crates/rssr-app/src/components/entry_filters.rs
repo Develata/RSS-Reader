@@ -24,7 +24,7 @@ pub fn EntryFilters(
                 id: "entry-search-title",
                 name: "search_title",
                 class: "text-input",
-                "data-action": "search-title",
+                "data-field": "search-title",
                 value: "{search}",
                 placeholder: "按标题搜索",
                 oninput: move |event| on_search.call(event.value())

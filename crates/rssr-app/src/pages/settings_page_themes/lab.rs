@@ -97,7 +97,7 @@ pub(super) fn ThemeLabSection(
                 id: "settings-custom-css",
                 name: "custom_css",
                 class: "text-area",
-                "data-action": "custom-css",
+                "data-field": "custom-css",
                 value: "{draft().custom_css}",
                 placeholder: "[data-page=\"reader\"] .reader-body {{ max-width: 72ch; }}",
                 oninput: move |event| {

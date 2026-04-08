@@ -16,7 +16,7 @@ pub(crate) fn FeedComposeSection(feed_url: Signal<String>, bindings: FeedsPageBi
                         id: "feed-url-input",
                         name: "feed_url",
                         class: "text-input",
-                        "data-action": "feed-url-input",
+                        "data-field": "feed-url-input",
                         value: "{feed_url}",
                         placeholder: "https://example.com/feed.xml",
                         oninput: move |event| feed_url.set(event.value())

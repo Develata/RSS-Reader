@@ -23,7 +23,7 @@ pub(crate) fn ConfigExchangeSection(
                     id: "config-text",
                     name: "config_text",
                     class: "text-area",
-                    "data-action": "config-text",
+                    "data-field": "config-text",
                     value: "{config_text}",
                     placeholder: "{{\n  \"version\": 1,\n  ...\n}}",
                     oninput: move |event| {
@@ -70,7 +70,7 @@ pub(crate) fn ConfigExchangeSection(
                     id: "opml-text",
                     name: "opml_text",
                     class: "text-area",
-                    "data-action": "opml-text",
+                    "data-field": "opml-text",
                     value: "{opml_text}",
                     placeholder: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
                     oninput: move |event| opml_text.set(event.value())

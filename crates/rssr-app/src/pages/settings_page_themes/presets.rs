@@ -26,7 +26,7 @@ pub(super) fn ThemePresetSections(
                     id: "settings-preset-theme",
                     name: "preset_theme",
                     class: "select-input",
-                    "data-action": "preset-theme-select",
+                    "data-field": "preset-theme-select",
                     value: "{preset_choice}",
                     onchange: move |event| preset_choice.set(event.value()),
                     option { value: "none", "无预设" }
