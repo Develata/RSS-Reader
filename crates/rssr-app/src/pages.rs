@@ -9,6 +9,7 @@ mod entries_page_presenter;
 mod entries_page_queries;
 mod entries_page_reducer;
 mod entries_page_runtime;
+mod entries_page_session;
 mod entries_page_state;
 pub mod feeds_page;
 mod feeds_page_sections;

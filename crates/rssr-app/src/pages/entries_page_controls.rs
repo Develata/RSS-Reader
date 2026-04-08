@@ -1,7 +1,7 @@
 use super::entries_page_groups::{EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem};
 use super::entries_page_intent::EntriesPageIntent;
-use super::entries_page_reducer::dispatch_entries_page_intent;
-use super::entries_page_state::{EntriesPageState, EntryGroupingMode};
+use super::entries_page_session::EntriesPageSession;
+use super::entries_page_state::EntryGroupingMode;
 use crate::{
     app::AppUiState,
     components::{entry_filters::EntryFilters, status_banner::StatusBanner},
@@ -11,7 +11,7 @@ use dioxus::prelude::*;
 #[derive(Clone, Copy)]
 pub(super) struct EntryControlsProps<'a> {
     pub ui: AppUiState,
-    pub state: Signal<EntriesPageState>,
+    pub session: EntriesPageSession,
     pub visible_entries_len: usize,
     pub archived_count: usize,
     pub source_filter_options: &'a [(i64, String, String)],
@@ -21,13 +21,13 @@ pub(super) struct EntryControlsProps<'a> {
 pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
     let EntryControlsProps {
         mut ui,
-        state,
+        session,
         visible_entries_len,
         archived_count,
         source_filter_options,
         group_nav_items,
     } = props;
-    let snapshot = state();
+    let snapshot = session.snapshot();
 
     rsx! {
         if snapshot.controls_hidden {
@@ -38,8 +38,7 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
                     title: "显示筛选与组织",
                     "aria-label": "显示筛选与组织",
                     onclick: move |_| {
-                        remember_entry_controls_hidden(false);
-                        dispatch_entries_page_intent(state, EntriesPageIntent::SetControlsHidden(false));
+                        session.dispatch(EntriesPageIntent::SetControlsHidden(false));
                     },
                     span { class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--down", aria_hidden: "true" }
                 }
@@ -57,8 +56,7 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
                             EntryGroupingMode::Source => "source",
                         },
                         onchange: move |event| {
-                            dispatch_entries_page_intent(
-                                state,
+                            session.dispatch(
                                 EntriesPageIntent::SetGroupingMode(match event.value().as_str() {
                                     "source" => EntryGroupingMode::Source,
                                     _ => EntryGroupingMode::Time,
@@ -74,10 +72,7 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
                             "data-action": "toggle-archived",
                             checked: snapshot.show_archived,
                             onchange: move |event| {
-                                dispatch_entries_page_intent(
-                                    state,
-                                    EntriesPageIntent::SetShowArchived(event.checked()),
-                                )
+                                session.dispatch(EntriesPageIntent::SetShowArchived(event.checked()))
                             }
                         }
                         span { "显示已归档文章" }
@@ -131,19 +126,13 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
                     selected_feed_urls: snapshot.selected_feed_urls.clone(),
                     on_search: move |value| ui.entry_search.set(value),
                     on_change_read_filter: move |value| {
-                        dispatch_entries_page_intent(state, EntriesPageIntent::SetReadFilter(value))
+                        session.dispatch(EntriesPageIntent::SetReadFilter(value))
                     },
                     on_change_starred_filter: move |value| {
-                        dispatch_entries_page_intent(
-                            state,
-                            EntriesPageIntent::SetStarredFilter(value),
-                        )
+                        session.dispatch(EntriesPageIntent::SetStarredFilter(value))
                     },
                     on_change_selected_feed_urls: move |value| {
-                        dispatch_entries_page_intent(
-                            state,
-                            EntriesPageIntent::SetSelectedFeedUrls(value),
-                        )
+                        session.dispatch(EntriesPageIntent::SetSelectedFeedUrls(value))
                     },
                 }
                 StatusBanner { message: snapshot.status, tone: snapshot.status_tone }
@@ -160,8 +149,7 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
                         title: "收起筛选与组织",
                         "aria-label": "收起筛选与组织",
                         onclick: move |_| {
-                            remember_entry_controls_hidden(true);
-                            dispatch_entries_page_intent(state, EntriesPageIntent::SetControlsHidden(true));
+                            session.dispatch(EntriesPageIntent::SetControlsHidden(true));
                         },
                         span { class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--up", aria_hidden: "true" }
                     }
@@ -175,9 +163,9 @@ pub(super) fn render_entry_directory(
     grouping_mode: EntryGroupingMode,
     directory_months: &[EntryDirectoryMonth],
     directory_sources: &[EntryDirectorySource],
-    state: Signal<EntriesPageState>,
+    session: EntriesPageSession,
 ) -> Element {
-    let expanded_directory_sources = state().expanded_directory_sources;
+    let expanded_directory_sources = session.snapshot().expanded_directory_sources;
 
     rsx! {
         aside { class: "entry-directory-rail",
@@ -227,8 +215,7 @@ pub(super) fn render_entry_directory(
                                         aria_expanded: if is_open { "true" } else { "false" },
                                         "data-action": if is_open { "collapse-directory-source" } else { "expand-directory-source" },
                                         onclick: move |_| {
-                                            dispatch_entries_page_intent(
-                                                state,
+                                            session.dispatch(
                                                 EntriesPageIntent::ToggleDirectorySource(
                                                     toggle_anchor.clone(),
                                                 ),

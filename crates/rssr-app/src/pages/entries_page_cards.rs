@@ -2,12 +2,11 @@ use dioxus::prelude::*;
 use rssr_domain::EntrySummary;
 use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
-use crate::{
-    pages::entries_page::{EntriesPageBindings, EntriesPageEffect, execute_entries_page_effect},
-    router::AppRoute,
-};
+use crate::router::AppRoute;
 
-pub(super) fn render_entry_card(entry: EntrySummary, bindings: EntriesPageBindings) -> Element {
+use super::entries_page_session::EntriesPageSession;
+
+pub(super) fn render_entry_card(entry: EntrySummary, session: EntriesPageSession) -> Element {
     let read_title = entry.title.clone();
     let starred_title = entry.title.clone();
 
@@ -29,15 +28,7 @@ pub(super) fn render_entry_card(entry: EntrySummary, bindings: EntriesPageBindin
                     class: "button secondary",
                     "data-action": "mark-read",
                     onclick: move |_| {
-                        let effect = EntriesPageEffect::ToggleRead {
-                            entry_id: entry.id,
-                            entry_title: read_title.clone(),
-                            currently_read: entry.is_read,
-                        };
-                        spawn(async move {
-                            let outcome = execute_entries_page_effect(effect).await;
-                            bindings.apply_runtime_outcome(outcome);
-                        });
+                        session.toggle_read(entry.id, read_title.clone(), entry.is_read);
                     },
                     if entry.is_read { "标未读" } else { "标已读" }
                 }
@@ -45,15 +36,7 @@ pub(super) fn render_entry_card(entry: EntrySummary, bindings: EntriesPageBindin
                     class: "button secondary",
                     "data-action": "toggle-starred",
                     onclick: move |_| {
-                        let effect = EntriesPageEffect::ToggleStarred {
-                            entry_id: entry.id,
-                            entry_title: starred_title.clone(),
-                            currently_starred: entry.is_starred,
-                        };
-                        spawn(async move {
-                            let outcome = execute_entries_page_effect(effect).await;
-                            bindings.apply_runtime_outcome(outcome);
-                        });
+                        session.toggle_starred(entry.id, starred_title.clone(), entry.is_starred);
                     },
                     if entry.is_starred { "取消收藏" } else { "收藏" }
                 }

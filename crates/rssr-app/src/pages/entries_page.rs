@@ -7,14 +7,7 @@ use super::entries_page_controls::{
     EntryControlsProps, initial_entry_controls_hidden, render_entry_controls,
     render_entry_directory,
 };
-pub(crate) use super::{
-    entries_page_bindings::EntriesPageBindings, entries_page_effect::EntriesPageEffect,
-    entries_page_runtime::execute_entries_page_effect,
-};
-use super::{
-    entries_page_presenter::EntriesPagePresenter,
-    entries_page_state::{EntriesPageState, grouping_mode_preference},
-};
+use super::{entries_page_session::EntriesPageSession, entries_page_state::EntriesPageState};
 use crate::{
     app::{AppNav, AppUiState},
     bootstrap::AppServices,
@@ -96,74 +89,33 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
 
     let ui = use_context::<AppUiState>();
     let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
-    let bindings = EntriesPageBindings::new(state);
-    let state_snapshot = state();
-    let presenter = EntriesPagePresenter::from_state(&state_snapshot, feed_id, current_time_utc());
-    let reload_version = state_snapshot.reload_tick;
+    let session = EntriesPageSession::new(feed_id, state);
+    let state_snapshot = session.snapshot();
+    let presenter = session.presenter(current_time_utc());
+    let reload_version = session.reload_tick();
     let query_search = (!(ui.entry_search)().trim().is_empty()).then(|| (ui.entry_search)());
-    let query_feeds = state_snapshot.feeds.clone();
-    let query_state = state_snapshot.clone();
 
     use_resource(move || async move {
-        if let Some(feed_id) = feed_id {
-            let outcome =
-                execute_entries_page_effect(EntriesPageEffect::RememberLastOpenedFeed(feed_id))
-                    .await;
-            bindings.apply_runtime_outcome(outcome);
-        }
+        session.remember_last_opened_feed();
     });
 
     use_resource(move || async move {
-        let outcome = execute_entries_page_effect(EntriesPageEffect::LoadPreferences).await;
-        bindings.apply_runtime_outcome(outcome);
+        session.load_preferences();
     });
 
     use_resource(use_reactive!(|(reload_version)| async move {
         let _ = reload_version;
-        let outcome = execute_entries_page_effect(EntriesPageEffect::LoadFeeds).await;
-        bindings.apply_runtime_outcome(outcome);
+        session.load_feeds();
     }));
 
-    use_resource(use_reactive!(|(
-        feed_id,
-        reload_version,
-        query_search,
-        query_feeds,
-        query_state,
-    )| async move {
+    use_resource(use_reactive!(|(feed_id, reload_version, query_search)| async move {
         let _ = reload_version;
-        let _ = query_feeds;
-        let outcome = execute_entries_page_effect(EntriesPageEffect::LoadEntries(
-            query_state.entry_query(feed_id, query_search.clone()),
-        ))
-        .await;
-        bindings.apply_runtime_outcome(outcome);
+        let _ = feed_id;
+        session.load_entries(query_search.clone());
     }));
 
     use_effect(move || {
-        let snapshot = state();
-        if !snapshot.preferences_loaded {
-            return;
-        }
-
-        let next_grouping = grouping_mode_preference(snapshot.grouping_mode);
-        let next_show_archived = snapshot.show_archived;
-        let next_read_filter = snapshot.read_filter;
-        let next_starred_filter = snapshot.starred_filter;
-        let next_feed_urls = snapshot.selected_feed_urls;
-        let bindings = bindings;
-
-        spawn(async move {
-            let outcome = execute_entries_page_effect(EntriesPageEffect::SaveBrowsingPreferences {
-                grouping_mode: next_grouping,
-                show_archived: next_show_archived,
-                read_filter: next_read_filter,
-                starred_filter: next_starred_filter,
-                selected_feed_urls: next_feed_urls,
-            })
-            .await;
-            bindings.apply_runtime_outcome(outcome);
-        });
+        session.save_browsing_preferences();
     });
 
     rsx! {
@@ -191,7 +143,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     }
                     { render_entry_controls(EntryControlsProps {
                         ui,
-                        state,
+                        session,
                         visible_entries_len: presenter.visible_entries.len(),
                         archived_count: presenter.archived_count,
                         source_filter_options: &presenter.source_filter_options,
@@ -234,7 +186,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                         }
                                                         ul { class: "entry-list entry-list--grouped",
                                                             for entry in source.entries {
-                                                                { render_entry_card(entry, bindings) }
+                                                                { render_entry_card(entry, session) }
                                                             }
                                                         }
                                                     }
@@ -258,7 +210,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                 }
                                                 ul { class: "entry-list entry-list--grouped",
                                                     for entry in month.entries {
-                                                        { render_entry_card(entry, bindings) }
+                                                        { render_entry_card(entry, session) }
                                                     }
                                                 }
                                             }
@@ -274,7 +226,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                         state_snapshot.grouping_mode,
                         &presenter.directory_months,
                         &presenter.directory_sources,
-                        state,
+                        session,
                     ) }
                 }
             }
