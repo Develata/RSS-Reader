@@ -18,18 +18,20 @@ mod refresh;
 mod refresh_adapter;
 #[path = "web/state.rs"]
 mod state;
+#[path = "web/subscription_adapter.rs"]
+mod subscription_adapter;
 
 use anyhow::Context;
 use js_sys::Date;
 use rssr_application::{
-    ImportExportService, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
-    RefreshService,
+    AddSubscriptionInput, ImportExportService, RefreshAllInput, RefreshAllOutcome,
+    RefreshFeedOutcome, RefreshFeedResult, RefreshService, RemoveSubscriptionInput,
+    SubscriptionWorkflow,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::{Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings, normalize_feed_url};
+use rssr_domain::{Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings};
 use time::OffsetDateTime;
 use tokio::sync::OnceCell;
-use url::Url;
 
 use self::{
     exchange::{
@@ -39,10 +41,8 @@ use self::{
     },
     exchange_adapter::build_import_export_service,
     mutations::{
-        add_subscription as add_subscription_state,
-        remember_last_opened_feed_id as remember_feed_id, remove_feed as remove_feed_state,
-        save_settings as save_settings_state, set_read as set_entry_read,
-        set_starred as set_entry_starred,
+        remember_last_opened_feed_id as remember_feed_id, save_settings as save_settings_state,
+        set_read as set_entry_read, set_starred as set_entry_starred,
     },
     query::{
         get_entry as query_get_entry, list_entries as query_list_entries,
@@ -51,6 +51,7 @@ use self::{
     refresh::ensure_auto_refresh_started as start_auto_refresh,
     refresh_adapter::build_refresh_service,
     state::{PersistedState, load_state},
+    subscription_adapter::build_subscription_workflow,
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -60,6 +61,7 @@ pub struct AppServices {
     client: reqwest::Client,
     refresh_service: RefreshService,
     import_export_service: ImportExportService,
+    subscription_workflow: SubscriptionWorkflow,
     auto_refresh_started: AtomicBool,
 }
 
@@ -75,9 +77,12 @@ impl AppServices {
                 let client = reqwest::Client::new();
                 let refresh_service = build_refresh_service(state.clone(), client.clone());
                 let import_export_service = build_import_export_service(state.clone());
+                let subscription_workflow =
+                    build_subscription_workflow(state.clone(), refresh_service.clone());
                 Ok(Arc::new(Self {
                     refresh_service,
                     import_export_service,
+                    subscription_workflow,
                     state,
                     client,
                     auto_refresh_started: AtomicBool::new(false),
@@ -143,13 +148,23 @@ impl AppServices {
     }
 
     pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
-        let url = normalize_feed_url(&Url::parse(raw_url).context("订阅 URL 不合法")?);
-        let feed_id = add_subscription_state(self, &url)?;
-        self.refresh_feed(feed_id).await.context("首次刷新订阅失败")
+        let outcome = self
+            .subscription_workflow
+            .add_subscription_and_refresh(&AddSubscriptionInput {
+                url: raw_url.to_string(),
+                title: None,
+                folder: None,
+            })
+            .await
+            .context("保存订阅失败")?;
+        self.handle_refresh_outcome(outcome.refresh).context("首次刷新订阅失败")
     }
 
     pub async fn remove_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        remove_feed_state(self, feed_id)
+        self.subscription_workflow
+            .remove_subscription(RemoveSubscriptionInput { feed_id, purge_entries: true })
+            .await
+            .context("删除订阅失败")
     }
 
     pub async fn refresh_all(&self) -> anyhow::Result<()> {
