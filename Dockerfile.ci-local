@@ -1,0 +1,59 @@
+# syntax=docker/dockerfile:1.7
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CARGO_HOME=/usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV PATH=/usr/local/cargo/bin:${PATH}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    build-essential \
+    ca-certificates \
+    curl \
+    fonts-liberation \
+    git \
+    libasound2t64 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcairo2 \
+    libcups2t64 \
+    libdbus-1-3 \
+    libexpat1 \
+    libfontconfig1 \
+    libgbm1 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libgtk-3-dev \
+    libnspr4 \
+    libnss3 \
+    libpango-1.0-0 \
+    libsoup-3.0-dev \
+    libwebkit2gtk-4.1-dev \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxdo-dev \
+    libxext6 \
+    libxfixes3 \
+    libxkbcommon0 \
+    libxrandr2 \
+    pkg-config \
+    python3 \
+    unzip \
+    wget \
+    xdg-utils \
+    zip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal --default-toolchain stable \
+    && rustup target add wasm32-unknown-unknown
+
+RUN cargo install wasm-bindgen-cli --version 0.2.114 --locked
+
+WORKDIR /work
+
+CMD ["bash"]

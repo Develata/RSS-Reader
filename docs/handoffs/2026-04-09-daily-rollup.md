@@ -125,6 +125,25 @@
   - 只有 `refs/tags/v*` 才会执行 metadata、registry login 与 image push
 - 这样保留了“验证 Docker 镜像可构建、可运行”的持续信心，同时避免每次主线 push 都生成额外的 GHCR 版本噪音
 
+### 当日后续补充：本地 Linux CI 容器基座
+
+- 新增 `Dockerfile.ci-local`
+  - 基于 `ubuntu:24.04`
+  - 预装 Rust stable、`wasm32-unknown-unknown` target、`wasm-bindgen-cli`
+  - 安装与当前 `CI` workflow 接近的系统依赖和 headless Chrome 运行库
+- 新增 `scripts/run_ci_local_container.sh`
+  - 支持一键启动交互式容器
+  - 支持 `--rebuild`
+  - 支持 `--cmd '<command>'` 一次性执行测试命令
+  - 默认挂载 cargo registry/git/target volume，并开启 `--shm-size=2g`
+  - 默认使用 `--network host`，尽量贴近 browser runner 与 CI 的网络行为
+- 这套容器不是为了替代 GitHub Actions，而是为了在本地更接近 `ubuntu-latest` 地复现：
+  - `cargo test -p rssr-web`
+  - `cargo test -p rssr-infra --test ...`
+  - `cargo test -p rssr-infra --target wasm32-unknown-unknown --test ... --no-run`
+  - `scripts/setup_chrome_for_testing.sh`
+  - `scripts/run_wasm_*_contract_harness.sh`
+
 ### Contract harness 规划与重建
 
 - 新增 `docs/testing/contract-harness-rebuild-plan.md`，明确不直接复制旧分支 harness，而按当前主线重建。
@@ -224,6 +243,7 @@
 - `bash -n scripts/run_wasm_contract_harness.sh scripts/run_wasm_refresh_contract_harness.sh scripts/run_wasm_subscription_contract_harness.sh scripts/run_wasm_config_exchange_contract_harness.sh`：通过
 - CI workflow YAML 解析：通过
 - `docker.yml` 触发条件与 push gate 代码级复核：通过
+- `bash -n scripts/run_ci_local_container.sh`：通过
 
 ### 手工验收
 
@@ -250,6 +270,7 @@
 - 当前这轮 handoff 目录整理尚未提交，因此“按日期汇总”本身仍处于 `pending` 状态。
 - 这次 runner 修复主要面向 GitHub Actions 的 Chrome 会话稳定性；真正是否彻底收口，仍需下一次远端 `wasm-browser-contract` matrix 结果确认。
 - Docker workflow 现在仍会在 `main` push 时运行一次完整 smoke；如果未来还想进一步节流，可以再评估是否把这条 workflow 只留给 tag 与手动触发。
+- 本地 CI 容器当前是“最小可复用基座”，还没有把全部 GitHub Actions job 包装成统一入口脚本；后续如长期使用，可以再加一层 `scripts/run_ci_local_checks.sh`。
 
 ## 给下一位 Agent 的备注
 

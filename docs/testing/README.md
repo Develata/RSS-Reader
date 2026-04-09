@@ -24,6 +24,9 @@
 - 如果是执行 browser contract harness：
   - 先看 [环境限制索引](./environment-limitations.md)
   - 再按 [Contract Harness 重建计划](./contract-harness-rebuild-plan.md) 里的脚本入口执行
+- 如果想在本地复现接近 GitHub Actions 的 Linux 测试环境：
+  - 用仓库根目录的 `Dockerfile.ci-local`
+  - 或直接执行 `scripts/run_ci_local_container.sh`
 
 ## 当前覆盖重点
 
