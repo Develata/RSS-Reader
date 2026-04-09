@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::bootstrap::ReaderNavigation;
-use crate::ui::{UiCommand, UiIntent, apply_projected_ui_command};
+use crate::ui::{UiCommand, UiIntent, spawn_projected_ui_command};
 
 use super::{reducer::dispatch_reader_page_intent, state::ReaderPageState};
 
@@ -53,11 +53,8 @@ impl ReaderPageSession {
     }
 
     fn spawn_ui_command(self, command: UiCommand) {
-        spawn(async move {
-            apply_projected_ui_command(command, UiIntent::into_reader_page_intent, |intent| {
-                dispatch_reader_page_intent(self.state, intent);
-            })
-            .await;
+        spawn_projected_ui_command(command, UiIntent::into_reader_page_intent, move |intent| {
+            dispatch_reader_page_intent(self.state, intent);
         });
     }
 }

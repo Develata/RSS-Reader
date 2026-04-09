@@ -1,4 +1,4 @@
-mod effect;
+mod facade;
 pub(crate) mod intent;
 mod reducer;
 mod sections;
@@ -7,18 +7,21 @@ mod state;
 
 use dioxus::prelude::*;
 
+use self::facade::FeedsPageFacade;
 use self::sections::{ConfigExchangeSection, FeedComposeSection, SavedFeedsSection};
 use self::session::FeedsPageSession;
 use crate::{
     app::AppNav, components::status_banner::StatusBanner,
     hooks::use_mobile_back_navigation::use_mobile_back_navigation, router::AppRoute,
+    ui::use_reactive_task,
 };
 
 #[component]
 pub fn FeedsPage() -> Element {
     use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
 
-    let (session, snapshot) = use_feeds_page_workspace();
+    let facade = use_feeds_page_workspace();
+    let snapshot = &facade.snapshot;
 
     rsx! {
         section { class: "page page-feeds", "data-page": "feeds",
@@ -37,22 +40,21 @@ pub fn FeedsPage() -> Element {
                 }
             }
             StatusBanner { message: snapshot.status.clone(), tone: snapshot.status_tone.clone() }
-            FeedComposeSection { session }
-            ConfigExchangeSection { session }
-            SavedFeedsSection { session }
+            FeedComposeSection { facade: facade.clone() }
+            ConfigExchangeSection { facade: facade.clone() }
+            SavedFeedsSection { facade }
         }
     }
 }
 
-fn use_feeds_page_workspace() -> (FeedsPageSession, state::FeedsPageState) {
+fn use_feeds_page_workspace() -> FeedsPageFacade {
     let state = use_signal(state::FeedsPageState::new);
     let session = FeedsPageSession::new(state);
     let reload_tick = session.reload_tick();
 
-    use_resource(use_reactive!(|(reload_tick)| async move {
-        let _ = reload_tick;
+    use_reactive_task(reload_tick, move |_| {
         session.load_snapshot();
-    }));
+    });
 
-    (session, session.snapshot())
+    FeedsPageFacade::new(session, session.snapshot())
 }

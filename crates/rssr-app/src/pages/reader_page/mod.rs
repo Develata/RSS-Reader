@@ -1,3 +1,4 @@
+mod facade;
 pub(crate) mod intent;
 mod reducer;
 mod session;
@@ -9,17 +10,27 @@ use dioxus::prelude::*;
 use crate::{
     app::AppNav, components::status_banner::StatusBanner,
     hooks::use_mobile_back_navigation::use_mobile_back_navigation,
-    hooks::use_reader_shortcuts::use_reader_shortcuts, router::AppRoute,
+    hooks::use_reader_shortcuts::use_reader_shortcuts, router::AppRoute, ui::use_reactive_task,
 };
 
 pub(crate) use self::session::ReaderPageSession;
+
+use self::facade::ReaderPageFacade;
 
 #[component]
 pub fn ReaderPage(entry_id: i64) -> Element {
     use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
 
     let navigator = use_navigator();
-    let (session, snapshot, shortcuts) = use_reader_page_workspace(entry_id);
+    let facade = use_reader_page_workspace(entry_id);
+    let snapshot = facade.snapshot.clone();
+    let shortcuts = facade.shortcuts;
+    let previous_action_target = facade.previous_action_target();
+    let next_action_target = facade.next_action_target();
+    let previous_facade = facade.clone();
+    let read_facade = facade.clone();
+    let starred_facade = facade.clone();
+    let next_facade = facade.clone();
 
     rsx! {
         article {
@@ -76,15 +87,15 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 }
                 nav { class: "reader-bottom-bar", "aria-label": "阅读快捷操作",
                     button {
-                        class: if session.previous_action_target().is_some() {
+                        class: if previous_action_target.is_some() {
                             "reader-bottom-bar__button"
                         } else {
                             "reader-bottom-bar__button is-disabled"
                         },
-                        disabled: session.previous_action_target().is_none(),
+                        disabled: previous_action_target.is_none(),
                         "data-nav": "previous-unread-entry",
                         onclick: move |_| {
-                            if let Some(target) = session.previous_action_target() {
+                            if let Some(target) = previous_facade.previous_action_target() {
                                 navigator.push(AppRoute::ReaderPage { entry_id: target });
                             }
                         },
@@ -95,7 +106,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         class: "reader-bottom-bar__button",
                         "data-action": "mark-read",
                         onclick: move |_| {
-                            session.toggle_read(false);
+                            read_facade.toggle_read(false);
                         },
                         span { class: "reader-bottom-bar__icon", if snapshot.is_read { "○" } else { "✓" } }
                         span { class: "reader-bottom-bar__label", if snapshot.is_read { "未读（M）" } else { "已读（M）" } }
@@ -108,21 +119,21 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         },
                         "data-action": "toggle-starred",
                         onclick: move |_| {
-                            session.toggle_starred(false);
+                            starred_facade.toggle_starred(false);
                         },
                         span { class: "reader-bottom-bar__icon", if snapshot.is_starred { "★" } else { "☆" } }
                         span { class: "reader-bottom-bar__label", "收藏（F）" }
                     }
                     button {
-                        class: if session.next_action_target().is_some() {
+                        class: if next_action_target.is_some() {
                             "reader-bottom-bar__button"
                         } else {
                             "reader-bottom-bar__button is-disabled"
                         },
-                        disabled: session.next_action_target().is_none(),
+                        disabled: next_action_target.is_none(),
                         "data-nav": "next-unread-entry",
                         onclick: move |_| {
-                            if let Some(target) = session.next_action_target() {
+                            if let Some(target) = next_facade.next_action_target() {
                                 navigator.push(AppRoute::ReaderPage { entry_id: target });
                             }
                         },
@@ -135,19 +146,15 @@ pub fn ReaderPage(entry_id: i64) -> Element {
     }
 }
 
-fn use_reader_page_workspace(
-    entry_id: i64,
-) -> (ReaderPageSession, state::ReaderPageState, Callback<KeyboardEvent>) {
+fn use_reader_page_workspace(entry_id: i64) -> ReaderPageFacade {
     let state = use_signal(state::ReaderPageState::new);
     let session = ReaderPageSession::new(entry_id, state);
     let shortcuts = use_reader_shortcuts(session);
     let reload_version = session.reload_tick();
 
-    use_resource(use_reactive!(|(entry_id, reload_version)| async move {
-        let _ = reload_version;
-        let _ = entry_id;
+    use_reactive_task((entry_id, reload_version), move |_| {
         session.load();
-    }));
+    });
 
-    (session, session.snapshot(), shortcuts)
+    ReaderPageFacade::new(session, session.snapshot(), shortcuts)
 }

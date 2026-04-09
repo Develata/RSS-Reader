@@ -1,9 +1,14 @@
 use dioxus::prelude::*;
 
-use crate::pages::feeds_page::session::FeedsPageSession;
+use crate::pages::feeds_page::facade::FeedsPageFacade;
 
 #[component]
-pub(crate) fn FeedComposeSection(session: FeedsPageSession) -> Element {
+pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
+    let snapshot = facade.snapshot.clone();
+    let paste_facade = facade.clone();
+    let input_facade = facade.clone();
+    let add_facade = facade.clone();
+
     rsx! {
         div { class: "feed-workbench feed-workbench--single",
             div { class: "feed-compose-card",
@@ -17,7 +22,7 @@ pub(crate) fn FeedComposeSection(session: FeedsPageSession) -> Element {
                         name: "feed_url",
                         class: "text-input",
                         "data-field": "feed-url-input",
-                        value: "{session.feed_url()}",
+                        value: "{snapshot.feed_url}",
                         placeholder: "https://example.com/feed.xml",
                         onkeydown: move |event| {
                             if !is_paste_shortcut(&event) {
@@ -25,20 +30,20 @@ pub(crate) fn FeedComposeSection(session: FeedsPageSession) -> Element {
                             }
 
                             event.prevent_default();
-                            session.paste_feed_url();
+                            paste_facade.paste_feed_url();
                         },
-                        oninput: move |event| session.set_feed_url(event.value())
+                        oninput: move |event| input_facade.set_feed_url(event.value())
                     }
                     button {
                         class: "button",
                         "data-action": "add-feed",
-                        onclick: move |_| session.add_feed(),
+                        onclick: move |_| add_facade.add_feed(),
                         "添加订阅"
                     }
                     button {
                         class: "button secondary",
                         "data-action": "refresh-all",
-                        onclick: move |_| session.refresh_all(),
+                        onclick: move |_| facade.refresh_all(),
                         "刷新全部"
                     }
                 }
