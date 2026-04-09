@@ -4,7 +4,7 @@ use super::{
     bindings::EntriesPageBindings, controls::remember_entry_controls_hidden,
     effect::EntriesPageEffect, intent::EntriesPageIntent, presenter::EntriesPagePresenter,
     reducer::dispatch_entries_page_intent, runtime::execute_entries_page_effect,
-    state::EntriesPageState, state::grouping_mode_preference,
+    state::EntriesPageState,
 };
 use rssr_domain::EntryQuery;
 use time::OffsetDateTime;
@@ -33,10 +33,6 @@ impl EntriesPageSession {
         EntriesPagePresenter::from_state(&self.snapshot(), self.feed_id, now)
     }
 
-    pub(crate) fn entry_query(self, search_title: Option<String>) -> EntryQuery {
-        self.snapshot().entry_query(self.feed_id, search_title)
-    }
-
     pub(crate) fn remember_last_opened_feed(self) {
         if let Some(feed_id) = self.feed_id {
             self.spawn_effect(EntriesPageEffect::RememberLastOpenedFeed(feed_id));
@@ -51,22 +47,29 @@ impl EntriesPageSession {
         self.spawn_effect(EntriesPageEffect::LoadFeeds);
     }
 
-    pub(crate) fn load_entries(self, search_title: Option<String>) {
-        self.spawn_effect(EntriesPageEffect::LoadEntries(self.entry_query(search_title)));
+    pub(crate) fn load_entries_query(self, query: EntryQuery) {
+        self.spawn_effect(EntriesPageEffect::LoadEntries(query));
     }
 
-    pub(crate) fn save_browsing_preferences(self) {
-        let snapshot = self.snapshot();
-        if !snapshot.preferences_loaded {
+    pub(crate) fn save_browsing_preferences_with(
+        self,
+        preferences_loaded: bool,
+        grouping_mode: rssr_domain::EntryGroupingPreference,
+        show_archived: bool,
+        read_filter: rssr_domain::ReadFilter,
+        starred_filter: rssr_domain::StarredFilter,
+        selected_feed_urls: Vec<String>,
+    ) {
+        if !preferences_loaded {
             return;
         }
 
         self.spawn_effect(EntriesPageEffect::SaveBrowsingPreferences {
-            grouping_mode: grouping_mode_preference(snapshot.grouping_mode),
-            show_archived: snapshot.show_archived,
-            read_filter: snapshot.read_filter,
-            starred_filter: snapshot.starred_filter,
-            selected_feed_urls: snapshot.selected_feed_urls,
+            grouping_mode,
+            show_archived,
+            read_filter,
+            starred_filter,
+            selected_feed_urls,
         });
     }
 

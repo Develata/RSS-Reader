@@ -225,33 +225,55 @@ fn use_entries_page_workspace(
 ) -> (EntriesPageSession, EntriesPageState, presenter::EntriesPagePresenter) {
     let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
     let session = EntriesPageSession::new(feed_id, state);
+    let state_snapshot = session.snapshot();
     let reload_version = session.reload_tick();
     let query_search = (!(ui.entry_search)().trim().is_empty()).then(|| (ui.entry_search)());
+    let entry_query = state_snapshot.entry_query(feed_id, query_search.clone());
+    let preferences_loaded = state_snapshot.preferences_loaded;
+    let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
+    let show_archived = state_snapshot.show_archived;
+    let read_filter = state_snapshot.read_filter;
+    let starred_filter = state_snapshot.starred_filter;
+    let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
 
-    use_resource(move || async move {
+    use_resource(use_reactive!(|(feed_id)| async move {
+        let _ = feed_id;
         session.remember_last_opened_feed();
-    });
+    }));
 
-    use_resource(move || async move {
+    use_resource(use_reactive!(|(feed_id)| async move {
+        let _ = feed_id;
         session.load_preferences();
-    });
+    }));
 
     use_resource(use_reactive!(|(reload_version)| async move {
         let _ = reload_version;
         session.load_feeds();
     }));
 
-    use_resource(use_reactive!(|(feed_id, reload_version, query_search)| async move {
+    use_resource(use_reactive!(|(entry_query, reload_version)| async move {
         let _ = reload_version;
-        let _ = feed_id;
-        session.load_entries(query_search.clone());
+        session.load_entries_query(entry_query.clone());
     }));
 
-    use_effect(move || {
-        session.save_browsing_preferences();
-    });
+    use_effect(use_reactive!(|(
+        preferences_loaded,
+        grouping_mode,
+        show_archived,
+        read_filter,
+        starred_filter,
+        selected_feed_urls,
+    )| {
+        session.save_browsing_preferences_with(
+            preferences_loaded,
+            grouping_mode,
+            show_archived,
+            read_filter,
+            starred_filter,
+            selected_feed_urls.clone(),
+        );
+    }));
 
-    let state_snapshot = session.snapshot();
     let presenter = session.presenter(current_time_utc());
     (session, state_snapshot, presenter)
 }

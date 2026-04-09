@@ -524,6 +524,15 @@
 
 ## 风险与后续事项
 
+- `entries_page` 在目录化与 workspace 收薄后，一度出现 `/entries` 登录后白屏。根因不是资源 404，也不是旧 localStorage 兼容，而是页面工作区里把 `EntryQuery` 和“保存浏览偏好”这两条副作用链建立在了 `session.snapshot()` 的隐式读取上；在 wasm 下这会把资源刷新和状态写回耦合成主线程卡死。
+- 目前已把 `entries_page` 的加载与保存触发改成显式依赖：
+  - `LoadEntries` 直接消费在 view shell 外部推导好的 `EntryQuery`
+  - `SaveBrowsingPreferences` 直接消费显式传入的偏好快照
+  - `remember_last_opened_feed` / `load_preferences` 也改成以 `feed_id` 为边界的显式 reactive 挂载
+- Chrome MCP 复测结果：
+  - 全新隔离浏览器上下文下，先完成本地登录，再进入 `http://127.0.0.1:8081/entries`
+  - 修复前：页面线程挂死，`take_snapshot` / `evaluate_script` 超时，用户视角是纯白屏
+  - 修复后：页面正常渲染出顶部导航、文章标题、“显示筛选与组织”按钮，以及空状态文案“没有可显示的文章，先去订阅页添加并刷新 feed。”
 - `wasm-pack test` 不是当前仓库的正式 wasm harness 入口；若要强行支持，需要额外拆分 native-only integration tests。
 - WSL2 本地环境仍无法可靠执行 `chromedriver` 真实浏览器链路，需以 GitHub Actions 结果为准。
 - 后续更值得做的是观察远端 `wasm-browser-contract` matrix 是否全绿，并在必要时针对 CI 差异修补脚本或环境。
