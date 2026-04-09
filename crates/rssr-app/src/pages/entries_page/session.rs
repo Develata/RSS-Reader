@@ -98,10 +98,13 @@ impl EntriesPageSession {
     }
 
     fn spawn_effect(self, effect: EntriesPageEffect) {
-        let bindings = self.bindings;
         spawn(async move {
             let outcome = execute_entries_page_effect(effect).await;
-            bindings.apply_runtime_outcome(outcome);
+            self.apply_runtime_outcome(outcome);
         });
+    }
+
+    fn apply_runtime_outcome(self, outcome: super::runtime::EntriesPageRuntimeOutcome) {
+        self.bindings.apply_runtime_outcome(outcome);
     }
 }

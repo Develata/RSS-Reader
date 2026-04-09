@@ -1,4 +1,4 @@
-use super::{commands::FeedsPageCommandOutcome, queries::FeedsPageSnapshot};
+use super::queries::FeedsPageSnapshot;
 
 #[derive(Debug)]
 pub(crate) enum FeedsPageIntent {
@@ -16,6 +16,11 @@ pub(crate) enum FeedsPageIntent {
     ImportOpmlRequested,
     PasteFeedUrlRequested,
     SnapshotLoaded(Result<FeedsPageSnapshot, String>),
-    CommandCompleted(FeedsPageCommandOutcome),
+    ConfigTextExported(String),
+    OpmlTextExported(String),
+    PendingConfigImportSet(bool),
+    PendingDeleteFeedSet(Option<i64>),
+    SetStatus { message: String, tone: String },
+    BumpReload,
     ClipboardReadCompleted(Result<Option<String>, String>),
 }

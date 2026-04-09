@@ -36,42 +36,34 @@ impl ReaderPageSession {
     }
 
     pub(crate) fn load(self) {
-        let entry_id = self.entry_id;
-        let bindings = self.bindings;
-        spawn(async move {
-            let outcome = execute_reader_page_effect(ReaderPageEffect::LoadEntry(entry_id)).await;
-            bindings.apply_runtime_outcome(outcome);
-        });
+        self.spawn_effect(ReaderPageEffect::LoadEntry(self.entry_id));
     }
 
     pub(crate) fn toggle_read(self, via_shortcut: bool) {
-        let entry_id = self.entry_id;
-        let currently_read = (self.state)().is_read;
-        let bindings = self.bindings;
-        spawn(async move {
-            let outcome = execute_reader_page_effect(ReaderPageEffect::ToggleRead {
-                entry_id,
-                currently_read,
-                via_shortcut,
-            })
-            .await;
-            bindings.apply_runtime_outcome(outcome);
+        self.spawn_effect(ReaderPageEffect::ToggleRead {
+            entry_id: self.entry_id,
+            currently_read: (self.state)().is_read,
+            via_shortcut,
         });
     }
 
     pub(crate) fn toggle_starred(self, via_shortcut: bool) {
-        let entry_id = self.entry_id;
-        let currently_starred = (self.state)().is_starred;
-        let bindings = self.bindings;
-        spawn(async move {
-            let outcome = execute_reader_page_effect(ReaderPageEffect::ToggleStarred {
-                entry_id,
-                currently_starred,
-                via_shortcut,
-            })
-            .await;
-            bindings.apply_runtime_outcome(outcome);
+        self.spawn_effect(ReaderPageEffect::ToggleStarred {
+            entry_id: self.entry_id,
+            currently_starred: (self.state)().is_starred,
+            via_shortcut,
         });
+    }
+
+    fn spawn_effect(self, effect: ReaderPageEffect) {
+        spawn(async move {
+            let outcome = execute_reader_page_effect(effect).await;
+            self.apply_runtime_outcome(outcome);
+        });
+    }
+
+    fn apply_runtime_outcome(self, outcome: super::runtime::ReaderPageRuntimeOutcome) {
+        self.bindings.apply_runtime_outcome(outcome);
     }
 }
 

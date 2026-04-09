@@ -86,27 +86,29 @@ pub(crate) fn reduce_feeds_page_intent(
             }
             Vec::new()
         }
-        FeedsPageIntent::CommandCompleted(outcome) => {
-            if let Some(next) = outcome.patch.feed_url {
-                state.feed_url = next;
-            }
-            if let Some(next) = outcome.patch.config_text {
-                state.config_text = next;
-            }
-            if let Some(next) = outcome.patch.opml_text {
-                state.opml_text = next;
-            }
-            if let Some(next) = outcome.patch.pending_config_import {
-                state.pending_config_import = next;
-            }
-            if let Some(next) = outcome.patch.pending_delete_feed {
-                state.pending_delete_feed = next;
-            }
-            state.status = outcome.status_message;
-            state.status_tone = outcome.status_tone.to_string();
-            if outcome.reload {
-                state.reload_tick += 1;
-            }
+        FeedsPageIntent::ConfigTextExported(raw) => {
+            state.config_text = raw;
+            Vec::new()
+        }
+        FeedsPageIntent::OpmlTextExported(raw) => {
+            state.opml_text = raw;
+            Vec::new()
+        }
+        FeedsPageIntent::PendingConfigImportSet(pending) => {
+            state.pending_config_import = pending;
+            Vec::new()
+        }
+        FeedsPageIntent::PendingDeleteFeedSet(pending) => {
+            state.pending_delete_feed = pending;
+            Vec::new()
+        }
+        FeedsPageIntent::SetStatus { message, tone } => {
+            state.status = message;
+            state.status_tone = tone;
+            Vec::new()
+        }
+        FeedsPageIntent::BumpReload => {
+            state.reload_tick += 1;
             Vec::new()
         }
         FeedsPageIntent::ClipboardReadCompleted(result) => {

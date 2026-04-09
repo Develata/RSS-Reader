@@ -22,9 +22,9 @@ pub(crate) async fn execute_feeds_page_effect(effect: FeedsPageEffect) -> FeedsP
                 load_feeds_page_snapshot().await.map_err(|err| err.to_string()),
             ))
         }
-        FeedsPageEffect::ExecuteCommand(command) => FeedsPageRuntimeOutcome::single(
-            FeedsPageIntent::CommandCompleted(execute_command(command).await),
-        ),
+        FeedsPageEffect::ExecuteCommand(command) => {
+            FeedsPageRuntimeOutcome { intents: execute_command(command).await }
+        }
         FeedsPageEffect::ReadFeedUrlFromClipboard => FeedsPageRuntimeOutcome::single(
             FeedsPageIntent::ClipboardReadCompleted(read_feed_url_from_clipboard().await),
         ),
