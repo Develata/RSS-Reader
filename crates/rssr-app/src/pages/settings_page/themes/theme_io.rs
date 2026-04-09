@@ -2,7 +2,7 @@ use crate::status::{set_status_error, set_status_info};
 use dioxus::prelude::*;
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::pages::settings_page::{save::SettingsPageSaveSession, session::SettingsPageSession};
+use crate::pages::settings_page::facade::SettingsPageFacade;
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
@@ -27,25 +27,23 @@ async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(super) fn import_css_file(session: SettingsPageSession, save_session: SettingsPageSaveSession) {
+pub(super) fn import_css_file(facade: &SettingsPageFacade) {
     use super::theme_apply::apply_custom_css_from_raw;
 
+    let facade = facade.clone();
     spawn(async move {
         match pick_css_file_contents().await {
-            Ok(Some(raw)) => apply_custom_css_from_raw(
-                session,
-                save_session,
-                raw,
-                "已从文件载入并应用自定义 CSS。",
-            ),
+            Ok(Some(raw)) => {
+                apply_custom_css_from_raw(&facade, raw, "已从文件载入并应用自定义 CSS。")
+            }
             Ok(None) => set_status_info(
-                session.status_signal(),
-                session.status_tone_signal(),
+                facade.status_signal(),
+                facade.status_tone_signal(),
                 "已取消载入 CSS 文件。",
             ),
             Err(err) => set_status_error(
-                session.status_signal(),
-                session.status_tone_signal(),
+                facade.status_signal(),
+                facade.status_tone_signal(),
                 format!("载入 CSS 文件失败：{err}"),
             ),
         }

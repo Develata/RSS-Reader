@@ -8,7 +8,7 @@ use crate::{
         themes::{detect_preset_key, validate_custom_css},
     },
     status::{set_status_error, set_status_info},
-    ui::{UiCommand, UiIntent, apply_projected_ui_intents, execute_ui_command},
+    ui::{UiCommand, UiIntent, apply_projected_ui_intents, spawn_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -50,40 +50,37 @@ impl SettingsPageSaveSession {
         let status_tone = self.page.status_tone_signal();
         let success_message = success_message.into();
 
-        spawn(async move {
-            let intents = execute_ui_command(UiCommand::SettingsSaveAppearance {
-                settings: next.clone(),
-                success_message,
-            })
-            .await;
-
-            state.with_mut(|state| state.pending_save = false);
-            let mut saved_settings = None;
-            let mut status_message = String::new();
-            apply_projected_ui_intents(
-                intents.clone(),
-                UiIntent::into_settings_page_intent,
-                |intent| match intent {
-                    SettingsPageIntent::SettingsLoaded(settings) => {
-                        saved_settings = Some(settings);
-                    }
-                    SettingsPageIntent::SetStatus { message, .. } => {
+        spawn_ui_command(
+            UiCommand::SettingsSaveAppearance { settings: next.clone(), success_message },
+            move |intents| {
+                state.with_mut(|state| state.pending_save = false);
+                let mut saved_settings = None;
+                let mut status_message = String::new();
+                apply_projected_ui_intents(
+                    intents.clone(),
+                    UiIntent::into_settings_page_intent,
+                    |intent| match intent {
+                        SettingsPageIntent::SettingsLoaded(settings) => {
+                            saved_settings = Some(settings);
+                        }
+                        SettingsPageIntent::SetStatus { message, .. } => {
+                            status_message = message;
+                        }
+                    },
+                );
+                for intent in intents {
+                    if let Some((message, _)) = intent.into_status() {
                         status_message = message;
                     }
-                },
-            );
-            for intent in intents {
-                if let Some((message, _)) = intent.into_status() {
-                    status_message = message;
                 }
-            }
-            if let Some(saved_settings) = saved_settings {
-                self.page.apply_loaded_settings(saved_settings);
-                set_status_info(status, status_tone, status_message);
-            } else {
-                self.page.restore_settings(previous, previous_preset);
-                set_status_error(status, status_tone, status_message);
-            }
-        });
+                if let Some(saved_settings) = saved_settings {
+                    self.page.apply_loaded_settings(saved_settings);
+                    set_status_info(status, status_tone, status_message);
+                } else {
+                    self.page.restore_settings(previous, previous_preset);
+                    set_status_error(status, status_tone, status_message);
+                }
+            },
+        );
     }
 }

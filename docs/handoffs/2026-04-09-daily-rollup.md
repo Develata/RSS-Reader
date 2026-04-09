@@ -439,6 +439,35 @@
   - `UiCommand` 的直接分发
 - 从结构上看，这一步比“引入全局总线”更重要，因为它真正去掉了“总线下面再藏一层 page-local runtime 适配器”的残余中间层。
 
+### 当日后续重构：feeds_page 收平到与其它页面同层
+
+- 在 `entries / reader / settings` 都已经去掉本地 `effect/runtime` 之后，继续把 `feeds_page` 也收平：
+  - 删除 `feeds_page/effect.rs`
+  - `reduce_feeds_page_intent(...)` 不再产出 `FeedsPageEffect`
+  - 现在直接产出 `UiCommand`
+  - `FeedsPageSession` 直接用 `spawn_projected_ui_command(...)` 分发命令并回灌 `FeedsPageIntent`
+- 这意味着 `feeds_page` 不再是“四个主页面里唯一还保留本地 runtime 壳层”的例外。
+- 剪贴板读取也已经被总线化：
+  - `UiCommand::FeedsReadFeedUrlFromClipboard`
+  - 由 `UiRuntime` 统一处理，再回灌 `FeedsPageIntent::FeedUrlChanged` 或错误状态
+- 做完这一步后，四个主页面的结构已经更接近同一形态：
+  - page-local session
+  - page-local reducer / intent（管理局部 UI 状态）
+  - 直接发 `UiCommand`
+  - `UiRuntime` 统一承接真实行为
+
+### 当日后续整理：ui helper 收口
+
+- 既然页面已经统一改成：
+  - `visit_ui_command`
+  - `collect_projected_ui_command`
+  - `spawn_projected_ui_command`
+  这三类主入口
+- 那么 helper 层里未被实际消费的：
+  - `spawn_visited_ui_command`
+  - `apply_projected_ui_command` 的公开 re-export
+  也一并清掉，避免总线刚建立就留下死 helper。
+
 ### 当前验证与限制补充
 
 - 本轮 UI 总线扩展后的验证：
@@ -1171,6 +1200,498 @@
 - `cargo fmt --all`：通过
 - `cargo check -p rssr-app`：通过
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `git diff --check`：通过
+
+## 追加：把页面生命周期编排继续收成通用 facade helper
+
+### 背景
+
+- 前几轮已经把页面的真实行为层并到 `UiRuntime`，但 `entries / reader / feeds / settings` 仍然各自在页面壳里写：
+  - `use_resource(use_reactive!(...))`
+  - `use_effect(use_reactive!(...))`
+- 这些代码虽然已经不直接碰 service，但仍然是重复的生命周期机械代码，不利于继续往“纯语义壳”推进。
+
+### 本轮变更
+
+- [ui/helpers.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/helpers.rs)
+  - 新增：
+    - `spawn_ui_command`
+    - `spawn_projected_ui_command`
+    - `use_reactive_task`
+    - `use_reactive_side_effect`
+  - 页面和子 session 不再自己包 `spawn(async move { ... })`，也不再到处散落 `use_resource/use_effect` 的样板。
+
+- [entries_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/session.rs)
+  - [reader_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/session.rs)
+  - [settings_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/session.rs)
+  - [feeds_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/session.rs)
+  - [settings_page/save/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/save/session.rs)
+  - [settings_page/sync/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/session.rs)
+  - 这些 session 现在统一通过 `ui/helpers` 发 bus，不再各自维护异步投影胶水。
+
+- 页面 workspace 入口也继续变薄：
+  - [entries_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)
+  - [reader_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/mod.rs)
+  - [feeds_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/mod.rs)
+  - [settings_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/mod.rs)
+  - 这些页面现在统一通过 `use_reactive_task/use_reactive_side_effect` 描述“需要哪些语义动作”，而不是直接写 hook 机械代码。
+
+### 当前判断
+
+- 这一步不是引入更大的抽象，而是把已经稳定下来的 page-local bus 样板继续集中。
+- 到这里，页面层比上一轮更接近：
+  - 语义 DOM
+  - 局部 state
+  - reducer
+  - 极薄的 session / facade
+- 下一轮如果要继续往前推，就可以开始考虑更明确的 `headless page facade model`，而不是先处理更多重复钩子。
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
+- `git diff --check`：通过
+
+## 追加：把 facade 从“对象打包层”推进成“动作口 + 快照边界”
+
+### 背景
+
+- 上一轮已经让 `entries / reader / feeds / settings` 都有了 facade，但大部分 facade 还只是：
+  - `session`
+  - `snapshot`
+  - `presenter`
+  的对象打包层。
+- 页面和 section 仍然容易直接伸手去拿底层 `session` 方法，这还不够像稳定的 headless interface。
+
+### 本轮变更
+
+- `reader_page`
+  - [facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/facade.rs)
+    - 新增动作口：
+      - `previous_action_target`
+      - `next_action_target`
+      - `toggle_read`
+      - `toggle_starred`
+  - [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/mod.rs)
+    - 底部阅读操作条已改成优先调 facade，而不是直接调 session
+
+- `feeds_page`
+  - [facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/facade.rs)
+    - 新增动作口：
+      - `set_feed_url`
+      - `set_config_text`
+      - `set_opml_text`
+      - `add_feed`
+      - `refresh_all`
+      - `export/import config`
+      - `export/import opml`
+      - `refresh_feed`
+      - `remove_feed`
+      - `paste_feed_url`
+      - `is_delete_pending_for`
+  - [sections/compose.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/compose.rs)
+  - [sections/config_exchange.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/config_exchange.rs)
+  - [sections/saved.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/saved.rs)
+    - 这些 section 现在优先消费 facade 动作口，不再显式依赖 `FeedsPageSession`
+
+- `settings_page`
+  - [facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/facade.rs)
+    - 新增动作口和只读入口：
+      - `draft_signal`
+      - `preset_choice_signal`
+      - `status`
+      - `status_tone`
+      - `status_signal`
+      - `status_tone_signal`
+      - `open_repository`
+      - `save`
+      - `save_with_message`
+      - `pending_save`
+      - `set_endpoint`
+      - `set_remote_path`
+      - `push`
+      - `pull`
+  - [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/mod.rs)
+    - 根页面开始直接走 facade 的状态与动作口
+  - [appearance.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/appearance.rs)
+  - [sync/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/mod.rs)
+    - 卡片层现在优先调用 facade
+  - [themes/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/mod.rs)
+  - [themes/lab.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/lab.rs)
+  - [themes/presets.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/presets.rs)
+  - [themes/theme_apply.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/theme_apply.rs)
+  - [themes/theme_io.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/theme_io.rs)
+    - 主题相关动作已经从“显式拿 page/save session”收成“先走 facade，再由 facade 落到页面底层句柄”
+
+### 当前判断
+
+- 到这里，facade 已经不只是 page-local workspace 的包装器，而开始具备真正的外部边界价值：
+  - section / card / page 先看 facade
+  - facade 暴露快照与动作口
+  - session 继续向内退居为实现细节
+- 这比前一轮更接近你要的：
+  - `headless active interface`
+  - 页面是默认语义壳
+  - bus/runtime/infra 承担真实行为
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `git diff --check`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
+
+## 追加：起第一版 headless page facade model
+
+### 背景
+
+- 前几轮已经把页面真实行为收进 `UiRuntime`，也把生命周期和 bus 投影样板集中到了 `ui/helpers`。
+- 但 `entries / reader / feeds` 页面本身仍然在消费：
+  - `session`
+  - `snapshot`
+  - `presenter`
+  这类分散对象，页面壳依旧在自己拼 view model。
+
+### 本轮变更
+
+- `entries_page`
+  - 新增 [facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/facade.rs)
+  - [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)
+    - workspace 现在直接返回 `EntriesPageFacade`
+    - 页面本身不再自己组装 `session + state_snapshot + presenter`
+  - [controls.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/controls.rs)
+    - 控制区开始直接消费 `EntriesPageFacade`
+
+- `reader_page`
+  - 新增 [facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/facade.rs)
+  - [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/mod.rs)
+    - workspace 现在直接返回 `ReaderPageFacade`
+
+- `feeds_page`
+  - 新增 [facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/facade.rs)
+  - [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/mod.rs)
+    - workspace 现在直接返回 `FeedsPageFacade`
+  - [sections/compose.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/compose.rs)
+  - [sections/config_exchange.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/config_exchange.rs)
+  - [sections/saved.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/saved.rs)
+    - section 不再各自回头从 session 读快照，而是消费 facade 的只读数据 + 动作口
+
+### 当前判断
+
+- 这一步还不是最终的统一 page facade 框架，但已经把最成熟的三个页面推进到了：
+  - workspace 返回明确 facade
+  - 页面/section 优先消费 facade
+  - 本地 session 继续退居动作口
+- 这比之前更接近：
+  - 语义壳
+  - facade/view model
+  - bus/runtime/infra 承担真实行为
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `git diff --check`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
+
+## 追加：把 settings_page 也纳入组合式 facade
+
+### 背景
+
+- `entries / reader / feeds` 已经起了第一版 facade，但 `settings_page` 仍然由根页面把：
+  - `page session`
+  - `save session`
+  - `sync session`
+  分散交给各个卡片。
+- 这会让组合页继续成为例外，不利于把四个主页面都统一到“页面暴露 facade、行为沉到 bus/runtime”的模型里。
+
+### 本轮变更
+
+- 新增 [facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/facade.rs)
+  - `SettingsPageFacade`
+  - 统一承载：
+    - `page`
+    - `save`
+    - `save_snapshot`
+    - `sync`
+    - `sync_snapshot`
+
+- [settings_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/mod.rs)
+  - 根页面现在统一组装 `SettingsPageFacade`
+  - 再把 facade 分发给各卡片
+
+- [appearance.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/appearance.rs)
+  - 不再自己创建 save session，而是直接消费 facade
+
+- [sync/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/mod.rs)
+  - 不再自己创建 sync session，而是直接消费 facade
+
+### 当前判断
+
+- 到这里，四个主页面都已经具备了“workspace 返回/暴露 page facade”的趋势。
+- `settings_page` 仍然是组合页，但不再是架构例外；它只是组合式 facade，而不是散落的多个本地工作台。
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `git diff --check`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
+
+## 追加：收口启动型多投影场景
+
+### 背景
+
+- 上一轮已经把页面 session 的 bus 投影样板收到了统一 helper。
+- 但 `StartupPage` 这种启动型场景仍然需要对同一批 intents 做双重处理：
+  - 处理 startup route
+  - 处理 fallback status
+- 这类场景不适合简单套 `collect_projected_ui_command`，否则会重复执行命令。
+
+### 本轮变更
+
+- [ui/helpers.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/helpers.rs) 新增 `visit_ui_command`
+  - 语义是：
+    - 单次执行 `UiCommand`
+    - 顺序访问每个 `UiIntent`
+    - 由调用方自行决定多投影处理
+- [ui/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/mod.rs) 已导出该 helper
+- [entries_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs) 的 `StartupPage` 改成使用 `visit_ui_command`
+  - 不再直接碰 `execute_ui_command`
+  - 但仍保留 route/status 的双重处理逻辑
+
+### 当前判断
+
+- 到这里，`StartupPage` 这种启动壳也已经被统一纳入 bus helper 体系。
+- 页面层直接触碰 `execute_ui_command` 的必要性进一步下降。
+- 这一步的重点不是新增能力，而是把“多投影但单次执行”的启动场景也收进统一心智模型。
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
+- `git diff --check`：通过
+
+## 追加：把 WebAuthGate 与 AppNav 交互继续迁入 ui/shell
+
+### 背景
+
+- 在引入 `AppShellState` 与 shell facade 后，根组件里仍然保留两类明显的壳交互实现：
+  - `AppNav` 的搜索提交、搜索聚焦、导航显隐交互
+  - `WebAuthGate` 的表单状态、默认用户名填充、登录/初始化提交
+- 这些都属于 UI shell boundary，不应该继续散在 `app.rs`。
+
+### 本轮变更
+
+- [ui/shell.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/shell.rs)
+  - `AppShellState` 新增：
+    - `submit_search`
+    - `focus_search`
+  - 新增：
+    - `WebAuthGateShell`
+    - `use_web_auth_gate_shell`
+  - `WebAuthGateShell` 现在负责：
+    - username/password/status/status_tone
+    - 默认用户名填充
+    - `NeedsSetup/NeedsLogin` 提交逻辑
+    - 登录成功后的过渡处理
+- [ui/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/mod.rs)
+  - 导出 `use_web_auth_gate_shell`
+- [app.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/app.rs)
+  - `AppNav` 不再自己决定：
+    - 搜索提交跳转
+    - 搜索框 focus 跳转
+    - 导航显隐副作用
+  - `WebAuthGate` 不再自己维护：
+    - username/password/status/status_tone
+    - 默认用户名 effect
+    - setup/login 提交流程
+  - 这些现在都改成消费 `ui/shell` 暴露的壳状态与壳方法
+
+### 当前判断
+
+- 到这里，`app.rs` 已经更接近真正的根壳：
+  - theme provider
+  - shell provider
+  - shell facade 挂载
+  - 语义渲染分支
+- `ui/shell` 现在已经承接：
+  - 全局壳状态
+  - 启动/认证壳 facade
+  - 顶部导航/搜索壳交互
+  - Web 本地认证壳交互
+- 这说明当前架构已经不只是 page-local runtime 收口，而是开始形成更完整的 shell boundary。
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
+- `git diff --check`：通过
+
+## 追加：把 WebAuthGate 与 AppNav 交互迁入 ui/shell
+
+### 背景
+
+- 在引入 `AppShellState` 和 shell facade 后，根组件里仍然保留两块明显的壳交互实现：
+  - `AppNav` 的搜索提交、搜索聚焦、顶部导航显隐交互
+  - `WebAuthGate` 的用户名/密码表单状态、默认用户名填充、登录/初始化提交
+- 这些都不属于页面业务，也不应该继续散在 `app.rs` 里。
+
+### 本轮变更
+
+- [ui/shell.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/shell.rs)
+  - `AppShellState` 新增：
+    - `submit_search`
+    - `focus_search`
+  - 新增：
+    - `WebAuthGateShell`
+    - `use_web_auth_gate_shell`
+  - `WebAuthGateShell` 现在负责：
+    - 用户名/密码 signal
+    - 默认用户名填充
+    - 状态文案与 tone
+    - `NeedsSetup/NeedsLogin` 的提交逻辑
+    - 登录成功后的过渡处理
+- [app.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/app.rs)
+  - `AppNav` 不再自己决定：
+    - 搜索提交跳转
+    - 搜索框 focus 时跳转
+    - 导航显隐副作用
+  - `WebAuthGate` 不再自己维护：
+    - username/password/status/status_tone
+    - 默认用户名 effect
+    - setup/login 提交流程
+  - 这些现在都改成消费 `ui/shell` 暴露的壳方法与壳状态
+- [entries_page/controls.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/controls.rs)
+  - 继续通过 `AppShellState` 统一读写全局搜索词
+
+### 当前判断
+
+- 到这里，`app.rs` 已经更接近真正的根壳：
+  - provider
+  - shell facade 挂载
+  - 语义渲染分支
+- `ui/shell` 已经开始承接三类职责：
+  - 全局壳状态
+  - 启动/认证壳 facade
+  - 顶部导航/搜索这类全局壳交互
+- 这说明当前架构已经从“页面 local runtime 收口”进入了更明确的：
+  - shell boundary 收口
+  - command/query/runtime facade 收口
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
+- `git diff --check`：通过
+
+## 追加：把全局壳状态迁入 ui/shell
+
+### 背景
+
+- 在引入 shell facade 之后，`App()` 仍然自己持有一组全局壳状态实现：
+  - 全局搜索词
+  - 顶部导航显隐
+  - localStorage 持久化
+- 这些状态虽然不是业务状态，但仍属于 UI shell boundary，不应该继续留在根组件里。
+
+### 本轮变更
+
+- [ui/shell.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/shell.rs) 现在新增：
+  - `AppShellState`
+  - `use_app_shell_state`
+  - `entry_search / nav_hidden` 的 localStorage 持久化实现
+  - `set_entry_search / show_nav / hide_nav` 等壳层方法
+- [ui/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/mod.rs) 已导出：
+  - `AppShellState`
+  - `use_app_shell_state`
+- [app.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/app.rs)
+  - 删除原本的：
+    - `AppUiState`
+    - `initial_entry_search`
+    - `remember_entry_search`
+    - `initial_nav_hidden`
+    - `remember_nav_hidden`
+  - 现在直接：
+    - `let shell = use_app_shell_state();`
+    - `use_context_provider(|| shell);`
+  - `AppNav` 也改成只消费 `AppShellState`
+- [entries_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)
+  - workspace 读取搜索词改成消费 `AppShellState`
+- [entries_page/controls.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/controls.rs)
+  - `EntryFilters` 的搜索输入也改成通过 `AppShellState` 的壳层方法更新
+
+### 当前判断
+
+- 到这里，根组件已经不再自己保存“全局壳状态实现细节”。
+- `App()` 更接近：
+  - 提供 theme context
+  - 提供 shell context
+  - 挂载 shell bus
+  - 输出语义 DOM
+- 这一步对 `headless active interface + CSS 完全分离 + infra` 很关键，因为它继续把：
+  - 页面结构
+  - 壳状态
+  - 行为调度
+  分别往更稳定的边界收。
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
+- `git diff --check`：通过
+
+## 追加：收口入口壳层的 shell facade
+
+### 背景
+
+- 在 `visit_ui_command` 之后，`StartupPage` 和 `App()` 虽然已经不再直接碰 service，但仍然各自手写一段启动资源逻辑：
+  - 认证壳负责 server gate + authenticated shell hydrate
+  - 启动页负责 startup route + fallback status
+- 这些都属于更高一层的 UI shell boundary，不应该继续散在页面/根组件里。
+
+### 本轮变更
+
+- 新增 [ui/shell.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/shell.rs)
+  - `use_authenticated_shell_bus`
+  - `use_startup_route_bus`
+- [ui/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/mod.rs) 已导出上述 shell helper
+- [app.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/app.rs)
+  - 根组件现在直接挂 `use_authenticated_shell_bus(auth, settings)`
+  - 不再自己维护认证探测后的 shell hydrate 流程
+- [entries_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)
+  - `StartupPage` 现在直接挂 `use_startup_route_bus(...)`
+  - 不再自己持有 startup route 解析 resource
+
+### 当前判断
+
+- 到这里，`App()` 与 `StartupPage` 都已经从“手写启动壳逻辑”进一步退化成“挂载 shell facade”的入口。
+- 页面和根组件继续朝：
+  - 语义壳
+  - bus facade
+  - CSS 呈现层
+ 这条线推进。
+- `ui` 层现在已经不只是命令与 snapshot，还开始承担明确的 shell boundary。
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
 - `git diff --check`：通过
 
 ## 追加：收口页面 session 的 bus 投影 helper

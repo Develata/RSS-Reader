@@ -1,5 +1,4 @@
-use crate::pages::settings_page::save::SettingsPageSaveSession;
-use crate::pages::settings_page::session::SettingsPageSession;
+use crate::pages::settings_page::facade::SettingsPageFacade;
 use dioxus::prelude::*;
 
 use super::{theme_apply::apply_custom_css_from_raw, theme_io::export_css_file};
@@ -11,10 +10,15 @@ use super::theme_io::import_css_file;
 use super::theme_io::trigger_css_file_input_in_browser;
 
 #[component]
-pub(super) fn ThemeLabSection(
-    session: SettingsPageSession,
-    save_session: SettingsPageSaveSession,
-) -> Element {
+pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
+    let draft_signal = facade.draft_signal();
+    #[cfg(target_arch = "wasm32")]
+    let import_file_facade = facade.clone();
+    let import_trigger_facade = facade.clone();
+    let input_facade = facade.clone();
+    let apply_facade = facade.clone();
+    let export_facade = facade.clone();
+
     #[cfg(target_arch = "wasm32")]
     let file_import_input = rsx! {
         input {
@@ -27,18 +31,18 @@ pub(super) fn ThemeLabSection(
                 let Some(file) = event.files().into_iter().next() else {
                     return;
                 };
+                let import_facade = import_file_facade.clone();
 
                 spawn(async move {
                     match file.read_string().await {
                         Ok(raw) => apply_custom_css_from_raw(
-                            session,
-                            save_session,
+                            &import_facade,
                             raw,
                             "已从文件载入并应用自定义 CSS。",
                         ),
                         Err(err) => crate::status::set_status_error(
-                            session.status_signal(),
-                            session.status_tone_signal(),
+                            import_facade.status_signal(),
+                            import_facade.status_tone_signal(),
                             format!("载入 CSS 文件失败：{err}"),
                         ),
                     }
@@ -58,8 +62,8 @@ pub(super) fn ThemeLabSection(
             onclick: move |_| {
                 if let Err(err) = trigger_css_file_input_in_browser() {
                     crate::status::set_status_error(
-                        session.status_signal(),
-                        session.status_tone_signal(),
+                        import_trigger_facade.status_signal(),
+                        import_trigger_facade.status_tone_signal(),
                         format!("载入 CSS 文件失败：{err}"),
                     );
                 }
@@ -74,10 +78,7 @@ pub(super) fn ThemeLabSection(
             class: "button secondary",
             "data-action": "import-custom-css-file",
             onclick: move |_| {
-                import_css_file(
-                    session,
-                    save_session,
-                );
+                import_css_file(&import_trigger_facade);
             },
             "导入主题文件"
         }
@@ -94,15 +95,15 @@ pub(super) fn ThemeLabSection(
                 name: "custom_css",
                 class: "text-area",
                 "data-field": "custom-css",
-                value: "{session.draft()().custom_css}",
+                value: "{draft_signal().custom_css}",
                 placeholder: "[data-page=\"reader\"] .reader-body {{ max-width: 72ch; }}",
                 oninput: move |event| {
-                    let mut next = session.draft()();
+                    let mut draft = input_facade.draft_signal();
+                    let mut preset_choice = input_facade.preset_choice_signal();
+                    let mut next = draft();
                     next.custom_css = event.value();
-                    session
-                        .preset_choice()
-                        .set(super::detect_preset_key(&next.custom_css).to_string());
-                    session.draft().set(next);
+                    preset_choice.set(super::detect_preset_key(&next.custom_css).to_string());
+                    draft.set(next);
                 }
             }
             div { class: "inline-actions settings-card__actions",
@@ -112,9 +113,8 @@ pub(super) fn ThemeLabSection(
                     "data-action": "apply-custom-css",
                     onclick: move |_| {
                         apply_custom_css_from_raw(
-                            session,
-                            save_session,
-                            session.draft()().custom_css,
+                            &apply_facade,
+                            apply_facade.draft_signal()().custom_css,
                             "已应用当前输入框中的自定义 CSS。",
                         );
                     },
@@ -125,9 +125,9 @@ pub(super) fn ThemeLabSection(
                     "data-action": "export-custom-css-file",
                     onclick: move |_| {
                         export_css_file(
-                            session.draft()().custom_css,
-                            session.status_signal(),
-                            session.status_tone_signal(),
+                            export_facade.draft_signal()().custom_css,
+                            export_facade.status_signal(),
+                            export_facade.status_tone_signal(),
                         );
                     },
                     "导出当前 CSS"

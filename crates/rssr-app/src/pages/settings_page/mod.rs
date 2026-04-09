@@ -1,4 +1,5 @@
 mod appearance;
+mod facade;
 pub(crate) mod intent;
 mod preferences;
 mod save;
@@ -9,11 +10,16 @@ mod themes;
 use dioxus::prelude::*;
 
 use self::{
-    appearance::AppearanceSettingsCard, session::SettingsPageSession, sync::WebDavSettingsCard,
+    appearance::AppearanceSettingsCard,
+    facade::SettingsPageFacade,
+    save::{SettingsPageSaveSession, SettingsPageSaveState},
+    session::SettingsPageSession,
+    sync::{SettingsPageSyncSession, SettingsPageSyncState, WebDavSettingsCard},
 };
 use crate::{
     app::AppNav, components::status_banner::StatusBanner,
     hooks::use_mobile_back_navigation::use_mobile_back_navigation, theme::ThemeController,
+    ui::use_reactive_task,
 };
 
 #[component]
@@ -22,8 +28,20 @@ pub fn SettingsPage() -> Element {
 
     let theme = use_context::<ThemeController>();
     let session = SettingsPageSession::new(theme);
+    let save_state = use_signal(SettingsPageSaveState::new);
+    let save_session = SettingsPageSaveSession::new(save_state, session);
+    let sync_state = use_signal(SettingsPageSyncState::new);
+    let sync_session = SettingsPageSyncSession::new(sync_state, session);
+    let facade = SettingsPageFacade::new(
+        session,
+        save_session,
+        save_session.snapshot(),
+        sync_session,
+        sync_session.snapshot(),
+    );
+    let repository_facade = facade.clone();
 
-    use_resource(move || async move {
+    use_reactive_task((), move |_| {
         session.load();
     });
 
@@ -38,7 +56,7 @@ pub fn SettingsPage() -> Element {
                     r#type: "button",
                     aria_label: "打开项目 GitHub 仓库",
                     title: "打开项目 GitHub 仓库",
-                    onclick: move |_| session.open_repository(),
+                    onclick: move |_| repository_facade.open_repository(),
                     svg {
                         xmlns: "http://www.w3.org/2000/svg",
                         view_box: "0 0 24 24",
@@ -52,10 +70,10 @@ pub fn SettingsPage() -> Element {
                     }
                 }
             }
-            StatusBanner { message: session.status(), tone: session.status_tone() }
+            StatusBanner { message: facade.status(), tone: facade.status_tone() }
             div { class: "settings-grid",
-                AppearanceSettingsCard { session }
-                WebDavSettingsCard { session }
+                AppearanceSettingsCard { facade: facade.clone() }
+                WebDavSettingsCard { facade }
             }
         }
     }

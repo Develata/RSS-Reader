@@ -3,14 +3,16 @@ mod state;
 
 use dioxus::prelude::*;
 
-use self::{session::SettingsPageSyncSession, state::SettingsPageSyncState};
-use super::session::SettingsPageSession;
+pub(crate) use self::session::SettingsPageSyncSession;
+pub(crate) use self::state::SettingsPageSyncState;
+use super::facade::SettingsPageFacade;
 
 #[component]
-pub(crate) fn WebDavSettingsCard(session: SettingsPageSession) -> Element {
-    let state = use_signal(SettingsPageSyncState::new);
-    let sync_session = SettingsPageSyncSession::new(state, session);
-    let snapshot = sync_session.snapshot();
+pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
+    let snapshot = facade.sync_snapshot.clone();
+    let endpoint_facade = facade.clone();
+    let remote_path_facade = facade.clone();
+    let push_facade = facade.clone();
 
     rsx! {
         div { class: "settings-card",
@@ -31,7 +33,7 @@ pub(crate) fn WebDavSettingsCard(session: SettingsPageSession) -> Element {
                             "data-field": "webdav-endpoint",
                             value: "{snapshot.endpoint}",
                             placeholder: "https://dav.example.com/base/",
-                            oninput: move |event| sync_session.set_endpoint(event.value())
+                            oninput: move |event| endpoint_facade.set_endpoint(event.value())
                         }
                     }
                     div {
@@ -43,7 +45,7 @@ pub(crate) fn WebDavSettingsCard(session: SettingsPageSession) -> Element {
                             "data-field": "webdav-remote-path",
                             value: "{snapshot.remote_path}",
                             placeholder: "config/rss-reader.json",
-                            oninput: move |event| sync_session.set_remote_path(event.value())
+                            oninput: move |event| remote_path_facade.set_remote_path(event.value())
                         }
                     }
                 }
@@ -56,7 +58,7 @@ pub(crate) fn WebDavSettingsCard(session: SettingsPageSession) -> Element {
                     button {
                         class: "button secondary",
                         "data-action": "push-webdav",
-                        onclick: move |_| sync_session.push(),
+                        onclick: move |_| push_facade.push(),
                         "上传配置"
                     }
                     button {
@@ -66,7 +68,7 @@ pub(crate) fn WebDavSettingsCard(session: SettingsPageSession) -> Element {
                             "button secondary"
                         },
                         "data-action": "pull-webdav",
-                        onclick: move |_| sync_session.pull(),
+                        onclick: move |_| facade.pull(),
                         if snapshot.pending_remote_pull { "确认下载并覆盖" } else { "下载配置" }
                     }
                 }
