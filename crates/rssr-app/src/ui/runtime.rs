@@ -15,20 +15,12 @@ use crate::{
     },
 };
 use anyhow::Context;
+#[cfg(target_arch = "wasm32")]
+use dioxus::prelude::document;
 use rssr_domain::EntryQuery;
 use rssr_domain::StartupView;
 
-pub(crate) struct UiRuntimeOutcome {
-    pub(crate) intents: Vec<UiIntent>,
-}
-
-impl UiRuntimeOutcome {
-    fn single(intent: UiIntent) -> Self {
-        Self { intents: vec![intent] }
-    }
-}
-
-pub(crate) async fn execute_ui_command(command: UiCommand) -> UiRuntimeOutcome {
+pub(crate) async fn execute_ui_command(command: UiCommand) -> Vec<UiIntent> {
     match command {
         UiCommand::LoadAuthenticatedShell => match AppServices::shared().await {
             Ok(services) => {
@@ -37,9 +29,7 @@ pub(crate) async fn execute_ui_command(command: UiCommand) -> UiRuntimeOutcome {
                     Err(err) => return status_error(format!("读取设置失败：{err}")),
                 };
                 services.ensure_auto_refresh_started();
-                UiRuntimeOutcome::single(UiIntent::AuthenticatedShellLoaded(
-                    AuthenticatedShellSnapshot { settings },
-                ))
+                vec![UiIntent::AuthenticatedShellLoaded(AuthenticatedShellSnapshot { settings })]
             }
             Err(err) => status_error(format!("初始化应用失败：{err}")),
         },
@@ -71,9 +61,7 @@ pub(crate) async fn execute_ui_command(command: UiCommand) -> UiRuntimeOutcome {
                     }
                 };
 
-                UiRuntimeOutcome::single(UiIntent::StartupRouteResolved(StartupRouteSnapshot {
-                    route,
-                }))
+                vec![UiIntent::StartupRouteResolved(StartupRouteSnapshot { route })]
             }
             Err(err) => resolve_with_fallback(format!("初始化应用失败：{err}")),
         },
@@ -107,16 +95,14 @@ pub(crate) async fn execute_ui_command(command: UiCommand) -> UiRuntimeOutcome {
                         }
                     }
 
-                    UiRuntimeOutcome { intents }
+                    intents
                 }
                 Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
             }
         }
         UiCommand::EntriesLoadEntries { query } => match AppServices::shared().await {
             Ok(services) => match services.list_entries(&query).await {
-                Ok(entries) => UiRuntimeOutcome {
-                    intents: vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries(entries))],
-                },
+                Ok(entries) => vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries(entries))],
                 Err(err) => entries_status_error(format!("读取文章失败：{err}")),
             },
             Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
@@ -175,7 +161,7 @@ pub(crate) async fn execute_ui_command(command: UiCommand) -> UiRuntimeOutcome {
                         || settings.entry_filtered_feed_urls != selected_feed_urls;
 
                     if !changed {
-                        return UiRuntimeOutcome { intents: Vec::new() };
+                        return Vec::new();
                     }
 
                     settings.entry_grouping_mode = grouping_mode;
@@ -185,7 +171,7 @@ pub(crate) async fn execute_ui_command(command: UiCommand) -> UiRuntimeOutcome {
                     settings.entry_filtered_feed_urls = selected_feed_urls;
 
                     match services.save_settings(&settings).await {
-                        Ok(()) => UiRuntimeOutcome { intents: Vec::new() },
+                        Ok(()) => Vec::new(),
                         Err(err) => entries_status_error(format!("保存文章页偏好失败：{err}")),
                     }
                 }
@@ -235,7 +221,7 @@ pub(crate) async fn execute_ui_command(command: UiCommand) -> UiRuntimeOutcome {
                         Some(err.to_string()),
                     ))),
                 }
-                UiRuntimeOutcome { intents }
+                intents
             }
             Err(err) => reader_status_error(format!("初始化应用失败：{err}")),
         },
@@ -474,6 +460,11 @@ pub(crate) async fn execute_ui_command(command: UiCommand) -> UiRuntimeOutcome {
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
+        UiCommand::FeedsReadFeedUrlFromClipboard => match read_feed_url_from_clipboard().await {
+            Ok(Some(text)) => feeds_intents(vec![FeedsPageIntent::FeedUrlChanged(text)]),
+            Ok(None) => Vec::new(),
+            Err(err) => feeds_status_error(format!("读取系统剪贴板失败：{err}")),
+        },
         UiCommand::SettingsLoad => match AppServices::shared().await {
             Ok(services) => match services.load_settings().await {
                 Ok(settings) => {
@@ -535,64 +526,77 @@ pub(crate) async fn execute_ui_command(command: UiCommand) -> UiRuntimeOutcome {
     }
 }
 
-fn status_error(message: impl Into<String>) -> UiRuntimeOutcome {
-    UiRuntimeOutcome::single(UiIntent::SetStatus {
-        message: message.into(),
-        tone: "error".to_string(),
-    })
+fn status_error(message: impl Into<String>) -> Vec<UiIntent> {
+    vec![UiIntent::SetStatus { message: message.into(), tone: "error".to_string() }]
 }
 
-fn resolve_with_fallback(message: impl Into<String>) -> UiRuntimeOutcome {
-    UiRuntimeOutcome {
-        intents: vec![
-            UiIntent::SetStatus { message: message.into(), tone: "error".to_string() },
-            UiIntent::StartupRouteResolved(StartupRouteSnapshot {
-                route: AppRoute::EntriesPage {},
-            }),
-        ],
-    }
+fn resolve_with_fallback(message: impl Into<String>) -> Vec<UiIntent> {
+    vec![
+        UiIntent::SetStatus { message: message.into(), tone: "error".to_string() },
+        UiIntent::StartupRouteResolved(StartupRouteSnapshot { route: AppRoute::EntriesPage {} }),
+    ]
 }
 
-fn entries_intents(intents: Vec<EntriesPageIntent>) -> UiRuntimeOutcome {
-    UiRuntimeOutcome { intents: intents.into_iter().map(UiIntent::EntriesPage).collect() }
+fn entries_intents(intents: Vec<EntriesPageIntent>) -> Vec<UiIntent> {
+    intents.into_iter().map(UiIntent::EntriesPage).collect()
 }
 
-fn entries_status_error(message: impl Into<String>) -> UiRuntimeOutcome {
+fn entries_status_error(message: impl Into<String>) -> Vec<UiIntent> {
     entries_intents(vec![EntriesPageIntent::SetStatus {
         message: message.into(),
         tone: "error".to_string(),
     }])
 }
 
-fn reader_intents(intents: Vec<ReaderPageIntent>) -> UiRuntimeOutcome {
-    UiRuntimeOutcome { intents: intents.into_iter().map(UiIntent::ReaderPage).collect() }
+fn reader_intents(intents: Vec<ReaderPageIntent>) -> Vec<UiIntent> {
+    intents.into_iter().map(UiIntent::ReaderPage).collect()
 }
 
-fn reader_status_error(message: impl Into<String>) -> UiRuntimeOutcome {
+fn reader_status_error(message: impl Into<String>) -> Vec<UiIntent> {
     reader_intents(vec![ReaderPageIntent::SetStatus {
         message: message.into(),
         tone: "error".to_string(),
     }])
 }
 
-fn feeds_intents(intents: Vec<FeedsPageIntent>) -> UiRuntimeOutcome {
-    UiRuntimeOutcome { intents: intents.into_iter().map(UiIntent::FeedsPage).collect() }
+fn feeds_intents(intents: Vec<FeedsPageIntent>) -> Vec<UiIntent> {
+    intents.into_iter().map(UiIntent::FeedsPage).collect()
 }
 
-fn feeds_status_error(message: impl Into<String>) -> UiRuntimeOutcome {
+fn feeds_status_error(message: impl Into<String>) -> Vec<UiIntent> {
     feeds_intents(vec![FeedsPageIntent::SetStatus {
         message: message.into(),
         tone: "error".to_string(),
     }])
 }
 
-fn settings_intents(intents: Vec<SettingsPageIntent>) -> UiRuntimeOutcome {
-    UiRuntimeOutcome { intents: intents.into_iter().map(UiIntent::SettingsPage).collect() }
+fn settings_intents(intents: Vec<SettingsPageIntent>) -> Vec<UiIntent> {
+    intents.into_iter().map(UiIntent::SettingsPage).collect()
 }
 
-fn settings_status_error(message: impl Into<String>) -> UiRuntimeOutcome {
+fn settings_status_error(message: impl Into<String>) -> Vec<UiIntent> {
     settings_intents(vec![SettingsPageIntent::SetStatus {
         message: message.into(),
         tone: "error".to_string(),
     }])
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn read_feed_url_from_clipboard() -> Result<Option<String>, String> {
+    document::eval(
+        r#"
+        if (typeof navigator === "undefined" || !navigator.clipboard || !navigator.clipboard.readText) {
+            return null;
+        }
+        return navigator.clipboard.readText();
+        "#,
+    )
+    .join::<Option<String>>()
+    .await
+    .map_err(|err| err.to_string())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn read_feed_url_from_clipboard() -> Result<Option<String>, String> {
+    Err("当前平台不支持从系统剪贴板读取订阅地址".to_string())
 }

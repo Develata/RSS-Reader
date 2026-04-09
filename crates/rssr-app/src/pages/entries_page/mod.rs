@@ -1,11 +1,9 @@
 mod cards;
 mod controls;
-mod effect;
 mod groups;
 pub(crate) mod intent;
 mod presenter;
 mod reducer;
-mod runtime;
 mod session;
 mod state;
 
@@ -24,7 +22,7 @@ use crate::{
     hooks::use_mobile_back_navigation::use_mobile_back_navigation,
     router::AppRoute,
     status::set_status_error,
-    ui::{UiCommand, UiIntent, execute_ui_command},
+    ui::{UiCommand, execute_ui_command},
 };
 
 #[component]
@@ -34,25 +32,18 @@ pub fn StartupPage() -> Element {
     let mut status_tone = use_signal(|| "info".to_string());
 
     use_resource(move || async move {
-        let outcome = execute_ui_command(UiCommand::ResolveStartupRoute).await;
-        for intent in outcome.intents {
-            match intent {
-                UiIntent::StartupRouteResolved(snapshot) => {
-                    let _ = navigator.replace(snapshot.route);
+        for intent in execute_ui_command(UiCommand::ResolveStartupRoute).await {
+            if let Some(snapshot) = intent.clone().into_startup_route_resolved() {
+                let _ = navigator.replace(snapshot.route);
+                continue;
+            }
+            if let Some((message, tone)) = intent.into_status() {
+                if tone == "error" {
+                    set_status_error(status, status_tone, message);
+                } else {
+                    status_tone.set(tone);
+                    status.set(message);
                 }
-                UiIntent::SetStatus { message, tone } => {
-                    if tone == "error" {
-                        set_status_error(status, status_tone, message);
-                    } else {
-                        status_tone.set(tone);
-                        status.set(message);
-                    }
-                }
-                UiIntent::AuthenticatedShellLoaded(_)
-                | UiIntent::EntriesPage(_)
-                | UiIntent::FeedsPage(_)
-                | UiIntent::ReaderPage(_)
-                | UiIntent::SettingsPage(_) => {}
             }
         }
     });

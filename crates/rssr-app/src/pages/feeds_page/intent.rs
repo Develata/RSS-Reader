@@ -29,5 +29,4 @@ pub(crate) enum FeedsPageIntent {
     PendingDeleteFeedSet(Option<i64>),
     SetStatus { message: String, tone: String },
     BumpReload,
-    ClipboardReadCompleted(Result<Option<String>, String>),
 }

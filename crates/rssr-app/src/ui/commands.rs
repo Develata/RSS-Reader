@@ -65,6 +65,7 @@ pub(crate) enum UiCommand {
     FeedsImportOpml {
         raw: String,
     },
+    FeedsReadFeedUrlFromClipboard,
     SettingsLoad,
     SettingsSaveAppearance {
         settings: UserSettings,

@@ -1,16 +1,14 @@
 use dioxus::prelude::*;
 
+use super::state::SettingsPageSaveState;
 use crate::{
     pages::settings_page::{
+        intent::SettingsPageIntent,
         session::SettingsPageSession,
         themes::{detect_preset_key, validate_custom_css},
     },
     status::{set_status_error, set_status_info},
-};
-
-use super::{
-    effect::SettingsPageSaveEffect, runtime::execute_settings_page_save_effect,
-    state::SettingsPageSaveState,
+    ui::{UiCommand, execute_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -53,20 +51,35 @@ impl SettingsPageSaveSession {
         let success_message = success_message.into();
 
         spawn(async move {
-            let outcome =
-                execute_settings_page_save_effect(SettingsPageSaveEffect::SaveAppearance {
-                    settings: next.clone(),
-                    success_message,
-                })
-                .await;
+            let intents = execute_ui_command(UiCommand::SettingsSaveAppearance {
+                settings: next.clone(),
+                success_message,
+            })
+            .await;
 
             state.with_mut(|state| state.pending_save = false);
-            if let Some(saved_settings) = outcome.saved_settings {
+            let mut saved_settings = None;
+            let mut status_message = String::new();
+            for intent in intents {
+                if let Some(intent) = intent.clone().into_settings_page_intent() {
+                    match intent {
+                        SettingsPageIntent::SettingsLoaded(settings) => {
+                            saved_settings = Some(settings);
+                        }
+                        SettingsPageIntent::SetStatus { message, .. } => {
+                            status_message = message;
+                        }
+                    }
+                } else if let Some((message, _)) = intent.into_status() {
+                    status_message = message;
+                }
+            }
+            if let Some(saved_settings) = saved_settings {
                 self.page.apply_loaded_settings(saved_settings);
-                set_status_info(status, status_tone, outcome.status_message);
+                set_status_info(status, status_tone, status_message);
             } else {
                 self.page.restore_settings(previous, previous_preset);
-                set_status_error(status, status_tone, outcome.status_message);
+                set_status_error(status, status_tone, status_message);
             }
         });
     }

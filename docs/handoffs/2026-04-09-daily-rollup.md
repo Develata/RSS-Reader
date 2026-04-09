@@ -338,6 +338,107 @@
   - `UiRuntime` 统一承接真实行为
   - CSS 后续可以在不破坏行为层的前提下更彻底接管布局与显示
 
+### 当日后续重构：继续压薄 page-local runtime
+
+- 在四个主页面都已经接到 `UiRuntime` 之后，继续做第二轮收口，不再保留那些只会“把 page-local effect 映射成 `UiCommand`”的空壳 runtime。
+- `entries_page`：
+  - 直接在 `EntriesPageSession` 内派发：
+    - `UiCommand::EntriesBootstrap`
+    - `UiCommand::EntriesLoadEntries`
+    - `UiCommand::EntriesToggleRead`
+    - `UiCommand::EntriesToggleStarred`
+    - `UiCommand::EntriesSaveBrowsingPreferences`
+  - 删除 page-local 的：
+    - `effect.rs`
+    - `runtime.rs`
+- `reader_page`：
+  - `ReaderPageSession` 现在直接派发：
+    - `UiCommand::ReaderLoadEntry`
+    - `UiCommand::ReaderToggleRead`
+    - `UiCommand::ReaderToggleStarred`
+  - 删除 page-local 的：
+    - `effect.rs`
+    - `runtime.rs`
+- `settings_page`：
+  - 主页面加载不再通过 `SettingsPageEffect / SettingsPageRuntime`
+  - `SettingsPageSession` 直接派发 `UiCommand::SettingsLoad`
+  - `save/session.rs` 与 `sync/session.rs` 也直接派发：
+    - `UiCommand::SettingsSaveAppearance`
+    - `UiCommand::SettingsPushConfig`
+    - `UiCommand::SettingsPullConfig`
+  - 删除：
+    - `settings_page/effect.rs`
+    - `settings_page/runtime.rs`
+    - `settings_page/save/effect.rs`
+    - `settings_page/save/runtime.rs`
+    - `settings_page/sync/effect.rs`
+    - `settings_page/sync/runtime.rs`
+- `feeds_page`：
+  - 保留 page-local 的 reducer / state / session
+  - 但不再维持额外的 `commands.rs` 和 `runtime.rs`
+  - reducer 直接产出两类 effect：
+    - `Dispatch(UiCommand)`
+    - `ReadFeedUrlFromClipboard`
+  - 这样 `feeds_page` 本地层现在只保留浏览器局部动作（clipboard）这一类总线外行为
+- 到这一步为止，页面本地层和全局总线的边界更明确了：
+  - 全局 bus 负责所有 application / infra 行为
+  - 页面本地层只负责：
+    - page-local state / reducer
+    - 语义 intent
+    - 极少量浏览器局部能力
+- 这比前一轮“page-local runtime + UiRuntime”的混合态又更接近目标：
+  - 页面趋向纯语义壳
+  - CSS 可以继续接管结构和显示
+  - `UiRuntime` 成为稳定的行为承接面
+
+### 当日后续重构：继续压薄 page-local runtime
+
+- 在 `UiRuntime` 已经接住四个主页面的真实 service 路径之后，继续做第二步收口：
+  - 不再满足于“page-local runtime 只是薄映射”
+  - 直接让 page session 发 `UiCommand`
+  - 删掉已经退化成中转壳的本地 `effect/runtime`
+- 这次被进一步压薄的页面/子能力包括：
+  - `entries_page`
+  - `reader_page`
+  - `settings_page`
+  - `settings_page/save`
+  - `settings_page/sync`
+- 具体变化：
+  - `EntriesPageSession` 直接发：
+    - `UiCommand::EntriesBootstrap`
+    - `UiCommand::EntriesLoadEntries`
+    - `UiCommand::EntriesToggleRead`
+    - `UiCommand::EntriesToggleStarred`
+    - `UiCommand::EntriesSaveBrowsingPreferences`
+  - `ReaderPageSession` 直接发：
+    - `UiCommand::ReaderLoadEntry`
+    - `UiCommand::ReaderToggleRead`
+    - `UiCommand::ReaderToggleStarred`
+  - `SettingsPageSession` 直接发：
+    - `UiCommand::SettingsLoad`
+  - `SettingsPageSaveSession` 直接发：
+    - `UiCommand::SettingsSaveAppearance`
+  - `SettingsPageSyncSession` 直接发：
+    - `UiCommand::SettingsPushConfig`
+    - `UiCommand::SettingsPullConfig`
+- 删除的页面本地中间层：
+  - `entries_page/effect.rs`
+  - `entries_page/runtime.rs`
+  - `reader_page/effect.rs`
+  - `reader_page/runtime.rs`
+  - `settings_page/effect.rs`
+  - `settings_page/runtime.rs`
+  - `settings_page/save/effect.rs`
+  - `settings_page/save/runtime.rs`
+  - `settings_page/sync/effect.rs`
+  - `settings_page/sync/runtime.rs`
+- 这样做之后，页面本地层的职责进一步收缩成：
+  - 语义 DOM
+  - page-local reducer / intent（仍然保留局部 UI 状态整理）
+  - 少量浏览器局部能力
+  - `UiCommand` 的直接分发
+- 从结构上看，这一步比“引入全局总线”更重要，因为它真正去掉了“总线下面再藏一层 page-local runtime 适配器”的残余中间层。
+
 ### 当前验证与限制补充
 
 - 本轮 UI 总线扩展后的验证：
@@ -1001,3 +1102,120 @@
   - 代码层编译通过
   - bus 第一刀只影响 `App()` 与 `StartupPage`
   - 其余页面未被进一步改写
+
+## 追加：继续压薄 page-local runtime
+
+### 背景与目标
+
+- 在四个主页面都接到 `UiRuntime` 之后，页面层仍然保留了一层“本地 runtime 包 bus”的薄转发。
+- 这会让页面接口停在：
+  - `page-local runtime + UiRuntime`
+- 而不是继续退化成更接近：
+  - `state + reducer + session + bus`
+- 本轮目标就是继续压薄这一层，让页面更接近纯语义壳。
+
+### 本轮变更
+
+- `entries_page`
+  - 删除 [effect.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/effect.rs)
+  - 删除 [runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/runtime.rs)
+  - [session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/session.rs) 现在直接派发 `UiCommand`
+- `reader_page`
+  - 删除 [effect.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/effect.rs)
+  - 删除 [runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/runtime.rs)
+  - [session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/session.rs) 现在直接派发 `UiCommand`
+- `feeds_page`
+  - 删除 [commands.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/commands.rs)
+  - 删除 [runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/runtime.rs)
+  - [effect.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/effect.rs) 现在只保留：
+    - `LoadSnapshot`
+    - `Dispatch(UiCommand)`
+    - `ReadFeedUrlFromClipboard`
+  - 也就是页面本地只保留浏览器剪贴板这种 bus 外局部能力
+- `settings_page`
+  - 删除 [effect.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/effect.rs)
+  - 删除 [runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/runtime.rs)
+  - 删除 [save/effect.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/save/effect.rs)
+  - 删除 [save/runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/save/runtime.rs)
+  - 删除 [sync/effect.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/effect.rs)
+  - 删除 [sync/runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/runtime.rs)
+
+### 统一 bus 接口继续收口
+
+- [ui/runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime.rs) 不再返回额外的 `UiRuntimeOutcome`
+- 现在统一就是：
+  - `UiCommand -> Vec<UiIntent>`
+- [ui/snapshot.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/snapshot.rs) 给 `UiIntent` 增加了页面级投影 helper：
+  - `into_authenticated_shell_loaded`
+  - `into_startup_route_resolved`
+  - `into_entries_page_intent`
+  - `into_reader_page_intent`
+  - `into_feeds_page_intent`
+  - `into_settings_page_intent`
+  - `into_status`
+
+### 当前判断
+
+- 到这里，`UiRuntime` 已经是四个主页面共同的真实行为承接面。
+- 页面本地层现在主要只剩：
+  - `state`
+  - `intent`
+  - `reducer`
+  - `session`
+  - 极少数浏览器局部能力
+- 这比之前更接近目标中的：
+  - `headless active interface + CSS 完全分离 + infra`
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `git diff --check`：通过
+
+## 追加：继续收口 bus 接口与页面局部能力
+
+### 背景
+
+- 上一轮虽然已经把主页面都推到 `UiRuntime` 上，但 bus 接口仍然还带一层 `UiRuntimeOutcome { intents }` 包装。
+- 同时 `feeds_page` 还残留最后一处本地浏览器副作用：
+  - 剪贴板读取 fallback
+
+### 本轮变更
+
+- [ui/runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime.rs) 去掉 `UiRuntimeOutcome`
+  - 现在统一就是：
+    - `UiCommand -> Vec<UiIntent>`
+- [app.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/app.rs)
+  - [entries_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)
+  - [entries_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/session.rs)
+  - [reader_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/session.rs)
+  - [feeds_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/session.rs)
+  - [settings_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/session.rs)
+  - [settings_page/save/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/save/session.rs)
+  - [settings_page/sync/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/session.rs)
+  这些消费方都改成直接处理 `Vec<UiIntent>`，不再先拆 `.intents`
+
+- `feeds_page` 的最后一处本地浏览器能力也推到了总线：
+  - [ui/commands.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/commands.rs) 新增 `UiCommand::FeedsReadFeedUrlFromClipboard`
+  - [ui/runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime.rs) 负责执行剪贴板读取
+  - [feeds_page/effect.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/effect.rs) 不再保留 `ReadFeedUrlFromClipboard`
+  - [feeds_page/intent.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/intent.rs) 不再保留 `ClipboardReadCompleted`
+  - [feeds_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/session.rs) 删掉本地 `document::eval(...)` 剪贴板逻辑
+
+### 当前判断
+
+- 到这里，`feeds_page` 也不再自己执行浏览器异步能力，而是只发 bus command。
+- 页面本地层更接近：
+  - `state`
+  - `reducer`
+  - `session`
+  - 语义 DOM
+- 这比上一轮又往 `headless active interface + CSS 完全分离 + infra` 目标收了一步。
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `git diff --check`：通过

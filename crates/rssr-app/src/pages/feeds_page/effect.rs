@@ -1,8 +1,7 @@
-use super::commands::FeedsPageCommand;
+use crate::ui::UiCommand;
 
 #[derive(Debug, Clone)]
 pub(crate) enum FeedsPageEffect {
     LoadSnapshot,
-    ExecuteCommand(FeedsPageCommand),
-    ReadFeedUrlFromClipboard,
+    Dispatch(UiCommand),
 }

@@ -1,13 +1,11 @@
 use dioxus::prelude::*;
 use rssr_domain::UserSettings;
 
-use super::{
-    effect::SettingsPageEffect, intent::SettingsPageIntent, runtime::execute_settings_page_effect,
-    themes::detect_preset_key,
-};
+use super::{intent::SettingsPageIntent, themes::detect_preset_key};
 use crate::{
     status::{set_status_error, set_status_info},
     theme::ThemeController,
+    ui::{UiCommand, execute_ui_command},
 };
 
 const REPOSITORY_URL: &str = "https://github.com/Develata/RSS-Reader";
@@ -61,7 +59,7 @@ impl SettingsPageSession {
     }
 
     pub(crate) fn load(self) {
-        self.spawn_effect(SettingsPageEffect::LoadSettings);
+        self.spawn_ui_command(UiCommand::SettingsLoad);
     }
 
     pub(crate) fn dispatch(self, intent: SettingsPageIntent) {
@@ -103,11 +101,12 @@ impl SettingsPageSession {
         }
     }
 
-    fn spawn_effect(self, effect: SettingsPageEffect) {
+    fn spawn_ui_command(self, command: UiCommand) {
         spawn(async move {
-            let outcome = execute_settings_page_effect(effect).await;
-            for intent in outcome.intents {
-                self.dispatch(intent);
+            for intent in execute_ui_command(command).await {
+                if let Some(intent) = intent.into_settings_page_intent() {
+                    self.dispatch(intent);
+                }
             }
         });
     }

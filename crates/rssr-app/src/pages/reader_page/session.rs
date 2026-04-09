@@ -1,13 +1,9 @@
 use dioxus::prelude::*;
 
 use crate::bootstrap::ReaderNavigation;
+use crate::ui::{UiCommand, execute_ui_command};
 
-use super::{
-    effect::ReaderPageEffect,
-    reducer::dispatch_reader_page_intent,
-    runtime::{ReaderPageRuntimeOutcome, execute_reader_page_effect},
-    state::ReaderPageState,
-};
+use super::{reducer::dispatch_reader_page_intent, state::ReaderPageState};
 
 #[derive(Clone, Copy)]
 pub(crate) struct ReaderPageSession {
@@ -37,11 +33,11 @@ impl ReaderPageSession {
     }
 
     pub(crate) fn load(self) {
-        self.spawn_effect(ReaderPageEffect::LoadEntry(self.entry_id));
+        self.spawn_ui_command(UiCommand::ReaderLoadEntry { entry_id: self.entry_id });
     }
 
     pub(crate) fn toggle_read(self, via_shortcut: bool) {
-        self.spawn_effect(ReaderPageEffect::ToggleRead {
+        self.spawn_ui_command(UiCommand::ReaderToggleRead {
             entry_id: self.entry_id,
             currently_read: (self.state)().is_read,
             via_shortcut,
@@ -49,24 +45,21 @@ impl ReaderPageSession {
     }
 
     pub(crate) fn toggle_starred(self, via_shortcut: bool) {
-        self.spawn_effect(ReaderPageEffect::ToggleStarred {
+        self.spawn_ui_command(UiCommand::ReaderToggleStarred {
             entry_id: self.entry_id,
             currently_starred: (self.state)().is_starred,
             via_shortcut,
         });
     }
 
-    fn spawn_effect(self, effect: ReaderPageEffect) {
+    fn spawn_ui_command(self, command: UiCommand) {
         spawn(async move {
-            let outcome = execute_reader_page_effect(effect).await;
-            self.apply_runtime_outcome(outcome);
+            for intent in execute_ui_command(command).await {
+                if let Some(intent) = intent.into_reader_page_intent() {
+                    dispatch_reader_page_intent(self.state, intent);
+                }
+            }
         });
-    }
-
-    fn apply_runtime_outcome(self, outcome: ReaderPageRuntimeOutcome) {
-        for intent in outcome.intents {
-            dispatch_reader_page_intent(self.state, intent);
-        }
     }
 }
 

@@ -1,14 +1,11 @@
 use dioxus::prelude::*;
 
 use super::{
-    controls::remember_entry_controls_hidden,
-    effect::EntriesPageEffect,
-    intent::EntriesPageIntent,
-    presenter::EntriesPagePresenter,
-    reducer::dispatch_entries_page_intent,
-    runtime::{EntriesPageRuntimeOutcome, execute_entries_page_effect},
+    controls::remember_entry_controls_hidden, intent::EntriesPageIntent,
+    presenter::EntriesPagePresenter, reducer::dispatch_entries_page_intent,
     state::EntriesPageState,
 };
+use crate::ui::{UiCommand, execute_ui_command};
 use rssr_domain::EntryQuery;
 use time::OffsetDateTime;
 
@@ -36,7 +33,7 @@ impl EntriesPageSession {
     }
 
     pub(crate) fn bootstrap(self, load_preferences: bool, load_feeds: bool) {
-        self.spawn_effect(EntriesPageEffect::Bootstrap {
+        self.spawn_ui_command(UiCommand::EntriesBootstrap {
             feed_id: self.feed_id,
             load_preferences,
             load_feeds,
@@ -44,7 +41,7 @@ impl EntriesPageSession {
     }
 
     pub(crate) fn load_entries_query(self, query: EntryQuery) {
-        self.spawn_effect(EntriesPageEffect::LoadEntries(query));
+        self.spawn_ui_command(UiCommand::EntriesLoadEntries { query });
     }
 
     pub(crate) fn save_browsing_preferences_with(
@@ -60,7 +57,7 @@ impl EntriesPageSession {
             return;
         }
 
-        self.spawn_effect(EntriesPageEffect::SaveBrowsingPreferences {
+        self.spawn_ui_command(UiCommand::EntriesSaveBrowsingPreferences {
             grouping_mode,
             show_archived,
             read_filter,
@@ -70,7 +67,11 @@ impl EntriesPageSession {
     }
 
     pub(crate) fn toggle_read(self, entry_id: i64, entry_title: String, currently_read: bool) {
-        self.spawn_effect(EntriesPageEffect::ToggleRead { entry_id, entry_title, currently_read });
+        self.spawn_ui_command(UiCommand::EntriesToggleRead {
+            entry_id,
+            entry_title,
+            currently_read,
+        });
     }
 
     pub(crate) fn toggle_starred(
@@ -79,7 +80,7 @@ impl EntriesPageSession {
         entry_title: String,
         currently_starred: bool,
     ) {
-        self.spawn_effect(EntriesPageEffect::ToggleStarred {
+        self.spawn_ui_command(UiCommand::EntriesToggleStarred {
             entry_id,
             entry_title,
             currently_starred,
@@ -93,16 +94,13 @@ impl EntriesPageSession {
         dispatch_entries_page_intent(self.state, intent);
     }
 
-    fn spawn_effect(self, effect: EntriesPageEffect) {
+    fn spawn_ui_command(self, command: UiCommand) {
         spawn(async move {
-            let outcome = execute_entries_page_effect(effect).await;
-            self.apply_runtime_outcome(outcome);
+            for intent in execute_ui_command(command).await {
+                if let Some(intent) = intent.into_entries_page_intent() {
+                    self.dispatch(intent);
+                }
+            }
         });
-    }
-
-    fn apply_runtime_outcome(self, outcome: EntriesPageRuntimeOutcome) {
-        for intent in outcome.intents {
-            self.dispatch(intent);
-        }
     }
 }

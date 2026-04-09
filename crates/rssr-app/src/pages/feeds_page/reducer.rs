@@ -1,9 +1,7 @@
 use dioxus::prelude::*;
 
-use super::{
-    commands::FeedsPageCommand, effect::FeedsPageEffect, intent::FeedsPageIntent,
-    state::FeedsPageState,
-};
+use super::{effect::FeedsPageEffect, intent::FeedsPageIntent, state::FeedsPageState};
+use crate::ui::UiCommand;
 
 pub(crate) fn dispatch_feeds_page_intent(
     mut state: Signal<FeedsPageState>,
@@ -34,44 +32,43 @@ pub(crate) fn reduce_feeds_page_intent(
             Vec::new()
         }
         FeedsPageIntent::AddFeedRequested => {
-            vec![FeedsPageEffect::ExecuteCommand(FeedsPageCommand::AddFeed {
+            vec![FeedsPageEffect::Dispatch(UiCommand::FeedsAddFeed {
                 raw_url: state.feed_url.clone(),
             })]
         }
         FeedsPageIntent::RefreshAllRequested => {
-            vec![FeedsPageEffect::ExecuteCommand(FeedsPageCommand::RefreshAll)]
+            vec![FeedsPageEffect::Dispatch(UiCommand::FeedsRefreshAll)]
         }
         FeedsPageIntent::RefreshFeedRequested { feed_id, feed_title } => {
-            vec![FeedsPageEffect::ExecuteCommand(FeedsPageCommand::RefreshFeed {
-                feed_id,
-                feed_title,
-            })]
+            vec![FeedsPageEffect::Dispatch(UiCommand::FeedsRefreshFeed { feed_id, feed_title })]
         }
         FeedsPageIntent::RemoveFeedRequested { feed_id, feed_title } => {
-            vec![FeedsPageEffect::ExecuteCommand(FeedsPageCommand::RemoveFeed {
+            vec![FeedsPageEffect::Dispatch(UiCommand::FeedsRemoveFeed {
                 feed_id,
                 feed_title,
                 confirmed: state.pending_delete_feed == Some(feed_id),
             })]
         }
         FeedsPageIntent::ExportConfigRequested => {
-            vec![FeedsPageEffect::ExecuteCommand(FeedsPageCommand::ExportConfig)]
+            vec![FeedsPageEffect::Dispatch(UiCommand::FeedsExportConfig)]
         }
         FeedsPageIntent::ImportConfigRequested => {
-            vec![FeedsPageEffect::ExecuteCommand(FeedsPageCommand::ImportConfig {
+            vec![FeedsPageEffect::Dispatch(UiCommand::FeedsImportConfig {
                 raw: state.config_text.clone(),
                 confirmed: state.pending_config_import,
             })]
         }
         FeedsPageIntent::ExportOpmlRequested => {
-            vec![FeedsPageEffect::ExecuteCommand(FeedsPageCommand::ExportOpml)]
+            vec![FeedsPageEffect::Dispatch(UiCommand::FeedsExportOpml)]
         }
         FeedsPageIntent::ImportOpmlRequested => {
-            vec![FeedsPageEffect::ExecuteCommand(FeedsPageCommand::ImportOpml {
+            vec![FeedsPageEffect::Dispatch(UiCommand::FeedsImportOpml {
                 raw: state.opml_text.clone(),
             })]
         }
-        FeedsPageIntent::PasteFeedUrlRequested => vec![FeedsPageEffect::ReadFeedUrlFromClipboard],
+        FeedsPageIntent::PasteFeedUrlRequested => {
+            vec![FeedsPageEffect::Dispatch(UiCommand::FeedsReadFeedUrlFromClipboard)]
+        }
         FeedsPageIntent::SnapshotLoaded(result) => {
             match result {
                 Ok(snapshot) => {
@@ -109,17 +106,6 @@ pub(crate) fn reduce_feeds_page_intent(
         }
         FeedsPageIntent::BumpReload => {
             state.reload_tick += 1;
-            Vec::new()
-        }
-        FeedsPageIntent::ClipboardReadCompleted(result) => {
-            match result {
-                Ok(Some(text)) => state.feed_url = text,
-                Ok(None) => {}
-                Err(err) => {
-                    state.status = format!("读取系统剪贴板失败：{err}");
-                    state.status_tone = "error".to_string();
-                }
-            }
             Vec::new()
         }
     }
