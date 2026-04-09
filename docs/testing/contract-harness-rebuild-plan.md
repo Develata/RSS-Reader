@@ -143,7 +143,7 @@
 当前进度：
 
 - 已完成 host / sqlite baseline
-- browser fixture 尚未开始
+- browser / wasm baseline 已完成
 
 ### 阶段 2：subscription contract harness
 
