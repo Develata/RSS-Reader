@@ -53,7 +53,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
     #[cfg(target_arch = "wasm32")]
     let import_css_trigger = rsx! {
         button {
-            class: "button",
+            class: "button inline-actions__item",
             "data-variant": "secondary",
             "data-action": "import-custom-css-file",
             onclick: move |_| {
@@ -69,7 +69,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
     #[cfg(not(target_arch = "wasm32"))]
     let import_css_trigger = rsx! {
         button {
-            class: "button",
+            class: "button inline-actions__item",
             "data-variant": "secondary",
             "data-action": "import-custom-css-file",
             onclick: move |_| {
@@ -99,7 +99,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
             div { class: "inline-actions settings-card__actions",
                 {import_css_trigger}
                 button {
-                    class: "button",
+                    class: "button inline-actions__item",
                     "data-variant": "secondary",
                     "data-action": "apply-custom-css",
                     onclick: move |_| {
@@ -112,7 +112,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
                     "应用当前 CSS"
                 }
                 button {
-                    class: "button",
+                    class: "button inline-actions__item",
                     "data-variant": "secondary",
                     "data-action": "export-custom-css-file",
                     onclick: move |_| {

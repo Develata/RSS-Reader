@@ -35,7 +35,7 @@ pub fn StartupPage() -> Element {
     rsx! {
         section { class: "page page-entries", "data-page": "entries",
             AppNav {}
-            h2 { "文章" }
+            h2 { class: "page-title", "文章" }
             StatusBanner { message: status(), tone: status_tone() }
         }
     }
@@ -66,9 +66,9 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             AppNav {}
             div { class: "entries-layout",
                 div { class: "entries-main",
-                    div { class: "reading-header",
+                    div { class: "reading-header page-section-header page-section-header--entries", "data-slot": "page-section-header",
                         div { class: "reading-header__row",
-                            h2 { "{entries_page_title(feed_id)}" }
+                            h2 { class: "page-title page-section-title", "{entries_page_title(feed_id)}" }
                         }
                     }
                     if feed_id.is_some() {
@@ -118,9 +118,9 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                             h5 { class: "entry-source-group__title", "{source.title}" }
                                                             p { class: "entry-source-group__meta", "{source.subtitle}" }
                                                         }
-                                                        ul { class: "entry-list entry-list--grouped",
-                                                            for entry in &source.entries {
-                                                                { render_entry_card(entry.clone(), facade.clone()) }
+                                                        ul { class: "entry-list entry-list--grouped entry-list--reading",
+                                                            for (index , entry) in source.entries.iter().enumerate() {
+                                                                { render_entry_card(entry.clone(), facade.clone(), list_edge_state(index, source.entries.len())) }
                                                             }
                                                         }
                                                     }
@@ -142,9 +142,9 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                     h4 { class: "entry-date-group__title", "{month.title}" }
                                                     p { class: "entry-date-group__meta", "{month.subtitle}" }
                                                 }
-                                                ul { class: "entry-list entry-list--grouped",
-                                                    for entry in &month.entries {
-                                                        { render_entry_card(entry.clone(), facade.clone()) }
+                                                ul { class: "entry-list entry-list--grouped entry-list--reading",
+                                                    for (index , entry) in month.entries.iter().enumerate() {
+                                                        { render_entry_card(entry.clone(), facade.clone(), list_edge_state(index, month.entries.len())) }
                                                     }
                                                 }
                                             }
@@ -244,4 +244,14 @@ fn current_time_utc() -> OffsetDateTime {
 
 fn entries_page_title(feed_id: Option<i64>) -> &'static str {
     if feed_id.is_some() { "订阅文章" } else { "文章" }
+}
+
+fn list_edge_state(index: usize, len: usize) -> &'static str {
+    match (index, len) {
+        (_, 0) => "single",
+        (0, 1) => "single",
+        (0, _) => "start",
+        (i, l) if i + 1 == l => "end",
+        _ => "middle",
+    }
 }

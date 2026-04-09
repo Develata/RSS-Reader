@@ -32,14 +32,14 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
                 }
                 div { class: "inline-actions",
                     button {
-                        class: "button",
+                        class: "button inline-actions__item",
                         "data-variant": "secondary",
                         "data-action": "export-config",
                         onclick: move |_| export_config_facade.export_config(),
                         "导出配置"
                     }
                     button {
-                        class: "button",
+                        class: "button inline-actions__item",
                         "data-variant": "{facade.config_import_button_variant()}",
                         "data-state": "{facade.config_import_state()}",
                         "data-action": "import-config",
@@ -64,14 +64,14 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
                 }
                 div { class: "inline-actions",
                     button {
-                        class: "button",
+                        class: "button inline-actions__item",
                         "data-variant": "secondary",
                         "data-action": "export-opml",
                         onclick: move |_| export_opml_facade.export_opml(),
                         "导出 OPML"
                     }
                     button {
-                        class: "button",
+                        class: "button inline-actions__item",
                         "data-variant": "secondary",
                         "data-action": "import-opml",
                         onclick: move |_| import_opml_facade.import_opml(),

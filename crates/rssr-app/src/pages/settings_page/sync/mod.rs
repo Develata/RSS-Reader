@@ -23,7 +23,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                     h4 { class: "settings-card__section-title", "远端配置端点" }
                 }
                 div { class: "settings-form-grid",
-                    div {
+                    div { class: "settings-form-grid__item",
                         label { class: "field-label", r#for: "settings-webdav-endpoint", "Endpoint" }
                         input {
                             id: "settings-webdav-endpoint",
@@ -35,7 +35,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                             oninput: move |event| endpoint_facade.set_endpoint(event.value())
                         }
                     }
-                    div {
+                    div { class: "settings-form-grid__item",
                         label { class: "field-label", r#for: "settings-webdav-remote-path", "Remote Path" }
                         input {
                             id: "settings-webdav-remote-path",
@@ -55,14 +55,14 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                 }
                 div { class: "inline-actions settings-card__actions",
                     button {
-                        class: "button",
+                        class: "button inline-actions__item",
                         "data-variant": "secondary",
                         "data-action": "push-webdav",
                         onclick: move |_| push_facade.push(),
                         "上传配置"
                     }
                     button {
-                        class: "button",
+                        class: "button inline-actions__item",
                         "data-variant": "{facade.remote_pull_button_variant()}",
                         "data-state": "{facade.remote_pull_state()}",
                         "data-action": "pull-webdav",

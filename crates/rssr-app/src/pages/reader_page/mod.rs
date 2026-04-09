@@ -42,7 +42,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             }
                 div { class: "reader-toolbar inline-actions",
                     button {
-                        class: "button",
+                        class: "button inline-actions__item",
                         "data-variant": "secondary",
                         "data-nav": "back",
                         onclick: move |_| navigator.go_back(),
@@ -69,7 +69,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 div { class: "reader-pagination reader-pagination--context inline-actions",
                     if let Some(previous_feed_entry_id) = facade.navigation_state().previous_feed_entry_id {
                         button {
-                            class: "button",
+                            class: "button inline-actions__item",
                             "data-variant": "secondary",
                             "data-nav": "previous-feed-entry",
                             onclick: move |_| { navigator.push(AppRoute::ReaderPage { entry_id: previous_feed_entry_id }); },
@@ -78,7 +78,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     }
                     if let Some(next_feed_entry_id) = facade.navigation_state().next_feed_entry_id {
                         button {
-                            class: "button",
+                            class: "button inline-actions__item",
                             "data-variant": "secondary",
                             "data-nav": "next-feed-entry",
                             onclick: move |_| { navigator.push(AppRoute::ReaderPage { entry_id: next_feed_entry_id }); },

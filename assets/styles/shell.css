@@ -193,7 +193,7 @@
   padding: 24px;
 }
 
-.page h2 {
+.page-title {
   margin: 0 0 18px;
   font-size: 2rem;
   letter-spacing: -0.03em;
@@ -207,8 +207,14 @@
   margin-bottom: 18px;
 }
 
-.page-header h2 {
+.page-header__title {
   margin: 0;
+}
+
+.page-header__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .icon-link-button {

@@ -25,8 +25,8 @@ pub fn FeedsPage() -> Element {
     rsx! {
         section { class: "page page-feeds", "data-page": "feeds",
             AppNav {}
-            div { class: "reading-header reading-header--feeds",
-                h2 { "订阅" }
+            div { class: "reading-header reading-header--feeds page-section-header page-section-header--feeds", "data-slot": "page-section-header",
+                h2 { class: "page-title page-section-title", "订阅" }
             }
             div { class: "stats-grid stats-grid--airy",
                 div { class: "stat-card",

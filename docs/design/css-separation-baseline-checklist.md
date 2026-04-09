@@ -1,364 +1,220 @@
-# CSS 完全分离基线检查
+# CSS 完全分离执行清单
 
 ## 目标
 
-这份清单用于推进：
+- 推进：
+  - `headless active interface`
+  - `CSS 完全分离`
+  - `infra` 承担真实行为
+- 判断标准：
+  - CSS 优先依赖稳定语义接口
+  - 页面只提供默认语义壳
+  - 避免继续依赖深 DOM 层级、匿名子节点、位置选择器、modifier class
 
-- `headless active interface`
-- `CSS 完全分离`
-- `infra` 承担真实行为
+## 当前结论
 
-它只关注一个问题：
+- 第一轮状态接口迁移：已完成
+  - `status-banner` -> `data-state`
+  - `button` -> `data-variant`
+  - `app-shell` 密度 -> `data-density`
+  - 主题卡 / 来源筛选 / 阅读底栏按钮 -> `data-state`
+- 第二轮结构槽迁移：进行中
+  - 标题槽、页头槽、表单项槽、动作项槽、阅读列表边界槽已补
+- 当前剩余问题：
+  - 少量标题/卡片头部仍依赖标签名
+  - 少量分组头部仍依赖内部 DOM 结构
+  - 少量布局规则仍直接依赖页面内部 class 组合
 
-- 当前样式是否仍然依赖页面内部 DOM 结构，而不是稳定语义接口
+## 已完成项
 
-结论先说：
+### 状态接口
 
-- 当前主页面已经比早期干净很多。
-- 但仍有几类选择器会妨碍“页面只是默认语义壳、CSS 可以自由重排”的终局。
-- 第一轮状态接口迁移已经落地：
-  - `status-banner` 已切到 `data-state`
-  - `button` 已切到 `data-variant`
-  - `app-shell` 密度已切到 `data-density`
-  - 主题卡、来源筛选 chip、阅读底栏按钮已切到 `data-state`
-- 因此本清单里与这些点对应的条目，现在应视为“已完成第一轮收口，后续只剩一致性复查”。
+- 已迁移：
+  - `.status-banner.info/.error`
+  - `.button.secondary/.danger/.danger-outline`
+  - `.app-shell.density-compact`
+  - `.theme-card.is-active`
+  - `.entry-filters__source-chip.is-selected`
+  - `.reader-bottom-bar__button.is-active/.is-disabled`
 
----
-
-## 总体判断
-
-### 已经做对的部分
-
-- 页面级作用域已经比较稳定：
-  - `data-page`
-  - `data-action`
-  - `data-field`
-  - `data-nav`
+- 当前稳定接口：
   - `data-state`
-- 主页面的大块布局主要仍靠稳定 class，而不是匿名 DOM 层级。
-- `reader-html` 已经被限制在单独内容岛里，没有把远端 HTML 样式扩散到整个页面。
+  - `data-variant`
+  - `data-density`
 
-### 仍需收口的部分
+### 结构槽
 
-- 一些布局样式仍依赖：
-  - 标签后代选择器
-  - `> *`
-  - `:first-child` / `:last-child`
-  - 相邻兄弟 `+`
-- 一些状态样式仍依赖：
-  - `.is-*`
-  - `.info`
-  - `.error`
-  - `.secondary`
-  - `.danger`
-  - `.danger-outline`
-  - `.density-compact`
+- 已迁移：
+  - `.page h2` -> `.page-title`
+  - `.page-header h2` -> `.page-header__title`
+  - `.page-header .icon-link-button` -> `.page-header__actions .icon-link-button`
+  - `settings-form-grid > div` -> `.settings-form-grid__item`
+  - `inline-actions > *` -> `.inline-actions__item`
+  - `entry-card__actions > *` -> `[data-slot="entry-card-action"]`
+  - `.entry-card--reading + .entry-card--reading` -> `data-list-edge`
+  - `.entry-card--reading:first-child/:last-child` -> `data-list-edge`
+  - `.page-entries .reading-header` -> `.page-section-header--entries`
 
-这些都不是运行时 bug，但会削弱 CSS 对页面结构的独立控制能力。
-
----
-
-## 第一组：必须收掉的层级依赖
-
-### 1. 页面标题和页头仍依赖内部标签结构
-
-文件：
-
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
-- [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)
-
-问题点：
-
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css#L196) `.page h2`
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css#L210) `.page-header h2`
-- [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css#L47) `.page h2`
-- [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css#L56) `.page-header .icon-link-button`
-
-为什么是问题：
-
-- 这些规则要求页面标题继续是 `h2`，而且要求按钮继续挂在 `page-header` 下面。
-- 一旦页面为了 CSS 重排把标题换成别的语义元素，或者把动作按钮搬离这个容器，样式就会失效。
-
-下一轮建议：
-
-- 补稳定标题 hook，例如：
+- 当前稳定接口：
   - `.page-title`
   - `.page-header__title`
   - `.page-header__actions`
-- 让样式改为针对语义槽，而不是标签名或后代位置。
-
-### 2. 布局规则仍假设子节点是匿名直系子元素
-
-文件：
-
-- [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
-- [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
-- [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)
-
-问题点：
-
-- [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css#L156) `.settings-form-grid > div`
-- [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css#L425) `.entry-card__actions > *`
-- [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css#L174) `.inline-actions > *`
-- [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css#L183) `.entry-card__actions > *`
-
-为什么是问题：
-
-- 这些规则默认子元素是什么都无所谓，但必须是“直接子节点”。
-- 如果页面为了语义结构多包一层容器，布局就立刻变掉。
-
-下一轮建议：
-
-- 给动作槽和表单项补语义子类：
+  - `.page-section-header`
+  - `.page-section-title`
   - `.settings-form-grid__item`
   - `.inline-actions__item`
-  - `.entry-card__action`
-- 避免继续使用 `> *` 作为长期接口。
-
-### 3. 阅读列表仍依赖顺序与相邻关系
-
-文件：
-
-- [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
-
-问题点：
-
-- [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css#L236) `.entry-list--grouped .entry-card--reading + .entry-card--reading`
-- [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css#L255) `.entry-card--reading:first-child`
-- [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css#L259) `.entry-card--reading:last-child`
-
-为什么是问题：
-
-- 这些规则直接把“在列表里的位置”当成视觉状态来源。
-- 一旦未来页面加分隔容器、广告位、注释位或可折叠组，这些样式会变脆。
-
-下一轮建议：
-
-- 用显式状态替代位置判断，例如：
+  - `[data-slot="entry-card-action"]`
   - `data-list-edge="start|middle|end|single"`
-  - 或在 facade/session 里为阅读列表项补稳定边界状态
 
-### 4. 页面特化仍靠页面类和内部块类组合
+## P1：下一轮必须收掉
 
-文件：
+### 1. 卡片头部仍依赖标签名
 
-- [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
-- [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)
+- 文件：
+  - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
+- 目标规则：
+  - `.feed-compose-card__header h3`
+  - `.feed-workbench__note h3`
+  - `.exchange-header h3`
+  - `.exchange-card h3`
+  - `.settings-card h3`
+- 下一步：
+  - 为这些区域补稳定标题槽，例如：
+    - `.card-title`
+    - `.section-title`
+    - `.workbench-title`
 
-问题点：
+### 2. 分组头部仍依赖内部标题/元信息结构
 
-- [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css#L35) `.page-entries .reading-header`
-- [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css#L86) `.page-entries .reading-header`
+- 文件：
+  - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
+- 目标区域：
+  - `.entry-group__header`
+  - `.entry-source-group__header`
+  - `.entry-date-group__header`
+  - `.entry-group__title`
+  - `.entry-group__meta`
+  - `.entry-source-group__title`
+  - `.entry-source-group__meta`
+  - `.entry-date-group__title`
+  - `.entry-date-group__meta`
+- 下一步：
+  - 统一为语义槽，而不是依赖“标题标签 + 说明标签”的组合
 
-为什么是问题：
+### 3. 顶部标题区仍带页面特化 class
 
-- 这还在依赖“某块元素在某页面里”的结构组合，而不是纯页面语义接口。
+- 文件：
+  - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
+  - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
+- 现状：
+  - 已有 `.page-section-header--entries`
+  - 仍有 `reading-header--feeds`
+- 下一步：
+  - 统一成：
+    - `.page-section-header--entries`
+    - `.page-section-header--feeds`
+    - `.page-section-header--settings`
+  - 不再依赖历史 `reading-header*` 命名
 
-下一轮建议：
+## P2：可以继续收，但不阻塞
 
-- 统一成页面数据接口，例如：
-  - `[data-page="entries"] [data-slot="reading-header"]`
-  - 或稳定 class `.page-header--entries`
+### 1. 页面级布局仍依赖部分结构 class
 
----
+- 文件：
+  - [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
+  - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
+  - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
+- 关注点：
+  - `.page`
+  - `.page-header`
+  - `.entry-groups`
+  - `.entries-layout`
+  - `.settings-grid`
+  - `.exchange-grid`
+- 判断：
+  - 这些目前还算合理，不属于第一优先级问题
+  - 但后续若要做到更极端的 CSS 重排，需要继续槽化
 
-## 第二组：必须收掉的 class 状态依赖
+### 2. 响应式规则仍偏 class 驱动
 
-### 1. 状态 banner 仍靠 `.info` / `.error`
+- 文件：
+  - [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)
+- 重点：
+  - 移动端规则大多已跟随第一轮、第二轮迁移
+  - 仍需要在后续同步检查新增槽位是否都覆盖了 mobile path
 
-文件：
+## P3：只做一致性复查
 
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
+### 状态接口
 
-问题点：
+- 确保新增状态只走：
+  - `data-state`
+  - `data-variant`
+  - `data-density`
+- 不再引入：
+  - `.is-*`
+  - `.info/.error`
+  - `.secondary/.danger/.danger-outline`
+  - `density-*`
 
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css#L293) `.status-banner.info`
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css#L297) `.status-banner.error`
+### 结构槽
 
-当前代码已经有：
+- 确保新增布局规则优先依赖：
+  - `.page-title`
+  - `.page-header__title`
+  - `.page-header__actions`
+  - `.page-section-header`
+  - `.page-section-title`
+  - `.settings-form-grid__item`
+  - `.inline-actions__item`
+  - `[data-slot="entry-card-action"]`
+  - `data-list-edge`
 
-- [status_banner.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/components/status_banner.rs) `data-state="{tone}"`
-
-当前状态：
-
-- 已完成，样式已迁到：
-  - `.status-banner[data-state="info"]`
-  - `.status-banner[data-state="error"]`
-
-后续建议：
-
-- 继续避免在新组件里回流 `.info/.error` modifier class。
-
-### 2. 主题卡、筛选项、阅读底栏仍靠 `.is-*`
-
-文件：
-
-- [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
-- [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
-- [reader.css](/home/develata/gitclone/RSS-Reader/assets/styles/reader.css)
-
-问题点：
-
-- [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css#L193) `.theme-card.is-active`
-- [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css#L223) `.entry-filters__source-chip.is-selected`
-- [reader.css](/home/develata/gitclone/RSS-Reader/assets/styles/reader.css#L209) `.reader-bottom-bar__button.is-active`
-- [reader.css](/home/develata/gitclone/RSS-Reader/assets/styles/reader.css#L215) `.reader-bottom-bar__button.is-disabled`
-
-当前状态：
-
-- 已完成第一轮迁移：
-  - `.theme-card[data-state="active"]`
-  - `.entry-filters__source-chip[data-state="selected"]`
-  - `.reader-bottom-bar__button[data-state="starred|read|available|unavailable"]`
-
-后续建议：
-
-- 新增交互状态时，优先补 `data-state`，不要再引入 `.is-*`。
-
-### 3. 按钮视觉变体仍靠 class modifier
-
-文件：
-
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
-
-问题点：
-
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css#L356) `.button.secondary`
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css#L361) `.button.danger`
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css#L365) `.button.danger-outline`
-
-为什么是问题：
-
-- 这些 class 本质上是在表达视觉语义，而不是结构语义。
-- 它们还在被页面 facade 和组件硬编码返回，例如：
-  - [settings_page/facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/facade.rs#L118)
-  - [feeds_page/facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/facade.rs#L45)
-  - [reader_page/facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/facade.rs#L95)
-
-当前状态：
-
-- 已完成，当前按钮视觉变体统一走：
-  - `data-variant="primary|secondary|danger|danger-outline"`
-
-后续建议：
-
-- facade 和页面 session 不再返回视觉 class 字符串，只返回语义变体名。
-
-### 4. density 仍靠根 class
-
-文件：
-
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
-- [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
-- [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
-
-问题点：
-
-- `.app-shell.density-compact ...`
-
-为什么是问题：
-
-- 这不是深 DOM 问题，但仍然是状态靠 class modifier，而不是公开状态接口。
-
-当前状态：
-
-- 已完成，根壳已改为：
-  - `.app-shell[data-density="compact"]`
-  - `.app-shell[data-density="comfortable"]`
-
-后续建议：
-
-- 继续把所有密度相关规则集中到 `data-density`，不要再引入 `density-*` class modifier。
-
----
-
-## 第三组：允许保留的例外
+## 允许保留的例外
 
 ### `reader-html` 内容岛
 
-文件：
+- 文件：
+  - [reader.css](/home/develata/gitclone/RSS-Reader/assets/styles/reader.css)
+- 原因：
+  - 这是正文内容岛，不是页面壳结构
+  - 可以继续保留内容标签样式，例如：
+    - `.reader-html p`
+    - `.reader-html h1/h2/h3/h4`
+    - `.reader-html ul/ol`
+    - `.reader-html img`
+    - `.reader-html figure`
 
-- [reader.css](/home/develata/gitclone/RSS-Reader/assets/styles/reader.css)
+## 验收方式
 
-问题点：
+- grep 不应再命中以下模式：
+  - `.status-banner.info`
+  - `.status-banner.error`
+  - `.button.secondary`
+  - `.button.danger`
+  - `.button.danger-outline`
+  - `.theme-card.is-active`
+  - `.entry-filters__source-chip.is-selected`
+  - `.reader-bottom-bar__button.is-active`
+  - `.reader-bottom-bar__button.is-disabled`
+  - `.app-shell.density-compact`
+  - `.page h2`
+  - `.page-header h2`
+  - `settings-form-grid > div`
+  - `inline-actions > *`
+  - `entry-card__actions > *`
+  - `.entry-card--reading:first-child`
+  - `.entry-card--reading:last-child`
+  - `.entry-card--reading + .entry-card--reading`
+  - `.page-entries .reading-header`
 
-- [reader.css](/home/develata/gitclone/RSS-Reader/assets/styles/reader.css#L73) `.reader-html p:first-child`
-- [reader.css](/home/develata/gitclone/RSS-Reader/assets/styles/reader.css#L116) `.reader-html p > img:only-child ...`
-- 以及整组：
-  - `h1/h2/h3/h4`
-  - `blockquote`
-  - `ul/ol`
-  - `img/video/canvas/svg/picture`
-  - `figure`
-  - `table`
+- 编译验证：
+  - `cargo fmt --all`
+  - `cargo check -p rssr-app`
+  - `cargo check -p rssr-app --target wasm32-unknown-unknown`
+  - `git diff --check`
 
-判断：
+## 当前最值得继续做的两刀
 
-- 这组样式可以作为**允许保留的内容 HTML 例外**。
-- 原因不是页面结构耦合，而是它本来就在给远端 HTML 内容岛做排版修正。
-
-要求：
-
-- 继续把它限制在 `.reader-html` / `[data-state="html"]` 语义范围内
-- 不要把这类标签规则扩散到 `.page`、`.reader-page` 或全局
-
----
-
-## 文档漂移
-
-文件：
-
-- [theme-author-selector-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/theme-author-selector-reference.md)
-
-问题：
-
-- 这份文档仍然列着旧接口，例如：
-  - `data-action="feed-url-input"`
-  - `data-action="search-title"`
-  - `data-action="filter-unread"`
-  - `data-action="filter-starred"`
-- 但当前代码已经收成：
-  - `data-field="entry-search"`
-  - `data-field="read-filter-unread"`
-  - `data-field="starred-filter-starred"`
-  - 以及更多 `data-state`
-
-下一轮建议：
-
-- 让主题作者文档与：
-  - [frontend-command-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/frontend-command-reference.md)
-  完全对齐。
-
----
-
-## 下一轮收口清单
-
-### P1
-
-- 把 `.status-banner.info/.error` 迁到 `data-state`
-- 把 `.theme-card.is-active`、`.entry-filters__source-chip.is-selected`、`.reader-bottom-bar__button.is-*` 迁到 `data-state`
-- 把 `.button.secondary/.danger/.danger-outline` 迁到 `data-variant`
-- 把 `.app-shell.density-compact` 迁到 `data-density`
-
-### P2
-
-- 给页头和标题补稳定语义槽：
-  - `.page-title`
-  - `.page-header__title`
-  - `.page-header__actions`
-- 去掉 `.page h2`、`.page-header h2`、`.page-header .icon-link-button`
-
-### P3
-
-- 去掉 `.settings-form-grid > div`、`.inline-actions > *`、`.entry-card__actions > *`
-- 给子项补稳定语义 class / `data-slot`
-
-### P4
-
-- 去掉 `.entry-card--reading:first-child/last-child` 和相邻兄弟规则
-- 用显式列表边界状态替代位置依赖
-
-### P5
-
-- 同步更新 `theme-author-selector-reference.md`
-- 明确把 `reader-html` 标记成“允许保留的内容岛例外”
+1. 把卡片头部统一成标题槽，去掉 `h3` 依赖。
+2. 把 entries 的分组头部统一成标题/元信息槽，去掉内部标题结构依赖。

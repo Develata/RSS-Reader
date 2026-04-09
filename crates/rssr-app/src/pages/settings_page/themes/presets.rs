@@ -23,7 +23,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                 select {
                     id: "settings-preset-theme",
                     name: "preset_theme",
-                    class: "select-input",
+                    class: "select-input inline-actions__item",
                     "data-field": "preset-theme-select",
                     value: "{preset_choice}",
                     onchange: move |event| facade.set_preset_choice(event.value()),
@@ -35,7 +35,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     option { value: "midnight-ledger", "Midnight Ledger" }
                 }
                 button {
-                    class: "button",
+                    class: "button inline-actions__item",
                     "data-variant": "secondary",
                     "data-action": "apply-selected-theme",
                     onclick: move |_| apply_selected_facade.apply_selected_theme(),

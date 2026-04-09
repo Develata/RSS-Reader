@@ -6,13 +6,17 @@ use crate::router::AppRoute;
 
 use super::facade::EntriesPageFacade;
 
-pub(super) fn render_entry_card(entry: EntrySummary, facade: EntriesPageFacade) -> Element {
+pub(super) fn render_entry_card(
+    entry: EntrySummary,
+    facade: EntriesPageFacade,
+    list_edge: &'static str,
+) -> Element {
     let read_title = entry.title.clone();
     let starred_title = entry.title.clone();
     let read_facade = facade.clone();
 
     rsx! {
-        li { class: "entry-card entry-card--reading", key: "{entry.id}",
+        li { class: "entry-card entry-card--reading", key: "{entry.id}", "data-list-edge": "{list_edge}",
             Link {
                 class: "entry-card__title",
                 to: AppRoute::ReaderPage { entry_id: entry.id },
@@ -28,6 +32,7 @@ pub(super) fn render_entry_card(entry: EntrySummary, facade: EntriesPageFacade) 
                 button {
                     class: "button",
                     "data-variant": "secondary",
+                    "data-slot": "entry-card-action",
                     "data-action": "mark-read",
                     onclick: move |_| {
                         read_facade.toggle_read(entry.id, read_title.clone(), entry.is_read);
@@ -37,6 +42,7 @@ pub(super) fn render_entry_card(entry: EntrySummary, facade: EntriesPageFacade) 
                 button {
                     class: "button",
                     "data-variant": "secondary",
+                    "data-slot": "entry-card-action",
                     "data-action": "toggle-starred",
                     onclick: move |_| {
                         facade.toggle_starred(entry.id, starred_title.clone(), entry.is_starred);

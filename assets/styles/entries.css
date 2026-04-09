@@ -32,7 +32,7 @@
   min-width: 0;
 }
 
-.page-entries .reading-header {
+.page-section-header--entries {
   margin-bottom: 22px;
   padding-bottom: 18px;
   border-bottom: 1px solid rgba(62, 42, 27, 0.08);
@@ -224,6 +224,15 @@
   border-color: rgba(176, 74, 47, 0.24);
   background: rgba(255, 245, 239, 0.92);
   color: var(--ink);
+}
+
+.inline-actions__item {
+  width: auto;
+}
+
+.entry-card__action,
+[data-slot="entry-card-action"] {
+  flex: 0 1 auto;
 }
 
 .entry-organize-bar {
@@ -420,10 +429,6 @@
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 14px;
-}
-
-.entry-card__actions > * {
-  flex: 0 1 auto;
 }
 
 .app-shell[data-density="compact"] .entry-group__header {
