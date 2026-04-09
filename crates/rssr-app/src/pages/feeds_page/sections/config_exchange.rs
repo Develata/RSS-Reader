@@ -39,6 +39,7 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
                     }
                     button {
                         class: facade.config_import_button_class(),
+                        "data-state": "{facade.config_import_state()}",
                         "data-action": "import-config",
                         onclick: move |_| import_config_facade.import_config(),
                         "{facade.config_import_button_label()}"

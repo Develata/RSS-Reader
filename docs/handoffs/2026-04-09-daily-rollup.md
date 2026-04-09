@@ -294,6 +294,63 @@
   - `docs/design/frontend-command-reference.md`
 - 这样后续继续推进 `headless active interface + CSS 完全分离 + infra` 时，不再只有愿景文档和接口清单，而有一份明确的“当前实现版边界说明”作为正式基线。
 
+### 当日后续收口：阅读筛选字段语义继续去动作化
+
+- `crates/rssr-app/src/components/entry_filters.rs` 里原先仍把阅读筛选项暴露为动作接口：
+  - `filter-unread`
+  - `filter-read`
+  - `filter-starred`
+  - `filter-unstarred`
+- 这类接口本质上是在表达持续筛选状态，不是触发一次性副作用，因此继续收成稳定字段接口：
+  - `data-field="read-filter-unread"`
+  - `data-field="read-filter-read"`
+  - `data-field="starred-filter-starred"`
+  - `data-field="starred-filter-unstarred"`
+  - `data-field="entry-source-filter"`
+- 同时更新 `docs/design/frontend-command-reference.md`：
+  - 从 `data-action` 清单移除这组筛选项
+  - 把当前稳定 `data-field` 接口系统化列出
+- 这一步的意义不是改视觉，而是继续确保：
+  - `data-action` 只表示真正的命令语义
+  - `data-field` 只表示持续输入或选择状态
+  - CSS 与自动化不再需要根据旧命名猜测某个输入到底是字段还是动作
+
+### 当日后续收口：补 `data-state` 作为默认状态语义面
+
+- 为了继续推进 `headless active interface + CSS 完全分离 + infra`，开始把一些原先主要靠 class
+  名、按钮文案或 disabled 状态表达的默认状态，收成稳定 `data-state`：
+  - `status-banner` 直接暴露 tone：
+    - `info`
+    - `error`
+    - `success`
+  - 设置页保存按钮：
+    - `pending`
+    - `idle`
+  - WebDAV 下载按钮：
+    - `confirm`
+    - `idle`
+  - 主题卡片：
+    - `active`
+    - `inactive`
+  - 配置导入按钮：
+    - `confirm`
+    - `idle`
+  - 已保存订阅区：
+    - `empty`
+    - `populated`
+  - 删除订阅按钮 / 卡片：
+    - `confirm`
+    - `idle`
+  - 阅读页：
+    - 页面级 `error / loaded`
+    - 正文 `html / text`
+    - 上一篇 / 下一篇 `available / unavailable`
+    - 已读按钮 `read / unread`
+    - 收藏按钮 `starred / unstarred`
+- 同时同步更新 `docs/design/frontend-command-reference.md`：
+  - 新增“状态接口”小节
+  - 把 `data-state` 的角色从隐含约定变成正式设计接口
+
 ### 当日后续重构：全局 UI 命令面第一刀
 
 - 在 `crates/rssr-app/src/ui/` 下新增最小全局 UI 层骨架：

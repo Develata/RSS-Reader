@@ -62,6 +62,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                     }
                     button {
                         class: facade.remote_pull_button_class(),
+                        "data-state": "{facade.remote_pull_state()}",
                         "data-action": "pull-webdav",
                         onclick: move |_| facade.pull(),
                         "{facade.remote_pull_button_label()}"

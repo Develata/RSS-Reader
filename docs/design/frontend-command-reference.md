@@ -172,10 +172,6 @@
 - `data-action="group-by-source"`
 - `data-action="group-by-time"`
 - `data-action="toggle-archived"`
-- `data-action="filter-unread"`
-- `data-action="filter-starred"`
-- `data-action="filter-read"`
-- `data-action="filter-unstarred"`
 - `data-action="apply-custom-css"`
 - `data-action="export-custom-css-file"`
 - `data-action="import-custom-css-file"`
@@ -258,6 +254,63 @@
 
 设置页中的输入字段不应伪装成命令。它们应暴露稳定的 `data-field`，而把真正触发副作用的
 按钮继续保留为 `data-action`。
+
+当前已经稳定公开的字段接口包括：
+
+- `data-field="entry-search"`
+- `data-field="search-title"`
+- `data-field="read-filter-unread"`
+- `data-field="read-filter-read"`
+- `data-field="starred-filter-starred"`
+- `data-field="starred-filter-unstarred"`
+- `data-field="entry-source-filter"`
+- `data-field="entry-grouping-mode"`
+- `data-field="show-archived"`
+- `data-field="feed-url-input"`
+- `data-field="config-text"`
+- `data-field="opml-text"`
+- `data-field="theme-mode"`
+- `data-field="list-density"`
+- `data-field="startup-view"`
+- `data-field="refresh-interval"`
+- `data-field="archive-after-months"`
+- `data-field="reader-font-scale"`
+- `data-field="preset-theme-select"`
+- `data-field="custom-css"`
+- `data-field="webdav-endpoint"`
+- `data-field="webdav-remote-path"`
+
+---
+
+## 状态接口
+
+当某个节点需要暴露稳定的默认状态，而这个状态不应依赖 class 名、按钮文案或 DOM 层级时，
+应优先使用 `data-state`。
+
+当前已经开始使用的状态语义包括：
+
+- `data-state="expanded" | "collapsed"`
+- `data-state="info" | "error" | "success"`
+- `data-state="pending" | "idle"`
+- `data-state="confirm" | "idle"`
+- `data-state="active" | "inactive"`
+- `data-state="available" | "unavailable"`
+- `data-state="read" | "unread"`
+- `data-state="starred" | "unstarred"`
+- `data-state="html" | "text"`
+- `data-state="empty" | "populated"`
+
+`data-state` 的职责应保持为：
+
+- 默认状态语义
+- CSS / 自动化可依赖的稳定状态面
+- facade 或 shell 已经明确投影出来的可读状态
+
+而不是：
+
+- 替代 class 的视觉命名
+- 临时 DOM hack
+- 页面私有且不可复用的内部标记
 
 当前已稳定的设置页字段接口：
 

@@ -11,7 +11,9 @@ use super::support::feed_refresh_status_text;
 pub(crate) fn SavedFeedsSection(facade: FeedsPageFacade) -> Element {
     if facade.feeds().is_empty() {
         return rsx! {
-            StatusBanner { message: facade.empty_feeds_message().to_string(), tone: "info".to_string() }
+            div { "data-state": "{facade.feeds_list_state()}",
+                StatusBanner { message: facade.empty_feeds_message().to_string(), tone: "info".to_string() }
+            }
         };
     }
 
@@ -19,7 +21,7 @@ pub(crate) fn SavedFeedsSection(facade: FeedsPageFacade) -> Element {
         div { class: "exchange-header exchange-header--saved",
             h3 { "已保存订阅" }
         }
-        ul { class: "feed-list",
+        ul { class: "feed-list", "data-state": "{facade.feeds_list_state()}",
             for feed in facade.feeds() {
                 { render_feed_card(feed, facade.clone()) }
             }
@@ -34,7 +36,7 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
     let refresh_facade = facade.clone();
 
     rsx! {
-        li { class: "feed-card", key: "{feed_id}",
+        li { class: "feed-card", key: "{feed_id}", "data-state": "{facade.remove_feed_state(feed_id)}",
             Link {
                 class: "feed-card__title",
                 "data-nav": "feed-entries",
@@ -58,6 +60,7 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
                 }
                 button {
                     class: facade.remove_feed_button_class(feed_id),
+                    "data-state": "{facade.remove_feed_state(feed_id)}",
                     "data-action": "remove-feed",
                     onclick: move |_| facade.remove_feed(feed_id, delete_feed_title.clone()),
                     "{facade.remove_feed_button_label(feed_id)}"

@@ -33,7 +33,7 @@ pub fn EntryFilters(
                 input {
                     name: "filter_unread",
                     r#type: "checkbox",
-                    "data-action": "filter-unread",
+                    "data-field": "read-filter-unread",
                     checked: matches!(read_filter, ReadFilter::UnreadOnly),
                     onchange: move |event| {
                         on_change_read_filter.call(if event.checked() {
@@ -49,7 +49,7 @@ pub fn EntryFilters(
                 input {
                     name: "filter_read",
                     r#type: "checkbox",
-                    "data-action": "filter-read",
+                    "data-field": "read-filter-read",
                     checked: matches!(read_filter, ReadFilter::ReadOnly),
                     onchange: move |event| {
                         on_change_read_filter.call(if event.checked() {
@@ -65,7 +65,7 @@ pub fn EntryFilters(
                 input {
                     name: "filter_starred",
                     r#type: "checkbox",
-                    "data-action": "filter-starred",
+                    "data-field": "starred-filter-starred",
                     checked: matches!(starred_filter, StarredFilter::StarredOnly),
                     onchange: move |event| {
                         on_change_starred_filter.call(if event.checked() {
@@ -81,7 +81,7 @@ pub fn EntryFilters(
                 input {
                     name: "filter_unstarred",
                     r#type: "checkbox",
-                    "data-action": "filter-unstarred",
+                    "data-field": "starred-filter-unstarred",
                     checked: matches!(starred_filter, StarredFilter::UnstarredOnly),
                     onchange: move |event| {
                         on_change_starred_filter.call(if event.checked() {
@@ -123,6 +123,7 @@ pub fn EntryFilters(
                                         input {
                                             class: "sr-only",
                                             r#type: "checkbox",
+                                            "data-field": "entry-source-filter",
                                             checked: is_selected,
                                             onchange: move |_| on_change_selected_feed_urls.call(next_selected_feed_urls.clone())
                                         }

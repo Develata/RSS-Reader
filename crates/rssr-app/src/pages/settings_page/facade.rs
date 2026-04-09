@@ -110,6 +110,10 @@ impl SettingsPageFacade {
         if self.is_theme_preset_active(preset_key) { "theme-card is-active" } else { "theme-card" }
     }
 
+    pub(crate) fn theme_card_state(&self, preset_key: &str) -> &'static str {
+        if self.is_theme_preset_active(preset_key) { "active" } else { "inactive" }
+    }
+
     pub(crate) fn theme_apply_button_class(&self, preset_key: &str) -> &'static str {
         if self.is_theme_preset_active(preset_key) { "button" } else { "button secondary" }
     }
@@ -146,6 +150,10 @@ impl SettingsPageFacade {
         if self.is_save_pending() { "正在保存…" } else { "保存设置" }
     }
 
+    pub(crate) fn save_state(&self) -> &'static str {
+        if self.is_save_pending() { "pending" } else { "idle" }
+    }
+
     pub(crate) fn endpoint(&self) -> &str {
         &self.sync_snapshot.endpoint
     }
@@ -172,6 +180,10 @@ impl SettingsPageFacade {
 
     pub(crate) fn remote_pull_button_label(&self) -> &'static str {
         if self.is_remote_pull_pending() { "确认下载并覆盖" } else { "下载配置" }
+    }
+
+    pub(crate) fn remote_pull_state(&self) -> &'static str {
+        if self.is_remote_pull_pending() { "confirm" } else { "idle" }
     }
 
     pub(crate) fn push(&self) {

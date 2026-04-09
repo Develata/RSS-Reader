@@ -90,6 +90,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                             article {
                                 class: facade.theme_card_class(preset.key),
                                 key: "{preset.key}",
+                                "data-state": "{facade.theme_card_state(preset.key)}",
                                 "data-theme-preset": "{preset.key}",
                                 h4 { class: "theme-card__title", "{preset_name}" }
                                 div { class: "theme-card__swatches",

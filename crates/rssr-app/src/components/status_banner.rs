@@ -9,6 +9,6 @@ pub fn StatusBanner(message: String, tone: Option<String>) -> Element {
     let tone = tone.unwrap_or_else(|| "info".to_string());
 
     rsx! {
-        p { class: "status-banner {tone}", "{message}" }
+        p { class: "status-banner {tone}", "data-state": "{tone}", "{message}" }
     }
 }

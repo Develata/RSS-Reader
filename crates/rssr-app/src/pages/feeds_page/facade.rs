@@ -49,12 +49,20 @@ impl FeedsPageFacade {
         if self.is_config_import_pending() { "确认覆盖导入" } else { "导入配置" }
     }
 
+    pub(crate) fn config_import_state(&self) -> &'static str {
+        if self.is_config_import_pending() { "confirm" } else { "idle" }
+    }
+
     pub(crate) fn is_delete_pending_for(&self, feed_id: i64) -> bool {
         self.session.is_delete_pending_for(feed_id)
     }
 
     pub(crate) fn empty_feeds_message(&self) -> &'static str {
         "还没有订阅，先添加一个 feed URL。"
+    }
+
+    pub(crate) fn feeds_list_state(&self) -> &'static str {
+        if self.feeds().is_empty() { "empty" } else { "populated" }
     }
 
     pub(crate) fn remove_feed_button_class(&self, feed_id: i64) -> &'static str {
@@ -67,6 +75,10 @@ impl FeedsPageFacade {
 
     pub(crate) fn remove_feed_button_label(&self, feed_id: i64) -> &'static str {
         if self.is_delete_pending_for(feed_id) { "确认删除" } else { "删除订阅" }
+    }
+
+    pub(crate) fn remove_feed_state(&self, feed_id: i64) -> &'static str {
+        if self.is_delete_pending_for(feed_id) { "confirm" } else { "idle" }
     }
 
     pub(crate) fn feeds(&self) -> &[FeedSummary] {

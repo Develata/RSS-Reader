@@ -33,6 +33,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
         article {
             class: "reader-page",
             "data-page": "reader",
+            "data-state": if facade.error().is_some() { "error" } else { "loaded" },
             tabindex: 0,
             onkeydown: move |event| shortcuts.call(event),
             AppNav {}
@@ -57,7 +58,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 if facade.has_status_message() {
                     StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string() }
                 }
-                div { class: "reader-body",
+                div { class: "reader-body", "data-state": "{facade.body_state()}",
                     if let Some(html) = facade.body_html() {
                         div { class: "reader-html", dangerous_inner_html: "{html}" }
                     } else {
@@ -86,6 +87,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     button {
                         class: facade.previous_entry_button_class(),
                         disabled: !facade.has_previous_entry_target(),
+                        "data-state": "{facade.previous_entry_state()}",
                         "data-nav": "previous-unread-entry",
                         onclick: move |_| {
                             if let Some(target) = previous_facade.previous_entry_target() {
@@ -97,6 +99,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     }
                     button {
                         class: "reader-bottom-bar__button",
+                        "data-state": "{facade.read_state()}",
                         "data-action": "mark-read",
                         onclick: move |_| {
                             read_facade.toggle_read(false);
@@ -106,6 +109,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     }
                     button {
                         class: facade.starred_button_class(),
+                        "data-state": "{facade.starred_state()}",
                         "data-action": "toggle-starred",
                         onclick: move |_| {
                             starred_facade.toggle_starred(false);
@@ -116,6 +120,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     button {
                         class: facade.next_entry_button_class(),
                         disabled: !facade.has_next_entry_target(),
+                        "data-state": "{facade.next_entry_state()}",
                         "data-nav": "next-unread-entry",
                         onclick: move |_| {
                             if let Some(target) = next_facade.next_entry_target() {

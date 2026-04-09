@@ -112,6 +112,10 @@ impl ReaderPageFacade {
         if self.is_read() { "未读（M）" } else { "已读（M）" }
     }
 
+    pub(crate) fn read_state(&self) -> &'static str {
+        if self.is_read() { "read" } else { "unread" }
+    }
+
     pub(crate) fn starred_button_class(&self) -> &'static str {
         if self.is_starred() {
             "reader-bottom-bar__button is-active"
@@ -122,6 +126,22 @@ impl ReaderPageFacade {
 
     pub(crate) fn starred_toggle_icon(&self) -> &'static str {
         if self.is_starred() { "★" } else { "☆" }
+    }
+
+    pub(crate) fn starred_state(&self) -> &'static str {
+        if self.is_starred() { "starred" } else { "unstarred" }
+    }
+
+    pub(crate) fn previous_entry_state(&self) -> &'static str {
+        if self.has_previous_entry_target() { "available" } else { "unavailable" }
+    }
+
+    pub(crate) fn next_entry_state(&self) -> &'static str {
+        if self.has_next_entry_target() { "available" } else { "unavailable" }
+    }
+
+    pub(crate) fn body_state(&self) -> &'static str {
+        if self.body_html().is_some() { "html" } else { "text" }
     }
 
     pub(crate) fn toggle_read(&self, via_shortcut: bool) {
