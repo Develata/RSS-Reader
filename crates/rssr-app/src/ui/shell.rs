@@ -5,7 +5,7 @@ use rssr_domain::UserSettings;
 use crate::{
     router::AppRoute,
     status::{set_status_error, set_status_info},
-    ui::{UiCommand, UiIntent, collect_projected_ui_command, visit_ui_command},
+    ui::{ShellCommand, UiCommand, UiIntent, collect_projected_ui_command, visit_ui_command},
     web_auth::{
         WebAuthState, configured_username, local_auth_state, login, setup_credentials,
         verify_server_gate,
@@ -120,7 +120,7 @@ pub(crate) fn use_authenticated_shell_bus(
 
         if current_auth == WebAuthState::Authenticated {
             for snapshot in collect_projected_ui_command(
-                UiCommand::LoadAuthenticatedShell,
+                UiCommand::Shell(ShellCommand::LoadAuthenticatedShell),
                 UiIntent::into_authenticated_shell_loaded,
             )
             .await
@@ -137,7 +137,7 @@ pub(crate) fn use_startup_route_bus(
     mut status_tone: Signal<String>,
 ) {
     use_resource(move || async move {
-        visit_ui_command(UiCommand::ResolveStartupRoute, |intent| {
+        visit_ui_command(UiCommand::Shell(ShellCommand::ResolveStartupRoute), |intent| {
             if let Some(snapshot) = intent.clone().into_startup_route_resolved() {
                 let _ = navigator.replace(snapshot.route);
                 return;

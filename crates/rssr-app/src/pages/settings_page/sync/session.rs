@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use super::state::SettingsPageSyncState;
-use crate::ui::{UiCommand, UiIntent, spawn_projected_ui_command};
+use crate::ui::{SettingsCommand, UiCommand, UiIntent, spawn_projected_ui_command};
 use crate::{pages::settings_page::session::SettingsPageSession, status::set_status_info};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -29,10 +29,10 @@ impl SettingsPageSyncSession {
 
     pub(crate) fn push(self) {
         let snapshot = self.snapshot();
-        self.apply_ui_command(UiCommand::SettingsPushConfig {
+        self.apply_ui_command(UiCommand::Settings(SettingsCommand::PushConfig {
             endpoint: snapshot.endpoint,
             remote_path: snapshot.remote_path,
-        });
+        }));
     }
 
     pub(crate) fn pull(mut self) {
@@ -47,10 +47,10 @@ impl SettingsPageSyncSession {
         }
 
         let snapshot = self.snapshot();
-        self.apply_ui_command(UiCommand::SettingsPullConfig {
+        self.apply_ui_command(UiCommand::Settings(SettingsCommand::PullConfig {
             endpoint: snapshot.endpoint,
             remote_path: snapshot.remote_path,
-        });
+        }));
     }
 
     fn apply_ui_command(mut self, command: UiCommand) {

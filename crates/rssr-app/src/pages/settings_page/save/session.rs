@@ -8,7 +8,7 @@ use crate::{
         themes::{detect_preset_key, validate_custom_css},
     },
     status::{set_status_error, set_status_info},
-    ui::{UiCommand, UiIntent, apply_projected_ui_intents, spawn_ui_command},
+    ui::{SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, spawn_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -51,7 +51,10 @@ impl SettingsPageSaveSession {
         let success_message = success_message.into();
 
         spawn_ui_command(
-            UiCommand::SettingsSaveAppearance { settings: next.clone(), success_message },
+            UiCommand::Settings(SettingsCommand::SaveAppearance {
+                settings: next.clone(),
+                success_message,
+            }),
             move |intents| {
                 state.with_mut(|state| state.pending_save = false);
                 let mut saved_settings = None;

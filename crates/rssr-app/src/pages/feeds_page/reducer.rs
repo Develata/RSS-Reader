@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use super::{intent::FeedsPageIntent, state::FeedsPageState};
-use crate::ui::UiCommand;
+use crate::ui::{FeedsCommand, UiCommand};
 
 pub(crate) fn dispatch_feeds_page_intent(
     mut state: Signal<FeedsPageState>,
@@ -17,7 +17,7 @@ pub(crate) fn reduce_feeds_page_intent(
     intent: FeedsPageIntent,
 ) -> Vec<UiCommand> {
     match intent {
-        FeedsPageIntent::LoadRequested => vec![UiCommand::FeedsLoadSnapshot],
+        FeedsPageIntent::LoadRequested => vec![UiCommand::Feeds(FeedsCommand::LoadSnapshot)],
         FeedsPageIntent::FeedUrlChanged(value) => {
             state.feed_url = value;
             Vec::new()
@@ -32,29 +32,35 @@ pub(crate) fn reduce_feeds_page_intent(
             Vec::new()
         }
         FeedsPageIntent::AddFeedRequested => {
-            vec![UiCommand::FeedsAddFeed { raw_url: state.feed_url.clone() }]
+            vec![UiCommand::Feeds(FeedsCommand::AddFeed { raw_url: state.feed_url.clone() })]
         }
-        FeedsPageIntent::RefreshAllRequested => vec![UiCommand::FeedsRefreshAll],
+        FeedsPageIntent::RefreshAllRequested => vec![UiCommand::Feeds(FeedsCommand::RefreshAll)],
         FeedsPageIntent::RefreshFeedRequested { feed_id, feed_title } => {
-            vec![UiCommand::FeedsRefreshFeed { feed_id, feed_title }]
+            vec![UiCommand::Feeds(FeedsCommand::RefreshFeed { feed_id, feed_title })]
         }
         FeedsPageIntent::RemoveFeedRequested { feed_id, feed_title } => {
-            vec![UiCommand::FeedsRemoveFeed {
+            vec![UiCommand::Feeds(FeedsCommand::RemoveFeed {
                 feed_id,
                 feed_title,
                 confirmed: state.pending_delete_feed == Some(feed_id),
-            }]
+            })]
         }
-        FeedsPageIntent::ExportConfigRequested => vec![UiCommand::FeedsExportConfig],
-        FeedsPageIntent::ImportConfigRequested => vec![UiCommand::FeedsImportConfig {
-            raw: state.config_text.clone(),
-            confirmed: state.pending_config_import,
-        }],
-        FeedsPageIntent::ExportOpmlRequested => vec![UiCommand::FeedsExportOpml],
+        FeedsPageIntent::ExportConfigRequested => {
+            vec![UiCommand::Feeds(FeedsCommand::ExportConfig)]
+        }
+        FeedsPageIntent::ImportConfigRequested => {
+            vec![UiCommand::Feeds(FeedsCommand::ImportConfig {
+                raw: state.config_text.clone(),
+                confirmed: state.pending_config_import,
+            })]
+        }
+        FeedsPageIntent::ExportOpmlRequested => vec![UiCommand::Feeds(FeedsCommand::ExportOpml)],
         FeedsPageIntent::ImportOpmlRequested => {
-            vec![UiCommand::FeedsImportOpml { raw: state.opml_text.clone() }]
+            vec![UiCommand::Feeds(FeedsCommand::ImportOpml { raw: state.opml_text.clone() })]
         }
-        FeedsPageIntent::PasteFeedUrlRequested => vec![UiCommand::FeedsReadFeedUrlFromClipboard],
+        FeedsPageIntent::PasteFeedUrlRequested => {
+            vec![UiCommand::Feeds(FeedsCommand::ReadFeedUrlFromClipboard)]
+        }
         FeedsPageIntent::SnapshotLoaded(result) => {
             match result {
                 Ok(snapshot) => {

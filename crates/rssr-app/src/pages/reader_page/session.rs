@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::bootstrap::ReaderNavigation;
-use crate::ui::{UiCommand, UiIntent, spawn_projected_ui_command};
+use crate::ui::{ReaderCommand, UiCommand, UiIntent, spawn_projected_ui_command};
 
 use super::{reducer::dispatch_reader_page_intent, state::ReaderPageState};
 
@@ -33,23 +33,25 @@ impl ReaderPageSession {
     }
 
     pub(crate) fn load(self) {
-        self.spawn_ui_command(UiCommand::ReaderLoadEntry { entry_id: self.entry_id });
+        self.spawn_ui_command(UiCommand::Reader(ReaderCommand::LoadEntry {
+            entry_id: self.entry_id,
+        }));
     }
 
     pub(crate) fn toggle_read(self, via_shortcut: bool) {
-        self.spawn_ui_command(UiCommand::ReaderToggleRead {
+        self.spawn_ui_command(UiCommand::Reader(ReaderCommand::ToggleRead {
             entry_id: self.entry_id,
             currently_read: (self.state)().is_read,
             via_shortcut,
-        });
+        }));
     }
 
     pub(crate) fn toggle_starred(self, via_shortcut: bool) {
-        self.spawn_ui_command(UiCommand::ReaderToggleStarred {
+        self.spawn_ui_command(UiCommand::Reader(ReaderCommand::ToggleStarred {
             entry_id: self.entry_id,
             currently_starred: (self.state)().is_starred,
             via_shortcut,
-        });
+        }));
     }
 
     fn spawn_ui_command(self, command: UiCommand) {

@@ -1294,6 +1294,85 @@
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
 - `git diff --check`：通过
 
+## 追加：按命令族拆分 `UiRuntime`
+
+### 背景
+
+- [ui/runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime.rs) 在引入统一 bus 后，已经同时承接：
+  - shell / startup
+  - entries
+  - reader
+  - feeds
+  - settings
+- 方向本身正确，但单文件继续增长会很快形成新的 God object。
+
+### 本轮变更
+
+- 将 `crates/rssr-app/src/ui/runtime.rs` 收成目录模块：
+  - [ui/runtime/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/mod.rs)
+  - [ui/runtime/shell.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/shell.rs)
+  - [ui/runtime/entries.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/entries.rs)
+  - [ui/runtime/reader.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/reader.rs)
+  - [ui/runtime/feeds.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/feeds.rs)
+  - [ui/runtime/settings.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/settings.rs)
+- 对外入口保持不变：
+  - `execute_ui_command(command: UiCommand) -> Vec<UiIntent>`
+- `mod.rs` 现在只负责按命令族路由：
+  - shell
+  - entries
+  - reader
+  - feeds
+  - settings
+- 各族特有 helper 也一起下沉：
+  - `entries_status_error`
+  - `reader_status_error`
+  - `feeds_status_error`
+  - `settings_status_error`
+  - feeds 剪贴板读取逻辑
+
+### 当前判断
+
+- 这一步没有改变 bus 语义和页面行为。
+- 变化点只在内部结构：把“统一入口”保留住，同时把“统一入口内部的实现责任”按命令族拆开。
+- 后续如果继续扩 `UiCommand`，优先应该在对应族文件增量演进，而不是再把 `mod.rs` 变回大 `match` 细节堆场。
+
+## 追加：按命令族拆分 `UiCommand`
+
+### 背景
+
+- `UiRuntime` 已经按命令族拆开，如果 `UiCommand` 继续保持单个大枚举文件，膨胀点只是从 runtime 转移到 commands。
+- 当前 bus 已经稳定覆盖：
+  - shell
+  - entries
+  - reader
+  - feeds
+  - settings
+
+### 本轮变更
+
+- 将 `crates/rssr-app/src/ui/commands.rs` 收成目录模块：
+  - [ui/commands/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/commands/mod.rs)
+  - [ui/commands/shell.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/commands/shell.rs)
+  - [ui/commands/entries.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/commands/entries.rs)
+  - [ui/commands/reader.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/commands/reader.rs)
+  - [ui/commands/feeds.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/commands/feeds.rs)
+  - [ui/commands/settings.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/commands/settings.rs)
+- `UiCommand` 现在变成族枚举包装：
+  - `UiCommand::Shell(ShellCommand)`
+  - `UiCommand::Entries(EntriesCommand)`
+  - `UiCommand::Reader(ReaderCommand)`
+  - `UiCommand::Feeds(FeedsCommand)`
+  - `UiCommand::Settings(SettingsCommand)`
+- 页面 session / reducer / shell 层都改成显式发对应族命令，而不是继续向一个平铺大枚举塞分支。
+- [ui/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/mod.rs) 统一 re-export 这些命令族，页面调用侧不需要知道底层目录细节。
+
+### 当前判断
+
+- 到这里，bus 的“入口统一”与“内部按领域拆分”已经形成对称结构：
+  - runtime 按命令族拆
+  - commands 按命令族拆
+- 这更贴近 `headless active interface + CSS 完全分离 + infra` 的目标，因为页面层现在发出的不再是“全局大枚举中的一条分支”，而是更明确的领域语义命令。
+
 ### 当日后续收口：page facade 命名统一
 
 - 在四个 page facade 上继续做了一轮高价值统一，不再保留“同义不同名”的边界词汇：

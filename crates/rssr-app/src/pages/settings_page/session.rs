@@ -5,7 +5,7 @@ use super::{intent::SettingsPageIntent, themes::detect_preset_key};
 use crate::{
     status::{set_status_error, set_status_info},
     theme::ThemeController,
-    ui::{UiCommand, UiIntent, spawn_projected_ui_command},
+    ui::{SettingsCommand, UiCommand, UiIntent, spawn_projected_ui_command},
 };
 
 const REPOSITORY_URL: &str = "https://github.com/Develata/RSS-Reader";
@@ -59,7 +59,7 @@ impl SettingsPageSession {
     }
 
     pub(crate) fn load(self) {
-        self.spawn_ui_command(UiCommand::SettingsLoad);
+        self.spawn_ui_command(UiCommand::Settings(SettingsCommand::Load));
     }
 
     pub(crate) fn dispatch(self, intent: SettingsPageIntent) {

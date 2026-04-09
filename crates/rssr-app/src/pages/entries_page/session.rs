@@ -5,7 +5,7 @@ use super::{
     presenter::EntriesPagePresenter, reducer::dispatch_entries_page_intent,
     state::EntriesPageState,
 };
-use crate::ui::{UiCommand, UiIntent, spawn_projected_ui_command};
+use crate::ui::{EntriesCommand, UiCommand, UiIntent, spawn_projected_ui_command};
 use rssr_domain::EntryQuery;
 use time::OffsetDateTime;
 
@@ -37,15 +37,15 @@ impl EntriesPageSession {
     }
 
     pub(crate) fn bootstrap(self, load_preferences: bool, load_feeds: bool) {
-        self.spawn_ui_command(UiCommand::EntriesBootstrap {
+        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::Bootstrap {
             feed_id: self.feed_id,
             load_preferences,
             load_feeds,
-        });
+        }));
     }
 
     pub(crate) fn load_entries_query(self, query: EntryQuery) {
-        self.spawn_ui_command(UiCommand::EntriesLoadEntries { query });
+        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::LoadEntries { query }));
     }
 
     pub(crate) fn save_browsing_preferences_with(
@@ -61,21 +61,21 @@ impl EntriesPageSession {
             return;
         }
 
-        self.spawn_ui_command(UiCommand::EntriesSaveBrowsingPreferences {
+        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::SaveBrowsingPreferences {
             grouping_mode,
             show_archived,
             read_filter,
             starred_filter,
             selected_feed_urls,
-        });
+        }));
     }
 
     pub(crate) fn toggle_read(self, entry_id: i64, entry_title: String, currently_read: bool) {
-        self.spawn_ui_command(UiCommand::EntriesToggleRead {
+        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::ToggleRead {
             entry_id,
             entry_title,
             currently_read,
-        });
+        }));
     }
 
     pub(crate) fn toggle_starred(
@@ -84,11 +84,11 @@ impl EntriesPageSession {
         entry_title: String,
         currently_starred: bool,
     ) {
-        self.spawn_ui_command(UiCommand::EntriesToggleStarred {
+        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::ToggleStarred {
             entry_id,
             entry_title,
             currently_starred,
-        });
+        }));
     }
 
     pub(crate) fn dispatch(self, intent: EntriesPageIntent) {
