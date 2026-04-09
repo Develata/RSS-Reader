@@ -1255,6 +1255,74 @@
 - `cargo check -p rssr-app`：通过
 - `commit`：pending
 
+## 追加：把 reader/feeds facade 继续收成只读快照边界
+
+### 背景
+
+- 在 `entries_page` 和 `settings_page` 收口之后，`reader_page` 与 `feeds_page` 仍然还存在一类较明显的耦合：
+  - 组件虽然已经拿 facade
+  - 但仍然大量直接解构 `facade.snapshot.*`
+- 这意味着页面壳和 section 仍然依赖底层 state 结构细节，而不是依赖 facade 的稳定只读边界。
+
+### 本轮变更
+
+- [reader_page/facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/facade.rs)
+  - 补出只读访问口：
+    - `shortcuts`
+    - `title`
+    - `source`
+    - `published_at`
+    - `body_text`
+    - `body_html`
+    - `status`
+    - `status_tone`
+    - `error`
+    - `is_read`
+    - `is_starred`
+    - `navigation_state`
+  - `session` / `snapshot` 不再继续作为页面层主要读取面
+
+- [reader_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/mod.rs)
+  - 页面壳不再直接解构 `snapshot`
+  - 阅读正文、上下文分页、底部操作条都改成优先读 facade
+
+- [feeds_page/facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/facade.rs)
+  - 补出只读访问口：
+    - `feed_url`
+    - `config_text`
+    - `opml_text`
+    - `pending_config_import`
+    - `feeds`
+    - `feed_count`
+    - `entry_count`
+    - `status`
+    - `status_tone`
+
+- [feeds_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/mod.rs)
+  - 顶部统计卡和状态 banner 改成直接消费 facade 只读口
+
+- [feeds_page/sections/compose.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/compose.rs)
+  - 新增订阅输入框不再直接读 `snapshot.feed_url`
+
+- [feeds_page/sections/config_exchange.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/config_exchange.rs)
+  - JSON / OPML 输入框和导入确认态改成读 facade
+
+- [feeds_page/sections/saved.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/saved.rs)
+  - 已保存订阅列表不再直接读 `snapshot.feeds`
+
+### 当前判断
+
+- 到这里，`reader_page` 和 `feeds_page` 的 facade 已经更像真正的只读边界，而不只是“把 session 和 snapshot 打包一下”。
+- 这一步和前两轮一起看，四个主页面都已经在往统一的：
+  - 只读快照
+  - 明确动作口
+ 这个 page boundary 模式靠拢。
+
+### 本轮验证
+
+- `cargo check -p rssr-app`：通过
+- `commit`：pending
+
 ## 追加：把 settings_page facade 收成“值 + 动作口”边界
 
 ### 背景

@@ -21,7 +21,6 @@ pub fn FeedsPage() -> Element {
     use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
 
     let facade = use_feeds_page_workspace();
-    let snapshot = &facade.snapshot;
 
     rsx! {
         section { class: "page page-feeds", "data-page": "feeds",
@@ -32,14 +31,14 @@ pub fn FeedsPage() -> Element {
             div { class: "stats-grid stats-grid--airy",
                 div { class: "stat-card",
                     div { class: "stat-card__label", "订阅数" }
-                    div { class: "stat-card__value", "{snapshot.feed_count}" }
+                    div { class: "stat-card__value", "{facade.feed_count()}" }
                 }
                 div { class: "stat-card",
                     div { class: "stat-card__label", "文章数" }
-                    div { class: "stat-card__value", "{snapshot.entry_count}" }
+                    div { class: "stat-card__value", "{facade.entry_count()}" }
                 }
             }
-            StatusBanner { message: snapshot.status.clone(), tone: snapshot.status_tone.clone() }
+            StatusBanner { message: facade.status().to_string(), tone: facade.status_tone().to_string() }
             FeedComposeSection { facade: facade.clone() }
             ConfigExchangeSection { facade: facade.clone() }
             SavedFeedsSection { facade }

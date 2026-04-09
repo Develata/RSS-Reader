@@ -23,8 +23,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
 
     let navigator = use_navigator();
     let facade = use_reader_page_workspace(entry_id);
-    let snapshot = facade.snapshot.clone();
-    let shortcuts = facade.shortcuts;
+    let shortcuts = facade.shortcuts();
     let previous_action_target = facade.previous_action_target();
     let next_action_target = facade.next_action_target();
     let previous_facade = facade.clone();
@@ -40,7 +39,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             onkeydown: move |event| shortcuts.call(event),
             AppNav {}
             header { class: "reader-header",
-                h2 { class: "reader-title", "{snapshot.title}" }
+                h2 { class: "reader-title", "{facade.title()}" }
             }
             div { class: "reader-toolbar inline-actions",
                 button {
@@ -51,24 +50,24 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 }
             }
             div { class: "reader-meta-block",
-                p { class: "reader-meta", "来源：{snapshot.source}" }
-                p { class: "reader-meta", "发布时间：{snapshot.published_at}" }
+                p { class: "reader-meta", "来源：{facade.source()}" }
+                p { class: "reader-meta", "发布时间：{facade.published_at()}" }
             }
-            if let Some(message) = snapshot.error.clone() {
-                StatusBanner { message, tone: "error".to_string() }
+            if let Some(message) = facade.error() {
+                StatusBanner { message: message.to_string(), tone: "error".to_string() }
             } else {
-                if !snapshot.status.is_empty() {
-                    StatusBanner { message: snapshot.status.clone(), tone: snapshot.status_tone.clone() }
+                if !facade.status().is_empty() {
+                    StatusBanner { message: facade.status().to_string(), tone: facade.status_tone().to_string() }
                 }
                 div { class: "reader-body",
-                    if let Some(html) = snapshot.body_html.clone() {
+                    if let Some(html) = facade.body_html() {
                         div { class: "reader-html", dangerous_inner_html: "{html}" }
                     } else {
-                        pre { "{snapshot.body_text}" }
+                        pre { "{facade.body_text()}" }
                     }
                 }
                 div { class: "reader-pagination reader-pagination--context inline-actions",
-                    if let Some(previous_feed_entry_id) = snapshot.navigation_state.previous_feed_entry_id {
+                    if let Some(previous_feed_entry_id) = facade.navigation_state().previous_feed_entry_id {
                         button {
                             class: "button secondary",
                             "data-nav": "previous-feed-entry",
@@ -76,7 +75,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                             "上一篇同订阅文章"
                         }
                     }
-                    if let Some(next_feed_entry_id) = snapshot.navigation_state.next_feed_entry_id {
+                    if let Some(next_feed_entry_id) = facade.navigation_state().next_feed_entry_id {
                         button {
                             class: "button secondary",
                             "data-nav": "next-feed-entry",
@@ -108,11 +107,11 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         onclick: move |_| {
                             read_facade.toggle_read(false);
                         },
-                        span { class: "reader-bottom-bar__icon", if snapshot.is_read { "○" } else { "✓" } }
-                        span { class: "reader-bottom-bar__label", if snapshot.is_read { "未读（M）" } else { "已读（M）" } }
+                        span { class: "reader-bottom-bar__icon", if facade.is_read() { "○" } else { "✓" } }
+                        span { class: "reader-bottom-bar__label", if facade.is_read() { "未读（M）" } else { "已读（M）" } }
                     }
                     button {
-                        class: if snapshot.is_starred {
+                        class: if facade.is_starred() {
                             "reader-bottom-bar__button is-active"
                         } else {
                             "reader-bottom-bar__button"
@@ -121,7 +120,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         onclick: move |_| {
                             starred_facade.toggle_starred(false);
                         },
-                        span { class: "reader-bottom-bar__icon", if snapshot.is_starred { "★" } else { "☆" } }
+                        span { class: "reader-bottom-bar__icon", if facade.is_starred() { "★" } else { "☆" } }
                         span { class: "reader-bottom-bar__label", "收藏（F）" }
                     }
                     button {

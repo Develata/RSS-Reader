@@ -9,9 +9,7 @@ use super::support::feed_refresh_status_text;
 
 #[component]
 pub(crate) fn SavedFeedsSection(facade: FeedsPageFacade) -> Element {
-    let snapshot = &facade.snapshot;
-
-    if snapshot.feeds.is_empty() {
+    if facade.feeds().is_empty() {
         return rsx! {
             StatusBanner { message: "还没有订阅，先添加一个 feed URL。".to_string(), tone: "info".to_string() }
         };
@@ -22,7 +20,7 @@ pub(crate) fn SavedFeedsSection(facade: FeedsPageFacade) -> Element {
             h3 { "已保存订阅" }
         }
         ul { class: "feed-list",
-            for feed in &snapshot.feeds {
+            for feed in facade.feeds() {
                 { render_feed_card(feed, facade.clone()) }
             }
         }

@@ -4,7 +4,6 @@ use crate::pages::feeds_page::facade::FeedsPageFacade;
 
 #[component]
 pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
-    let snapshot = facade.snapshot.clone();
     let paste_facade = facade.clone();
     let input_facade = facade.clone();
     let add_facade = facade.clone();
@@ -22,7 +21,7 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
                         name: "feed_url",
                         class: "text-input",
                         "data-field": "feed-url-input",
-                        value: "{snapshot.feed_url}",
+                        value: "{facade.feed_url()}",
                         placeholder: "https://example.com/feed.xml",
                         onkeydown: move |event| {
                             if !is_paste_shortcut(&event) {

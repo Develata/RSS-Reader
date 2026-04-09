@@ -4,7 +4,6 @@ use crate::pages::feeds_page::facade::FeedsPageFacade;
 
 #[component]
 pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
-    let snapshot = facade.snapshot.clone();
     let config_input_facade = facade.clone();
     let export_config_facade = facade.clone();
     let import_config_facade = facade.clone();
@@ -27,7 +26,7 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
                     name: "config_text",
                     class: "text-area",
                     "data-field": "config-text",
-                    value: "{snapshot.config_text}",
+                    value: "{facade.config_text()}",
                     placeholder: "{{\n  \"version\": 1,\n  ...\n}}",
                     oninput: move |event| config_input_facade.set_config_text(event.value())
                 }
@@ -39,10 +38,10 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
                         "导出配置"
                     }
                     button {
-                        class: if snapshot.pending_config_import { "button danger" } else { "button secondary" },
+                        class: if facade.pending_config_import() { "button danger" } else { "button secondary" },
                         "data-action": "import-config",
                         onclick: move |_| import_config_facade.import_config(),
-                        if snapshot.pending_config_import { "确认覆盖导入" } else { "导入配置" }
+                        if facade.pending_config_import() { "确认覆盖导入" } else { "导入配置" }
                     }
                 }
             }
@@ -56,7 +55,7 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
                     name: "opml_text",
                     class: "text-area",
                     "data-field": "opml-text",
-                    value: "{snapshot.opml_text}",
+                    value: "{facade.opml_text()}",
                     placeholder: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
                     oninput: move |event| opml_input_facade.set_opml_text(event.value())
                 }
