@@ -1255,6 +1255,80 @@
 - `cargo check -p rssr-app`：通过
 - `commit`：pending
 
+## 追加：标准化 entries/settings facade 边界命名
+
+### 背景
+
+- 在前几轮 facade 收口后，四个主页面已经都有 page facade，但一致性还不够：
+  - `reader_page` / `feeds_page` 已经开始转向明确的 accessor
+  - `entries_page` 仍然保留 `ui/session/snapshot/presenter` 原始字段暴露
+  - `settings_page` 的 facade 字段本身也还是公开的
+- 这意味着 facade 的语义边界已经形成，但命名和访问习惯还不统一。
+
+### 本轮变更
+
+- [entries_page/facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/facade.rs)
+  - 把 `ui/session/snapshot/presenter` 收成私有字段
+  - 补出更完整的 accessor：
+    - 搜索/筛选相关：
+      - `entry_search`
+      - `set_entry_search`
+      - `read_filter`
+      - `starred_filter`
+      - `selected_feed_urls`
+    - 页面展示相关：
+      - `controls_hidden`
+      - `grouping_mode`
+      - `show_archived`
+      - `archive_after_months`
+      - `status`
+      - `status_tone`
+      - `entries_is_empty`
+      - `visible_entries_is_empty`
+      - `visible_entries_len`
+      - `archived_count`
+    - presenter 快照相关：
+      - `source_filter_options`
+      - `group_nav_items`
+      - `time_grouped_entries`
+      - `source_grouped_entries`
+      - `directory_months`
+      - `directory_sources`
+      - `expanded_directory_sources`
+
+- [entries_page/controls.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/controls.rs)
+  - 不再直接解构：
+    - `facade.ui`
+    - `facade.snapshot`
+    - `facade.presenter`
+  - 改成统一走 facade accessor
+
+- [entries_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)
+  - 分组渲染和目录渲染不再直接解构 `snapshot/presenter`
+  - 统一改成走 facade
+  - 同时把分组循环改成按引用遍历，避免在 facade slice 模式下误移动内部向量
+
+- [settings_page/facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/facade.rs)
+  - `page/save/save_snapshot/sync/sync_snapshot` 改成私有字段
+  - 现在 `settings_page` facade 也明确只通过方法暴露边界
+
+### 当前判断
+
+- 到这里，四个主页面的 facade 形态已经更接近统一：
+  - 原始字段不再是主要读取面
+  - 读路径通过 accessor
+  - 写路径通过动作口
+- 也就是说，page boundary 现在已经比前几轮更接近：
+  - `snapshot accessors`
+  - `action slots`
+ 这个统一心智模型。
+
+### 本轮验证
+
+- `cargo check -p rssr-app`：通过
+- `git diff --check`：通过
+- `commit`：pending
+
 ## 追加：把 reader/feeds facade 继续收成只读快照边界
 
 ### 背景

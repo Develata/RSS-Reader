@@ -57,8 +57,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
     let controls = render_entry_controls(&facade);
-    let snapshot = facade.snapshot.clone();
-    let presenter = facade.presenter.clone();
 
     rsx! {
         section {
@@ -84,14 +82,14 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                         }
                     }
                     { controls }
-                    if snapshot.entries.is_empty() {
+                    if facade.entries_is_empty() {
                         div { class: "entries-page__state", "data-state": "empty",
                             StatusBanner {
                                 message: empty_entries_message(feed_id),
                                 tone: "info".to_string()
                             }
                         }
-                    } else if presenter.visible_entries.is_empty() {
+                    } else if facade.visible_entries_is_empty() {
                         div { class: "entries-page__state", "data-state": "archived",
                             StatusBanner {
                                 message: "当前结果中的文章都已被自动归档，勾选“显示已归档文章”即可查看。".to_string(),
@@ -100,28 +98,28 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                         }
                     } else {
                         div { class: "entry-groups",
-                            if snapshot.grouping_mode == state::EntryGroupingMode::Time {
-                                for month in presenter.time_grouped_entries {
+                            if facade.grouping_mode() == state::EntryGroupingMode::Time {
+                                for month in facade.time_grouped_entries() {
                                     section { class: "entry-group entry-group--time", key: "{month.anchor_id}", id: "{month.anchor_id}",
                                         div { class: "entry-group__header",
                                             h3 { class: "entry-group__title", "{month.title}" }
                                             p { class: "entry-group__meta", "{month.subtitle}" }
                                         }
-                                        for date_group in month.dates {
+                                        for date_group in &month.dates {
                                             section { class: "entry-date-group", key: "{date_group.anchor_id}", id: "{date_group.anchor_id}",
                                                 div { class: "entry-date-group__header",
                                                     h4 { class: "entry-date-group__title", "{date_group.title}" }
                                                     p { class: "entry-date-group__meta", "{date_group.subtitle}" }
                                                 }
-                                                for source in date_group.sources {
+                                                for source in &date_group.sources {
                                                     section { class: "entry-source-group", key: "{source.anchor_id}", id: "{source.anchor_id}",
                                                         div { class: "entry-source-group__header",
                                                             h5 { class: "entry-source-group__title", "{source.title}" }
                                                             p { class: "entry-source-group__meta", "{source.subtitle}" }
                                                         }
                                                         ul { class: "entry-list entry-list--grouped",
-                                                            for entry in source.entries {
-                                                                { render_entry_card(entry, facade.clone()) }
+                                                            for entry in &source.entries {
+                                                                { render_entry_card(entry.clone(), facade.clone()) }
                                                             }
                                                         }
                                                     }
@@ -131,21 +129,21 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                     }
                                 }
                             } else {
-                                for group in presenter.source_grouped_entries {
+                                for group in facade.source_grouped_entries() {
                                     section { class: "entry-group", key: "{group.title}", id: "{group.anchor_id}",
                                         div { class: "entry-group__header",
                                             h3 { class: "entry-group__title", "{group.title}" }
                                             p { class: "entry-group__meta", "{group.subtitle}" }
                                         }
-                                        for month in group.months {
+                                        for month in &group.months {
                                             section { class: "entry-date-group", key: "{month.anchor_id}", id: "{month.anchor_id}",
                                                 div { class: "entry-date-group__header",
                                                     h4 { class: "entry-date-group__title", "{month.title}" }
                                                     p { class: "entry-date-group__meta", "{month.subtitle}" }
                                                 }
                                                 ul { class: "entry-list entry-list--grouped",
-                                                    for entry in month.entries {
-                                                        { render_entry_card(entry, facade.clone()) }
+                                                    for entry in &month.entries {
+                                                        { render_entry_card(entry.clone(), facade.clone()) }
                                                     }
                                                 }
                                             }
@@ -156,12 +154,12 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                         }
                     }
                 }
-                if !presenter.group_nav_items.is_empty() {
+                if !facade.group_nav_items().is_empty() {
                     { render_entry_directory(
                         &facade,
-                        snapshot.grouping_mode,
-                        &presenter.directory_months,
-                        &presenter.directory_sources,
+                        facade.grouping_mode(),
+                        facade.directory_months(),
+                        facade.directory_sources(),
                     ) }
                 }
             }

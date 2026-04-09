@@ -5,9 +5,6 @@ use crate::components::{entry_filters::EntryFilters, status_banner::StatusBanner
 use dioxus::prelude::*;
 
 pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
-    let ui = facade.ui;
-    let snapshot = &facade.snapshot;
-    let presenter = &facade.presenter;
     let show_controls_facade = facade.clone();
     let grouping_facade = facade.clone();
     let archived_facade = facade.clone();
@@ -15,13 +12,14 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
     let starred_filter_facade = facade.clone();
     let selected_sources_facade = facade.clone();
     let hide_controls_facade = facade.clone();
-    let visible_entries_len = presenter.visible_entries.len();
-    let archived_count = presenter.archived_count;
-    let source_filter_options = &presenter.source_filter_options;
-    let group_nav_items: &[EntryGroupNavItem] = &presenter.group_nav_items;
+    let search_facade = facade.clone();
+    let visible_entries_len = facade.visible_entries_len();
+    let archived_count = facade.archived_count();
+    let source_filter_options = facade.source_filter_options();
+    let group_nav_items: &[EntryGroupNavItem] = facade.group_nav_items();
 
     rsx! {
-        if snapshot.controls_hidden {
+        if facade.controls_hidden() {
             div { class: "entry-controls-reveal",
                 button {
                     class: "entry-controls-toggle entry-controls-toggle--flat",
@@ -39,8 +37,8 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                     select {
                         id: "entry-grouping-mode",
                         class: "select-input",
-                        "data-action": if snapshot.grouping_mode == EntryGroupingMode::Time { "group-by-time" } else { "group-by-source" },
-                        value: match snapshot.grouping_mode {
+                        "data-action": if facade.grouping_mode() == EntryGroupingMode::Time { "group-by-time" } else { "group-by-source" },
+                        value: match facade.grouping_mode() {
                             EntryGroupingMode::Time => "time",
                             EntryGroupingMode::Source => "source",
                         },
@@ -57,16 +55,16 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                         input {
                             r#type: "checkbox",
                             "data-action": "toggle-archived",
-                            checked: snapshot.show_archived,
+                            checked: facade.show_archived(),
                             onchange: move |event| archived_facade.set_show_archived(event.checked())
                         }
                         span { "显示已归档文章" }
                     }
                     p { class: "page-intro",
-                        if snapshot.show_archived {
+                        if facade.show_archived() {
                             "当前同时显示归档文章。"
                         } else {
-                            "默认隐藏超过 {snapshot.archive_after_months} 个月的归档文章。"
+                            "默认隐藏超过 {facade.archive_after_months()} 个月的归档文章。"
                         }
                     }
                 }
@@ -83,7 +81,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                         span { class: "entry-overview__label", "当前组织" }
                         strong {
                             class: "entry-overview__value",
-                            if snapshot.grouping_mode == EntryGroupingMode::Time { "按时间" } else { "按来源" }
+                            if facade.grouping_mode() == EntryGroupingMode::Time { "按时间" } else { "按来源" }
                         }
                     }
                 }
@@ -104,21 +102,21 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                     }
                 }
                 EntryFilters {
-                    search: ui.entry_search(),
-                    read_filter: snapshot.read_filter,
-                    starred_filter: snapshot.starred_filter,
+                    search: facade.entry_search(),
+                    read_filter: facade.read_filter(),
+                    starred_filter: facade.starred_filter(),
                     available_sources: source_filter_options.to_vec(),
-                    selected_feed_urls: snapshot.selected_feed_urls.clone(),
-                    on_search: move |value| ui.set_entry_search(value),
+                    selected_feed_urls: facade.selected_feed_urls().to_vec(),
+                    on_search: move |value| search_facade.set_entry_search(value),
                     on_change_read_filter: move |value| read_filter_facade.set_read_filter(value),
                     on_change_starred_filter: move |value| starred_filter_facade.set_starred_filter(value),
                     on_change_selected_feed_urls: move |value| selected_sources_facade.set_selected_feed_urls(value),
                 }
                 StatusBanner {
-                    message: snapshot.status.clone(),
-                    tone: snapshot.status_tone.clone(),
+                    message: facade.status().to_string(),
+                    tone: facade.status_tone().to_string(),
                 }
-                if archived_count > 0 && !snapshot.show_archived {
+                if archived_count > 0 && !facade.show_archived() {
                     StatusBanner {
                         message: format!("当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。", archived_count),
                         tone: "info".to_string()
@@ -145,7 +143,7 @@ pub(super) fn render_entry_directory(
     directory_months: &[EntryDirectoryMonth],
     directory_sources: &[EntryDirectorySource],
 ) -> Element {
-    let expanded_directory_sources = &facade.snapshot.expanded_directory_sources;
+    let expanded_directory_sources = facade.expanded_directory_sources();
 
     rsx! {
         aside { class: "entry-directory-rail",

@@ -9,11 +9,11 @@ use rssr_domain::UserSettings;
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct SettingsPageFacade {
-    pub(crate) page: SettingsPageSession,
-    pub(crate) save: SettingsPageSaveSession,
-    pub(crate) save_snapshot: SettingsPageSaveState,
-    pub(crate) sync: SettingsPageSyncSession,
-    pub(crate) sync_snapshot: SettingsPageSyncState,
+    page: SettingsPageSession,
+    save: SettingsPageSaveSession,
+    save_snapshot: SettingsPageSaveState,
+    sync: SettingsPageSyncSession,
+    sync_snapshot: SettingsPageSyncState,
 }
 
 impl SettingsPageFacade {
