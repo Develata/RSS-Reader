@@ -259,6 +259,26 @@
   - `open_repository()`
   - 以及对 `theme / draft / preset_choice / status` 的访问器
 
+### 当日后续重构：App shell 再向语义壳收一层
+
+- `AppNav` 不再自己持有导航与搜索的交互细节，而是开始明确消费 `ui/shell.rs` 中的 `AppNavShell`：
+  - `nav_hidden`
+  - `show_nav`
+  - `hide_nav`
+  - `entry_search`
+  - `submit_search`
+  - `focus_search`
+- 这样 `app.rs` 里的导航壳继续变薄，更接近“默认语义 DOM + shell state”的结构，而不是直接编排导航行为。
+- 同时补了一轮 DOM 语义整理，避免把字段型接口误标成动作：
+  - 顶部搜索框增加 `data-field="entry-search"`
+  - 文章页组织方式选择器从条件 `data-action` 改成稳定 `data-field="entry-grouping-mode"`
+  - “显示已归档文章”开关从 `data-action` 改成 `data-field="show-archived"`
+- 这一轮的目标不是视觉变化，而是让：
+  - `App shell`
+  - `page shell`
+  - CSS / 自动化 / future headless interface
+ 共享同一套更稳定的语义接口。
+
 ### 当日后续重构：全局 UI 命令面第一刀
 
 - 在 `crates/rssr-app/src/ui/` 下新增最小全局 UI 层骨架：
@@ -1201,6 +1221,113 @@
 - `cargo check -p rssr-app`：通过
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
 - `git diff --check`：通过
+
+### 当日后续收口：page facade 命名统一
+
+- 在四个 page facade 上继续做了一轮高价值统一，不再保留“同义不同名”的边界词汇：
+  - `status()` 统一收成 `status_message()`
+  - `feeds_page`：
+    - `pending_config_import()` -> `is_config_import_pending()`
+    - `feed_count()` -> `total_feed_count()`
+    - `entry_count()` -> `total_entry_count()`
+  - `settings_page`：
+    - `pending_save()` -> `is_save_pending()`
+    - `pending_remote_pull()` -> `is_remote_pull_pending()`
+  - `entries_page`：
+    - `archived_count()` -> `archived_entry_count()`
+  - `reader_page`：
+    - `previous_action_target()` -> `previous_entry_target()`
+    - `next_action_target()` -> `next_entry_target()`
+- 这轮不是简单改名，而是在把 facade 真正收成更稳定的 page boundary 词汇：
+  - `status_message`
+  - `status_tone`
+  - `is_*_pending`
+  - `total_*`
+  - `*_entry_target`
+- 相应页面与 section 也同步改成消费新命名：
+  - `reader_page/mod.rs`
+  - `feeds_page/mod.rs`
+  - `feeds_page/sections/config_exchange.rs`
+  - `settings_page/appearance.rs`
+  - `settings_page/sync/mod.rs`
+  - `entries_page/controls.rs`
+  - `hooks/use_reader_shortcuts.rs`
+
+### 当日后续收口：将展示策略继续推入 facade
+
+- 继续把页面壳里手写的展示判断收回 facade，不让页面自己拼接：
+  - `has_status_message()`
+  - `save_button_label()`
+  - `remote_pull_button_class()`
+  - `remote_pull_button_label()`
+  - `config_import_button_class()`
+  - `config_import_button_label()`
+  - `previous_entry_button_class()`
+  - `next_entry_button_class()`
+  - `read_toggle_icon()`
+  - `read_toggle_label()`
+  - `starred_button_class()`
+  - `starred_toggle_icon()`
+- 受影响边界：
+  - `entries_page/facade.rs`
+  - `reader_page/facade.rs`
+  - `feeds_page/facade.rs`
+  - `settings_page/facade.rs`
+  - `reader_page/mod.rs`
+  - `feeds_page/mod.rs`
+  - `feeds_page/sections/config_exchange.rs`
+  - `settings_page/appearance.rs`
+  - `settings_page/sync/mod.rs`
+  - `entries_page/controls.rs`
+- 这轮之后，页面和 section/card/control 继续从“自己决定壳层展示策略”退化成“消费 facade 提供的默认语义策略”，更接近：
+  - `headless active interface`
+  - `CSS 完全分离`
+  - `infra` 承担真实行为
+
+### 当日后续收口：空状态与删除确认策略继续进入 facade
+
+- 继续把仍然留在页面里的默认文案和危险态策略收回 facade：
+  - `entries_page`：
+    - `empty_entries_message()`
+    - `archived_entries_state_message()`
+    - `archived_entries_message()`
+  - `feeds_page`：
+    - `empty_feeds_message()`
+    - `remove_feed_button_class(feed_id)`
+    - `remove_feed_button_label(feed_id)`
+- 页面和 section 不再自己决定：
+  - “没有文章 / 没有订阅”空状态文案
+  - “确认删除 / 删除订阅”按钮文案
+  - 删除确认态对应的危险按钮样式
+- 受影响文件：
+  - `entries_page/facade.rs`
+  - `entries_page/session.rs`
+  - `entries_page/controls.rs`
+  - `entries_page/mod.rs`
+  - `feeds_page/facade.rs`
+  - `feeds_page/sections/saved.rs`
+
+### 当日后续收口：settings themes 也开始优先消费 facade
+
+- `settings_page/themes` 里原本还留着比较明显的默认展示和选择策略：
+  - 当前主题是否激活
+  - 主题卡片 class
+  - “当前已选 / 使用这套主题”按钮文案
+  - “载入所选主题”按钮内部对 `none / custom / builtin` 的分支判断
+  - `custom_css` 的直接读取与同步
+- 这轮将其继续回收到 `SettingsPageFacade`：
+  - `custom_css()`
+  - `set_custom_css(...)`
+  - `apply_selected_theme()`
+  - `apply_builtin_theme(...)`
+  - `clear_custom_css(...)`
+  - `is_theme_preset_active(...)`
+  - `theme_card_class(...)`
+  - `theme_apply_button_class(...)`
+  - `theme_apply_button_label(...)`
+  - `remove_theme_preset(...)`
+- `themes/presets.rs` 和 `themes/lab.rs` 现在优先通过 facade 获取这些策略和动作，不再自己判断当前主题卡片状态。
+- 同时删掉了 `themes/theme_apply.rs` 里已经被 facade 吸收掉的旧 helper，避免留下新的死代码。
 
 ## 追加：把 entries_page 继续收成 facade 动作口边界
 

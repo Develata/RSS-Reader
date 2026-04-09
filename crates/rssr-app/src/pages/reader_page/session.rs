@@ -24,12 +24,12 @@ impl ReaderPageSession {
         (self.state)().reload_tick
     }
 
-    pub(crate) fn previous_action_target(self) -> Option<i64> {
-        previous_action_target((self.state)().navigation_state)
+    pub(crate) fn previous_entry_target(self) -> Option<i64> {
+        previous_entry_target((self.state)().navigation_state)
     }
 
-    pub(crate) fn next_action_target(self) -> Option<i64> {
-        next_action_target((self.state)().navigation_state)
+    pub(crate) fn next_entry_target(self) -> Option<i64> {
+        next_entry_target((self.state)().navigation_state)
     }
 
     pub(crate) fn load(self) {
@@ -59,10 +59,10 @@ impl ReaderPageSession {
     }
 }
 
-fn previous_action_target(navigation: ReaderNavigation) -> Option<i64> {
+fn previous_entry_target(navigation: ReaderNavigation) -> Option<i64> {
     navigation.previous_unread_entry_id.or(navigation.previous_feed_entry_id)
 }
 
-fn next_action_target(navigation: ReaderNavigation) -> Option<i64> {
+fn next_entry_target(navigation: ReaderNavigation) -> Option<i64> {
     navigation.next_unread_entry_id.or(navigation.next_feed_entry_id)
 }

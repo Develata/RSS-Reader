@@ -2,14 +2,10 @@ use dioxus::prelude::*;
 
 use crate::pages::settings_page::facade::SettingsPageFacade;
 
-use super::{
-    theme_apply::{apply_builtin_theme, apply_custom_css_from_raw, clear_custom_css},
-    theme_preset::{builtin_theme_presets, detect_preset_key},
-};
+use super::{theme_apply::apply_custom_css_from_raw, theme_preset::builtin_theme_presets};
 
 #[component]
 pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
-    let draft = facade.draft();
     let preset_choice = facade.preset_choice();
     let atlas_facade = facade.clone();
     let newsprint_facade = facade.clone();
@@ -41,19 +37,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                 button {
                     class: "button secondary",
                     "data-action": "apply-selected-theme",
-                    onclick: move |_| {
-                        let choice = apply_selected_facade.preset_choice();
-                        if choice == "none" {
-                            clear_custom_css(&apply_selected_facade, "已清空自定义 CSS。");
-                            return;
-                        }
-                        if choice == "custom" {
-                            apply_selected_facade
-                                .set_status("当前是自定义主题，请直接编辑 CSS 或从文件导入。", "info");
-                            return;
-                        }
-                        apply_builtin_theme(&apply_selected_facade, choice.as_str());
-                    },
+                    onclick: move |_| apply_selected_facade.apply_selected_theme(),
                     "载入所选主题"
                 }
             }
@@ -62,41 +46,40 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     class: "button secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "atlas-sidebar",
-                    onclick: move |_| apply_builtin_theme(&atlas_facade, "atlas-sidebar"),
+                    onclick: move |_| atlas_facade.apply_builtin_theme("atlas-sidebar"),
                     "Atlas Sidebar"
                 }
                 button {
                     class: "button secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "newsprint",
-                    onclick: move |_| apply_builtin_theme(&newsprint_facade, "newsprint"),
+                    onclick: move |_| newsprint_facade.apply_builtin_theme("newsprint"),
                     "Newsprint"
                 }
                 button {
                     class: "button secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "forest-desk",
-                    onclick: move |_| apply_builtin_theme(&forest_facade, "forest-desk"),
+                    onclick: move |_| forest_facade.apply_builtin_theme("forest-desk"),
                     "Amethyst Glass"
                 }
                 button {
                     class: "button secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "midnight-ledger",
-                    onclick: move |_| { apply_builtin_theme(&midnight_facade, "midnight-ledger") },
+                    onclick: move |_| { midnight_facade.apply_builtin_theme("midnight-ledger") },
                     "Midnight Ledger"
                 }
                 button {
                     class: "button secondary danger-outline",
                     "data-action": "clear-custom-css",
-                    onclick: move |_| clear_custom_css(&clear_facade, "已清空自定义 CSS。"),
+                    onclick: move |_| clear_facade.clear_custom_css("已清空自定义 CSS。"),
                     "清空 CSS"
                 }
             }
             div { class: "theme-gallery",
                 for preset in builtin_theme_presets() {
                     {
-                        let is_active = detect_preset_key(&draft.custom_css) == preset.key;
                         let apply_card_facade = facade.clone();
                         let remove_card_facade = facade.clone();
                         let preset_key = preset.key.to_string();
@@ -105,7 +88,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                         let preset_swatches = preset.swatches;
                         rsx! {
                             article {
-                                class: if is_active { "theme-card is-active" } else { "theme-card" },
+                                class: facade.theme_card_class(preset.key),
                                 key: "{preset.key}",
                                 "data-theme-preset": "{preset.key}",
                                 h4 { class: "theme-card__title", "{preset_name}" }
@@ -118,7 +101,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                                     }
                                 }
                                 button {
-                                    class: if is_active { "button" } else { "button secondary" },
+                                    class: facade.theme_apply_button_class(preset.key),
                                     "data-action": "apply-theme-preset",
                                     "data-theme-preset": "{preset.key}",
                                     onclick: move |_| {
@@ -128,22 +111,13 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                                             format!("已从主题卡片应用：{}。", preset_name),
                                         );
                                     },
-                                    if is_active { "当前已选" } else { "使用这套主题" }
+                                    "{facade.theme_apply_button_label(preset.key)}"
                                 }
                                 button {
                                     class: "button secondary danger-outline",
                                     "data-action": "remove-theme-preset",
                                     "data-theme-preset": "{preset.key}",
-                                    onclick: move |_| {
-                                        if detect_preset_key(&remove_card_facade.draft().custom_css) != remove_preset_key.as_str() {
-                                            remove_card_facade.set_status(
-                                                format!("当前并未启用主题：{}。", preset_name),
-                                                "info",
-                                            );
-                                            return;
-                                        }
-                                        clear_custom_css(&remove_card_facade, format!("已移除主题：{}。", preset_name));
-                                    },
+                                    onclick: move |_| remove_card_facade.remove_theme_preset(remove_preset_key.as_str(), preset_name),
                                     "移除这套主题"
                                 }
                             }

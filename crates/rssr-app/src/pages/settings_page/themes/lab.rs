@@ -88,15 +88,10 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
                 name: "custom_css",
                 class: "text-area",
                 "data-field": "custom-css",
-                value: "{facade.draft().custom_css}",
+                value: "{facade.custom_css()}",
                 placeholder: "[data-page=\"reader\"] .reader-body {{ max-width: 72ch; }}",
                 oninput: move |event| {
-                    let value = event.value();
-                    let preset = super::detect_preset_key(&value).to_string();
-                    input_facade.update_draft(|next| {
-                        next.custom_css = value;
-                    });
-                    input_facade.set_preset_choice(preset);
+                    input_facade.set_custom_css(event.value());
                 }
             }
             div { class: "inline-actions settings-card__actions",
@@ -107,7 +102,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
                     onclick: move |_| {
                         apply_custom_css_from_raw(
                             &apply_facade,
-                            apply_facade.draft().custom_css,
+                            apply_facade.custom_css(),
                             "已应用当前输入框中的自定义 CSS。",
                         );
                     },
@@ -117,7 +112,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
                     class: "button secondary",
                     "data-action": "export-custom-css-file",
                     onclick: move |_| {
-                        export_css_file(export_facade.draft().custom_css, &export_facade);
+                        export_css_file(export_facade.custom_css(), &export_facade);
                     },
                     "导出当前 CSS"
                 }

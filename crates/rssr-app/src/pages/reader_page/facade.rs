@@ -44,12 +44,16 @@ impl ReaderPageFacade {
         self.snapshot.body_html.as_deref()
     }
 
-    pub(crate) fn status(&self) -> &str {
+    pub(crate) fn status_message(&self) -> &str {
         &self.snapshot.status
     }
 
     pub(crate) fn status_tone(&self) -> &str {
         &self.snapshot.status_tone
+    }
+
+    pub(crate) fn has_status_message(&self) -> bool {
+        !self.status_message().is_empty()
     }
 
     pub(crate) fn error(&self) -> Option<&str> {
@@ -68,12 +72,56 @@ impl ReaderPageFacade {
         &self.snapshot.navigation_state
     }
 
-    pub(crate) fn previous_action_target(&self) -> Option<i64> {
-        self.session.previous_action_target()
+    pub(crate) fn previous_entry_target(&self) -> Option<i64> {
+        self.session.previous_entry_target()
     }
 
-    pub(crate) fn next_action_target(&self) -> Option<i64> {
-        self.session.next_action_target()
+    pub(crate) fn next_entry_target(&self) -> Option<i64> {
+        self.session.next_entry_target()
+    }
+
+    pub(crate) fn has_previous_entry_target(&self) -> bool {
+        self.previous_entry_target().is_some()
+    }
+
+    pub(crate) fn has_next_entry_target(&self) -> bool {
+        self.next_entry_target().is_some()
+    }
+
+    pub(crate) fn previous_entry_button_class(&self) -> &'static str {
+        if self.has_previous_entry_target() {
+            "reader-bottom-bar__button"
+        } else {
+            "reader-bottom-bar__button is-disabled"
+        }
+    }
+
+    pub(crate) fn next_entry_button_class(&self) -> &'static str {
+        if self.has_next_entry_target() {
+            "reader-bottom-bar__button"
+        } else {
+            "reader-bottom-bar__button is-disabled"
+        }
+    }
+
+    pub(crate) fn read_toggle_icon(&self) -> &'static str {
+        if self.is_read() { "○" } else { "✓" }
+    }
+
+    pub(crate) fn read_toggle_label(&self) -> &'static str {
+        if self.is_read() { "未读（M）" } else { "已读（M）" }
+    }
+
+    pub(crate) fn starred_button_class(&self) -> &'static str {
+        if self.is_starred() {
+            "reader-bottom-bar__button is-active"
+        } else {
+            "reader-bottom-bar__button"
+        }
+    }
+
+    pub(crate) fn starred_toggle_icon(&self) -> &'static str {
+        if self.is_starred() { "★" } else { "☆" }
     }
 
     pub(crate) fn toggle_read(&self, via_shortcut: bool) {

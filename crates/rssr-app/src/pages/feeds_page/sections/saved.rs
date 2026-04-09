@@ -11,7 +11,7 @@ use super::support::feed_refresh_status_text;
 pub(crate) fn SavedFeedsSection(facade: FeedsPageFacade) -> Element {
     if facade.feeds().is_empty() {
         return rsx! {
-            StatusBanner { message: "还没有订阅，先添加一个 feed URL。".to_string(), tone: "info".to_string() }
+            StatusBanner { message: facade.empty_feeds_message().to_string(), tone: "info".to_string() }
         };
     }
 
@@ -31,7 +31,6 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
     let feed_id = feed.id;
     let refresh_feed_title = feed.title.clone();
     let delete_feed_title = feed.title.clone();
-    let is_delete_pending = facade.is_delete_pending_for(feed_id);
     let refresh_facade = facade.clone();
 
     rsx! {
@@ -58,10 +57,10 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
                     "刷新此订阅"
                 }
                 button {
-                    class: if is_delete_pending { "button danger" } else { "button secondary danger-outline" },
+                    class: facade.remove_feed_button_class(feed_id),
                     "data-action": "remove-feed",
                     onclick: move |_| facade.remove_feed(feed_id, delete_feed_title.clone()),
-                    if is_delete_pending { "确认删除" } else { "删除订阅" }
+                    "{facade.remove_feed_button_label(feed_id)}"
                 }
             }
         }

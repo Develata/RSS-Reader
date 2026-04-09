@@ -24,8 +24,6 @@ pub fn ReaderPage(entry_id: i64) -> Element {
     let navigator = use_navigator();
     let facade = use_reader_page_workspace(entry_id);
     let shortcuts = facade.shortcuts();
-    let previous_action_target = facade.previous_action_target();
-    let next_action_target = facade.next_action_target();
     let previous_facade = facade.clone();
     let read_facade = facade.clone();
     let starred_facade = facade.clone();
@@ -56,8 +54,8 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             if let Some(message) = facade.error() {
                 StatusBanner { message: message.to_string(), tone: "error".to_string() }
             } else {
-                if !facade.status().is_empty() {
-                    StatusBanner { message: facade.status().to_string(), tone: facade.status_tone().to_string() }
+                if facade.has_status_message() {
+                    StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string() }
                 }
                 div { class: "reader-body",
                     if let Some(html) = facade.body_html() {
@@ -86,15 +84,11 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 }
                 nav { class: "reader-bottom-bar", "aria-label": "阅读快捷操作",
                     button {
-                        class: if previous_action_target.is_some() {
-                            "reader-bottom-bar__button"
-                        } else {
-                            "reader-bottom-bar__button is-disabled"
-                        },
-                        disabled: previous_action_target.is_none(),
+                        class: facade.previous_entry_button_class(),
+                        disabled: !facade.has_previous_entry_target(),
                         "data-nav": "previous-unread-entry",
                         onclick: move |_| {
-                            if let Some(target) = previous_facade.previous_action_target() {
+                            if let Some(target) = previous_facade.previous_entry_target() {
                                 navigator.push(AppRoute::ReaderPage { entry_id: target });
                             }
                         },
@@ -107,32 +101,24 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         onclick: move |_| {
                             read_facade.toggle_read(false);
                         },
-                        span { class: "reader-bottom-bar__icon", if facade.is_read() { "○" } else { "✓" } }
-                        span { class: "reader-bottom-bar__label", if facade.is_read() { "未读（M）" } else { "已读（M）" } }
+                        span { class: "reader-bottom-bar__icon", "{facade.read_toggle_icon()}" }
+                        span { class: "reader-bottom-bar__label", "{facade.read_toggle_label()}" }
                     }
                     button {
-                        class: if facade.is_starred() {
-                            "reader-bottom-bar__button is-active"
-                        } else {
-                            "reader-bottom-bar__button"
-                        },
+                        class: facade.starred_button_class(),
                         "data-action": "toggle-starred",
                         onclick: move |_| {
                             starred_facade.toggle_starred(false);
                         },
-                        span { class: "reader-bottom-bar__icon", if facade.is_starred() { "★" } else { "☆" } }
+                        span { class: "reader-bottom-bar__icon", "{facade.starred_toggle_icon()}" }
                         span { class: "reader-bottom-bar__label", "收藏（F）" }
                     }
                     button {
-                        class: if next_action_target.is_some() {
-                            "reader-bottom-bar__button"
-                        } else {
-                            "reader-bottom-bar__button is-disabled"
-                        },
-                        disabled: next_action_target.is_none(),
+                        class: facade.next_entry_button_class(),
+                        disabled: !facade.has_next_entry_target(),
                         "data-nav": "next-unread-entry",
                         onclick: move |_| {
-                            if let Some(target) = next_facade.next_action_target() {
+                            if let Some(target) = next_facade.next_entry_target() {
                                 navigator.push(AppRoute::ReaderPage { entry_id: target });
                             }
                         },

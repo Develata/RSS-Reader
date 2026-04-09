@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 
 use self::{lab::ThemeLabSection, presets::ThemePresetSections};
 
-pub(crate) use self::theme_preset::detect_preset_key;
+pub(crate) use self::theme_preset::{detect_preset_key, preset_css, preset_display_name};
 pub(crate) use self::theme_validation::validate_custom_css;
 
 #[component]

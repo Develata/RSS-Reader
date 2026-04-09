@@ -85,14 +85,14 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     if facade.entries_is_empty() {
                         div { class: "entries-page__state", "data-state": "empty",
                             StatusBanner {
-                                message: empty_entries_message(feed_id),
+                                message: facade.empty_entries_message(),
                                 tone: "info".to_string()
                             }
                         }
                     } else if facade.visible_entries_is_empty() {
                         div { class: "entries-page__state", "data-state": "archived",
                             StatusBanner {
-                                message: "当前结果中的文章都已被自动归档，勾选“显示已归档文章”即可查看。".to_string(),
+                                message: facade.archived_entries_state_message().to_string(),
                                 tone: "info".to_string()
                             }
                         }
@@ -243,12 +243,4 @@ fn current_time_utc() -> OffsetDateTime {
 
 fn entries_page_title(feed_id: Option<i64>) -> &'static str {
     if feed_id.is_some() { "订阅文章" } else { "文章" }
-}
-
-fn empty_entries_message(feed_id: Option<i64>) -> String {
-    if feed_id.is_some() {
-        "这个订阅下还没有可显示的文章，先尝试刷新该 feed。".to_string()
-    } else {
-        "没有可显示的文章，先去订阅页添加并刷新 feed。".to_string()
-    }
 }

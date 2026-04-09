@@ -14,7 +14,7 @@ fn midnight_ledger_theme_css() -> &'static str {
     include_str!("../../../../../../assets/themes/midnight-ledger.css")
 }
 
-pub(super) fn preset_css(key: &str) -> &'static str {
+pub(crate) fn preset_css(key: &str) -> &'static str {
     match key {
         "none" => "",
         "atlas-sidebar" => atlas_sidebar_theme_css(),
@@ -25,7 +25,7 @@ pub(super) fn preset_css(key: &str) -> &'static str {
     }
 }
 
-pub(super) fn preset_display_name(key: &str) -> &'static str {
+pub(crate) fn preset_display_name(key: &str) -> &'static str {
     match key {
         "atlas-sidebar" => "Atlas Sidebar",
         "newsprint" => "Newsprint",

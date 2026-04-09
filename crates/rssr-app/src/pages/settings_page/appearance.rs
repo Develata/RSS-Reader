@@ -17,10 +17,10 @@ pub(crate) fn AppearanceSettingsCard(facade: SettingsPageFacade) -> Element {
             div { class: "settings-card__footer",
                 button {
                     class: "button",
-                    disabled: facade.pending_save(),
+                    disabled: facade.is_save_pending(),
                     "data-action": "save-settings",
                     onclick: move |_| facade.save(),
-                    if facade.pending_save() { "正在保存…" } else { "保存设置" }
+                    "{facade.save_button_label()}"
                 }
             }
         }

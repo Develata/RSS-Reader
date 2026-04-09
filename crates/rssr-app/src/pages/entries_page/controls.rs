@@ -14,7 +14,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
     let hide_controls_facade = facade.clone();
     let search_facade = facade.clone();
     let visible_entries_len = facade.visible_entries_len();
-    let archived_count = facade.archived_count();
+    let archived_count = facade.archived_entry_count();
     let source_filter_options = facade.source_filter_options();
     let group_nav_items: &[EntryGroupNavItem] = facade.group_nav_items();
 
@@ -37,7 +37,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                     select {
                         id: "entry-grouping-mode",
                         class: "select-input",
-                        "data-action": if facade.grouping_mode() == EntryGroupingMode::Time { "group-by-time" } else { "group-by-source" },
+                        "data-field": "entry-grouping-mode",
                         value: match facade.grouping_mode() {
                             EntryGroupingMode::Time => "time",
                             EntryGroupingMode::Source => "source",
@@ -54,7 +54,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                     label { class: "entry-filters__toggle",
                         input {
                             r#type: "checkbox",
-                            "data-action": "toggle-archived",
+                            "data-field": "show-archived",
                             checked: facade.show_archived(),
                             onchange: move |event| archived_facade.set_show_archived(event.checked())
                         }
@@ -112,13 +112,15 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                     on_change_starred_filter: move |value| starred_filter_facade.set_starred_filter(value),
                     on_change_selected_feed_urls: move |value| selected_sources_facade.set_selected_feed_urls(value),
                 }
-                StatusBanner {
-                    message: facade.status().to_string(),
-                    tone: facade.status_tone().to_string(),
+                if facade.has_status_message() {
+                    StatusBanner {
+                        message: facade.status_message().to_string(),
+                        tone: facade.status_tone().to_string(),
+                    }
                 }
                 if archived_count > 0 && !facade.show_archived() {
                     StatusBanner {
-                        message: format!("当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。", archived_count),
+                        message: facade.archived_entries_message(),
                         tone: "info".to_string()
                     }
                 }

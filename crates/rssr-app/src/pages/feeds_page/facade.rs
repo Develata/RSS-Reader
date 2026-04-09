@@ -37,32 +37,60 @@ impl FeedsPageFacade {
         self.session.set_opml_text(value);
     }
 
-    pub(crate) fn pending_config_import(&self) -> bool {
+    pub(crate) fn is_config_import_pending(&self) -> bool {
         self.snapshot.pending_config_import
+    }
+
+    pub(crate) fn config_import_button_class(&self) -> &'static str {
+        if self.is_config_import_pending() { "button danger" } else { "button secondary" }
+    }
+
+    pub(crate) fn config_import_button_label(&self) -> &'static str {
+        if self.is_config_import_pending() { "确认覆盖导入" } else { "导入配置" }
     }
 
     pub(crate) fn is_delete_pending_for(&self, feed_id: i64) -> bool {
         self.session.is_delete_pending_for(feed_id)
     }
 
+    pub(crate) fn empty_feeds_message(&self) -> &'static str {
+        "还没有订阅，先添加一个 feed URL。"
+    }
+
+    pub(crate) fn remove_feed_button_class(&self, feed_id: i64) -> &'static str {
+        if self.is_delete_pending_for(feed_id) {
+            "button danger"
+        } else {
+            "button secondary danger-outline"
+        }
+    }
+
+    pub(crate) fn remove_feed_button_label(&self, feed_id: i64) -> &'static str {
+        if self.is_delete_pending_for(feed_id) { "确认删除" } else { "删除订阅" }
+    }
+
     pub(crate) fn feeds(&self) -> &[FeedSummary] {
         &self.snapshot.feeds
     }
 
-    pub(crate) fn feed_count(&self) -> usize {
+    pub(crate) fn total_feed_count(&self) -> usize {
         self.snapshot.feed_count
     }
 
-    pub(crate) fn entry_count(&self) -> usize {
+    pub(crate) fn total_entry_count(&self) -> usize {
         self.snapshot.entry_count
     }
 
-    pub(crate) fn status(&self) -> &str {
+    pub(crate) fn status_message(&self) -> &str {
         &self.snapshot.status
     }
 
     pub(crate) fn status_tone(&self) -> &str {
         &self.snapshot.status_tone
+    }
+
+    pub(crate) fn has_status_message(&self) -> bool {
+        !self.status_message().is_empty()
     }
 
     pub(crate) fn add_feed(&self) {

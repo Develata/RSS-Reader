@@ -61,14 +61,10 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                         "上传配置"
                     }
                     button {
-                        class: if facade.pending_remote_pull() {
-                            "button danger"
-                        } else {
-                            "button secondary"
-                        },
+                        class: facade.remote_pull_button_class(),
                         "data-action": "pull-webdav",
                         onclick: move |_| facade.pull(),
-                        if facade.pending_remote_pull() { "确认下载并覆盖" } else { "下载配置" }
+                        "{facade.remote_pull_button_label()}"
                     }
                 }
             }

@@ -7,7 +7,9 @@ use super::{
         EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem, EntryMonthGroup,
         EntrySourceGroup,
     },
-    intent::EntriesPageIntent, presenter::EntriesPagePresenter, session::EntriesPageSession,
+    intent::EntriesPageIntent,
+    presenter::EntriesPagePresenter,
+    session::EntriesPageSession,
     state::{EntriesPageState, EntryGroupingMode},
 };
 
@@ -66,12 +68,16 @@ impl EntriesPageFacade {
         &self.snapshot.selected_feed_urls
     }
 
-    pub(crate) fn status(&self) -> &str {
+    pub(crate) fn status_message(&self) -> &str {
         &self.snapshot.status
     }
 
     pub(crate) fn status_tone(&self) -> &str {
         &self.snapshot.status_tone
+    }
+
+    pub(crate) fn has_status_message(&self) -> bool {
+        !self.status_message().is_empty()
     }
 
     pub(crate) fn entries_is_empty(&self) -> bool {
@@ -86,8 +92,15 @@ impl EntriesPageFacade {
         self.presenter.visible_entries.len()
     }
 
-    pub(crate) fn archived_count(&self) -> usize {
+    pub(crate) fn archived_entry_count(&self) -> usize {
         self.presenter.archived_count
+    }
+
+    pub(crate) fn archived_entries_message(&self) -> String {
+        format!(
+            "当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。",
+            self.archived_entry_count()
+        )
     }
 
     pub(crate) fn source_filter_options(&self) -> &[(i64, String, String)] {
@@ -118,6 +131,18 @@ impl EntriesPageFacade {
         &self.snapshot.expanded_directory_sources
     }
 
+    pub(crate) fn empty_entries_message(&self) -> String {
+        if self.session.feed_id().is_some() {
+            "这个订阅下还没有可显示的文章，先尝试刷新该 feed。".to_string()
+        } else {
+            "没有可显示的文章，先去订阅页添加并刷新 feed。".to_string()
+        }
+    }
+
+    pub(crate) fn archived_entries_state_message(&self) -> &'static str {
+        "当前结果中的文章都已被自动归档，勾选“显示已归档文章”即可查看。"
+    }
+
     pub(crate) fn set_controls_hidden(&self, hidden: bool) {
         self.session.dispatch(EntriesPageIntent::SetControlsHidden(hidden));
     }
@@ -139,13 +164,11 @@ impl EntriesPageFacade {
     }
 
     pub(crate) fn set_selected_feed_urls(&self, value: Vec<String>) {
-        self.session
-            .dispatch(EntriesPageIntent::SetSelectedFeedUrls(value));
+        self.session.dispatch(EntriesPageIntent::SetSelectedFeedUrls(value));
     }
 
     pub(crate) fn toggle_directory_source(&self, anchor_id: String) {
-        self.session
-            .dispatch(EntriesPageIntent::ToggleDirectorySource(anchor_id));
+        self.session.dispatch(EntriesPageIntent::ToggleDirectorySource(anchor_id));
     }
 
     pub(crate) fn toggle_read(&self, entry_id: i64, title: String, is_read: bool) {

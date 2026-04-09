@@ -38,10 +38,10 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
                         "导出配置"
                     }
                     button {
-                        class: if facade.pending_config_import() { "button danger" } else { "button secondary" },
+                        class: facade.config_import_button_class(),
                         "data-action": "import-config",
                         onclick: move |_| import_config_facade.import_config(),
-                        if facade.pending_config_import() { "确认覆盖导入" } else { "导入配置" }
+                        "{facade.config_import_button_label()}"
                     }
                 }
             }

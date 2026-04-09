@@ -1,6 +1,6 @@
-use dioxus::prelude::*;
-
 #[cfg(not(target_arch = "wasm32"))]
+use dioxus::prelude::spawn;
+
 use crate::pages::settings_page::facade::SettingsPageFacade;
 
 #[cfg(not(target_arch = "wasm32"))]

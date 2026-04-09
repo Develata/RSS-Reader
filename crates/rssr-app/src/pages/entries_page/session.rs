@@ -24,6 +24,10 @@ impl EntriesPageSession {
         (self.state)()
     }
 
+    pub(crate) fn feed_id(self) -> Option<i64> {
+        self.feed_id
+    }
+
     pub(crate) fn reload_tick(self) -> u64 {
         (self.state)().reload_tick
     }

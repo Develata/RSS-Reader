@@ -10,12 +10,12 @@ pub fn use_reader_shortcuts(session: ReaderPageSession) -> Callback<KeyboardEven
 
         match key.as_str() {
             "arrowleft" => {
-                if let Some(target) = session.previous_action_target() {
+                if let Some(target) = session.previous_entry_target() {
                     navigator.push(AppRoute::ReaderPage { entry_id: target });
                 }
             }
             "arrowright" => {
-                if let Some(target) = session.next_action_target() {
+                if let Some(target) = session.next_entry_target() {
                     navigator.push(AppRoute::ReaderPage { entry_id: target });
                 }
             }

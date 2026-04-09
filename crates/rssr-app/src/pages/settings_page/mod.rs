@@ -70,7 +70,9 @@ pub fn SettingsPage() -> Element {
                     }
                 }
             }
-            StatusBanner { message: facade.status(), tone: facade.status_tone() }
+            if facade.has_status_message() {
+                StatusBanner { message: facade.status_message(), tone: facade.status_tone() }
+            }
             div { class: "settings-grid",
                 AppearanceSettingsCard { facade: facade.clone() }
                 WebDavSettingsCard { facade }

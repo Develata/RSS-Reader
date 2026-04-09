@@ -31,14 +31,16 @@ pub fn FeedsPage() -> Element {
             div { class: "stats-grid stats-grid--airy",
                 div { class: "stat-card",
                     div { class: "stat-card__label", "订阅数" }
-                    div { class: "stat-card__value", "{facade.feed_count()}" }
+                    div { class: "stat-card__value", "{facade.total_feed_count()}" }
                 }
                 div { class: "stat-card",
                     div { class: "stat-card__label", "文章数" }
-                    div { class: "stat-card__value", "{facade.entry_count()}" }
+                    div { class: "stat-card__value", "{facade.total_entry_count()}" }
                 }
             }
-            StatusBanner { message: facade.status().to_string(), tone: facade.status_tone().to_string() }
+            if facade.has_status_message() {
+                StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string() }
+            }
             FeedComposeSection { facade: facade.clone() }
             ConfigExchangeSection { facade: facade.clone() }
             SavedFeedsSection { facade }
