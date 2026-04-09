@@ -13,7 +13,7 @@ use super::{
     state::SettingsPageSaveState,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SettingsPageSaveSession {
     state: Signal<SettingsPageSaveState>,
     page: SettingsPageSession,
@@ -29,6 +29,10 @@ impl SettingsPageSaveSession {
     }
 
     pub(crate) fn save(self) {
+        self.save_with_message("设置已保存。");
+    }
+
+    pub(crate) fn save_with_message(self, success_message: impl Into<String>) {
         let next = (self.page.draft())();
         if let Err(err) = validate_custom_css(&next.custom_css) {
             set_status_error(
@@ -49,12 +53,15 @@ impl SettingsPageSaveSession {
         let mut preset_choice = self.page.preset_choice();
         let status = self.page.status_signal();
         let status_tone = self.page.status_tone_signal();
+        let success_message = success_message.into();
 
         spawn(async move {
-            let outcome = execute_settings_page_save_effect(
-                SettingsPageSaveEffect::SaveAppearance(next.clone()),
-            )
-            .await;
+            let outcome =
+                execute_settings_page_save_effect(SettingsPageSaveEffect::SaveAppearance {
+                    settings: next.clone(),
+                    success_message,
+                })
+                .await;
 
             state.with_mut(|state| state.pending_save = false);
             if let Some(saved_settings) = outcome.saved_settings {

@@ -1,99 +1,53 @@
-use dioxus::prelude::*;
-use rssr_domain::UserSettings;
+use dioxus::prelude::WritableExt;
 
-use crate::{
-    bootstrap::AppServices,
-    status::{set_status_error, set_status_info},
-    theme::ThemeController,
-};
+use crate::pages::settings_page::{save::SettingsPageSaveSession, session::SettingsPageSession};
 
-use super::theme_preset::{detect_preset_key, preset_css};
+use super::theme_preset::{detect_preset_key, preset_css, preset_display_name};
 use super::theme_validation::validate_custom_css;
 
 pub(super) fn apply_builtin_theme(
-    theme: ThemeController,
-    mut draft: Signal<UserSettings>,
-    mut preset_choice: Signal<String>,
-    status: Signal<String>,
-    status_tone: Signal<String>,
+    session: SettingsPageSession,
+    save_session: SettingsPageSaveSession,
     preset_key: &str,
-    preset_name: &str,
 ) {
-    let mut next = draft();
+    let mut next = session.draft()();
     next.custom_css = preset_css(preset_key).to_string();
-    preset_choice.set(preset_key.to_string());
-    let applied = next.clone();
-    draft.set(next);
-    apply_settings_immediately(
-        theme,
-        draft,
-        preset_choice,
-        status,
-        status_tone,
-        applied,
-        format!("已应用示例主题：{preset_name}。"),
-    );
+    session.preset_choice().set(preset_key.to_string());
+    session.draft().set(next);
+    save_session
+        .save_with_message(format!("已应用示例主题：{}。", preset_display_name(preset_key)));
 }
 
-pub(super) fn apply_settings_immediately(
-    mut theme: ThemeController,
-    mut draft: Signal<UserSettings>,
-    mut preset_choice: Signal<String>,
-    status: Signal<String>,
-    status_tone: Signal<String>,
-    next: UserSettings,
-    success_message: String,
+pub(super) fn clear_custom_css(
+    session: SettingsPageSession,
+    save_session: SettingsPageSaveSession,
+    success_message: impl Into<String>,
 ) {
-    let previous = (theme.settings)();
-    let previous_preset = detect_preset_key(&previous.custom_css).to_string();
-    theme.settings.set(next.clone());
-    spawn(async move {
-        match AppServices::shared().await {
-            Ok(services) => match services.save_settings(&next).await {
-                Ok(()) => set_status_info(status, status_tone, success_message),
-                Err(err) => {
-                    theme.settings.set(previous.clone());
-                    draft.set(previous);
-                    preset_choice.set(previous_preset);
-                    set_status_error(status, status_tone, format!("保存设置失败：{err}"));
-                }
-            },
-            Err(err) => {
-                theme.settings.set(previous.clone());
-                draft.set(previous);
-                preset_choice.set(previous_preset);
-                set_status_error(status, status_tone, format!("初始化应用失败：{err}"));
-            }
-        }
-    });
+    let mut next = session.draft()();
+    next.custom_css.clear();
+    session.preset_choice().set("none".to_string());
+    session.draft().set(next);
+    save_session.save_with_message(success_message.into());
 }
 
 pub(super) fn apply_custom_css_from_raw(
-    theme: ThemeController,
-    mut draft: Signal<UserSettings>,
-    mut preset_choice: Signal<String>,
-    status: Signal<String>,
-    status_tone: Signal<String>,
+    session: SettingsPageSession,
+    save_session: SettingsPageSaveSession,
     raw: String,
-    success_message: String,
+    success_message: impl Into<String>,
 ) {
     if let Err(err) = validate_custom_css(&raw) {
-        set_status_error(status, status_tone, format!("自定义 CSS 格式无效：{err}"));
+        crate::status::set_status_error(
+            session.status_signal(),
+            session.status_tone_signal(),
+            format!("自定义 CSS 格式无效：{err}"),
+        );
         return;
     }
 
-    let mut next = draft();
+    let mut next = session.draft()();
     next.custom_css = raw;
-    preset_choice.set(detect_preset_key(&next.custom_css).to_string());
-    let applied = next.clone();
-    draft.set(next);
-    apply_settings_immediately(
-        theme,
-        draft,
-        preset_choice,
-        status,
-        status_tone,
-        applied,
-        success_message,
-    );
+    session.preset_choice().set(detect_preset_key(&next.custom_css).to_string());
+    session.draft().set(next);
+    save_session.save_with_message(success_message.into());
 }

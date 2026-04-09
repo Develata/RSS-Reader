@@ -547,3 +547,99 @@
 - 如果要继续追 `zheye` 分支遗产，优先级已经明显下降；更高优先级是：
   - 看 `wasm-browser-contract` matrix 的真实结果
   - 再决定是否需要为 CI 差异补环境脚本
+
+## 追加：页面会话收口与 browser state 写放大优化
+
+### settings themes 保存语义并回页面 save session
+
+- 主题实验室里原先绕过页面保存链的“即时保存 / 回滚”逻辑，现已收回 [save/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/save/session.rs)。
+- 关键代码调整：
+  - [save/effect.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/save/effect.rs) 的 `SaveAppearance` 改为显式携带 `success_message`。
+  - [save/runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/save/runtime.rs) 不再硬编码单一成功提示，而是接受调用方传入的主题相关文案。
+  - [save/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/save/session.rs) 增加 `save_with_message(...)`，让主题实验室与“保存设置”按钮共享一条保存链。
+  - [theme_apply.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/theme_apply.rs) 删除了直接调 service 并手写回滚的旧路径，只负责更新 `draft / preset_choice`，随后把真正的写入交给 `SettingsPageSaveSession`。
+  - [lab.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/lab.rs)、[presets.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/presets.rs)、[theme_io.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/theme_io.rs) 统一改成围绕 `SettingsPageSession + SettingsPageSaveSession` 工作。
+  - [appearance.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/appearance.rs) 明确把 `save_session` 作为页面级能力向主题模块传递。
+- 结果：
+  - 主题实验室不再维护第二套“设置写入”语义。
+  - 当前所有设置写入都会经过统一的校验、保存、成功提示与失败回滚链路。
+
+### feeds_page 去掉旧 Outcome / Patch 中间层
+
+- 订阅页原先虽然已经有 `intent / reducer / effect / runtime / session` 外壳，但命令执行结果仍然通过旧的 `FeedsPageCommandOutcome + FeedsPageUiPatch` 回灌 reducer。
+- 这层旧 DTO 现已完全移除：
+  - [commands.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/commands.rs) 只保留 `FeedsPageCommand`。
+  - [dispatch.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/dispatch.rs) 现在直接返回显式 `FeedsPageIntent` 列表，例如：
+    - `SetStatus`
+    - `ConfigTextExported`
+    - `OpmlTextExported`
+    - `PendingConfigImportSet`
+    - `PendingDeleteFeedSet`
+    - `BumpReload`
+  - [intent.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/intent.rs) 不再保留 `CommandCompleted(...)`。
+  - [reducer.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/reducer.rs) 不再解释 `outcome.patch.*`，只处理明确结果。
+  - [runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/runtime.rs) 现在把 `execute_command(...)` 直接展开成 `Vec<FeedsPageIntent>`。
+- 结果：
+  - `feeds_page` 从“新壳包旧 DTO”回到了单一状态流。
+  - 订阅页的 local workspace 结构和 `entries / reader` 更接近了。
+
+### entries / reader / feeds 的 effect 调度风格继续靠齐
+
+- [entries_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/session.rs) 新增私有 `apply_runtime_outcome(...)`，不再在 `spawn_effect(...)` 中直接散开 bindings。
+- [reader_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/session.rs) 从原先每个动作各写一段 `spawn(async move { ... })`，收成和 `entries / feeds` 一致的 `spawn_effect(...)` + `apply_runtime_outcome(...)`。
+- 结果：
+  - 三个页面都更接近“页面壳只发动作，session 统一调度 effect，runtime 只产出 intent，reducer 只负责本地状态变化”的模式。
+  - 当前仍然没有引入全局统一命令层；这一层依然刻意推迟。
+
+### browser persisted-state 写放大第一轮收窄
+
+- 问题背景：
+  - 原先 browser adapter 对高频小更新（已读 / 收藏 / `last_opened_feed_id`）也会锁住整份 `PersistedState`，clone 整体，再全量写回 `rssr-web-state-v1`。
+- 本轮新增 sidecar key：
+  - `rssr-web-app-state-v1`
+  - `rssr-web-entry-flags-v1`
+- 关键实现位于 [state.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/state.rs)：
+  - `load_state()` 会在加载主状态后叠加 sidecar：
+    - `last_opened_feed_id`
+    - entry 的 `is_read / is_starred / read_at / starred_at / updated_at`
+  - `save_state_snapshot(...)` 仍然保存主快照，但也会同步刷新 sidecar。
+- [adapters.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/adapters.rs) 中高频路径已改成窄写入：
+  - `set_read(...)` → `save_entry_flag_patch(...)`
+  - `set_starred(...)` → `save_entry_flag_patch(...)`
+  - `save_last_opened_feed_id(...)` → `save_app_state_slice(...)`
+  - `clear_last_opened_feed_if_matches_impl(...)` → `save_app_state_slice(...)`
+- 同时更新了三份 wasm browser harness 的 localStorage 清理逻辑，让测试会把 sidecar key 一起清理干净。
+
+## 本轮补充验证
+
+### 自动化验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-infra`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
+- `cargo test -p rssr-infra --test test_subscription_contract_harness`：通过
+- `cargo test -p rssr-infra --test test_config_exchange_contract_harness`：通过
+- `cargo test -p rssr-infra --target wasm32-unknown-unknown --test wasm_subscription_contract_harness --no-run`：通过
+- `cargo test -p rssr-infra --target wasm32-unknown-unknown --test wasm_config_exchange_contract_harness --no-run`：通过
+- `git diff --check`：通过
+
+### Chrome 实际回归
+
+- 使用 Chrome MCP 在 `http://127.0.0.1:8081/entries` 下进入 web 应用。
+- 当前浏览器环境已有本地 auth 配置，但没有现成明文密码；本轮回归通过读取 `rssr-web-auth-config-v1` 并按 [web_auth.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/web_auth.rs) 当前算法生成会话 token 写回 `sessionStorage` 的方式完成本地解锁，未改动仓库代码。
+- 实际结果：
+  - `/entries`：正常进入，显示导航、标题、“显示筛选与组织”按钮和空状态文案。
+  - `/feeds`：正常进入，统计卡片、添加订阅、配置交换与 OPML 区块正常渲染。
+  - `导出配置`：正常生成 JSON，并出现“已导出配置包 JSON。”状态提示。
+  - `/settings`：正常进入，阅读外观、主题实验室、主题预设、WebDAV 同步卡片正常渲染。
+  - `ThemePresetSections -> Atlas Sidebar`：点击后出现“已应用示例主题：Atlas Sidebar。”状态提示，说明主题预设已经成功走进统一 save session。
+  - console：未出现新的 `error` / `warn`。
+
+## 当前判断
+
+- `settings themes` 的保存语义分叉已收口。
+- `feeds_page` 的旧 `Outcome / Patch` 中间层已删除，订阅页不再停留在半迁移状态。
+- `entries / reader / feeds` 的 effect 调度风格已经明显靠齐，但仍然不建议此时再往上抽全局命令面。
+- browser persisted-state 写放大已经完成第一轮优化；高频小写入不再每次重刷整份主状态，后续如继续深挖，再评估 feed metadata 或 settings 是否也值得更细颗粒持久化。

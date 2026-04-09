@@ -1,14 +1,20 @@
 use dioxus::prelude::*;
 
-use crate::{pages::settings_page::session::SettingsPageSession, status::set_status_info};
+use crate::{
+    pages::settings_page::{save::SettingsPageSaveSession, session::SettingsPageSession},
+    status::set_status_info,
+};
 
 use super::{
-    theme_apply::{apply_builtin_theme, apply_settings_immediately},
-    theme_preset::{builtin_theme_presets, detect_preset_key, preset_css, preset_display_name},
+    theme_apply::{apply_builtin_theme, apply_custom_css_from_raw, clear_custom_css},
+    theme_preset::{builtin_theme_presets, detect_preset_key},
 };
 
 #[component]
-pub(super) fn ThemePresetSections(session: SettingsPageSession) -> Element {
+pub(super) fn ThemePresetSections(
+    session: SettingsPageSession,
+    save_session: SettingsPageSaveSession,
+) -> Element {
     rsx! {
         div { class: "settings-card__section",
             div { class: "settings-card__section-header",
@@ -35,19 +41,7 @@ pub(super) fn ThemePresetSections(session: SettingsPageSession) -> Element {
                     onclick: move |_| {
                         let choice = session.preset_choice()();
                         if choice == "none" {
-                            let mut next = session.draft()();
-                            next.custom_css.clear();
-                            let applied = next.clone();
-                            session.draft().set(next);
-                            apply_settings_immediately(
-                                session.theme(),
-                                session.draft(),
-                                session.preset_choice(),
-                                session.status_signal(),
-                                session.status_tone_signal(),
-                                applied,
-                                "已清空自定义 CSS。".to_string(),
-                            );
+                            clear_custom_css(session, save_session, "已清空自定义 CSS。");
                             return;
                         }
                         if choice == "custom" {
@@ -58,20 +52,7 @@ pub(super) fn ThemePresetSections(session: SettingsPageSession) -> Element {
                             );
                             return;
                         }
-                        let mut next = session.draft()();
-                        next.custom_css = preset_css(choice.as_str()).to_string();
-                        session.preset_choice().set(choice.clone());
-                        let applied = next.clone();
-                        session.draft().set(next);
-                        apply_settings_immediately(
-                            session.theme(),
-                            session.draft(),
-                            session.preset_choice(),
-                            session.status_signal(),
-                            session.status_tone_signal(),
-                            applied,
-                            format!("已应用示例主题：{}。", preset_display_name(choice.as_str())),
-                        );
+                        apply_builtin_theme(session, save_session, choice.as_str());
                     },
                     "载入所选主题"
                 }
@@ -81,81 +62,36 @@ pub(super) fn ThemePresetSections(session: SettingsPageSession) -> Element {
                     class: "button secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "atlas-sidebar",
-                    onclick: move |_| apply_builtin_theme(
-                        session.theme(),
-                        session.draft(),
-                        session.preset_choice(),
-                        session.status_signal(),
-                        session.status_tone_signal(),
-                        "atlas-sidebar",
-                        "Atlas Sidebar",
-                    ),
+                    onclick: move |_| apply_builtin_theme(session, save_session, "atlas-sidebar"),
                     "Atlas Sidebar"
                 }
                 button {
                     class: "button secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "newsprint",
-                    onclick: move |_| apply_builtin_theme(
-                        session.theme(),
-                        session.draft(),
-                        session.preset_choice(),
-                        session.status_signal(),
-                        session.status_tone_signal(),
-                        "newsprint",
-                        "Newsprint",
-                    ),
+                    onclick: move |_| apply_builtin_theme(session, save_session, "newsprint"),
                     "Newsprint"
                 }
                 button {
                     class: "button secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "forest-desk",
-                    onclick: move |_| apply_builtin_theme(
-                        session.theme(),
-                        session.draft(),
-                        session.preset_choice(),
-                        session.status_signal(),
-                        session.status_tone_signal(),
-                        "forest-desk",
-                        "Amethyst Glass",
-                    ),
+                    onclick: move |_| apply_builtin_theme(session, save_session, "forest-desk"),
                     "Amethyst Glass"
                 }
                 button {
                     class: "button secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "midnight-ledger",
-                    onclick: move |_| apply_builtin_theme(
-                        session.theme(),
-                        session.draft(),
-                        session.preset_choice(),
-                        session.status_signal(),
-                        session.status_tone_signal(),
-                        "midnight-ledger",
-                        "Midnight Ledger",
-                    ),
+                    onclick: move |_| {
+                        apply_builtin_theme(session, save_session, "midnight-ledger")
+                    },
                     "Midnight Ledger"
                 }
                 button {
                     class: "button secondary danger-outline",
                     "data-action": "clear-custom-css",
-                    onclick: move |_| {
-                        let mut next = session.draft()();
-                        next.custom_css.clear();
-                        session.preset_choice().set("none".to_string());
-                        let applied = next.clone();
-                        session.draft().set(next);
-                        apply_settings_immediately(
-                            session.theme(),
-                            session.draft(),
-                            session.preset_choice(),
-                            session.status_signal(),
-                            session.status_tone_signal(),
-                            applied,
-                            "已清空自定义 CSS。".to_string(),
-                        );
-                    },
+                    onclick: move |_| clear_custom_css(session, save_session, "已清空自定义 CSS。"),
                     "清空 CSS"
                 }
             }
@@ -186,18 +122,10 @@ pub(super) fn ThemePresetSections(session: SettingsPageSession) -> Element {
                                     "data-action": "apply-theme-preset",
                                     "data-theme-preset": "{preset.key}",
                                     onclick: move |_| {
-                                        let mut next = session.draft()();
-                                        next.custom_css = preset_css(preset_key.as_str()).to_string();
-                                        session.preset_choice().set(preset_key.clone());
-                                        let applied = next.clone();
-                                        session.draft().set(next);
-                                        apply_settings_immediately(
-                                            session.theme(),
-                                            session.draft(),
-                                            session.preset_choice(),
-                                            session.status_signal(),
-                                            session.status_tone_signal(),
-                                            applied,
+                                        apply_custom_css_from_raw(
+                                            session,
+                                            save_session,
+                                            super::theme_preset::preset_css(preset_key.as_str()).to_string(),
                                             format!("已从主题卡片应用：{}。", preset_name),
                                         );
                                     },
@@ -216,18 +144,9 @@ pub(super) fn ThemePresetSections(session: SettingsPageSession) -> Element {
                                             );
                                             return;
                                         }
-                                        let mut next = session.draft()();
-                                        next.custom_css.clear();
-                                        session.preset_choice().set("none".to_string());
-                                        let applied = next.clone();
-                                        session.draft().set(next);
-                                        apply_settings_immediately(
-                                            session.theme(),
-                                            session.draft(),
-                                            session.preset_choice(),
-                                            session.status_signal(),
-                                            session.status_tone_signal(),
-                                            applied,
+                                        clear_custom_css(
+                                            session,
+                                            save_session,
                                             format!("已移除主题：{}。", preset_name),
                                         );
                                     },

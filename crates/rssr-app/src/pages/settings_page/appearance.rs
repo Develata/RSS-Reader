@@ -17,7 +17,7 @@ pub(crate) fn AppearanceSettingsCard(session: SettingsPageSession) -> Element {
                 h3 { "阅读外观" }
             }
             ReadingPreferencesSection { draft: session.draft() }
-            ThemeSettingsSections { session }
+            ThemeSettingsSections { session, save_session }
             div { class: "settings-card__footer",
                 button {
                     class: "button",

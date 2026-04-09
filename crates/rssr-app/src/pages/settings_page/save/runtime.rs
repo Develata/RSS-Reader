@@ -13,16 +13,18 @@ pub(crate) async fn execute_settings_page_save_effect(
     effect: SettingsPageSaveEffect,
 ) -> SettingsPageSaveRuntimeOutcome {
     match effect {
-        SettingsPageSaveEffect::SaveAppearance(settings) => match AppServices::shared().await {
-            Ok(services) => match services.save_settings(&settings).await {
-                Ok(()) => SettingsPageSaveRuntimeOutcome {
-                    status_message: "设置已保存。".to_string(),
-                    saved_settings: Some(settings),
+        SettingsPageSaveEffect::SaveAppearance { settings, success_message } => {
+            match AppServices::shared().await {
+                Ok(services) => match services.save_settings(&settings).await {
+                    Ok(()) => SettingsPageSaveRuntimeOutcome {
+                        status_message: success_message,
+                        saved_settings: Some(settings),
+                    },
+                    Err(err) => error(format!("保存设置失败：{err}")),
                 },
-                Err(err) => error(format!("保存设置失败：{err}")),
-            },
-            Err(err) => error(format!("初始化应用失败：{err}")),
-        },
+                Err(err) => error(format!("初始化应用失败：{err}")),
+            }
+        }
     }
 }
 

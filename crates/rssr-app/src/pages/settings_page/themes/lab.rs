@@ -1,3 +1,4 @@
+use crate::pages::settings_page::save::SettingsPageSaveSession;
 use crate::pages::settings_page::session::SettingsPageSession;
 use dioxus::prelude::*;
 
@@ -10,7 +11,10 @@ use super::theme_io::import_css_file;
 use super::theme_io::trigger_css_file_input_in_browser;
 
 #[component]
-pub(super) fn ThemeLabSection(session: SettingsPageSession) -> Element {
+pub(super) fn ThemeLabSection(
+    session: SettingsPageSession,
+    save_session: SettingsPageSaveSession,
+) -> Element {
     #[cfg(target_arch = "wasm32")]
     let file_import_input = rsx! {
         input {
@@ -27,13 +31,10 @@ pub(super) fn ThemeLabSection(session: SettingsPageSession) -> Element {
                 spawn(async move {
                     match file.read_string().await {
                         Ok(raw) => apply_custom_css_from_raw(
-                            session.theme(),
-                            session.draft(),
-                            session.preset_choice(),
-                            session.status_signal(),
-                            session.status_tone_signal(),
+                            session,
+                            save_session,
                             raw,
-                            "已从文件载入并应用自定义 CSS。".to_string(),
+                            "已从文件载入并应用自定义 CSS。",
                         ),
                         Err(err) => crate::status::set_status_error(
                             session.status_signal(),
@@ -74,11 +75,8 @@ pub(super) fn ThemeLabSection(session: SettingsPageSession) -> Element {
             "data-action": "import-custom-css-file",
             onclick: move |_| {
                 import_css_file(
-                    session.theme(),
-                    session.draft(),
-                    session.preset_choice(),
-                    session.status_signal(),
-                    session.status_tone_signal(),
+                    session,
+                    save_session,
                 );
             },
             "导入主题文件"
@@ -114,13 +112,10 @@ pub(super) fn ThemeLabSection(session: SettingsPageSession) -> Element {
                     "data-action": "apply-custom-css",
                     onclick: move |_| {
                         apply_custom_css_from_raw(
-                            session.theme(),
-                            session.draft(),
-                            session.preset_choice(),
-                            session.status_signal(),
-                            session.status_tone_signal(),
+                            session,
+                            save_session,
                             session.draft()().custom_css,
-                            "已应用当前输入框中的自定义 CSS。".to_string(),
+                            "已应用当前输入框中的自定义 CSS。",
                         );
                     },
                     "应用当前 CSS"

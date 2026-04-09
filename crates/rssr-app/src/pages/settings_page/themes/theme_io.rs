@@ -2,6 +2,9 @@ use crate::status::{set_status_error, set_status_info};
 use dioxus::prelude::*;
 
 #[cfg(not(target_arch = "wasm32"))]
+use crate::pages::settings_page::{save::SettingsPageSaveSession, session::SettingsPageSession};
+
+#[cfg(not(target_arch = "wasm32"))]
 async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
     #[cfg(target_os = "android")]
     {
@@ -24,28 +27,27 @@ async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(super) fn import_css_file(
-    theme: crate::theme::ThemeController,
-    draft: Signal<rssr_domain::UserSettings>,
-    preset_choice: Signal<String>,
-    status: Signal<String>,
-    status_tone: Signal<String>,
-) {
+pub(super) fn import_css_file(session: SettingsPageSession, save_session: SettingsPageSaveSession) {
     use super::theme_apply::apply_custom_css_from_raw;
 
     spawn(async move {
         match pick_css_file_contents().await {
             Ok(Some(raw)) => apply_custom_css_from_raw(
-                theme,
-                draft,
-                preset_choice,
-                status,
-                status_tone,
+                session,
+                save_session,
                 raw,
-                "已从文件载入并应用自定义 CSS。".to_string(),
+                "已从文件载入并应用自定义 CSS。",
             ),
-            Ok(None) => set_status_info(status, status_tone, "已取消载入 CSS 文件。"),
-            Err(err) => set_status_error(status, status_tone, format!("载入 CSS 文件失败：{err}")),
+            Ok(None) => set_status_info(
+                session.status_signal(),
+                session.status_tone_signal(),
+                "已取消载入 CSS 文件。",
+            ),
+            Err(err) => set_status_error(
+                session.status_signal(),
+                session.status_tone_signal(),
+                format!("载入 CSS 文件失败：{err}"),
+            ),
         }
     });
 }

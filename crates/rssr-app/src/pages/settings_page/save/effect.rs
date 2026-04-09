@@ -2,5 +2,5 @@ use rssr_domain::UserSettings;
 
 #[derive(Debug, Clone)]
 pub(crate) enum SettingsPageSaveEffect {
-    SaveAppearance(UserSettings),
+    SaveAppearance { settings: UserSettings, success_message: String },
 }
