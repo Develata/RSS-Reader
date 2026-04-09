@@ -57,7 +57,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
     let controls = render_entry_controls(&facade);
-    let session = facade.session;
     let snapshot = facade.snapshot.clone();
     let presenter = facade.presenter.clone();
 
@@ -122,7 +121,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                         }
                                                         ul { class: "entry-list entry-list--grouped",
                                                             for entry in source.entries {
-                                                                { render_entry_card(entry, session) }
+                                                                { render_entry_card(entry, facade.clone()) }
                                                             }
                                                         }
                                                     }
@@ -146,7 +145,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                 }
                                                 ul { class: "entry-list entry-list--grouped",
                                                     for entry in month.entries {
-                                                        { render_entry_card(entry, session) }
+                                                        { render_entry_card(entry, facade.clone()) }
                                                     }
                                                 }
                                             }
@@ -159,10 +158,10 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                 }
                 if !presenter.group_nav_items.is_empty() {
                     { render_entry_directory(
+                        &facade,
                         snapshot.grouping_mode,
                         &presenter.directory_months,
                         &presenter.directory_sources,
-                        session,
                     ) }
                 }
             }

@@ -4,11 +4,12 @@ use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::router::AppRoute;
 
-use super::session::EntriesPageSession;
+use super::facade::EntriesPageFacade;
 
-pub(super) fn render_entry_card(entry: EntrySummary, session: EntriesPageSession) -> Element {
+pub(super) fn render_entry_card(entry: EntrySummary, facade: EntriesPageFacade) -> Element {
     let read_title = entry.title.clone();
     let starred_title = entry.title.clone();
+    let read_facade = facade.clone();
 
     rsx! {
         li { class: "entry-card entry-card--reading", key: "{entry.id}",
@@ -28,7 +29,7 @@ pub(super) fn render_entry_card(entry: EntrySummary, session: EntriesPageSession
                     class: "button secondary",
                     "data-action": "mark-read",
                     onclick: move |_| {
-                        session.toggle_read(entry.id, read_title.clone(), entry.is_read);
+                        read_facade.toggle_read(entry.id, read_title.clone(), entry.is_read);
                     },
                     if entry.is_read { "标未读" } else { "标已读" }
                 }
@@ -36,7 +37,7 @@ pub(super) fn render_entry_card(entry: EntrySummary, session: EntriesPageSession
                     class: "button secondary",
                     "data-action": "toggle-starred",
                     onclick: move |_| {
-                        session.toggle_starred(entry.id, starred_title.clone(), entry.is_starred);
+                        facade.toggle_starred(entry.id, starred_title.clone(), entry.is_starred);
                     },
                     if entry.is_starred { "取消收藏" } else { "收藏" }
                 }

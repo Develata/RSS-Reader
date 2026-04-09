@@ -1,16 +1,20 @@
 use super::facade::EntriesPageFacade;
 use super::groups::{EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem};
-use super::intent::EntriesPageIntent;
-use super::session::EntriesPageSession;
 use super::state::EntryGroupingMode;
 use crate::components::{entry_filters::EntryFilters, status_banner::StatusBanner};
 use dioxus::prelude::*;
 
 pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
     let ui = facade.ui;
-    let session = facade.session;
     let snapshot = &facade.snapshot;
     let presenter = &facade.presenter;
+    let show_controls_facade = facade.clone();
+    let grouping_facade = facade.clone();
+    let archived_facade = facade.clone();
+    let read_filter_facade = facade.clone();
+    let starred_filter_facade = facade.clone();
+    let selected_sources_facade = facade.clone();
+    let hide_controls_facade = facade.clone();
     let visible_entries_len = presenter.visible_entries.len();
     let archived_count = presenter.archived_count;
     let source_filter_options = &presenter.source_filter_options;
@@ -24,9 +28,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                     "data-action": "show-entry-controls",
                     title: "显示筛选与组织",
                     "aria-label": "显示筛选与组织",
-                    onclick: move |_| {
-                        session.dispatch(EntriesPageIntent::SetControlsHidden(false));
-                    },
+                    onclick: move |_| show_controls_facade.set_controls_hidden(false),
                     span { class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--down", aria_hidden: "true" }
                 }
             }
@@ -43,12 +45,10 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                             EntryGroupingMode::Source => "source",
                         },
                         onchange: move |event| {
-                            session.dispatch(
-                                EntriesPageIntent::SetGroupingMode(match event.value().as_str() {
-                                    "source" => EntryGroupingMode::Source,
-                                    _ => EntryGroupingMode::Time,
-                                }),
-                            );
+                            grouping_facade.set_grouping_mode(match event.value().as_str() {
+                                "source" => EntryGroupingMode::Source,
+                                _ => EntryGroupingMode::Time,
+                            });
                         },
                         option { value: "time", "按时间" }
                         option { value: "source", "按来源" }
@@ -58,9 +58,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                             r#type: "checkbox",
                             "data-action": "toggle-archived",
                             checked: snapshot.show_archived,
-                            onchange: move |event| {
-                                session.dispatch(EntriesPageIntent::SetShowArchived(event.checked()))
-                            }
+                            onchange: move |event| archived_facade.set_show_archived(event.checked())
                         }
                         span { "显示已归档文章" }
                     }
@@ -112,15 +110,9 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                     available_sources: source_filter_options.to_vec(),
                     selected_feed_urls: snapshot.selected_feed_urls.clone(),
                     on_search: move |value| ui.set_entry_search(value),
-                    on_change_read_filter: move |value| {
-                        session.dispatch(EntriesPageIntent::SetReadFilter(value))
-                    },
-                    on_change_starred_filter: move |value| {
-                        session.dispatch(EntriesPageIntent::SetStarredFilter(value))
-                    },
-                    on_change_selected_feed_urls: move |value| {
-                        session.dispatch(EntriesPageIntent::SetSelectedFeedUrls(value))
-                    },
+                    on_change_read_filter: move |value| read_filter_facade.set_read_filter(value),
+                    on_change_starred_filter: move |value| starred_filter_facade.set_starred_filter(value),
+                    on_change_selected_feed_urls: move |value| selected_sources_facade.set_selected_feed_urls(value),
                 }
                 StatusBanner {
                     message: snapshot.status.clone(),
@@ -138,9 +130,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                         "data-action": "hide-entry-controls",
                         title: "收起筛选与组织",
                         "aria-label": "收起筛选与组织",
-                        onclick: move |_| {
-                            session.dispatch(EntriesPageIntent::SetControlsHidden(true));
-                        },
+                        onclick: move |_| hide_controls_facade.set_controls_hidden(true),
                         span { class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--up", aria_hidden: "true" }
                     }
                 }
@@ -150,12 +140,12 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
 }
 
 pub(super) fn render_entry_directory(
+    facade: &EntriesPageFacade,
     grouping_mode: EntryGroupingMode,
     directory_months: &[EntryDirectoryMonth],
     directory_sources: &[EntryDirectorySource],
-    session: EntriesPageSession,
 ) -> Element {
-    let expanded_directory_sources = session.snapshot().expanded_directory_sources;
+    let expanded_directory_sources = &facade.snapshot.expanded_directory_sources;
 
     rsx! {
         aside { class: "entry-directory-rail",
@@ -198,6 +188,7 @@ pub(super) fn render_entry_directory(
                             let anchor_id = source.anchor_id.clone();
                             let is_open = expanded_directory_sources.contains(&anchor_id);
                             let toggle_anchor = anchor_id.clone();
+                            let toggle_facade = facade.clone();
                             rsx! {
                                 div { class: "entry-directory-rail__subsection", key: "{anchor_id}",
                                     button {
@@ -205,11 +196,7 @@ pub(super) fn render_entry_directory(
                                         aria_expanded: if is_open { "true" } else { "false" },
                                         "data-action": if is_open { "collapse-directory-source" } else { "expand-directory-source" },
                                         onclick: move |_| {
-                                            session.dispatch(
-                                                EntriesPageIntent::ToggleDirectorySource(
-                                                    toggle_anchor.clone(),
-                                                ),
-                                            );
+                                            toggle_facade.toggle_directory_source(toggle_anchor.clone());
                                         },
                                         span { class: "entry-directory-rail__toggle-text", "{source.title}" }
                                         span { class: "entry-directory-rail__toggle-meta", "{source.subtitle}" }
