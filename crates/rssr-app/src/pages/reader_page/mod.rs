@@ -1,10 +1,10 @@
 mod effect;
-mod intent;
+pub(crate) mod intent;
 mod reducer;
 mod runtime;
 mod session;
-mod state;
-mod support;
+pub(crate) mod state;
+pub(crate) mod support;
 
 use dioxus::prelude::*;
 

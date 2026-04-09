@@ -1,6 +1,13 @@
-use super::queries::FeedsPageSnapshot;
+use rssr_domain::FeedSummary;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub(crate) struct FeedsPageSnapshot {
+    pub(crate) feeds: Vec<FeedSummary>,
+    pub(crate) feed_count: usize,
+    pub(crate) entry_count: usize,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) enum FeedsPageIntent {
     LoadRequested,
     FeedUrlChanged(String),

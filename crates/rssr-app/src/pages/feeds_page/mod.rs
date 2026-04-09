@@ -1,8 +1,6 @@
 mod commands;
-mod dispatch;
 mod effect;
-mod intent;
-mod queries;
+pub(crate) mod intent;
 mod reducer;
 mod runtime;
 mod sections;
