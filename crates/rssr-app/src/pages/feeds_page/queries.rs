@@ -3,6 +3,7 @@ use rssr_domain::{EntryQuery, FeedSummary};
 
 use crate::bootstrap::AppServices;
 
+#[derive(Debug)]
 pub(crate) struct FeedsPageSnapshot {
     pub(crate) feeds: Vec<FeedSummary>,
     pub(crate) feed_count: usize,

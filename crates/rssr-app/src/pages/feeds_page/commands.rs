@@ -19,6 +19,7 @@ pub(crate) struct FeedsPageUiPatch {
     pub(crate) pending_delete_feed: Option<Option<i64>>,
 }
 
+#[derive(Debug)]
 pub(crate) struct FeedsPageCommandOutcome {
     pub(crate) patch: FeedsPageUiPatch,
     pub(crate) status_message: String,

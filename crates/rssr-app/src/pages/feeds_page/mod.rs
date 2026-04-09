@@ -1,6 +1,10 @@
 mod commands;
 mod dispatch;
+mod effect;
+mod intent;
 mod queries;
+mod reducer;
+mod runtime;
 mod sections;
 mod session;
 mod state;
@@ -18,14 +22,7 @@ use crate::{
 pub fn FeedsPage() -> Element {
     use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
 
-    let state = use_signal(state::FeedsPageState::new);
-    let session = FeedsPageSession::new(state);
-    let reload_tick = session.reload_tick();
-
-    use_resource(use_reactive!(|(reload_tick)| async move {
-        let _ = reload_tick;
-        session.load_snapshot().await;
-    }));
+    let (session, snapshot) = use_feeds_page_workspace();
 
     rsx! {
         section { class: "page page-feeds", "data-page": "feeds",
@@ -36,17 +33,30 @@ pub fn FeedsPage() -> Element {
             div { class: "stats-grid stats-grid--airy",
                 div { class: "stat-card",
                     div { class: "stat-card__label", "订阅数" }
-                    div { class: "stat-card__value", "{session.feed_count()}" }
+                    div { class: "stat-card__value", "{snapshot.feed_count}" }
                 }
                 div { class: "stat-card",
                     div { class: "stat-card__label", "文章数" }
-                    div { class: "stat-card__value", "{session.entry_count()}" }
+                    div { class: "stat-card__value", "{snapshot.entry_count}" }
                 }
             }
-            StatusBanner { message: session.status(), tone: session.status_tone() }
+            StatusBanner { message: snapshot.status.clone(), tone: snapshot.status_tone.clone() }
             FeedComposeSection { session }
             ConfigExchangeSection { session }
             SavedFeedsSection { session }
         }
     }
+}
+
+fn use_feeds_page_workspace() -> (FeedsPageSession, state::FeedsPageState) {
+    let state = use_signal(state::FeedsPageState::new);
+    let session = FeedsPageSession::new(state);
+    let reload_tick = session.reload_tick();
+
+    use_resource(use_reactive!(|(reload_tick)| async move {
+        let _ = reload_tick;
+        session.load_snapshot();
+    }));
+
+    (session, session.snapshot())
 }

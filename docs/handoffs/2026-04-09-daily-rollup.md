@@ -331,6 +331,43 @@
   - `entries_page` / `reader_page` 的 view shell 中剩余的加载逻辑被压回私有 workspace helper
   - 页面层的“壳”与“会话内核”分界更接近同一种形状，后续继续重构时更容易保持一致
 
+### 当日后续重构：feeds_page 补齐 intent / reducer / effect / runtime
+
+- `feeds_page` 在完成目录化和 local session 之后，又继续向 `entries/reader` 的形状靠拢了一步：
+  - 新增 `crates/rssr-app/src/pages/feeds_page/intent.rs`
+  - 新增 `crates/rssr-app/src/pages/feeds_page/reducer.rs`
+  - 新增 `crates/rssr-app/src/pages/feeds_page/effect.rs`
+  - 新增 `crates/rssr-app/src/pages/feeds_page/runtime.rs`
+- 这轮没有重写 UI，也没有改 `commands/dispatch/queries` 的业务语义，而是把它们重新挂到显式的会话流里：
+  - `FeedsPageIntent` 统一表达：
+    - 本地字段变化
+    - 加载请求
+    - 各类订阅/配置交换动作请求
+    - clipboard paste 请求
+    - runtime 回灌结果
+  - `reduce_feeds_page_intent(...)` 负责：
+    - 更新 `FeedsPageState`
+    - 派生是否需要执行 `LoadSnapshot / ExecuteCommand / ReadFeedUrlFromClipboard`
+  - `execute_feeds_page_effect(...)` 负责：
+    - 调 `load_feeds_page_snapshot()`
+    - 调现有 `execute_command(...)`
+    - 在浏览器端读取剪贴板文本
+  - `FeedsPageSession` 则不再直接做“查询 + 命令 + patch 回填”的混合控制器，而是负责：
+    - `dispatch_intent(...)`
+    - `spawn_effect(...)`
+    - 对 section 暴露稳定的页面动作接口
+- `feeds_page/mod.rs` 也继续收薄：
+  - 新增私有 `use_feeds_page_workspace()`
+  - 把 `state/session/reload resource` 压回 helper
+  - 页面壳只消费 `session + snapshot`
+- 订阅输入框的 paste fallback 也正式进入这条 effect 链，不再从 section 里直接起一段异步 clipboard 读取逻辑。
+- 到这一步为止，`feeds_page` 虽然还不像 `entries_page` 那样有完整 presenter/reducer 风格的页面内核，但已经具备了：
+  - 显式 state
+  - 显式 intent
+  - 显式 effect/runtime
+  - 围绕 session 的统一入口
+  后续如果继续推进，不需要再先做一次中间态迁移。
+
 ### Contract harness 规划与重建
 
 - 新增 `docs/testing/contract-harness-rebuild-plan.md`，明确不直接复制旧分支 harness，而按当前主线重建。

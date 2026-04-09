@@ -25,9 +25,7 @@ pub(crate) fn FeedComposeSection(session: FeedsPageSession) -> Element {
                             }
 
                             event.prevent_default();
-                            spawn(async move {
-                                session.paste_feed_url_result(paste_feed_url_from_clipboard().await);
-                            });
+                            session.paste_feed_url();
                         },
                         oninput: move |event| session.set_feed_url(event.value())
                     }
@@ -54,18 +52,4 @@ fn is_paste_shortcut(event: &KeyboardEvent) -> bool {
     let has_paste_modifier =
         modifiers.contains(Modifiers::META) || modifiers.contains(Modifiers::CONTROL);
     has_paste_modifier && event.key().to_string().eq_ignore_ascii_case("v")
-}
-
-async fn paste_feed_url_from_clipboard() -> Result<Option<String>, String> {
-    document::eval(
-        r#"
-        if (typeof navigator === "undefined" || !navigator.clipboard || !navigator.clipboard.readText) {
-            return null;
-        }
-        return navigator.clipboard.readText();
-        "#,
-    )
-    .join::<Option<String>>()
-    .await
-    .map_err(|err| err.to_string())
 }
