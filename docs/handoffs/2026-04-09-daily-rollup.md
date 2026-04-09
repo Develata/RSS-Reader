@@ -259,6 +259,30 @@
   - `open_repository()`
   - 以及对 `theme / draft / preset_choice / status` 的访问器
 
+### 当日后续收口：CSS 完全分离第一轮状态接口迁移
+
+- 在完成 `ui/shell + ui bus + page facade` 基线后，继续做了第一轮真正面向 `CSS 完全分离` 的状态接口迁移。
+- 这轮不是改视觉风格，而是把仍绑在 modifier class 上的样式语义收进稳定属性接口：
+  - `StatusBanner` 从 `.status-banner.info/.error` 收到 `data-state`
+  - 按钮变体从 `.button.secondary/.danger/.danger-outline` 收到 `data-variant`
+  - 根壳密度从 `.app-shell.density-compact` 收到 `data-density`
+  - 主题卡、来源筛选 chip、阅读页底栏按钮从 `.is-*` 收到 `data-state`
+- 对应代码与样式变更集中在：
+  - `crates/rssr-app/src/components/status_banner.rs`
+  - `crates/rssr-app/src/components/entry_filters.rs`
+  - `crates/rssr-app/src/theme.rs`
+  - `crates/rssr-app/src/app.rs`
+  - `crates/rssr-app/src/pages/settings_page/{facade,appearance.rs,themes/*,sync/mod.rs}`
+  - `crates/rssr-app/src/pages/feeds_page/{facade,sections/*}`
+  - `crates/rssr-app/src/pages/reader_page/{facade,mod.rs}`
+  - `crates/rssr-app/src/pages/entries_page/{mod.rs,cards.rs}`
+  - `assets/styles/{shell,workspaces,entries,reader}.css`
+- 这轮完成后，CSS 分离清单里的第一批 class modifier 依赖已经被实际清掉；后续重点会转到更深的 DOM 层级依赖，比如：
+  - `.page h2`
+  - `.settings-form-grid > div`
+  - `.entry-card__actions > *`
+  - `.entry-card--reading:first-child/:last-child`
+
 ### 当日后续重构：App shell 再向语义壳收一层
 
 - `AppNav` 不再自己持有导航与搜索的交互细节，而是开始明确消费 `ui/shell.rs` 中的 `AppNavShell`：
@@ -1372,6 +1396,55 @@
   - runtime 按命令族拆
   - commands 按命令族拆
 - 这更贴近 `headless active interface + CSS 完全分离 + infra` 的目标，因为页面层现在发出的不再是“全局大枚举中的一条分支”，而是更明确的领域语义命令。
+
+## 追加：CSS 完全分离基线检查
+
+### 背景
+
+- 在 `ui/shell + ui bus + page facade` 已经基本稳定后，下一步风险不再主要来自行为层，而是样式层是否仍然暗中依赖页面内部 DOM 结构。
+- 这轮审计只看一件事：
+  - 当前 CSS 是否还能被视为“语义接口上的默认皮肤”
+
+### 本轮产出
+
+- 新增：
+  - [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)
+- 更新：
+  - [README.md](/home/develata/gitclone/RSS-Reader/docs/design/README.md)
+
+### 审计结论
+
+- 页面级语义接口已经足够稳定，主风险不在 `data-page/data-action/data-field/data-state` 缺失，而在两类样式残留：
+  1. 深层结构依赖
+     - 例如 `.page h2`
+     - `.page-header .icon-link-button`
+     - `.settings-form-grid > div`
+     - `.inline-actions > *`
+     - `.entry-card__actions > *`
+     - `.entry-card--reading:first-child/last-child`
+     - `.entry-card--reading + .entry-card--reading`
+  2. 状态仍然编码在 class modifier
+     - `.status-banner.info/.error`
+     - `.theme-card.is-active`
+     - `.entry-filters__source-chip.is-selected`
+     - `.reader-bottom-bar__button.is-active/.is-disabled`
+     - `.button.secondary/.danger/.danger-outline`
+     - `.app-shell.density-compact`
+
+- 同时确认了一类可以保留的例外：
+  - `reader-html` 内容岛的 HTML 标签排版规则
+  - 这类选择器不是页面结构耦合，而是远端正文内容标准化的一部分
+
+### 下一轮建议
+
+- 优先把 modifier class 状态迁到：
+  - `data-state`
+  - `data-variant`
+  - `data-density`
+- 然后再去掉 `> *`、`:first-child`、相邻兄弟和标签后代依赖
+- 最后同步修复：
+  - [theme-author-selector-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/theme-author-selector-reference.md)
+  里仍然残留的旧 selector 文档
 
 ### 当日后续收口：page facade 命名统一
 

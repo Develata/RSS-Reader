@@ -35,7 +35,8 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     option { value: "midnight-ledger", "Midnight Ledger" }
                 }
                 button {
-                    class: "button secondary",
+                    class: "button",
+                    "data-variant": "secondary",
                     "data-action": "apply-selected-theme",
                     onclick: move |_| apply_selected_facade.apply_selected_theme(),
                     "载入所选主题"
@@ -43,35 +44,40 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
             }
             div { class: "preset-grid",
                 button {
-                    class: "button secondary",
+                    class: "button",
+                    "data-variant": "secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "atlas-sidebar",
                     onclick: move |_| atlas_facade.apply_builtin_theme("atlas-sidebar"),
                     "Atlas Sidebar"
                 }
                 button {
-                    class: "button secondary",
+                    class: "button",
+                    "data-variant": "secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "newsprint",
                     onclick: move |_| newsprint_facade.apply_builtin_theme("newsprint"),
                     "Newsprint"
                 }
                 button {
-                    class: "button secondary",
+                    class: "button",
+                    "data-variant": "secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "forest-desk",
                     onclick: move |_| forest_facade.apply_builtin_theme("forest-desk"),
                     "Amethyst Glass"
                 }
                 button {
-                    class: "button secondary",
+                    class: "button",
+                    "data-variant": "secondary",
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "midnight-ledger",
                     onclick: move |_| { midnight_facade.apply_builtin_theme("midnight-ledger") },
                     "Midnight Ledger"
                 }
                 button {
-                    class: "button secondary danger-outline",
+                    class: "button",
+                    "data-variant": "danger-outline",
                     "data-action": "clear-custom-css",
                     onclick: move |_| clear_facade.clear_custom_css("已清空自定义 CSS。"),
                     "清空 CSS"
@@ -88,7 +94,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                         let preset_swatches = preset.swatches;
                         rsx! {
                             article {
-                                class: facade.theme_card_class(preset.key),
+                                class: "theme-card",
                                 key: "{preset.key}",
                                 "data-state": "{facade.theme_card_state(preset.key)}",
                                 "data-theme-preset": "{preset.key}",
@@ -102,7 +108,8 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                                     }
                                 }
                                 button {
-                                    class: facade.theme_apply_button_class(preset.key),
+                                    class: "button",
+                                    "data-variant": "{facade.theme_apply_button_variant(preset.key)}",
                                     "data-action": "apply-theme-preset",
                                     "data-theme-preset": "{preset.key}",
                                     onclick: move |_| {
@@ -115,7 +122,8 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                                     "{facade.theme_apply_button_label(preset.key)}"
                                 }
                                 button {
-                                    class: "button secondary danger-outline",
+                                    class: "button",
+                                    "data-variant": "danger-outline",
                                     "data-action": "remove-theme-preset",
                                     "data-theme-preset": "{preset.key}",
                                     onclick: move |_| remove_card_facade.remove_theme_preset(remove_preset_key.as_str(), preset_name),

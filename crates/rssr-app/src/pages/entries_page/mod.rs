@@ -74,7 +74,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     if feed_id.is_some() {
                         div { class: "entries-page__backlink",
                             Link {
-                                class: "button secondary",
+                                class: "button",
+                                "data-variant": "secondary",
                                 "data-nav": "entries",
                                 to: AppRoute::EntriesPage {},
                                 "返回全部文章"

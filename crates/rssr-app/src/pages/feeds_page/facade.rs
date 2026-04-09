@@ -41,8 +41,8 @@ impl FeedsPageFacade {
         self.snapshot.pending_config_import
     }
 
-    pub(crate) fn config_import_button_class(&self) -> &'static str {
-        if self.is_config_import_pending() { "button danger" } else { "button secondary" }
+    pub(crate) fn config_import_button_variant(&self) -> &'static str {
+        if self.is_config_import_pending() { "danger" } else { "secondary" }
     }
 
     pub(crate) fn config_import_button_label(&self) -> &'static str {
@@ -65,12 +65,8 @@ impl FeedsPageFacade {
         if self.feeds().is_empty() { "empty" } else { "populated" }
     }
 
-    pub(crate) fn remove_feed_button_class(&self, feed_id: i64) -> &'static str {
-        if self.is_delete_pending_for(feed_id) {
-            "button danger"
-        } else {
-            "button secondary danger-outline"
-        }
+    pub(crate) fn remove_feed_button_variant(&self, feed_id: i64) -> &'static str {
+        if self.is_delete_pending_for(feed_id) { "danger" } else { "danger-outline" }
     }
 
     pub(crate) fn remove_feed_button_label(&self, feed_id: i64) -> &'static str {

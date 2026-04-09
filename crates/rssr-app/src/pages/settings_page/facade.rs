@@ -106,16 +106,12 @@ impl SettingsPageFacade {
         detect_preset_key(&self.custom_css()) == preset_key
     }
 
-    pub(crate) fn theme_card_class(&self, preset_key: &str) -> &'static str {
-        if self.is_theme_preset_active(preset_key) { "theme-card is-active" } else { "theme-card" }
-    }
-
     pub(crate) fn theme_card_state(&self, preset_key: &str) -> &'static str {
         if self.is_theme_preset_active(preset_key) { "active" } else { "inactive" }
     }
 
-    pub(crate) fn theme_apply_button_class(&self, preset_key: &str) -> &'static str {
-        if self.is_theme_preset_active(preset_key) { "button" } else { "button secondary" }
+    pub(crate) fn theme_apply_button_variant(&self, preset_key: &str) -> &'static str {
+        if self.is_theme_preset_active(preset_key) { "primary" } else { "secondary" }
     }
 
     pub(crate) fn theme_apply_button_label(&self, preset_key: &str) -> &'static str {
@@ -174,8 +170,8 @@ impl SettingsPageFacade {
         self.sync_snapshot.pending_remote_pull
     }
 
-    pub(crate) fn remote_pull_button_class(&self) -> &'static str {
-        if self.is_remote_pull_pending() { "button danger" } else { "button secondary" }
+    pub(crate) fn remote_pull_button_variant(&self) -> &'static str {
+        if self.is_remote_pull_pending() { "danger" } else { "secondary" }
     }
 
     pub(crate) fn remote_pull_button_label(&self) -> &'static str {

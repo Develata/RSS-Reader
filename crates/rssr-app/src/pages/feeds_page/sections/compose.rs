@@ -35,12 +35,14 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
                     }
                     button {
                         class: "button",
+                        "data-variant": "primary",
                         "data-action": "add-feed",
                         onclick: move |_| add_facade.add_feed(),
                         "添加订阅"
                     }
                     button {
-                        class: "button secondary",
+                        class: "button",
+                        "data-variant": "secondary",
                         "data-action": "refresh-all",
                         onclick: move |_| facade.refresh_all(),
                         "刷新全部"

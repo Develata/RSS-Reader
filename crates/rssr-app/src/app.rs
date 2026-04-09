@@ -2,8 +2,9 @@ use dioxus::prelude::*;
 
 use crate::{
     bootstrap::AppServices,
+    components::status_banner::StatusBanner,
     router::{AppRoute, RoutableApp},
-    theme::{ThemeController, density_class, theme_class},
+    theme::{ThemeController, density_state, theme_class},
     ui::{
         use_app_nav_shell, use_app_shell_state, use_authenticated_shell_bus,
         use_web_auth_gate_shell,
@@ -49,7 +50,8 @@ pub fn App() -> Element {
         }
         if auth() == WebAuthState::Authenticated {
             div {
-                class: "app-shell {theme_class(settings().theme)} {density_class(settings().list_density)}",
+                class: "app-shell {theme_class(settings().theme)}",
+                "data-density": "{density_state(settings().list_density)}",
                 style: "--reader-font-scale: {settings().reader_font_scale};",
                 RoutableApp {}
             }
@@ -155,7 +157,10 @@ fn WebAuthLoadingGate() -> Element {
                 }
                 h1 { class: "web-auth-card__title", "验证登录状态" }
                 p { class: "web-auth-card__intro", "正在确认当前 Web 部署的服务端登录会话，请稍候。" }
-                p { class: "status-banner info", "正在与服务端确认登录状态..." }
+                StatusBanner {
+                    message: "正在与服务端确认登录状态...".to_string(),
+                    tone: "info".to_string(),
+                }
             }
         }
     }
@@ -178,10 +183,7 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
                 }
                 h1 { class: "web-auth-card__title", "{shell.title()}" }
                 p { class: "web-auth-card__intro", "{shell.intro()}" }
-                p {
-                    class: "status-banner {shell.status_tone()}",
-                    "{shell.status()}"
-                }
+                StatusBanner { message: shell.status(), tone: shell.status_tone() }
                 form {
                     class: "web-auth-form",
                     onsubmit: move |event| {
@@ -217,6 +219,7 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
                     }
                     button {
                         class: "button",
+                        "data-variant": "primary",
                         r#type: "submit",
                         "{shell.submit_label()}"
                     }

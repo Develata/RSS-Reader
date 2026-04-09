@@ -115,11 +115,8 @@ pub fn EntryFilters(
                                 };
                                 rsx! {
                                     label {
-                                        class: if is_selected {
-                                            "entry-filters__source-chip is-selected"
-                                        } else {
-                                            "entry-filters__source-chip"
-                                        },
+                                        class: "entry-filters__source-chip",
+                                        "data-state": if is_selected { "selected" } else { "unselected" },
                                         input {
                                             class: "sr-only",
                                             r#type: "checkbox",

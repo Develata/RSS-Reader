@@ -7,6 +7,7 @@
 - [功能设计哲学](./functional-design-philosophy.md)
 - [Headless Active Interface 设计目标](./headless-active-interface.md)
 - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
+- [CSS 完全分离基线检查](./css-separation-baseline-checklist.md)
 - [前端命令与界面接口清单](./frontend-command-reference.md)
 - [主题作者选择器参考](./theme-author-selector-reference.md)
 
@@ -22,6 +23,8 @@
   - [Headless Active Interface 设计目标](./headless-active-interface.md)
 - 想看当前 repo 里 `ui/shell + ui bus + page facade` 已经落成到什么程度，以及实际边界怎么划：
   - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
+- 想审计当前样式是不是还依赖 DOM 内部结构，以及下一轮该先收什么：
+  - [CSS 完全分离基线检查](./css-separation-baseline-checklist.md)
 - 想手写主题，或把一份文档直接丢给 AI 生成 CSS：
   - [主题作者选择器参考](./theme-author-selector-reference.md)
 
@@ -99,3 +102,18 @@
 - 写新主题
 - 让 AI 生成 CSS
 - 检查某份主题是否过度依赖内部 DOM 层级
+
+### CSS 完全分离基线检查
+
+关注：
+
+- 当前哪些样式仍然依赖深 DOM 层级
+- 哪些状态样式仍然绑在 modifier class 上
+- 哪些内容岛样式可以作为允许保留的例外
+- 下一轮 CSS 分离收口应该按什么顺序推进
+
+适合：
+
+- 做页面壳 / facade / shell 收口后的样式审计
+- 给下一轮 `data-state` / `data-variant` / `data-density` 改造排优先级
+- 判断一条样式规则是否仍在偷用页面内部结构

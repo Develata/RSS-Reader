@@ -26,7 +26,8 @@ pub(super) fn render_entry_card(entry: EntrySummary, facade: EntriesPageFacade) 
             }
             div { class: "entry-card__actions",
                 button {
-                    class: "button secondary",
+                    class: "button",
+                    "data-variant": "secondary",
                     "data-action": "mark-read",
                     onclick: move |_| {
                         read_facade.toggle_read(entry.id, read_title.clone(), entry.is_read);
@@ -34,7 +35,8 @@ pub(super) fn render_entry_card(entry: EntrySummary, facade: EntriesPageFacade) 
                     if entry.is_read { "标未读" } else { "标已读" }
                 }
                 button {
-                    class: "button secondary",
+                    class: "button",
+                    "data-variant": "secondary",
                     "data-action": "toggle-starred",
                     onclick: move |_| {
                         facade.toggle_starred(entry.id, starred_title.clone(), entry.is_starred);

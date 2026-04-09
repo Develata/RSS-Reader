@@ -40,12 +40,13 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             header { class: "reader-header",
                 h2 { class: "reader-title", "{facade.title()}" }
             }
-            div { class: "reader-toolbar inline-actions",
-                button {
-                    class: "button secondary",
-                    "data-nav": "back",
-                    onclick: move |_| navigator.go_back(),
-                    "返回上一页"
+                div { class: "reader-toolbar inline-actions",
+                    button {
+                        class: "button",
+                        "data-variant": "secondary",
+                        "data-nav": "back",
+                        onclick: move |_| navigator.go_back(),
+                        "返回上一页"
                 }
             }
             div { class: "reader-meta-block",
@@ -68,7 +69,8 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 div { class: "reader-pagination reader-pagination--context inline-actions",
                     if let Some(previous_feed_entry_id) = facade.navigation_state().previous_feed_entry_id {
                         button {
-                            class: "button secondary",
+                            class: "button",
+                            "data-variant": "secondary",
                             "data-nav": "previous-feed-entry",
                             onclick: move |_| { navigator.push(AppRoute::ReaderPage { entry_id: previous_feed_entry_id }); },
                             "上一篇同订阅文章"
@@ -76,7 +78,8 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     }
                     if let Some(next_feed_entry_id) = facade.navigation_state().next_feed_entry_id {
                         button {
-                            class: "button secondary",
+                            class: "button",
+                            "data-variant": "secondary",
                             "data-nav": "next-feed-entry",
                             onclick: move |_| { navigator.push(AppRoute::ReaderPage { entry_id: next_feed_entry_id }); },
                             "下一篇同订阅文章"
@@ -85,7 +88,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 }
                 nav { class: "reader-bottom-bar", "aria-label": "阅读快捷操作",
                     button {
-                        class: facade.previous_entry_button_class(),
+                        class: "reader-bottom-bar__button",
                         disabled: !facade.has_previous_entry_target(),
                         "data-state": "{facade.previous_entry_state()}",
                         "data-nav": "previous-unread-entry",
@@ -108,7 +111,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         span { class: "reader-bottom-bar__label", "{facade.read_toggle_label()}" }
                     }
                     button {
-                        class: facade.starred_button_class(),
+                        class: "reader-bottom-bar__button",
                         "data-state": "{facade.starred_state()}",
                         "data-action": "toggle-starred",
                         onclick: move |_| {
@@ -118,7 +121,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         span { class: "reader-bottom-bar__label", "收藏（F）" }
                     }
                     button {
-                        class: facade.next_entry_button_class(),
+                        class: "reader-bottom-bar__button",
                         disabled: !facade.has_next_entry_target(),
                         "data-state": "{facade.next_entry_state()}",
                         "data-nav": "next-unread-entry",

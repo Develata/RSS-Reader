@@ -17,6 +17,7 @@ pub(crate) fn AppearanceSettingsCard(facade: SettingsPageFacade) -> Element {
             div { class: "settings-card__footer",
                 button {
                     class: "button",
+                    "data-variant": "primary",
                     "data-state": "{facade.save_state()}",
                     disabled: facade.is_save_pending(),
                     "data-action": "save-settings",

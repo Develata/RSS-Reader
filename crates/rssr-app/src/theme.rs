@@ -14,9 +14,9 @@ pub fn theme_class(mode: rssr_domain::ThemeMode) -> &'static str {
     }
 }
 
-pub fn density_class(density: ListDensity) -> &'static str {
+pub fn density_state(density: ListDensity) -> &'static str {
     match density {
-        ListDensity::Comfortable => "density-comfortable",
-        ListDensity::Compact => "density-compact",
+        ListDensity::Comfortable => "comfortable",
+        ListDensity::Compact => "compact",
     }
 }

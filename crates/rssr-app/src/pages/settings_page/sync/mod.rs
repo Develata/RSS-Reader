@@ -55,13 +55,15 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                 }
                 div { class: "inline-actions settings-card__actions",
                     button {
-                        class: "button secondary",
+                        class: "button",
+                        "data-variant": "secondary",
                         "data-action": "push-webdav",
                         onclick: move |_| push_facade.push(),
                         "上传配置"
                     }
                     button {
-                        class: facade.remote_pull_button_class(),
+                        class: "button",
+                        "data-variant": "{facade.remote_pull_button_variant()}",
                         "data-state": "{facade.remote_pull_state()}",
                         "data-action": "pull-webdav",
                         onclick: move |_| facade.pull(),

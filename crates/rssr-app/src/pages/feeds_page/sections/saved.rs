@@ -53,13 +53,15 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
             }
             div { class: "entry-card__actions",
                 button {
-                    class: "button secondary",
+                    class: "button",
+                    "data-variant": "secondary",
                     "data-action": "refresh-feed",
                     onclick: move |_| refresh_facade.refresh_feed(feed_id, refresh_feed_title.clone()),
                     "刷新此订阅"
                 }
                 button {
-                    class: facade.remove_feed_button_class(feed_id),
+                    class: "button",
+                    "data-variant": "{facade.remove_feed_button_variant(feed_id)}",
                     "data-state": "{facade.remove_feed_state(feed_id)}",
                     "data-action": "remove-feed",
                     onclick: move |_| facade.remove_feed(feed_id, delete_feed_title.clone()),

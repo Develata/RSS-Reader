@@ -88,22 +88,6 @@ impl ReaderPageFacade {
         self.next_entry_target().is_some()
     }
 
-    pub(crate) fn previous_entry_button_class(&self) -> &'static str {
-        if self.has_previous_entry_target() {
-            "reader-bottom-bar__button"
-        } else {
-            "reader-bottom-bar__button is-disabled"
-        }
-    }
-
-    pub(crate) fn next_entry_button_class(&self) -> &'static str {
-        if self.has_next_entry_target() {
-            "reader-bottom-bar__button"
-        } else {
-            "reader-bottom-bar__button is-disabled"
-        }
-    }
-
     pub(crate) fn read_toggle_icon(&self) -> &'static str {
         if self.is_read() { "○" } else { "✓" }
     }
@@ -114,14 +98,6 @@ impl ReaderPageFacade {
 
     pub(crate) fn read_state(&self) -> &'static str {
         if self.is_read() { "read" } else { "unread" }
-    }
-
-    pub(crate) fn starred_button_class(&self) -> &'static str {
-        if self.is_starred() {
-            "reader-bottom-bar__button is-active"
-        } else {
-            "reader-bottom-bar__button"
-        }
     }
 
     pub(crate) fn starred_toggle_icon(&self) -> &'static str {
