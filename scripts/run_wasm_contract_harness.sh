@@ -8,6 +8,7 @@ fi
 
 harness_name="$1"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+crate_root="${repo_root}/crates/rssr-infra"
 export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 
 cd "$repo_root"
@@ -43,4 +44,30 @@ if [[ -z "${wasm_artifact}" ]]; then
   exit 1
 fi
 
-wasm-bindgen-test-runner "${wasm_artifact}"
+webdriver_config="$(mktemp)"
+cleanup() {
+  rm -f "${webdriver_config}"
+}
+trap cleanup EXIT
+
+cat >"${webdriver_config}" <<'EOF'
+{
+  "goog:chromeOptions": {
+    "args": [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--remote-allow-origins=*",
+      "--window-size=1280,720"
+    ]
+  }
+}
+EOF
+
+(
+  cd "${crate_root}"
+  cp "${webdriver_config}" webdriver.json
+  trap 'rm -f webdriver.json' EXIT
+  wasm-bindgen-test-runner "${repo_root}/${wasm_artifact}"
+)

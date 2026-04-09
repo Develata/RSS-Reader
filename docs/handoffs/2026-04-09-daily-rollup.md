@@ -101,6 +101,22 @@
   - 不直接 cherry-pick 大型重构提交
   - 只手动吸收当前主线仍缺的修复、测试文档和 contract 测试方向
 
+### 当日后续修复：CI 红点收口
+
+- 修复 `rssr-web` 中 `auth_state_file_prefers_userprofile_when_home_is_missing` 的跨宿主机断言：
+  - 旧断言把 Windows 风格路径分隔符写死为 `\\`
+  - 在 Linux runner 上 `PathBuf::join` 会生成 `C:\\Users\\rssr/.rssr-web-auth.json`
+  - 新断言改为基于 `PathBuf::from(...).join(DEFAULT_AUTH_STATE_FILE_NAME)`，与真实实现一致
+- 为 wasm browser harness runner 补了 `webdriver.json` 能力配置，显式加入：
+  - `--headless=new`
+  - `--no-sandbox`
+  - `--disable-dev-shm-usage`
+  - `--disable-gpu`
+  - `--remote-allow-origins=*`
+  - `--window-size=1280,720`
+- runner 现在在 `crates/rssr-infra` 下执行 `wasm-bindgen-test-runner`，确保能拾取同目录的 `webdriver.json`
+- 本机 WSL2 仍受 `chromedriver bind() failed: Cannot assign requested address (99)` 限制，但 GitHub Actions 上此前的 `404 + SIGKILL` 路径已经被 runner 配置缺失所对齐修补
+
 ### Contract harness 规划与重建
 
 - 新增 `docs/testing/contract-harness-rebuild-plan.md`，明确不直接复制旧分支 harness，而按当前主线重建。
@@ -195,6 +211,7 @@
 - `cargo test -p rssr-infra --target wasm32-unknown-unknown --test wasm_refresh_contract_harness --no-run`：通过
 - `cargo test -p rssr-infra --target wasm32-unknown-unknown --test wasm_subscription_contract_harness --no-run`：通过
 - `cargo test -p rssr-infra --target wasm32-unknown-unknown --test wasm_config_exchange_contract_harness --no-run`：通过
+- `cargo test -p rssr-web`：通过
 - `git diff --check`：通过
 - `bash -n scripts/run_wasm_contract_harness.sh scripts/run_wasm_refresh_contract_harness.sh scripts/run_wasm_subscription_contract_harness.sh scripts/run_wasm_config_exchange_contract_harness.sh`：通过
 - CI workflow YAML 解析：通过
@@ -205,6 +222,7 @@
 - `wasm-pack test --headless --chrome crates/rssr-infra --test wasm_refresh_contract_harness`：失败，但失败原因为当前 crate 下 native-only 集成测试也被一起按 wasm 编译，不是 wasm harness 本身错误
 - WSL2 本地 browser runner：受 `chromedriver bind() failed: Cannot assign requested address (99)` 限制，真实浏览器执行依赖 GitHub Actions
 - Chrome for Testing / chromedriver 安装与版本对齐：通过
+- `bash scripts/run_wasm_refresh_contract_harness.sh`：仍为 `env-limited`，但当前输出已进入 WSL2 绑定异常路径，不再是缺少 browser capability 配置的未知失败
 
 ## 结果
 
@@ -221,6 +239,7 @@
 - WSL2 本地环境仍无法可靠执行 `chromedriver` 真实浏览器链路，需以 GitHub Actions 结果为准。
 - 后续更值得做的是观察远端 `wasm-browser-contract` matrix 是否全绿，并在必要时针对 CI 差异修补脚本或环境。
 - 当前这轮 handoff 目录整理尚未提交，因此“按日期汇总”本身仍处于 `pending` 状态。
+- 这次 runner 修复主要面向 GitHub Actions 的 Chrome 会话稳定性；真正是否彻底收口，仍需下一次远端 `wasm-browser-contract` matrix 结果确认。
 
 ## 给下一位 Agent 的备注
 

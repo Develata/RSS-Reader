@@ -125,7 +125,7 @@ fn write_auth_state_file(auth_state_file: &Path, payload: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_auth_state_file;
+    use super::{DEFAULT_AUTH_STATE_FILE_NAME, resolve_auth_state_file};
 
     unsafe fn set_test_var(name: &str, value: &str) {
         unsafe {
@@ -155,6 +155,9 @@ mod tests {
             remove_test_var("USERPROFILE");
         }
 
-        assert_eq!(resolved, std::path::Path::new(r"C:\Users\rssr\.rssr-web-auth.json"));
+        assert_eq!(
+            resolved,
+            std::path::PathBuf::from(r"C:\Users\rssr").join(DEFAULT_AUTH_STATE_FILE_NAME)
+        );
     }
 }
