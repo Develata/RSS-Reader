@@ -9,7 +9,10 @@ use rssr_infra::application_adapters::browser::{
         BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRepository, BrowserOpmlCodec,
         BrowserSettingsRepository,
     },
-    state::{LoadedState, PersistedEntry, PersistedFeed, PersistedState, STORAGE_KEY, load_state},
+    state::{
+        APP_STATE_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY, LoadedState, PersistedEntry, PersistedFeed,
+        PersistedState, STORAGE_KEY, load_state,
+    },
 };
 use time::OffsetDateTime;
 use wasm_bindgen_test::wasm_bindgen_test;
@@ -39,6 +42,8 @@ fn clear_browser_state_storage() {
         web_sys::window().and_then(|window| window.local_storage().ok()).flatten()
     {
         let _ = storage.remove_item(STORAGE_KEY);
+        let _ = storage.remove_item(APP_STATE_STORAGE_KEY);
+        let _ = storage.remove_item(ENTRY_FLAGS_STORAGE_KEY);
     }
 }
 

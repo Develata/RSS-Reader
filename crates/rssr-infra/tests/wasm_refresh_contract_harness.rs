@@ -8,7 +8,10 @@ use rssr_application::{
 };
 use rssr_infra::application_adapters::browser::{
     adapters::BrowserRefreshStore,
-    state::{LoadedState, PersistedFeed, PersistedState, STORAGE_KEY, load_state},
+    state::{
+        APP_STATE_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY, LoadedState, PersistedFeed, PersistedState,
+        STORAGE_KEY, load_state,
+    },
 };
 use time::OffsetDateTime;
 use url::Url;
@@ -21,6 +24,8 @@ fn clear_browser_state_storage() {
         web_sys::window().and_then(|window| window.local_storage().ok()).flatten()
     {
         let _ = storage.remove_item(STORAGE_KEY);
+        let _ = storage.remove_item(APP_STATE_STORAGE_KEY);
+        let _ = storage.remove_item(ENTRY_FLAGS_STORAGE_KEY);
     }
 }
 

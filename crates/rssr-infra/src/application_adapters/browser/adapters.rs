@@ -21,7 +21,10 @@ use super::{
         get_entry as query_get_entry, list_entries as query_list_entries,
         list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
     },
-    state::{PersistedFeed, PersistedState, save_state_snapshot, upsert_entries},
+    state::{
+        PersistedFeed, PersistedState, save_app_state_slice, save_entry_flag_patch,
+        save_state_snapshot, upsert_entries,
+    },
 };
 
 #[derive(Clone)]
@@ -158,7 +161,7 @@ impl EntryRepository for BrowserEntryRepository {
     }
 
     async fn set_read(&self, entry_id: i64, is_read: bool) -> rssr_domain::Result<()> {
-        let snapshot = {
+        let entry = {
             let mut state = self.state.lock().expect("lock state");
             let now = now_utc();
             let entry = state
@@ -169,14 +172,14 @@ impl EntryRepository for BrowserEntryRepository {
             entry.is_read = is_read;
             entry.read_at = is_read.then_some(now);
             entry.updated_at = now;
-            state.clone()
+            entry.clone()
         };
 
-        save_state_snapshot(snapshot).map_err(map_persistence_error)
+        save_entry_flag_patch(&entry).map_err(map_persistence_error)
     }
 
     async fn set_starred(&self, entry_id: i64, is_starred: bool) -> rssr_domain::Result<()> {
-        let snapshot = {
+        let entry = {
             let mut state = self.state.lock().expect("lock state");
             let now = now_utc();
             let entry = state
@@ -187,10 +190,10 @@ impl EntryRepository for BrowserEntryRepository {
             entry.is_starred = is_starred;
             entry.starred_at = is_starred.then_some(now);
             entry.updated_at = now;
-            state.clone()
+            entry.clone()
         };
 
-        save_state_snapshot(snapshot).map_err(map_persistence_error)
+        save_entry_flag_patch(&entry).map_err(map_persistence_error)
     }
 
     async fn delete_for_feed(&self, feed_id: i64) -> rssr_domain::Result<()> {
@@ -219,26 +222,26 @@ impl BrowserAppStateAdapter {
     }
 
     pub fn save_last_opened_feed_id(&self, feed_id: Option<i64>) -> Result<()> {
-        let snapshot = {
+        let last_opened_feed_id = {
             let mut state = self.state.lock().expect("lock state");
             state.last_opened_feed_id = feed_id;
-            state.clone()
+            state.last_opened_feed_id
         };
 
-        save_state_snapshot(snapshot)
+        save_app_state_slice(last_opened_feed_id)
     }
 
     fn clear_last_opened_feed_if_matches_impl(&self, feed_id: i64) -> Result<()> {
-        let snapshot = {
+        let last_opened_feed_id = {
             let mut state = self.state.lock().expect("lock state");
             if state.last_opened_feed_id != Some(feed_id) {
                 return Ok(());
             }
             state.last_opened_feed_id = None;
-            state.clone()
+            state.last_opened_feed_id
         };
 
-        save_state_snapshot(snapshot)
+        save_app_state_slice(last_opened_feed_id)
     }
 }
 
