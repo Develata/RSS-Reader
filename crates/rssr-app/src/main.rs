@@ -8,6 +8,7 @@ mod pages;
 mod router;
 mod status;
 mod theme;
+mod ui;
 mod web_auth;
 
 #[cfg(not(target_arch = "wasm32"))]

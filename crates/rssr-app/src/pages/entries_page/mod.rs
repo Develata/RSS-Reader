@@ -2,16 +2,14 @@ mod cards;
 mod controls;
 mod effect;
 mod groups;
-mod intent;
+pub(crate) mod intent;
 mod presenter;
-mod queries;
 mod reducer;
 mod runtime;
 mod session;
 mod state;
 
 use dioxus::prelude::*;
-use rssr_domain::StartupView;
 use time::OffsetDateTime;
 
 use self::cards::render_entry_card;
@@ -22,57 +20,39 @@ use self::controls::{
 use self::{session::EntriesPageSession, state::EntriesPageState};
 use crate::{
     app::{AppNav, AppUiState},
-    bootstrap::AppServices,
     components::status_banner::StatusBanner,
     hooks::use_mobile_back_navigation::use_mobile_back_navigation,
     router::AppRoute,
     status::set_status_error,
+    ui::{UiCommand, UiIntent, execute_ui_command},
 };
 
 #[component]
 pub fn StartupPage() -> Element {
     let navigator = use_navigator();
-    let status = use_signal(|| "正在准备你的阅读入口…".to_string());
-    let status_tone = use_signal(|| "info".to_string());
+    let mut status = use_signal(|| "正在准备你的阅读入口…".to_string());
+    let mut status_tone = use_signal(|| "info".to_string());
 
     use_resource(move || async move {
-        match AppServices::shared().await {
-            Ok(services) => {
-                let settings = match services.load_settings().await {
-                    Ok(settings) => settings,
-                    Err(err) => {
-                        set_status_error(status, status_tone, format!("读取设置失败：{err}"));
-                        navigator.replace(AppRoute::EntriesPage {});
-                        return;
+        let outcome = execute_ui_command(UiCommand::ResolveStartupRoute).await;
+        for intent in outcome.intents {
+            match intent {
+                UiIntent::StartupRouteResolved(snapshot) => {
+                    let _ = navigator.replace(snapshot.route);
+                }
+                UiIntent::SetStatus { message, tone } => {
+                    if tone == "error" {
+                        set_status_error(status, status_tone, message);
+                    } else {
+                        status_tone.set(tone);
+                        status.set(message);
                     }
-                };
-
-                let target = match settings.startup_view {
-                    StartupView::All => AppRoute::EntriesPage {},
-                    StartupView::LastFeed => {
-                        let last_feed_id = services.load_last_opened_feed_id().await.ok().flatten();
-                        let feed_exists = match last_feed_id {
-                            Some(feed_id) => services
-                                .list_feeds()
-                                .await
-                                .map(|feeds| feeds.iter().any(|feed| feed.id == feed_id))
-                                .unwrap_or(false),
-                            None => false,
-                        };
-
-                        if let Some(feed_id) = last_feed_id.filter(|_| feed_exists) {
-                            AppRoute::FeedEntriesPage { feed_id }
-                        } else {
-                            AppRoute::EntriesPage {}
-                        }
-                    }
-                };
-
-                navigator.replace(target);
-            }
-            Err(err) => {
-                set_status_error(status, status_tone, format!("初始化应用失败：{err}"));
-                navigator.replace(AppRoute::EntriesPage {});
+                }
+                UiIntent::AuthenticatedShellLoaded(_)
+                | UiIntent::EntriesPage(_)
+                | UiIntent::FeedsPage(_)
+                | UiIntent::ReaderPage(_)
+                | UiIntent::SettingsPage(_) => {}
             }
         }
     });

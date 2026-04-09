@@ -1,104 +1,23 @@
-use std::sync::Arc;
-
-use crate::bootstrap::AppServices;
-
-use super::{
-    effect::EntriesPageEffect,
-    intent::EntriesPageIntent,
-    queries::{
-        load_entries_page_entries, load_entries_page_feeds, load_entries_page_preferences,
-        remember_last_opened_feed,
-    },
-};
+use super::{effect::EntriesPageEffect, intent::EntriesPageIntent};
+use crate::ui::{UiCommand, UiIntent, execute_ui_command};
 
 pub(crate) struct EntriesPageRuntimeOutcome {
     pub(crate) intents: Vec<EntriesPageIntent>,
 }
 
-impl EntriesPageRuntimeOutcome {
-    pub(crate) fn empty() -> Self {
-        Self { intents: Vec::new() }
-    }
-}
-
 pub(crate) async fn execute_entries_page_effect(
     effect: EntriesPageEffect,
 ) -> EntriesPageRuntimeOutcome {
-    match effect {
+    let command = match effect {
         EntriesPageEffect::Bootstrap { feed_id, load_preferences, load_feeds } => {
-            let mut intents = Vec::new();
-
-            if let Some(feed_id) = feed_id {
-                remember_last_opened_feed(feed_id).await;
-            }
-
-            if load_preferences {
-                match load_entries_page_preferences().await {
-                    Ok(settings) => intents.push(EntriesPageIntent::ApplyLoadedSettings(settings)),
-                    Err(err) => return status_error(err),
-                }
-            }
-
-            if load_feeds {
-                match load_entries_page_feeds().await {
-                    Ok(feeds) => intents.push(EntriesPageIntent::SetFeeds(feeds)),
-                    Err(err) => return status_error(err),
-                }
-            }
-
-            EntriesPageRuntimeOutcome { intents }
+            UiCommand::EntriesBootstrap { feed_id, load_preferences, load_feeds }
         }
-        EntriesPageEffect::LoadEntries(query) => match load_entries_page_entries(query).await {
-            Ok(entries) => {
-                EntriesPageRuntimeOutcome { intents: vec![EntriesPageIntent::SetEntries(entries)] }
-            }
-            Err(err) => status_error(err),
-        },
+        EntriesPageEffect::LoadEntries(query) => UiCommand::EntriesLoadEntries { query },
         EntriesPageEffect::ToggleRead { entry_id, entry_title, currently_read } => {
-            match shared_services().await {
-                Ok(services) => match services.set_read(entry_id, !currently_read).await {
-                    Ok(()) => EntriesPageRuntimeOutcome {
-                        intents: vec![
-                            EntriesPageIntent::SetStatus {
-                                message: format!(
-                                    "已将《{}》{}。",
-                                    entry_title,
-                                    if currently_read {
-                                        "标记为未读"
-                                    } else {
-                                        "标记为已读"
-                                    }
-                                ),
-                                tone: "info".to_string(),
-                            },
-                            EntriesPageIntent::BumpReload,
-                        ],
-                    },
-                    Err(err) => status_error(format!("更新已读状态失败：{err}")),
-                },
-                Err(err) => status_error(err),
-            }
+            UiCommand::EntriesToggleRead { entry_id, entry_title, currently_read }
         }
         EntriesPageEffect::ToggleStarred { entry_id, entry_title, currently_starred } => {
-            match shared_services().await {
-                Ok(services) => match services.set_starred(entry_id, !currently_starred).await {
-                    Ok(()) => EntriesPageRuntimeOutcome {
-                        intents: vec![
-                            EntriesPageIntent::SetStatus {
-                                message: format!(
-                                    "已{}《{}》。",
-                                    if currently_starred { "取消收藏" } else { "收藏" },
-                                    entry_title
-                                ),
-                                tone: "info".to_string(),
-                            },
-                            EntriesPageIntent::BumpReload,
-                        ],
-                    },
-                    Err(err) => status_error(format!("更新收藏状态失败：{err}")),
-                },
-                Err(err) => status_error(err),
-            }
+            UiCommand::EntriesToggleStarred { entry_id, entry_title, currently_starred }
         }
         EntriesPageEffect::SaveBrowsingPreferences {
             grouping_mode,
@@ -106,46 +25,31 @@ pub(crate) async fn execute_entries_page_effect(
             read_filter,
             starred_filter,
             selected_feed_urls,
-        } => match shared_services().await {
-            Ok(services) => match services.load_settings().await {
-                Ok(mut settings) => {
-                    let changed = settings.entry_grouping_mode != grouping_mode
-                        || settings.show_archived_entries != show_archived
-                        || settings.entry_read_filter != read_filter
-                        || settings.entry_starred_filter != starred_filter
-                        || settings.entry_filtered_feed_urls != selected_feed_urls;
-
-                    if !changed {
-                        return EntriesPageRuntimeOutcome::empty();
-                    }
-
-                    settings.entry_grouping_mode = grouping_mode;
-                    settings.show_archived_entries = show_archived;
-                    settings.entry_read_filter = read_filter;
-                    settings.entry_starred_filter = starred_filter;
-                    settings.entry_filtered_feed_urls = selected_feed_urls;
-
-                    match services.save_settings(&settings).await {
-                        Ok(()) => EntriesPageRuntimeOutcome::empty(),
-                        Err(err) => status_error(format!("保存文章页偏好失败：{err}")),
-                    }
-                }
-                Err(err) => status_error(format!("读取文章页偏好失败：{err}")),
-            },
-            Err(err) => status_error(err),
+        } => UiCommand::EntriesSaveBrowsingPreferences {
+            grouping_mode,
+            show_archived,
+            read_filter,
+            starred_filter,
+            selected_feed_urls,
         },
-    }
-}
+    };
 
-fn status_error(message: impl Into<String>) -> EntriesPageRuntimeOutcome {
+    let outcome = execute_ui_command(command).await;
     EntriesPageRuntimeOutcome {
-        intents: vec![EntriesPageIntent::SetStatus {
-            message: message.into(),
-            tone: "error".to_string(),
-        }],
+        intents: outcome
+            .intents
+            .into_iter()
+            .filter_map(|intent| match intent {
+                UiIntent::EntriesPage(intent) => Some(intent),
+                UiIntent::SetStatus { message, tone } => {
+                    Some(EntriesPageIntent::SetStatus { message, tone })
+                }
+                UiIntent::AuthenticatedShellLoaded(_)
+                | UiIntent::StartupRouteResolved(_)
+                | UiIntent::FeedsPage(_)
+                | UiIntent::ReaderPage(_)
+                | UiIntent::SettingsPage(_) => None,
+            })
+            .collect(),
     }
-}
-
-async fn shared_services() -> Result<Arc<AppServices>, String> {
-    AppServices::shared().await.map_err(|err| format!("初始化应用失败：{err}"))
 }
