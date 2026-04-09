@@ -1173,6 +1173,53 @@
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
 - `git diff --check`：通过
 
+## 追加：收口页面 session 的 bus 投影 helper
+
+### 背景
+
+- 在 bus 接口压到 `UiCommand -> Vec<UiIntent>` 之后，页面 `session` 里还残留一批重复样板：
+  - 执行 `execute_ui_command(...)`
+  - 遍历 intents
+  - 用某个 `into_*_intent` 投影
+  - 再分发到本地 reducer
+- 这些逻辑本身没有业务差异，只是重复的 bus 消费胶水。
+
+### 本轮变更
+
+- 新增 [ui/helpers.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/helpers.rs)
+  - `collect_projected_ui_command`
+  - `apply_projected_ui_command`
+  - `apply_projected_ui_intents`
+- [ui/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/mod.rs) 已统一导出这些 helper
+- 下列页面 session / 壳层已切到统一 helper：
+  - [app.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/app.rs)
+  - [entries_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/session.rs)
+  - [reader_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/session.rs)
+  - [feeds_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/session.rs)
+  - [settings_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/session.rs)
+  - [settings_page/sync/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/session.rs)
+  - [settings_page/save/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/save/session.rs)
+
+### 当前判断
+
+- 页面层现在不只是“行为经由 bus”，而且“消费 bus 的样板”也开始集中到了统一 helper。
+- 这一步的意义不是再造新抽象，而是把重复胶水收掉，让页面层更接近：
+  - 语义 DOM
+  - 局部 state
+  - reducer
+  - 最少量 session
+- `StartupPage` 仍保留手动处理，是因为它同时要处理：
+  - startup route
+  - fallback status
+  对同一批 intents 做双重投影，硬套 helper 反而会把命令执行两次。
+
+### 本轮验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `git diff --check`：通过
+
 ## 追加：继续收口 bus 接口与页面局部能力
 
 ### 背景

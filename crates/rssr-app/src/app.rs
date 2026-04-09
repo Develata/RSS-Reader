@@ -5,7 +5,7 @@ use crate::{
     router::{AppRoute, RoutableApp},
     status::{set_status_error, set_status_info},
     theme::{ThemeController, density_class, theme_class},
-    ui::{UiCommand, execute_ui_command},
+    ui::{UiCommand, UiIntent, collect_projected_ui_command},
     web_auth::{
         WebAuthState, auth_state, configured_username, local_auth_state, login, setup_credentials,
         verify_server_gate,
@@ -106,10 +106,13 @@ pub fn App() -> Element {
         }
 
         if current_auth == WebAuthState::Authenticated {
-            for intent in execute_ui_command(UiCommand::LoadAuthenticatedShell).await {
-                if let Some(snapshot) = intent.into_authenticated_shell_loaded() {
-                    settings.set(snapshot.settings);
-                }
+            for snapshot in collect_projected_ui_command(
+                UiCommand::LoadAuthenticatedShell,
+                UiIntent::into_authenticated_shell_loaded,
+            )
+            .await
+            {
+                settings.set(snapshot.settings);
             }
         }
     });

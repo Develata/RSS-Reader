@@ -8,7 +8,7 @@ use crate::{
         themes::{detect_preset_key, validate_custom_css},
     },
     status::{set_status_error, set_status_info},
-    ui::{UiCommand, execute_ui_command},
+    ui::{UiCommand, UiIntent, apply_projected_ui_intents, execute_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -60,17 +60,20 @@ impl SettingsPageSaveSession {
             state.with_mut(|state| state.pending_save = false);
             let mut saved_settings = None;
             let mut status_message = String::new();
-            for intent in intents {
-                if let Some(intent) = intent.clone().into_settings_page_intent() {
-                    match intent {
-                        SettingsPageIntent::SettingsLoaded(settings) => {
-                            saved_settings = Some(settings);
-                        }
-                        SettingsPageIntent::SetStatus { message, .. } => {
-                            status_message = message;
-                        }
+            apply_projected_ui_intents(
+                intents.clone(),
+                UiIntent::into_settings_page_intent,
+                |intent| match intent {
+                    SettingsPageIntent::SettingsLoaded(settings) => {
+                        saved_settings = Some(settings);
                     }
-                } else if let Some((message, _)) = intent.into_status() {
+                    SettingsPageIntent::SetStatus { message, .. } => {
+                        status_message = message;
+                    }
+                },
+            );
+            for intent in intents {
+                if let Some((message, _)) = intent.into_status() {
                     status_message = message;
                 }
             }

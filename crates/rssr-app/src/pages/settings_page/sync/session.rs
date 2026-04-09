@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use super::state::SettingsPageSyncState;
-use crate::ui::{UiCommand, UiIntent, execute_ui_command};
+use crate::ui::{UiCommand, UiIntent, apply_projected_ui_command};
 use crate::{pages::settings_page::session::SettingsPageSession, status::set_status_info};
 
 #[derive(Clone, Copy)]
@@ -30,12 +30,11 @@ impl SettingsPageSyncSession {
     pub(crate) fn push(self) {
         let snapshot = self.snapshot();
         spawn(async move {
-            let intents = execute_ui_command(UiCommand::SettingsPushConfig {
+            self.apply_ui_command(UiCommand::SettingsPushConfig {
                 endpoint: snapshot.endpoint,
                 remote_path: snapshot.remote_path,
             })
             .await;
-            self.apply_runtime_intents(intents);
         });
     }
 
@@ -52,21 +51,19 @@ impl SettingsPageSyncSession {
 
         let snapshot = self.snapshot();
         spawn(async move {
-            let intents = execute_ui_command(UiCommand::SettingsPullConfig {
+            self.apply_ui_command(UiCommand::SettingsPullConfig {
                 endpoint: snapshot.endpoint,
                 remote_path: snapshot.remote_path,
             })
             .await;
-            self.apply_runtime_intents(intents);
         });
     }
 
-    fn apply_runtime_intents(mut self, intents: Vec<UiIntent>) {
+    async fn apply_ui_command(mut self, command: UiCommand) {
         self.state.with_mut(|state| state.pending_remote_pull = false);
-        for intent in intents {
-            if let Some(intent) = intent.into_settings_page_intent() {
-                self.page.dispatch(intent);
-            }
-        }
+        apply_projected_ui_command(command, UiIntent::into_settings_page_intent, |intent| {
+            self.page.dispatch(intent);
+        })
+        .await;
     }
 }

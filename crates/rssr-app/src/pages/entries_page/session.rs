@@ -5,7 +5,7 @@ use super::{
     presenter::EntriesPagePresenter, reducer::dispatch_entries_page_intent,
     state::EntriesPageState,
 };
-use crate::ui::{UiCommand, execute_ui_command};
+use crate::ui::{UiCommand, UiIntent, apply_projected_ui_command};
 use rssr_domain::EntryQuery;
 use time::OffsetDateTime;
 
@@ -96,11 +96,10 @@ impl EntriesPageSession {
 
     fn spawn_ui_command(self, command: UiCommand) {
         spawn(async move {
-            for intent in execute_ui_command(command).await {
-                if let Some(intent) = intent.into_entries_page_intent() {
-                    self.dispatch(intent);
-                }
-            }
+            apply_projected_ui_command(command, UiIntent::into_entries_page_intent, |intent| {
+                self.dispatch(intent);
+            })
+            .await;
         });
     }
 }

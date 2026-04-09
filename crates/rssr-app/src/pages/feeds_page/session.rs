@@ -4,7 +4,7 @@ use super::{
     effect::FeedsPageEffect, intent::FeedsPageIntent, reducer::dispatch_feeds_page_intent,
     state::FeedsPageState,
 };
-use crate::ui::{UiCommand, UiIntent, execute_ui_command};
+use crate::ui::{UiCommand, UiIntent, apply_projected_ui_command};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct FeedsPageSession {
@@ -75,23 +75,23 @@ impl FeedsPageSession {
         spawn(async move {
             match effect {
                 FeedsPageEffect::LoadSnapshot => {
-                    for intent in execute_ui_command(UiCommand::FeedsLoadSnapshot).await {
-                        self.apply_ui_intent(intent);
-                    }
+                    apply_projected_ui_command(
+                        UiCommand::FeedsLoadSnapshot,
+                        UiIntent::into_feeds_page_intent,
+                        |intent| self.dispatch_intent(intent),
+                    )
+                    .await;
                 }
                 FeedsPageEffect::Dispatch(command) => {
-                    for intent in execute_ui_command(command).await {
-                        self.apply_ui_intent(intent);
-                    }
+                    apply_projected_ui_command(
+                        command,
+                        UiIntent::into_feeds_page_intent,
+                        |intent| self.dispatch_intent(intent),
+                    )
+                    .await;
                 }
             }
         });
-    }
-
-    fn apply_ui_intent(self, intent: UiIntent) {
-        if let Some(intent) = intent.into_feeds_page_intent() {
-            self.dispatch_intent(intent);
-        }
     }
 
     pub(crate) fn is_delete_pending_for(self, feed_id: i64) -> bool {
