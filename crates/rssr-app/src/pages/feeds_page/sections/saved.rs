@@ -1,21 +1,15 @@
 use dioxus::prelude::*;
-use rssr_domain::FeedSummary;
 
 use crate::{
-    components::status_banner::StatusBanner,
-    pages::feeds_page::{FeedsPageBindings, FeedsPageCommand, execute_feeds_page_command},
+    components::status_banner::StatusBanner, pages::feeds_page::session::FeedsPageSession,
     router::AppRoute,
 };
 
 use super::support::feed_refresh_status_text;
 
 #[component]
-pub(crate) fn SavedFeedsSection(
-    feeds: Signal<Vec<FeedSummary>>,
-    pending_delete_feed: Signal<Option<i64>>,
-    bindings: FeedsPageBindings,
-) -> Element {
-    if feeds().is_empty() {
+pub(crate) fn SavedFeedsSection(session: FeedsPageSession) -> Element {
+    if session.feeds().is_empty() {
         return rsx! {
             StatusBanner { message: "还没有订阅，先添加一个 feed URL。".to_string(), tone: "info".to_string() }
         };
@@ -26,21 +20,17 @@ pub(crate) fn SavedFeedsSection(
             h3 { "已保存订阅" }
         }
         ul { class: "feed-list",
-            for feed in feeds() {
-                { render_feed_card(feed, pending_delete_feed, bindings) }
+            for feed in session.feeds() {
+                { render_feed_card(feed, session) }
             }
         }
     }
 }
 
-fn render_feed_card(
-    feed: FeedSummary,
-    pending_delete_feed: Signal<Option<i64>>,
-    bindings: FeedsPageBindings,
-) -> Element {
+fn render_feed_card(feed: rssr_domain::FeedSummary, session: FeedsPageSession) -> Element {
     let refresh_feed_title = feed.title.clone();
     let delete_feed_title = feed.title.clone();
-    let is_delete_pending = pending_delete_feed() == Some(feed.id);
+    let is_delete_pending = session.is_delete_pending_for(feed.id);
 
     rsx! {
         li { class: "feed-card", key: "{feed.id}",
@@ -62,32 +52,13 @@ fn render_feed_card(
                 button {
                     class: "button secondary",
                     "data-action": "refresh-feed",
-                    onclick: move |_| {
-                        let command = FeedsPageCommand::RefreshFeed {
-                            feed_id: feed.id,
-                            feed_title: refresh_feed_title.clone(),
-                        };
-                        spawn(async move {
-                            let outcome = execute_feeds_page_command(command).await;
-                            bindings.apply_command_outcome(outcome);
-                        });
-                    },
+                    onclick: move |_| session.refresh_feed(feed.id, refresh_feed_title.clone()),
                     "刷新此订阅"
                 }
                 button {
                     class: if is_delete_pending { "button danger" } else { "button secondary danger-outline" },
                     "data-action": "remove-feed",
-                    onclick: move |_| {
-                        let command = FeedsPageCommand::RemoveFeed {
-                            feed_id: feed.id,
-                            feed_title: delete_feed_title.clone(),
-                            confirmed: pending_delete_feed() == Some(feed.id),
-                        };
-                        spawn(async move {
-                            let outcome = execute_feeds_page_command(command).await;
-                            bindings.apply_command_outcome(outcome);
-                        });
-                    },
+                    onclick: move |_| session.remove_feed(feed.id, delete_feed_title.clone()),
                     if is_delete_pending { "确认删除" } else { "删除订阅" }
                 }
             }

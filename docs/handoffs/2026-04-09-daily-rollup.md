@@ -259,6 +259,51 @@
   - 以及对 `theme / draft / preset_choice / status` 的访问器
 - 这轮没有把设置页改成新的大状态机，也没有改变 `save` / `sync` / `themes` 的能力边界；目标只是进一步减少 view shell 中零散的状态线头和服务初始化逻辑，让页面壳更接近“只组装 session 与 section”。
 
+### 当日后续重构：feeds 完整 local session / settings 状态边界再收口
+
+- `feeds_page` 继续从“页面壳 + 一组散 signal + bindings patch”收成更完整的 local session/workspace：
+  - 新增 `crates/rssr-app/src/pages/feeds_page/state.rs`
+  - 删除旧的 `crates/rssr-app/src/pages/feeds_page/bindings.rs`
+  - `FeedsPageSession` 现在直接持有 `Signal<FeedsPageState>`
+- `FeedsPageState` 统一承载：
+  - `feed_url`
+  - `config_text`
+  - `opml_text`
+  - `pending_config_import`
+  - `pending_delete_feed`
+  - `feeds`
+  - `feed_count`
+  - `entry_count`
+  - `status`
+  - `status_tone`
+  - `reload_tick`
+- `FeedsPageSession` 现在直接负责：
+  - `load_snapshot()`
+  - `apply_snapshot(...)`
+  - `apply_command_outcome(...)`
+  - `set_feed_url / set_config_text / set_opml_text`
+  - `add_feed / refresh_all / refresh_feed / remove_feed`
+  - `export_config / import_config / export_opml / import_opml`
+  - 粘贴失败时的状态错误回写
+- 订阅页 section 也改成直接消费 `FeedsPageSession`：
+  - `sections/compose.rs`
+  - `sections/config_exchange.rs`
+  - `sections/saved.rs`
+- 这一步的意义是：
+  - 订阅页不再依赖“页面壳构造 signal，再由 bindings 回补 patch”的旧模式
+  - 命令结果、状态提示、reload tick 和输入状态都回到同一个本地 workspace
+  - 后续如果继续把订阅页推进到和文章页/阅读页更接近的状态机结构，已经不需要先做一次中间抽象迁移
+
+- `settings_page` 这一步则继续收边界，而不是强推成大状态机：
+  - `AppearanceSettingsCard` 现在直接接收 `SettingsPageSession`
+  - `WebDavSettingsCard` 现在也直接接收 `SettingsPageSession`
+  - 页面壳不再把 `theme / draft / preset_choice / status / status_tone` 五根线手动往下散
+  - `SettingsPageSession` 现在明确承担：
+    - 初始设置加载
+    - GitHub 仓库打开失败时的状态提示
+    - 向子卡片暴露同一组页面级状态入口
+- 这里刻意没有把设置页变成统一 reducer/store，因为当前设置页仍然更像“多个独立工具卡片”的组合页；这次收口的目标是缩小边界，而不是为了统一形式去强造更重的页面内核。
+
 ### Contract harness 规划与重建
 
 - 新增 `docs/testing/contract-harness-rebuild-plan.md`，明确不直接复制旧分支 harness，而按当前主线重建。
@@ -349,6 +394,7 @@
 
 - 页面目录化与模块重命名后，host / wasm / Android 三个目标都编译通过。
 - `feeds/settings` view shell 再收薄后，host / wasm / Android 三个目标继续保持通过。
+- `feeds_page` 收成完整 local session/workspace、`settings_page` 页面级状态入口再收口之后，host / wasm / Android 三个目标继续保持通过。
 - `git diff --check` 通过，没有引入格式或空白错误。
 - 这轮未改 UI 行为与业务逻辑，重点验收的是模块结构调整后跨目标路径、`include_str!` 相对路径、以及 session/workspace 内部引用是否仍然正确。
 

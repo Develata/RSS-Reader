@@ -1,23 +1,21 @@
 use dioxus::prelude::*;
-use rssr_domain::UserSettings;
 
 use super::{
     preferences::ReadingPreferencesSection, save::SettingsPageSaveSession,
-    save::SettingsPageSaveState, themes::ThemeSettingsSections,
+    save::SettingsPageSaveState, session::SettingsPageSession, themes::ThemeSettingsSections,
 };
-use crate::theme::ThemeController;
 
 #[component]
-pub(crate) fn AppearanceSettingsCard(
-    theme: ThemeController,
-    draft: Signal<UserSettings>,
-    preset_choice: Signal<String>,
-    status: Signal<String>,
-    status_tone: Signal<String>,
-) -> Element {
+pub(crate) fn AppearanceSettingsCard(session: SettingsPageSession) -> Element {
     let save_state = use_signal(SettingsPageSaveState::new);
-    let save_session =
-        SettingsPageSaveSession::new(save_state, theme, draft, preset_choice, status, status_tone);
+    let save_session = SettingsPageSaveSession::new(
+        save_state,
+        session.theme(),
+        session.draft(),
+        session.preset_choice(),
+        session.status_signal(),
+        session.status_tone_signal(),
+    );
     let save_snapshot = save_session.snapshot();
 
     rsx! {
@@ -25,13 +23,13 @@ pub(crate) fn AppearanceSettingsCard(
             div { class: "settings-card__header",
                 h3 { "阅读外观" }
             }
-            ReadingPreferencesSection { draft }
+            ReadingPreferencesSection { draft: session.draft() }
             ThemeSettingsSections {
-                theme,
-                draft,
-                preset_choice,
-                status,
-                status_tone,
+                theme: session.theme(),
+                draft: session.draft(),
+                preset_choice: session.preset_choice(),
+                status: session.status_signal(),
+                status_tone: session.status_tone_signal(),
             }
             div { class: "settings-card__footer",
                 button {

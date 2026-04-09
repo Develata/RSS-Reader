@@ -6,7 +6,7 @@ use crate::{bootstrap::AppServices, status::set_status_error, theme::ThemeContro
 
 const REPOSITORY_URL: &str = "https://github.com/Develata/RSS-Reader";
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SettingsPageSession {
     theme: ThemeController,
     draft: Signal<UserSettings>,

@@ -53,20 +53,8 @@ pub fn SettingsPage() -> Element {
             }
             StatusBanner { message: session.status(), tone: session.status_tone() }
             div { class: "settings-grid",
-                AppearanceSettingsCard {
-                    theme: session.theme(),
-                    draft: session.draft(),
-                    preset_choice: session.preset_choice(),
-                    status: session.status_signal(),
-                    status_tone: session.status_tone_signal(),
-                }
-                WebDavSettingsCard {
-                    theme: session.theme(),
-                    draft: session.draft(),
-                    preset_choice: session.preset_choice(),
-                    status: session.status_signal(),
-                    status_tone: session.status_tone_signal(),
-                }
+                AppearanceSettingsCard { session }
+                WebDavSettingsCard { session }
             }
         }
     }

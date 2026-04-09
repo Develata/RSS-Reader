@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::pages::feeds_page::{FeedsPageBindings, FeedsPageCommand, execute_feeds_page_command};
+use crate::pages::feeds_page::session::FeedsPageSession;
 
 #[component]
-pub(crate) fn FeedComposeSection(feed_url: Signal<String>, bindings: FeedsPageBindings) -> Element {
+pub(crate) fn FeedComposeSection(session: FeedsPageSession) -> Element {
     rsx! {
         div { class: "feed-workbench feed-workbench--single",
             div { class: "feed-compose-card",
@@ -17,7 +17,7 @@ pub(crate) fn FeedComposeSection(feed_url: Signal<String>, bindings: FeedsPageBi
                         name: "feed_url",
                         class: "text-input",
                         "data-field": "feed-url-input",
-                        value: "{feed_url}",
+                        value: "{session.feed_url()}",
                         placeholder: "https://example.com/feed.xml",
                         onkeydown: move |event| {
                             if !is_paste_shortcut(&event) {
@@ -26,38 +26,21 @@ pub(crate) fn FeedComposeSection(feed_url: Signal<String>, bindings: FeedsPageBi
 
                             event.prevent_default();
                             spawn(async move {
-                                match paste_feed_url_from_clipboard().await {
-                                    Ok(Some(text)) => feed_url.set(text),
-                                    Ok(None) => {}
-                                    Err(err) => bindings
-                                        .set_status_error(format!("读取系统剪贴板失败：{err}")),
-                                }
+                                session.paste_feed_url_result(paste_feed_url_from_clipboard().await);
                             });
                         },
-                        oninput: move |event| feed_url.set(event.value())
+                        oninput: move |event| session.set_feed_url(event.value())
                     }
                     button {
                         class: "button",
                         "data-action": "add-feed",
-                        onclick: move |_| {
-                            let command = FeedsPageCommand::AddFeed { raw_url: feed_url() };
-                            spawn(async move {
-                                let outcome = execute_feeds_page_command(command).await;
-                                bindings.apply_command_outcome(outcome);
-                            });
-                        },
+                        onclick: move |_| session.add_feed(),
                         "添加订阅"
                     }
                     button {
                         class: "button secondary",
                         "data-action": "refresh-all",
-                        onclick: move |_| {
-                            spawn(async move {
-                                let outcome =
-                                    execute_feeds_page_command(FeedsPageCommand::RefreshAll).await;
-                                bindings.apply_command_outcome(outcome);
-                            });
-                        },
+                        onclick: move |_| session.refresh_all(),
                         "刷新全部"
                     }
                 }

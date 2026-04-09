@@ -1,18 +1,14 @@
-mod bindings;
 mod commands;
 mod dispatch;
 mod queries;
 mod sections;
 mod session;
+mod state;
 
 use dioxus::prelude::*;
 
 use self::sections::{ConfigExchangeSection, FeedComposeSection, SavedFeedsSection};
 use self::session::FeedsPageSession;
-pub(crate) use self::{
-    bindings::FeedsPageBindings, commands::FeedsPageCommand,
-    dispatch::execute_command as execute_feeds_page_command,
-};
 use crate::{
     app::AppNav, components::status_banner::StatusBanner,
     hooks::use_mobile_back_navigation::use_mobile_back_navigation, router::AppRoute,
@@ -22,13 +18,14 @@ use crate::{
 pub fn FeedsPage() -> Element {
     use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
 
-    let reload_tick = use_signal(|| 0_u64);
-    let session = FeedsPageSession::new(reload_tick);
+    let state = use_signal(state::FeedsPageState::new);
+    let session = FeedsPageSession::new(state);
+    let reload_tick = session.reload_tick();
 
-    use_resource(move || async move {
-        let _ = reload_tick();
+    use_resource(use_reactive!(|(reload_tick)| async move {
+        let _ = reload_tick;
         session.load_snapshot().await;
-    });
+    }));
 
     rsx! {
         section { class: "page page-feeds", "data-page": "feeds",
@@ -47,18 +44,9 @@ pub fn FeedsPage() -> Element {
                 }
             }
             StatusBanner { message: session.status(), tone: session.status_tone() }
-            FeedComposeSection { feed_url: session.feed_url(), bindings: session.bindings() }
-            ConfigExchangeSection {
-                config_text: session.config_text(),
-                opml_text: session.opml_text(),
-                pending_config_import: session.pending_config_import(),
-                bindings: session.bindings(),
-            }
-            SavedFeedsSection {
-                feeds: session.feeds(),
-                pending_delete_feed: session.pending_delete_feed(),
-                bindings: session.bindings(),
-            }
+            FeedComposeSection { session }
+            ConfigExchangeSection { session }
+            SavedFeedsSection { session }
         }
     }
 }
