@@ -235,22 +235,14 @@ fn use_entries_page_workspace(
     let starred_filter = state_snapshot.starred_filter;
     let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
 
-    use_resource(use_reactive!(|(feed_id)| async move {
+    use_resource(use_reactive!(|(feed_id, reload_version, preferences_loaded)| async move {
         let _ = feed_id;
-        session.remember_last_opened_feed();
-    }));
-
-    use_resource(use_reactive!(|(feed_id)| async move {
-        let _ = feed_id;
-        session.load_preferences();
-    }));
-
-    use_resource(use_reactive!(|(reload_version)| async move {
         let _ = reload_version;
-        session.load_feeds();
+        session.bootstrap(!preferences_loaded, true);
     }));
 
-    use_resource(use_reactive!(|(entry_query, reload_version)| async move {
+    use_resource(use_reactive!(|(feed_id, entry_query, reload_version)| async move {
+        let _ = feed_id;
         let _ = reload_version;
         session.load_entries_query(entry_query.clone());
     }));

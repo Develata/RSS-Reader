@@ -25,22 +25,29 @@ pub(crate) async fn execute_entries_page_effect(
     effect: EntriesPageEffect,
 ) -> EntriesPageRuntimeOutcome {
     match effect {
-        EntriesPageEffect::RememberLastOpenedFeed(feed_id) => {
-            remember_last_opened_feed(feed_id).await;
-            EntriesPageRuntimeOutcome::empty()
-        }
-        EntriesPageEffect::LoadPreferences => match load_entries_page_preferences().await {
-            Ok(settings) => EntriesPageRuntimeOutcome {
-                intents: vec![EntriesPageIntent::ApplyLoadedSettings(settings)],
-            },
-            Err(err) => status_error(err),
-        },
-        EntriesPageEffect::LoadFeeds => match load_entries_page_feeds().await {
-            Ok(feeds) => {
-                EntriesPageRuntimeOutcome { intents: vec![EntriesPageIntent::SetFeeds(feeds)] }
+        EntriesPageEffect::Bootstrap { feed_id, load_preferences, load_feeds } => {
+            let mut intents = Vec::new();
+
+            if let Some(feed_id) = feed_id {
+                remember_last_opened_feed(feed_id).await;
             }
-            Err(err) => status_error(err),
-        },
+
+            if load_preferences {
+                match load_entries_page_preferences().await {
+                    Ok(settings) => intents.push(EntriesPageIntent::ApplyLoadedSettings(settings)),
+                    Err(err) => return status_error(err),
+                }
+            }
+
+            if load_feeds {
+                match load_entries_page_feeds().await {
+                    Ok(feeds) => intents.push(EntriesPageIntent::SetFeeds(feeds)),
+                    Err(err) => return status_error(err),
+                }
+            }
+
+            EntriesPageRuntimeOutcome { intents }
+        }
         EntriesPageEffect::LoadEntries(query) => match load_entries_page_entries(query).await {
             Ok(entries) => {
                 EntriesPageRuntimeOutcome { intents: vec![EntriesPageIntent::SetEntries(entries)] }

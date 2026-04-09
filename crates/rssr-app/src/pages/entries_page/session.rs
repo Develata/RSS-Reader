@@ -35,18 +35,12 @@ impl EntriesPageSession {
         EntriesPagePresenter::from_state(&self.snapshot(), self.feed_id, now)
     }
 
-    pub(crate) fn remember_last_opened_feed(self) {
-        if let Some(feed_id) = self.feed_id {
-            self.spawn_effect(EntriesPageEffect::RememberLastOpenedFeed(feed_id));
-        }
-    }
-
-    pub(crate) fn load_preferences(self) {
-        self.spawn_effect(EntriesPageEffect::LoadPreferences);
-    }
-
-    pub(crate) fn load_feeds(self) {
-        self.spawn_effect(EntriesPageEffect::LoadFeeds);
+    pub(crate) fn bootstrap(self, load_preferences: bool, load_feeds: bool) {
+        self.spawn_effect(EntriesPageEffect::Bootstrap {
+            feed_id: self.feed_id,
+            load_preferences,
+            load_feeds,
+        });
     }
 
     pub(crate) fn load_entries_query(self, query: EntryQuery) {

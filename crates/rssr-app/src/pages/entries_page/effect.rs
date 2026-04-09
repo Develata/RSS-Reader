@@ -2,9 +2,11 @@ use rssr_domain::{EntryGroupingPreference, EntryQuery, ReadFilter, StarredFilter
 
 #[derive(Debug, Clone)]
 pub(crate) enum EntriesPageEffect {
-    RememberLastOpenedFeed(i64),
-    LoadPreferences,
-    LoadFeeds,
+    Bootstrap {
+        feed_id: Option<i64>,
+        load_preferences: bool,
+        load_feeds: bool,
+    },
     LoadEntries(EntryQuery),
     ToggleRead {
         entry_id: i64,
