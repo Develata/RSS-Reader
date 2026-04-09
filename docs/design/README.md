@@ -6,6 +6,7 @@
 
 - [功能设计哲学](./functional-design-philosophy.md)
 - [Headless Active Interface 设计目标](./headless-active-interface.md)
+- [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
 - [前端命令与界面接口清单](./frontend-command-reference.md)
 - [主题作者选择器参考](./theme-author-selector-reference.md)
 
@@ -19,6 +20,8 @@
   - [前端命令与界面接口清单](./frontend-command-reference.md)
 - 想理解为什么这次要往完全 headless 的活动接口转变，以及迁移门禁：
   - [Headless Active Interface 设计目标](./headless-active-interface.md)
+- 想看当前 repo 里 `ui/shell + ui bus + page facade` 已经落成到什么程度，以及实际边界怎么划：
+  - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
 - 想手写主题，或把一份文档直接丢给 AI 生成 CSS：
   - [主题作者选择器参考](./theme-author-selector-reference.md)
 
@@ -67,6 +70,20 @@
 - 启动这次前端架构重构
 - 判断某次 UI 重构是否越过视觉等价边界
 - 设计 GUI / CLI 共用的统一命令面
+
+### UI Shell / Bus / Page Facade 边界
+
+关注：
+
+- 当前 `rssr-app` 里已经形成的 `ui/shell`、`UiCommand / UiRuntime / UiIntent`、`page facade` 边界
+- 什么职责应留在 shell，什么职责应留在 bus，什么职责应留在 facade
+- 哪些反模式不应再回流到页面组件
+
+适合：
+
+- 继续推进 `headless active interface + CSS 完全分离 + infra`
+- 判断某次页面重构是否把职责放回错层
+- 对齐当前实现版架构，而不是只看目标愿景
 
 ### 主题作者选择器参考
 

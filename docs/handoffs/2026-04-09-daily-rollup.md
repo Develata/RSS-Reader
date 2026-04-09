@@ -277,7 +277,22 @@
   - `App shell`
   - `page shell`
   - CSS / 自动化 / future headless interface
- 共享同一套更稳定的语义接口。
+  共享同一套更稳定的语义接口。
+
+### 当日后续文档收口：把目标架构与当前实现正式对齐
+
+- 新增设计文档：
+  - `docs/design/ui-shell-bus-page-facade.md`
+- 这份文档不再讲“未来应该怎么做”，而是明确记录当前主线已经落成的实现边界：
+  - `ui/shell`
+  - `UiCommand / UiRuntime / UiIntent`
+  - `page facade`
+  - semantic page shell
+- 同时把设计文档索引和旧目标文档接起来：
+  - `docs/design/README.md`
+  - `docs/design/headless-active-interface.md`
+  - `docs/design/frontend-command-reference.md`
+- 这样后续继续推进 `headless active interface + CSS 完全分离 + infra` 时，不再只有愿景文档和接口清单，而有一份明确的“当前实现版边界说明”作为正式基线。
 
 ### 当日后续重构：全局 UI 命令面第一刀
 

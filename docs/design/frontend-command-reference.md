@@ -8,6 +8,7 @@
 
 - [功能设计哲学](./functional-design-philosophy.md)
 - [Headless Active Interface 设计目标](./headless-active-interface.md)
+- [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
 
 ---
 
@@ -34,6 +35,11 @@
 
 > 说明：下面列的是当前已经对外暴露的 UI 语义面；后续 headless 重构会把它们逐步迁移为统
 > 一的 Rust 命令层，但不应改变这些公开语义。
+
+> 当前实现补充：这些公开语义现在已经不只是 DOM 标记，而是开始映射到 `rssr-app/src/ui` 中的
+> `UiCommand / UiRuntime / UiIntent`。页面继续负责默认语义壳，当前实现版边界见：
+>
+> - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
 
 ### 订阅相关
 

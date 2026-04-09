@@ -13,6 +13,10 @@ interface”时的目标架构、非目标、迁移约束和验收门禁。
 - 为什么这会支持极端 CSS 视觉重构
 - 每完成一个模块后，怎样证明视觉和体验没有漂移
 
+如果要看当前 repo 里已经落地的实现版边界，而不是目标本身，见：
+
+- [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
+
 ## 核心定义
 
 ### active interface
@@ -87,6 +91,18 @@ view shell 指负责路由、布局、主题、动画、焦点管理和信息呈
 而不是：
 
 - 完全 headless 的命令面
+
+> 更新：上述描述是最初的迁移起点。当前主线已经进一步演进到：
+>
+> - `ui/shell`
+> - `UiCommand / UiRuntime / UiIntent`
+> - `page facade`
+> - semantic page shell
+>
+> 也就是说，当前实现已经不再只是“语义化 UI + 稳定选择器”，而是进入了 headless active
+> interface 的实现阶段。本文档继续定义终局目标与迁移门禁，当前实现细节见：
+>
+> - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
 
 ### 目标状态
 
@@ -245,5 +261,6 @@ Chrome MCP 验收不是可选附加项，而是模块收口条件。
 ## 相关文档
 
 - [功能设计哲学](./functional-design-philosophy.md)
+- [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
 - [前端命令与界面接口清单](./frontend-command-reference.md)
 - [Headless 重构视觉等价验收](../testing/headless-refactor-equivalence.md)
