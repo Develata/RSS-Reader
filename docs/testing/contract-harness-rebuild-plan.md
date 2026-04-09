@@ -178,6 +178,11 @@
 - 删除订阅后的配置同步
 - browser fixture 下 settings 与 last-opened state 的保持/清理
 
+当前进度：
+
+- 已完成 host / sqlite baseline
+- browser / wasm baseline 已完成
+
 ## 每阶段的建议实现方式
 
 ### refresh harness
@@ -279,7 +284,8 @@
 截至当前主线：
 
 - `refresh contract harness` 已有 host / sqlite baseline
-- browser fixture 的下一步重点，不是继续往同一份 host harness 里塞逻辑，而是先明确 wasm/browser 测试基座怎么建
+- `subscription contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
+- `config exchange contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 
 ## 当前结论
 
