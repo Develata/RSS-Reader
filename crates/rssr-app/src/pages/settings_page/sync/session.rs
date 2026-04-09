@@ -4,10 +4,7 @@ use super::{
     effect::SettingsPageSyncEffect, runtime::execute_settings_page_sync_effect,
     state::SettingsPageSyncState,
 };
-use crate::{
-    pages::settings_page::{session::SettingsPageSession, themes::detect_preset_key},
-    status::set_status_info,
-};
+use crate::{pages::settings_page::session::SettingsPageSession, status::set_status_info};
 
 #[derive(Clone, Copy)]
 pub(crate) struct SettingsPageSyncSession {
@@ -68,20 +65,8 @@ impl SettingsPageSyncSession {
 
     fn apply_runtime_outcome(mut self, outcome: super::runtime::SettingsPageSyncRuntimeOutcome) {
         self.state.with_mut(|state| state.pending_remote_pull = false);
-        if let Some(settings) = outcome.imported_settings {
-            self.page.preset_choice().set(detect_preset_key(&settings.custom_css).to_string());
-            self.page.draft().set(settings.clone());
-            self.page.theme().settings.set(settings);
-        }
-        if outcome.status_tone == "error" {
-            self.page.status_tone_signal().set("error".to_string());
-            self.page.status_signal().set(outcome.status_message);
-        } else {
-            set_status_info(
-                self.page.status_signal(),
-                self.page.status_tone_signal(),
-                outcome.status_message,
-            );
+        for intent in outcome.page_intents {
+            self.page.dispatch(intent);
         }
     }
 }

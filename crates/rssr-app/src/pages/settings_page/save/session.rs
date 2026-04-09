@@ -48,9 +48,6 @@ impl SettingsPageSaveSession {
         let mut state = self.state;
         state.with_mut(|state| state.pending_save = true);
 
-        let mut theme = self.page.theme();
-        let mut draft = self.page.draft();
-        let mut preset_choice = self.page.preset_choice();
         let status = self.page.status_signal();
         let status_tone = self.page.status_tone_signal();
         let success_message = success_message.into();
@@ -65,12 +62,10 @@ impl SettingsPageSaveSession {
 
             state.with_mut(|state| state.pending_save = false);
             if let Some(saved_settings) = outcome.saved_settings {
-                theme.settings.set(saved_settings);
+                self.page.apply_loaded_settings(saved_settings);
                 set_status_info(status, status_tone, outcome.status_message);
             } else {
-                theme.settings.set(previous.clone());
-                draft.set(previous);
-                preset_choice.set(previous_preset);
+                self.page.restore_settings(previous, previous_preset);
                 set_status_error(status, status_tone, outcome.status_message);
             }
         });

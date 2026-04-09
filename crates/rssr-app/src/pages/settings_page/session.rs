@@ -1,8 +1,14 @@
 use dioxus::prelude::*;
 use rssr_domain::UserSettings;
 
-use super::themes::detect_preset_key;
-use crate::{bootstrap::AppServices, status::set_status_error, theme::ThemeController};
+use super::{
+    effect::SettingsPageEffect, intent::SettingsPageIntent, runtime::execute_settings_page_effect,
+    themes::detect_preset_key,
+};
+use crate::{
+    status::{set_status_error, set_status_info},
+    theme::ThemeController,
+};
 
 const REPOSITORY_URL: &str = "https://github.com/Develata/RSS-Reader";
 
@@ -54,27 +60,56 @@ impl SettingsPageSession {
         (self.status_tone)()
     }
 
-    pub(crate) async fn load(mut self) {
-        match AppServices::shared().await {
-            Ok(services) => match services.load_settings().await {
-                Ok(settings) => {
-                    self.preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
-                    self.draft.set(settings);
-                }
-                Err(err) => {
-                    set_status_error(self.status, self.status_tone, format!("读取设置失败：{err}"))
-                }
-            },
-            Err(err) => {
-                set_status_error(self.status, self.status_tone, format!("初始化应用失败：{err}"))
-            }
+    pub(crate) fn load(self) {
+        self.spawn_effect(SettingsPageEffect::LoadSettings);
+    }
+
+    pub(crate) fn dispatch(self, intent: SettingsPageIntent) {
+        match intent {
+            SettingsPageIntent::SettingsLoaded(settings) => self.apply_loaded_settings(settings),
+            SettingsPageIntent::SetStatus { message, tone } => self.set_status(message, tone),
+        }
+    }
+
+    pub(crate) fn apply_loaded_settings(mut self, settings: UserSettings) {
+        self.preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
+        self.draft.set(settings.clone());
+        self.theme.settings.set(settings);
+    }
+
+    pub(crate) fn restore_settings(
+        mut self,
+        settings: UserSettings,
+        preset_choice: impl Into<String>,
+    ) {
+        self.preset_choice.set(preset_choice.into());
+        self.draft.set(settings.clone());
+        self.theme.settings.set(settings);
+    }
+
+    pub(crate) fn set_status(self, message: impl Into<String>, tone: impl Into<String>) {
+        let message = message.into();
+        let tone = tone.into();
+        if tone == "error" {
+            set_status_error(self.status, self.status_tone, message);
+        } else {
+            set_status_info(self.status, self.status_tone, message);
         }
     }
 
     pub(crate) fn open_repository(self) {
         if let Err(err) = open_repository_url() {
-            set_status_error(self.status, self.status_tone, format!("打开 GitHub 仓库失败：{err}"));
+            self.set_status(format!("打开 GitHub 仓库失败：{err}"), "error");
         }
+    }
+
+    fn spawn_effect(self, effect: SettingsPageEffect) {
+        spawn(async move {
+            let outcome = execute_settings_page_effect(effect).await;
+            for intent in outcome.intents {
+                self.dispatch(intent);
+            }
+        });
     }
 }
 

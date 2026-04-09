@@ -1,5 +1,8 @@
 mod appearance;
+mod effect;
+mod intent;
 mod preferences;
+mod runtime;
 mod save;
 mod session;
 mod sync;
@@ -23,7 +26,7 @@ pub fn SettingsPage() -> Element {
     let session = SettingsPageSession::new(theme);
 
     use_resource(move || async move {
-        session.load().await;
+        session.load();
     });
 
     rsx! {

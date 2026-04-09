@@ -1,13 +1,11 @@
-use rssr_domain::UserSettings;
-
 use crate::bootstrap::AppServices;
+
+use crate::pages::settings_page::intent::SettingsPageIntent;
 
 use super::effect::SettingsPageSyncEffect;
 
 pub(crate) struct SettingsPageSyncRuntimeOutcome {
-    pub(crate) status_message: String,
-    pub(crate) status_tone: String,
-    pub(crate) imported_settings: Option<UserSettings>,
+    pub(crate) page_intents: Vec<SettingsPageIntent>,
 }
 
 pub(crate) async fn execute_settings_page_sync_effect(
@@ -28,9 +26,13 @@ pub(crate) async fn execute_settings_page_sync_effect(
                 Ok(services) => match services.pull_remote_config(&endpoint, &remote_path).await {
                     Ok(true) => match services.load_settings().await {
                         Ok(settings) => SettingsPageSyncRuntimeOutcome {
-                            status_message: "已从 WebDAV 下载并导入配置。".to_string(),
-                            status_tone: "info".to_string(),
-                            imported_settings: Some(settings),
+                            page_intents: vec![
+                                SettingsPageIntent::SettingsLoaded(settings),
+                                SettingsPageIntent::SetStatus {
+                                    message: "已从 WebDAV 下载并导入配置。".to_string(),
+                                    tone: "info".to_string(),
+                                },
+                            ],
                         },
                         Err(err) => error(format!("导入后读取设置失败：{err}")),
                     },
@@ -45,16 +47,18 @@ pub(crate) async fn execute_settings_page_sync_effect(
 
 fn info(message: impl Into<String>) -> SettingsPageSyncRuntimeOutcome {
     SettingsPageSyncRuntimeOutcome {
-        status_message: message.into(),
-        status_tone: "info".to_string(),
-        imported_settings: None,
+        page_intents: vec![SettingsPageIntent::SetStatus {
+            message: message.into(),
+            tone: "info".to_string(),
+        }],
     }
 }
 
 fn error(message: impl Into<String>) -> SettingsPageSyncRuntimeOutcome {
     SettingsPageSyncRuntimeOutcome {
-        status_message: message.into(),
-        status_tone: "error".to_string(),
-        imported_settings: None,
+        page_intents: vec![SettingsPageIntent::SetStatus {
+            message: message.into(),
+            tone: "error".to_string(),
+        }],
     }
 }
