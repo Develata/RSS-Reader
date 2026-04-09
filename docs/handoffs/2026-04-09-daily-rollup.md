@@ -31,6 +31,7 @@
 - `682da79` `test: add config exchange contract harness`
 - `d8b046d` `test: unify wasm contract harness runner`
 - `pending` 当前这轮 handoff 按日期整理与补细节
+- `pending` 当前这轮本地 CI 容器非交互 `--cmd` 路径修复
 
 ## 影响范围
 
@@ -144,6 +145,20 @@
   - `scripts/setup_chrome_for_testing.sh`
   - `scripts/run_wasm_*_contract_harness.sh`
 
+### 当日后续修复：本地 CI 容器 `--cmd` 非交互执行
+
+- `scripts/run_ci_local_container.sh` 最初统一使用 `docker run -it`。
+- 这在交互式 shell 下正常，但在脚本化或当前这类非交互执行环境里，会直接报：
+  - `the input device is not a TTY`
+- 修复后脚本改成两条分支：
+  - 无 `--cmd` 时，继续使用 `-it` 进入交互式容器
+  - 有 `--cmd` 时，去掉 TTY 参数，按非交互 one-shot 命令执行
+- 这次修复不改变镜像内容、不改变 volume/network/shm 配置，只修正容器启动模式与实际使用场景不匹配的问题。
+- 修复后已确认：
+  - `bash scripts/run_ci_local_container.sh --cmd 'echo ok'`
+  - `bash scripts/run_ci_local_container.sh --cmd 'cargo test -p rssr-web -- --nocapture'`
+  均能正常执行
+
 ### Contract harness 规划与重建
 
 - 新增 `docs/testing/contract-harness-rebuild-plan.md`，明确不直接复制旧分支 harness，而按当前主线重建。
@@ -244,6 +259,8 @@
 - CI workflow YAML 解析：通过
 - `docker.yml` 触发条件与 push gate 代码级复核：通过
 - `bash -n scripts/run_ci_local_container.sh`：通过
+- `bash scripts/run_ci_local_container.sh --cmd 'echo ok'`：通过
+- `bash scripts/run_ci_local_container.sh --cmd 'cargo test -p rssr-web -- --nocapture'`：通过
 
 ### 手工验收
 
@@ -258,6 +275,7 @@
 - `zheye-mainline-stabilization` 中最核心的三条 contract 线，已经在当前 `main` 上完成重建。
 - headless 接口命名与字段/动作边界进一步清晰。
 - 当前主线已经具备统一的 wasm browser harness runner 与 CI matrix。
+- 本地 `Dockerfile.ci-local` + `run_ci_local_container.sh` 现在既能支持交互式排障，也能支持脚本化单命令测试执行。
 - 到此可以更准确地说：
   - `zheye` 分支的主功能与架构价值，已经基本被当前 `main` 手动吸收
   - 剩余重点不再是“还缺哪条主线”，而是观察远端 CI 是否把三条 wasm contract 线全部跑绿

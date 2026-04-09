@@ -63,7 +63,6 @@ fi
 docker_args=(
   run
   --rm
-  -it
   --name "$container_name"
   --workdir /work
   --mount "type=bind,src=${repo_root},target=/work"
@@ -80,5 +79,6 @@ fi
 if [[ -n "$run_cmd" ]]; then
   docker "${docker_args[@]}" "$image_name" bash -lc "$run_cmd"
 else
+  docker_args+=(-it)
   docker "${docker_args[@]}" "$image_name"
 fi
