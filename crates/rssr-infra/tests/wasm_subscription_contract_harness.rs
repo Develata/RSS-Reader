@@ -11,8 +11,9 @@ use rssr_domain::{EntryQuery, EntryRepository};
 use rssr_infra::application_adapters::browser::{
     adapters::{BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRepository},
     state::{
-        APP_STATE_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY, LoadedState, PersistedEntry, PersistedFeed,
-        PersistedState, STORAGE_KEY, load_state,
+        APP_STATE_STORAGE_KEY, BrowserState, ENTRY_FLAGS_STORAGE_KEY, LoadedState,
+        PersistedAppStateSlice, PersistedEntry, PersistedFeed, PersistedState, STORAGE_KEY,
+        load_state,
     },
 };
 use time::OffsetDateTime;
@@ -95,16 +96,12 @@ fn sample_entry(id: i64, feed_id: i64, index: i64) -> PersistedEntry {
         updated_at_source: None,
         first_seen_at: OffsetDateTime::UNIX_EPOCH,
         content_hash: Some(format!("hash-{index}")),
-        is_read: false,
-        is_starred: false,
-        read_at: None,
-        starred_at: None,
         created_at: OffsetDateTime::UNIX_EPOCH,
         updated_at: OffsetDateTime::UNIX_EPOCH,
     }
 }
 
-fn build_workflow(state: Arc<Mutex<PersistedState>>) -> SubscriptionWorkflow {
+fn build_workflow(state: Arc<Mutex<BrowserState>>) -> SubscriptionWorkflow {
     let feed_service = FeedService::new(
         Arc::new(BrowserFeedRepository::new(state.clone())),
         Arc::new(BrowserEntryRepository::new(state.clone())),
@@ -119,7 +116,7 @@ fn build_workflow(state: Arc<Mutex<PersistedState>>) -> SubscriptionWorkflow {
 async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(PersistedState::default()));
+    let state = Arc::new(Mutex::new(BrowserState::default()));
     let workflow = build_workflow(state.clone());
 
     let first = workflow
@@ -144,18 +141,18 @@ async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
 
     {
         let snapshot = state.lock().expect("lock state");
-        assert_eq!(snapshot.feeds.len(), 1);
-        assert_eq!(snapshot.feeds[0].url, "https://example.com/feed.xml");
-        assert_eq!(snapshot.feeds[0].title.as_deref(), Some("Updated Title"));
-        assert_eq!(snapshot.feeds[0].folder.as_deref(), Some("Reading"));
-        assert!(!snapshot.feeds[0].is_deleted);
+        assert_eq!(snapshot.core.feeds.len(), 1);
+        assert_eq!(snapshot.core.feeds[0].url, "https://example.com/feed.xml");
+        assert_eq!(snapshot.core.feeds[0].title.as_deref(), Some("Updated Title"));
+        assert_eq!(snapshot.core.feeds[0].folder.as_deref(), Some("Reading"));
+        assert!(!snapshot.core.feeds[0].is_deleted);
     }
 
     let LoadedState { state: persisted, warning } = load_state();
     assert!(warning.is_none());
-    assert_eq!(persisted.feeds.len(), 1);
-    assert_eq!(persisted.feeds[0].url, "https://example.com/feed.xml");
-    assert_eq!(persisted.feeds[0].title.as_deref(), Some("Updated Title"));
+    assert_eq!(persisted.core.feeds.len(), 1);
+    assert_eq!(persisted.core.feeds[0].url, "https://example.com/feed.xml");
+    assert_eq!(persisted.core.feeds[0].title.as_deref(), Some("Updated Title"));
 
     clear_browser_state_storage();
 }
@@ -164,13 +161,16 @@ async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
 async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears_matching_state() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(PersistedState {
-        next_feed_id: 1,
-        next_entry_id: 2,
-        feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
-        entries: vec![sample_entry(1, 1, 1), sample_entry(2, 1, 2)],
-        last_opened_feed_id: Some(1),
-        ..PersistedState::default()
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState {
+            next_feed_id: 1,
+            next_entry_id: 2,
+            feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
+            entries: vec![sample_entry(1, 1, 1), sample_entry(2, 1, 2)],
+            ..PersistedState::default()
+        },
+        app_state: PersistedAppStateSlice { last_opened_feed_id: Some(1) },
+        ..BrowserState::default()
     }));
     let workflow = build_workflow(state.clone());
 
@@ -181,18 +181,18 @@ async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears
 
     {
         let snapshot = state.lock().expect("lock state");
-        assert_eq!(snapshot.feeds.len(), 1);
-        assert!(snapshot.feeds[0].is_deleted);
-        assert!(snapshot.entries.is_empty());
-        assert_eq!(snapshot.last_opened_feed_id, None);
+        assert_eq!(snapshot.core.feeds.len(), 1);
+        assert!(snapshot.core.feeds[0].is_deleted);
+        assert!(snapshot.core.entries.is_empty());
+        assert_eq!(snapshot.app_state.last_opened_feed_id, None);
     }
 
     let LoadedState { state: persisted, warning } = load_state();
     assert!(warning.is_none());
-    assert_eq!(persisted.feeds.len(), 1);
-    assert!(persisted.feeds[0].is_deleted);
-    assert!(persisted.entries.is_empty());
-    assert_eq!(persisted.last_opened_feed_id, None);
+    assert_eq!(persisted.core.feeds.len(), 1);
+    assert!(persisted.core.feeds[0].is_deleted);
+    assert!(persisted.core.entries.is_empty());
+    assert_eq!(persisted.app_state.last_opened_feed_id, None);
 
     clear_browser_state_storage();
 }
@@ -201,14 +201,17 @@ async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears
 async fn browser_subscription_remove_preserves_other_last_opened_feed() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(PersistedState {
-        next_feed_id: 2,
-        feeds: vec![
-            sample_feed(1, "https://example.com/retained.xml", false),
-            sample_feed(2, "https://example.com/removed.xml", false),
-        ],
-        last_opened_feed_id: Some(1),
-        ..PersistedState::default()
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState {
+            next_feed_id: 2,
+            feeds: vec![
+                sample_feed(1, "https://example.com/retained.xml", false),
+                sample_feed(2, "https://example.com/removed.xml", false),
+            ],
+            ..PersistedState::default()
+        },
+        app_state: PersistedAppStateSlice { last_opened_feed_id: Some(1) },
+        ..BrowserState::default()
     }));
     let workflow = build_workflow(state.clone());
 
@@ -219,8 +222,10 @@ async fn browser_subscription_remove_preserves_other_last_opened_feed() {
 
     {
         let snapshot = state.lock().expect("lock state");
-        assert_eq!(snapshot.last_opened_feed_id, Some(1));
-        assert!(snapshot.feeds.iter().find(|feed| feed.id == 2).expect("removed feed").is_deleted);
+        assert_eq!(snapshot.app_state.last_opened_feed_id, Some(1));
+        assert!(
+            snapshot.core.feeds.iter().find(|feed| feed.id == 2).expect("removed feed").is_deleted
+        );
     }
 
     let entry_repository = BrowserEntryRepository::new(state.clone());
@@ -232,7 +237,7 @@ async fn browser_subscription_remove_preserves_other_last_opened_feed() {
 
     let LoadedState { state: persisted, warning } = load_state();
     assert!(warning.is_none());
-    assert_eq!(persisted.last_opened_feed_id, Some(1));
+    assert_eq!(persisted.app_state.last_opened_feed_id, Some(1));
 
     clear_browser_state_storage();
 }

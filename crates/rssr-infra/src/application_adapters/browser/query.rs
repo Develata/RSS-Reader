@@ -4,19 +4,20 @@ use rssr_domain::{
     Entry, EntryNavigation, EntryQuery, EntrySummary, FeedSummary, ReadFilter, StarredFilter,
 };
 
-use super::state::{PersistedEntry, PersistedState, to_domain_entry};
+use super::state::{BrowserState, PersistedEntry, entry_flags, to_domain_entry};
 
-pub fn list_feeds(state: &PersistedState) -> Vec<FeedSummary> {
+pub fn list_feeds(state: &BrowserState) -> Vec<FeedSummary> {
     let mut counts_by_feed = HashMap::<i64, (u32, u32)>::new();
-    for entry in &state.entries {
+    for entry in &state.core.entries {
         let counts = counts_by_feed.entry(entry.feed_id).or_insert((0, 0));
         counts.0 += 1;
-        if !entry.is_read {
+        if !entry_flags(state, entry.id).map(|flag| flag.is_read).unwrap_or(false) {
             counts.1 += 1;
         }
     }
 
     let mut feeds = state
+        .core
         .feeds
         .iter()
         .filter(|feed| !feed.is_deleted)
@@ -35,10 +36,11 @@ pub fn list_feeds(state: &PersistedState) -> Vec<FeedSummary> {
     feeds
 }
 
-pub fn list_entries(state: &PersistedState, query: &EntryQuery) -> Vec<EntrySummary> {
+pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummary> {
     let allowed_feed_ids = (!query.feed_ids.is_empty())
         .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
     let active_feed_titles = state
+        .core
         .feeds
         .iter()
         .filter(|feed| !feed.is_deleted)
@@ -46,9 +48,13 @@ pub fn list_entries(state: &PersistedState, query: &EntryQuery) -> Vec<EntrySumm
         .collect::<HashMap<_, _>>();
 
     let mut items = state
+        .core
         .entries
         .iter()
         .filter(|entry| {
+            let is_read = entry_flags(state, entry.id).map(|flag| flag.is_read).unwrap_or(false);
+            let is_starred =
+                entry_flags(state, entry.id).map(|flag| flag.is_starred).unwrap_or(false);
             if !active_feed_titles.contains_key(&entry.feed_id) {
                 return false;
             }
@@ -64,14 +70,14 @@ pub fn list_entries(state: &PersistedState, query: &EntryQuery) -> Vec<EntrySumm
             }
             match query.read_filter {
                 ReadFilter::All => {}
-                ReadFilter::UnreadOnly if entry.is_read => return false,
-                ReadFilter::ReadOnly if !entry.is_read => return false,
+                ReadFilter::UnreadOnly if is_read => return false,
+                ReadFilter::ReadOnly if !is_read => return false,
                 _ => {}
             }
             match query.starred_filter {
                 StarredFilter::All => {}
-                StarredFilter::StarredOnly if !entry.is_starred => return false,
-                StarredFilter::UnstarredOnly if entry.is_starred => return false,
+                StarredFilter::StarredOnly if !is_starred => return false,
+                StarredFilter::UnstarredOnly if is_starred => return false,
                 _ => {}
             }
             if let Some(search) = &query.search_title
@@ -87,8 +93,8 @@ pub fn list_entries(state: &PersistedState, query: &EntryQuery) -> Vec<EntrySumm
             title: entry.title.clone(),
             feed_title: active_feed_titles.get(&entry.feed_id).cloned().unwrap_or_default(),
             published_at: entry.published_at,
-            is_read: entry.is_read,
-            is_starred: entry.is_starred,
+            is_read: entry_flags(state, entry.id).map(|flag| flag.is_read).unwrap_or(false),
+            is_starred: entry_flags(state, entry.id).map(|flag| flag.is_starred).unwrap_or(false),
         })
         .collect::<Vec<_>>();
 
@@ -101,18 +107,26 @@ pub fn list_entries(state: &PersistedState, query: &EntryQuery) -> Vec<EntrySumm
     items
 }
 
-pub fn get_entry(state: &PersistedState, entry_id: i64) -> anyhow::Result<Option<Entry>> {
-    state.entries.iter().find(|entry| entry.id == entry_id).map(to_domain_entry).transpose()
+pub fn get_entry(state: &BrowserState, entry_id: i64) -> anyhow::Result<Option<Entry>> {
+    state
+        .core
+        .entries
+        .iter()
+        .find(|entry| entry.id == entry_id)
+        .map(|entry| to_domain_entry(state, entry))
+        .transpose()
 }
 
-pub fn reader_navigation(state: &PersistedState, current_entry_id: i64) -> EntryNavigation {
+pub fn reader_navigation(state: &BrowserState, current_entry_id: i64) -> EntryNavigation {
     let active_feed_ids = state
+        .core
         .feeds
         .iter()
         .filter(|feed| !feed.is_deleted)
         .map(|feed| feed.id)
         .collect::<HashSet<_>>();
     let Some(current_entry) = state
+        .core
         .entries
         .iter()
         .find(|entry| entry.id == current_entry_id && active_feed_ids.contains(&entry.feed_id))
@@ -121,6 +135,7 @@ pub fn reader_navigation(state: &PersistedState, current_entry_id: i64) -> Entry
     };
 
     let mut ordered_entries = state
+        .core
         .entries
         .iter()
         .filter(|entry| active_feed_ids.contains(&entry.feed_id))
@@ -132,10 +147,12 @@ pub fn reader_navigation(state: &PersistedState, current_entry_id: i64) -> Entry
         navigation.previous_unread_entry_id = ordered_entries[..index]
             .iter()
             .rev()
-            .find(|entry| !entry.is_read)
+            .find(|entry| !entry_flags(state, entry.id).map(|flag| flag.is_read).unwrap_or(false))
             .map(|entry| entry.id);
-        navigation.next_unread_entry_id =
-            ordered_entries[index + 1..].iter().find(|entry| !entry.is_read).map(|entry| entry.id);
+        navigation.next_unread_entry_id = ordered_entries[index + 1..]
+            .iter()
+            .find(|entry| !entry_flags(state, entry.id).map(|flag| flag.is_read).unwrap_or(false))
+            .map(|entry| entry.id);
         navigation.previous_feed_entry_id = ordered_entries[..index]
             .iter()
             .rev()

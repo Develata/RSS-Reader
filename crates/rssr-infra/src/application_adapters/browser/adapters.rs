@@ -22,18 +22,18 @@ use super::{
         list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
     },
     state::{
-        PersistedFeed, PersistedState, save_app_state_slice, save_entry_flag_patch,
-        save_state_snapshot, upsert_entries,
+        BrowserState, PersistedEntryFlag, PersistedFeed, last_opened_feed_id, save_app_state_slice,
+        save_entry_flag_patch, save_state_snapshot, upsert_entries,
     },
 };
 
 #[derive(Clone)]
 pub struct BrowserFeedRepository {
-    state: Arc<Mutex<PersistedState>>,
+    state: Arc<Mutex<BrowserState>>,
 }
 
 impl BrowserFeedRepository {
-    pub fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+    pub fn new(state: Arc<Mutex<BrowserState>>) -> Self {
         Self { state }
     }
 }
@@ -53,7 +53,7 @@ impl FeedRepository for BrowserFeedRepository {
             let now = now_utc();
 
             if let Some(feed) =
-                state.feeds.iter_mut().find(|feed| feed.url == normalized_url.as_str())
+                state.core.feeds.iter_mut().find(|feed| feed.url == normalized_url.as_str())
             {
                 if new_feed.title.is_some() {
                     feed.title = normalized_title.clone();
@@ -65,9 +65,9 @@ impl FeedRepository for BrowserFeedRepository {
                 feed.updated_at = now;
                 (feed.clone(), state.clone())
             } else {
-                state.next_feed_id += 1;
+                state.core.next_feed_id += 1;
                 let persisted = PersistedFeed {
-                    id: state.next_feed_id,
+                    id: state.core.next_feed_id,
                     url: normalized_url.to_string(),
                     title: normalized_title,
                     site_url: None,
@@ -83,7 +83,7 @@ impl FeedRepository for BrowserFeedRepository {
                     created_at: now,
                     updated_at: now,
                 };
-                state.feeds.push(persisted.clone());
+                state.core.feeds.push(persisted.clone());
                 (persisted, state.clone())
             }
         };
@@ -96,6 +96,7 @@ impl FeedRepository for BrowserFeedRepository {
         let snapshot = {
             let mut state = self.state.lock().expect("lock state");
             let feed = state
+                .core
                 .feeds
                 .iter_mut()
                 .find(|feed| feed.id == feed_id)
@@ -110,12 +111,19 @@ impl FeedRepository for BrowserFeedRepository {
 
     async fn list_feeds(&self) -> rssr_domain::Result<Vec<Feed>> {
         let state = self.state.lock().expect("lock state");
-        state.feeds.iter().filter(|feed| !feed.is_deleted).map(persisted_feed_to_domain).collect()
+        state
+            .core
+            .feeds
+            .iter()
+            .filter(|feed| !feed.is_deleted)
+            .map(persisted_feed_to_domain)
+            .collect()
     }
 
     async fn get_feed(&self, feed_id: i64) -> rssr_domain::Result<Option<Feed>> {
         let state = self.state.lock().expect("lock state");
         state
+            .core
             .feeds
             .iter()
             .find(|feed| feed.id == feed_id && !feed.is_deleted)
@@ -131,11 +139,11 @@ impl FeedRepository for BrowserFeedRepository {
 
 #[derive(Clone)]
 pub struct BrowserEntryRepository {
-    state: Arc<Mutex<PersistedState>>,
+    state: Arc<Mutex<BrowserState>>,
 }
 
 impl BrowserEntryRepository {
-    pub fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+    pub fn new(state: Arc<Mutex<BrowserState>>) -> Self {
         Self { state }
     }
 }
@@ -164,42 +172,72 @@ impl EntryRepository for BrowserEntryRepository {
         let entry = {
             let mut state = self.state.lock().expect("lock state");
             let now = now_utc();
-            let entry = state
-                .entries
-                .iter_mut()
-                .find(|entry| entry.id == entry_id)
-                .ok_or(DomainError::NotFound)?;
-            entry.is_read = is_read;
-            entry.read_at = is_read.then_some(now);
-            entry.updated_at = now;
-            entry.clone()
+            let entry = state.entry_flags.entries.iter_mut().find(|entry| entry.id == entry_id);
+
+            if let Some(entry) = entry {
+                entry.is_read = is_read;
+                entry.read_at = is_read.then_some(now);
+                entry.clone()
+            } else {
+                if !state.core.entries.iter().any(|entry| entry.id == entry_id) {
+                    return Err(DomainError::NotFound);
+                }
+                let flag = PersistedEntryFlag {
+                    id: entry_id,
+                    is_read,
+                    is_starred: false,
+                    read_at: is_read.then_some(now),
+                    starred_at: None,
+                };
+                state.entry_flags.entries.push(flag.clone());
+                flag
+            }
         };
 
-        save_entry_flag_patch(&entry).map_err(map_persistence_error)
+        save_entry_flag_patch(entry).map_err(map_persistence_error)
     }
 
     async fn set_starred(&self, entry_id: i64, is_starred: bool) -> rssr_domain::Result<()> {
         let entry = {
             let mut state = self.state.lock().expect("lock state");
             let now = now_utc();
-            let entry = state
-                .entries
-                .iter_mut()
-                .find(|entry| entry.id == entry_id)
-                .ok_or(DomainError::NotFound)?;
-            entry.is_starred = is_starred;
-            entry.starred_at = is_starred.then_some(now);
-            entry.updated_at = now;
-            entry.clone()
+            let entry = state.entry_flags.entries.iter_mut().find(|entry| entry.id == entry_id);
+
+            if let Some(entry) = entry {
+                entry.is_starred = is_starred;
+                entry.starred_at = is_starred.then_some(now);
+                entry.clone()
+            } else {
+                if !state.core.entries.iter().any(|entry| entry.id == entry_id) {
+                    return Err(DomainError::NotFound);
+                }
+                let flag = PersistedEntryFlag {
+                    id: entry_id,
+                    is_read: false,
+                    is_starred,
+                    read_at: None,
+                    starred_at: is_starred.then_some(now),
+                };
+                state.entry_flags.entries.push(flag.clone());
+                flag
+            }
         };
 
-        save_entry_flag_patch(&entry).map_err(map_persistence_error)
+        save_entry_flag_patch(entry).map_err(map_persistence_error)
     }
 
     async fn delete_for_feed(&self, feed_id: i64) -> rssr_domain::Result<()> {
         let snapshot = {
             let mut state = self.state.lock().expect("lock state");
-            state.entries.retain(|entry| entry.feed_id != feed_id);
+            let removed_entry_ids = state
+                .core
+                .entries
+                .iter()
+                .filter(|entry| entry.feed_id == feed_id)
+                .map(|entry| entry.id)
+                .collect::<Vec<_>>();
+            state.core.entries.retain(|entry| entry.feed_id != feed_id);
+            state.entry_flags.entries.retain(|entry| !removed_entry_ids.contains(&entry.id));
             state.clone()
         };
 
@@ -209,23 +247,23 @@ impl EntryRepository for BrowserEntryRepository {
 
 #[derive(Clone)]
 pub struct BrowserAppStateAdapter {
-    state: Arc<Mutex<PersistedState>>,
+    state: Arc<Mutex<BrowserState>>,
 }
 
 impl BrowserAppStateAdapter {
-    pub fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+    pub fn new(state: Arc<Mutex<BrowserState>>) -> Self {
         Self { state }
     }
 
     pub fn load_last_opened_feed_id(&self) -> Result<Option<i64>> {
-        Ok(self.state.lock().expect("lock state").last_opened_feed_id)
+        Ok(last_opened_feed_id(&self.state.lock().expect("lock state")))
     }
 
     pub fn save_last_opened_feed_id(&self, feed_id: Option<i64>) -> Result<()> {
         let last_opened_feed_id = {
             let mut state = self.state.lock().expect("lock state");
-            state.last_opened_feed_id = feed_id;
-            state.last_opened_feed_id
+            state.app_state.last_opened_feed_id = feed_id;
+            state.app_state.last_opened_feed_id
         };
 
         save_app_state_slice(last_opened_feed_id)
@@ -234,11 +272,11 @@ impl BrowserAppStateAdapter {
     fn clear_last_opened_feed_if_matches_impl(&self, feed_id: i64) -> Result<()> {
         let last_opened_feed_id = {
             let mut state = self.state.lock().expect("lock state");
-            if state.last_opened_feed_id != Some(feed_id) {
+            if state.app_state.last_opened_feed_id != Some(feed_id) {
                 return Ok(());
             }
-            state.last_opened_feed_id = None;
-            state.last_opened_feed_id
+            state.app_state.last_opened_feed_id = None;
+            state.app_state.last_opened_feed_id
         };
 
         save_app_state_slice(last_opened_feed_id)
@@ -262,11 +300,11 @@ impl FeedRemovalCleanupPort for BrowserAppStateAdapter {
 
 #[derive(Clone)]
 pub struct BrowserSettingsRepository {
-    state: Arc<Mutex<PersistedState>>,
+    state: Arc<Mutex<BrowserState>>,
 }
 
 impl BrowserSettingsRepository {
-    pub fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+    pub fn new(state: Arc<Mutex<BrowserState>>) -> Self {
         Self { state }
     }
 }
@@ -274,13 +312,13 @@ impl BrowserSettingsRepository {
 #[async_trait::async_trait]
 impl SettingsRepository for BrowserSettingsRepository {
     async fn load(&self) -> rssr_domain::Result<UserSettings> {
-        Ok(self.state.lock().expect("lock state").settings.clone())
+        Ok(self.state.lock().expect("lock state").core.settings.clone())
     }
 
     async fn save(&self, settings: &UserSettings) -> rssr_domain::Result<()> {
         let snapshot = {
             let mut state = self.state.lock().expect("lock state");
-            state.settings = settings.clone();
+            state.core.settings = settings.clone();
             state.clone()
         };
 
@@ -412,11 +450,11 @@ impl FeedRefreshSourcePort for BrowserFeedRefreshSource {
 
 #[derive(Clone)]
 pub struct BrowserRefreshStore {
-    state: Arc<Mutex<PersistedState>>,
+    state: Arc<Mutex<BrowserState>>,
 }
 
 impl BrowserRefreshStore {
-    pub fn new(state: Arc<Mutex<PersistedState>>) -> Self {
+    pub fn new(state: Arc<Mutex<BrowserState>>) -> Self {
         Self { state }
     }
 }
@@ -426,6 +464,7 @@ impl RefreshStorePort for BrowserRefreshStore {
     async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
         let state = self.state.lock().expect("lock state");
         state
+            .core
             .feeds
             .iter()
             .filter(|feed| !feed.is_deleted)
@@ -445,6 +484,7 @@ impl RefreshStorePort for BrowserRefreshStore {
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
         let state = self.state.lock().expect("lock state");
         state
+            .core
             .feeds
             .iter()
             .find(|feed| feed.id == feed_id && !feed.is_deleted)
@@ -465,8 +505,12 @@ impl RefreshStorePort for BrowserRefreshStore {
         let snapshot = {
             let mut state = self.state.lock().expect("lock state");
             let now = now_utc();
-            let feed =
-                state.feeds.iter_mut().find(|feed| feed.id == feed_id).context("订阅不存在")?;
+            let feed = state
+                .core
+                .feeds
+                .iter_mut()
+                .find(|feed| feed.id == feed_id)
+                .context("订阅不存在")?;
 
             match commit {
                 RefreshCommit::NotModified { metadata } => {
@@ -494,7 +538,7 @@ impl RefreshStorePort for BrowserRefreshStore {
                     feed.fetch_error = None;
                     feed.updated_at = now;
                     upsert_entries(
-                        &mut state,
+                        &mut state.core,
                         feed_id,
                         map_application_entries(update.feed.entries),
                     )?;

@@ -9,8 +9,8 @@ use rssr_application::{
 use rssr_infra::application_adapters::browser::{
     adapters::BrowserRefreshStore,
     state::{
-        APP_STATE_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY, LoadedState, PersistedFeed, PersistedState,
-        STORAGE_KEY, load_state,
+        APP_STATE_STORAGE_KEY, BrowserState, ENTRY_FLAGS_STORAGE_KEY, LoadedState, PersistedFeed,
+        PersistedState, STORAGE_KEY, load_state,
     },
 };
 use time::OffsetDateTime;
@@ -68,13 +68,16 @@ fn sample_entry(index: i64) -> ParsedEntryData {
 async fn browser_refresh_store_lists_only_active_targets() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(PersistedState {
-        next_feed_id: 2,
-        feeds: vec![
-            sample_feed(1, "https://example.com/feed-1.xml", false),
-            sample_feed(2, "https://example.com/feed-2.xml", true),
-        ],
-        ..PersistedState::default()
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState {
+            next_feed_id: 2,
+            feeds: vec![
+                sample_feed(1, "https://example.com/feed-1.xml", false),
+                sample_feed(2, "https://example.com/feed-2.xml", true),
+            ],
+            ..PersistedState::default()
+        },
+        ..BrowserState::default()
     }));
     let store = BrowserRefreshStore::new(state);
 
@@ -91,10 +94,13 @@ async fn browser_refresh_store_lists_only_active_targets() {
 async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(PersistedState {
-        next_feed_id: 1,
-        feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
-        ..PersistedState::default()
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState {
+            next_feed_id: 1,
+            feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
+            ..PersistedState::default()
+        },
+        ..BrowserState::default()
     }));
     let store = BrowserRefreshStore::new(state.clone());
 
@@ -113,21 +119,21 @@ async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
 
     {
         let snapshot = state.lock().expect("lock state");
-        assert_eq!(snapshot.feeds.len(), 1);
-        assert_eq!(snapshot.feeds[0].etag.as_deref(), Some("etag-1"));
+        assert_eq!(snapshot.core.feeds.len(), 1);
+        assert_eq!(snapshot.core.feeds[0].etag.as_deref(), Some("etag-1"));
         assert_eq!(
-            snapshot.feeds[0].last_modified.as_deref(),
+            snapshot.core.feeds[0].last_modified.as_deref(),
             Some("Wed, 01 Apr 2026 10:00:00 GMT")
         );
-        assert!(snapshot.feeds[0].last_fetched_at.is_some());
-        assert!(snapshot.feeds[0].last_success_at.is_some());
-        assert_eq!(snapshot.feeds[0].fetch_error, None);
+        assert!(snapshot.core.feeds[0].last_fetched_at.is_some());
+        assert!(snapshot.core.feeds[0].last_success_at.is_some());
+        assert_eq!(snapshot.core.feeds[0].fetch_error, None);
     }
 
     let LoadedState { state: persisted, warning } = load_state();
     assert!(warning.is_none());
-    assert_eq!(persisted.feeds.len(), 1);
-    assert_eq!(persisted.feeds[0].etag.as_deref(), Some("etag-1"));
+    assert_eq!(persisted.core.feeds.len(), 1);
+    assert_eq!(persisted.core.feeds[0].etag.as_deref(), Some("etag-1"));
 
     clear_browser_state_storage();
 }
@@ -136,10 +142,13 @@ async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
 async fn browser_refresh_store_commit_updated_persists_feed_metadata_and_entries() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(PersistedState {
-        next_feed_id: 1,
-        feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
-        ..PersistedState::default()
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState {
+            next_feed_id: 1,
+            feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
+            ..PersistedState::default()
+        },
+        ..BrowserState::default()
     }));
     let store = BrowserRefreshStore::new(state.clone());
 
@@ -166,24 +175,24 @@ async fn browser_refresh_store_commit_updated_persists_feed_metadata_and_entries
 
     {
         let snapshot = state.lock().expect("lock state");
-        assert_eq!(snapshot.feeds.len(), 1);
-        assert_eq!(snapshot.feeds[0].title.as_deref(), Some("Updated Feed"));
-        assert_eq!(snapshot.feeds[0].site_url.as_deref(), Some("https://example.com/"));
-        assert_eq!(snapshot.feeds[0].description.as_deref(), Some("Updated description"));
-        assert_eq!(snapshot.feeds[0].etag.as_deref(), Some("etag-updated"));
-        assert!(snapshot.feeds[0].last_fetched_at.is_some());
-        assert!(snapshot.feeds[0].last_success_at.is_some());
-        assert_eq!(snapshot.feeds[0].fetch_error, None);
-        assert_eq!(snapshot.entries.len(), 2);
-        assert_eq!(snapshot.entries[0].feed_id, 1);
-        assert_eq!(snapshot.entries[0].title, "Entry 1");
-        assert_eq!(snapshot.entries[1].title, "Entry 2");
+        assert_eq!(snapshot.core.feeds.len(), 1);
+        assert_eq!(snapshot.core.feeds[0].title.as_deref(), Some("Updated Feed"));
+        assert_eq!(snapshot.core.feeds[0].site_url.as_deref(), Some("https://example.com/"));
+        assert_eq!(snapshot.core.feeds[0].description.as_deref(), Some("Updated description"));
+        assert_eq!(snapshot.core.feeds[0].etag.as_deref(), Some("etag-updated"));
+        assert!(snapshot.core.feeds[0].last_fetched_at.is_some());
+        assert!(snapshot.core.feeds[0].last_success_at.is_some());
+        assert_eq!(snapshot.core.feeds[0].fetch_error, None);
+        assert_eq!(snapshot.core.entries.len(), 2);
+        assert_eq!(snapshot.core.entries[0].feed_id, 1);
+        assert_eq!(snapshot.core.entries[0].title, "Entry 1");
+        assert_eq!(snapshot.core.entries[1].title, "Entry 2");
     }
 
     let LoadedState { state: persisted, warning } = load_state();
     assert!(warning.is_none());
-    assert_eq!(persisted.entries.len(), 2);
-    assert_eq!(persisted.feeds[0].title.as_deref(), Some("Updated Feed"));
+    assert_eq!(persisted.core.entries.len(), 2);
+    assert_eq!(persisted.core.feeds[0].title.as_deref(), Some("Updated Feed"));
 
     clear_browser_state_storage();
 }
@@ -192,10 +201,13 @@ async fn browser_refresh_store_commit_updated_persists_feed_metadata_and_entries
 async fn browser_refresh_store_commit_failed_persists_error_without_success_timestamp() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(PersistedState {
-        next_feed_id: 1,
-        feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
-        ..PersistedState::default()
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState {
+            next_feed_id: 1,
+            feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
+            ..PersistedState::default()
+        },
+        ..BrowserState::default()
     }));
     let store = BrowserRefreshStore::new(state.clone());
 
@@ -217,20 +229,20 @@ async fn browser_refresh_store_commit_failed_persists_error_without_success_time
 
     {
         let snapshot = state.lock().expect("lock state");
-        assert_eq!(snapshot.feeds[0].etag.as_deref(), Some("etag-failed"));
+        assert_eq!(snapshot.core.feeds[0].etag.as_deref(), Some("etag-failed"));
         assert_eq!(
-            snapshot.feeds[0].last_modified.as_deref(),
+            snapshot.core.feeds[0].last_modified.as_deref(),
             Some("Fri, 03 Apr 2026 10:00:00 GMT")
         );
-        assert!(snapshot.feeds[0].last_fetched_at.is_some());
-        assert!(snapshot.feeds[0].last_success_at.is_none());
-        assert_eq!(snapshot.feeds[0].fetch_error.as_deref(), Some("network timeout"));
-        assert!(snapshot.entries.is_empty());
+        assert!(snapshot.core.feeds[0].last_fetched_at.is_some());
+        assert!(snapshot.core.feeds[0].last_success_at.is_none());
+        assert_eq!(snapshot.core.feeds[0].fetch_error.as_deref(), Some("network timeout"));
+        assert!(snapshot.core.entries.is_empty());
     }
 
     let LoadedState { state: persisted, warning } = load_state();
     assert!(warning.is_none());
-    assert_eq!(persisted.feeds[0].fetch_error.as_deref(), Some("network timeout"));
+    assert_eq!(persisted.core.feeds[0].fetch_error.as_deref(), Some("network timeout"));
 
     clear_browser_state_storage();
 }

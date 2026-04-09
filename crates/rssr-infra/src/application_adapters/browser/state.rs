@@ -15,6 +15,13 @@ pub const STORAGE_KEY: &str = "rssr-web-state-v1";
 pub const APP_STATE_STORAGE_KEY: &str = "rssr-web-app-state-v1";
 pub const ENTRY_FLAGS_STORAGE_KEY: &str = "rssr-web-entry-flags-v1";
 
+#[derive(Debug, Default, Clone)]
+pub struct BrowserState {
+    pub core: PersistedState,
+    pub app_state: PersistedAppStateSlice,
+    pub entry_flags: PersistedEntryFlagsSlice,
+}
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PersistedState {
     pub next_feed_id: i64,
@@ -22,8 +29,6 @@ pub struct PersistedState {
     pub feeds: Vec<PersistedFeed>,
     pub entries: Vec<PersistedEntry>,
     pub settings: rssr_domain::UserSettings,
-    #[serde(skip_serializing, skip_deserializing, default)]
-    pub last_opened_feed_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,70 +66,66 @@ pub struct PersistedEntry {
     pub updated_at_source: Option<OffsetDateTime>,
     pub first_seen_at: OffsetDateTime,
     pub content_hash: Option<String>,
-    #[serde(skip_serializing, skip_deserializing, default)]
-    pub is_read: bool,
-    #[serde(skip_serializing, skip_deserializing, default)]
-    pub is_starred: bool,
-    #[serde(skip_serializing, skip_deserializing, default)]
-    pub read_at: Option<OffsetDateTime>,
-    #[serde(skip_serializing, skip_deserializing, default)]
-    pub starred_at: Option<OffsetDateTime>,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
 }
 
 pub struct LoadedState {
-    pub state: PersistedState,
+    pub state: BrowserState,
     pub warning: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-struct PersistedAppStateSlice {
-    last_opened_feed_id: Option<i64>,
+pub struct PersistedAppStateSlice {
+    pub last_opened_feed_id: Option<i64>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-struct PersistedEntryFlagsSlice {
-    entries: Vec<PersistedEntryFlag>,
+pub struct PersistedEntryFlagsSlice {
+    pub entries: Vec<PersistedEntryFlag>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PersistedEntryFlag {
-    id: i64,
-    is_read: bool,
-    is_starred: bool,
-    read_at: Option<OffsetDateTime>,
-    starred_at: Option<OffsetDateTime>,
+pub struct PersistedEntryFlag {
+    pub id: i64,
+    pub is_read: bool,
+    pub is_starred: bool,
+    pub read_at: Option<OffsetDateTime>,
+    pub starred_at: Option<OffsetDateTime>,
 }
 
 pub fn load_state() -> LoadedState {
     let Some(storage) = browser_storage() else {
-        return LoadedState { state: PersistedState::default(), warning: None };
+        return LoadedState { state: BrowserState::default(), warning: None };
     };
 
     let raw = match storage.get_item(STORAGE_KEY) {
         Ok(Some(raw)) => raw,
         Ok(None) => {
-            return LoadedState { state: PersistedState::default(), warning: None };
+            return LoadedState { state: BrowserState::default(), warning: None };
         }
         Err(_) => {
             return LoadedState {
-                state: PersistedState::default(),
+                state: BrowserState::default(),
                 warning: Some("读取浏览器本地存储失败，已使用空状态启动。".to_string()),
             };
         }
     };
 
     match serde_json::from_str(&raw).context("解析浏览器本地状态失败") {
-        Ok(mut state) => {
-            apply_sidecar_overlays(&storage, &mut state);
-            LoadedState { state, warning: None }
-        }
+        Ok(core) => LoadedState {
+            state: BrowserState {
+                core,
+                app_state: load_app_state_slice(&storage).unwrap_or_default(),
+                entry_flags: load_entry_flags_slice(&storage).unwrap_or_default(),
+            },
+            warning: None,
+        },
         Err(error) => {
             backup_corrupt_state(&storage, &raw);
             let _ = storage.remove_item(STORAGE_KEY);
             LoadedState {
-                state: PersistedState::default(),
+                state: BrowserState::default(),
                 warning: Some(format!(
                     "浏览器本地状态已损坏，已保留损坏副本并使用空状态启动：{error}"
                 )),
@@ -133,35 +134,28 @@ pub fn load_state() -> LoadedState {
     }
 }
 
-pub fn save_state_snapshot(state: PersistedState) -> anyhow::Result<()> {
-    save_serialized_state(serde_json::to_string(&state)?)?;
-    save_app_state_slice_internal(state.last_opened_feed_id)?;
-    save_entry_flags_slice_internal(&state.entries)?;
+pub fn save_state_snapshot(state: BrowserState) -> anyhow::Result<()> {
+    save_serialized_state(serde_json::to_string(&state.core)?)?;
+    save_app_state_slice_internal(&state.app_state)?;
+    save_entry_flags_slice_internal(&state.entry_flags)?;
     Ok(())
 }
 
 pub fn save_app_state_slice(last_opened_feed_id: Option<i64>) -> anyhow::Result<()> {
-    save_app_state_slice_internal(last_opened_feed_id)
+    save_app_state_slice_internal(&PersistedAppStateSlice { last_opened_feed_id })
 }
 
-pub fn save_entry_flag_patch(entry: &PersistedEntry) -> anyhow::Result<()> {
+pub fn save_entry_flag_patch(flag: PersistedEntryFlag) -> anyhow::Result<()> {
     let Some(storage) = browser_storage() else {
         return Ok(());
     };
 
     let mut slice = load_entry_flags_slice(&storage).unwrap_or_default();
-    let patch = PersistedEntryFlag {
-        id: entry.id,
-        is_read: entry.is_read,
-        is_starred: entry.is_starred,
-        read_at: entry.read_at,
-        starred_at: entry.starred_at,
-    };
 
-    if let Some(existing) = slice.entries.iter_mut().find(|current| current.id == entry.id) {
-        *existing = patch;
+    if let Some(existing) = slice.entries.iter_mut().find(|current| current.id == flag.id) {
+        *existing = flag;
     } else {
-        slice.entries.push(patch);
+        slice.entries.push(flag);
     }
 
     save_storage_key(&storage, ENTRY_FLAGS_STORAGE_KEY, serde_json::to_string(&slice)?)
@@ -188,69 +182,43 @@ fn save_storage_key(storage: &Storage, key: &str, raw: String) -> anyhow::Result
     storage.set_item(key, &raw).map_err(|_| anyhow::anyhow!("写入浏览器本地存储失败"))
 }
 
-fn save_app_state_slice_internal(last_opened_feed_id: Option<i64>) -> anyhow::Result<()> {
+fn save_app_state_slice_internal(slice: &PersistedAppStateSlice) -> anyhow::Result<()> {
     let Some(storage) = browser_storage() else {
         return Ok(());
     };
 
-    let raw = serde_json::to_string(&PersistedAppStateSlice { last_opened_feed_id })?;
+    let raw = serde_json::to_string(slice)?;
     save_storage_key(&storage, APP_STATE_STORAGE_KEY, raw)
 }
 
-fn save_entry_flags_slice_internal(entries: &[PersistedEntry]) -> anyhow::Result<()> {
+fn save_entry_flags_slice_internal(slice: &PersistedEntryFlagsSlice) -> anyhow::Result<()> {
     let Some(storage) = browser_storage() else {
         return Ok(());
-    };
-
-    let slice = PersistedEntryFlagsSlice {
-        entries: entries
-            .iter()
-            .map(|entry| PersistedEntryFlag {
-                id: entry.id,
-                is_read: entry.is_read,
-                is_starred: entry.is_starred,
-                read_at: entry.read_at,
-                starred_at: entry.starred_at,
-            })
-            .collect(),
     };
 
     save_storage_key(&storage, ENTRY_FLAGS_STORAGE_KEY, serde_json::to_string(&slice)?)
 }
 
-fn load_entry_flags_slice(storage: &Storage) -> Option<PersistedEntryFlagsSlice> {
-    let raw = storage.get_item(ENTRY_FLAGS_STORAGE_KEY).ok().flatten()?;
-    serde_json::from_str(&raw).ok()
-}
-
-fn apply_sidecar_overlays(storage: &Storage, state: &mut PersistedState) {
-    if let Ok(Some(raw)) = storage.get_item(APP_STATE_STORAGE_KEY) {
-        match serde_json::from_str::<PersistedAppStateSlice>(&raw) {
-            Ok(app_state) => state.last_opened_feed_id = app_state.last_opened_feed_id,
-            Err(_) => {
-                backup_corrupt_blob(storage, APP_STATE_STORAGE_KEY, &raw);
-                let _ = storage.remove_item(APP_STATE_STORAGE_KEY);
-            }
+fn load_app_state_slice(storage: &Storage) -> Option<PersistedAppStateSlice> {
+    let raw = storage.get_item(APP_STATE_STORAGE_KEY).ok().flatten()?;
+    match serde_json::from_str(&raw) {
+        Ok(slice) => Some(slice),
+        Err(_) => {
+            backup_corrupt_blob(storage, APP_STATE_STORAGE_KEY, &raw);
+            let _ = storage.remove_item(APP_STATE_STORAGE_KEY);
+            None
         }
     }
+}
 
-    if let Ok(Some(raw)) = storage.get_item(ENTRY_FLAGS_STORAGE_KEY) {
-        match serde_json::from_str::<PersistedEntryFlagsSlice>(&raw) {
-            Ok(slice) => {
-                for flag in slice.entries {
-                    if let Some(entry) = state.entries.iter_mut().find(|entry| entry.id == flag.id)
-                    {
-                        entry.is_read = flag.is_read;
-                        entry.is_starred = flag.is_starred;
-                        entry.read_at = flag.read_at;
-                        entry.starred_at = flag.starred_at;
-                    }
-                }
-            }
-            Err(_) => {
-                backup_corrupt_blob(storage, ENTRY_FLAGS_STORAGE_KEY, &raw);
-                let _ = storage.remove_item(ENTRY_FLAGS_STORAGE_KEY);
-            }
+fn load_entry_flags_slice(storage: &Storage) -> Option<PersistedEntryFlagsSlice> {
+    let raw = storage.get_item(ENTRY_FLAGS_STORAGE_KEY).ok().flatten()?;
+    match serde_json::from_str(&raw) {
+        Ok(slice) => Some(slice),
+        Err(_) => {
+            backup_corrupt_blob(storage, ENTRY_FLAGS_STORAGE_KEY, &raw);
+            let _ = storage.remove_item(ENTRY_FLAGS_STORAGE_KEY);
+            None
         }
     }
 }
@@ -260,7 +228,16 @@ fn backup_corrupt_blob(storage: &Storage, key: &str, raw: &str) {
     let _ = storage.set_item(&backup_key, raw);
 }
 
-pub fn to_domain_entry(entry: &PersistedEntry) -> anyhow::Result<Entry> {
+pub fn last_opened_feed_id(state: &BrowserState) -> Option<i64> {
+    state.app_state.last_opened_feed_id
+}
+
+pub fn entry_flags<'a>(state: &'a BrowserState, entry_id: i64) -> Option<&'a PersistedEntryFlag> {
+    state.entry_flags.entries.iter().find(|flag| flag.id == entry_id)
+}
+
+pub fn to_domain_entry(state: &BrowserState, entry: &PersistedEntry) -> anyhow::Result<Entry> {
+    let flags = entry_flags(state, entry.id);
     Ok(Entry {
         id: entry.id,
         feed_id: entry.feed_id,
@@ -276,10 +253,10 @@ pub fn to_domain_entry(entry: &PersistedEntry) -> anyhow::Result<Entry> {
         updated_at_source: entry.updated_at_source,
         first_seen_at: entry.first_seen_at,
         content_hash: entry.content_hash.clone(),
-        is_read: entry.is_read,
-        is_starred: entry.is_starred,
-        read_at: entry.read_at,
-        starred_at: entry.starred_at,
+        is_read: flags.map(|flag| flag.is_read).unwrap_or(false),
+        is_starred: flags.map(|flag| flag.is_starred).unwrap_or(false),
+        read_at: flags.and_then(|flag| flag.read_at),
+        starred_at: flags.and_then(|flag| flag.starred_at),
         created_at: entry.created_at,
         updated_at: entry.updated_at,
     })
@@ -336,10 +313,6 @@ pub fn upsert_entries(
                 updated_at_source: entry.updated_at_source,
                 first_seen_at: now,
                 content_hash,
-                is_read: false,
-                is_starred: false,
-                read_at: None,
-                starred_at: None,
                 created_at: now,
                 updated_at: now,
             });

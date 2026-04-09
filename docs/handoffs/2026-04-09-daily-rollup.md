@@ -688,3 +688,132 @@
 - 当前剩下的结构差异主要是**有意设计差异**，不再是历史兼容包袱：
   - `settings_page` 仍然是“组合壳 + save/sync/themes 子 session”，这是刻意保持的页面边界
   - 还没有引入全局统一命令面，这也是刻意延后，而不是过渡残留
+
+## 追加：继续按重构优先级收口
+
+### settings_page 主加载链 session 化
+
+- 本轮新增：
+  - [effect.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/effect.rs)
+  - [intent.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/intent.rs)
+  - [runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/runtime.rs)
+- [session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/session.rs) 不再直接在 `load()` 里调用 `AppServices::shared().await` 和 `services.load_settings().await`。
+- 现在改成：
+  - 页面壳触发 `session.load()`
+  - session 只发 `SettingsPageEffect::LoadSettings`
+  - runtime 执行副作用
+  - runtime 返回 `SettingsPageIntent`
+  - session 统一 `dispatch(...)`
+- 新增了页面级 helper：
+  - `apply_loaded_settings(...)`
+  - `restore_settings(...)`
+  - `set_status(...)`
+- 结果：
+  - 设置页主加载链不再是“页面壳 + session 直调 service”的半旧模式。
+  - 页面级状态写回入口比之前统一。
+
+### settings_page sync 与页面 session 的边界统一
+
+- [sync/runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/runtime.rs) 不再返回：
+  - `status_message`
+  - `status_tone`
+  - `imported_settings`
+  这类 ad-hoc 结构。
+- 现在它直接产出 `Vec<SettingsPageIntent>`：
+  - `SettingsLoaded(...)`
+  - `SetStatus { ... }`
+- [sync/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/session.rs) 也不再手动改：
+  - `preset_choice`
+  - `draft`
+  - `theme.settings`
+  - `status`
+- 现在的边界变成：
+  - `sync session` 只负责自己的局部状态，例如 `pending_remote_pull`
+  - 页面级设置、主题、状态提示统一回到 `SettingsPageSession`
+- 同时 [save/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/save/session.rs) 也改成复用页面 session 的恢复与加载逻辑，不再自己散改 `theme/draft/preset_choice`
+
+### entries_page 的 workspace hook 再收一层
+
+- 之前 [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs) 里有 4 条独立加载 resource：
+  - `remember_last_opened_feed`
+  - `load_preferences`
+  - `load_feeds`
+  - `load_entries`
+- 本轮把前三条合并成一个更清楚的 workspace 启动 effect：
+  - [effect.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/effect.rs) 新增 `Bootstrap { feed_id, load_preferences, load_feeds }`
+  - [session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/session.rs) 新增 `bootstrap(...)`
+  - [runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/runtime.rs) 统一执行：
+    - remember last feed
+    - load preferences
+    - load feeds
+- 现在页面壳只保留：
+  - 一条 bootstrap resource
+  - 一条 entries resource
+  - 一条 preferences save effect
+- 结果：
+  - `entries_page` 的 hook 编排明显更薄
+  - workspace 生命周期入口更明确
+
+### browser state 第二轮 slice 化
+
+- 本轮把 browser state 从“单个 `PersistedState` + 隐式 sidecar 覆盖”进一步收成了显式复合结构：
+  - [state.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/state.rs)
+  - 新增 `BrowserState { core, app_state, entry_flags }`
+- 主状态现在只承担核心内容：
+  - `feeds`
+  - `entries` 主体内容
+  - `settings`
+  - `next_feed_id`
+  - `next_entry_id`
+- `last_opened_feed_id` 已正式移出主状态，进入：
+  - `PersistedAppStateSlice`
+- entry flags 也已正式移出主 entry 结构，进入：
+  - `PersistedEntryFlagsSlice`
+  - `PersistedEntryFlag`
+- [PersistedEntry](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/state.rs) 现在不再携带：
+  - `is_read`
+  - `is_starred`
+  - `read_at`
+  - `starred_at`
+- [query.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/query.rs) 和 [adapters.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/adapters.rs) 已改成围绕 `BrowserState` 工作：
+  - feed / entry / settings 仓储改读 `core`
+  - app-state adapter 改读写 `app_state`
+  - read/starred 改读写 `entry_flags`
+- wasm browser harness 也同步改到了新的显式 slice 结构：
+  - [wasm_refresh_contract_harness.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/tests/wasm_refresh_contract_harness.rs)
+  - [wasm_subscription_contract_harness.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/tests/wasm_subscription_contract_harness.rs)
+  - [wasm_config_exchange_contract_harness.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/tests/wasm_config_exchange_contract_harness.rs)
+- 结果：
+  - browser state 已不再停留在“逻辑 slice 化、内存结构仍然混在一起”的半步状态
+  - adapter/query/tests 的边界都更清晰
+
+## 这一轮验证
+
+### 自动化验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app -p rssr-infra`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
+- `cargo test -p rssr-infra --test test_subscription_contract_harness --test test_config_exchange_contract_harness`：通过
+- `cargo test -p rssr-infra --target wasm32-unknown-unknown --test wasm_subscription_contract_harness --test wasm_config_exchange_contract_harness --test wasm_refresh_contract_harness --no-run`：通过
+- `git diff --check`：通过
+
+### Chrome 实际回归
+
+- 使用 Chrome MCP 对 web 端做了实际检查。
+- 结果：
+  - `/entries`：正常进入，标题与空状态正常显示
+  - `/feeds`：正常进入，统计卡片、订阅输入与配置交换区正常显示
+  - `/settings`：正常进入
+  - 在设置页点击主题预设 `Newsprint`：
+    - 页面出现“已应用示例主题：Newsprint。”
+    - 说明 `themes -> save session -> page session` 这条统一链路实际可用
+  - console：没有新的 `error` / `warn`
+
+## 本轮判断
+
+- `settings_page` 的页面级加载链和 `sync` 边界已经明显收口，不再各自私下直写页面状态。
+- `entries_page` 的 workspace hook 已比之前更像单一工作台生命周期入口。
+- browser state 已从“主状态 + sidecar 逻辑覆盖”推进到显式 slice 结构，长期维护成本更低。
+- 到目前为止，继续往上抽“全局命令面”仍然不值得；页面级 local workspace 的收口优先级仍然更高。
