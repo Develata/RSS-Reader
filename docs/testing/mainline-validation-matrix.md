@@ -86,4 +86,4 @@
 - [全局浏览器回归报告](./global-browser-regression.md)
 - [手工回归测试清单](./manual-regression.md)
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
-- [2026-04-08-headless-phase1-inventory](/home/develata/gitclone/RSS-Reader/docs/handoffs/2026-04-08-headless-phase1-inventory.md)
+- [2026-04-08-daily-rollup](/home/develata/gitclone/RSS-Reader/docs/handoffs/2026-04-08-daily-rollup.md)
