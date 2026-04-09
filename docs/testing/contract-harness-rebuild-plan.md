@@ -260,7 +260,20 @@
 ### wasm / browser refresh contract harness
 
 - `bash scripts/setup_chrome_for_testing.sh`
+- `bash scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness`
 - `bash scripts/run_wasm_refresh_contract_harness.sh`
+
+### wasm / browser subscription contract harness
+
+- `bash scripts/setup_chrome_for_testing.sh`
+- `bash scripts/run_wasm_contract_harness.sh wasm_subscription_contract_harness`
+- `bash scripts/run_wasm_subscription_contract_harness.sh`
+
+### wasm / browser config exchange contract harness
+
+- `bash scripts/setup_chrome_for_testing.sh`
+- `bash scripts/run_wasm_contract_harness.sh wasm_config_exchange_contract_harness`
+- `bash scripts/run_wasm_config_exchange_contract_harness.sh`
 
 当前仓库不再使用：
 
@@ -283,7 +296,7 @@
 
 截至当前主线：
 
-- `refresh contract harness` 已有 host / sqlite baseline
+- `refresh contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 - `subscription contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 - `config exchange contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 

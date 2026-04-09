@@ -81,6 +81,13 @@ jobs:
 
   wasm-browser-contract:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        harness:
+          - wasm_refresh_contract_harness
+          - wasm_subscription_contract_harness
+          - wasm_config_exchange_contract_harness
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -107,8 +114,8 @@ jobs:
       - name: Setup Chrome for Testing
         run: bash scripts/setup_chrome_for_testing.sh
 
-      - name: Run wasm refresh contract harness
-        run: bash scripts/run_wasm_refresh_contract_harness.sh
+      - name: Run wasm browser contract harness
+        run: bash scripts/run_wasm_contract_harness.sh "${{ matrix.harness }}"
 
   android-smoke:
     runs-on: ubuntu-latest
