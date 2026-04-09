@@ -159,6 +159,11 @@
 - 删除后 entry 清理
 - `last_opened_feed_id` 清理
 
+当前进度：
+
+- 已完成 host / sqlite baseline
+- browser fixture 尚未开始
+
 ### 阶段 3：config exchange contract harness
 
 建议新文件：
