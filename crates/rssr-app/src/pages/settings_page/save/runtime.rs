@@ -1,6 +1,9 @@
 use rssr_domain::UserSettings;
 
-use crate::bootstrap::AppServices;
+use crate::{
+    pages::settings_page::intent::SettingsPageIntent,
+    ui::{UiCommand, UiIntent, execute_ui_command},
+};
 
 use super::effect::SettingsPageSaveEffect;
 
@@ -12,22 +15,31 @@ pub(crate) struct SettingsPageSaveRuntimeOutcome {
 pub(crate) async fn execute_settings_page_save_effect(
     effect: SettingsPageSaveEffect,
 ) -> SettingsPageSaveRuntimeOutcome {
-    match effect {
+    let command = match effect {
         SettingsPageSaveEffect::SaveAppearance { settings, success_message } => {
-            match AppServices::shared().await {
-                Ok(services) => match services.save_settings(&settings).await {
-                    Ok(()) => SettingsPageSaveRuntimeOutcome {
-                        status_message: success_message,
-                        saved_settings: Some(settings),
-                    },
-                    Err(err) => error(format!("保存设置失败：{err}")),
-                },
-                Err(err) => error(format!("初始化应用失败：{err}")),
+            UiCommand::SettingsSaveAppearance { settings, success_message }
+        }
+    };
+
+    let mut status_message = String::new();
+    let mut saved_settings = None;
+
+    for intent in execute_ui_command(command).await.intents {
+        match intent {
+            UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(settings)) => {
+                saved_settings = Some(settings);
             }
+            UiIntent::SettingsPage(SettingsPageIntent::SetStatus { message, .. })
+            | UiIntent::SetStatus { message, .. } => {
+                status_message = message;
+            }
+            UiIntent::AuthenticatedShellLoaded(_)
+            | UiIntent::StartupRouteResolved(_)
+            | UiIntent::EntriesPage(_)
+            | UiIntent::FeedsPage(_)
+            | UiIntent::ReaderPage(_) => {}
         }
     }
-}
 
-fn error(message: impl Into<String>) -> SettingsPageSaveRuntimeOutcome {
-    SettingsPageSaveRuntimeOutcome { status_message: message.into(), saved_settings: None }
+    SettingsPageSaveRuntimeOutcome { status_message, saved_settings }
 }

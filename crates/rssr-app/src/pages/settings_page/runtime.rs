@@ -1,4 +1,4 @@
-use crate::bootstrap::AppServices;
+use crate::ui::{UiCommand, UiIntent, execute_ui_command};
 
 use super::{effect::SettingsPageEffect, intent::SettingsPageIntent};
 
@@ -9,24 +9,24 @@ pub(crate) struct SettingsPageRuntimeOutcome {
 pub(crate) async fn execute_settings_page_effect(
     effect: SettingsPageEffect,
 ) -> SettingsPageRuntimeOutcome {
-    match effect {
-        SettingsPageEffect::LoadSettings => match AppServices::shared().await {
-            Ok(services) => match services.load_settings().await {
-                Ok(settings) => SettingsPageRuntimeOutcome {
-                    intents: vec![SettingsPageIntent::SettingsLoaded(settings)],
-                },
-                Err(err) => status_error(format!("读取设置失败：{err}")),
-            },
-            Err(err) => status_error(format!("初始化应用失败：{err}")),
-        },
-    }
-}
-
-fn status_error(message: impl Into<String>) -> SettingsPageRuntimeOutcome {
     SettingsPageRuntimeOutcome {
-        intents: vec![SettingsPageIntent::SetStatus {
-            message: message.into(),
-            tone: "error".to_string(),
-        }],
+        intents: execute_ui_command(match effect {
+            SettingsPageEffect::LoadSettings => UiCommand::SettingsLoad,
+        })
+        .await
+        .intents
+        .into_iter()
+        .filter_map(|intent| match intent {
+            UiIntent::SettingsPage(intent) => Some(intent),
+            UiIntent::SetStatus { message, tone } => {
+                Some(SettingsPageIntent::SetStatus { message, tone })
+            }
+            UiIntent::AuthenticatedShellLoaded(_)
+            | UiIntent::StartupRouteResolved(_)
+            | UiIntent::EntriesPage(_)
+            | UiIntent::FeedsPage(_)
+            | UiIntent::ReaderPage(_) => None,
+        })
+        .collect(),
     }
 }

@@ -258,6 +258,97 @@
   - `load()`
   - `open_repository()`
   - 以及对 `theme / draft / preset_choice / status` 的访问器
+
+### 当日后续重构：全局 UI 命令面第一刀
+
+- 在 `crates/rssr-app/src/ui/` 下新增最小全局 UI 层骨架：
+  - `mod.rs`
+  - `commands.rs`
+  - `snapshot.rs`
+  - `runtime.rs`
+- 这一刀的目标不是引入新的大 store，而是先建立统一的：
+  - `UiCommand`
+  - `UiIntent`
+  - `UiRuntime`
+- `App()` 根壳不再直接执行：
+  - `AppServices::shared()`
+  - `load_settings()`
+  - `ensure_auto_refresh_started()`
+- 这些初始化动作现在改走：
+  - `UiCommand::LoadAuthenticatedShell`
+  - `UiIntent::AuthenticatedShellLoaded`
+- `StartupPage` 也不再在页面函数里直接做“读取设置 -> 决定启动路由 -> 跳转”，而是改走：
+  - `UiCommand::ResolveStartupRoute`
+  - `UiIntent::StartupRouteResolved`
+- 这一步的意义不是减少几行代码，而是把最后两个明显的 UI 壳层直连 service 点先拔掉，为后续把页面退化成 headless active interface 的语义壳打基础。
+
+### 当日后续重构：entries / reader / feeds 接入统一 UiRuntime
+
+- `entries_page`：
+  - 删掉旧的 `queries.rs`
+  - 页面 runtime 不再直接触碰 `AppServices`
+  - `Bootstrap / LoadEntries / ToggleRead / ToggleStarred / SaveBrowsingPreferences` 全部改为先映射到 `UiCommand`
+  - 再由 `UiRuntime` 回灌 `EntriesPageIntent`
+- `reader_page`：
+  - `LoadEntry / ToggleRead / ToggleStarred` 三类 effect 也改成统一映射到 `UiCommand`
+  - `reader_page/runtime.rs` 不再自己保存一套独立 service 调用与正文选择流程
+  - 正文装配、状态消息与 reload intent 现在由 `UiRuntime` 统一产出
+- `feeds_page`：
+  - 删掉旧的 `dispatch.rs`
+  - 删掉旧的 `queries.rs`
+  - `LoadSnapshot / AddFeed / Refresh / Remove / ImportExport` 这组原先分散在 `queries + dispatch` 的 service 调用统一提升到 `UiRuntime`
+  - 页面本地 runtime 现在只负责：
+    - `FeedsPageEffect -> UiCommand` 映射
+    - 剪贴板读取这类浏览器局部能力
+    - `UiIntent -> FeedsPageIntent` 转发
+- 到这一步为止，`entries / reader / feeds` 三个主页面已经进入同一类总线形状：
+  - 页面 session 发 page-local effect
+  - page-local runtime 做薄映射
+  - `UiRuntime` 负责真正的 service / application 调用
+  - 再回灌 page-local intent
+- 也就是说，页面不再各自保存第二套“直接碰 service 的 runtime 语义”，已经开始朝“页面只是 active shell，行为统一由全局 runtime 总线承接”的方向收口。
+
+### 当日后续重构：settings_page service 路径并入 UiRuntime
+
+- 在 `entries / reader / feeds` 已经接入 `UiRuntime` 之后，继续把 `settings_page` 相关的真实 service 路径也统一并入总线：
+  - `settings_page/runtime.rs` 的主加载链
+  - `settings_page/save/runtime.rs` 的保存链
+  - `settings_page/sync/runtime.rs` 的 WebDAV push/pull 链
+- 为此扩展了全局 UI 命令面：
+  - `UiCommand::SettingsLoad`
+  - `UiCommand::SettingsSaveAppearance`
+  - `UiCommand::SettingsPushConfig`
+  - `UiCommand::SettingsPullConfig`
+- 同时引入 `UiIntent::SettingsPage(SettingsPageIntent)`，让设置页现有的 page-local intent 可以直接作为总线回灌目标，而不需要再保留一套平行的 runtime 返回协议。
+- 这次并没有把 `open_repository()` 这类纯前端壳行为硬塞进总线：
+  - 该动作不涉及 `AppServices`
+  - 仍保留在 `SettingsPageSession`
+  - 这样总线只负责真正需要 application / infra 的命令，边界更干净
+- 完成这一步之后，四个主页面的真实 service 访问都已经有了同一归宿：
+  - `entries_page`
+  - `reader_page`
+  - `feeds_page`
+  - `settings_page`
+- 页面侧现在保留的 runtime 更多只是：
+  - page-local effect 到 `UiCommand` 的薄映射
+  - 浏览器局部能力（例如 clipboard）
+  - page-local intent 的回灌
+- 也就是说，`rssr-app` 正在从“每页各自一套半独立 runtime”转向：
+  - 页面只保留语义壳和局部交互接口
+  - `UiRuntime` 统一承接真实行为
+  - CSS 后续可以在不破坏行为层的前提下更彻底接管布局与显示
+
+### 当前验证与限制补充
+
+- 本轮 UI 总线扩展后的验证：
+  - `cargo fmt --all`
+  - `cargo check -p rssr-app`
+  - `cargo check -p rssr-app --target wasm32-unknown-unknown`
+  - `cargo check -p rssr-app --target aarch64-linux-android`
+  - `git diff --check`
+- 这次尝试补新的 Chrome MCP 页面实测时，MCP 侧仍返回：
+  - `Transport closed`
+- 因此本轮没有新增浏览器自动化验收记录；当前浏览器侧验证受限于 MCP transport，而不是代码编译或页面路由本身失败。
 - 这轮没有把设置页改成新的大状态机，也没有改变 `save` / `sync` / `themes` 的能力边界；目标只是进一步减少 view shell 中零散的状态线头和服务初始化逻辑，让页面壳更接近“只组装 session 与 section”。
 
 ### 当日后续重构：feeds 完整 local session / settings 状态边界再收口
@@ -816,4 +907,97 @@
 - `settings_page` 的页面级加载链和 `sync` 边界已经明显收口，不再各自私下直写页面状态。
 - `entries_page` 的 workspace hook 已比之前更像单一工作台生命周期入口。
 - browser state 已从“主状态 + sidecar 逻辑覆盖”推进到显式 slice 结构，长期维护成本更低。
-- 到目前为止，继续往上抽“全局命令面”仍然不值得；页面级 local workspace 的收口优先级仍然更高。
+- 到这里，继续只做 page-local runtime 已经开始接近过渡态；如果后续目标是 `headless active interface + CSS 完全分离 + infra`，就应开始往统一 UI 命令面推进。
+
+## 追加：全局 UI 命令面第一刀
+
+### 背景与目标
+
+- 在页面层一致性审查后，发现真正还在 UI 壳层直接碰 service 的核心点主要是：
+  - [App()](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/app.rs)
+  - [StartupPage](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)
+- 为了把 UI 继续往 `headless active interface` 推，而不是无限细化各页 local runtime，本轮先落了最小全局总线骨架。
+
+### 本轮新增
+
+- 新增 [ui/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/mod.rs)
+- 新增 [ui/commands.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/commands.rs)
+- 新增 [ui/snapshot.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/snapshot.rs)
+- 新增 [ui/runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime.rs)
+- [main.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/main.rs) 已注册新 `ui` 模块
+
+### 最小总线骨架
+
+- 当前只先定义两条命令：
+  - `UiCommand::LoadAuthenticatedShell`
+  - `UiCommand::ResolveStartupRoute`
+- 当前只先落两类 snapshot / intent：
+  - `AuthenticatedShellSnapshot`
+  - `StartupRouteSnapshot`
+  - `UiIntent::{AuthenticatedShellLoaded, StartupRouteResolved, SetStatus}`
+- [ui/runtime.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime.rs) 现在是这条最小统一入口：
+  - 接收 `UiCommand`
+  - 调 `AppServices`
+  - 产出 `UiIntent`
+
+### App 根壳接入
+
+- [App()](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/app.rs) 不再在认证通过后直接：
+  - `AppServices::shared()`
+  - `load_settings()`
+  - `ensure_auto_refresh_started()`
+- 现在改成：
+  - `execute_ui_command(UiCommand::LoadAuthenticatedShell)`
+  - 再应用 `UiIntent::AuthenticatedShellLoaded(...)`
+- 结果：
+  - 根壳不再直接碰 service 初始化细节
+  - settings hydrate 和 auto refresh 启动都收进了最小 UI runtime
+
+### StartupPage 接入
+
+- [StartupPage](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs) 不再直接：
+  - `AppServices::shared()`
+  - `load_settings()`
+  - `load_last_opened_feed_id()`
+  - `list_feeds()`
+  - 自己拼 startup route
+- 现在改成：
+  - `execute_ui_command(UiCommand::ResolveStartupRoute)`
+  - 再处理：
+    - `UiIntent::StartupRouteResolved(...)`
+    - `UiIntent::SetStatus { ... }`
+- 结果：
+  - 启动页也从“页面壳自己决定启动导航”收进了统一 UI runtime
+
+### 这一刀后的判断
+
+- 这还不是完整“全局命令总线”，只是第一批最小切口。
+- 但现在已经有了：
+  - 统一 UI command 入口
+  - 统一 UI runtime 执行入口
+  - 统一 UI snapshot / intent 回灌形式
+- 这意味着后续继续迁：
+  - `entries`
+  - `reader`
+  - `feeds`
+  - `settings`
+  就不需要再新起一套 page-local 风格，而可以逐步吸收到同一总线。
+
+## 追加验证
+
+### 自动化验证
+
+- `cargo fmt --all`：通过
+- `cargo check -p rssr-app`：通过
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过
+- `git diff --check`：通过
+
+### Web 实测说明
+
+- 本轮原计划使用 Chrome MCP 继续验证 `/` 启动页与 authenticated shell。
+- 但在执行 MCP 导航前，Chrome MCP transport 会话中断，工具侧返回 `Transport closed`，因此本轮未能补做新的浏览器实测。
+- 当前可以确认的是：
+  - 代码层编译通过
+  - bus 第一刀只影响 `App()` 与 `StartupPage`
+  - 其余页面未被进一步改写

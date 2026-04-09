@@ -1,6 +1,6 @@
 mod appearance;
 mod effect;
-mod intent;
+pub(crate) mod intent;
 mod preferences;
 mod runtime;
 mod save;
