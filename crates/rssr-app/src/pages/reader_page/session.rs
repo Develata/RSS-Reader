@@ -3,8 +3,8 @@ use dioxus::prelude::*;
 use crate::bootstrap::ReaderNavigation;
 
 use super::{
-    reader_page_bindings::ReaderPageBindings, reader_page_effect::ReaderPageEffect,
-    reader_page_runtime::execute_reader_page_effect, reader_page_state::ReaderPageState,
+    bindings::ReaderPageBindings, effect::ReaderPageEffect, runtime::execute_reader_page_effect,
+    state::ReaderPageState,
 };
 
 #[derive(Clone, Copy)]

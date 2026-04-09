@@ -3,8 +3,8 @@
 - 日期：2026-04-09
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：d8b046d
-- 相关 commit：3318d5e, 2937232, 92fb6e1, 07391a3, 4d11787, 4d0d270, 9cfde8e, aede229, e7a14ad, 8cf8b53, 049a8ab, c9c13fa, a592d40, 781bf1a, 682da79, d8b046d, pending
+- 当前 HEAD：0047269
+- 相关 commit：3318d5e, 2937232, 92fb6e1, 07391a3, 4d11787, 4d0d270, 9cfde8e, aede229, e7a14ad, 8cf8b53, 049a8ab, c9c13fa, a592d40, 781bf1a, 682da79, d8b046d, f1bc8a8, 30bb036, 722e5ad, 01a0365, 0047269, pending
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -30,9 +30,13 @@
 - `781bf1a` `test: add wasm subscription contract harness`
 - `682da79` `test: add config exchange contract harness`
 - `d8b046d` `test: unify wasm contract harness runner`
+- `f1bc8a8` `fix: stabilize rssr-web auth test and wasm runner`
+- `30bb036` `ci: only publish docker images for version tags`
+- `722e5ad` `test: add local linux ci container`
+- `01a0365` `fix: support non-interactive local ci runs`
+- `0047269` `fix: resolve wasm browser runner issues and enhance Chrome setup script`
 - `pending` 当前这轮 handoff 按日期整理与补细节
-- `pending` 当前这轮本地 CI 容器非交互 `--cmd` 路径修复
-- `pending` 当前这轮 wasm browser runner 根因修复
+- `pending` 当前这轮页面模块目录化与 workspace 结构统一
 
 ## 影响范围
 
@@ -181,6 +185,80 @@
   - `bash scripts/run_ci_local_container.sh --cmd 'cargo test -p rssr-web -- --nocapture'`
   均能正常执行
 
+### 当日后续重构：页面模块目录化与 workspace 结构统一
+
+- 将 `rssr-app` 页面层里已经成型的局部 workspace/session 结构，正式从“平铺文件”收成“目录模块”：
+  - `crates/rssr-app/src/pages/entries_page/`
+  - `crates/rssr-app/src/pages/reader_page/`
+  - `crates/rssr-app/src/pages/settings_page/`
+- `entries_page` 现在统一落在一个显式模块下：
+  - `mod.rs`
+  - `bindings.rs`
+  - `cards.rs`
+  - `controls.rs`
+  - `effect.rs`
+  - `groups.rs`
+  - `intent.rs`
+  - `presenter.rs`
+  - `queries.rs`
+  - `reducer.rs`
+  - `runtime.rs`
+  - `session.rs`
+  - `state.rs`
+- `reader_page` 也从平铺的 `reader_page_*` 文件统一成目录模块：
+  - `mod.rs`
+  - `bindings.rs`
+  - `effect.rs`
+  - `intent.rs`
+  - `reducer.rs`
+  - `runtime.rs`
+  - `session.rs`
+  - `state.rs`
+  - `support.rs`
+- `settings_page` 则进一步收成更接近能力边界的层次：
+  - `appearance.rs`
+  - `preferences.rs`
+  - `save/{mod,effect,runtime,session,state}.rs`
+  - `sync/{mod,effect,runtime,session,state}.rs`
+  - `themes/{mod,lab,presets,theme_apply,theme_io,theme_preset,theme_validation}.rs`
+- `feeds_page` 也不再保留“单文件页面 + 邻接 sections 目录”的旧形状，而是统一为：
+  - `feeds_page/mod.rs`
+  - `feeds_page/{bindings,commands,dispatch,queries}.rs`
+  - `feeds_page/sections/{mod,compose,config_exchange,saved,support}.rs`
+- `crates/rssr-app/src/pages.rs` 不再继续充当大号平铺注册表，页面内核逻辑回收到各自模块目录内部。
+- 这轮重构不改变页面行为，不引入新功能，目标是统一页面内核的物理结构，使已经形成的 session/workspace 模式更可维护、更可搜索，也让后续继续收薄 view shell 时不需要在几十个 `*_page_*` 平铺文件中来回跳转。
+- 这轮完成后，`entries_page` / `feeds_page` / `reader_page` / `settings_page` 四个页面模块都已经进入同一类目录模块形状；后续如果继续统一页面模式，可以直接沿目录模块继续，而不必再先做一次物理文件重排。
+
+### 当日后续重构：feeds/settings view shell 再收薄
+
+- 在目录化完成后，继续把 `feeds_page` 与 `settings_page` 页面的壳层入口再往内部收一层：
+  - `crates/rssr-app/src/pages/feeds_page/session.rs`
+  - `crates/rssr-app/src/pages/settings_page/session.rs`
+- `feeds_page` 的页面壳不再自己组装整组信号并直接调用 snapshot 查询函数，而是通过 `FeedsPageSession` 统一管理：
+  - `feed_url`
+  - `config_text`
+  - `opml_text`
+  - `pending_config_import`
+  - `pending_delete_feed`
+  - `feeds`
+  - `feed_count`
+  - `entry_count`
+  - `status`
+  - `status_tone`
+  - `load_snapshot()`
+- `settings_page` 的页面壳不再直接持有：
+  - `draft`
+  - `preset_choice`
+  - `status`
+  - `status_tone`
+  - `AppServices::shared() -> load_settings()`
+  - 打开 GitHub 仓库的错误处理
+- 这些入口现在统一落到 `SettingsPageSession`：
+  - `load()`
+  - `open_repository()`
+  - 以及对 `theme / draft / preset_choice / status` 的访问器
+- 这轮没有把设置页改成新的大状态机，也没有改变 `save` / `sync` / `themes` 的能力边界；目标只是进一步减少 view shell 中零散的状态线头和服务初始化逻辑，让页面壳更接近“只组装 session 与 section”。
+
 ### Contract harness 规划与重建
 
 - 新增 `docs/testing/contract-harness-rebuild-plan.md`，明确不直接复制旧分支 harness，而按当前主线重建。
@@ -258,6 +336,32 @@
   - 自动化验证
   - 手工验收
   - 风险判断
+
+## 验证与验收
+
+- `cargo fmt --all`
+- `cargo check -p rssr-app`
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`
+- `cargo check -p rssr-app --target aarch64-linux-android`
+- `git diff --check`
+
+结果：
+
+- 页面目录化与模块重命名后，host / wasm / Android 三个目标都编译通过。
+- `feeds/settings` view shell 再收薄后，host / wasm / Android 三个目标继续保持通过。
+- `git diff --check` 通过，没有引入格式或空白错误。
+- 这轮未改 UI 行为与业务逻辑，重点验收的是模块结构调整后跨目标路径、`include_str!` 相对路径、以及 session/workspace 内部引用是否仍然正确。
+
+## 当前状态 / 风险 / 待跟进
+
+- 状态：`commit: pending`
+- 当前目录化已经完成第一轮收口，但还没有继续把 `feeds_page` 也改成完全一致的目录模块。
+- 当前风险主要不是功能回退，而是：
+  - 后续如果继续改页面结构，需要保持 `pages.rs` 入口和内部 re-export 一致
+  - `settings_page` 目前虽然已目录化，但它仍然是“组合壳 + save/sync/themes 子能力”，不是像 `entries_page` 那样的完整单页状态机；这是刻意保留的边界，不应误当成未完成状态去强行统一
+- 建议下一步：
+  - 若继续沿重构线推进，优先评估是否把 `feeds_page` 也收成显式目录模块
+  - 或者转去做一轮更细的 view shell 收薄，继续减少页面壳中零散的 `use_resource/use_effect`
  重新汇入日汇总，避免目录干净了但信息丢失。
 
 ## 验证与验收

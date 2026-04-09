@@ -1,12 +1,14 @@
+mod effect;
+mod runtime;
+mod session;
+mod state;
+
 use dioxus::prelude::*;
 use rssr_domain::UserSettings;
 
 use crate::theme::ThemeController;
 
-use super::{
-    settings_page_sync_session::SettingsPageSyncSession,
-    settings_page_sync_state::SettingsPageSyncState,
-};
+use self::{session::SettingsPageSyncSession, state::SettingsPageSyncState};
 
 #[component]
 pub(crate) fn WebDavSettingsCard(

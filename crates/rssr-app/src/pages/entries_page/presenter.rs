@@ -2,12 +2,12 @@ use rssr_domain::{EntrySummary, is_entry_archived};
 use time::OffsetDateTime;
 
 use super::{
-    entries_page_groups::{
+    groups::{
         EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem, EntryMonthGroup,
         EntrySourceGroup, build_directory_months, build_directory_sources, build_group_nav_items,
         build_month_nav_items, group_entries_by_source_tree, group_entries_by_time_tree,
     },
-    entries_page_state::{EntriesPageState, EntryGroupingMode},
+    state::{EntriesPageState, EntryGroupingMode},
 };
 
 pub(crate) struct EntriesPagePresenter {

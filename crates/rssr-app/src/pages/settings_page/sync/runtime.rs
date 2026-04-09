@@ -2,7 +2,7 @@ use rssr_domain::UserSettings;
 
 use crate::bootstrap::AppServices;
 
-use super::settings_page_sync_effect::SettingsPageSyncEffect;
+use super::effect::SettingsPageSyncEffect;
 
 pub(crate) struct SettingsPageSyncRuntimeOutcome {
     pub(crate) status_message: String,

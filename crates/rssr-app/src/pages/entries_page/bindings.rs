@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
 use super::{
-    entries_page_reducer::dispatch_entries_page_intent,
-    entries_page_runtime::EntriesPageRuntimeOutcome, entries_page_state::EntriesPageState,
+    reducer::dispatch_entries_page_intent, runtime::EntriesPageRuntimeOutcome,
+    state::EntriesPageState,
 };
 
 #[derive(Clone, Copy, PartialEq)]

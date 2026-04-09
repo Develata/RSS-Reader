@@ -1,6 +1,6 @@
 use rssr_domain::{EntrySummary, FeedSummary, ReadFilter, StarredFilter, UserSettings};
 
-use super::entries_page_state::EntryGroupingMode;
+use super::state::EntryGroupingMode;
 
 #[derive(Debug, Clone)]
 pub(crate) enum EntriesPageIntent {

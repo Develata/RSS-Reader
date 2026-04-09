@@ -2,15 +2,14 @@ use dioxus::prelude::*;
 use rssr_domain::UserSettings;
 
 use crate::{
+    pages::settings_page::themes::{detect_preset_key, validate_custom_css},
     status::{set_status_error, set_status_info},
     theme::ThemeController,
 };
 
 use super::{
-    settings_page_save_effect::SettingsPageSaveEffect,
-    settings_page_save_runtime::execute_settings_page_save_effect,
-    settings_page_save_state::SettingsPageSaveState, settings_page_themes::detect_preset_key,
-    settings_page_themes::validate_custom_css,
+    effect::SettingsPageSaveEffect, runtime::execute_settings_page_save_effect,
+    state::SettingsPageSaveState,
 };
 
 #[derive(Clone, Copy)]

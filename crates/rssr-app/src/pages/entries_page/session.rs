@@ -1,12 +1,10 @@
 use dioxus::prelude::*;
 
 use super::{
-    entries_page_bindings::EntriesPageBindings,
-    entries_page_controls::remember_entry_controls_hidden, entries_page_effect::EntriesPageEffect,
-    entries_page_intent::EntriesPageIntent, entries_page_presenter::EntriesPagePresenter,
-    entries_page_reducer::dispatch_entries_page_intent,
-    entries_page_runtime::execute_entries_page_effect, entries_page_state::EntriesPageState,
-    entries_page_state::grouping_mode_preference,
+    bindings::EntriesPageBindings, controls::remember_entry_controls_hidden,
+    effect::EntriesPageEffect, intent::EntriesPageIntent, presenter::EntriesPagePresenter,
+    reducer::dispatch_entries_page_intent, runtime::execute_entries_page_effect,
+    state::EntriesPageState, state::grouping_mode_preference,
 };
 use rssr_domain::EntryQuery;
 use time::OffsetDateTime;

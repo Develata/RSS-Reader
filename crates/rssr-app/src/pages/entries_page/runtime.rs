@@ -3,9 +3,9 @@ use std::sync::Arc;
 use crate::bootstrap::AppServices;
 
 use super::{
-    entries_page_effect::EntriesPageEffect,
-    entries_page_intent::EntriesPageIntent,
-    entries_page_queries::{
+    effect::EntriesPageEffect,
+    intent::EntriesPageIntent,
+    queries::{
         load_entries_page_entries, load_entries_page_feeds, load_entries_page_preferences,
         remember_last_opened_feed,
     },

@@ -1,8 +1,7 @@
 use dioxus::prelude::*;
 
 use super::{
-    reader_page_reducer::dispatch_reader_page_intent,
-    reader_page_runtime::ReaderPageRuntimeOutcome, reader_page_state::ReaderPageState,
+    reducer::dispatch_reader_page_intent, runtime::ReaderPageRuntimeOutcome, state::ReaderPageState,
 };
 
 #[derive(Clone, Copy, PartialEq)]

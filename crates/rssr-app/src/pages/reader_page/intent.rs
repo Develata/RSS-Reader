@@ -1,4 +1,4 @@
-use super::reader_page_state::ReaderPageLoadedContent;
+use super::state::ReaderPageLoadedContent;
 
 #[derive(Debug, Clone)]
 pub(crate) enum ReaderPageIntent {

@@ -1,8 +1,7 @@
 use dioxus::prelude::*;
 
 use super::{
-    entries_page_intent::EntriesPageIntent, entries_page_state::EntriesPageState,
-    entries_page_state::entry_grouping_mode_from_preference,
+    intent::EntriesPageIntent, state::EntriesPageState, state::entry_grouping_mode_from_preference,
 };
 
 pub(crate) fn dispatch_entries_page_intent(

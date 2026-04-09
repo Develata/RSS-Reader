@@ -4,7 +4,7 @@ use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::router::AppRoute;
 
-use super::entries_page_session::EntriesPageSession;
+use super::session::EntriesPageSession;
 
 pub(super) fn render_entry_card(entry: EntrySummary, session: EntriesPageSession) -> Element {
     let read_title = entry.title.clone();

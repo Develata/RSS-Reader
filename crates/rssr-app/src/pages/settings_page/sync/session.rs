@@ -2,11 +2,13 @@ use dioxus::prelude::*;
 use rssr_domain::UserSettings;
 
 use super::{
-    settings_page_sync_effect::SettingsPageSyncEffect,
-    settings_page_sync_runtime::execute_settings_page_sync_effect,
-    settings_page_sync_state::SettingsPageSyncState, settings_page_themes::detect_preset_key,
+    effect::SettingsPageSyncEffect, runtime::execute_settings_page_sync_effect,
+    state::SettingsPageSyncState,
 };
-use crate::{status::set_status_info, theme::ThemeController};
+use crate::{
+    pages::settings_page::themes::detect_preset_key, status::set_status_info,
+    theme::ThemeController,
+};
 
 #[derive(Clone, Copy)]
 pub(crate) struct SettingsPageSyncSession {
@@ -76,10 +78,7 @@ impl SettingsPageSyncSession {
         });
     }
 
-    fn apply_runtime_outcome(
-        mut self,
-        outcome: super::settings_page_sync_runtime::SettingsPageSyncRuntimeOutcome,
-    ) {
+    fn apply_runtime_outcome(mut self, outcome: super::runtime::SettingsPageSyncRuntimeOutcome) {
         self.state.with_mut(|state| state.pending_remote_pull = false);
         if let Some(settings) = outcome.imported_settings {
             self.preset_choice.set(detect_preset_key(&settings.custom_css).to_string());

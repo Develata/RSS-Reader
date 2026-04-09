@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use super::{reader_page_intent::ReaderPageIntent, reader_page_state::ReaderPageState};
+use super::{intent::ReaderPageIntent, state::ReaderPageState};
 
 pub(crate) fn dispatch_reader_page_intent(
     mut state: Signal<ReaderPageState>,

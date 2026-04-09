@@ -2,9 +2,8 @@ use dioxus::prelude::*;
 use rssr_domain::UserSettings;
 
 use super::{
-    settings_page_preferences::ReadingPreferencesSection,
-    settings_page_save_session::SettingsPageSaveSession,
-    settings_page_save_state::SettingsPageSaveState, settings_page_themes::ThemeSettingsSections,
+    preferences::ReadingPreferencesSection, save::SettingsPageSaveSession,
+    save::SettingsPageSaveState, themes::ThemeSettingsSections,
 };
 use crate::theme::ThemeController;
 

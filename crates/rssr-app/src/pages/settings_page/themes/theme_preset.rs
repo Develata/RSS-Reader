@@ -1,17 +1,17 @@
 fn newsprint_theme_css() -> &'static str {
-    include_str!("../../../../../assets/themes/newsprint.css")
+    include_str!("../../../../../../assets/themes/newsprint.css")
 }
 
 fn atlas_sidebar_theme_css() -> &'static str {
-    include_str!("../../../../../assets/themes/atlas-sidebar.css")
+    include_str!("../../../../../../assets/themes/atlas-sidebar.css")
 }
 
 fn forest_desk_theme_css() -> &'static str {
-    include_str!("../../../../../assets/themes/forest-desk.css")
+    include_str!("../../../../../../assets/themes/forest-desk.css")
 }
 
 fn midnight_ledger_theme_css() -> &'static str {
-    include_str!("../../../../../assets/themes/midnight-ledger.css")
+    include_str!("../../../../../../assets/themes/midnight-ledger.css")
 }
 
 pub(super) fn preset_css(key: &str) -> &'static str {

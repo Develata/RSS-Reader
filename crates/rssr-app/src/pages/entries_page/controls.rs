@@ -1,7 +1,7 @@
-use super::entries_page_groups::{EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem};
-use super::entries_page_intent::EntriesPageIntent;
-use super::entries_page_session::EntriesPageSession;
-use super::entries_page_state::EntryGroupingMode;
+use super::groups::{EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem};
+use super::intent::EntriesPageIntent;
+use super::session::EntriesPageSession;
+use super::state::EntryGroupingMode;
 use crate::{
     app::AppUiState,
     components::{entry_filters::EntryFilters, status_banner::StatusBanner},

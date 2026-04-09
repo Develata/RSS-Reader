@@ -1,3 +1,12 @@
+mod bindings;
+mod effect;
+mod intent;
+mod reducer;
+mod runtime;
+mod session;
+mod state;
+mod support;
+
 use dioxus::prelude::*;
 
 use crate::{
@@ -6,14 +15,14 @@ use crate::{
     hooks::use_reader_shortcuts::use_reader_shortcuts, router::AppRoute,
 };
 
-pub(crate) use super::reader_page_session::ReaderPageSession;
+pub(crate) use self::session::ReaderPageSession;
 
 #[component]
 pub fn ReaderPage(entry_id: i64) -> Element {
     use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
 
     let navigator = use_navigator();
-    let state = use_signal(super::reader_page_state::ReaderPageState::new);
+    let state = use_signal(state::ReaderPageState::new);
     let session = ReaderPageSession::new(entry_id, state);
     let shortcuts = use_reader_shortcuts(session);
     let snapshot = session.snapshot();

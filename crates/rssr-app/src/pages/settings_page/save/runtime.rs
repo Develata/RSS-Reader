@@ -2,7 +2,7 @@ use rssr_domain::UserSettings;
 
 use crate::bootstrap::AppServices;
 
-use super::settings_page_save_effect::SettingsPageSaveEffect;
+use super::effect::SettingsPageSaveEffect;
 
 pub(crate) struct SettingsPageSaveRuntimeOutcome {
     pub(crate) status_message: String,

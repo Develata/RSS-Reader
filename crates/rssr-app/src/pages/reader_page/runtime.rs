@@ -3,10 +3,10 @@ use std::sync::Arc;
 use crate::bootstrap::{AppServices, ReaderNavigation};
 
 use super::{
-    reader_page_effect::ReaderPageEffect,
-    reader_page_intent::ReaderPageIntent,
-    reader_page_state::ReaderPageLoadedContent,
-    reader_page_support::{ReaderBody, format_reader_datetime_utc, select_reader_body},
+    effect::ReaderPageEffect,
+    intent::ReaderPageIntent,
+    state::ReaderPageLoadedContent,
+    support::{ReaderBody, format_reader_datetime_utc, select_reader_body},
 };
 
 pub(crate) struct ReaderPageRuntimeOutcome {

@@ -1,13 +1,26 @@
+mod bindings;
+mod cards;
+mod controls;
+mod effect;
+mod groups;
+mod intent;
+mod presenter;
+mod queries;
+mod reducer;
+mod runtime;
+mod session;
+mod state;
+
 use dioxus::prelude::*;
 use rssr_domain::StartupView;
 use time::OffsetDateTime;
 
-use super::entries_page_cards::render_entry_card;
-use super::entries_page_controls::{
+use self::cards::render_entry_card;
+use self::controls::{
     EntryControlsProps, initial_entry_controls_hidden, render_entry_controls,
     render_entry_directory,
 };
-use super::{entries_page_session::EntriesPageSession, entries_page_state::EntriesPageState};
+use self::{session::EntriesPageSession, state::EntriesPageState};
 use crate::{
     app::{AppNav, AppUiState},
     bootstrap::AppServices,
@@ -165,7 +178,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                         }
                     } else {
                         div { class: "entry-groups",
-                            if state_snapshot.grouping_mode == super::entries_page_state::EntryGroupingMode::Time {
+                            if state_snapshot.grouping_mode == state::EntryGroupingMode::Time {
                                 for month in presenter.time_grouped_entries {
                                     section { class: "entry-group entry-group--time", key: "{month.anchor_id}", id: "{month.anchor_id}",
                                         div { class: "entry-group__header",
