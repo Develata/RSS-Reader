@@ -32,6 +32,7 @@
 - `d8b046d` `test: unify wasm contract harness runner`
 - `pending` 当前这轮 handoff 按日期整理与补细节
 - `pending` 当前这轮本地 CI 容器非交互 `--cmd` 路径修复
+- `pending` 当前这轮 wasm browser runner 根因修复
 
 ## 影响范围
 
@@ -117,6 +118,27 @@
   - `--window-size=1280,720`
 - runner 现在在 `crates/rssr-infra` 下执行 `wasm-bindgen-test-runner`，确保能拾取同目录的 `webdriver.json`
 - 本机 WSL2 仍受 `chromedriver bind() failed: Cannot assign requested address (99)` 限制，但 GitHub Actions 上此前的 `404 + SIGKILL` 路径已经被 runner 配置缺失所对齐修补
+
+### 当日后续修复：wasm browser runner 根因定位与修补
+
+- 在本地 Linux CI 容器中成功稳定复现了 GitHub Actions 同样的失败路径：
+  - `wasm-bindgen-test-runner` 进入 `Visiting http://127.0.0.1:...`
+  - 随后出现 `driver status: signal: 9 (SIGKILL)` 与 `Error: http status: 404`
+- 后续通过 `chromedriver --verbose` 缩小问题，确认不是 contract harness 本身失败，也不是单纯 Chrome/ChromeDriver 版本过新，而是 Chrome 进程启动时直接崩溃：
+  - `chrome_crashpad_handler: Permission denied (13)`
+- 根因是：
+  - `scripts/setup_chrome_for_testing.sh` 用 Python 解压 Chrome for Testing zip
+  - 顶层可执行文件权限没有完整保留下来
+  - 之前只对 `chrome` 与 `chromedriver` 做了 `chmod +x`
+  - 但 Chrome 实际还会启动 `chrome_crashpad_handler`，导致 session 创建阶段直接崩溃
+- 修复内容：
+  - `scripts/setup_chrome_for_testing.sh` 改为对 `chrome-${platform}` 与 `chromedriver-${platform}` 顶层文件统一 `chmod +x`
+  - `scripts/run_wasm_contract_harness.sh` 为每次执行分配独立 `--user-data-dir`
+  - 并显式把 `google-chrome` binary 写入 `webdriver.json`
+- 修复后，在本地 Linux 容器里，按接近 CI 的执行路径，三条 wasm browser harness 都已实际跑绿：
+  - refresh
+  - subscription
+  - config exchange
 
 ### 当日后续修复：Docker 发布节流
 
@@ -261,6 +283,8 @@
 - `bash -n scripts/run_ci_local_container.sh`：通过
 - `bash scripts/run_ci_local_container.sh --cmd 'echo ok'`：通过
 - `bash scripts/run_ci_local_container.sh --cmd 'cargo test -p rssr-web -- --nocapture'`：通过
+- `bash scripts/run_ci_local_container.sh --cmd 'bash scripts/setup_chrome_for_testing.sh >/dev/null; bash scripts/run_wasm_refresh_contract_harness.sh'`：通过
+- `bash scripts/run_ci_local_container.sh --cmd 'bash scripts/setup_chrome_for_testing.sh >/dev/null; bash scripts/run_wasm_refresh_contract_harness.sh; bash scripts/run_wasm_subscription_contract_harness.sh; bash scripts/run_wasm_config_exchange_contract_harness.sh'`：通过
 
 ### 手工验收
 
@@ -269,6 +293,10 @@
 - WSL2 本地 browser runner：受 `chromedriver bind() failed: Cannot assign requested address (99)` 限制，真实浏览器执行依赖 GitHub Actions
 - Chrome for Testing / chromedriver 安装与版本对齐：通过
 - `bash scripts/run_wasm_refresh_contract_harness.sh`：仍为 `env-limited`，但当前输出已进入 WSL2 绑定异常路径，不再是缺少 browser capability 配置的未知失败
+- Linux CI 容器中的真实 browser 执行：
+  - `run_wasm_refresh_contract_harness.sh`：通过
+  - `run_wasm_subscription_contract_harness.sh`：通过
+  - `run_wasm_config_exchange_contract_harness.sh`：通过
 
 ## 结果
 
@@ -276,6 +304,7 @@
 - headless 接口命名与字段/动作边界进一步清晰。
 - 当前主线已经具备统一的 wasm browser harness runner 与 CI matrix。
 - 本地 `Dockerfile.ci-local` + `run_ci_local_container.sh` 现在既能支持交互式排障，也能支持脚本化单命令测试执行。
+- wasm browser harness 的 `404 + SIGKILL` 根因已经被定位并在本地 Linux 容器中验证修复。
 - 到此可以更准确地说：
   - `zheye` 分支的主功能与架构价值，已经基本被当前 `main` 手动吸收
   - 剩余重点不再是“还缺哪条主线”，而是观察远端 CI 是否把三条 wasm contract 线全部跑绿

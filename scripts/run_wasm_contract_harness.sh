@@ -45,12 +45,37 @@ if [[ -z "${wasm_artifact}" ]]; then
 fi
 
 webdriver_config="$(mktemp)"
+profile_dir="$(mktemp -d)"
 cleanup() {
   rm -f "${webdriver_config}"
+  rm -rf "${profile_dir}"
 }
 trap cleanup EXIT
 
-cat >"${webdriver_config}" <<'EOF'
+chrome_binary=""
+if command -v google-chrome >/dev/null 2>&1; then
+  chrome_binary="$(command -v google-chrome)"
+fi
+
+if [[ -n "${chrome_binary}" ]]; then
+  cat >"${webdriver_config}" <<EOF
+{
+  "goog:chromeOptions": {
+    "binary": "${chrome_binary}",
+    "args": [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--remote-allow-origins=*",
+      "--window-size=1280,720",
+      "--user-data-dir=${profile_dir}"
+    ]
+  }
+}
+EOF
+else
+  cat >"${webdriver_config}" <<EOF
 {
   "goog:chromeOptions": {
     "args": [
@@ -59,11 +84,13 @@ cat >"${webdriver_config}" <<'EOF'
       "--disable-dev-shm-usage",
       "--disable-gpu",
       "--remote-allow-origins=*",
-      "--window-size=1280,720"
+      "--window-size=1280,720",
+      "--user-data-dir=${profile_dir}"
     ]
   }
 }
 EOF
+fi
 
 (
   cd "${crate_root}"

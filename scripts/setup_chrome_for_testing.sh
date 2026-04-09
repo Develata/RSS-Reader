@@ -62,11 +62,12 @@ if [[ ! -x "${driver_dir}/chromedriver" ]]; then
     "${version_dir}/chromedriver-${platform}.zip"
 fi
 
+find "${chrome_dir}" -maxdepth 1 -type f -exec chmod +x {} +
+find "${driver_dir}" -maxdepth 1 -type f -exec chmod +x {} +
+
 ln -sf "${chrome_dir}/chrome" "${bin_dir}/google-chrome"
 ln -sf "${chrome_dir}/chrome" "${bin_dir}/google-chrome-stable"
 ln -sf "${driver_dir}/chromedriver" "${bin_dir}/chromedriver"
-
-chmod +x "${chrome_dir}/chrome" "${driver_dir}/chromedriver"
 
 echo "Installed Chrome for Testing ${version}"
 "${bin_dir}/google-chrome" --version
