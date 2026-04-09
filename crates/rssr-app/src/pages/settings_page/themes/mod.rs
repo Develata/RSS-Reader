@@ -5,10 +5,8 @@ mod theme_io;
 mod theme_preset;
 mod theme_validation;
 
+use crate::pages::settings_page::session::SettingsPageSession;
 use dioxus::prelude::*;
-use rssr_domain::UserSettings;
-
-use crate::theme::ThemeController;
 
 use self::{lab::ThemeLabSection, presets::ThemePresetSections};
 
@@ -16,27 +14,9 @@ pub(crate) use self::theme_preset::detect_preset_key;
 pub(crate) use self::theme_validation::validate_custom_css;
 
 #[component]
-pub(crate) fn ThemeSettingsSections(
-    theme: ThemeController,
-    draft: Signal<UserSettings>,
-    preset_choice: Signal<String>,
-    status: Signal<String>,
-    status_tone: Signal<String>,
-) -> Element {
+pub(crate) fn ThemeSettingsSections(session: SettingsPageSession) -> Element {
     rsx! {
-        ThemeLabSection {
-            theme,
-            draft,
-            preset_choice,
-            status,
-            status_tone,
-        }
-        ThemePresetSections {
-            theme,
-            draft,
-            preset_choice,
-            status,
-            status_tone,
-        }
+        ThemeLabSection { session }
+        ThemePresetSections { session }
     }
 }

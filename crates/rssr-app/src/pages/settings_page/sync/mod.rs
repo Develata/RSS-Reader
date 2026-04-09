@@ -11,14 +11,7 @@ use super::session::SettingsPageSession;
 #[component]
 pub(crate) fn WebDavSettingsCard(session: SettingsPageSession) -> Element {
     let state = use_signal(SettingsPageSyncState::new);
-    let sync_session = SettingsPageSyncSession::new(
-        state,
-        session.theme(),
-        session.draft(),
-        session.preset_choice(),
-        session.status_signal(),
-        session.status_tone_signal(),
-    );
+    let sync_session = SettingsPageSyncSession::new(state, session);
     let snapshot = sync_session.snapshot();
 
     rsx! {

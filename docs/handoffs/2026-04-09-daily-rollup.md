@@ -3,8 +3,8 @@
 - 日期：2026-04-09
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：0047269
-- 相关 commit：3318d5e, 2937232, 92fb6e1, 07391a3, 4d11787, 4d0d270, 9cfde8e, aede229, e7a14ad, 8cf8b53, 049a8ab, c9c13fa, a592d40, 781bf1a, 682da79, d8b046d, f1bc8a8, 30bb036, 722e5ad, 01a0365, 0047269, pending
+- 当前 HEAD：见当日提交时间线
+- 相关 commit：3318d5e, 2937232, 92fb6e1, 07391a3, 4d11787, 4d0d270, 9cfde8e, aede229, e7a14ad, 8cf8b53, 049a8ab, c9c13fa, a592d40, 781bf1a, 682da79, d8b046d, f1bc8a8, 30bb036, 722e5ad, 01a0365, 0047269, b8bde41, b9de79f, 0ccd7b3
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -35,8 +35,9 @@
 - `722e5ad` `test: add local linux ci container`
 - `01a0365` `fix: support non-interactive local ci runs`
 - `0047269` `fix: resolve wasm browser runner issues and enhance Chrome setup script`
-- `pending` 当前这轮 handoff 按日期整理与补细节
-- `pending` 当前这轮页面模块目录化与 workspace 结构统一
+- `b8bde41` `docs: consolidate handoff logs by day`
+- `b9de79f` `refactor: organize page modules into local workspaces`
+- `0ccd7b3` `refactor: deepen page session boundaries`
 
 ## 影响范围
 
@@ -304,6 +305,32 @@
     - 向子卡片暴露同一组页面级状态入口
 - 这里刻意没有把设置页变成统一 reducer/store，因为当前设置页仍然更像“多个独立工具卡片”的组合页；这次收口的目标是缩小边界，而不是为了统一形式去强造更重的页面内核。
 
+### 当日后续重构：entries/reader workspace helper 与 settings 子卡片围绕页面 session
+
+- `entries_page` 的 view shell 再收薄一层：
+  - 将 `remember_last_opened_feed`、偏好加载、订阅加载、文章加载与浏览偏好保存这些 `use_resource/use_effect` 组合统一收进私有 `use_entries_page_workspace(...)`
+  - `entries_page/mod.rs` 现在在页面壳里只拿三样东西：
+    - `EntriesPageSession`
+    - `EntriesPageState`
+    - `EntriesPagePresenter`
+  - 这一步没有改变文章页行为，但把“页面装配”和“异步 wiring”拆得更清楚，后续如果继续收 `entries_page`，可以先改 helper，而不必先碰渲染骨架
+- `reader_page` 做了同类收口：
+  - 新增私有 `use_reader_page_workspace(...)`
+  - 将 `state/session/reload/load` 与快捷键绑定周边的资源加载集中到 helper 中
+  - `ReaderPage` 组件本体继续只保留：
+    - 导航
+    - 正文/状态展示
+    - 上下篇与未读跳转操作
+- `settings_page` 的内部卡片边界也进一步统一到了 `SettingsPageSession`：
+  - `SettingsPageSaveSession` 不再单独持有 `theme/draft/preset_choice/status/status_tone` 五条裸状态线，而是显式持有 `SettingsPageSession`
+  - `SettingsPageSyncSession` 同样改为显式持有 `SettingsPageSession`
+  - `ThemeSettingsSections`、`ThemeLabSection`、`ThemePresetSections` 改成直接消费 `SettingsPageSession`
+  - `AppearanceSettingsCard` 与 `WebDavSettingsCard` 因而不再负责把页面级状态逐根下传，只负责创建自己的局部 save/sync state
+- 这轮重构的实际收益是：
+  - `settings_page` 的 themes/save/sync 三块不再围绕一串裸 signal 相互耦合
+  - `entries_page` / `reader_page` 的 view shell 中剩余的加载逻辑被压回私有 workspace helper
+  - 页面层的“壳”与“会话内核”分界更接近同一种形状，后续继续重构时更容易保持一致
+
 ### Contract harness 规划与重建
 
 - 新增 `docs/testing/contract-harness-rebuild-plan.md`，明确不直接复制旧分支 harness，而按当前主线重建。
@@ -374,7 +401,6 @@
 ### handoff 整理
 
 - 将 `docs/handoffs/` 中 `2026-04-06` 到 `2026-04-09` 的碎片记录按日期归并为单日汇总。
-- 当前这次文档整理尚未提交，因此本条对应状态为 `commit: pending`。
 - 这次整理不是单纯删文件，而是把原始记录里的：
   - 提交顺序
   - 关键文件
@@ -400,7 +426,7 @@
 
 ## 当前状态 / 风险 / 待跟进
 
-- 状态：`commit: pending`
+- 状态：`validated`
 - 当前目录化已经完成第一轮收口，但还没有继续把 `feeds_page` 也改成完全一致的目录模块。
 - 当前风险主要不是功能回退，而是：
   - 后续如果继续改页面结构，需要保持 `pages.rs` 入口和内部 re-export 一致
@@ -464,7 +490,6 @@
 - `wasm-pack test` 不是当前仓库的正式 wasm harness 入口；若要强行支持，需要额外拆分 native-only integration tests。
 - WSL2 本地环境仍无法可靠执行 `chromedriver` 真实浏览器链路，需以 GitHub Actions 结果为准。
 - 后续更值得做的是观察远端 `wasm-browser-contract` matrix 是否全绿，并在必要时针对 CI 差异修补脚本或环境。
-- 当前这轮 handoff 目录整理尚未提交，因此“按日期汇总”本身仍处于 `pending` 状态。
 - 这次 runner 修复主要面向 GitHub Actions 的 Chrome 会话稳定性；真正是否彻底收口，仍需下一次远端 `wasm-browser-contract` matrix 结果确认。
 - Docker workflow 现在仍会在 `main` push 时运行一次完整 smoke；如果未来还想进一步节流，可以再评估是否把这条 workflow 只留给 tag 与手动触发。
 - 本地 CI 容器当前是“最小可复用基座”，还没有把全部 GitHub Actions job 包装成统一入口脚本；后续如长期使用，可以再加一层 `scripts/run_ci_local_checks.sh`。

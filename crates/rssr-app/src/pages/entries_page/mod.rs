@@ -101,35 +101,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     use_mobile_back_navigation(feed_id.map(|_| AppRoute::FeedsPage {}));
 
     let ui = use_context::<AppUiState>();
-    let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
-    let session = EntriesPageSession::new(feed_id, state);
-    let state_snapshot = session.snapshot();
-    let presenter = session.presenter(current_time_utc());
-    let reload_version = session.reload_tick();
-    let query_search = (!(ui.entry_search)().trim().is_empty()).then(|| (ui.entry_search)());
-
-    use_resource(move || async move {
-        session.remember_last_opened_feed();
-    });
-
-    use_resource(move || async move {
-        session.load_preferences();
-    });
-
-    use_resource(use_reactive!(|(reload_version)| async move {
-        let _ = reload_version;
-        session.load_feeds();
-    }));
-
-    use_resource(use_reactive!(|(feed_id, reload_version, query_search)| async move {
-        let _ = reload_version;
-        let _ = feed_id;
-        session.load_entries(query_search.clone());
-    }));
-
-    use_effect(move || {
-        session.save_browsing_preferences();
-    });
+    let (session, state_snapshot, presenter) = use_entries_page_workspace(feed_id, ui);
 
     rsx! {
         section {
@@ -245,6 +217,43 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             }
         }
     }
+}
+
+fn use_entries_page_workspace(
+    feed_id: Option<i64>,
+    ui: AppUiState,
+) -> (EntriesPageSession, EntriesPageState, presenter::EntriesPagePresenter) {
+    let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
+    let session = EntriesPageSession::new(feed_id, state);
+    let reload_version = session.reload_tick();
+    let query_search = (!(ui.entry_search)().trim().is_empty()).then(|| (ui.entry_search)());
+
+    use_resource(move || async move {
+        session.remember_last_opened_feed();
+    });
+
+    use_resource(move || async move {
+        session.load_preferences();
+    });
+
+    use_resource(use_reactive!(|(reload_version)| async move {
+        let _ = reload_version;
+        session.load_feeds();
+    }));
+
+    use_resource(use_reactive!(|(feed_id, reload_version, query_search)| async move {
+        let _ = reload_version;
+        let _ = feed_id;
+        session.load_entries(query_search.clone());
+    }));
+
+    use_effect(move || {
+        session.save_browsing_preferences();
+    });
+
+    let state_snapshot = session.snapshot();
+    let presenter = session.presenter(current_time_utc());
+    (session, state_snapshot, presenter)
 }
 
 #[cfg(target_arch = "wasm32")]

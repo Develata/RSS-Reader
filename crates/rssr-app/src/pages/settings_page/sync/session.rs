@@ -1,35 +1,23 @@
 use dioxus::prelude::*;
-use rssr_domain::UserSettings;
 
 use super::{
     effect::SettingsPageSyncEffect, runtime::execute_settings_page_sync_effect,
     state::SettingsPageSyncState,
 };
 use crate::{
-    pages::settings_page::themes::detect_preset_key, status::set_status_info,
-    theme::ThemeController,
+    pages::settings_page::{session::SettingsPageSession, themes::detect_preset_key},
+    status::set_status_info,
 };
 
 #[derive(Clone, Copy)]
 pub(crate) struct SettingsPageSyncSession {
     state: Signal<SettingsPageSyncState>,
-    theme: ThemeController,
-    draft: Signal<UserSettings>,
-    preset_choice: Signal<String>,
-    status: Signal<String>,
-    status_tone: Signal<String>,
+    page: SettingsPageSession,
 }
 
 impl SettingsPageSyncSession {
-    pub(crate) fn new(
-        state: Signal<SettingsPageSyncState>,
-        theme: ThemeController,
-        draft: Signal<UserSettings>,
-        preset_choice: Signal<String>,
-        status: Signal<String>,
-        status_tone: Signal<String>,
-    ) -> Self {
-        Self { state, theme, draft, preset_choice, status, status_tone }
+    pub(crate) fn new(state: Signal<SettingsPageSyncState>, page: SettingsPageSession) -> Self {
+        Self { state, page }
     }
 
     pub(crate) fn snapshot(self) -> SettingsPageSyncState {
@@ -60,8 +48,8 @@ impl SettingsPageSyncSession {
         if !self.snapshot().pending_remote_pull {
             self.state.with_mut(|state| state.pending_remote_pull = true);
             set_status_info(
-                self.status,
-                self.status_tone,
+                self.page.status_signal(),
+                self.page.status_tone_signal(),
                 "从 WebDAV 下载配置会覆盖当前订阅集合，并清理缺失订阅的本地文章；再次点击才会执行。",
             );
             return;
@@ -81,15 +69,19 @@ impl SettingsPageSyncSession {
     fn apply_runtime_outcome(mut self, outcome: super::runtime::SettingsPageSyncRuntimeOutcome) {
         self.state.with_mut(|state| state.pending_remote_pull = false);
         if let Some(settings) = outcome.imported_settings {
-            self.preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
-            self.draft.set(settings.clone());
-            self.theme.settings.set(settings);
+            self.page.preset_choice().set(detect_preset_key(&settings.custom_css).to_string());
+            self.page.draft().set(settings.clone());
+            self.page.theme().settings.set(settings);
         }
         if outcome.status_tone == "error" {
-            self.status_tone.set("error".to_string());
-            self.status.set(outcome.status_message);
+            self.page.status_tone_signal().set("error".to_string());
+            self.page.status_signal().set(outcome.status_message);
         } else {
-            set_status_info(self.status, self.status_tone, outcome.status_message);
+            set_status_info(
+                self.page.status_signal(),
+                self.page.status_tone_signal(),
+                outcome.status_message,
+            );
         }
     }
 }

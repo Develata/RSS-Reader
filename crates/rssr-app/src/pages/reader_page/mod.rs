@@ -22,17 +22,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
     use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
 
     let navigator = use_navigator();
-    let state = use_signal(state::ReaderPageState::new);
-    let session = ReaderPageSession::new(entry_id, state);
-    let shortcuts = use_reader_shortcuts(session);
-    let snapshot = session.snapshot();
-    let reload_version = session.reload_tick();
-
-    use_resource(use_reactive!(|(entry_id, reload_version)| async move {
-        let _ = reload_version;
-        let _ = entry_id;
-        session.load();
-    }));
+    let (session, snapshot, shortcuts) = use_reader_page_workspace(entry_id);
 
     rsx! {
         article {
@@ -146,4 +136,21 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             }
         }
     }
+}
+
+fn use_reader_page_workspace(
+    entry_id: i64,
+) -> (ReaderPageSession, state::ReaderPageState, Callback<KeyboardEvent>) {
+    let state = use_signal(state::ReaderPageState::new);
+    let session = ReaderPageSession::new(entry_id, state);
+    let shortcuts = use_reader_shortcuts(session);
+    let reload_version = session.reload_tick();
+
+    use_resource(use_reactive!(|(entry_id, reload_version)| async move {
+        let _ = reload_version;
+        let _ = entry_id;
+        session.load();
+    }));
+
+    (session, session.snapshot(), shortcuts)
 }
