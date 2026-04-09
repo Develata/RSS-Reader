@@ -117,6 +117,14 @@
 - runner 现在在 `crates/rssr-infra` 下执行 `wasm-bindgen-test-runner`，确保能拾取同目录的 `webdriver.json`
 - 本机 WSL2 仍受 `chromedriver bind() failed: Cannot assign requested address (99)` 限制，但 GitHub Actions 上此前的 `404 + SIGKILL` 路径已经被 runner 配置缺失所对齐修补
 
+### 当日后续修复：Docker 发布节流
+
+- 调整 `.github/workflows/docker.yml` 的语义边界：
+  - `main` 分支日常 push 仍会执行 Docker build 与 runtime smoke
+  - 但不会再登录 GHCR，也不会真正 push image
+  - 只有 `refs/tags/v*` 才会执行 metadata、registry login 与 image push
+- 这样保留了“验证 Docker 镜像可构建、可运行”的持续信心，同时避免每次主线 push 都生成额外的 GHCR 版本噪音
+
 ### Contract harness 规划与重建
 
 - 新增 `docs/testing/contract-harness-rebuild-plan.md`，明确不直接复制旧分支 harness，而按当前主线重建。
@@ -215,6 +223,7 @@
 - `git diff --check`：通过
 - `bash -n scripts/run_wasm_contract_harness.sh scripts/run_wasm_refresh_contract_harness.sh scripts/run_wasm_subscription_contract_harness.sh scripts/run_wasm_config_exchange_contract_harness.sh`：通过
 - CI workflow YAML 解析：通过
+- `docker.yml` 触发条件与 push gate 代码级复核：通过
 
 ### 手工验收
 
@@ -240,6 +249,7 @@
 - 后续更值得做的是观察远端 `wasm-browser-contract` matrix 是否全绿，并在必要时针对 CI 差异修补脚本或环境。
 - 当前这轮 handoff 目录整理尚未提交，因此“按日期汇总”本身仍处于 `pending` 状态。
 - 这次 runner 修复主要面向 GitHub Actions 的 Chrome 会话稳定性；真正是否彻底收口，仍需下一次远端 `wasm-browser-contract` matrix 结果确认。
+- Docker workflow 现在仍会在 `main` push 时运行一次完整 smoke；如果未来还想进一步节流，可以再评估是否把这条 workflow 只留给 tag 与手动触发。
 
 ## 给下一位 Agent 的备注
 
