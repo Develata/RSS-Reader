@@ -1,9 +1,10 @@
+use dioxus::prelude::WritableExt;
+
 use super::{
     save::{SettingsPageSaveSession, SettingsPageSaveState},
     session::SettingsPageSession,
     sync::{SettingsPageSyncSession, SettingsPageSyncState},
 };
-use dioxus::prelude::Signal;
 use rssr_domain::UserSettings;
 
 #[derive(Clone, PartialEq)]
@@ -26,12 +27,24 @@ impl SettingsPageFacade {
         Self { page, save, save_snapshot, sync, sync_snapshot }
     }
 
-    pub(crate) fn draft_signal(&self) -> Signal<UserSettings> {
-        self.page.draft()
+    pub(crate) fn draft(&self) -> UserSettings {
+        (self.page.draft())()
     }
 
-    pub(crate) fn preset_choice_signal(&self) -> Signal<String> {
-        self.page.preset_choice()
+    pub(crate) fn update_draft(&self, update: impl FnOnce(&mut UserSettings)) {
+        let mut draft = self.page.draft();
+        let mut next = draft();
+        update(&mut next);
+        draft.set(next);
+    }
+
+    pub(crate) fn preset_choice(&self) -> String {
+        (self.page.preset_choice())()
+    }
+
+    pub(crate) fn set_preset_choice(&self, value: impl Into<String>) {
+        let mut preset_choice = self.page.preset_choice();
+        preset_choice.set(value.into());
     }
 
     pub(crate) fn status(&self) -> String {
@@ -42,12 +55,8 @@ impl SettingsPageFacade {
         self.page.status_tone()
     }
 
-    pub(crate) fn status_signal(&self) -> Signal<String> {
-        self.page.status_signal()
-    }
-
-    pub(crate) fn status_tone_signal(&self) -> Signal<String> {
-        self.page.status_tone_signal()
+    pub(crate) fn set_status(&self, message: impl Into<String>, tone: impl Into<String>) {
+        self.page.set_status(message, tone);
     }
 
     pub(crate) fn open_repository(&self) {
@@ -66,12 +75,24 @@ impl SettingsPageFacade {
         self.save_snapshot.pending_save
     }
 
+    pub(crate) fn endpoint(&self) -> &str {
+        &self.sync_snapshot.endpoint
+    }
+
     pub(crate) fn set_endpoint(&self, endpoint: String) {
         self.sync.set_endpoint(endpoint);
     }
 
+    pub(crate) fn remote_path(&self) -> &str {
+        &self.sync_snapshot.remote_path
+    }
+
     pub(crate) fn set_remote_path(&self, remote_path: String) {
         self.sync.set_remote_path(remote_path);
+    }
+
+    pub(crate) fn pending_remote_pull(&self) -> bool {
+        self.sync_snapshot.pending_remote_pull
     }
 
     pub(crate) fn push(&self) {

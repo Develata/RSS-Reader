@@ -1202,6 +1202,138 @@
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
 - `git diff --check`：通过
 
+## 追加：把 entries_page 继续收成 facade 动作口边界
+
+### 背景
+
+- 前一轮已经给四个主页面都补上了 facade，但 `entries_page` 的控件区、目录区、文章卡片仍然直接碰：
+  - `EntriesPageSession`
+  - `session.dispatch(...)`
+  - `session.toggle_*`
+- 这意味着 `entries_page` 还是没完全达到“组件拿 facade，而不是拿 session”的边界要求。
+
+### 本轮变更
+
+- [entries_page/facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/facade.rs)
+  - 新增动作口：
+    - `set_controls_hidden`
+    - `set_grouping_mode`
+    - `set_show_archived`
+    - `set_read_filter`
+    - `set_starred_filter`
+    - `set_selected_feed_urls`
+    - `toggle_directory_source`
+    - `toggle_read`
+    - `toggle_starred`
+  - 并为 facade 本身补了 `Clone`
+
+- [entries_page/controls.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/controls.rs)
+  - 控件区不再直接 `session.dispatch(...)`
+  - 目录区不再直接拿 `EntriesPageSession`
+  - 现在统一通过 `EntriesPageFacade` 动作口操作
+
+- [entries_page/cards.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/cards.rs)
+  - 文章卡片不再直接拿 `EntriesPageSession`
+  - 已读/收藏切换改走 facade
+
+- [entries_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)
+  - 卡片渲染和目录渲染改成直接传 facade
+  - 页面壳进一步从 “session + presenter + snapshot” 退向 “facade + 语义 DOM”
+
+### 当前判断
+
+- `entries_page` 现在比 `reader_page` / `feeds_page` 更接近统一的 facade 边界了。
+- 页面组件树里最容易泄漏局部 session 的三个位置：
+  - controls
+  - directory
+  - cards
+  已经统一走 facade。
+- 这一步没有引入新业务逻辑，纯粹是在继续压薄页面边界。
+
+### 本轮验证
+
+- `cargo check -p rssr-app`：通过
+- `commit`：pending
+
+## 追加：把 settings_page facade 收成“值 + 动作口”边界
+
+### 背景
+
+- `settings_page` 虽然已经有 facade，但前一轮仍然更多是在透传：
+  - `draft_signal`
+  - `preset_choice_signal`
+  - `status_signal`
+  - `status_tone_signal`
+- 这意味着：
+  - `preferences`
+  - `themes`
+  - `sync`
+  这些 section 虽然表面上在用 facade，实际上仍然在直接操作页面内部 `Signal`。
+
+### 本轮变更
+
+- [settings_page/facade.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/facade.rs)
+  - facade 现在补出更明确的值/动作口：
+    - `draft`
+    - `update_draft`
+    - `preset_choice`
+    - `set_preset_choice`
+    - `set_status`
+    - `endpoint`
+    - `remote_path`
+    - `pending_remote_pull`
+
+- [settings_page/preferences.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/preferences.rs)
+  - `ReadingPreferencesSection` 不再接 `Signal<UserSettings>`
+  - 改成直接接 `SettingsPageFacade`
+  - 主题/密度/启动视图/刷新间隔/归档阈值/字体缩放都改成走 `update_draft`
+
+- [settings_page/appearance.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/appearance.rs)
+  - 外观卡片不再单独把 `draft Signal` 往下传
+  - 继续只暴露 facade
+
+- [settings_page/sync/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/mod.rs)
+  - WebDAV 卡片不再直接读 `sync_snapshot` 字段
+  - 改成使用 facade 的：
+    - `endpoint`
+    - `remote_path`
+    - `pending_remote_pull`
+
+- [settings_page/themes/theme_apply.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/theme_apply.rs)
+  - 主题应用辅助函数不再直接碰 draft/preset/status `Signal`
+  - 统一走：
+    - `update_draft`
+    - `set_preset_choice`
+    - `set_status`
+
+- [settings_page/themes/theme_io.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/theme_io.rs)
+  - 主题文件导入导出状态反馈也统一走 facade
+
+- [settings_page/themes/lab.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/lab.rs)
+  - 主题实验室不再直接取 signal 进行改写
+  - 文本输入、导入、导出、应用都改成走 facade 动作口
+
+- [settings_page/themes/presets.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/presets.rs)
+  - 主题预设选择、主题卡片应用/移除也都改成走 facade
+
+### 当前判断
+
+- `settings_page` 现在比上一轮更像真正的 page boundary：
+  - section 不再直接摸页面内部 signal
+  - facade 不再只是“session 打包层”，而是开始承担：
+    - 设置值读取
+    - 设置写入动作
+    - 壳层状态反馈
+- 这一步和 `entries_page` 一样，目标都是让组件进一步退化成：
+  - 语义 DOM
+  - 少量局部展示逻辑
+  - facade 动作口消费方
+
+### 本轮验证
+
+- `cargo check -p rssr-app`：通过
+- `commit`：pending
+
 ## 追加：把页面生命周期编排继续收成通用 facade helper
 
 ### 背景

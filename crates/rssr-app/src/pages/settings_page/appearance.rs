@@ -7,14 +7,12 @@ use super::{
 
 #[component]
 pub(crate) fn AppearanceSettingsCard(facade: SettingsPageFacade) -> Element {
-    let draft = facade.draft_signal();
-
     rsx! {
         div { class: "settings-card",
             div { class: "settings-card__header",
                 h3 { "阅读外观" }
             }
-            ReadingPreferencesSection { draft }
+            ReadingPreferencesSection { facade: facade.clone() }
             ThemeSettingsSections { facade: facade.clone() }
             div { class: "settings-card__footer",
                 button {

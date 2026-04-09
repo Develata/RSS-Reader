@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::{pages::settings_page::facade::SettingsPageFacade, status::set_status_info};
+use crate::pages::settings_page::facade::SettingsPageFacade;
 
 use super::{
     theme_apply::{apply_builtin_theme, apply_custom_css_from_raw, clear_custom_css},
@@ -9,8 +9,8 @@ use super::{
 
 #[component]
 pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
-    let draft = facade.draft_signal();
-    let mut preset_choice = facade.preset_choice_signal();
+    let draft = facade.draft();
+    let preset_choice = facade.preset_choice();
     let atlas_facade = facade.clone();
     let newsprint_facade = facade.clone();
     let forest_facade = facade.clone();
@@ -30,7 +30,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     class: "select-input",
                     "data-field": "preset-theme-select",
                     value: "{preset_choice}",
-                    onchange: move |event| preset_choice.set(event.value()),
+                    onchange: move |event| facade.set_preset_choice(event.value()),
                     option { value: "none", "无预设" }
                     option { value: "custom", "自定义主题" }
                     option { value: "atlas-sidebar", "Atlas Sidebar" }
@@ -42,17 +42,14 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     class: "button secondary",
                     "data-action": "apply-selected-theme",
                     onclick: move |_| {
-                        let choice = preset_choice();
+                        let choice = apply_selected_facade.preset_choice();
                         if choice == "none" {
                             clear_custom_css(&apply_selected_facade, "已清空自定义 CSS。");
                             return;
                         }
                         if choice == "custom" {
-                            set_status_info(
-                                apply_selected_facade.status_signal(),
-                                apply_selected_facade.status_tone_signal(),
-                                "当前是自定义主题，请直接编辑 CSS 或从文件导入。",
-                            );
+                            apply_selected_facade
+                                .set_status("当前是自定义主题，请直接编辑 CSS 或从文件导入。", "info");
                             return;
                         }
                         apply_builtin_theme(&apply_selected_facade, choice.as_str());
@@ -99,7 +96,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
             div { class: "theme-gallery",
                 for preset in builtin_theme_presets() {
                     {
-                        let is_active = detect_preset_key(&draft().custom_css) == preset.key;
+                        let is_active = detect_preset_key(&draft.custom_css) == preset.key;
                         let apply_card_facade = facade.clone();
                         let remove_card_facade = facade.clone();
                         let preset_key = preset.key.to_string();
@@ -138,11 +135,10 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                                     "data-action": "remove-theme-preset",
                                     "data-theme-preset": "{preset.key}",
                                     onclick: move |_| {
-                                        if detect_preset_key(&draft().custom_css) != remove_preset_key.as_str() {
-                                            set_status_info(
-                                                remove_card_facade.status_signal(),
-                                                remove_card_facade.status_tone_signal(),
+                                        if detect_preset_key(&remove_card_facade.draft().custom_css) != remove_preset_key.as_str() {
+                                            remove_card_facade.set_status(
                                                 format!("当前并未启用主题：{}。", preset_name),
+                                                "info",
                                             );
                                             return;
                                         }

@@ -9,7 +9,6 @@ use super::facade::SettingsPageFacade;
 
 #[component]
 pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
-    let snapshot = facade.sync_snapshot.clone();
     let endpoint_facade = facade.clone();
     let remote_path_facade = facade.clone();
     let push_facade = facade.clone();
@@ -31,7 +30,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                             name: "webdav_endpoint",
                             class: "text-input",
                             "data-field": "webdav-endpoint",
-                            value: "{snapshot.endpoint}",
+                            value: "{facade.endpoint()}",
                             placeholder: "https://dav.example.com/base/",
                             oninput: move |event| endpoint_facade.set_endpoint(event.value())
                         }
@@ -43,7 +42,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                             name: "webdav_remote_path",
                             class: "text-input",
                             "data-field": "webdav-remote-path",
-                            value: "{snapshot.remote_path}",
+                            value: "{facade.remote_path()}",
                             placeholder: "config/rss-reader.json",
                             oninput: move |event| remote_path_facade.set_remote_path(event.value())
                         }
@@ -62,14 +61,14 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                         "上传配置"
                     }
                     button {
-                        class: if snapshot.pending_remote_pull {
+                        class: if facade.pending_remote_pull() {
                             "button danger"
                         } else {
                             "button secondary"
                         },
                         "data-action": "pull-webdav",
                         onclick: move |_| facade.pull(),
-                        if snapshot.pending_remote_pull { "确认下载并覆盖" } else { "下载配置" }
+                        if facade.pending_remote_pull() { "确认下载并覆盖" } else { "下载配置" }
                     }
                 }
             }

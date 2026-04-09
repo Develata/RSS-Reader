@@ -1,4 +1,3 @@
-use crate::status::{set_status_error, set_status_info};
 use dioxus::prelude::*;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -36,16 +35,8 @@ pub(super) fn import_css_file(facade: &SettingsPageFacade) {
             Ok(Some(raw)) => {
                 apply_custom_css_from_raw(&facade, raw, "已从文件载入并应用自定义 CSS。")
             }
-            Ok(None) => set_status_info(
-                facade.status_signal(),
-                facade.status_tone_signal(),
-                "已取消载入 CSS 文件。",
-            ),
-            Err(err) => set_status_error(
-                facade.status_signal(),
-                facade.status_tone_signal(),
-                format!("载入 CSS 文件失败：{err}"),
-            ),
+            Ok(None) => facade.set_status("已取消载入 CSS 文件。", "info"),
+            Err(err) => facade.set_status(format!("载入 CSS 文件失败：{err}"), "error"),
         }
     });
 }
@@ -67,29 +58,28 @@ pub(super) fn trigger_css_file_input_in_browser() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn export_css_file(raw: String, status: Signal<String>, status_tone: Signal<String>) {
+pub(super) fn export_css_file(raw: String, facade: &SettingsPageFacade) {
     if raw.trim().is_empty() {
-        set_status_info(status, status_tone, "当前没有可导出的自定义 CSS。");
+        facade.set_status("当前没有可导出的自定义 CSS。", "info");
         return;
     }
 
     #[cfg(target_arch = "wasm32")]
     {
         match save_css_file_in_browser(&raw) {
-            Ok(()) => set_status_info(status, status_tone, "已导出当前自定义 CSS。"),
-            Err(err) => set_status_error(status, status_tone, format!("导出 CSS 文件失败：{err}")),
+            Ok(()) => facade.set_status("已导出当前自定义 CSS。", "info"),
+            Err(err) => facade.set_status(format!("导出 CSS 文件失败：{err}"), "error"),
         }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     {
+        let facade = facade.clone();
         spawn(async move {
             match save_css_file(&raw).await {
-                Ok(true) => set_status_info(status, status_tone, "已导出当前自定义 CSS。"),
-                Ok(false) => set_status_info(status, status_tone, "已取消导出 CSS 文件。"),
-                Err(err) => {
-                    set_status_error(status, status_tone, format!("导出 CSS 文件失败：{err}"))
-                }
+                Ok(true) => facade.set_status("已导出当前自定义 CSS。", "info"),
+                Ok(false) => facade.set_status("已取消导出 CSS 文件。", "info"),
+                Err(err) => facade.set_status(format!("导出 CSS 文件失败：{err}"), "error"),
             }
         });
     }

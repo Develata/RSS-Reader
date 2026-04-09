@@ -11,7 +11,6 @@ use super::theme_io::trigger_css_file_input_in_browser;
 
 #[component]
 pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
-    let draft_signal = facade.draft_signal();
     #[cfg(target_arch = "wasm32")]
     let import_file_facade = facade.clone();
     let import_trigger_facade = facade.clone();
@@ -40,11 +39,8 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
                             raw,
                             "已从文件载入并应用自定义 CSS。",
                         ),
-                        Err(err) => crate::status::set_status_error(
-                            import_facade.status_signal(),
-                            import_facade.status_tone_signal(),
-                            format!("载入 CSS 文件失败：{err}"),
-                        ),
+                        Err(err) => import_facade
+                            .set_status(format!("载入 CSS 文件失败：{err}"), "error"),
                     }
                 });
             },
@@ -61,11 +57,8 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
             "data-action": "import-custom-css-file",
             onclick: move |_| {
                 if let Err(err) = trigger_css_file_input_in_browser() {
-                    crate::status::set_status_error(
-                        import_trigger_facade.status_signal(),
-                        import_trigger_facade.status_tone_signal(),
-                        format!("载入 CSS 文件失败：{err}"),
-                    );
+                    import_trigger_facade
+                        .set_status(format!("载入 CSS 文件失败：{err}"), "error");
                 }
             },
             "导入主题文件"
@@ -95,15 +88,15 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
                 name: "custom_css",
                 class: "text-area",
                 "data-field": "custom-css",
-                value: "{draft_signal().custom_css}",
+                value: "{facade.draft().custom_css}",
                 placeholder: "[data-page=\"reader\"] .reader-body {{ max-width: 72ch; }}",
                 oninput: move |event| {
-                    let mut draft = input_facade.draft_signal();
-                    let mut preset_choice = input_facade.preset_choice_signal();
-                    let mut next = draft();
-                    next.custom_css = event.value();
-                    preset_choice.set(super::detect_preset_key(&next.custom_css).to_string());
-                    draft.set(next);
+                    let value = event.value();
+                    let preset = super::detect_preset_key(&value).to_string();
+                    input_facade.update_draft(|next| {
+                        next.custom_css = value;
+                    });
+                    input_facade.set_preset_choice(preset);
                 }
             }
             div { class: "inline-actions settings-card__actions",
@@ -114,7 +107,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
                     onclick: move |_| {
                         apply_custom_css_from_raw(
                             &apply_facade,
-                            apply_facade.draft_signal()().custom_css,
+                            apply_facade.draft().custom_css,
                             "已应用当前输入框中的自定义 CSS。",
                         );
                     },
@@ -124,11 +117,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
                     class: "button secondary",
                     "data-action": "export-custom-css-file",
                     onclick: move |_| {
-                        export_css_file(
-                            export_facade.draft_signal()().custom_css,
-                            export_facade.status_signal(),
-                            export_facade.status_tone_signal(),
-                        );
+                        export_css_file(export_facade.draft().custom_css, &export_facade);
                     },
                     "导出当前 CSS"
                 }

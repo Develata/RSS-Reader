@@ -1,8 +1,18 @@
 use dioxus::prelude::*;
-use rssr_domain::{ListDensity, StartupView, ThemeMode, UserSettings};
+use rssr_domain::{ListDensity, StartupView, ThemeMode};
+
+use super::facade::SettingsPageFacade;
 
 #[component]
-pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element {
+pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
+    let draft = facade.draft();
+    let theme_facade = facade.clone();
+    let density_facade = facade.clone();
+    let startup_facade = facade.clone();
+    let refresh_facade = facade.clone();
+    let archive_facade = facade.clone();
+    let font_scale_facade = facade.clone();
+
     rsx! {
         div { class: "settings-card__section",
             div { class: "settings-card__section-header",
@@ -16,11 +26,11 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         name: "theme_mode",
                         class: "select-input",
                         "data-field": "theme-mode",
-                        value: "{theme_value(draft().theme)}",
+                        value: "{theme_value(draft.theme)}",
                         onchange: move |event| {
-                            let mut next = draft();
-                            next.theme = parse_theme_mode(&event.value());
-                            draft.set(next);
+                            theme_facade.update_draft(|next| {
+                                next.theme = parse_theme_mode(&event.value());
+                            });
                         },
                         option { value: "system", "跟随系统" }
                         option { value: "light", "浅色" }
@@ -34,11 +44,11 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         name: "list_density",
                         class: "select-input",
                         "data-field": "list-density",
-                        value: "{density_value(draft().list_density)}",
+                        value: "{density_value(draft.list_density)}",
                         onchange: move |event| {
-                            let mut next = draft();
-                            next.list_density = parse_list_density(&event.value());
-                            draft.set(next);
+                            density_facade.update_draft(|next| {
+                                next.list_density = parse_list_density(&event.value());
+                            });
                         },
                         option { value: "comfortable", "舒适" }
                         option { value: "compact", "紧凑" }
@@ -51,11 +61,11 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         name: "startup_view",
                         class: "select-input",
                         "data-field": "startup-view",
-                        value: "{startup_value(draft().startup_view)}",
+                        value: "{startup_value(draft.startup_view)}",
                         onchange: move |event| {
-                            let mut next = draft();
-                            next.startup_view = parse_startup_view(&event.value());
-                            draft.set(next);
+                            startup_facade.update_draft(|next| {
+                                next.startup_view = parse_startup_view(&event.value());
+                            });
                         },
                         option { value: "all", "全部文章" }
                         option { value: "last_feed", "上次订阅" }
@@ -68,12 +78,12 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         name: "refresh_interval_minutes",
                         class: "text-input",
                         "data-field": "refresh-interval",
-                        value: "{draft().refresh_interval_minutes}",
+                        value: "{draft.refresh_interval_minutes}",
                         oninput: move |event| {
                             if let Ok(minutes) = event.value().parse::<u32>() {
-                                let mut next = draft();
-                                next.refresh_interval_minutes = minutes;
-                                draft.set(next);
+                                refresh_facade.update_draft(|next| {
+                                    next.refresh_interval_minutes = minutes;
+                                });
                             }
                         }
                     }
@@ -85,12 +95,12 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         name: "archive_after_months",
                         class: "text-input",
                         "data-field": "archive-after-months",
-                        value: "{draft().archive_after_months}",
+                        value: "{draft.archive_after_months}",
                         oninput: move |event| {
                             if let Ok(months) = event.value().parse::<u32>() {
-                                let mut next = draft();
-                                next.archive_after_months = months;
-                                draft.set(next);
+                                archive_facade.update_draft(|next| {
+                                    next.archive_after_months = months;
+                                });
                             }
                         }
                     }
@@ -102,12 +112,12 @@ pub(crate) fn ReadingPreferencesSection(draft: Signal<UserSettings>) -> Element 
                         name: "reader_font_scale",
                         class: "text-input",
                         "data-field": "reader-font-scale",
-                        value: "{draft().reader_font_scale}",
+                        value: "{draft.reader_font_scale}",
                         oninput: move |event| {
                             if let Ok(scale) = event.value().parse::<f32>() {
-                                let mut next = draft();
-                                next.reader_font_scale = scale;
-                                draft.set(next);
+                                font_scale_facade.update_draft(|next| {
+                                    next.reader_font_scale = scale;
+                                });
                             }
                         }
                     }
