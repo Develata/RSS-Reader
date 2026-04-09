@@ -12,7 +12,7 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
         div { class: "feed-workbench feed-workbench--single",
             div { class: "feed-compose-card",
                 div { class: "feed-compose-card__header",
-                    h3 { "新增订阅" }
+                    h3 { class: "card-title", "新增订阅" }
                 }
                 div { class: "feed-form",
                     label { class: "sr-only", r#for: "feed-url-input", "订阅地址" }

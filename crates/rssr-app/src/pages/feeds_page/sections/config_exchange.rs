@@ -13,12 +13,12 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
 
     rsx! {
         div { class: "exchange-header",
-            h3 { "配置交换" }
+            h3 { class: "card-title", "配置交换" }
         }
         div { class: "exchange-grid",
             div { class: "exchange-card",
                 div { class: "settings-card__header",
-                    h3 { "配置包 JSON" }
+                    h3 { class: "card-title", "配置包 JSON" }
                 }
                 label { class: "sr-only", r#for: "config-text", "配置包 JSON 文本" }
                 textarea {
@@ -50,7 +50,7 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
             }
             div { class: "exchange-card",
                 div { class: "settings-card__header",
-                    h3 { "OPML" }
+                    h3 { class: "card-title", "OPML" }
                 }
                 label { class: "sr-only", r#for: "opml-text", "OPML 文本" }
                 textarea {

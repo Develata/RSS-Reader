@@ -16,7 +16,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
     rsx! {
         div { class: "settings-card",
             div { class: "settings-card__header",
-                h3 { "WebDAV 配置交换" }
+                h3 { class: "card-title", "WebDAV 配置交换" }
             }
             div { class: "settings-card__section",
                 div { class: "settings-card__section-header",

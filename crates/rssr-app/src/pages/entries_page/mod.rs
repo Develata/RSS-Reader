@@ -102,21 +102,21 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             if facade.grouping_mode() == state::EntryGroupingMode::Time {
                                 for month in facade.time_grouped_entries() {
                                     section { class: "entry-group entry-group--time", key: "{month.anchor_id}", id: "{month.anchor_id}",
-                                        div { class: "entry-group__header",
-                                            h3 { class: "entry-group__title", "{month.title}" }
-                                            p { class: "entry-group__meta", "{month.subtitle}" }
+                                        div { class: "entry-group__header group-header", "data-group-level": "primary",
+                                            h3 { class: "group-header__title", "{month.title}" }
+                                            p { class: "group-header__meta", "{month.subtitle}" }
                                         }
                                         for date_group in &month.dates {
                                             section { class: "entry-date-group", key: "{date_group.anchor_id}", id: "{date_group.anchor_id}",
-                                                div { class: "entry-date-group__header",
-                                                    h4 { class: "entry-date-group__title", "{date_group.title}" }
-                                                    p { class: "entry-date-group__meta", "{date_group.subtitle}" }
+                                                div { class: "entry-date-group__header group-header", "data-group-level": "date",
+                                                    h4 { class: "group-header__title", "{date_group.title}" }
+                                                    p { class: "group-header__meta", "{date_group.subtitle}" }
                                                 }
                                                 for source in &date_group.sources {
                                                     section { class: "entry-source-group", key: "{source.anchor_id}", id: "{source.anchor_id}",
-                                                        div { class: "entry-source-group__header",
-                                                            h5 { class: "entry-source-group__title", "{source.title}" }
-                                                            p { class: "entry-source-group__meta", "{source.subtitle}" }
+                                                        div { class: "entry-source-group__header group-header", "data-group-level": "source",
+                                                            h5 { class: "group-header__title", "{source.title}" }
+                                                            p { class: "group-header__meta", "{source.subtitle}" }
                                                         }
                                                         ul { class: "entry-list entry-list--grouped entry-list--reading",
                                                             for (index , entry) in source.entries.iter().enumerate() {
@@ -132,15 +132,15 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             } else {
                                 for group in facade.source_grouped_entries() {
                                     section { class: "entry-group", key: "{group.title}", id: "{group.anchor_id}",
-                                        div { class: "entry-group__header",
-                                            h3 { class: "entry-group__title", "{group.title}" }
-                                            p { class: "entry-group__meta", "{group.subtitle}" }
+                                        div { class: "entry-group__header group-header", "data-group-level": "primary",
+                                            h3 { class: "group-header__title", "{group.title}" }
+                                            p { class: "group-header__meta", "{group.subtitle}" }
                                         }
                                         for month in &group.months {
                                             section { class: "entry-date-group", key: "{month.anchor_id}", id: "{month.anchor_id}",
-                                                div { class: "entry-date-group__header",
-                                                    h4 { class: "entry-date-group__title", "{month.title}" }
-                                                    p { class: "entry-date-group__meta", "{month.subtitle}" }
+                                                div { class: "entry-date-group__header group-header", "data-group-level": "date",
+                                                    h4 { class: "group-header__title", "{month.title}" }
+                                                    p { class: "group-header__meta", "{month.subtitle}" }
                                                 }
                                                 ul { class: "entry-list entry-list--grouped entry-list--reading",
                                                     for (index , entry) in month.entries.iter().enumerate() {

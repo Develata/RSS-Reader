@@ -20,6 +20,8 @@
   - 主题卡 / 来源筛选 / 阅读底栏按钮 -> `data-state`
 - 第二轮结构槽迁移：进行中
   - 标题槽、页头槽、表单项槽、动作项槽、阅读列表边界槽已补
+  - 卡片头部标题已开始统一迁到 `.card-title`
+  - entries 分组头部已开始统一迁到 `.group-header` / `.group-header__title` / `.group-header__meta`
 - 当前剩余问题：
   - 少量标题/卡片头部仍依赖标签名
   - 少量分组头部仍依赖内部 DOM 结构
@@ -73,33 +75,24 @@
 - 文件：
   - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
 - 目标规则：
-  - `.feed-compose-card__header h3`
   - `.feed-workbench__note h3`
-  - `.exchange-header h3`
-  - `.exchange-card h3`
-  - `.settings-card h3`
 - 下一步：
-  - 为这些区域补稳定标题槽，例如：
-    - `.card-title`
-    - `.section-title`
-    - `.workbench-title`
+  - 将剩余 note / 说明块标题也统一到稳定标题槽
+  - 不再新增针对 `h3` 的卡片头部规则
 
 ### 2. 分组头部仍依赖内部标题/元信息结构
 
 - 文件：
   - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
 - 目标区域：
-  - `.entry-group__header`
-  - `.entry-source-group__header`
-  - `.entry-date-group__header`
-  - `.entry-group__title`
-  - `.entry-group__meta`
-  - `.entry-source-group__title`
-  - `.entry-source-group__meta`
-  - `.entry-date-group__title`
-  - `.entry-date-group__meta`
+  - 历史 selector 已迁移为：
+    - `.group-header`
+    - `.group-header__title`
+    - `.group-header__meta`
+    - `data-group-level="primary|date|source"`
 - 下一步：
-  - 统一为语义槽，而不是依赖“标题标签 + 说明标签”的组合
+  - 清理遗留 selector 文档和辅助样式
+  - 保持后续新增分组头部只走统一槽
 
 ### 3. 顶部标题区仍带页面特化 class
 
@@ -108,13 +101,13 @@
   - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
 - 现状：
   - 已有 `.page-section-header--entries`
-  - 仍有 `reading-header--feeds`
+  - `feeds` 已迁到 `.page-section-header--feeds`
 - 下一步：
   - 统一成：
     - `.page-section-header--entries`
     - `.page-section-header--feeds`
     - `.page-section-header--settings`
-  - 不再依赖历史 `reading-header*` 命名
+  - 继续清理 settings 路径上的历史 `reading-header*` 命名
 
 ## P2：可以继续收，但不阻塞
 
@@ -165,6 +158,11 @@
   - `.page-header__actions`
   - `.page-section-header`
   - `.page-section-title`
+  - `.card-title`
+  - `.group-header`
+  - `.group-header__title`
+  - `.group-header__meta`
+  - `data-group-level`
   - `.settings-form-grid__item`
   - `.inline-actions__item`
   - `[data-slot="entry-card-action"]`

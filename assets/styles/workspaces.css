@@ -32,9 +32,7 @@
   margin-bottom: 14px;
 }
 
-.feed-compose-card__header h3,
-.feed-workbench__note h3,
-.exchange-header h3 {
+.card-title {
   margin: 0;
 }
 
@@ -83,11 +81,6 @@
   border: 1px solid rgba(62, 42, 27, 0.09);
   border-radius: 22px;
   background: rgba(255, 251, 246, 0.84);
-}
-
-.exchange-card h3,
-.settings-card h3 {
-  margin: 0 0 12px;
 }
 
 .settings-card__header {
@@ -295,7 +288,7 @@
 .app-shell[data-density="compact"] .entry-card__meta,
 .app-shell[data-density="compact"] .page-intro,
 .app-shell[data-density="compact"] .field-label,
-.app-shell[data-density="compact"] .entry-group__meta {
+.app-shell[data-density="compact"] .group-header__meta {
   font-size: 0.88rem;
 }
 

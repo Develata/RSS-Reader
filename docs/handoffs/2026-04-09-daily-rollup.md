@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`main`
 - 状态：`active`
-- HEAD：`afd54bb` `refactor: move css state semantics to data attributes`
+- HEAD：`713cdca` `refactor: add semantic layout slots for css decoupling`
 - 说明：本文件已按日汇总标准压缩，保留提交时间线、关键变更、验证、风险与待跟进项；过程性细节以同日提交和设计文档为准。
 
 ## 工作摘要
@@ -22,7 +22,12 @@
   - `data-state`
   - `data-variant`
   - `data-density`
-- 第二轮 CSS 结构槽迁移正在工作区中，尚未提交。
+- 第二轮 CSS 结构槽迁移已提交。
+- 第三轮 CSS 语义收口正在工作区中，重点是继续去掉卡片头部对 `h3` 的依赖。
+- 第三轮 CSS 语义收口正在工作区中，当前已继续推进：
+  - 卡片头部统一迁到 `.card-title`
+  - entries 分组头部统一迁到 `.group-header` 语义槽
+  - feeds 页头从 `reading-header--feeds` 迁到 `page-section-header--feeds`
 
 ## 当日提交时间线
 
@@ -443,4 +448,3 @@
 - 继续收 CSS 结构语义
 - 避免 `ui/runtime` 与 facade 再次膨胀
 - 让页面最终真正退化成默认语义壳
-
