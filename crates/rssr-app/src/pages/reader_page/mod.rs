@@ -1,4 +1,3 @@
-mod bindings;
 mod effect;
 mod intent;
 mod reducer;

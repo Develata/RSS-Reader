@@ -3,7 +3,9 @@ use dioxus::prelude::*;
 use crate::bootstrap::ReaderNavigation;
 
 use super::{
-    bindings::ReaderPageBindings, effect::ReaderPageEffect, runtime::execute_reader_page_effect,
+    effect::ReaderPageEffect,
+    reducer::dispatch_reader_page_intent,
+    runtime::{ReaderPageRuntimeOutcome, execute_reader_page_effect},
     state::ReaderPageState,
 };
 
@@ -11,12 +13,11 @@ use super::{
 pub(crate) struct ReaderPageSession {
     entry_id: i64,
     state: Signal<ReaderPageState>,
-    bindings: ReaderPageBindings,
 }
 
 impl ReaderPageSession {
     pub(crate) fn new(entry_id: i64, state: Signal<ReaderPageState>) -> Self {
-        Self { entry_id, state, bindings: ReaderPageBindings::new(state) }
+        Self { entry_id, state }
     }
 
     pub(crate) fn snapshot(self) -> ReaderPageState {
@@ -62,8 +63,10 @@ impl ReaderPageSession {
         });
     }
 
-    fn apply_runtime_outcome(self, outcome: super::runtime::ReaderPageRuntimeOutcome) {
-        self.bindings.apply_runtime_outcome(outcome);
+    fn apply_runtime_outcome(self, outcome: ReaderPageRuntimeOutcome) {
+        for intent in outcome.intents {
+            dispatch_reader_page_intent(self.state, intent);
+        }
     }
 }
 

@@ -22,6 +22,7 @@ pub struct PersistedState {
     pub feeds: Vec<PersistedFeed>,
     pub entries: Vec<PersistedEntry>,
     pub settings: rssr_domain::UserSettings,
+    #[serde(skip_serializing, skip_deserializing, default)]
     pub last_opened_feed_id: Option<i64>,
 }
 
@@ -60,9 +61,13 @@ pub struct PersistedEntry {
     pub updated_at_source: Option<OffsetDateTime>,
     pub first_seen_at: OffsetDateTime,
     pub content_hash: Option<String>,
+    #[serde(skip_serializing, skip_deserializing, default)]
     pub is_read: bool,
+    #[serde(skip_serializing, skip_deserializing, default)]
     pub is_starred: bool,
+    #[serde(skip_serializing, skip_deserializing, default)]
     pub read_at: Option<OffsetDateTime>,
+    #[serde(skip_serializing, skip_deserializing, default)]
     pub starred_at: Option<OffsetDateTime>,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
@@ -90,7 +95,6 @@ struct PersistedEntryFlag {
     is_starred: bool,
     read_at: Option<OffsetDateTime>,
     starred_at: Option<OffsetDateTime>,
-    updated_at: OffsetDateTime,
 }
 
 pub fn load_state() -> LoadedState {
@@ -152,7 +156,6 @@ pub fn save_entry_flag_patch(entry: &PersistedEntry) -> anyhow::Result<()> {
         is_starred: entry.is_starred,
         read_at: entry.read_at,
         starred_at: entry.starred_at,
-        updated_at: entry.updated_at,
     };
 
     if let Some(existing) = slice.entries.iter_mut().find(|current| current.id == entry.id) {
@@ -208,7 +211,6 @@ fn save_entry_flags_slice_internal(entries: &[PersistedEntry]) -> anyhow::Result
                 is_starred: entry.is_starred,
                 read_at: entry.read_at,
                 starred_at: entry.starred_at,
-                updated_at: entry.updated_at,
             })
             .collect(),
     };
@@ -242,7 +244,6 @@ fn apply_sidecar_overlays(storage: &Storage, state: &mut PersistedState) {
                         entry.is_starred = flag.is_starred;
                         entry.read_at = flag.read_at;
                         entry.starred_at = flag.starred_at;
-                        entry.updated_at = flag.updated_at;
                     }
                 }
             }

@@ -1,9 +1,12 @@
 use dioxus::prelude::*;
 
 use super::{
-    bindings::EntriesPageBindings, controls::remember_entry_controls_hidden,
-    effect::EntriesPageEffect, intent::EntriesPageIntent, presenter::EntriesPagePresenter,
-    reducer::dispatch_entries_page_intent, runtime::execute_entries_page_effect,
+    controls::remember_entry_controls_hidden,
+    effect::EntriesPageEffect,
+    intent::EntriesPageIntent,
+    presenter::EntriesPagePresenter,
+    reducer::dispatch_entries_page_intent,
+    runtime::{EntriesPageRuntimeOutcome, execute_entries_page_effect},
     state::EntriesPageState,
 };
 use rssr_domain::EntryQuery;
@@ -13,12 +16,11 @@ use time::OffsetDateTime;
 pub(crate) struct EntriesPageSession {
     feed_id: Option<i64>,
     state: Signal<EntriesPageState>,
-    bindings: EntriesPageBindings,
 }
 
 impl EntriesPageSession {
     pub(crate) fn new(feed_id: Option<i64>, state: Signal<EntriesPageState>) -> Self {
-        Self { feed_id, state, bindings: EntriesPageBindings::new(state) }
+        Self { feed_id, state }
     }
 
     pub(crate) fn snapshot(self) -> EntriesPageState {
@@ -104,7 +106,9 @@ impl EntriesPageSession {
         });
     }
 
-    fn apply_runtime_outcome(self, outcome: super::runtime::EntriesPageRuntimeOutcome) {
-        self.bindings.apply_runtime_outcome(outcome);
+    fn apply_runtime_outcome(self, outcome: EntriesPageRuntimeOutcome) {
+        for intent in outcome.intents {
+            self.dispatch(intent);
+        }
     }
 }

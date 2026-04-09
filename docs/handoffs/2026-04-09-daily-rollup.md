@@ -643,3 +643,48 @@
 - `feeds_page` 的旧 `Outcome / Patch` 中间层已删除，订阅页不再停留在半迁移状态。
 - `entries / reader / feeds` 的 effect 调度风格已经明显靠齐，但仍然不建议此时再往上抽全局命令面。
 - browser persisted-state 写放大已经完成第一轮优化；高频小写入不再每次重刷整份主状态，后续如继续深挖，再评估 feed metadata 或 settings 是否也值得更细颗粒持久化。
+
+## 追加：进一步去掉残留双轨
+
+### entries / reader 去掉 bindings 中间层
+
+- [entries_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/session.rs) 与 [reader_page/session.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/session.rs) 现在不再通过 `bindings.rs` 把 runtime outcome 二次转发到 reducer。
+- 两页都直接在 session 内：
+  - `spawn_effect(...)`
+  - `execute_*_effect(...)`
+  - 遍历 `outcome.intents`
+  - 直接 `dispatch_*_intent(...)`
+- 对应地：
+  - [entries_page/bindings.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/bindings.rs) 已删除
+  - [reader_page/bindings.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/bindings.rs) 已删除
+  - [entries_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs) 与 [reader_page/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/mod.rs) 不再声明 `bindings` 模块
+- 结果：
+  - `entries / reader / feeds` 三页都回到更一致的单一局部状态流。
+  - 之前那层“session 内已统一调度，但仍绕一层 bindings”的过渡味道已经去掉。
+
+### browser persisted-state 不再在主状态序列化 sidecar 已接管字段
+
+- [state.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/state.rs) 中以下字段已改成只在内存里保留，不再参与主状态 `rssr-web-state-v1` 的序列化/反序列化：
+  - `PersistedState::last_opened_feed_id`
+  - `PersistedEntry::is_read`
+  - `PersistedEntry::is_starred`
+  - `PersistedEntry::read_at`
+  - `PersistedEntry::starred_at`
+- 这些字段现在的唯一持久化来源是 sidecar：
+  - `rssr-web-app-state-v1`
+  - `rssr-web-entry-flags-v1`
+- 同时，`entry flags` sidecar 不再重复持久化 `updated_at`，减少与主 entry 内容快照的重叠。
+- 结果：
+  - browser storage 里不再存在“主状态也写一份，sidecar 再写一份”的显式双轨字段。
+  - 主状态负责内容主体，sidecar 负责高频状态切片，职责边界更清楚。
+
+## 这一轮后的判断
+
+- 之前最明确的双轨已经被清掉：
+  - `settings themes` 保存语义双轨：已消失
+  - `feeds_page` 旧 `Outcome / Patch` 双轨：已消失
+  - `entries / reader` bindings 中间层：已消失
+  - browser 主状态与 sidecar 的重复持久化字段：已消失
+- 当前剩下的结构差异主要是**有意设计差异**，不再是历史兼容包袱：
+  - `settings_page` 仍然是“组合壳 + save/sync/themes 子 session”，这是刻意保持的页面边界
+  - 还没有引入全局统一命令面，这也是刻意延后，而不是过渡残留

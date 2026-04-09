@@ -1,4 +1,3 @@
-mod bindings;
 mod cards;
 mod controls;
 mod effect;
