@@ -1,33 +1,20 @@
+use super::facade::EntriesPageFacade;
 use super::groups::{EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem};
 use super::intent::EntriesPageIntent;
 use super::session::EntriesPageSession;
 use super::state::EntryGroupingMode;
-use crate::{
-    app::AppUiState,
-    components::{entry_filters::EntryFilters, status_banner::StatusBanner},
-};
+use crate::components::{entry_filters::EntryFilters, status_banner::StatusBanner};
 use dioxus::prelude::*;
 
-#[derive(Clone, Copy)]
-pub(super) struct EntryControlsProps<'a> {
-    pub ui: AppUiState,
-    pub session: EntriesPageSession,
-    pub visible_entries_len: usize,
-    pub archived_count: usize,
-    pub source_filter_options: &'a [(i64, String, String)],
-    pub group_nav_items: &'a [EntryGroupNavItem],
-}
-
-pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
-    let EntryControlsProps {
-        mut ui,
-        session,
-        visible_entries_len,
-        archived_count,
-        source_filter_options,
-        group_nav_items,
-    } = props;
-    let snapshot = session.snapshot();
+pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
+    let ui = facade.ui;
+    let session = facade.session;
+    let snapshot = &facade.snapshot;
+    let presenter = &facade.presenter;
+    let visible_entries_len = presenter.visible_entries.len();
+    let archived_count = presenter.archived_count;
+    let source_filter_options = &presenter.source_filter_options;
+    let group_nav_items: &[EntryGroupNavItem] = &presenter.group_nav_items;
 
     rsx! {
         if snapshot.controls_hidden {
@@ -119,12 +106,12 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
                     }
                 }
                 EntryFilters {
-                    search: (ui.entry_search)(),
+                    search: ui.entry_search(),
                     read_filter: snapshot.read_filter,
                     starred_filter: snapshot.starred_filter,
                     available_sources: source_filter_options.to_vec(),
                     selected_feed_urls: snapshot.selected_feed_urls.clone(),
-                    on_search: move |value| ui.entry_search.set(value),
+                    on_search: move |value| ui.set_entry_search(value),
                     on_change_read_filter: move |value| {
                         session.dispatch(EntriesPageIntent::SetReadFilter(value))
                     },
@@ -135,7 +122,10 @@ pub(super) fn render_entry_controls(props: EntryControlsProps<'_>) -> Element {
                         session.dispatch(EntriesPageIntent::SetSelectedFeedUrls(value))
                     },
                 }
-                StatusBanner { message: snapshot.status, tone: snapshot.status_tone }
+                StatusBanner {
+                    message: snapshot.status.clone(),
+                    tone: snapshot.status_tone.clone(),
+                }
                 if archived_count > 0 && !snapshot.show_archived {
                     StatusBanner {
                         message: format!("当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。", archived_count),

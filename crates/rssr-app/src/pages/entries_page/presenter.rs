@@ -10,6 +10,7 @@ use super::{
     state::{EntriesPageState, EntryGroupingMode},
 };
 
+#[derive(Clone)]
 pub(crate) struct EntriesPagePresenter {
     pub(crate) archived_count: usize,
     pub(crate) visible_entries: Vec<EntrySummary>,

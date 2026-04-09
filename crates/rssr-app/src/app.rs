@@ -3,13 +3,11 @@ use dioxus::prelude::*;
 use crate::{
     bootstrap::AppServices,
     router::{AppRoute, RoutableApp},
-    status::{set_status_error, set_status_info},
     theme::{ThemeController, density_class, theme_class},
-    ui::{UiCommand, UiIntent, collect_projected_ui_command},
-    web_auth::{
-        WebAuthState, auth_state, configured_username, local_auth_state, login, setup_credentials,
-        verify_server_gate,
+    ui::{
+        AppShellState, use_app_shell_state, use_authenticated_shell_bus, use_web_auth_gate_shell,
     },
+    web_auth::{WebAuthState, auth_state},
 };
 
 const APP_NAME: &str = "RSS-Reader";
@@ -28,94 +26,16 @@ const APP_STYLESHEET: &str = concat!(
     include_str!("../../../assets/styles/responsive.css"),
 );
 
-#[derive(Clone, Copy)]
-pub struct AppUiState {
-    pub entry_search: Signal<String>,
-    pub nav_hidden: Signal<bool>,
-}
-
-fn initial_entry_search() -> String {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-            && let Ok(Some(value)) = storage.get_item("rssr-entry-search")
-        {
-            return value;
-        }
-    }
-
-    String::new()
-}
-
-fn remember_entry_search(_value: &str) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-        {
-            let _ = storage.set_item("rssr-entry-search", _value);
-        }
-    }
-}
-
-fn initial_nav_hidden() -> bool {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-            && let Ok(Some(value)) = storage.get_item("rssr-nav-hidden")
-        {
-            return value == "1";
-        }
-    }
-
-    false
-}
-
-fn remember_nav_hidden(_hidden: bool) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-        {
-            let _ = storage.set_item("rssr-nav-hidden", if _hidden { "1" } else { "0" });
-        }
-    }
-}
-
 #[component]
 #[allow(non_snake_case)]
 pub fn App() -> Element {
-    let mut settings = use_signal(AppServices::default_settings);
+    let settings = use_signal(AppServices::default_settings);
     let mut auth = use_signal(auth_state);
-    let entry_search = use_signal(initial_entry_search);
-    let nav_hidden = use_signal(initial_nav_hidden);
+    let shell = use_app_shell_state();
     use_context_provider(|| ThemeController { settings });
-    use_context_provider(|| AppUiState { entry_search, nav_hidden });
+    use_context_provider(|| shell);
 
-    use_resource(move || async move {
-        let current_auth = auth();
-        if current_auth == WebAuthState::PendingServerProbe {
-            if verify_server_gate().await {
-                auth.set(WebAuthState::Authenticated);
-            } else {
-                auth.set(local_auth_state());
-            }
-            return;
-        }
-
-        if current_auth == WebAuthState::Authenticated {
-            for snapshot in collect_projected_ui_command(
-                UiCommand::LoadAuthenticatedShell,
-                UiIntent::into_authenticated_shell_loaded,
-            )
-            .await
-            {
-                settings.set(snapshot.settings);
-            }
-        }
-    });
+    use_authenticated_shell_bus(auth, settings);
 
     rsx! {
         document::Meta {
@@ -145,18 +65,17 @@ pub fn App() -> Element {
 
 #[component]
 pub fn AppNav() -> Element {
-    let mut ui = use_context::<AppUiState>();
+    let shell = use_context::<AppShellState>();
     let navigator = use_navigator();
 
-    if (ui.nav_hidden)() {
+    if shell.nav_hidden() {
         return rsx! {
             div { class: "app-nav-reveal",
                 button {
                     class: "app-nav-reveal__button",
                     "data-action": "show-top-nav",
                     onclick: move |_| {
-                        remember_nav_hidden(false);
-                        ui.nav_hidden.set(false);
+                        shell.show_nav();
                     },
                     span { class: "app-nav-reveal__icon", "≡" }
                 }
@@ -186,8 +105,7 @@ pub fn AppNav() -> Element {
                     aria_label: "收起顶部导航",
                     title: "收起顶部导航",
                     onclick: move |_| {
-                        remember_nav_hidden(true);
-                        ui.nav_hidden.set(true);
+                        shell.hide_nav();
                     },
                     "×"
                 }
@@ -196,7 +114,7 @@ pub fn AppNav() -> Element {
                 class: "app-nav__search",
                 onsubmit: move |event| {
                     event.prevent_default();
-                    navigator.push(AppRoute::EntriesPage {});
+                    shell.submit_search(navigator.clone());
                 },
                 label {
                     class: "app-nav__search-icon",
@@ -208,12 +126,10 @@ pub fn AppNav() -> Element {
                     class: "app-nav__search-input",
                     r#type: "search",
                     placeholder: "搜索文章标题",
-                    value: "{(ui.entry_search)()}",
-                    onfocus: move |_| { navigator.push(AppRoute::EntriesPage {}); },
+                    value: "{shell.entry_search()}",
+                    onfocus: move |_| shell.focus_search(navigator.clone()),
                     oninput: move |event| {
-                        let value = event.value();
-                        remember_entry_search(&value);
-                        ui.entry_search.set(value);
+                        shell.set_entry_search(event.value());
                     },
                 }
                 span { class: "app-nav__search-hint", "Enter" }
@@ -245,43 +161,7 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
         return rsx! { WebAuthLoadingGate {} };
     }
 
-    let mut username = use_signal(String::new);
-    let mut password = use_signal(String::new);
-    let status =
-        use_signal(|| "当前处于本地浏览器保护模式。首次使用请先设置用户名和密码。".to_string());
-    let status_tone = use_signal(|| "info".to_string());
-
-    use_effect(move || {
-        if state == WebAuthState::NeedsLogin
-            && username().is_empty()
-            && let Some(default_username) = configured_username()
-            && !default_username.is_empty()
-        {
-            username.set(default_username);
-        }
-    });
-
-    let title = match state {
-        WebAuthState::NeedsSetup => "初始化 Web 登录",
-        WebAuthState::NeedsLogin => "登录 RSS-Reader",
-        WebAuthState::Authenticated | WebAuthState::PendingServerProbe => "验证登录状态",
-    };
-    let intro = match state {
-        WebAuthState::NeedsSetup => {
-            "当前只在本地浏览器使用场景下启用了数据保护。首次进入这个浏览器环境时，需要先设置一组本地用户名和密码。"
-        }
-        WebAuthState::NeedsLogin => {
-            "请输入先前设置的用户名和密码，解锁当前浏览器里的本地阅读器数据。"
-        }
-        WebAuthState::Authenticated | WebAuthState::PendingServerProbe => {
-            "正在确认当前登录状态，请稍候。"
-        }
-    };
-    let submit_label = match state {
-        WebAuthState::NeedsSetup => "保存并进入",
-        WebAuthState::NeedsLogin => "登录",
-        WebAuthState::Authenticated | WebAuthState::PendingServerProbe => "继续",
-    };
+    let shell = use_web_auth_gate_shell(state);
 
     rsx! {
         div { class: "web-auth-shell",
@@ -290,34 +170,17 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
                     div { class: "web-auth-brand__mark", dangerous_inner_html: "{WEB_AUTH_MARKUP}" }
                     p { class: "web-auth-brand__name", "{APP_NAME}" }
                 }
-                h1 { class: "web-auth-card__title", "{title}" }
-                p { class: "web-auth-card__intro", "{intro}" }
+                h1 { class: "web-auth-card__title", "{shell.title()}" }
+                p { class: "web-auth-card__intro", "{shell.intro()}" }
                 p {
-                    class: "status-banner {status_tone()}",
-                    "{status()}"
+                    class: "status-banner {shell.status_tone()}",
+                    "{shell.status()}"
                 }
                 form {
                     class: "web-auth-form",
                     onsubmit: move |event| {
                         event.prevent_default();
-                        let next_username = username();
-                        let next_password = password();
-                        let result = match state {
-                            WebAuthState::NeedsSetup => setup_credentials(&next_username, &next_password),
-                            WebAuthState::NeedsLogin => login(&next_username, &next_password),
-                            WebAuthState::Authenticated | WebAuthState::PendingServerProbe => Ok(()),
-                        };
-
-                        match result {
-                            Ok(()) => {
-                                set_status_info(status, status_tone, "验证通过，正在进入阅读器。");
-                                password.set(String::new());
-                                complete_web_auth_transition(on_authenticated);
-                            }
-                            Err(err) => {
-                                set_status_error(status, status_tone, err);
-                            }
-                        }
+                        shell.submit(on_authenticated);
                     },
                     label {
                         class: "field-label",
@@ -328,9 +191,9 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
                         id: "web-auth-username",
                         name: "username",
                         class: "text-input",
-                        value: "{username}",
+                        value: "{shell.username()}",
                         autocomplete: "username",
-                        oninput: move |event| username.set(event.value()),
+                        oninput: move |event| shell.set_username(event.value()),
                     }
                     label {
                         class: "field-label",
@@ -342,14 +205,14 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
                         name: "password",
                         class: "text-input",
                         r#type: "password",
-                        value: "{password}",
+                        value: "{shell.password()}",
                         autocomplete: if state == WebAuthState::NeedsSetup { "new-password" } else { "current-password" },
-                        oninput: move |event| password.set(event.value()),
+                        oninput: move |event| shell.set_password(event.value()),
                     }
                     button {
                         class: "button",
                         r#type: "submit",
-                        "{submit_label}"
+                        "{shell.submit_label()}"
                     }
                 }
                 p {
@@ -359,20 +222,4 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
             }
         }
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn complete_web_auth_transition(on_authenticated: EventHandler<()>) {
-    if let Some(window) = web_sys::window()
-        && window.location().reload().is_ok()
-    {
-        return;
-    }
-
-    on_authenticated.call(());
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn complete_web_auth_transition(on_authenticated: EventHandler<()>) {
-    on_authenticated.call(());
 }

@@ -1,5 +1,6 @@
 mod cards;
 mod controls;
+mod facade;
 mod groups;
 pub(crate) mod intent;
 mod presenter;
@@ -12,41 +13,24 @@ use time::OffsetDateTime;
 
 use self::cards::render_entry_card;
 use self::controls::{
-    EntryControlsProps, initial_entry_controls_hidden, render_entry_controls,
-    render_entry_directory,
+    initial_entry_controls_hidden, render_entry_controls, render_entry_directory,
 };
-use self::{session::EntriesPageSession, state::EntriesPageState};
+use self::{facade::EntriesPageFacade, session::EntriesPageSession, state::EntriesPageState};
 use crate::{
-    app::{AppNav, AppUiState},
+    app::AppNav,
     components::status_banner::StatusBanner,
     hooks::use_mobile_back_navigation::use_mobile_back_navigation,
     router::AppRoute,
-    status::set_status_error,
-    ui::{UiCommand, execute_ui_command},
+    ui::{AppShellState, use_reactive_side_effect, use_reactive_task, use_startup_route_bus},
 };
 
 #[component]
 pub fn StartupPage() -> Element {
     let navigator = use_navigator();
-    let mut status = use_signal(|| "正在准备你的阅读入口…".to_string());
-    let mut status_tone = use_signal(|| "info".to_string());
+    let status = use_signal(|| "正在准备你的阅读入口…".to_string());
+    let status_tone = use_signal(|| "info".to_string());
 
-    use_resource(move || async move {
-        for intent in execute_ui_command(UiCommand::ResolveStartupRoute).await {
-            if let Some(snapshot) = intent.clone().into_startup_route_resolved() {
-                let _ = navigator.replace(snapshot.route);
-                continue;
-            }
-            if let Some((message, tone)) = intent.into_status() {
-                if tone == "error" {
-                    set_status_error(status, status_tone, message);
-                } else {
-                    status_tone.set(tone);
-                    status.set(message);
-                }
-            }
-        }
-    });
+    use_startup_route_bus(navigator, status, status_tone);
 
     rsx! {
         section { class: "page page-entries", "data-page": "entries",
@@ -70,8 +54,12 @@ pub fn FeedEntriesPage(feed_id: i64) -> Element {
 fn entries_page_content(feed_id: Option<i64>) -> Element {
     use_mobile_back_navigation(feed_id.map(|_| AppRoute::FeedsPage {}));
 
-    let ui = use_context::<AppUiState>();
-    let (session, state_snapshot, presenter) = use_entries_page_workspace(feed_id, ui);
+    let ui = use_context::<AppShellState>();
+    let facade = use_entries_page_workspace(feed_id, ui);
+    let controls = render_entry_controls(&facade);
+    let session = facade.session;
+    let snapshot = facade.snapshot.clone();
+    let presenter = facade.presenter.clone();
 
     rsx! {
         section {
@@ -96,15 +84,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             }
                         }
                     }
-                    { render_entry_controls(EntryControlsProps {
-                        ui,
-                        session,
-                        visible_entries_len: presenter.visible_entries.len(),
-                        archived_count: presenter.archived_count,
-                        source_filter_options: &presenter.source_filter_options,
-                        group_nav_items: &presenter.group_nav_items,
-                    }) }
-                    if state_snapshot.entries.is_empty() {
+                    { controls }
+                    if snapshot.entries.is_empty() {
                         div { class: "entries-page__state", "data-state": "empty",
                             StatusBanner {
                                 message: empty_entries_message(feed_id),
@@ -120,7 +101,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                         }
                     } else {
                         div { class: "entry-groups",
-                            if state_snapshot.grouping_mode == state::EntryGroupingMode::Time {
+                            if snapshot.grouping_mode == state::EntryGroupingMode::Time {
                                 for month in presenter.time_grouped_entries {
                                     section { class: "entry-group entry-group--time", key: "{month.anchor_id}", id: "{month.anchor_id}",
                                         div { class: "entry-group__header",
@@ -178,7 +159,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                 }
                 if !presenter.group_nav_items.is_empty() {
                     { render_entry_directory(
-                        state_snapshot.grouping_mode,
+                        snapshot.grouping_mode,
                         &presenter.directory_months,
                         &presenter.directory_sources,
                         session,
@@ -189,15 +170,13 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     }
 }
 
-fn use_entries_page_workspace(
-    feed_id: Option<i64>,
-    ui: AppUiState,
-) -> (EntriesPageSession, EntriesPageState, presenter::EntriesPagePresenter) {
+fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> EntriesPageFacade {
     let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
     let session = EntriesPageSession::new(feed_id, state);
     let state_snapshot = session.snapshot();
     let reload_version = session.reload_tick();
-    let query_search = (!(ui.entry_search)().trim().is_empty()).then(|| (ui.entry_search)());
+    let entry_search = ui.entry_search();
+    let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
     let entry_query = state_snapshot.entry_query(feed_id, query_search.clone());
     let preferences_loaded = state_snapshot.preferences_loaded;
     let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
@@ -206,38 +185,49 @@ fn use_entries_page_workspace(
     let starred_filter = state_snapshot.starred_filter;
     let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
 
-    use_resource(use_reactive!(|(feed_id, reload_version, preferences_loaded)| async move {
-        let _ = feed_id;
-        let _ = reload_version;
-        session.bootstrap(!preferences_loaded, true);
-    }));
+    use_reactive_task(
+        (feed_id, reload_version, preferences_loaded),
+        move |(_, _, preferences_loaded)| {
+            session.bootstrap(!preferences_loaded, true);
+        },
+    );
 
-    use_resource(use_reactive!(|(feed_id, entry_query, reload_version)| async move {
-        let _ = feed_id;
-        let _ = reload_version;
-        session.load_entries_query(entry_query.clone());
-    }));
+    use_reactive_task(
+        (feed_id, entry_query.clone(), reload_version),
+        move |(_, entry_query, _)| {
+            session.load_entries_query(entry_query);
+        },
+    );
 
-    use_effect(use_reactive!(|(
-        preferences_loaded,
-        grouping_mode,
-        show_archived,
-        read_filter,
-        starred_filter,
-        selected_feed_urls,
-    )| {
-        session.save_browsing_preferences_with(
+    use_reactive_side_effect(
+        (
             preferences_loaded,
             grouping_mode,
             show_archived,
             read_filter,
             starred_filter,
-            selected_feed_urls.clone(),
-        );
-    }));
+            selected_feed_urls,
+        ),
+        move |(
+            preferences_loaded,
+            grouping_mode,
+            show_archived,
+            read_filter,
+            starred_filter,
+            selected_feed_urls,
+        )| {
+            session.save_browsing_preferences_with(
+                preferences_loaded,
+                grouping_mode,
+                show_archived,
+                read_filter,
+                starred_filter,
+                selected_feed_urls,
+            );
+        },
+    );
 
-    let presenter = session.presenter(current_time_utc());
-    (session, state_snapshot, presenter)
+    EntriesPageFacade::new(ui, session, state_snapshot, current_time_utc())
 }
 
 #[cfg(target_arch = "wasm32")]
