@@ -57,6 +57,52 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
     AppShellState { entry_search, nav_hidden }
 }
 
+#[derive(Clone)]
+pub(crate) struct AppNavShell {
+    shell: AppShellState,
+    navigator: Navigator,
+}
+
+impl AppNavShell {
+    pub(crate) fn nav_hidden(&self) -> bool {
+        self.shell.nav_hidden()
+    }
+
+    pub(crate) fn nav_state(&self) -> &'static str {
+        if self.nav_hidden() { "collapsed" } else { "expanded" }
+    }
+
+    pub(crate) fn entry_search(&self) -> String {
+        self.shell.entry_search()
+    }
+
+    pub(crate) fn set_entry_search(&self, value: String) {
+        self.shell.set_entry_search(value);
+    }
+
+    pub(crate) fn show_nav(&self) {
+        self.shell.show_nav();
+    }
+
+    pub(crate) fn hide_nav(&self) {
+        self.shell.hide_nav();
+    }
+
+    pub(crate) fn submit_search(&self) {
+        self.shell.submit_search(self.navigator.clone());
+    }
+
+    pub(crate) fn focus_search(&self) {
+        self.shell.focus_search(self.navigator.clone());
+    }
+}
+
+pub(crate) fn use_app_nav_shell() -> AppNavShell {
+    let shell = use_context::<AppShellState>();
+    let navigator = use_navigator();
+    AppNavShell { shell, navigator }
+}
+
 pub(crate) fn use_authenticated_shell_bus(
     mut auth: Signal<WebAuthState>,
     mut settings: Signal<UserSettings>,

@@ -12,8 +12,8 @@ pub(crate) use self::{
     },
     runtime::execute_ui_command,
     shell::{
-        AppShellState, use_app_shell_state, use_authenticated_shell_bus, use_startup_route_bus,
-        use_web_auth_gate_shell,
+        AppShellState, use_app_nav_shell, use_app_shell_state, use_authenticated_shell_bus,
+        use_startup_route_bus, use_web_auth_gate_shell,
     },
     snapshot::UiIntent,
 };

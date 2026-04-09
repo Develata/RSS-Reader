@@ -5,7 +5,8 @@ use crate::{
     router::{AppRoute, RoutableApp},
     theme::{ThemeController, density_class, theme_class},
     ui::{
-        AppShellState, use_app_shell_state, use_authenticated_shell_bus, use_web_auth_gate_shell,
+        use_app_nav_shell, use_app_shell_state, use_authenticated_shell_bus,
+        use_web_auth_gate_shell,
     },
     web_auth::{WebAuthState, auth_state},
 };
@@ -65,17 +66,21 @@ pub fn App() -> Element {
 
 #[component]
 pub fn AppNav() -> Element {
-    let shell = use_context::<AppShellState>();
-    let navigator = use_navigator();
+    let shell = use_app_nav_shell();
+    let show_nav_shell = shell.clone();
+    let hide_nav_shell = shell.clone();
+    let submit_search_shell = shell.clone();
+    let focus_search_shell = shell.clone();
+    let update_search_shell = shell.clone();
 
     if shell.nav_hidden() {
         return rsx! {
-            div { class: "app-nav-reveal",
+            div { class: "app-nav-reveal", "data-state": "{shell.nav_state()}",
                 button {
                     class: "app-nav-reveal__button",
                     "data-action": "show-top-nav",
                     onclick: move |_| {
-                        shell.show_nav();
+                        show_nav_shell.show_nav();
                     },
                     span { class: "app-nav-reveal__icon", "≡" }
                 }
@@ -84,7 +89,7 @@ pub fn AppNav() -> Element {
     }
 
     rsx! {
-        nav { class: "app-nav-shell",
+        nav { class: "app-nav-shell", "data-state": "{shell.nav_state()}",
             div { class: "app-nav__topline",
                 Link {
                     class: "app-nav__brand",
@@ -105,7 +110,7 @@ pub fn AppNav() -> Element {
                     aria_label: "收起顶部导航",
                     title: "收起顶部导航",
                     onclick: move |_| {
-                        shell.hide_nav();
+                        hide_nav_shell.hide_nav();
                     },
                     "×"
                 }
@@ -114,7 +119,7 @@ pub fn AppNav() -> Element {
                 class: "app-nav__search",
                 onsubmit: move |event| {
                     event.prevent_default();
-                    shell.submit_search(navigator.clone());
+                    submit_search_shell.submit_search();
                 },
                 label {
                     class: "app-nav__search-icon",
@@ -124,12 +129,13 @@ pub fn AppNav() -> Element {
                 input {
                     id: "app-nav-search-input",
                     class: "app-nav__search-input",
+                    "data-field": "entry-search",
                     r#type: "search",
                     placeholder: "搜索文章标题",
                     value: "{shell.entry_search()}",
-                    onfocus: move |_| shell.focus_search(navigator.clone()),
+                    onfocus: move |_| focus_search_shell.focus_search(),
                     oninput: move |event| {
-                        shell.set_entry_search(event.value());
+                        update_search_shell.set_entry_search(event.value());
                     },
                 }
                 span { class: "app-nav__search-hint", "Enter" }
