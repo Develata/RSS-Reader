@@ -257,6 +257,39 @@
       - `data-nav="feeds|entries|settings"`
       - 空状态 banner
 
+### 12. 正式补齐了静态 Web 应用内部页与 `rssr-web` 登录后 smoke
+
+- 静态 Web：
+  - 继续使用同源 helper：
+    - `/__codex/setup-local-auth?username=...&password=...&next=/entries`
+    - `/__codex/setup-local-auth?username=...&password=...&next=/feeds`
+    - `/__codex/setup-local-auth?username=...&password=...&next=/settings`
+  - headless Chrome 已确认：
+    - `/entries` 最终进入真实应用页
+    - `/feeds` 最终进入真实订阅页
+    - `/settings` 最终进入真实设置页
+  - DOM 命中包括：
+    - `data-page="entries"`
+    - `data-page="feeds"`
+    - `data-page="settings"`
+    - `data-layout="entries-layout"`
+    - `data-layout="feed-workbench-single"`
+    - `data-layout="settings-grid"`
+- `rssr-web`：
+  - 在 helper 拉起的部署壳上补走了一轮真实 cookie 登录流
+  - 已确认：
+    - `POST /login` 返回 `303`
+    - `/session-probe` 为 `204`
+    - 登录后 `/feeds` 为 `200`
+    - 登录后 `/settings` 为 `200`
+    - `/logout` 返回 `303` 到 `/login`
+- 当前判断：
+  - 发布前回归工具链已经覆盖：
+    - 静态 Web 门禁壳
+    - 静态 Web 应用内部页
+    - `rssr-web` 部署壳登录前后路径
+  - 这条线当前剩下的就不是“缺入口”，而是后续是否还要加更细的业务 smoke
+
 ## 已执行的验证 / 验收
 
 - 脚本可执行权限：
@@ -326,26 +359,58 @@
     - `http://127.0.0.1:8093/feeds`
     - `http://127.0.0.1:8093/settings`
   - 已确认导航壳、搜索框、导航链接正常显示，console 无新错误
+- 最终静态 Web 应用内部页 headless smoke：
+  - `bash scripts/run_web_spa_regression_server.sh --skip-build --port 8107`
+  - `google-chrome --headless=new --dump-dom 'http://127.0.0.1:8107/__codex/setup-local-auth?...&next=/entries'`
+  - `google-chrome --headless=new --dump-dom 'http://127.0.0.1:8107/__codex/setup-local-auth?...&next=/feeds'`
+  - `google-chrome --headless=new --dump-dom 'http://127.0.0.1:8107/__codex/setup-local-auth?...&next=/settings'`
+  - 已确认：
+    - `data-page="entries"`
+    - `data-page="feeds"`
+    - `data-page="settings"`
+    - `data-layout="entries-layout"`
+    - `data-layout="feed-workbench-single"`
+    - `data-layout="settings-grid"`
+- 最终 `rssr-web` 登录流 smoke：
+  - `bash scripts/run_rssr_web_browser_smoke.sh --skip-build --port 18087`
+  - `curl -X POST /login`
+  - `curl /session-probe`
+  - `curl /feeds`
+  - `curl /settings`
+  - `curl /logout`
+  - 已确认：
+    - 登录 `303`
+    - `/session-probe` `204`
+    - `/feeds` `200`
+    - `/settings` `200`
+    - `/logout` `303 -> /login`
 
 ## 当前状态、风险、待跟进项
 
-- 当前工作区未提交。
-- 这轮没有继续扩大 CSS 迁移面，而是：
-  - 固化回归脚本
-  - 把 `app-nav`、`entry-directory-rail`、`reader-page`、`web-auth` 从 class 驱动进一步迁到语义接口
-  - 把下一批 class 驱动密集区整理进执行清单
-  - 把主题作者与前端公开接口文档正式收口到当前实现
-- 下一步最自然的是：
-  - 复查剩余通用布局 class 是否还值得继续槽化
-  - 或把这轮语义接口迁移和文档收口一起提交
-  - 或继续审查内置主题里剩余的内部组件 class 依赖，决定它们是保留公开，还是继续补 `data-slot`
+- 当前工作区干净，仅剩未跟踪的 `.codex`。
+- 今天这条线已经完成：
+  - CSS 公开语义接口迁移
+  - 内置主题迁移
+  - 主题契约测试
+  - 静态 Web / `rssr-web` smoke helper
+  - 发布前 UI 预检入口
+  - 静态 Web 应用内部页与 `rssr-web` 登录后路径的正式回归
+- 当前没有新的阻塞性风险。
+- 如果下一步继续，不再建议扩 selector 迁移面；更值的是：
+  - 继续补更细的业务 smoke
+  - 或转去做真正的发布前缺口清单
+  - 或回到其它功能/架构主线
 
 ## 相关 commit / worktree 状态
 
-- 已有基线提交：
+- 今日新增关键提交：
+  - `70318a9` `test: add release ui preflight runner`
+  - `25c34f2` `test: add rssr-web browser smoke helper`
+  - `66f8cec` `test: wait for rssr-web browser smoke readiness`
+  - `537cafc` `test: add static web browser smoke helper`
+- 之前已完成的 CSS/主题基线提交：
   - `be2b7dd` `refactor: add semantic layout interfaces for css`
+  - `7fe328a` `refactor: finalize semantic css interfaces`
+  - `5937c49` `refactor: align builtin themes with semantic slots`
 - 当前 worktree：
-  - 设计文档更新
-  - 新增 SPA fallback 回归脚本
-  - 新增对应设计文档
-  - `app-nav` / `entry-directory-rail` / `reader-page` / `web-auth` 语义接口迁移
+  - clean
