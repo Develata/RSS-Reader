@@ -324,6 +324,11 @@
 - 额外旁证：
   - seed 后直接访问 `/feeds`
   - 订阅页统计已从 `0 / 0` 恢复到真实 seeded 数据路径
+- 进一步收口：
+  - 发布前预检脚本 `summary.md` 模板已新增：
+    - `静态 reader seed smoke`
+  - `run_release_ui_regression.sh` 的静态阶段提示也会直接打印 reader-demo helper URL
+  - 发布前回归清单与 testing 索引都已把 `/entries/2` seed 路径提升为正式入口，而不再只是附带技巧
 
 ## 已执行的验证 / 验收
 

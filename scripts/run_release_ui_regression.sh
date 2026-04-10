@@ -94,6 +94,7 @@ write_summary() {
 - /feeds：
 - /settings：
 - /reader/{entry_id}：
+- 静态 reader seed smoke：
 - 默认主题：
 - Atlas Sidebar：
 - Newsprint：
@@ -229,6 +230,7 @@ echo "After the server comes up, manually verify:"
 echo "  - http://127.0.0.1:${port}/entries"
 echo "  - http://127.0.0.1:${port}/feeds"
 echo "  - http://127.0.0.1:${port}/settings"
+echo "  - http://127.0.0.1:${port}/__codex/setup-local-auth?username=smoke&password=smoke-pass-123&seed=reader-demo&next=/entries/2"
 if [[ "$with_rssr_web" == "true" ]]; then
   echo "  - rssr-web smoke logs: $web_log"
 fi

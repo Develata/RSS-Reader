@@ -73,6 +73,12 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
 bash scripts/run_release_ui_regression.sh --debug --port 8091
 ```
 
+如果要把真实阅读页也固定纳入这轮预检，静态 Web 阶段直接补：
+
+```text
+http://127.0.0.1:8091/__codex/setup-local-auth?username=smoke&password=smoke-pass-123&seed=reader-demo&next=/entries/2
+```
+
 如果只想单独启动现成构建产物，也可以继续直接执行：
 
 ```bash
@@ -158,6 +164,8 @@ bash scripts/run_static_web_browser_smoke.sh
 ```bash
 bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2
 ```
+
+当前 `reader-demo` seed 已经实测可进入真实阅读页，不再是只写门禁状态的占位 helper。
 
 `rssr-web`：
 

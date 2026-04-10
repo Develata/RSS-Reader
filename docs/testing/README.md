@@ -21,6 +21,7 @@
 - 如果是发版前确认：
   - 先过 [发布前 UI 回归清单](./release-ui-regression-checklist.md)
   - 再补充路由、订阅刷新、阅读页导航、主题切换、设置持久化的专项确认
+  - 静态 Web 如果要稳定进入真实阅读页，优先用 `run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2`
 - 如果是排查 Web 端问题：
   - 重点看 feed 刷新、浏览器 Console 和持久化行为
 - 如果是逐模块推进 headless active interface 重构：
