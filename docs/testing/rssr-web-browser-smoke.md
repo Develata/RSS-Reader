@@ -31,6 +31,8 @@ bash scripts/run_rssr_web_browser_smoke.sh
 默认地址：
 
 - `http://127.0.0.1:18081`
+- 默认推荐 feed：
+  - `https://www.ruanyifeng.com/blog/atom.xml`
 
 ## 常用参数
 
@@ -38,22 +40,51 @@ bash scripts/run_rssr_web_browser_smoke.sh
 bash scripts/run_rssr_web_browser_smoke.sh --skip-build
 bash scripts/run_rssr_web_browser_smoke.sh --port 18082
 bash scripts/run_rssr_web_browser_smoke.sh --release
+bash scripts/run_rssr_web_browser_smoke.sh --feed-url https://example.com/feed.xml
 ```
 
-## 推荐检查项
+## 固定手工步骤
 
-至少检查：
+脚本启动后，按下面顺序检查：
 
-- `/login`
-- 登录后 `/feeds`
-- 登录后 `/settings`
-- `/logout`
+1. 打开 `/login`。
+2. 用脚本打印的临时用户名和密码登录。
+3. 进入 `/feeds`。
+4. 在 `data-field="feed-url-input"` 输入推荐 feed。
+5. 点击 `data-action="add-feed"`。
+6. 确认页面出现新的 feed 卡片，且卡片标题链接带有 `data-nav="feed-entries"`。
+7. 点击该卡片上的 `data-action="refresh-feed"`。
+8. 如果页面出现文章，点击 `data-nav="feed-entries"` 进入文章页；如能进入阅读页，再补看 `/reader`。
+9. 打开 `/settings`，确认设置页在登录态下正常可达。
+10. 打开 `/logout`，确认会回到 `/login`。
 
-如果环境允许，再补：
+## 固定 selector / 期望
 
-- 至少 1 个需要代理的 feed 导入
-- feed 首次刷新
-- 导入后进入 `/entries` 或 `/reader`
+- `data-field="feed-url-input"`：订阅输入框
+- `data-action="add-feed"`：添加订阅
+- `data-action="refresh-feed"`：刷新单个订阅
+- `data-nav="feed-entries"`：进入该订阅文章页
+
+建议期望：
+
+- 登录后 `/feeds` 可达
+- 添加 feed 后，新的 feed 卡片可见
+- 刷新后不应回到登录页，也不应出现明显错误壳
+- `/settings` 可达
+- `/logout` 后回到 `/login`
+
+## 为什么当前仍是手工 smoke
+
+当前这条链路没有收成固定浏览器自动化，不是因为页面接口不稳定，而是因为：
+
+- 公开 selector 已稳定
+- 但当前仓库环境里的 Chrome MCP / DevTools 连接不稳定
+- 因此“真实浏览器里添加订阅并完成首次刷新”这条路径，暂时仍保留为固定手工 smoke
+
+也就是说：
+
+- 这条回归的入口、步骤、selector、推荐 feed 都已经固定
+- 还没固定下来的只是浏览器自动操作本身
 
 ## 结果记录
 
@@ -64,9 +95,9 @@ bash scripts/run_rssr_web_browser_smoke.sh --release
 建议直接在这份模板上补：
 
 - 登录页结果
-- `/feeds` 结果
+- `feed-url-input / add-feed / refresh-feed / feed-entries` 结果
 - `/settings` 结果
-- 登出结果
+- `/logout` 结果
 - 代理 feed 结果
 - console 结果
 - 是否通过

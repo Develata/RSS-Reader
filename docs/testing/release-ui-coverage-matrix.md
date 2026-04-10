@@ -38,8 +38,8 @@
 | `rssr-web` 代理链路 `/feed-proxy` 返回真实 XML | 固定 smoke | `bash scripts/run_rssr_web_proxy_feed_smoke.sh` | P1 | 当前默认验证阮一峰 Atom |
 | 静态 Web `/reader` 多主题下的视觉细节 | 手工 | 参考 `target/static-web-reader-theme-matrix/<ts>/*.png` | P2 | 脚本已产出截图，但是否“好看/可读”仍需人工判断 |
 | 静态 Web 小视口下的视觉细节 | 手工 | 参考 `target/static-web-small-viewport-smoke/<ts>/*.png` | P2 | 脚本已产出截图，但仍需人工判断是否可接受 |
-| `rssr-web` 浏览器态下真实添加订阅并完成首次刷新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 当前还没有全 UI 自动化，只钉住了 `/feed-proxy` 链路 |
-| `rssr-web` 浏览器态下真实代理 feed 导入后的页面更新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 建议后续继续收口，但当前不阻塞 P1 |
+| `rssr-web` 浏览器态下真实添加订阅并完成首次刷新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 入口、推荐 feed、selector、结果模板都已固定；当前缺的是浏览器自动操作 |
+| `rssr-web` 浏览器态下真实代理 feed 导入后的页面更新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 公开 selector 已稳定，当前仍主要受限于本地 Chrome MCP / DevTools 连接不稳定 |
 | WebDAV 上传/下载 UI 实页回归 | 手工 | 发布前清单 + 浏览器手工 | P2 | 自动化更多停留在 lower-level gates |
 | 多主题下 `/entries` `/feeds` `/settings` 的视觉细节 | 手工 | 发布前清单 + 浏览器手工 | P2 | 内置主题契约已自动化，但视觉仍建议 spot check |
 | 真实远端 feed 首次刷新后的 `/entries` / `/reader` 浏览器态 | 手工 | 发布前清单 + 浏览器手工 | P2 | 受远端源波动和 CORS/代理形态影响 |
@@ -60,6 +60,7 @@
 
 - 仍有少量 **浏览器视觉判断** 需要人工看截图或实机页面
 - `rssr-web` 浏览器态下“真实添加订阅并完成首次刷新”仍未自动化
+- 这条缺口现在更准确地说是“自动操作缺口”，不是“入口或契约缺口”
 
 ## 推荐发布前顺序
 
@@ -81,4 +82,4 @@ bash scripts/run_rssr_web_proxy_feed_smoke.sh
 
 - 看多主题 `/reader` 截图是否可接受
 - 看小视口截图是否可接受
-- 如本次发布涉及订阅/刷新/代理行为，再手工补一次 `rssr-web` 浏览器态真实添加订阅
+- 如本次发布涉及订阅/刷新/代理行为，再按固定 selector 手工补一次 `rssr-web` 浏览器态真实添加订阅

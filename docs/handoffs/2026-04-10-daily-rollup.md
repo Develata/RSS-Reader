@@ -300,6 +300,34 @@
     - 多主题与小视口的视觉可接受性，仍需人工看截图
     - `rssr-web` 浏览器态下“真实添加订阅并完成首次刷新”仍未自动化
     - headless Chrome dump DOM 能拿到真实应用入口，而不是浏览器错误页
+
+### 14. `rssr-web` 浏览器态真实添加订阅已收成固定手工契约
+
+- 更新：
+  - [run_rssr_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_smoke.sh)
+  - [rssr-web-browser-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/rssr-web-browser-smoke.md)
+  - [release-ui-coverage-matrix.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-coverage-matrix.md)
+  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
+- 这轮没有继续硬做浏览器自动化，而是先把当前 P2 缺口收成稳定手工 smoke：
+  - 固定推荐代理 feed：
+    - `https://www.ruanyifeng.com/blog/atom.xml`
+  - 固定 selector：
+    - `data-field="feed-url-input"`
+    - `data-action="add-feed"`
+    - `data-action="refresh-feed"`
+    - `data-nav="feed-entries"`
+  - 固定结果模板：
+    - 登录
+    - 添加订阅
+    - 首次刷新
+    - 进入文章页 / 阅读页
+    - `/settings`
+    - `/logout`
+- 结论：
+  - 这条缺口现在已经不是“没有入口 / 没有契约”
+  - 而是“浏览器自动操作尚未固定”
+  - 当前仓库环境里的 Chrome MCP / DevTools 连接不稳定，因此这条链路暂时继续保持固定手工 smoke
 - 静态 Web 路由级 DOM smoke：
   - `entries / feeds / settings` 三条路径都用 headless Chrome dump DOM 验证过
   - 当前统一落到本地 Web 门禁壳：
@@ -451,6 +479,8 @@
   - `bash -n scripts/run_release_ui_regression.sh`
   - `bash scripts/run_release_ui_regression.sh --no-serve --skip-build`
   - `bash scripts/run_release_ui_regression.sh --no-serve --skip-build --with-rssr-web`
+- `rssr-web` 浏览器手工 smoke 脚本更新后复查：
+  - `bash -n scripts/run_rssr_web_browser_smoke.sh`
 - `rssr-web` 浏览器手工 smoke helper：
   - `bash -n scripts/run_rssr_web_browser_smoke.sh`
   - `timeout 20 bash scripts/run_rssr_web_browser_smoke.sh --skip-build --port 18083`
@@ -528,8 +558,10 @@
   - 发布前 UI 预检入口
   - 静态 Web 应用内部页与 `rssr-web` 登录后路径的正式回归
 - 当前没有新的阻塞性风险。
+- `rssr-web` 浏览器态真实添加订阅仍然不是自动化项，但步骤、selector、推荐 feed 与结果模板都已固定。
 - 如果下一步继续，不再建议扩 selector 迁移面；更值的是：
   - 继续补更细的业务 smoke
+  - 或在环境允许时把 `rssr-web` 浏览器态添加订阅收成真正自动化
   - 或转去做真正的发布前缺口清单
   - 或回到其它功能/架构主线
 

@@ -128,6 +128,17 @@ bash scripts/run_rssr_web_proxy_feed_smoke.sh
 bash scripts/run_rssr_web_browser_smoke.sh
 ```
 
+这条 helper 现在会同时给出：
+
+- 临时用户名 / 密码
+- 推荐代理 feed
+- `summary.md` 模板
+- 固定手工步骤依赖的 selector：
+  - `data-field="feed-url-input"`
+  - `data-action="add-feed"`
+  - `data-action="refresh-feed"`
+  - `data-nav="feed-entries"`
+
 ## 页面与主题矩阵
 
 发布前至少检查以下页面：
@@ -195,6 +206,11 @@ bash scripts/run_static_web_small_viewport_smoke.sh
 - 错误凭证有明确提示
 - 正确凭证可进入应用
 - 登出后会话被清除
+- 如果本次发布涉及订阅/刷新/代理行为，再按固定 selector 手工补一次：
+  - 在 `/feeds` 填 `data-field="feed-url-input"`
+  - 点击 `data-action="add-feed"`
+  - 点击 `data-action="refresh-feed"`
+  - 确认 `data-nav="feed-entries"` 可进入对应文章页
 
 ### 3. 订阅页
 

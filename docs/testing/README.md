@@ -30,6 +30,7 @@
   - 多主题下的真实阅读页，优先用 `run_static_web_reader_theme_matrix.sh`
   - 小视口关键路径，优先用 `run_static_web_small_viewport_smoke.sh`
   - 如果想先钉死部署壳的 feed 代理链路，优先用 `run_rssr_web_proxy_feed_smoke.sh`
+  - 如果本次发布涉及订阅/刷新/代理行为，再补一次 `run_rssr_web_browser_smoke.sh` 的固定手工步骤
 - 如果是排查 Web 端问题：
   - 重点看 feed 刷新、浏览器 Console 和持久化行为
 - 如果是逐模块推进 headless active interface 重构：

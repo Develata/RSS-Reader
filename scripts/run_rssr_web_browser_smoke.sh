@@ -8,6 +8,7 @@ log_dir=""
 username="smoke"
 password="smoke-pass-123"
 session_secret="rssr-web-browser-smoke-session-secret-0123456789"
+feed_url="https://www.ruanyifeng.com/blog/atom.xml"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -43,8 +44,12 @@ while [[ $# -gt 0 ]]; do
       session_secret="${2:?missing session secret value}"
       shift 2
       ;;
+    --feed-url)
+      feed_url="${2:?missing feed url value}"
+      shift 2
+      ;;
     *)
-      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--username USER] [--password PASS] [--session-secret SECRET]" >&2
+      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--username USER] [--password PASS] [--session-secret SECRET] [--feed-url URL]" >&2
       exit 1
       ;;
   esac
@@ -84,25 +89,46 @@ cat >"$summary_file" <<EOF
 - bind：http://127.0.0.1:${port}
 - 用户名：${username}
 - 密码：${password}
+- 推荐 feed：${feed_url}
 - 日志：${log_file}
 
-## 建议检查
+## 固定手工步骤
 
-- /login
-- 登录后 /feeds
-- 登录后 /settings
-- 登出
-- 至少 1 个需要代理的 feed 导入
+1. 打开 `/login`，用上面的用户名和密码登录。
+2. 进入 `/feeds`。
+3. 在 `data-field="feed-url-input"` 输入推荐 feed：
+
+   \`${feed_url}\`
+
+4. 点击 `data-action="add-feed"`。
+5. 确认页面出现新的 feed 卡片，且卡片标题链接带有 `data-nav="feed-entries"`。
+6. 点击该卡片上的 `data-action="refresh-feed"`。
+7. 如果页面出现文章，点击 `data-nav="feed-entries"` 进入文章页；如能进入阅读页，再补看 `/reader`。
+8. 打开 `/settings`，确认登录态下设置页可达。
+9. 访问 `/logout`，确认会回到 `/login`。
+
+## 固定 selector / 期望
+
+- 登录页：
+- `data-field="feed-url-input"`：
+- `data-action="add-feed"`：
+- `data-action="refresh-feed"`：
+- `data-nav="feed-entries"`：
+- `/settings`：
+- `/logout`：
 
 ## 结果补充
 
-- 登录页：
-- /feeds：
-- /settings：
-- 登出：
+- 新 feed 是否出现：
+- 首次刷新是否成功：
+- `/entries` 或 `/reader`：
 - 代理 feed：
 - console：
 - 是否通过：
+
+## 说明
+
+- 这条 smoke 当前仍是手工项，原因不是 selector 不稳定，而是当前仓库环境里的 Chrome MCP / DevTools 连接不稳定，尚未形成可重复的浏览器端 UI 自动化。
 EOF
 
 RSS_READER_WEB_BIND="127.0.0.1:${port}" \
@@ -140,6 +166,7 @@ fi
 echo "rssr-web browser smoke server is ready on http://127.0.0.1:${port}"
 echo "Username: ${username}"
 echo "Password: ${password}"
+echo "Recommended feed URL: ${feed_url}"
 echo "Summary template: ${summary_file}"
 echo "Log file: ${log_file}"
 echo
