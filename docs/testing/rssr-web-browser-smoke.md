@@ -21,6 +21,7 @@ bash scripts/run_rssr_web_browser_smoke.sh
 
 - 构建 `rssr-app` web bundle
 - 用临时凭据启动 `rssr-web`
+- 等待 `/healthz` ready 后再打印可访问地址
 - 打印：
   - 本地 URL
   - 用户名 / 密码
@@ -69,3 +70,13 @@ bash scripts/run_rssr_web_browser_smoke.sh --release
 - 代理 feed 结果
 - console 结果
 - 是否通过
+
+## Ready 约定
+
+脚本现在会先等 `http://127.0.0.1:<port>/healthz` 变成 `200`，然后才打印：
+
+- URL
+- 用户名 / 密码
+- summary 路径
+
+如果启动失败，会直接报错并提示查看对应 `rssr-web.log`，避免刚起进程时浏览器立刻撞上 `502`。

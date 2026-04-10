@@ -105,17 +105,43 @@ cat >"$summary_file" <<EOF
 - 是否通过：
 EOF
 
-echo "Starting rssr-web browser smoke server on http://127.0.0.1:${port}"
-echo "Username: ${username}"
-echo "Password: ${password}"
-echo "Summary template: ${summary_file}"
-echo "Log file: ${log_file}"
-echo
-
 RSS_READER_WEB_BIND="127.0.0.1:${port}" \
 RSS_READER_WEB_STATIC_DIR="$public_dir" \
 RSS_READER_WEB_USERNAME="$username" \
 RSS_READER_WEB_PASSWORD="$password" \
 RSS_READER_WEB_SESSION_SECRET="$session_secret" \
 RSS_READER_WEB_AUTH_STATE_FILE="$auth_state_file" \
-exec cargo run -p rssr-web 2>&1 | tee "$log_file"
+cargo run -p rssr-web 2>&1 | tee "$log_file" &
+server_pid=$!
+
+cleanup() {
+  if kill -0 "$server_pid" >/dev/null 2>&1; then
+    kill "$server_pid" >/dev/null 2>&1 || true
+    wait "$server_pid" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+ready="false"
+for _ in {1..30}; do
+  if curl -fsS "http://127.0.0.1:${port}/healthz" >/dev/null 2>&1; then
+    ready="true"
+    break
+  fi
+  sleep 1
+done
+
+if [[ "$ready" != "true" ]]; then
+  echo "rssr-web browser smoke server failed to become ready on http://127.0.0.1:${port}" >&2
+  echo "See log: ${log_file}" >&2
+  exit 1
+fi
+
+echo "rssr-web browser smoke server is ready on http://127.0.0.1:${port}"
+echo "Username: ${username}"
+echo "Password: ${password}"
+echo "Summary template: ${summary_file}"
+echo "Log file: ${log_file}"
+echo
+
+wait "$server_pid"

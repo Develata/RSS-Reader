@@ -197,6 +197,9 @@
   - 已实测：
     - helper 可启动 `rssr-web`
     - `/healthz` 返回 `200`
+  - 当前又继续补了一层：
+    - helper 会先等待 `/healthz` ready，再打印 URL 与临时凭据
+    - 启动失败时直接报错并指向 `rssr-web.log`
 
 ## 已执行的验证 / 验收
 
@@ -242,6 +245,7 @@
   - `bash -n scripts/run_rssr_web_browser_smoke.sh`
   - `timeout 20 bash scripts/run_rssr_web_browser_smoke.sh --skip-build --port 18083`
   - `curl -i http://127.0.0.1:18083/healthz`
+  - `timeout 20 bash scripts/run_rssr_web_browser_smoke.sh --skip-build --port 18085`
 - 语义接口 grep：
   - `rg -n "app-nav__|entry-directory-rail__|entry-top-directory__" assets/styles crates/rssr-app/src -g'*.css' -g'*.rs'`
 - 阅读页接口 grep：
