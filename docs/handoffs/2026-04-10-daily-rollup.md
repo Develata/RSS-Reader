@@ -154,6 +154,31 @@
     - 关键持久化与配置交换
     - 小视口与 Console 门禁
 
+### 8. 新增发布前 UI 预检脚本，串起自动化门禁与静态 Web 回归
+
+- 新增：
+  - [run_release_ui_regression.sh](/home/develata/gitclone/RSS-Reader/scripts/run_release_ui_regression.sh)
+- 更新：
+  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+  - [web-spa-regression-server.md](/home/develata/gitclone/RSS-Reader/docs/design/web-spa-regression-server.md)
+- 作用：
+  - 固定发布前 UI 预检入口
+  - 先串行跑：
+    - `rssr-app` 编译与测试
+    - builtin theme 契约测试
+    - `rssr-infra` 关键 contract harness
+    - `rssr-web` 测试
+  - 自动化门禁通过后，再进入静态 `rssr-app` + SPA fallback 回归服务
+  - 当前又继续补了两项：
+    - 可选 `rssr-web` 最小部署壳 smoke
+    - 自动生成 `summary.md` 结果模板与日志目录
+  - `rssr-web` smoke 当前已进一步扩到：
+    - 未登录访问 `/entries` 重定向到 `/login`
+    - 用临时凭据真实登录
+    - 登录后 `/session-probe` 为 `204`
+    - 登录后 `/feeds`、`/settings` 为 `200`
+    - `/logout` 后回到 `/login`
+
 ## 已执行的验证 / 验收
 
 - 脚本可执行权限：
@@ -190,6 +215,10 @@
   - `cargo test -p rssr-app --test test_builtin_theme_contracts`
 - 发布前 UI 回归清单接入后复查：
   - `git diff --check`
+- 发布前 UI 预检脚本：
+  - `bash -n scripts/run_release_ui_regression.sh`
+  - `bash scripts/run_release_ui_regression.sh --no-serve --skip-build`
+  - `bash scripts/run_release_ui_regression.sh --no-serve --skip-build --with-rssr-web`
 - 语义接口 grep：
   - `rg -n "app-nav__|entry-directory-rail__|entry-top-directory__" assets/styles crates/rssr-app/src -g'*.css' -g'*.rs'`
 - 阅读页接口 grep：

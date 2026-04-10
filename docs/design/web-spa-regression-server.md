@@ -6,6 +6,26 @@
 - 对未知路径自动回退到 `index.html`，避免直接访问 `/feeds`、`/settings`、`/entries` 时落到 404。
 - 给 Chrome MCP、本地浏览器回归和 CSS 完全分离检查提供固定入口。
 
+如果需要把发布前自动化门禁和静态 Web 回归串成一条命令，优先执行：
+
+```bash
+bash scripts/run_release_ui_regression.sh --debug --port 8091
+```
+
+这条脚本会先跑 `rssr-app / rssr-infra / rssr-web` 的发布前 UI 自动化门禁，再进入这里的 SPA fallback 服务。
+
+如果还想同时串上 `rssr-web` 的最小部署壳 smoke，可以加：
+
+```bash
+bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
+```
+
+对应日志和结果模板会落在：
+
+- `target/release-ui-regression/<timestamp>/automated-gates.log`
+- `target/release-ui-regression/<timestamp>/rssr-web.log`
+- `target/release-ui-regression/<timestamp>/summary.md`
+
 ## 脚本
 
 - [run_web_spa_regression_server.sh](/home/develata/gitclone/RSS-Reader/scripts/run_web_spa_regression_server.sh)

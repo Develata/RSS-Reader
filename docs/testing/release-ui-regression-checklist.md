@@ -23,6 +23,26 @@
 
 ## 发布前最小自动化门禁
 
+建议优先走统一脚本：
+
+```bash
+bash scripts/run_release_ui_regression.sh --debug --port 8091
+```
+
+如果只想先跑自动化门禁、不启动静态 Web 服务：
+
+```bash
+bash scripts/run_release_ui_regression.sh --no-serve
+```
+
+如果还想把 `rssr-web` 部署壳的最小 smoke 一起串进来：
+
+```bash
+bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
+```
+
+脚本内部会串行执行下面这组自动化检查。
+
 至少先通过：
 
 - `cargo check -p rssr-app`
@@ -50,7 +70,12 @@
 入口：
 
 ```bash
-dx build --platform web --package rssr-app
+bash scripts/run_release_ui_regression.sh --debug --port 8091
+```
+
+如果只想单独启动现成构建产物，也可以继续直接执行：
+
+```bash
 bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
 ```
 
@@ -67,6 +92,19 @@ bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
 - `/`
 - 登录 / 登出
 - 至少 1 个需要代理才能导入的 feed
+
+当前统一脚本里已经补了最小部署壳 smoke：
+
+- 启动 `rssr-web`
+- 探活 `/healthz`
+- 确认 `/login` 正常
+- 确认未登录访问 `/entries` 会重定向到 `/login`
+- 用临时凭据完成一次真实登录
+- 确认已登录后 `/session-probe` 返回 `204`
+- 确认已登录后 `/feeds` 和 `/settings` 返回 `200`
+- 确认 `/logout` 后回到 `/login`
+
+代理 feed 导入和更完整的页面行为，仍需要浏览器手工回归补齐。
 
 ## 页面与主题矩阵
 
@@ -222,6 +260,12 @@ bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
 - 主题矩阵结果
 - env-limited 项
 - 是否允许发布
+
+统一脚本会自动在日志目录生成一份初始模板：
+
+- `target/release-ui-regression/<timestamp>/summary.md`
+
+可以直接在这份模板上补完人工结论。
 
 ## 相关文档
 
