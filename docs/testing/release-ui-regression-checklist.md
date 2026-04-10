@@ -106,6 +106,12 @@ bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
 
 代理 feed 导入和更完整的页面行为，仍需要浏览器手工回归补齐。
 
+如果要快速起一个可登录的 `rssr-web` 浏览器回归环境，直接用：
+
+```bash
+bash scripts/run_rssr_web_browser_smoke.sh
+```
+
 ## 页面与主题矩阵
 
 发布前至少检查以下页面：
@@ -271,6 +277,7 @@ bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
 
 - [主线验证矩阵](./mainline-validation-matrix.md)
 - [手工回归测试清单](./manual-regression.md)
+- [`rssr-web` 浏览器手工 Smoke](./rssr-web-browser-smoke.md)
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
 - [环境限制索引](./environment-limitations.md)
 - [Web SPA 回归服务脚本](/home/develata/gitclone/RSS-Reader/docs/design/web-spa-regression-server.md)

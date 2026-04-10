@@ -179,6 +179,25 @@
     - 登录后 `/feeds`、`/settings` 为 `200`
     - `/logout` 后回到 `/login`
 
+### 9. 新增 `rssr-web` 浏览器手工 smoke 启动脚本
+
+- 新增：
+  - [run_rssr_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_smoke.sh)
+  - [rssr-web-browser-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/rssr-web-browser-smoke.md)
+- 更新：
+  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
+  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+- 作用：
+  - 固定一条真实浏览器态的 `rssr-web` 手工 smoke 启动路径
+  - 自动给出临时用户名、密码、日志文件和结果模板
+  - 避免每次手工回归时重复拼：
+    - `RSS_READER_WEB_*` 环境变量
+    - 静态目录路径
+    - 临时认证状态文件
+  - 已实测：
+    - helper 可启动 `rssr-web`
+    - `/healthz` 返回 `200`
+
 ## 已执行的验证 / 验收
 
 - 脚本可执行权限：
@@ -219,6 +238,10 @@
   - `bash -n scripts/run_release_ui_regression.sh`
   - `bash scripts/run_release_ui_regression.sh --no-serve --skip-build`
   - `bash scripts/run_release_ui_regression.sh --no-serve --skip-build --with-rssr-web`
+- `rssr-web` 浏览器手工 smoke helper：
+  - `bash -n scripts/run_rssr_web_browser_smoke.sh`
+  - `timeout 20 bash scripts/run_rssr_web_browser_smoke.sh --skip-build --port 18083`
+  - `curl -i http://127.0.0.1:18083/healthz`
 - 语义接口 grep：
   - `rg -n "app-nav__|entry-directory-rail__|entry-top-directory__" assets/styles crates/rssr-app/src -g'*.css' -g'*.rs'`
 - 阅读页接口 grep：
