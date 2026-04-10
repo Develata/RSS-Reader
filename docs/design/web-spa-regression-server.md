@@ -88,6 +88,8 @@ bash scripts/run_web_spa_regression_server.sh --release
   - 只初始化本地 Web 门禁
   - 或加 `seed=reader-demo` 额外写入最小浏览器状态，稳定进入 `/entries/2`
   - 或加 `preset=atlas-sidebar|newsprint|forest-desk|midnight-ledger`，把内置主题 CSS 一起播种进浏览器状态
+  - helper 现在在服务端预先计算 auth config / session token，再由前端同步写入 storage
+  - 这样 headless 截图不会再卡在 “Preparing local web auth...” 的过渡页
 - 另外还提供：
   - `/__codex/dump-browser-state`
   - 用于直接查看当前 origin 下：

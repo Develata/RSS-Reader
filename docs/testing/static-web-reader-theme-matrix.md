@@ -63,3 +63,12 @@ bash scripts/run_static_web_reader_theme_matrix.sh --port 8103
 - 各主题结果
 - 是否出现布局回退
 - 是否允许进入发布前总回归
+
+## 当前基线
+
+- 2026-04-10 已完成一轮人工视觉验收：
+  - 产物目录：`target/static-web-reader-theme-matrix/20260410-213206/`
+  - 结论：默认主题、`Atlas Sidebar`、`Newsprint`、`Amethyst Glass`、`Midnight Ledger` 的 `/entries/2` 阅读页均可接受
+- 本轮通过条件：
+  - 标题、元信息、正文、底部栏可读
+  - 没有明显塌陷、遮挡或不可点击区域

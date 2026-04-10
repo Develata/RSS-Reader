@@ -36,8 +36,8 @@
 | 静态 Web 小视口关键路径 | 固定 smoke | `bash scripts/run_static_web_small_viewport_smoke.sh` | P1 | 默认 `390x844`，覆盖 `/entries` `/feeds` `/settings` `/entries/2` |
 | `rssr-web` 登录 / 会话 / `/feeds` `/settings` 基础壳 | 自动化 | `bash scripts/run_release_ui_regression.sh --with-rssr-web` | P1 | 已覆盖登录、`/session-probe`、登出 |
 | `rssr-web` 代理链路 `/feed-proxy` 返回真实 XML | 固定 smoke | `bash scripts/run_rssr_web_proxy_feed_smoke.sh` | P1 | 当前默认验证阮一峰 Atom |
-| 静态 Web `/reader` 多主题下的视觉细节 | 手工 | 参考 `target/static-web-reader-theme-matrix/<ts>/*.png` | P2 | 脚本已产出截图，但是否“好看/可读”仍需人工判断 |
-| 静态 Web 小视口下的视觉细节 | 手工 | 参考 `target/static-web-small-viewport-smoke/<ts>/*.png` | P2 | 脚本已产出截图，但仍需人工判断是否可接受 |
+| 静态 Web `/reader` 多主题下的视觉细节 | 固定 smoke + 手工结论 | `bash scripts/run_static_web_reader_theme_matrix.sh` + 查看 `target/static-web-reader-theme-matrix/<ts>/*.png` | P2 | 2026-04-10 基线已人工通过；后续发布仍需复看新产物 |
+| 静态 Web 小视口下的视觉细节 | 固定 smoke + 手工结论 | `bash scripts/run_static_web_small_viewport_smoke.sh` + 查看 `target/static-web-small-viewport-smoke/<ts>/*.png` | P2 | 2026-04-10 基线已人工通过；后续发布仍需复看新产物 |
 | `rssr-web` 浏览器态下真实添加订阅并完成首次刷新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 入口、推荐 feed、selector、结果模板都已固定；当前缺的是浏览器自动操作 |
 | `rssr-web` 浏览器态下真实代理 feed 导入后的页面更新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 公开 selector 已稳定，当前仍主要受限于本地 Chrome MCP / DevTools 连接不稳定 |
 | WebDAV 上传/下载 UI 实页回归 | 手工 | 发布前清单 + 浏览器手工 | P2 | 自动化更多停留在 lower-level gates |

@@ -258,6 +258,20 @@
   - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
 - 目标：
   - 先把 `rssr-web` 部署壳下最关键的代理链路固定成可重复 smoke
+
+### 13. 静态 Web 视觉验收 helper 竞态已修，主题矩阵与小视口基线已人工通过
+
+- 问题：
+  - headless 截图偶发停在 `/__codex/setup-local-auth` 的 “Preparing local web auth...” 过渡页
+  - 根因不是页面回退，而是 helper 先前在浏览器端异步计算 auth config / session token，截图时机不稳定
+- 修复：
+  - [run_web_spa_regression_server.sh](/home/develata/gitclone/RSS-Reader/scripts/run_web_spa_regression_server.sh) 现改为服务端预先计算 auth config / session token，再由前端同步写入 storage 并跳转
+- 复验产物：
+  - `target/static-web-reader-theme-matrix/20260410-213206/`
+  - `target/static-web-small-viewport-smoke/20260410-213206/`
+- 人工结论：
+  - 多主题 `/entries/2` 阅读页：通过
+  - `390x844` 小视口 `/entries`、`/feeds`、`/settings`、`/entries/2`：通过
   - 验证“登录后请求 `/feed-proxy` 返回真实 XML feed，而不是登录页或静态壳”
   - 当前选择的默认远端 feed：
     - `https://www.ruanyifeng.com/blog/atom.xml`

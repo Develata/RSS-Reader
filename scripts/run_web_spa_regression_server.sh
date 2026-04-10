@@ -52,6 +52,8 @@ echo "Serving ${public_dir} with SPA fallback on http://127.0.0.1:${port}"
 echo "Press Ctrl+C to stop."
 
 python3 - "$public_dir" "$port" "$repo_root" <<'PY'
+import base64
+import hashlib
 import http.server
 import json
 import os
@@ -82,6 +84,14 @@ def load_theme_preset_css(key):
         return fh.read()
 
 
+def to_base64_url(raw_bytes):
+    return base64.urlsafe_b64encode(raw_bytes).decode("ascii").rstrip("=")
+
+
+def sha256_base64_url(text):
+    return to_base64_url(hashlib.sha256(text.encode("utf-8")).digest())
+
+
 class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, directory=None, **kwargs):
         super().__init__(*args, directory=directory, **kwargs)
@@ -106,6 +116,10 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
         preset = params.get("preset", [""])[0].strip()
         if not next_path.startswith("/") or next_path.startswith("//"):
             next_path = "/entries"
+
+        salt = sha256_base64_url(f"{username}:codex-static-smoke")
+        password_hash = sha256_base64_url(f"{username}\n{password}\n{salt}")
+        session_token = sha256_base64_url(f"{username}:{password_hash}")
 
         core_state = None
         app_state = None
@@ -134,39 +148,23 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
 <body>
   <p>Preparing local web auth for <code>{username}</code>...</p>
   <script>
-    const username = {username!r}.trim();
-    const password = {password!r};
     const nextPath = {next_path!r};
-    const seed = {seed!r};
     const preset = {preset!r};
     const AUTH_CONFIG_KEY = "rssr-web-auth-config-v1";
     const AUTH_SESSION_KEY = "rssr-web-auth-session-v1";
     const STORAGE_KEY = "rssr-web-state-v1";
     const APP_STATE_STORAGE_KEY = "rssr-web-app-state-v1";
     const ENTRY_FLAGS_STORAGE_KEY = "rssr-web-entry-flags-v1";
+    const authConfig = {f"{username}\n{password_hash}\n{salt}"!r};
+    const sessionToken = {session_token!r};
     const coreState = {json.dumps(core_state, ensure_ascii=False)};
     const appState = {json.dumps(app_state, ensure_ascii=False)};
     const entryFlags = {json.dumps(entry_flags, ensure_ascii=False)};
 
-    function toBase64Url(bytes) {{
-      let binary = "";
-      for (const value of bytes) binary += String.fromCharCode(value);
-      return btoa(binary).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/g, "");
-    }}
-
-    async function sha256Base64Url(text) {{
-      const encoded = new TextEncoder().encode(text);
-      const digest = await crypto.subtle.digest("SHA-256", encoded);
-      return toBase64Url(new Uint8Array(digest));
-    }}
-
-    async function main() {{
-      const salt = await sha256Base64Url(`${{username}}:codex-static-smoke`);
-      const passwordHash = await sha256Base64Url(`${{username}}\\n${{password}}\\n${{salt}}`);
-      const sessionToken = await sha256Base64Url(`${{username}}:${{passwordHash}}`);
-      localStorage.setItem(AUTH_CONFIG_KEY, `${{username}}\\n${{passwordHash}}\\n${{salt}}`);
+    function main() {{
+      localStorage.setItem(AUTH_CONFIG_KEY, authConfig);
       sessionStorage.setItem(AUTH_SESSION_KEY, sessionToken);
-      if (seed === "reader-demo" && coreState && appState && entryFlags) {{
+      if (coreState && appState && entryFlags) {{
         localStorage.setItem(STORAGE_KEY, JSON.stringify(coreState));
         localStorage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify(appState));
         localStorage.setItem(ENTRY_FLAGS_STORAGE_KEY, JSON.stringify(entryFlags));
@@ -174,9 +172,11 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
       location.replace(nextPath);
     }}
 
-    main().catch((error) => {{
+    try {{
+      main();
+    }} catch (error) {{
       document.body.innerHTML = `<pre>${{String(error)}}</pre>`;
-    }});
+    }}
   </script>
 </body>
 </html>"""

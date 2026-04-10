@@ -60,3 +60,14 @@ bash scripts/run_static_web_small_viewport_smoke.sh --preset newsprint
 - 每条路径结果
 - 视口尺寸
 - 是否存在小视口布局回退
+
+## 当前基线
+
+- 2026-04-10 已完成一轮人工视觉验收：
+  - 产物目录：`target/static-web-small-viewport-smoke/20260410-213206/`
+  - 视口：`390x844`
+  - 结论：`/entries`、`/feeds`、`/settings`、`/entries/2` 均可接受
+- 本轮通过条件：
+  - 导航未消失
+  - 表单与列表未挤爆
+  - 阅读页正文和底部栏仍可用
