@@ -22,6 +22,7 @@
   - 标题槽、页头槽、表单项槽、动作项槽、阅读列表边界槽已补
   - 卡片头部标题已开始统一迁到 `.card-title`
   - entries 分组头部已开始统一迁到 `.group-header` / `.group-header__title` / `.group-header__meta`
+  - 关键布局容器已开始统一迁到 `data-layout`
 - 当前剩余问题：
   - 少量标题/卡片头部仍依赖标签名
   - 少量分组头部仍依赖内部 DOM 结构
@@ -102,12 +103,33 @@
 - 现状：
   - 已有 `.page-section-header--entries`
   - `feeds` 已迁到 `.page-section-header--feeds`
+  - `settings` 已迁到 `.page-section-header--settings`
 - 下一步：
   - 统一成：
     - `.page-section-header--entries`
     - `.page-section-header--feeds`
     - `.page-section-header--settings`
-  - 继续清理 settings 路径上的历史 `reading-header*` 命名
+  - 保持后续新增页头只走 `page-section-header--*`
+
+### 4. 布局容器仍主要靠 class 组合命名
+
+- 文件：
+  - [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
+  - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
+  - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
+  - [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)
+- 当前已迁移：
+  - `page-header` -> `data-layout="page-header"`
+  - `stats-grid` -> `data-layout="stats-grid"`
+  - `feed-workbench--single` -> `data-layout="feed-workbench-single"`
+  - `exchange-grid` -> `data-layout="exchange-grid"`
+  - `settings-grid` -> `data-layout="settings-grid"`
+  - `entries-layout` -> `data-layout="entries-layout"`
+  - `entry-groups` -> `data-layout="entry-groups"`
+  - `page-header__actions` -> `data-slot="page-header-actions"`
+  - `reading-header__row` -> `data-slot="page-section-row"`
+- 下一步：
+  - 继续减少只靠 class 命名表达布局角色的规则
 
 ## P2：可以继续收，但不阻塞
 
@@ -163,6 +185,7 @@
   - `.group-header__title`
   - `.group-header__meta`
   - `data-group-level`
+  - `data-layout`
   - `.settings-form-grid__item`
   - `.inline-actions__item`
   - `[data-slot="entry-card-action"]`

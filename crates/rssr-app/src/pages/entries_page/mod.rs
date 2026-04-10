@@ -64,10 +64,10 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             "data-page": "entries",
             "data-entry-scope": if feed_id.is_some() { "feed" } else { "all" },
             AppNav {}
-            div { class: "entries-layout",
+            div { class: "entries-layout", "data-layout": "entries-layout",
                 div { class: "entries-main",
                     div { class: "reading-header page-section-header page-section-header--entries", "data-slot": "page-section-header",
-                        div { class: "reading-header__row",
+                        div { class: "reading-header__row", "data-slot": "page-section-row",
                             h2 { class: "page-title page-section-title", "{entries_page_title(feed_id)}" }
                         }
                     }
@@ -98,7 +98,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             }
                         }
                     } else {
-                        div { class: "entry-groups",
+                        div { class: "entry-groups", "data-layout": "entry-groups",
                             if facade.grouping_mode() == state::EntryGroupingMode::Time {
                                 for month in facade.time_grouped_entries() {
                                     section { class: "entry-group entry-group--time", key: "{month.anchor_id}", id: "{month.anchor_id}",

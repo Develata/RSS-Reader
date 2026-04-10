@@ -28,6 +28,9 @@
   - 卡片头部统一迁到 `.card-title`
   - entries 分组头部统一迁到 `.group-header` 语义槽
   - feeds 页头从 `reading-header--feeds` 迁到 `page-section-header--feeds`
+  - settings 页头统一到 `page-section-header--settings`
+  - `page-header / stats-grid / feed-workbench / exchange-grid / settings-grid / entries-layout` 已开始统一到 `data-layout`
+  - `entry-groups / page-header-actions / page-section-row` 已继续迁到 `data-layout` / `data-slot`
 
 ## 当日提交时间线
 

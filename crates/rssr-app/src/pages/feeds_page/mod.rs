@@ -28,7 +28,7 @@ pub fn FeedsPage() -> Element {
             div { class: "reading-header page-section-header page-section-header--feeds", "data-slot": "page-section-header",
                 h2 { class: "page-title page-section-title", "订阅" }
             }
-            div { class: "stats-grid stats-grid--airy",
+            div { class: "stats-grid stats-grid--airy", "data-layout": "stats-grid", "data-layout-variant": "airy",
                 div { class: "stat-card",
                     div { class: "stat-card__label", "订阅数" }
                     div { class: "stat-card__value", "{facade.total_feed_count()}" }

@@ -15,7 +15,7 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
         div { class: "exchange-header",
             h3 { class: "card-title", "配置交换" }
         }
-        div { class: "exchange-grid",
+        div { class: "exchange-grid", "data-layout": "exchange-grid",
             div { class: "exchange-card",
                 div { class: "settings-card__header",
                     h3 { class: "card-title", "配置包 JSON" }
