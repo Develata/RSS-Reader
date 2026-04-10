@@ -84,6 +84,7 @@ fn should_fallback_web_feed_request(
                 | StatusCode::UNAUTHORIZED
                 | StatusCode::FORBIDDEN
                 | StatusCode::METHOD_NOT_ALLOWED
+                | StatusCode::BAD_REQUEST
         ) || request.kind == WebFeedRequestKind::Proxy
             && response.status().is_success()
             && looks_like_proxy_login_or_spa_shell(response))

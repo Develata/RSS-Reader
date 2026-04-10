@@ -1,5 +1,6 @@
 mod auth;
 mod proxy;
+mod smoke;
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -24,6 +25,7 @@ use crate::{
         session_probe, show_login,
     },
     proxy::feed_proxy,
+    smoke::{browser_feed_smoke, feed_fixture, smoke_helpers_enabled},
 };
 
 const FAVICON_ICO: &[u8] = include_bytes!("../../../icons/icon.ico");
@@ -53,6 +55,15 @@ async fn main() -> Result<()> {
         config.static_dir.display()
     );
 
+    let smoke_helpers = if smoke_helpers_enabled() {
+        Router::new()
+            .route("/__codex/browser-feed-smoke", get(browser_feed_smoke))
+            .route("/__codex/feed-fixture.xml", get(feed_fixture))
+            .with_state(app_state.clone())
+    } else {
+        Router::new()
+    };
+
     let protected = Router::new()
         .route("/", get(serve_app_shell))
         .route("/entries", get(serve_app_shell))
@@ -73,6 +84,7 @@ async fn main() -> Result<()> {
         .route("/logout", get(handle_logout))
         .route("/healthz", get(healthz))
         .route("/favicon.ico", get(favicon))
+        .merge(smoke_helpers)
         .merge(protected)
         .with_state(app_state);
 

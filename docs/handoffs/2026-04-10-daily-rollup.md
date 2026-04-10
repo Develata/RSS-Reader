@@ -272,6 +272,18 @@
 - 人工结论：
   - 多主题 `/entries/2` 阅读页：通过
   - `390x844` 小视口 `/entries`、`/feeds`、`/settings`、`/entries/2`：通过
+
+### 14. `rssr-web` 浏览器态添加订阅与首次刷新已固定成自动 smoke
+
+- 新增：
+  - [run_rssr_web_browser_feed_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_feed_smoke.sh)
+  - [rssr-web-browser-feed-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/rssr-web-browser-feed-smoke.md)
+- 关键实现：
+  - `rssr-web` 新增 smoke-only helper：`/__codex/browser-feed-smoke`、`/__codex/feed-fixture.xml`
+  - helper 会在同源 iframe 中自动完成：建立登录态、添加 feed fixture、刷新订阅、进入 `feed-entries`
+- 结果：
+  - 新 smoke 已实跑通过
+  - `run_release_ui_regression.sh --with-rssr-web` 已串入这条自动化链
   - 验证“登录后请求 `/feed-proxy` 返回真实 XML feed，而不是登录页或静态壳”
   - 当前选择的默认远端 feed：
     - `https://www.ruanyifeng.com/blog/atom.xml`
@@ -320,39 +332,9 @@
 - 更新：
   - [run_rssr_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_smoke.sh)
   - [rssr-web-browser-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/rssr-web-browser-smoke.md)
-  - [release-ui-coverage-matrix.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-coverage-matrix.md)
-  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
-  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
-- 这轮没有继续硬做浏览器自动化，而是先把当前 P2 缺口收成稳定手工 smoke：
-  - 固定推荐代理 feed：
-    - `https://www.ruanyifeng.com/blog/atom.xml`
-  - 固定 selector：
-    - `data-field="feed-url-input"`
-    - `data-action="add-feed"`
-    - `data-action="refresh-feed"`
-    - `data-nav="feed-entries"`
-  - 固定结果模板：
-    - 登录
-    - 添加订阅
-    - 首次刷新
-    - 进入文章页 / 阅读页
-    - `/settings`
-    - `/logout`
-- 结论：
-  - 这条缺口现在已经不是“没有入口 / 没有契约”
-  - 而是“浏览器自动操作尚未固定”
-  - 当前仓库环境里的 Chrome MCP / DevTools 连接不稳定，因此这条链路暂时继续保持固定手工 smoke
-- 静态 Web 路由级 DOM smoke：
-  - `entries / feeds / settings` 三条路径都用 headless Chrome dump DOM 验证过
-  - 当前统一落到本地 Web 门禁壳：
-    - `data-layout="web-auth-shell"`
-    - `data-slot="web-auth-title"`
-    - `初始化 Web 登录`
-    - `保存并进入`
-  - 这说明：
-    - SPA fallback 正常
-    - 三条核心路由都能稳定回到同一套本地门禁壳
-    - 当前还缺的是“已初始化本地凭据后的真实应用内部页面”浏览器态回归
+- 作用：
+  - 保留固定推荐代理 feed、selector 和结果模板，继续作为真实远端 feed 的手工补充入口
+  - 同源 fixture 下的登录、添加订阅、刷新与进入 `feed-entries`，现已由后续自动 smoke 接替
 
 ### 11. 新增静态 Web 浏览器手工 smoke helper
 

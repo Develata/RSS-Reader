@@ -266,6 +266,14 @@ pub(crate) async fn session_probe() -> impl IntoResponse {
     StatusCode::NO_CONTENT
 }
 
+pub(crate) fn issue_smoke_auth_cookie_headers(
+    config: &AuthConfig,
+) -> anyhow::Result<(String, String)> {
+    let expires_at = OffsetDateTime::now_utc() + config.session_ttl;
+    let token = build_session_token(config, expires_at.unix_timestamp())?;
+    Ok((session_cookie_header(&token, config), gate_cookie_header(config)))
+}
+
 pub(crate) async fn require_auth(
     State(state): State<AppState>,
     request: Request,

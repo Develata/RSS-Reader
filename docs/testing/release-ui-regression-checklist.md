@@ -128,6 +128,12 @@ bash scripts/run_rssr_web_proxy_feed_smoke.sh
 bash scripts/run_rssr_web_browser_smoke.sh
 ```
 
+如果要把部署壳下“登录后添加订阅并完成首次刷新”直接固定成自动化，优先用：
+
+```bash
+bash scripts/run_rssr_web_browser_feed_smoke.sh
+```
+
 这条 helper 现在会同时给出：
 
 - 临时用户名 / 密码

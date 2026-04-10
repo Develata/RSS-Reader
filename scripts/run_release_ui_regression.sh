@@ -64,6 +64,7 @@ mkdir -p "$log_dir"
 summary_file="$log_dir/summary.md"
 automated_log="$log_dir/automated-gates.log"
 web_log="$log_dir/rssr-web.log"
+web_browser_feed_log="$log_dir/rssr-web-browser-feed-smoke.log"
 
 write_summary() {
   local automated_status="$1"
@@ -213,6 +214,12 @@ if [[ "$with_rssr_web" == "true" ]]; then
   ensure_web_bundle
   echo "Running rssr-web smoke..."
   run_rssr_web_smoke
+  echo "Running rssr-web browser feed smoke..."
+  bash scripts/run_rssr_web_browser_feed_smoke.sh \
+    --skip-build \
+    --port "$((web_port + 1))" \
+    --log-dir "$log_dir/rssr-web-browser-feed-smoke" \
+    >"$web_browser_feed_log" 2>&1
   write_summary "passed" "passed" "$(if [[ "$serve_spa" == "true" ]]; then echo pending; else echo skipped; fi)"
 fi
 

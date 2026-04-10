@@ -38,7 +38,7 @@
 | `rssr-web` 代理链路 `/feed-proxy` 返回真实 XML | 固定 smoke | `bash scripts/run_rssr_web_proxy_feed_smoke.sh` | P1 | 当前默认验证阮一峰 Atom |
 | 静态 Web `/reader` 多主题下的视觉细节 | 固定 smoke + 手工结论 | `bash scripts/run_static_web_reader_theme_matrix.sh` + 查看 `target/static-web-reader-theme-matrix/<ts>/*.png` | P2 | 2026-04-10 基线已人工通过；后续发布仍需复看新产物 |
 | 静态 Web 小视口下的视觉细节 | 固定 smoke + 手工结论 | `bash scripts/run_static_web_small_viewport_smoke.sh` + 查看 `target/static-web-small-viewport-smoke/<ts>/*.png` | P2 | 2026-04-10 基线已人工通过；后续发布仍需复看新产物 |
-| `rssr-web` 浏览器态下真实添加订阅并完成首次刷新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 入口、推荐 feed、selector、结果模板都已固定；当前缺的是浏览器自动操作 |
+| `rssr-web` 浏览器态下真实添加订阅并完成首次刷新 | 固定 smoke | `bash scripts/run_rssr_web_browser_feed_smoke.sh` | P2 | 现已用同源 helper + 本地 feed fixture 自动化 |
 | `rssr-web` 浏览器态下真实代理 feed 导入后的页面更新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 公开 selector 已稳定，当前仍主要受限于本地 Chrome MCP / DevTools 连接不稳定 |
 | WebDAV 上传/下载 UI 实页回归 | 手工 | 发布前清单 + 浏览器手工 | P2 | 自动化更多停留在 lower-level gates |
 | 多主题下 `/entries` `/feeds` `/settings` 的视觉细节 | 手工 | 发布前清单 + 浏览器手工 | P2 | 内置主题契约已自动化，但视觉仍建议 spot check |
@@ -59,8 +59,8 @@
 所以现在的主要缺口，不再是“没有固定入口”，而是：
 
 - 仍有少量 **浏览器视觉判断** 需要人工看截图或实机页面
-- `rssr-web` 浏览器态下“真实添加订阅并完成首次刷新”仍未自动化
-- 这条缺口现在更准确地说是“自动操作缺口”，不是“入口或契约缺口”
+- `rssr-web` 浏览器态下对真实远端 feed 的首刷行为仍主要靠手工补充
+- 当前 deploy-shell 自动化已经覆盖了同源 fixture feed 的登录后添加与刷新链路
 
 ## 推荐发布前顺序
 
@@ -76,10 +76,11 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
 bash scripts/run_static_web_reader_theme_matrix.sh
 bash scripts/run_static_web_small_viewport_smoke.sh
 bash scripts/run_rssr_web_proxy_feed_smoke.sh
+bash scripts/run_rssr_web_browser_feed_smoke.sh
 ```
 
 3. 最后补最少量人工浏览器确认：
 
 - 看多主题 `/reader` 截图是否可接受
 - 看小视口截图是否可接受
-- 如本次发布涉及订阅/刷新/代理行为，再按固定 selector 手工补一次 `rssr-web` 浏览器态真实添加订阅
+- 如本次发布涉及真实远端 feed 行为，再按固定 selector 手工补一次 `rssr-web` 浏览器态真实添加订阅
