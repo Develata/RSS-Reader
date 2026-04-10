@@ -554,7 +554,7 @@
   - 发布前 UI 预检入口
   - 静态 Web 应用内部页与 `rssr-web` 登录后路径的正式回归
 - 当前没有新的阻塞性风险。
-- `rssr-web` 浏览器态真实添加订阅仍然不是自动化项，但步骤、selector、推荐 feed 与结果模板都已固定。
+- `rssr-web` 浏览器态真实添加订阅与首次刷新已固定成自动 smoke，不再只是手工项。
 - 如果下一步继续，不再建议扩 selector 迁移面；更值的是：
   - 继续补更细的业务 smoke
   - 或在环境允许时把 `rssr-web` 浏览器态添加订阅收成真正自动化
@@ -568,6 +568,8 @@
   - `25c34f2` `test: add rssr-web browser smoke helper`
   - `66f8cec` `test: wait for rssr-web browser smoke readiness`
   - `537cafc` `test: add static web browser smoke helper`
+  - `15fdd6f` `test: automate rssr-web browser feed smoke`
+  - `8c9d21f` `test: add chrome mcp target launcher`
 - 之前已完成的 CSS/主题基线提交：
   - `be2b7dd` `refactor: add semantic layout interfaces for css`
   - `7fe328a` `refactor: finalize semantic css interfaces`
@@ -578,12 +580,13 @@
 ## 补充：Chrome MCP 全量实测
 
 - 实测入口：
-  - 静态 Web：`http://127.0.0.1:8110/__codex/setup-local-auth?...&seed=reader-demo&next=/entries`
-  - `rssr-web`：`http://127.0.0.1:18096/__codex/browser-feed-smoke`
+  - 静态 Web：`http://127.0.0.1:8111/__codex/setup-local-auth?...&seed=reader-demo&next=/entries`
+  - `rssr-web`：`http://127.0.0.1:18097/__codex/browser-feed-smoke`
 - Chrome MCP 已实际确认：
   - 静态 `/entries`、`/feeds`、`/settings`、`/entries/2` 均能进入真实应用页
-  - `Atlas Sidebar` 主题可在 `/settings` 成功应用，随后 `/entries/2` 阅读页仍正常渲染
+  - `Newsprint` 主题可在 `/settings` 成功应用，随后 `/entries/2` 阅读页仍正常渲染
   - `390x844` 小视口下 `/entries`、`/feeds`、`/settings` 仍可达且主内容存在
+  - `rssr-web` 登录后 `/entries`、`/feeds`、`/settings` 可达
   - `rssr-web` helper 页面返回 `status=pass`，已自动完成登录、添加 feed、刷新订阅并进入 `feed-entries`
 - 发现并顺手修复：
   - [scripts/run_rssr_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_smoke.sh) 的 summary heredoc 反引号未转义，会导致 shell 误执行；当前 `commit: pending`
