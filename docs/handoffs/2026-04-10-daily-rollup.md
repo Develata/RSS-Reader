@@ -218,6 +218,35 @@
     - `bash scripts/run_web_spa_regression_server.sh --skip-build --port 8100`
   - 已确认：
     - `curl -I http://127.0.0.1:8100/entries` 返回 `200`
+
+### 11. 静态 `/reader` 多主题回归与小视口回归已固定成独立 smoke
+
+- 新增：
+  - [run_static_web_reader_theme_matrix.sh](/home/develata/gitclone/RSS-Reader/scripts/run_static_web_reader_theme_matrix.sh)
+  - [run_static_web_small_viewport_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_static_web_small_viewport_smoke.sh)
+  - [static-web-reader-theme-matrix.md](/home/develata/gitclone/RSS-Reader/docs/testing/static-web-reader-theme-matrix.md)
+  - [static-web-small-viewport-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/static-web-small-viewport-smoke.md)
+- 更新：
+  - [run_web_spa_regression_server.sh](/home/develata/gitclone/RSS-Reader/scripts/run_web_spa_regression_server.sh)
+  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
+  - [web-spa-regression-server.md](/home/develata/gitclone/RSS-Reader/docs/design/web-spa-regression-server.md)
+- 作用：
+  - 同源 local auth helper 新增 `preset=atlas-sidebar|newsprint|forest-desk|midnight-ledger`
+  - 可以把内置主题 CSS 和 `reader-demo` seed 一起播种进浏览器状态
+  - `/reader` 多主题回归不再需要手工进设置页切主题
+  - 小视口回归不再需要手工拖浏览器尺寸
+- 已实跑：
+  - `bash scripts/run_static_web_reader_theme_matrix.sh --skip-build --port 8114`
+  - `bash scripts/run_static_web_small_viewport_smoke.sh --skip-build --port 8115`
+- 结果：
+  - 主题矩阵产物落盘到：
+    - `target/static-web-reader-theme-matrix/20260410-210009/`
+  - 小视口产物落盘到：
+    - `target/static-web-small-viewport-smoke/20260410-210009/`
+  - 两条 smoke 都通过：
+    - 多主题 `/entries/2` 均进入真实阅读页
+    - 小视口 `/entries`、`/feeds`、`/settings`、`/entries/2` 均进入真实页面
     - headless Chrome dump DOM 能拿到真实应用入口，而不是浏览器错误页
 - 静态 Web 路由级 DOM smoke：
   - `entries / feeds / settings` 三条路径都用 headless Chrome dump DOM 验证过

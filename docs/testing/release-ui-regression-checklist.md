@@ -135,6 +135,12 @@ bash scripts/run_rssr_web_browser_smoke.sh
 - `Amethyst Glass`
 - `Midnight Ledger`
 
+如果要把多主题 `/reader` 回归固定化，直接用：
+
+```bash
+bash scripts/run_static_web_reader_theme_matrix.sh
+```
+
 ## 核心检查项
 
 ### 1. 启动与路由
@@ -166,6 +172,12 @@ bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/
 ```
 
 当前 `reader-demo` seed 已经实测可进入真实阅读页，不再是只写门禁状态的占位 helper。
+
+如果要补一轮固定的小视口关键路径，可以用：
+
+```bash
+bash scripts/run_static_web_small_viewport_smoke.sh
+```
 
 `rssr-web`：
 
@@ -233,6 +245,12 @@ bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/
 - `/reader`
 - 正文宽度、元信息、底部栏是否仍可用
 
+如果要把这条回归固定化，优先用：
+
+```bash
+bash scripts/run_static_web_reader_theme_matrix.sh
+```
+
 ## 语义接口检查
 
 发布前至少确认：
@@ -255,6 +273,12 @@ bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/
 
 - 桌面宽度
 - 小视口，例如 `390 x 844`
+
+如果要把小视口检查固定化，优先用：
+
+```bash
+bash scripts/run_static_web_small_viewport_smoke.sh
+```
 
 移动端重点看：
 

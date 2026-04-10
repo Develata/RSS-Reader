@@ -87,6 +87,7 @@ bash scripts/run_web_spa_regression_server.sh --release
 - 同源 helper `/__codex/setup-local-auth` 现在支持：
   - 只初始化本地 Web 门禁
   - 或加 `seed=reader-demo` 额外写入最小浏览器状态，稳定进入 `/entries/2`
+  - 或加 `preset=atlas-sidebar|newsprint|forest-desk|midnight-ledger`，把内置主题 CSS 一起播种进浏览器状态
 - 另外还提供：
   - `/__codex/dump-browser-state`
   - 用于直接查看当前 origin 下：

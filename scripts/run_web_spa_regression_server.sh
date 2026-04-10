@@ -65,6 +65,21 @@ port = int(sys.argv[2])
 repo_root = os.path.abspath(sys.argv[3])
 HELPER_PATH = "/__codex/setup-local-auth"
 DUMP_PATH = "/__codex/dump-browser-state"
+THEME_FIXTURE_ROOT = os.path.join(repo_root, "assets", "themes")
+THEME_PRESET_FILES = {
+    "atlas-sidebar": "atlas-sidebar.css",
+    "newsprint": "newsprint.css",
+    "forest-desk": "forest-desk.css",
+    "midnight-ledger": "midnight-ledger.css",
+}
+
+
+def load_theme_preset_css(key):
+    filename = THEME_PRESET_FILES.get(key)
+    if not filename:
+        return None
+    with open(os.path.join(THEME_FIXTURE_ROOT, filename), "r", encoding="utf-8") as fh:
+        return fh.read()
 
 
 class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
@@ -88,6 +103,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
         password = params.get("password", ["smoke-pass-123"])[0]
         next_path = params.get("next", ["/entries"])[0]
         seed = params.get("seed", [""])[0].strip()
+        preset = params.get("preset", [""])[0].strip()
         if not next_path.startswith("/") or next_path.startswith("//"):
             next_path = "/entries"
 
@@ -104,6 +120,10 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
             with open(os.path.join(fixture_root, "reader_demo_entry_flags.json"), "r", encoding="utf-8") as fh:
                 entry_flags = json.load(fh)
 
+        preset_css = load_theme_preset_css(preset)
+        if core_state is not None and preset_css is not None:
+            core_state.setdefault("settings", {})["custom_css"] = preset_css
+
         html = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -118,6 +138,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
     const password = {password!r};
     const nextPath = {next_path!r};
     const seed = {seed!r};
+    const preset = {preset!r};
     const AUTH_CONFIG_KEY = "rssr-web-auth-config-v1";
     const AUTH_SESSION_KEY = "rssr-web-auth-session-v1";
     const STORAGE_KEY = "rssr-web-state-v1";

@@ -8,6 +8,8 @@
 - [发布前 UI 回归清单](./release-ui-regression-checklist.md)
 - [`rssr-web` 浏览器手工 Smoke](./rssr-web-browser-smoke.md)
 - [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
+- [Static Web `/reader` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
+- [Static Web 小视口 Smoke](./static-web-small-viewport-smoke.md)
 - [全局浏览器回归报告](./global-browser-regression.md)
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
 - [主线验证矩阵](./mainline-validation-matrix.md)
@@ -22,6 +24,8 @@
   - 先过 [发布前 UI 回归清单](./release-ui-regression-checklist.md)
   - 再补充路由、订阅刷新、阅读页导航、主题切换、设置持久化的专项确认
   - 静态 Web 如果要稳定进入真实阅读页，优先用 `run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2`
+  - 多主题下的真实阅读页，优先用 `run_static_web_reader_theme_matrix.sh`
+  - 小视口关键路径，优先用 `run_static_web_small_viewport_smoke.sh`
 - 如果是排查 Web 端问题：
   - 重点看 feed 刷新、浏览器 Console 和持久化行为
 - 如果是逐模块推进 headless active interface 重构：
