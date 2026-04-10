@@ -24,9 +24,10 @@
   - entries 分组头部已开始统一迁到 `.group-header` / `.group-header__title` / `.group-header__meta`
   - 关键布局容器已开始统一迁到 `data-layout`
 - 当前剩余问题：
-  - 少量标题/卡片头部仍依赖标签名
-  - 少量分组头部仍依赖内部 DOM 结构
-  - 少量布局规则仍直接依赖页面内部 class 组合
+  - 高密度 class 驱动区域已经基本清空。
+  - 当前剩余问题主要是：
+    - 少量通用布局 class 仍在承担组织作用
+    - `reader-html` 内容岛作为允许保留的例外继续存在
 
 ## 已完成项
 
@@ -68,6 +69,83 @@
   - `.inline-actions__item`
   - `[data-slot="entry-card-action"]`
   - `data-list-edge="start|middle|end|single"`
+
+### 导航壳
+
+- 已迁移：
+  - `app-nav-shell` -> `data-layout="app-nav-shell"`
+  - `app-nav-reveal` -> `data-layout="app-nav-reveal"`
+  - `app-nav__topline` -> `data-layout="app-nav-topline"`
+  - `app-nav` -> `data-layout="app-nav-links"`
+  - `app-nav__search` -> `data-layout="app-nav-search"`
+  - `app-nav__brand* / reveal* / search* / collapse` -> `data-slot="app-nav-*"`
+  - `app-nav__link` -> `data-nav`
+
+- 当前稳定接口：
+  - `data-layout="app-nav-shell|app-nav-reveal|app-nav-topline|app-nav-links|app-nav-search"`
+  - `data-slot="app-nav-*"`
+  - `data-nav`
+
+### 目录栏与顶部目录
+
+- 已迁移：
+  - `entry-directory-rail` -> `data-layout="entry-directory-rail"`
+  - `entry-directory-rail__nav` -> `data-layout="entry-directory-nav"`
+  - `entry-directory-rail__section/subsection` -> `data-layout="entry-directory-section"`
+  - `entry-directory-rail__children` -> `data-layout="entry-directory-children"`
+  - `entry-directory-rail__grandchildren` -> `data-layout="entry-directory-grandchildren"`
+  - `entry-directory-rail__link` -> `data-layout="entry-directory-link"`
+  - `entry-directory-rail__toggle` -> `data-layout="entry-directory-toggle"`
+  - `entry-directory-rail__title` -> `data-slot="entry-directory-heading"`
+  - `entry-top-directory` -> `data-layout="entry-top-directory"`
+  - `entry-top-directory__chip` -> `data-layout="entry-top-directory-chip"`
+  - 目录文案统一到：
+    - `data-slot="entry-directory-title"`
+    - `data-slot="entry-directory-meta"`
+- 当前稳定接口：
+  - `data-layout="entry-directory-*|entry-top-directory*"`
+  - `data-slot="entry-directory-heading|entry-directory-title|entry-directory-meta"`
+  - `data-nav="entry-directory-*"`
+
+### 阅读页外壳
+
+- 已迁移：
+  - `reader-page` -> `data-layout="reader-page"`
+  - `reader-header` -> `data-layout="reader-header"`
+  - `reader-toolbar` -> `data-layout="reader-toolbar"`
+  - `reader-meta-block` -> `data-layout="reader-meta-block"`
+  - `reader-body` -> `data-layout="reader-body"`
+  - `reader-pagination` -> `data-layout="reader-pagination" + data-context`
+  - `reader-bottom-bar` -> `data-layout="reader-bottom-bar"`
+  - `reader-title / reader-meta / reader-bottom-bar__icon / reader-bottom-bar__label` -> `data-slot`
+- 当前稳定接口：
+  - `data-layout="reader-*"`
+  - `data-slot="reader-title|reader-meta|reader-bottom-bar-icon|reader-bottom-bar-label"`
+  - `data-context="feed"`
+
+### Web 本地门禁壳
+
+- 已迁移：
+  - `web-auth-shell` -> `data-layout="web-auth-shell"`
+  - `web-auth-card` -> `data-layout="web-auth-card"`
+  - `web-auth-brand` -> `data-layout="web-auth-brand"`
+  - `web-auth-form` -> `data-layout="web-auth-form"`
+  - `web-auth-brand__mark / name / title / intro / note` -> `data-slot`
+- 当前稳定接口：
+  - `data-layout="web-auth-shell|web-auth-card|web-auth-brand|web-auth-form"`
+  - `data-slot="web-auth-brand-mark|web-auth-brand-name|web-auth-title|web-auth-intro|web-auth-note"`
+
+### 筛选布局
+
+- 已迁移：
+  - `entry-filters` -> `data-layout="entry-filters"`
+  - `entry-filters__toggle` -> `data-layout="entry-filters-toggle"`
+  - `entry-filters__sources` -> `data-layout="entry-filters-sources"`
+  - `entry-filters__source-grid` -> `data-layout="entry-filters-source-grid"`
+  - `entry-filters__sources-label` -> `data-slot="entry-filters-sources-label"`
+- 当前稳定接口：
+  - `data-layout="entry-filters|entry-filters-toggle|entry-filters-sources|entry-filters-source-grid"`
+  - `data-slot="entry-filters-sources-label"`
 
 ## P1：下一轮必须收掉
 
@@ -126,10 +204,26 @@
   - `settings-grid` -> `data-layout="settings-grid"`
   - `entries-layout` -> `data-layout="entries-layout"`
   - `entry-groups` -> `data-layout="entry-groups"`
+  - `entry-filters` -> `data-layout="entry-filters"`
   - `page-header__actions` -> `data-slot="page-header-actions"`
   - `reading-header__row` -> `data-slot="page-section-row"`
 - 下一步：
   - 继续减少只靠 class 命名表达布局角色的规则
+  - 但 `.page` 和 `.page-header` 当前可视为通用壳类，不作为高优先级槽化目标
+
+### 5. 已清掉的高密度 class 驱动区域
+
+- 文件：
+  - [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
+  - [reader.css](/home/develata/gitclone/RSS-Reader/assets/styles/reader.css)
+- 关注点：
+  - `app-nav*`
+  - `entry-directory-rail*`
+  - `reader-page*`
+  - `web-auth-*`
+- 判断：
+  - 这些专项区域已经迁到稳定语义接口
+  - 下一轮不再需要按“高密度 class 驱动区域”继续拆，而应转去做局部一致性复查
 
 ## P2：可以继续收，但不阻塞
 
@@ -237,5 +331,5 @@
 
 ## 当前最值得继续做的两刀
 
-1. 把卡片头部统一成标题槽，去掉 `h3` 依赖。
-2. 把 entries 的分组头部统一成标题/元信息槽，去掉内部标题结构依赖。
+1. 收 `feed-workbench__note` 这条剩余 `h3` 依赖。
+2. 复查剩余通用布局 class 是否还应该继续槽化，优先看 `.page`、`.page-header`、`.entry-filters`。

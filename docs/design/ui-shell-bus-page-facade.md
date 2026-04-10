@@ -76,8 +76,8 @@
 
 当前目录：
 
-- [commands.rs](../../crates/rssr-app/src/ui/commands.rs)
-- [runtime.rs](../../crates/rssr-app/src/ui/runtime.rs)
+- [commands/mod.rs](../../crates/rssr-app/src/ui/commands/mod.rs)
+- [runtime/mod.rs](../../crates/rssr-app/src/ui/runtime/mod.rs)
 - [snapshot.rs](../../crates/rssr-app/src/ui/snapshot.rs)
 - [helpers.rs](../../crates/rssr-app/src/ui/helpers.rs)
 - [shell.rs](../../crates/rssr-app/src/ui/shell.rs)
@@ -147,7 +147,7 @@
 
 当前定义见：
 
-- [commands.rs](../../crates/rssr-app/src/ui/commands.rs)
+- [commands/mod.rs](../../crates/rssr-app/src/ui/commands/mod.rs)
 
 命令命名应满足：
 
@@ -166,7 +166,7 @@
 
 当前实现见：
 
-- [runtime.rs](../../crates/rssr-app/src/ui/runtime.rs)
+- [runtime/mod.rs](../../crates/rssr-app/src/ui/runtime/mod.rs)
 
 它是“前端行为承接面”，不是页面私有 helper。
 
@@ -238,6 +238,13 @@ facade 是页面边界对象，不是简单 DTO。
 
 这些默认策略应尽量先收进 facade。
 
+但 facade 的边界也应保持克制：
+
+- 可以承接语义状态和默认文案
+- 可以承接默认动作入口
+- 不应重新长成视觉 class 计算中心
+- 不应替代 CSS 做布局职责
+
 ---
 
 ## 页面组件现在应该做什么
@@ -249,6 +256,18 @@ facade 是页面边界对象，不是简单 DTO。
 - 使用稳定的 `data-*`
 - 渲染 facade 暴露的值
 - 调用 facade 暴露的动作
+
+当前这套语义 DOM 应优先围绕：
+
+- `data-page`
+- `data-layout`
+- `data-slot`
+- `data-nav`
+- `data-action`
+- `data-field`
+- `data-state`
+- `data-variant`
+- `data-density`
 
 也就是说，页面组件应该更像：
 

@@ -77,36 +77,36 @@ pub fn AppNav() -> Element {
 
     if shell.nav_hidden() {
         return rsx! {
-            div { class: "app-nav-reveal", "data-state": "{shell.nav_state()}",
+            div { "data-layout": "app-nav-reveal", "data-state": "{shell.nav_state()}",
                 button {
-                    class: "app-nav-reveal__button",
+                    "data-slot": "app-nav-reveal-button",
                     "data-action": "show-top-nav",
                     onclick: move |_| {
                         show_nav_shell.show_nav();
                     },
-                    span { class: "app-nav-reveal__icon", "≡" }
+                    span { "data-slot": "app-nav-reveal-icon", "≡" }
                 }
             }
         };
     }
 
     rsx! {
-        nav { class: "app-nav-shell", "data-state": "{shell.nav_state()}",
-            div { class: "app-nav__topline",
+        nav { "data-layout": "app-nav-shell", "data-state": "{shell.nav_state()}",
+            div { "data-layout": "app-nav-topline",
                 Link {
-                    class: "app-nav__brand",
+                    "data-slot": "app-nav-brand",
                     to: AppRoute::EntriesPage {},
                     aria_label: APP_NAME,
-                    span { class: "app-nav__brand-mark", "R" }
-                    span { class: "app-nav__brand-name", "{APP_NAME}" }
+                    span { "data-slot": "app-nav-brand-mark", "R" }
+                    span { "data-slot": "app-nav-brand-name", "{APP_NAME}" }
                 }
-                div { class: "app-nav",
-                    Link { class: "app-nav__link", "data-nav": "feeds", to: AppRoute::FeedsPage {}, "订阅" }
-                    Link { class: "app-nav__link", "data-nav": "entries", to: AppRoute::EntriesPage {}, "文章" }
-                    Link { class: "app-nav__link", "data-nav": "settings", to: AppRoute::SettingsPage {}, "设置" }
+                div { "data-layout": "app-nav-links",
+                    Link { "data-nav": "feeds", to: AppRoute::FeedsPage {}, "订阅" }
+                    Link { "data-nav": "entries", to: AppRoute::EntriesPage {}, "文章" }
+                    Link { "data-nav": "settings", to: AppRoute::SettingsPage {}, "设置" }
                 }
                 button {
-                    class: "app-nav__collapse",
+                    "data-slot": "app-nav-collapse",
                     "data-action": "hide-top-nav",
                     r#type: "button",
                     aria_label: "收起顶部导航",
@@ -118,19 +118,19 @@ pub fn AppNav() -> Element {
                 }
             }
             form {
-                class: "app-nav__search",
+                "data-layout": "app-nav-search",
                 onsubmit: move |event| {
                     event.prevent_default();
                     submit_search_shell.submit_search();
                 },
                 label {
-                    class: "app-nav__search-icon",
+                    "data-slot": "app-nav-search-icon",
                     r#for: "app-nav-search-input",
                     "⌕"
                 }
                 input {
                     id: "app-nav-search-input",
-                    class: "app-nav__search-input",
+                    "data-slot": "app-nav-search-input",
                     "data-field": "entry-search",
                     r#type: "search",
                     placeholder: "搜索文章标题",
@@ -140,7 +140,7 @@ pub fn AppNav() -> Element {
                         update_search_shell.set_entry_search(event.value());
                     },
                 }
-                span { class: "app-nav__search-hint", "Enter" }
+                span { "data-slot": "app-nav-search-hint", "Enter" }
             }
         }
     }
@@ -149,14 +149,14 @@ pub fn AppNav() -> Element {
 #[component]
 fn WebAuthLoadingGate() -> Element {
     rsx! {
-        div { class: "web-auth-shell",
-            div { class: "web-auth-card",
-                div { class: "web-auth-brand",
-                    div { class: "web-auth-brand__mark", dangerous_inner_html: "{WEB_AUTH_MARKUP}" }
-                    p { class: "web-auth-brand__name", "{APP_NAME}" }
+        div { "data-layout": "web-auth-shell",
+            div { "data-layout": "web-auth-card",
+                div { "data-layout": "web-auth-brand",
+                    div { "data-slot": "web-auth-brand-mark", dangerous_inner_html: "{WEB_AUTH_MARKUP}" }
+                    p { "data-slot": "web-auth-brand-name", "{APP_NAME}" }
                 }
-                h1 { class: "web-auth-card__title", "验证登录状态" }
-                p { class: "web-auth-card__intro", "正在确认当前 Web 部署的服务端登录会话，请稍候。" }
+                h1 { "data-slot": "web-auth-title", "验证登录状态" }
+                p { "data-slot": "web-auth-intro", "正在确认当前 Web 部署的服务端登录会话，请稍候。" }
                 StatusBanner {
                     message: "正在与服务端确认登录状态...".to_string(),
                     tone: "info".to_string(),
@@ -175,17 +175,17 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
     let shell = use_web_auth_gate_shell(state);
 
     rsx! {
-        div { class: "web-auth-shell",
-            div { class: "web-auth-card",
-                div { class: "web-auth-brand",
-                    div { class: "web-auth-brand__mark", dangerous_inner_html: "{WEB_AUTH_MARKUP}" }
-                    p { class: "web-auth-brand__name", "{APP_NAME}" }
+        div { "data-layout": "web-auth-shell",
+            div { "data-layout": "web-auth-card",
+                div { "data-layout": "web-auth-brand",
+                    div { "data-slot": "web-auth-brand-mark", dangerous_inner_html: "{WEB_AUTH_MARKUP}" }
+                    p { "data-slot": "web-auth-brand-name", "{APP_NAME}" }
                 }
-                h1 { class: "web-auth-card__title", "{shell.title()}" }
-                p { class: "web-auth-card__intro", "{shell.intro()}" }
+                h1 { "data-slot": "web-auth-title", "{shell.title()}" }
+                p { "data-slot": "web-auth-intro", "{shell.intro()}" }
                 StatusBanner { message: shell.status(), tone: shell.status_tone() }
                 form {
-                    class: "web-auth-form",
+                    "data-layout": "web-auth-form",
                     onsubmit: move |event| {
                         event.prevent_default();
                         shell.submit(on_authenticated);
@@ -225,7 +225,7 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
                     }
                 }
                 p {
-                    class: "web-auth-card__note",
+                    "data-slot": "web-auth-note",
                     "说明：这层门禁只用于 localhost 等本地浏览器场景下保护本地数据。对外部署时，真正的访问控制仍应由 rssr-web 服务端登录承担。"
                 }
             }

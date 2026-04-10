@@ -8,6 +8,7 @@
 - [Headless Active Interface 设计目标](./headless-active-interface.md)
 - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
 - [CSS 完全分离基线检查](./css-separation-baseline-checklist.md)
+- [Web SPA 回归服务脚本](./web-spa-regression-server.md)
 - [前端命令与界面接口清单](./frontend-command-reference.md)
 - [主题作者选择器参考](./theme-author-selector-reference.md)
 
@@ -25,6 +26,8 @@
   - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
 - 想审计当前样式是不是还依赖 DOM 内部结构，以及下一轮该先收什么：
   - [CSS 完全分离基线检查](./css-separation-baseline-checklist.md)
+- 想对静态 web 构建做本地 SPA 回归，避免 `/feeds` / `/settings` 直接 404：
+  - [Web SPA 回归服务脚本](./web-spa-regression-server.md)
 - 想手写主题，或把一份文档直接丢给 AI 生成 CSS：
   - [主题作者选择器参考](./theme-author-selector-reference.md)
 

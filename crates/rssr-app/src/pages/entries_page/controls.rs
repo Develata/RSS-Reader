@@ -86,17 +86,17 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                     }
                 }
                 if !group_nav_items.is_empty() {
-                    nav { class: "entry-top-directory", "aria-label": "文章目录",
+                    nav { "data-layout": "entry-top-directory", "aria-label": "文章目录",
                         for item in group_nav_items {
                             button {
-                                class: "entry-top-directory__chip",
+                                "data-layout": "entry-top-directory-chip",
                                 r#type: "button",
                                 onclick: {
                                     let anchor_id = item.anchor_id.clone();
                                     move |_| scroll_to_entry_group(&anchor_id)
                                 },
-                                span { class: "entry-top-directory__title", "{item.title}" }
-                                span { class: "entry-top-directory__meta", "{item.subtitle}" }
+                                span { "data-slot": "entry-directory-title", "{item.title}" }
+                                span { "data-slot": "entry-directory-meta", "{item.subtitle}" }
                             }
                         }
                     }
@@ -148,33 +148,37 @@ pub(super) fn render_entry_directory(
     let expanded_directory_sources = facade.expanded_directory_sources();
 
     rsx! {
-        aside { class: "entry-directory-rail",
-            h3 { class: "entry-directory-rail__title", "目录" }
+        aside { "data-layout": "entry-directory-rail",
+            h3 { "data-slot": "entry-directory-heading", "目录" }
             if grouping_mode == EntryGroupingMode::Time {
-                nav { class: "entry-directory-rail__nav", "aria-label": "文章目录导航",
+                nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
                     for month in directory_months {
-                        div { class: "entry-directory-rail__section", key: "{month.anchor_id}",
+                        div { "data-layout": "entry-directory-section", key: "{month.anchor_id}",
                             button {
-                                class: "entry-directory-rail__link entry-directory-rail__link--month",
+                                "data-layout": "entry-directory-link",
+                                "data-directory-level": "month",
+                                "data-nav": "entry-directory-month",
                                 r#type: "button",
                                 onclick: {
                                     let anchor_id = month.anchor_id.clone();
                                     move |_| scroll_to_entry_group(&anchor_id)
                                 },
-                                span { class: "entry-directory-rail__link-title", "{month.title}" }
-                                span { class: "entry-directory-rail__link-meta", "{month.subtitle}" }
+                                span { "data-slot": "entry-directory-title", "{month.title}" }
+                                span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
                             }
-                            div { class: "entry-directory-rail__children",
+                            div { "data-layout": "entry-directory-children",
                                 for date in &month.dates {
                                     button {
-                                        class: "entry-directory-rail__link entry-directory-rail__link--date",
+                                        "data-layout": "entry-directory-link",
+                                        "data-directory-level": "date",
+                                        "data-nav": "entry-directory-date",
                                         r#type: "button",
                                         onclick: {
                                             let anchor_id = date.anchor_id.clone();
                                             move |_| scroll_to_entry_group(&anchor_id)
                                         },
-                                        span { class: "entry-directory-rail__link-title", "{date.title}" }
-                                        span { class: "entry-directory-rail__link-meta", "{date.subtitle}" }
+                                        span { "data-slot": "entry-directory-title", "{date.title}" }
+                                        span { "data-slot": "entry-directory-meta", "{date.subtitle}" }
                                     }
                                 }
                             }
@@ -182,7 +186,7 @@ pub(super) fn render_entry_directory(
                     }
                 }
             } else {
-                nav { class: "entry-directory-rail__nav", "aria-label": "文章目录导航",
+                nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
                     for source in directory_sources {
                         {
                             let anchor_id = source.anchor_id.clone();
@@ -190,29 +194,32 @@ pub(super) fn render_entry_directory(
                             let toggle_anchor = anchor_id.clone();
                             let toggle_facade = facade.clone();
                             rsx! {
-                                div { class: "entry-directory-rail__subsection", key: "{anchor_id}",
+                                div { "data-layout": "entry-directory-section", key: "{anchor_id}",
                                     button {
-                                        class: "entry-directory-rail__toggle",
+                                        "data-layout": "entry-directory-toggle",
+                                        "data-state": if is_open { "expanded" } else { "collapsed" },
                                         aria_expanded: if is_open { "true" } else { "false" },
                                         "data-action": if is_open { "collapse-directory-source" } else { "expand-directory-source" },
                                         onclick: move |_| {
                                             toggle_facade.toggle_directory_source(toggle_anchor.clone());
                                         },
-                                        span { class: "entry-directory-rail__toggle-text", "{source.title}" }
-                                        span { class: "entry-directory-rail__toggle-meta", "{source.subtitle}" }
+                                        span { "data-slot": "entry-directory-title", "{source.title}" }
+                                        span { "data-slot": "entry-directory-meta", "{source.subtitle}" }
                                     }
                                     if is_open {
-                                        div { class: "entry-directory-rail__grandchildren",
+                                        div { "data-layout": "entry-directory-grandchildren",
                                             for month in &source.months {
                                                 button {
-                                                    class: "entry-directory-rail__link",
+                                                    "data-layout": "entry-directory-link",
+                                                    "data-directory-level": "month",
+                                                    "data-nav": "entry-directory-month",
                                                     r#type: "button",
                                                     onclick: {
                                                         let anchor_id = month.anchor_id.clone();
                                                         move |_| scroll_to_entry_group(&anchor_id)
                                                     },
-                                                    span { class: "entry-directory-rail__link-title", "{month.title}" }
-                                                    span { class: "entry-directory-rail__link-meta", "{month.subtitle}" }
+                                                    span { "data-slot": "entry-directory-title", "{month.title}" }
+                                                    span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
                                                 }
                                             }
                                         }

@@ -33,14 +33,15 @@ pub fn ReaderPage(entry_id: i64) -> Element {
         article {
             class: "reader-page",
             "data-page": "reader",
+            "data-layout": "reader-page",
             "data-state": if facade.error().is_some() { "error" } else { "loaded" },
             tabindex: 0,
             onkeydown: move |event| shortcuts.call(event),
             AppNav {}
-            header { class: "reader-header",
-                h2 { class: "reader-title", "{facade.title()}" }
+            header { class: "reader-header", "data-layout": "reader-header",
+                h2 { class: "reader-title", "data-slot": "reader-title", "{facade.title()}" }
             }
-                div { class: "reader-toolbar inline-actions",
+                div { class: "reader-toolbar inline-actions", "data-layout": "reader-toolbar",
                     button {
                         class: "button inline-actions__item",
                         "data-variant": "secondary",
@@ -49,9 +50,9 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         "返回上一页"
                 }
             }
-            div { class: "reader-meta-block",
-                p { class: "reader-meta", "来源：{facade.source()}" }
-                p { class: "reader-meta", "发布时间：{facade.published_at()}" }
+            div { class: "reader-meta-block", "data-layout": "reader-meta-block",
+                p { class: "reader-meta", "data-slot": "reader-meta", "来源：{facade.source()}" }
+                p { class: "reader-meta", "data-slot": "reader-meta", "发布时间：{facade.published_at()}" }
             }
             if let Some(message) = facade.error() {
                 StatusBanner { message: message.to_string(), tone: "error".to_string() }
@@ -59,14 +60,14 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 if facade.has_status_message() {
                     StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string() }
                 }
-                div { class: "reader-body", "data-state": "{facade.body_state()}",
+                div { class: "reader-body", "data-layout": "reader-body", "data-state": "{facade.body_state()}",
                     if let Some(html) = facade.body_html() {
                         div { class: "reader-html", dangerous_inner_html: "{html}" }
                     } else {
                         pre { "{facade.body_text()}" }
                     }
                 }
-                div { class: "reader-pagination reader-pagination--context inline-actions",
+                div { class: "reader-pagination reader-pagination--context inline-actions", "data-layout": "reader-pagination", "data-context": "feed",
                     if let Some(previous_feed_entry_id) = facade.navigation_state().previous_feed_entry_id {
                         button {
                             class: "button inline-actions__item",
@@ -86,7 +87,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         }
                     }
                 }
-                nav { class: "reader-bottom-bar", "aria-label": "阅读快捷操作",
+                nav { class: "reader-bottom-bar", "data-layout": "reader-bottom-bar", "aria-label": "阅读快捷操作",
                     button {
                         class: "reader-bottom-bar__button",
                         disabled: !facade.has_previous_entry_target(),
@@ -97,8 +98,8 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                                 navigator.push(AppRoute::ReaderPage { entry_id: target });
                             }
                         },
-                        span { class: "reader-bottom-bar__icon", "‹" }
-                        span { class: "reader-bottom-bar__label", "上一未读" }
+                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", "‹" }
+                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label", "上一未读" }
                     }
                     button {
                         class: "reader-bottom-bar__button",
@@ -107,8 +108,8 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         onclick: move |_| {
                             read_facade.toggle_read(false);
                         },
-                        span { class: "reader-bottom-bar__icon", "{facade.read_toggle_icon()}" }
-                        span { class: "reader-bottom-bar__label", "{facade.read_toggle_label()}" }
+                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", "{facade.read_toggle_icon()}" }
+                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label", "{facade.read_toggle_label()}" }
                     }
                     button {
                         class: "reader-bottom-bar__button",
@@ -117,8 +118,8 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         onclick: move |_| {
                             starred_facade.toggle_starred(false);
                         },
-                        span { class: "reader-bottom-bar__icon", "{facade.starred_toggle_icon()}" }
-                        span { class: "reader-bottom-bar__label", "收藏（F）" }
+                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", "{facade.starred_toggle_icon()}" }
+                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label", "收藏（F）" }
                     }
                     button {
                         class: "reader-bottom-bar__button",
@@ -130,8 +131,8 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                                 navigator.push(AppRoute::ReaderPage { entry_id: target });
                             }
                         },
-                        span { class: "reader-bottom-bar__icon", "›" }
-                        span { class: "reader-bottom-bar__label", "下一未读" }
+                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", "›" }
+                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label", "下一未读" }
                     }
                 }
             }

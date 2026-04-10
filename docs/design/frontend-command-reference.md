@@ -225,28 +225,47 @@
 
 ---
 
-## 稳定组件接口
+## 稳定界面接口
 
-以下 class 应尽量作为公开界面接口长期保持稳定：
+当前应优先依赖的不是 page 私有 class，而是：
+
+- `data-page`
+- `data-layout`
+- `data-slot`
+- `data-nav`
+- `data-action`
+- `data-field`
+- `data-state`
+- `data-variant`
+- `data-density`
+
+通用 class 仍然保留为公开界面接口，但范围应收敛在真正通用的壳和组件上：
 
 - `.app-shell`
 - `.app-header`
-- `.app-nav`
-- `.app-nav-shell`
 - `.page`
-- `.page-section`
-- `.feed-list`
 - `.feed-card`
-- `.entry-list`
 - `.entry-card`
-- `.reader-toolbar`
-- `.reader-body`
-- `.settings-panel`
+- `.settings-card`
+- `.exchange-card`
+- `.theme-card`
 - `.status-banner`
 - `.button`
 - `.text-input`
 - `.text-area`
 - `.select-input`
+- `.field-label`
+- `.reader-html`
+
+不再建议把以下 page-specific class 当作长期契约：
+
+- `.app-nav*`
+- `.reader-page*`
+- `.entry-filters*`
+- `.entry-directory-*`
+- `.web-auth-*`
+
+这些区域现在都应优先通过语义接口消费。
 
 ---
 
@@ -311,13 +330,6 @@
 - 替代 class 的视觉命名
 - 临时 DOM hack
 - 页面私有且不可复用的内部标记
-
-当前已稳定的设置页字段接口：
-
-- `data-field="theme-mode"`
-- `data-field="list-density"`
-- `data-field="startup-view"`
-- `data-field="refresh-interval"`
 - `data-field="archive-after-months"`
 - `data-field="reader-font-scale"`
 - `data-field="custom-css"`
@@ -340,32 +352,53 @@
 
 ---
 
-## 容器与展示位边界
+## 布局与槽位接口
 
 容器、画廊、卡片壳、列表包裹层等展示位不应再使用 `data-action`。
 
-它们可以使用：
+它们应优先使用：
 
-- 稳定 class
+- `data-layout`
+- `data-slot`
 - `data-page`
 - `data-theme-preset`
-- 其它明确描述数据载荷的 attribute
+- 其它明确描述载荷的属性
 
-但不应伪装成“动作接口”。
+当前已经稳定公开的布局/槽位接口包括：
 
----
+- `data-layout="app-nav-shell"`
+- `data-layout="app-nav-links"`
+- `data-layout="app-nav-search"`
+- `data-layout="web-auth-shell"`
+- `data-layout="page-header"`
+- `data-layout="page-section-header"`
+- `data-layout="stats-grid"`
+- `data-layout="feed-workbench-single"`
+- `data-layout="exchange-grid"`
+- `data-layout="settings-grid"`
+- `data-layout="entries-layout"`
+- `data-layout="entry-groups"`
+- `data-layout="entry-directory-rail"`
+- `data-layout="entry-top-directory"`
+- `data-layout="entry-filters"`
+- `data-layout="reader-page"`
+- `data-layout="reader-header"`
+- `data-layout="reader-toolbar"`
+- `data-layout="reader-body"`
+- `data-layout="reader-bottom-bar"`
+- `data-slot="page-header-actions"`
+- `data-slot="page-title"`
+- `data-slot="entry-directory-title"`
+- `data-slot="entry-directory-meta"`
+- `data-slot="reader-title"`
+- `data-slot="reader-meta"`
+- `data-slot="reader-bottom-bar-label"`
 
-## 状态接口
+它们的职责是：
 
-状态应通过 class 或 data attribute 明确暴露，而不是让主题去猜测逻辑：
-
-- `.is-active`
-- `.is-loading`
-- `.is-disabled`
-- `.is-read`
-- `.is-starred`
-- `.has-error`
-- `data-state="loading|ready|error"`
+- 暴露稳定结构语义
+- 给 CSS / AI / 自动化提供不依赖 DOM 层级的锚点
+- 让 page facade 和 UI shell 能继续退化成默认语义壳
 
 ---
 
