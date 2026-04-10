@@ -121,6 +121,21 @@
   - 主题示例已经不再依赖高密度旧 selector
   - 下一轮如果继续收，就该转向是否还要保留部分内部组件 class 作为主题公开契约
 
+### 6. 新增内置主题契约测试，防止 selector 回退
+
+- 新增：
+  - [test_builtin_theme_contracts.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/tests/test_builtin_theme_contracts.rs)
+- 作用：
+  - 拦截内置主题重新引入旧 selector 契约
+  - 明确要求主题继续引用当前语义接口：
+    - `data-layout="app-nav-shell"`
+    - `data-nav`
+    - `data-variant="secondary"`
+    - `data-layout="reader-body"`
+- 目标：
+  - 让主题资产回归不再依赖手工审查
+  - 把 `assets/themes/*.css` 也纳入仓库内的自动化演进边界
+
 ## 已执行的验证 / 验收
 
 - 脚本可执行权限：
@@ -153,6 +168,8 @@
   - `rg -n "theme-card__description|theme-card__notes|feed-card__title|feed-card__meta|entry-card__title|entry-card__meta" assets/themes docs/design/css-separation-baseline-checklist.md`
   - `cargo check -p rssr-app`
   - `git diff --check`
+- 主题契约测试：
+  - `cargo test -p rssr-app --test test_builtin_theme_contracts`
 - 语义接口 grep：
   - `rg -n "app-nav__|entry-directory-rail__|entry-top-directory__" assets/styles crates/rssr-app/src -g'*.css' -g'*.rs'`
 - 阅读页接口 grep：
