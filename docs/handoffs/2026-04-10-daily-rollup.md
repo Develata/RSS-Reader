@@ -272,6 +272,33 @@
 - 边界说明：
   - 这条 smoke 先覆盖 deploy-shell 代理链路
   - 还不是“浏览器里真实添加订阅并完成首次刷新”的全 UI 自动化
+
+### 13. 发布前 UI 缺口已收成正式覆盖矩阵
+
+- 新增：
+  - [release-ui-coverage-matrix.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-coverage-matrix.md)
+- 更新：
+  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
+  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+- 作用：
+  - 把当前发布前回归分成：
+    - `自动化`
+    - `固定 smoke`
+    - `手工`
+  - 明确写出：
+    - 已固定的 P1 能力
+    - 仍然要手工补的 P2 / P3 缺口
+- 当前矩阵结论：
+  - P1 已基本固定：
+    - 自动化门禁
+    - 静态 Web 真实内部页
+    - 静态 `/reader` 多主题矩阵
+    - 静态 Web 小视口关键路径
+    - `rssr-web` 登录壳
+    - `rssr-web` `/feed-proxy` 代理链路
+  - 当前真正剩下的主要缺口是：
+    - 多主题与小视口的视觉可接受性，仍需人工看截图
+    - `rssr-web` 浏览器态下“真实添加订阅并完成首次刷新”仍未自动化
     - headless Chrome dump DOM 能拿到真实应用入口，而不是浏览器错误页
 - 静态 Web 路由级 DOM smoke：
   - `entries / feeds / settings` 三条路径都用 headless Chrome dump DOM 验证过

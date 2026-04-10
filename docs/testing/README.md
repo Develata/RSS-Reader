@@ -6,6 +6,7 @@
 
 - [手工回归测试清单](./manual-regression.md)
 - [发布前 UI 回归清单](./release-ui-regression-checklist.md)
+- [发布前 UI 覆盖矩阵](./release-ui-coverage-matrix.md)
 - [`rssr-web` 浏览器手工 Smoke](./rssr-web-browser-smoke.md)
 - [`rssr-web` 代理 Feed Smoke](./rssr-web-proxy-feed-smoke.md)
 - [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
@@ -23,6 +24,7 @@
   - 先过一遍 [手工回归测试清单](./manual-regression.md)
 - 如果是发版前确认：
   - 先过 [发布前 UI 回归清单](./release-ui-regression-checklist.md)
+  - 再看 [发布前 UI 覆盖矩阵](./release-ui-coverage-matrix.md)，判断还剩哪些手工缺口
   - 再补充路由、订阅刷新、阅读页导航、主题切换、设置持久化的专项确认
   - 静态 Web 如果要稳定进入真实阅读页，优先用 `run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2`
   - 多主题下的真实阅读页，优先用 `run_static_web_reader_theme_matrix.sh`
