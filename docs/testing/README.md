@@ -7,6 +7,7 @@
 - [手工回归测试清单](./manual-regression.md)
 - [发布前 UI 回归清单](./release-ui-regression-checklist.md)
 - [`rssr-web` 浏览器手工 Smoke](./rssr-web-browser-smoke.md)
+- [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
 - [全局浏览器回归报告](./global-browser-regression.md)
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
 - [主线验证矩阵](./mainline-validation-matrix.md)

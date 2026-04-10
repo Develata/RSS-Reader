@@ -147,6 +147,12 @@ bash scripts/run_rssr_web_browser_smoke.sh
 - 初始化后可进入应用
 - 后续重新打开时，登录表单和状态提示正常
 
+如果要固定一条可复用的静态 Web 浏览器态入口，直接用：
+
+```bash
+bash scripts/run_static_web_browser_smoke.sh
+```
+
 `rssr-web`：
 
 - 未登录访问会进入登录页
@@ -278,6 +284,7 @@ bash scripts/run_rssr_web_browser_smoke.sh
 - [主线验证矩阵](./mainline-validation-matrix.md)
 - [手工回归测试清单](./manual-regression.md)
 - [`rssr-web` 浏览器手工 Smoke](./rssr-web-browser-smoke.md)
+- [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
 - [环境限制索引](./environment-limitations.md)
 - [Web SPA 回归服务脚本](/home/develata/gitclone/RSS-Reader/docs/design/web-spa-regression-server.md)

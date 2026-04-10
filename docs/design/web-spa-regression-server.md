@@ -5,6 +5,8 @@
 - 为 `rssr-app` 的 web 构建提供一个本地静态服务入口。
 - 对未知路径自动回退到 `index.html`，避免直接访问 `/feeds`、`/settings`、`/entries` 时落到 404。
 - 给 Chrome MCP、本地浏览器回归和 CSS 完全分离检查提供固定入口。
+- 给同源本地 Web auth helper 提供承载入口：
+  - `/__codex/setup-local-auth`
 
 如果需要把发布前自动化门禁和静态 Web 回归串成一条命令，优先执行：
 
@@ -25,6 +27,12 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
 - `target/release-ui-regression/<timestamp>/automated-gates.log`
 - `target/release-ui-regression/<timestamp>/rssr-web.log`
 - `target/release-ui-regression/<timestamp>/summary.md`
+
+如果只想做静态 Web 的真实浏览器态 smoke，优先用：
+
+```bash
+bash scripts/run_static_web_browser_smoke.sh
+```
 
 ## 脚本
 

@@ -201,6 +201,62 @@
     - helper 会先等待 `/healthz` ready，再打印 URL 与临时凭据
     - 启动失败时直接报错并指向 `rssr-web.log`
 
+### 10. 正式跑了一轮发布前 UI 回归预检
+
+- 自动化 + `rssr-web` 预检：
+  - `bash scripts/run_release_ui_regression.sh --no-serve --skip-build --with-rssr-web`
+  - 结果：
+    - `rssr-app` 自动化门禁通过
+    - builtin theme 契约测试通过
+    - `rssr-infra` 关键 contract harness 通过
+    - `rssr-web` 测试通过
+    - `rssr-web` smoke 通过
+  - 结果模板：
+    - `target/release-ui-regression/20260410-161507/summary.md`
+- 静态 Web + SPA fallback：
+  - 用前台最小方式起：
+    - `bash scripts/run_web_spa_regression_server.sh --skip-build --port 8100`
+  - 已确认：
+    - `curl -I http://127.0.0.1:8100/entries` 返回 `200`
+    - headless Chrome dump DOM 能拿到真实应用入口，而不是浏览器错误页
+- 静态 Web 路由级 DOM smoke：
+  - `entries / feeds / settings` 三条路径都用 headless Chrome dump DOM 验证过
+  - 当前统一落到本地 Web 门禁壳：
+    - `data-layout="web-auth-shell"`
+    - `data-slot="web-auth-title"`
+    - `初始化 Web 登录`
+    - `保存并进入`
+  - 这说明：
+    - SPA fallback 正常
+    - 三条核心路由都能稳定回到同一套本地门禁壳
+    - 当前还缺的是“已初始化本地凭据后的真实应用内部页面”浏览器态回归
+
+### 11. 新增静态 Web 浏览器手工 smoke helper
+
+- 新增：
+  - [run_static_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_static_web_browser_smoke.sh)
+  - [static-web-browser-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/static-web-browser-smoke.md)
+- 更新：
+  - [run_web_spa_regression_server.sh](/home/develata/gitclone/RSS-Reader/scripts/run_web_spa_regression_server.sh)
+  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
+  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+  - [web-spa-regression-server.md](/home/develata/gitclone/RSS-Reader/docs/design/web-spa-regression-server.md)
+- 作用：
+  - 固定一条“静态 Web 本地门禁已初始化后的真实浏览器态回归”入口
+  - 用同源 helper URL 自动写入：
+    - `rssr-web-auth-config-v1`
+    - `rssr-web-auth-session-v1`
+  - 自动跳转到目标页，避免每次手工先填一遍初始化表单
+  - 已实测：
+    - helper 脚本可起服务并输出 helper URL
+    - `GET /__codex/setup-local-auth?...` 返回 `200`
+    - headless Chrome 访问 helper URL 后，最终 DOM 已进入真实 `/entries` 页面
+    - 可见：
+      - `data-page="entries"`
+      - `data-layout="entries-layout"`
+      - `data-nav="feeds|entries|settings"`
+      - 空状态 banner
+
 ## 已执行的验证 / 验收
 
 - 脚本可执行权限：
@@ -246,6 +302,15 @@
   - `timeout 20 bash scripts/run_rssr_web_browser_smoke.sh --skip-build --port 18083`
   - `curl -i http://127.0.0.1:18083/healthz`
   - `timeout 20 bash scripts/run_rssr_web_browser_smoke.sh --skip-build --port 18085`
+- 正式发布前预检执行：
+  - `bash scripts/run_release_ui_regression.sh --no-serve --skip-build --with-rssr-web`
+  - `timeout 15 bash -lc 'bash scripts/run_web_spa_regression_server.sh --skip-build --port 8100 ...'`
+  - `timeout 18 bash -lc 'bash scripts/run_web_spa_regression_server.sh --skip-build --port 8101 ...'`
+- 静态 Web 浏览器 smoke helper：
+  - `bash -n scripts/run_static_web_browser_smoke.sh`
+  - `timeout 20 bash scripts/run_static_web_browser_smoke.sh --skip-build --port 8102`
+  - `timeout 15 bash -lc 'bash scripts/run_web_spa_regression_server.sh --skip-build --port 8103 ...'`
+  - `timeout 18 bash -lc 'bash scripts/run_web_spa_regression_server.sh --skip-build --port 8104 ...'`
 - 语义接口 grep：
   - `rg -n "app-nav__|entry-directory-rail__|entry-top-directory__" assets/styles crates/rssr-app/src -g'*.css' -g'*.rs'`
 - 阅读页接口 grep：
