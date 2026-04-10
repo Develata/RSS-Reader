@@ -83,6 +83,7 @@
 
 ## 参考记录
 
+- [发布前 UI 回归清单](./release-ui-regression-checklist.md)
 - [全局浏览器回归报告](./global-browser-regression.md)
 - [手工回归测试清单](./manual-regression.md)
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)

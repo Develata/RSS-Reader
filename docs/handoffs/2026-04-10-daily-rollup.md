@@ -136,6 +136,24 @@
   - 让主题资产回归不再依赖手工审查
   - 把 `assets/themes/*.css` 也纳入仓库内的自动化演进边界
 
+### 7. 新增发布前 UI 回归清单，接入 testing 文档索引
+
+- 新增：
+  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+- 更新：
+  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
+  - [mainline-validation-matrix.md](/home/develata/gitclone/RSS-Reader/docs/testing/mainline-validation-matrix.md)
+- 作用：
+  - 把发布前 UI 验收与普通手工回归、主线验证矩阵区分开
+  - 固定两条 Web 入口：
+    - 静态 `rssr-app` + SPA fallback
+    - `rssr-web` 部署壳
+  - 固定发布门禁关注点：
+    - 路由与交互
+    - 主题与 CSS 契约
+    - 关键持久化与配置交换
+    - 小视口与 Console 门禁
+
 ## 已执行的验证 / 验收
 
 - 脚本可执行权限：
@@ -170,6 +188,8 @@
   - `git diff --check`
 - 主题契约测试：
   - `cargo test -p rssr-app --test test_builtin_theme_contracts`
+- 发布前 UI 回归清单接入后复查：
+  - `git diff --check`
 - 语义接口 grep：
   - `rg -n "app-nav__|entry-directory-rail__|entry-top-directory__" assets/styles crates/rssr-app/src -g'*.css' -g'*.rs'`
 - 阅读页接口 grep：

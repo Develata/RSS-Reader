@@ -5,6 +5,7 @@
 ## 当前文档
 
 - [手工回归测试清单](./manual-regression.md)
+- [发布前 UI 回归清单](./release-ui-regression-checklist.md)
 - [全局浏览器回归报告](./global-browser-regression.md)
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
 - [主线验证矩阵](./mainline-validation-matrix.md)
@@ -16,7 +17,8 @@
 - 每次大改阅读页、订阅页、设置页或主题系统之后：
   - 先过一遍 [手工回归测试清单](./manual-regression.md)
 - 如果是发版前确认：
-  - 优先看路由、订阅刷新、阅读页导航、主题切换、设置持久化
+  - 先过 [发布前 UI 回归清单](./release-ui-regression-checklist.md)
+  - 再补充路由、订阅刷新、阅读页导航、主题切换、设置持久化的专项确认
 - 如果是排查 Web 端问题：
   - 重点看 feed 刷新、浏览器 Console 和持久化行为
 - 如果是逐模块推进 headless active interface 重构：
