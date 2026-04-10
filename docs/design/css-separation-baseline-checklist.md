@@ -147,7 +147,56 @@
   - `data-layout="entry-filters|entry-filters-toggle|entry-filters-sources|entry-filters-source-grid"`
   - `data-slot="entry-filters-sources-label"`
 
+### 主题作者 smoke review 结果
+
+- fresh `debug/web/public` 构建已确认真实输出：
+  - `data-layout`
+  - `data-slot`
+  - `data-page`
+  - `data-nav`
+  - `data-action`
+  - `data-field`
+  - `data-state`
+  - `data-density`
+- 通过浏览器注入最小 CSS 已确认：
+  - `[data-layout="app-nav-shell"]`
+  - `[data-layout="app-nav-links"]`
+  - `[data-slot="app-nav-search-input"]`
+  - `[data-page="settings"] [data-layout="settings-grid"]`
+  这些公开接口已经足够驱动实际布局和主题覆写
+- 静态审计原先暴露的内置主题旧 selector 依赖，现已完成第一轮收口：
+  - `.app-nav*`
+  - `.reader-page*`
+  - `.entry-filters*`
+  - `.button.secondary/.danger/.danger-outline`
+  - `.theme-card.is-active`
+  已从 `assets/themes/*.css` 清空
+
 ## P1：下一轮必须收掉
+
+### 0. 内置主题资产继续收剩余旧口径
+
+- 文件：
+  - [atlas-sidebar.css](/home/develata/gitclone/RSS-Reader/assets/themes/atlas-sidebar.css)
+  - [forest-desk.css](/home/develata/gitclone/RSS-Reader/assets/themes/forest-desk.css)
+  - [midnight-ledger.css](/home/develata/gitclone/RSS-Reader/assets/themes/midnight-ledger.css)
+  - [newsprint.css](/home/develata/gitclone/RSS-Reader/assets/themes/newsprint.css)
+- 已完成：
+  - 导航壳改成 `data-layout/data-nav`
+  - 阅读壳改成 `data-layout/data-slot`
+  - 按钮变体改成 `data-variant`
+  - 主题卡激活态改成 `data-state`
+- 下一步：
+  - 继续判断是否还需要保留部分内部组件 class
+  - 目前对应的公开 slot 已有：
+    - `data-slot="feed-card-title"`
+    - `data-slot="feed-card-meta"`
+    - `data-slot="entry-card-title"`
+    - `data-slot="entry-card-meta"`
+    - `data-slot="page-intro"`
+    - `data-slot="theme-card-title"`
+    - `data-slot="theme-card-swatches"`
+    - `data-slot="theme-card-swatch"`
 
 ### 1. 卡片头部仍依赖标签名
 

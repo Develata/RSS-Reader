@@ -60,7 +60,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                         }
                         span { "显示已归档文章" }
                     }
-                    p { class: "page-intro",
+                    p { class: "page-intro", "data-slot": "page-intro",
                         if facade.show_archived() {
                             "当前同时显示归档文章。"
                         } else {

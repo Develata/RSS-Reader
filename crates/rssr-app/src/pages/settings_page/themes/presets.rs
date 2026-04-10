@@ -98,11 +98,12 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                                 key: "{preset.key}",
                                 "data-state": "{facade.theme_card_state(preset.key)}",
                                 "data-theme-preset": "{preset.key}",
-                                h4 { class: "theme-card__title", "{preset_name}" }
-                                div { class: "theme-card__swatches",
+                                h4 { class: "theme-card__title", "data-slot": "theme-card-title", "{preset_name}" }
+                                div { class: "theme-card__swatches", "data-slot": "theme-card-swatches",
                                     for swatch in preset_swatches {
                                         span {
                                             class: "theme-card__swatch",
+                                            "data-slot": "theme-card-swatch",
                                             style: "background:{swatch}",
                                         }
                                     }

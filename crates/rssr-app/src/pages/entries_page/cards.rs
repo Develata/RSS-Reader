@@ -19,10 +19,11 @@ pub(super) fn render_entry_card(
         li { class: "entry-card entry-card--reading", key: "{entry.id}", "data-list-edge": "{list_edge}",
             Link {
                 class: "entry-card__title",
+                "data-slot": "entry-card-title",
                 to: AppRoute::ReaderPage { entry_id: entry.id },
                 "{entry.title}"
             }
-            div { class: "entry-card__meta",
+            div { class: "entry-card__meta", "data-slot": "entry-card-meta",
                 "{entry.feed_title}"
                 if let Some(date) = format_entry_date_utc(entry.published_at) { " · {date}" }
                 if entry.is_read { " · 已读" } else { " · 未读" }

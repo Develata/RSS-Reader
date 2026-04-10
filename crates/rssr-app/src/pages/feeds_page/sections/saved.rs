@@ -39,16 +39,17 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
         li { class: "feed-card", key: "{feed_id}", "data-state": "{facade.remove_feed_state(feed_id)}",
             Link {
                 class: "feed-card__title",
+                "data-slot": "feed-card-title",
                 "data-nav": "feed-entries",
                 to: AppRoute::FeedEntriesPage { feed_id },
                 "{feed.title}"
             }
             p { class: "feed-card__url", "{feed.url}" }
             div { class: "feed-card__meta-group",
-                p { class: "feed-card__meta", "本地文章 {feed.entry_count} · 未读 {feed.unread_count}" }
-                p { class: "feed-card__meta", "{feed_refresh_status_text(&feed)}" }
+                p { class: "feed-card__meta", "data-slot": "feed-card-meta", "本地文章 {feed.entry_count} · 未读 {feed.unread_count}" }
+                p { class: "feed-card__meta", "data-slot": "feed-card-meta", "{feed_refresh_status_text(&feed)}" }
                 if let Some(error) = &feed.fetch_error {
-                    p { class: "feed-card__meta feed-card__meta--error", "最近失败：{error}" }
+                    p { class: "feed-card__meta feed-card__meta--error", "data-slot": "feed-card-meta", "最近失败：{error}" }
                 }
             }
             div { class: "entry-card__actions",

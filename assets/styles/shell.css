@@ -238,7 +238,7 @@
   background: rgba(255, 250, 242, 0.96);
 }
 
-.page-intro {
+[data-slot="page-intro"] {
   margin: 0 0 18px;
   color: var(--muted);
   line-height: 1.65;
@@ -276,8 +276,8 @@
 }
 
 .stat-card__label,
-.entry-card__meta,
-.feed-card__meta {
+[data-slot="entry-card-meta"],
+[data-slot="feed-card-meta"] {
   color: var(--muted);
   font-size: 0.9rem;
 }

@@ -18,7 +18,7 @@ bash scripts/run_web_spa_regression_server.sh
 
 默认行为：
 - 构建 `rssr-app` web bundle
-- 读取 `target/dx/rssr-app/release/web/public`
+- 读取 `target/dx/rssr-app/debug/web/public`
 - 在 `http://127.0.0.1:8091` 提供带 SPA fallback 的静态服务
 
 可选参数：
@@ -27,7 +27,13 @@ bash scripts/run_web_spa_regression_server.sh
 bash scripts/run_web_spa_regression_server.sh --port 8092
 bash scripts/run_web_spa_regression_server.sh --skip-build
 bash scripts/run_web_spa_regression_server.sh --debug
+bash scripts/run_web_spa_regression_server.sh --release
 ```
+
+说明：
+
+- 当前 `dx build --platform web --package rssr-app` 默认产出 `debug/web/public`
+- 如果要检查 release 构建，应显式使用 `--release`
 
 ## 推荐回归路径
 

@@ -388,11 +388,19 @@
 - `data-layout="reader-bottom-bar"`
 - `data-slot="page-header-actions"`
 - `data-slot="page-title"`
+- `data-slot="page-intro"`
+- `data-slot="feed-card-title"`
+- `data-slot="feed-card-meta"`
+- `data-slot="entry-card-title"`
+- `data-slot="entry-card-meta"`
 - `data-slot="entry-directory-title"`
 - `data-slot="entry-directory-meta"`
 - `data-slot="reader-title"`
 - `data-slot="reader-meta"`
 - `data-slot="reader-bottom-bar-label"`
+- `data-slot="theme-card-title"`
+- `data-slot="theme-card-swatches"`
+- `data-slot="theme-card-swatch"`
 
 它们的职责是：
 

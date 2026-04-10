@@ -78,6 +78,49 @@
     - `ui/runtime/mod.rs`
   - 把前端接口说明从“旧 class 列表”收口成“语义接口优先 + 少量通用 class 保留”
 
+### 4. 主题作者 smoke review 暴露了两处真实缺口
+
+- 先前固定脚本的默认 profile 假设有误：
+  - `dx build --platform web --package rssr-app` 当前默认产出 `target/dx/rssr-app/debug/web/public`
+  - 脚本原先默认读 `release/web/public`，导致清理构建目录后会误报缺失
+  - 现已改为默认 `debug`，并在 `--release` 时显式走 release 构建
+- fresh web 构建的浏览器回归已确认：
+  - `data-layout`
+  - `data-slot`
+  - `data-page`
+  - `data-nav`
+  - `data-action`
+  - `data-field`
+  - `data-state`
+  - `data-density`
+  这些语义接口都真实落到了 DOM
+- 同时静态审计也确认：
+  - `assets/themes/*.css` 仍大量依赖旧 class 和旧结构
+  - 下一轮更值得收的是“内置主题资产迁移”，而不是继续盲目扩展页面壳 CSS 迁移面
+
+### 5. 内置主题资产已开始对齐新的公开语义契约
+
+- 更新：
+  - [atlas-sidebar.css](/home/develata/gitclone/RSS-Reader/assets/themes/atlas-sidebar.css)
+  - [newsprint.css](/home/develata/gitclone/RSS-Reader/assets/themes/newsprint.css)
+  - [forest-desk.css](/home/develata/gitclone/RSS-Reader/assets/themes/forest-desk.css)
+  - [midnight-ledger.css](/home/develata/gitclone/RSS-Reader/assets/themes/midnight-ledger.css)
+- 已完成：
+  - `app-nav*` 改到 `data-layout="app-nav-*"` / `data-nav`
+  - `reader-page*` 改到 `data-layout="reader-*"` / `data-slot="reader-*"`
+  - `button.secondary/.danger/.danger-outline` 改到 `data-variant`
+  - `theme-card.is-active` 改到 `data-state="active"`
+  - `stats-grid`、`settings-grid`、`reader-body` 等关键布局接口切到 `data-layout`
+- 继续完成：
+  - `feed-card__title / feed-card__meta` -> `data-slot="feed-card-title|feed-card-meta"`
+  - `entry-card__title / entry-card__meta` -> `data-slot="entry-card-title|entry-card-meta"`
+  - `page-intro` -> `data-slot="page-intro"`
+  - `theme-card__title / theme-card__swatches / theme-card__swatch` -> `data-slot="theme-card-*"`
+  - 原先未实际使用的 `theme-card__description / theme-card__notes` 已确认为死接口并删除
+- 当前判断：
+  - 主题示例已经不再依赖高密度旧 selector
+  - 下一轮如果继续收，就该转向是否还要保留部分内部组件 class 作为主题公开契约
+
 ## 已执行的验证 / 验收
 
 - 脚本可执行权限：
@@ -99,6 +142,17 @@
 - 文档一致性复查：
   - `rg -n "\\.app-nav|\\.reader-page|\\.reader-header|\\.reader-toolbar|\\.entry-filters|\\.web-auth-|\\.is-active|\\.is-disabled|\\.button\\.secondary|\\.button\\.danger|\\.button\\.danger-outline" docs/design`
   - `rg -n "commands\\.rs|runtime\\.rs" docs/design`
+- 主题作者 smoke review：
+  - `rg -n "\\.app-nav|\\.reader-page|\\.reader-header|\\.reader-toolbar|\\.entry-filters|\\.web-auth-|\\.button\\.secondary|\\.button\\.danger|\\.button\\.danger-outline|\\.theme-card\\.is-active|\\.entry-filters__source-chip\\.is-selected|\\.reader-bottom-bar__button\\.is-" assets/themes`
+  - `dx build --platform web --package rssr-app`
+  - `bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8094`
+  - Chrome MCP 直接访问 `http://127.0.0.1:8094/entries`、`/settings`
+  - 在浏览器中注入只依赖公开接口的最小 CSS，并确认 `app-nav` 与 `settings-grid` 可被稳定覆写
+- 主题资产迁移验证：
+  - `rg -n "\\.app-nav|\\.reader-page|\\.reader-header|\\.reader-toolbar|\\.entry-filters|\\.web-auth-|\\.button\\.secondary|\\.button\\.danger|\\.button\\.danger-outline|\\.theme-card\\.is-active|\\.entry-filters__source-chip\\.is-selected|\\.reader-bottom-bar__button\\.is-" assets/themes`
+  - `rg -n "theme-card__description|theme-card__notes|feed-card__title|feed-card__meta|entry-card__title|entry-card__meta" assets/themes docs/design/css-separation-baseline-checklist.md`
+  - `cargo check -p rssr-app`
+  - `git diff --check`
 - 语义接口 grep：
   - `rg -n "app-nav__|entry-directory-rail__|entry-top-directory__" assets/styles crates/rssr-app/src -g'*.css' -g'*.rs'`
 - 阅读页接口 grep：
@@ -126,6 +180,7 @@
 - 下一步最自然的是：
   - 复查剩余通用布局 class 是否还值得继续槽化
   - 或把这轮语义接口迁移和文档收口一起提交
+  - 或继续审查内置主题里剩余的内部组件 class 依赖，决定它们是保留公开，还是继续补 `data-slot`
 
 ## 相关 commit / worktree 状态
 

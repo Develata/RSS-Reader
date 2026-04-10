@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-profile="release"
+profile="debug"
 port="8091"
 skip_build="false"
 
@@ -32,7 +32,11 @@ done
 
 if [[ "$skip_build" != "true" ]]; then
   echo "Building rssr-app web bundle (${profile})..."
-  dx build --platform web --package rssr-app >/dev/null
+  if [[ "$profile" == "release" ]]; then
+    dx build --platform web --package rssr-app --release >/dev/null
+  else
+    dx build --platform web --package rssr-app >/dev/null
+  fi
 fi
 
 public_dir="target/dx/rssr-app/${profile}/web/public"
