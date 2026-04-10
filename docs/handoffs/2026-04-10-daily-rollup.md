@@ -247,6 +247,31 @@
   - 两条 smoke 都通过：
     - 多主题 `/entries/2` 均进入真实阅读页
     - 小视口 `/entries`、`/feeds`、`/settings`、`/entries/2` 均进入真实页面
+
+### 12. `rssr-web` 真实代理 feed 回归已固定成 deploy-shell smoke
+
+- 新增：
+  - [run_rssr_web_proxy_feed_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_proxy_feed_smoke.sh)
+  - [rssr-web-proxy-feed-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/rssr-web-proxy-feed-smoke.md)
+- 更新：
+  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
+  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+- 目标：
+  - 先把 `rssr-web` 部署壳下最关键的代理链路固定成可重复 smoke
+  - 验证“登录后请求 `/feed-proxy` 返回真实 XML feed，而不是登录页或静态壳”
+  - 当前选择的默认远端 feed：
+    - `https://www.ruanyifeng.com/blog/atom.xml`
+- 已实跑：
+  - `bash scripts/run_rssr_web_proxy_feed_smoke.sh --skip-build --port 18086`
+- 结果：
+  - 登录成功
+  - `/feed-proxy` 返回 `200`
+  - body 为真实 XML feed
+  - 产物落盘到：
+    - `target/rssr-web-proxy-feed-smoke/20260410-210340/`
+- 边界说明：
+  - 这条 smoke 先覆盖 deploy-shell 代理链路
+  - 还不是“浏览器里真实添加订阅并完成首次刷新”的全 UI 自动化
     - headless Chrome dump DOM 能拿到真实应用入口，而不是浏览器错误页
 - 静态 Web 路由级 DOM smoke：
   - `entries / feeds / settings` 三条路径都用 headless Chrome dump DOM 验证过

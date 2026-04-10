@@ -112,6 +112,12 @@ bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
 
 代理 feed 导入和更完整的页面行为，仍需要浏览器手工回归补齐。
 
+如果要先固定一条更窄的 deploy-shell 代理回归，优先用：
+
+```bash
+bash scripts/run_rssr_web_proxy_feed_smoke.sh
+```
+
 如果要快速起一个可登录的 `rssr-web` 浏览器回归环境，直接用：
 
 ```bash
