@@ -94,28 +94,28 @@ cat >"$summary_file" <<EOF
 
 ## 固定手工步骤
 
-1. 打开 `/login`，用上面的用户名和密码登录。
-2. 进入 `/feeds`。
-3. 在 `data-field="feed-url-input"` 输入推荐 feed：
+1. 打开 \`/login\`，用上面的用户名和密码登录。
+2. 进入 \`/feeds\`。
+3. 在 \`data-field="feed-url-input"\` 输入推荐 feed：
 
    \`${feed_url}\`
 
-4. 点击 `data-action="add-feed"`。
-5. 确认页面出现新的 feed 卡片，且卡片标题链接带有 `data-nav="feed-entries"`。
-6. 点击该卡片上的 `data-action="refresh-feed"`。
+4. 点击 \`data-action="add-feed"\`。
+5. 确认页面出现新的 feed 卡片，且卡片标题链接带有 \`data-nav="feed-entries"\`。
+6. 点击该卡片上的 \`data-action="refresh-feed"\`。
 7. 如果页面出现文章，点击 `data-nav="feed-entries"` 进入文章页；如能进入阅读页，再补看 `/reader`。
-8. 打开 `/settings`，确认登录态下设置页可达。
-9. 访问 `/logout`，确认会回到 `/login`。
+8. 打开 \`/settings\`，确认登录态下设置页可达。
+9. 访问 \`/logout\`，确认会回到 \`/login\`。
 
 ## 固定 selector / 期望
 
 - 登录页：
-- `data-field="feed-url-input"`：
-- `data-action="add-feed"`：
-- `data-action="refresh-feed"`：
-- `data-nav="feed-entries"`：
-- `/settings`：
-- `/logout`：
+- \`data-field="feed-url-input"\`：
+- \`data-action="add-feed"\`：
+- \`data-action="refresh-feed"\`：
+- \`data-nav="feed-entries"\`：
+- \`/settings\`：
+- \`/logout\`：
 
 ## 结果补充
 

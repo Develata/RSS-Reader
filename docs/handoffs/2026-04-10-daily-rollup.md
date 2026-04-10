@@ -573,4 +573,17 @@
   - `7fe328a` `refactor: finalize semantic css interfaces`
   - `5937c49` `refactor: align builtin themes with semantic slots`
 - 当前 worktree：
-  - clean
+  - pending
+
+## 补充：Chrome MCP 全量实测
+
+- 实测入口：
+  - 静态 Web：`http://127.0.0.1:8110/__codex/setup-local-auth?...&seed=reader-demo&next=/entries`
+  - `rssr-web`：`http://127.0.0.1:18096/__codex/browser-feed-smoke`
+- Chrome MCP 已实际确认：
+  - 静态 `/entries`、`/feeds`、`/settings`、`/entries/2` 均能进入真实应用页
+  - `Atlas Sidebar` 主题可在 `/settings` 成功应用，随后 `/entries/2` 阅读页仍正常渲染
+  - `390x844` 小视口下 `/entries`、`/feeds`、`/settings` 仍可达且主内容存在
+  - `rssr-web` helper 页面返回 `status=pass`，已自动完成登录、添加 feed、刷新订阅并进入 `feed-entries`
+- 发现并顺手修复：
+  - [scripts/run_rssr_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_smoke.sh) 的 summary heredoc 反引号未转义，会导致 shell 误执行；当前 `commit: pending`
