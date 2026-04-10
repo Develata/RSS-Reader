@@ -587,3 +587,10 @@
   - `rssr-web` helper 页面返回 `status=pass`，已自动完成登录、添加 feed、刷新订阅并进入 `feed-entries`
 - 发现并顺手修复：
   - [scripts/run_rssr_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_smoke.sh) 的 summary heredoc 反引号未转义，会导致 shell 误执行；当前 `commit: pending`
+
+## 补充：Chrome MCP 固定启动入口
+
+- 新增：[run_chrome_mcp_target.sh](/home/develata/gitclone/RSS-Reader/scripts/run_chrome_mcp_target.sh)、[chrome-mcp-target.md](/home/develata/gitclone/RSS-Reader/docs/testing/chrome-mcp-target.md)
+- 作用：固定 Chrome DevTools MCP 目标浏览器的启动参数，统一 `remote-debugging-port`、profile、日志与就绪检查。
+- 实测：`bash -n scripts/run_chrome_mcp_target.sh`、`bash scripts/run_chrome_mcp_target.sh`、`bash scripts/run_chrome_mcp_target.sh --port 9223 --profile-dir target/chrome-mcp-profile-9223 --restart`
+- 当前结论：默认 `9222` 端口已可被固定入口识别；Chrome MCP 如果再次断连，优先执行 `bash scripts/run_chrome_mcp_target.sh --restart`。

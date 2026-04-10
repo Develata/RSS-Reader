@@ -16,6 +16,12 @@
 
 - [发布前 UI 覆盖矩阵](./release-ui-coverage-matrix.md)
 
+如果这轮要直接用 Chrome MCP 做真实浏览器态补查，先起：
+
+```bash
+bash scripts/run_chrome_mcp_target.sh --restart
+```
+
 ## 使用时机
 
 在以下场景执行：
