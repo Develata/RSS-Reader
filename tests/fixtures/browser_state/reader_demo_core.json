@@ -1,0 +1,75 @@
+{
+  "next_feed_id": 2,
+  "next_entry_id": 3,
+  "feeds": [
+    {
+      "id": 1,
+      "url": "https://example.com/feed.xml",
+      "title": "Demo Feed",
+      "site_url": "https://example.com",
+      "description": "A seeded demo feed for static web browser smoke.",
+      "icon_url": null,
+      "folder": null,
+      "etag": null,
+      "last_modified": null,
+      "last_fetched_at": "2026-04-10 00:00:00.0 +00:00:00",
+      "last_success_at": "2026-04-10 00:00:00.0 +00:00:00",
+      "fetch_error": null,
+      "is_deleted": false,
+      "created_at": "2026-04-10 00:00:00.0 +00:00:00",
+      "updated_at": "2026-04-10 00:00:00.0 +00:00:00"
+    }
+  ],
+  "entries": [
+    {
+      "id": 1,
+      "feed_id": 1,
+      "external_id": "demo-entry-1",
+      "dedup_key": "demo-entry-1",
+      "url": "https://example.com/posts/demo-entry-1",
+      "title": "Demo Entry One",
+      "author": "RSS-Reader Smoke",
+      "summary": "A seeded unread entry for static browser smoke.",
+      "content_html": "<p>Demo Entry One body.</p>",
+      "content_text": "Demo Entry One body.",
+      "published_at": "2026-04-09 08:00:00.0 +00:00:00",
+      "updated_at_source": "2026-04-09 08:00:00.0 +00:00:00",
+      "first_seen_at": "2026-04-10 00:00:00.0 +00:00:00",
+      "content_hash": "demo-entry-1",
+      "created_at": "2026-04-10 00:00:00.0 +00:00:00",
+      "updated_at": "2026-04-10 00:00:00.0 +00:00:00"
+    },
+    {
+      "id": 2,
+      "feed_id": 1,
+      "external_id": "demo-entry-2",
+      "dedup_key": "demo-entry-2",
+      "url": "https://example.com/posts/demo-entry-2",
+      "title": "Demo Entry Two",
+      "author": "RSS-Reader Smoke",
+      "summary": "A seeded reader page entry for static browser smoke.",
+      "content_html": "<p>Demo Entry Two body.</p>",
+      "content_text": "Demo Entry Two body.",
+      "published_at": "2026-04-10 08:00:00.0 +00:00:00",
+      "updated_at_source": "2026-04-10 08:00:00.0 +00:00:00",
+      "first_seen_at": "2026-04-10 00:00:00.0 +00:00:00",
+      "content_hash": "demo-entry-2",
+      "created_at": "2026-04-10 00:00:00.0 +00:00:00",
+      "updated_at": "2026-04-10 00:00:00.0 +00:00:00"
+    }
+  ],
+  "settings": {
+    "theme": "system",
+    "list_density": "comfortable",
+    "startup_view": "all",
+    "refresh_interval_minutes": 30,
+    "archive_after_months": 3,
+    "reader_font_scale": 1.0,
+    "entry_grouping_mode": "time",
+    "show_archived_entries": false,
+    "entry_read_filter": "all",
+    "entry_starred_filter": "all",
+    "entry_filtered_feed_urls": [],
+    "custom_css": ""
+  }
+}

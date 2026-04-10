@@ -21,6 +21,21 @@ bash scripts/run_static_web_browser_smoke.sh
 - helper 会自动写入本地 `localStorage/sessionStorage`
 - 然后跳转到默认内部页 `/entries`
 
+如果要稳定进入真实阅读页，也可以直接播种一份最小 demo 数据：
+
+```bash
+bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2
+```
+
+这会额外写入一份最小浏览器状态，确保：
+
+- `/entries`
+- `/feeds`
+- `/settings`
+- `/entries/2`
+
+都能在 fresh profile 下直接进入真实应用内部页。
+
 ## helper URL
 
 脚本会打印类似：
@@ -41,6 +56,7 @@ http://127.0.0.1:8091/__codex/setup-local-auth?username=smoke&password=smoke-pas
 - `/entries`
 - 内部导航到 `/feeds`
 - 内部导航到 `/settings`
+- 如使用 `--seed reader-demo`，再补 `/entries/2`
 - 刷新当前页后是否仍保持已登录
 
 ## 结果记录

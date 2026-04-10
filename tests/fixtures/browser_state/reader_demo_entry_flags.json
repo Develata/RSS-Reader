@@ -1,0 +1,18 @@
+{
+  "entries": [
+    {
+      "id": 1,
+      "is_read": true,
+      "is_starred": false,
+      "read_at": "2026-04-10 00:00:00.0 +00:00:00",
+      "starred_at": null
+    },
+    {
+      "id": 2,
+      "is_read": false,
+      "is_starred": true,
+      "read_at": null,
+      "starred_at": "2026-04-10 00:00:00.0 +00:00:00"
+    }
+  ]
+}

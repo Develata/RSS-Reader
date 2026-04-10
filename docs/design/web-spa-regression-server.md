@@ -34,6 +34,12 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
 bash scripts/run_static_web_browser_smoke.sh
 ```
 
+如果要稳定进入真实阅读页，也可以直接用 demo seed：
+
+```bash
+bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2
+```
+
 ## 脚本
 
 - [run_web_spa_regression_server.sh](/home/develata/gitclone/RSS-Reader/scripts/run_web_spa_regression_server.sh)
@@ -78,3 +84,13 @@ bash scripts/run_web_spa_regression_server.sh --release
 - 这个脚本只解决本地静态构建回归的 SPA fallback 问题。
 - 它不是 `dx serve` 的替代品。
 - 如果要检查热更新或 dev server 行为，仍然应使用 `dx serve`。
+- 同源 helper `/__codex/setup-local-auth` 现在支持：
+  - 只初始化本地 Web 门禁
+  - 或加 `seed=reader-demo` 额外写入最小浏览器状态，稳定进入 `/entries/2`
+- 另外还提供：
+  - `/__codex/dump-browser-state`
+  - 用于直接查看当前 origin 下：
+    - auth config / session 是否存在
+    - `rssr-web-state-v1`
+    - `rssr-web-app-state-v1`
+    - `rssr-web-entry-flags-v1`

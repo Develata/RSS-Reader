@@ -45,11 +45,15 @@ if [[ ! -d "$public_dir" ]]; then
   exit 1
 fi
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+
 echo "Serving ${public_dir} with SPA fallback on http://127.0.0.1:${port}"
 echo "Press Ctrl+C to stop."
 
-python3 - "$public_dir" "$port" <<'PY'
+python3 - "$public_dir" "$port" "$repo_root" <<'PY'
 import http.server
+import json
 import os
 import socketserver
 import sys
@@ -58,7 +62,9 @@ from urllib.parse import parse_qs, urlparse
 
 root = os.path.abspath(sys.argv[1])
 port = int(sys.argv[2])
+repo_root = os.path.abspath(sys.argv[3])
 HELPER_PATH = "/__codex/setup-local-auth"
+DUMP_PATH = "/__codex/dump-browser-state"
 
 
 class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
@@ -81,8 +87,22 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
         username = params.get("username", ["smoke"])[0].strip()
         password = params.get("password", ["smoke-pass-123"])[0]
         next_path = params.get("next", ["/entries"])[0]
+        seed = params.get("seed", [""])[0].strip()
         if not next_path.startswith("/") or next_path.startswith("//"):
             next_path = "/entries"
+
+        core_state = None
+        app_state = None
+        entry_flags = None
+
+        if seed == "reader-demo":
+            fixture_root = os.path.join(repo_root, "tests", "fixtures", "browser_state")
+            with open(os.path.join(fixture_root, "reader_demo_core.json"), "r", encoding="utf-8") as fh:
+                core_state = json.load(fh)
+            with open(os.path.join(fixture_root, "reader_demo_app_state.json"), "r", encoding="utf-8") as fh:
+                app_state = json.load(fh)
+            with open(os.path.join(fixture_root, "reader_demo_entry_flags.json"), "r", encoding="utf-8") as fh:
+                entry_flags = json.load(fh)
 
         html = f"""<!doctype html>
 <html lang="zh-CN">
@@ -97,8 +117,15 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
     const username = {username!r}.trim();
     const password = {password!r};
     const nextPath = {next_path!r};
+    const seed = {seed!r};
     const AUTH_CONFIG_KEY = "rssr-web-auth-config-v1";
     const AUTH_SESSION_KEY = "rssr-web-auth-session-v1";
+    const STORAGE_KEY = "rssr-web-state-v1";
+    const APP_STATE_STORAGE_KEY = "rssr-web-app-state-v1";
+    const ENTRY_FLAGS_STORAGE_KEY = "rssr-web-entry-flags-v1";
+    const coreState = {json.dumps(core_state, ensure_ascii=False)};
+    const appState = {json.dumps(app_state, ensure_ascii=False)};
+    const entryFlags = {json.dumps(entry_flags, ensure_ascii=False)};
 
     function toBase64Url(bytes) {{
       let binary = "";
@@ -118,6 +145,11 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
       const sessionToken = await sha256Base64Url(`${{username}}:${{passwordHash}}`);
       localStorage.setItem(AUTH_CONFIG_KEY, `${{username}}\\n${{passwordHash}}\\n${{salt}}`);
       sessionStorage.setItem(AUTH_SESSION_KEY, sessionToken);
+      if (seed === "reader-demo" && coreState && appState && entryFlags) {{
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(coreState));
+        localStorage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify(appState));
+        localStorage.setItem(ENTRY_FLAGS_STORAGE_KEY, JSON.stringify(entryFlags));
+      }}
       location.replace(nextPath);
     }}
 
@@ -134,9 +166,59 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
+    def _dump_browser_state_page(self):
+        html = """<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browser State Dump</title>
+</head>
+<body>
+  <pre id="dump">loading...</pre>
+  <script>
+    const keys = [
+      "rssr-web-auth-config-v1",
+      "rssr-web-auth-session-v1",
+      "rssr-web-state-v1",
+      "rssr-web-app-state-v1",
+      "rssr-web-entry-flags-v1",
+    ];
+
+    function safeParse(raw) {
+      if (raw == null) return null;
+      try {
+        return JSON.parse(raw);
+      } catch (error) {
+        return { parse_error: String(error), raw };
+      }
+    }
+
+    const result = {
+      auth_config_present: localStorage.getItem(keys[0]) != null,
+      auth_session_present: sessionStorage.getItem(keys[1]) != null,
+      core: safeParse(localStorage.getItem(keys[2])),
+      app_state: safeParse(localStorage.getItem(keys[3])),
+      entry_flags: safeParse(localStorage.getItem(keys[4])),
+    };
+
+    document.getElementById("dump").textContent = JSON.stringify(result, null, 2);
+  </script>
+</body>
+</html>"""
+        encoded = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
     def do_GET(self):
-        if urlparse(self.path).path == HELPER_PATH:
+        path = urlparse(self.path).path
+        if path == HELPER_PATH:
             return self._auth_helper_page()
+        if path == DUMP_PATH:
+            return self._dump_browser_state_page()
         existing = self._translate_existing_path()
         if existing is not None:
             return super().do_GET()
@@ -144,7 +226,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_HEAD(self):
-        if urlparse(self.path).path == HELPER_PATH:
+        if urlparse(self.path).path in {HELPER_PATH, DUMP_PATH}:
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()

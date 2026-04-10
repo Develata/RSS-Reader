@@ -8,6 +8,7 @@ log_dir=""
 username="smoke"
 password="smoke-pass-123"
 next_path="/entries"
+seed=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -43,8 +44,12 @@ while [[ $# -gt 0 ]]; do
       next_path="${2:?missing next value}"
       shift 2
       ;;
+    --seed)
+      seed="${2:?missing seed value}"
+      shift 2
+      ;;
     *)
-      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--username USER] [--password PASS] [--next PATH]" >&2
+      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--username USER] [--password PASS] [--next PATH] [--seed reader-demo]" >&2
       exit 1
       ;;
   esac
@@ -59,6 +64,9 @@ mkdir -p "$log_dir"
 log_file="$log_dir/static-web.log"
 summary_file="$log_dir/summary.md"
 helper_url="http://127.0.0.1:${port}/__codex/setup-local-auth?username=${username}&password=${password}&next=${next_path}"
+if [[ -n "$seed" ]]; then
+  helper_url="${helper_url}&seed=${seed}"
+fi
 
 cat >"$summary_file" <<EOF
 # Static Web 浏览器手工 smoke
@@ -70,6 +78,7 @@ cat >"$summary_file" <<EOF
 - helper：${helper_url}
 - 用户名：${username}
 - 密码：${password}
+- seed：${seed:-none}
 - 日志：${log_file}
 
 ## 建议检查
@@ -78,6 +87,7 @@ cat >"$summary_file" <<EOF
 - 自动跳转后 /entries
 - 内部导航到 /feeds
 - 内部导航到 /settings
+- 如使用 \`--seed reader-demo\`，补 \`/entries/2\`
 - 刷新当前页仍保持已登录
 
 ## 结果补充
@@ -86,6 +96,7 @@ cat >"$summary_file" <<EOF
 - /entries：
 - /feeds：
 - /settings：
+- /entries/2：
 - 刷新保持登录：
 - console：
 - 是否通过：

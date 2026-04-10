@@ -153,6 +153,12 @@ bash scripts/run_rssr_web_browser_smoke.sh
 bash scripts/run_static_web_browser_smoke.sh
 ```
 
+如果要把真实阅读页 `/entries/{entry_id}` 也纳入固定回归，可以用 demo seed：
+
+```bash
+bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2
+```
+
 `rssr-web`：
 
 - 未登录访问会进入登录页

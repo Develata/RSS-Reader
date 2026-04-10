@@ -290,6 +290,41 @@
     - `rssr-web` 部署壳登录前后路径
   - 这条线当前剩下的就不是“缺入口”，而是后续是否还要加更细的业务 smoke
 
+### 13. 静态 Web 现已补齐可重复进入真实 `/reader` 的 demo seed
+
+- 新增浏览器状态 fixture：
+  - `tests/fixtures/browser_state/reader_demo_core.json`
+  - `tests/fixtures/browser_state/reader_demo_app_state.json`
+  - `tests/fixtures/browser_state/reader_demo_entry_flags.json`
+- 新增 fixture 契约测试：
+  - [test_browser_state_seed_contracts.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/tests/test_browser_state_seed_contracts.rs)
+- `run_web_spa_regression_server.sh` 的同源 helper 现在支持：
+  - `seed=reader-demo`
+  - 额外暴露：
+    - `/__codex/dump-browser-state`
+- `run_static_web_browser_smoke.sh` 现在支持：
+  - `--seed reader-demo`
+  - 可直接配合：
+    - `--next /entries/2`
+- 这轮先踩到一个真实问题：
+  - 初版 seed 用了 RFC3339 风格时间字符串
+  - 但当前 `time::OffsetDateTime` 的 JSON 反序列化实际要求的是：
+    - `2026-04-10 00:00:00.0 +00:00:00`
+  - fixture 契约测试把这个问题直接卡了出来
+- 修正后已确认：
+  - helper 会写入真实可用的 `BrowserState`
+  - fresh profile 下 headless Chrome 访问：
+    - `/__codex/setup-local-auth?...&seed=reader-demo&next=/entries/2`
+  - 最终 DOM 可见：
+    - `data-page="reader"`
+    - `data-layout="reader-page"`
+    - `Demo Entry Two`
+    - `来源：https://example.com/posts/demo-entry-2`
+    - `收藏（F）`
+- 额外旁证：
+  - seed 后直接访问 `/feeds`
+  - 订阅页统计已从 `0 / 0` 恢复到真实 seeded 数据路径
+
 ## 已执行的验证 / 验收
 
 - 脚本可执行权限：
@@ -384,6 +419,17 @@
     - `/feeds` `200`
     - `/settings` `200`
     - `/logout` `303 -> /login`
+- 静态 Web reader-demo seed 契约：
+  - `cargo test -p rssr-infra --test test_browser_state_seed_contracts`
+- 静态 Web real reader smoke：
+  - `bash scripts/run_web_spa_regression_server.sh --skip-build --port 8109`
+  - `google-chrome --headless=new --dump-dom 'http://127.0.0.1:8109/__codex/setup-local-auth?...&seed=reader-demo&next=/entries/2'`
+  - 已确认：
+    - `data-page="reader"`
+    - `data-layout="reader-page"`
+    - `Demo Entry Two`
+    - `来源：https://example.com/posts/demo-entry-2`
+    - `收藏（F）`
 
 ## 当前状态、风险、待跟进项
 
