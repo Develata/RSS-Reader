@@ -3,8 +3,9 @@ use std::{fs, path::PathBuf, sync::Arc};
 use anyhow::{Context, ensure};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use rssr_application::{
-    AddSubscriptionInput, AppCompositionInput, AppUseCases, RefreshAllInput, RefreshAllOutcome,
-    RefreshFeedOutcome, RefreshFeedResult, RemoveSubscriptionInput,
+    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
+    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
+    RemoveSubscriptionInput,
 };
 use rssr_domain::{Feed, FeedRepository, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
@@ -266,20 +267,18 @@ impl CliServices {
     ) -> anyhow::Result<()> {
         let input = AddSubscriptionInput { url: raw_url, title, folder };
 
-        if refresh {
-            let outcome = self
-                .use_cases
-                .subscription_workflow
-                .add_subscription_and_refresh(&input)
-                .await
-                .context("保存订阅失败")?;
-            ensure_refresh_feed_succeeded(&outcome.refresh).context("首次刷新订阅失败")?;
-        } else {
-            self.use_cases
-                .subscription_workflow
-                .add_subscription(&input)
-                .await
-                .context("保存订阅失败")?;
+        let outcome = self
+            .use_cases
+            .subscription_workflow
+            .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
+                subscription: input,
+                refresh_after_add: refresh,
+            })
+            .await
+            .context("保存订阅失败")?;
+
+        if let Some(first_refresh) = outcome.first_refresh {
+            ensure_refresh_feed_succeeded(&first_refresh).context("首次刷新订阅失败")?;
         }
 
         Ok(())

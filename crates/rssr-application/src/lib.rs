@@ -22,5 +22,6 @@ pub use refresh_service::{
 };
 pub use settings_service::SettingsService;
 pub use subscription_workflow::{
-    AddSubscriptionAndRefreshOutcome, AppStatePort, SubscriptionWorkflow,
+    AddSubscriptionAndRefreshOutcome, AddSubscriptionLifecycleInput,
+    AddSubscriptionLifecycleOutcome, AppStatePort, SubscriptionWorkflow,
 };

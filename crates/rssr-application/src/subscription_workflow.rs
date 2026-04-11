@@ -18,6 +18,18 @@ pub struct AddSubscriptionAndRefreshOutcome {
     pub refresh: RefreshFeedOutcome,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddSubscriptionLifecycleInput {
+    pub subscription: AddSubscriptionInput,
+    pub refresh_after_add: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddSubscriptionLifecycleOutcome {
+    pub feed: Feed,
+    pub first_refresh: Option<RefreshFeedOutcome>,
+}
+
 #[derive(Clone)]
 pub struct SubscriptionWorkflow {
     feed_service: FeedService,
@@ -35,16 +47,40 @@ impl SubscriptionWorkflow {
     }
 
     pub async fn add_subscription(&self, input: &AddSubscriptionInput) -> Result<Feed> {
-        self.feed_service.add_subscription(input).await
+        Ok(self
+            .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
+                subscription: input.clone(),
+                refresh_after_add: false,
+            })
+            .await?
+            .feed)
     }
 
     pub async fn add_subscription_and_refresh(
         &self,
         input: &AddSubscriptionInput,
     ) -> Result<AddSubscriptionAndRefreshOutcome> {
-        let feed = self.feed_service.add_subscription(input).await?;
-        let refresh = self.refresh_service.refresh_feed(feed.id).await?;
-        Ok(AddSubscriptionAndRefreshOutcome { feed, refresh })
+        let outcome = self
+            .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
+                subscription: input.clone(),
+                refresh_after_add: true,
+            })
+            .await?;
+        let refresh = outcome.first_refresh.expect("refresh_after_add produces refresh outcome");
+        Ok(AddSubscriptionAndRefreshOutcome { feed: outcome.feed, refresh })
+    }
+
+    pub async fn add_subscription_lifecycle(
+        &self,
+        input: AddSubscriptionLifecycleInput,
+    ) -> Result<AddSubscriptionLifecycleOutcome> {
+        let feed = self.feed_service.add_subscription(&input.subscription).await?;
+        let first_refresh = if input.refresh_after_add {
+            Some(self.refresh_service.refresh_feed(feed.id).await?)
+        } else {
+            None
+        };
+        Ok(AddSubscriptionLifecycleOutcome { feed, first_refresh })
     }
 
     pub async fn remove_subscription(&self, input: RemoveSubscriptionInput) -> Result<()> {
@@ -70,7 +106,10 @@ mod tests {
         RefreshStorePort, RefreshTarget,
     };
 
-    use super::{AddSubscriptionAndRefreshOutcome, AppStatePort, SubscriptionWorkflow};
+    use super::{
+        AddSubscriptionAndRefreshOutcome, AddSubscriptionLifecycleInput, AppStatePort,
+        SubscriptionWorkflow,
+    };
 
     struct FeedRepositoryStub {
         next_id: Mutex<i64>,
@@ -248,6 +287,80 @@ mod tests {
 
         assert_eq!(outcome.feed.id, 1);
         assert!(matches!(outcome.refresh.result, crate::RefreshFeedResult::Updated { .. }));
+    }
+
+    #[tokio::test]
+    async fn add_lifecycle_can_skip_first_refresh() {
+        let workflow = SubscriptionWorkflow::new(
+            crate::FeedService::new(
+                Arc::new(FeedRepositoryStub {
+                    next_id: Mutex::new(7),
+                    deleted_feed_ids: Mutex::new(Vec::new()),
+                }),
+                Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) }),
+            ),
+            crate::RefreshService::new(
+                Arc::new(SourceStub),
+                Arc::new(StoreStub { targets: Vec::new() }),
+            ),
+            Arc::new(AppStateStub { cleared_feed_ids: Mutex::new(Vec::new()) }),
+        );
+
+        let outcome = workflow
+            .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
+                subscription: crate::AddSubscriptionInput {
+                    url: "https://example.com/feed.xml".to_string(),
+                    title: None,
+                    folder: None,
+                },
+                refresh_after_add: false,
+            })
+            .await
+            .expect("add without refresh");
+
+        assert_eq!(outcome.feed.id, 7);
+        assert_eq!(outcome.first_refresh, None);
+    }
+
+    #[tokio::test]
+    async fn add_lifecycle_can_run_first_refresh() {
+        let workflow = SubscriptionWorkflow::new(
+            crate::FeedService::new(
+                Arc::new(FeedRepositoryStub {
+                    next_id: Mutex::new(3),
+                    deleted_feed_ids: Mutex::new(Vec::new()),
+                }),
+                Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) }),
+            ),
+            crate::RefreshService::new(
+                Arc::new(SourceStub),
+                Arc::new(StoreStub {
+                    targets: vec![RefreshTarget {
+                        feed_id: 3,
+                        url: Url::parse("https://example.com/feed.xml").expect("valid url"),
+                        etag: None,
+                        last_modified: None,
+                    }],
+                }),
+            ),
+            Arc::new(AppStateStub { cleared_feed_ids: Mutex::new(Vec::new()) }),
+        );
+
+        let outcome = workflow
+            .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
+                subscription: crate::AddSubscriptionInput {
+                    url: "https://example.com/feed.xml".to_string(),
+                    title: None,
+                    folder: None,
+                },
+                refresh_after_add: true,
+            })
+            .await
+            .expect("add with first refresh");
+
+        assert_eq!(outcome.feed.id, 3);
+        let refresh = outcome.first_refresh.expect("first refresh outcome");
+        assert!(matches!(refresh.result, crate::RefreshFeedResult::Updated { .. }));
     }
 
     #[tokio::test]

@@ -7,6 +7,7 @@
 - [功能设计哲学](./functional-design-philosophy.md)
 - [Headless Active Interface 设计目标](./headless-active-interface.md)
 - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
+- [Application Use Case 收敛计划](./application-use-case-consolidation-plan.md)
 - [CSS 完全分离基线检查](./css-separation-baseline-checklist.md)
 - [Web SPA 回归服务脚本](./web-spa-regression-server.md)
 - [前端命令与界面接口清单](./frontend-command-reference.md)
@@ -24,6 +25,8 @@
   - [Headless Active Interface 设计目标](./headless-active-interface.md)
 - 想看当前 repo 里 `ui/shell + ui bus + page facade` 已经落成到什么程度，以及实际边界怎么划：
   - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
+- 想按宪章 1.3.0 继续收敛 application use case：
+  - [Application Use Case 收敛计划](./application-use-case-consolidation-plan.md)
 - 想审计当前样式是不是还依赖 DOM 内部结构，以及下一轮该先收什么：
   - [CSS 完全分离基线检查](./css-separation-baseline-checklist.md)
 - 想对静态 web 构建做本地 SPA 回归，避免 `/feeds` / `/settings` 直接 404：

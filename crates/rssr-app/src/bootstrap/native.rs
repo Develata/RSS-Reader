@@ -6,8 +6,9 @@ use std::time::Duration;
 
 use anyhow::Context;
 use rssr_application::{
-    AddSubscriptionInput, AppCompositionInput, AppUseCases, RefreshAllInput, RefreshAllOutcome,
-    RefreshFeedOutcome, RefreshFeedResult, RefreshLocalizedEntry,
+    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
+    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
+    RefreshLocalizedEntry,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::UserSettings;
@@ -191,14 +192,18 @@ impl RefreshPort for RefreshCapability {
             .host
             .use_cases
             .subscription_workflow
-            .add_subscription_and_refresh(&AddSubscriptionInput {
-                url: raw_url.to_string(),
-                title: None,
-                folder: None,
+            .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
+                subscription: AddSubscriptionInput {
+                    url: raw_url.to_string(),
+                    title: None,
+                    folder: None,
+                },
+                refresh_after_add: true,
             })
             .await
             .context("保存订阅失败")?;
-        self.handle_refresh_outcome(outcome.refresh).context("首次刷新订阅失败")
+        let refresh = outcome.first_refresh.expect("refresh_after_add produces refresh outcome");
+        self.handle_refresh_outcome(refresh).context("首次刷新订阅失败")
     }
 
     async fn refresh_all(&self) -> anyhow::Result<()> {

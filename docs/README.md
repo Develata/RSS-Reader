@@ -22,6 +22,8 @@
   - [前端命令与界面接口清单](./design/frontend-command-reference.md)
 - 想理解即将进行的完全 headless active interface 重构：
   - [Headless Active Interface 设计目标](./design/headless-active-interface.md)
+- 想继续推进 application use case 收敛：
+  - [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)
 - 想准备 Android 发包或验收：
   - [Android 安装包落地清单](./roadmaps/android-release-roadmap.md)
 - 想跑一轮人工验证：
@@ -38,6 +40,7 @@
 - [Headless Active Interface 设计目标](./design/headless-active-interface.md)
 - [前端命令与界面接口清单](./design/frontend-command-reference.md)
 - [主题作者选择器参考](./design/theme-author-selector-reference.md)
+- [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)
 
 这组文档主要回答：
 
