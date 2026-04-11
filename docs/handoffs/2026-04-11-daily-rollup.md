@@ -18,6 +18,7 @@
 继续把 feeds/settings workspace 与主题 CSS 中的卡片、表单、统计块规则迁到 `data-layout` / `data-slot` 语义接口，并给可见回归 CDP runner 增加请求级超时。
 继续收 `.page`、`.page-header`、entries controls / overview / source chip 的视觉 class 依赖，页面根改用 `data-page`，普通 page 与 reader page 保持分离。
 完成一轮“保留 class 边界”审查，明确设计系统 class / 组件内部 class / 低优先级页面 wrapper 的保留边界，并清理一个明确死 selector。
+继续复查深选择器边界，保留 `reader-html` 内容岛例外，同时把 atlas sidebar 主题里可替换的 `.status-banner` / `.inline-actions` 直接子定位迁到语义布局入口。
 
 ## 影响范围
 
@@ -107,6 +108,13 @@
 - 清理 `assets/styles/entries.css` 中已无 DOM 对应的 `.entry-card__action` 死 selector。
 - 更新 [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)，避免后续继续机械迁移设计系统 class。
 
+### Deep Selector Audit
+
+- `StatusBanner` 组件补齐 `data-layout="status-banner"`。
+- `atlas-sidebar` 中普通 page / reader page 的直接子定位不再使用 `.status-banner`。
+- `atlas-sidebar` 中 reader action 区域不再用 `.inline-actions` 作为页面定位入口，改用 `data-layout="reader-toolbar"` / `data-layout="reader-pagination"`。
+- `reader-html` 内容岛中的 `p` / `li` / `img` 等标签规则继续作为允许例外保留。
+
 ### Regression Runner 稳定性
 
 - `scripts/browser/rssr_visible_regression.mjs` 的 CDP navigation 现在会等待 `Page.loadEventFired`，但不把 load event 作为硬门禁；最终仍由 selector readiness 判断页面可用。
@@ -149,6 +157,11 @@
 - `rg -o 'class: "[^"]+"' crates/rssr-app/src -S`：已执行，用于 Rust DOM class token 对照。
 - `rg -n "entry-card__action" assets/styles assets/themes crates/rssr-app/src -S`：通过，剩余命中仅为 `entry-card__actions` 容器，不再有 `.entry-card__action` selector。
 - `git diff --check`：通过。
+- `cargo fmt`：通过。
+- `cargo check -p rssr-app`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `rg -n "> \\.(status-banner|inline-actions)|\\.status-banner|\\.inline-actions" assets/themes/atlas-sidebar.css -S`：通过，无剩余命中。
+- `scripts/run_windows_chrome_visible_regression.sh --static-port 8316 --rssr-web-port 18816 --chrome-port 9228 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-115622/summary.md`。
 
 ### 手工验收
 

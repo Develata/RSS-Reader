@@ -56,6 +56,7 @@
 - `status-banner`
   - 通用反馈组件类。
   - 状态已走 `data-state`。
+  - 布局定位已补 `data-layout="status-banner"`；主题需要定位页面内 banner 时优先用 `data-layout`。
 - `icon-link-button`
   - 图标按钮 primitive；可保留。
 - `sr-only` / `sr-only-file-input`
@@ -84,6 +85,17 @@
 - `.entry-card__action`
   - Rust DOM 已统一使用 `data-slot="entry-card-action"`。
   - CSS 中的 `.entry-card__action` 已删除，保留 `[data-slot="entry-card-action"]`。
+
+## 2026-04-11 深选择器复查
+
+- 审查命令：
+  - `rg -n "(^|[,{])[^{}]*(>|\\+|~)[^{}]*\\{" assets/styles assets/themes -S`
+  - `rg -n "\\.[A-Za-z][A-Za-z0-9_-]+\\s+(h[1-6]|p|ul|ol|li|img|figure|button|span|div|input|textarea|select)\\b|\\]\\s+(h[1-6]|p|ul|ol|li|img|figure|button|span|div|input|textarea|select)\\b" assets/styles assets/themes -S`
+- 结论：
+  - `reader-html` 内容岛标签规则继续作为允许例外保留。
+  - `atlas-sidebar` 中普通 page / reader page 的直接子布局规则继续保留，但入口必须优先使用 `data-layout` / `data-slot`。
+  - 已将 `atlas-sidebar` 的 `.status-banner` 页面定位改为 `[data-layout="status-banner"]`。
+  - 已将 `atlas-sidebar` 的 reader `.inline-actions` 页面定位改为 `[data-layout="reader-toolbar"]` / `[data-layout="reader-pagination"]`。
 
 ## 已完成项
 

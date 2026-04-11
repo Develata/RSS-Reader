@@ -65,7 +65,7 @@ body {
 
 [data-page]:not([data-page="reader"]) > [data-slot="page-title"],
 [data-page]:not([data-page="reader"]) > [data-slot="page-intro"],
-[data-page]:not([data-page="reader"]) > .status-banner,
+[data-page]:not([data-page="reader"]) > [data-layout="status-banner"],
 [data-page]:not([data-page="reader"]) > [data-layout="stats-grid"],
 [data-page]:not([data-page="reader"]) > [data-layout="feed-form"],
 [data-page]:not([data-page="reader"]) > [data-layout="exchange-grid"],
@@ -114,8 +114,9 @@ body {
 
 [data-layout="reader-page"] > [data-slot="reader-title"],
 [data-layout="reader-page"] > [data-slot="reader-meta"],
-[data-layout="reader-page"] > .status-banner,
-[data-layout="reader-page"] > .inline-actions,
+[data-layout="reader-page"] > [data-layout="status-banner"],
+[data-layout="reader-page"] > [data-layout="reader-toolbar"],
+[data-layout="reader-page"] > [data-layout="reader-pagination"],
 [data-layout="reader-page"] > [data-layout="reader-body"] {
   grid-column: 2;
 }
