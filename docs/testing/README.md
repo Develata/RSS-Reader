@@ -11,6 +11,7 @@
 - [`rssr-web` 浏览器自动 Feed Smoke](./rssr-web-browser-feed-smoke.md)
 - [`rssr-web` 代理 Feed Smoke](./rssr-web-proxy-feed-smoke.md)
 - [Chrome MCP 目标浏览器](./chrome-mcp-target.md)
+- [Windows Chrome 可见窗口回归](./windows-chrome-visible-regression.md)
 - [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
 - [Static Web `/reader` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
 - [Static Web 小视口 Smoke](./static-web-small-viewport-smoke.md)
@@ -33,10 +34,12 @@
   - 小视口关键路径，优先用 `run_static_web_small_viewport_smoke.sh`
   - 如果想先钉死部署壳的 feed 代理链路，优先用 `run_rssr_web_proxy_feed_smoke.sh`
   - 如果想把部署壳下“登录后添加订阅并完成首次刷新”固定成自动化，优先用 `run_rssr_web_browser_feed_smoke.sh`
+  - 如果需要用户可见的 Windows 原生 Chrome 窗口，优先用 `run_windows_chrome_visible_regression.sh`
   - 如果本次发布涉及订阅/刷新/代理行为，再补一次 `run_rssr_web_browser_smoke.sh` 的固定手工步骤
 - 如果是排查 Web 端问题：
   - 重点看 feed 刷新、浏览器 Console 和持久化行为
   - 如果要直接用 Chrome MCP 做浏览器态回归，先起 [Chrome MCP 目标浏览器](./chrome-mcp-target.md)
+  - 如果 WSLg/Linux Chrome 呈现异常，改用 [Windows Chrome 可见窗口回归](./windows-chrome-visible-regression.md)
 - 如果是逐模块推进 headless active interface 重构：
   - 先按 [Headless 重构视觉等价验收](./headless-refactor-equivalence.md) 走基线与复测
 - 如果是执行 browser contract harness：

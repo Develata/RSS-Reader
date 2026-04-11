@@ -34,6 +34,14 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
 bash scripts/run_static_web_browser_smoke.sh
 ```
 
+如果需要用户可见的 Windows 原生 Chrome 窗口，而不是 WSLg/Linux Chrome 或 headless Chrome，使用：
+
+```bash
+bash scripts/run_windows_chrome_visible_regression.sh --skip-build
+```
+
+这条路径会通过 PowerShell 启动 Windows Chrome，再用 Windows Node/CDP 执行 repo 内的浏览器 runner。它和 Chrome MCP 不是同一条控制链路，适合验证用户能实际看到的浏览器窗口。
+
 如果要稳定进入真实阅读页，也可以直接用 demo seed：
 
 ```bash
@@ -43,6 +51,8 @@ bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/
 ## 脚本
 
 - [run_web_spa_regression_server.sh](/home/develata/gitclone/RSS-Reader/scripts/run_web_spa_regression_server.sh)
+- [run_windows_chrome_visible_regression.sh](/home/develata/gitclone/RSS-Reader/scripts/run_windows_chrome_visible_regression.sh)
+- [rssr_visible_regression.mjs](/home/develata/gitclone/RSS-Reader/scripts/browser/rssr_visible_regression.mjs)
 
 ## 用法
 
