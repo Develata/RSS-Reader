@@ -98,27 +98,31 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             }
                         }
                     } else {
-                        div { class: "entry-groups", "data-layout": "entry-groups",
+                        div {
+                            class: "entry-groups",
+                            "data-layout": "entry-groups",
+                            "data-state": "populated",
+                            "data-grouping-mode": if facade.grouping_mode() == state::EntryGroupingMode::Time { "time" } else { "source" },
                             if facade.grouping_mode() == state::EntryGroupingMode::Time {
                                 for month in facade.time_grouped_entries() {
-                                    section { class: "entry-group entry-group--time", key: "{month.anchor_id}", id: "{month.anchor_id}",
-                                        div { class: "entry-group__header group-header", "data-group-level": "primary",
-                                            h3 { class: "group-header__title", "{month.title}" }
-                                            p { class: "group-header__meta", "{month.subtitle}" }
+                                    section { class: "entry-group entry-group--time", key: "{month.anchor_id}", id: "{month.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "time", "data-group-level": "month",
+                                        div { class: "entry-group__header group-header", "data-layout": "entry-group-header", "data-group-level": "primary",
+                                            h3 { class: "group-header__title", "data-slot": "entry-group-title", "{month.title}" }
+                                            p { class: "group-header__meta", "data-slot": "entry-group-meta", "{month.subtitle}" }
                                         }
                                         for date_group in &month.dates {
-                                            section { class: "entry-date-group", key: "{date_group.anchor_id}", id: "{date_group.anchor_id}",
-                                                div { class: "entry-date-group__header group-header", "data-group-level": "date",
-                                                    h4 { class: "group-header__title", "{date_group.title}" }
-                                                    p { class: "group-header__meta", "{date_group.subtitle}" }
+                                            section { class: "entry-date-group", key: "{date_group.anchor_id}", id: "{date_group.anchor_id}", "data-layout": "entry-date-group", "data-grouping-mode": "time",
+                                                div { class: "entry-date-group__header group-header", "data-layout": "entry-group-header", "data-group-level": "date",
+                                                    h4 { class: "group-header__title", "data-slot": "entry-group-title", "{date_group.title}" }
+                                                    p { class: "group-header__meta", "data-slot": "entry-group-meta", "{date_group.subtitle}" }
                                                 }
                                                 for source in &date_group.sources {
-                                                    section { class: "entry-source-group", key: "{source.anchor_id}", id: "{source.anchor_id}",
-                                                        div { class: "entry-source-group__header group-header", "data-group-level": "source",
-                                                            h5 { class: "group-header__title", "{source.title}" }
-                                                            p { class: "group-header__meta", "{source.subtitle}" }
+                                                    section { class: "entry-source-group", key: "{source.anchor_id}", id: "{source.anchor_id}", "data-layout": "entry-source-group", "data-grouping-mode": "time",
+                                                        div { class: "entry-source-group__header group-header", "data-layout": "entry-group-header", "data-group-level": "source",
+                                                            h5 { class: "group-header__title", "data-slot": "entry-group-title", "{source.title}" }
+                                                            p { class: "group-header__meta", "data-slot": "entry-group-meta", "{source.subtitle}" }
                                                         }
-                                                        ul { class: "entry-list entry-list--grouped entry-list--reading",
+                                                        ul { class: "entry-list entry-list--grouped entry-list--reading", "data-layout": "entry-list", "data-state": "populated",
                                                             for (index , entry) in source.entries.iter().enumerate() {
                                                                 { render_entry_card(entry.clone(), facade.clone(), list_edge_state(index, source.entries.len())) }
                                                             }
@@ -131,18 +135,18 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 }
                             } else {
                                 for group in facade.source_grouped_entries() {
-                                    section { class: "entry-group", key: "{group.title}", id: "{group.anchor_id}",
-                                        div { class: "entry-group__header group-header", "data-group-level": "primary",
-                                            h3 { class: "group-header__title", "{group.title}" }
-                                            p { class: "group-header__meta", "{group.subtitle}" }
+                                    section { class: "entry-group", key: "{group.title}", id: "{group.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "source", "data-group-level": "source",
+                                        div { class: "entry-group__header group-header", "data-layout": "entry-group-header", "data-group-level": "primary",
+                                            h3 { class: "group-header__title", "data-slot": "entry-group-title", "{group.title}" }
+                                            p { class: "group-header__meta", "data-slot": "entry-group-meta", "{group.subtitle}" }
                                         }
                                         for month in &group.months {
-                                            section { class: "entry-date-group", key: "{month.anchor_id}", id: "{month.anchor_id}",
-                                                div { class: "entry-date-group__header group-header", "data-group-level": "date",
-                                                    h4 { class: "group-header__title", "{month.title}" }
-                                                    p { class: "group-header__meta", "{month.subtitle}" }
+                                            section { class: "entry-date-group", key: "{month.anchor_id}", id: "{month.anchor_id}", "data-layout": "entry-date-group", "data-grouping-mode": "source",
+                                                div { class: "entry-date-group__header group-header", "data-layout": "entry-group-header", "data-group-level": "date",
+                                                    h4 { class: "group-header__title", "data-slot": "entry-group-title", "{month.title}" }
+                                                    p { class: "group-header__meta", "data-slot": "entry-group-meta", "{month.subtitle}" }
                                                 }
-                                                ul { class: "entry-list entry-list--grouped entry-list--reading",
+                                                ul { class: "entry-list entry-list--grouped entry-list--reading", "data-layout": "entry-list", "data-state": "populated",
                                                     for (index , entry) in month.entries.iter().enumerate() {
                                                         { render_entry_card(entry.clone(), facade.clone(), list_edge_state(index, month.entries.len())) }
                                                     }

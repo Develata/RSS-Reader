@@ -80,9 +80,12 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
     };
 
     rsx! {
-        div { class: "settings-card__section settings-card__section--theme-lab",
-            div { class: "settings-card__section-header",
-                h4 { class: "settings-card__section-title", "主题实验室" }
+        div {
+            class: "settings-card__section settings-card__section--theme-lab",
+            "data-layout": "theme-lab",
+            "data-section": "settings-theme-lab",
+            div { class: "settings-card__section-header", "data-slot": "settings-card-section-header",
+                h4 { class: "settings-card__section-title", "data-slot": "settings-card-section-title", "主题实验室" }
             }
             label { class: "field-label", r#for: "settings-custom-css", "自定义 CSS" }
             textarea {
@@ -96,7 +99,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
                     input_facade.set_custom_css(event.value());
                 }
             }
-            div { class: "inline-actions settings-card__actions",
+            div { class: "inline-actions settings-card__actions", "data-layout": "theme-lab-actions",
                 {import_css_trigger}
                 button {
                     class: "button inline-actions__item",

@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：b914f4c
-- 相关 commit：2189d8b / b914f4c / pending
+- 当前 HEAD：2379557
+- 相关 commit：2189d8b / b914f4c / 2379557 / pending
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -13,6 +13,7 @@
 完成一轮 Windows 原生 Chrome 可见窗口回归验证，确认当前 Web SPA 与 `rssr-web` 浏览器态 smoke 路径可在用户可见的 Windows Chrome 窗口内通过。
 随后将该验证路径固化为 repo 内脚本与文档，避免继续依赖 `target/` 临时 runner。
 继续把可见浏览器 runner 从中文文案断言迁到 `data-*` 语义接口。
+继续补齐页面层语义接口，让 settings themes、entries groups、reader body 都暴露更稳定的 headless active interface。
 
 ## 影响范围
 
@@ -50,6 +51,13 @@
 - 主题矩阵改为通过 `data-theme-preset`、`data-state="active"` 与 `#user-custom-css` 判断主题应用。
 - `rssr-web` feed smoke 改为通过 `data-smoke="rssr-web-browser-feed-smoke"` 与 `data-result="pass"` 判断结果。
 
+### 页面语义接口补齐
+
+- settings themes：`theme-lab`、`theme-presets`、`theme-preset-selector`、`theme-preset-quick-actions`、`theme-gallery`、`theme-card` 等区域补齐 `data-layout` / `data-section` / `data-slot`。
+- entries groups：列表容器补齐 `data-state="populated"` 与 `data-grouping-mode`；分组、日期组、来源组和列表补齐 `data-layout`、`data-group-level`、`data-slot`。
+- reader body：HTML / text 正文分别补齐 `data-slot="reader-body-html"` 与 `data-slot="reader-body-text"`。
+- 可见浏览器 runner 更新为使用这些更细的语义 selector。
+
 ## 验证与验收
 
 ### 自动化验证
@@ -59,6 +67,10 @@
 - Windows Node/CDP visible Chrome regression script：通过。
 - `scripts/run_windows_chrome_visible_regression.sh --use-existing-servers --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-082128/summary.md`。
 - `scripts/run_windows_chrome_visible_regression.sh --static-port 8114 --rssr-web-port 18104 --chrome-port 9225 --skip-build --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-083451/summary.md`。
+- `cargo fmt`：通过。
+- `cargo check -p rssr-app`：通过。
+- `node --check scripts/browser/rssr_visible_regression.mjs`：通过。
+- `scripts/run_windows_chrome_visible_regression.sh --static-port 8120 --rssr-web-port 18110 --chrome-port 9225 --skip-build --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-084846/summary.md`。
 
 ### 手工验收
 

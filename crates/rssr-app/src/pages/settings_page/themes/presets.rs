@@ -15,11 +15,14 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
     let apply_selected_facade = facade.clone();
 
     rsx! {
-        div { class: "settings-card__section",
-            div { class: "settings-card__section-header",
-                h4 { class: "settings-card__section-title", "内置主题预设" }
+        div {
+            class: "settings-card__section",
+            "data-layout": "theme-presets",
+            "data-section": "settings-theme-presets",
+            div { class: "settings-card__section-header", "data-slot": "settings-card-section-header",
+                h4 { class: "settings-card__section-title", "data-slot": "settings-card-section-title", "内置主题预设" }
             }
-            div { class: "inline-actions settings-card__actions",
+            div { class: "inline-actions settings-card__actions", "data-layout": "theme-preset-selector",
                 select {
                     id: "settings-preset-theme",
                     name: "preset_theme",
@@ -42,7 +45,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     "载入所选主题"
                 }
             }
-            div { class: "preset-grid",
+            div { class: "preset-grid", "data-layout": "theme-preset-quick-actions",
                 button {
                     class: "button",
                     "data-variant": "secondary",
@@ -83,7 +86,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     "清空 CSS"
                 }
             }
-            div { class: "theme-gallery",
+            div { class: "theme-gallery", "data-layout": "theme-gallery",
                 for preset in builtin_theme_presets() {
                     {
                         let apply_card_facade = facade.clone();
@@ -96,6 +99,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                             article {
                                 class: "theme-card",
                                 key: "{preset.key}",
+                                "data-layout": "theme-card",
                                 "data-state": "{facade.theme_card_state(preset.key)}",
                                 "data-theme-preset": "{preset.key}",
                                 h4 { class: "theme-card__title", "data-slot": "theme-card-title", "{preset_name}" }

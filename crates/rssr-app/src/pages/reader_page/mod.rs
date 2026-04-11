@@ -62,9 +62,9 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 }
                 div { class: "reader-body", "data-layout": "reader-body", "data-state": "{facade.body_state()}",
                     if let Some(html) = facade.body_html() {
-                        div { class: "reader-html", dangerous_inner_html: "{html}" }
+                        div { class: "reader-html", "data-slot": "reader-body-html", dangerous_inner_html: "{html}" }
                     } else {
-                        pre { "{facade.body_text()}" }
+                        pre { "data-slot": "reader-body-text", "{facade.body_text()}" }
                     }
                 }
                 div { class: "reader-pagination reader-pagination--context inline-actions", "data-layout": "reader-pagination", "data-context": "feed",

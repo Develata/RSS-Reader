@@ -107,7 +107,10 @@ async function runStaticPageChecks(client) {
   await navigate(client, setup);
   await selectorExists(client, '[data-page="entries"][data-entry-scope="all"]');
   await selectorExists(client, '[data-layout="entries-layout"]');
-  await selectorExists(client, '[data-layout="entry-groups"] [data-slot="entry-card-title"]');
+  await selectorExists(
+    client,
+    '[data-layout="entry-groups"][data-state="populated"][data-grouping-mode] [data-layout="entry-list"][data-state="populated"] [data-slot="entry-card-title"]',
+  );
   console.log('static entries: pass');
 
   await navigate(client, `${staticBase}/feeds`);
@@ -123,6 +126,9 @@ async function runStaticPageChecks(client) {
 async function runReaderThemeMatrix(client) {
   await navigate(client, `${staticBase}/settings`);
   await selectorExists(client, '[data-page="settings"] [data-layout="settings-grid"]');
+  await selectorExists(client, '[data-page="settings"] [data-layout="theme-lab"]');
+  await selectorExists(client, '[data-page="settings"] [data-layout="theme-presets"]');
+  await selectorExists(client, '[data-page="settings"] [data-layout="theme-gallery"]');
   await selectorExists(client, '[data-field="preset-theme-select"]');
 
   for (const theme of ['atlas-sidebar', 'newsprint', 'forest-desk', 'midnight-ledger']) {
@@ -132,7 +138,7 @@ async function runReaderThemeMatrix(client) {
     await navigate(client, `${staticBase}/entries/2`);
     await selectorExists(client, '[data-page="reader"][data-state="loaded"]');
     await selectorExists(client, '[data-layout="reader-page"] [data-slot="reader-title"]');
-    await selectorExists(client, '[data-layout="reader-body"][data-state]');
+    await selectorExists(client, '[data-layout="reader-body"][data-state] [data-slot^="reader-body-"]');
     console.log(`theme reader ${theme}: pass`);
     await navigate(client, `${staticBase}/settings`);
     await selectorExists(client, '[data-page="settings"] [data-layout="settings-grid"]');
@@ -148,10 +154,13 @@ async function runSmallViewportChecks(client) {
   });
 
   for (const [url, marker] of [
-    [`${staticBase}/entries`, '[data-layout="entries-layout"] [data-slot="entry-card-title"]'],
+    [
+      `${staticBase}/entries`,
+      '[data-layout="entry-groups"][data-state="populated"] [data-layout="entry-list"] [data-slot="entry-card-title"]',
+    ],
     [`${staticBase}/feeds`, '[data-page="feeds"] [data-field="feed-url-input"]'],
-    [`${staticBase}/settings`, '[data-page="settings"] [data-layout="settings-grid"]'],
-    [`${staticBase}/entries/2`, '[data-page="reader"] [data-layout="reader-body"]'],
+    [`${staticBase}/settings`, '[data-page="settings"] [data-layout="theme-presets"]'],
+    [`${staticBase}/entries/2`, '[data-page="reader"] [data-layout="reader-body"] [data-slot^="reader-body-"]'],
   ]) {
     await navigate(client, url);
     await selectorExists(client, marker);
