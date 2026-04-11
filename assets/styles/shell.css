@@ -384,5 +384,8 @@
   grid-auto-flow: column;
   justify-content: start;
   gap: 12px;
-  margin-top: 12px;
+}
+
+.inline-actions__item {
+  width: auto;
 }

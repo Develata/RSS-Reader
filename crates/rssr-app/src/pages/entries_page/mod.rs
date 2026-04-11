@@ -65,14 +65,14 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             "data-entry-scope": if feed_id.is_some() { "feed" } else { "all" },
             AppNav {}
             div { class: "entries-layout", "data-layout": "entries-layout",
-                div { class: "entries-main",
+                div { class: "entries-main", "data-layout": "entries-main",
                     div { class: "reading-header page-section-header page-section-header--entries", "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "entries",
                         div { class: "reading-header__row", "data-slot": "page-section-row",
                             h2 { class: "page-title page-section-title", "data-slot": "page-title", "{entries_page_title(feed_id)}" }
                         }
                     }
                     if feed_id.is_some() {
-                        div { class: "entries-page__backlink",
+                        div { class: "entries-page__backlink", "data-layout": "entries-page-backlink",
                             Link {
                                 class: "button",
                                 "data-variant": "secondary",
@@ -84,14 +84,14 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     }
                     { controls }
                     if facade.entries_is_empty() {
-                        div { class: "entries-page__state", "data-state": "empty",
+                        div { class: "entries-page__state", "data-layout": "entries-page-state", "data-state": "empty",
                             StatusBanner {
                                 message: facade.empty_entries_message(),
                                 tone: "info".to_string()
                             }
                         }
                     } else if facade.visible_entries_is_empty() {
-                        div { class: "entries-page__state", "data-state": "archived",
+                        div { class: "entries-page__state", "data-layout": "entries-page-state", "data-state": "archived",
                             StatusBanner {
                                 message: facade.archived_entries_state_message().to_string(),
                                 tone: "info".to_string()

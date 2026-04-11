@@ -70,15 +70,10 @@
 
 ### 低优先级候选
 
-- `entries-main`
-  - 当前只承担 `min-width: 0` wrapper 作用。
-  - 不急于公开成 `data-layout`；只有当外部主题需要重排 entries 主列时再槽化。
-- `entries-page__backlink`
-  - 当前只承担返回链接 margin。
-  - 可保留为内部 wrapper；不需要马上进入 headless active interface。
-- `entries-page__state`
-  - 已有 `data-state="empty|archived"`。
-  - class 只承担局部位置样式；可保留，或后续收成 `data-layout="entries-state"`。
+- `inline-actions__item`
+  - 常与 `button`、`status-banner` 一起出现，更接近设计系统辅助 class。
+  - 基础宽度规则已从 `entries.css` 回收到全局 `shell.css`；容器 `.inline-actions` 也已去掉通用 `margin-top`，间距改由各页面 `data-layout` 决定。
+  - 若后续不需要跨主题重排，可继续保留，不必强行槽化。
 
 ### 已清理死样式
 
@@ -323,7 +318,8 @@
   - `entry-filters__source-chip` -> `data-layout="entry-filters-source-chip"`
 - 下一步：
   - 继续减少只靠 class 命名表达布局角色的规则
-  - 优先复查 `.entries-main`、`.entries-page__*`、`.inline-actions__item` 这类还没有业务语义的低优先级规则
+  - 优先复查新增页面 wrapper 是否错误复用设计系统 class 做布局锚点，而不是继续迁移已定性的设计系统 class
+  - 特别避免把页面间距、分栏、定位语义塞回 `.inline-actions` / `.button` 这类全局 class
 
 ### 5. 已清掉的高密度 class 驱动区域
 
@@ -348,13 +344,12 @@
   - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
   - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
 - 关注点：
-  - `.entries-main`
   - `.entry-groups`
   - `.entries-layout`
   - `.settings-grid`
   - `.exchange-grid`
 - 判断：
-  - `entries-main` / `entries-page__*` 目前还算合理，不属于第一优先级问题。
+  - `entries-main` / `entries-page__*` 已迁到 `data-layout="entries-main"` / `entries-page-backlink` / `entries-page-state`，不再属于残留 page-local class 入口。
   - `entry-groups` / `entries-layout` / `settings-grid` / `exchange-grid` 已有 `data-layout`，CSS 不应再以 class 作为主入口。
   - 后续若要做到更极端的 CSS 重排，再补业务槽，不要预先暴露全部内部 wrapper。
 

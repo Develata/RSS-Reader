@@ -28,7 +28,7 @@
   align-items: start;
 }
 
-.entries-main {
+[data-layout="entries-main"] {
   min-width: 0;
 }
 
@@ -42,11 +42,11 @@
   margin-bottom: 12px;
 }
 
-.entries-page__backlink {
+[data-layout="entries-page-backlink"] {
   margin-bottom: 16px;
 }
 
-.entries-page__state {
+[data-layout="entries-page-state"] {
   margin-top: 4px;
 }
 
@@ -224,10 +224,6 @@
   border-color: rgba(176, 74, 47, 0.24);
   background: rgba(255, 245, 239, 0.92);
   color: var(--ink);
-}
-
-.inline-actions__item {
-  width: auto;
 }
 
 [data-slot="entry-card-action"] {

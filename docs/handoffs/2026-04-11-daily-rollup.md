@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：c41864f
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f
+- 当前 HEAD：85c07f8
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -19,6 +19,9 @@
 继续收 `.page`、`.page-header`、entries controls / overview / source chip 的视觉 class 依赖，页面根改用 `data-page`，普通 page 与 reader page 保持分离。
 完成一轮“保留 class 边界”审查，明确设计系统 class / 组件内部 class / 低优先级页面 wrapper 的保留边界，并清理一个明确死 selector。
 继续复查深选择器边界，保留 `reader-html` 内容岛例外，同时把 atlas sidebar 主题里可替换的 `.status-banner` / `.inline-actions` 直接子定位迁到语义布局入口。
+继续把 entries 页面本地壳 wrapper 从视觉 class 入口迁到 `data-layout`，缩小 page-local CSS 对内部 DOM 名称的依赖。
+继续清理设计系统边界上的样式归属，把 `.inline-actions__item` 的基础规则从页面 CSS 挪回全局 shell。
+继续把 `.inline-actions` 容器从“带默认页面间距”的混合 class 收回成纯排列辅助 class，页面间距改由具体 `data-layout` 承担。
 
 ## 影响范围
 
@@ -122,6 +125,27 @@
 - `scripts/browser/rssr_visible_regression.mjs` 增加 `CDP_COMMAND_TIMEOUT_MS` 请求级超时，避免 Windows Chrome/CDP 会话污染时无限挂起。
 - 可见 runner 在主题矩阵和小视口循环中打印阶段 start/pass，方便定位失败步骤。
 
+### Entries Page Wrapper 语义化
+
+- [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)
+  - `entries-main`、`entries-page__backlink`、`entries-page__state` 根节点补齐 `data-layout`，页面 wrapper 不再只靠 class 暴露布局角色。
+- [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
+  - 对应 `min-width`、backlink margin、empty/archived state margin 改由 `[data-layout="entries-main"]`、`entries-page-backlink`、`entries-page-state` 驱动。
+- [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)
+  - 将 `entries-main` / `entries-page__*` 从“低优先级候选”调整为“已收口”，并把 `inline-actions__item` 归并为设计系统 class 边界问题。
+
+### Design System Class Boundary 收口
+
+- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
+  - `.inline-actions__item` 的基础宽度规则回收到全局 shell，明确它属于设计系统辅助 class，而不是 entries 页面私有样式。
+  - `.inline-actions` 删除通用 `margin-top`，不再让设计系统 class 隐含页面间距语义。
+- [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
+  - 删除误放在页面样式内的 `.inline-actions__item` 规则，避免 page-local CSS 污染 reader/settings/feeds 共用动作条。
+- [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
+  - `exchange-card-actions` 显式补回 `margin-top: 12px`，把原先混在 `.inline-actions` 里的页面间距语义落回页面布局 hook。
+- [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)
+  - 将 `inline-actions__item` 的结论更新为“保留为设计系统 class，重点只检查是否被页面拿来承担布局锚点”。
+
 ## 验证与验收
 
 ### 自动化验证
@@ -162,6 +186,10 @@
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
 - `rg -n "> \\.(status-banner|inline-actions)|\\.status-banner|\\.inline-actions" assets/themes/atlas-sidebar.css -S`：通过，无剩余命中。
 - `scripts/run_windows_chrome_visible_regression.sh --static-port 8316 --rssr-web-port 18816 --chrome-port 9228 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-115622/summary.md`。
+- `scripts/run_windows_chrome_visible_regression.sh --static-port 8320 --rssr-web-port 18820 --chrome-port 9230 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-131242/summary.md`。
+- `rg -n "entries-main|entries-page__backlink|entries-page__state" crates/rssr-app/src assets/styles -S`：通过，CSS 入口已迁到 `data-layout`，仅剩 DOM class token。
+- `rg -n "\\.inline-actions__item" assets/styles assets/themes -S`：通过，仅剩 `shell.css` 和 `responsive.css` 两处设计系统规则。
+- `rg -n "\\.inline-actions\\b|\\.inline-actions__item" assets/styles assets/themes -S`：通过，`.inline-actions` / `.inline-actions__item` 仅剩全局设计系统规则；页面间距已回落到 `data-layout`。
 
 ### 手工验收
 
@@ -190,6 +218,9 @@
 - 可见回归复用 Windows Chrome 端口时，CDP load event 可能不会覆盖所有 SPA route 情况；runner 已改为 selector readiness 作为最终判断。
 - 复用长期运行的 Windows Chrome DevTools 端口可能受历史 tab / 旧 CDP 会话污染；建议日常回归优先使用新的 `--chrome-port`，或先清理旧可见回归窗口。
 - 下一轮 CSS 分离不建议继续机械迁移 `button` / `field-label` / `inline-actions__item`；应只看新增死样式、深 DOM selector，或主题作者确实需要重排的业务槽。
+- 当前 entries wrapper 这轮尚未单独提交；若继续拆 class 边界，应优先检查设计系统 class 与页面语义 hook 的交界处，而不是继续平铺更多 `data-*`。
+- `.inline-actions__item` 已确认属于设计系统 class；后续只需要防止页面/主题把它重新当作布局入口使用。
+- `.inline-actions` 现已只承担排列，不再隐含通用 `margin-top`；若后续出现动作条节奏问题，应优先在对应 `data-layout` 修，而不是回填到全局 class。
 
 ## 给下一位 Agent 的备注
 
@@ -201,3 +232,4 @@
 - `e8d3887` 已提交保留 class 边界审查与 `.entry-card__action` 死 selector 清理。
 - `972ab12` 已提交 class audit handoff 元数据更新。
 - `c41864f` 已提交 status banner layout hook 与 atlas 深选择器收口。
+- 本工作区当前还有一轮未提交改动：entries page wrapper 语义化、design-system class boundary 收口与 checklist/handoff 更新，commit: pending。

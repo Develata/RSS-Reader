@@ -129,6 +129,10 @@
   min-width: 0;
 }
 
+[data-layout="exchange-card-actions"] {
+  margin-top: 12px;
+}
+
 [data-layout="settings-card-actions"],
 [data-layout="theme-lab-actions"],
 [data-layout="theme-preset-selector"] {
