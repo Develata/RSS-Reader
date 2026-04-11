@@ -69,11 +69,11 @@ body {
   letter-spacing: -0.045em;
 }
 
-.stat-card,
-.feed-card,
-.entry-card,
-.exchange-card,
-.settings-card,
+[data-layout="stat-card"],
+[data-layout="feed-card"],
+[data-layout="entry-card"],
+[data-layout="exchange-card"],
+[data-layout="settings-card"],
 [data-layout="theme-card"] {
   border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: 18px;
@@ -85,8 +85,8 @@ body {
     border-color 220ms ease;
 }
 
-.feed-card:hover,
-.entry-card:hover {
+[data-layout="feed-card"]:hover,
+[data-layout="entry-card"]:hover {
   transform: translateY(-3px);
   box-shadow: 0 12px 28px rgba(31, 38, 135, 0.12);
   border-color: rgba(255, 255, 255, 0.95);

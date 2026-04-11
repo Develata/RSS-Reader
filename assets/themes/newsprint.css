@@ -66,20 +66,20 @@ body {
   letter-spacing: -0.05em;
 }
 
-.stat-card,
-.feed-card,
-.entry-card,
-.exchange-card,
-.settings-card,
+[data-layout="stat-card"],
+[data-layout="feed-card"],
+[data-layout="entry-card"],
+[data-layout="exchange-card"],
+[data-layout="settings-card"],
 [data-layout="theme-card"] {
   border-radius: 8px;
   box-shadow: none;
 }
 
-.feed-card,
-.entry-card,
-.exchange-card,
-.settings-card {
+[data-layout="feed-card"],
+[data-layout="entry-card"],
+[data-layout="exchange-card"],
+[data-layout="settings-card"] {
   border-style: solid;
 }
 
@@ -167,7 +167,7 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-[data-page="feeds"] .feed-list,
+[data-page="feeds"] [data-layout="feed-list"],
 [data-page="entries"] [data-layout="entry-list"] {
   gap: 10px;
 }

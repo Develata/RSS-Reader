@@ -67,9 +67,9 @@ body {
 .page > [data-slot="page-intro"],
 .page > .status-banner,
 .page > [data-layout="stats-grid"],
-.page > .feed-form,
+.page > [data-layout="feed-form"],
 .page > [data-layout="exchange-grid"],
-.page > .feed-list,
+.page > [data-layout="feed-list"],
 .page > [data-layout="entry-filters"],
 .page > [data-layout="entry-list"],
 .page > [data-layout="settings-grid"] {
@@ -132,11 +132,11 @@ body {
     var(--panel);
 }
 
-.feed-card,
-.entry-card,
-.exchange-card,
-.settings-card,
-.stat-card,
+[data-layout="feed-card"],
+[data-layout="entry-card"],
+[data-layout="exchange-card"],
+[data-layout="settings-card"],
+[data-layout="stat-card"],
 [data-layout="reader-page"],
 [data-layout="theme-card"] {
   border-radius: 24px;

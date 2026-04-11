@@ -57,7 +57,7 @@
     align-self: flex-end;
   }
 
-  .feed-form {
+  [data-layout="feed-form"] {
     grid-template-columns: 1fr;
   }
 
@@ -71,7 +71,7 @@
     grid-template-columns: 1fr;
   }
 
-  .settings-form-grid {
+  [data-layout="settings-form-grid"] {
     grid-template-columns: 1fr;
   }
 
@@ -162,7 +162,7 @@
     padding: 18px 16px;
   }
 
-  .settings-card__section--theme-lab {
+  [data-layout="theme-lab"] {
     padding: 16px;
     border-radius: 18px;
   }
@@ -310,8 +310,8 @@
   .entry-organize-bar,
   [data-layout="entry-filters"],
   .entry-overview__metric,
-  .settings-card,
-  .exchange-card {
+  [data-layout="settings-card"],
+  [data-layout="exchange-card"] {
     padding-left: 14px;
     padding-right: 14px;
   }
@@ -351,7 +351,7 @@
     padding: 16px 14px;
   }
 
-  .settings-card__section--theme-lab {
+  [data-layout="theme-lab"] {
     padding: 14px;
   }
 }

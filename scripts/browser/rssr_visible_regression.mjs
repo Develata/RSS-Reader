@@ -3,6 +3,7 @@ const staticBase = process.env.STATIC_BASE ?? 'http://127.0.0.1:8112';
 const rssrWebBase = process.env.RSSR_WEB_BASE ?? 'http://127.0.0.1:18098';
 const keepBrowserOpen = process.env.KEEP_BROWSER_OPEN === 'true';
 const slowMs = Number.parseInt(process.env.SLOW_MS ?? '200', 10);
+const cdpCommandTimeoutMs = Number.parseInt(process.env.CDP_COMMAND_TIMEOUT_MS ?? '15000', 10);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -36,8 +37,9 @@ function connect(wsUrl) {
       return;
     }
 
-    const { resolve, reject } = pending.get(msg.id);
+    const { resolve, reject, timeout } = pending.get(msg.id);
     pending.delete(msg.id);
+    clearTimeout(timeout);
     if (msg.error) {
       reject(new Error(JSON.stringify(msg.error)));
     } else {
@@ -50,12 +52,24 @@ function connect(wsUrl) {
     ws.addEventListener('error', reject, { once: true });
   });
 
+  ws.addEventListener('close', () => {
+    for (const [msgId, { reject, timeout, method }] of pending) {
+      clearTimeout(timeout);
+      reject(new Error(`CDP socket closed while waiting for ${method}#${msgId}`));
+    }
+    pending.clear();
+  });
+
   async function send(method, params = {}) {
     await ready;
     const msgId = ++id;
     ws.send(JSON.stringify({ id: msgId, method, params }));
     return await new Promise((resolve, reject) => {
-      pending.set(msgId, { resolve, reject });
+      const timeout = setTimeout(() => {
+        pending.delete(msgId);
+        reject(new Error(`Timed out waiting for CDP response ${method}#${msgId}`));
+      }, cdpCommandTimeoutMs);
+      pending.set(msgId, { method, resolve, reject, timeout });
     });
   }
 
@@ -171,6 +185,7 @@ async function runReaderThemeMatrix(client) {
   await selectorExists(client, '[data-field="preset-theme-select"]');
 
   for (const theme of ['atlas-sidebar', 'newsprint', 'forest-desk', 'midnight-ledger']) {
+    console.log(`theme reader ${theme}: start`);
     await clickSelector(client, `button[data-action="apply-theme-preset"][data-theme-preset="${theme}"]`);
     await selectorExists(client, `article[data-theme-preset="${theme}"][data-state="active"]`);
     await selectorExists(client, '#user-custom-css');
@@ -201,6 +216,7 @@ async function runSmallViewportChecks(client) {
     [`${staticBase}/settings`, '[data-page="settings"] [data-layout="theme-presets"]'],
     [`${staticBase}/entries/2`, '[data-page="reader"] [data-layout="reader-body"] [data-slot^="reader-body-"]'],
   ]) {
+    console.log(`small viewport ${url}: start`);
     await navigate(client, url);
     await selectorExists(client, marker);
     console.log(`small viewport ${url}: pass`);

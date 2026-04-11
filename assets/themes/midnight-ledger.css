@@ -95,11 +95,11 @@ body {
   background: rgba(51, 66, 77, 0.98);
 }
 
-.feed-card,
-.entry-card,
-.exchange-card,
-.settings-card,
-.stat-card,
+[data-layout="feed-card"],
+[data-layout="entry-card"],
+[data-layout="exchange-card"],
+[data-layout="settings-card"],
+[data-layout="stat-card"],
 [data-layout="reader-page"],
 [data-layout="theme-card"] {
   border-radius: 18px;

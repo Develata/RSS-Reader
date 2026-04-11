@@ -29,13 +29,13 @@ pub fn FeedsPage() -> Element {
                 h2 { class: "page-title page-section-title", "订阅" }
             }
             div { class: "stats-grid stats-grid--airy", "data-layout": "stats-grid", "data-layout-variant": "airy",
-                div { class: "stat-card",
-                    div { class: "stat-card__label", "订阅数" }
-                    div { class: "stat-card__value", "{facade.total_feed_count()}" }
+                div { class: "stat-card", "data-layout": "stat-card", "data-stat": "feeds",
+                    div { class: "stat-card__label", "data-slot": "stat-card-label", "订阅数" }
+                    div { class: "stat-card__value", "data-slot": "stat-card-value", "{facade.total_feed_count()}" }
                 }
-                div { class: "stat-card",
-                    div { class: "stat-card__label", "文章数" }
-                    div { class: "stat-card__value", "{facade.total_entry_count()}" }
+                div { class: "stat-card", "data-layout": "stat-card", "data-stat": "entries",
+                    div { class: "stat-card__label", "data-slot": "stat-card-label", "文章数" }
+                    div { class: "stat-card__value", "data-slot": "stat-card-value", "{facade.total_entry_count()}" }
                 }
             }
             if facade.has_status_message() {

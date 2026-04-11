@@ -14,12 +14,12 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
     let font_scale_facade = facade.clone();
 
     rsx! {
-        div { class: "settings-card__section",
-            div { class: "settings-card__section-header",
-                h4 { class: "settings-card__section-title", "阅读节奏" }
+        div { class: "settings-card__section", "data-layout": "settings-card-section", "data-section": "reading-preferences",
+            div { class: "settings-card__section-header", "data-slot": "settings-card-section-header",
+                h4 { class: "settings-card__section-title", "data-slot": "settings-card-section-title", "阅读节奏" }
             }
-            div { class: "settings-form-grid",
-                div { class: "settings-form-grid__item",
+            div { class: "settings-form-grid", "data-layout": "settings-form-grid",
+                div { class: "settings-form-grid__item", "data-slot": "settings-form-grid-item",
                     label { class: "field-label", r#for: "settings-theme-mode", "主题" }
                     select {
                         id: "settings-theme-mode",
@@ -37,7 +37,7 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         option { value: "dark", "深色" }
                     }
                 }
-                div { class: "settings-form-grid__item",
+                div { class: "settings-form-grid__item", "data-slot": "settings-form-grid-item",
                     label { class: "field-label", r#for: "settings-list-density", "列表密度" }
                     select {
                         id: "settings-list-density",
@@ -54,7 +54,7 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         option { value: "compact", "紧凑" }
                     }
                 }
-                div { class: "settings-form-grid__item",
+                div { class: "settings-form-grid__item", "data-slot": "settings-form-grid-item",
                     label { class: "field-label", r#for: "settings-startup-view", "启动视图" }
                     select {
                         id: "settings-startup-view",
@@ -71,7 +71,7 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         option { value: "last_feed", "上次订阅" }
                     }
                 }
-                div { class: "settings-form-grid__item",
+                div { class: "settings-form-grid__item", "data-slot": "settings-form-grid-item",
                     label { class: "field-label", r#for: "settings-refresh-interval", "刷新间隔（分钟）" }
                     input {
                         id: "settings-refresh-interval",
@@ -88,7 +88,7 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         }
                     }
                 }
-                div { class: "settings-form-grid__item",
+                div { class: "settings-form-grid__item", "data-slot": "settings-form-grid-item",
                     label { class: "field-label", r#for: "settings-archive-after-months", "自动归档阈值（月）" }
                     input {
                         id: "settings-archive-after-months",
@@ -105,7 +105,7 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         }
                     }
                 }
-                div { class: "settings-form-grid__item",
+                div { class: "settings-form-grid__item", "data-slot": "settings-form-grid-item",
                     label { class: "field-label", r#for: "settings-reader-font-scale", "阅读字号缩放" }
                     input {
                         id: "settings-reader-font-scale",

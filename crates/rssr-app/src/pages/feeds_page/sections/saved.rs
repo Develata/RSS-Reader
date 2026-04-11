@@ -11,17 +11,17 @@ use super::support::feed_refresh_status_text;
 pub(crate) fn SavedFeedsSection(facade: FeedsPageFacade) -> Element {
     if facade.feeds().is_empty() {
         return rsx! {
-            div { "data-state": "{facade.feeds_list_state()}",
+            div { "data-layout": "feed-list-state", "data-state": "{facade.feeds_list_state()}",
                 StatusBanner { message: facade.empty_feeds_message().to_string(), tone: "info".to_string() }
             }
         };
     }
 
     rsx! {
-        div { class: "exchange-header exchange-header--saved",
-            h3 { class: "card-title", "已保存订阅" }
+        div { class: "exchange-header exchange-header--saved", "data-layout": "exchange-header", "data-section": "saved-feeds",
+            h3 { class: "card-title", "data-slot": "card-title", "已保存订阅" }
         }
-        ul { class: "feed-list", "data-state": "{facade.feeds_list_state()}",
+        ul { class: "feed-list", "data-layout": "feed-list", "data-state": "{facade.feeds_list_state()}",
             for feed in facade.feeds() {
                 { render_feed_card(feed, facade.clone()) }
             }
@@ -36,7 +36,7 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
     let refresh_facade = facade.clone();
 
     rsx! {
-        li { class: "feed-card", key: "{feed_id}", "data-state": "{facade.remove_feed_state(feed_id)}",
+        li { class: "feed-card", key: "{feed_id}", "data-layout": "feed-card", "data-state": "{facade.remove_feed_state(feed_id)}",
             Link {
                 class: "feed-card__title",
                 "data-slot": "feed-card-title",
@@ -44,15 +44,15 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
                 to: AppRoute::FeedEntriesPage { feed_id },
                 "{feed.title}"
             }
-            p { class: "feed-card__url", "{feed.url}" }
-            div { class: "feed-card__meta-group",
+            p { class: "feed-card__url", "data-slot": "feed-card-url", "{feed.url}" }
+            div { class: "feed-card__meta-group", "data-layout": "feed-card-meta-group",
                 p { class: "feed-card__meta", "data-slot": "feed-card-meta", "本地文章 {feed.entry_count} · 未读 {feed.unread_count}" }
                 p { class: "feed-card__meta", "data-slot": "feed-card-meta", "{feed_refresh_status_text(&feed)}" }
                 if let Some(error) = &feed.fetch_error {
-                    p { class: "feed-card__meta feed-card__meta--error", "data-slot": "feed-card-meta", "最近失败：{error}" }
+                    p { class: "feed-card__meta feed-card__meta--error", "data-slot": "feed-card-meta", "data-state": "error", "最近失败：{error}" }
                 }
             }
-            div { class: "entry-card__actions",
+            div { class: "entry-card__actions", "data-layout": "feed-card-actions",
                 button {
                     class: "button",
                     "data-variant": "secondary",

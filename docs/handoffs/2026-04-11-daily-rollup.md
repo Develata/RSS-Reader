@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：d3368b4
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / pending
+- 当前 HEAD：954b22a
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / pending
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -15,10 +15,11 @@
 继续把可见浏览器 runner 从中文文案断言迁到 `data-*` 语义接口。
 继续补齐页面层语义接口，让 settings themes、entries groups、reader body 都暴露更稳定的 headless active interface。
 继续把 entries/reader/theme 相关 CSS 从深 class selector 迁到语义 `data-*` selector。
+继续把 feeds/settings workspace 与主题 CSS 中的卡片、表单、统计块规则迁到 `data-layout` / `data-slot` 语义接口，并给可见回归 CDP runner 增加请求级超时。
 
 ## 影响范围
 
-- 模块：`scripts/run_web_spa_regression_server.sh`、`scripts/run_windows_chrome_visible_regression.sh`、`scripts/browser/rssr_visible_regression.mjs`、Web SPA 静态回归路径
+- 模块：`scripts/run_web_spa_regression_server.sh`、`scripts/run_windows_chrome_visible_regression.sh`、`scripts/browser/rssr_visible_regression.mjs`、`crates/rssr-app/src/pages/*`、`assets/styles/*`、`assets/themes/*`、Web SPA 静态回归路径
 - 平台：Windows Chrome、Web、WSL 开发环境
 - 额外影响：browser regression workflow / handoff docs
 
@@ -67,10 +68,21 @@
 - `assets/themes/*`：theme card、reader HTML 段落、entry list 相关规则继续迁到 `data-layout` / `data-slot`。
 - 移除 `forest-desk` 中 reader 页下已经没有命中对象的 `.entry-card__actions` 陈旧规则。
 
+### Feeds / Settings 语义接口收口
+
+- feeds 页面统计卡补齐 `data-layout="stat-card"`、`data-stat`、`data-slot="stat-card-label/value"`。
+- feeds compose / saved / config exchange 区域补齐 `feed-compose-card`、`feed-form`、`feed-list`、`feed-card`、`exchange-card`、`exchange-header` 等 `data-layout` / `data-section` / `data-slot`。
+- settings appearance / preferences / sync 卡片补齐 `settings-card`、`settings-card-section`、`settings-form-grid`、`settings-card-actions/footer` 等语义 hook。
+- `assets/styles/workspaces.css`、`assets/styles/shell.css`、`assets/styles/responsive.css` 和四个内置 theme CSS 中对应视觉规则改用语义 selector。
+- 删除 `workspaces.css` 中已经没有页面 DOM 对应的 `feed-workbench__note` / intro 类死样式。
+- 更新 [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)，把 `feed-workbench__note` 从待办改为已清理。
+
 ### Regression Runner 稳定性
 
 - `scripts/browser/rssr_visible_regression.mjs` 的 CDP navigation 现在会等待 `Page.loadEventFired`，但不把 load event 作为硬门禁；最终仍由 selector readiness 判断页面可用。
 - `scripts/run_windows_chrome_visible_regression.sh` 在启动静态 SPA server / `rssr-web` 后会检查子进程是否仍存活，避免端口冲突时误命中旧服务。
+- `scripts/browser/rssr_visible_regression.mjs` 增加 `CDP_COMMAND_TIMEOUT_MS` 请求级超时，避免 Windows Chrome/CDP 会话污染时无限挂起。
+- 可见 runner 在主题矩阵和小视口循环中打印阶段 start/pass，方便定位失败步骤。
 
 ## 验证与验收
 
@@ -87,6 +99,14 @@
 - `scripts/run_windows_chrome_visible_regression.sh --static-port 8120 --rssr-web-port 18110 --chrome-port 9225 --skip-build --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-084846/summary.md`。
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
 - `scripts/run_windows_chrome_visible_regression.sh --static-port 8311 --rssr-web-port 18811 --chrome-port 9225 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-091253/summary.md`。
+- `cargo fmt`：通过。
+- `cargo check -p rssr-app`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `node --check scripts/browser/rssr_visible_regression.mjs`：通过。
+- `bash -n scripts/run_windows_chrome_visible_regression.sh`：通过。
+- `git diff --check`：通过。
+- `rg -n "\\.(feed-form|feed-compose-card|feed-list|feed-card|exchange-card|exchange-header|settings-card|stat-card|card-title|settings-form-grid|preset-grid|theme-gallery)(\\b|__)" assets/styles assets/themes -S`：通过，无剩余命中。
+- `scripts/run_windows_chrome_visible_regression.sh --static-port 8314 --rssr-web-port 18814 --chrome-port 9226 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-092733/summary.md`。
 
 ### 手工验收
 
@@ -100,7 +120,8 @@
 ## 结果
 
 - 当前 Web SPA 回归路径在可见 Windows Chrome 下通过。
-- 这轮未修改生产代码；只新增本地验证脚本与测试文档。
+- 当前页面语义接口和 CSS 分离基线继续前移；feeds/settings/stat/exchange 这批视觉 class 已不再被 `assets/styles` / `assets/themes` 作为 CSS 选择器入口。
+- 可见回归 runner 已避免 CDP 请求无限挂起；复用污染较重的 9225 Chrome 会话时曾在 `Page.navigate` 超时，改用干净 9226 Windows Chrome profile 后全量通过。
 - WSLg 桌面窗口呈现问题继续视为环境层问题，不阻塞 Web SPA 浏览器态验证。
 
 ## 风险与后续事项
@@ -110,8 +131,11 @@
 - WSL 环境代理变量可能误导 localhost 诊断；检查本地端口时应使用 `curl --noproxy '*'`。
 - 当前 visible runner 主路径已迁到 `data-*` 语义接口；后续扩展测试时应继续保持 selector-first，避免新增文案驱动断言。
 - 可见回归复用 Windows Chrome 端口时，CDP load event 可能不会覆盖所有 SPA route 情况；runner 已改为 selector readiness 作为最终判断。
+- 复用长期运行的 Windows Chrome DevTools 端口可能受历史 tab / 旧 CDP 会话污染；建议日常回归优先使用新的 `--chrome-port`，或先清理旧可见回归窗口。
+- 下一轮 CSS 分离最值得继续看 `.page` / `.page-header` / `.entry-filters` / entries controls / overview 里的剩余 class 结构规则。
 
 ## 给下一位 Agent 的备注
 
 - 本轮可见验证使用 Windows Chrome CDP/Node，而不是 Dioxus desktop/WSLg 窗口。
 - Windows visible Chrome CDP runner 已沉淀进 repo；当前主路径断言也已迁到 headless active interface 风格。
+- 本轮未提交：`commit: pending`。提交前建议复查 [scripts/browser/rssr_visible_regression.mjs](/home/develata/gitclone/RSS-Reader/scripts/browser/rssr_visible_regression.mjs)、[workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)、[feeds_page](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/mod.rs)、[settings_page](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/appearance.rs)。

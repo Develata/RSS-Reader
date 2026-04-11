@@ -198,14 +198,12 @@
     - `data-slot="theme-card-swatches"`
     - `data-slot="theme-card-swatch"`
 
-### 1. 卡片头部仍依赖标签名
+### 1. 卡片头部剩余标签依赖
 
-- 文件：
-  - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
-- 目标规则：
-  - `.feed-workbench__note h3`
-- 下一步：
-  - 将剩余 note / 说明块标题也统一到稳定标题槽
+- 状态：已清理
+- 处理结果：
+  - `feed-workbench__note` 在页面层已经没有对应 DOM
+  - 相关死 CSS 已从 [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css) 删除
   - 不再新增针对 `h3` 的卡片头部规则
 
 ### 2. 分组头部仍依赖内部标题/元信息结构
@@ -380,5 +378,5 @@
 
 ## 当前最值得继续做的两刀
 
-1. 收 `feed-workbench__note` 这条剩余 `h3` 依赖。
-2. 复查剩余通用布局 class 是否还应该继续槽化，优先看 `.page`、`.page-header`、`.entry-filters`。
+1. 复查剩余通用布局 class 是否还应该继续槽化，优先看 `.page`、`.page-header`、`.entry-filters`。
+2. 继续压低 entries controls / overview 中以 class 表达视觉结构的规则。
