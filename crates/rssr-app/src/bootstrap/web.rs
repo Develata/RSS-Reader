@@ -7,14 +7,11 @@ mod refresh;
 
 use anyhow::Context;
 use rssr_application::{
-    AddSubscriptionInput, AppStateService, EntryService, FeedService, ImportExportService,
-    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RefreshService,
-    RemoveSubscriptionInput, SettingsService, SubscriptionWorkflow,
+    AddSubscriptionInput, AppCompositionInput, AppUseCases, RefreshAllInput, RefreshAllOutcome,
+    RefreshFeedOutcome, RefreshFeedResult,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::{
-    EntriesWorkspaceState, Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings,
-};
+use rssr_domain::UserSettings;
 use rssr_infra::application_adapters::browser::{
     adapters::{
         BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRefreshSource,
@@ -27,8 +24,6 @@ use tokio::sync::OnceCell;
 
 use self::{
     exchange::{
-        export_config_json as export_exchange_json, export_opml as export_exchange_opml,
-        import_config_json as import_exchange_json, import_opml as import_exchange_opml,
         pull_remote_config as pull_exchange_remote, push_remote_config as push_exchange_remote,
     },
     refresh::ensure_auto_refresh_started as start_auto_refresh,
@@ -38,14 +33,23 @@ static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
 pub struct AppServices {
     client: reqwest::Client,
-    feed_service: FeedService,
-    entry_service: EntryService,
-    settings_service: SettingsService,
-    app_state_service: AppStateService,
-    refresh_service: RefreshService,
-    subscription_workflow: SubscriptionWorkflow,
-    import_export_service: ImportExportService,
+    use_cases: AppUseCases,
     auto_refresh_started: AtomicBool,
+}
+
+#[derive(Clone)]
+pub(crate) struct AutoRefreshCapability {
+    host: Arc<AppServices>,
+}
+
+#[derive(Clone)]
+pub(crate) struct RefreshCapability {
+    host: Arc<AppServices>,
+}
+
+#[derive(Clone)]
+pub(crate) struct RemoteConfigCapability {
+    host: Arc<AppServices>,
 }
 
 impl AppServices {
@@ -62,31 +66,18 @@ impl AppServices {
                 let entry_repository = Arc::new(BrowserEntryRepository::new(state.clone()));
                 let settings_repository = Arc::new(BrowserSettingsRepository::new(state.clone()));
                 let app_state_adapter = Arc::new(BrowserAppStateAdapter::new(state.clone()));
-                let feed_service =
-                    FeedService::new(feed_repository.clone(), entry_repository.clone());
-                let refresh_service = RefreshService::new(
-                    Arc::new(BrowserFeedRefreshSource::new(client.clone())),
-                    Arc::new(BrowserRefreshStore::new(state.clone())),
-                );
+                let use_cases = AppUseCases::compose(AppCompositionInput {
+                    feed_repository,
+                    entry_repository,
+                    settings_repository,
+                    app_state: app_state_adapter,
+                    refresh_source: Arc::new(BrowserFeedRefreshSource::new(client.clone())),
+                    refresh_store: Arc::new(BrowserRefreshStore::new(state)),
+                    opml_codec: Arc::new(BrowserOpmlCodec),
+                });
                 Ok(Arc::new(Self {
                     client,
-                    feed_service: feed_service.clone(),
-                    entry_service: EntryService::new(entry_repository.clone()),
-                    settings_service: SettingsService::new(settings_repository.clone()),
-                    app_state_service: AppStateService::new(app_state_adapter.clone()),
-                    refresh_service: refresh_service.clone(),
-                    subscription_workflow: SubscriptionWorkflow::new(
-                        feed_service,
-                        refresh_service,
-                        app_state_adapter.clone(),
-                    ),
-                    import_export_service: ImportExportService::new_with_feed_removal_cleanup(
-                        feed_repository,
-                        entry_repository,
-                        settings_repository,
-                        Arc::new(BrowserOpmlCodec),
-                        app_state_adapter,
-                    ),
+                    use_cases,
                     auto_refresh_started: AtomicBool::new(false),
                 }))
             })
@@ -98,66 +89,34 @@ impl AppServices {
         UserSettings::default()
     }
 
-    pub async fn list_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {
-        self.feed_service.list_feeds().await
+    pub(crate) fn use_cases(&self) -> AppUseCases {
+        self.use_cases.clone()
     }
 
-    pub async fn list_entries(&self, query: &EntryQuery) -> anyhow::Result<Vec<EntrySummary>> {
-        self.entry_service.list_entries(query).await
+    pub(crate) fn auto_refresh(self: &Arc<Self>) -> AutoRefreshCapability {
+        AutoRefreshCapability { host: Arc::clone(self) }
     }
 
-    pub async fn get_entry(&self, entry_id: i64) -> anyhow::Result<Option<Entry>> {
-        self.entry_service.get_entry(entry_id).await
+    pub(crate) fn refresh(self: &Arc<Self>) -> RefreshCapability {
+        RefreshCapability { host: Arc::clone(self) }
     }
 
-    pub async fn reader_navigation(
-        &self,
-        current_entry_id: i64,
-    ) -> anyhow::Result<ReaderNavigation> {
-        self.entry_service.reader_navigation(current_entry_id).await
+    pub(crate) fn remote_config(self: &Arc<Self>) -> RemoteConfigCapability {
+        RemoteConfigCapability { host: Arc::clone(self) }
     }
+}
 
-    pub async fn set_read(&self, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
-        self.entry_service.set_read(entry_id, is_read).await
+impl AutoRefreshCapability {
+    pub(crate) fn ensure_started(&self) {
+        start_auto_refresh(&self.host);
     }
+}
 
-    pub async fn set_starred(&self, entry_id: i64, is_starred: bool) -> anyhow::Result<()> {
-        self.entry_service.set_starred(entry_id, is_starred).await
-    }
-
-    pub async fn load_settings(&self) -> anyhow::Result<UserSettings> {
-        self.settings_service.load().await
-    }
-
-    pub async fn save_settings(&self, settings: &UserSettings) -> anyhow::Result<()> {
-        self.settings_service.save(settings).await
-    }
-
-    pub async fn load_last_opened_feed_id(&self) -> anyhow::Result<Option<i64>> {
-        self.app_state_service.load_last_opened_feed_id().await
-    }
-
-    pub async fn remember_last_opened_feed_id(&self, feed_id: i64) -> anyhow::Result<()> {
-        self.app_state_service.save_last_opened_feed_id(Some(feed_id)).await
-    }
-
-    pub async fn load_entries_workspace_state(&self) -> anyhow::Result<EntriesWorkspaceState> {
-        self.app_state_service.load_entries_workspace().await
-    }
-
-    pub async fn save_entries_workspace_state(
-        &self,
-        entries_workspace: EntriesWorkspaceState,
-    ) -> anyhow::Result<()> {
-        self.app_state_service.save_entries_workspace(entries_workspace).await
-    }
-
-    pub fn ensure_auto_refresh_started(self: &Arc<Self>) {
-        start_auto_refresh(self);
-    }
-
-    pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
+impl RefreshCapability {
+    pub(crate) async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
         let outcome = self
+            .host
+            .use_cases
             .subscription_workflow
             .add_subscription_and_refresh(&AddSubscriptionInput {
                 url: raw_url.to_string(),
@@ -169,61 +128,19 @@ impl AppServices {
         self.handle_refresh_outcome(outcome.refresh).context("首次刷新订阅失败")
     }
 
-    pub async fn remove_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        self.subscription_workflow
-            .remove_subscription(RemoveSubscriptionInput { feed_id, purge_entries: true })
-            .await
-            .context("删除订阅失败")
-    }
-
-    pub async fn refresh_all(&self) -> anyhow::Result<()> {
-        let outcome = self.refresh_service.refresh_all(RefreshAllInput::default()).await?;
+    pub(crate) async fn refresh_all(&self) -> anyhow::Result<()> {
+        let outcome = self
+            .host
+            .use_cases
+            .refresh_service
+            .refresh_all(RefreshAllInput::default())
+            .await?;
         self.handle_refresh_all_outcome(outcome)
     }
 
-    pub async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        let outcome = self.refresh_service.refresh_feed(feed_id).await?;
+    pub(crate) async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
+        let outcome = self.host.use_cases.refresh_service.refresh_feed(feed_id).await?;
         self.handle_refresh_outcome(outcome)
-    }
-
-    pub async fn export_config_json(&self) -> anyhow::Result<String> {
-        export_exchange_json(&self.import_export_service).await
-    }
-
-    pub async fn import_config_json(&self, raw: &str) -> anyhow::Result<()> {
-        import_exchange_json(&self.import_export_service, raw).await
-    }
-
-    pub async fn export_opml(&self) -> anyhow::Result<String> {
-        export_exchange_opml(&self.import_export_service).await
-    }
-
-    pub async fn import_opml(&self, raw: &str) -> anyhow::Result<()> {
-        import_exchange_opml(&self.import_export_service, raw).await
-    }
-
-    pub async fn push_remote_config(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> anyhow::Result<()> {
-        push_exchange_remote(
-            &self.import_export_service,
-            &BrowserRemoteConfigStore::new(self.client.clone(), endpoint, remote_path),
-        )
-        .await
-    }
-
-    pub async fn pull_remote_config(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> anyhow::Result<bool> {
-        pull_exchange_remote(
-            &self.import_export_service,
-            &BrowserRemoteConfigStore::new(self.client.clone(), endpoint, remote_path),
-        )
-        .await
     }
 
     fn handle_refresh_all_outcome(&self, outcome: RefreshAllOutcome) -> anyhow::Result<()> {
@@ -256,6 +173,28 @@ impl AppServices {
             RefreshFeedResult::Updated { .. } | RefreshFeedResult::NotModified => Ok(()),
             RefreshFeedResult::Failed { message } => anyhow::bail!("{}: {message}", outcome.url),
         }
+    }
+}
+
+impl RemoteConfigCapability {
+    pub(crate) async fn push(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<()> {
+        push_exchange_remote(
+            &self.host.use_cases.import_export_service,
+            &BrowserRemoteConfigStore::new(self.host.client.clone(), endpoint, remote_path),
+        )
+        .await
+    }
+
+    pub(crate) async fn pull(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> anyhow::Result<bool> {
+        pull_exchange_remote(
+            &self.host.use_cases.import_export_service,
+            &BrowserRemoteConfigStore::new(self.host.client.clone(), endpoint, remote_path),
+        )
+        .await
     }
 }
 #[cfg(test)]

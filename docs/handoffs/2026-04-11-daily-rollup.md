@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：29b64df
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df
+- 当前 HEAD：9202355
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355
 - 相关 tag / release：N/A
 - 状态：`pending`
 
@@ -26,10 +26,13 @@
 继续批量清理页面/卡片/分组/统计/表单等语义已经被 `data-layout` / `data-slot` 接管、但仍残留在 DOM 上的死 class token。
 开始第一刀架构收口：把 entries browsing/workspace state 从 `UserSettings` 和 config package 中拆出，落到独立 `app_state` 真相源，并让 entries runtime 改走新的 app-state 持久化路径。
 继续第二刀架构收口：为 `ui/runtime/*` 增加 `UiServices` 窄门面和按命令族分组的 port，移除各 runtime 模块对 `AppServices::shared()` 的直接依赖。
+继续第三刀架构收口：把应用层服务装配下移成共享 `AppUseCases::compose(...)`，让 native / web / cli 共同复用同一套 use-case 组合骨架。
+继续第四刀架构收口：让 `UiServices` 直接持有 `AppUseCases`，把 `AppServices` 再压回 host facade，仅保留自动刷新、刷新后处理和远端 config sync 这类 host 特有行为。
+继续第五刀架构收口：把 host 特有行为显式拆成 capability，对 runtime 暴露 `auto_refresh`、`refresh`、`remote_config`，并把 native 正文图片本地化后台任务收成独立 worker。
 
 ## 影响范围
 
-- 模块：`scripts/run_web_spa_regression_server.sh`、`scripts/run_windows_chrome_visible_regression.sh`、`scripts/browser/rssr_visible_regression.mjs`、`crates/rssr-app/src/pages/*`、`crates/rssr-domain/src/app_state.rs`、`crates/rssr-application/src/app_state_service.rs`、`crates/rssr-infra/src/db/app_state_repository.rs`、`crates/rssr-infra/src/application_adapters/browser/*`、`assets/styles/*`、`assets/themes/*`、Web SPA 静态回归路径
+- 模块：`scripts/run_web_spa_regression_server.sh`、`scripts/run_windows_chrome_visible_regression.sh`、`scripts/browser/rssr_visible_regression.mjs`、`crates/rssr-app/src/pages/*`、`crates/rssr-app/src/ui/runtime/services.rs`、`crates/rssr-app/src/bootstrap/*`、`crates/rssr-domain/src/app_state.rs`、`crates/rssr-application/src/app_state_service.rs`、`crates/rssr-application/src/composition.rs`、`crates/rssr-infra/src/db/app_state_repository.rs`、`crates/rssr-infra/src/application_adapters/browser/*`、`assets/styles/*`、`assets/themes/*`、Web SPA 静态回归路径
 - 平台：Windows Chrome、Web、WSL 开发环境
 - 额外影响：browser regression workflow / handoff docs / config package v2 / browser app-state keyspace v2
 
@@ -69,6 +72,25 @@
 - entries groups：列表容器补齐 `data-state="populated"` 与 `data-grouping-mode`；分组、日期组、来源组和列表补齐 `data-layout`、`data-group-level`、`data-slot`。
 - reader body：HTML / text 正文分别补齐 `data-slot="reader-body-html"` 与 `data-slot="reader-body-text"`。
 - 可见浏览器 runner 更新为使用这些更细的语义 selector。
+
+### Shared Composition Primitive
+
+- `crates/rssr-application/src/composition.rs` 新增 `AppUseCases::compose(...)`、`AppCompositionInput`、`AppStateServicesPort`，把 feed / entry / settings / app-state / refresh / subscription / import-export 的装配统一下沉到应用层。
+- `native`、`web`、`cli` 现在都只负责选择 adapter 和 capability，再调用 `AppUseCases::compose(...)`，不再各自平行 new 一套主流程骨架。
+- `SqliteAppStateAdapter` 同时实现 `AppStateRepository`，使 app-state 在 composition 层能作为单一依赖注入。
+
+### Host Facade 收薄
+
+- `crates/rssr-app/src/ui/runtime/services.rs` 现在直接持有 `AppUseCases`，entries / reader / feeds / settings / shell 的大多数操作直接走 use-case。
+- `AppServices` 不再承担第二套通用 service API；目前只保留 `shared()`、`default_settings()`、`use_cases()`，以及自动刷新、刷新后图片本地化、远端 config sync 这类 host 特有行为。
+- web 端 `bootstrap/web/exchange.rs` 只保留 push/pull remote config helper；纯导入导出已回到 `ImportExportService` 直接调用。
+
+### Host Capability 显式化
+
+- native / web 的 `AppServices` 现在显式暴露 `auto_refresh()`、`refresh()`、`remote_config()` capability，而不是再挂一组混合 service 方法。
+- `crates/rssr-app/src/ui/runtime/services.rs` 已切到这些 capability：shell 只拿 `auto_refresh`，settings 只拿 `remote_config`，feeds 只拿 `refresh`。
+- `crates/rssr-app/src/bootstrap/native.rs` 新增 `ImageLocalizationWorker`，把刷新后的正文图片本地化后台任务从 host facade 主体里抽离。
+- `crates/rssr-app/src/bootstrap/web/refresh.rs` 已改为通过 `refresh()` capability 触发自动刷新，不再直接调 `AppServices::refresh_all()`。
 
 ### CSS 分离收口
 
@@ -219,6 +241,22 @@
 - [feeds.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/feeds.rs)
   - feeds runtime 改成走 `FeedsPort`，为后续把订阅/配置交换 workflow 抽离成共享 use case 做准备。
 
+### Shared Composition Primitive
+
+- [composition.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/composition.rs)
+  - 新增共享 `AppCompositionInput`、`AppStateServicesPort`、`AppUseCases::compose(...)`。
+  - 组合入口统一负责装配 `FeedService`、`EntryService`、`SettingsService`、`AppStateService`、`RefreshService`、`SubscriptionWorkflow`、`ImportExportService`。
+- [app_state_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/app_state_service.rs)、[entry_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/entry_service.rs)、[settings_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/settings_service.rs)、[import_export_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/import_export_service.rs)
+  - 补齐 `Clone`，使组合后的应用层骨架可被 host facade 直接持有。
+- [non_refresh.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/non_refresh.rs)
+  - `SqliteAppStateAdapter` 现在同时实现 `AppStateRepository`，可作为单一 `app_state` 依赖传给组合入口。
+- [native.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/native.rs)
+  - 桌面端 bootstrap 不再直接手工拼 `FeedService` / `RefreshService` / `SubscriptionWorkflow` / `ImportExportService`，而是只负责选 SQLite / HTTP / parser / localizer 等 host adapter，然后调用 `AppUseCases::compose(...)`。
+- [web.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/web.rs)
+  - web bootstrap 同样改为只负责 browser state / reqwest client / browser refresh source / remote config store 等 host adapter 的选择，然后调用共享组合入口。
+- [main.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-cli/src/main.rs)
+  - CLI 初始化流程切到 `AppUseCases::compose(...)`，不再自己平行重建完整 service/workflow 装配链。
+
 ## 验证与验收
 
 ### 自动化验证
@@ -286,6 +324,13 @@
 - `cargo test -p rssr-infra --test test_regression_smoke`：通过。
 - `git diff --check`：通过。
 - `rg -n "AppServices::shared\\(|UiServices::shared\\(" crates/rssr-app/src/ui/runtime -S`：通过，runtime 目录内仅 `services.rs` 保留唯一 `AppServices::shared()` 入口，其他命令族全部切到 `UiServices::shared()`。
+- `cargo check -p rssr-cli`：通过。
+- `rg -n "AppUseCases::compose\\(|AppCompositionInput|AppStateServicesPort" crates/rssr-app crates/rssr-cli crates/rssr-application -S`：通过，native / web / cli 已共同接入共享 composition primitive。
+- `cargo check -p rssr-app`：通过。
+- `rg -n "self\\.inner\\.|AppServices::shared\\(|\\.use_cases\\(\\)" crates/rssr-app/src/ui/runtime crates/rssr-app/src/bootstrap -S`：通过，runtime 内只剩 `UiServices::shared()` 的单一 `AppServices::shared()` 入口，纯 use-case 读写已不再经由 `AppServices` 转发。
+- `cargo check -p rssr-app`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `rg -n "pub (async )?fn (ensure_auto_refresh_started|add_subscription|refresh_all|refresh_feed|push_remote_config|pull_remote_config)" crates/rssr-app/src/bootstrap crates/rssr-app/src/ui/runtime -S`：无命中，旧的 host 混合方法面已从 bootstrap/runtime 移除。
 
 ### 手工验收
 
@@ -304,6 +349,8 @@
 - 保留 class 边界已明确：设计系统 class 不再作为“必须迁移”的技术债；后续只处理死样式、深 DOM selector、确实需要外部主题控制的页面业务槽。
 - 可见回归 runner 已避免 CDP 请求无限挂起；复用污染较重的 9225 Chrome 会话时曾在 `Page.navigate` 超时，改用干净 9226 Windows Chrome profile 后全量通过。
 - WSLg 桌面窗口呈现问题继续视为环境层问题，不阻塞 Web SPA 浏览器态验证。
+- `UiServices` 现在已处于“use cases + host capability”形态；`AppServices` 从全能 backend 退回到 host facade，但 native/web bootstrap 仍保留少量平台启动与后台任务责任，后续还可继续按 capability 拆薄。
+- 当前 host facade 已不再暴露旧的混合 service 方法面；runtime 依赖已明确分成 use-case 读写与 host capability 两类入口。
 
 ## 风险与后续事项
 
@@ -313,6 +360,8 @@
 - 当前 visible runner 主路径已迁到 `data-*` 语义接口；后续扩展测试时应继续保持 selector-first，避免新增文案驱动断言。
 - 可见回归复用 Windows Chrome 端口时，CDP load event 可能不会覆盖所有 SPA route 情况；runner 已改为 selector readiness 作为最终判断。
 - 复用长期运行的 Windows Chrome DevTools 端口可能受历史 tab / 旧 CDP 会话污染；建议日常回归优先使用新的 `--chrome-port`，或先清理旧可见回归窗口。
+- 当前 `AppServices` 仍同时承载 native/web host 启动、自动刷新调度与少量 capability bridge；下一步若继续架构线，应优先把这些能力显式拆成 host capability，而不是重新给 `AppServices` 加方法。
+- native / web 目前的 capability 结构仍是平台内联定义；若继续推进，可再把 capability 共享接口抽到更明确的 host adapter 层，但不应重新收敛成一个新的全能 manager。
 - 下一轮 CSS 分离不建议继续机械迁移 `button` / `field-label` / `inline-actions__item`；应只看新增死样式、深 DOM selector，或主题作者确实需要重排的业务槽。
 - 当前 entries wrapper 这轮尚未单独提交；若继续拆 class 边界，应优先检查设计系统 class 与页面语义 hook 的交界处，而不是继续平铺更多 `data-*`。
 - `.inline-actions__item` 已确认属于设计系统 class；后续只需要防止页面/主题把它重新当作布局入口使用。
@@ -332,4 +381,6 @@
 - `972ab12` 已提交 class audit handoff 元数据更新。
 - `c41864f` 已提交 status banner layout hook 与 atlas 深选择器收口。
 - `66119cf` 已提交 page shell / design-system class boundary 收口。
-- 本工作区当前还有一轮未提交改动：semantic shell class purge 与规范文档同步，commit: pending。
+- `882a764` 已提交 app-state 拆分与 runtime 窄 port 收口。
+- `62a165e` 已提交该轮 handoff 记录。
+- 本工作区当前还有一轮未提交改动：shared composition primitive 接入三端、`AppServices -> host facade` 收薄，以及 host capability 显式化，commit: pending。

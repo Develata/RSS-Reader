@@ -18,7 +18,7 @@ pub(super) fn ensure_auto_refresh_started(services: &Arc<AppServices>) {
         let mut last_refresh_started_at = None;
 
         loop {
-            let settings = match services.load_settings().await {
+            let settings = match services.use_cases().settings_service.load().await {
                 Ok(settings) => settings,
                 Err(error) => {
                     tracing::warn!(error = %error, "读取自动刷新设置失败，稍后重试");
@@ -37,7 +37,7 @@ pub(super) fn ensure_auto_refresh_started(services: &Arc<AppServices>) {
                     refresh_interval_minutes = settings.refresh_interval_minutes,
                     "触发后台自动刷新全部订阅"
                 );
-                if let Err(error) = services.refresh_all().await {
+                if let Err(error) = services.refresh().refresh_all().await {
                     tracing::warn!(error = %error, "后台自动刷新失败");
                 }
                 last_refresh_started_at = Some(now);

@@ -6,13 +6,11 @@ use std::time::Duration;
 
 use anyhow::Context;
 use rssr_application::{
-    AddSubscriptionInput, AppStateService, EntryService, FeedService, ImportExportService,
-    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
-    RefreshLocalizedEntry, RefreshService, RemoveSubscriptionInput, SettingsService,
-    SubscriptionWorkflow,
+    AddSubscriptionInput, AppCompositionInput, AppUseCases, RefreshAllInput, RefreshAllOutcome,
+    RefreshFeedOutcome, RefreshFeedResult, RefreshLocalizedEntry,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::{EntriesWorkspaceState, Entry, EntryQuery, FeedSummary, UserSettings};
+use rssr_domain::UserSettings;
 use rssr_infra::{
     application_adapters::{
         InfraFeedRefreshSource, InfraOpmlCodec, SqliteAppStateAdapter, SqliteRefreshStore,
@@ -38,21 +36,33 @@ use tokio::sync::OnceCell;
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
 pub struct AppServices {
-    entry_repository: Arc<SqliteEntryRepository>,
-    app_state_service: AppStateService,
-    feed_service: FeedService,
-    entry_service: EntryService,
-    settings_service: SettingsService,
-    refresh_service: RefreshService,
-    subscription_workflow: SubscriptionWorkflow,
-    import_export_service: ImportExportService,
-    body_asset_localizer: BodyAssetLocalizer,
+    use_cases: AppUseCases,
+    image_localization_worker: ImageLocalizationWorker,
     auto_refresh_started: AtomicBool,
 }
 
+#[derive(Clone)]
+pub(crate) struct AutoRefreshCapability {
+    host: Arc<AppServices>,
+}
+
+#[derive(Clone)]
+pub(crate) struct RefreshCapability {
+    host: Arc<AppServices>,
+}
+
+#[derive(Clone)]
+pub(crate) struct RemoteConfigCapability {
+    host: Arc<AppServices>,
+}
+
+#[derive(Clone)]
+struct ImageLocalizationWorker {
+    entry_repository: Arc<SqliteEntryRepository>,
+    body_asset_localizer: BodyAssetLocalizer,
+}
+
 impl AppServices {
-    const MAX_BACKGROUND_LOCALIZED_ENTRIES: usize = 5;
-    const LOCALIZE_TIMEOUT: Duration = Duration::from_secs(5);
     const AUTO_REFRESH_RETRY_DELAY: Duration = Duration::from_secs(30);
     const REFRESH_ALL_CONCURRENCY: usize = 4;
 
@@ -77,36 +87,28 @@ impl AppServices {
                 let app_state_repository = Arc::new(SqliteAppStateRepository::new(pool));
                 let app_state_adapter =
                     Arc::new(SqliteAppStateAdapter::new(app_state_repository.clone()));
-                let feed_service =
-                    FeedService::new(feed_repository.clone(), entry_repository.clone());
-                let refresh_service = RefreshService::new(
-                    Arc::new(InfraFeedRefreshSource::new(FetchClient::new(), FeedParser::new())),
-                    Arc::new(SqliteRefreshStore::new(
-                        feed_repository.clone(),
+                let use_cases = AppUseCases::compose(AppCompositionInput {
+                    feed_repository: feed_repository.clone(),
+                    entry_repository: entry_repository.clone(),
+                    settings_repository,
+                    app_state: app_state_adapter,
+                    refresh_source: Arc::new(InfraFeedRefreshSource::new(
+                        FetchClient::new(),
+                        FeedParser::new(),
+                    )),
+                    refresh_store: Arc::new(SqliteRefreshStore::new(
+                        feed_repository,
                         entry_repository.clone(),
                     )),
-                );
+                    opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
+                });
 
                 Ok(Arc::new(Self {
-                    feed_service: feed_service.clone(),
-                    entry_service: EntryService::new(entry_repository.clone()),
-                    settings_service: SettingsService::new(settings_repository.clone()),
-                    refresh_service: refresh_service.clone(),
-                    subscription_workflow: SubscriptionWorkflow::new(
-                        feed_service,
-                        refresh_service,
-                        app_state_adapter.clone(),
-                    ),
-                    import_export_service: ImportExportService::new_with_feed_removal_cleanup(
-                        feed_repository.clone(),
-                        entry_repository.clone(),
-                        settings_repository,
-                        Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
-                        app_state_adapter,
-                    ),
-                    entry_repository,
-                    app_state_service: AppStateService::new(app_state_repository),
-                    body_asset_localizer: BodyAssetLocalizer::new(),
+                    use_cases,
+                    image_localization_worker: ImageLocalizationWorker {
+                        entry_repository,
+                        body_asset_localizer: BodyAssetLocalizer::new(),
+                    },
                     auto_refresh_started: AtomicBool::new(false),
                 }))
             })
@@ -118,78 +120,39 @@ impl AppServices {
         UserSettings::default()
     }
 
-    pub async fn list_feeds(&self) -> anyhow::Result<Vec<FeedSummary>> {
-        self.feed_service.list_feeds().await
+    pub(crate) fn use_cases(&self) -> AppUseCases {
+        self.use_cases.clone()
     }
 
-    pub async fn list_entries(
-        &self,
-        query: &EntryQuery,
-    ) -> anyhow::Result<Vec<rssr_domain::EntrySummary>> {
-        self.entry_service.list_entries(query).await
+    pub(crate) fn auto_refresh(self: &Arc<Self>) -> AutoRefreshCapability {
+        AutoRefreshCapability { host: Arc::clone(self) }
     }
 
-    pub async fn get_entry(&self, entry_id: i64) -> anyhow::Result<Option<Entry>> {
-        self.entry_service.get_entry(entry_id).await
+    pub(crate) fn refresh(self: &Arc<Self>) -> RefreshCapability {
+        RefreshCapability { host: Arc::clone(self) }
     }
 
-    pub async fn reader_navigation(
-        &self,
-        current_entry_id: i64,
-    ) -> anyhow::Result<ReaderNavigation> {
-        self.entry_service.reader_navigation(current_entry_id).await
+    pub(crate) fn remote_config(self: &Arc<Self>) -> RemoteConfigCapability {
+        RemoteConfigCapability { host: Arc::clone(self) }
     }
+}
 
-    pub async fn set_read(&self, entry_id: i64, is_read: bool) -> anyhow::Result<()> {
-        self.entry_service.set_read(entry_id, is_read).await
-    }
-
-    pub async fn set_starred(&self, entry_id: i64, is_starred: bool) -> anyhow::Result<()> {
-        self.entry_service.set_starred(entry_id, is_starred).await
-    }
-
-    pub async fn load_settings(&self) -> anyhow::Result<UserSettings> {
-        self.settings_service.load().await
-    }
-
-    pub async fn save_settings(&self, settings: &UserSettings) -> anyhow::Result<()> {
-        self.settings_service.save(settings).await
-    }
-
-    pub async fn load_last_opened_feed_id(&self) -> anyhow::Result<Option<i64>> {
-        self.app_state_service.load_last_opened_feed_id().await
-    }
-
-    pub async fn remember_last_opened_feed_id(&self, feed_id: i64) -> anyhow::Result<()> {
-        self.app_state_service.save_last_opened_feed_id(Some(feed_id)).await
-    }
-
-    pub async fn load_entries_workspace_state(&self) -> anyhow::Result<EntriesWorkspaceState> {
-        self.app_state_service.load_entries_workspace().await
-    }
-
-    pub async fn save_entries_workspace_state(
-        &self,
-        entries_workspace: EntriesWorkspaceState,
-    ) -> anyhow::Result<()> {
-        self.app_state_service.save_entries_workspace(entries_workspace).await
-    }
-
-    pub fn ensure_auto_refresh_started(self: &Arc<Self>) {
-        if self.auto_refresh_started.swap(true, Ordering::SeqCst) {
+impl AutoRefreshCapability {
+    pub(crate) fn ensure_started(&self) {
+        if self.host.auto_refresh_started.swap(true, Ordering::SeqCst) {
             return;
         }
 
-        let services = Arc::clone(self);
+        let host = Arc::clone(&self.host);
         tokio::spawn(async move {
             let mut last_refresh_started_at = None;
 
             loop {
-                let settings = match services.load_settings().await {
+                let settings = match host.use_cases.settings_service.load().await {
                     Ok(settings) => settings,
                     Err(error) => {
                         tracing::warn!(error = %error, "读取自动刷新设置失败，稍后重试");
-                        tokio::time::sleep(Self::AUTO_REFRESH_RETRY_DELAY).await;
+                        tokio::time::sleep(AppServices::AUTO_REFRESH_RETRY_DELAY).await;
                         continue;
                     }
                 };
@@ -204,7 +167,7 @@ impl AppServices {
                         refresh_interval_minutes = settings.refresh_interval_minutes,
                         "触发后台自动刷新全部订阅"
                     );
-                    if let Err(error) = services.refresh_all().await {
+                    if let Err(error) = host.refresh().refresh_all().await {
                         tracing::warn!(error = %error, "后台自动刷新失败");
                     }
                     last_refresh_started_at = Some(now);
@@ -219,9 +182,13 @@ impl AppServices {
             }
         });
     }
+}
 
-    pub async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
+impl RefreshCapability {
+    pub(crate) async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
         let outcome = self
+            .host
+            .use_cases
             .subscription_workflow
             .add_subscription_and_refresh(&AddSubscriptionInput {
                 url: raw_url.to_string(),
@@ -233,31 +200,82 @@ impl AppServices {
         self.handle_refresh_outcome(outcome.refresh).context("首次刷新订阅失败")
     }
 
-    pub async fn remove_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        self.subscription_workflow
-            .remove_subscription(RemoveSubscriptionInput { feed_id, purge_entries: true })
-            .await
-            .context("删除订阅失败")
-    }
-
-    pub async fn refresh_all(self: &Arc<Self>) -> anyhow::Result<()> {
+    pub(crate) async fn refresh_all(&self) -> anyhow::Result<()> {
         let outcome = self
+            .host
+            .use_cases
             .refresh_service
-            .refresh_all(RefreshAllInput { max_concurrency: Self::REFRESH_ALL_CONCURRENCY })
+            .refresh_all(RefreshAllInput {
+                max_concurrency: AppServices::REFRESH_ALL_CONCURRENCY,
+            })
             .await?;
         self.handle_refresh_all_outcome(outcome)
     }
 
-    pub async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        let outcome = self.refresh_service.refresh_feed(feed_id).await?;
+    pub(crate) async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
+        let outcome = self.host.use_cases.refresh_service.refresh_feed(feed_id).await?;
         self.handle_refresh_outcome(outcome)
     }
 
-    fn spawn_background_image_localization(
-        &self,
-        feed_id: i64,
-        entries: Vec<RefreshLocalizedEntry>,
-    ) {
+    fn handle_refresh_all_outcome(&self, outcome: RefreshAllOutcome) -> anyhow::Result<()> {
+        let mut errors = Vec::new();
+
+        for feed in outcome.feeds {
+            match feed.result {
+                RefreshFeedResult::Updated { localization_entries, .. } => {
+                    tracing::debug!(feed_id = feed.feed_id, "刷新订阅成功");
+                    self.host
+                        .image_localization_worker
+                        .spawn(feed.feed_id, localization_entries);
+                }
+                RefreshFeedResult::NotModified => {
+                    tracing::debug!(feed_id = feed.feed_id, "订阅未变化");
+                }
+                RefreshFeedResult::Failed { message } => {
+                    tracing::warn!(feed_id = feed.feed_id, error = %message, "刷新订阅失败");
+                    errors.push(format!("{}: {message}", feed.url));
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            anyhow::bail!("部分订阅刷新失败: {}", errors.join(" | "))
+        }
+    }
+
+    fn handle_refresh_outcome(&self, outcome: RefreshFeedOutcome) -> anyhow::Result<()> {
+        match outcome.result {
+            RefreshFeedResult::Updated { localization_entries, .. } => {
+                self.host
+                    .image_localization_worker
+                    .spawn(outcome.feed_id, localization_entries);
+                Ok(())
+            }
+            RefreshFeedResult::NotModified => Ok(()),
+            RefreshFeedResult::Failed { message } => anyhow::bail!("{}: {message}", outcome.url),
+        }
+    }
+}
+
+impl RemoteConfigCapability {
+    pub(crate) async fn push(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<()> {
+        let remote = WebDavConfigSync::new(endpoint, remote_path)?;
+        self.host.use_cases.import_export_service.push_remote_config(&remote).await
+    }
+
+    pub(crate) async fn pull(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<bool> {
+        let remote = WebDavConfigSync::new(endpoint, remote_path)?;
+        self.host.use_cases.import_export_service.pull_remote_config(&remote).await
+    }
+}
+
+impl ImageLocalizationWorker {
+    const MAX_BACKGROUND_LOCALIZED_ENTRIES: usize = 5;
+    const LOCALIZE_TIMEOUT: Duration = Duration::from_secs(5);
+
+    fn spawn(&self, feed_id: i64, entries: Vec<RefreshLocalizedEntry>) {
         let entry_repository = self.entry_repository.clone();
         let localizer = self.body_asset_localizer.clone();
 
@@ -345,76 +363,5 @@ impl AppServices {
                 }
             }
         });
-    }
-
-    pub async fn export_config_json(&self) -> anyhow::Result<String> {
-        self.import_export_service.export_config_json().await
-    }
-
-    pub async fn import_config_json(&self, raw: &str) -> anyhow::Result<()> {
-        self.import_export_service.import_config_json(raw).await
-    }
-
-    pub async fn export_opml(&self) -> anyhow::Result<String> {
-        self.import_export_service.export_opml().await
-    }
-
-    pub async fn import_opml(&self, raw: &str) -> anyhow::Result<()> {
-        self.import_export_service.import_opml(raw).await
-    }
-
-    pub async fn push_remote_config(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> anyhow::Result<()> {
-        let remote = WebDavConfigSync::new(endpoint, remote_path)?;
-        self.import_export_service.push_remote_config(&remote).await
-    }
-
-    pub async fn pull_remote_config(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> anyhow::Result<bool> {
-        let remote = WebDavConfigSync::new(endpoint, remote_path)?;
-        self.import_export_service.pull_remote_config(&remote).await
-    }
-
-    fn handle_refresh_all_outcome(&self, outcome: RefreshAllOutcome) -> anyhow::Result<()> {
-        let mut errors = Vec::new();
-
-        for feed in outcome.feeds {
-            match feed.result {
-                RefreshFeedResult::Updated { localization_entries, .. } => {
-                    tracing::debug!(feed_id = feed.feed_id, "刷新订阅成功");
-                    self.spawn_background_image_localization(feed.feed_id, localization_entries);
-                }
-                RefreshFeedResult::NotModified => {
-                    tracing::debug!(feed_id = feed.feed_id, "订阅未变化");
-                }
-                RefreshFeedResult::Failed { message } => {
-                    tracing::warn!(feed_id = feed.feed_id, error = %message, "刷新订阅失败");
-                    errors.push(format!("{}: {message}", feed.url));
-                }
-            }
-        }
-
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            anyhow::bail!("部分订阅刷新失败: {}", errors.join(" | "))
-        }
-    }
-
-    fn handle_refresh_outcome(&self, outcome: RefreshFeedOutcome) -> anyhow::Result<()> {
-        match outcome.result {
-            RefreshFeedResult::Updated { localization_entries, .. } => {
-                self.spawn_background_image_localization(outcome.feed_id, localization_entries);
-                Ok(())
-            }
-            RefreshFeedResult::NotModified => Ok(()),
-            RefreshFeedResult::Failed { message } => anyhow::bail!("{}: {message}", outcome.url),
-        }
     }
 }
