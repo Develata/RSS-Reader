@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：412631b
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355 / 3ce6eb8 / 7140fd1 / 9460c4a / 58eaaf2 / 412631b
+- 当前 HEAD：198266a
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355 / 3ce6eb8 / 7140fd1 / 9460c4a / 58eaaf2 / 412631b / 198266a / handoff pending
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -33,6 +33,7 @@
 继续第七刀架构收口：把 runtime 依赖的 capability 进一步收成 `HostCapabilities` trait-object bundle，让 bootstrap 不再向 runtime 暴露具体 capability 实现类型。
 完成 `.specify` 宪章 1.3.0 后的完整状态对齐、基线验证与 push 尝试；push 被 GitHub HTTPS 凭据阻止，代码侧无失败。
 按新宪章补充 application use case 收敛架构计划，并落地第一刀：订阅生命周期由 `rssr-application::SubscriptionWorkflow` 统一承接，CLI/native/web 不再各自重组“添加后是否首次刷新”的业务分支。
+继续第二刀 application use case 收敛：刷新 outcome 的失败摘要、结果计数和失败行格式由 `rssr-application` 统一提供，native/web/CLI 不再各自手写 refresh-all 失败列表。
 
 ## 影响范围
 
@@ -135,6 +136,15 @@
 - [native.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/native.rs) 与 [web.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/web.rs) 的 `RefreshCapability::add_subscription(...)` 改为调用 lifecycle 方法，host 只负责把首次刷新 outcome 翻译成现有用户可见结果。
 - [main.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-cli/src/main.rs) 的 `add_subscription(...)` 改为把 `--skip-refresh` 映射为 `refresh_after_add`，首次刷新失败仍由 CLI 现有 exit/error 逻辑处理。
 - `rssr-application` 新增直接覆盖 lifecycle skip-refresh 与 refresh-after-add 两个分支的测试。
+
+### Refresh Outcome Summary
+
+- [refresh_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/refresh_service.rs) 新增 `RefreshFeedFailureSummary` 与 `RefreshAllSummary`。
+- `RefreshFeedOutcome` 新增 `is_success()`、`failure_summary()`、`failure_line()`，把单 feed 失败摘要稳定在 application 层。
+- `RefreshAllOutcome` 新增 `summary()`、`failure_summaries()`、`joined_failure_lines()`，统一刷新总览、失败计数与失败行拼接。
+- [native.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/native.rs) 和 [web.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/web.rs) 的 refresh handling 改为复用 `joined_failure_lines()` / `failure_line()`；native 仍保留平台专属 `ImageLocalizationWorker` 调度。
+- [main.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-cli/src/main.rs) 的 `ensure_refresh_*_succeeded` 改为复用 application summary helper，CLI 只保留退出错误的中文前缀。
+- `rssr-application` 新增 `refresh_feed_failure_summary_keeps_feed_identity` 与 `refresh_all_summary_counts_results_and_formats_failures`，覆盖 feed identity、结果计数与失败行格式。
 
 ### CSS 分离收口
 
@@ -524,6 +534,18 @@
 - `bash scripts/run_windows_chrome_visible_regression.sh --static-port 8339 --rssr-web-port 18839 --chrome-port 9249 --skip-build --slow-ms 250 --log-dir target/windows-chrome-visible-regression/20260411-codex-subscription-lifecycle-clean-port-slow`：未通过，失败点仍为 Windows CDP `Page.navigate` timeout。
 - 结论：本次代码路径由 workspace tests、native/wasm/android check、重新构建后的 release UI regression、`rssr-web browser feed smoke`、静态小视口 smoke 和 reader theme matrix 覆盖通过；Windows visible runner 当前保留为 env-limited/CDP flake，不作为阻断本次 application-layer 收敛的失败。
 
+### Application Use Case 收敛第二刀验证
+
+- `cargo fmt --check`：通过。
+- `git diff --check`：通过。
+- `cargo test -p rssr-application`：通过，21 tests。
+- `cargo check -p rssr-cli`：通过。
+- `cargo check -p rssr-app`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `cargo test --workspace`：通过；包含 `test_webdav_local_roundtrip`。
+- `bash scripts/run_release_ui_regression.sh --no-serve --with-rssr-web --port 8345 --web-port 18845 --log-dir target/release-ui-regression/20260411-codex-refresh-summary`：通过；该轮重新构建 debug web bundle，自动化门禁、`rssr-web` HTTP smoke、`rssr-web browser feed smoke` 均通过。
+- 本轮未再跑 Windows visible Chrome 全量回归；本次改动不触及 DOM/selector/seed，且 release UI 与 `rssr-web browser feed smoke` 已覆盖当前 web bundle。
+
 ## 给下一位 Agent 的备注
 
 - 本轮可见验证使用 Windows Chrome CDP/Node，而不是 Dioxus desktop/WSLg 窗口。
@@ -543,4 +565,5 @@
 - `9460c4a` 已提交 `.specify` 宪章 `1.3.0` 升级、smoke helper selector/key 修复和格式化修正。
 - `58eaaf2` 已提交主线 pre-push 验证记录。
 - `412631b` 已提交 application use case 收敛计划与订阅生命周期 workflow 首刀。
+- `198266a` 已提交 refresh outcome summary helper 与 native/web/CLI 调用收敛。
 - 状态对齐开始时工作区为 clean，分支状态为 `main...origin/main [ahead 72]`；本轮 push 尝试被 GitHub HTTPS 凭据阻止。
