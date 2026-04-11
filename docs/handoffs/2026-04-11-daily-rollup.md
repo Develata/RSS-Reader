@@ -3,10 +3,10 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：3ce6eb8
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355 / 3ce6eb8
+- 当前 HEAD：7140fd1
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355 / 3ce6eb8 / 7140fd1 / pending
 - 相关 tag / release：N/A
-- 状态：`pending`
+- 状态：`validated`
 
 ## 工作摘要
 
@@ -385,8 +385,7 @@
 - 复用长期运行的 Windows Chrome DevTools 端口可能受历史 tab / 旧 CDP 会话污染；建议日常回归优先使用新的 `--chrome-port`，或先清理旧可见回归窗口。
 - 当前 `AppServices` 仍同时承载 native/web host 启动、自动刷新调度与少量 capability bridge；下一步若继续架构线，应优先把这些能力显式拆成 host capability，而不是重新给 `AppServices` 加方法。
 - native / web 目前的 capability 结构仍是平台内联定义；若继续推进，可再把 capability 共享接口抽到更明确的 host adapter 层，但不应重新收敛成一个新的全能 manager。
-- `UiServices` 仍依赖 bootstrap 暴露的具体 capability 类型；下一步如果继续推进，应优先定义更窄的 host capability 接口或 bundle，而不是回到 `AppServices` 直传。
-- 当前 `HostCapabilities` 已经是统一 bundle；下一步若继续推进，重点应转到 bootstrap/native/web 本身的 host assembly 与 capability provider 抽取，而不是继续折腾 page runtime。
+- `UiServices` 已切到统一 `HostCapabilities` bundle，不再依赖 native/web 具体 capability 类型；下一步若继续推进，重点应转到 bootstrap/native/web 本身的 host assembly 与 capability provider 抽取，而不是继续折腾 page runtime。
 - 下一轮 CSS 分离不建议继续机械迁移 `button` / `field-label` / `inline-actions__item`；应只看新增死样式、深 DOM selector，或主题作者确实需要重排的业务槽。
 - 当前 entries wrapper 这轮尚未单独提交；若继续拆 class 边界，应优先检查设计系统 class 与页面语义 hook 的交界处，而不是继续平铺更多 `data-*`。
 - `.inline-actions__item` 已确认属于设计系统 class；后续只需要防止页面/主题把它重新当作布局入口使用。
@@ -394,6 +393,83 @@
 - 这轮之后，reader/settings/feeds 仍允许保留的 class 应只剩设计系统类、卡片标题类和 reader bottom bar 内部实现类；若后续再出现新的页面 class token，需要先证明存在外部消费方。
 - 这轮之后，页面/卡片/分组/表单相关 dead class token 已基本清空；剩余保留类应优先视为设计系统类或内部实现类，而不是新的页面契约。
 - `rssr-web browser feed smoke` 当前两次都在最终 `[data-smoke="rssr-web-browser-feed-smoke"][data-result="pass"]` selector 等待超时；由于前面静态页面与 reader/settings/feeds 可见回归均通过，暂判断为 helper/环境层问题，待单独排查。
+
+## 本轮补充：状态对齐、基线验证、smoke 排查、工程宪法评估
+
+### 状态对齐
+
+- 当前 HEAD 已从文档中的 `3ce6eb8` 对齐为 `7140fd1`。
+- `7140fd1` 已提交 `UiServices` 从 `Arc<AppServices>` 压到 `use_cases + HostCapabilities` 的改动。
+- 本轮补充修改尚未提交，commit: pending。
+
+### 基线验证
+
+- `cargo fmt --check`：初次失败，暴露 `7140fd1` 中 native/web capability 收口后的格式未落盘；已执行 `cargo fmt` 修正。
+- `cargo check -p rssr-app`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `cargo check -p rssr-cli`：通过。
+- `cargo test -p rssr-application`：通过，17 passed。
+- `cargo test -p rssr-infra --test test_config_package_codec`：通过，7 passed。
+- `cargo test -p rssr-infra --test test_config_exchange_contract_harness`：通过，4 passed。
+- `cargo test -p rssr-infra --test wasm_config_exchange_contract_harness --target wasm32-unknown-unknown --no-run`：通过。
+- `cargo test -p rssr-web`：通过，14 passed。
+- `node --check scripts/browser/rssr_visible_regression.mjs`：通过。
+- `bash -n scripts/run_web_spa_regression_server.sh`：通过。
+- `bash -n scripts/run_rssr_web_browser_feed_smoke.sh`：通过。
+- `bash -n scripts/run_windows_chrome_visible_regression.sh`：通过。
+- `git diff --check`：通过。
+
+### `rssr-web browser feed smoke` 超时排查
+
+- 独立执行 `scripts/run_rssr_web_browser_feed_smoke.sh --skip-build --port 18901` 复现失败。
+- 失败 DOM 显示 helper 已打开 `/feeds`、填入 feed URL、点击 `data-action="add-feed"`，但等待 `li.feed-card` 超时。
+- 根因 1：`crates/rssr-web/src/smoke.rs` 仍使用已被移除的 `li.feed-card` 旧 class selector。
+- 修复：helper 改为查询 `li[data-layout="feed-card"]`。
+- 修复后执行 `scripts/run_rssr_web_browser_feed_smoke.sh --skip-build --port 18902`：通过。
+- Windows visible regression 使用 `--skip-build` 后又在静态 `/entries` populated selector 超时。
+- 根因 2：`scripts/run_web_spa_regression_server.sh` 的 reader-demo seed 仍写入 `rssr-web-app-state-v1`，但浏览器 adapter 已升级为 `rssr-web-app-state-v2`。
+- 修复：静态 SPA helper 与 `docs/design/web-spa-regression-server.md` 同步为 `rssr-web-app-state-v2`。
+- fresh build 后首次 Windows visible regression 在 `Page.navigate` 上超时；换全新 Chrome 端口/profile 后通过，符合既有 CDP 会话污染风险。
+- 最终验证：`scripts/run_windows_chrome_visible_regression.sh --static-port 8334 --rssr-web-port 18834 --chrome-port 9244 --skip-build --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-codex-after-fresh-build-clean-port/summary.md`。
+- 提交前复验：`scripts/run_rssr_web_browser_feed_smoke.sh --skip-build --port 18903 --log-dir target/rssr-web-browser-feed-smoke/20260411-codex-precommit-feed-smoke`：通过。
+- 提交前复验：`scripts/run_windows_chrome_visible_regression.sh --static-port 8335 --rssr-web-port 18835 --chrome-port 9245 --skip-build --slow-ms 100 --log-dir target/windows-chrome-visible-regression/20260411-codex-precommit-visible-regression`：通过。
+
+### 工程宪法评估
+
+- 结论：值得部分融入，但不建议全文并入现有 `.specify/memory/constitution.md`。
+- 适合吸收的部分：
+  - 骨架与边界先于模块和实现。
+  - 外部环境依赖必须通过 adapter/capability 进入核心逻辑。
+  - 单一真相源、版本与迁移责任、失败路径、可观测性、幂等与并发时序应进入设计门禁。
+  - 骨架级变更需要先出分析报告并由 USER 明确批准。
+- 不适合直接全文纳入的部分：
+  - 文本过长且抽象，容易把项目现有 RSS 专用宪章稀释成通用治理手册。
+  - “严格固定顺序”和“最低成熟度”若照搬，会和当前 spec-kit 用户故事切片、快速验证、渐进交付节奏冲突。
+  - “完美主义”措辞需要改写为“边界审查与收敛”，否则容易被误用为过度设计或延期落地理由。
+  - 优先级排序里把工程复杂度控制放到次级，和项目现有“简单演进”“性能是产品特性”存在张力。
+- 建议后续如果正式融入，应做 `.specify` 宪章 minor 版本升级，而不是替换全文：
+  - 新增或扩展“骨架边界、单一真相源、失败可验证”原则。
+  - 在 plan 模板中增加状态/数据/配置模型、adapter 边界、失败/迁移/回退检查。
+  - 在 spec 模板中强化边界情况、非目标、版本迁移影响。
+  - 在 tasks 模板中按风险自动生成迁移、观测、回归验证任务。
+
+### `.specify` 宪章 minor 升级
+
+- `.specify/memory/constitution.md` 从 `1.2.0` 升级到 `1.3.0`，最后修订日期更新为 `2026-04-11`。
+- 原则 V 补充外部环境依赖必须通过 adapter、port 或 capability 进入核心逻辑。
+- 新增原则 VII：`骨架边界，真相源，失败可验证`。
+- 新原则明确：
+  - 功能或架构变更必须先说明其落入的既有能力轴和模块边界。
+  - 骨架级变更必须先提交分析并由 USER 明确批准。
+  - 核心状态、数据和配置必须有唯一真相源。
+  - 持久化、storage、同步链路、导入导出格式必须承担版本、迁移、兼容和回退责任。
+  - 核心流程必须在设计阶段定义失败传播、用户可见结果、观测点、幂等/去重和验证方式。
+- 同步 `.specify/templates/constitution-template.md`，新增第 6、7 原则占位示例。
+- 同步 `.specify/templates/plan-template.md`，新增真相源/版本责任、adapter/capability 边界、失败与观测策略，以及骨架变更判断门禁。
+- 同步 `.specify/templates/spec-template.md`，新增状态/版本/失败边界和 adapter/capability 边界。
+- 同步 `.specify/templates/tasks-template.md`，新增迁移/回退、失败路径、观测、幂等/去重相关任务要求。
+- `.specify/templates/checklist-template.md` 与 `.specify/templates/agent-file-template.md` 已复查，无强制变更。
+- `.specify/templates/commands/` 当前不存在，无需同步。
 
 ## 给下一位 Agent 的备注
 
@@ -410,4 +486,5 @@
 - `62a165e` 已提交该轮 handoff 记录。
 - `9202355` 已提交 shared composition primitive 接入应用层与 CLI。
 - `3ce6eb8` 已提交 host facade 收薄与 runtime capability 化。
-- 本工作区当前还有一轮未提交改动：`UiServices` 从 `Arc<AppServices>` 继续压到 `use_cases + HostCapabilities`，并把 capability 对外接口收成 trait-object bundle，commit: pending。
+- `7140fd1` 已提交 `UiServices` 从 `Arc<AppServices>` 继续压到 `use_cases + HostCapabilities`，并把 capability 对外接口收成 trait-object bundle。
+- 状态对齐开始时工作区为 clean，分支状态为 `main...origin/main [ahead 72]`；本轮补充修复与文档更新 commit: pending。

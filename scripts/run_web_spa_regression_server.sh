@@ -153,7 +153,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
     const AUTH_CONFIG_KEY = "rssr-web-auth-config-v1";
     const AUTH_SESSION_KEY = "rssr-web-auth-session-v1";
     const STORAGE_KEY = "rssr-web-state-v1";
-    const APP_STATE_STORAGE_KEY = "rssr-web-app-state-v1";
+    const APP_STATE_STORAGE_KEY = "rssr-web-app-state-v2";
     const ENTRY_FLAGS_STORAGE_KEY = "rssr-web-entry-flags-v1";
     const authConfig = {f"{username}\n{password_hash}\n{salt}"!r};
     const sessionToken = {session_token!r};
@@ -202,7 +202,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
       "rssr-web-auth-config-v1",
       "rssr-web-auth-session-v1",
       "rssr-web-state-v1",
-      "rssr-web-app-state-v1",
+      "rssr-web-app-state-v2",
       "rssr-web-entry-flags-v1",
     ];
 

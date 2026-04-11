@@ -117,6 +117,19 @@
 - [如果这是重构，说明本次是否影响命令层、查询层、视图壳或 CLI/GUI 语义统一]
 - [如果不是架构重构，写“无架构演进影响”]
 
+### 状态、版本与失败边界
+
+- [列出该功能涉及的核心状态/数据/配置真相源；如果没有影响，写“无真相源变化”]
+- [说明是否涉及数据库、浏览器 storage、缓存、配置包、OPML、WebDAV 或本地文件格式版本变化]
+- [列出主要失败条件、用户可见结果、重试/退出边界、重复执行是否幂等]
+- [说明需要哪些日志、状态记录、测试 fixture、contract harness 或浏览器 smoke 来验证失败路径]
+
+### Adapter / Capability 边界
+
+- [列出所有外部环境依赖，例如 SQLite、HTTP、feed parser、browser storage、文件系统、WebDAV、后台任务]
+- [说明这些依赖通过哪个 adapter、port、capability 或 use case 进入系统]
+- [如果没有新增外部依赖，写“无新增 adapter/capability 边界”]
+
 ### 非目标与排除项
 
 - [明确列出该功能不会新增什么]

@@ -128,12 +128,8 @@ impl RefreshPort for RefreshCapability {
     }
 
     async fn refresh_all(&self) -> anyhow::Result<()> {
-        let outcome = self
-            .host
-            .use_cases
-            .refresh_service
-            .refresh_all(RefreshAllInput::default())
-            .await?;
+        let outcome =
+            self.host.use_cases.refresh_service.refresh_all(RefreshAllInput::default()).await?;
         self.handle_refresh_all_outcome(outcome)
     }
 

@@ -206,9 +206,7 @@ impl RefreshPort for RefreshCapability {
             .host
             .use_cases
             .refresh_service
-            .refresh_all(RefreshAllInput {
-                max_concurrency: AppServices::REFRESH_ALL_CONCURRENCY,
-            })
+            .refresh_all(RefreshAllInput { max_concurrency: AppServices::REFRESH_ALL_CONCURRENCY })
             .await?;
         self.handle_refresh_all_outcome(outcome)
     }
@@ -227,9 +225,7 @@ impl RefreshCapability {
             match feed.result {
                 RefreshFeedResult::Updated { localization_entries, .. } => {
                     tracing::debug!(feed_id = feed.feed_id, "刷新订阅成功");
-                    self.host
-                        .image_localization_worker
-                        .spawn(feed.feed_id, localization_entries);
+                    self.host.image_localization_worker.spawn(feed.feed_id, localization_entries);
                 }
                 RefreshFeedResult::NotModified => {
                     tracing::debug!(feed_id = feed.feed_id, "订阅未变化");
@@ -251,9 +247,7 @@ impl RefreshCapability {
     fn handle_refresh_outcome(&self, outcome: RefreshFeedOutcome) -> anyhow::Result<()> {
         match outcome.result {
             RefreshFeedResult::Updated { localization_entries, .. } => {
-                self.host
-                    .image_localization_worker
-                    .spawn(outcome.feed_id, localization_entries);
+                self.host.image_localization_worker.spawn(outcome.feed_id, localization_entries);
                 Ok(())
             }
             RefreshFeedResult::NotModified => Ok(()),

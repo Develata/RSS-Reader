@@ -105,5 +105,5 @@ bash scripts/run_web_spa_regression_server.sh --release
   - 用于直接查看当前 origin 下：
     - auth config / session 是否存在
     - `rssr-web-state-v1`
-    - `rssr-web-app-state-v1`
+    - `rssr-web-app-state-v2`
     - `rssr-web-entry-flags-v1`

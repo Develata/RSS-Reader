@@ -139,7 +139,7 @@ pub(crate) async fn browser_feed_smoke(State(state): State<AppState>) -> impl In
       log("clicked add-feed");
 
       const feedCard = await waitFor(
-        () => Array.from(feedsDoc.querySelectorAll('li.feed-card')).find(card =>
+        () => Array.from(feedsDoc.querySelectorAll('li[data-layout="feed-card"]')).find(card =>
           card.textContent.includes(expectedFeedTitle) || card.textContent.includes(feedUrl)
         ),
         "new feed card",

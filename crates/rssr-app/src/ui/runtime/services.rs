@@ -43,7 +43,10 @@ impl UiServices {
     }
 
     pub(crate) fn feeds(&self) -> FeedsPort {
-        FeedsPort { use_cases: self.use_cases.clone(), host_capabilities: self.host_capabilities.clone() }
+        FeedsPort {
+            use_cases: self.use_cases.clone(),
+            host_capabilities: self.host_capabilities.clone(),
+        }
     }
 }
 
