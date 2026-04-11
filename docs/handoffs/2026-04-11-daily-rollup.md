@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：7140fd1
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355 / 3ce6eb8 / 7140fd1 / pending
+- 当前 HEAD：9460c4a
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355 / 3ce6eb8 / 7140fd1 / 9460c4a / pending
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -471,6 +471,14 @@
 - `.specify/templates/checklist-template.md` 与 `.specify/templates/agent-file-template.md` 已复查，无强制变更。
 - `.specify/templates/commands/` 当前不存在，无需同步。
 
+### 主线完整验证与 pre-push 预检
+
+- `cargo test --workspace`：通过；包括 `test_webdav_local_roundtrip`，本轮无 env-limited 项。
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过。
+- `bash scripts/run_release_ui_regression.sh --no-serve --with-rssr-web --skip-build --port 8336 --web-port 18836 --log-dir target/release-ui-regression/20260411-codex-mainline-prepush`：通过。
+- release UI summary 位于 `target/release-ui-regression/20260411-codex-mainline-prepush/summary.md`。
+- 本轮主线验证覆盖 workspace 单测、rssr-app native/wasm/android check、rssr-web 单测、release UI 自动门禁、rssr-web HTTP smoke、rssr-web browser feed smoke、Windows visible Chrome 全量回归。
+
 ## 给下一位 Agent 的备注
 
 - 本轮可见验证使用 Windows Chrome CDP/Node，而不是 Dioxus desktop/WSLg 窗口。
@@ -487,4 +495,5 @@
 - `9202355` 已提交 shared composition primitive 接入应用层与 CLI。
 - `3ce6eb8` 已提交 host facade 收薄与 runtime capability 化。
 - `7140fd1` 已提交 `UiServices` 从 `Arc<AppServices>` 继续压到 `use_cases + HostCapabilities`，并把 capability 对外接口收成 trait-object bundle。
-- 状态对齐开始时工作区为 clean，分支状态为 `main...origin/main [ahead 72]`；本轮补充修复与文档更新 commit: pending。
+- `9460c4a` 已提交 `.specify` 宪章 `1.3.0` 升级、smoke helper selector/key 修复和格式化修正。
+- 状态对齐开始时工作区为 clean，分支状态为 `main...origin/main [ahead 72]`；本轮 pre-push 验证记录 commit: pending。
