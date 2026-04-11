@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：037e31a
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / pending
+- 当前 HEAD：c36edfd
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -157,4 +157,5 @@
 - 本轮可见验证使用 Windows Chrome CDP/Node，而不是 Dioxus desktop/WSLg 窗口。
 - Windows visible Chrome CDP runner 已沉淀进 repo；当前主路径断言也已迁到 headless active interface 风格。
 - `037e31a` 已提交上一轮 workspace CSS 语义 hook 收口。
-- 本轮未提交：`commit: pending`。提交前建议复查 [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)、[responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)、[entry controls](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/controls.rs)、[entry filters](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/components/entry_filters.rs)。
+- `c36edfd` 已提交 page shell / entries controls 语义 hook 收口。
+- 下一轮建议先复查 [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)、[responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)、[entry controls](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/controls.rs)、[entry filters](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/components/entry_filters.rs) 的低优先级剩余内部 class。
