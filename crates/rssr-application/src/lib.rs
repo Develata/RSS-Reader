@@ -16,9 +16,9 @@ pub use import_export_service::{
 };
 pub use refresh_service::{
     FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate, ParsedEntryData,
-    ParsedFeedUpdate, RefreshAllInput, RefreshAllOutcome, RefreshCommit, RefreshFailure,
-    RefreshFeedOutcome, RefreshFeedResult, RefreshHttpMetadata, RefreshLocalizedEntry,
-    RefreshService, RefreshStorePort, RefreshTarget,
+    ParsedFeedUpdate, RefreshAllInput, RefreshAllOutcome, RefreshAllSummary, RefreshCommit,
+    RefreshFailure, RefreshFeedFailureSummary, RefreshFeedOutcome, RefreshFeedResult,
+    RefreshHttpMetadata, RefreshLocalizedEntry, RefreshService, RefreshStorePort, RefreshTarget,
 };
 pub use settings_service::SettingsService;
 pub use subscription_workflow::{

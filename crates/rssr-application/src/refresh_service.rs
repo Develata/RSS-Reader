@@ -104,11 +104,40 @@ pub struct RefreshFeedOutcome {
 }
 
 impl RefreshFeedOutcome {
+    pub fn is_success(&self) -> bool {
+        !matches!(self.result, RefreshFeedResult::Failed { .. })
+    }
+
     pub fn failure_message(&self) -> Option<&str> {
         match &self.result {
             RefreshFeedResult::Failed { message } => Some(message),
             _ => None,
         }
+    }
+
+    pub fn failure_summary(&self) -> Option<RefreshFeedFailureSummary> {
+        self.failure_message().map(|message| RefreshFeedFailureSummary {
+            feed_id: self.feed_id,
+            url: self.url.clone(),
+            message: message.to_string(),
+        })
+    }
+
+    pub fn failure_line(&self) -> Option<String> {
+        self.failure_summary().map(|failure| failure.display_line())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefreshFeedFailureSummary {
+    pub feed_id: i64,
+    pub url: String,
+    pub message: String,
+}
+
+impl RefreshFeedFailureSummary {
+    pub fn display_line(&self) -> String {
+        format!("{}: {}", self.url, self.message)
     }
 }
 
@@ -118,26 +147,77 @@ pub struct RefreshAllOutcome {
 }
 
 impl RefreshAllOutcome {
+    pub fn summary(&self) -> RefreshAllSummary {
+        let mut summary =
+            RefreshAllSummary { total_count: self.feeds.len(), ..RefreshAllSummary::default() };
+
+        for outcome in &self.feeds {
+            match &outcome.result {
+                RefreshFeedResult::Updated { .. } => summary.updated_count += 1,
+                RefreshFeedResult::NotModified => summary.not_modified_count += 1,
+                RefreshFeedResult::Failed { .. } => {
+                    summary.failed_count += 1;
+                    if let Some(failure) = outcome.failure_summary() {
+                        summary.failures.push(failure);
+                    }
+                }
+            }
+        }
+
+        summary
+    }
+
     pub fn has_failures(&self) -> bool {
-        self.feeds.iter().any(|outcome| matches!(outcome.result, RefreshFeedResult::Failed { .. }))
+        self.summary().has_failures()
     }
 
     pub fn updated_count(&self) -> usize {
-        self.feeds
-            .iter()
-            .filter(|outcome| matches!(outcome.result, RefreshFeedResult::Updated { .. }))
-            .count()
+        self.summary().updated_count
     }
 
     pub fn not_modified_count(&self) -> usize {
-        self.feeds
-            .iter()
-            .filter(|outcome| matches!(outcome.result, RefreshFeedResult::NotModified))
-            .count()
+        self.summary().not_modified_count
     }
 
     pub fn failures(&self) -> Vec<&RefreshFeedOutcome> {
         self.feeds.iter().filter(|outcome| outcome.failure_message().is_some()).collect()
+    }
+
+    pub fn failure_summaries(&self) -> Vec<RefreshFeedFailureSummary> {
+        self.summary().failures
+    }
+
+    pub fn joined_failure_lines(&self) -> Option<String> {
+        self.summary().joined_failure_lines()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RefreshAllSummary {
+    pub total_count: usize,
+    pub updated_count: usize,
+    pub not_modified_count: usize,
+    pub failed_count: usize,
+    pub failures: Vec<RefreshFeedFailureSummary>,
+}
+
+impl RefreshAllSummary {
+    pub fn has_failures(&self) -> bool {
+        self.failed_count > 0
+    }
+
+    pub fn joined_failure_lines(&self) -> Option<String> {
+        if self.failures.is_empty() {
+            None
+        } else {
+            Some(
+                self.failures
+                    .iter()
+                    .map(RefreshFeedFailureSummary::display_line)
+                    .collect::<Vec<_>>()
+                    .join(" | "),
+            )
+        }
     }
 }
 
@@ -371,6 +451,68 @@ mod tests {
             published_at: None,
             updated_at_source: None,
         }
+    }
+
+    #[test]
+    fn refresh_feed_failure_summary_keeps_feed_identity() {
+        let outcome = super::RefreshFeedOutcome {
+            feed_id: 9,
+            url: "https://example.com/feed.xml".to_string(),
+            result: super::RefreshFeedResult::Failed { message: "boom".to_string() },
+        };
+
+        assert!(!outcome.is_success());
+        assert_eq!(outcome.failure_message(), Some("boom"));
+        assert_eq!(outcome.failure_line(), Some("https://example.com/feed.xml: boom".to_string()));
+        assert_eq!(
+            outcome.failure_summary(),
+            Some(super::RefreshFeedFailureSummary {
+                feed_id: 9,
+                url: "https://example.com/feed.xml".to_string(),
+                message: "boom".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn refresh_all_summary_counts_results_and_formats_failures() {
+        let outcome = super::RefreshAllOutcome {
+            feeds: vec![
+                super::RefreshFeedOutcome {
+                    feed_id: 1,
+                    url: "https://example.com/one.xml".to_string(),
+                    result: super::RefreshFeedResult::Updated {
+                        entry_count: 2,
+                        localization_entries: Vec::new(),
+                    },
+                },
+                super::RefreshFeedOutcome {
+                    feed_id: 2,
+                    url: "https://example.com/two.xml".to_string(),
+                    result: super::RefreshFeedResult::NotModified,
+                },
+                super::RefreshFeedOutcome {
+                    feed_id: 3,
+                    url: "https://example.com/three.xml".to_string(),
+                    result: super::RefreshFeedResult::Failed { message: "boom".to_string() },
+                },
+            ],
+        };
+
+        let summary = outcome.summary();
+
+        assert_eq!(summary.total_count, 3);
+        assert_eq!(summary.updated_count, 1);
+        assert_eq!(summary.not_modified_count, 1);
+        assert_eq!(summary.failed_count, 1);
+        assert!(summary.has_failures());
+        assert_eq!(summary.failures[0].feed_id, 3);
+        assert_eq!(outcome.updated_count(), 1);
+        assert_eq!(outcome.not_modified_count(), 1);
+        assert_eq!(
+            outcome.joined_failure_lines(),
+            Some("https://example.com/three.xml: boom".to_string())
+        );
     }
 
     #[tokio::test]

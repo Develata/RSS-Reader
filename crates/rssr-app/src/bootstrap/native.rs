@@ -224,7 +224,7 @@ impl RefreshPort for RefreshCapability {
 
 impl RefreshCapability {
     fn handle_refresh_all_outcome(&self, outcome: RefreshAllOutcome) -> anyhow::Result<()> {
-        let mut errors = Vec::new();
+        let failure_lines = outcome.joined_failure_lines();
 
         for feed in outcome.feeds {
             match feed.result {
@@ -237,26 +237,27 @@ impl RefreshCapability {
                 }
                 RefreshFeedResult::Failed { message } => {
                     tracing::warn!(feed_id = feed.feed_id, error = %message, "刷新订阅失败");
-                    errors.push(format!("{}: {message}", feed.url));
                 }
             }
         }
 
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            anyhow::bail!("部分订阅刷新失败: {}", errors.join(" | "))
+        if let Some(failures) = failure_lines {
+            anyhow::bail!("部分订阅刷新失败: {failures}");
         }
+        Ok(())
     }
 
     fn handle_refresh_outcome(&self, outcome: RefreshFeedOutcome) -> anyhow::Result<()> {
+        let failure_line = outcome.failure_line();
         match outcome.result {
             RefreshFeedResult::Updated { localization_entries, .. } => {
                 self.host.image_localization_worker.spawn(outcome.feed_id, localization_entries);
                 Ok(())
             }
             RefreshFeedResult::NotModified => Ok(()),
-            RefreshFeedResult::Failed { message } => anyhow::bail!("{}: {message}", outcome.url),
+            RefreshFeedResult::Failed { .. } => {
+                anyhow::bail!("{}", failure_line.unwrap_or_else(|| "刷新订阅失败".to_string()))
+            }
         }
     }
 }

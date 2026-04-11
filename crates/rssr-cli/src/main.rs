@@ -4,8 +4,7 @@ use anyhow::{Context, ensure};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
-    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
-    RemoveSubscriptionInput,
+    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RemoveSubscriptionInput,
 };
 use rssr_domain::{Feed, FeedRepository, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
@@ -412,24 +411,15 @@ fn print_feeds(feeds: &[Feed]) {
 }
 
 fn ensure_refresh_feed_succeeded(outcome: &RefreshFeedOutcome) -> anyhow::Result<()> {
-    match &outcome.result {
-        RefreshFeedResult::Failed { message } => {
-            anyhow::bail!("{}: {message}", outcome.url);
-        }
-        RefreshFeedResult::NotModified | RefreshFeedResult::Updated { .. } => Ok(()),
+    if let Some(failure_line) = outcome.failure_line() {
+        anyhow::bail!("{failure_line}");
     }
+    Ok(())
 }
 
 fn ensure_refresh_all_succeeded(outcome: &RefreshAllOutcome) -> anyhow::Result<()> {
-    let failures = outcome
-        .failures()
-        .into_iter()
-        .map(|feed| format!("{}: {}", feed.url, feed.failure_message().unwrap_or("刷新失败")))
-        .collect::<Vec<_>>();
-
-    if failures.is_empty() {
-        Ok(())
-    } else {
-        anyhow::bail!("部分订阅刷新失败: {}", failures.join(" | "))
+    if let Some(failures) = outcome.joined_failure_lines() {
+        anyhow::bail!("部分订阅刷新失败: {failures}");
     }
+    Ok(())
 }
