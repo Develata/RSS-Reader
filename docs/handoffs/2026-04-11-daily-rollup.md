@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：fea79d0
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / pending
+- 当前 HEAD：e8d3887
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -185,4 +185,4 @@
 - `037e31a` 已提交上一轮 workspace CSS 语义 hook 收口。
 - `c36edfd` 已提交 page shell / entries controls 语义 hook 收口。
 - `fea79d0` 已提交 handoff 元数据记录。
-- 本轮未提交：`commit: pending`。提交前建议复查 [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md) 和 [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)。
+- `e8d3887` 已提交保留 class 边界审查与 `.entry-card__action` 死 selector 清理。
