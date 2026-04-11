@@ -35,7 +35,7 @@ pub fn StartupPage() -> Element {
     rsx! {
         section { class: "page page-entries", "data-page": "entries",
             AppNav {}
-            h2 { class: "page-title", "文章" }
+            h2 { class: "page-title", "data-slot": "page-title", "文章" }
             StatusBanner { message: status(), tone: status_tone() }
         }
     }
@@ -66,9 +66,9 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             AppNav {}
             div { class: "entries-layout", "data-layout": "entries-layout",
                 div { class: "entries-main",
-                    div { class: "reading-header page-section-header page-section-header--entries", "data-slot": "page-section-header",
+                    div { class: "reading-header page-section-header page-section-header--entries", "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "entries",
                         div { class: "reading-header__row", "data-slot": "page-section-row",
-                            h2 { class: "page-title page-section-title", "{entries_page_title(feed_id)}" }
+                            h2 { class: "page-title page-section-title", "data-slot": "page-title", "{entries_page_title(feed_id)}" }
                         }
                     }
                     if feed_id.is_some() {

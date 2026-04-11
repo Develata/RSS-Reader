@@ -48,8 +48,8 @@ pub fn SettingsPage() -> Element {
     rsx! {
         section { class: "page page-settings", "data-page": "settings",
             AppNav {}
-            div { class: "page-header page-section-header page-section-header--settings", "data-slot": "page-section-header", "data-layout": "page-header",
-                h2 { class: "page-header__title page-title page-section-title", "设置" }
+            div { class: "page-header page-section-header page-section-header--settings", "data-slot": "page-section-header", "data-layout": "page-header", "data-section": "settings",
+                h2 { class: "page-header__title page-title page-section-title", "data-slot": "page-title", "设置" }
                 div { class: "page-header__actions", "data-slot": "page-header-actions",
                     button {
                         class: "icon-link-button",

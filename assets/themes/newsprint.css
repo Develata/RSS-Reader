@@ -24,7 +24,7 @@ body {
 }
 
 [data-layout="app-nav-shell"],
-.page,
+[data-page]:not([data-page="reader"]),
 [data-layout="reader-page"] {
   border-radius: 10px;
   border-color: rgba(67, 50, 33, 0.16);
@@ -54,7 +54,7 @@ body {
   border-color: rgba(143, 63, 43, 0.28);
 }
 
-.page,
+[data-page]:not([data-page="reader"]),
 [data-layout="reader-page"] {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0) 28%),

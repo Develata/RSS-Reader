@@ -116,6 +116,7 @@ pub fn EntryFilters(
                                 rsx! {
                                     label {
                                         class: "entry-filters__source-chip",
+                                        "data-layout": "entry-filters-source-chip",
                                         "data-state": if is_selected { "selected" } else { "unselected" },
                                         input {
                                             class: "sr-only",

@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：954b22a
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / pending
+- 当前 HEAD：037e31a
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / pending
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -16,6 +16,7 @@
 继续补齐页面层语义接口，让 settings themes、entries groups、reader body 都暴露更稳定的 headless active interface。
 继续把 entries/reader/theme 相关 CSS 从深 class selector 迁到语义 `data-*` selector。
 继续把 feeds/settings workspace 与主题 CSS 中的卡片、表单、统计块规则迁到 `data-layout` / `data-slot` 语义接口，并给可见回归 CDP runner 增加请求级超时。
+继续收 `.page`、`.page-header`、entries controls / overview / source chip 的视觉 class 依赖，页面根改用 `data-page`，普通 page 与 reader page 保持分离。
 
 ## 影响范围
 
@@ -77,6 +78,14 @@
 - 删除 `workspaces.css` 中已经没有页面 DOM 对应的 `feed-workbench__note` / intro 类死样式。
 - 更新 [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)，把 `feed-workbench__note` 从待办改为已清理。
 
+### Page Shell / Entries Controls 收口
+
+- 页面标题补齐 `data-slot="page-title"`。
+- entries / feeds / settings 页头补齐 `data-layout="page-header"`、`data-slot="page-section-header"`、`data-section`。
+- entries controls 补齐 `entry-controls-panel/reveal/toggle`、`entry-organize-bar`、`entry-overview`、`entry-overview-metric`、`entry-overview-label/value`、`entry-filters-source-chip` 等 `data-layout` / `data-slot`。
+- `.page` CSS 入口迁到 `[data-page]:not([data-page="reader"])`，reader 继续走 `[data-layout="reader-page"]`，避免普通页面壳样式污染 reader。
+- `assets/styles/entries.css`、`assets/styles/shell.css`、`assets/styles/responsive.css`、`assets/themes/*` 中对应规则不再依赖 `.page`、`.page-title`、`.reading-header`、`.page-section-header--*`、`.entry-controls-*`、`.entry-overview*`、`.entry-filters__source-chip`。
+
 ### Regression Runner 稳定性
 
 - `scripts/browser/rssr_visible_regression.mjs` 的 CDP navigation 现在会等待 `Page.loadEventFired`，但不把 load event 作为硬门禁；最终仍由 selector readiness 判断页面可用。
@@ -107,6 +116,14 @@
 - `git diff --check`：通过。
 - `rg -n "\\.(feed-form|feed-compose-card|feed-list|feed-card|exchange-card|exchange-header|settings-card|stat-card|card-title|settings-form-grid|preset-grid|theme-gallery)(\\b|__)" assets/styles assets/themes -S`：通过，无剩余命中。
 - `scripts/run_windows_chrome_visible_regression.sh --static-port 8314 --rssr-web-port 18814 --chrome-port 9226 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-092733/summary.md`。
+- `cargo fmt`：通过。
+- `cargo check -p rssr-app`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `node --check scripts/browser/rssr_visible_regression.mjs`：通过。
+- `bash -n scripts/run_windows_chrome_visible_regression.sh`：通过。
+- `git diff --check`：通过。
+- `rg -n "\\.(page|page-title|page-header__title|page-header__actions|page-section-header--|reading-header|entry-organize-bar|entry-overview|entry-overview__|entry-controls|entry-filters__source-chip)(\\b|__|--)" assets/styles assets/themes -S`：通过，无剩余命中。
+- `scripts/run_windows_chrome_visible_regression.sh --static-port 8315 --rssr-web-port 18815 --chrome-port 9227 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-093306/summary.md`。
 
 ### 手工验收
 
@@ -121,6 +138,7 @@
 
 - 当前 Web SPA 回归路径在可见 Windows Chrome 下通过。
 - 当前页面语义接口和 CSS 分离基线继续前移；feeds/settings/stat/exchange 这批视觉 class 已不再被 `assets/styles` / `assets/themes` 作为 CSS 选择器入口。
+- page shell 与 entries controls/overview/source chip 这批视觉 class 也已不再被 `assets/styles` / `assets/themes` 作为 CSS 选择器入口。
 - 可见回归 runner 已避免 CDP 请求无限挂起；复用污染较重的 9225 Chrome 会话时曾在 `Page.navigate` 超时，改用干净 9226 Windows Chrome profile 后全量通过。
 - WSLg 桌面窗口呈现问题继续视为环境层问题，不阻塞 Web SPA 浏览器态验证。
 
@@ -132,10 +150,11 @@
 - 当前 visible runner 主路径已迁到 `data-*` 语义接口；后续扩展测试时应继续保持 selector-first，避免新增文案驱动断言。
 - 可见回归复用 Windows Chrome 端口时，CDP load event 可能不会覆盖所有 SPA route 情况；runner 已改为 selector readiness 作为最终判断。
 - 复用长期运行的 Windows Chrome DevTools 端口可能受历史 tab / 旧 CDP 会话污染；建议日常回归优先使用新的 `--chrome-port`，或先清理旧可见回归窗口。
-- 下一轮 CSS 分离最值得继续看 `.page` / `.page-header` / `.entry-filters` / entries controls / overview 里的剩余 class 结构规则。
+- 下一轮 CSS 分离最值得继续看 `.entries-main`、`.entries-page__backlink/state`、`.inline-actions__item`、`.field-label` 是否需要继续语义化；这些比 `.page` / controls 优先级低。
 
 ## 给下一位 Agent 的备注
 
 - 本轮可见验证使用 Windows Chrome CDP/Node，而不是 Dioxus desktop/WSLg 窗口。
 - Windows visible Chrome CDP runner 已沉淀进 repo；当前主路径断言也已迁到 headless active interface 风格。
-- 本轮未提交：`commit: pending`。提交前建议复查 [scripts/browser/rssr_visible_regression.mjs](/home/develata/gitclone/RSS-Reader/scripts/browser/rssr_visible_regression.mjs)、[workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)、[feeds_page](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/mod.rs)、[settings_page](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/appearance.rs)。
+- `037e31a` 已提交上一轮 workspace CSS 语义 hook 收口。
+- 本轮未提交：`commit: pending`。提交前建议复查 [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)、[responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)、[entry controls](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/controls.rs)、[entry filters](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/components/entry_filters.rs)。

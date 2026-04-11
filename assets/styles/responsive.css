@@ -4,7 +4,7 @@
     padding: 10px 0 34px;
   }
 
-  .page,
+  [data-page]:not([data-page="reader"]),
   [data-layout="reader-page"] {
     padding: 18px;
     border-radius: 22px;
@@ -44,7 +44,7 @@
     justify-content: flex-end;
   }
 
-  .page-title {
+  [data-slot="page-title"] {
     font-size: 1.7rem;
   }
 
@@ -75,7 +75,7 @@
     grid-template-columns: 1fr;
   }
 
-  .entry-overview {
+  [data-layout="entry-overview"] {
     grid-template-columns: 1fr;
   }
 
@@ -84,7 +84,7 @@
     gap: 18px;
   }
 
-  .page-section-header--entries {
+  [data-slot="page-section-header"][data-section="entries"] {
     margin-bottom: 18px;
     padding-bottom: 14px;
   }
@@ -149,16 +149,16 @@
   }
 
   [data-slot="page-section-row"],
-  .entry-controls-reveal {
+  [data-layout="entry-controls-reveal"] {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .entry-controls-reveal .entry-controls-toggle {
+  [data-layout="entry-controls-reveal"] [data-layout="entry-controls-toggle"] {
     width: 100%;
   }
 
-  .page-section-header--settings {
+  [data-slot="page-section-header"][data-section="settings"] {
     padding: 18px 16px;
   }
 
@@ -242,7 +242,7 @@
   }
 
   [data-layout="app-nav-shell"],
-  .page,
+  [data-page]:not([data-page="reader"]),
   [data-layout="reader-page"] {
     padding: 16px 14px;
     border-radius: 18px;
@@ -303,13 +303,13 @@
     font-size: 0.92rem;
   }
 
-  .page-title {
+  [data-slot="page-title"] {
     font-size: 1.5rem;
   }
 
-  .entry-organize-bar,
+  [data-layout="entry-organize-bar"],
   [data-layout="entry-filters"],
-  .entry-overview__metric,
+  [data-layout="entry-overview-metric"],
   [data-layout="settings-card"],
   [data-layout="exchange-card"] {
     padding-left: 14px;
@@ -347,7 +347,7 @@
     border-radius: 14px;
   }
 
-  .page-section-header--settings {
+  [data-slot="page-section-header"][data-section="settings"] {
     padding: 16px 14px;
   }
 

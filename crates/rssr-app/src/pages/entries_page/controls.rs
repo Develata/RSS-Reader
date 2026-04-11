@@ -20,19 +20,25 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
 
     rsx! {
         if facade.controls_hidden() {
-            div { class: "entry-controls-reveal",
+            div { class: "entry-controls-reveal", "data-layout": "entry-controls-reveal",
                 button {
                     class: "entry-controls-toggle entry-controls-toggle--flat",
+                    "data-layout": "entry-controls-toggle",
                     "data-action": "show-entry-controls",
                     title: "显示筛选与组织",
                     "aria-label": "显示筛选与组织",
                     onclick: move |_| show_controls_facade.set_controls_hidden(false),
-                    span { class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--down", aria_hidden: "true" }
+                    span {
+                        class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--down",
+                        "data-slot": "entry-controls-toggle-chevron",
+                        "data-direction": "down",
+                        aria_hidden: "true"
+                    }
                 }
             }
         } else {
-            div { class: "entry-controls-panel",
-                div { class: "entry-organize-bar",
+            div { class: "entry-controls-panel", "data-layout": "entry-controls-panel",
+                div { class: "entry-organize-bar", "data-layout": "entry-organize-bar",
                     label { class: "field-label", r#for: "entry-grouping-mode", "组织方式" }
                     select {
                         id: "entry-grouping-mode",
@@ -68,19 +74,20 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                         }
                     }
                 }
-                div { class: "entry-overview",
-                    div { class: "entry-overview__metric",
-                        span { class: "entry-overview__label", "当前结果" }
-                        strong { class: "entry-overview__value", "{visible_entries_len}" }
+                div { class: "entry-overview", "data-layout": "entry-overview",
+                    div { class: "entry-overview__metric", "data-layout": "entry-overview-metric",
+                        span { class: "entry-overview__label", "data-slot": "entry-overview-label", "当前结果" }
+                        strong { class: "entry-overview__value", "data-slot": "entry-overview-value", "{visible_entries_len}" }
                     }
-                    div { class: "entry-overview__metric",
-                        span { class: "entry-overview__label", "归档文章" }
-                        strong { class: "entry-overview__value", "{archived_count}" }
+                    div { class: "entry-overview__metric", "data-layout": "entry-overview-metric",
+                        span { class: "entry-overview__label", "data-slot": "entry-overview-label", "归档文章" }
+                        strong { class: "entry-overview__value", "data-slot": "entry-overview-value", "{archived_count}" }
                     }
-                    div { class: "entry-overview__metric", "data-tone": "summary",
-                        span { class: "entry-overview__label", "当前组织" }
+                    div { class: "entry-overview__metric", "data-layout": "entry-overview-metric", "data-tone": "summary",
+                        span { class: "entry-overview__label", "data-slot": "entry-overview-label", "当前组织" }
                         strong {
                             class: "entry-overview__value",
+                            "data-slot": "entry-overview-value",
                             if facade.grouping_mode() == EntryGroupingMode::Time { "按时间" } else { "按来源" }
                         }
                     }
@@ -124,14 +131,20 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                         tone: "info".to_string()
                     }
                 }
-                div { class: "entry-controls-reveal",
+                div { class: "entry-controls-reveal", "data-layout": "entry-controls-reveal",
                     button {
                         class: "entry-controls-toggle entry-controls-toggle--flat",
+                        "data-layout": "entry-controls-toggle",
                         "data-action": "hide-entry-controls",
                         title: "收起筛选与组织",
                         "aria-label": "收起筛选与组织",
                         onclick: move |_| hide_controls_facade.set_controls_hidden(true),
-                        span { class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--up", aria_hidden: "true" }
+                        span {
+                            class: "entry-controls-toggle__chevron entry-controls-toggle__chevron--up",
+                            "data-slot": "entry-controls-toggle-chevron",
+                            "data-direction": "up",
+                            aria_hidden: "true"
+                        }
                     }
                 }
             }

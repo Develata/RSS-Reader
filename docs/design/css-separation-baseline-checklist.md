@@ -220,21 +220,17 @@
   - 清理遗留 selector 文档和辅助样式
   - 保持后续新增分组头部只走统一槽
 
-### 3. 顶部标题区仍带页面特化 class
+### 3. 顶部标题区页面特化 class
 
 - 文件：
   - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
   - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
-- 现状：
-  - 已有 `.page-section-header--entries`
-  - `feeds` 已迁到 `.page-section-header--feeds`
-  - `settings` 已迁到 `.page-section-header--settings`
-- 下一步：
-  - 统一成：
-    - `.page-section-header--entries`
-    - `.page-section-header--feeds`
-    - `.page-section-header--settings`
-  - 保持后续新增页头只走 `page-section-header--*`
+- 状态：已收口
+- 处理结果：
+  - 页头统一使用 `data-layout="page-header"`
+  - 页面标题统一使用 `data-slot="page-title"`
+  - 页面页头差异统一使用 `data-slot="page-section-header"` + `data-section="entries|feeds|settings"`
+  - CSS 不再依赖 `.page-title`、`.reading-header`、`.page-section-header--*`、`.page-header__title`
 
 ### 4. 布局容器仍主要靠 class 组合命名
 
@@ -244,6 +240,7 @@
   - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
   - [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)
 - 当前已迁移：
+  - `page` -> `[data-page]:not([data-page="reader"])`
   - `page-header` -> `data-layout="page-header"`
   - `stats-grid` -> `data-layout="stats-grid"`
   - `feed-workbench--single` -> `data-layout="feed-workbench-single"`
@@ -254,9 +251,12 @@
   - `entry-filters` -> `data-layout="entry-filters"`
   - `page-header__actions` -> `data-slot="page-header-actions"`
   - `reading-header__row` -> `data-slot="page-section-row"`
+  - `entry-controls-*` -> `data-layout="entry-controls-*"` / `data-slot="entry-controls-toggle-chevron"`
+  - `entry-overview*` -> `data-layout="entry-overview*"` / `data-slot="entry-overview-*"`
+  - `entry-filters__source-chip` -> `data-layout="entry-filters-source-chip"`
 - 下一步：
   - 继续减少只靠 class 命名表达布局角色的规则
-  - 但 `.page` 和 `.page-header` 当前可视为通用壳类，不作为高优先级槽化目标
+  - 优先复查 `.entries-main`、`.entries-page__*`、`.inline-actions__item` 这类还没有业务语义的低优先级规则
 
 ### 5. 已清掉的高密度 class 驱动区域
 
@@ -281,8 +281,7 @@
   - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
   - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
 - 关注点：
-  - `.page`
-  - `.page-header`
+  - `.entries-main`
   - `.entry-groups`
   - `.entries-layout`
   - `.settings-grid`
@@ -316,20 +315,10 @@
 ### 结构槽
 
 - 确保新增布局规则优先依赖：
-  - `.page-title`
-  - `.page-header__title`
-  - `.page-header__actions`
-  - `.page-section-header`
-  - `.page-section-title`
-  - `.card-title`
-  - `.group-header`
-  - `.group-header__title`
-  - `.group-header__meta`
-  - `data-group-level`
+  - `data-page`
   - `data-layout`
-  - `.settings-form-grid__item`
-  - `.inline-actions__item`
-  - `[data-slot="entry-card-action"]`
+  - `data-slot`
+  - `data-group-level`
   - `data-list-edge`
 
 ## 允许保留的例外
@@ -378,5 +367,5 @@
 
 ## 当前最值得继续做的两刀
 
-1. 复查剩余通用布局 class 是否还应该继续槽化，优先看 `.page`、`.page-header`、`.entry-filters`。
-2. 继续压低 entries controls / overview 中以 class 表达视觉结构的规则。
+1. 复查 `.entries-main`、`.entries-page__backlink/state` 是否值得槽化，避免过早把纯内部 wrapper 都暴露成公开接口。
+2. 继续清理 `.inline-actions__item` / `.field-label` 这类通用组件 class 是否需要保留为设计系统 class。

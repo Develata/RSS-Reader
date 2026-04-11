@@ -22,18 +22,18 @@ body {
   width: min(1500px, calc(100vw - 34px));
 }
 
-.page,
+[data-page]:not([data-page="reader"]),
 [data-layout="reader-page"] {
   margin-top: 0;
 }
 
-.page {
+[data-page]:not([data-page="reader"]) {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   gap: 18px 24px;
 }
 
-.page > [data-layout="app-nav-shell"] {
+[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] {
   grid-column: 1;
   grid-row: 1 / span 12;
   position: sticky;
@@ -51,28 +51,28 @@ body {
   box-shadow: 0 18px 36px rgba(32, 41, 55, 0.06);
 }
 
-.page > [data-layout="app-nav-shell"] [data-layout="app-nav-links"] {
+[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-layout="app-nav-links"] {
   display: grid;
   width: 100%;
   gap: 10px;
 }
 
-.page > [data-layout="app-nav-shell"] [data-nav] {
+[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-nav] {
   border-radius: 18px;
   text-align: center;
   background: rgba(255, 255, 255, 0.95);
 }
 
-.page > [data-slot="page-title"],
-.page > [data-slot="page-intro"],
-.page > .status-banner,
-.page > [data-layout="stats-grid"],
-.page > [data-layout="feed-form"],
-.page > [data-layout="exchange-grid"],
-.page > [data-layout="feed-list"],
-.page > [data-layout="entry-filters"],
-.page > [data-layout="entry-list"],
-.page > [data-layout="settings-grid"] {
+[data-page]:not([data-page="reader"]) > [data-slot="page-title"],
+[data-page]:not([data-page="reader"]) > [data-slot="page-intro"],
+[data-page]:not([data-page="reader"]) > .status-banner,
+[data-page]:not([data-page="reader"]) > [data-layout="stats-grid"],
+[data-page]:not([data-page="reader"]) > [data-layout="feed-form"],
+[data-page]:not([data-page="reader"]) > [data-layout="exchange-grid"],
+[data-page]:not([data-page="reader"]) > [data-layout="feed-list"],
+[data-page]:not([data-page="reader"]) > [data-layout="entry-filters"],
+[data-page]:not([data-page="reader"]) > [data-layout="entry-list"],
+[data-page]:not([data-page="reader"]) > [data-layout="settings-grid"] {
   grid-column: 2;
 }
 
@@ -125,7 +125,7 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.page,
+[data-page]:not([data-page="reader"]),
 [data-layout="reader-page"] {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0)),
@@ -207,18 +207,18 @@ body {
 }
 
 @media (max-width: 960px) {
-  .page,
+  [data-page]:not([data-page="reader"]),
   [data-layout="reader-page"] {
     display: block;
   }
 
-  .page > [data-layout="app-nav-shell"],
+  [data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"],
   [data-layout="reader-page"] > [data-layout="app-nav-shell"] {
     position: static;
     margin-bottom: 20px;
   }
 
-  .page > [data-layout="app-nav-shell"] [data-layout="app-nav-links"],
+  [data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-layout="app-nav-links"],
   [data-layout="reader-page"] > [data-layout="app-nav-shell"] [data-layout="app-nav-links"] {
     position: static;
     display: flex;

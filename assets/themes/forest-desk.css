@@ -54,7 +54,7 @@ body {
   box-shadow: 0 6px 16px rgba(139, 92, 246, 0.14);
 }
 
-.page,
+[data-page]:not([data-page="reader"]),
 [data-layout="reader-page"] {
   border: 1px solid var(--line);
   border-radius: 24px;
