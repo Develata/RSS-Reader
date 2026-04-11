@@ -72,10 +72,10 @@ async function waitFor(client, expression, timeoutMs = 20000) {
   throw new Error(`Timed out waiting for ${expression}`);
 }
 
-async function textIncludes(client, text, timeoutMs = 20000) {
+async function selectorExists(client, selector, timeoutMs = 20000) {
   return await waitFor(
     client,
-    `document.body && document.body.innerText.includes(${JSON.stringify(text)})`,
+    `document.querySelector(${JSON.stringify(selector)}) !== null`,
     timeoutMs,
   );
 }
@@ -85,10 +85,9 @@ async function navigate(client, url) {
   await sleep(Math.max(1000, slowMs));
 }
 
-async function clickText(client, text) {
+async function clickSelector(client, selector) {
   const expression = `(() => {
-    const target = [...document.querySelectorAll('button,a,[role="button"]')]
-      .find((el) => (el.innerText || el.textContent || '').trim().includes(${JSON.stringify(text)}));
+    const target = document.querySelector(${JSON.stringify(selector)});
     if (!target) return false;
     target.click();
     return true;
@@ -98,7 +97,7 @@ async function clickText(client, text) {
     returnByValue: true,
   });
   if (!result.result.value) {
-    throw new Error(`Could not click ${text}`);
+    throw new Error(`Could not click ${selector}`);
   }
   await sleep(slowMs);
 }
@@ -106,33 +105,37 @@ async function clickText(client, text) {
 async function runStaticPageChecks(client) {
   const setup = `${staticBase}/__codex/setup-local-auth?username=smoke&password=smoke-pass-123&seed=reader-demo&next=/entries`;
   await navigate(client, setup);
-  await textIncludes(client, 'Demo Entry Two');
+  await selectorExists(client, '[data-page="entries"][data-entry-scope="all"]');
+  await selectorExists(client, '[data-layout="entries-layout"]');
+  await selectorExists(client, '[data-layout="entry-groups"] [data-slot="entry-card-title"]');
   console.log('static entries: pass');
 
   await navigate(client, `${staticBase}/feeds`);
-  await textIncludes(client, '新增订阅');
-  await textIncludes(client, '已保存订阅');
+  await selectorExists(client, '[data-page="feeds"]');
+  await selectorExists(client, '[data-layout="feed-workbench-single"]');
+  await selectorExists(client, '[data-field="feed-url-input"]');
+  await selectorExists(client, '[data-action="add-feed"]');
+  await selectorExists(client, '[data-nav="feed-entries"]');
+  await selectorExists(client, '[data-state="populated"]');
   console.log('static feeds: pass');
 }
 
 async function runReaderThemeMatrix(client) {
   await navigate(client, `${staticBase}/settings`);
-  await textIncludes(client, '主题实验室');
+  await selectorExists(client, '[data-page="settings"] [data-layout="settings-grid"]');
+  await selectorExists(client, '[data-field="preset-theme-select"]');
 
-  for (const theme of [
-    'Atlas Sidebar',
-    'Newsprint',
-    'Amethyst Glass',
-    'Midnight Ledger',
-  ]) {
-    await clickText(client, theme);
-    await textIncludes(client, `已应用示例主题：${theme}。`);
+  for (const theme of ['atlas-sidebar', 'newsprint', 'forest-desk', 'midnight-ledger']) {
+    await clickSelector(client, `button[data-action="apply-theme-preset"][data-theme-preset="${theme}"]`);
+    await selectorExists(client, `article[data-theme-preset="${theme}"][data-state="active"]`);
+    await selectorExists(client, '#user-custom-css');
     await navigate(client, `${staticBase}/entries/2`);
-    await textIncludes(client, 'Demo Entry Two');
-    await textIncludes(client, 'Demo Entry Two body.');
+    await selectorExists(client, '[data-page="reader"][data-state="loaded"]');
+    await selectorExists(client, '[data-layout="reader-page"] [data-slot="reader-title"]');
+    await selectorExists(client, '[data-layout="reader-body"][data-state]');
     console.log(`theme reader ${theme}: pass`);
     await navigate(client, `${staticBase}/settings`);
-    await textIncludes(client, '主题实验室');
+    await selectorExists(client, '[data-page="settings"] [data-layout="settings-grid"]');
   }
 }
 
@@ -145,13 +148,13 @@ async function runSmallViewportChecks(client) {
   });
 
   for (const [url, marker] of [
-    [`${staticBase}/entries`, 'Demo Entry Two'],
-    [`${staticBase}/feeds`, '新增订阅'],
-    [`${staticBase}/settings`, 'WebDAV 配置交换'],
-    [`${staticBase}/entries/2`, 'Demo Entry Two body.'],
+    [`${staticBase}/entries`, '[data-layout="entries-layout"] [data-slot="entry-card-title"]'],
+    [`${staticBase}/feeds`, '[data-page="feeds"] [data-field="feed-url-input"]'],
+    [`${staticBase}/settings`, '[data-page="settings"] [data-layout="settings-grid"]'],
+    [`${staticBase}/entries/2`, '[data-page="reader"] [data-layout="reader-body"]'],
   ]) {
     await navigate(client, url);
-    await textIncludes(client, marker);
+    await selectorExists(client, marker);
     console.log(`small viewport ${url}: pass`);
   }
 
@@ -160,8 +163,11 @@ async function runSmallViewportChecks(client) {
 
 async function runRssrWebFeedSmoke(client) {
   await navigate(client, `${rssrWebBase}/__codex/browser-feed-smoke`);
-  await textIncludes(client, '"status": "pass"', 30000);
-  await textIncludes(client, 'Codex Smoke Entry', 30000);
+  await selectorExists(
+    client,
+    '[data-smoke="rssr-web-browser-feed-smoke"][data-result="pass"]',
+    30000,
+  );
   console.log('rssr-web browser feed smoke: pass');
 }
 

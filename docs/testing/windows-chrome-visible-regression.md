@@ -55,6 +55,12 @@ bash scripts/run_windows_chrome_visible_regression.sh \
 - 小视口 `390x844` 下的 `/entries`、`/feeds`、`/settings`、`/entries/2`
 - `rssr-web` 的 `__codex/browser-feed-smoke` 浏览器态 helper
 
+断言策略：
+
+- 页面与布局存在性优先检查 `data-page`、`data-layout`、`data-field`、`data-action`、`data-nav`、`data-state`。
+- 主题矩阵通过 `data-theme-preset`、`data-state="active"` 和 `#user-custom-css` 确认主题写入，而不是依赖按钮文案。
+- `rssr-web` feed smoke 通过 `data-smoke="rssr-web-browser-feed-smoke"` 和 `data-result="pass"` 确认结果。
+
 ## 和 Chrome MCP 的区别
 
 Chrome MCP 路径：
@@ -88,4 +94,4 @@ Codex -> bash -> PowerShell -> Windows Chrome -> Windows Node/CDP
 
 - 这不是像素级视觉回归。
 - 这不是外网真实 feed 长链路压力测试。
-- 当前断言仍有一部分依赖页面中文文案；后续应继续迁到 `data-page`、`data-layout`、`data-action`、`data-state` 等 headless active interface。
+- 当前主路径已经迁到 `data-*` 语义接口；后续如果扩展交互覆盖，应继续保持 selector-first，不再新增文案驱动断言。
