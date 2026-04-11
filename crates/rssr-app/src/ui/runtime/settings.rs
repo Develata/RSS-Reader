@@ -1,13 +1,12 @@
 use crate::{
-    bootstrap::AppServices,
     pages::settings_page::intent::SettingsPageIntent,
-    ui::{commands::SettingsCommand, snapshot::UiIntent},
+    ui::{commands::SettingsCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
 
 pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
     match command {
-        SettingsCommand::Load => match AppServices::shared().await {
-            Ok(services) => match services.load_settings().await {
+        SettingsCommand::Load => match UiServices::shared().await {
+            Ok(services) => match services.settings().load_settings().await {
                 Ok(settings) => {
                     settings_intents(vec![SettingsPageIntent::SettingsLoaded(settings)])
                 }
@@ -16,8 +15,8 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
             Err(err) => settings_status_error(format!("初始化应用失败：{err}")),
         },
         SettingsCommand::SaveAppearance { settings, success_message } => {
-            match AppServices::shared().await {
-                Ok(services) => match services.save_settings(&settings).await {
+            match UiServices::shared().await {
+                Ok(services) => match services.settings().save_settings(&settings).await {
                     Ok(()) => settings_intents(vec![
                         SettingsPageIntent::SettingsLoaded(settings),
                         SettingsPageIntent::SetStatus {
@@ -30,22 +29,22 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
                 Err(err) => settings_status_error(format!("初始化应用失败：{err}")),
             }
         }
-        SettingsCommand::PushConfig { endpoint, remote_path } => {
-            match AppServices::shared().await {
-                Ok(services) => match services.push_remote_config(&endpoint, &remote_path).await {
+        SettingsCommand::PushConfig { endpoint, remote_path } => match UiServices::shared().await {
+            Ok(services) => {
+                match services.settings().push_remote_config(&endpoint, &remote_path).await {
                     Ok(()) => settings_intents(vec![SettingsPageIntent::SetStatus {
                         message: "配置已上传到 WebDAV。".to_string(),
                         tone: "info".to_string(),
                     }]),
                     Err(err) => settings_status_error(format!("上传配置失败：{err}")),
-                },
-                Err(err) => settings_status_error(format!("初始化应用失败：{err}")),
+                }
             }
-        }
-        SettingsCommand::PullConfig { endpoint, remote_path } => {
-            match AppServices::shared().await {
-                Ok(services) => match services.pull_remote_config(&endpoint, &remote_path).await {
-                    Ok(true) => match services.load_settings().await {
+            Err(err) => settings_status_error(format!("初始化应用失败：{err}")),
+        },
+        SettingsCommand::PullConfig { endpoint, remote_path } => match UiServices::shared().await {
+            Ok(services) => {
+                match services.settings().pull_remote_config(&endpoint, &remote_path).await {
+                    Ok(true) => match services.settings().load_settings().await {
                         Ok(settings) => settings_intents(vec![
                             SettingsPageIntent::SettingsLoaded(settings),
                             SettingsPageIntent::SetStatus {
@@ -60,10 +59,10 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
                         tone: "info".to_string(),
                     }]),
                     Err(err) => settings_status_error(format!("下载配置失败：{err}")),
-                },
-                Err(err) => settings_status_error(format!("初始化应用失败：{err}")),
+                }
             }
-        }
+            Err(err) => settings_status_error(format!("初始化应用失败：{err}")),
+        },
     }
 }
 

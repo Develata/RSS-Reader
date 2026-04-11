@@ -1,6 +1,7 @@
 mod entries;
 mod feeds;
 mod reader;
+mod services;
 mod settings;
 mod shell;
 

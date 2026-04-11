@@ -1,6 +1,6 @@
 use anyhow::Context;
 use js_sys::Date;
-use rssr_domain::Entry;
+use rssr_domain::{AppStateSnapshot, Entry};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use url::Url;
@@ -12,7 +12,7 @@ use super::{
 };
 
 pub const STORAGE_KEY: &str = "rssr-web-state-v1";
-pub const APP_STATE_STORAGE_KEY: &str = "rssr-web-app-state-v1";
+pub const APP_STATE_STORAGE_KEY: &str = "rssr-web-app-state-v2";
 pub const ENTRY_FLAGS_STORAGE_KEY: &str = "rssr-web-entry-flags-v1";
 
 #[derive(Debug, Default, Clone)]
@@ -75,10 +75,7 @@ pub struct LoadedState {
     pub warning: Option<String>,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct PersistedAppStateSlice {
-    pub last_opened_feed_id: Option<i64>,
-}
+pub type PersistedAppStateSlice = AppStateSnapshot;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PersistedEntryFlagsSlice {
@@ -141,8 +138,8 @@ pub fn save_state_snapshot(state: BrowserState) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn save_app_state_slice(last_opened_feed_id: Option<i64>) -> anyhow::Result<()> {
-    save_app_state_slice_internal(&PersistedAppStateSlice { last_opened_feed_id })
+pub fn save_app_state_slice(slice: &PersistedAppStateSlice) -> anyhow::Result<()> {
+    save_app_state_slice_internal(slice)
 }
 
 pub fn save_entry_flag_patch(flag: PersistedEntryFlag) -> anyhow::Result<()> {
@@ -226,10 +223,6 @@ fn load_entry_flags_slice(storage: &Storage) -> Option<PersistedEntryFlagsSlice>
 fn backup_corrupt_blob(storage: &Storage, key: &str, raw: &str) {
     let backup_key = format!("{key}-corrupt-{}", Date::now() as i64);
     let _ = storage.set_item(&backup_key, raw);
-}
-
-pub fn last_opened_feed_id(state: &BrowserState) -> Option<i64> {
-    state.app_state.last_opened_feed_id
 }
 
 pub fn entry_flags<'a>(state: &'a BrowserState, entry_id: i64) -> Option<&'a PersistedEntryFlag> {

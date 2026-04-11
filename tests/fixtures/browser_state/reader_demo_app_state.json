@@ -1,3 +1,10 @@
 {
-  "last_opened_feed_id": 1
+  "last_opened_feed_id": 1,
+  "entries_workspace": {
+    "grouping_mode": "time",
+    "show_archived": false,
+    "read_filter": "all",
+    "starred_filter": "all",
+    "selected_feed_urls": []
+  }
 }

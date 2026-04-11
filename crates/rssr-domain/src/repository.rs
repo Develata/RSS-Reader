@@ -1,4 +1,5 @@
 use crate::{
+    app_state::AppStateSnapshot,
     entry::{Entry, EntryNavigation, EntryQuery, EntrySummary},
     feed::{Feed, FeedSummary, NewFeedSubscription},
     settings::UserSettings,
@@ -31,4 +32,10 @@ pub trait EntryRepository: Send + Sync {
 pub trait SettingsRepository: Send + Sync {
     async fn load(&self) -> crate::Result<UserSettings>;
     async fn save(&self, settings: &UserSettings) -> crate::Result<()>;
+}
+
+#[async_trait::async_trait]
+pub trait AppStateRepository: Send + Sync {
+    async fn load(&self) -> crate::Result<AppStateSnapshot>;
+    async fn save(&self, state: &AppStateSnapshot) -> crate::Result<()>;
 }

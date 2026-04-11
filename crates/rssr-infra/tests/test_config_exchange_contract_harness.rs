@@ -2,9 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use rssr_application::import_export_service::{ImportExportService, RemoteConfigStore};
 use rssr_domain::{
-    ConfigFeed, ConfigPackage, EntryGroupingPreference, FeedRepository, ListDensity,
-    NewFeedSubscription, ReadFilter, SettingsRepository, StarredFilter, StartupView, ThemeMode,
-    UserSettings,
+    ConfigFeed, ConfigPackage, FeedRepository, ListDensity, NewFeedSubscription,
+    SettingsRepository, StartupView, ThemeMode, UserSettings,
 };
 use rssr_infra::{
     application_adapters::{InfraOpmlCodec, SqliteAppStateAdapter},
@@ -85,11 +84,6 @@ fn sample_settings() -> UserSettings {
         refresh_interval_minutes: 15,
         archive_after_months: 3,
         reader_font_scale: 1.2,
-        entry_grouping_mode: EntryGroupingPreference::Source,
-        show_archived_entries: true,
-        entry_read_filter: ReadFilter::UnreadOnly,
-        entry_starred_filter: StarredFilter::StarredOnly,
-        entry_filtered_feed_urls: vec!["https://example.com/feed.xml".to_string()],
         custom_css: "[data-page=\"feeds\"] .feed-card { order: 2; }".to_string(),
     }
 }
@@ -192,7 +186,7 @@ async fn config_exchange_contract_import_cleans_removed_feed_entries_and_last_op
     fixture
         .service
         .import_config_package(&ConfigPackage {
-            version: 1,
+            version: 2,
             exported_at: OffsetDateTime::UNIX_EPOCH,
             feeds: vec![ConfigFeed {
                 url: retained_feed.url.to_string(),

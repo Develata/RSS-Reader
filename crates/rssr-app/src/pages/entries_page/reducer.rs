@@ -15,11 +15,13 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
     match intent {
         EntriesPageIntent::ApplyLoadedSettings(settings) => {
             state.archive_after_months = settings.archive_after_months;
-            state.read_filter = settings.entry_read_filter;
-            state.starred_filter = settings.entry_starred_filter;
-            state.selected_feed_urls = settings.entry_filtered_feed_urls;
-            state.show_archived = settings.show_archived_entries;
-            state.grouping_mode = entry_grouping_mode_from_preference(settings.entry_grouping_mode);
+        }
+        EntriesPageIntent::ApplyLoadedWorkspaceState(workspace) => {
+            state.read_filter = workspace.read_filter;
+            state.starred_filter = workspace.starred_filter;
+            state.selected_feed_urls = workspace.selected_feed_urls;
+            state.show_archived = workspace.show_archived;
+            state.grouping_mode = entry_grouping_mode_from_preference(workspace.grouping_mode);
             state.preferences_loaded = true;
         }
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = feeds,

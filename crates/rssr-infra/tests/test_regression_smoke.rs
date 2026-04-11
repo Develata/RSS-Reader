@@ -55,7 +55,7 @@ fn smoke_regressions_cover_parser_config_and_webdav_edges() {
     assert_eq!(decoded_opml[0].folder.as_deref(), Some("Tech"));
 
     let raw = encode_config_package(&ConfigPackage {
-        version: 1,
+        version: 2,
         exported_at: OffsetDateTime::UNIX_EPOCH,
         feeds: vec![ConfigFeed {
             url: "https://example.com/feed.xml".to_string(),

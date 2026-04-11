@@ -99,7 +99,7 @@ impl ImportExportService {
 
         let settings = self.settings_repository.load().await?;
 
-        Ok(ConfigPackage { version: 1, exported_at: export_time_utc(), feeds, settings })
+        Ok(ConfigPackage { version: 2, exported_at: export_time_utc(), feeds, settings })
     }
 
     pub async fn import_config_package(&self, package: &ConfigPackage) -> Result<()> {

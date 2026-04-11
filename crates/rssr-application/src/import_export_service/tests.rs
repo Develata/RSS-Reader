@@ -310,7 +310,7 @@ async fn export_config_contains_active_feeds_and_settings() {
 
     let exported = service.export_config().await.expect("export config");
 
-    assert_eq!(exported.version, 1);
+    assert_eq!(exported.version, 2);
     assert_eq!(exported.feeds.len(), 1);
     assert_eq!(exported.feeds[0].url, "https://example.com/feed.xml");
     assert_eq!(exported.feeds[0].title.as_deref(), Some("Example"));
@@ -415,7 +415,7 @@ async fn import_config_clears_removed_feed_entries_and_metadata() {
 
     service
         .import_config_package(&ConfigPackage {
-            version: 1,
+            version: 2,
             exported_at: OffsetDateTime::UNIX_EPOCH,
             feeds: vec![ConfigFeed {
                 url: "https://example.com/feed.xml".to_string(),
@@ -494,7 +494,7 @@ async fn pull_remote_config_cleans_up_removed_feed_app_state() {
     let remote = StubRemoteConfigStore {
         payload: Mutex::new(Some(
             serde_json::to_string(&ConfigPackage {
-                version: 1,
+                version: 2,
                 exported_at: OffsetDateTime::UNIX_EPOCH,
                 feeds: vec![ConfigFeed {
                     url: "https://example.com/feed.xml".to_string(),

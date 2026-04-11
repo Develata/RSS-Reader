@@ -6,12 +6,13 @@ use std::time::Duration;
 
 use anyhow::Context;
 use rssr_application::{
-    AddSubscriptionInput, EntryService, FeedService, ImportExportService, RefreshAllInput,
-    RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RefreshLocalizedEntry,
-    RefreshService, RemoveSubscriptionInput, SettingsService, SubscriptionWorkflow,
+    AddSubscriptionInput, AppStateService, EntryService, FeedService, ImportExportService,
+    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
+    RefreshLocalizedEntry, RefreshService, RemoveSubscriptionInput, SettingsService,
+    SubscriptionWorkflow,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::{Entry, EntryQuery, FeedSummary, UserSettings};
+use rssr_domain::{EntriesWorkspaceState, Entry, EntryQuery, FeedSummary, UserSettings};
 use rssr_infra::{
     application_adapters::{
         InfraFeedRefreshSource, InfraOpmlCodec, SqliteAppStateAdapter, SqliteRefreshStore,
@@ -38,7 +39,7 @@ static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
 pub struct AppServices {
     entry_repository: Arc<SqliteEntryRepository>,
-    app_state_repository: Arc<SqliteAppStateRepository>,
+    app_state_service: AppStateService,
     feed_service: FeedService,
     entry_service: EntryService,
     settings_service: SettingsService,
@@ -104,7 +105,7 @@ impl AppServices {
                         app_state_adapter,
                     ),
                     entry_repository,
-                    app_state_repository,
+                    app_state_service: AppStateService::new(app_state_repository),
                     body_asset_localizer: BodyAssetLocalizer::new(),
                     auto_refresh_started: AtomicBool::new(false),
                 }))
@@ -156,11 +157,22 @@ impl AppServices {
     }
 
     pub async fn load_last_opened_feed_id(&self) -> anyhow::Result<Option<i64>> {
-        self.app_state_repository.load_last_opened_feed_id().await.map_err(Into::into)
+        self.app_state_service.load_last_opened_feed_id().await
     }
 
     pub async fn remember_last_opened_feed_id(&self, feed_id: i64) -> anyhow::Result<()> {
-        self.app_state_repository.save_last_opened_feed_id(Some(feed_id)).await.map_err(Into::into)
+        self.app_state_service.save_last_opened_feed_id(Some(feed_id)).await
+    }
+
+    pub async fn load_entries_workspace_state(&self) -> anyhow::Result<EntriesWorkspaceState> {
+        self.app_state_service.load_entries_workspace().await
+    }
+
+    pub async fn save_entries_workspace_state(
+        &self,
+        entries_workspace: EntriesWorkspaceState,
+    ) -> anyhow::Result<()> {
+        self.app_state_service.save_entries_workspace(entries_workspace).await
     }
 
     pub fn ensure_auto_refresh_started(self: &Arc<Self>) {

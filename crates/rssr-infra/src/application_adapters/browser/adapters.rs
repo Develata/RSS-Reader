@@ -8,9 +8,9 @@ use rssr_application::{
     RefreshFailure, RefreshHttpMetadata, RefreshStorePort, RefreshTarget, RemoteConfigStore,
 };
 use rssr_domain::{
-    DomainError, Entry, EntryNavigation, EntryQuery, EntryRepository, EntrySummary, Feed,
-    FeedRepository, FeedSummary, NewFeedSubscription, SettingsRepository, UserSettings,
-    normalize_feed_url,
+    AppStateRepository, AppStateSnapshot, DomainError, Entry, EntryNavigation, EntryQuery,
+    EntryRepository, EntrySummary, Feed, FeedRepository, FeedSummary, NewFeedSubscription,
+    SettingsRepository, UserSettings, normalize_feed_url,
 };
 
 use super::{
@@ -22,7 +22,7 @@ use super::{
         list_feeds as query_list_feeds, reader_navigation as query_reader_navigation,
     },
     state::{
-        BrowserState, PersistedEntryFlag, PersistedFeed, last_opened_feed_id, save_app_state_slice,
+        BrowserState, PersistedEntryFlag, PersistedFeed, save_app_state_slice,
         save_entry_flag_patch, save_state_snapshot, upsert_entries,
     },
 };
@@ -255,31 +255,42 @@ impl BrowserAppStateAdapter {
         Self { state }
     }
 
-    pub fn load_last_opened_feed_id(&self) -> Result<Option<i64>> {
-        Ok(last_opened_feed_id(&self.state.lock().expect("lock state")))
+    pub fn load_snapshot(&self) -> Result<AppStateSnapshot> {
+        Ok(self.state.lock().expect("lock state").app_state.clone())
     }
 
-    pub fn save_last_opened_feed_id(&self, feed_id: Option<i64>) -> Result<()> {
-        let last_opened_feed_id = {
+    pub fn save_snapshot(&self, app_state: &AppStateSnapshot) -> Result<()> {
+        let persisted = {
             let mut state = self.state.lock().expect("lock state");
-            state.app_state.last_opened_feed_id = feed_id;
-            state.app_state.last_opened_feed_id
+            state.app_state = app_state.clone();
+            state.app_state.clone()
         };
 
-        save_app_state_slice(last_opened_feed_id)
+        save_app_state_slice(&persisted)
     }
 
     fn clear_last_opened_feed_if_matches_impl(&self, feed_id: i64) -> Result<()> {
-        let last_opened_feed_id = {
+        let persisted = {
             let mut state = self.state.lock().expect("lock state");
             if state.app_state.last_opened_feed_id != Some(feed_id) {
                 return Ok(());
             }
             state.app_state.last_opened_feed_id = None;
-            state.app_state.last_opened_feed_id
+            state.app_state.clone()
         };
 
-        save_app_state_slice(last_opened_feed_id)
+        save_app_state_slice(&persisted)
+    }
+}
+
+#[async_trait::async_trait]
+impl AppStateRepository for BrowserAppStateAdapter {
+    async fn load(&self) -> rssr_domain::Result<AppStateSnapshot> {
+        self.load_snapshot().map_err(map_persistence_error)
+    }
+
+    async fn save(&self, state: &AppStateSnapshot) -> rssr_domain::Result<()> {
+        self.save_snapshot(state).map_err(map_persistence_error)
     }
 }
 

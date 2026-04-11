@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use rssr_domain::{
-    EntryGroupingPreference, EntryQuery, EntrySummary, FeedSummary, ReadFilter, StarredFilter,
-    UserSettings,
+    EntriesWorkspaceState, EntryGroupingPreference, EntryQuery, EntrySummary, FeedSummary,
+    ReadFilter, StarredFilter, UserSettings,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,14 +32,15 @@ pub(crate) struct EntriesPageState {
 impl EntriesPageState {
     pub(crate) fn new(initial_controls_hidden: bool) -> Self {
         let settings = UserSettings::default();
+        let workspace = EntriesWorkspaceState::default();
         Self {
             entries: Vec::new(),
             feeds: Vec::new(),
-            read_filter: settings.entry_read_filter,
-            starred_filter: settings.entry_starred_filter,
-            selected_feed_urls: settings.entry_filtered_feed_urls,
-            show_archived: settings.show_archived_entries,
-            grouping_mode: entry_grouping_mode_from_preference(settings.entry_grouping_mode),
+            read_filter: workspace.read_filter,
+            starred_filter: workspace.starred_filter,
+            selected_feed_urls: workspace.selected_feed_urls,
+            show_archived: workspace.show_archived,
+            grouping_mode: entry_grouping_mode_from_preference(workspace.grouping_mode),
             archive_after_months: settings.archive_after_months,
             expanded_directory_sources: BTreeSet::new(),
             controls_hidden: initial_controls_hidden,

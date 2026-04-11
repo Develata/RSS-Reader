@@ -147,14 +147,17 @@ async fn browser_config_exchange_import_cleans_removed_feed_entries_and_last_ope
             entries: vec![sample_entry(1, 2, 1)],
             ..PersistedState::default()
         },
-        app_state: PersistedAppStateSlice { last_opened_feed_id: Some(2) },
+        app_state: PersistedAppStateSlice {
+            last_opened_feed_id: Some(2),
+            ..PersistedAppStateSlice::default()
+        },
         ..BrowserState::default()
     }));
     let service = build_service(state.clone());
 
     service
         .import_config_package(&ConfigPackage {
-            version: 1,
+            version: 2,
             exported_at: OffsetDateTime::UNIX_EPOCH,
             feeds: vec![ConfigFeed {
                 url: "https://example.com/feed.xml".to_string(),

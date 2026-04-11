@@ -169,7 +169,10 @@ async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears
             entries: vec![sample_entry(1, 1, 1), sample_entry(2, 1, 2)],
             ..PersistedState::default()
         },
-        app_state: PersistedAppStateSlice { last_opened_feed_id: Some(1) },
+        app_state: PersistedAppStateSlice {
+            last_opened_feed_id: Some(1),
+            ..PersistedAppStateSlice::default()
+        },
         ..BrowserState::default()
     }));
     let workflow = build_workflow(state.clone());
@@ -210,7 +213,10 @@ async fn browser_subscription_remove_preserves_other_last_opened_feed() {
             ],
             ..PersistedState::default()
         },
-        app_state: PersistedAppStateSlice { last_opened_feed_id: Some(1) },
+        app_state: PersistedAppStateSlice {
+            last_opened_feed_id: Some(1),
+            ..PersistedAppStateSlice::default()
+        },
         ..BrowserState::default()
     }));
     let workflow = build_workflow(state.clone());

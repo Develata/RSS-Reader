@@ -1,10 +1,13 @@
-use rssr_domain::{EntrySummary, FeedSummary, ReadFilter, StarredFilter, UserSettings};
+use rssr_domain::{
+    EntriesWorkspaceState, EntrySummary, FeedSummary, ReadFilter, StarredFilter, UserSettings,
+};
 
 use super::state::EntryGroupingMode;
 
 #[derive(Debug, Clone)]
 pub(crate) enum EntriesPageIntent {
     ApplyLoadedSettings(UserSettings),
+    ApplyLoadedWorkspaceState(EntriesWorkspaceState),
     SetFeeds(Vec<FeedSummary>),
     SetEntries(Vec<EntrySummary>),
     SetStatus { message: String, tone: String },

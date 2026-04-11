@@ -7,7 +7,7 @@ pub(super) fn import_field(value: Option<String>, existed: bool) -> Option<Strin
 }
 
 pub(super) fn validate_config_package(package: &ConfigPackage) -> Result<()> {
-    ensure!(package.version >= 1, "配置包版本必须大于等于 1");
+    ensure!(package.version == 2, "配置包版本必须等于 2");
     validate_settings(&package.settings)?;
 
     let mut seen_urls = std::collections::HashSet::new();
@@ -32,11 +32,5 @@ fn validate_settings(settings: &UserSettings) -> Result<()> {
         (0.8..=1.5).contains(&settings.reader_font_scale),
         "阅读字号缩放必须在 0.8 到 1.5 之间"
     );
-    let mut seen_urls = std::collections::HashSet::new();
-    for raw in &settings.entry_filtered_feed_urls {
-        let normalized =
-            normalize_feed_url(&Url::parse(raw).with_context(|| format!("无效的订阅 URL：{raw}"))?);
-        ensure!(seen_urls.insert(normalized.to_string()), "来源筛选中包含重复的订阅 URL：{raw}");
-    }
     Ok(())
 }

@@ -65,11 +65,6 @@
     "refresh_interval_minutes": 30,
     "archive_after_months": 3,
     "reader_font_scale": 1.0,
-    "entry_grouping_mode": "time",
-    "show_archived_entries": false,
-    "entry_read_filter": "all",
-    "entry_starred_filter": "all",
-    "entry_filtered_feed_urls": [],
     "custom_css": ""
   }
 }

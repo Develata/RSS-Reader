@@ -7,12 +7,14 @@ mod refresh;
 
 use anyhow::Context;
 use rssr_application::{
-    AddSubscriptionInput, EntryService, FeedService, ImportExportService, RefreshAllInput,
-    RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RefreshService,
+    AddSubscriptionInput, AppStateService, EntryService, FeedService, ImportExportService,
+    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RefreshService,
     RemoveSubscriptionInput, SettingsService, SubscriptionWorkflow,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::{Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings};
+use rssr_domain::{
+    EntriesWorkspaceState, Entry, EntryQuery, EntrySummary, FeedSummary, UserSettings,
+};
 use rssr_infra::application_adapters::browser::{
     adapters::{
         BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRefreshSource,
@@ -39,7 +41,7 @@ pub struct AppServices {
     feed_service: FeedService,
     entry_service: EntryService,
     settings_service: SettingsService,
-    app_state_adapter: Arc<BrowserAppStateAdapter>,
+    app_state_service: AppStateService,
     refresh_service: RefreshService,
     subscription_workflow: SubscriptionWorkflow,
     import_export_service: ImportExportService,
@@ -71,7 +73,7 @@ impl AppServices {
                     feed_service: feed_service.clone(),
                     entry_service: EntryService::new(entry_repository.clone()),
                     settings_service: SettingsService::new(settings_repository.clone()),
-                    app_state_adapter: app_state_adapter.clone(),
+                    app_state_service: AppStateService::new(app_state_adapter.clone()),
                     refresh_service: refresh_service.clone(),
                     subscription_workflow: SubscriptionWorkflow::new(
                         feed_service,
@@ -132,11 +134,22 @@ impl AppServices {
     }
 
     pub async fn load_last_opened_feed_id(&self) -> anyhow::Result<Option<i64>> {
-        self.app_state_adapter.load_last_opened_feed_id()
+        self.app_state_service.load_last_opened_feed_id().await
     }
 
     pub async fn remember_last_opened_feed_id(&self, feed_id: i64) -> anyhow::Result<()> {
-        self.app_state_adapter.save_last_opened_feed_id(Some(feed_id))
+        self.app_state_service.save_last_opened_feed_id(Some(feed_id)).await
+    }
+
+    pub async fn load_entries_workspace_state(&self) -> anyhow::Result<EntriesWorkspaceState> {
+        self.app_state_service.load_entries_workspace().await
+    }
+
+    pub async fn save_entries_workspace_state(
+        &self,
+        entries_workspace: EntriesWorkspaceState,
+    ) -> anyhow::Result<()> {
+        self.app_state_service.save_entries_workspace(entries_workspace).await
     }
 
     pub fn ensure_auto_refresh_started(self: &Arc<Self>) {
