@@ -16,7 +16,12 @@ pub(super) fn render_entry_card(
     let read_facade = facade.clone();
 
     rsx! {
-        li { class: "entry-card entry-card--reading", key: "{entry.id}", "data-list-edge": "{list_edge}",
+        li {
+            class: "entry-card entry-card--reading",
+            key: "{entry.id}",
+            "data-layout": "entry-card",
+            "data-variant": "reading",
+            "data-list-edge": "{list_edge}",
             Link {
                 class: "entry-card__title",
                 "data-slot": "entry-card-title",
@@ -29,7 +34,7 @@ pub(super) fn render_entry_card(
                 if entry.is_read { " · 已读" } else { " · 未读" }
                 if entry.is_starred { " · 已收藏" }
             }
-            div { class: "entry-card__actions",
+            div { class: "entry-card__actions", "data-layout": "entry-card-actions",
                 button {
                     class: "button",
                     "data-variant": "secondary",

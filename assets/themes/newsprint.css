@@ -71,7 +71,7 @@ body {
 .entry-card,
 .exchange-card,
 .settings-card,
-.theme-card {
+[data-layout="theme-card"] {
   border-radius: 8px;
   box-shadow: none;
 }
@@ -153,13 +153,13 @@ body {
   background: rgba(255, 253, 249, 0.84);
 }
 
-.theme-card {
+[data-layout="theme-card"] {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.05)),
     rgba(253, 249, 241, 0.82);
 }
 
-.theme-card[data-state="active"] {
+[data-layout="theme-card"][data-state="active"] {
   box-shadow: inset 0 0 0 1px rgba(143, 63, 43, 0.16);
 }
 
@@ -168,7 +168,7 @@ body {
 }
 
 [data-page="feeds"] .feed-list,
-[data-page="entries"] .entry-list {
+[data-page="entries"] [data-layout="entry-list"] {
   gap: 10px;
 }
 
@@ -180,7 +180,7 @@ body {
   line-height: 1.92;
 }
 
-[data-page="reader"] .reader-html p,
-[data-page="reader"] .reader-html li {
+[data-page="reader"] [data-slot="reader-body-html"] p,
+[data-page="reader"] [data-slot="reader-body-html"] li {
   hanging-punctuation: first last;
 }

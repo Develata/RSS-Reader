@@ -20,9 +20,18 @@ function connect(wsUrl) {
   const ws = new WebSocket(wsUrl);
   let id = 0;
   const pending = new Map();
+  const eventWaiters = new Map();
 
   ws.addEventListener('message', (event) => {
     const msg = JSON.parse(event.data);
+    if (msg.method && eventWaiters.has(msg.method)) {
+      const waiters = eventWaiters.get(msg.method);
+      eventWaiters.delete(msg.method);
+      for (const resolve of waiters) {
+        resolve(msg.params ?? {});
+      }
+    }
+
     if (!msg.id || !pending.has(msg.id)) {
       return;
     }
@@ -52,6 +61,34 @@ function connect(wsUrl) {
 
   return {
     send,
+    waitForEvent(method, timeoutMs = 20000) {
+      return new Promise((resolve, reject) => {
+        let timeout = null;
+        const resolveOnce = (params) => {
+          if (timeout !== null) {
+            clearTimeout(timeout);
+          }
+          resolve(params);
+        };
+        const waiters = eventWaiters.get(method) ?? [];
+        waiters.push(resolveOnce);
+        eventWaiters.set(method, waiters);
+        timeout = setTimeout(() => {
+          const activeWaiters = eventWaiters.get(method);
+          if (!activeWaiters) {
+            return;
+          }
+          const index = activeWaiters.indexOf(resolveOnce);
+          if (index >= 0) {
+            activeWaiters.splice(index, 1);
+          }
+          if (activeWaiters.length === 0) {
+            eventWaiters.delete(method);
+          }
+          reject(new Error(`Timed out waiting for CDP event ${method}`));
+        }, timeoutMs);
+      });
+    },
     close: () => ws.close(),
   };
 }
@@ -81,8 +118,10 @@ async function selectorExists(client, selector, timeoutMs = 20000) {
 }
 
 async function navigate(client, url) {
+  const loaded = client.waitForEvent('Page.loadEventFired', 5000).catch(() => null);
   await client.send('Page.navigate', { url });
-  await sleep(Math.max(1000, slowMs));
+  await loaded;
+  await sleep(slowMs);
 }
 
 async function clickSelector(client, selector) {

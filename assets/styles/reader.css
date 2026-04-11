@@ -51,73 +51,73 @@
   overflow-wrap: anywhere;
 }
 
-[data-layout="reader-body"] pre {
+[data-slot="reader-body-text"] {
   white-space: pre-wrap;
   font-family: inherit;
   line-height: inherit;
 }
 
-.reader-html {
+[data-slot="reader-body-html"] {
   max-width: 100%;
 }
 
-.reader-html p:first-child {
+[data-slot="reader-body-html"] p:first-child {
   margin-top: 0;
 }
 
-.reader-html p,
-.reader-body pre {
+[data-slot="reader-body-html"] p,
+[data-slot="reader-body-text"] {
   margin: 0 0 1.2em;
 }
 
-.reader-html h1,
-.reader-html h2,
-.reader-html h3,
-.reader-html h4 {
+[data-slot="reader-body-html"] h1,
+[data-slot="reader-body-html"] h2,
+[data-slot="reader-body-html"] h3,
+[data-slot="reader-body-html"] h4 {
   margin: 1.9em 0 0.7em;
   font-family: var(--font-display);
   line-height: 1.25;
   letter-spacing: -0.025em;
 }
 
-.reader-html blockquote {
+[data-slot="reader-body-html"] blockquote {
   margin: 1.4em 0;
   padding: 0.2em 0 0.2em 1em;
   border-left: 3px solid rgba(176, 74, 47, 0.22);
   color: #5f5046;
 }
 
-.reader-html ul,
-.reader-html ol {
+[data-slot="reader-body-html"] ul,
+[data-slot="reader-body-html"] ol {
   padding-left: 1.5em;
   line-height: 1.8;
 }
 
-.reader-html img,
-.reader-html video,
-.reader-html canvas,
-.reader-html svg,
-.reader-html picture {
+[data-slot="reader-body-html"] img,
+[data-slot="reader-body-html"] video,
+[data-slot="reader-body-html"] canvas,
+[data-slot="reader-body-html"] svg,
+[data-slot="reader-body-html"] picture {
   display: inline-block;
   max-width: 100%;
   height: auto;
   vertical-align: middle;
 }
 
-.reader-html p > img:only-child:not(.emoji):not(.wp-smiley):not([src*="s.w.org/images/core/emoji/"]),
-.reader-html div > img:only-child:not(.emoji):not(.wp-smiley):not([src*="s.w.org/images/core/emoji/"]),
-.reader-html a > img:only-child:not(.emoji):not(.wp-smiley):not([src*="s.w.org/images/core/emoji/"]),
-.reader-html figure img,
-.reader-html picture:only-child,
-.reader-html p > picture:only-child,
-.reader-html figure picture {
+[data-slot="reader-body-html"] p > img:only-child:not(.emoji):not(.wp-smiley):not([src*="s.w.org/images/core/emoji/"]),
+[data-slot="reader-body-html"] div > img:only-child:not(.emoji):not(.wp-smiley):not([src*="s.w.org/images/core/emoji/"]),
+[data-slot="reader-body-html"] a > img:only-child:not(.emoji):not(.wp-smiley):not([src*="s.w.org/images/core/emoji/"]),
+[data-slot="reader-body-html"] figure img,
+[data-slot="reader-body-html"] picture:only-child,
+[data-slot="reader-body-html"] p > picture:only-child,
+[data-slot="reader-body-html"] figure picture {
   display: block;
 }
 
-.reader-html img.emoji,
-.reader-html img.wp-smiley,
-.reader-html img[alt][draggable="false"],
-.reader-html img[src*="s.w.org/images/core/emoji/"] {
+[data-slot="reader-body-html"] img.emoji,
+[data-slot="reader-body-html"] img.wp-smiley,
+[data-slot="reader-body-html"] img[alt][draggable="false"],
+[data-slot="reader-body-html"] img[src*="s.w.org/images/core/emoji/"] {
   display: inline-block;
   width: 1.35em;
   height: 1.35em;
@@ -127,20 +127,20 @@
   vertical-align: -0.22em;
 }
 
-.reader-html figure {
+[data-slot="reader-body-html"] figure {
   max-width: 100%;
   margin: 1.2rem 0;
 }
 
-.reader-html iframe,
-.reader-html embed,
-.reader-html object {
+[data-slot="reader-body-html"] iframe,
+[data-slot="reader-body-html"] embed,
+[data-slot="reader-body-html"] object {
   display: block;
   width: min(100%, 100%);
   max-width: 100%;
 }
 
-.reader-html table {
+[data-slot="reader-body-html"] table {
   display: block;
   width: 100%;
   max-width: 100%;

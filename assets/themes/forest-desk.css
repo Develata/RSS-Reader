@@ -74,7 +74,7 @@ body {
 .entry-card,
 .exchange-card,
 .settings-card,
-.theme-card {
+[data-layout="theme-card"] {
   border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: 18px;
   background: var(--panel-strong);
@@ -92,7 +92,7 @@ body {
   border-color: rgba(255, 255, 255, 0.95);
 }
 
-.theme-card[data-state="active"] {
+[data-layout="theme-card"][data-state="active"] {
   border-color: rgba(139, 92, 246, 0.42);
   box-shadow:
     0 0 0 1px rgba(139, 92, 246, 0.18),
@@ -239,15 +239,6 @@ body {
   margin-bottom: 32px;
   padding-bottom: 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.55);
-}
-
-[data-page="reader"] .entry-card__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 32px;
-  padding-top: 24px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.82);
 }
 
 [data-page="reader"] [data-action="mark-read"],

@@ -71,7 +71,7 @@ body {
 .page > [data-layout="exchange-grid"],
 .page > .feed-list,
 .page > [data-layout="entry-filters"],
-.page > .entry-list,
+.page > [data-layout="entry-list"],
 .page > [data-layout="settings-grid"] {
   grid-column: 2;
 }
@@ -138,7 +138,7 @@ body {
 .settings-card,
 .stat-card,
 [data-layout="reader-page"],
-.theme-card {
+[data-layout="theme-card"] {
   border-radius: 24px;
   box-shadow: 0 10px 24px rgba(39, 52, 71, 0.04);
 }

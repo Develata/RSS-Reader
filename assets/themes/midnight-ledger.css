@@ -101,14 +101,14 @@ body {
 .settings-card,
 .stat-card,
 [data-layout="reader-page"],
-.theme-card {
+[data-layout="theme-card"] {
   border-radius: 18px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
     var(--panel-strong);
 }
 
-.theme-card[data-state="active"] {
+[data-layout="theme-card"][data-state="active"] {
   box-shadow:
     0 0 0 1px rgba(83, 192, 187, 0.16),
     0 18px 34px rgba(0, 0, 0, 0.18);

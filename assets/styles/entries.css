@@ -357,13 +357,13 @@
   margin-top: 20px;
 }
 
-.entry-group {
+[data-layout="entry-group"] {
   display: grid;
   gap: 12px;
   scroll-margin-top: 112px;
 }
 
-.group-header {
+[data-layout="entry-group-header"] {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -371,66 +371,66 @@
   gap: 10px 16px;
 }
 
-.group-header[data-group-level="primary"] {
+[data-layout="entry-group-header"][data-group-level="primary"] {
   padding-bottom: 12px;
   border-bottom: 1px solid rgba(62, 42, 27, 0.08);
 }
 
-.group-header__title {
+[data-slot="entry-group-title"] {
   margin: 0;
 }
 
-.group-header__meta {
+[data-slot="entry-group-meta"] {
   margin: 0;
   color: var(--muted);
 }
 
-.entry-source-group {
+[data-layout="entry-source-group"] {
   display: grid;
   gap: 14px;
 }
 
-.group-header[data-group-level="source"] {
+[data-layout="entry-group-header"][data-group-level="source"] {
   padding: 2px 0 10px;
   border-bottom: 1px dashed rgba(62, 42, 27, 0.08);
 }
 
-.group-header[data-group-level="primary"] .group-header__title {
+[data-layout="entry-group-header"][data-group-level="primary"] [data-slot="entry-group-title"] {
   font-size: 1.05rem;
   letter-spacing: -0.01em;
 }
 
-.group-header[data-group-level="date"] .group-header__title,
-.group-header[data-group-level="source"] .group-header__title {
+[data-layout="entry-group-header"][data-group-level="date"] [data-slot="entry-group-title"],
+[data-layout="entry-group-header"][data-group-level="source"] [data-slot="entry-group-title"] {
   font-size: 0.98rem;
 }
 
-.group-header[data-group-level="primary"] .group-header__meta {
+[data-layout="entry-group-header"][data-group-level="primary"] [data-slot="entry-group-meta"] {
   font-size: 0.92rem;
 }
 
-.group-header[data-group-level="date"] .group-header__meta,
-.group-header[data-group-level="source"] .group-header__meta {
+[data-layout="entry-group-header"][data-group-level="date"] [data-slot="entry-group-meta"],
+[data-layout="entry-group-header"][data-group-level="source"] [data-slot="entry-group-meta"] {
   font-size: 0.84rem;
 }
 
-.entry-date-group {
+[data-layout="entry-date-group"] {
   display: grid;
   gap: 8px;
 }
 
-.group-header[data-group-level="date"] {
+[data-layout="entry-group-header"][data-group-level="date"] {
   gap: 10px 14px;
 }
 
-.entry-card__actions {
+[data-layout="entry-card-actions"] {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 14px;
 }
 
-.app-shell[data-density="compact"] .group-header[data-group-level="primary"] {
+.app-shell[data-density="compact"] [data-layout="entry-group-header"][data-group-level="primary"] {
   padding-bottom: 8px;
 }
 

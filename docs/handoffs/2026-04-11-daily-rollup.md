@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：2379557
-- 相关 commit：2189d8b / b914f4c / 2379557 / pending
+- 当前 HEAD：d3368b4
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / pending
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -14,6 +14,7 @@
 随后将该验证路径固化为 repo 内脚本与文档，避免继续依赖 `target/` 临时 runner。
 继续把可见浏览器 runner 从中文文案断言迁到 `data-*` 语义接口。
 继续补齐页面层语义接口，让 settings themes、entries groups、reader body 都暴露更稳定的 headless active interface。
+继续把 entries/reader/theme 相关 CSS 从深 class selector 迁到语义 `data-*` selector。
 
 ## 影响范围
 
@@ -58,6 +59,19 @@
 - reader body：HTML / text 正文分别补齐 `data-slot="reader-body-html"` 与 `data-slot="reader-body-text"`。
 - 可见浏览器 runner 更新为使用这些更细的语义 selector。
 
+### CSS 分离收口
+
+- `assets/styles/entries.css`：entry group/header/title/meta/list/action 规则改用 `data-layout` / `data-slot` / `data-state`。
+- `assets/styles/reader.css`：reader HTML/text 正文内部规则改用 `data-slot="reader-body-html"` / `data-slot="reader-body-text"`。
+- `assets/styles/workspaces.css`、`assets/styles/responsive.css`：entry list、entry card actions、theme card swatches 等规则改用语义 selector。
+- `assets/themes/*`：theme card、reader HTML 段落、entry list 相关规则继续迁到 `data-layout` / `data-slot`。
+- 移除 `forest-desk` 中 reader 页下已经没有命中对象的 `.entry-card__actions` 陈旧规则。
+
+### Regression Runner 稳定性
+
+- `scripts/browser/rssr_visible_regression.mjs` 的 CDP navigation 现在会等待 `Page.loadEventFired`，但不把 load event 作为硬门禁；最终仍由 selector readiness 判断页面可用。
+- `scripts/run_windows_chrome_visible_regression.sh` 在启动静态 SPA server / `rssr-web` 后会检查子进程是否仍存活，避免端口冲突时误命中旧服务。
+
 ## 验证与验收
 
 ### 自动化验证
@@ -71,6 +85,8 @@
 - `cargo check -p rssr-app`：通过。
 - `node --check scripts/browser/rssr_visible_regression.mjs`：通过。
 - `scripts/run_windows_chrome_visible_regression.sh --static-port 8120 --rssr-web-port 18110 --chrome-port 9225 --skip-build --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-084846/summary.md`。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `scripts/run_windows_chrome_visible_regression.sh --static-port 8311 --rssr-web-port 18811 --chrome-port 9225 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-091253/summary.md`。
 
 ### 手工验收
 
@@ -93,6 +109,7 @@
 - 如果后续要求“Chrome MCP 工具本身控制 Windows Chrome”，需要建立稳定的 WSL-to-Windows CDP bridge，或在 Windows 侧启动 MCP server。
 - WSL 环境代理变量可能误导 localhost 诊断；检查本地端口时应使用 `curl --noproxy '*'`。
 - 当前 visible runner 主路径已迁到 `data-*` 语义接口；后续扩展测试时应继续保持 selector-first，避免新增文案驱动断言。
+- 可见回归复用 Windows Chrome 端口时，CDP load event 可能不会覆盖所有 SPA route 情况；runner 已改为 selector readiness 作为最终判断。
 
 ## 给下一位 Agent 的备注
 

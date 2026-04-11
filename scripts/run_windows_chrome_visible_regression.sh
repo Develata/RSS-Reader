@@ -177,6 +177,11 @@ if [[ "$use_existing_servers" != "true" ]]; then
   bash scripts/run_web_spa_regression_server.sh "${static_args[@]}" >"$static_log" 2>&1 &
   static_pid=$!
   wait_for_url "http://127.0.0.1:${static_port}/entries" "Static SPA server"
+  if ! kill -0 "$static_pid" >/dev/null 2>&1; then
+    echo "Static SPA server process exited while checking http://127.0.0.1:${static_port}" >&2
+    echo "See log: ${static_log}" >&2
+    exit 1
+  fi
 
   if [[ ! -d "$public_dir" ]]; then
     echo "Web build output not found: ${public_dir}" >&2
@@ -193,6 +198,11 @@ if [[ "$use_existing_servers" != "true" ]]; then
   cargo run -p rssr-web >"$rssr_web_log" 2>&1 &
   rssr_web_pid=$!
   wait_for_url "http://127.0.0.1:${rssr_web_port}/healthz" "rssr-web server"
+  if ! kill -0 "$rssr_web_pid" >/dev/null 2>&1; then
+    echo "rssr-web server process exited while checking http://127.0.0.1:${rssr_web_port}" >&2
+    echo "See log: ${rssr_web_log}" >&2
+    exit 1
+  fi
 else
   wait_for_url "http://127.0.0.1:${static_port}/entries" "Existing Static SPA server"
   wait_for_url "http://127.0.0.1:${rssr_web_port}/healthz" "Existing rssr-web server"
