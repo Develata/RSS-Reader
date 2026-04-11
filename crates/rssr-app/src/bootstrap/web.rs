@@ -28,6 +28,7 @@ use self::{
     },
     refresh::ensure_auto_refresh_started as start_auto_refresh,
 };
+use super::{AutoRefreshPort, HostCapabilities, RefreshPort, RemoteConfigPort};
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
@@ -38,17 +39,17 @@ pub struct AppServices {
 }
 
 #[derive(Clone)]
-pub(crate) struct AutoRefreshCapability {
+struct AutoRefreshCapability {
     host: Arc<AppServices>,
 }
 
 #[derive(Clone)]
-pub(crate) struct RefreshCapability {
+struct RefreshCapability {
     host: Arc<AppServices>,
 }
 
 #[derive(Clone)]
-pub(crate) struct RemoteConfigCapability {
+struct RemoteConfigCapability {
     host: Arc<AppServices>,
 }
 
@@ -93,27 +94,25 @@ impl AppServices {
         self.use_cases.clone()
     }
 
-    pub(crate) fn auto_refresh(self: &Arc<Self>) -> AutoRefreshCapability {
-        AutoRefreshCapability { host: Arc::clone(self) }
-    }
-
-    pub(crate) fn refresh(self: &Arc<Self>) -> RefreshCapability {
-        RefreshCapability { host: Arc::clone(self) }
-    }
-
-    pub(crate) fn remote_config(self: &Arc<Self>) -> RemoteConfigCapability {
-        RemoteConfigCapability { host: Arc::clone(self) }
+    pub(crate) fn host_capabilities(self: &Arc<Self>) -> HostCapabilities {
+        HostCapabilities {
+            auto_refresh: Arc::new(AutoRefreshCapability { host: Arc::clone(self) }),
+            refresh: Arc::new(RefreshCapability { host: Arc::clone(self) }),
+            remote_config: Arc::new(RemoteConfigCapability { host: Arc::clone(self) }),
+        }
     }
 }
 
-impl AutoRefreshCapability {
-    pub(crate) fn ensure_started(&self) {
+impl AutoRefreshPort for AutoRefreshCapability {
+    fn ensure_started(&self) {
         start_auto_refresh(&self.host);
     }
 }
 
-impl RefreshCapability {
-    pub(crate) async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl RefreshPort for RefreshCapability {
+    async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
         let outcome = self
             .host
             .use_cases
@@ -128,7 +127,7 @@ impl RefreshCapability {
         self.handle_refresh_outcome(outcome.refresh).context("首次刷新订阅失败")
     }
 
-    pub(crate) async fn refresh_all(&self) -> anyhow::Result<()> {
+    async fn refresh_all(&self) -> anyhow::Result<()> {
         let outcome = self
             .host
             .use_cases
@@ -138,11 +137,13 @@ impl RefreshCapability {
         self.handle_refresh_all_outcome(outcome)
     }
 
-    pub(crate) async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
+    async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
         let outcome = self.host.use_cases.refresh_service.refresh_feed(feed_id).await?;
         self.handle_refresh_outcome(outcome)
     }
+}
 
+impl RefreshCapability {
     fn handle_refresh_all_outcome(&self, outcome: RefreshAllOutcome) -> anyhow::Result<()> {
         let mut errors = Vec::new();
 
@@ -176,8 +177,10 @@ impl RefreshCapability {
     }
 }
 
-impl RemoteConfigCapability {
-    pub(crate) async fn push(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<()> {
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl RemoteConfigPort for RemoteConfigCapability {
+    async fn push(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<()> {
         push_exchange_remote(
             &self.host.use_cases.import_export_service,
             &BrowserRemoteConfigStore::new(self.host.client.clone(), endpoint, remote_path),
@@ -185,11 +188,7 @@ impl RemoteConfigCapability {
         .await
     }
 
-    pub(crate) async fn pull(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> anyhow::Result<bool> {
+    async fn pull(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<bool> {
         pull_exchange_remote(
             &self.host.use_cases.import_export_service,
             &BrowserRemoteConfigStore::new(self.host.client.clone(), endpoint, remote_path),

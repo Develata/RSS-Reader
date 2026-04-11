@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::Result;
 use rssr_application::{AppUseCases, RemoveSubscriptionInput};
 use rssr_domain::{
@@ -7,18 +5,19 @@ use rssr_domain::{
     UserSettings,
 };
 
-use crate::bootstrap::AppServices;
+use crate::bootstrap::{AppServices, HostCapabilities};
 
 pub(crate) struct UiServices {
-    host: Arc<AppServices>,
     use_cases: AppUseCases,
+    host_capabilities: HostCapabilities,
 }
 
 impl UiServices {
     pub(crate) async fn shared() -> Result<Self> {
         let host = AppServices::shared().await?;
         let use_cases = host.use_cases();
-        Ok(Self { host, use_cases })
+        let host_capabilities = host.host_capabilities();
+        Ok(Self { use_cases, host_capabilities })
     }
 
     pub(crate) fn entries(&self) -> EntriesPort {
@@ -26,11 +25,17 @@ impl UiServices {
     }
 
     pub(crate) fn shell(&self) -> ShellPort {
-        ShellPort { host: self.host.clone(), use_cases: self.use_cases.clone() }
+        ShellPort {
+            use_cases: self.use_cases.clone(),
+            host_capabilities: self.host_capabilities.clone(),
+        }
     }
 
     pub(crate) fn settings(&self) -> SettingsPort {
-        SettingsPort { host: self.host.clone(), use_cases: self.use_cases.clone() }
+        SettingsPort {
+            use_cases: self.use_cases.clone(),
+            host_capabilities: self.host_capabilities.clone(),
+        }
     }
 
     pub(crate) fn reader(&self) -> ReaderPort {
@@ -38,7 +43,7 @@ impl UiServices {
     }
 
     pub(crate) fn feeds(&self) -> FeedsPort {
-        FeedsPort { host: self.host.clone(), use_cases: self.use_cases.clone() }
+        FeedsPort { use_cases: self.use_cases.clone(), host_capabilities: self.host_capabilities.clone() }
     }
 }
 
@@ -86,8 +91,8 @@ impl EntriesPort {
 
 #[derive(Clone)]
 pub(crate) struct ShellPort {
-    host: Arc<AppServices>,
     use_cases: AppUseCases,
+    host_capabilities: HostCapabilities,
 }
 
 impl ShellPort {
@@ -96,7 +101,7 @@ impl ShellPort {
     }
 
     pub(crate) fn ensure_auto_refresh_started(&self) {
-        self.host.auto_refresh().ensure_started();
+        self.host_capabilities.auto_refresh.ensure_started();
     }
 
     pub(crate) async fn load_last_opened_feed_id(&self) -> Result<Option<i64>> {
@@ -110,8 +115,8 @@ impl ShellPort {
 
 #[derive(Clone)]
 pub(crate) struct SettingsPort {
-    host: Arc<AppServices>,
     use_cases: AppUseCases,
+    host_capabilities: HostCapabilities,
 }
 
 impl SettingsPort {
@@ -124,7 +129,7 @@ impl SettingsPort {
     }
 
     pub(crate) async fn push_remote_config(&self, endpoint: &str, remote_path: &str) -> Result<()> {
-        self.host.remote_config().push(endpoint, remote_path).await
+        self.host_capabilities.remote_config.push(endpoint, remote_path).await
     }
 
     pub(crate) async fn pull_remote_config(
@@ -132,7 +137,7 @@ impl SettingsPort {
         endpoint: &str,
         remote_path: &str,
     ) -> Result<bool> {
-        self.host.remote_config().pull(endpoint, remote_path).await
+        self.host_capabilities.remote_config.pull(endpoint, remote_path).await
     }
 }
 
@@ -161,8 +166,8 @@ impl ReaderPort {
 
 #[derive(Clone)]
 pub(crate) struct FeedsPort {
-    host: Arc<AppServices>,
     use_cases: AppUseCases,
+    host_capabilities: HostCapabilities,
 }
 
 impl FeedsPort {
@@ -175,15 +180,15 @@ impl FeedsPort {
     }
 
     pub(crate) async fn add_subscription(&self, raw_url: &str) -> Result<()> {
-        self.host.refresh().add_subscription(raw_url).await
+        self.host_capabilities.refresh.add_subscription(raw_url).await
     }
 
     pub(crate) async fn refresh_all(&self) -> Result<()> {
-        self.host.refresh().refresh_all().await
+        self.host_capabilities.refresh.refresh_all().await
     }
 
     pub(crate) async fn refresh_feed(&self, feed_id: i64) -> Result<()> {
-        self.host.refresh().refresh_feed(feed_id).await
+        self.host_capabilities.refresh.refresh_feed(feed_id).await
     }
 
     pub(crate) async fn remove_feed(&self, feed_id: i64) -> Result<()> {

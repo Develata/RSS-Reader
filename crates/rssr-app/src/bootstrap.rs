@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "bootstrap/native.rs"]
 mod imp;
@@ -7,6 +9,32 @@ mod imp;
 mod imp;
 
 pub use imp::{AppServices, ReaderNavigation};
+
+#[derive(Clone)]
+pub(crate) struct HostCapabilities {
+    pub(crate) auto_refresh: Arc<dyn AutoRefreshPort>,
+    pub(crate) refresh: Arc<dyn RefreshPort>,
+    pub(crate) remote_config: Arc<dyn RemoteConfigPort>,
+}
+
+pub(crate) trait AutoRefreshPort {
+    fn ensure_started(&self);
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+pub(crate) trait RefreshPort {
+    async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()>;
+    async fn refresh_all(&self) -> anyhow::Result<()>;
+    async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()>;
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+pub(crate) trait RemoteConfigPort {
+    async fn push(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<()>;
+    async fn pull(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<bool>;
+}
 
 fn auto_refresh_wait_duration(
     last_refresh_started_at: Option<time::OffsetDateTime>,

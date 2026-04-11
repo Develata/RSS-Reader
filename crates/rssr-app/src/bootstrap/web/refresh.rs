@@ -14,6 +14,7 @@ pub(super) fn ensure_auto_refresh_started(services: &Arc<AppServices>) {
     }
 
     let services = Arc::clone(services);
+    let refresh = services.host_capabilities().refresh;
     spawn_local(async move {
         let mut last_refresh_started_at = None;
 
@@ -37,7 +38,7 @@ pub(super) fn ensure_auto_refresh_started(services: &Arc<AppServices>) {
                     refresh_interval_minutes = settings.refresh_interval_minutes,
                     "触发后台自动刷新全部订阅"
                 );
-                if let Err(error) = services.refresh().refresh_all().await {
+                if let Err(error) = refresh.refresh_all().await {
                     tracing::warn!(error = %error, "后台自动刷新失败");
                 }
                 last_refresh_started_at = Some(now);

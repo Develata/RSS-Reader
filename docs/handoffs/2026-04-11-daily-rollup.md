@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：9202355
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355
+- 当前 HEAD：3ce6eb8
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355 / 3ce6eb8
 - 相关 tag / release：N/A
 - 状态：`pending`
 
@@ -29,6 +29,8 @@
 继续第三刀架构收口：把应用层服务装配下移成共享 `AppUseCases::compose(...)`，让 native / web / cli 共同复用同一套 use-case 组合骨架。
 继续第四刀架构收口：让 `UiServices` 直接持有 `AppUseCases`，把 `AppServices` 再压回 host facade，仅保留自动刷新、刷新后处理和远端 config sync 这类 host 特有行为。
 继续第五刀架构收口：把 host 特有行为显式拆成 capability，对 runtime 暴露 `auto_refresh`、`refresh`、`remote_config`，并把 native 正文图片本地化后台任务收成独立 worker。
+继续第六刀架构收口：让 `UiServices` 只缓存 `use_cases + capability`，不再长期持有整块 `Arc<AppServices>`。
+继续第七刀架构收口：把 runtime 依赖的 capability 进一步收成 `HostCapabilities` trait-object bundle，让 bootstrap 不再向 runtime 暴露具体 capability 实现类型。
 
 ## 影响范围
 
@@ -91,6 +93,19 @@
 - `crates/rssr-app/src/ui/runtime/services.rs` 已切到这些 capability：shell 只拿 `auto_refresh`，settings 只拿 `remote_config`，feeds 只拿 `refresh`。
 - `crates/rssr-app/src/bootstrap/native.rs` 新增 `ImageLocalizationWorker`，把刷新后的正文图片本地化后台任务从 host facade 主体里抽离。
 - `crates/rssr-app/src/bootstrap/web/refresh.rs` 已改为通过 `refresh()` capability 触发自动刷新，不再直接调 `AppServices::refresh_all()`。
+
+### Runtime 持有面继续压薄
+
+- `crates/rssr-app/src/bootstrap.rs` 现在对 runtime 侧只暴露统一的 `HostCapabilities` bundle 和对应 trait 接口，而不再暴露具体 capability 类型。
+- `crates/rssr-app/src/ui/runtime/services.rs` 不再缓存 `Arc<AppServices>`；`UiServices::shared()` 只在初始化时取一次 host，然后缓存 `AppUseCases + capability`。
+- page runtime 现在拿到的是明确的 host 能力对象，而不是整块 host facade，有利于下一步把 capability 接口进一步上提到 host adapter 层。
+
+### Host Capability Bundle
+
+- `crates/rssr-app/src/bootstrap.rs` 新增 `HostCapabilities`、`AutoRefreshPort`、`RefreshPort`、`RemoteConfigPort`，把 runtime 可见的 host 能力收成 trait-object bundle。
+- native / web bootstrap 现在只在各自模块内部保留具体 `AutoRefreshCapability` / `RefreshCapability` / `RemoteConfigCapability` 实现，并通过 `host_capabilities()` 返回统一 bundle。
+- `crates/rssr-app/src/ui/runtime/services.rs` 现在只依赖 `HostCapabilities`，不再直接 import bootstrap 内部的具体 capability 类型。
+- native 自动刷新后台任务仍在模块内部使用具体 `RefreshCapability`，避免把 `tokio::spawn` 路径改成非 `Send` trait object。
 
 ### CSS 分离收口
 
@@ -331,6 +346,12 @@
 - `cargo check -p rssr-app`：通过。
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
 - `rg -n "pub (async )?fn (ensure_auto_refresh_started|add_subscription|refresh_all|refresh_feed|push_remote_config|pull_remote_config)" crates/rssr-app/src/bootstrap crates/rssr-app/src/ui/runtime -S`：无命中，旧的 host 混合方法面已从 bootstrap/runtime 移除。
+- `cargo check -p rssr-app`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `rg -n "Arc<AppServices>|host: Arc<AppServices>|AppServices::shared\\(" crates/rssr-app/src/ui/runtime/services.rs crates/rssr-app/src/ui/runtime -S`：通过，`UiServices` 初始化时仅保留单一 `AppServices::shared()` 入口，后续 runtime port 已不再持有 `Arc<AppServices>`。
+- `cargo check -p rssr-app`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `rg -n "AutoRefreshCapability|RefreshCapability|RemoteConfigCapability|HostCapabilities|AppServices::shared\\(" crates/rssr-app/src/ui/runtime/services.rs crates/rssr-app/src/bootstrap.rs crates/rssr-app/src/bootstrap -S`：通过，runtime 已只依赖 `HostCapabilities` bundle；具体 capability 类型仅在 bootstrap 内部保留。
 
 ### 手工验收
 
@@ -351,6 +372,8 @@
 - WSLg 桌面窗口呈现问题继续视为环境层问题，不阻塞 Web SPA 浏览器态验证。
 - `UiServices` 现在已处于“use cases + host capability”形态；`AppServices` 从全能 backend 退回到 host facade，但 native/web bootstrap 仍保留少量平台启动与后台任务责任，后续还可继续按 capability 拆薄。
 - 当前 host facade 已不再暴露旧的混合 service 方法面；runtime 依赖已明确分成 use-case 读写与 host capability 两类入口。
+- 当前 runtime 持有面已经进一步压到 `use_cases + capability`；剩余可继续抽象的部分主要在 capability 的共享接口层，而不是页面 runtime 本身。
+- 当前 runtime 与 bootstrap 的接口面已进一步缩到 `AppUseCases + HostCapabilities`；页面层不再看到平台专属 capability 实现。
 
 ## 风险与后续事项
 
@@ -362,6 +385,8 @@
 - 复用长期运行的 Windows Chrome DevTools 端口可能受历史 tab / 旧 CDP 会话污染；建议日常回归优先使用新的 `--chrome-port`，或先清理旧可见回归窗口。
 - 当前 `AppServices` 仍同时承载 native/web host 启动、自动刷新调度与少量 capability bridge；下一步若继续架构线，应优先把这些能力显式拆成 host capability，而不是重新给 `AppServices` 加方法。
 - native / web 目前的 capability 结构仍是平台内联定义；若继续推进，可再把 capability 共享接口抽到更明确的 host adapter 层，但不应重新收敛成一个新的全能 manager。
+- `UiServices` 仍依赖 bootstrap 暴露的具体 capability 类型；下一步如果继续推进，应优先定义更窄的 host capability 接口或 bundle，而不是回到 `AppServices` 直传。
+- 当前 `HostCapabilities` 已经是统一 bundle；下一步若继续推进，重点应转到 bootstrap/native/web 本身的 host assembly 与 capability provider 抽取，而不是继续折腾 page runtime。
 - 下一轮 CSS 分离不建议继续机械迁移 `button` / `field-label` / `inline-actions__item`；应只看新增死样式、深 DOM selector，或主题作者确实需要重排的业务槽。
 - 当前 entries wrapper 这轮尚未单独提交；若继续拆 class 边界，应优先检查设计系统 class 与页面语义 hook 的交界处，而不是继续平铺更多 `data-*`。
 - `.inline-actions__item` 已确认属于设计系统 class；后续只需要防止页面/主题把它重新当作布局入口使用。
@@ -383,4 +408,6 @@
 - `66119cf` 已提交 page shell / design-system class boundary 收口。
 - `882a764` 已提交 app-state 拆分与 runtime 窄 port 收口。
 - `62a165e` 已提交该轮 handoff 记录。
-- 本工作区当前还有一轮未提交改动：shared composition primitive 接入三端、`AppServices -> host facade` 收薄，以及 host capability 显式化，commit: pending。
+- `9202355` 已提交 shared composition primitive 接入应用层与 CLI。
+- `3ce6eb8` 已提交 host facade 收薄与 runtime capability 化。
+- 本工作区当前还有一轮未提交改动：`UiServices` 从 `Arc<AppServices>` 继续压到 `use_cases + HostCapabilities`，并把 capability 对外接口收成 trait-object bundle，commit: pending。
