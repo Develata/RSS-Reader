@@ -8,7 +8,7 @@ use anyhow::Context;
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
     RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
-    RefreshLocalizedEntry,
+    RefreshLocalizedEntry, RemoteConfigPullOutcome, RemoteConfigPushOutcome,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::UserSettings;
@@ -265,12 +265,20 @@ impl RefreshCapability {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl RemoteConfigPort for RemoteConfigCapability {
-    async fn push(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<()> {
+    async fn push(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> anyhow::Result<RemoteConfigPushOutcome> {
         let remote = WebDavConfigSync::new(endpoint, remote_path)?;
         self.host.use_cases.import_export_service.push_remote_config(&remote).await
     }
 
-    async fn pull(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<bool> {
+    async fn pull(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> anyhow::Result<RemoteConfigPullOutcome> {
         let remote = WebDavConfigSync::new(endpoint, remote_path)?;
         self.host.use_cases.import_export_service.pull_remote_config(&remote).await
     }

@@ -12,7 +12,8 @@ pub use composition::{AppCompositionInput, AppStateServicesPort, AppUseCases};
 pub use entry_service::EntryService;
 pub use feed_service::{AddSubscriptionInput, FeedService, RemoveSubscriptionInput};
 pub use import_export_service::{
-    FeedRemovalCleanupPort, ImportExportService, OpmlCodecPort, RemoteConfigStore,
+    ConfigImportOutcome, FeedRemovalCleanupPort, ImportExportService, OpmlCodecPort,
+    OpmlImportOutcome, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore,
 };
 pub use refresh_service::{
     FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate, ParsedEntryData,

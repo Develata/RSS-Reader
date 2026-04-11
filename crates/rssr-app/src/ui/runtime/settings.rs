@@ -2,6 +2,7 @@ use crate::{
     pages::settings_page::intent::SettingsPageIntent,
     ui::{commands::SettingsCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
+use rssr_application::ConfigImportOutcome;
 
 pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
     match command {
@@ -32,8 +33,11 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
         SettingsCommand::PushConfig { endpoint, remote_path } => match UiServices::shared().await {
             Ok(services) => {
                 match services.settings().push_remote_config(&endpoint, &remote_path).await {
-                    Ok(()) => settings_intents(vec![SettingsPageIntent::SetStatus {
-                        message: "配置已上传到 WebDAV。".to_string(),
+                    Ok(outcome) => settings_intents(vec![SettingsPageIntent::SetStatus {
+                        message: format!(
+                            "配置已上传到 WebDAV：{} 个订阅。",
+                            outcome.exported_feed_count
+                        ),
                         tone: "info".to_string(),
                     }]),
                     Err(err) => settings_status_error(format!("上传配置失败：{err}")),
@@ -44,17 +48,23 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
         SettingsCommand::PullConfig { endpoint, remote_path } => match UiServices::shared().await {
             Ok(services) => {
                 match services.settings().pull_remote_config(&endpoint, &remote_path).await {
-                    Ok(true) => match services.settings().load_settings().await {
-                        Ok(settings) => settings_intents(vec![
-                            SettingsPageIntent::SettingsLoaded(settings),
-                            SettingsPageIntent::SetStatus {
-                                message: "已从 WebDAV 下载并导入配置。".to_string(),
-                                tone: "info".to_string(),
-                            },
-                        ]),
-                        Err(err) => settings_status_error(format!("导入后读取设置失败：{err}")),
-                    },
-                    Ok(false) => settings_intents(vec![SettingsPageIntent::SetStatus {
+                    Ok(outcome) if outcome.found() => {
+                        let import = outcome.import().expect("found outcome has import");
+                        match services.settings().load_settings().await {
+                            Ok(settings) => settings_intents(vec![
+                                SettingsPageIntent::SettingsLoaded(settings),
+                                SettingsPageIntent::SetStatus {
+                                    message: format!(
+                                        "已从 WebDAV 下载并导入配置：{}。",
+                                        config_import_summary(import)
+                                    ),
+                                    tone: "info".to_string(),
+                                },
+                            ]),
+                            Err(err) => settings_status_error(format!("导入后读取设置失败：{err}")),
+                        }
+                    }
+                    Ok(_) => settings_intents(vec![SettingsPageIntent::SetStatus {
                         message: "远端配置不存在。".to_string(),
                         tone: "info".to_string(),
                     }]),
@@ -75,4 +85,12 @@ fn settings_status_error(message: impl Into<String>) -> Vec<UiIntent> {
         message: message.into(),
         tone: "error".to_string(),
     }])
+}
+
+fn config_import_summary(outcome: &ConfigImportOutcome) -> String {
+    let settings = if outcome.settings_updated { "设置已更新" } else { "设置未变化" };
+    format!(
+        "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
+        outcome.imported_feed_count, outcome.removed_feed_count
+    )
 }

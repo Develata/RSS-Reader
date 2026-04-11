@@ -190,7 +190,8 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
         .expect("overwrite settings");
 
     let restored = service.pull_remote_config(&remote).await.expect("pull config");
-    assert!(restored);
+    assert!(restored.found());
+    assert_eq!(restored.import.as_ref().expect("import outcome").imported_feed_count, 1);
 
     let feeds = feed_repository.list_feeds().await.expect("list feeds");
     assert_eq!(feeds.len(), 1);

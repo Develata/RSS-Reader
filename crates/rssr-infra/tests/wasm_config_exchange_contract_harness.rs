@@ -214,7 +214,8 @@ async fn browser_config_exchange_remote_pull_roundtrip_restores_feed_and_setting
     let import_state = Arc::new(Mutex::new(BrowserState::default()));
     let import_service = build_service(import_state.clone());
     let pulled = import_service.pull_remote_config(remote.as_ref()).await.expect("pull remote");
-    assert!(pulled);
+    assert!(pulled.found());
+    assert_eq!(pulled.import.as_ref().expect("import outcome").imported_feed_count, 1);
 
     {
         let snapshot = import_state.lock().expect("lock state");

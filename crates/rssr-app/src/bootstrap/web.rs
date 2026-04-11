@@ -9,6 +9,7 @@ use anyhow::Context;
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
     RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::UserSettings;
@@ -181,7 +182,11 @@ impl RefreshCapability {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl RemoteConfigPort for RemoteConfigCapability {
-    async fn push(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<()> {
+    async fn push(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> anyhow::Result<RemoteConfigPushOutcome> {
         push_exchange_remote(
             &self.host.use_cases.import_export_service,
             &BrowserRemoteConfigStore::new(self.host.client.clone(), endpoint, remote_path),
@@ -189,7 +194,11 @@ impl RemoteConfigPort for RemoteConfigCapability {
         .await
     }
 
-    async fn pull(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<bool> {
+    async fn pull(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> anyhow::Result<RemoteConfigPullOutcome> {
         pull_exchange_remote(
             &self.host.use_cases.import_export_service,
             &BrowserRemoteConfigStore::new(self.host.client.clone(), endpoint, remote_path),

@@ -346,10 +346,11 @@ async fn remote_config_roundtrip_uses_json_payload() {
     );
     let remote = StubRemoteConfigStore { payload: Mutex::new(None) };
 
-    service.push_remote_config(&remote).await.expect("push config");
+    let pushed = service.push_remote_config(&remote).await.expect("push config");
     let pulled = service.pull_remote_config(&remote).await.expect("pull config");
 
-    assert!(pulled);
+    assert_eq!(pushed.exported_feed_count, 1);
+    assert!(pulled.found());
     assert!(
         remote
             .payload
@@ -359,6 +360,22 @@ async fn remote_config_roundtrip_uses_json_payload() {
             .expect("payload exists")
             .contains("\"feeds\"")
     );
+}
+
+#[tokio::test]
+async fn pull_remote_config_reports_missing_remote_payload() {
+    let service = ImportExportService::new(
+        Arc::new(MemoryFeedRepository { feeds: Mutex::new(Vec::new()) }),
+        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) }),
+        Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
+        Arc::new(RecordingOpmlCodec::default()),
+    );
+    let remote = StubRemoteConfigStore { payload: Mutex::new(None) };
+
+    let pulled = service.pull_remote_config(&remote).await.expect("pull missing config");
+
+    assert!(!pulled.found());
+    assert_eq!(pulled.import(), None);
 }
 
 #[tokio::test]
@@ -405,6 +422,8 @@ async fn import_config_clears_removed_feed_entries_and_metadata() {
     let entry_repository =
         Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) });
     let cleanup = Arc::new(RecordingFeedRemovalCleanup::default());
+    let mut imported_settings = UserSettings::default();
+    imported_settings.refresh_interval_minutes += 1;
     let service = ImportExportService::new_with_feed_removal_cleanup(
         feed_repository.clone(),
         entry_repository.clone(),
@@ -413,7 +432,7 @@ async fn import_config_clears_removed_feed_entries_and_metadata() {
         cleanup.clone(),
     );
 
-    service
+    let outcome = service
         .import_config_package(&ConfigPackage {
             version: 2,
             exported_at: OffsetDateTime::UNIX_EPOCH,
@@ -422,10 +441,14 @@ async fn import_config_clears_removed_feed_entries_and_metadata() {
                 title: None,
                 folder: None,
             }],
-            settings: UserSettings::default(),
+            settings: imported_settings,
         })
         .await
         .expect("import package");
+
+    assert_eq!(outcome.imported_feed_count, 1);
+    assert_eq!(outcome.removed_feed_count, 1);
+    assert!(outcome.settings_updated);
 
     let feeds = feed_repository.list_feeds().await.expect("list feeds");
     let retained = feeds.iter().find(|feed| feed.id == 1).expect("retained feed exists");
@@ -509,7 +532,8 @@ async fn pull_remote_config_cleans_up_removed_feed_app_state() {
 
     let pulled = service.pull_remote_config(&remote).await.expect("pull remote config");
 
-    assert!(pulled);
+    assert!(pulled.found());
+    assert_eq!(pulled.import.as_ref().expect("import outcome").removed_feed_count, 1);
     assert_eq!(
         entry_repository.deleted_feed_ids.lock().expect("lock deleted ids").as_slice(),
         &[2]
@@ -570,9 +594,10 @@ async fn import_opml_upserts_normalized_feeds() {
         }])),
     );
 
-    service.import_opml("<opml />").await.expect("import opml");
+    let outcome = service.import_opml("<opml />").await.expect("import opml");
 
     let feeds = feed_repository.list_feeds().await.expect("list feeds");
+    assert_eq!(outcome.imported_feed_count, 1);
     assert_eq!(feeds.len(), 1);
     assert_eq!(feeds[0].url.as_str(), "https://example.com/feed.xml");
     assert_eq!(feeds[0].folder.as_deref(), Some("Tech"));

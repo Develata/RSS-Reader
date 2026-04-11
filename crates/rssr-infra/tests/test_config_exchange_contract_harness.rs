@@ -276,7 +276,8 @@ async fn config_exchange_contract_remote_push_and_pull_roundtrip() {
         .pull_remote_config(remote.as_ref())
         .await
         .expect("pull remote config");
-    assert!(pulled);
+    assert!(pulled.found());
+    assert_eq!(pulled.import.as_ref().expect("import outcome").imported_feed_count, 1);
 
     let imported_feeds = import_fixture.feed_repository.list_feeds().await.expect("list feeds");
     assert_eq!(imported_feeds.len(), 1);

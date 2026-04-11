@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use rssr_application::{RemoteConfigPullOutcome, RemoteConfigPushOutcome};
+
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "bootstrap/native.rs"]
 mod imp;
@@ -32,8 +34,16 @@ pub(crate) trait RefreshPort {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub(crate) trait RemoteConfigPort {
-    async fn push(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<()>;
-    async fn pull(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<bool>;
+    async fn push(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> anyhow::Result<RemoteConfigPushOutcome>;
+    async fn pull(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> anyhow::Result<RemoteConfigPullOutcome>;
 }
 
 fn auto_refresh_wait_duration(

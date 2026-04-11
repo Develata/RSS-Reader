@@ -1,5 +1,8 @@
 use anyhow::Result;
-use rssr_application::{AppUseCases, RemoveSubscriptionInput};
+use rssr_application::{
+    AppUseCases, ConfigImportOutcome, OpmlImportOutcome, RemoteConfigPullOutcome,
+    RemoteConfigPushOutcome, RemoveSubscriptionInput,
+};
 use rssr_domain::{
     EntriesWorkspaceState, Entry, EntryNavigation, EntryQuery, EntrySummary, FeedSummary,
     UserSettings,
@@ -131,7 +134,11 @@ impl SettingsPort {
         self.use_cases.settings_service.save(settings).await
     }
 
-    pub(crate) async fn push_remote_config(&self, endpoint: &str, remote_path: &str) -> Result<()> {
+    pub(crate) async fn push_remote_config(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> Result<RemoteConfigPushOutcome> {
         self.host_capabilities.remote_config.push(endpoint, remote_path).await
     }
 
@@ -139,7 +146,7 @@ impl SettingsPort {
         &self,
         endpoint: &str,
         remote_path: &str,
-    ) -> Result<bool> {
+    ) -> Result<RemoteConfigPullOutcome> {
         self.host_capabilities.remote_config.pull(endpoint, remote_path).await
     }
 }
@@ -205,7 +212,7 @@ impl FeedsPort {
         self.use_cases.import_export_service.export_config_json().await
     }
 
-    pub(crate) async fn import_config_json(&self, raw: &str) -> Result<()> {
+    pub(crate) async fn import_config_json(&self, raw: &str) -> Result<ConfigImportOutcome> {
         self.use_cases.import_export_service.import_config_json(raw).await
     }
 
@@ -213,7 +220,7 @@ impl FeedsPort {
         self.use_cases.import_export_service.export_opml().await
     }
 
-    pub(crate) async fn import_opml(&self, raw: &str) -> Result<()> {
+    pub(crate) async fn import_opml(&self, raw: &str) -> Result<OpmlImportOutcome> {
         self.use_cases.import_export_service.import_opml(raw).await
     }
 }

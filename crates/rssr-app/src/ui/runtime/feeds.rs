@@ -5,6 +5,7 @@ use crate::{
 use anyhow::Context;
 #[cfg(target_arch = "wasm32")]
 use dioxus::prelude::document;
+use rssr_application::{ConfigImportOutcome, OpmlImportOutcome};
 use rssr_domain::EntryQuery;
 
 pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
@@ -143,10 +144,10 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
 
             match UiServices::shared().await {
                 Ok(services) => match services.feeds().import_config_json(&raw).await {
-                    Ok(()) => feeds_intents(vec![
+                    Ok(outcome) => feeds_intents(vec![
                         FeedsPageIntent::PendingConfigImportSet(false),
                         FeedsPageIntent::SetStatus {
-                            message: "配置包已导入。".to_string(),
+                            message: format!("配置包已导入：{}。", config_import_summary(&outcome)),
                             tone: "info".to_string(),
                         },
                         FeedsPageIntent::BumpReload,
@@ -183,9 +184,9 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
         },
         FeedsCommand::ImportOpml { raw } => match UiServices::shared().await {
             Ok(services) => match services.feeds().import_opml(&raw).await {
-                Ok(()) => feeds_intents(vec![
+                Ok(outcome) => feeds_intents(vec![
                     FeedsPageIntent::SetStatus {
-                        message: "OPML 已导入。".to_string(),
+                        message: format!("OPML 已导入：{}。", opml_import_summary(&outcome)),
                         tone: "info".to_string(),
                     },
                     FeedsPageIntent::BumpReload,
@@ -211,6 +212,18 @@ fn feeds_status_error(message: impl Into<String>) -> Vec<UiIntent> {
         message: message.into(),
         tone: "error".to_string(),
     }])
+}
+
+fn config_import_summary(outcome: &ConfigImportOutcome) -> String {
+    let settings = if outcome.settings_updated { "设置已更新" } else { "设置未变化" };
+    format!(
+        "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
+        outcome.imported_feed_count, outcome.removed_feed_count
+    )
+}
+
+fn opml_import_summary(outcome: &OpmlImportOutcome) -> String {
+    format!("{} 个订阅", outcome.imported_feed_count)
 }
 
 #[cfg(target_arch = "wasm32")]

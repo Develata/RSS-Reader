@@ -4,7 +4,8 @@ use anyhow::{Context, ensure};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
-    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RemoveSubscriptionInput,
+    ConfigImportOutcome, OpmlImportOutcome, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput,
 };
 use rssr_domain::{Feed, FeedRepository, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
@@ -168,8 +169,8 @@ async fn main() -> anyhow::Result<()> {
         Command::ImportConfig(args) => {
             let raw = fs::read_to_string(&args.input)
                 .with_context(|| format!("读取配置文件失败: {}", args.input.display()))?;
-            services.import_config_json(&raw).await?;
-            println!("配置已导入。");
+            let outcome = services.import_config_json(&raw).await?;
+            println!("配置已导入：{}。", config_import_summary(&outcome));
         }
         Command::ExportOpml(args) => {
             let raw = services.export_opml().await?;
@@ -178,8 +179,8 @@ async fn main() -> anyhow::Result<()> {
         Command::ImportOpml(args) => {
             let raw = fs::read_to_string(&args.input)
                 .with_context(|| format!("读取 OPML 文件失败: {}", args.input.display()))?;
-            services.import_opml(&raw).await?;
-            println!("OPML 已导入。");
+            let outcome = services.import_opml(&raw).await?;
+            println!("OPML 已导入：{} 个订阅。", outcome.imported_feed_count);
         }
         Command::ShowSettings => {
             let settings = services.load_settings().await?;
@@ -192,12 +193,13 @@ async fn main() -> anyhow::Result<()> {
             println!("设置已保存。");
         }
         Command::PushWebdav(args) => {
-            services.push_remote_config(&args.endpoint, &args.remote_path).await?;
-            println!("配置已上传到 WebDAV。");
+            let outcome = services.push_remote_config(&args.endpoint, &args.remote_path).await?;
+            println!("配置已上传到 WebDAV：{} 个订阅。", outcome.exported_feed_count);
         }
         Command::PullWebdav(args) => {
-            if services.pull_remote_config(&args.endpoint, &args.remote_path).await? {
-                println!("已从 WebDAV 下载并导入配置。");
+            let outcome = services.pull_remote_config(&args.endpoint, &args.remote_path).await?;
+            if let Some(import) = outcome.import {
+                println!("已从 WebDAV 下载并导入配置：{}。", config_import_summary(&import));
             } else {
                 println!("远端配置不存在。");
             }
@@ -308,7 +310,7 @@ impl CliServices {
         self.use_cases.import_export_service.export_config_json().await
     }
 
-    async fn import_config_json(&self, raw: &str) -> anyhow::Result<()> {
+    async fn import_config_json(&self, raw: &str) -> anyhow::Result<ConfigImportOutcome> {
         self.use_cases.import_export_service.import_config_json(raw).await
     }
 
@@ -316,7 +318,7 @@ impl CliServices {
         self.use_cases.import_export_service.export_opml().await
     }
 
-    async fn import_opml(&self, raw: &str) -> anyhow::Result<()> {
+    async fn import_opml(&self, raw: &str) -> anyhow::Result<OpmlImportOutcome> {
         self.use_cases.import_export_service.import_opml(raw).await
     }
 
@@ -328,12 +330,20 @@ impl CliServices {
         self.use_cases.settings_service.save(settings).await
     }
 
-    async fn push_remote_config(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<()> {
+    async fn push_remote_config(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> anyhow::Result<RemoteConfigPushOutcome> {
         let remote = WebDavConfigSync::new(endpoint, remote_path)?;
         self.use_cases.import_export_service.push_remote_config(&remote).await
     }
 
-    async fn pull_remote_config(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<bool> {
+    async fn pull_remote_config(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> anyhow::Result<RemoteConfigPullOutcome> {
         let remote = WebDavConfigSync::new(endpoint, remote_path)?;
         self.use_cases.import_export_service.pull_remote_config(&remote).await
     }
@@ -408,6 +418,14 @@ fn print_feeds(feeds: &[Feed]) {
         let folder = feed.folder.as_deref().unwrap_or("-");
         println!("{}\t{}\t{}\t{}", feed.id, title, folder, feed.url);
     }
+}
+
+fn config_import_summary(outcome: &ConfigImportOutcome) -> String {
+    let settings = if outcome.settings_updated { "设置已更新" } else { "设置未变化" };
+    format!(
+        "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
+        outcome.imported_feed_count, outcome.removed_feed_count
+    )
 }
 
 fn ensure_refresh_feed_succeeded(outcome: &RefreshFeedOutcome) -> anyhow::Result<()> {
