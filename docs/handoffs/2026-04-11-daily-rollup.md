@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：9460c4a
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355 / 3ce6eb8 / 7140fd1 / 9460c4a / pending
+- 当前 HEAD：412631b
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355 / 3ce6eb8 / 7140fd1 / 9460c4a / 58eaaf2 / 412631b
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -31,12 +31,15 @@
 继续第五刀架构收口：把 host 特有行为显式拆成 capability，对 runtime 暴露 `auto_refresh`、`refresh`、`remote_config`，并把 native 正文图片本地化后台任务收成独立 worker。
 继续第六刀架构收口：让 `UiServices` 只缓存 `use_cases + capability`，不再长期持有整块 `Arc<AppServices>`。
 继续第七刀架构收口：把 runtime 依赖的 capability 进一步收成 `HostCapabilities` trait-object bundle，让 bootstrap 不再向 runtime 暴露具体 capability 实现类型。
+完成 `.specify` 宪章 1.3.0 后的完整状态对齐、基线验证与 push 尝试；push 被 GitHub HTTPS 凭据阻止，代码侧无失败。
+按新宪章补充 application use case 收敛架构计划，并落地第一刀：订阅生命周期由 `rssr-application::SubscriptionWorkflow` 统一承接，CLI/native/web 不再各自重组“添加后是否首次刷新”的业务分支。
 
 ## 影响范围
 
 - 模块：`scripts/run_web_spa_regression_server.sh`、`scripts/run_windows_chrome_visible_regression.sh`、`scripts/browser/rssr_visible_regression.mjs`、`crates/rssr-app/src/pages/*`、`crates/rssr-app/src/ui/runtime/services.rs`、`crates/rssr-app/src/bootstrap/*`、`crates/rssr-domain/src/app_state.rs`、`crates/rssr-application/src/app_state_service.rs`、`crates/rssr-application/src/composition.rs`、`crates/rssr-infra/src/db/app_state_repository.rs`、`crates/rssr-infra/src/application_adapters/browser/*`、`assets/styles/*`、`assets/themes/*`、Web SPA 静态回归路径
 - 平台：Windows Chrome、Web、WSL 开发环境
 - 额外影响：browser regression workflow / handoff docs / config package v2 / browser app-state keyspace v2
+- 额外影响：application use case 收敛计划 / CLI 添加订阅流程 / native-web 添加订阅后首次刷新流程 / pre-push 验证记录
 
 ## 关键变更
 
@@ -106,6 +109,32 @@
 - native / web bootstrap 现在只在各自模块内部保留具体 `AutoRefreshCapability` / `RefreshCapability` / `RemoteConfigCapability` 实现，并通过 `host_capabilities()` 返回统一 bundle。
 - `crates/rssr-app/src/ui/runtime/services.rs` 现在只依赖 `HostCapabilities`，不再直接 import bootstrap 内部的具体 capability 类型。
 - native 自动刷新后台任务仍在模块内部使用具体 `RefreshCapability`，避免把 `tokio::spawn` 路径改成非 `Send` trait object。
+
+### Pre-push Baseline And Push Attempt
+
+- `cargo test --workspace`：通过；包含 `test_webdav_local_roundtrip`。
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过。
+- `bash scripts/run_release_ui_regression.sh --no-serve --with-rssr-web --skip-build --port 8336 --web-port 18836 --log-dir target/release-ui-regression/20260411-codex-mainline-prepush`：通过。
+- `git push origin main`：失败，原因是当前环境没有 GitHub HTTPS 用户名/凭据，报错为 `fatal: could not read Username for 'https://github.com': No such device or address`。
+- `gh`：未安装，无法改用 GitHub CLI 认证路径。
+
+### Application Use Case Consolidation Plan
+
+- 新增 [application-use-case-consolidation-plan.md](/home/develata/gitclone/RSS-Reader/docs/design/application-use-case-consolidation-plan.md)。
+- 计划按宪章 `1.3.0` 的顺序组织：先定义骨架边界，再列模块边界，再落到第一步实现逻辑。
+- 收敛范围限定在当前 RSS 阅读器本体内的 subscription management / feed refresh / basic config exchange。
+- 明确真相源：feeds 走 `FeedRepository`，entries/read-starred 走 `EntryRepository`，durable settings 走 `SettingsRepository`，workspace state 走 `AppStateRepository`，browser app-state keyspace 为 `rssr-web-app-state-v2`。
+- 明确不下沉到 application 的 host 责任：auto-refresh loop、native image localization worker、WebDAV store construction、浏览器持久化细节和 UI 文案/呈现策略。
+- 后续顺序建议：先收 refresh outcome summarization，再看 config exchange consolidation，最后补 contract/harness。
+
+### Subscription Lifecycle Workflow
+
+- [subscription_workflow.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/subscription_workflow.rs) 新增 `AddSubscriptionLifecycleInput` 与 `AddSubscriptionLifecycleOutcome`。
+- `SubscriptionWorkflow::add_subscription_lifecycle(...)` 统一表达“添加订阅 + 可选首次刷新”。
+- 兼容 helper `add_subscription(...)` 与 `add_subscription_and_refresh(...)` 继续保留，但内部委托给 lifecycle 方法，避免双主干。
+- [native.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/native.rs) 与 [web.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/web.rs) 的 `RefreshCapability::add_subscription(...)` 改为调用 lifecycle 方法，host 只负责把首次刷新 outcome 翻译成现有用户可见结果。
+- [main.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-cli/src/main.rs) 的 `add_subscription(...)` 改为把 `--skip-refresh` 映射为 `refresh_after_add`，首次刷新失败仍由 CLI 现有 exit/error 逻辑处理。
+- `rssr-application` 新增直接覆盖 lifecycle skip-refresh 与 refresh-after-add 两个分支的测试。
 
 ### CSS 分离收口
 
@@ -392,7 +421,7 @@
 - `.inline-actions` 现已只承担排列，不再隐含通用 `margin-top`；若后续出现动作条节奏问题，应优先在对应 `data-layout` 修，而不是回填到全局 class。
 - 这轮之后，reader/settings/feeds 仍允许保留的 class 应只剩设计系统类、卡片标题类和 reader bottom bar 内部实现类；若后续再出现新的页面 class token，需要先证明存在外部消费方。
 - 这轮之后，页面/卡片/分组/表单相关 dead class token 已基本清空；剩余保留类应优先视为设计系统类或内部实现类，而不是新的页面契约。
-- `rssr-web browser feed smoke` 当前两次都在最终 `[data-smoke="rssr-web-browser-feed-smoke"][data-result="pass"]` selector 等待超时；由于前面静态页面与 reader/settings/feeds 可见回归均通过，暂判断为 helper/环境层问题，待单独排查。
+- `rssr-web browser feed smoke` 的旧 selector 超时已在本轮补充排查中修复；后续若再次超时，应先检查 helper 是否重新依赖页面 class 或旧 app-state key。
 
 ## 本轮补充：状态对齐、基线验证、smoke 排查、工程宪法评估
 
@@ -479,6 +508,22 @@
 - release UI summary 位于 `target/release-ui-regression/20260411-codex-mainline-prepush/summary.md`。
 - 本轮主线验证覆盖 workspace 单测、rssr-app native/wasm/android check、rssr-web 单测、release UI 自动门禁、rssr-web HTTP smoke、rssr-web browser feed smoke、Windows visible Chrome 全量回归。
 
+### Application Use Case 收敛首刀验证
+
+- `cargo fmt --check`：通过。
+- `git diff --check`：通过。
+- `cargo test --workspace`：通过；`rssr-application` 当前为 19 tests，新增 lifecycle refresh / no-refresh 分支均通过。
+- `cargo check -p rssr-cli`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过。
+- `bash scripts/run_release_ui_regression.sh --no-serve --with-rssr-web --port 8342 --web-port 18842 --log-dir target/release-ui-regression/20260411-codex-subscription-lifecycle`：通过；该轮重新构建 debug web bundle，自动化门禁、`rssr-web` HTTP smoke、`rssr-web browser feed smoke` 均通过。
+- `bash scripts/run_static_web_small_viewport_smoke.sh --skip-build --port 8343 --log-dir target/static-web-small-viewport-smoke/20260411-codex-subscription-lifecycle-current-build`：通过；Chrome DBus warning 属于当前 WSL headless 环境噪音。
+- `bash scripts/run_static_web_reader_theme_matrix.sh --skip-build --port 8344 --log-dir target/static-web-reader-theme-matrix/20260411-codex-subscription-lifecycle-current-build`：通过；Chrome DBus warning 属于当前 WSL headless 环境噪音。
+- `bash scripts/run_windows_chrome_visible_regression.sh --static-port 8337 --rssr-web-port 18837 --chrome-port 9247 --slow-ms 100 --log-dir target/windows-chrome-visible-regression/20260411-codex-subscription-lifecycle`：未通过，失败点为 Windows CDP `Page.navigate` timeout；此前阶段静态 entries/feeds、主题矩阵、小视口 entries/feeds 已通过。
+- `bash scripts/run_windows_chrome_visible_regression.sh --static-port 8338 --rssr-web-port 18838 --chrome-port 9248 --skip-build --slow-ms 100 --log-dir target/windows-chrome-visible-regression/20260411-codex-subscription-lifecycle-clean-port`：未通过，失败点为小视口 `/settings` 等待 `[data-page="settings"] [data-layout="theme-presets"]`。
+- `bash scripts/run_windows_chrome_visible_regression.sh --static-port 8339 --rssr-web-port 18839 --chrome-port 9249 --skip-build --slow-ms 250 --log-dir target/windows-chrome-visible-regression/20260411-codex-subscription-lifecycle-clean-port-slow`：未通过，失败点仍为 Windows CDP `Page.navigate` timeout。
+- 结论：本次代码路径由 workspace tests、native/wasm/android check、重新构建后的 release UI regression、`rssr-web browser feed smoke`、静态小视口 smoke 和 reader theme matrix 覆盖通过；Windows visible runner 当前保留为 env-limited/CDP flake，不作为阻断本次 application-layer 收敛的失败。
+
 ## 给下一位 Agent 的备注
 
 - 本轮可见验证使用 Windows Chrome CDP/Node，而不是 Dioxus desktop/WSLg 窗口。
@@ -496,4 +541,6 @@
 - `3ce6eb8` 已提交 host facade 收薄与 runtime capability 化。
 - `7140fd1` 已提交 `UiServices` 从 `Arc<AppServices>` 继续压到 `use_cases + HostCapabilities`，并把 capability 对外接口收成 trait-object bundle。
 - `9460c4a` 已提交 `.specify` 宪章 `1.3.0` 升级、smoke helper selector/key 修复和格式化修正。
-- 状态对齐开始时工作区为 clean，分支状态为 `main...origin/main [ahead 72]`；本轮 pre-push 验证记录 commit: pending。
+- `58eaaf2` 已提交主线 pre-push 验证记录。
+- `412631b` 已提交 application use case 收敛计划与订阅生命周期 workflow 首刀。
+- 状态对齐开始时工作区为 clean，分支状态为 `main...origin/main [ahead 72]`；本轮 push 尝试被 GitHub HTTPS 凭据阻止。
