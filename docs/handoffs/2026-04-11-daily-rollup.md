@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：198266a
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355 / 3ce6eb8 / 7140fd1 / 9460c4a / 58eaaf2 / 412631b / 198266a / handoff pending
+- 当前 HEAD：c28a643
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df / 882a764 / 62a165e / 9202355 / 3ce6eb8 / 7140fd1 / 9460c4a / 58eaaf2 / 412631b / 198266a / bb63a30 / c28a643 / handoff pending
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -34,6 +34,7 @@
 完成 `.specify` 宪章 1.3.0 后的完整状态对齐、基线验证与 push 尝试；push 被 GitHub HTTPS 凭据阻止，代码侧无失败。
 按新宪章补充 application use case 收敛架构计划，并落地第一刀：订阅生命周期由 `rssr-application::SubscriptionWorkflow` 统一承接，CLI/native/web 不再各自重组“添加后是否首次刷新”的业务分支。
 继续第二刀 application use case 收敛：刷新 outcome 的失败摘要、结果计数和失败行格式由 `rssr-application` 统一提供，native/web/CLI 不再各自手写 refresh-all 失败列表。
+继续第三刀 application use case 收敛：配置导入、OPML 导入、远端 push/pull 现在返回 application outcome，UI/CLI 可以展示导入订阅数、清理缺失订阅数、设置是否变化和远端是否存在；WebDAV/Browser remote store 构造仍保留在 host/adapter。
 
 ## 影响范围
 
@@ -145,6 +146,17 @@
 - [native.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/native.rs) 和 [web.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/web.rs) 的 refresh handling 改为复用 `joined_failure_lines()` / `failure_line()`；native 仍保留平台专属 `ImageLocalizationWorker` 调度。
 - [main.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-cli/src/main.rs) 的 `ensure_refresh_*_succeeded` 改为复用 application summary helper，CLI 只保留退出错误的中文前缀。
 - `rssr-application` 新增 `refresh_feed_failure_summary_keeps_feed_identity` 与 `refresh_all_summary_counts_results_and_formats_failures`，覆盖 feed identity、结果计数与失败行格式。
+
+### Config Exchange Outcomes
+
+- [import_export_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/import_export_service.rs) 新增 `ConfigImportOutcome`、`OpmlImportOutcome`、`RemoteConfigPushOutcome`、`RemoteConfigPullOutcome`。
+- `import_config_package(...)` / `import_config_json(...)` 现在返回导入订阅数、清理缺失订阅数、设置是否变化。
+- `import_opml(...)` 现在返回导入订阅数。
+- `push_remote_config(...)` 现在返回导出的订阅数。
+- `pull_remote_config(...)` 不再返回裸 `bool`，而是返回远端缺失或导入 outcome；remote store 构造仍在 native/web/CLI adapter 层。
+- [bootstrap.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap.rs) 的 `RemoteConfigPort`、native/web bootstrap、web exchange helper、runtime `SettingsPort`/`FeedsPort` 同步使用 outcome。
+- [feeds.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/feeds.rs)、[settings.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/settings.rs)、[main.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-cli/src/main.rs) 只负责 user-facing summary 文案，不再决定导入结果语义。
+- config exchange contract harness、wasm config exchange contract harness、WebDAV local roundtrip 均已更新为断言 `found()` 与导入 outcome。
 
 ### CSS 分离收口
 
@@ -546,6 +558,22 @@
 - `bash scripts/run_release_ui_regression.sh --no-serve --with-rssr-web --port 8345 --web-port 18845 --log-dir target/release-ui-regression/20260411-codex-refresh-summary`：通过；该轮重新构建 debug web bundle，自动化门禁、`rssr-web` HTTP smoke、`rssr-web browser feed smoke` 均通过。
 - 本轮未再跑 Windows visible Chrome 全量回归；本次改动不触及 DOM/selector/seed，且 release UI 与 `rssr-web browser feed smoke` 已覆盖当前 web bundle。
 
+### Application Use Case 收敛第三刀验证
+
+- `cargo fmt --check`：通过。
+- `git diff --check`：通过。
+- `cargo check -p rssr-application`：通过。
+- `cargo check -p rssr-app`：通过。
+- `cargo check -p rssr-cli`：通过。
+- `cargo test -p rssr-application`：通过，22 tests。
+- `cargo test -p rssr-infra --test test_config_exchange_contract_harness`：通过。
+- `cargo test -p rssr-infra --test wasm_config_exchange_contract_harness --target wasm32-unknown-unknown --no-run`：通过。
+- `cargo test -p rssr-infra --test test_webdav_local_roundtrip`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `cargo check -p rssr-app --target aarch64-linux-android`：通过。
+- `cargo test --workspace`：通过；包含 `test_webdav_local_roundtrip`。
+- `bash scripts/run_release_ui_regression.sh --no-serve --with-rssr-web --port 8346 --web-port 18846 --log-dir target/release-ui-regression/20260411-codex-config-exchange-outcomes`：通过；该轮重新构建 debug web bundle，自动化门禁、`rssr-web` HTTP smoke、`rssr-web browser feed smoke` 均通过。
+
 ## 给下一位 Agent 的备注
 
 - 本轮可见验证使用 Windows Chrome CDP/Node，而不是 Dioxus desktop/WSLg 窗口。
@@ -566,4 +594,6 @@
 - `58eaaf2` 已提交主线 pre-push 验证记录。
 - `412631b` 已提交 application use case 收敛计划与订阅生命周期 workflow 首刀。
 - `198266a` 已提交 refresh outcome summary helper 与 native/web/CLI 调用收敛。
+- `bb63a30` 已提交 refresh summary handoff。
+- `c28a643` 已提交 config exchange outcome 收敛。
 - 状态对齐开始时工作区为 clean，分支状态为 `main...origin/main [ahead 72]`；本轮 push 尝试被 GitHub HTTPS 凭据阻止。
