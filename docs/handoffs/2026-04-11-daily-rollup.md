@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：c36edfd
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd
+- 当前 HEAD：fea79d0
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / pending
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -17,6 +17,7 @@
 继续把 entries/reader/theme 相关 CSS 从深 class selector 迁到语义 `data-*` selector。
 继续把 feeds/settings workspace 与主题 CSS 中的卡片、表单、统计块规则迁到 `data-layout` / `data-slot` 语义接口，并给可见回归 CDP runner 增加请求级超时。
 继续收 `.page`、`.page-header`、entries controls / overview / source chip 的视觉 class 依赖，页面根改用 `data-page`，普通 page 与 reader page 保持分离。
+完成一轮“保留 class 边界”审查，明确设计系统 class / 组件内部 class / 低优先级页面 wrapper 的保留边界，并清理一个明确死 selector。
 
 ## 影响范围
 
@@ -86,6 +87,26 @@
 - `.page` CSS 入口迁到 `[data-page]:not([data-page="reader"])`，reader 继续走 `[data-layout="reader-page"]`，避免普通页面壳样式污染 reader。
 - `assets/styles/entries.css`、`assets/styles/shell.css`、`assets/styles/responsive.css`、`assets/themes/*` 中对应规则不再依赖 `.page`、`.page-title`、`.reading-header`、`.page-section-header--*`、`.entry-controls-*`、`.entry-overview*`、`.entry-filters__source-chip`。
 
+### Class Boundary Audit
+
+- 审查剩余 CSS class selector 与 Rust class token 的交集 / 差集。
+- 明确保留为设计系统边界：
+  - `app-shell`
+  - `theme-light` / `theme-dark` / `theme-system`
+  - `button` / `text-input` / `text-area` / `select-input` / `field-label`
+  - `inline-actions` / `inline-actions__item`
+  - `status-banner`
+  - `icon-link-button`
+  - `sr-only` / `sr-only-file-input`
+- 明确保留为组件内部实现：
+  - `reader-bottom-bar__button`
+- 明确低优先级候选：
+  - `entries-main`
+  - `entries-page__backlink`
+  - `entries-page__state`
+- 清理 `assets/styles/entries.css` 中已无 DOM 对应的 `.entry-card__action` 死 selector。
+- 更新 [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)，避免后续继续机械迁移设计系统 class。
+
 ### Regression Runner 稳定性
 
 - `scripts/browser/rssr_visible_regression.mjs` 的 CDP navigation 现在会等待 `Page.loadEventFired`，但不把 load event 作为硬门禁；最终仍由 selector readiness 判断页面可用。
@@ -124,6 +145,10 @@
 - `git diff --check`：通过。
 - `rg -n "\\.(page|page-title|page-header__title|page-header__actions|page-section-header--|reading-header|entry-organize-bar|entry-overview|entry-overview__|entry-controls|entry-filters__source-chip)(\\b|__|--)" assets/styles assets/themes -S`：通过，无剩余命中。
 - `scripts/run_windows_chrome_visible_regression.sh --static-port 8315 --rssr-web-port 18815 --chrome-port 9227 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-093306/summary.md`。
+- `rg --pcre2 -o '(^|[,\\s])\\.[A-Za-z][A-Za-z0-9_-]*(?=[\\s:{.#\\[,>+~)]|$)' assets/styles assets/themes -S`：已执行，用于剩余 class selector 审查。
+- `rg -o 'class: "[^"]+"' crates/rssr-app/src -S`：已执行，用于 Rust DOM class token 对照。
+- `rg -n "entry-card__action" assets/styles assets/themes crates/rssr-app/src -S`：通过，剩余命中仅为 `entry-card__actions` 容器，不再有 `.entry-card__action` selector。
+- `git diff --check`：通过。
 
 ### 手工验收
 
@@ -139,6 +164,7 @@
 - 当前 Web SPA 回归路径在可见 Windows Chrome 下通过。
 - 当前页面语义接口和 CSS 分离基线继续前移；feeds/settings/stat/exchange 这批视觉 class 已不再被 `assets/styles` / `assets/themes` 作为 CSS 选择器入口。
 - page shell 与 entries controls/overview/source chip 这批视觉 class 也已不再被 `assets/styles` / `assets/themes` 作为 CSS 选择器入口。
+- 保留 class 边界已明确：设计系统 class 不再作为“必须迁移”的技术债；后续只处理死样式、深 DOM selector、确实需要外部主题控制的页面业务槽。
 - 可见回归 runner 已避免 CDP 请求无限挂起；复用污染较重的 9225 Chrome 会话时曾在 `Page.navigate` 超时，改用干净 9226 Windows Chrome profile 后全量通过。
 - WSLg 桌面窗口呈现问题继续视为环境层问题，不阻塞 Web SPA 浏览器态验证。
 
@@ -150,7 +176,7 @@
 - 当前 visible runner 主路径已迁到 `data-*` 语义接口；后续扩展测试时应继续保持 selector-first，避免新增文案驱动断言。
 - 可见回归复用 Windows Chrome 端口时，CDP load event 可能不会覆盖所有 SPA route 情况；runner 已改为 selector readiness 作为最终判断。
 - 复用长期运行的 Windows Chrome DevTools 端口可能受历史 tab / 旧 CDP 会话污染；建议日常回归优先使用新的 `--chrome-port`，或先清理旧可见回归窗口。
-- 下一轮 CSS 分离最值得继续看 `.entries-main`、`.entries-page__backlink/state`、`.inline-actions__item`、`.field-label` 是否需要继续语义化；这些比 `.page` / controls 优先级低。
+- 下一轮 CSS 分离不建议继续机械迁移 `button` / `field-label` / `inline-actions__item`；应只看新增死样式、深 DOM selector，或主题作者确实需要重排的业务槽。
 
 ## 给下一位 Agent 的备注
 
@@ -158,4 +184,5 @@
 - Windows visible Chrome CDP runner 已沉淀进 repo；当前主路径断言也已迁到 headless active interface 风格。
 - `037e31a` 已提交上一轮 workspace CSS 语义 hook 收口。
 - `c36edfd` 已提交 page shell / entries controls 语义 hook 收口。
-- 下一轮建议先复查 [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)、[responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)、[entry controls](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/controls.rs)、[entry filters](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/components/entry_filters.rs) 的低优先级剩余内部 class。
+- `fea79d0` 已提交 handoff 元数据记录。
+- 本轮未提交：`commit: pending`。提交前建议复查 [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md) 和 [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)。

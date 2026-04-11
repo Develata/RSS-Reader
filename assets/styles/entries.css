@@ -230,7 +230,6 @@
   width: auto;
 }
 
-.entry-card__action,
 [data-slot="entry-card-action"] {
   flex: 0 1 auto;
 }

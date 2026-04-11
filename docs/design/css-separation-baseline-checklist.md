@@ -29,6 +29,62 @@
     - 少量通用布局 class 仍在承担组织作用
     - `reader-html` 内容岛作为允许保留的例外继续存在
 
+## 2026-04-11 保留 class 边界审查
+
+- 审查命令：
+  - `rg --pcre2 -o '(^|[,\\s])\\.[A-Za-z][A-Za-z0-9_-]*(?=[\\s:{.#\\[,>+~)]|$)' assets/styles assets/themes -S`
+  - `rg -o 'class: "[^"]+"' crates/rssr-app/src -S`
+- 结论：
+  - CSS 中剩余 class selector 已收敛到小集合。
+  - 当前不应继续盲目把所有 class 改成 `data-*`，否则会把设计系统类和内部实现类都暴露成不必要的外部接口。
+  - 只应继续处理“页面语义缺失”或“死样式”。
+
+### 应保留为设计系统 / 全局状态 class
+
+- `app-shell`
+  - 根 shell class，承载全局壳层、密度和主题组合。
+  - `data-density` 已承担密度状态；`app-shell` 本身可以继续作为设计系统根类。
+- `theme-light` / `theme-dark` / `theme-system`
+  - 由 `theme_class(settings().theme)` 动态注入，静态 class token 扫描不会命中。
+  - 当前可保留为主题根状态类；若未来要继续统一，可单独迁成 `data-theme`，不要混在页面局部 CSS 收口里做。
+- `button`、`text-input`、`text-area`、`select-input`、`field-label`
+  - 表单与按钮设计系统类。
+  - 状态已经通过 `data-variant` / `data-field` 表达，不需要为了“完全分离”强行改成 `data-layout`。
+- `inline-actions` / `inline-actions__item`
+  - 通用动作行布局类。
+  - 可保留为设计系统布局 primitive；只有当某个页面需要表达业务动作槽时，再额外补 `data-layout`。
+- `status-banner`
+  - 通用反馈组件类。
+  - 状态已走 `data-state`。
+- `icon-link-button`
+  - 图标按钮 primitive；可保留。
+- `sr-only` / `sr-only-file-input`
+  - 可访问性 utility；必须保留为 utility class，不应语义化。
+
+### 可保留为组件内部实现 class
+
+- `reader-bottom-bar__button`
+  - 当前选择器被限制在 `[data-layout="reader-bottom-bar"]` 下。
+  - `data-state` 已承担状态语义；按钮本体 class 可作为 reader bottom bar 内部实现 class 保留。
+
+### 低优先级候选
+
+- `entries-main`
+  - 当前只承担 `min-width: 0` wrapper 作用。
+  - 不急于公开成 `data-layout`；只有当外部主题需要重排 entries 主列时再槽化。
+- `entries-page__backlink`
+  - 当前只承担返回链接 margin。
+  - 可保留为内部 wrapper；不需要马上进入 headless active interface。
+- `entries-page__state`
+  - 已有 `data-state="empty|archived"`。
+  - class 只承担局部位置样式；可保留，或后续收成 `data-layout="entries-state"`。
+
+### 已清理死样式
+
+- `.entry-card__action`
+  - Rust DOM 已统一使用 `data-slot="entry-card-action"`。
+  - CSS 中的 `.entry-card__action` 已删除，保留 `[data-slot="entry-card-action"]`。
+
 ## 已完成项
 
 ### 状态接口
@@ -55,6 +111,7 @@
   - `settings-form-grid > div` -> `.settings-form-grid__item`
   - `inline-actions > *` -> `.inline-actions__item`
   - `entry-card__actions > *` -> `[data-slot="entry-card-action"]`
+  - `.entry-card__action` -> 已删除死 selector
   - `.entry-card--reading + .entry-card--reading` -> `data-list-edge`
   - `.entry-card--reading:first-child/:last-child` -> `data-list-edge`
   - `.page-entries .reading-header` -> `.page-section-header--entries`
@@ -65,8 +122,6 @@
   - `.page-header__actions`
   - `.page-section-header`
   - `.page-section-title`
-  - `.settings-form-grid__item`
-  - `.inline-actions__item`
   - `[data-slot="entry-card-action"]`
   - `data-list-edge="start|middle|end|single"`
 
@@ -287,8 +342,9 @@
   - `.settings-grid`
   - `.exchange-grid`
 - 判断：
-  - 这些目前还算合理，不属于第一优先级问题
-  - 但后续若要做到更极端的 CSS 重排，需要继续槽化
+  - `entries-main` / `entries-page__*` 目前还算合理，不属于第一优先级问题。
+  - `entry-groups` / `entries-layout` / `settings-grid` / `exchange-grid` 已有 `data-layout`，CSS 不应再以 class 作为主入口。
+  - 后续若要做到更极端的 CSS 重排，再补业务槽，不要预先暴露全部内部 wrapper。
 
 ### 2. 响应式规则仍偏 class 驱动
 
@@ -367,5 +423,5 @@
 
 ## 当前最值得继续做的两刀
 
-1. 复查 `.entries-main`、`.entries-page__backlink/state` 是否值得槽化，避免过早把纯内部 wrapper 都暴露成公开接口。
-2. 继续清理 `.inline-actions__item` / `.field-label` 这类通用组件 class 是否需要保留为设计系统 class。
+1. 暂停对 `button` / `field-label` / `inline-actions__item` 这类设计系统 class 的机械迁移，除非有明确页面语义缺口。
+2. 后续只处理新增死样式、深 DOM 层级 selector，或确实需要由主题作者重排的页面业务槽。
