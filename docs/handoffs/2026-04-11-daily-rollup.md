@@ -3,10 +3,10 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：66119cf
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf
+- 当前 HEAD：29b64df
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf / 29b64df
 - 相关 tag / release：N/A
-- 状态：`validated`
+- 状态：`pending`
 
 ## 工作摘要
 
@@ -24,12 +24,14 @@
 继续把 `.inline-actions` 容器从“带默认页面间距”的混合 class 收回成纯排列辅助 class，页面间距改由具体 `data-layout` 承担。
 继续删除页面 DOM 上已经没有任何消费方的旧 class token，避免 reader/settings/feeds 保持双轨壳层。
 继续批量清理页面/卡片/分组/统计/表单等语义已经被 `data-layout` / `data-slot` 接管、但仍残留在 DOM 上的死 class token。
+开始第一刀架构收口：把 entries browsing/workspace state 从 `UserSettings` 和 config package 中拆出，落到独立 `app_state` 真相源，并让 entries runtime 改走新的 app-state 持久化路径。
+继续第二刀架构收口：为 `ui/runtime/*` 增加 `UiServices` 窄门面和按命令族分组的 port，移除各 runtime 模块对 `AppServices::shared()` 的直接依赖。
 
 ## 影响范围
 
-- 模块：`scripts/run_web_spa_regression_server.sh`、`scripts/run_windows_chrome_visible_regression.sh`、`scripts/browser/rssr_visible_regression.mjs`、`crates/rssr-app/src/pages/*`、`assets/styles/*`、`assets/themes/*`、Web SPA 静态回归路径
+- 模块：`scripts/run_web_spa_regression_server.sh`、`scripts/run_windows_chrome_visible_regression.sh`、`scripts/browser/rssr_visible_regression.mjs`、`crates/rssr-app/src/pages/*`、`crates/rssr-domain/src/app_state.rs`、`crates/rssr-application/src/app_state_service.rs`、`crates/rssr-infra/src/db/app_state_repository.rs`、`crates/rssr-infra/src/application_adapters/browser/*`、`assets/styles/*`、`assets/themes/*`、Web SPA 静态回归路径
 - 平台：Windows Chrome、Web、WSL 开发环境
-- 额外影响：browser regression workflow / handoff docs
+- 额外影响：browser regression workflow / handoff docs / config package v2 / browser app-state keyspace v2
 
 ## 关键变更
 
@@ -178,6 +180,45 @@
 - [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)、[frontend-command-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/frontend-command-reference.md)、[theme-author-selector-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/theme-author-selector-reference.md)
   - 当前规范文档删除 `.feed-card` / `.entry-card` / `.settings-card` / `.exchange-card` / `.theme-card` / `.card-title` / `.group-header*` 等已失效的建议入口，统一回到 `data-layout` / `data-slot`。
 
+### App State / Workspace State Split
+
+- [app_state.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-domain/src/app_state.rs)
+  - 新增 `AppStateSnapshot` 与 `EntriesWorkspaceState`，把 `last_opened_feed_id` 和 entries browsing/workspace state 收口成独立真相源。
+- [settings.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-domain/src/settings.rs)
+  - `UserSettings` 删除 `entry_grouping_mode`、`show_archived_entries`、`entry_read_filter`、`entry_starred_filter`、`entry_filtered_feed_urls`，只保留 durable settings。
+- [repository.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-domain/src/repository.rs)、[app_state_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/app_state_service.rs)
+  - 新增 `AppStateRepository` 与 `AppStateService`，给 host / runtime 一个比 `SettingsRepository` 更窄、更正确的 app-state 入口。
+- [app_state_repository.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/db/app_state_repository.rs)
+  - SQLite app state 由单个 `last_opened_feed_id` key 升级为 `app_state_v2` JSON blob，承载 `last_opened_feed_id + entries_workspace`。
+- [state.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/state.rs)
+  - 浏览器 app-state sidecar key 升为 `rssr-web-app-state-v2`，并持久化完整 `AppStateSnapshot`。
+- [native.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/native.rs)、[web.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/web.rs)
+  - `AppServices` 新增 `load_entries_workspace_state` / `save_entries_workspace_state`，并改由 `AppStateService` 读写 last-opened feed 与 entries workspace。
+- [entries.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/entries.rs)、[intent.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/intent.rs)、[reducer.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/reducer.rs)、[state.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/state.rs)
+  - entries bootstrap 现在分别加载 durable settings 与 `EntriesWorkspaceState`；`SaveBrowsingPreferences` 不再回写 `UserSettings`，而是改写 `app_state.entries_workspace`。
+- [import_export_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/import_export_service.rs)、[rules.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/import_export_service/rules.rs)
+  - config package 导出版本升到 `2`；导入器不再接受旧的 `settings + browsing state` 混合结构。
+- [config-package.schema.json](/home/develata/gitclone/RSS-Reader/specs/001-minimal-rss-reader/contracts/config-package.schema.json)
+  - schema 删除 entries browsing/workspace 字段，并把 `version` 收紧到常量 `2`。
+- `tests/fixtures/browser_state/reader_demo_core.json` / `tests/fixtures/browser_state/reader_demo_app_state.json`
+  - browser seed fixture 改成 “durable settings 在 core，entries workspace 在 app-state sidecar” 的新布局。
+
+### UI Runtime Port Narrowing
+
+- [services.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/services.rs)
+  - 新增 `UiServices`，把 `AppServices::shared()` 收口到 runtime 单入口。
+  - 新增 `EntriesPort`、`ShellPort`、`SettingsPort`、`ReaderPort`、`FeedsPort`，按命令族暴露窄能力面。
+- [entries.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/entries.rs)
+  - entries runtime 现在只依赖 `EntriesPort`，不再直接取 `AppServices::shared()`。
+- [shell.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/shell.rs)
+  - shell runtime 改成走 `ShellPort` 加载 durable settings、启动自动刷新、解析 startup route。
+- [settings.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/settings.rs)
+  - settings runtime 改成走 `SettingsPort`，把本页所需的保存/同步能力与全能 app host 隔开。
+- [reader.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/reader.rs)
+  - reader runtime 改成走 `ReaderPort`，只保留获取 entry / navigation / read-star toggle 的窄接口。
+- [feeds.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/feeds.rs)
+  - feeds runtime 改成走 `FeedsPort`，为后续把订阅/配置交换 workflow 抽离成共享 use case 做准备。
+
 ## 验证与验收
 
 ### 自动化验证
@@ -231,6 +272,20 @@
 - `scripts/run_windows_chrome_visible_regression.sh --static-port 8324 --rssr-web-port 18824 --chrome-port 9234 --slow-ms 100`：静态 entries/feeds、reader theme matrix、小视口 routes 通过；`rssr-web browser feed smoke` 超时失败。
 - `scripts/run_windows_chrome_visible_regression.sh --static-port 8326 --rssr-web-port 18826 --chrome-port 9236 --slow-ms 100`：静态 entries/feeds、reader theme matrix、小视口 routes 再次通过；`rssr-web browser feed smoke` 再次超时失败。
 - `scripts/run_windows_chrome_visible_regression.sh --static-port 8320 --rssr-web-port 18820 --chrome-port 9230 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-131242/summary.md`。
+- `cargo fmt`：通过。
+- `cargo check -p rssr-app`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `cargo test -p rssr-application`：通过。
+- `cargo test -p rssr-infra --tests --no-run`：通过。
+- `cargo test -p rssr-infra --test wasm_config_exchange_contract_harness --target wasm32-unknown-unknown --no-run`：通过。
+- `cargo test -p rssr-infra --test wasm_subscription_contract_harness --target wasm32-unknown-unknown --no-run`：通过。
+- `cargo test -p rssr-infra --test test_settings_repository`：通过。
+- `cargo test -p rssr-infra --test test_config_package_codec`：通过。
+- `cargo test -p rssr-infra --test test_config_package_schema_consistency`：通过。
+- `cargo test -p rssr-infra --test test_config_exchange_contract_harness`：通过。
+- `cargo test -p rssr-infra --test test_regression_smoke`：通过。
+- `git diff --check`：通过。
+- `rg -n "AppServices::shared\\(|UiServices::shared\\(" crates/rssr-app/src/ui/runtime -S`：通过，runtime 目录内仅 `services.rs` 保留唯一 `AppServices::shared()` 入口，其他命令族全部切到 `UiServices::shared()`。
 
 ### 手工验收
 
