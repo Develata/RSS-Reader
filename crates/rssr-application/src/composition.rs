@@ -1,0 +1,68 @@
+use std::sync::Arc;
+
+use rssr_domain::{AppStateRepository, EntryRepository, FeedRepository, SettingsRepository};
+
+use crate::{
+    AppStatePort, AppStateService, EntryService, FeedRefreshSourcePort, FeedRemovalCleanupPort,
+    FeedService, ImportExportService, OpmlCodecPort, RefreshService, RefreshStorePort,
+    SettingsService, SubscriptionWorkflow,
+};
+
+pub trait AppStateServicesPort:
+    AppStateRepository + AppStatePort + FeedRemovalCleanupPort + Send + Sync
+{
+}
+
+impl<T> AppStateServicesPort for T where
+    T: AppStateRepository + AppStatePort + FeedRemovalCleanupPort + Send + Sync + ?Sized
+{
+}
+
+pub struct AppCompositionInput {
+    pub feed_repository: Arc<dyn FeedRepository>,
+    pub entry_repository: Arc<dyn EntryRepository>,
+    pub settings_repository: Arc<dyn SettingsRepository>,
+    pub app_state: Arc<dyn AppStateServicesPort>,
+    pub refresh_source: Arc<dyn FeedRefreshSourcePort>,
+    pub refresh_store: Arc<dyn RefreshStorePort>,
+    pub opml_codec: Arc<dyn OpmlCodecPort>,
+}
+
+#[derive(Clone)]
+pub struct AppUseCases {
+    pub feed_service: FeedService,
+    pub entry_service: EntryService,
+    pub settings_service: SettingsService,
+    pub app_state_service: AppStateService,
+    pub refresh_service: RefreshService,
+    pub subscription_workflow: SubscriptionWorkflow,
+    pub import_export_service: ImportExportService,
+}
+
+impl AppUseCases {
+    pub fn compose(input: AppCompositionInput) -> Self {
+        let feed_service =
+            FeedService::new(input.feed_repository.clone(), input.entry_repository.clone());
+        let refresh_service = RefreshService::new(input.refresh_source, input.refresh_store);
+
+        Self {
+            feed_service: feed_service.clone(),
+            entry_service: EntryService::new(input.entry_repository.clone()),
+            settings_service: SettingsService::new(input.settings_repository.clone()),
+            app_state_service: AppStateService::new(input.app_state.clone()),
+            refresh_service: refresh_service.clone(),
+            subscription_workflow: SubscriptionWorkflow::new(
+                feed_service,
+                refresh_service,
+                input.app_state.clone(),
+            ),
+            import_export_service: ImportExportService::new_with_feed_removal_cleanup(
+                input.feed_repository,
+                input.entry_repository,
+                input.settings_repository,
+                input.opml_codec,
+                input.app_state,
+            ),
+        }
+    }
+}

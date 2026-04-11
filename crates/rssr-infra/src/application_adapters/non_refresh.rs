@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use rssr_application::{AppStatePort, FeedRemovalCleanupPort, OpmlCodecPort, RemoteConfigStore};
-use rssr_domain::AppStateSnapshot;
+use rssr_domain::{AppStateRepository, AppStateSnapshot};
 
 use crate::{
     config_sync::webdav::WebDavConfigSync, db::app_state_repository::SqliteAppStateRepository,
@@ -34,6 +34,17 @@ impl SqliteAppStateAdapter {
 
     pub async fn save_snapshot(&self, state: &AppStateSnapshot) -> Result<()> {
         self.repository.save_snapshot(state).await.map_err(Into::into)
+    }
+}
+
+#[async_trait::async_trait]
+impl AppStateRepository for SqliteAppStateAdapter {
+    async fn load(&self) -> rssr_domain::Result<AppStateSnapshot> {
+        self.repository.load_snapshot().await
+    }
+
+    async fn save(&self, state: &AppStateSnapshot) -> rssr_domain::Result<()> {
+        self.repository.save_snapshot(state).await
     }
 }
 

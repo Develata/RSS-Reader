@@ -14,6 +14,7 @@ use url::Url;
 
 use self::rules::{import_field, validate_config_package};
 
+#[derive(Clone)]
 pub struct ImportExportService {
     feed_repository: Arc<dyn FeedRepository>,
     entry_repository: Arc<dyn EntryRepository>,

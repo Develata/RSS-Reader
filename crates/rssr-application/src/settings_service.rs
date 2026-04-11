@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{Result, ensure};
 use rssr_domain::{SettingsRepository, UserSettings};
 
+#[derive(Clone)]
 pub struct SettingsService {
     repository: Arc<dyn SettingsRepository>,
 }

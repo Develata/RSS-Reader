@@ -1,4 +1,5 @@
 pub mod app_state_service;
+pub mod composition;
 pub mod entry_service;
 pub mod feed_service;
 pub mod import_export_service;
@@ -7,6 +8,7 @@ pub mod settings_service;
 pub mod subscription_workflow;
 
 pub use app_state_service::AppStateService;
+pub use composition::{AppCompositionInput, AppStateServicesPort, AppUseCases};
 pub use entry_service::EntryService;
 pub use feed_service::{AddSubscriptionInput, FeedService, RemoveSubscriptionInput};
 pub use import_export_service::{

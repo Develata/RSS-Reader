@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use rssr_domain::{Entry, EntryNavigation, EntryQuery, EntryRepository, EntrySummary};
 
+#[derive(Clone)]
 pub struct EntryService {
     repository: Arc<dyn EntryRepository>,
 }

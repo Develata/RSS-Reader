@@ -3,18 +3,19 @@ use std::{fs, path::PathBuf, sync::Arc};
 use anyhow::{Context, ensure};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use rssr_application::{
-    AddSubscriptionInput, AppStatePort, FeedService, ImportExportService, RefreshAllInput,
-    RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RefreshService,
-    RemoveSubscriptionInput, SettingsService, SubscriptionWorkflow,
+    AddSubscriptionInput, AppCompositionInput, AppUseCases, RefreshAllInput, RefreshAllOutcome,
+    RefreshFeedOutcome, RefreshFeedResult, RemoveSubscriptionInput,
 };
 use rssr_domain::{Feed, FeedRepository, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
-    application_adapters::{InfraFeedRefreshSource, InfraOpmlCodec, SqliteRefreshStore},
+    application_adapters::{
+        InfraFeedRefreshSource, InfraOpmlCodec, SqliteAppStateAdapter, SqliteRefreshStore,
+    },
     config_sync::webdav::WebDavConfigSync,
     db::{
-        entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository,
-        settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,
-        storage_backend::StorageBackend,
+        app_state_repository::SqliteAppStateRepository, entry_repository::SqliteEntryRepository,
+        feed_repository::SqliteFeedRepository, settings_repository::SqliteSettingsRepository,
+        sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
     },
     fetch::FetchClient,
     opml::OpmlCodec,
@@ -208,10 +209,7 @@ async fn main() -> anyhow::Result<()> {
 
 struct CliServices {
     feed_repository: Arc<SqliteFeedRepository>,
-    settings_service: SettingsService,
-    refresh_service: RefreshService,
-    subscription_workflow: SubscriptionWorkflow,
-    import_export_service: ImportExportService,
+    use_cases: AppUseCases,
 }
 
 impl CliServices {
@@ -233,30 +231,26 @@ impl CliServices {
 
         let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
         let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
-        let settings_repository = Arc::new(SqliteSettingsRepository::new(pool));
-        let feed_service = FeedService::new(feed_repository.clone(), entry_repository.clone());
-        let refresh_service = RefreshService::new(
-            Arc::new(InfraFeedRefreshSource::new(FetchClient::new(), FeedParser::new())),
-            Arc::new(SqliteRefreshStore::new(feed_repository.clone(), entry_repository.clone())),
-        );
-        let import_export_service = ImportExportService::new(
-            feed_repository.clone(),
-            entry_repository,
-            settings_repository.clone(),
-            Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
-        );
+        let settings_repository = Arc::new(SqliteSettingsRepository::new(pool.clone()));
+        let app_state =
+            Arc::new(SqliteAppStateAdapter::new(Arc::new(SqliteAppStateRepository::new(pool))));
+        let use_cases = AppUseCases::compose(AppCompositionInput {
+            feed_repository: feed_repository.clone(),
+            entry_repository: entry_repository.clone(),
+            settings_repository,
+            app_state,
+            refresh_source: Arc::new(InfraFeedRefreshSource::new(
+                FetchClient::new(),
+                FeedParser::new(),
+            )),
+            refresh_store: Arc::new(SqliteRefreshStore::new(
+                feed_repository.clone(),
+                entry_repository,
+            )),
+            opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
+        });
 
-        Ok(Self {
-            settings_service: SettingsService::new(settings_repository.clone()),
-            refresh_service: refresh_service.clone(),
-            subscription_workflow: SubscriptionWorkflow::new(
-                feed_service,
-                refresh_service,
-                Arc::new(NoopAppState),
-            ),
-            import_export_service,
-            feed_repository,
-        })
+        Ok(Self { feed_repository, use_cases })
     }
 
     async fn list_feeds(&self) -> anyhow::Result<Vec<Feed>> {
@@ -274,76 +268,76 @@ impl CliServices {
 
         if refresh {
             let outcome = self
+                .use_cases
                 .subscription_workflow
                 .add_subscription_and_refresh(&input)
                 .await
                 .context("保存订阅失败")?;
             ensure_refresh_feed_succeeded(&outcome.refresh).context("首次刷新订阅失败")?;
         } else {
-            self.subscription_workflow.add_subscription(&input).await.context("保存订阅失败")?;
+            self.use_cases
+                .subscription_workflow
+                .add_subscription(&input)
+                .await
+                .context("保存订阅失败")?;
         }
 
         Ok(())
     }
 
     async fn remove_feed(&self, feed_id: i64, purge_entries: bool) -> anyhow::Result<()> {
-        self.subscription_workflow
+        self.use_cases
+            .subscription_workflow
             .remove_subscription(RemoveSubscriptionInput { feed_id, purge_entries })
             .await
     }
 
     async fn refresh_all(&self) -> anyhow::Result<()> {
-        let outcome =
-            self.refresh_service.refresh_all(RefreshAllInput { max_concurrency: 1 }).await?;
+        let outcome = self
+            .use_cases
+            .refresh_service
+            .refresh_all(RefreshAllInput { max_concurrency: 1 })
+            .await?;
         ensure_refresh_all_succeeded(&outcome)
     }
 
     async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
-        let outcome = self.refresh_service.refresh_feed(feed_id).await?;
+        let outcome = self.use_cases.refresh_service.refresh_feed(feed_id).await?;
         ensure_refresh_feed_succeeded(&outcome)
     }
 
     async fn export_config_json(&self) -> anyhow::Result<String> {
-        self.import_export_service.export_config_json().await
+        self.use_cases.import_export_service.export_config_json().await
     }
 
     async fn import_config_json(&self, raw: &str) -> anyhow::Result<()> {
-        self.import_export_service.import_config_json(raw).await
+        self.use_cases.import_export_service.import_config_json(raw).await
     }
 
     async fn export_opml(&self) -> anyhow::Result<String> {
-        self.import_export_service.export_opml().await
+        self.use_cases.import_export_service.export_opml().await
     }
 
     async fn import_opml(&self, raw: &str) -> anyhow::Result<()> {
-        self.import_export_service.import_opml(raw).await
+        self.use_cases.import_export_service.import_opml(raw).await
     }
 
     async fn load_settings(&self) -> anyhow::Result<UserSettings> {
-        self.settings_service.load().await
+        self.use_cases.settings_service.load().await
     }
 
     async fn save_settings(&self, settings: &UserSettings) -> anyhow::Result<()> {
-        self.settings_service.save(settings).await
+        self.use_cases.settings_service.save(settings).await
     }
 
     async fn push_remote_config(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<()> {
         let remote = WebDavConfigSync::new(endpoint, remote_path)?;
-        self.import_export_service.push_remote_config(&remote).await
+        self.use_cases.import_export_service.push_remote_config(&remote).await
     }
 
     async fn pull_remote_config(&self, endpoint: &str, remote_path: &str) -> anyhow::Result<bool> {
         let remote = WebDavConfigSync::new(endpoint, remote_path)?;
-        self.import_export_service.pull_remote_config(&remote).await
-    }
-}
-
-struct NoopAppState;
-
-#[async_trait::async_trait]
-impl AppStatePort for NoopAppState {
-    async fn clear_last_opened_feed_if_matches(&self, _feed_id: i64) -> anyhow::Result<()> {
-        Ok(())
+        self.use_cases.import_export_service.pull_remote_config(&remote).await
     }
 }
 

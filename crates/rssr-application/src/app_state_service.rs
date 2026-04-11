@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use rssr_domain::{AppStateRepository, AppStateSnapshot, EntriesWorkspaceState};
 
+#[derive(Clone)]
 pub struct AppStateService {
     repository: Arc<dyn AppStateRepository>,
 }
