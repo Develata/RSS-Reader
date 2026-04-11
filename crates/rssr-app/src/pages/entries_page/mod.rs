@@ -33,9 +33,9 @@ pub fn StartupPage() -> Element {
     use_startup_route_bus(navigator, status, status_tone);
 
     rsx! {
-        section { class: "page page-entries", "data-page": "entries",
+        section { "data-page": "entries",
             AppNav {}
-            h2 { class: "page-title", "data-slot": "page-title", "文章" }
+            h2 { "data-slot": "page-title", "文章" }
             StatusBanner { message: status(), tone: status_tone() }
         }
     }
@@ -60,19 +60,18 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
 
     rsx! {
         section {
-            class: "page page-entries",
             "data-page": "entries",
             "data-entry-scope": if feed_id.is_some() { "feed" } else { "all" },
             AppNav {}
-            div { class: "entries-layout", "data-layout": "entries-layout",
-                div { class: "entries-main", "data-layout": "entries-main",
-                    div { class: "reading-header page-section-header page-section-header--entries", "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "entries",
-                        div { class: "reading-header__row", "data-slot": "page-section-row",
-                            h2 { class: "page-title page-section-title", "data-slot": "page-title", "{entries_page_title(feed_id)}" }
+            div { "data-layout": "entries-layout",
+                div { "data-layout": "entries-main",
+                    div { "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "entries",
+                        div { "data-slot": "page-section-row",
+                            h2 { "data-slot": "page-title", "{entries_page_title(feed_id)}" }
                         }
                     }
                     if feed_id.is_some() {
-                        div { class: "entries-page__backlink", "data-layout": "entries-page-backlink",
+                        div { "data-layout": "entries-page-backlink",
                             Link {
                                 class: "button",
                                 "data-variant": "secondary",
@@ -84,14 +83,14 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     }
                     { controls }
                     if facade.entries_is_empty() {
-                        div { class: "entries-page__state", "data-layout": "entries-page-state", "data-state": "empty",
+                        div { "data-layout": "entries-page-state", "data-state": "empty",
                             StatusBanner {
                                 message: facade.empty_entries_message(),
                                 tone: "info".to_string()
                             }
                         }
                     } else if facade.visible_entries_is_empty() {
-                        div { class: "entries-page__state", "data-layout": "entries-page-state", "data-state": "archived",
+                        div { "data-layout": "entries-page-state", "data-state": "archived",
                             StatusBanner {
                                 message: facade.archived_entries_state_message().to_string(),
                                 tone: "info".to_string()
@@ -99,30 +98,29 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                         }
                     } else {
                         div {
-                            class: "entry-groups",
                             "data-layout": "entry-groups",
                             "data-state": "populated",
                             "data-grouping-mode": if facade.grouping_mode() == state::EntryGroupingMode::Time { "time" } else { "source" },
                             if facade.grouping_mode() == state::EntryGroupingMode::Time {
                                 for month in facade.time_grouped_entries() {
-                                    section { class: "entry-group entry-group--time", key: "{month.anchor_id}", id: "{month.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "time", "data-group-level": "month",
-                                        div { class: "entry-group__header group-header", "data-layout": "entry-group-header", "data-group-level": "primary",
-                                            h3 { class: "group-header__title", "data-slot": "entry-group-title", "{month.title}" }
-                                            p { class: "group-header__meta", "data-slot": "entry-group-meta", "{month.subtitle}" }
+                                    section { key: "{month.anchor_id}", id: "{month.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "time", "data-group-level": "month",
+                                        div { "data-layout": "entry-group-header", "data-group-level": "primary",
+                                            h3 { "data-slot": "entry-group-title", "{month.title}" }
+                                            p { "data-slot": "entry-group-meta", "{month.subtitle}" }
                                         }
                                         for date_group in &month.dates {
-                                            section { class: "entry-date-group", key: "{date_group.anchor_id}", id: "{date_group.anchor_id}", "data-layout": "entry-date-group", "data-grouping-mode": "time",
-                                                div { class: "entry-date-group__header group-header", "data-layout": "entry-group-header", "data-group-level": "date",
-                                                    h4 { class: "group-header__title", "data-slot": "entry-group-title", "{date_group.title}" }
-                                                    p { class: "group-header__meta", "data-slot": "entry-group-meta", "{date_group.subtitle}" }
+                                            section { key: "{date_group.anchor_id}", id: "{date_group.anchor_id}", "data-layout": "entry-date-group", "data-grouping-mode": "time",
+                                                div { "data-layout": "entry-group-header", "data-group-level": "date",
+                                                    h4 { "data-slot": "entry-group-title", "{date_group.title}" }
+                                                    p { "data-slot": "entry-group-meta", "{date_group.subtitle}" }
                                                 }
                                                 for source in &date_group.sources {
-                                                    section { class: "entry-source-group", key: "{source.anchor_id}", id: "{source.anchor_id}", "data-layout": "entry-source-group", "data-grouping-mode": "time",
-                                                        div { class: "entry-source-group__header group-header", "data-layout": "entry-group-header", "data-group-level": "source",
-                                                            h5 { class: "group-header__title", "data-slot": "entry-group-title", "{source.title}" }
-                                                            p { class: "group-header__meta", "data-slot": "entry-group-meta", "{source.subtitle}" }
+                                                    section { key: "{source.anchor_id}", id: "{source.anchor_id}", "data-layout": "entry-source-group", "data-grouping-mode": "time",
+                                                        div { "data-layout": "entry-group-header", "data-group-level": "source",
+                                                            h5 { "data-slot": "entry-group-title", "{source.title}" }
+                                                            p { "data-slot": "entry-group-meta", "{source.subtitle}" }
                                                         }
-                                                        ul { class: "entry-list entry-list--grouped entry-list--reading", "data-layout": "entry-list", "data-state": "populated",
+                                                        ul { "data-layout": "entry-list", "data-state": "populated",
                                                             for (index , entry) in source.entries.iter().enumerate() {
                                                                 { render_entry_card(entry.clone(), facade.clone(), list_edge_state(index, source.entries.len())) }
                                                             }
@@ -135,18 +133,18 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 }
                             } else {
                                 for group in facade.source_grouped_entries() {
-                                    section { class: "entry-group", key: "{group.title}", id: "{group.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "source", "data-group-level": "source",
-                                        div { class: "entry-group__header group-header", "data-layout": "entry-group-header", "data-group-level": "primary",
-                                            h3 { class: "group-header__title", "data-slot": "entry-group-title", "{group.title}" }
-                                            p { class: "group-header__meta", "data-slot": "entry-group-meta", "{group.subtitle}" }
+                                    section { key: "{group.title}", id: "{group.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "source", "data-group-level": "source",
+                                        div { "data-layout": "entry-group-header", "data-group-level": "primary",
+                                            h3 { "data-slot": "entry-group-title", "{group.title}" }
+                                            p { "data-slot": "entry-group-meta", "{group.subtitle}" }
                                         }
                                         for month in &group.months {
-                                            section { class: "entry-date-group", key: "{month.anchor_id}", id: "{month.anchor_id}", "data-layout": "entry-date-group", "data-grouping-mode": "source",
-                                                div { class: "entry-date-group__header group-header", "data-layout": "entry-group-header", "data-group-level": "date",
-                                                    h4 { class: "group-header__title", "data-slot": "entry-group-title", "{month.title}" }
-                                                    p { class: "group-header__meta", "data-slot": "entry-group-meta", "{month.subtitle}" }
+                                            section { key: "{month.anchor_id}", id: "{month.anchor_id}", "data-layout": "entry-date-group", "data-grouping-mode": "source",
+                                                div { "data-layout": "entry-group-header", "data-group-level": "date",
+                                                    h4 { "data-slot": "entry-group-title", "{month.title}" }
+                                                    p { "data-slot": "entry-group-meta", "{month.subtitle}" }
                                                 }
-                                                ul { class: "entry-list entry-list--grouped entry-list--reading", "data-layout": "entry-list", "data-state": "populated",
+                                                ul { "data-layout": "entry-list", "data-state": "populated",
                                                     for (index , entry) in month.entries.iter().enumerate() {
                                                         { render_entry_card(entry.clone(), facade.clone(), list_edge_state(index, month.entries.len())) }
                                                     }

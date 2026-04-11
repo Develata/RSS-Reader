@@ -23,19 +23,19 @@ pub fn FeedsPage() -> Element {
     let facade = use_feeds_page_workspace();
 
     rsx! {
-        section { class: "page page-feeds", "data-page": "feeds",
+        section { "data-page": "feeds",
             AppNav {}
-            div { class: "reading-header page-section-header page-section-header--feeds", "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "feeds",
-                h2 { class: "page-title page-section-title", "data-slot": "page-title", "订阅" }
+            div { "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "feeds",
+                h2 { "data-slot": "page-title", "订阅" }
             }
-            div { class: "stats-grid stats-grid--airy", "data-layout": "stats-grid", "data-layout-variant": "airy",
-                div { class: "stat-card", "data-layout": "stat-card", "data-stat": "feeds",
-                    div { class: "stat-card__label", "data-slot": "stat-card-label", "订阅数" }
-                    div { class: "stat-card__value", "data-slot": "stat-card-value", "{facade.total_feed_count()}" }
+            div { "data-layout": "stats-grid", "data-layout-variant": "airy",
+                div { "data-layout": "stat-card", "data-stat": "feeds",
+                    div { "data-slot": "stat-card-label", "订阅数" }
+                    div { "data-slot": "stat-card-value", "{facade.total_feed_count()}" }
                 }
-                div { class: "stat-card", "data-layout": "stat-card", "data-stat": "entries",
-                    div { class: "stat-card__label", "data-slot": "stat-card-label", "文章数" }
-                    div { class: "stat-card__value", "data-slot": "stat-card-value", "{facade.total_entry_count()}" }
+                div { "data-layout": "stat-card", "data-stat": "entries",
+                    div { "data-slot": "stat-card-label", "文章数" }
+                    div { "data-slot": "stat-card-value", "{facade.total_entry_count()}" }
                 }
             }
             if facade.has_status_message() {

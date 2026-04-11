@@ -14,16 +14,16 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
     let push_facade = facade.clone();
 
     rsx! {
-        div { class: "settings-card", "data-layout": "settings-card", "data-section": "webdav-sync",
-            div { class: "settings-card__header", "data-slot": "settings-card-header",
-                h3 { class: "card-title", "data-slot": "card-title", "WebDAV 配置交换" }
+        div { "data-layout": "settings-card", "data-section": "webdav-sync",
+            div { "data-slot": "settings-card-header",
+                h3 { "data-slot": "card-title", "WebDAV 配置交换" }
             }
-            div { class: "settings-card__section", "data-layout": "settings-card-section", "data-section": "webdav-endpoint",
-                div { class: "settings-card__section-header", "data-slot": "settings-card-section-header",
-                    h4 { class: "settings-card__section-title", "data-slot": "settings-card-section-title", "远端配置端点" }
+            div { "data-layout": "settings-card-section", "data-section": "webdav-endpoint",
+                div { "data-slot": "settings-card-section-header",
+                    h4 { "data-slot": "settings-card-section-title", "远端配置端点" }
                 }
-                div { class: "settings-form-grid", "data-layout": "settings-form-grid",
-                    div { class: "settings-form-grid__item", "data-slot": "settings-form-grid-item",
+                div { "data-layout": "settings-form-grid",
+                    div { "data-slot": "settings-form-grid-item",
                         label { class: "field-label", r#for: "settings-webdav-endpoint", "Endpoint" }
                         input {
                             id: "settings-webdav-endpoint",
@@ -35,7 +35,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                             oninput: move |event| endpoint_facade.set_endpoint(event.value())
                         }
                     }
-                    div { class: "settings-form-grid__item", "data-slot": "settings-form-grid-item",
+                    div { "data-slot": "settings-form-grid-item",
                         label { class: "field-label", r#for: "settings-webdav-remote-path", "Remote Path" }
                         input {
                             id: "settings-webdav-remote-path",
@@ -49,11 +49,11 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                     }
                 }
             }
-            div { class: "settings-card__section", "data-layout": "settings-card-section", "data-section": "webdav-actions",
-                div { class: "settings-card__section-header", "data-slot": "settings-card-section-header",
-                    h4 { class: "settings-card__section-title", "data-slot": "settings-card-section-title", "同步动作" }
+            div { "data-layout": "settings-card-section", "data-section": "webdav-actions",
+                div { "data-slot": "settings-card-section-header",
+                    h4 { "data-slot": "settings-card-section-title", "同步动作" }
                 }
-                div { class: "inline-actions settings-card__actions", "data-layout": "settings-card-actions",
+                div { class: "inline-actions", "data-layout": "settings-card-actions",
                     button {
                         class: "button inline-actions__item",
                         "data-variant": "secondary",

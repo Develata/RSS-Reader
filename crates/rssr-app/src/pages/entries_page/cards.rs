@@ -17,24 +17,22 @@ pub(super) fn render_entry_card(
 
     rsx! {
         li {
-            class: "entry-card entry-card--reading",
             key: "{entry.id}",
             "data-layout": "entry-card",
             "data-variant": "reading",
             "data-list-edge": "{list_edge}",
             Link {
-                class: "entry-card__title",
                 "data-slot": "entry-card-title",
                 to: AppRoute::ReaderPage { entry_id: entry.id },
                 "{entry.title}"
             }
-            div { class: "entry-card__meta", "data-slot": "entry-card-meta",
+            div { "data-slot": "entry-card-meta",
                 "{entry.feed_title}"
                 if let Some(date) = format_entry_date_utc(entry.published_at) { " · {date}" }
                 if entry.is_read { " · 已读" } else { " · 未读" }
                 if entry.is_starred { " · 已收藏" }
             }
-            div { class: "entry-card__actions", "data-layout": "entry-card-actions",
+            div { "data-layout": "entry-card-actions",
                 button {
                     class: "button",
                     "data-variant": "secondary",

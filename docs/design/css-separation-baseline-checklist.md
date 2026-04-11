@@ -20,14 +20,14 @@
   - 主题卡 / 来源筛选 / 阅读底栏按钮 -> `data-state`
 - 第二轮结构槽迁移：进行中
   - 标题槽、页头槽、表单项槽、动作项槽、阅读列表边界槽已补
-  - 卡片头部标题已开始统一迁到 `.card-title`
-  - entries 分组头部已开始统一迁到 `.group-header` / `.group-header__title` / `.group-header__meta`
+  - 卡片头部标题已统一迁到 `data-slot="card-title"`
+  - entries 分组头部已统一迁到 `data-layout="entry-group-header"` + `data-slot="entry-group-title|entry-group-meta"`
   - 关键布局容器已开始统一迁到 `data-layout`
 - 当前剩余问题：
   - 高密度 class 驱动区域已经基本清空。
   - 当前剩余问题主要是：
     - 少量通用布局 class 仍在承担组织作用
-    - `reader-html` 内容岛作为允许保留的例外继续存在
+    - `reader-body-html` 内容岛作为允许保留的例外继续存在
 
 ## 2026-04-11 保留 class 边界审查
 
@@ -87,7 +87,7 @@
   - `rg -n "(^|[,{])[^{}]*(>|\\+|~)[^{}]*\\{" assets/styles assets/themes -S`
   - `rg -n "\\.[A-Za-z][A-Za-z0-9_-]+\\s+(h[1-6]|p|ul|ol|li|img|figure|button|span|div|input|textarea|select)\\b|\\]\\s+(h[1-6]|p|ul|ol|li|img|figure|button|span|div|input|textarea|select)\\b" assets/styles assets/themes -S`
 - 结论：
-  - `reader-html` 内容岛标签规则继续作为允许例外保留。
+- `reader-body-html` 内容岛标签规则继续作为允许例外保留。
   - `atlas-sidebar` 中普通 page / reader page 的直接子布局规则继续保留，但入口必须优先使用 `data-layout` / `data-slot`。
   - 已将 `atlas-sidebar` 的 `.status-banner` 页面定位改为 `[data-layout="status-banner"]`。
   - 已将 `atlas-sidebar` 的 reader `.inline-actions` 页面定位改为 `[data-layout="reader-toolbar"]` / `[data-layout="reader-pagination"]`。
@@ -100,9 +100,9 @@
   - `.status-banner.info/.error`
   - `.button.secondary/.danger/.danger-outline`
   - `.app-shell.density-compact`
-  - `.theme-card.is-active`
-  - `.entry-filters__source-chip.is-selected`
-  - `.reader-bottom-bar__button.is-active/.is-disabled`
+  - `[data-layout="theme-card"][data-state="active"]`
+  - `[data-layout="entry-filters-source-chip"][data-state="selected"]`
+  - `.reader-bottom-bar__button[data-state]`
 
 - 当前稳定接口：
   - `data-state`
@@ -274,9 +274,9 @@
   - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
 - 目标区域：
   - 历史 selector 已迁移为：
-    - `.group-header`
-    - `.group-header__title`
-    - `.group-header__meta`
+    - `data-layout="entry-group-header"`
+    - `data-slot="entry-group-title"`
+    - `data-slot="entry-group-meta"`
     - `data-group-level="primary|date|source"`
 - 下一步：
   - 清理遗留 selector 文档和辅助样式
@@ -344,10 +344,10 @@
   - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
   - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
 - 关注点：
-  - `.entry-groups`
-  - `.entries-layout`
-  - `.settings-grid`
-  - `.exchange-grid`
+  - `data-layout="entry-groups"`
+  - `data-layout="entries-layout"`
+  - `data-layout="settings-grid"`
+  - `data-layout="exchange-grid"`
 - 判断：
   - `entries-main` / `entries-page__*` 已迁到 `data-layout="entries-main"` / `entries-page-backlink` / `entries-page-state`，不再属于残留 page-local class 入口。
   - `entry-groups` / `entries-layout` / `settings-grid` / `exchange-grid` 已有 `data-layout`，CSS 不应再以 class 作为主入口。
@@ -386,18 +386,18 @@
 
 ## 允许保留的例外
 
-### `reader-html` 内容岛
+### `reader-body-html` 内容岛
 
 - 文件：
   - [reader.css](/home/develata/gitclone/RSS-Reader/assets/styles/reader.css)
 - 原因：
   - 这是正文内容岛，不是页面壳结构
   - 可以继续保留内容标签样式，例如：
-    - `.reader-html p`
-    - `.reader-html h1/h2/h3/h4`
-    - `.reader-html ul/ol`
-    - `.reader-html img`
-    - `.reader-html figure`
+    - `[data-slot="reader-body-html"] p`
+    - `[data-slot="reader-body-html"] h1/h2/h3/h4`
+    - `[data-slot="reader-body-html"] ul/ol`
+    - `[data-slot="reader-body-html"] img`
+    - `[data-slot="reader-body-html"] figure`
 
 ## 验收方式
 
@@ -407,11 +407,10 @@
   - `.button.secondary`
   - `.button.danger`
   - `.button.danger-outline`
-  - `.theme-card.is-active`
-  - `.entry-filters__source-chip.is-selected`
-  - `.reader-bottom-bar__button.is-active`
-  - `.reader-bottom-bar__button.is-disabled`
-  - `.app-shell.density-compact`
+  - `[data-layout="theme-card"][data-state="active"]`
+  - `[data-layout="entry-filters-source-chip"][data-state="selected"]`
+  - `.reader-bottom-bar__button[data-state]`
+  - `.app-shell[data-density="compact"]`
   - `.page h2`
   - `.page-header h2`
   - `settings-form-grid > div`

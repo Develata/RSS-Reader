@@ -14,7 +14,7 @@ pub fn EntryFilters(
     on_change_selected_feed_urls: EventHandler<Vec<String>>,
 ) -> Element {
     rsx! {
-        div { class: "entry-filters", "data-layout": "entry-filters",
+        div { "data-layout": "entry-filters",
             label {
                 class: "sr-only",
                 r#for: "entry-search-title",
@@ -29,7 +29,7 @@ pub fn EntryFilters(
                 placeholder: "按标题搜索",
                 oninput: move |event| on_search.call(event.value())
             }
-            label { class: "entry-filters__toggle", "data-layout": "entry-filters-toggle",
+            label { "data-layout": "entry-filters-toggle",
                 input {
                     name: "filter_unread",
                     r#type: "checkbox",
@@ -45,7 +45,7 @@ pub fn EntryFilters(
                 }
                 span { "仅未读" }
             }
-            label { class: "entry-filters__toggle", "data-layout": "entry-filters-toggle",
+            label { "data-layout": "entry-filters-toggle",
                 input {
                     name: "filter_read",
                     r#type: "checkbox",
@@ -61,7 +61,7 @@ pub fn EntryFilters(
                 }
                 span { "仅已读" }
             }
-            label { class: "entry-filters__toggle", "data-layout": "entry-filters-toggle",
+            label { "data-layout": "entry-filters-toggle",
                 input {
                     name: "filter_starred",
                     r#type: "checkbox",
@@ -77,7 +77,7 @@ pub fn EntryFilters(
                 }
                 span { "仅收藏" }
             }
-            label { class: "entry-filters__toggle", "data-layout": "entry-filters-toggle",
+            label { "data-layout": "entry-filters-toggle",
                 input {
                     name: "filter_unstarred",
                     r#type: "checkbox",
@@ -94,9 +94,9 @@ pub fn EntryFilters(
                 span { "仅未收藏" }
             }
             if !available_sources.is_empty() {
-                div { class: "entry-filters__sources", "data-layout": "entry-filters-sources",
-                    p { class: "entry-filters__sources-label", "data-slot": "entry-filters-sources-label", "按来源筛选" }
-                    div { class: "entry-filters__source-grid", "data-layout": "entry-filters-source-grid",
+                div { "data-layout": "entry-filters-sources",
+                    p { "data-slot": "entry-filters-sources-label", "按来源筛选" }
+                    div { "data-layout": "entry-filters-source-grid",
                         for (_feed_id, title, url) in available_sources {
                             {
                                 let is_selected = selected_feed_urls.contains(&url);
@@ -115,7 +115,6 @@ pub fn EntryFilters(
                                 };
                                 rsx! {
                                     label {
-                                        class: "entry-filters__source-chip",
                                         "data-layout": "entry-filters-source-chip",
                                         "data-state": if is_selected { "selected" } else { "unselected" },
                                         input {

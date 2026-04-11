@@ -25,16 +25,11 @@
   - `.app-header`
   - `.page`
   - `.button`
-  - `.status-banner`
-  - `.text-input`
-  - `.text-area`
-  - `.select-input`
-  - `.field-label`
-  - `.feed-card`
-  - `.entry-card`
-  - `.settings-card`
-  - `.exchange-card`
-  - `.theme-card`
+- `.status-banner`
+- `.text-input`
+- `.text-area`
+- `.select-input`
+- `.field-label`
 - 避免依赖深层后代和匿名位置：
   - `.page > div:nth-child(3) > button`
   - `.entry-card > :first-child > :last-child`
@@ -371,22 +366,17 @@
 - `.app-eyebrow`
 - `.app-subtitle`
 - `.page`
-- `.feed-card`
-- `.entry-card`
-- `.settings-card`
-- `.exchange-card`
-- `.theme-card`
 - `.status-banner`
 - `.button`
 - `.text-input`
 - `.text-area`
 - `.select-input`
 - `.field-label`
-- `.reader-html`
+- `[data-slot="reader-body-html"]`
 
 说明：
 
-- `.reader-html` 是内容岛例外，可以继续依赖
+- `[data-slot="reader-body-html"]` 是内容岛例外，可以继续依赖
 - `.page` / `.app-header` 是通用壳类，不是下一轮优先清理对象
 
 ## 可用 CSS 变量

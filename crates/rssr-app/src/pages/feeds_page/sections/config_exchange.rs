@@ -12,13 +12,13 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
     let import_opml_facade = facade.clone();
 
     rsx! {
-        div { class: "exchange-header", "data-layout": "exchange-header", "data-section": "config-exchange",
-            h3 { class: "card-title", "data-slot": "card-title", "配置交换" }
+        div { "data-layout": "exchange-header", "data-section": "config-exchange",
+            h3 { "data-slot": "card-title", "配置交换" }
         }
-        div { class: "exchange-grid", "data-layout": "exchange-grid",
-            div { class: "exchange-card", "data-layout": "exchange-card", "data-section": "config-json",
-                div { class: "settings-card__header", "data-slot": "settings-card-header",
-                    h3 { class: "card-title", "data-slot": "card-title", "配置包 JSON" }
+        div { "data-layout": "exchange-grid",
+            div { "data-layout": "exchange-card", "data-section": "config-json",
+                div { "data-slot": "settings-card-header",
+                    h3 { "data-slot": "card-title", "配置包 JSON" }
                 }
                 label { class: "sr-only", r#for: "config-text", "配置包 JSON 文本" }
                 textarea {
@@ -48,9 +48,9 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
                     }
                 }
             }
-            div { class: "exchange-card", "data-layout": "exchange-card", "data-section": "opml",
-                div { class: "settings-card__header", "data-slot": "settings-card-header",
-                    h3 { class: "card-title", "data-slot": "card-title", "OPML" }
+            div { "data-layout": "exchange-card", "data-section": "opml",
+                div { "data-slot": "settings-card-header",
+                    h3 { "data-slot": "card-title", "OPML" }
                 }
                 label { class: "sr-only", r#for: "opml-text", "OPML 文本" }
                 textarea {

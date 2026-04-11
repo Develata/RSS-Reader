@@ -3,8 +3,8 @@
 - 日期：2026-04-11
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：85c07f8
-- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8
+- 当前 HEAD：66119cf
+- 相关 commit：2189d8b / b914f4c / 2379557 / d3368b4 / 954b22a / 037e31a / c36edfd / fea79d0 / e8d3887 / 972ab12 / c41864f / 85c07f8 / 66119cf
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -22,6 +22,8 @@
 继续把 entries 页面本地壳 wrapper 从视觉 class 入口迁到 `data-layout`，缩小 page-local CSS 对内部 DOM 名称的依赖。
 继续清理设计系统边界上的样式归属，把 `.inline-actions__item` 的基础规则从页面 CSS 挪回全局 shell。
 继续把 `.inline-actions` 容器从“带默认页面间距”的混合 class 收回成纯排列辅助 class，页面间距改由具体 `data-layout` 承担。
+继续删除页面 DOM 上已经没有任何消费方的旧 class token，避免 reader/settings/feeds 保持双轨壳层。
+继续批量清理页面/卡片/分组/统计/表单等语义已经被 `data-layout` / `data-slot` 接管、但仍残留在 DOM 上的死 class token。
 
 ## 影响范围
 
@@ -146,6 +148,36 @@
 - [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)
   - 将 `inline-actions__item` 的结论更新为“保留为设计系统 class，重点只检查是否被页面拿来承担布局锚点”。
 
+### Dead Class Token 清理
+
+- [config_exchange.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/config_exchange.rs)
+  - feeds 配置交换区移除误挂的 `settings-card__header`，只保留 `data-slot="settings-card-header"`。
+- [appearance.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/appearance.rs)
+  - appearance 卡片头部移除 `settings-card__header`。
+- [preferences.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/preferences.rs)
+  - 阅读偏好区移除 `settings-card__section` / `settings-card__section-header` / `settings-card__section-title`。
+- [sync/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/mod.rs)
+  - WebDAV 卡片移除 `settings-card__header`、`settings-card__section*`、`settings-card__actions`。
+- [themes/lab.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/lab.rs)
+  - 主题实验室移除 `settings-card__section*` / `settings-card__actions` 残留，并把自定义 CSS placeholder 改成 `[data-layout="reader-body"]` 示例。
+- [themes/presets.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/presets.rs)
+  - 主题预设区移除 `settings-card__section*` / `settings-card__actions` 残留。
+- [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/mod.rs)
+  - reader 页面移除 `reader-page` / `reader-header` / `reader-title` / `reader-toolbar` / `reader-meta-block` / `reader-meta` / `reader-body` / `reader-html` / `reader-pagination` / `reader-pagination--context` 等已失效 class token，只保留 `data-layout` / `data-slot` 和仍有样式消费方的 `inline-actions` / `reader-bottom-bar__button`。
+- [frontend-command-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/frontend-command-reference.md)、[theme-author-selector-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/theme-author-selector-reference.md)、[css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)
+  - 当前规范文档中的 reader 内容岛示例已统一从 `.reader-html` 切到 `[data-slot="reader-body-html"]`。
+
+### Semantic Shell Class Purge
+
+- [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/mod.rs)、[compose.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/compose.rs)、[config_exchange.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/config_exchange.rs)、[saved.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/saved.rs)
+  - feeds 页面移除 `page-*`、`stats-grid*`、`stat-card*`、`feed-workbench*`、`feed-compose-card*`、`feed-form`、`exchange-*`、`feed-card*` 等已无消费方的壳层 class token。
+- [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/mod.rs)、[appearance.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/appearance.rs)、[preferences.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/preferences.rs)、[sync/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/mod.rs)、[presets.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/presets.rs)
+  - settings 页面移除 `page-*`、`settings-grid`、`settings-card*`、`card-title`、`theme-gallery` 等死 token，仅保留设计系统类和语义属性。
+- [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)、[cards.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/cards.rs)、[controls.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/controls.rs)、[entry_filters.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/components/entry_filters.rs)
+  - entries 页面移除 `page-*`、`entries-*`、`entry-group*`、`entry-overview*`、`entry-controls*`、`entry-filters__*`、`entry-card__*` 等已被 `data-layout` / `data-slot` 取代的 DOM class token。
+- [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)、[frontend-command-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/frontend-command-reference.md)、[theme-author-selector-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/theme-author-selector-reference.md)
+  - 当前规范文档删除 `.feed-card` / `.entry-card` / `.settings-card` / `.exchange-card` / `.theme-card` / `.card-title` / `.group-header*` 等已失效的建议入口，统一回到 `data-layout` / `data-slot`。
+
 ## 验证与验收
 
 ### 自动化验证
@@ -190,6 +222,15 @@
 - `rg -n "entries-main|entries-page__backlink|entries-page__state" crates/rssr-app/src assets/styles -S`：通过，CSS 入口已迁到 `data-layout`，仅剩 DOM class token。
 - `rg -n "\\.inline-actions__item" assets/styles assets/themes -S`：通过，仅剩 `shell.css` 和 `responsive.css` 两处设计系统规则。
 - `rg -n "\\.inline-actions\\b|\\.inline-actions__item" assets/styles assets/themes -S`：通过，`.inline-actions` / `.inline-actions__item` 仅剩全局设计系统规则；页面间距已回落到 `data-layout`。
+- `rg -n 'class: "[^"]*(settings-card__header|settings-card__section|settings-card__section-header|settings-card__section-title|settings-card__actions|reader-page|reader-header|reader-title|reader-toolbar|reader-meta-block|reader-meta|reader-body|reader-html|reader-pagination|reader-pagination--context)[^"]*"' crates/rssr-app/src -S`：通过，活跃代码中的旧混合态 class token 已清空。
+- `scripts/run_windows_chrome_visible_regression.sh --static-port 8322 --rssr-web-port 18822 --chrome-port 9232 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-133206/summary.md`。
+- `rg -n 'class: "[^"]*(page|page-|page-header|page-section-header|page-title|entries-layout|entries-main|entries-page__|entry-card__title|entry-card__meta|entry-card__actions|entry-group|entry-date-group|entry-source-group|entry-list--|entry-overview|entry-controls|entry-filters__|feed-card|feed-compose|feed-workbench|feed-form|exchange-header|exchange-grid|exchange-card|settings-card|settings-grid|stats-grid|stat-card|card-title|theme-gallery|theme-card|group-header)[^"]*"' crates/rssr-app/src -S`：通过，活跃代码中这批 page shell / card shell class token 已清空。
+- `cargo fmt`：通过。
+- `cargo check -p rssr-app`：通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过。
+- `scripts/run_windows_chrome_visible_regression.sh --static-port 8324 --rssr-web-port 18824 --chrome-port 9234 --slow-ms 100`：静态 entries/feeds、reader theme matrix、小视口 routes 通过；`rssr-web browser feed smoke` 超时失败。
+- `scripts/run_windows_chrome_visible_regression.sh --static-port 8326 --rssr-web-port 18826 --chrome-port 9236 --slow-ms 100`：静态 entries/feeds、reader theme matrix、小视口 routes 再次通过；`rssr-web browser feed smoke` 再次超时失败。
+- `scripts/run_windows_chrome_visible_regression.sh --static-port 8320 --rssr-web-port 18820 --chrome-port 9230 --slow-ms 100`：通过，summary 位于 `target/windows-chrome-visible-regression/20260411-131242/summary.md`。
 
 ### 手工验收
 
@@ -221,6 +262,9 @@
 - 当前 entries wrapper 这轮尚未单独提交；若继续拆 class 边界，应优先检查设计系统 class 与页面语义 hook 的交界处，而不是继续平铺更多 `data-*`。
 - `.inline-actions__item` 已确认属于设计系统 class；后续只需要防止页面/主题把它重新当作布局入口使用。
 - `.inline-actions` 现已只承担排列，不再隐含通用 `margin-top`；若后续出现动作条节奏问题，应优先在对应 `data-layout` 修，而不是回填到全局 class。
+- 这轮之后，reader/settings/feeds 仍允许保留的 class 应只剩设计系统类、卡片标题类和 reader bottom bar 内部实现类；若后续再出现新的页面 class token，需要先证明存在外部消费方。
+- 这轮之后，页面/卡片/分组/表单相关 dead class token 已基本清空；剩余保留类应优先视为设计系统类或内部实现类，而不是新的页面契约。
+- `rssr-web browser feed smoke` 当前两次都在最终 `[data-smoke="rssr-web-browser-feed-smoke"][data-result="pass"]` selector 等待超时；由于前面静态页面与 reader/settings/feeds 可见回归均通过，暂判断为 helper/环境层问题，待单独排查。
 
 ## 给下一位 Agent 的备注
 
@@ -232,4 +276,5 @@
 - `e8d3887` 已提交保留 class 边界审查与 `.entry-card__action` 死 selector 清理。
 - `972ab12` 已提交 class audit handoff 元数据更新。
 - `c41864f` 已提交 status banner layout hook 与 atlas 深选择器收口。
-- 本工作区当前还有一轮未提交改动：entries page wrapper 语义化、design-system class boundary 收口与 checklist/handoff 更新，commit: pending。
+- `66119cf` 已提交 page shell / design-system class boundary 收口。
+- 本工作区当前还有一轮未提交改动：semantic shell class purge 与规范文档同步，commit: pending。

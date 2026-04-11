@@ -9,12 +9,12 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
     let add_facade = facade.clone();
 
     rsx! {
-        div { class: "feed-workbench feed-workbench--single", "data-layout": "feed-workbench-single",
-            div { class: "feed-compose-card", "data-layout": "feed-compose-card",
-                div { class: "feed-compose-card__header", "data-slot": "feed-compose-card-header",
-                    h3 { class: "card-title", "data-slot": "card-title", "新增订阅" }
+        div { "data-layout": "feed-workbench-single",
+            div { "data-layout": "feed-compose-card",
+                div { "data-slot": "feed-compose-card-header",
+                    h3 { "data-slot": "card-title", "新增订阅" }
                 }
-                div { class: "feed-form", "data-layout": "feed-form",
+                div { "data-layout": "feed-form",
                     label { class: "sr-only", r#for: "feed-url-input", "订阅地址" }
                     input {
                         id: "feed-url-input",

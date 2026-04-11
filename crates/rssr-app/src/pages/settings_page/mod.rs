@@ -46,11 +46,11 @@ pub fn SettingsPage() -> Element {
     });
 
     rsx! {
-        section { class: "page page-settings", "data-page": "settings",
+        section { "data-page": "settings",
             AppNav {}
-            div { class: "page-header page-section-header page-section-header--settings", "data-slot": "page-section-header", "data-layout": "page-header", "data-section": "settings",
-                h2 { class: "page-header__title page-title page-section-title", "data-slot": "page-title", "设置" }
-                div { class: "page-header__actions", "data-slot": "page-header-actions",
+            div { "data-slot": "page-section-header", "data-layout": "page-header", "data-section": "settings",
+                h2 { "data-slot": "page-title", "设置" }
+                div { "data-slot": "page-header-actions",
                     button {
                         class: "icon-link-button",
                         "data-action": "open-github-repo",
@@ -75,7 +75,7 @@ pub fn SettingsPage() -> Element {
             if facade.has_status_message() {
                 StatusBanner { message: facade.status_message(), tone: facade.status_tone() }
             }
-            div { class: "settings-grid", "data-layout": "settings-grid",
+            div { "data-layout": "settings-grid",
                 AppearanceSettingsCard { facade: facade.clone() }
                 WebDavSettingsCard { facade }
             }

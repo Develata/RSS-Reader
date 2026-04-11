@@ -244,18 +244,13 @@
 - `.app-shell`
 - `.app-header`
 - `.page`
-- `.feed-card`
-- `.entry-card`
-- `.settings-card`
-- `.exchange-card`
-- `.theme-card`
 - `.status-banner`
 - `.button`
 - `.text-input`
 - `.text-area`
 - `.select-input`
 - `.field-label`
-- `.reader-html`
+- `[data-slot="reader-body-html"]`
 
 不再建议把以下 page-specific class 当作长期契约：
 
