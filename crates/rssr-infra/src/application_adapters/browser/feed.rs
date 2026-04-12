@@ -7,6 +7,7 @@ use time::OffsetDateTime;
 use url::Url;
 
 use super::feed_request::{should_fallback_web_feed_request, web_refresh_request_urls};
+use super::feed_response::looks_like_html_response_body;
 
 #[derive(Debug, Clone)]
 pub struct ParsedFeed {
@@ -80,16 +81,6 @@ pub fn parse_feed(raw: &str) -> anyhow::Result<ParsedFeed> {
         );
     }
     normalize_feed(feed_rs::parser::parse(raw.as_bytes()).context("解析 RSS/Atom feed 失败")?)
-}
-
-fn looks_like_html_response_body(raw: &str) -> bool {
-    let trimmed = raw.trim_start_matches('\u{feff}').trim_start();
-    let head = trimmed.chars().take(256).collect::<String>().to_ascii_lowercase();
-
-    head.starts_with("<!doctype html")
-        || head.starts_with("<html")
-        || head.starts_with("<head")
-        || head.starts_with("<body")
 }
 
 fn normalize_feed(feed: FeedRsFeed) -> anyhow::Result<ParsedFeed> {

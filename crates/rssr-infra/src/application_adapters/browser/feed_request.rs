@@ -1,6 +1,8 @@
 use anyhow::Context;
-use reqwest::{StatusCode, header};
+use reqwest::StatusCode;
 use url::Url;
+
+use super::feed_response::looks_like_proxy_login_or_spa_shell;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WebFeedRequestKind {
@@ -80,31 +82,13 @@ fn status_requires_web_feed_fallback(status: StatusCode) -> bool {
     )
 }
 
-fn looks_like_proxy_login_or_spa_shell(response: &reqwest::Response) -> bool {
-    let content_type = response
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default();
-
-    looks_like_proxy_login_or_spa_shell_parts(content_type, response.url().path())
-}
-
-fn looks_like_proxy_login_or_spa_shell_parts(content_type: &str, path: &str) -> bool {
-    let content_type = content_type.to_ascii_lowercase();
-
-    content_type.starts_with("text/html")
-        || content_type.starts_with("application/xhtml+xml")
-        || path.starts_with("/login")
-}
-
 #[cfg(test)]
 mod tests {
     use reqwest::StatusCode;
 
     use super::{
-        WebFeedRequestKind, looks_like_proxy_login_or_spa_shell_parts,
-        status_requires_web_feed_fallback, web_refresh_request_urls_with_origin_and_now,
+        WebFeedRequestKind, status_requires_web_feed_fallback,
+        web_refresh_request_urls_with_origin_and_now,
     };
 
     #[test]
@@ -150,14 +134,6 @@ mod tests {
 
         assert_eq!(request_urls.len(), 2);
         assert_eq!(request_urls[1].url, "ftp://feeds.example.com/rss.xml");
-    }
-
-    #[test]
-    fn proxy_shell_detection_flags_html_and_login_routes() {
-        assert!(looks_like_proxy_login_or_spa_shell_parts("text/html; charset=utf-8", "/"));
-        assert!(looks_like_proxy_login_or_spa_shell_parts("application/xhtml+xml", "/"));
-        assert!(looks_like_proxy_login_or_spa_shell_parts("application/xml", "/login"));
-        assert!(!looks_like_proxy_login_or_spa_shell_parts("application/xml", "/feed-proxy"));
     }
 
     #[test]

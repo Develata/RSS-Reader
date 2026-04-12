@@ -2,6 +2,7 @@ pub mod adapters;
 pub mod config;
 pub mod feed;
 mod feed_request;
+mod feed_response;
 pub mod query;
 pub mod state;
 
