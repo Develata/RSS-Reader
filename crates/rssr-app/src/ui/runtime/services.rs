@@ -1,13 +1,11 @@
 use anyhow::Result;
 use rssr_application::{
     AppUseCases, ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome,
-    OpmlImportOutcome, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput,
-    StartupTarget,
+    OpmlImportOutcome, ReaderEntrySnapshot, RemoteConfigPullOutcome, RemoteConfigPushOutcome,
+    RemoveSubscriptionInput, StartupTarget, ToggleReadInput, ToggleReadOutcome, ToggleStarredInput,
+    ToggleStarredOutcome,
 };
-use rssr_domain::{
-    EntriesWorkspaceState, Entry, EntryNavigation, EntryQuery, EntrySummary, FeedSummary,
-    UserSettings,
-};
+use rssr_domain::{EntriesWorkspaceState, EntryQuery, EntrySummary, FeedSummary, UserSettings};
 
 use crate::bootstrap::{AppServices, HostCapabilities};
 
@@ -150,20 +148,19 @@ pub(crate) struct ReaderPort {
 }
 
 impl ReaderPort {
-    pub(crate) async fn get_entry(&self, entry_id: i64) -> Result<Option<Entry>> {
-        self.use_cases.entry_service.get_entry(entry_id).await
+    pub(crate) async fn load_entry(&self, entry_id: i64) -> Result<ReaderEntrySnapshot> {
+        self.use_cases.reader_service.load_entry(entry_id).await
     }
 
-    pub(crate) async fn reader_navigation(&self, entry_id: i64) -> Result<EntryNavigation> {
-        self.use_cases.entry_service.reader_navigation(entry_id).await
+    pub(crate) async fn toggle_read(&self, input: ToggleReadInput) -> Result<ToggleReadOutcome> {
+        self.use_cases.reader_service.toggle_read(input).await
     }
 
-    pub(crate) async fn set_read(&self, entry_id: i64, is_read: bool) -> Result<()> {
-        self.use_cases.entry_service.set_read(entry_id, is_read).await
-    }
-
-    pub(crate) async fn set_starred(&self, entry_id: i64, is_starred: bool) -> Result<()> {
-        self.use_cases.entry_service.set_starred(entry_id, is_starred).await
+    pub(crate) async fn toggle_starred(
+        &self,
+        input: ToggleStarredInput,
+    ) -> Result<ToggleStarredOutcome> {
+        self.use_cases.reader_service.toggle_starred(input).await
     }
 }
 

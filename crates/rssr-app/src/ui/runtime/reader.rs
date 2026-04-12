@@ -6,15 +6,22 @@ use crate::{
     },
     ui::{commands::ReaderCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
+use rssr_application::{ToggleReadInput, ToggleStarredInput};
 
 pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
     match command {
         ReaderCommand::LoadEntry { entry_id } => match UiServices::shared().await {
             Ok(services) => {
-                let reader = services.reader();
                 let mut intents = vec![UiIntent::ReaderPage(ReaderPageIntent::BeginLoading)];
-                match reader.get_entry(entry_id).await {
-                    Ok(Some(entry)) => {
+                match services.reader().load_entry(entry_id).await {
+                    Ok(snapshot) => {
+                        let Some(entry) = snapshot.entry else {
+                            intents.push(UiIntent::ReaderPage(ReaderPageIntent::SetError(Some(
+                                "文章不存在".to_string(),
+                            ))));
+                            return intents;
+                        };
+
                         let (body_html, body_text) = match select_reader_body(
                             entry.content_html,
                             entry.content_text,
@@ -36,18 +43,12 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
                                 .unwrap_or_else(|| "未知发布时间".to_string()),
                             is_read: entry.is_read,
                             is_starred: entry.is_starred,
-                            navigation_state: reader
-                                .reader_navigation(entry_id)
-                                .await
-                                .unwrap_or_default(),
+                            navigation_state: snapshot.navigation,
                         };
                         intents.push(UiIntent::ReaderPage(ReaderPageIntent::ApplyLoadedContent(
                             content,
                         )));
                     }
-                    Ok(None) => intents.push(UiIntent::ReaderPage(ReaderPageIntent::SetError(
-                        Some("文章不存在".to_string()),
-                    ))),
                     Err(err) => intents.push(UiIntent::ReaderPage(ReaderPageIntent::SetError(
                         Some(err.to_string()),
                     ))),
@@ -58,25 +59,29 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
         },
         ReaderCommand::ToggleRead { entry_id, currently_read, via_shortcut } => {
             match UiServices::shared().await {
-                Ok(services) => match services.reader().set_read(entry_id, !currently_read).await {
-                    Ok(()) => reader_intents(vec![
+                Ok(services) => match services
+                    .reader()
+                    .toggle_read(ToggleReadInput { entry_id, currently_read })
+                    .await
+                {
+                    Ok(outcome) => reader_intents(vec![
                         ReaderPageIntent::SetStatus {
                             message: if via_shortcut {
-                                if currently_read {
-                                    "已通过快捷键标记为未读。".to_string()
-                                } else {
+                                if outcome.is_read {
                                     "已通过快捷键标记为已读。".to_string()
+                                } else {
+                                    "已通过快捷键标记为未读。".to_string()
                                 }
-                            } else if currently_read {
-                                "已将当前文章标记为未读。".to_string()
-                            } else {
+                            } else if outcome.is_read {
                                 "已将当前文章标记为已读。".to_string()
+                            } else {
+                                "已将当前文章标记为未读。".to_string()
                             },
                             tone: "info".to_string(),
                         },
                         ReaderPageIntent::BumpReload,
                     ]),
-                    Err(err) => reader_status_error(format!("更新已读状态失败：{err}")),
+                    Err(err) => reader_status_error(format!("{err}")),
                 },
                 Err(err) => reader_status_error(format!("初始化应用失败：{err}")),
             }
@@ -84,25 +89,29 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
         ReaderCommand::ToggleStarred { entry_id, currently_starred, via_shortcut } => {
             match UiServices::shared().await {
                 Ok(services) => {
-                    match services.reader().set_starred(entry_id, !currently_starred).await {
-                        Ok(()) => reader_intents(vec![
+                    match services
+                        .reader()
+                        .toggle_starred(ToggleStarredInput { entry_id, currently_starred })
+                        .await
+                    {
+                        Ok(outcome) => reader_intents(vec![
                             ReaderPageIntent::SetStatus {
                                 message: if via_shortcut {
-                                    if currently_starred {
-                                        "已通过快捷键取消收藏。".to_string()
-                                    } else {
+                                    if outcome.is_starred {
                                         "已通过快捷键收藏文章。".to_string()
+                                    } else {
+                                        "已通过快捷键取消收藏。".to_string()
                                     }
-                                } else if currently_starred {
-                                    "已取消收藏当前文章。".to_string()
-                                } else {
+                                } else if outcome.is_starred {
                                     "已收藏当前文章。".to_string()
+                                } else {
+                                    "已取消收藏当前文章。".to_string()
                                 },
                                 tone: "info".to_string(),
                             },
                             ReaderPageIntent::BumpReload,
                         ]),
-                        Err(err) => reader_status_error(format!("更新收藏状态失败：{err}")),
+                        Err(err) => reader_status_error(format!("{err}")),
                     }
                 }
                 Err(err) => reader_status_error(format!("初始化应用失败：{err}")),

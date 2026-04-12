@@ -4,8 +4,8 @@ use rssr_domain::{AppStateRepository, EntryRepository, FeedRepository, SettingsR
 
 use crate::{
     AppStatePort, AppStateService, EntriesWorkspaceService, EntryService, FeedRefreshSourcePort,
-    FeedRemovalCleanupPort, FeedService, ImportExportService, OpmlCodecPort, RefreshService,
-    RefreshStorePort, SettingsService, StartupService, SubscriptionWorkflow,
+    FeedRemovalCleanupPort, FeedService, ImportExportService, OpmlCodecPort, ReaderService,
+    RefreshService, RefreshStorePort, SettingsService, StartupService, SubscriptionWorkflow,
 };
 
 pub trait AppStateServicesPort:
@@ -39,6 +39,7 @@ pub struct AppUseCases {
     pub import_export_service: ImportExportService,
     pub startup_service: StartupService,
     pub entries_workspace_service: EntriesWorkspaceService,
+    pub reader_service: ReaderService,
 }
 
 impl AppUseCases {
@@ -49,10 +50,11 @@ impl AppUseCases {
 
         let settings_service = SettingsService::new(input.settings_repository.clone());
         let app_state_service = AppStateService::new(input.app_state.clone());
+        let entry_service = EntryService::new(input.entry_repository.clone());
 
         Self {
             feed_service: feed_service.clone(),
-            entry_service: EntryService::new(input.entry_repository.clone()),
+            entry_service: entry_service.clone(),
             settings_service: settings_service.clone(),
             app_state_service: app_state_service.clone(),
             refresh_service: refresh_service.clone(),
@@ -78,6 +80,7 @@ impl AppUseCases {
                 app_state_service,
                 feed_service,
             ),
+            reader_service: ReaderService::new(entry_service),
         }
     }
 }
