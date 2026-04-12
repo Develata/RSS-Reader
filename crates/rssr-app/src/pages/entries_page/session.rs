@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use super::{
-    controls::remember_entry_controls_hidden, intent::EntriesPageIntent,
+    browser_interactions::remember_entry_controls_hidden, intent::EntriesPageIntent,
     presenter::EntriesPagePresenter, reducer::dispatch_entries_page_intent,
     state::EntriesPageState,
 };

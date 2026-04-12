@@ -1,3 +1,4 @@
+mod browser_interactions;
 mod cards;
 mod controls;
 mod facade;
@@ -11,10 +12,9 @@ mod state;
 use dioxus::prelude::*;
 use time::OffsetDateTime;
 
+use self::browser_interactions::initial_entry_controls_hidden;
 use self::cards::render_entry_card;
-use self::controls::{
-    initial_entry_controls_hidden, render_entry_controls, render_entry_directory,
-};
+use self::controls::{render_entry_controls, render_entry_directory};
 use self::{facade::EntriesPageFacade, session::EntriesPageSession, state::EntriesPageState};
 use crate::{
     app::AppNav,
