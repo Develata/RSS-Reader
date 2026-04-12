@@ -4,9 +4,9 @@ use rssr_domain::{AppStateRepository, EntryRepository, FeedRepository, SettingsR
 
 use crate::{
     AppStatePort, AppStateService, EntriesListService, EntriesWorkspaceService, EntryService,
-    FeedRefreshSourcePort, FeedRemovalCleanupPort, FeedService, ImportExportService, OpmlCodecPort,
-    ReaderService, RefreshService, RefreshStorePort, SettingsService, StartupService,
-    SubscriptionWorkflow,
+    FeedRefreshSourcePort, FeedRemovalCleanupPort, FeedService, FeedsSnapshotService,
+    ImportExportService, OpmlCodecPort, ReaderService, RefreshService, RefreshStorePort,
+    SettingsService, StartupService, SubscriptionWorkflow,
 };
 
 pub trait AppStateServicesPort:
@@ -41,6 +41,7 @@ pub struct AppUseCases {
     pub startup_service: StartupService,
     pub entries_list_service: EntriesListService,
     pub entries_workspace_service: EntriesWorkspaceService,
+    pub feeds_snapshot_service: FeedsSnapshotService,
     pub reader_service: ReaderService,
 }
 
@@ -81,8 +82,9 @@ impl AppUseCases {
             entries_workspace_service: EntriesWorkspaceService::new(
                 settings_service,
                 app_state_service,
-                feed_service,
+                feed_service.clone(),
             ),
+            feeds_snapshot_service: FeedsSnapshotService::new(feed_service),
             reader_service: ReaderService::new(entry_service),
         }
     }

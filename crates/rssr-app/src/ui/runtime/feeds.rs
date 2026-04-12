@@ -2,31 +2,25 @@ use crate::{
     pages::feeds_page::intent::{FeedsPageIntent, FeedsPageSnapshot},
     ui::{commands::FeedsCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
-use anyhow::Context;
 #[cfg(target_arch = "wasm32")]
 use dioxus::prelude::document;
 use rssr_application::{ConfigImportOutcome, OpmlImportOutcome};
-use rssr_domain::EntryQuery;
 
 pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
     match command {
         FeedsCommand::LoadSnapshot => match UiServices::shared().await {
-            Ok(services) => {
-                let feeds_port = services.feeds();
-                let result: anyhow::Result<FeedsPageSnapshot> = async {
-                    let feeds = feeds_port.list_feeds().await.context("读取订阅失败")?;
-                    let entry_count = feeds_port
-                        .list_entries(&EntryQuery::default())
-                        .await
-                        .context("读取文章统计失败")?
-                        .len();
-                    Ok(FeedsPageSnapshot { feed_count: feeds.len(), entry_count, feeds })
+            Ok(services) => match services.feeds().load_snapshot().await {
+                Ok(outcome) => {
+                    feeds_intents(vec![FeedsPageIntent::SnapshotLoaded(Ok(FeedsPageSnapshot {
+                        feeds: outcome.feeds,
+                        feed_count: outcome.feed_count,
+                        entry_count: outcome.entry_count,
+                    }))])
                 }
-                .await;
-                feeds_intents(vec![FeedsPageIntent::SnapshotLoaded(
-                    result.map_err(|err| err.to_string()),
-                )])
-            }
+                Err(err) => {
+                    feeds_intents(vec![FeedsPageIntent::SnapshotLoaded(Err(err.to_string()))])
+                }
+            },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
         FeedsCommand::AddFeed { raw_url } => match UiServices::shared().await {

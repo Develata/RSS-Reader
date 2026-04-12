@@ -1,12 +1,13 @@
 use anyhow::Result;
 use rssr_application::{
     AppUseCases, ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome,
-    EntriesListOutcome, OpmlImportOutcome, ReaderEntrySnapshot, RemoteConfigPullOutcome,
-    RemoteConfigPushOutcome, RemoveSubscriptionInput, StartupTarget, ToggleEntryReadInput,
-    ToggleEntryReadOutcome, ToggleEntryStarredInput, ToggleEntryStarredOutcome, ToggleReadInput,
-    ToggleReadOutcome, ToggleStarredInput, ToggleStarredOutcome,
+    EntriesListOutcome, FeedsSnapshotOutcome, OpmlImportOutcome, ReaderEntrySnapshot,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput, StartupTarget,
+    ToggleEntryReadInput, ToggleEntryReadOutcome, ToggleEntryStarredInput,
+    ToggleEntryStarredOutcome, ToggleReadInput, ToggleReadOutcome, ToggleStarredInput,
+    ToggleStarredOutcome,
 };
-use rssr_domain::{EntriesWorkspaceState, EntryQuery, FeedSummary, UserSettings};
+use rssr_domain::{EntriesWorkspaceState, EntryQuery, UserSettings};
 
 use crate::bootstrap::{AppServices, HostCapabilities};
 
@@ -178,15 +179,8 @@ pub(crate) struct FeedsPort {
 }
 
 impl FeedsPort {
-    pub(crate) async fn list_feeds(&self) -> Result<Vec<FeedSummary>> {
-        self.use_cases.feed_service.list_feeds().await
-    }
-
-    pub(crate) async fn list_entries(
-        &self,
-        query: &EntryQuery,
-    ) -> Result<Vec<rssr_domain::EntrySummary>> {
-        self.use_cases.entry_service.list_entries(query).await
+    pub(crate) async fn load_snapshot(&self) -> Result<FeedsSnapshotOutcome> {
+        self.use_cases.feeds_snapshot_service.load_snapshot().await
     }
 
     pub(crate) async fn add_subscription(&self, raw_url: &str) -> Result<()> {

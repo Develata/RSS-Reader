@@ -4,6 +4,7 @@ pub mod entries_list_service;
 pub mod entries_workspace_service;
 pub mod entry_service;
 pub mod feed_service;
+pub mod feeds_snapshot_service;
 pub mod import_export_service;
 pub mod reader_service;
 pub mod refresh_service;
@@ -23,6 +24,7 @@ pub use entries_workspace_service::{
 };
 pub use entry_service::EntryService;
 pub use feed_service::{AddSubscriptionInput, FeedService, RemoveSubscriptionInput};
+pub use feeds_snapshot_service::{FeedsSnapshotOutcome, FeedsSnapshotService};
 pub use import_export_service::{
     ConfigImportOutcome, FeedRemovalCleanupPort, ImportExportService, OpmlCodecPort,
     OpmlImportOutcome, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore,
