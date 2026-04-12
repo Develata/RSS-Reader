@@ -13,7 +13,7 @@ pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
         ShellCommand::LoadAuthenticatedShell => match UiServices::shared().await {
             Ok(services) => {
                 let shell = services.shell();
-                let settings = match shell.load_settings().await {
+                let settings = match shell.load_authenticated_shell().await {
                     Ok(settings) => settings,
                     Err(err) => return status_error(format!("读取设置失败：{err}")),
                 };

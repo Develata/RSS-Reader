@@ -89,11 +89,11 @@ impl AppNavShell {
     }
 
     pub(crate) fn submit_search(&self) {
-        self.shell.submit_search(self.navigator.clone());
+        self.shell.submit_search(self.navigator);
     }
 
     pub(crate) fn focus_search(&self) {
-        self.shell.focus_search(self.navigator.clone());
+        self.shell.focus_search(self.navigator);
     }
 }
 

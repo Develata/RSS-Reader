@@ -10,6 +10,7 @@ pub mod reader_service;
 pub mod refresh_service;
 pub mod settings_service;
 pub mod settings_sync_service;
+pub mod shell_service;
 pub mod startup_service;
 pub mod subscription_workflow;
 
@@ -42,6 +43,7 @@ pub use refresh_service::{
 };
 pub use settings_service::SettingsService;
 pub use settings_sync_service::{AppliedRemoteConfigOutcome, SettingsSyncService};
+pub use shell_service::{AuthenticatedShellSnapshot, ShellService};
 pub use startup_service::{StartupService, StartupTarget};
 pub use subscription_workflow::{
     AddSubscriptionAndRefreshOutcome, AddSubscriptionLifecycleInput,

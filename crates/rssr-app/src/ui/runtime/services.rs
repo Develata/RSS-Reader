@@ -105,8 +105,8 @@ pub(crate) struct ShellPort {
 }
 
 impl ShellPort {
-    pub(crate) async fn load_settings(&self) -> Result<UserSettings> {
-        self.use_cases.settings_service.load().await
+    pub(crate) async fn load_authenticated_shell(&self) -> Result<UserSettings> {
+        Ok(self.use_cases.shell_service.load_authenticated_shell().await?.settings)
     }
 
     pub(crate) fn ensure_auto_refresh_started(&self) {
