@@ -1,10 +1,12 @@
 use anyhow::Context;
 use feed_rs::model::{Entry as FeedRsEntry, Feed as FeedRsFeed, Text};
-use reqwest::{StatusCode, header};
+use reqwest::header;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 use url::Url;
+
+use super::feed_request::{should_fallback_web_feed_request, web_refresh_request_urls};
 
 #[derive(Debug, Clone)]
 pub struct ParsedFeed {
@@ -69,81 +71,6 @@ pub async fn web_fetch_feed_response(
     Err(error).context(
         "发送 feed 抓取请求失败（浏览器环境下通常是目标站点未开放 CORS、当前部署未启用 feed 代理，或当前网络不可达）",
     )
-}
-
-fn should_fallback_web_feed_request(
-    index: usize,
-    total: usize,
-    request: &WebFeedRequest,
-    response: &reqwest::Response,
-) -> bool {
-    index + 1 < total
-        && (matches!(
-            response.status(),
-            StatusCode::NOT_FOUND
-                | StatusCode::UNAUTHORIZED
-                | StatusCode::FORBIDDEN
-                | StatusCode::METHOD_NOT_ALLOWED
-                | StatusCode::BAD_REQUEST
-        ) || request.kind == WebFeedRequestKind::Proxy
-            && response.status().is_success()
-            && looks_like_proxy_login_or_spa_shell(response))
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum WebFeedRequestKind {
-    Proxy,
-    Direct,
-}
-
-#[derive(Debug, Clone)]
-struct WebFeedRequest {
-    url: String,
-    kind: WebFeedRequestKind,
-}
-
-fn web_refresh_request_urls(raw: &str) -> anyhow::Result<Vec<WebFeedRequest>> {
-    let url = Url::parse(raw).with_context(|| format!("订阅 URL 不合法：{raw}"))?;
-    let mut request_urls = Vec::new();
-
-    if let Some(proxy_url) = web_feed_proxy_request_url(url.as_str()) {
-        request_urls.push(WebFeedRequest { url: proxy_url, kind: WebFeedRequestKind::Proxy });
-    }
-
-    let mut direct_url = url;
-    if matches!(direct_url.scheme(), "http" | "https") {
-        direct_url
-            .query_pairs_mut()
-            .append_pair("_rssr_fetch", &js_sys::Date::now().round().to_string());
-    }
-    request_urls
-        .push(WebFeedRequest { url: direct_url.to_string(), kind: WebFeedRequestKind::Direct });
-    Ok(request_urls)
-}
-
-fn web_feed_proxy_request_url(feed_url: &str) -> Option<String> {
-    let window = web_sys::window()?;
-    let origin = window.location().origin().ok()?;
-    let mut proxy_url = Url::parse(&origin).ok()?;
-    proxy_url.set_path("/feed-proxy");
-    proxy_url.set_query(None);
-    proxy_url.query_pairs_mut().append_pair("url", feed_url);
-    Some(proxy_url.to_string())
-}
-
-fn looks_like_proxy_login_or_spa_shell(response: &reqwest::Response) -> bool {
-    let content_type = response
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-
-    if content_type.starts_with("text/html") || content_type.starts_with("application/xhtml+xml") {
-        return true;
-    }
-
-    response.url().path().starts_with("/login")
 }
 
 pub fn parse_feed(raw: &str) -> anyhow::Result<ParsedFeed> {
