@@ -1,5 +1,6 @@
 pub mod app_state_service;
 pub mod composition;
+pub mod entries_list_service;
 pub mod entries_workspace_service;
 pub mod entry_service;
 pub mod feed_service;
@@ -12,6 +13,10 @@ pub mod subscription_workflow;
 
 pub use app_state_service::AppStateService;
 pub use composition::{AppCompositionInput, AppStateServicesPort, AppUseCases};
+pub use entries_list_service::{
+    EntriesListOutcome, EntriesListService, ToggleEntryReadInput, ToggleEntryReadOutcome,
+    ToggleEntryStarredInput, ToggleEntryStarredOutcome,
+};
 pub use entries_workspace_service::{
     EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesWorkspaceService,
     SaveEntriesWorkspaceOutcome,

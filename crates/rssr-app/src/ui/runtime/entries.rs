@@ -2,7 +2,7 @@ use crate::{
     pages::entries_page::intent::EntriesPageIntent,
     ui::{commands::EntriesCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
-use rssr_application::EntriesBootstrapInput;
+use rssr_application::{EntriesBootstrapInput, ToggleEntryReadInput, ToggleEntryStarredInput};
 use rssr_domain::EntriesWorkspaceState;
 
 pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
@@ -42,31 +42,37 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
         }
         EntriesCommand::LoadEntries { query } => match UiServices::shared().await {
             Ok(services) => match services.entries().list_entries(&query).await {
-                Ok(entries) => vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries(entries))],
-                Err(err) => entries_status_error(format!("读取文章失败：{err}")),
+                Ok(outcome) => {
+                    vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries(outcome.entries))]
+                }
+                Err(err) => entries_status_error(format!("{err}")),
             },
             Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
         },
         EntriesCommand::ToggleRead { entry_id, entry_title, currently_read } => {
             match UiServices::shared().await {
                 Ok(services) => {
-                    match services.entries().set_read(entry_id, !currently_read).await {
-                        Ok(()) => entries_intents(vec![
+                    match services
+                        .entries()
+                        .toggle_read(ToggleEntryReadInput { entry_id, currently_read })
+                        .await
+                    {
+                        Ok(outcome) => entries_intents(vec![
                             EntriesPageIntent::SetStatus {
                                 message: format!(
                                     "已将《{}》{}。",
                                     entry_title,
-                                    if currently_read {
-                                        "标记为未读"
-                                    } else {
+                                    if outcome.is_read {
                                         "标记为已读"
+                                    } else {
+                                        "标记为未读"
                                     }
                                 ),
                                 tone: "info".to_string(),
                             },
                             EntriesPageIntent::BumpReload,
                         ]),
-                        Err(err) => entries_status_error(format!("更新已读状态失败：{err}")),
+                        Err(err) => entries_status_error(format!("{err}")),
                     }
                 }
                 Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
@@ -75,19 +81,23 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
         EntriesCommand::ToggleStarred { entry_id, entry_title, currently_starred } => {
             match UiServices::shared().await {
                 Ok(services) => {
-                    match services.entries().set_starred(entry_id, !currently_starred).await {
-                        Ok(()) => entries_intents(vec![
+                    match services
+                        .entries()
+                        .toggle_starred(ToggleEntryStarredInput { entry_id, currently_starred })
+                        .await
+                    {
+                        Ok(outcome) => entries_intents(vec![
                             EntriesPageIntent::SetStatus {
                                 message: format!(
                                     "已{}《{}》。",
-                                    if currently_starred { "取消收藏" } else { "收藏" },
+                                    if outcome.is_starred { "收藏" } else { "取消收藏" },
                                     entry_title
                                 ),
                                 tone: "info".to_string(),
                             },
                             EntriesPageIntent::BumpReload,
                         ]),
-                        Err(err) => entries_status_error(format!("更新收藏状态失败：{err}")),
+                        Err(err) => entries_status_error(format!("{err}")),
                     }
                 }
                 Err(err) => entries_status_error(format!("初始化应用失败：{err}")),

@@ -1,11 +1,12 @@
 use anyhow::Result;
 use rssr_application::{
     AppUseCases, ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome,
-    OpmlImportOutcome, ReaderEntrySnapshot, RemoteConfigPullOutcome, RemoteConfigPushOutcome,
-    RemoveSubscriptionInput, StartupTarget, ToggleReadInput, ToggleReadOutcome, ToggleStarredInput,
-    ToggleStarredOutcome,
+    EntriesListOutcome, OpmlImportOutcome, ReaderEntrySnapshot, RemoteConfigPullOutcome,
+    RemoteConfigPushOutcome, RemoveSubscriptionInput, StartupTarget, ToggleEntryReadInput,
+    ToggleEntryReadOutcome, ToggleEntryStarredInput, ToggleEntryStarredOutcome, ToggleReadInput,
+    ToggleReadOutcome, ToggleStarredInput, ToggleStarredOutcome,
 };
-use rssr_domain::{EntriesWorkspaceState, EntryQuery, EntrySummary, FeedSummary, UserSettings};
+use rssr_domain::{EntriesWorkspaceState, EntryQuery, FeedSummary, UserSettings};
 
 use crate::bootstrap::{AppServices, HostCapabilities};
 
@@ -77,16 +78,22 @@ impl EntriesPort {
             .changed)
     }
 
-    pub(crate) async fn list_entries(&self, query: &EntryQuery) -> Result<Vec<EntrySummary>> {
-        self.use_cases.entry_service.list_entries(query).await
+    pub(crate) async fn list_entries(&self, query: &EntryQuery) -> Result<EntriesListOutcome> {
+        self.use_cases.entries_list_service.list_entries(query).await
     }
 
-    pub(crate) async fn set_read(&self, entry_id: i64, is_read: bool) -> Result<()> {
-        self.use_cases.entry_service.set_read(entry_id, is_read).await
+    pub(crate) async fn toggle_read(
+        &self,
+        input: ToggleEntryReadInput,
+    ) -> Result<ToggleEntryReadOutcome> {
+        self.use_cases.entries_list_service.toggle_read(input).await
     }
 
-    pub(crate) async fn set_starred(&self, entry_id: i64, is_starred: bool) -> Result<()> {
-        self.use_cases.entry_service.set_starred(entry_id, is_starred).await
+    pub(crate) async fn toggle_starred(
+        &self,
+        input: ToggleEntryStarredInput,
+    ) -> Result<ToggleEntryStarredOutcome> {
+        self.use_cases.entries_list_service.toggle_starred(input).await
     }
 }
 
@@ -175,7 +182,10 @@ impl FeedsPort {
         self.use_cases.feed_service.list_feeds().await
     }
 
-    pub(crate) async fn list_entries(&self, query: &EntryQuery) -> Result<Vec<EntrySummary>> {
+    pub(crate) async fn list_entries(
+        &self,
+        query: &EntryQuery,
+    ) -> Result<Vec<rssr_domain::EntrySummary>> {
         self.use_cases.entry_service.list_entries(query).await
     }
 
