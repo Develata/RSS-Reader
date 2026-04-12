@@ -5,6 +5,7 @@ pub mod feed_service;
 pub mod import_export_service;
 pub mod refresh_service;
 pub mod settings_service;
+pub mod startup_service;
 pub mod subscription_workflow;
 
 pub use app_state_service::AppStateService;
@@ -22,6 +23,7 @@ pub use refresh_service::{
     RefreshHttpMetadata, RefreshLocalizedEntry, RefreshService, RefreshStorePort, RefreshTarget,
 };
 pub use settings_service::SettingsService;
+pub use startup_service::{StartupService, StartupTarget};
 pub use subscription_workflow::{
     AddSubscriptionAndRefreshOutcome, AddSubscriptionLifecycleInput,
     AddSubscriptionLifecycleOutcome, AppStatePort, SubscriptionWorkflow,

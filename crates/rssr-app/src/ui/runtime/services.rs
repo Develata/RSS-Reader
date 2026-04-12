@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rssr_application::{
     AppUseCases, ConfigImportOutcome, OpmlImportOutcome, RemoteConfigPullOutcome,
-    RemoteConfigPushOutcome, RemoveSubscriptionInput,
+    RemoteConfigPushOutcome, RemoveSubscriptionInput, StartupTarget,
 };
 use rssr_domain::{
     EntriesWorkspaceState, Entry, EntryNavigation, EntryQuery, EntrySummary, FeedSummary,
@@ -110,12 +110,8 @@ impl ShellPort {
         self.host_capabilities.auto_refresh.ensure_started();
     }
 
-    pub(crate) async fn load_last_opened_feed_id(&self) -> Result<Option<i64>> {
-        self.use_cases.app_state_service.load_last_opened_feed_id().await
-    }
-
-    pub(crate) async fn list_feeds(&self) -> Result<Vec<FeedSummary>> {
-        self.use_cases.feed_service.list_feeds().await
+    pub(crate) async fn resolve_startup_target(&self) -> Result<StartupTarget> {
+        self.use_cases.startup_service.resolve_startup_target().await
     }
 }
 

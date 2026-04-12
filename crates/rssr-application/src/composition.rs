@@ -5,7 +5,7 @@ use rssr_domain::{AppStateRepository, EntryRepository, FeedRepository, SettingsR
 use crate::{
     AppStatePort, AppStateService, EntryService, FeedRefreshSourcePort, FeedRemovalCleanupPort,
     FeedService, ImportExportService, OpmlCodecPort, RefreshService, RefreshStorePort,
-    SettingsService, SubscriptionWorkflow,
+    SettingsService, StartupService, SubscriptionWorkflow,
 };
 
 pub trait AppStateServicesPort:
@@ -37,6 +37,7 @@ pub struct AppUseCases {
     pub refresh_service: RefreshService,
     pub subscription_workflow: SubscriptionWorkflow,
     pub import_export_service: ImportExportService,
+    pub startup_service: StartupService,
 }
 
 impl AppUseCases {
@@ -45,14 +46,17 @@ impl AppUseCases {
             FeedService::new(input.feed_repository.clone(), input.entry_repository.clone());
         let refresh_service = RefreshService::new(input.refresh_source, input.refresh_store);
 
+        let settings_service = SettingsService::new(input.settings_repository.clone());
+        let app_state_service = AppStateService::new(input.app_state.clone());
+
         Self {
             feed_service: feed_service.clone(),
             entry_service: EntryService::new(input.entry_repository.clone()),
-            settings_service: SettingsService::new(input.settings_repository.clone()),
-            app_state_service: AppStateService::new(input.app_state.clone()),
+            settings_service: settings_service.clone(),
+            app_state_service: app_state_service.clone(),
             refresh_service: refresh_service.clone(),
             subscription_workflow: SubscriptionWorkflow::new(
-                feed_service,
+                feed_service.clone(),
                 refresh_service,
                 input.app_state.clone(),
             ),
@@ -63,6 +67,7 @@ impl AppUseCases {
                 input.opml_codec,
                 input.app_state,
             ),
+            startup_service: StartupService::new(settings_service, app_state_service, feed_service),
         }
     }
 }

@@ -6,7 +6,7 @@ use crate::{
         snapshot::{AuthenticatedShellSnapshot, StartupRouteSnapshot, UiIntent},
     },
 };
-use rssr_domain::StartupView;
+use rssr_application::StartupTarget;
 
 pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
     match command {
@@ -25,30 +25,14 @@ pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
         ShellCommand::ResolveStartupRoute => match UiServices::shared().await {
             Ok(services) => {
                 let shell = services.shell();
-                let settings = match shell.load_settings().await {
-                    Ok(settings) => settings,
-                    Err(err) => return resolve_with_fallback(format!("读取设置失败：{err}")),
+                let target = match shell.resolve_startup_target().await {
+                    Ok(target) => target,
+                    Err(err) => return resolve_with_fallback(format!("解析启动页面失败：{err}")),
                 };
 
-                let route = match settings.startup_view {
-                    StartupView::All => AppRoute::EntriesPage {},
-                    StartupView::LastFeed => {
-                        let last_feed_id = shell.load_last_opened_feed_id().await.ok().flatten();
-                        let feed_exists = match last_feed_id {
-                            Some(feed_id) => shell
-                                .list_feeds()
-                                .await
-                                .map(|feeds| feeds.iter().any(|feed| feed.id == feed_id))
-                                .unwrap_or(false),
-                            None => false,
-                        };
-
-                        if let Some(feed_id) = last_feed_id.filter(|_| feed_exists) {
-                            AppRoute::FeedEntriesPage { feed_id }
-                        } else {
-                            AppRoute::EntriesPage {}
-                        }
-                    }
+                let route = match target {
+                    StartupTarget::AllEntries => AppRoute::EntriesPage {},
+                    StartupTarget::FeedEntries { feed_id } => AppRoute::FeedEntriesPage { feed_id },
                 };
 
                 vec![UiIntent::StartupRouteResolved(StartupRouteSnapshot { route })]
