@@ -5,6 +5,10 @@ use rssr_domain::UserSettings;
 use crate::{
     router::AppRoute,
     status::{set_status_error, set_status_info},
+    ui::shell_browser::{
+        complete_web_auth_transition, initial_entry_search, initial_nav_hidden,
+        remember_entry_search, remember_nav_hidden,
+    },
     ui::{ShellCommand, UiCommand, UiIntent, collect_projected_ui_command, visit_ui_command},
     web_auth::{
         WebAuthState, configured_username, local_auth_state, login, setup_credentials,
@@ -259,70 +263,4 @@ pub(crate) fn use_web_auth_gate_shell(state: WebAuthState) -> WebAuthGateShell {
     });
 
     WebAuthGateShell { state, username, password, status, status_tone }
-}
-
-fn initial_entry_search() -> String {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-            && let Ok(Some(value)) = storage.get_item("rssr-entry-search")
-        {
-            return value;
-        }
-    }
-
-    String::new()
-}
-
-fn remember_entry_search(_value: &str) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-        {
-            let _ = storage.set_item("rssr-entry-search", _value);
-        }
-    }
-}
-
-fn initial_nav_hidden() -> bool {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-            && let Ok(Some(value)) = storage.get_item("rssr-nav-hidden")
-        {
-            return value == "1";
-        }
-    }
-
-    false
-}
-
-fn remember_nav_hidden(_hidden: bool) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-        {
-            let _ = storage.set_item("rssr-nav-hidden", if _hidden { "1" } else { "0" });
-        }
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn complete_web_auth_transition(on_authenticated: EventHandler<()>) {
-    if let Some(window) = web_sys::window()
-        && window.location().reload().is_ok()
-    {
-        return;
-    }
-
-    on_authenticated.call(());
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn complete_web_auth_transition(on_authenticated: EventHandler<()>) {
-    on_authenticated.call(());
 }

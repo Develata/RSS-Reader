@@ -2,6 +2,7 @@ mod commands;
 mod helpers;
 mod runtime;
 mod shell;
+mod shell_browser;
 mod snapshot;
 
 pub(crate) use self::{
