@@ -86,44 +86,32 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
-        FeedsCommand::RemoveFeed { feed_id, feed_title, confirmed } => {
-            if !confirmed {
-                return feeds_intents(vec![
-                    FeedsPageIntent::PendingDeleteFeedSet(Some(feed_id)),
+        FeedsCommand::RemoveFeed { feed_id, feed_title } => match UiServices::shared().await {
+            Ok(services) => match services.feeds().remove_feed(feed_id).await {
+                Ok(()) => feeds_intents(vec![
+                    FeedsPageIntent::PendingDeleteFeedSet(None),
                     FeedsPageIntent::SetStatus {
-                        message: format!("再次点击即可删除订阅：{feed_title}"),
+                        message: format!("已删除订阅：{feed_title}"),
                         tone: "info".to_string(),
                     },
-                ]);
-            }
-
-            match UiServices::shared().await {
-                Ok(services) => match services.feeds().remove_feed(feed_id).await {
-                    Ok(()) => feeds_intents(vec![
-                        FeedsPageIntent::PendingDeleteFeedSet(None),
-                        FeedsPageIntent::SetStatus {
-                            message: format!("已删除订阅：{feed_title}"),
-                            tone: "info".to_string(),
-                        },
-                        FeedsPageIntent::BumpReload,
-                    ]),
-                    Err(err) => feeds_intents(vec![
-                        FeedsPageIntent::PendingDeleteFeedSet(None),
-                        FeedsPageIntent::SetStatus {
-                            message: format!("删除订阅失败：{err}"),
-                            tone: "error".to_string(),
-                        },
-                    ]),
-                },
+                    FeedsPageIntent::BumpReload,
+                ]),
                 Err(err) => feeds_intents(vec![
                     FeedsPageIntent::PendingDeleteFeedSet(None),
                     FeedsPageIntent::SetStatus {
-                        message: format!("初始化应用失败：{err}"),
+                        message: format!("删除订阅失败：{err}"),
                         tone: "error".to_string(),
                     },
                 ]),
-            }
-        }
+            },
+            Err(err) => feeds_intents(vec![
+                FeedsPageIntent::PendingDeleteFeedSet(None),
+                FeedsPageIntent::SetStatus {
+                    message: format!("初始化应用失败：{err}"),
+                    tone: "error".to_string(),
+                },
+            ]),
+        },
         FeedsCommand::ExportConfig => match UiServices::shared().await {
             Ok(services) => match services.feeds().export_config_json().await {
                 Ok(raw) => feeds_intents(vec![
@@ -137,45 +125,32 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
-        FeedsCommand::ImportConfig { raw, confirmed } => {
-            if !confirmed {
-                return feeds_intents(vec![
-                    FeedsPageIntent::PendingConfigImportSet(true),
+        FeedsCommand::ImportConfig { raw } => match UiServices::shared().await {
+            Ok(services) => match services.feeds().import_config_json(&raw).await {
+                Ok(outcome) => feeds_intents(vec![
+                    FeedsPageIntent::PendingConfigImportSet(false),
                     FeedsPageIntent::SetStatus {
-                        message: "导入配置会按配置包覆盖当前订阅集合，并清理缺失订阅的本地文章；再次点击才会执行。"
-                            .to_string(),
+                        message: format!("配置包已导入：{}。", config_import_summary(&outcome)),
                         tone: "info".to_string(),
                     },
-                ]);
-            }
-
-            match UiServices::shared().await {
-                Ok(services) => match services.feeds().import_config_json(&raw).await {
-                    Ok(outcome) => feeds_intents(vec![
-                        FeedsPageIntent::PendingConfigImportSet(false),
-                        FeedsPageIntent::SetStatus {
-                            message: format!("配置包已导入：{}。", config_import_summary(&outcome)),
-                            tone: "info".to_string(),
-                        },
-                        FeedsPageIntent::BumpReload,
-                    ]),
-                    Err(err) => feeds_intents(vec![
-                        FeedsPageIntent::PendingConfigImportSet(false),
-                        FeedsPageIntent::SetStatus {
-                            message: format!("导入配置包失败：{err}"),
-                            tone: "error".to_string(),
-                        },
-                    ]),
-                },
+                    FeedsPageIntent::BumpReload,
+                ]),
                 Err(err) => feeds_intents(vec![
                     FeedsPageIntent::PendingConfigImportSet(false),
                     FeedsPageIntent::SetStatus {
-                        message: format!("初始化应用失败：{err}"),
+                        message: format!("导入配置包失败：{err}"),
                         tone: "error".to_string(),
                     },
                 ]),
-            }
-        }
+            },
+            Err(err) => feeds_intents(vec![
+                FeedsPageIntent::PendingConfigImportSet(false),
+                FeedsPageIntent::SetStatus {
+                    message: format!("初始化应用失败：{err}"),
+                    tone: "error".to_string(),
+                },
+            ]),
+        },
         FeedsCommand::ExportOpml => match UiServices::shared().await {
             Ok(services) => match services.feeds().export_opml().await {
                 Ok(raw) => feeds_intents(vec![
