@@ -22,8 +22,7 @@ fn config_package_decode_rejects_duplicate_feed_urls() {
     ]);
     let raw = serde_json::to_string(&raw).expect("encode invalid package");
 
-    let error = decode_config_package(&raw).expect_err("duplicate urls must fail");
-    assert!(error.to_string().contains("重复的 feed URL"), "unexpected error: {error:#}");
+    assert_decode_error_contains(&raw, "duplicate urls must fail", "重复的 feed URL");
 }
 
 #[test]
@@ -35,8 +34,7 @@ fn config_package_decode_rejects_duplicate_feed_urls_after_normalization() {
     ]);
     let raw = serde_json::to_string(&raw).expect("encode invalid package");
 
-    let error = decode_config_package(&raw).expect_err("normalized duplicate urls must fail");
-    assert!(error.to_string().contains("重复的 feed URL"), "unexpected error: {error:#}");
+    assert_decode_error_contains(&raw, "normalized duplicate urls must fail", "重复的 feed URL");
 }
 
 #[test]
@@ -46,8 +44,7 @@ fn config_package_decode_rejects_invalid_setting_ranges() {
     raw["settings"]["reader_font_scale"] = json!(2.0);
     let raw = serde_json::to_string(&raw).expect("encode invalid package");
 
-    let error = decode_config_package(&raw).expect_err("invalid settings must fail");
-    assert!(error.to_string().contains("刷新间隔必须"), "unexpected error: {error:#}");
+    assert_decode_error_contains(&raw, "invalid settings must fail", "刷新间隔必须");
 }
 
 #[test]
@@ -56,8 +53,7 @@ fn config_package_decode_rejects_invalid_feed_url() {
     raw["feeds"][0]["url"] = json!("not-a-url");
     let raw = serde_json::to_string(&raw).expect("encode invalid package");
 
-    let error = decode_config_package(&raw).expect_err("invalid feed url must fail");
-    assert!(error.to_string().contains("无效的 feed URL"), "unexpected error: {error:#}");
+    assert_decode_error_contains(&raw, "invalid feed url must fail", "无效的 feed URL");
 }
 
 #[test]
@@ -66,8 +62,7 @@ fn config_package_decode_rejects_unknown_top_level_property() {
     raw["unexpected"] = json!(true);
     let raw = serde_json::to_string(&raw).expect("encode invalid package");
 
-    let error = decode_config_package(&raw).expect_err("unknown top-level field must fail");
-    assert!(error.to_string().contains("unknown field"), "unexpected error: {error:#}");
+    assert_decode_error_contains(&raw, "unknown top-level field must fail", "unknown field");
 }
 
 #[test]
@@ -76,8 +71,13 @@ fn config_package_decode_rejects_unknown_nested_property() {
     raw["settings"]["unexpected"] = json!(true);
     let raw = serde_json::to_string(&raw).expect("encode invalid package");
 
-    let error = decode_config_package(&raw).expect_err("unknown nested field must fail");
-    assert!(error.to_string().contains("unknown field"), "unexpected error: {error:#}");
+    assert_decode_error_contains(&raw, "unknown nested field must fail", "unknown field");
+}
+
+fn assert_decode_error_contains(raw: &str, failure_message: &str, expected: &str) {
+    let error = decode_config_package(raw).expect_err(failure_message);
+    let message = error.to_string();
+    assert!(message.contains(expected), "expected `{expected}` in decode error, got: {error:#}");
 }
 
 fn sample_package() -> ConfigPackage {
