@@ -9,7 +9,9 @@ use rssr_application::{
 };
 use rssr_domain::{EntriesWorkspaceState, EntryQuery, UserSettings};
 
-use crate::bootstrap::{AddSubscriptionOutcome, AppServices, HostCapabilities};
+use crate::bootstrap::{
+    AddSubscriptionOutcome, AppServices, HostCapabilities, RefreshAllExecutionOutcome,
+};
 
 pub(crate) struct UiServices {
     use_cases: AppUseCases,
@@ -189,7 +191,7 @@ impl FeedsPort {
         self.host_capabilities.refresh.add_subscription(raw_url).await
     }
 
-    pub(crate) async fn refresh_all(&self) -> Result<()> {
+    pub(crate) async fn refresh_all(&self) -> Result<RefreshAllExecutionOutcome> {
         self.host_capabilities.refresh.refresh_all().await
     }
 

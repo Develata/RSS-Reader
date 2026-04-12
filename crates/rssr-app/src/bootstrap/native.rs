@@ -35,7 +35,8 @@ use time::OffsetDateTime;
 use tokio::sync::OnceCell;
 
 use super::{
-    AddSubscriptionOutcome, AutoRefreshPort, HostCapabilities, RefreshPort, RemoteConfigPort,
+    AddSubscriptionOutcome, AutoRefreshPort, HostCapabilities, RefreshAllExecutionOutcome,
+    RefreshPort, RemoteConfigPort,
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -213,7 +214,7 @@ impl RefreshPort for RefreshCapability {
         }
     }
 
-    async fn refresh_all(&self) -> anyhow::Result<()> {
+    async fn refresh_all(&self) -> anyhow::Result<RefreshAllExecutionOutcome> {
         let outcome = self
             .host
             .use_cases
@@ -230,7 +231,10 @@ impl RefreshPort for RefreshCapability {
 }
 
 impl RefreshCapability {
-    fn handle_refresh_all_outcome(&self, outcome: RefreshAllOutcome) -> anyhow::Result<()> {
+    fn handle_refresh_all_outcome(
+        &self,
+        outcome: RefreshAllOutcome,
+    ) -> anyhow::Result<RefreshAllExecutionOutcome> {
         let failure_lines = outcome.joined_failure_lines();
 
         for feed in outcome.feeds {
@@ -248,10 +252,7 @@ impl RefreshCapability {
             }
         }
 
-        if let Some(failures) = failure_lines {
-            anyhow::bail!("部分订阅刷新失败: {failures}");
-        }
-        Ok(())
+        Ok(RefreshAllExecutionOutcome { failure_message: failure_lines })
     }
 
     fn handle_refresh_outcome(&self, outcome: RefreshFeedOutcome) -> anyhow::Result<()> {

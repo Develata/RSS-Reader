@@ -48,10 +48,17 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
         },
         FeedsCommand::RefreshAll => match UiServices::shared().await {
             Ok(services) => match services.feeds().refresh_all().await {
-                Ok(_) => feeds_intents(vec![
+                Ok(outcome) => feeds_intents(vec![
                     FeedsPageIntent::SetStatus {
-                        message: "刷新完成。".to_string(),
-                        tone: "info".to_string(),
+                        message: outcome.failure_message.as_ref().map_or_else(
+                            || "刷新完成。".to_string(),
+                            |failure| format!("刷新完成，但部分订阅失败：{failure}"),
+                        ),
+                        tone: if outcome.failure_message.is_some() {
+                            "error".to_string()
+                        } else {
+                            "info".to_string()
+                        },
                     },
                     FeedsPageIntent::BumpReload,
                 ]),

@@ -18,6 +18,11 @@ pub(crate) enum AddSubscriptionOutcome {
     SavedRefreshFailed { message: String },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RefreshAllExecutionOutcome {
+    pub(crate) failure_message: Option<String>,
+}
+
 #[derive(Clone)]
 pub(crate) struct HostCapabilities {
     pub(crate) auto_refresh: Arc<dyn AutoRefreshPort>,
@@ -33,7 +38,7 @@ pub(crate) trait AutoRefreshPort {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub(crate) trait RefreshPort {
     async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<AddSubscriptionOutcome>;
-    async fn refresh_all(&self) -> anyhow::Result<()>;
+    async fn refresh_all(&self) -> anyhow::Result<RefreshAllExecutionOutcome>;
     async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()>;
 }
 
