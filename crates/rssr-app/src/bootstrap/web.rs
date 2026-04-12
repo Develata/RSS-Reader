@@ -6,6 +6,7 @@ mod exchange;
 mod refresh;
 
 use anyhow::Context;
+use dioxus::prelude::document;
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
     RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
@@ -30,8 +31,8 @@ use self::{
     refresh::ensure_auto_refresh_started as start_auto_refresh,
 };
 use super::{
-    AddSubscriptionOutcome, AutoRefreshPort, HostCapabilities, RefreshAllExecutionOutcome,
-    RefreshFeedExecutionOutcome, RefreshPort, RemoteConfigPort,
+    AddSubscriptionOutcome, AutoRefreshPort, ClipboardPort, HostCapabilities,
+    RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome, RefreshPort, RemoteConfigPort,
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -56,6 +57,9 @@ struct RefreshCapability {
 struct RemoteConfigCapability {
     host: Arc<AppServices>,
 }
+
+#[derive(Clone)]
+struct ClipboardCapability;
 
 impl AppServices {
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
@@ -103,6 +107,7 @@ impl AppServices {
             auto_refresh: Arc::new(AutoRefreshCapability { host: Arc::clone(self) }),
             refresh: Arc::new(RefreshCapability { host: Arc::clone(self) }),
             remote_config: Arc::new(RemoteConfigCapability { host: Arc::clone(self) }),
+            clipboard: Arc::new(ClipboardCapability),
         }
     }
 }
@@ -221,6 +226,24 @@ impl RemoteConfigPort for RemoteConfigCapability {
             &BrowserRemoteConfigStore::new(self.host.client.clone(), endpoint, remote_path),
         )
         .await
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl ClipboardPort for ClipboardCapability {
+    async fn read_text(&self) -> anyhow::Result<Option<String>> {
+        document::eval(
+            r#"
+            if (typeof navigator === "undefined" || !navigator.clipboard || !navigator.clipboard.readText) {
+                return null;
+            }
+            return navigator.clipboard.readText();
+            "#,
+        )
+        .join::<Option<String>>()
+        .await
+        .map_err(|err| anyhow::anyhow!(err.to_string()))
     }
 }
 #[cfg(test)]

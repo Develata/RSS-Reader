@@ -33,6 +33,7 @@ pub(crate) struct HostCapabilities {
     pub(crate) auto_refresh: Arc<dyn AutoRefreshPort>,
     pub(crate) refresh: Arc<dyn RefreshPort>,
     pub(crate) remote_config: Arc<dyn RemoteConfigPort>,
+    pub(crate) clipboard: Arc<dyn ClipboardPort>,
 }
 
 pub(crate) trait AutoRefreshPort {
@@ -60,6 +61,12 @@ pub(crate) trait RemoteConfigPort {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<RemoteConfigPullOutcome>;
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+pub(crate) trait ClipboardPort {
+    async fn read_text(&self) -> anyhow::Result<Option<String>>;
 }
 
 fn auto_refresh_wait_duration(

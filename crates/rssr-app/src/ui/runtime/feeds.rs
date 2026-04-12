@@ -3,8 +3,6 @@ use crate::{
     pages::feeds_page::intent::{FeedsPageIntent, FeedsPageSnapshot},
     ui::{commands::FeedsCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
-#[cfg(target_arch = "wasm32")]
-use dioxus::prelude::document;
 use rssr_application::{ConfigImportOutcome, OpmlImportOutcome};
 
 pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
@@ -177,10 +175,13 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
-        FeedsCommand::ReadFeedUrlFromClipboard => match read_feed_url_from_clipboard().await {
-            Ok(Some(text)) => feeds_intents(vec![FeedsPageIntent::FeedUrlChanged(text)]),
-            Ok(None) => Vec::new(),
-            Err(err) => feeds_status_error(format!("读取系统剪贴板失败：{err}")),
+        FeedsCommand::ReadFeedUrlFromClipboard => match UiServices::shared().await {
+            Ok(services) => match services.feeds().read_clipboard_text().await {
+                Ok(Some(text)) => feeds_intents(vec![FeedsPageIntent::FeedUrlChanged(text)]),
+                Ok(None) => Vec::new(),
+                Err(err) => feeds_status_error(format!("读取系统剪贴板失败：{err}")),
+            },
+            Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
     }
 }
@@ -206,24 +207,4 @@ fn config_import_summary(outcome: &ConfigImportOutcome) -> String {
 
 fn opml_import_summary(outcome: &OpmlImportOutcome) -> String {
     format!("{} 个订阅", outcome.imported_feed_count)
-}
-
-#[cfg(target_arch = "wasm32")]
-async fn read_feed_url_from_clipboard() -> Result<Option<String>, String> {
-    document::eval(
-        r#"
-        if (typeof navigator === "undefined" || !navigator.clipboard || !navigator.clipboard.readText) {
-            return null;
-        }
-        return navigator.clipboard.readText();
-        "#,
-    )
-    .join::<Option<String>>()
-    .await
-    .map_err(|err| err.to_string())
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-async fn read_feed_url_from_clipboard() -> Result<Option<String>, String> {
-    Err("当前平台不支持从系统剪贴板读取订阅地址".to_string())
 }
