@@ -1,5 +1,6 @@
 mod browser_interactions;
 mod cards;
+mod clock;
 mod controls;
 mod facade;
 mod groups;
@@ -10,10 +11,10 @@ mod session;
 mod state;
 
 use dioxus::prelude::*;
-use time::OffsetDateTime;
 
 use self::browser_interactions::initial_entry_controls_hidden;
 use self::cards::render_entry_card;
+use self::clock::current_time_utc;
 use self::controls::{render_entry_controls, render_entry_directory};
 use self::{facade::EntriesPageFacade, session::EntriesPageSession, state::EntriesPageState};
 use crate::{
@@ -228,20 +229,6 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     );
 
     EntriesPageFacade::new(ui, session, state_snapshot, current_time_utc())
-}
-
-#[cfg(target_arch = "wasm32")]
-fn current_time_utc() -> OffsetDateTime {
-    let millis = js_sys::Date::now();
-    let seconds = (millis / 1_000.0).floor() as i64;
-    let nanos = ((millis % 1_000.0) * 1_000_000.0).round() as i64;
-    OffsetDateTime::from_unix_timestamp(seconds).expect("valid unix timestamp")
-        + time::Duration::nanoseconds(nanos)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn current_time_utc() -> OffsetDateTime {
-    OffsetDateTime::now_utc()
 }
 
 fn entries_page_title(feed_id: Option<i64>) -> &'static str {
