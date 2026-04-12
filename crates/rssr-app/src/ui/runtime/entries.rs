@@ -2,6 +2,7 @@ use crate::{
     pages::entries_page::intent::EntriesPageIntent,
     ui::{commands::EntriesCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
+use rssr_application::EntriesBootstrapInput;
 use rssr_domain::EntriesWorkspaceState;
 
 pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
@@ -9,46 +10,32 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
         EntriesCommand::Bootstrap { feed_id, load_preferences, load_feeds } => {
             match UiServices::shared().await {
                 Ok(services) => {
-                    let entries = services.entries();
-                    let mut intents = Vec::new();
-
-                    if let Some(feed_id) = feed_id {
-                        let _ = entries.remember_last_opened_feed_id(feed_id).await;
-                    }
-
-                    if load_preferences {
-                        match entries.load_settings().await {
-                            Ok(settings) => intents.push(UiIntent::EntriesPage(
-                                EntriesPageIntent::ApplyLoadedSettings(settings),
-                            )),
-                            Err(err) => {
-                                return entries_status_error(format!("读取设置失败：{err}"));
-                            }
-                        }
-
-                        match entries.load_workspace_state().await {
-                            Ok(workspace) => intents.push(UiIntent::EntriesPage(
-                                EntriesPageIntent::ApplyLoadedWorkspaceState(workspace),
-                            )),
-                            Err(err) => {
-                                return entries_status_error(format!(
-                                    "读取文章页工作区状态失败：{err}"
+                    match services
+                        .entries()
+                        .bootstrap(EntriesBootstrapInput { feed_id, load_preferences, load_feeds })
+                        .await
+                    {
+                        Ok(outcome) => {
+                            let mut intents = Vec::new();
+                            if let Some(settings) = outcome.settings {
+                                intents.push(UiIntent::EntriesPage(
+                                    EntriesPageIntent::ApplyLoadedSettings(settings),
                                 ));
                             }
-                        }
-                    }
-
-                    if load_feeds {
-                        match entries.list_feeds().await {
-                            Ok(feeds) => intents
-                                .push(UiIntent::EntriesPage(EntriesPageIntent::SetFeeds(feeds))),
-                            Err(err) => {
-                                return entries_status_error(format!("读取订阅失败：{err}"));
+                            if let Some(workspace) = outcome.workspace {
+                                intents.push(UiIntent::EntriesPage(
+                                    EntriesPageIntent::ApplyLoadedWorkspaceState(workspace),
+                                ));
                             }
+                            if let Some(feeds) = outcome.feeds {
+                                intents.push(UiIntent::EntriesPage(EntriesPageIntent::SetFeeds(
+                                    feeds,
+                                )));
+                            }
+                            intents
                         }
+                        Err(err) => entries_status_error(format!("加载文章页初始状态失败：{err}")),
                     }
-
-                    intents
                 }
                 Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
             }
@@ -113,28 +100,19 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
             starred_filter,
             selected_feed_urls,
         } => match UiServices::shared().await {
-            Ok(services) => match services.entries().load_workspace_state().await {
-                Ok(current) => {
-                    let next = EntriesWorkspaceState {
-                        grouping_mode,
-                        show_archived,
-                        read_filter,
-                        starred_filter,
-                        selected_feed_urls,
-                    };
-                    let changed = current != next;
-
-                    if !changed {
-                        return Vec::new();
-                    }
-
-                    match services.entries().save_workspace_state(next).await {
-                        Ok(()) => Vec::new(),
-                        Err(err) => entries_status_error(format!("保存文章页偏好失败：{err}")),
-                    }
+            Ok(services) => {
+                let next = EntriesWorkspaceState {
+                    grouping_mode,
+                    show_archived,
+                    read_filter,
+                    starred_filter,
+                    selected_feed_urls,
+                };
+                match services.entries().save_workspace_if_changed(next).await {
+                    Ok(true) | Ok(false) => Vec::new(),
+                    Err(err) => entries_status_error(format!("保存文章页偏好失败：{err}")),
                 }
-                Err(err) => entries_status_error(format!("读取文章页偏好失败：{err}")),
-            },
+            }
             Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
         },
     }

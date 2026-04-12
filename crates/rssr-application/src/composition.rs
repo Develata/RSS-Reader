@@ -3,9 +3,9 @@ use std::sync::Arc;
 use rssr_domain::{AppStateRepository, EntryRepository, FeedRepository, SettingsRepository};
 
 use crate::{
-    AppStatePort, AppStateService, EntryService, FeedRefreshSourcePort, FeedRemovalCleanupPort,
-    FeedService, ImportExportService, OpmlCodecPort, RefreshService, RefreshStorePort,
-    SettingsService, StartupService, SubscriptionWorkflow,
+    AppStatePort, AppStateService, EntriesWorkspaceService, EntryService, FeedRefreshSourcePort,
+    FeedRemovalCleanupPort, FeedService, ImportExportService, OpmlCodecPort, RefreshService,
+    RefreshStorePort, SettingsService, StartupService, SubscriptionWorkflow,
 };
 
 pub trait AppStateServicesPort:
@@ -38,6 +38,7 @@ pub struct AppUseCases {
     pub subscription_workflow: SubscriptionWorkflow,
     pub import_export_service: ImportExportService,
     pub startup_service: StartupService,
+    pub entries_workspace_service: EntriesWorkspaceService,
 }
 
 impl AppUseCases {
@@ -67,7 +68,16 @@ impl AppUseCases {
                 input.opml_codec,
                 input.app_state,
             ),
-            startup_service: StartupService::new(settings_service, app_state_service, feed_service),
+            startup_service: StartupService::new(
+                settings_service.clone(),
+                app_state_service.clone(),
+                feed_service.clone(),
+            ),
+            entries_workspace_service: EntriesWorkspaceService::new(
+                settings_service,
+                app_state_service,
+                feed_service,
+            ),
         }
     }
 }

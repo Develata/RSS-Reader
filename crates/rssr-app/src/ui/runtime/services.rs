@@ -1,7 +1,8 @@
 use anyhow::Result;
 use rssr_application::{
-    AppUseCases, ConfigImportOutcome, OpmlImportOutcome, RemoteConfigPullOutcome,
-    RemoteConfigPushOutcome, RemoveSubscriptionInput, StartupTarget,
+    AppUseCases, ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome,
+    OpmlImportOutcome, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput,
+    StartupTarget,
 };
 use rssr_domain::{
     EntriesWorkspaceState, Entry, EntryNavigation, EntryQuery, EntrySummary, FeedSummary,
@@ -59,27 +60,23 @@ pub(crate) struct EntriesPort {
 }
 
 impl EntriesPort {
-    pub(crate) async fn remember_last_opened_feed_id(&self, feed_id: i64) -> Result<()> {
-        self.use_cases.app_state_service.save_last_opened_feed_id(Some(feed_id)).await
+    pub(crate) async fn bootstrap(
+        &self,
+        input: EntriesBootstrapInput,
+    ) -> Result<EntriesBootstrapOutcome> {
+        self.use_cases.entries_workspace_service.bootstrap(input).await
     }
 
-    pub(crate) async fn load_settings(&self) -> Result<UserSettings> {
-        self.use_cases.settings_service.load().await
-    }
-
-    pub(crate) async fn load_workspace_state(&self) -> Result<EntriesWorkspaceState> {
-        self.use_cases.app_state_service.load_entries_workspace().await
-    }
-
-    pub(crate) async fn save_workspace_state(
+    pub(crate) async fn save_workspace_if_changed(
         &self,
         workspace: EntriesWorkspaceState,
-    ) -> Result<()> {
-        self.use_cases.app_state_service.save_entries_workspace(workspace).await
-    }
-
-    pub(crate) async fn list_feeds(&self) -> Result<Vec<FeedSummary>> {
-        self.use_cases.feed_service.list_feeds().await
+    ) -> Result<bool> {
+        Ok(self
+            .use_cases
+            .entries_workspace_service
+            .save_workspace_if_changed(workspace)
+            .await?
+            .changed)
     }
 
     pub(crate) async fn list_entries(&self, query: &EntryQuery) -> Result<Vec<EntrySummary>> {
