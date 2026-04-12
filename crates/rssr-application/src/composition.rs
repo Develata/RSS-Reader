@@ -6,7 +6,7 @@ use crate::{
     AppStatePort, AppStateService, EntriesListService, EntriesWorkspaceService, EntryService,
     FeedRefreshSourcePort, FeedRemovalCleanupPort, FeedService, FeedsSnapshotService,
     ImportExportService, OpmlCodecPort, ReaderService, RefreshService, RefreshStorePort,
-    SettingsService, StartupService, SubscriptionWorkflow,
+    SettingsService, SettingsSyncService, StartupService, SubscriptionWorkflow,
 };
 
 pub trait AppStateServicesPort:
@@ -34,6 +34,7 @@ pub struct AppUseCases {
     pub feed_service: FeedService,
     pub entry_service: EntryService,
     pub settings_service: SettingsService,
+    pub settings_sync_service: SettingsSyncService,
     pub app_state_service: AppStateService,
     pub refresh_service: RefreshService,
     pub subscription_workflow: SubscriptionWorkflow,
@@ -52,6 +53,7 @@ impl AppUseCases {
         let refresh_service = RefreshService::new(input.refresh_source, input.refresh_store);
 
         let settings_service = SettingsService::new(input.settings_repository.clone());
+        let settings_sync_service = SettingsSyncService::new(settings_service.clone());
         let app_state_service = AppStateService::new(input.app_state.clone());
         let entry_service = EntryService::new(input.entry_repository.clone());
 
@@ -59,6 +61,7 @@ impl AppUseCases {
             feed_service: feed_service.clone(),
             entry_service: entry_service.clone(),
             settings_service: settings_service.clone(),
+            settings_sync_service,
             app_state_service: app_state_service.clone(),
             refresh_service: refresh_service.clone(),
             subscription_workflow: SubscriptionWorkflow::new(

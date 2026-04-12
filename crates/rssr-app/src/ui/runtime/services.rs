@@ -1,8 +1,8 @@
 use anyhow::Result;
 use rssr_application::{
-    AppUseCases, ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome,
-    EntriesListOutcome, FeedsSnapshotOutcome, OpmlImportOutcome, ReaderEntrySnapshot,
-    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput, StartupTarget,
+    AppUseCases, AppliedRemoteConfigOutcome, ConfigImportOutcome, EntriesBootstrapInput,
+    EntriesBootstrapOutcome, EntriesListOutcome, FeedsSnapshotOutcome, OpmlImportOutcome,
+    ReaderEntrySnapshot, RemoteConfigPushOutcome, RemoveSubscriptionInput, StartupTarget,
     ToggleEntryReadInput, ToggleEntryReadOutcome, ToggleEntryStarredInput,
     ToggleEntryStarredOutcome, ToggleReadInput, ToggleReadOutcome, ToggleStarredInput,
     ToggleStarredOutcome,
@@ -141,12 +141,13 @@ impl SettingsPort {
         self.host_capabilities.remote_config.push(endpoint, remote_path).await
     }
 
-    pub(crate) async fn pull_remote_config(
+    pub(crate) async fn pull_remote_config_and_load_settings(
         &self,
         endpoint: &str,
         remote_path: &str,
-    ) -> Result<RemoteConfigPullOutcome> {
-        self.host_capabilities.remote_config.pull(endpoint, remote_path).await
+    ) -> Result<AppliedRemoteConfigOutcome> {
+        let outcome = self.host_capabilities.remote_config.pull(endpoint, remote_path).await?;
+        self.use_cases.settings_sync_service.apply_remote_pull(outcome).await
     }
 }
 
