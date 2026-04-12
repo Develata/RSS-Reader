@@ -8,7 +8,7 @@ use anyhow::Context;
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
     RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
-    RefreshLocalizedEntry, RemoteConfigPullOutcome, RemoteConfigPushOutcome,
+    RefreshLocalizedEntry, RemoteConfigPullOutcome, RemoteConfigPushOutcome, SystemClock,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::UserSettings;
@@ -110,6 +110,7 @@ impl AppServices {
                         entry_repository.clone(),
                     )),
                     opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
+                    clock: Arc::new(SystemClock),
                 });
 
                 Ok(Arc::new(Self {

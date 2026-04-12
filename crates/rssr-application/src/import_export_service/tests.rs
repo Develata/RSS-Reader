@@ -7,7 +7,9 @@ use rssr_domain::{
 use time::OffsetDateTime;
 use url::Url;
 
-use super::{FeedRemovalCleanupPort, ImportExportService, OpmlCodecPort, RemoteConfigStore};
+use super::{
+    ClockPort, FeedRemovalCleanupPort, ImportExportService, OpmlCodecPort, RemoteConfigStore,
+};
 
 struct StubRemoteConfigStore {
     payload: Mutex<Option<String>>,
@@ -143,6 +145,16 @@ impl FeedRemovalCleanupPort for RecordingFeedRemovalCleanup {
     }
 }
 
+struct FixedClock {
+    now: OffsetDateTime,
+}
+
+impl ClockPort for FixedClock {
+    fn now_utc(&self) -> OffsetDateTime {
+        self.now
+    }
+}
+
 struct MemoryFeedRepository {
     feeds: Mutex<Vec<Feed>>,
 }
@@ -264,7 +276,7 @@ impl SettingsRepository for MemorySettingsRepository {
 #[tokio::test]
 async fn export_config_contains_active_feeds_and_settings() {
     let now = OffsetDateTime::UNIX_EPOCH;
-    let service = ImportExportService::new(
+    let service = ImportExportService::new_with_feed_removal_cleanup_and_clock(
         Arc::new(StubFeedRepository {
             feeds: vec![
                 Feed {
@@ -306,11 +318,14 @@ async fn export_config_contains_active_feeds_and_settings() {
         Arc::new(StubEntryRepository),
         Arc::new(StubSettingsRepository { settings: UserSettings::default() }),
         Arc::new(RecordingOpmlCodec::default()),
+        Arc::new(RecordingFeedRemovalCleanup::default()),
+        Arc::new(FixedClock { now }),
     );
 
     let exported = service.export_config().await.expect("export config");
 
     assert_eq!(exported.version, 2);
+    assert_eq!(exported.exported_at, now);
     assert_eq!(exported.feeds.len(), 1);
     assert_eq!(exported.feeds[0].url, "https://example.com/feed.xml");
     assert_eq!(exported.feeds[0].title.as_deref(), Some("Example"));

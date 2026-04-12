@@ -5,7 +5,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
     ConfigImportOutcome, OpmlImportOutcome, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome,
-    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput, SystemClock,
 };
 use rssr_domain::{Feed, FeedRepository, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
@@ -250,6 +250,7 @@ impl CliServices {
                 entry_repository,
             )),
             opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
+            clock: Arc::new(SystemClock),
         });
 
         Ok(Self { feed_repository, use_cases })

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use rssr_domain::{AppStateRepository, EntryRepository, FeedRepository, SettingsRepository};
 
 use crate::{
-    AppStatePort, AppStateService, EntriesListService, EntriesWorkspaceService, EntryService,
-    FeedRefreshSourcePort, FeedRemovalCleanupPort, FeedService, FeedsSnapshotService,
+    AppStatePort, AppStateService, ClockPort, EntriesListService, EntriesWorkspaceService,
+    EntryService, FeedRefreshSourcePort, FeedRemovalCleanupPort, FeedService, FeedsSnapshotService,
     ImportExportService, OpmlCodecPort, ReaderService, RefreshService, RefreshStorePort,
     SettingsPageService, SettingsService, SettingsSyncService, ShellService, StartupService,
     SubscriptionWorkflow,
@@ -28,6 +28,7 @@ pub struct AppCompositionInput {
     pub refresh_source: Arc<dyn FeedRefreshSourcePort>,
     pub refresh_store: Arc<dyn RefreshStorePort>,
     pub opml_codec: Arc<dyn OpmlCodecPort>,
+    pub clock: Arc<dyn ClockPort>,
 }
 
 #[derive(Clone)]
@@ -77,12 +78,13 @@ impl AppUseCases {
                 refresh_service,
                 input.app_state.clone(),
             ),
-            import_export_service: ImportExportService::new_with_feed_removal_cleanup(
+            import_export_service: ImportExportService::new_with_feed_removal_cleanup_and_clock(
                 input.feed_repository,
                 input.entry_repository,
                 input.settings_repository,
                 input.opml_codec,
                 input.app_state,
+                input.clock,
             ),
             startup_service: StartupService::new(
                 settings_service.clone(),

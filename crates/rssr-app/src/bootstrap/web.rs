@@ -9,7 +9,7 @@ use anyhow::Context;
 use dioxus::prelude::document;
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
-    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
+    ClockPort, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
     RemoteConfigPullOutcome, RemoteConfigPushOutcome,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
@@ -20,8 +20,10 @@ use rssr_infra::application_adapters::browser::{
         BrowserFeedRepository, BrowserOpmlCodec, BrowserRefreshStore, BrowserRemoteConfigStore,
         BrowserSettingsRepository,
     },
+    now_utc,
     state::load_state,
 };
+use time::OffsetDateTime;
 use tokio::sync::OnceCell;
 
 use self::{
@@ -61,6 +63,15 @@ struct RemoteConfigCapability {
 #[derive(Clone)]
 struct ClipboardCapability;
 
+#[derive(Clone)]
+struct BrowserClock;
+
+impl ClockPort for BrowserClock {
+    fn now_utc(&self) -> OffsetDateTime {
+        now_utc()
+    }
+}
+
 impl AppServices {
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES
@@ -83,6 +94,7 @@ impl AppServices {
                     refresh_source: Arc::new(BrowserFeedRefreshSource::new(client.clone())),
                     refresh_store: Arc::new(BrowserRefreshStore::new(state)),
                     opml_codec: Arc::new(BrowserOpmlCodec),
+                    clock: Arc::new(BrowserClock),
                 });
                 Ok(Arc::new(Self {
                     client,
