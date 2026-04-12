@@ -20,11 +20,11 @@ impl SettingsPageSyncSession {
     }
 
     pub(crate) fn set_endpoint(mut self, endpoint: String) {
-        self.state.with_mut(|state| state.endpoint = endpoint);
+        self.state.with_mut(|state| state.set_endpoint(endpoint));
     }
 
     pub(crate) fn set_remote_path(mut self, remote_path: String) {
-        self.state.with_mut(|state| state.remote_path = remote_path);
+        self.state.with_mut(|state| state.set_remote_path(remote_path));
     }
 
     pub(crate) fn push(self) {
@@ -36,8 +36,15 @@ impl SettingsPageSyncSession {
     }
 
     pub(crate) fn pull(mut self) {
-        if !self.snapshot().pending_remote_pull {
-            self.state.with_mut(|state| state.pending_remote_pull = true);
+        let confirmation_required = {
+            let mut confirmation_required = false;
+            self.state.with_mut(|state| {
+                confirmation_required = state.request_remote_pull_confirmation();
+            });
+            confirmation_required
+        };
+
+        if confirmation_required {
             set_status_info(
                 self.page.status_signal(),
                 self.page.status_tone_signal(),
@@ -54,7 +61,7 @@ impl SettingsPageSyncSession {
     }
 
     fn apply_ui_command(mut self, command: UiCommand) {
-        self.state.with_mut(|state| state.pending_remote_pull = false);
+        self.state.with_mut(|state| state.clear_pending_remote_pull());
         spawn_projected_ui_command(command, UiIntent::into_settings_page_intent, move |intent| {
             self.page.dispatch(intent);
         });
