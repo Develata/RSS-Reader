@@ -1,12 +1,13 @@
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
+#[path = "web/clipboard.rs"]
+mod clipboard;
 #[path = "web/exchange.rs"]
 mod exchange;
 #[path = "web/refresh.rs"]
 mod refresh;
 
 use anyhow::Context;
-use dioxus::prelude::document;
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
     ClockPort, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
@@ -27,6 +28,7 @@ use time::OffsetDateTime;
 use tokio::sync::OnceCell;
 
 use self::{
+    clipboard::read_browser_clipboard_text,
     exchange::{
         pull_remote_config as pull_exchange_remote, push_remote_config as push_exchange_remote,
     },
@@ -245,17 +247,7 @@ impl RemoteConfigPort for RemoteConfigCapability {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl ClipboardPort for ClipboardCapability {
     async fn read_text(&self) -> anyhow::Result<Option<String>> {
-        document::eval(
-            r#"
-            if (typeof navigator === "undefined" || !navigator.clipboard || !navigator.clipboard.readText) {
-                return null;
-            }
-            return navigator.clipboard.readText();
-            "#,
-        )
-        .join::<Option<String>>()
-        .await
-        .map_err(|err| anyhow::anyhow!(err.to_string()))
+        read_browser_clipboard_text().await
     }
 }
 #[cfg(test)]

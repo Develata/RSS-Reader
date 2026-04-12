@@ -1,14 +1,12 @@
 use dioxus::prelude::*;
 use rssr_domain::UserSettings;
 
-use super::{intent::SettingsPageIntent, themes::detect_preset_key};
+use super::{browser::open_repository_url, intent::SettingsPageIntent, themes::detect_preset_key};
 use crate::{
     status::{set_status_error, set_status_info},
     theme::ThemeController,
     ui::{SettingsCommand, UiCommand, UiIntent, spawn_projected_ui_command},
 };
-
-const REPOSITORY_URL: &str = "https://github.com/Develata/RSS-Reader";
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SettingsPageSession {
@@ -106,18 +104,4 @@ impl SettingsPageSession {
             self.dispatch(intent);
         });
     }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn open_repository_url() -> Result<(), String> {
-    webbrowser::open(REPOSITORY_URL).map(|_| ()).map_err(|err| err.to_string())
-}
-
-#[cfg(target_arch = "wasm32")]
-fn open_repository_url() -> Result<(), String> {
-    web_sys::window()
-        .ok_or_else(|| "浏览器窗口不可用".to_string())?
-        .open_with_url_and_target(REPOSITORY_URL, "_blank")
-        .map(|_| ())
-        .map_err(|err| format!("{err:?}"))
 }

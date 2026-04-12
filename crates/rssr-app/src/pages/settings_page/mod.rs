@@ -1,4 +1,5 @@
 mod appearance;
+mod browser;
 mod facade;
 pub(crate) mod intent;
 mod preferences;
