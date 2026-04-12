@@ -126,11 +126,12 @@ pub(crate) struct SettingsPort {
 
 impl SettingsPort {
     pub(crate) async fn load_settings(&self) -> Result<UserSettings> {
-        self.use_cases.settings_service.load().await
+        Ok(self.use_cases.settings_page_service.load().await?.settings)
     }
 
     pub(crate) async fn save_settings(&self, settings: &UserSettings) -> Result<()> {
-        self.use_cases.settings_service.save(settings).await
+        self.use_cases.settings_page_service.save_appearance(settings).await?;
+        Ok(())
     }
 
     pub(crate) async fn push_remote_config(
@@ -147,7 +148,7 @@ impl SettingsPort {
         remote_path: &str,
     ) -> Result<AppliedRemoteConfigOutcome> {
         let outcome = self.host_capabilities.remote_config.pull(endpoint, remote_path).await?;
-        self.use_cases.settings_sync_service.apply_remote_pull(outcome).await
+        self.use_cases.settings_page_service.apply_remote_pull(outcome).await
     }
 }
 
