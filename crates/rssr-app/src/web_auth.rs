@@ -1,16 +1,16 @@
 #[cfg(target_arch = "wasm32")]
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 #[cfg(target_arch = "wasm32")]
-use js_sys::wasm_bindgen::JsCast;
-#[cfg(target_arch = "wasm32")]
 use sha2::{Digest, Sha256};
+
+#[cfg(target_arch = "wasm32")]
+#[path = "web_auth_browser.rs"]
+mod browser;
 
 #[cfg(target_arch = "wasm32")]
 const AUTH_CONFIG_KEY: &str = "rssr-web-auth-config-v1";
 #[cfg(target_arch = "wasm32")]
 const AUTH_SESSION_KEY: &str = "rssr-web-auth-session-v1";
-#[cfg(target_arch = "wasm32")]
-const SERVER_GATE_COOKIE: &str = "rssr_web_gate";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WebAuthState {
@@ -63,11 +63,11 @@ impl StoredCredentials {
 
 #[cfg(target_arch = "wasm32")]
 pub fn auth_state() -> WebAuthState {
-    if server_gate_present() {
+    if browser::server_gate_present() {
         return WebAuthState::PendingServerProbe;
     }
 
-    if !local_web_auth_enabled() {
+    if !browser::local_web_auth_enabled() {
         return WebAuthState::Authenticated;
     }
 
@@ -76,14 +76,11 @@ pub fn auth_state() -> WebAuthState {
 
 #[cfg(target_arch = "wasm32")]
 pub async fn verify_server_gate() -> bool {
-    if !server_gate_present() {
+    if !browser::server_gate_present() {
         return false;
     }
 
-    let Some(window) = web_sys::window() else {
-        return false;
-    };
-    let Ok(origin) = window.location().origin() else {
+    let Some(origin) = browser::browser_origin() else {
         return false;
     };
     let probe_url = format!("{origin}/session-probe");
@@ -100,7 +97,7 @@ pub fn local_auth_state() -> WebAuthState {
         return WebAuthState::NeedsSetup;
     };
 
-    if session_storage_get(AUTH_SESSION_KEY).as_deref()
+    if browser::session_storage_get(AUTH_SESSION_KEY).as_deref()
         == Some(credentials.session_token().as_str())
     {
         WebAuthState::Authenticated
@@ -128,8 +125,8 @@ pub fn auth_state() -> WebAuthState {
 pub fn setup_credentials(username: &str, password: &str) -> Result<(), String> {
     validate_credentials(username, password)?;
     let credentials = StoredCredentials::new(username.trim().to_string(), password);
-    local_storage_set(AUTH_CONFIG_KEY, &credentials.encode())?;
-    session_storage_set(AUTH_SESSION_KEY, &credentials.session_token())?;
+    browser::local_storage_set(AUTH_CONFIG_KEY, &credentials.encode())?;
+    browser::session_storage_set(AUTH_SESSION_KEY, &credentials.session_token())?;
     Ok(())
 }
 
@@ -144,7 +141,7 @@ pub fn login(username: &str, password: &str) -> Result<(), String> {
     if credentials.username != username.trim() || !credentials.verify(password) {
         return Err("用户名或密码错误。".to_string());
     }
-    session_storage_set(AUTH_SESSION_KEY, &credentials.session_token())?;
+    browser::session_storage_set(AUTH_SESSION_KEY, &credentials.session_token())?;
     Ok(())
 }
 
@@ -180,7 +177,7 @@ fn validate_credentials(username: &str, password: &str) -> Result<(), String> {
 
 #[cfg(target_arch = "wasm32")]
 fn generate_salt(username: &str) -> String {
-    let seed = format!("{}:{}", username.trim(), js_sys::Date::now());
+    let seed = format!("{}:{}", username.trim(), browser::browser_now_millis());
     URL_SAFE_NO_PAD.encode(Sha256::digest(seed.as_bytes()))
 }
 
@@ -192,73 +189,7 @@ fn hash_password(username: &str, password: &str, salt: &str) -> String {
 
 #[cfg(target_arch = "wasm32")]
 fn load_credentials() -> Option<StoredCredentials> {
-    StoredCredentials::decode(&local_storage_get(AUTH_CONFIG_KEY)?)
-}
-
-#[cfg(target_arch = "wasm32")]
-fn local_storage_get(key: &str) -> Option<String> {
-    let window = web_sys::window()?;
-    let storage = window.local_storage().ok()??;
-    storage.get_item(key).ok()?
-}
-
-#[cfg(target_arch = "wasm32")]
-fn local_storage_set(key: &str, value: &str) -> Result<(), String> {
-    let window = web_sys::window().ok_or_else(|| "浏览器窗口不可用。".to_string())?;
-    let storage = window
-        .local_storage()
-        .map_err(|err| format!("读取本地存储失败：{err:?}"))?
-        .ok_or_else(|| "浏览器不支持 localStorage。".to_string())?;
-    storage.set_item(key, value).map_err(|err| format!("写入本地存储失败：{err:?}"))
-}
-
-#[cfg(target_arch = "wasm32")]
-fn session_storage_get(key: &str) -> Option<String> {
-    let window = web_sys::window()?;
-    let storage = window.session_storage().ok()??;
-    storage.get_item(key).ok()?
-}
-
-#[cfg(target_arch = "wasm32")]
-fn session_storage_set(key: &str, value: &str) -> Result<(), String> {
-    let window = web_sys::window().ok_or_else(|| "浏览器窗口不可用。".to_string())?;
-    let storage = window
-        .session_storage()
-        .map_err(|err| format!("读取会话存储失败：{err:?}"))?
-        .ok_or_else(|| "浏览器不支持 sessionStorage。".to_string())?;
-    storage.set_item(key, value).map_err(|err| format!("写入会话存储失败：{err:?}"))
-}
-
-#[cfg(target_arch = "wasm32")]
-fn server_gate_present() -> bool {
-    let Some(window) = web_sys::window() else {
-        return false;
-    };
-    let Some(document) = window.document() else {
-        return false;
-    };
-    let Ok(html_document) = document.dyn_into::<web_sys::HtmlDocument>() else {
-        return false;
-    };
-    let Ok(cookie_string) = html_document.cookie() else {
-        return false;
-    };
-    cookie_string
-        .split(';')
-        .map(str::trim)
-        .filter_map(|entry| entry.split_once('='))
-        .any(|(name, value)| name == SERVER_GATE_COOKIE && value == "1")
-}
-
-#[cfg(target_arch = "wasm32")]
-fn local_web_auth_enabled() -> bool {
-    let Some(window) = web_sys::window() else {
-        return false;
-    };
-    let Ok(hostname) = window.location().hostname() else {
-        return false;
-    };
-    is_local_protection_host(&hostname)
+    StoredCredentials::decode(&browser::local_storage_get(AUTH_CONFIG_KEY)?)
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
