@@ -11,6 +11,9 @@ struct FixturePersistedState {
     settings: UserSettings,
 }
 
+// These fixture structs mirror the full persisted contract even when a given
+// assertion only touches part of the payload.
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct FixturePersistedFeed {
     id: i64,
@@ -30,6 +33,7 @@ struct FixturePersistedFeed {
     updated_at: OffsetDateTime,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct FixturePersistedEntry {
     id: i64,
@@ -60,6 +64,7 @@ struct FixturePersistedEntryFlagsSlice {
     entries: Vec<FixturePersistedEntryFlag>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct FixturePersistedEntryFlag {
     id: i64,
