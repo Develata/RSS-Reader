@@ -1,6 +1,7 @@
 mod lab;
 mod presets;
 mod theme_apply;
+mod theme_file_io;
 mod theme_io;
 mod theme_preset;
 mod theme_validation;

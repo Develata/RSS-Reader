@@ -7,7 +7,7 @@ use super::{theme_apply::apply_custom_css_from_raw, theme_io::export_css_file};
 use super::theme_io::import_css_file;
 
 #[cfg(target_arch = "wasm32")]
-use super::theme_io::trigger_css_file_input_in_browser;
+use super::theme_file_io::trigger_css_file_input_in_browser;
 
 #[component]
 pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
