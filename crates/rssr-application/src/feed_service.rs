@@ -241,6 +241,6 @@ mod tests {
             .await
             .expect_err("invalid url should fail");
 
-        assert!(error.to_string().contains("订阅 URL 不合法"));
+        assert!(error.downcast_ref::<url::ParseError>().is_some());
     }
 }
