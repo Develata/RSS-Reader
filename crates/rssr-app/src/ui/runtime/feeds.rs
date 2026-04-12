@@ -1,4 +1,5 @@
 use crate::{
+    bootstrap::AddSubscriptionOutcome,
     pages::feeds_page::intent::{FeedsPageIntent, FeedsPageSnapshot},
     ui::{commands::FeedsCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
@@ -25,7 +26,7 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
         },
         FeedsCommand::AddFeed { raw_url } => match UiServices::shared().await {
             Ok(services) => match services.feeds().add_subscription(&raw_url).await {
-                Ok(()) => feeds_intents(vec![
+                Ok(AddSubscriptionOutcome::SavedAndRefreshed) => feeds_intents(vec![
                     FeedsPageIntent::FeedUrlChanged(String::new()),
                     FeedsPageIntent::SetStatus {
                         message: "订阅已保存并完成首次刷新。".to_string(),
@@ -33,16 +34,14 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
                     },
                     FeedsPageIntent::BumpReload,
                 ]),
-                Err(err) if err.to_string().contains("首次刷新订阅失败") => {
-                    feeds_intents(vec![
-                        FeedsPageIntent::FeedUrlChanged(String::new()),
-                        FeedsPageIntent::SetStatus {
-                            message: format!("订阅已保存，但首次刷新失败：{err}"),
-                            tone: "error".to_string(),
-                        },
-                        FeedsPageIntent::BumpReload,
-                    ])
-                }
+                Ok(AddSubscriptionOutcome::SavedRefreshFailed { message }) => feeds_intents(vec![
+                    FeedsPageIntent::FeedUrlChanged(String::new()),
+                    FeedsPageIntent::SetStatus {
+                        message: format!("订阅已保存，但首次刷新失败：{message}"),
+                        tone: "error".to_string(),
+                    },
+                    FeedsPageIntent::BumpReload,
+                ]),
                 Err(err) => feeds_status_error(format!("保存订阅失败：{err}")),
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),

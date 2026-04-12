@@ -12,6 +12,12 @@ mod imp;
 
 pub use imp::{AppServices, ReaderNavigation};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AddSubscriptionOutcome {
+    SavedAndRefreshed,
+    SavedRefreshFailed { message: String },
+}
+
 #[derive(Clone)]
 pub(crate) struct HostCapabilities {
     pub(crate) auto_refresh: Arc<dyn AutoRefreshPort>,
@@ -26,7 +32,7 @@ pub(crate) trait AutoRefreshPort {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub(crate) trait RefreshPort {
-    async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()>;
+    async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<AddSubscriptionOutcome>;
     async fn refresh_all(&self) -> anyhow::Result<()>;
     async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()>;
 }

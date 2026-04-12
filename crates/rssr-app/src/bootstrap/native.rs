@@ -34,7 +34,9 @@ use rssr_infra::{
 use time::OffsetDateTime;
 use tokio::sync::OnceCell;
 
-use super::{AutoRefreshPort, HostCapabilities, RefreshPort, RemoteConfigPort};
+use super::{
+    AddSubscriptionOutcome, AutoRefreshPort, HostCapabilities, RefreshPort, RemoteConfigPort,
+};
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
@@ -187,7 +189,7 @@ impl AutoRefreshPort for AutoRefreshCapability {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl RefreshPort for RefreshCapability {
-    async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<()> {
+    async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<AddSubscriptionOutcome> {
         let outcome = self
             .host
             .use_cases
@@ -203,7 +205,12 @@ impl RefreshPort for RefreshCapability {
             .await
             .context("保存订阅失败")?;
         let refresh = outcome.first_refresh.expect("refresh_after_add produces refresh outcome");
-        self.handle_refresh_outcome(refresh).context("首次刷新订阅失败")
+        match self.handle_refresh_outcome(refresh) {
+            Ok(()) => Ok(AddSubscriptionOutcome::SavedAndRefreshed),
+            Err(error) => {
+                Ok(AddSubscriptionOutcome::SavedRefreshFailed { message: error.to_string() })
+            }
+        }
     }
 
     async fn refresh_all(&self) -> anyhow::Result<()> {

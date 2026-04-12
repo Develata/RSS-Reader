@@ -9,7 +9,7 @@ use rssr_application::{
 };
 use rssr_domain::{EntriesWorkspaceState, EntryQuery, UserSettings};
 
-use crate::bootstrap::{AppServices, HostCapabilities};
+use crate::bootstrap::{AddSubscriptionOutcome, AppServices, HostCapabilities};
 
 pub(crate) struct UiServices {
     use_cases: AppUseCases,
@@ -185,7 +185,7 @@ impl FeedsPort {
         self.use_cases.feeds_snapshot_service.load_snapshot().await
     }
 
-    pub(crate) async fn add_subscription(&self, raw_url: &str) -> Result<()> {
+    pub(crate) async fn add_subscription(&self, raw_url: &str) -> Result<AddSubscriptionOutcome> {
         self.host_capabilities.refresh.add_subscription(raw_url).await
     }
 
