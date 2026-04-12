@@ -11,6 +11,7 @@ use rssr_domain::{EntriesWorkspaceState, EntryQuery, UserSettings};
 
 use crate::bootstrap::{
     AddSubscriptionOutcome, AppServices, HostCapabilities, RefreshAllExecutionOutcome,
+    RefreshFeedExecutionOutcome,
 };
 
 pub(crate) struct UiServices {
@@ -195,7 +196,7 @@ impl FeedsPort {
         self.host_capabilities.refresh.refresh_all().await
     }
 
-    pub(crate) async fn refresh_feed(&self, feed_id: i64) -> Result<()> {
+    pub(crate) async fn refresh_feed(&self, feed_id: i64) -> Result<RefreshFeedExecutionOutcome> {
         self.host_capabilities.refresh.refresh_feed(feed_id).await
     }
 

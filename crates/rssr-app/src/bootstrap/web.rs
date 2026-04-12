@@ -31,7 +31,7 @@ use self::{
 };
 use super::{
     AddSubscriptionOutcome, AutoRefreshPort, HostCapabilities, RefreshAllExecutionOutcome,
-    RefreshPort, RemoteConfigPort,
+    RefreshFeedExecutionOutcome, RefreshPort, RemoteConfigPort,
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -132,11 +132,10 @@ impl RefreshPort for RefreshCapability {
             .await
             .context("保存订阅失败")?;
         let refresh = outcome.first_refresh.expect("refresh_after_add produces refresh outcome");
-        match self.handle_refresh_outcome(refresh) {
-            Ok(()) => Ok(AddSubscriptionOutcome::SavedAndRefreshed),
-            Err(error) => {
-                Ok(AddSubscriptionOutcome::SavedRefreshFailed { message: error.to_string() })
-            }
+        let outcome = self.handle_refresh_feed_outcome(refresh);
+        match outcome.failure_message {
+            Some(message) => Ok(AddSubscriptionOutcome::SavedRefreshFailed { message }),
+            None => Ok(AddSubscriptionOutcome::SavedAndRefreshed),
         }
     }
 
@@ -146,9 +145,9 @@ impl RefreshPort for RefreshCapability {
         self.handle_refresh_all_outcome(outcome)
     }
 
-    async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
+    async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<RefreshFeedExecutionOutcome> {
         let outcome = self.host.use_cases.refresh_service.refresh_feed(feed_id).await?;
-        self.handle_refresh_outcome(outcome)
+        Ok(self.handle_refresh_feed_outcome(outcome))
     }
 }
 
@@ -176,12 +175,22 @@ impl RefreshCapability {
         Ok(RefreshAllExecutionOutcome { failure_message: failure_lines })
     }
 
-    fn handle_refresh_outcome(&self, outcome: RefreshFeedOutcome) -> anyhow::Result<()> {
-        let failure_line = outcome.failure_line();
+    fn handle_refresh_feed_outcome(
+        &self,
+        outcome: RefreshFeedOutcome,
+    ) -> RefreshFeedExecutionOutcome {
+        let failure_message = outcome.failure_line();
         match outcome.result {
-            RefreshFeedResult::Updated { .. } | RefreshFeedResult::NotModified => Ok(()),
-            RefreshFeedResult::Failed { .. } => {
-                anyhow::bail!("{}", failure_line.unwrap_or_else(|| "刷新订阅失败".to_string()))
+            RefreshFeedResult::Updated { .. } | RefreshFeedResult::NotModified => {
+                RefreshFeedExecutionOutcome { failure_message: None }
+            }
+            RefreshFeedResult::Failed { message } => {
+                tracing::warn!(feed_id = outcome.feed_id, error = %message, "刷新订阅失败");
+                RefreshFeedExecutionOutcome {
+                    failure_message: Some(
+                        failure_message.unwrap_or_else(|| "刷新订阅失败".to_string()),
+                    ),
+                }
             }
         }
     }
