@@ -19,26 +19,34 @@ pub(crate) fn reduce_feeds_page_intent(
     match intent {
         FeedsPageIntent::LoadRequested => vec![UiCommand::Feeds(FeedsCommand::LoadSnapshot)],
         FeedsPageIntent::FeedUrlChanged(value) => {
+            clear_pending_confirmations(state);
             state.feed_url = value;
             Vec::new()
         }
         FeedsPageIntent::ConfigTextChanged(value) => {
-            state.pending_config_import = false;
+            clear_pending_confirmations(state);
             state.config_text = value;
             Vec::new()
         }
         FeedsPageIntent::OpmlTextChanged(value) => {
+            clear_pending_confirmations(state);
             state.opml_text = value;
             Vec::new()
         }
         FeedsPageIntent::AddFeedRequested => {
+            clear_pending_confirmations(state);
             vec![UiCommand::Feeds(FeedsCommand::AddFeed { raw_url: state.feed_url.clone() })]
         }
-        FeedsPageIntent::RefreshAllRequested => vec![UiCommand::Feeds(FeedsCommand::RefreshAll)],
+        FeedsPageIntent::RefreshAllRequested => {
+            clear_pending_confirmations(state);
+            vec![UiCommand::Feeds(FeedsCommand::RefreshAll)]
+        }
         FeedsPageIntent::RefreshFeedRequested { feed_id, feed_title } => {
+            clear_pending_confirmations(state);
             vec![UiCommand::Feeds(FeedsCommand::RefreshFeed { feed_id, feed_title })]
         }
         FeedsPageIntent::RemoveFeedRequested { feed_id, feed_title } => {
+            state.pending_config_import = false;
             if state.pending_delete_feed != Some(feed_id) {
                 state.pending_delete_feed = Some(feed_id);
                 state.status = format!("再次点击即可删除订阅：{feed_title}");
@@ -49,9 +57,11 @@ pub(crate) fn reduce_feeds_page_intent(
             vec![UiCommand::Feeds(FeedsCommand::RemoveFeed { feed_id, feed_title })]
         }
         FeedsPageIntent::ExportConfigRequested => {
+            clear_pending_confirmations(state);
             vec![UiCommand::Feeds(FeedsCommand::ExportConfig)]
         }
         FeedsPageIntent::ImportConfigRequested => {
+            state.pending_delete_feed = None;
             if !state.pending_config_import {
                 state.pending_config_import = true;
                 state.status = "导入配置会按配置包覆盖当前订阅集合，并清理缺失订阅的本地文章；再次点击才会执行。"
@@ -62,11 +72,16 @@ pub(crate) fn reduce_feeds_page_intent(
 
             vec![UiCommand::Feeds(FeedsCommand::ImportConfig { raw: state.config_text.clone() })]
         }
-        FeedsPageIntent::ExportOpmlRequested => vec![UiCommand::Feeds(FeedsCommand::ExportOpml)],
+        FeedsPageIntent::ExportOpmlRequested => {
+            clear_pending_confirmations(state);
+            vec![UiCommand::Feeds(FeedsCommand::ExportOpml)]
+        }
         FeedsPageIntent::ImportOpmlRequested => {
+            clear_pending_confirmations(state);
             vec![UiCommand::Feeds(FeedsCommand::ImportOpml { raw: state.opml_text.clone() })]
         }
         FeedsPageIntent::PasteFeedUrlRequested => {
+            clear_pending_confirmations(state);
             vec![UiCommand::Feeds(FeedsCommand::ReadFeedUrlFromClipboard)]
         }
         FeedsPageIntent::SnapshotLoaded(result) => {
@@ -84,6 +99,7 @@ pub(crate) fn reduce_feeds_page_intent(
             Vec::new()
         }
         FeedsPageIntent::ConfigTextExported(raw) => {
+            state.pending_config_import = false;
             state.config_text = raw;
             Vec::new()
         }
@@ -109,6 +125,11 @@ pub(crate) fn reduce_feeds_page_intent(
             Vec::new()
         }
     }
+}
+
+fn clear_pending_confirmations(state: &mut FeedsPageState) {
+    state.pending_config_import = false;
+    state.pending_delete_feed = None;
 }
 
 #[cfg(test)]
@@ -180,5 +201,62 @@ mod tests {
             }
             other => panic!("unexpected effect: {other:?}"),
         }
+    }
+
+    #[test]
+    fn unrelated_user_action_clears_pending_delete_confirmation() {
+        let mut state = FeedsPageState::new();
+        state.pending_delete_feed = Some(42);
+
+        let effects = reduce_feeds_page_intent(&mut state, FeedsPageIntent::RefreshAllRequested);
+
+        assert_eq!(effects.len(), 1);
+        assert_eq!(state.pending_delete_feed, None);
+        match &effects[0] {
+            UiCommand::Feeds(FeedsCommand::RefreshAll) => {}
+            other => panic!("unexpected effect: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unrelated_user_action_clears_pending_config_import_confirmation() {
+        let mut state = FeedsPageState::new();
+        state.pending_config_import = true;
+
+        let effects = reduce_feeds_page_intent(&mut state, FeedsPageIntent::ExportOpmlRequested);
+
+        assert_eq!(effects.len(), 1);
+        assert!(!state.pending_config_import);
+        match &effects[0] {
+            UiCommand::Feeds(FeedsCommand::ExportOpml) => {}
+            other => panic!("unexpected effect: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn exported_config_text_clears_pending_config_import_confirmation() {
+        let mut state = FeedsPageState::new();
+        state.pending_config_import = true;
+
+        let effects = reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::ConfigTextExported("{\"feeds\":[]}".to_string()),
+        );
+
+        assert!(effects.is_empty());
+        assert!(!state.pending_config_import);
+        assert_eq!(state.config_text, "{\"feeds\":[]}");
+    }
+
+    #[test]
+    fn switching_confirmation_domains_clears_previous_pending_state() {
+        let mut state = FeedsPageState::new();
+        state.pending_delete_feed = Some(42);
+
+        let effects = reduce_feeds_page_intent(&mut state, FeedsPageIntent::ImportConfigRequested);
+
+        assert!(effects.is_empty());
+        assert_eq!(state.pending_delete_feed, None);
+        assert!(state.pending_config_import);
     }
 }
