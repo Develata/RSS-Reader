@@ -110,7 +110,6 @@ The project does not need an immediate mass rename. It does need stable naming r
   - `SettingsSyncService`
   - `SettingsPageService`
   - `AppStateService`
-  - `ShellService`
   - `StartupService`
 
 This classification is a boundary baseline, not a rename order. The main rule is to keep future
