@@ -3,11 +3,11 @@
 use std::sync::{Arc, Mutex};
 
 use rssr_application::{
-    FeedRefreshUpdate, ParsedEntryData, ParsedFeedUpdate, RefreshCommit, RefreshFailure,
-    RefreshHttpMetadata, RefreshStorePort,
+    FeedRefreshSourceOutput, FeedRefreshUpdate, ParsedEntryData, ParsedFeedUpdate, RefreshCommit,
+    RefreshFailure, RefreshHttpMetadata, RefreshStorePort,
 };
 use rssr_infra::application_adapters::browser::{
-    adapters::BrowserRefreshStore,
+    adapters::{BrowserRefreshStore, classify_browser_refresh_body},
     state::{
         APP_STATE_STORAGE_KEY, BrowserState, ENTRY_FLAGS_STORAGE_KEY, LoadedState, PersistedFeed,
         PersistedState, STORAGE_KEY, load_state,
@@ -61,6 +61,63 @@ fn sample_entry(index: i64) -> ParsedEntryData {
         content_text: Some(format!("Summary {index}")),
         published_at: Some(OffsetDateTime::UNIX_EPOCH + time::Duration::days(index)),
         updated_at_source: None,
+    }
+}
+
+const SAMPLE_FEED_XML: &str = r#"
+<rss version="2.0">
+  <channel>
+    <title>Browser Source Feed</title>
+    <link>https://example.com/</link>
+    <description>Browser source fixture.</description>
+    <item>
+      <guid>entry-1</guid>
+      <title>Browser Source Entry</title>
+      <link>https://example.com/articles/entry-1</link>
+      <description><![CDATA[<p>Browser source entry body.</p>]]></description>
+    </item>
+  </channel>
+</rss>
+"#;
+
+#[wasm_bindgen_test]
+fn browser_refresh_source_classifies_valid_xml_body_as_updated() {
+    let output = classify_browser_refresh_body(
+        RefreshHttpMetadata {
+            etag: Some("etag-source".to_string()),
+            last_modified: Some("Mon, 13 Apr 2026 10:00:00 GMT".to_string()),
+        },
+        SAMPLE_FEED_XML,
+    );
+
+    match output {
+        FeedRefreshSourceOutput::Updated(update) => {
+            assert_eq!(update.metadata.etag.as_deref(), Some("etag-source"));
+            assert_eq!(update.feed.title.as_deref(), Some("Browser Source Feed"));
+            assert_eq!(update.feed.entries.len(), 1);
+            assert_eq!(update.feed.entries[0].title, "Browser Source Entry");
+        }
+        other => panic!("unexpected source output: {other:?}"),
+    }
+}
+
+#[wasm_bindgen_test]
+fn browser_refresh_source_classifies_html_shell_body_as_parse_failure() {
+    let output = classify_browser_refresh_body(
+        RefreshHttpMetadata {
+            etag: Some("etag-html".to_string()),
+            last_modified: Some("Mon, 13 Apr 2026 11:00:00 GMT".to_string()),
+        },
+        "<!doctype html><html><body>login shell</body></html>",
+    );
+
+    match output {
+        FeedRefreshSourceOutput::Failed(failure) => {
+            assert_eq!(failure.metadata.expect("metadata").etag.as_deref(), Some("etag-html"));
+            assert!(failure.message.starts_with("解析订阅失败:"));
+            assert!(failure.message.contains("当前响应不是 XML feed"));
+        }
+        other => panic!("unexpected source output: {other:?}"),
     }
 }
 

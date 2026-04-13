@@ -215,7 +215,7 @@
 
 ### refresh source-side harness 设计
 
-当前 `BrowserFeedRefreshSource` 仍没有同等粒度的 contract harness。
+当前 `BrowserFeedRefreshSource` 已有第一批 body classification contract，但仍没有完整网络请求级 harness。
 
 这里的 source-side 只指：
 
@@ -243,6 +243,17 @@
 - request 顺序与 fallback 规则，优先继续落在 `feed_request.rs` / `feed_response.rs` 的纯函数测试
 - source outcome 映射，优先围绕 `BrowserFeedRefreshSource` 的 `Failed / NotModified / Updated` 分类做 wasm/browser harness
 - `/feed-proxy` 部署壳是否返回真实 XML，继续由 `run_rssr_web_proxy_feed_smoke.sh` 兜住
+
+当前进度：
+
+- 已完成：
+  - valid XML body -> `Updated`
+  - HTML shell body -> `Failed`，message 前缀为 `解析订阅失败:`
+- 待实现：
+  - network / CORS failure
+  - proxy shell / login shell 的 request-level fallback
+  - non-success status -> `Failed`
+  - bad XML parse failure
 
 当前不建议为了覆盖 source-side 去做的事：
 
@@ -345,7 +356,7 @@
 
 - `refresh contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 - `refresh store-side` 的 browser contract 已覆盖 target lookup、successful commit、failed commit 与 localStorage 写回
-- `refresh source-side` 的 failure triage 与契约说明已补齐，但 source-side harness 仍待实现
+- `refresh source-side` 的 failure triage 与契约说明已补齐，第一批 body classification harness 已落地，request-level harness 仍待实现
 - `subscription contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 - `config exchange contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 

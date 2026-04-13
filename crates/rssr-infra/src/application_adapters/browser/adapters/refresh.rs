@@ -68,16 +68,23 @@ impl FeedRefreshSourcePort for BrowserFeedRefreshSource {
             }
         };
 
-        match parse_feed(&body) {
-            Ok(parsed) => Ok(FeedRefreshSourceOutput::Updated(FeedRefreshUpdate {
-                metadata,
-                feed: map_parsed_feed(parsed),
-            })),
-            Err(error) => Ok(FeedRefreshSourceOutput::Failed(RefreshFailure {
-                message: format!("解析订阅失败: {error}"),
-                metadata: Some(metadata),
-            })),
-        }
+        Ok(classify_browser_refresh_body(metadata, &body))
+    }
+}
+
+pub fn classify_browser_refresh_body(
+    metadata: RefreshHttpMetadata,
+    body: &str,
+) -> FeedRefreshSourceOutput {
+    match parse_feed(body) {
+        Ok(parsed) => FeedRefreshSourceOutput::Updated(FeedRefreshUpdate {
+            metadata,
+            feed: map_parsed_feed(parsed),
+        }),
+        Err(error) => FeedRefreshSourceOutput::Failed(RefreshFailure {
+            message: format!("解析订阅失败: {error}"),
+            metadata: Some(metadata),
+        }),
     }
 }
 
