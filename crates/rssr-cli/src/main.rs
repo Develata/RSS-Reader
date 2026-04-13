@@ -7,7 +7,7 @@ use rssr_application::{
     ConfigImportOutcome, OpmlImportOutcome, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome,
     RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput, SystemClock,
 };
-use rssr_domain::{Feed, FeedRepository, ListDensity, StartupView, ThemeMode, UserSettings};
+use rssr_domain::{Feed, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
     application_adapters::{
         InfraFeedRefreshSource, InfraOpmlCodec, SqliteAppStateAdapter, SqliteRefreshStore,
@@ -210,7 +210,6 @@ async fn main() -> anyhow::Result<()> {
 }
 
 struct CliServices {
-    feed_repository: Arc<SqliteFeedRepository>,
     use_cases: AppUseCases,
 }
 
@@ -253,11 +252,11 @@ impl CliServices {
             clock: Arc::new(SystemClock),
         });
 
-        Ok(Self { feed_repository, use_cases })
+        Ok(Self { use_cases })
     }
 
     async fn list_feeds(&self) -> anyhow::Result<Vec<Feed>> {
-        Ok(self.feed_repository.list_feeds().await?)
+        self.use_cases.feed_catalog_service.list_feeds().await
     }
 
     async fn add_subscription(

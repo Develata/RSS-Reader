@@ -4,10 +4,10 @@ use rssr_domain::{AppStateRepository, EntryRepository, FeedRepository, SettingsR
 
 use crate::{
     AppStatePort, AppStateService, ClockPort, EntriesListService, EntriesWorkspaceService,
-    EntryService, FeedRefreshSourcePort, FeedRemovalCleanupPort, FeedService, FeedsSnapshotService,
-    ImportExportService, OpmlCodecPort, ReaderService, RefreshService, RefreshStorePort,
-    SettingsPageService, SettingsService, SettingsSyncService, ShellService, StartupService,
-    SubscriptionWorkflow,
+    EntryService, FeedCatalogService, FeedRefreshSourcePort, FeedRemovalCleanupPort, FeedService,
+    FeedsSnapshotService, ImportExportService, OpmlCodecPort, ReaderService, RefreshService,
+    RefreshStorePort, SettingsPageService, SettingsService, SettingsSyncService, ShellService,
+    StartupService, SubscriptionWorkflow,
 };
 
 pub trait AppStateServicesPort:
@@ -33,6 +33,7 @@ pub struct AppCompositionInput {
 
 #[derive(Clone)]
 pub struct AppUseCases {
+    pub feed_catalog_service: FeedCatalogService,
     pub feed_service: FeedService,
     pub entry_service: EntryService,
     pub settings_service: SettingsService,
@@ -54,6 +55,7 @@ impl AppUseCases {
     pub fn compose(input: AppCompositionInput) -> Self {
         let feed_service =
             FeedService::new(input.feed_repository.clone(), input.entry_repository.clone());
+        let feed_catalog_service = FeedCatalogService::new(input.feed_repository.clone());
         let refresh_service = RefreshService::new(input.refresh_source, input.refresh_store);
 
         let settings_service = SettingsService::new(input.settings_repository.clone());
@@ -65,6 +67,7 @@ impl AppUseCases {
         let entry_service = EntryService::new(input.entry_repository.clone());
 
         Self {
+            feed_catalog_service,
             feed_service: feed_service.clone(),
             entry_service: entry_service.clone(),
             settings_service: settings_service.clone(),
