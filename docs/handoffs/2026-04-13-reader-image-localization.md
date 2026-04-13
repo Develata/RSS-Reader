@@ -3,8 +3,8 @@
 - 日期：2026-04-13
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：ba73a07
-- 相关 commit：ba73a07
+- 当前 HEAD：7d108b9
+- 相关 commit：ba73a07, 7d108b9
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -38,7 +38,14 @@
 - 本地化成功后会把对应 `<img>` 的 `src` 改成本地 `data:` URL，并移除远端 `srcset`，避免浏览器继续优先请求失败的远端候选图。
 - 图片抓取请求增加 image-like `Accept`、browser-like `User-Agent`，并在有文章 URL 时发送 `Referer`。
 - 单篇文章本地化上限从 4 张提高到 8 张；单图上限从 512 KiB 提高到 1 MiB，总量上限从 1 MiB 提高到 2 MiB。
+- 单图请求超时为 8 秒，连接超时为 3 秒。
 - 跳过常见占位图资源：`placeholder`、`blank.gif`、`transparent.gif`、`spacer.gif`、`1x1.gif`、`pixel.gif`。
+
+### ImageLocalizationWorker
+
+- 整篇文章的外层本地化预算不再固定为 5 秒，而是按 `IMAGE_REQUEST_TIMEOUT * max_images_per_entry + 5` 计算。
+- 当前预算为 69 秒，用于容纳最多 8 张图的串行本地化。
+- 单图请求仍有 8 秒上限；慢图应只影响自身，不应让整篇文章在 5 秒内整体放弃。
 
 ### Reader sanitizer
 
@@ -59,6 +66,7 @@
 - `cargo fmt --check`：通过
 - `cargo test -p rssr-infra fetch::client`：通过，7 passed
 - `cargo test -p rssr-infra`：通过
+- `cargo test -p rssr-app bootstrap::tests`：通过，5 passed
 - `cargo test -p rssr-app reader_`：通过，5 passed
 - `cargo test -p rssr-app`：通过，31 passed
 - `cargo check --workspace`：通过
@@ -73,6 +81,7 @@
 
 - 本次交付可合并。
 - native 刷新后的新文章更可能把 lazy/srcset 图片、表情包候选图本地化为 `data:` URL，从而减少 broken image。
+- 对 NVIDIA 这类图片较多或图片响应较慢的文章，外层 worker 不应再因为 5 秒总超时而整篇跳过写回。
 
 ## 风险与后续事项
 
