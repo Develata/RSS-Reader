@@ -5,7 +5,7 @@ use crate::{
     router::AppRoute,
 };
 
-use super::support::feed_refresh_status_text;
+use super::support::{feed_refresh_state_attr, feed_refresh_status_text};
 
 #[component]
 pub(crate) fn SavedFeedsSection(facade: FeedsPageFacade) -> Element {
@@ -36,7 +36,19 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
     let refresh_facade = facade.clone();
 
     rsx! {
-        li { key: "{feed_id}", "data-layout": "feed-card", "data-state": "{facade.remove_feed_state(feed_id)}",
+        li {
+            key: "{feed_id}",
+            "data-layout": "feed-card",
+            "data-state": "{facade.remove_feed_state(feed_id)}",
+            "data-feed-id": "{feed.id}",
+            "data-feed-title": "{feed.title}",
+            "data-feed-url": "{feed.url}",
+            "data-entry-count": "{feed.entry_count}",
+            "data-unread-count": "{feed.unread_count}",
+            "data-refresh-state": "{feed_refresh_state_attr(feed)}",
+            "data-last-fetched-at": "{feed.last_fetched_at.map(|value| value.unix_timestamp_nanos()).unwrap_or_default()}",
+            "data-last-success-at": "{feed.last_success_at.map(|value| value.unix_timestamp_nanos()).unwrap_or_default()}",
+            "data-fetch-error": "{feed.fetch_error.clone().unwrap_or_default()}",
             Link {
                 "data-slot": "feed-card-title",
                 "data-nav": "feed-entries",

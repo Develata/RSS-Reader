@@ -151,26 +151,33 @@ pub(crate) async fn browser_feed_smoke(State(state): State<AppState>) -> impl In
         () => feedCard.querySelector('[data-action="refresh-feed"]'),
         "refresh-feed button"
       );
-      const refreshStatusBefore = feedCard.textContent.replace(/\s+/g, " ").trim();
+      const refreshStateBefore = feedCard.dataset.refreshState || "unknown";
+      const lastFetchedAtBefore = BigInt(feedCard.dataset.lastFetchedAt || "0");
       refreshButton.click();
       log("clicked refresh-feed");
 
-      await waitFor(
+      const refreshedCard = await waitFor(
         () => {{
-          const bodyText = feedsDoc.body.textContent || "";
-          const refreshStatusAfter = feedCard.textContent.replace(/\s+/g, " ").trim();
-          return bodyText.includes("已刷新订阅：" + expectedFeedTitle)
-            || bodyText.includes(expectedEntryTitle)
-            || (refreshStatusAfter !== refreshStatusBefore
-              && /最近成功：|最近尝试：/.test(refreshStatusAfter));
+          const refreshStateAfter = feedCard.dataset.refreshState || "unknown";
+          const lastFetchedAtAfter = BigInt(feedCard.dataset.lastFetchedAt || "0");
+          if (refreshStateAfter === "failed") {{
+            throw new Error(`refresh failed: ${{feedCard.dataset.fetchError || "unknown error"}}`);
+          }}
+          if (refreshStateAfter !== refreshStateBefore && refreshStateAfter !== "never") {{
+            return feedCard;
+          }}
+          if (lastFetchedAtAfter > lastFetchedAtBefore && refreshStateAfter !== "never") {{
+            return feedCard;
+          }}
+          return null;
         }},
-        "refresh result banner",
+        "successful refresh result",
         90000
       );
-      log("refresh finished");
+      log(`refresh finished: state=${{refreshedCard.dataset.refreshState}} entries=${{refreshedCard.dataset.entryCount}} lastFetchedAt=${{refreshedCard.dataset.lastFetchedAt}}`);
 
       const feedEntriesLink = await waitFor(
-        () => feedCard.querySelector('[data-nav="feed-entries"]'),
+        () => refreshedCard.querySelector('[data-nav="feed-entries"]'),
         "feed-entries link"
       );
       feedEntriesLink.click();
@@ -193,7 +200,10 @@ pub(crate) async fn browser_feed_smoke(State(state): State<AppState>) -> impl In
 
       setResult("pass", {{
         finalPath: frame.contentWindow.location.pathname,
-        feedCardText: feedCard.textContent.replace(/\\s+/g, " ").trim(),
+        refreshState: refreshedCard.dataset.refreshState,
+        entryCount: refreshedCard.dataset.entryCount,
+        fetchError: refreshedCard.dataset.fetchError,
+        feedCardText: refreshedCard.textContent.replace(/\\s+/g, " ").trim(),
       }});
     }}
 
