@@ -207,8 +207,54 @@
 当前最小 browser 基座建议先覆盖：
 
 - `BrowserRefreshStore::list_targets`
+- `BrowserRefreshStore::get_target`
 - `BrowserRefreshStore::commit(NotModified)`
+- `BrowserRefreshStore::commit(Updated)` 清理旧 `fetch_error`
+- `BrowserRefreshStore::commit(Failed)` 保留既有 `last_success_at`
 - browser localStorage 写回是否成功
+
+### refresh source-side harness 设计
+
+当前 `BrowserFeedRefreshSource` 仍没有同等粒度的 contract harness。
+
+这里的 source-side 只指：
+
+- 请求顺序
+- fallback 判定
+- HTML shell / login shell 识别
+- 非成功状态映射
+- XML 解析失败映射
+
+不包含：
+
+- browser state 写回
+- `last_fetched_at / last_success_at / fetch_error` 更新
+- entries upsert
+
+最小覆盖集建议固定为 4 类：
+
+- network / CORS failure
+- proxy shell / login shell
+- non-success status
+- parse failure
+
+其中：
+
+- request 顺序与 fallback 规则，优先继续落在 `feed_request.rs` / `feed_response.rs` 的纯函数测试
+- source outcome 映射，优先围绕 `BrowserFeedRefreshSource` 的 `Failed / NotModified / Updated` 分类做 wasm/browser harness
+- `/feed-proxy` 部署壳是否返回真实 XML，继续由 `run_rssr_web_proxy_feed_smoke.sh` 兜住
+
+当前不建议为了覆盖 source-side 去做的事：
+
+- 不为 `BrowserFeedRefreshSource` 专门引入 host-only mock 结构
+- 不把 source-side harness 绑到 `rssr-app` 页面或 `data-action`
+- 不把 `/feed-proxy` 部署壳问题和 store-side 持久化问题混进同一份断言
+
+建议下一步实现顺序：
+
+1. 先把 source-side 最小覆盖集写成设计清单并固定文档入口
+2. 再判断是否需要新增“response classification helper”来降低 wasm harness 复杂度
+3. 最后再补真正的 source-side harness
 
 ### subscription harness
 
@@ -237,6 +283,7 @@
 - 不在 harness 里直接依赖 `rssr-app` 页面结构或 `data-action`
 - 不把 browser fixture 再实现成一套脱离主线的临时模型，除非当前 adapter 无法支持断言
 - 不把 `test_webdav_local_roundtrip` 的环境限制混进 contract harness 本体
+- 不为了 source-side harness 回退当前 `wasm32` 专属 browser adapter 边界
 
 ## 建议验收
 
@@ -297,6 +344,8 @@
 截至当前主线：
 
 - `refresh contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
+- `refresh store-side` 的 browser contract 已覆盖 target lookup、successful commit、failed commit 与 localStorage 写回
+- `refresh source-side` 的 failure triage 与契约说明已补齐，但 source-side harness 仍待实现
 - `subscription contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 - `config exchange contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 
