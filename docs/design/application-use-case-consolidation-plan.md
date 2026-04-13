@@ -77,6 +77,15 @@ plugin loading, a rule engine, or a new global store.
 - Host layers may compose multiple application calls for presentation, but they must not recreate
   business branching that already exists in a workflow.
 
+In the current codebase this distinction is intentional:
+
+- `SubscriptionWorkflow` stays a workflow because it spans multiple use cases and state effects:
+  subscription mutation, optional first refresh, and last-opened-feed cleanup on removal.
+- `RefreshService` stays a service because it owns one coherent capability family: resolve refresh
+  targets, invoke refresh source/store ports, and return stable refresh outcomes. It is internally
+  multi-step, but it does not orchestrate across unrelated product actions the way
+  `SubscriptionWorkflow` does.
+
 ### Naming baseline
 
 The project does not need an immediate mass rename. It does need stable naming rules:
@@ -191,8 +200,8 @@ smoke gates.
 1. Naming consistency review
    - Decide whether any current service name actively obscures its boundary.
    - Prefer rule enforcement and small targeted renames over mass churn.
-2. Settings and shell boundary review
-   - Re-check whether `SettingsPageService`, `ShellService`, and `StartupService` still reflect
-     stable application semantics instead of page/runtime convenience.
+2. Workflow/service split review
+   - Re-check whether future multi-step actions should become workflows or remain services.
+   - Do not create new workflows just because a service has multiple internal steps.
 3. Verification hardening
    - Add focused contract tests when a shared outcome or migration boundary changes.
