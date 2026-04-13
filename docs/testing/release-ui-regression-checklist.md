@@ -51,6 +51,18 @@ bash scripts/run_release_ui_regression.sh --no-serve
 bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
 ```
 
+如果要一次性把 browser / wasm contract harness 和 4 条固定 smoke 也串进来：
+
+```bash
+bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web --with-browser-contracts --with-fixed-smokes
+```
+
+等价快捷入口：
+
+```bash
+bash scripts/run_release_ui_regression.sh --debug --port 8091 --full
+```
+
 脚本内部会串行执行下面这组自动化检查。
 
 至少先通过：
@@ -59,9 +71,23 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`
 - `cargo test -p rssr-app`
 - `cargo test -p rssr-app --test test_builtin_theme_contracts`
+- `cargo test -p rssr-infra --test test_refresh_contract_harness`
 - `cargo test -p rssr-infra --test test_subscription_contract_harness`
 - `cargo test -p rssr-infra --test test_config_exchange_contract_harness`
 - `cargo test -p rssr-web`
+
+如果启用 `--with-browser-contracts`，还会补：
+
+- `bash scripts/run_wasm_refresh_contract_harness.sh`
+- `bash scripts/run_wasm_subscription_contract_harness.sh`
+- `bash scripts/run_wasm_config_exchange_contract_harness.sh`
+
+如果启用 `--with-fixed-smokes`，还会补：
+
+- `bash scripts/run_static_web_reader_theme_matrix.sh --skip-build`
+- `bash scripts/run_static_web_small_viewport_smoke.sh --skip-build`
+- `bash scripts/run_rssr_web_proxy_feed_smoke.sh --skip-build`
+- `bash scripts/run_rssr_web_browser_feed_smoke.sh --skip-build`
 
 如果这组自动化没过，不进入后续手工回归。
 

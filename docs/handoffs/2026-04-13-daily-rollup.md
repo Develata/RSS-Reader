@@ -225,3 +225,99 @@
 - commit：pending
 - tag / release：N/A
 - worktree：`main` 分支，当前包含本次 handoff 文档增量更新
+
+---
+
+## 增量交接（2026-04-13 release harness 闭环）
+
+- 日期：2026-04-13
+- 作者 / Agent：Codex
+- 分支：main
+- 当前 HEAD：a9f6c5b
+- 相关 commit：pending
+- 相关 tag / release：N/A
+- 状态：`validated`
+
+### 工作摘要与背景
+
+按用户给定优先级，先补齐 subscription 的 browser / wasm contract harness 在统一回归入口中的正式门禁，再把发布前验证闭环收口到单一脚本入口，避免 release 前还要手工拼接多条固定 smoke。
+
+### 受影响模块与平台
+
+- 模块：
+  - `scripts/run_release_ui_regression.sh`
+  - `docs/testing/contract-harness-rebuild-plan.md`
+  - `docs/testing/mainline-validation-matrix.md`
+  - `docs/testing/release-ui-coverage-matrix.md`
+  - `docs/testing/release-ui-regression-checklist.md`
+  - `docs/handoffs/2026-04-13-daily-rollup.md`
+- 平台：
+  - Web
+  - wasm32
+  - Docker / `rssr-web`
+  - desktop Linux 验证环境
+- 额外影响：
+  - release validation workflow
+  - contract harness 文档口径
+
+### 关键代码 / 文档 / workflow 变更
+
+- `scripts/run_release_ui_regression.sh`
+  - 新增 `--with-browser-contracts`、`--with-fixed-smokes` 与 `--full` 入口。
+  - 自动化门禁补入 `test_refresh_contract_harness`。
+  - 可选串行执行三条 wasm/browser contract harness：
+    - `run_wasm_refresh_contract_harness.sh`
+    - `run_wasm_subscription_contract_harness.sh`
+    - `run_wasm_config_exchange_contract_harness.sh`
+  - 可选串行执行四条固定 smoke：
+    - static web `/reader` 主题矩阵
+    - static web 小视口关键路径
+    - `rssr-web` `/feed-proxy`
+    - `rssr-web` 浏览器态首次添加订阅 + 首刷
+  - 主 summary 模板新增 contract / fixed smoke 状态与产物索引。
+- `docs/testing/contract-harness-rebuild-plan.md`
+  - 修正 subscription 阶段进度，明确 browser / wasm baseline 已完成。
+- `docs/testing/mainline-validation-matrix.md`
+  - `add/remove` 与 `config/exchange` 自动化入口补入 host harness 与 wasm harness。
+- `docs/testing/release-ui-coverage-matrix.md`
+  - 发布前 UI 覆盖矩阵改为以统一脚本可选串行模式为推荐入口。
+- `docs/testing/release-ui-regression-checklist.md`
+  - 发布前清单补入 `--with-browser-contracts` / `--with-fixed-smokes` / `--full` 用法与新增门禁明细。
+
+### 已执行验证 / 验收
+
+#### 自动化验证
+
+- `bash -n scripts/run_release_ui_regression.sh`：通过
+- `cargo test -p rssr-infra --test test_subscription_contract_harness`：通过
+- `bash scripts/run_wasm_subscription_contract_harness.sh`：通过
+- `bash scripts/run_release_ui_regression.sh --debug --no-serve --full --log-dir target/release-ui-regression/20260413-codex-full`：通过
+
+#### 手工验收
+
+- 统一回归 summary 产物复核：通过
+  - `target/release-ui-regression/20260413-codex-full/summary.md`
+  - 确认 `自动化门禁 / browser / wasm contract harness / rssr-web smoke / 固定 smoke 套件` 全部为 `passed`
+- 固定 smoke 产物目录存在性复核：通过
+  - `target/release-ui-regression/20260413-codex-full/static-web-reader-theme-matrix`
+  - `target/release-ui-regression/20260413-codex-full/static-web-small-viewport-smoke`
+  - `target/release-ui-regression/20260413-codex-full/rssr-web-proxy-feed-smoke`
+  - `target/release-ui-regression/20260413-codex-full/rssr-web-browser-feed-smoke`
+
+### 当前状态、风险、待跟进
+
+- 当前状态：
+  - subscription browser / wasm harness 已被统一 release 回归入口正式纳入。
+  - 发布前验证闭环现在可用单条 `run_release_ui_regression.sh --full --no-serve` 串行执行。
+- 风险：
+  - 固定 smoke 里的 headless Chrome 仍会输出大量 DBus 噪声日志，但未影响退出码与产物。
+  - `rssr-web` 浏览器态代理 feed 导入后的页面更新、WebDAV UI 实页回归、真实远端 feed 首刷等项仍保留为手工补查。
+- 待跟进：
+  - 如果要继续压缩 release 噪声，优先收口 fixed smoke 里的 Chrome stderr。
+  - 按用户排序继续推进 refresh / 图片本地化稳定性与 composition builder 收口。
+
+### 相关 commit / tag / worktree 状态
+
+- commit：pending
+- tag / release：N/A
+- worktree：`main` 分支，当前包含 release harness / testing docs / handoff 文档增量更新

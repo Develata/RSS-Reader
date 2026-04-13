@@ -162,7 +162,7 @@
 当前进度：
 
 - 已完成 host / sqlite baseline
-- browser fixture 尚未开始
+- browser / wasm baseline 已完成
 
 ### 阶段 3：config exchange contract harness
 

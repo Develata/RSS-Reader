@@ -28,17 +28,17 @@
 | --- | --- | --- | --- | --- |
 | `rssr-app` Web 构建与单测 | 自动化 | `bash scripts/run_release_ui_regression.sh --no-serve` | P1 | 已串行覆盖 `cargo check/test` |
 | builtin theme 契约 | 自动化 | `cargo test -p rssr-app --test test_builtin_theme_contracts` | P1 | 防止内置主题回退到旧 selector |
-| `rssr-infra` 关键 contract harness | 自动化 | `bash scripts/run_release_ui_regression.sh --no-serve` | P1 | 当前至少覆盖 subscription / config exchange |
+| `rssr-infra` host + browser contract harness | 自动化 | `bash scripts/run_release_ui_regression.sh --no-serve --with-browser-contracts` | P1 | 串行覆盖 refresh / subscription / config exchange 的 sqlite 与 wasm/browser harness |
 | `rssr-web` 单测 | 自动化 | `bash scripts/run_release_ui_regression.sh --no-serve --with-rssr-web` | P1 | 已纳入统一预检 |
 | 静态 Web `/entries` / `/feeds` / `/settings` 路由可达 | 固定 smoke | `bash scripts/run_static_web_browser_smoke.sh` | P1 | 依赖同源 local auth helper |
 | 静态 Web 真实阅读页 `/entries/2` | 固定 smoke | `bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2` | P1 | 已固定 demo seed |
-| 静态 Web `/reader` 多主题矩阵 | 固定 smoke | `bash scripts/run_static_web_reader_theme_matrix.sh` | P1 | 默认主题 + 4 个内置主题 |
-| 静态 Web 小视口关键路径 | 固定 smoke | `bash scripts/run_static_web_small_viewport_smoke.sh` | P1 | 默认 `390x844`，覆盖 `/entries` `/feeds` `/settings` `/entries/2` |
+| 静态 Web `/reader` 多主题矩阵 | 固定 smoke | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_reader_theme_matrix.sh` | P1 | 默认主题 + 4 个内置主题 |
+| 静态 Web 小视口关键路径 | 固定 smoke | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_small_viewport_smoke.sh` | P1 | 默认 `390x844`，覆盖 `/entries` `/feeds` `/settings` `/entries/2` |
 | `rssr-web` 登录 / 会话 / `/feeds` `/settings` 基础壳 | 自动化 | `bash scripts/run_release_ui_regression.sh --with-rssr-web` | P1 | 已覆盖登录、`/session-probe`、登出 |
-| `rssr-web` 代理链路 `/feed-proxy` 返回真实 XML | 固定 smoke | `bash scripts/run_rssr_web_proxy_feed_smoke.sh` | P1 | 当前默认验证阮一峰 Atom |
-| 静态 Web `/reader` 多主题下的视觉细节 | 固定 smoke + 手工结论 | `bash scripts/run_static_web_reader_theme_matrix.sh` + 查看 `target/static-web-reader-theme-matrix/<ts>/*.png` | P2 | 2026-04-10 基线已人工通过；后续发布仍需复看新产物 |
-| 静态 Web 小视口下的视觉细节 | 固定 smoke + 手工结论 | `bash scripts/run_static_web_small_viewport_smoke.sh` + 查看 `target/static-web-small-viewport-smoke/<ts>/*.png` | P2 | 2026-04-10 基线已人工通过；后续发布仍需复看新产物 |
-| `rssr-web` 浏览器态下真实添加订阅并完成首次刷新 | 固定 smoke | `bash scripts/run_rssr_web_browser_feed_smoke.sh` | P2 | 现已用同源 helper + 本地 feed fixture 自动化 |
+| `rssr-web` 代理链路 `/feed-proxy` 返回真实 XML | 固定 smoke | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_rssr_web_proxy_feed_smoke.sh` | P1 | 当前默认验证阮一峰 Atom |
+| 静态 Web `/reader` 多主题下的视觉细节 | 固定 smoke + 手工结论 | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_reader_theme_matrix.sh` + 查看 `target/static-web-reader-theme-matrix/<ts>/*.png` | P2 | 2026-04-10 基线已人工通过；后续发布仍需复看新产物 |
+| 静态 Web 小视口下的视觉细节 | 固定 smoke + 手工结论 | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_small_viewport_smoke.sh` + 查看 `target/static-web-small-viewport-smoke/<ts>/*.png` | P2 | 2026-04-10 基线已人工通过；后续发布仍需复看新产物 |
+| `rssr-web` 浏览器态下真实添加订阅并完成首次刷新 | 固定 smoke | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_rssr_web_browser_feed_smoke.sh` | P2 | 现已用同源 helper + 本地 feed fixture 自动化 |
 | `rssr-web` 浏览器态下真实代理 feed 导入后的页面更新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 公开 selector 已稳定，当前仍主要受限于本地 Chrome MCP / DevTools 连接不稳定 |
 | WebDAV 上传/下载 UI 实页回归 | 手工 | 发布前清单 + 浏览器手工 | P2 | 自动化更多停留在 lower-level gates |
 | 多主题下 `/entries` `/feeds` `/settings` 的视觉细节 | 手工 | 发布前清单 + 浏览器手工 | P2 | 内置主题契约已自动化，但视觉仍建议 spot check |
@@ -67,10 +67,10 @@
 1. 先跑：
 
 ```bash
-bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
+bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web --with-browser-contracts --with-fixed-smokes
 ```
 
-2. 再跑：
+2. 如果只想分步执行固定 smoke，再跑：
 
 ```bash
 bash scripts/run_static_web_reader_theme_matrix.sh
