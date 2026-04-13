@@ -35,7 +35,13 @@ pub(crate) fn select_reader_body(
 }
 
 pub(crate) fn sanitize_remote_html(raw: &str) -> Option<String> {
-    let sanitized = ammonia::clean(raw);
+    let sanitized = ammonia::Builder::default()
+        .add_tag_attributes(
+            "img",
+            &["class", "data-src", "data-original", "data-lazy-src", "data-orig-file", "srcset"],
+        )
+        .clean(raw)
+        .to_string();
     let trimmed = sanitized.trim();
     (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
@@ -112,6 +118,28 @@ mod tests {
                 assert!(html.contains("<p>Hello</p>"));
                 assert!(!html.contains("onclick"));
                 assert!(!html.contains("<script"));
+            }
+            ReaderBody::Text(_) => panic!("expected html body"),
+        }
+    }
+
+    #[test]
+    fn reader_preserves_image_source_attributes_after_sanitizing() {
+        let body = select_reader_body(
+            Some(
+                r#"<p><img src="/fallback.jpg" srcset="/image.webp 1x, /image@2x.webp 2x" data-src="/image.webp" onerror="alert(1)"></p>"#
+                    .to_string(),
+            ),
+            None,
+            None,
+        );
+
+        match body {
+            ReaderBody::Html(html) => {
+                assert!(html.contains(r#"src="/fallback.jpg""#));
+                assert!(html.contains(r#"srcset="/image.webp 1x, /image@2x.webp 2x""#));
+                assert!(html.contains(r#"data-src="/image.webp""#));
+                assert!(!html.contains("onerror"));
             }
             ReaderBody::Text(_) => panic!("expected html body"),
         }
