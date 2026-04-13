@@ -91,6 +91,36 @@ async fn browser_refresh_store_lists_only_active_targets() {
 }
 
 #[wasm_bindgen_test]
+async fn browser_refresh_store_get_target_normalizes_url_and_skips_deleted_feeds() {
+    clear_browser_state_storage();
+
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState {
+            next_feed_id: 2,
+            feeds: vec![
+                sample_feed(1, "https://example.com:443/feed.xml#frag", false),
+                sample_feed(2, "https://example.com/deleted.xml", true),
+            ],
+            ..PersistedState::default()
+        },
+        ..BrowserState::default()
+    }));
+    let store = BrowserRefreshStore::new(state);
+
+    let active = store.get_target(1).await.expect("get active target").expect("target exists");
+    assert_eq!(active.feed_id, 1);
+    assert_eq!(active.url.as_str(), "https://example.com/feed.xml");
+
+    let deleted = store.get_target(2).await.expect("get deleted target");
+    assert!(deleted.is_none());
+
+    let missing = store.get_target(99).await.expect("get missing target");
+    assert!(missing.is_none());
+
+    clear_browser_state_storage();
+}
+
+#[wasm_bindgen_test]
 async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
     clear_browser_state_storage();
 
@@ -198,6 +228,43 @@ async fn browser_refresh_store_commit_updated_persists_feed_metadata_and_entries
 }
 
 #[wasm_bindgen_test]
+async fn browser_refresh_store_commit_updated_clears_previous_fetch_error() {
+    clear_browser_state_storage();
+
+    let mut feed = sample_feed(1, "https://example.com/feed.xml", false);
+    feed.fetch_error = Some("previous failure".to_string());
+
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState { next_feed_id: 1, feeds: vec![feed], ..PersistedState::default() },
+        ..BrowserState::default()
+    }));
+    let store = BrowserRefreshStore::new(state.clone());
+
+    store
+        .commit(
+            1,
+            RefreshCommit::Updated {
+                update: FeedRefreshUpdate {
+                    metadata: RefreshHttpMetadata::default(),
+                    feed: ParsedFeedUpdate {
+                        title: Some("Recovered Feed".to_string()),
+                        site_url: None,
+                        description: None,
+                        entries: vec![sample_entry(1)],
+                    },
+                },
+            },
+        )
+        .await
+        .expect("commit updated");
+
+    let snapshot = state.lock().expect("lock state");
+    assert_eq!(snapshot.core.feeds[0].fetch_error, None);
+
+    clear_browser_state_storage();
+}
+
+#[wasm_bindgen_test]
 async fn browser_refresh_store_commit_failed_persists_error_without_success_timestamp() {
     clear_browser_state_storage();
 
@@ -243,6 +310,40 @@ async fn browser_refresh_store_commit_failed_persists_error_without_success_time
     let LoadedState { state: persisted, warning } = load_state();
     assert!(warning.is_none());
     assert_eq!(persisted.core.feeds[0].fetch_error.as_deref(), Some("network timeout"));
+
+    clear_browser_state_storage();
+}
+
+#[wasm_bindgen_test]
+async fn browser_refresh_store_commit_failed_preserves_previous_success_timestamp() {
+    clear_browser_state_storage();
+
+    let mut feed = sample_feed(1, "https://example.com/feed.xml", false);
+    let previous_success = OffsetDateTime::UNIX_EPOCH + time::Duration::days(3);
+    let previous_fetch = OffsetDateTime::UNIX_EPOCH + time::Duration::days(4);
+    feed.last_success_at = Some(previous_success);
+    feed.last_fetched_at = Some(previous_fetch);
+
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState { next_feed_id: 1, feeds: vec![feed], ..PersistedState::default() },
+        ..BrowserState::default()
+    }));
+    let store = BrowserRefreshStore::new(state.clone());
+
+    store
+        .commit(
+            1,
+            RefreshCommit::Failed {
+                failure: RefreshFailure { message: "still failing".to_string(), metadata: None },
+            },
+        )
+        .await
+        .expect("commit failed");
+
+    let snapshot = state.lock().expect("lock state");
+    assert_eq!(snapshot.core.feeds[0].last_success_at, Some(previous_success));
+    assert_ne!(snapshot.core.feeds[0].last_fetched_at, Some(previous_fetch));
+    assert_eq!(snapshot.core.feeds[0].fetch_error.as_deref(), Some("still failing"));
 
     clear_browser_state_storage();
 }

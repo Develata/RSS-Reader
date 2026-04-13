@@ -33,7 +33,7 @@
 | 能力项 | 自动化入口 | 是否需要手工 smoke | 是否受环境限制 | 通过标准 |
 |---|---|---|---|---|
 | add/remove | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_application_refresh_store_adapter`；`cargo check -p rssr-cli` | 是 | 低 | URL 可添加；删除后列表与 app state 保持一致；无异常报错 |
-| refresh | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_feed_refresh_flow`；`cargo test -p rssr-infra --test test_application_refresh_store_adapter` | 是 | 中 | single / all 都可完成；成功、失败、not modified 语义正确；不产生异常重复写入 |
+| refresh | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_feed_refresh_flow`；`cargo test -p rssr-infra --test test_application_refresh_store_adapter`；`bash scripts/run_wasm_refresh_contract_harness.sh` | 是 | 中 | single / all 都可完成；成功、失败、not modified 语义正确；browser refresh store target/commit 语义正确；不产生异常重复写入 |
 | config/exchange | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_config_package_codec`；`cargo test -p rssr-infra --test test_config_package_io`；`cargo test -p rssr-infra --test test_opml_interop` | 是 | 中 | JSON / OPML roundtrip 可用；损坏或非法配置被拒绝；导入后订阅与设置恢复符合预期 |
 | reader rendering | `cargo test -p rssr-app`；`cargo check -p rssr-app --target wasm32-unknown-unknown` | 是 | 中 | 阅读页优先展示完整 HTML；HTML-like fallback 不再被原样显示标签；内容经过清洗 |
 | web startup | `cargo check -p rssr-app --target wasm32-unknown-unknown`；`cargo test -p rssr-web` | 是 | 中 | 首屏可交互；无黑屏、无页面无响应；主要路由切换正常；Console 无新的 panic / 死循环 |
