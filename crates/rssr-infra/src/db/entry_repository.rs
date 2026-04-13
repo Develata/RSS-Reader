@@ -2,12 +2,12 @@ use rssr_domain::{
     DomainError, Entry, EntryNavigation, EntryQuery, EntryRepository, EntrySummary, ReadFilter,
     Result as DomainResult, StarredFilter,
 };
-use sha2::{Digest, Sha256};
 use sqlx::{QueryBuilder, Row, Sqlite};
 use time::OffsetDateTime;
 use url::Url;
 
 use crate::db::SqlitePool;
+use crate::feed_normalization::hash_content;
 use crate::parser::feed_parser::ParsedEntry;
 
 #[derive(Clone)]
@@ -387,16 +387,6 @@ impl EntryRepository for SqliteEntryRepository {
 
 fn map_sqlx_error(error: sqlx::Error) -> DomainError {
     DomainError::Persistence(error.to_string())
-}
-
-fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>) -> Option<String> {
-    let mut hasher = Sha256::new();
-    let mut used = false;
-    for part in [title, text, html].into_iter().flatten() {
-        hasher.update(part.as_bytes());
-        used = true;
-    }
-    used.then(|| format!("{:x}", hasher.finalize()))
 }
 
 pub fn compute_entry_content_hash(
