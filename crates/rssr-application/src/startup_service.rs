@@ -39,9 +39,9 @@ impl StartupService {
 
         let feed_exists = self
             .feed_repository
-            .list_summaries()
+            .get_feed(feed_id)
             .await
-            .map(|feeds| feeds.iter().any(|feed| feed.id == feed_id))
+            .map(|feed| feed.is_some())
             .unwrap_or(false);
 
         if feed_exists {
@@ -60,6 +60,8 @@ mod tests {
         AppStateRepository, AppStateSnapshot, Feed, FeedRepository, FeedSummary,
         NewFeedSubscription, SettingsRepository, StartupView, UserSettings,
     };
+    use time::OffsetDateTime;
+    use url::Url;
 
     use super::{StartupService, StartupTarget};
 
@@ -117,8 +119,30 @@ mod tests {
             Ok(Vec::new())
         }
 
-        async fn get_feed(&self, _feed_id: i64) -> rssr_domain::Result<Option<Feed>> {
-            Ok(None)
+        async fn get_feed(&self, feed_id: i64) -> rssr_domain::Result<Option<Feed>> {
+            self.summaries
+                .iter()
+                .find(|summary| summary.id == feed_id)
+                .map(|summary| {
+                    Ok(Feed {
+                        id: summary.id,
+                        url: Url::parse(&summary.url).expect("test feed url"),
+                        title: Some(summary.title.clone()),
+                        site_url: None,
+                        description: None,
+                        icon_url: None,
+                        folder: None,
+                        etag: None,
+                        last_modified: None,
+                        last_fetched_at: summary.last_fetched_at,
+                        last_success_at: summary.last_success_at,
+                        fetch_error: summary.fetch_error.clone(),
+                        is_deleted: false,
+                        created_at: OffsetDateTime::UNIX_EPOCH,
+                        updated_at: OffsetDateTime::UNIX_EPOCH,
+                    })
+                })
+                .transpose()
         }
 
         async fn list_summaries(&self) -> rssr_domain::Result<Vec<FeedSummary>> {

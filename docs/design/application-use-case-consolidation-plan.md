@@ -22,6 +22,8 @@ consolidation work is already on the mainline:
 - Feed snapshot query moved into `FeedsSnapshotService`
 - CLI feed listing moved into `FeedCatalogService`
 - Feed summaries queries for startup/workspace moved off `FeedService`
+- Startup last-opened feed validation now uses the feed repository's single-feed lookup instead of
+  feed summary aggregation.
 - Pure facade services removed:
   - `ShellService`
   - `SettingsPageService`
@@ -52,6 +54,31 @@ Current result:
 
 No code change is required from this check. The next application-layer work should still be driven
 by real boundary pressure, not by mass renaming.
+
+## Startup Query Narrowing 2026-04-13
+
+Reviewed files:
+
+- `crates/rssr-application/src/startup_service.rs`
+- `crates/rssr-application/src/entries_workspace_service.rs`
+- `crates/rssr-application/src/app_state_service.rs`
+- `crates/rssr-application/src/settings_service.rs`
+- `crates/rssr-application/src/settings_sync_service.rs`
+
+Current result:
+
+- `StartupService` uses `FeedRepository::get_feed(feed_id)` to validate a last-opened feed instead
+  of loading all feed summaries.
+- `EntriesWorkspaceService` still loads feed summaries because its bootstrap output can return the
+  feeds list to the UI; that remains a query surface, not a command-service passthrough.
+- `AppStateService` remains the owner for app-state slices such as entries workspace state and
+  last-opened feed. Replacing it with direct repository access in callers would duplicate snapshot
+  read/modify/write rules.
+- `SettingsSyncService` remains thin but intentional: it translates a remote pull/import outcome
+  into the settings snapshot the host needs after import.
+
+No workflow split is required from this check. The useful code change is the narrower startup
+existence query, not a broad service-to-repository rewrite.
 
 ## Skeleton Boundary
 
