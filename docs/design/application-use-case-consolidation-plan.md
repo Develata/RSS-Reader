@@ -114,6 +114,11 @@ The project does not need an immediate mass rename. It does need stable naming r
 This classification is a boundary baseline, not a rename order. The main rule is to keep future
 changes consistent with it.
 
+`SettingsSyncService` is intentionally retained even though it is thin. Its job is not generic
+repository access; it defines the application outcome for "remote config pull has already been
+applied, now expose whether it imported and what the current effective settings are". That
+semantic is stable enough to justify its own use case.
+
 ## Truth Sources
 
 - Feeds: `FeedRepository`
