@@ -105,6 +105,35 @@ The split trigger remains future growth beyond config-exchange semantics: contin
 conflict resolution, account identity, background scheduling, or a separate OPML subscription
 management surface. None of those is present in the current implementation.
 
+## Boundary Checklist Sweep 2026-04-13
+
+Reviewed files and searches:
+
+- `rg` for repository types in `crates/rssr-app/src` and `crates/rssr-cli/src`
+- `rg` for `list_feeds`, `list_summaries`, `get_feed`, `list_entries`, and `get_entry` in
+  `crates/rssr-application/src`
+- `crates/rssr-app/src/bootstrap/native.rs`
+- `crates/rssr-app/src/bootstrap/web.rs`
+- `crates/rssr-cli/src/main.rs`
+
+Current result:
+
+- UI runtime and CLI command handlers still enter the application layer through `AppUseCases`.
+- Repository construction in native, web, and CLI bootstrap remains composition wiring, not command
+  handler access.
+- Application-layer query methods match their current output surfaces:
+  - `FeedCatalogService` uses full feed entities for CLI listing.
+  - `FeedsSnapshotService` and `EntriesWorkspaceService` use feed summaries where their outputs need
+    summaries.
+  - `StartupService` uses single-feed lookup for last-opened feed existence.
+  - `ImportExportService` uses full feed entities where config export/import and OPML interop need
+    full feed membership data.
+- Native `ImageLocalizationWorker` holds `SqliteEntryRepository` directly as a host worker for
+  hash-checked background HTML localization writeback. This remains the documented native image
+  localization exception and must not be copied into UI runtime ports.
+
+No code change is required from this sweep.
+
 ## Skeleton Boundary
 
 The work stays inside the existing product skeleton:

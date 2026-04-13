@@ -26,9 +26,13 @@ code changes are merged.
   - platform transport
   - clipboard
   - browser/native-specific remote config wiring
+  - native image localization worker writeback
   - host-visible refresh execution outcomes
 - Host capabilities may call application use cases, but must not recreate business branching that
   already exists in an application workflow or service.
+- Native image localization may hold native infra writeback dependencies when it is scoped to
+  background asset localization and hash-checked entry updates. Do not generalize that exception
+  into UI runtime repository access.
 
 ## Query And Command Boundaries
 
