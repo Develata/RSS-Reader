@@ -153,5 +153,5 @@
 
 全链路阶段性复测仍参考：
 
-- [全局浏览器回归报告](./global-browser-regression.md)
+- [发布前 UI 覆盖矩阵](./release-ui-coverage-matrix.md)
 - [手工回归测试清单](./manual-regression.md)

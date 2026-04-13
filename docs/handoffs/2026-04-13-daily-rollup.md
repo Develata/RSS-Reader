@@ -156,3 +156,72 @@
   - `crates/rssr-app/src/bootstrap/native.rs`
   - `crates/rssr-app/src/pages/reader_page/support.rs`
 - 若需要逐项恢复原拆分 handoff 细节，只能从 git 历史检出 2026-04-13 当日已删除记录。
+
+---
+
+## 增量交接（2026-04-13 架构体检）
+
+- 日期：2026-04-13
+- 作者 / Agent：Codex
+- 分支：main
+- 当前 HEAD：b6cdee1
+- 相关 commit：pending
+- 相关 tag / release：N/A
+- 状态：`validated`
+
+### 工作摘要与背景
+
+按用户请求完成一次“全仓 Rust 架构清晰度与 infra 边界一致性”审查，覆盖 `domain/application/infra/app/cli/web` 的依赖方向、模块职责、组合入口和高复杂文件。
+
+### 受影响模块与平台
+
+- 模块：
+  - `crates/rssr-domain/src/*`
+  - `crates/rssr-application/src/*`
+  - `crates/rssr-infra/src/*`
+  - `crates/rssr-app/src/bootstrap/*`
+  - `crates/rssr-app/src/ui/runtime/*`
+  - `crates/rssr-cli/src/main.rs`
+  - `crates/rssr-web/src/*`
+  - `docs/design/*`
+  - `docs/handoffs/2026-04-13-daily-rollup.md`
+- 平台：
+  - desktop
+  - Android
+  - Web
+  - CLI
+  - Docker / `rssr-web`
+
+### 关键代码 / 文档 / workflow 变更
+
+- 代码变更：无（本次为审查，不包含业务代码修改）。
+- 文档变更：追加当前增量交接记录（本节）。
+- workflow：无 CI/workflow 配置变更。
+
+### 已执行验证 / 验收
+
+#### 自动化验证
+
+- `cargo check --workspace`：通过
+
+#### 结构与边界核查（静态检索）
+
+- `rg -n "use rssr_infra|rssr_infra::|sqlx::|reqwest::" crates/rssr-application/src crates/rssr-domain/src`：无匹配（应用层/领域层未反向依赖 infra 或基础设施库）
+- `rg -n "use rssr_application|rssr_application::" crates/rssr-domain/src`：无匹配（domain 未依赖 application）
+- `rg -n "AppServices::shared|use_cases\\(|rssr_infra|Sqlite|Repository" crates/rssr-app/src/pages crates/rssr-app/src/ui crates/rssr-app/src/hooks crates/rssr-app/src/components`：仅 `ui/runtime/services.rs` 命中（页面层未直接持有 infra/repository）
+
+### 当前状态、风险、待跟进
+
+- 当前状态：架构评审已完成，结论已同步给用户；代码库可编译。
+- 主要风险：
+  - `rssr-app` native/web 与 `rssr-cli` 存在 composition 与能力编排重复，后续变更成本偏高。
+  - `rssr-web/src/auth.rs` 与 `rssr-infra/src/fetch/client.rs` 文件职责偏重，继续增长后可维护性风险升高。
+- 待跟进：
+  - 抽取共享 composition builder，减少三处启动入口重复装配。
+  - 拆分高复杂文件（先从 `auth.rs` 的 HTML 输出与鉴权流程解耦开始）。
+
+### 相关 commit / tag / worktree 状态
+
+- commit：pending
+- tag / release：N/A
+- worktree：`main` 分支，当前包含本次 handoff 文档增量更新

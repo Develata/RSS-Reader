@@ -1,62 +1,75 @@
 # 测试与回归文档
 
-这个目录收纳手工验证、回归检查与测试辅助说明。
+这个目录只保留两类长期文档：
 
-## 当前文档
+- 可重复执行的检查清单和 smoke 入口
+- 长期维护的验证矩阵、环境限制和重建计划
 
-- [手工回归测试清单](./manual-regression.md)
+单次执行结果、临时报表和阶段性结论，优先写入：
+
+- `target/**/summary.md`
+- `docs/handoffs/`
+
+不要再把一次性测试报告长期堆在这里。
+
+## 快速导航
+
+### 入口索引
+
+- [主线验证矩阵](./mainline-validation-matrix.md)
 - [发布前 UI 回归清单](./release-ui-regression-checklist.md)
 - [发布前 UI 覆盖矩阵](./release-ui-coverage-matrix.md)
+- [手工回归测试清单](./manual-regression.md)
+
+### Web / 浏览器 smoke
+
 - [`rssr-web` 浏览器手工 Smoke](./rssr-web-browser-smoke.md)
 - [`rssr-web` 浏览器自动 Feed Smoke](./rssr-web-browser-feed-smoke.md)
 - [`rssr-web` 代理 Feed Smoke](./rssr-web-proxy-feed-smoke.md)
-- [Chrome MCP 目标浏览器](./chrome-mcp-target.md)
-- [Windows Chrome 可见窗口回归](./windows-chrome-visible-regression.md)
 - [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
 - [Static Web `/reader` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
 - [Static Web 小视口 Smoke](./static-web-small-viewport-smoke.md)
-- [全局浏览器回归报告](./global-browser-regression.md)
+- [Windows Chrome 可见窗口回归](./windows-chrome-visible-regression.md)
+- [Chrome MCP 目标浏览器](./chrome-mcp-target.md)
+
+### 重构 / 约束
+
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
-- [主线验证矩阵](./mainline-validation-matrix.md)
 - [环境限制索引](./environment-limitations.md)
 - [Contract Harness 重建计划](./contract-harness-rebuild-plan.md)
 
-## 建议怎么使用
+### 用户故事手工模板
 
-- 每次大改阅读页、订阅页、设置页或主题系统之后：
-  - 先过一遍 [手工回归测试清单](./manual-regression.md)
-- 如果是发版前确认：
-  - 先过 [发布前 UI 回归清单](./release-ui-regression-checklist.md)
-  - 再看 [发布前 UI 覆盖矩阵](./release-ui-coverage-matrix.md)，判断还剩哪些手工缺口
-  - 再补充路由、订阅刷新、阅读页导航、主题切换、设置持久化的专项确认
-  - 静态 Web 如果要稳定进入真实阅读页，优先用 `run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2`
-  - 多主题下的真实阅读页，优先用 `run_static_web_reader_theme_matrix.sh`
-  - 小视口关键路径，优先用 `run_static_web_small_viewport_smoke.sh`
-  - 如果想先钉死部署壳的 feed 代理链路，优先用 `run_rssr_web_proxy_feed_smoke.sh`
-  - 如果想把部署壳下“登录后添加订阅并完成首次刷新”固定成自动化，优先用 `run_rssr_web_browser_feed_smoke.sh`
-  - 如果需要用户可见的 Windows 原生 Chrome 窗口，优先用 `run_windows_chrome_visible_regression.sh`
-  - 如果本次发布涉及订阅/刷新/代理行为，再补一次 `run_rssr_web_browser_smoke.sh` 的固定手工步骤
-- 如果是排查 Web 端问题：
-  - 重点看 feed 刷新、浏览器 Console 和持久化行为
-  - 如果要直接用 Chrome MCP 做浏览器态回归，先起 [Chrome MCP 目标浏览器](./chrome-mcp-target.md)
-  - 如果 WSLg/Linux Chrome 呈现异常，改用 [Windows Chrome 可见窗口回归](./windows-chrome-visible-regression.md)
-- 如果是逐模块推进 headless active interface 重构：
-  - 先按 [Headless 重构视觉等价验收](./headless-refactor-equivalence.md) 走基线与复测
-- 如果是执行 browser contract harness：
-  - 先看 [环境限制索引](./environment-limitations.md)
-  - 再按 [Contract Harness 重建计划](./contract-harness-rebuild-plan.md) 里的脚本入口执行
-- 如果想在本地复现接近 GitHub Actions 的 Linux 测试环境：
-  - 用仓库根目录的 `Dockerfile.ci-local`
-  - 或直接执行 `scripts/run_ci_local_container.sh`
+- [US1 手工验证清单：订阅、列表与阅读](./manual/us1-reading-checklist.md)
+- [US1 性能检查模板：刷新与阅读](./manual/us1-performance-checklist.md)
+- [US2 手工验证清单：筛选、搜索与快捷键](./manual/us2-interaction-checklist.md)
+- [US2 性能检查模板：大数据量筛选与状态切换](./manual/us2-performance-checklist.md)
+- [US3 手工验证清单：配置交换与导入导出](./manual/us3-config-exchange-checklist.md)
+- [US3 边界验证模板：配置交换与主题生效](./manual/us3-boundary-checklist.md)
+- [最终验收模板：MVP](./manual/final-acceptance-checklist.md)
 
-## 当前覆盖重点
+## 推荐使用方式
 
-这套回归清单当前更偏向：
+### 日常改动
 
-- Web 端主要交互
-- 阅读体验链路
-- 主题切换与设置保存
-- 导入导出与本地持久化
-- headless 重构中的模块级视觉与体验等价验证
+- 页面、主题、设置或阅读链路有改动后，先走 [手工回归测试清单](./manual-regression.md)。
+- 涉及浏览器入口时，优先选一个固定 smoke 脚本，不要临时手搓环境。
 
-后续如果 Android 真机验收单独成型，建议继续在这个目录下新增独立的 Android 回归文档，而不是把所有平台混进同一份清单。
+### 发布前
+
+- 先看 [发布前 UI 覆盖矩阵](./release-ui-coverage-matrix.md)，确认哪些已经自动化、哪些还要人工补。
+- 再按 [发布前 UI 回归清单](./release-ui-regression-checklist.md) 执行。
+- 本次如果涉及真实阅读页、多主题或小视口，额外补：
+  - `bash scripts/run_static_web_reader_theme_matrix.sh`
+  - `bash scripts/run_static_web_small_viewport_smoke.sh`
+
+### 主线验证 / CI 补查
+
+- 先看 [主线验证矩阵](./mainline-validation-matrix.md)。
+- 遇到失败先查 [环境限制索引](./environment-limitations.md)，不要把环境问题直接记成代码回归。
+
+## 维护规则
+
+- 新文档如果是长期入口，文件名应体现“清单 / 矩阵 / smoke / 计划”。
+- 新文档如果只是某次执行结果，不应放在 `docs/testing/` 根目录。
+- 过时报告应及时删除，避免 README 和主线矩阵继续引用旧结论。

@@ -1,433 +1,163 @@
-# CSS 完全分离执行清单
+# CSS 完全分离基线清单
 
 ## 目标
 
-- 推进：
-  - `headless active interface`
-  - `CSS 完全分离`
-  - `infra` 承担真实行为
-- 判断标准：
-  - CSS 优先依赖稳定语义接口
-  - 页面只提供默认语义壳
-  - 避免继续依赖深 DOM 层级、匿名子节点、位置选择器、modifier class
+这份清单用于维护当前 UI 的 CSS 分离基线，避免后续主题、页面和组件继续回退到以下旧模式：
 
-## 当前结论
+- 依赖深 DOM 层级和匿名子节点
+- 依赖位置选择器驱动业务语义
+- 把页面结构 class 误当成对外稳定接口
+- 把主题覆写写死在具体组件实现细节上
 
-- 第一轮状态接口迁移：已完成
-  - `status-banner` -> `data-state`
-  - `button` -> `data-variant`
-  - `app-shell` 密度 -> `data-density`
-  - 主题卡 / 来源筛选 / 阅读底栏按钮 -> `data-state`
-- 第二轮结构槽迁移：进行中
-  - 标题槽、页头槽、表单项槽、动作项槽、阅读列表边界槽已补
-  - 卡片头部标题已统一迁到 `data-slot="card-title"`
-  - entries 分组头部已统一迁到 `data-layout="entry-group-header"` + `data-slot="entry-group-title|entry-group-meta"`
-  - 关键布局容器已开始统一迁到 `data-layout`
-- 当前剩余问题：
-  - 高密度 class 驱动区域已经基本清空。
-  - 当前剩余问题主要是：
-    - 少量通用布局 class 仍在承担组织作用
-    - `reader-body-html` 内容岛作为允许保留的例外继续存在
+当前判断口径是：
 
-## 2026-04-11 保留 class 边界审查
+- 页面和主题优先依赖稳定的 `data-*` 语义接口
+- class 只保留给设计系统 primitive、utility 或组件内部实现
+- `infra` / 页面代码负责产出真实语义，不让 CSS 反向猜 DOM
 
-- 审查命令：
-  - `rg --pcre2 -o '(^|[,\\s])\\.[A-Za-z][A-Za-z0-9_-]*(?=[\\s:{.#\\[,>+~)]|$)' assets/styles assets/themes -S`
-  - `rg -o 'class: "[^"]+"' crates/rssr-app/src -S`
-- 结论：
-  - CSS 中剩余 class selector 已收敛到小集合。
-  - 当前不应继续盲目把所有 class 改成 `data-*`，否则会把设计系统类和内部实现类都暴露成不必要的外部接口。
-  - 只应继续处理“页面语义缺失”或“死样式”。
+## 当前基线
 
-### 应保留为设计系统 / 全局状态 class
+### 已稳定的公开接口
 
-- `app-shell`
-  - 根 shell class，承载全局壳层、密度和主题组合。
-  - `data-density` 已承担密度状态；`app-shell` 本身可以继续作为设计系统根类。
-- `theme-light` / `theme-dark` / `theme-system`
-  - 由 `theme_class(settings().theme)` 动态注入，静态 class token 扫描不会命中。
-  - 当前可保留为主题根状态类；若未来要继续统一，可单独迁成 `data-theme`，不要混在页面局部 CSS 收口里做。
-- `button`、`text-input`、`text-area`、`select-input`、`field-label`
-  - 表单与按钮设计系统类。
-  - 状态已经通过 `data-variant` / `data-field` 表达，不需要为了“完全分离”强行改成 `data-layout`。
-- `inline-actions` / `inline-actions__item`
-  - 通用动作行布局类。
-  - 可保留为设计系统布局 primitive；只有当某个页面需要表达业务动作槽时，再额外补 `data-layout`。
-- `status-banner`
-  - 通用反馈组件类。
-  - 状态已走 `data-state`。
-  - 布局定位已补 `data-layout="status-banner"`；主题需要定位页面内 banner 时优先用 `data-layout`。
-- `icon-link-button`
-  - 图标按钮 primitive；可保留。
-- `sr-only` / `sr-only-file-input`
-  - 可访问性 utility；必须保留为 utility class，不应语义化。
-
-### 可保留为组件内部实现 class
-
-- `reader-bottom-bar__button`
-  - 当前选择器被限制在 `[data-layout="reader-bottom-bar"]` 下。
-  - `data-state` 已承担状态语义；按钮本体 class 可作为 reader bottom bar 内部实现 class 保留。
-
-### 低优先级候选
-
-- `inline-actions__item`
-  - 常与 `button`、`status-banner` 一起出现，更接近设计系统辅助 class。
-  - 基础宽度规则已从 `entries.css` 回收到全局 `shell.css`；容器 `.inline-actions` 也已去掉通用 `margin-top`，间距改由各页面 `data-layout` 决定。
-  - 若后续不需要跨主题重排，可继续保留，不必强行槽化。
-
-### 已清理死样式
-
-- `.entry-card__action`
-  - Rust DOM 已统一使用 `data-slot="entry-card-action"`。
-  - CSS 中的 `.entry-card__action` 已删除，保留 `[data-slot="entry-card-action"]`。
-
-## 2026-04-11 深选择器复查
-
-- 审查命令：
-  - `rg -n "(^|[,{])[^{}]*(>|\\+|~)[^{}]*\\{" assets/styles assets/themes -S`
-  - `rg -n "\\.[A-Za-z][A-Za-z0-9_-]+\\s+(h[1-6]|p|ul|ol|li|img|figure|button|span|div|input|textarea|select)\\b|\\]\\s+(h[1-6]|p|ul|ol|li|img|figure|button|span|div|input|textarea|select)\\b" assets/styles assets/themes -S`
-- 结论：
-- `reader-body-html` 内容岛标签规则继续作为允许例外保留。
-  - `atlas-sidebar` 中普通 page / reader page 的直接子布局规则继续保留，但入口必须优先使用 `data-layout` / `data-slot`。
-  - 已将 `atlas-sidebar` 的 `.status-banner` 页面定位改为 `[data-layout="status-banner"]`。
-  - 已将 `atlas-sidebar` 的 reader `.inline-actions` 页面定位改为 `[data-layout="reader-toolbar"]` / `[data-layout="reader-pagination"]`。
-
-## 已完成项
-
-### 状态接口
-
-- 已迁移：
-  - `.status-banner.info/.error`
-  - `.button.secondary/.danger/.danger-outline`
-  - `.app-shell.density-compact`
-  - `[data-layout="theme-card"][data-state="active"]`
-  - `[data-layout="entry-filters-source-chip"][data-state="selected"]`
-  - `.reader-bottom-bar__button[data-state]`
-
-- 当前稳定接口：
+- 状态接口：
   - `data-state`
   - `data-variant`
   - `data-density`
-
-### 结构槽
-
-- 已迁移：
-  - `.page h2` -> `.page-title`
-  - `.page-header h2` -> `.page-header__title`
-  - `.page-header .icon-link-button` -> `.page-header__actions .icon-link-button`
-  - `settings-form-grid > div` -> `.settings-form-grid__item`
-  - `inline-actions > *` -> `.inline-actions__item`
-  - `entry-card__actions > *` -> `[data-slot="entry-card-action"]`
-  - `.entry-card__action` -> 已删除死 selector
-  - `.entry-card--reading + .entry-card--reading` -> `data-list-edge`
-  - `.entry-card--reading:first-child/:last-child` -> `data-list-edge`
-  - `.page-entries .reading-header` -> `.page-section-header--entries`
-
-- 当前稳定接口：
-  - `.page-title`
-  - `.page-header__title`
-  - `.page-header__actions`
-  - `.page-section-header`
-  - `.page-section-title`
-  - `[data-slot="entry-card-action"]`
-  - `data-list-edge="start|middle|end|single"`
-
-### 导航壳
-
-- 已迁移：
-  - `app-nav-shell` -> `data-layout="app-nav-shell"`
-  - `app-nav-reveal` -> `data-layout="app-nav-reveal"`
-  - `app-nav__topline` -> `data-layout="app-nav-topline"`
-  - `app-nav` -> `data-layout="app-nav-links"`
-  - `app-nav__search` -> `data-layout="app-nav-search"`
-  - `app-nav__brand* / reveal* / search* / collapse` -> `data-slot="app-nav-*"`
-  - `app-nav__link` -> `data-nav`
-
-- 当前稳定接口：
-  - `data-layout="app-nav-shell|app-nav-reveal|app-nav-topline|app-nav-links|app-nav-search"`
-  - `data-slot="app-nav-*"`
-  - `data-nav`
-
-### 目录栏与顶部目录
-
-- 已迁移：
-  - `entry-directory-rail` -> `data-layout="entry-directory-rail"`
-  - `entry-directory-rail__nav` -> `data-layout="entry-directory-nav"`
-  - `entry-directory-rail__section/subsection` -> `data-layout="entry-directory-section"`
-  - `entry-directory-rail__children` -> `data-layout="entry-directory-children"`
-  - `entry-directory-rail__grandchildren` -> `data-layout="entry-directory-grandchildren"`
-  - `entry-directory-rail__link` -> `data-layout="entry-directory-link"`
-  - `entry-directory-rail__toggle` -> `data-layout="entry-directory-toggle"`
-  - `entry-directory-rail__title` -> `data-slot="entry-directory-heading"`
-  - `entry-top-directory` -> `data-layout="entry-top-directory"`
-  - `entry-top-directory__chip` -> `data-layout="entry-top-directory-chip"`
-  - 目录文案统一到：
-    - `data-slot="entry-directory-title"`
-    - `data-slot="entry-directory-meta"`
-- 当前稳定接口：
-  - `data-layout="entry-directory-*|entry-top-directory*"`
-  - `data-slot="entry-directory-heading|entry-directory-title|entry-directory-meta"`
-  - `data-nav="entry-directory-*"`
-
-### 阅读页外壳
-
-- 已迁移：
-  - `reader-page` -> `data-layout="reader-page"`
-  - `reader-header` -> `data-layout="reader-header"`
-  - `reader-toolbar` -> `data-layout="reader-toolbar"`
-  - `reader-meta-block` -> `data-layout="reader-meta-block"`
-  - `reader-body` -> `data-layout="reader-body"`
-  - `reader-pagination` -> `data-layout="reader-pagination" + data-context`
-  - `reader-bottom-bar` -> `data-layout="reader-bottom-bar"`
-  - `reader-title / reader-meta / reader-bottom-bar__icon / reader-bottom-bar__label` -> `data-slot`
-- 当前稳定接口：
-  - `data-layout="reader-*"`
-  - `data-slot="reader-title|reader-meta|reader-bottom-bar-icon|reader-bottom-bar-label"`
-  - `data-context="feed"`
-
-### Web 本地门禁壳
-
-- 已迁移：
-  - `web-auth-shell` -> `data-layout="web-auth-shell"`
-  - `web-auth-card` -> `data-layout="web-auth-card"`
-  - `web-auth-brand` -> `data-layout="web-auth-brand"`
-  - `web-auth-form` -> `data-layout="web-auth-form"`
-  - `web-auth-brand__mark / name / title / intro / note` -> `data-slot`
-- 当前稳定接口：
-  - `data-layout="web-auth-shell|web-auth-card|web-auth-brand|web-auth-form"`
-  - `data-slot="web-auth-brand-mark|web-auth-brand-name|web-auth-title|web-auth-intro|web-auth-note"`
-
-### 筛选布局
-
-- 已迁移：
-  - `entry-filters` -> `data-layout="entry-filters"`
-  - `entry-filters__toggle` -> `data-layout="entry-filters-toggle"`
-  - `entry-filters__sources` -> `data-layout="entry-filters-sources"`
-  - `entry-filters__source-grid` -> `data-layout="entry-filters-source-grid"`
-  - `entry-filters__sources-label` -> `data-slot="entry-filters-sources-label"`
-- 当前稳定接口：
-  - `data-layout="entry-filters|entry-filters-toggle|entry-filters-sources|entry-filters-source-grid"`
-  - `data-slot="entry-filters-sources-label"`
-
-### 主题作者 smoke review 结果
-
-- fresh `debug/web/public` 构建已确认真实输出：
+- 结构接口：
   - `data-layout`
   - `data-slot`
   - `data-page`
   - `data-nav`
   - `data-action`
   - `data-field`
-  - `data-state`
-  - `data-density`
-- 通过浏览器注入最小 CSS 已确认：
-  - `[data-layout="app-nav-shell"]`
-  - `[data-layout="app-nav-links"]`
-  - `[data-slot="app-nav-search-input"]`
-  - `[data-page="settings"] [data-layout="settings-grid"]`
-  这些公开接口已经足够驱动实际布局和主题覆写
-- 静态审计原先暴露的内置主题旧 selector 依赖，现已完成第一轮收口：
+  - `data-context`
+  - `data-list-edge`
+
+### 已完成的主要迁移
+
+- 状态语义已从旧 modifier class 迁到数据属性：
+  - `status-banner.*` -> `data-state`
+  - `button.*` -> `data-variant`
+  - `app-shell.density-*` -> `data-density`
+  - 主题卡、来源筛选 chip、阅读底栏按钮 -> `data-state`
+- 页面结构和阅读壳已补齐稳定布局语义：
+  - 导航壳、阅读页、顶部目录、侧边目录、筛选区、Web 门禁壳均已迁到 `data-layout` / `data-slot`
+- 阅读列表边界语义已收口：
+  - 原先依赖 `:first-child` / `:last-child` / 邻接选择器的边界判断改为 `data-list-edge`
+- 内置主题首轮旧 selector 已清掉：
   - `.app-nav*`
   - `.reader-page*`
   - `.entry-filters*`
   - `.button.secondary/.danger/.danger-outline`
   - `.theme-card.is-active`
-  已从 `assets/themes/*.css` 清空
 
-## P1：下一轮必须收掉
+## 允许保留的 class 边界
 
-### 0. 内置主题资产继续收剩余旧口径
+### 设计系统 / 全局 primitive
 
-- 文件：
-  - [atlas-sidebar.css](/home/develata/gitclone/RSS-Reader/assets/themes/atlas-sidebar.css)
-  - [forest-desk.css](/home/develata/gitclone/RSS-Reader/assets/themes/forest-desk.css)
-  - [midnight-ledger.css](/home/develata/gitclone/RSS-Reader/assets/themes/midnight-ledger.css)
-  - [newsprint.css](/home/develata/gitclone/RSS-Reader/assets/themes/newsprint.css)
-- 已完成：
-  - 导航壳改成 `data-layout/data-nav`
-  - 阅读壳改成 `data-layout/data-slot`
-  - 按钮变体改成 `data-variant`
-  - 主题卡激活态改成 `data-state`
-- 下一步：
-  - 继续判断是否还需要保留部分内部组件 class
-  - 目前对应的公开 slot 已有：
-    - `data-slot="feed-card-title"`
-    - `data-slot="feed-card-meta"`
-    - `data-slot="entry-card-title"`
-    - `data-slot="entry-card-meta"`
-    - `data-slot="page-intro"`
-    - `data-slot="theme-card-title"`
-    - `data-slot="theme-card-swatches"`
-    - `data-slot="theme-card-swatch"`
+- `app-shell`
+  - 作为应用壳根类保留。
+  - 密度等状态语义已经由 `data-density` 承担。
+- `theme-light` / `theme-dark` / `theme-system`
+  - 当前仍可作为主题根状态类保留。
+  - 如果后续统一成 `data-theme`，应单独立项，不混在页面槽位收口里推进。
+- `button`
+- `text-input`
+- `text-area`
+- `select-input`
+- `field-label`
+- `icon-link-button`
+- `inline-actions`
+- `inline-actions__item`
+  - 这些属于 design-system primitive，不需要为了“完全分离”强行公开成页面语义接口。
 
-### 1. 卡片头部剩余标签依赖
+### Utility / a11y
 
-- 状态：已清理
-- 处理结果：
-  - `feed-workbench__note` 在页面层已经没有对应 DOM
-  - 相关死 CSS 已从 [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css) 删除
-  - 不再新增针对 `h3` 的卡片头部规则
+- `sr-only`
+- `sr-only-file-input`
 
-### 2. 分组头部仍依赖内部标题/元信息结构
+这类 class 必须保留为 utility，不做语义化改造。
 
-- 文件：
-  - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
-- 目标区域：
-  - 历史 selector 已迁移为：
-    - `data-layout="entry-group-header"`
-    - `data-slot="entry-group-title"`
-    - `data-slot="entry-group-meta"`
-    - `data-group-level="primary|date|source"`
-- 下一步：
-  - 清理遗留 selector 文档和辅助样式
-  - 保持后续新增分组头部只走统一槽
+### 组件内部实现
 
-### 3. 顶部标题区页面特化 class
+- `reader-bottom-bar__button`
+  - 当前状态语义已通过 `data-state` 暴露。
+  - 按钮本体 class 可以继续作为阅读底栏内部实现。
 
-- 文件：
-  - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
-  - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
-- 状态：已收口
-- 处理结果：
-  - 页头统一使用 `data-layout="page-header"`
-  - 页面标题统一使用 `data-slot="page-title"`
-  - 页面页头差异统一使用 `data-slot="page-section-header"` + `data-section="entries|feeds|settings"`
-  - CSS 不再依赖 `.page-title`、`.reading-header`、`.page-section-header--*`、`.page-header__title`
+## 允许存在的例外
 
-### 4. 布局容器仍主要靠 class 组合命名
+### `reader-body-html`
 
-- 文件：
-  - [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
-  - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
-  - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
-  - [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)
-- 当前已迁移：
-  - `page` -> `[data-page]:not([data-page="reader"])`
-  - `page-header` -> `data-layout="page-header"`
-  - `stats-grid` -> `data-layout="stats-grid"`
-  - `feed-workbench--single` -> `data-layout="feed-workbench-single"`
-  - `exchange-grid` -> `data-layout="exchange-grid"`
-  - `settings-grid` -> `data-layout="settings-grid"`
-  - `entries-layout` -> `data-layout="entries-layout"`
-  - `entry-groups` -> `data-layout="entry-groups"`
-  - `entry-filters` -> `data-layout="entry-filters"`
-  - `page-header__actions` -> `data-slot="page-header-actions"`
-  - `reading-header__row` -> `data-slot="page-section-row"`
-  - `entry-controls-*` -> `data-layout="entry-controls-*"` / `data-slot="entry-controls-toggle-chevron"`
-  - `entry-overview*` -> `data-layout="entry-overview*"` / `data-slot="entry-overview-*"`
-  - `entry-filters__source-chip` -> `data-layout="entry-filters-source-chip"`
-- 下一步：
-  - 继续减少只靠 class 命名表达布局角色的规则
-  - 优先复查新增页面 wrapper 是否错误复用设计系统 class 做布局锚点，而不是继续迁移已定性的设计系统 class
-  - 特别避免把页面间距、分栏、定位语义塞回 `.inline-actions` / `.button` 这类全局 class
+- 这是正文内容岛，不属于稳定页面壳语义。
+- 其中标签级样式允许继续使用元素选择器和内容容器限定。
+- 后续如需收口，只能按“内容渲染策略”处理，不能机械替换成大批 `data-slot`。
 
-### 5. 已清掉的高密度 class 驱动区域
+### 主题内的直接子布局规则
 
-- 文件：
-  - [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
-  - [reader.css](/home/develata/gitclone/RSS-Reader/assets/styles/reader.css)
-- 关注点：
-  - `app-nav*`
-  - `entry-directory-rail*`
-  - `reader-page*`
-  - `web-auth-*`
-- 判断：
-  - 这些专项区域已经迁到稳定语义接口
-  - 下一轮不再需要按“高密度 class 驱动区域”继续拆，而应转去做局部一致性复查
+- 仅当某主题确实需要控制壳层直系布局时，允许保留有限的直接子选择器。
+- 前提是页面入口已经先暴露 `data-layout` / `data-slot`，主题只在这些稳定入口上做补充，而不是反过来猜结构。
 
-## P2：可以继续收，但不阻塞
+## 审查命令
 
-### 1. 页面级布局仍依赖部分结构 class
+### 审查 CSS 中剩余 class selector
 
-- 文件：
-  - [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
-  - [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
-  - [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
-- 关注点：
-  - `data-layout="entry-groups"`
-  - `data-layout="entries-layout"`
-  - `data-layout="settings-grid"`
-  - `data-layout="exchange-grid"`
-- 判断：
-  - `entries-main` / `entries-page__*` 已迁到 `data-layout="entries-main"` / `entries-page-backlink` / `entries-page-state`，不再属于残留 page-local class 入口。
-  - `entry-groups` / `entries-layout` / `settings-grid` / `exchange-grid` 已有 `data-layout`，CSS 不应再以 class 作为主入口。
-  - 后续若要做到更极端的 CSS 重排，再补业务槽，不要预先暴露全部内部 wrapper。
+```bash
+rg --pcre2 -o '(^|[,\\s])\\.[A-Za-z][A-Za-z0-9_-]*(?=[\\s:{.#\\[,>+~)]|$)' assets/styles assets/themes -S
+```
 
-### 2. 响应式规则仍偏 class 驱动
+### 审查 Rust DOM 中直接输出的 class
 
-- 文件：
-  - [responsive.css](/home/develata/gitclone/RSS-Reader/assets/styles/responsive.css)
-- 重点：
-  - 移动端规则大多已跟随第一轮、第二轮迁移
-  - 仍需要在后续同步检查新增槽位是否都覆盖了 mobile path
+```bash
+rg -o 'class: "[^"]+"' crates/rssr-app/src -S
+```
 
-## P3：只做一致性复查
+### 审查深选择器
 
-### 状态接口
+```bash
+rg -n "(^|[,{])[^{}]*(>|\\+|~)[^{}]*\\{" assets/styles assets/themes -S
+```
 
-- 确保新增状态只走：
-  - `data-state`
-  - `data-variant`
-  - `data-density`
-- 不再引入：
-  - `.is-*`
-  - `.info/.error`
-  - `.secondary/.danger/.danger-outline`
-  - `density-*`
+### 审查标签选择器是否越过稳定语义边界
 
-### 结构槽
+```bash
+rg -n "\\.[A-Za-z][A-Za-z0-9_-]+\\s+(h[1-6]|p|ul|ol|li|img|figure|button|span|div|input|textarea|select)\\b|\\]\\s+(h[1-6]|p|ul|ol|li|img|figure|button|span|div|input|textarea|select)\\b" assets/styles assets/themes -S
+```
 
-- 确保新增布局规则优先依赖：
-  - `data-page`
-  - `data-layout`
-  - `data-slot`
-  - `data-group-level`
-  - `data-list-edge`
+## 下一轮判断规则
 
-## 允许保留的例外
+遇到一个 class 或 selector 时，按下面顺序判断：
 
-### `reader-body-html` 内容岛
+1. 它是否表达页面公开语义？
+2. 它是否已经有现成的 `data-layout` / `data-slot` / `data-state` 可替代？
+3. 它是否只是 design-system primitive 或 utility？
+4. 它是否只是组件内部实现，不应暴露给主题作者？
 
-- 文件：
-  - [reader.css](/home/develata/gitclone/RSS-Reader/assets/styles/reader.css)
-- 原因：
-  - 这是正文内容岛，不是页面壳结构
-  - 可以继续保留内容标签样式，例如：
-    - `[data-slot="reader-body-html"] p`
-    - `[data-slot="reader-body-html"] h1/h2/h3/h4`
-    - `[data-slot="reader-body-html"] ul/ol`
-    - `[data-slot="reader-body-html"] img`
-    - `[data-slot="reader-body-html"] figure`
+只有第 1 类缺失语义接口时，才继续迁移到 `data-*`。
 
-## 验收方式
+不要再做这些事：
 
-- grep 不应再命中以下模式：
-  - `.status-banner.info`
-  - `.status-banner.error`
-  - `.button.secondary`
-  - `.button.danger`
-  - `.button.danger-outline`
-  - `[data-layout="theme-card"][data-state="active"]`
-  - `[data-layout="entry-filters-source-chip"][data-state="selected"]`
-  - `.reader-bottom-bar__button[data-state]`
-  - `.app-shell[data-density="compact"]`
-  - `.page h2`
-  - `.page-header h2`
-  - `settings-form-grid > div`
-  - `inline-actions > *`
-  - `entry-card__actions > *`
-  - `.entry-card--reading:first-child`
-  - `.entry-card--reading:last-child`
-  - `.entry-card--reading + .entry-card--reading`
-  - `.page-entries .reading-header`
+- 为了“看起来更纯”把所有 class 一次性改成 `data-*`
+- 在没有页面语义需求时额外制造新公开接口
+- 让主题继续依赖匿名节点顺序或深层嵌套
 
-- 编译验证：
-  - `cargo fmt --all`
-  - `cargo check -p rssr-app`
-  - `cargo check -p rssr-app --target wasm32-unknown-unknown`
-  - `git diff --check`
+## 剩余重点
 
-## 当前最值得继续做的两刀
+### P1
 
-1. 暂停对 `button` / `field-label` / `inline-actions__item` 这类设计系统 class 的机械迁移，除非有明确页面语义缺口。
-2. 后续只处理新增死样式、深 DOM 层级 selector，或确实需要由主题作者重排的页面业务槽。
+- 继续清理“页面语义缺失”的个别区域，而不是清空所有 class。
+- 新增页面或组件时，先补稳定 `data-*` 入口，再写主题覆写。
+- 新主题和新 smoke 断言统一优先依赖 `data-layout` / `data-slot` / `data-state`。
+
+### P2
+
+- 持续复查内置主题是否重新引入页面私有 class selector。
+- 对仍保留的实现 class，确认它们没有被跨主题或跨页面当成公开契约使用。
+
+## 完成标准
+
+满足以下条件即可认为当前 CSS 分离基线稳定：
+
+- 页面和主题不再依赖深 DOM 层级表达主语义
+- 主题覆写优先使用稳定 `data-*` 接口
+- 保留 class 的用途能清楚归类到 primitive、utility 或内部实现
+- 新增页面改动可以通过 selector 审查，不再反复回退旧模式
