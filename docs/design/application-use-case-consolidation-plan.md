@@ -22,9 +22,36 @@ consolidation work is already on the mainline:
 - Feed snapshot query moved into `FeedsSnapshotService`
 - CLI feed listing moved into `FeedCatalogService`
 - Feed summaries queries for startup/workspace moved off `FeedService`
+- Pure facade services removed:
+  - `ShellService`
+  - `SettingsPageService`
+  - `EntryService`
 
 The next step is no longer "add the first shared workflow". The next step is to keep the
 application layer coherent while these use cases continue to split by responsibility.
+
+## Runtime Boundary Check 2026-04-13
+
+Reviewed files:
+
+- `crates/rssr-application/src/composition.rs`
+- `crates/rssr-app/src/ui/runtime/services.rs`
+
+Current result:
+
+- `AppUseCases::compose()` is still the only application composition entry.
+- UI runtime ports call `AppUseCases`; they do not take repositories directly.
+- Runtime host capabilities are still limited to host-owned behavior:
+  - auto-refresh lifecycle
+  - refresh execution capability with host-visible outcomes
+  - remote config transport
+  - clipboard access
+- Deleted facades (`ShellService`, `SettingsPageService`, `EntryService`) have not reappeared in
+  composition or runtime calls.
+- Current naming still matches the classification baseline below.
+
+No code change is required from this check. The next application-layer work should still be driven
+by real boundary pressure, not by mass renaming.
 
 ## Skeleton Boundary
 
