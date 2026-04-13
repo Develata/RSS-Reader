@@ -27,9 +27,8 @@ pub use feed_catalog_service::FeedCatalogService;
 pub use feed_service::{AddSubscriptionInput, FeedService, RemoveSubscriptionInput};
 pub use feeds_snapshot_service::{FeedsSnapshotOutcome, FeedsSnapshotService};
 pub use import_export_service::{
-    ClockPort, ConfigImportOutcome, FeedRemovalCleanupPort, ImportExportService, OpmlCodecPort,
-    OpmlImportOutcome, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore,
-    SystemClock,
+    ClockPort, ConfigImportOutcome, ImportExportService, OpmlCodecPort, OpmlImportOutcome,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore, SystemClock,
 };
 pub use reader_service::{
     ReaderEntrySnapshot, ReaderService, ToggleReadInput, ToggleReadOutcome, ToggleStarredInput,

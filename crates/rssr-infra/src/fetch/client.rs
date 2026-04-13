@@ -1,5 +1,6 @@
 mod body_asset_localizer;
 mod feed_http;
+mod feed_response;
 mod image_html;
 
 pub use body_asset_localizer::BodyAssetLocalizer;

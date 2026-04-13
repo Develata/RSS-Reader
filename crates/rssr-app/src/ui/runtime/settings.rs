@@ -2,7 +2,7 @@ use crate::{
     pages::settings_page::intent::SettingsPageIntent,
     ui::{commands::SettingsCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
-use rssr_application::{AppliedRemoteConfigOutcome, ConfigImportOutcome};
+use rssr_application::AppliedRemoteConfigOutcome;
 
 pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
     match command {
@@ -58,7 +58,7 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
                             SettingsPageIntent::SetStatus {
                                 message: format!(
                                     "已从 WebDAV 下载并导入配置：{}。",
-                                    config_import_summary(&import)
+                                    import.summary_line()
                                 ),
                                 tone: "info".to_string(),
                             },
@@ -87,12 +87,4 @@ fn settings_status_error(message: impl Into<String>) -> Vec<UiIntent> {
         message: message.into(),
         tone: "error".to_string(),
     }])
-}
-
-fn config_import_summary(outcome: &ConfigImportOutcome) -> String {
-    let settings = if outcome.settings_updated { "设置已更新" } else { "设置未变化" };
-    format!(
-        "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
-        outcome.imported_feed_count, outcome.removed_feed_count
-    )
 }

@@ -105,6 +105,27 @@ The split trigger remains future growth beyond config-exchange semantics: contin
 conflict resolution, account identity, background scheduling, or a separate OPML subscription
 management surface. None of those is present in the current implementation.
 
+## App State Cleanup Port Sweep 2026-04-13
+
+Reviewed files:
+
+- `crates/rssr-application/src/subscription_workflow.rs`
+- `crates/rssr-application/src/import_export_service.rs`
+- `crates/rssr-application/src/composition.rs`
+- `crates/rssr-infra/src/application_adapters/non_refresh.rs`
+- `crates/rssr-infra/src/application_adapters/browser/adapters/app_state.rs`
+
+Current result:
+
+- `FeedRemovalCleanupPort` duplicated the same method and adapter responsibility already owned by
+  `AppStatePort`.
+- `ImportExportService` now depends on `AppStatePort` for removed-feed app-state cleanup.
+- `AppStateServicesPort` now requires only `AppStateRepository + AppStatePort + Send + Sync`.
+- SQLite and browser app-state adapters no longer need a second cleanup-port impl.
+
+This keeps removed-feed cleanup as an app-state write concern without introducing a separate
+cleanup abstraction whose only method mirrors `AppStatePort`.
+
 ## Boundary Checklist Sweep 2026-04-13
 
 Reviewed files and searches:

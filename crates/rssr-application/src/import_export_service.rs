@@ -13,6 +13,7 @@ use time::OffsetDateTime;
 use url::Url;
 
 use self::rules::{import_field, validate_config_package};
+use crate::subscription_workflow::AppStatePort;
 
 #[derive(Clone)]
 pub struct ImportExportService {
@@ -20,7 +21,7 @@ pub struct ImportExportService {
     entry_repository: Arc<dyn EntryRepository>,
     settings_repository: Arc<dyn SettingsRepository>,
     opml_codec: Arc<dyn OpmlCodecPort>,
-    feed_removal_cleanup: Arc<dyn FeedRemovalCleanupPort>,
+    app_state_cleanup: Arc<dyn AppStatePort>,
     clock: Arc<dyn ClockPort>,
 }
 
@@ -56,6 +57,16 @@ pub struct ConfigImportOutcome {
     pub settings_updated: bool,
 }
 
+impl ConfigImportOutcome {
+    pub fn summary_line(&self) -> String {
+        let settings = if self.settings_updated { "设置已更新" } else { "设置未变化" };
+        format!(
+            "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
+            self.imported_feed_count, self.removed_feed_count
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpmlImportOutcome {
     pub imported_feed_count: usize,
@@ -89,18 +100,11 @@ impl RemoteConfigPullOutcome {
     }
 }
 
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub trait FeedRemovalCleanupPort: Send + Sync {
-    async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()>;
-}
-
 #[derive(Default)]
-struct NoopFeedRemovalCleanup;
+struct NoopAppStateCleanup;
 
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl FeedRemovalCleanupPort for NoopFeedRemovalCleanup {
+#[async_trait::async_trait]
+impl AppStatePort for NoopAppStateCleanup {
     async fn clear_last_opened_feed_if_matches(&self, _feed_id: i64) -> Result<()> {
         Ok(())
     }
@@ -113,38 +117,38 @@ impl ImportExportService {
         settings_repository: Arc<dyn SettingsRepository>,
         opml_codec: Arc<dyn OpmlCodecPort>,
     ) -> Self {
-        Self::new_with_feed_removal_cleanup(
+        Self::new_with_app_state_cleanup(
             feed_repository,
             entry_repository,
             settings_repository,
             opml_codec,
-            Arc::new(NoopFeedRemovalCleanup),
+            Arc::new(NoopAppStateCleanup),
         )
     }
 
-    pub fn new_with_feed_removal_cleanup(
+    pub fn new_with_app_state_cleanup(
         feed_repository: Arc<dyn FeedRepository>,
         entry_repository: Arc<dyn EntryRepository>,
         settings_repository: Arc<dyn SettingsRepository>,
         opml_codec: Arc<dyn OpmlCodecPort>,
-        feed_removal_cleanup: Arc<dyn FeedRemovalCleanupPort>,
+        app_state_cleanup: Arc<dyn AppStatePort>,
     ) -> Self {
-        Self::new_with_feed_removal_cleanup_and_clock(
+        Self::new_with_app_state_cleanup_and_clock(
             feed_repository,
             entry_repository,
             settings_repository,
             opml_codec,
-            feed_removal_cleanup,
+            app_state_cleanup,
             Arc::new(SystemClock),
         )
     }
 
-    pub fn new_with_feed_removal_cleanup_and_clock(
+    pub fn new_with_app_state_cleanup_and_clock(
         feed_repository: Arc<dyn FeedRepository>,
         entry_repository: Arc<dyn EntryRepository>,
         settings_repository: Arc<dyn SettingsRepository>,
         opml_codec: Arc<dyn OpmlCodecPort>,
-        feed_removal_cleanup: Arc<dyn FeedRemovalCleanupPort>,
+        app_state_cleanup: Arc<dyn AppStatePort>,
         clock: Arc<dyn ClockPort>,
     ) -> Self {
         Self {
@@ -152,7 +156,7 @@ impl ImportExportService {
             entry_repository,
             settings_repository,
             opml_codec,
-            feed_removal_cleanup,
+            app_state_cleanup,
             clock,
         }
     }
@@ -284,6 +288,6 @@ impl ImportExportService {
     async fn remove_feed_with_cleanup(&self, feed_id: i64) -> Result<()> {
         self.entry_repository.delete_for_feed(feed_id).await?;
         self.feed_repository.set_deleted(feed_id, true).await?;
-        self.feed_removal_cleanup.clear_last_opened_feed_if_matches(feed_id).await
+        self.app_state_cleanup.clear_last_opened_feed_if_matches(feed_id).await
     }
 }

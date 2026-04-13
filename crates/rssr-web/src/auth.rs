@@ -1,4 +1,6 @@
 mod config;
+mod login_flow;
+mod login_page;
 mod persisted_state;
 mod rate_limit;
 mod session;
@@ -18,6 +20,8 @@ use tokio::sync::Mutex;
 
 use self::config::verify_credentials;
 pub(crate) use self::config::{AuthConfig, generate_password_hash, load_config};
+use self::login_flow::{login_redirect, successful_login_response};
+use self::login_page::{render_login_failure, render_login_page};
 use self::rate_limit::{
     LoginThrottleState, clear_login_failures, login_attempt_is_blocked, rate_limit_key,
     record_login_failure,
@@ -26,9 +30,6 @@ use self::session::{
     SESSION_COOKIE, build_session_token, extract_cookie, gate_cookie_header, logout_cookie_header,
     logout_gate_cookie_header, session_cookie_header, session_is_valid,
 };
-
-const APP_NAME: &str = "RSS-Reader";
-const WEB_LOGIN_MARKUP: &str = include_str!("../../../assets/branding/rssr-mark.svg");
 
 #[derive(Clone)]
 pub(crate) struct AppState {
@@ -54,145 +55,7 @@ pub(crate) async fn show_login(
     Query(query): Query<LoginQuery>,
 ) -> impl IntoResponse {
     let next = sanitize_next(query.next.as_deref());
-    let error_message = match query.error.as_deref() {
-        Some("invalid_credentials") => "用户名或密码错误。",
-        Some("session_expired") => "登录已过期，请重新登录。",
-        Some("rate_limited") => "登录尝试过于频繁，请稍后再试。",
-        _ => "",
-    };
-
-    let secure_note = if state.config.secure_cookie {
-        "当前会话 cookie 已启用 Secure。"
-    } else {
-        "当前会话 cookie 未启用 Secure；生产环境请通过 HTTPS 反向代理并开启 RSS_READER_WEB_SECURE_COOKIE=true。"
-    };
-
-    Html(format!(
-        r#"<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{} 登录</title>
-  <style>
-    :root {{
-      color-scheme: light;
-      --bg: #f5f1ea;
-      --panel: rgba(255,255,255,0.92);
-      --line: rgba(77, 55, 35, 0.12);
-      --ink: #231b14;
-      --muted: #6b6258;
-      --accent: #6d4c35;
-      --accent-strong: #533827;
-      --danger: #9b3d2e;
-      --shadow: 0 20px 48px rgba(32, 24, 18, 0.08);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      background:
-        radial-gradient(circle at top, rgba(255,255,255,0.7), transparent 42%),
-        linear-gradient(180deg, #efe4d5, var(--bg));
-      color: var(--ink);
-    }}
-    .login-shell {{
-      width: min(420px, calc(100vw - 32px));
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      box-shadow: var(--shadow);
-      padding: 28px;
-    }}
-    .brand {{
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 14px;
-    }}
-    .brand-mark {{
-      width: 56px;
-      height: 56px;
-      flex: 0 0 auto;
-    }}
-    .brand-mark svg {{
-      display: block;
-      width: 100%;
-      height: 100%;
-    }}
-    .brand-name {{
-      margin: 0;
-      font-size: 1.15rem;
-      font-weight: 800;
-      letter-spacing: 0.02em;
-    }}
-    h1 {{ margin: 0 0 8px; font-size: 1.8rem; }}
-    p {{ margin: 0 0 16px; color: var(--muted); line-height: 1.6; }}
-    form {{ display: grid; gap: 14px; margin-top: 18px; }}
-    label {{ display: grid; gap: 6px; font-weight: 600; }}
-    input {{
-      width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 12px 14px;
-      font: inherit;
-      background: rgba(255,255,255,0.95);
-    }}
-    input:focus {{
-      outline: none;
-      border-color: rgba(109, 76, 53, 0.45);
-      box-shadow: 0 0 0 3px rgba(109, 76, 53, 0.12);
-    }}
-    button {{
-      margin-top: 6px;
-      border: none;
-      border-radius: 12px;
-      padding: 12px 16px;
-      font: inherit;
-      font-weight: 700;
-      background: var(--accent);
-      color: white;
-      cursor: pointer;
-    }}
-    button:hover {{ background: var(--accent-strong); }}
-    .error {{ min-height: 22px; color: var(--danger); font-weight: 600; }}
-    .note {{ margin-top: 14px; font-size: 0.92rem; }}
-  </style>
-</head>
-<body>
-  <main class="login-shell">
-    <div class="brand">
-      <div class="brand-mark">{}</div>
-      <p class="brand-name">{}</p>
-    </div>
-    <h1>登录 {}</h1>
-    <p>这个 Web 部署启用了登录保护。输入部署者提供的用户名和密码后，才能进入阅读器。</p>
-    <div class="error">{}</div>
-    <form method="post" action="/login" autocomplete="on">
-      <input type="hidden" name="next" value="{}">
-      <label for="login-username">用户名
-        <input id="login-username" name="username" type="text" autocomplete="username" required>
-      </label>
-      <label for="login-password">密码
-        <input id="login-password" name="password" type="password" autocomplete="current-password" required>
-      </label>
-      <button type="submit">登录</button>
-    </form>
-    <p class="note">{}</p>
-  </main>
-</body>
-</html>"#,
-        APP_NAME,
-        WEB_LOGIN_MARKUP,
-        APP_NAME,
-        APP_NAME,
-        error_message,
-        html_escape(next),
-        secure_note
-    ))
+    Html(render_login_page(&state.config, next, query.error.as_deref()))
 }
 
 pub(crate) async fn handle_login(
@@ -204,21 +67,15 @@ pub(crate) async fn handle_login(
     let rate_limit_key = rate_limit_key(&state.config, &headers, &form.username);
 
     if login_attempt_is_blocked(&state, &rate_limit_key).await {
-        return Redirect::to(&format!(
-            "/login?error=rate_limited&next={}",
-            urlencoding::encode(next)
-        ))
-        .into_response();
+        return login_redirect(next, Some("rate_limited"));
     }
 
     if !verify_credentials(&state.config, &form.username, &form.password) {
         let blocked = record_login_failure(&state, &rate_limit_key).await;
-        return Redirect::to(&format!(
-            "/login?error={}&next={}",
-            if blocked { "rate_limited" } else { "invalid_credentials" },
-            urlencoding::encode(next)
-        ))
-        .into_response();
+        return login_redirect(
+            next,
+            Some(if blocked { "rate_limited" } else { "invalid_credentials" }),
+        );
     }
 
     clear_login_failures(&state, &rate_limit_key).await;
@@ -229,23 +86,13 @@ pub(crate) async fn handle_login(
         Err(err) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Html(format!("登录失败：{}", html_escape(err.to_string()))),
+                Html(render_login_failure(err.to_string())),
             )
                 .into_response();
         }
     };
 
-    let mut response = Redirect::to(next).into_response();
-    response.headers_mut().append(
-        header::SET_COOKIE,
-        HeaderValue::from_str(&session_cookie_header(&token, &state.config))
-            .expect("valid session cookie"),
-    );
-    response.headers_mut().append(
-        header::SET_COOKIE,
-        HeaderValue::from_str(&gate_cookie_header(&state.config)).expect("valid gate cookie"),
-    );
-    response
+    successful_login_response(&state.config, next, &token)
 }
 
 pub(crate) async fn handle_logout(State(state): State<AppState>) -> impl IntoResponse {
@@ -287,17 +134,13 @@ pub(crate) async fn require_auth(
         let target = sanitize_next(Some(
             request.uri().path_and_query().map(|value| value.as_str()).unwrap_or("/"),
         ));
-        return Redirect::to(&format!(
-            "/login?error=session_expired&next={}",
-            urlencoding::encode(target)
-        ))
-        .into_response();
+        return login_redirect(target, Some("session_expired"));
     }
 
     let target = sanitize_next(Some(
         request.uri().path_and_query().map(|value| value.as_str()).unwrap_or("/"),
     ));
-    Redirect::to(&format!("/login?next={}", urlencoding::encode(target))).into_response()
+    login_redirect(target, None)
 }
 
 fn sanitize_next(next: Option<&str>) -> &str {
@@ -305,15 +148,6 @@ fn sanitize_next(next: Option<&str>) -> &str {
         Some(path) if path.starts_with('/') && !path.starts_with("//") => path,
         _ => "/",
     }
-}
-
-fn html_escape(raw: impl AsRef<str>) -> String {
-    raw.as_ref()
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
 }
 
 #[cfg(test)]

@@ -98,7 +98,7 @@ fn sample_entry(id: i64, feed_id: i64, index: i64) -> PersistedEntry {
 }
 
 fn build_service(state: Arc<Mutex<BrowserState>>) -> ImportExportService {
-    ImportExportService::new_with_feed_removal_cleanup_and_clock(
+    ImportExportService::new_with_app_state_cleanup_and_clock(
         Arc::new(BrowserFeedRepository::new(state.clone())),
         Arc::new(BrowserEntryRepository::new(state.clone())),
         Arc::new(BrowserSettingsRepository::new(state.clone())),

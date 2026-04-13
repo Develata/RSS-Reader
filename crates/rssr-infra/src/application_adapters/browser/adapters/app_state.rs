@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use rssr_application::{AppStatePort, FeedRemovalCleanupPort};
+use rssr_application::AppStatePort;
 use rssr_domain::{AppStateRepository, AppStateSnapshot};
 
 use crate::application_adapters::browser::state::{BrowserState, save_app_state_slice};
@@ -59,14 +59,6 @@ impl AppStateRepository for BrowserAppStateAdapter {
 
 #[async_trait::async_trait]
 impl AppStatePort for BrowserAppStateAdapter {
-    async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
-        self.clear_last_opened_feed_if_matches_impl(feed_id)
-    }
-}
-
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl FeedRemovalCleanupPort for BrowserAppStateAdapter {
     async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
         self.clear_last_opened_feed_if_matches_impl(feed_id)
     }

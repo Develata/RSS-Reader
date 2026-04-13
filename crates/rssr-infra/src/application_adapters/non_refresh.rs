@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use rssr_application::{AppStatePort, FeedRemovalCleanupPort, OpmlCodecPort, RemoteConfigStore};
+use rssr_application::{AppStatePort, OpmlCodecPort, RemoteConfigStore};
 use rssr_domain::{AppStateRepository, AppStateSnapshot};
 
 use crate::{
@@ -51,14 +51,6 @@ impl AppStateRepository for SqliteAppStateAdapter {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AppStatePort for SqliteAppStateAdapter {
-    async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
-        self.clear_last_opened_feed_if_matches_impl(feed_id).await
-    }
-}
-
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl FeedRemovalCleanupPort for SqliteAppStateAdapter {
     async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
         self.clear_last_opened_feed_if_matches_impl(feed_id).await
     }

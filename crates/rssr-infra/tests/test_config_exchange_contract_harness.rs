@@ -58,7 +58,7 @@ async fn build_sqlite_fixture() -> anyhow::Result<SqliteFixture> {
     let settings_repository = Arc::new(SqliteSettingsRepository::new(pool.clone()));
     let app_state_repository = Arc::new(SqliteAppStateRepository::new(pool.clone()));
     let cleanup = Arc::new(SqliteAppStateAdapter::new(app_state_repository.clone()));
-    let service = ImportExportService::new_with_feed_removal_cleanup(
+    let service = ImportExportService::new_with_app_state_cleanup(
         feed_repository.clone(),
         entry_repository.clone(),
         settings_repository.clone(),

@@ -7,9 +7,9 @@ use rssr_domain::{
 use time::OffsetDateTime;
 use url::Url;
 
-use super::{
-    ClockPort, FeedRemovalCleanupPort, ImportExportService, OpmlCodecPort, RemoteConfigStore,
-};
+use crate::AppStatePort;
+
+use super::{ClockPort, ImportExportService, OpmlCodecPort, RemoteConfigStore};
 
 struct StubRemoteConfigStore {
     payload: Mutex<Option<String>>,
@@ -132,13 +132,12 @@ impl SettingsRepository for StubSettingsRepository {
 }
 
 #[derive(Default)]
-struct RecordingFeedRemovalCleanup {
+struct RecordingAppStateCleanup {
     removed_feed_ids: Mutex<Vec<i64>>,
 }
 
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl FeedRemovalCleanupPort for RecordingFeedRemovalCleanup {
+#[async_trait::async_trait]
+impl AppStatePort for RecordingAppStateCleanup {
     async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> anyhow::Result<()> {
         self.removed_feed_ids.lock().expect("lock removed ids").push(feed_id);
         Ok(())
@@ -153,6 +152,28 @@ impl ClockPort for FixedClock {
     fn now_utc(&self) -> OffsetDateTime {
         self.now
     }
+}
+
+#[test]
+fn config_import_outcome_summary_line_formats_settings_state() {
+    assert_eq!(
+        super::ConfigImportOutcome {
+            imported_feed_count: 2,
+            removed_feed_count: 1,
+            settings_updated: true,
+        }
+        .summary_line(),
+        "导入 2 个订阅，清理 1 个缺失订阅，设置已更新"
+    );
+    assert_eq!(
+        super::ConfigImportOutcome {
+            imported_feed_count: 0,
+            removed_feed_count: 0,
+            settings_updated: false,
+        }
+        .summary_line(),
+        "导入 0 个订阅，清理 0 个缺失订阅，设置未变化"
+    );
 }
 
 struct MemoryFeedRepository {
@@ -276,7 +297,7 @@ impl SettingsRepository for MemorySettingsRepository {
 #[tokio::test]
 async fn export_config_contains_active_feeds_and_settings() {
     let now = OffsetDateTime::UNIX_EPOCH;
-    let service = ImportExportService::new_with_feed_removal_cleanup_and_clock(
+    let service = ImportExportService::new_with_app_state_cleanup_and_clock(
         Arc::new(StubFeedRepository {
             feeds: vec![
                 Feed {
@@ -318,7 +339,7 @@ async fn export_config_contains_active_feeds_and_settings() {
         Arc::new(StubEntryRepository),
         Arc::new(StubSettingsRepository { settings: UserSettings::default() }),
         Arc::new(RecordingOpmlCodec::default()),
-        Arc::new(RecordingFeedRemovalCleanup::default()),
+        Arc::new(RecordingAppStateCleanup::default()),
         Arc::new(FixedClock { now }),
     );
 
@@ -436,10 +457,10 @@ async fn import_config_clears_removed_feed_entries_and_metadata() {
     });
     let entry_repository =
         Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) });
-    let cleanup = Arc::new(RecordingFeedRemovalCleanup::default());
+    let cleanup = Arc::new(RecordingAppStateCleanup::default());
     let mut imported_settings = UserSettings::default();
     imported_settings.refresh_interval_minutes += 1;
-    let service = ImportExportService::new_with_feed_removal_cleanup(
+    let service = ImportExportService::new_with_app_state_cleanup(
         feed_repository.clone(),
         entry_repository.clone(),
         Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
@@ -521,8 +542,8 @@ async fn pull_remote_config_cleans_up_removed_feed_app_state() {
     });
     let entry_repository =
         Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) });
-    let cleanup = Arc::new(RecordingFeedRemovalCleanup::default());
-    let service = ImportExportService::new_with_feed_removal_cleanup(
+    let cleanup = Arc::new(RecordingAppStateCleanup::default());
+    let service = ImportExportService::new_with_app_state_cleanup(
         feed_repository,
         entry_repository.clone(),
         Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),

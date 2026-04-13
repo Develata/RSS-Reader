@@ -4,20 +4,14 @@ use rssr_domain::{AppStateRepository, EntryRepository, FeedRepository, SettingsR
 
 use crate::{
     AppStatePort, AppStateService, ClockPort, EntriesListService, EntriesWorkspaceService,
-    FeedCatalogService, FeedRefreshSourcePort, FeedRemovalCleanupPort, FeedService,
-    FeedsSnapshotService, ImportExportService, OpmlCodecPort, ReaderService, RefreshService,
-    RefreshStorePort, SettingsService, SettingsSyncService, StartupService, SubscriptionWorkflow,
+    FeedCatalogService, FeedRefreshSourcePort, FeedService, FeedsSnapshotService,
+    ImportExportService, OpmlCodecPort, ReaderService, RefreshService, RefreshStorePort,
+    SettingsService, SettingsSyncService, StartupService, SubscriptionWorkflow,
 };
 
-pub trait AppStateServicesPort:
-    AppStateRepository + AppStatePort + FeedRemovalCleanupPort + Send + Sync
-{
-}
+pub trait AppStateServicesPort: AppStateRepository + AppStatePort + Send + Sync {}
 
-impl<T> AppStateServicesPort for T where
-    T: AppStateRepository + AppStatePort + FeedRemovalCleanupPort + Send + Sync + ?Sized
-{
-}
+impl<T> AppStateServicesPort for T where T: AppStateRepository + AppStatePort + Send + Sync + ?Sized {}
 
 pub struct AppCompositionInput {
     pub feed_repository: Arc<dyn FeedRepository>,
@@ -70,7 +64,7 @@ impl AppUseCases {
                 refresh_service,
                 input.app_state.clone(),
             ),
-            import_export_service: ImportExportService::new_with_feed_removal_cleanup_and_clock(
+            import_export_service: ImportExportService::new_with_app_state_cleanup_and_clock(
                 input.feed_repository.clone(),
                 input.entry_repository.clone(),
                 input.settings_repository,

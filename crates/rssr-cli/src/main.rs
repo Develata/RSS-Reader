@@ -161,7 +161,7 @@ async fn main() -> anyhow::Result<()> {
             let raw = fs::read_to_string(&args.input)
                 .with_context(|| format!("读取配置文件失败: {}", args.input.display()))?;
             let outcome = services.import_config_json(&raw).await?;
-            println!("配置已导入：{}。", config_import_summary(&outcome));
+            println!("配置已导入：{}。", outcome.summary_line());
         }
         Command::ExportOpml(args) => {
             let raw = services.export_opml().await?;
@@ -190,7 +190,7 @@ async fn main() -> anyhow::Result<()> {
         Command::PullWebdav(args) => {
             let outcome = services.pull_remote_config(&args.endpoint, &args.remote_path).await?;
             if let Some(import) = outcome.import {
-                println!("已从 WebDAV 下载并导入配置：{}。", config_import_summary(&import));
+                println!("已从 WebDAV 下载并导入配置：{}。", import.summary_line());
             } else {
                 println!("远端配置不存在。");
             }
@@ -389,14 +389,6 @@ fn print_feeds(feeds: &[Feed]) {
         let folder = feed.folder.as_deref().unwrap_or("-");
         println!("{}\t{}\t{}\t{}", feed.id, title, folder, feed.url);
     }
-}
-
-fn config_import_summary(outcome: &ConfigImportOutcome) -> String {
-    let settings = if outcome.settings_updated { "设置已更新" } else { "设置未变化" };
-    format!(
-        "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
-        outcome.imported_feed_count, outcome.removed_feed_count
-    )
 }
 
 fn ensure_refresh_feed_succeeded(outcome: &RefreshFeedOutcome) -> anyhow::Result<()> {

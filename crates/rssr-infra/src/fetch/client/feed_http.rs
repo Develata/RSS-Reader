@@ -1,5 +1,9 @@
 use anyhow::Context;
-use reqwest::{StatusCode, header};
+use reqwest::header;
+
+use super::feed_response::{
+    FeedResponseStatus, classify_feed_response_status, http_metadata_from_headers,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct FetchClient {
@@ -44,20 +48,8 @@ impl FetchClient {
         }
 
         let response = builder.send().await.context("发送 feed 抓取请求失败")?;
-        let metadata = HttpMetadata {
-            etag: response
-                .headers()
-                .get(header::ETAG)
-                .and_then(|value| value.to_str().ok())
-                .map(ToOwned::to_owned),
-            last_modified: response
-                .headers()
-                .get(header::LAST_MODIFIED)
-                .and_then(|value| value.to_str().ok())
-                .map(ToOwned::to_owned),
-        };
-
-        if response.status() == StatusCode::NOT_MODIFIED {
+        let metadata = http_metadata_from_headers(response.headers());
+        if classify_feed_response_status(response.status()) == FeedResponseStatus::NotModified {
             return Ok(FetchResult::NotModified(metadata));
         }
 

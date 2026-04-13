@@ -3,7 +3,7 @@ use crate::{
     pages::feeds_page::intent::{FeedsPageIntent, FeedsPageSnapshot},
     ui::{commands::FeedsCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
-use rssr_application::{ConfigImportOutcome, OpmlImportOutcome};
+use rssr_application::OpmlImportOutcome;
 
 pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
     match command {
@@ -128,7 +128,7 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
                 Ok(outcome) => feeds_intents(vec![
                     FeedsPageIntent::PendingConfigImportSet(false),
                     FeedsPageIntent::SetStatus {
-                        message: format!("配置包已导入：{}。", config_import_summary(&outcome)),
+                        message: format!("配置包已导入：{}。", outcome.summary_line()),
                         tone: "info".to_string(),
                     },
                     FeedsPageIntent::BumpReload,
@@ -195,14 +195,6 @@ fn feeds_status_error(message: impl Into<String>) -> Vec<UiIntent> {
         message: message.into(),
         tone: "error".to_string(),
     }])
-}
-
-fn config_import_summary(outcome: &ConfigImportOutcome) -> String {
-    let settings = if outcome.settings_updated { "设置已更新" } else { "设置未变化" };
-    format!(
-        "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
-        outcome.imported_feed_count, outcome.removed_feed_count
-    )
 }
 
 fn opml_import_summary(outcome: &OpmlImportOutcome) -> String {
