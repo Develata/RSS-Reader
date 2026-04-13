@@ -9,21 +9,16 @@ mod refresh;
 
 use anyhow::Context;
 use rssr_application::{
-    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
-    ClockPort, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
-    RemoteConfigPullOutcome, RemoteConfigPushOutcome,
+    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, ClockPort, RefreshAllInput,
+    RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RemoteConfigPullOutcome,
+    RemoteConfigPushOutcome,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::UserSettings;
 use rssr_infra::application_adapters::browser::{
-    adapters::{
-        BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRefreshSource,
-        BrowserFeedRepository, BrowserOpmlCodec, BrowserRefreshStore, BrowserRemoteConfigStore,
-        BrowserSettingsRepository,
-    },
-    now_utc,
-    state::load_state,
+    adapters::BrowserRemoteConfigStore, now_utc, state::load_state,
 };
+use rssr_infra::composition::compose_browser_use_cases;
 use time::OffsetDateTime;
 use tokio::sync::OnceCell;
 
@@ -84,20 +79,8 @@ impl AppServices {
                 }
                 let state = Arc::new(Mutex::new(loaded.state));
                 let client = reqwest::Client::new();
-                let feed_repository = Arc::new(BrowserFeedRepository::new(state.clone()));
-                let entry_repository = Arc::new(BrowserEntryRepository::new(state.clone()));
-                let settings_repository = Arc::new(BrowserSettingsRepository::new(state.clone()));
-                let app_state_adapter = Arc::new(BrowserAppStateAdapter::new(state.clone()));
-                let use_cases = AppUseCases::compose(AppCompositionInput {
-                    feed_repository,
-                    entry_repository,
-                    settings_repository,
-                    app_state: app_state_adapter,
-                    refresh_source: Arc::new(BrowserFeedRefreshSource::new(client.clone())),
-                    refresh_store: Arc::new(BrowserRefreshStore::new(state)),
-                    opml_codec: Arc::new(BrowserOpmlCodec),
-                    clock: Arc::new(BrowserClock),
-                });
+                let use_cases =
+                    compose_browser_use_cases(state, client.clone(), Arc::new(BrowserClock));
                 Ok(Arc::new(Self {
                     client,
                     use_cases,

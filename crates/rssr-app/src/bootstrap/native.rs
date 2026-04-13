@@ -6,30 +6,23 @@ use std::time::Duration;
 
 use anyhow::Context;
 use rssr_application::{
-    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
-    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
-    RefreshLocalizedEntry, RemoteConfigPullOutcome, RemoteConfigPushOutcome, SystemClock,
+    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, RefreshAllInput,
+    RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RefreshLocalizedEntry,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::UserSettings;
 use rssr_infra::{
-    application_adapters::{
-        InfraFeedRefreshSource, InfraOpmlCodec, SqliteAppStateAdapter, SqliteRefreshStore,
-    },
+    composition::compose_native_sqlite_use_cases,
     config_sync::webdav::WebDavConfigSync,
     db::{
-        app_state_repository::SqliteAppStateRepository,
         entry_repository::{
             LocalizedEntryUpdate, SqliteEntryRepository, compute_entry_content_hash,
         },
-        feed_repository::SqliteFeedRepository,
-        settings_repository::SqliteSettingsRepository,
         sqlite_native::NativeSqliteBackend,
         storage_backend::StorageBackend,
     },
-    fetch::{BodyAssetLocalizer, FetchClient},
-    opml::OpmlCodec,
-    parser::FeedParser,
+    fetch::BodyAssetLocalizer,
 };
 use time::OffsetDateTime;
 use tokio::sync::OnceCell;
@@ -90,33 +83,12 @@ impl AppServices {
                 let pool = backend.connect().await.context("连接本地数据库失败")?;
                 backend.migrate(&pool).await.context("执行数据库迁移失败")?;
 
-                let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
-                let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
-                let settings_repository = Arc::new(SqliteSettingsRepository::new(pool.clone()));
-                let app_state_repository = Arc::new(SqliteAppStateRepository::new(pool));
-                let app_state_adapter =
-                    Arc::new(SqliteAppStateAdapter::new(app_state_repository.clone()));
-                let use_cases = AppUseCases::compose(AppCompositionInput {
-                    feed_repository: feed_repository.clone(),
-                    entry_repository: entry_repository.clone(),
-                    settings_repository,
-                    app_state: app_state_adapter,
-                    refresh_source: Arc::new(InfraFeedRefreshSource::new(
-                        FetchClient::new(),
-                        FeedParser::new(),
-                    )),
-                    refresh_store: Arc::new(SqliteRefreshStore::new(
-                        feed_repository,
-                        entry_repository.clone(),
-                    )),
-                    opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
-                    clock: Arc::new(SystemClock),
-                });
+                let composition = compose_native_sqlite_use_cases(pool);
 
                 Ok(Arc::new(Self {
-                    use_cases,
+                    use_cases: composition.use_cases,
                     image_localization_worker: ImageLocalizationWorker {
-                        entry_repository,
+                        entry_repository: composition.entry_repository,
                         body_asset_localizer: BodyAssetLocalizer::new(),
                     },
                     auto_refresh_started: AtomicBool::new(false),

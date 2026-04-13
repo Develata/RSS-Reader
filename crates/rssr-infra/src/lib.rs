@@ -1,4 +1,5 @@
 pub mod application_adapters;
+pub mod composition;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod config_sync;
 #[cfg(not(target_arch = "wasm32"))]

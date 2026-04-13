@@ -27,6 +27,36 @@ pub struct ParsedEntry {
     pub updated_at_source: Option<OffsetDateTime>,
 }
 
+#[derive(Debug, Default)]
+struct MissingContentWarningAggregation {
+    total_skipped: usize,
+    sample_titles: Vec<String>,
+}
+
+impl MissingContentWarningAggregation {
+    const MAX_SAMPLE_TITLES: usize = 3;
+
+    fn record(&mut self, title: &str) {
+        self.total_skipped += 1;
+        if self.sample_titles.len() < Self::MAX_SAMPLE_TITLES {
+            self.sample_titles.push(title.to_string());
+        }
+    }
+
+    fn emit(&self, feed_title: Option<&str>) {
+        if self.total_skipped == 0 {
+            return;
+        }
+
+        tracing::warn!(
+            feed_title = feed_title.unwrap_or("Untitled feed"),
+            skipped_entry_count = self.total_skipped,
+            sample_entry_titles = %self.sample_titles.join(" | "),
+            "本次 feed 规范化跳过了缺少 summary 和 content 的条目"
+        );
+    }
+}
+
 pub fn parse_feed_xml(raw: &str, warn_on_missing_content: bool) -> anyhow::Result<ParsedFeed> {
     let feed = feed_rs::parser::parse(raw.as_bytes()).context("解析 RSS/Atom feed 失败")?;
     normalize_feed(feed, warn_on_missing_content)
@@ -47,11 +77,16 @@ fn normalize_feed(feed: FeedRsFeed, warn_on_missing_content: bool) -> anyhow::Re
     let site_url = feed.links.first().and_then(|link| Url::parse(link.href.as_str()).ok());
     let description = feed.description.as_ref().map(text_content);
     let mut entries = Vec::with_capacity(feed.entries.len());
+    let mut warnings = MissingContentWarningAggregation::default();
 
     for entry in feed.entries {
-        if let Some(entry) = normalize_entry(entry, warn_on_missing_content)? {
+        if let Some(entry) = normalize_entry(entry, warn_on_missing_content, &mut warnings)? {
             entries.push(entry);
         }
+    }
+
+    if warn_on_missing_content {
+        warnings.emit(title.as_deref());
     }
 
     Ok(ParsedFeed { title, site_url, description, entries })
@@ -60,6 +95,7 @@ fn normalize_feed(feed: FeedRsFeed, warn_on_missing_content: bool) -> anyhow::Re
 fn normalize_entry(
     entry: FeedRsEntry,
     warn_on_missing_content: bool,
+    warnings: &mut MissingContentWarningAggregation,
 ) -> anyhow::Result<Option<ParsedEntry>> {
     let title = text_value(entry.title.as_ref()).unwrap_or_else(|| "Untitled entry".to_string());
     let url = entry.links.first().and_then(|link| Url::parse(link.href.as_str()).ok());
@@ -69,7 +105,7 @@ fn normalize_entry(
     let content_text = summary.clone();
     if content_html.is_none() && content_text.is_none() {
         if warn_on_missing_content {
-            tracing::warn!(entry_title = %title, "跳过缺少 summary 和 content 的 feed 条目");
+            warnings.record(&title);
         }
         return Ok(None);
     }
@@ -150,4 +186,25 @@ where
     Tz::Offset: Send + Sync,
 {
     OffsetDateTime::from_unix_timestamp(value.timestamp()).expect("valid unix timestamp")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MissingContentWarningAggregation;
+
+    #[test]
+    fn missing_content_warning_aggregation_keeps_total_count_and_samples() {
+        let mut aggregation = MissingContentWarningAggregation::default();
+
+        aggregation.record("Entry One");
+        aggregation.record("Entry Two");
+        aggregation.record("Entry Three");
+        aggregation.record("Entry Four");
+
+        assert_eq!(aggregation.total_skipped, 4);
+        assert_eq!(
+            aggregation.sample_titles,
+            vec!["Entry One".to_string(), "Entry Two".to_string(), "Entry Three".to_string()]
+        );
+    }
 }

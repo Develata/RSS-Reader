@@ -321,3 +321,83 @@
 - commit：pending
 - tag / release：N/A
 - worktree：`main` 分支，当前包含 release harness / testing docs / handoff 文档增量更新
+
+---
+
+## 增量交接（2026-04-13 feed normalization warning 聚合）
+
+- 日期：2026-04-13
+- 作者 / Agent：Codex
+- 分支：main
+- 当前 HEAD：a9f6c5b
+- 相关 commit：pending
+- 相关 tag / release：N/A
+- 状态：`validated`
+
+### 工作摘要与背景
+
+按用户给定的 P1 顺序，先从 `feed_normalization.rs` 下手，收口 sparse feed 条目在 parser 阶段的 warning 噪声。目标是保持现有 parse / refresh contract 不变，只把“每条缺内容文章打一条 warn”改成“每个 feed 聚合打一条 warn”。
+
+### 受影响模块与平台
+
+- 模块：
+  - `crates/rssr-infra/src/feed_normalization.rs`
+  - `docs/handoffs/2026-04-13-daily-rollup.md`
+- 平台：
+  - desktop
+  - Web
+  - wasm32
+  - CLI
+- 额外影响：
+  - native / browser 共用 parser 诊断日志
+
+### 关键代码 / 文档 / workflow 变更
+
+- `feed_normalization.rs`
+  - 新增内部 `MissingContentWarningAggregation`，累计：
+    - `total_skipped`
+    - 最多 3 条示例标题
+  - `normalize_entry(...)` 不再逐条 `tracing::warn!`，而是把缺少 `summary` 和 `content` 的条目登记到聚合器。
+  - `normalize_feed(...)` 在整份 feed 处理完成后只发出一条聚合 warning，并带上：
+    - `feed_title`
+    - `skipped_entry_count`
+    - `sample_entry_titles`
+  - 外部接口未变化：
+    - `parse_feed_xml(...) -> anyhow::Result<ParsedFeed>`
+    - `FeedParser::parse(...)`
+    - refresh / subscription / browser adapter contract 不受影响
+- 测试：
+  - 新增聚合器 unit test，锁定“总数完整、样例标题截断到前 3 条”的行为。
+
+### 已执行验证 / 验收
+
+#### 自动化验证
+
+- `cargo test -p rssr-infra missing_content_warning_aggregation_keeps_total_count_and_samples`：通过
+- `cargo test -p rssr-infra --test test_feed_parse_dedup`：通过
+- `cargo fmt --check`：通过
+- `git diff --check`：通过
+
+#### 手工验收
+
+- 静态代码复核：通过
+  - 确认 warning 聚合只发生在 `rssr-infra` parser 层，没有把 warning 面扩散到 application contract 或 UI 文案。
+
+### 当前状态、风险、待跟进
+
+- 当前状态：
+  - sparse / 缺内容条目的 parser warning 已从逐条噪声改成按 feed 聚合。
+  - parse 行为本身未改变，仍然会跳过缺少 `summary` 与 `content` 的条目，并保留其他有效条目。
+- 风险：
+  - 当前 warning 仍只进 tracing，没有进入 refresh outcome 或 UI 结果面；如果后续要把 parser 警告显式反馈给用户，还需要重新设计返回结构。
+- 待跟进：
+  - 按用户排序继续做 `crates/rssr-infra/src/fetch/client.rs`：
+    - 节流收口
+    - 复杂度拆解
+  - 若要继续压日志噪声，可再看 native `ImageLocalizationWorker` 是否也需要批量 warning 汇总，而不是逐条 entry warn。
+
+### 相关 commit / tag / worktree 状态
+
+- commit：pending
+- tag / release：N/A
+- worktree：`main` 分支，当前包含 `feed_normalization.rs` 与 handoff 文档增量更新

@@ -1,26 +1,17 @@
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{fs, path::PathBuf};
 
 use anyhow::{Context, ensure};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use rssr_application::{
-    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppCompositionInput, AppUseCases,
-    ConfigImportOutcome, OpmlImportOutcome, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome,
-    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput, SystemClock,
+    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, ConfigImportOutcome,
+    OpmlImportOutcome, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput,
 };
 use rssr_domain::{Feed, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
-    application_adapters::{
-        InfraFeedRefreshSource, InfraOpmlCodec, SqliteAppStateAdapter, SqliteRefreshStore,
-    },
+    composition::compose_native_sqlite_use_cases,
     config_sync::webdav::WebDavConfigSync,
-    db::{
-        app_state_repository::SqliteAppStateRepository, entry_repository::SqliteEntryRepository,
-        feed_repository::SqliteFeedRepository, settings_repository::SqliteSettingsRepository,
-        sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
-    },
-    fetch::FetchClient,
-    opml::OpmlCodec,
-    parser::FeedParser,
+    db::{sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend},
 };
 
 #[derive(Parser, Debug)]
@@ -230,27 +221,7 @@ impl CliServices {
         let pool = backend.connect().await.context("连接本地数据库失败")?;
         backend.migrate(&pool).await.context("执行数据库迁移失败")?;
 
-        let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
-        let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
-        let settings_repository = Arc::new(SqliteSettingsRepository::new(pool.clone()));
-        let app_state =
-            Arc::new(SqliteAppStateAdapter::new(Arc::new(SqliteAppStateRepository::new(pool))));
-        let use_cases = AppUseCases::compose(AppCompositionInput {
-            feed_repository: feed_repository.clone(),
-            entry_repository: entry_repository.clone(),
-            settings_repository,
-            app_state,
-            refresh_source: Arc::new(InfraFeedRefreshSource::new(
-                FetchClient::new(),
-                FeedParser::new(),
-            )),
-            refresh_store: Arc::new(SqliteRefreshStore::new(
-                feed_repository.clone(),
-                entry_repository,
-            )),
-            opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
-            clock: Arc::new(SystemClock),
-        });
+        let use_cases = compose_native_sqlite_use_cases(pool).use_cases;
 
         Ok(Self { use_cases })
     }
