@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use rssr_application::import_export_service::{ImportExportService, RemoteConfigStore};
+use rssr_application::import_export_service::{ClockPort, ImportExportService, RemoteConfigStore};
 use rssr_domain::{ConfigFeed, ConfigPackage, UserSettings};
 use rssr_infra::application_adapters::browser::{
     adapters::{
@@ -35,6 +35,14 @@ impl RemoteConfigStore for MemoryRemoteConfigStore {
 
     async fn download_config(&self) -> anyhow::Result<Option<String>> {
         Ok(self.payload.lock().expect("lock payload").clone())
+    }
+}
+
+struct FixedClock;
+
+impl ClockPort for FixedClock {
+    fn now_utc(&self) -> OffsetDateTime {
+        OffsetDateTime::UNIX_EPOCH
     }
 }
 
@@ -90,12 +98,13 @@ fn sample_entry(id: i64, feed_id: i64, index: i64) -> PersistedEntry {
 }
 
 fn build_service(state: Arc<Mutex<BrowserState>>) -> ImportExportService {
-    ImportExportService::new_with_feed_removal_cleanup(
+    ImportExportService::new_with_feed_removal_cleanup_and_clock(
         Arc::new(BrowserFeedRepository::new(state.clone())),
         Arc::new(BrowserEntryRepository::new(state.clone())),
         Arc::new(BrowserSettingsRepository::new(state.clone())),
         Arc::new(BrowserOpmlCodec),
         Arc::new(BrowserAppStateAdapter::new(state)),
+        Arc::new(FixedClock),
     )
 }
 
@@ -128,6 +137,7 @@ async fn browser_config_exchange_export_json_captures_active_feeds_and_settings(
     assert_eq!(package.feeds.len(), 1);
     assert_eq!(package.feeds[0].url, "https://example.com/feed.xml");
     assert_eq!(package.settings, settings);
+    assert_eq!(package.exported_at, OffsetDateTime::UNIX_EPOCH);
 
     clear_browser_state_storage();
 }
