@@ -49,6 +49,31 @@
 
 本次输出仅服务于后续架构收敛与低风险重构。
 
+## 1.1 阶段性状态回写（2026-04-13）
+
+这份审查报告形成后，application use case 收敛已经推进了一个阶段，因此这里补一份状态回写，避免读者把后续 handoff 中的局部结论和最初审查结论割裂开看。
+
+### 已推进的边界收敛
+
+- `SubscriptionWorkflow` 已承接订阅生命周期中的多步业务动作。
+- `RefreshService`、`ImportExportService`、`EntriesWorkspaceService`、`FeedsSnapshotService`、`FeedCatalogService` 已作为稳定 application use case 落位。
+- `ShellService`、`SettingsPageService`、`EntryService` 这类纯 façade 已被删除，不再作为名义 application 层继续存在。
+- `AppStateService` 已收窄到稳定状态切片，不再暴露完整快照级 `load/save` 泛化入口。
+- query / command / workflow 的命名基线已写入 [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)。
+
+### 仍然成立的核心问题
+
+以下判断截至 2026-04-13 仍然成立，只是优先级和剩余范围更清楚了：
+
+- P0 级的“三端核心用例重复实现”还没有完全消失，尤其 browser refresh / config exchange 路径仍有平台差异。
+- `rssr-app` 仍然承载较多 host lifecycle 和 browser/native 壳层逻辑，只是 application 语义已经比审查当时更集中。
+- `rssr-infra` 的 browser adapter 和 feed fetch 边界仍是后续最值得继续压实的方向之一。
+
+### 如何阅读这份报告
+
+- 想看最初的问题定义、分步路线图和长期判断：继续阅读本报告正文。
+- 想看当前已经删除了哪些 façade、保留了哪些 use case：结合 [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md) 与 `docs/handoffs/2026-04-13-*.md` 一起看。
+
 ## 2. 当前架构概览
 
 ### Workspace / crate 总览
@@ -694,3 +719,11 @@ SQLite 迁移由 `rssr-infra` 提供：
 - 它能让现有多 crate 结构真正开始发挥作用
 
 在这一步完成之前，继续增加新功能只会把现有边界失真进一步固化。
+
+### 阶段性更新（2026-04-13）
+
+上述建议已经完成了第一阶段的一部分，因此当前更值得继续推进的重点已经变成：
+
+- 继续压实 browser adapter 和 browser feed path 的正式边界，而不是再新增 page-shaped façade。
+- 继续让 entry / feed / settings 相关 host 路径通过稳定 use case 进入 application 层，而不是回流到 repository 直连。
+- 把最新的保留/删除结论持续同步到总览文档，避免高层判断只存在于 handoff 日志里。

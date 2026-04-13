@@ -14,6 +14,9 @@
 
 如果你已经知道自己要做什么，可以直接走下面的分流：
 
+- 想看 2026-04 架构审查结论和当前 application 收敛进度：
+  - [架构审查报告（2026-04）](./architecture-review-2026-04.md)
+  - [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)
 - 想改主题或让 AI 生成 CSS：
   - [主题作者选择器参考](./design/theme-author-selector-reference.md)
 - 想理解当前产品边界、缓存策略和样式体系：
@@ -51,6 +54,19 @@
 - 哪些 selector / hook 可以长期依赖
 - 怎样在不碰 Rust 逻辑的前提下自定义主题
 - 怎样把这套接口直接交给 AI 生成 CSS
+
+### 架构审查与收敛
+
+- [架构审查报告（2026-04）](./architecture-review-2026-04.md)
+- [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)
+- [Agent 交接记录](./handoffs/README.md)
+
+这组文档主要回答：
+
+- 2026-04 这轮架构审查最初指出了哪些边界失真
+- 哪些 application façade 已经删除，哪些 use case 明确保留
+- 当前 application naming baseline 和后续收敛顺序是什么
+- 最近一轮 agent 工作已经做到哪里，还有哪些边界仍在收敛中
 
 ### 路线图
 
