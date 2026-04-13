@@ -73,7 +73,7 @@ struct ImageLocalizationWorker {
 
 impl AppServices {
     const AUTO_REFRESH_RETRY_DELAY: Duration = Duration::from_secs(30);
-    const REFRESH_ALL_CONCURRENCY: usize = 4;
+    const REFRESH_ALL_CONCURRENCY: usize = 1;
 
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES
@@ -176,7 +176,7 @@ impl AutoRefreshPort for AutoRefreshCapability {
                         "触发后台自动刷新全部订阅"
                     );
                     if let Err(error) = refresh.refresh_all().await {
-                        tracing::warn!(error = %error, "后台自动刷新失败");
+                        tracing::warn!(error = ?error, "后台自动刷新失败");
                     }
                     last_refresh_started_at = Some(now);
                 }
