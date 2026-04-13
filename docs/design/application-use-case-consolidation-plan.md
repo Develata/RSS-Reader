@@ -80,6 +80,31 @@ Current result:
 No workflow split is required from this check. The useful code change is the narrower startup
 existence query, not a broad service-to-repository rewrite.
 
+## ImportExportService Boundary Check 2026-04-13
+
+Reviewed files:
+
+- `crates/rssr-application/src/import_export_service.rs`
+- `crates/rssr-application/src/import_export_service/tests.rs`
+- `crates/rssr-application/src/composition.rs`
+- `crates/rssr-app/src/ui/runtime/services.rs`
+- `crates/rssr-cli/src/main.rs`
+
+Current result:
+
+- `ImportExportService` should remain one service for now.
+- JSON config export/import is still the source of truth for config exchange.
+- OPML export/import is an interop view over the same feed membership data.
+- Remote config push/pull only transports the same config package payload.
+- Removed feed cleanup is a direct consequence of config import replacing feed membership, not a new
+  product axis.
+- UI runtime and CLI still call this service through `AppUseCases`; they do not reconstruct config
+  exchange decisions locally.
+
+The split trigger remains future growth beyond config-exchange semantics: continuous sync,
+conflict resolution, account identity, background scheduling, or a separate OPML subscription
+management surface. None of those is present in the current implementation.
+
 ## Skeleton Boundary
 
 The work stays inside the existing product skeleton:
@@ -264,3 +289,7 @@ smoke gates.
    - In particular, watch `ImportExportService` for growth beyond config-exchange semantics.
 3. Verification hardening
    - Add focused contract tests when a shared outcome or migration boundary changes.
+
+Reference checklist:
+
+- `docs/design/application-use-case-boundary-checklist.md`
