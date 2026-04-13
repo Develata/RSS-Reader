@@ -85,6 +85,10 @@ In the current codebase this distinction is intentional:
   targets, invoke refresh source/store ports, and return stable refresh outcomes. It is internally
   multi-step, but it does not orchestrate across unrelated product actions the way
   `SubscriptionWorkflow` does.
+- `ImportExportService` also stays a service for now because JSON config export/import, OPML
+  exchange, and remote config push/pull are all part of one config-exchange capability family.
+  It should only be split when one branch starts carrying materially different lifecycle or
+  side-effect coordination that no longer belongs to the same exchange boundary.
 
 ### Naming baseline
 
@@ -203,5 +207,6 @@ smoke gates.
 2. Workflow/service split review
    - Re-check whether future multi-step actions should become workflows or remain services.
    - Do not create new workflows just because a service has multiple internal steps.
+   - In particular, watch `ImportExportService` for growth beyond config-exchange semantics.
 3. Verification hardening
    - Add focused contract tests when a shared outcome or migration boundary changes.
