@@ -9,7 +9,6 @@ pub mod feeds_snapshot_service;
 pub mod import_export_service;
 pub mod reader_service;
 pub mod refresh_service;
-pub mod settings_page_service;
 pub mod settings_service;
 pub mod settings_sync_service;
 pub mod startup_service;
@@ -43,9 +42,6 @@ pub use refresh_service::{
     ParsedFeedUpdate, RefreshAllInput, RefreshAllOutcome, RefreshAllSummary, RefreshCommit,
     RefreshFailure, RefreshFeedFailureSummary, RefreshFeedOutcome, RefreshFeedResult,
     RefreshHttpMetadata, RefreshLocalizedEntry, RefreshService, RefreshStorePort, RefreshTarget,
-};
-pub use settings_page_service::{
-    SaveSettingsAppearanceOutcome, SettingsPageService, SettingsPageSnapshot,
 };
 pub use settings_service::SettingsService;
 pub use settings_sync_service::{AppliedRemoteConfigOutcome, SettingsSyncService};

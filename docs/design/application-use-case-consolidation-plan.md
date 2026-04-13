@@ -108,7 +108,6 @@ The project does not need an immediate mass rename. It does need stable naming r
 - Settings/app-state coordination:
   - `SettingsService`
   - `SettingsSyncService`
-  - `SettingsPageService`
   - `AppStateService`
   - `StartupService`
 
