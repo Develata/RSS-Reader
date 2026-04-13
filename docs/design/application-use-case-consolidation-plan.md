@@ -10,6 +10,22 @@ without moving host lifecycle, platform adapters, UI copy, or presentation polic
 This plan follows constitution `1.3.0`: skeleton boundaries first, then module boundaries, then
 implementation details.
 
+## Current Status
+
+The original first-step targets in this plan are no longer just proposals. The following
+consolidation work is already on the mainline:
+
+- Subscription lifecycle moved into `SubscriptionWorkflow`
+- Refresh outcome summaries moved into `RefreshService`
+- Config import/export and remote config outcomes moved into `ImportExportService`
+- Entries workspace bootstrap/save decisions moved into `EntriesWorkspaceService`
+- Feed snapshot query moved into `FeedsSnapshotService`
+- CLI feed listing moved into `FeedCatalogService`
+- Feed summaries queries for startup/workspace moved off `FeedService`
+
+The next step is no longer "add the first shared workflow". The next step is to keep the
+application layer coherent while these use cases continue to split by responsibility.
+
 ## Skeleton Boundary
 
 The work stays inside the existing product skeleton:
@@ -28,17 +44,77 @@ plugin loading, a rule engine, or a new global store.
   - No planned first-step changes.
 - `rssr-application`
   - Owns shared use cases and workflow outcomes.
-  - First-step target: subscription lifecycle workflow.
+  - Current target: keep command/query/workflow boundaries clean and avoid service-to-service
+    query passthrough.
 - `rssr-infra`
   - Owns SQLite, browser storage, HTTP fetch, parser, OPML, WebDAV, and adapter implementations.
   - No planned first-step changes except tests if a contract gap appears.
 - `rssr-app`
   - Owns UI runtime, host lifecycle, platform capabilities, and visible outcome translation.
-  - First-step target: consume the narrower application workflow instead of reassembling
-    subscription lifecycle decisions.
+  - Current target: keep calling shared use cases and host capabilities without reassembling
+    business decisions locally.
 - `rssr-cli`
   - Owns CLI argument parsing, file I/O, terminal output, and exit behavior.
-  - First-step target: delegate optional first refresh to the application workflow.
+  - Current target: keep shell behavior thin and route feed/config actions through application use
+    cases instead of repositories.
+
+## Application Boundary Rules
+
+### Query and command split
+
+- Query use cases may depend directly on repositories when they only read stable truth sources.
+- Command use cases may depend on repositories and write-side ports needed for the mutation.
+- Query use cases must not route reads through command services just to reuse a method name.
+- Command services should not grow "small query helpers" unless the query is inseparable from the
+  command invariant.
+
+### Workflow versus single-purpose service
+
+- A workflow service is allowed to orchestrate multiple use cases or ports when it represents one
+  real product action with branching outcomes.
+- A single-purpose service should stay narrow and map cleanly to one page/bootstrap/query/command
+  responsibility.
+- Host layers may compose multiple application calls for presentation, but they must not recreate
+  business branching that already exists in a workflow.
+
+### Naming baseline
+
+The project does not need an immediate mass rename. It does need stable naming rules:
+
+- Use `*Workflow` for multi-step business actions with branching flow, such as
+  `SubscriptionWorkflow`.
+- Use `*Service` for stable application use cases, whether they are query-oriented or
+  command-oriented.
+- Query-oriented services should prefer names that describe the returned surface or view, such as
+  `FeedsSnapshotService`, `FeedCatalogService`, and `EntriesListService`.
+- Command-oriented services should prefer names that describe the acted-on domain object, such as
+  `FeedService` after it was reduced to add/remove subscription behavior.
+- Page-shaped services such as `SettingsPageService` are acceptable only when they consolidate one
+  UI surface's stable application semantics and do not absorb presentation-only policy.
+
+### Current classification baseline
+
+- Workflow:
+  - `SubscriptionWorkflow`
+- Feed query services:
+  - `FeedCatalogService`
+  - `FeedsSnapshotService`
+- Feed command service:
+  - `FeedService`
+- Entry/query interaction services:
+  - `EntriesListService`
+  - `EntriesWorkspaceService`
+  - `ReaderService`
+- Settings/app-state coordination:
+  - `SettingsService`
+  - `SettingsSyncService`
+  - `SettingsPageService`
+  - `AppStateService`
+  - `ShellService`
+  - `StartupService`
+
+This classification is a boundary baseline, not a rename order. The main rule is to keep future
+changes consistent with it.
 
 ## Truth Sources
 
@@ -78,49 +154,42 @@ Subscription lifecycle must define:
 Host layers may translate outcomes into user-facing messages, logs, or exit status. They must not
 invent new business semantics.
 
-## First Implementation Step
+## Current Implementation Priority
 
 Scope:
 
-- Add one application-level subscription lifecycle input and outcome that supports optional first
-  refresh.
-- Keep existing `add_subscription` and `add_subscription_and_refresh` as compatibility helpers if
-  useful, but make the new lifecycle method the common implementation path.
-- Update CLI to delegate `--skip-refresh` to the lifecycle method.
-- Update native/web refresh capabilities to call the lifecycle method with first refresh enabled.
-- Add application tests for both refresh and no-refresh branches.
+- Keep new query use cases independent from command services.
+- Keep shells and UI runtime on `AppUseCases` instead of direct repository access.
+- Add documentation-level guidance before any mass rename.
+- Rename only when a name actively hides a boundary or causes repeated misuse.
 
-Out of scope for the first step:
+Out of scope for the current step:
 
-- Refresh-all summary helpers.
-- Config exchange workflow changes.
-- Auto-refresh scheduling.
-- Native image localization worker changes.
-- UI copy changes.
+- Workspace-wide renaming from `*Service` to `*Query` / `*Command`.
+- Reorganizing modules just for visual symmetry.
+- Moving host lifecycle, browser storage, or presentation policy into `rssr-application`.
 
 ## Validation Plan
 
-Minimum validation for the first step:
+Minimum validation for boundary-only follow-up steps:
 
 - `cargo fmt --check`
 - `cargo test -p rssr-application`
-- `cargo check -p rssr-app`
-- `cargo check -p rssr-app --target wasm32-unknown-unknown`
-- `cargo check -p rssr-cli`
-- `cargo test -p rssr-infra --test test_subscription_contract_harness`
-- `scripts/run_rssr_web_browser_feed_smoke.sh --skip-build`
+- `cargo test -p rssr-app`
+- `cargo test -p rssr-cli`
+- `cargo check --workspace`
+- `git diff --check`
 
-If the first step touches browser-visible behavior, also run Windows visible Chrome regression.
+If a step touches browser-visible behavior, also run the relevant UI regression and browser feed
+smoke gates.
 
 ## Follow-Up Steps
 
-After subscription lifecycle is stable:
-
-1. Refresh outcome summarization
-   - Consider application helpers for stable failure summaries and counts.
-   - Keep platform-specific localization and scheduling in host capabilities.
-2. Config exchange consolidation
-   - Check for remaining duplicated JSON/OPML/WebDAV validation and cleanup logic.
-   - Keep remote store construction in adapters.
+1. Naming consistency review
+   - Decide whether any current service name actively obscures its boundary.
+   - Prefer rule enforcement and small targeted renames over mass churn.
+2. Settings and shell boundary review
+   - Re-check whether `SettingsPageService`, `ShellService`, and `StartupService` still reflect
+     stable application semantics instead of page/runtime convenience.
 3. Verification hardening
    - Add focused contract tests when a shared outcome or migration boundary changes.
