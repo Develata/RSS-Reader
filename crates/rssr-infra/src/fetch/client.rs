@@ -3,6 +3,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use regex::Regex;
 use reqwest::{StatusCode, header};
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 use url::Url;
 
 #[derive(Debug, Clone, Default)]
@@ -82,12 +83,18 @@ impl BodyAssetLocalizer {
         "Mozilla/5.0 (compatible; RSS-Reader image localizer; +https://github.com)";
     const LAZY_IMAGE_ATTRIBUTES: &'static [&'static str] =
         &["data-src", "data-original", "data-lazy-src", "data-orig-file"];
+    pub const IMAGE_REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
 
     pub fn new() -> Self {
-        Self { inner: reqwest::Client::new() }
+        Self {
+            inner: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(3))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
+        }
     }
 
-    pub fn max_images_per_entry() -> usize {
+    pub const fn max_images_per_entry() -> usize {
         8
     }
 
@@ -170,11 +177,15 @@ impl BodyAssetLocalizer {
         referer: Option<&Url>,
         max_bytes: usize,
     ) -> anyhow::Result<Option<(String, usize)>> {
-        let mut request =
-            self.inner.get(url.clone()).header(header::USER_AGENT, Self::IMAGE_USER_AGENT).header(
+        let mut request = self
+            .inner
+            .get(url.clone())
+            .header(header::USER_AGENT, Self::IMAGE_USER_AGENT)
+            .header(
                 header::ACCEPT,
                 "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-            );
+            )
+            .timeout(Self::IMAGE_REQUEST_TIMEOUT);
         if let Some(referer) = referer {
             request = request.header(header::REFERER, referer.as_str());
         }

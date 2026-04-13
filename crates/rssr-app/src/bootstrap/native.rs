@@ -314,7 +314,11 @@ impl ClipboardPort for ClipboardCapability {
 
 impl ImageLocalizationWorker {
     const MAX_BACKGROUND_LOCALIZED_ENTRIES: usize = 5;
-    const LOCALIZE_TIMEOUT: Duration = Duration::from_secs(5);
+    const LOCALIZE_TIMEOUT: Duration = Duration::from_secs(
+        BodyAssetLocalizer::IMAGE_REQUEST_TIMEOUT.as_secs()
+            * BodyAssetLocalizer::max_images_per_entry() as u64
+            + 5,
+    );
 
     fn spawn(&self, feed_id: i64, entries: Vec<RefreshLocalizedEntry>) {
         let entry_repository = self.entry_repository.clone();
