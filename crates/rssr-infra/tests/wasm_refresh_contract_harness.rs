@@ -122,6 +122,25 @@ fn browser_refresh_source_classifies_html_shell_body_as_parse_failure() {
 }
 
 #[wasm_bindgen_test]
+fn browser_refresh_source_classifies_bad_xml_body_as_parse_failure() {
+    let output = classify_browser_refresh_body(
+        RefreshHttpMetadata {
+            etag: Some("etag-bad-xml".to_string()),
+            last_modified: Some("Mon, 13 Apr 2026 12:00:00 GMT".to_string()),
+        },
+        "<?xml version=\"1.0\"?><rss><channel><item>",
+    );
+
+    match output {
+        FeedRefreshSourceOutput::Failed(failure) => {
+            assert_eq!(failure.metadata.expect("metadata").etag.as_deref(), Some("etag-bad-xml"));
+            assert!(failure.message.starts_with("解析订阅失败:"));
+        }
+        other => panic!("unexpected source output: {other:?}"),
+    }
+}
+
+#[wasm_bindgen_test]
 async fn browser_refresh_store_lists_only_active_targets() {
     clear_browser_state_storage();
 

@@ -30,11 +30,13 @@ pub(super) fn should_fallback_web_feed_request(
     request: &WebFeedRequest,
     response: &reqwest::Response,
 ) -> bool {
-    index + 1 < total
-        && (status_requires_web_feed_fallback(response.status())
-            || request.kind == WebFeedRequestKind::Proxy
-                && response.status().is_success()
-                && looks_like_proxy_login_or_spa_shell(response))
+    should_fallback_web_feed_request_parts(
+        index,
+        total,
+        request.kind,
+        response.status(),
+        looks_like_proxy_login_or_spa_shell(response),
+    )
 }
 
 fn browser_origin() -> Option<String> {
@@ -82,13 +84,25 @@ fn status_requires_web_feed_fallback(status: StatusCode) -> bool {
     )
 }
 
+fn should_fallback_web_feed_request_parts(
+    index: usize,
+    total: usize,
+    kind: WebFeedRequestKind,
+    status: StatusCode,
+    looks_like_proxy_shell: bool,
+) -> bool {
+    index + 1 < total
+        && (status_requires_web_feed_fallback(status)
+            || kind == WebFeedRequestKind::Proxy && status.is_success() && looks_like_proxy_shell)
+}
+
 #[cfg(test)]
 mod tests {
     use reqwest::StatusCode;
 
     use super::{
-        WebFeedRequestKind, status_requires_web_feed_fallback,
-        web_refresh_request_urls_with_origin_and_now,
+        WebFeedRequestKind, should_fallback_web_feed_request_parts,
+        status_requires_web_feed_fallback, web_refresh_request_urls_with_origin_and_now,
     };
 
     #[test]
@@ -145,5 +159,52 @@ mod tests {
         assert!(status_requires_web_feed_fallback(StatusCode::BAD_REQUEST));
         assert!(!status_requires_web_feed_fallback(StatusCode::OK));
         assert!(!status_requires_web_feed_fallback(StatusCode::TOO_MANY_REQUESTS));
+    }
+
+    #[test]
+    fn fallback_policy_retries_proxy_shell_when_direct_request_remains() {
+        assert!(should_fallback_web_feed_request_parts(
+            0,
+            2,
+            WebFeedRequestKind::Proxy,
+            StatusCode::OK,
+            true
+        ));
+    }
+
+    #[test]
+    fn fallback_policy_does_not_retry_direct_or_final_requests() {
+        assert!(!should_fallback_web_feed_request_parts(
+            0,
+            2,
+            WebFeedRequestKind::Direct,
+            StatusCode::OK,
+            true
+        ));
+        assert!(!should_fallback_web_feed_request_parts(
+            1,
+            2,
+            WebFeedRequestKind::Proxy,
+            StatusCode::BAD_REQUEST,
+            true
+        ));
+    }
+
+    #[test]
+    fn fallback_policy_retries_selected_error_statuses_only_when_next_request_exists() {
+        assert!(should_fallback_web_feed_request_parts(
+            0,
+            2,
+            WebFeedRequestKind::Proxy,
+            StatusCode::FORBIDDEN,
+            false
+        ));
+        assert!(!should_fallback_web_feed_request_parts(
+            0,
+            2,
+            WebFeedRequestKind::Proxy,
+            StatusCode::TOO_MANY_REQUESTS,
+            false
+        ));
     }
 }

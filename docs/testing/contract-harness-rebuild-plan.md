@@ -249,11 +249,11 @@
 - 已完成：
   - valid XML body -> `Updated`
   - HTML shell body -> `Failed`，message 前缀为 `解析订阅失败:`
+  - bad XML body -> `Failed`，message 前缀为 `解析订阅失败:`
+  - proxy shell / login shell 的 request-level fallback 纯函数覆盖
 - 待实现：
   - network / CORS failure
-  - proxy shell / login shell 的 request-level fallback
   - non-success status -> `Failed`
-  - bad XML parse failure
 
 当前不建议为了覆盖 source-side 去做的事：
 
