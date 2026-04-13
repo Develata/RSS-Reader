@@ -100,27 +100,24 @@ impl SqliteRefreshStore {
 #[async_trait::async_trait]
 impl RefreshStorePort for SqliteRefreshStore {
     async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
-        Ok(self
-            .feed_repository
-            .list_feeds()
-            .await?
+        let feeds = self.feed_repository.list_feeds().await?;
+        let feed_ids_with_entries = self.entry_repository.list_feed_ids_with_entries().await?;
+
+        Ok(feeds
             .into_iter()
-            .map(|feed| RefreshTarget {
-                feed_id: feed.id,
-                url: feed.url,
-                etag: feed.etag,
-                last_modified: feed.last_modified,
+            .map(|feed| {
+                let has_entries = feed_ids_with_entries.contains(&feed.id);
+                map_refresh_target(feed, has_entries)
             })
             .collect())
     }
 
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
-        Ok(self.feed_repository.get_feed(feed_id).await?.map(|feed| RefreshTarget {
-            feed_id: feed.id,
-            url: feed.url,
-            etag: feed.etag,
-            last_modified: feed.last_modified,
-        }))
+        let Some(feed) = self.feed_repository.get_feed(feed_id).await? else {
+            return Ok(None);
+        };
+        let has_entries = self.entry_repository.has_entries_for_feed(feed_id).await?;
+        Ok(Some(map_refresh_target(feed, has_entries)))
     }
 
     async fn commit(&self, feed_id: i64, commit: RefreshCommit) -> Result<()> {
@@ -178,6 +175,21 @@ impl RefreshStorePort for SqliteRefreshStore {
 
         Ok(())
     }
+}
+
+fn map_refresh_target(feed: rssr_domain::Feed, has_entries: bool) -> RefreshTarget {
+    let (etag, last_modified) = if has_entries {
+        (feed.etag, feed.last_modified)
+    } else {
+        tracing::debug!(
+            feed_id = feed.id,
+            url = %feed.url,
+            "订阅本地无文章缓存，跳过条件请求并强制全量抓取"
+        );
+        (None, None)
+    };
+
+    RefreshTarget { feed_id: feed.id, url: feed.url, etag, last_modified }
 }
 
 fn map_http_metadata(metadata: crate::fetch::HttpMetadata) -> RefreshHttpMetadata {

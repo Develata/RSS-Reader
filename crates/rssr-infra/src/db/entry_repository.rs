@@ -122,6 +122,27 @@ impl SqliteEntryRepository {
         Ok(result.rows_affected() > 0)
     }
 
+    pub async fn has_entries_for_feed(&self, feed_id: i64) -> DomainResult<bool> {
+        let exists = sqlx::query_scalar::<_, i64>(
+            "SELECT EXISTS(SELECT 1 FROM entries WHERE feed_id = ?1 LIMIT 1)",
+        )
+        .bind(feed_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        Ok(exists != 0)
+    }
+
+    pub async fn list_feed_ids_with_entries(&self) -> DomainResult<std::collections::HashSet<i64>> {
+        let rows = sqlx::query_scalar::<_, i64>("SELECT DISTINCT feed_id FROM entries")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
+
+        Ok(rows.into_iter().collect())
+    }
+
     async fn find_adjacent_entry_id(
         &self,
         feed_id: Option<i64>,

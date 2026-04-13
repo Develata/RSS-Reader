@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
-use crate::db::{SqlitePool, create_sqlite_pool, migrate, storage_backend::StorageBackend};
+use crate::db::{
+    SqlitePool, create_sqlite_pool, default_sqlite_max_connections, migrate,
+    storage_backend::StorageBackend,
+};
 
 #[derive(Debug, Clone)]
 pub struct NativeSqliteBackend {
@@ -53,7 +56,9 @@ impl StorageBackend for NativeSqliteBackend {
                     SqliteConnectOptions::new().filename(database_path).create_if_missing(true);
 
                 SqlitePoolOptions::new()
-                    .max_connections(1)
+                    .max_connections(default_sqlite_max_connections(
+                        database_path.to_string_lossy().as_ref(),
+                    ))
                     .connect_with(options)
                     .await
                     .with_context(|| format!("打开本地数据库失败: {}", database_path.display()))

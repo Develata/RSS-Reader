@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use rssr_application::{
     FeedRefreshUpdate, ParsedEntryData, ParsedFeedUpdate, RefreshCommit, RefreshHttpMetadata,
-    RefreshStorePort,
+    RefreshStorePort, RefreshTarget,
 };
 use rssr_domain::{EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription};
 use rssr_infra::{
@@ -81,4 +81,47 @@ async fn sqlite_refresh_store_persists_updated_feed_metadata_entries_and_fetch_s
         entry_repository.list_entries(&EntryQuery::default()).await.expect("list entries");
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].title, "Entry 1");
+}
+
+#[tokio::test]
+async fn sqlite_refresh_store_forces_full_fetch_when_feed_has_no_entries() {
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let pool = backend.connect().await.expect("connect sqlite memory");
+    migrate(&pool).await.expect("run migrations");
+
+    let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
+    let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
+    let store = SqliteRefreshStore::new(feed_repository.clone(), entry_repository.clone());
+
+    let feed = feed_repository
+        .upsert_subscription(&NewFeedSubscription {
+            url: Url::parse("https://example.com/feed.xml").expect("valid url"),
+            title: Some("Example".to_string()),
+            folder: None,
+        })
+        .await
+        .expect("create feed");
+
+    feed_repository
+        .update_fetch_state(
+            feed.id,
+            Some("etag-empty"),
+            Some("Wed, 01 Apr 2026 10:00:00 GMT"),
+            None,
+            true,
+        )
+        .await
+        .expect("persist validators");
+
+    let target =
+        store.get_target(feed.id).await.expect("load refresh target").expect("target exists");
+    assert_eq!(
+        target,
+        RefreshTarget {
+            feed_id: feed.id,
+            url: Url::parse("https://example.com/feed.xml").expect("valid url"),
+            etag: None,
+            last_modified: None,
+        }
+    );
 }
