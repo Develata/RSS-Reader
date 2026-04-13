@@ -2,7 +2,6 @@ pub mod app_state_service;
 pub mod composition;
 pub mod entries_list_service;
 pub mod entries_workspace_service;
-pub mod entry_service;
 pub mod feed_catalog_service;
 pub mod feed_service;
 pub mod feeds_snapshot_service;
@@ -24,7 +23,6 @@ pub use entries_workspace_service::{
     EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesWorkspaceService,
     SaveEntriesWorkspaceOutcome,
 };
-pub use entry_service::EntryService;
 pub use feed_catalog_service::FeedCatalogService;
 pub use feed_service::{AddSubscriptionInput, FeedService, RemoveSubscriptionInput};
 pub use feeds_snapshot_service::{FeedsSnapshotOutcome, FeedsSnapshotService};

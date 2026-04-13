@@ -1,7 +1,7 @@
-use anyhow::Context;
-use rssr_domain::{EntryQuery, EntrySummary};
+use std::sync::Arc;
 
-use crate::EntryService;
+use anyhow::Context;
+use rssr_domain::{EntryQuery, EntryRepository, EntrySummary};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntriesListOutcome {
@@ -32,16 +32,16 @@ pub struct ToggleEntryStarredOutcome {
 
 #[derive(Clone)]
 pub struct EntriesListService {
-    entry_service: EntryService,
+    entry_repository: Arc<dyn EntryRepository>,
 }
 
 impl EntriesListService {
-    pub fn new(entry_service: EntryService) -> Self {
-        Self { entry_service }
+    pub fn new(entry_repository: Arc<dyn EntryRepository>) -> Self {
+        Self { entry_repository }
     }
 
     pub async fn list_entries(&self, query: &EntryQuery) -> anyhow::Result<EntriesListOutcome> {
-        let entries = self.entry_service.list_entries(query).await.context("读取文章失败")?;
+        let entries = self.entry_repository.list_entries(query).await.context("读取文章失败")?;
         Ok(EntriesListOutcome { entries })
     }
 
@@ -50,7 +50,10 @@ impl EntriesListService {
         input: ToggleEntryReadInput,
     ) -> anyhow::Result<ToggleEntryReadOutcome> {
         let is_read = !input.currently_read;
-        self.entry_service.set_read(input.entry_id, is_read).await.context("更新已读状态失败")?;
+        self.entry_repository
+            .set_read(input.entry_id, is_read)
+            .await
+            .context("更新已读状态失败")?;
         Ok(ToggleEntryReadOutcome { is_read })
     }
 
@@ -59,7 +62,7 @@ impl EntriesListService {
         input: ToggleEntryStarredInput,
     ) -> anyhow::Result<ToggleEntryStarredOutcome> {
         let is_starred = !input.currently_starred;
-        self.entry_service
+        self.entry_repository
             .set_starred(input.entry_id, is_starred)
             .await
             .context("更新收藏状态失败")?;
@@ -118,7 +121,7 @@ mod tests {
     }
 
     fn service(repository: Arc<EntryRepositoryStub>) -> EntriesListService {
-        EntriesListService::new(crate::EntryService::new(repository))
+        EntriesListService::new(repository)
     }
 
     #[tokio::test]

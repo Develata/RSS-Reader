@@ -1,7 +1,7 @@
-use anyhow::Context;
-use rssr_domain::{Entry, EntryNavigation};
+use std::sync::Arc;
 
-use crate::EntryService;
+use anyhow::Context;
+use rssr_domain::{Entry, EntryNavigation, EntryRepository};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReaderEntrySnapshot {
@@ -33,18 +33,18 @@ pub struct ToggleStarredOutcome {
 
 #[derive(Clone)]
 pub struct ReaderService {
-    entry_service: EntryService,
+    entry_repository: Arc<dyn EntryRepository>,
 }
 
 impl ReaderService {
-    pub fn new(entry_service: EntryService) -> Self {
-        Self { entry_service }
+    pub fn new(entry_repository: Arc<dyn EntryRepository>) -> Self {
+        Self { entry_repository }
     }
 
     pub async fn load_entry(&self, entry_id: i64) -> anyhow::Result<ReaderEntrySnapshot> {
-        let entry = self.entry_service.get_entry(entry_id).await.context("读取文章失败")?;
+        let entry = self.entry_repository.get_entry(entry_id).await.context("读取文章失败")?;
         let navigation = if entry.is_some() {
-            self.entry_service.reader_navigation(entry_id).await.unwrap_or_default()
+            self.entry_repository.reader_navigation(entry_id).await.unwrap_or_default()
         } else {
             EntryNavigation::default()
         };
@@ -54,7 +54,10 @@ impl ReaderService {
 
     pub async fn toggle_read(&self, input: ToggleReadInput) -> anyhow::Result<ToggleReadOutcome> {
         let is_read = !input.currently_read;
-        self.entry_service.set_read(input.entry_id, is_read).await.context("更新已读状态失败")?;
+        self.entry_repository
+            .set_read(input.entry_id, is_read)
+            .await
+            .context("更新已读状态失败")?;
         Ok(ToggleReadOutcome { is_read })
     }
 
@@ -63,7 +66,7 @@ impl ReaderService {
         input: ToggleStarredInput,
     ) -> anyhow::Result<ToggleStarredOutcome> {
         let is_starred = !input.currently_starred;
-        self.entry_service
+        self.entry_repository
             .set_starred(input.entry_id, is_starred)
             .await
             .context("更新收藏状态失败")?;
@@ -155,7 +158,7 @@ mod tests {
     }
 
     fn service(repository: Arc<EntryRepositoryStub>) -> ReaderService {
-        ReaderService::new(crate::EntryService::new(repository))
+        ReaderService::new(repository)
     }
 
     #[tokio::test]
