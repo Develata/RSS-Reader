@@ -92,13 +92,13 @@ impl AppUseCases {
             startup_service: StartupService::new(
                 settings_service.clone(),
                 app_state_service.clone(),
-                feed_service.clone(),
+                input.feed_repository.clone(),
             ),
             entries_list_service: EntriesListService::new(entry_service.clone()),
             entries_workspace_service: EntriesWorkspaceService::new(
                 settings_service,
                 app_state_service,
-                feed_service.clone(),
+                input.feed_repository.clone(),
             ),
             feeds_snapshot_service: FeedsSnapshotService::new(input.feed_repository),
             reader_service: ReaderService::new(entry_service),

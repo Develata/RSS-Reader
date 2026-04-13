@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use rssr_domain::{
-    EntryRepository, Feed, FeedRepository, FeedSummary, NewFeedSubscription, normalize_feed_url,
-};
+use rssr_domain::{EntryRepository, Feed, FeedRepository, NewFeedSubscription, normalize_feed_url};
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,10 +49,6 @@ impl FeedService {
         }
         Ok(self.feed_repository.set_deleted(input.feed_id, true).await?)
     }
-
-    pub async fn list_feeds(&self) -> Result<Vec<FeedSummary>> {
-        Ok(self.feed_repository.list_summaries().await?)
-    }
 }
 
 #[cfg(test)]
@@ -62,7 +56,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use rssr_domain::{
-        Entry, EntryNavigation, EntryQuery, EntryRepository, Feed, FeedRepository, FeedSummary,
+        Entry, EntryNavigation, EntryQuery, EntryRepository, Feed, FeedRepository,
         NewFeedSubscription,
     };
     use time::OffsetDateTime;
@@ -113,7 +107,7 @@ mod tests {
             Ok(None)
         }
 
-        async fn list_summaries(&self) -> rssr_domain::Result<Vec<FeedSummary>> {
+        async fn list_summaries(&self) -> rssr_domain::Result<Vec<rssr_domain::FeedSummary>> {
             Ok(Vec::new())
         }
     }

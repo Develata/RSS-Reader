@@ -1,6 +1,8 @@
-use rssr_domain::StartupView;
+use std::sync::Arc;
 
-use crate::{AppStateService, FeedService, SettingsService};
+use rssr_domain::{FeedRepository, StartupView};
+
+use crate::{AppStateService, SettingsService};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StartupTarget {
@@ -12,16 +14,16 @@ pub enum StartupTarget {
 pub struct StartupService {
     settings_service: SettingsService,
     app_state_service: AppStateService,
-    feed_service: FeedService,
+    feed_repository: Arc<dyn FeedRepository>,
 }
 
 impl StartupService {
     pub fn new(
         settings_service: SettingsService,
         app_state_service: AppStateService,
-        feed_service: FeedService,
+        feed_repository: Arc<dyn FeedRepository>,
     ) -> Self {
-        Self { settings_service, app_state_service, feed_service }
+        Self { settings_service, app_state_service, feed_repository }
     }
 
     pub async fn resolve_startup_target(&self) -> anyhow::Result<StartupTarget> {
@@ -36,8 +38,8 @@ impl StartupService {
         };
 
         let feed_exists = self
-            .feed_service
-            .list_feeds()
+            .feed_repository
+            .list_summaries()
             .await
             .map(|feeds| feeds.iter().any(|feed| feed.id == feed_id))
             .unwrap_or(false);
@@ -55,9 +57,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use rssr_domain::{
-        AppStateRepository, AppStateSnapshot, Entry, EntryNavigation, EntryQuery, EntryRepository,
-        Feed, FeedRepository, FeedSummary, NewFeedSubscription, SettingsRepository, StartupView,
-        UserSettings,
+        AppStateRepository, AppStateSnapshot, Feed, FeedRepository, FeedSummary,
+        NewFeedSubscription, SettingsRepository, StartupView, UserSettings,
     };
 
     use super::{StartupService, StartupTarget};
@@ -125,65 +126,27 @@ mod tests {
         }
     }
 
-    struct EntryRepositoryStub;
-
-    #[async_trait::async_trait]
-    impl EntryRepository for EntryRepositoryStub {
-        async fn list_entries(
-            &self,
-            _query: &EntryQuery,
-        ) -> rssr_domain::Result<Vec<rssr_domain::EntrySummary>> {
-            Ok(Vec::new())
-        }
-
-        async fn get_entry(&self, _entry_id: i64) -> rssr_domain::Result<Option<Entry>> {
-            Ok(None)
-        }
-
-        async fn reader_navigation(
-            &self,
-            _current_entry_id: i64,
-        ) -> rssr_domain::Result<EntryNavigation> {
-            Ok(EntryNavigation::default())
-        }
-
-        async fn set_read(&self, _entry_id: i64, _is_read: bool) -> rssr_domain::Result<()> {
-            Ok(())
-        }
-
-        async fn set_starred(&self, _entry_id: i64, _is_starred: bool) -> rssr_domain::Result<()> {
-            Ok(())
-        }
-
-        async fn delete_for_feed(&self, _feed_id: i64) -> rssr_domain::Result<()> {
-            Ok(())
-        }
-    }
-
     fn service(settings: UserSettings, state: AppStateSnapshot, feeds: Vec<i64>) -> StartupService {
         StartupService::new(
             crate::SettingsService::new(Arc::new(SettingsRepositoryStub { settings })),
             crate::AppStateService::new(Arc::new(AppStateRepositoryStub {
                 state: Mutex::new(state),
             })),
-            crate::FeedService::new(
-                Arc::new(FeedRepositoryStub {
-                    summaries: feeds
-                        .into_iter()
-                        .map(|id| FeedSummary {
-                            id,
-                            title: format!("Feed {id}"),
-                            url: format!("https://example.com/{id}.xml"),
-                            unread_count: 0,
-                            entry_count: 0,
-                            last_fetched_at: None,
-                            last_success_at: None,
-                            fetch_error: None,
-                        })
-                        .collect(),
-                }),
-                Arc::new(EntryRepositoryStub),
-            ),
+            Arc::new(FeedRepositoryStub {
+                summaries: feeds
+                    .into_iter()
+                    .map(|id| FeedSummary {
+                        id,
+                        title: format!("Feed {id}"),
+                        url: format!("https://example.com/{id}.xml"),
+                        unread_count: 0,
+                        entry_count: 0,
+                        last_fetched_at: None,
+                        last_success_at: None,
+                        fetch_error: None,
+                    })
+                    .collect(),
+            }),
         )
     }
 
