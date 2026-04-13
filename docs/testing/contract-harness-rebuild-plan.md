@@ -243,6 +243,7 @@
 - request 顺序与 fallback 规则，优先继续落在 `feed_request.rs` / `feed_response.rs` 的纯函数测试
 - source outcome 映射，优先围绕 `BrowserFeedRefreshSource` 的 `Failed / NotModified / Updated` 分类做 wasm/browser harness
 - `/feed-proxy` 部署壳是否返回真实 XML，继续由 `run_rssr_web_proxy_feed_smoke.sh` 兜住
+- network / CORS failure 不应强塞进 contract harness；它依赖真实 browser fetch 与部署环境，交给 `rssr-web` smoke 和环境限制索引判断
 
 当前进度：
 
@@ -253,7 +254,7 @@
   - proxy shell / login shell 的 request-level fallback 纯函数覆盖
   - `304 Not Modified` -> `NotModified`
   - non-success status -> `Failed`，message 前缀为 `feed 抓取返回非成功状态:`
-- 待实现：
+- 由 smoke / 环境限制覆盖：
   - network / CORS failure
 
 当前不建议为了覆盖 source-side 去做的事：
@@ -296,6 +297,7 @@
 - 不把 browser fixture 再实现成一套脱离主线的临时模型，除非当前 adapter 无法支持断言
 - 不把 `test_webdav_local_roundtrip` 的环境限制混进 contract harness 本体
 - 不为了 source-side harness 回退当前 `wasm32` 专属 browser adapter 边界
+- 不为了 network / CORS failure 新建脱离真实浏览器网络模型的假 harness
 
 ## 建议验收
 
@@ -357,7 +359,8 @@
 
 - `refresh contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 - `refresh store-side` 的 browser contract 已覆盖 target lookup、successful commit、failed commit 与 localStorage 写回
-- `refresh source-side` 的 failure triage 与契约说明已补齐，第一批 body classification harness 已落地，request-level harness 仍待实现
+- `refresh source-side` 的 failure triage 与契约说明已补齐，body classification / status classification / request fallback 纯函数覆盖已落地
+- `network / CORS failure` 不进入 contract harness 当前范围，由 `rssr-web` smoke 和环境限制索引覆盖
 - `subscription contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 - `config exchange contract harness` 已有 host / sqlite baseline 与 browser / wasm baseline
 

@@ -56,6 +56,18 @@ bash scripts/run_rssr_web_browser_feed_smoke.sh --release
 - 自动进入的订阅文章页中包含：
   - `Codex Smoke Entry`
 
+## 覆盖边界
+
+这条 smoke 使用同源 `__codex/feed-fixture.xml`，主要验证：
+
+- 登录后的 browser UI 自动流程
+- browser refresh source -> store -> UI 的成功路径
+- feed card 诊断属性与 entries page 跳转
+
+它不验证真实外部站点的 network / CORS failure。
+
+真实外部 feed 与 `/feed-proxy` 部署壳链路由 [`rssr-web` 代理 Feed Smoke](./rssr-web-proxy-feed-smoke.md) 覆盖。纯静态 Web 的 CORS 限制归入 [环境限制索引](./environment-limitations.md)。
+
 ## 结果记录
 
 脚本会生成：
