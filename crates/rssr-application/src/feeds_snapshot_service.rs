@@ -1,7 +1,7 @@
-use anyhow::Context;
-use rssr_domain::FeedSummary;
+use std::sync::Arc;
 
-use crate::FeedService;
+use anyhow::Context;
+use rssr_domain::{FeedRepository, FeedSummary};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FeedsSnapshotOutcome {
@@ -12,16 +12,16 @@ pub struct FeedsSnapshotOutcome {
 
 #[derive(Clone)]
 pub struct FeedsSnapshotService {
-    feed_service: FeedService,
+    feed_repository: Arc<dyn FeedRepository>,
 }
 
 impl FeedsSnapshotService {
-    pub fn new(feed_service: FeedService) -> Self {
-        Self { feed_service }
+    pub fn new(feed_repository: Arc<dyn FeedRepository>) -> Self {
+        Self { feed_repository }
     }
 
     pub async fn load_snapshot(&self) -> anyhow::Result<FeedsSnapshotOutcome> {
-        let feeds = self.feed_service.list_feeds().await.context("读取订阅失败")?;
+        let feeds = self.feed_repository.list_summaries().await.context("读取订阅失败")?;
         let feed_count = feeds.len();
         let entry_count = feeds.iter().map(|feed| feed.entry_count as usize).sum();
         Ok(FeedsSnapshotOutcome { feeds, feed_count, entry_count })
@@ -32,10 +32,7 @@ impl FeedsSnapshotService {
 mod tests {
     use std::sync::Arc;
 
-    use rssr_domain::{
-        Entry, EntryNavigation, EntryQuery, EntryRepository, EntrySummary, Feed, FeedRepository,
-        FeedSummary, NewFeedSubscription,
-    };
+    use rssr_domain::{Feed, FeedRepository, FeedSummary, NewFeedSubscription};
 
     use super::FeedsSnapshotService;
 
@@ -70,49 +67,8 @@ mod tests {
             Ok(self.summaries.clone())
         }
     }
-
-    struct EntryRepositoryStub;
-
-    #[async_trait::async_trait]
-    impl EntryRepository for EntryRepositoryStub {
-        async fn list_entries(
-            &self,
-            _query: &EntryQuery,
-        ) -> rssr_domain::Result<Vec<EntrySummary>> {
-            Err(rssr_domain::DomainError::InvalidInput(
-                "entry list should not be used for feeds snapshot".to_string(),
-            ))
-        }
-
-        async fn get_entry(&self, _entry_id: i64) -> rssr_domain::Result<Option<Entry>> {
-            Ok(None)
-        }
-
-        async fn reader_navigation(
-            &self,
-            _current_entry_id: i64,
-        ) -> rssr_domain::Result<EntryNavigation> {
-            Ok(EntryNavigation::default())
-        }
-
-        async fn set_read(&self, _entry_id: i64, _is_read: bool) -> rssr_domain::Result<()> {
-            Ok(())
-        }
-
-        async fn set_starred(&self, _entry_id: i64, _is_starred: bool) -> rssr_domain::Result<()> {
-            Ok(())
-        }
-
-        async fn delete_for_feed(&self, _feed_id: i64) -> rssr_domain::Result<()> {
-            Ok(())
-        }
-    }
-
     fn service(feeds: Vec<FeedSummary>) -> FeedsSnapshotService {
-        FeedsSnapshotService::new(crate::FeedService::new(
-            Arc::new(FeedRepositoryStub { summaries: feeds }),
-            Arc::new(EntryRepositoryStub),
-        ))
+        FeedsSnapshotService::new(Arc::new(FeedRepositoryStub { summaries: feeds }))
     }
 
     fn feed(id: i64, entry_count: u32) -> FeedSummary {

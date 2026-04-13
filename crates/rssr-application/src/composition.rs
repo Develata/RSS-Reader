@@ -79,7 +79,7 @@ impl AppUseCases {
                 input.app_state.clone(),
             ),
             import_export_service: ImportExportService::new_with_feed_removal_cleanup_and_clock(
-                input.feed_repository,
+                input.feed_repository.clone(),
                 input.entry_repository,
                 input.settings_repository,
                 input.opml_codec,
@@ -97,7 +97,7 @@ impl AppUseCases {
                 app_state_service,
                 feed_service.clone(),
             ),
-            feeds_snapshot_service: FeedsSnapshotService::new(feed_service),
+            feeds_snapshot_service: FeedsSnapshotService::new(input.feed_repository),
             reader_service: ReaderService::new(entry_service),
         }
     }
