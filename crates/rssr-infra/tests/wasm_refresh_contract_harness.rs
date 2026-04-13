@@ -2,12 +2,15 @@
 
 use std::sync::{Arc, Mutex};
 
+use reqwest::StatusCode;
 use rssr_application::{
     FeedRefreshSourceOutput, FeedRefreshUpdate, ParsedEntryData, ParsedFeedUpdate, RefreshCommit,
     RefreshFailure, RefreshHttpMetadata, RefreshStorePort,
 };
 use rssr_infra::application_adapters::browser::{
-    adapters::{BrowserRefreshStore, classify_browser_refresh_body},
+    adapters::{
+        BrowserRefreshStore, classify_browser_refresh_body, classify_browser_refresh_status,
+    },
     state::{
         APP_STATE_STORAGE_KEY, BrowserState, ENTRY_FLAGS_STORAGE_KEY, LoadedState, PersistedFeed,
         PersistedState, STORAGE_KEY, load_state,
@@ -79,6 +82,50 @@ const SAMPLE_FEED_XML: &str = r#"
   </channel>
 </rss>
 "#;
+
+#[wasm_bindgen_test]
+fn browser_refresh_source_classifies_not_modified_status() {
+    let output = classify_browser_refresh_status(
+        StatusCode::NOT_MODIFIED,
+        RefreshHttpMetadata {
+            etag: Some("etag-not-modified".to_string()),
+            last_modified: Some("Mon, 13 Apr 2026 09:00:00 GMT".to_string()),
+        },
+    );
+
+    match output {
+        Some(FeedRefreshSourceOutput::NotModified(metadata)) => {
+            assert_eq!(metadata.etag.as_deref(), Some("etag-not-modified"));
+        }
+        other => panic!("unexpected source output: {other:?}"),
+    }
+}
+
+#[wasm_bindgen_test]
+fn browser_refresh_source_classifies_non_success_status_as_failure() {
+    let output = classify_browser_refresh_status(
+        StatusCode::FORBIDDEN,
+        RefreshHttpMetadata {
+            etag: Some("etag-forbidden".to_string()),
+            last_modified: Some("Mon, 13 Apr 2026 09:30:00 GMT".to_string()),
+        },
+    );
+
+    match output {
+        Some(FeedRefreshSourceOutput::Failed(failure)) => {
+            assert_eq!(failure.metadata.expect("metadata").etag.as_deref(), Some("etag-forbidden"));
+            assert_eq!(failure.message, "feed 抓取返回非成功状态: HTTP status 403 Forbidden");
+        }
+        other => panic!("unexpected source output: {other:?}"),
+    }
+}
+
+#[wasm_bindgen_test]
+fn browser_refresh_source_allows_success_status_to_continue_to_body_classification() {
+    let output = classify_browser_refresh_status(StatusCode::OK, RefreshHttpMetadata::default());
+
+    assert!(output.is_none());
+}
 
 #[wasm_bindgen_test]
 fn browser_refresh_source_classifies_valid_xml_body_as_updated() {

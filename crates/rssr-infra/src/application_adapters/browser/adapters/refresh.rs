@@ -54,21 +54,29 @@ impl FeedRefreshSourcePort for BrowserFeedRefreshSource {
                 .map(ToOwned::to_owned),
         };
 
-        if response.status() == StatusCode::NOT_MODIFIED {
-            return Ok(FeedRefreshSourceOutput::NotModified(metadata));
+        if let Some(output) = classify_browser_refresh_status(response.status(), metadata.clone()) {
+            return Ok(output);
         }
 
-        let body = match response.error_for_status() {
-            Ok(response) => response.text().await.context("读取 feed 响应正文失败")?,
-            Err(error) => {
-                return Ok(FeedRefreshSourceOutput::Failed(RefreshFailure {
-                    message: format!("feed 抓取返回非成功状态: {error}"),
-                    metadata: Some(metadata),
-                }));
-            }
-        };
+        let body = response.text().await.context("读取 feed 响应正文失败")?;
 
         Ok(classify_browser_refresh_body(metadata, &body))
+    }
+}
+
+pub fn classify_browser_refresh_status(
+    status: StatusCode,
+    metadata: RefreshHttpMetadata,
+) -> Option<FeedRefreshSourceOutput> {
+    if status == StatusCode::NOT_MODIFIED {
+        Some(FeedRefreshSourceOutput::NotModified(metadata))
+    } else if !status.is_success() {
+        Some(FeedRefreshSourceOutput::Failed(RefreshFailure {
+            message: format!("feed 抓取返回非成功状态: HTTP status {status}"),
+            metadata: Some(metadata),
+        }))
+    } else {
+        None
     }
 }
 
