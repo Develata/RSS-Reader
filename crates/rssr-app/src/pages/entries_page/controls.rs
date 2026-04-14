@@ -2,9 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::ui::use_reactive_side_effect;
 
-use super::browser_interactions::{
-    refresh_directory_with_entry_scroll_state, scroll_to_entry_group,
-};
+use super::browser_interactions::{scroll_to_entry_group, sync_entry_directory_state_in_place};
 use super::facade::EntriesPageFacade;
 use super::groups::{EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem};
 use super::intent::EntriesPageIntent;
@@ -253,7 +251,7 @@ fn EntryDirectoryRail(
             toggled_directory_sections.clone(),
         ),
         move |_| {
-            refresh_directory_with_entry_scroll_state();
+            sync_entry_directory_state_in_place();
         },
     );
 

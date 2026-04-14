@@ -13,7 +13,8 @@ mod state;
 use dioxus::prelude::*;
 
 use self::browser_interactions::{
-    initial_entry_controls_hidden, scroll_directory_item, sync_directory_with_entry_scroll,
+    initial_entry_controls_hidden, scroll_directory_item,
+    sync_entry_directory_with_viewport_alignment,
 };
 use self::cards::render_entry_card;
 use self::clock::current_time_utc;
@@ -258,7 +259,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
             active_directory_anchor.clone(),
         ),
         move |_| {
-            sync_directory_with_entry_scroll();
+            sync_entry_directory_with_viewport_alignment();
         },
     );
 

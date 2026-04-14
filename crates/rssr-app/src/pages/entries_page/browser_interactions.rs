@@ -101,13 +101,15 @@ pub(super) fn scroll_directory_item(anchor_id: &str) {
     ));
 }
 
-fn sync_directory_with_entry_scroll_impl(scroll_target: bool) {
-    let scroll_target = if scroll_target { "true" } else { "false" };
+// Keep the tracker singleton alive across re-renders. Callers must choose whether this refresh
+// should also align the directory viewport, or only reconcile active/open state in place.
+fn refresh_entry_directory_tracker(align_directory_viewport: bool) {
+    let align_directory_viewport = if align_directory_viewport { "true" } else { "false" };
     let script = r#"
         const trackerKey = "__rssrEntryDirectoryTracker";
         const existingTracker = window[trackerKey];
         if (existingTracker?.scheduleUpdate) {
-            existingTracker.scheduleUpdate(true, __SCROLL_TARGET__);
+            existingTracker.scheduleUpdate(true, __ALIGN_DIRECTORY_VIEWPORT__);
             return;
         }
 
@@ -158,7 +160,7 @@ fn sync_directory_with_entry_scroll_impl(scroll_target: bool) {
             });
         };
 
-        const findScrollTarget = (groupAnchor, itemAnchor) => {
+        const findDirectoryViewportTarget = (groupAnchor, itemAnchor) => {
             const items = Array.from(document.querySelectorAll('[data-directory-kind="item"]'));
             const groups = Array.from(document.querySelectorAll('[data-directory-kind="group"]'));
             return (
@@ -207,7 +209,9 @@ fn sync_directory_with_entry_scroll_impl(scroll_target: bool) {
 
         let rafId = 0;
         let forceSync = false;
-        let shouldScrollTarget = true;
+        // This flag only controls whether the directory rail should be scrolled into view.
+        // Active/open state should still be refreshed even when viewport alignment is disabled.
+        let shouldAlignDirectoryViewport = true;
         let lastGroupAnchor = null;
         let lastItemAnchor = null;
 
@@ -224,9 +228,9 @@ fn sync_directory_with_entry_scroll_impl(scroll_target: bool) {
         const update = () => {
             rafId = 0;
             const shouldForceSync = forceSync;
-            const shouldScroll = shouldScrollTarget;
+            const shouldAlignViewport = shouldAlignDirectoryViewport;
             forceSync = false;
-            shouldScrollTarget = false;
+            shouldAlignDirectoryViewport = false;
 
             if (!document.querySelector('[data-page="entries"]')) {
                 cleanup();
@@ -251,8 +255,8 @@ fn sync_directory_with_entry_scroll_impl(scroll_target: bool) {
             lastGroupAnchor = groupAnchor;
             lastItemAnchor = itemAnchor;
 
-            if (shouldScroll) {
-                const target = findScrollTarget(groupAnchor, itemAnchor);
+            if (shouldAlignViewport) {
+                const target = findDirectoryViewportTarget(groupAnchor, itemAnchor);
                 if (target) {
                     target.scrollIntoView({
                         block: "nearest",
@@ -262,9 +266,12 @@ fn sync_directory_with_entry_scroll_impl(scroll_target: bool) {
             }
         };
 
-        const scheduleUpdate = (shouldForce = false, shouldScroll = false) => {
+        // `shouldAlignViewport` must only be true for entry-pane driven navigation/scrolling.
+        // Directory-local toggles should call into the state-only path and leave the current
+        // directory scroll position untouched.
+        const scheduleUpdate = (shouldForce = false, shouldAlignViewport = false) => {
             forceSync = forceSync || shouldForce;
-            shouldScrollTarget = shouldScrollTarget || shouldScroll;
+            shouldAlignDirectoryViewport = shouldAlignDirectoryViewport || shouldAlignViewport;
             if (rafId) {
                 return;
             }
@@ -287,15 +294,20 @@ fn sync_directory_with_entry_scroll_impl(scroll_target: bool) {
             scheduleUpdate,
         };
 
-        scheduleUpdate(true, __SCROLL_TARGET__);
+        scheduleUpdate(true, __ALIGN_DIRECTORY_VIEWPORT__);
         "#;
-    document::eval(&script.replace("__SCROLL_TARGET__", scroll_target));
+    document::eval(&script.replace("__ALIGN_DIRECTORY_VIEWPORT__", align_directory_viewport));
 }
 
-pub(super) fn sync_directory_with_entry_scroll() {
-    sync_directory_with_entry_scroll_impl(true);
+// Use this when the left article pane drove the change: initial render, page jump, page change,
+// or article scrolling. Besides refreshing active/open state, it keeps the active directory item
+// visible inside the directory rail.
+pub(super) fn sync_entry_directory_with_viewport_alignment() {
+    refresh_entry_directory_tracker(true);
 }
 
-pub(super) fn refresh_directory_with_entry_scroll_state() {
-    sync_directory_with_entry_scroll_impl(false);
+// Use this for directory-local interactions such as expand/collapse. It must not move the
+// directory viewport; otherwise a simple toggle would snap the rail back to the current article.
+pub(super) fn sync_entry_directory_state_in_place() {
+    refresh_entry_directory_tracker(false);
 }
