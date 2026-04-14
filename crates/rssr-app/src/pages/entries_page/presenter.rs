@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use time::OffsetDateTime;
 
@@ -26,6 +26,7 @@ pub(crate) struct EntriesPagePresenter {
     pub(crate) time_grouped_entries: Vec<EntryMonthGroup>,
     pub(crate) directory_months: Vec<EntryDirectoryMonth>,
     pub(crate) directory_sources: Vec<EntryDirectorySource>,
+    pub(crate) default_expanded_directory_sections: BTreeSet<String>,
     pub(crate) group_nav_items: Vec<EntryGroupNavItem>,
     pub(crate) active_group_anchor: Option<String>,
     pub(crate) active_directory_anchor: Option<String>,
@@ -41,11 +42,8 @@ impl EntriesPagePresenter {
         let mut visible_entries = Vec::with_capacity(state.entries.len());
 
         for entry in &state.entries {
-            let is_archived = rssr_domain::is_entry_archived(
-                entry.published_at,
-                state.archive_after_months,
-                now,
-            );
+            let is_archived =
+                rssr_domain::is_entry_archived(entry.published_at, state.archive_after_months, now);
             if is_archived {
                 archived_count += 1;
             }
@@ -61,16 +59,10 @@ impl EntriesPagePresenter {
         } else {
             ((visible_entries_len - 1) / page_size) as u32 + 1
         };
-        let current_page = if total_pages == 0 {
-            1
-        } else {
-            state.current_page.min(total_pages).max(1)
-        };
-        let page_start_index = if total_pages == 0 {
-            0
-        } else {
-            ((current_page - 1) as usize) * page_size
-        };
+        let current_page =
+            if total_pages == 0 { 1 } else { state.current_page.min(total_pages).max(1) };
+        let page_start_index =
+            if total_pages == 0 { 0 } else { ((current_page - 1) as usize) * page_size };
         let page_end_index = visible_entries_len.min(page_start_index.saturating_add(page_size));
         let paged_entries = visible_entries[page_start_index..page_end_index].to_vec();
         let page_start = if visible_entries_len == 0 { 0 } else { page_start_index + 1 };
@@ -87,53 +79,67 @@ impl EntriesPagePresenter {
 
         let current_entry_id = paged_entries.first().map(|entry| entry.id);
 
-        let (time_grouped_entries, source_grouped_entries, directory_months, directory_sources, group_nav_items, active_group_anchor, active_directory_anchor) =
-            match state.grouping_mode {
-                EntryGroupingMode::Time => {
-                    let all_groups = group_entries_by_time_tree(&visible_entries, page_size);
-                    let paged_groups = group_entries_by_time_tree(&paged_entries, page_size);
-                    let (active_group_anchor, active_directory_anchor) =
-                        find_active_time_anchors(&all_groups, current_entry_id);
-                    let directory_months = build_directory_months(
-                        &all_groups,
-                        active_group_anchor.as_deref(),
-                        active_directory_anchor.as_deref(),
-                    );
-                    let group_nav_items =
-                        build_month_nav_items(&all_groups, active_group_anchor.as_deref());
-                    (
-                        paged_groups,
-                        Vec::new(),
-                        directory_months,
-                        Vec::new(),
-                        group_nav_items,
-                        active_group_anchor,
-                        active_directory_anchor,
-                    )
-                }
-                EntryGroupingMode::Source => {
-                    let all_groups = group_entries_by_source_tree(&visible_entries, page_size);
-                    let paged_groups = group_entries_by_source_tree(&paged_entries, page_size);
-                    let (active_group_anchor, active_directory_anchor) =
-                        find_active_source_anchors(&all_groups, current_entry_id);
-                    let directory_sources = build_directory_sources(
-                        &all_groups,
-                        active_group_anchor.as_deref(),
-                        active_directory_anchor.as_deref(),
-                    );
-                    let group_nav_items =
-                        build_group_nav_items(&all_groups, active_group_anchor.as_deref());
-                    (
-                        Vec::new(),
-                        paged_groups,
-                        Vec::new(),
-                        directory_sources,
-                        group_nav_items,
-                        active_group_anchor,
-                        active_directory_anchor,
-                    )
-                }
-            };
+        let (
+            time_grouped_entries,
+            source_grouped_entries,
+            directory_months,
+            directory_sources,
+            default_expanded_directory_sections,
+            group_nav_items,
+            active_group_anchor,
+            active_directory_anchor,
+        ) = match state.grouping_mode {
+            EntryGroupingMode::Time => {
+                let all_groups = group_entries_by_time_tree(&visible_entries, page_size);
+                let paged_groups = group_entries_by_time_tree(&paged_entries, page_size);
+                let default_expanded_directory_sections =
+                    paged_groups.iter().map(|group| group.anchor_id.clone()).collect();
+                let (active_group_anchor, active_directory_anchor) =
+                    find_active_time_anchors(&all_groups, current_entry_id);
+                let directory_months = build_directory_months(
+                    &all_groups,
+                    active_group_anchor.as_deref(),
+                    active_directory_anchor.as_deref(),
+                );
+                let group_nav_items =
+                    build_month_nav_items(&all_groups, active_group_anchor.as_deref());
+                (
+                    paged_groups,
+                    Vec::new(),
+                    directory_months,
+                    Vec::new(),
+                    default_expanded_directory_sections,
+                    group_nav_items,
+                    active_group_anchor,
+                    active_directory_anchor,
+                )
+            }
+            EntryGroupingMode::Source => {
+                let all_groups = group_entries_by_source_tree(&visible_entries, page_size);
+                let paged_groups = group_entries_by_source_tree(&paged_entries, page_size);
+                let default_expanded_directory_sections =
+                    paged_groups.iter().map(|group| group.anchor_id.clone()).collect();
+                let (active_group_anchor, active_directory_anchor) =
+                    find_active_source_anchors(&all_groups, current_entry_id);
+                let directory_sources = build_directory_sources(
+                    &all_groups,
+                    active_group_anchor.as_deref(),
+                    active_directory_anchor.as_deref(),
+                );
+                let group_nav_items =
+                    build_group_nav_items(&all_groups, active_group_anchor.as_deref());
+                (
+                    Vec::new(),
+                    paged_groups,
+                    Vec::new(),
+                    directory_sources,
+                    default_expanded_directory_sections,
+                    group_nav_items,
+                    active_group_anchor,
+                    active_directory_anchor,
+                )
+            }
+        };
 
         Self {
             archived_count,
@@ -148,6 +154,7 @@ impl EntriesPagePresenter {
             time_grouped_entries,
             directory_months,
             directory_sources,
+            default_expanded_directory_sections,
             group_nav_items,
             active_group_anchor,
             active_directory_anchor,
@@ -209,17 +216,19 @@ mod tests {
             feed(2, "Beta", "https://example.com/beta.xml"),
         ];
 
-        let presenter = EntriesPagePresenter::from_state(
-            &state,
-            None,
-            parse_datetime("2026-04-13T08:00:00Z"),
-        );
+        let presenter =
+            EntriesPagePresenter::from_state(&state, None, parse_datetime("2026-04-13T08:00:00Z"));
 
         assert_eq!(presenter.visible_entries_len, 4);
         assert_eq!(presenter.current_page, 2);
         assert_eq!(presenter.total_pages, 2);
         assert_eq!(presenter.page_start, 3);
         assert_eq!(presenter.page_end, 4);
+        assert!(
+            presenter
+                .default_expanded_directory_sections
+                .contains(&presenter.time_grouped_entries[0].anchor_id)
+        );
         let rendered_total = presenter
             .time_grouped_entries
             .iter()
@@ -242,14 +251,12 @@ mod tests {
             entry(2, 2, "Beta", "2026-04-03T08:00:00Z"),
         ];
 
-        let presenter = EntriesPagePresenter::from_state(
-            &state,
-            None,
-            parse_datetime("2026-04-13T08:00:00Z"),
-        );
+        let presenter =
+            EntriesPagePresenter::from_state(&state, None, parse_datetime("2026-04-13T08:00:00Z"));
 
         assert_eq!(presenter.active_group_anchor.as_deref(), Some("entry-group-beta"));
         assert!(presenter.group_nav_items.iter().any(|item| item.is_active));
         assert!(presenter.directory_sources.iter().any(|item| item.is_active));
+        assert!(presenter.default_expanded_directory_sections.contains("entry-group-beta"));
     }
 }

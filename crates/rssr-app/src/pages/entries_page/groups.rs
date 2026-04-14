@@ -142,10 +142,7 @@ pub(crate) fn group_entries_by_source_tree(
     let mut latest_seen: BTreeMap<String, Option<OffsetDateTime>> = BTreeMap::new();
 
     for (index, entry) in entries.iter().enumerate() {
-        groups
-            .entry(entry.feed_title.clone())
-            .or_default()
-            .push((index, Arc::clone(entry)));
+        groups.entry(entry.feed_title.clone()).or_default().push((index, Arc::clone(entry)));
         let latest = latest_seen.entry(entry.feed_title.clone()).or_insert(None);
         if latest.is_none() || entry.published_at > *latest {
             *latest = entry.published_at;
@@ -356,10 +353,7 @@ fn group_date_sources(
     let mut groups: BTreeMap<String, Vec<(usize, Arc<EntrySummary>)>> = BTreeMap::new();
 
     for (index, entry) in entries {
-        groups
-            .entry(entry.feed_title.clone())
-            .or_default()
-            .push((*index, Arc::clone(entry)));
+        groups.entry(entry.feed_title.clone()).or_default().push((*index, Arc::clone(entry)));
     }
 
     groups
@@ -450,7 +444,12 @@ mod tests {
     use rssr_domain::EntrySummary;
     use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-    fn entry(id: i64, feed_title: &str, title: &str, published_at: Option<&str>) -> Arc<EntrySummary> {
+    fn entry(
+        id: i64,
+        feed_title: &str,
+        title: &str,
+        published_at: Option<&str>,
+    ) -> Arc<EntrySummary> {
         Arc::new(EntrySummary {
             id,
             feed_id: id,

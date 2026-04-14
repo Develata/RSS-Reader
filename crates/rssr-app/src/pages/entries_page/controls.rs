@@ -4,6 +4,26 @@ use super::state::EntryGroupingMode;
 use crate::components::{entry_filters::EntryFilters, status_banner::StatusBanner};
 use dioxus::prelude::*;
 
+#[derive(Clone, Copy)]
+struct DirectorySectionViewState {
+    is_open_base: bool,
+    is_open: bool,
+    can_toggle: bool,
+}
+
+fn directory_section_view_state(
+    default_open: bool,
+    toggled: bool,
+    is_active: bool,
+) -> DirectorySectionViewState {
+    let is_open_base = if default_open { !toggled } else { toggled };
+    DirectorySectionViewState {
+        is_open_base,
+        is_open: is_active || is_open_base,
+        can_toggle: !is_active,
+    }
+}
+
 pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
     let show_controls_facade = facade.clone();
     let grouping_facade = facade.clone();
@@ -99,7 +119,8 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                             button {
                                 "data-layout": "entry-top-directory-chip",
                                 r#type: "button",
-                                "data-state": if item.is_active { "active" } else { "idle" },
+                                "data-directory-kind": "group",
+                                "data-active": if item.is_active { "true" } else { "false" },
                                 "data-directory-anchor": "{item.anchor_id}",
                                 onclick: {
                                     let anchor_id = item.anchor_id.clone();
@@ -163,7 +184,8 @@ pub(super) fn render_entry_directory(
     directory_months: &[EntryDirectoryMonth],
     directory_sources: &[EntryDirectorySource],
 ) -> Element {
-    let expanded_directory_sources = facade.expanded_directory_sources();
+    let toggled_directory_sections = facade.expanded_directory_sections();
+    let default_expanded_directory_sections = facade.default_expanded_directory_sections();
 
     rsx! {
         aside { "data-layout": "entry-directory-rail",
@@ -171,44 +193,63 @@ pub(super) fn render_entry_directory(
             if grouping_mode == EntryGroupingMode::Time {
                 nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
                     for month in directory_months {
-                        div { "data-layout": "entry-directory-section", key: "{month.anchor_id}",
-                            button {
-                                "data-layout": "entry-directory-link",
-                                "data-directory-level": "month",
-                                "data-nav": "entry-directory-month",
-                                "data-state": if month.is_active { "active" } else { "idle" },
-                                "data-directory-anchor": "{month.anchor_id}",
-                                r#type: "button",
-                                onclick: {
-                                    let anchor_id = month.anchor_id.clone();
-                                    let target_page = month.target_page;
-                                    let facade = facade.clone();
-                                    move |_| {
-                                        facade.navigate_to_directory_target(target_page, anchor_id.clone())
-                                    }
-                                },
-                                span { "data-slot": "entry-directory-title", "{month.title}" }
-                                span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
-                            }
-                            div { "data-layout": "entry-directory-children",
-                                for date in &month.dates {
+                        {
+                            let anchor_id = month.anchor_id.clone();
+                            let view_state = directory_section_view_state(
+                                default_expanded_directory_sections.contains(&anchor_id),
+                                toggled_directory_sections.contains(&anchor_id),
+                                month.is_active,
+                            );
+                            let toggle_anchor = anchor_id.clone();
+                            let toggle_facade = facade.clone();
+                            rsx! {
+                                div { "data-layout": "entry-directory-section", key: "{month.anchor_id}",
                                     button {
-                                        "data-layout": "entry-directory-link",
-                                        "data-directory-level": "date",
-                                        "data-nav": "entry-directory-date",
-                                        "data-state": if date.is_active { "active" } else { "idle" },
-                                        "data-directory-anchor": "{date.anchor_id}",
+                                        "data-layout": "entry-directory-toggle",
+                                        "data-directory-kind": "group",
+                                        "data-directory-level": "month",
+                                        "data-nav": "entry-directory-month",
+                                        "data-active": if month.is_active { "true" } else { "false" },
+                                        "data-can-toggle": if view_state.can_toggle { "true" } else { "false" },
+                                        "data-open-base": if view_state.is_open_base { "true" } else { "false" },
+                                        "data-open": if view_state.is_open { "true" } else { "false" },
+                                        "data-directory-anchor": "{month.anchor_id}",
+                                        aria_disabled: if view_state.can_toggle { "false" } else { "true" },
+                                        aria_expanded: if view_state.is_open { "true" } else { "false" },
                                         r#type: "button",
-                                        onclick: {
-                                            let anchor_id = date.anchor_id.clone();
-                                            let target_page = date.target_page;
-                                            let facade = facade.clone();
-                                            move |_| {
-                                                facade.navigate_to_directory_target(target_page, anchor_id.clone())
-                                            }
+                                        onclick: move |_| {
+                                            toggle_facade.toggle_directory_section(toggle_anchor.clone());
                                         },
-                                        span { "data-slot": "entry-directory-title", "{date.title}" }
-                                        span { "data-slot": "entry-directory-meta", "{date.subtitle}" }
+                                        span { "data-slot": "entry-directory-title", "{month.title}" }
+                                        span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
+                                    }
+                                    div {
+                                        "data-layout": "entry-directory-children",
+                                        "data-directory-section-body": "true",
+                                        "data-open-base": if view_state.is_open_base { "true" } else { "false" },
+                                        "data-open": if view_state.is_open { "true" } else { "false" },
+                                        for date in &month.dates {
+                                            button {
+                                                "data-layout": "entry-directory-link",
+                                                "data-directory-kind": "item",
+                                                "data-directory-group-anchor": "{month.anchor_id}",
+                                                "data-directory-level": "date",
+                                                "data-nav": "entry-directory-date",
+                                                "data-active": if date.is_active { "true" } else { "false" },
+                                                "data-directory-anchor": "{date.anchor_id}",
+                                                r#type: "button",
+                                                onclick: {
+                                                    let anchor_id = date.anchor_id.clone();
+                                                    let target_page = date.target_page;
+                                                    let facade = facade.clone();
+                                                    move |_| {
+                                                        facade.navigate_to_directory_target(target_page, anchor_id.clone())
+                                                    }
+                                                },
+                                                span { "data-slot": "entry-directory-title", "{date.title}" }
+                                                span { "data-slot": "entry-directory-meta", "{date.subtitle}" }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -220,45 +261,57 @@ pub(super) fn render_entry_directory(
                     for source in directory_sources {
                         {
                             let anchor_id = source.anchor_id.clone();
-                            let is_open =
-                                source.is_active || expanded_directory_sources.contains(&anchor_id);
+                            let view_state = directory_section_view_state(
+                                default_expanded_directory_sections.contains(&anchor_id),
+                                toggled_directory_sections.contains(&anchor_id),
+                                source.is_active,
+                            );
                             let toggle_anchor = anchor_id.clone();
                             let toggle_facade = facade.clone();
                             rsx! {
                                 div { "data-layout": "entry-directory-section", key: "{anchor_id}",
                                     button {
                                         "data-layout": "entry-directory-toggle",
-                                        "data-state": if source.is_active { "active" } else if is_open { "expanded" } else { "collapsed" },
+                                        "data-directory-kind": "group",
+                                        "data-active": if source.is_active { "true" } else { "false" },
+                                        "data-can-toggle": if view_state.can_toggle { "true" } else { "false" },
+                                        "data-open-base": if view_state.is_open_base { "true" } else { "false" },
+                                        "data-open": if view_state.is_open { "true" } else { "false" },
                                         "data-directory-anchor": "{source.anchor_id}",
-                                        aria_expanded: if is_open { "true" } else { "false" },
-                                        "data-action": if is_open { "collapse-directory-source" } else { "expand-directory-source" },
+                                        aria_disabled: if view_state.can_toggle { "false" } else { "true" },
+                                        aria_expanded: if view_state.is_open { "true" } else { "false" },
+                                        "data-action": if view_state.is_open { "collapse-directory-source" } else { "expand-directory-source" },
                                         onclick: move |_| {
-                                            toggle_facade.toggle_directory_source(toggle_anchor.clone());
+                                            toggle_facade.toggle_directory_section(toggle_anchor.clone());
                                         },
                                         span { "data-slot": "entry-directory-title", "{source.title}" }
                                         span { "data-slot": "entry-directory-meta", "{source.subtitle}" }
                                     }
-                                    if is_open {
-                                        div { "data-layout": "entry-directory-grandchildren",
-                                            for month in &source.months {
-                                                button {
-                                                    "data-layout": "entry-directory-link",
-                                                    "data-directory-level": "month",
-                                                    "data-nav": "entry-directory-month",
-                                                    "data-state": if month.is_active { "active" } else { "idle" },
-                                                    "data-directory-anchor": "{month.anchor_id}",
-                                                    r#type: "button",
-                                                    onclick: {
-                                                        let anchor_id = month.anchor_id.clone();
-                                                        let target_page = month.target_page;
-                                                        let facade = facade.clone();
-                                                        move |_| {
-                                                            facade.navigate_to_directory_target(target_page, anchor_id.clone())
-                                                        }
-                                                    },
-                                                    span { "data-slot": "entry-directory-title", "{month.title}" }
-                                                    span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
-                                                }
+                                    div {
+                                        "data-layout": "entry-directory-grandchildren",
+                                        "data-directory-section-body": "true",
+                                        "data-open-base": if view_state.is_open_base { "true" } else { "false" },
+                                        "data-open": if view_state.is_open { "true" } else { "false" },
+                                        for month in &source.months {
+                                            button {
+                                                "data-layout": "entry-directory-link",
+                                                "data-directory-kind": "item",
+                                                "data-directory-group-anchor": "{source.anchor_id}",
+                                                "data-directory-level": "month",
+                                                "data-nav": "entry-directory-month",
+                                                "data-active": if month.is_active { "true" } else { "false" },
+                                                "data-directory-anchor": "{month.anchor_id}",
+                                                r#type: "button",
+                                                onclick: {
+                                                    let anchor_id = month.anchor_id.clone();
+                                                    let target_page = month.target_page;
+                                                    let facade = facade.clone();
+                                                    move |_| {
+                                                        facade.navigate_to_directory_target(target_page, anchor_id.clone())
+                                                    }
+                                                },
+                                                span { "data-slot": "entry-directory-title", "{month.title}" }
+                                                span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
                                             }
                                         }
                                     }
@@ -269,6 +322,35 @@ pub(super) fn render_entry_directory(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::directory_section_view_state;
+
+    #[test]
+    fn active_directory_section_stays_open_and_cannot_toggle() {
+        let state = directory_section_view_state(true, true, true);
+        assert!(!state.is_open_base);
+        assert!(state.is_open);
+        assert!(!state.can_toggle);
+    }
+
+    #[test]
+    fn inactive_current_page_section_can_be_collapsed() {
+        let state = directory_section_view_state(true, true, false);
+        assert!(!state.is_open_base);
+        assert!(!state.is_open);
+        assert!(state.can_toggle);
+    }
+
+    #[test]
+    fn off_page_section_can_be_manually_opened() {
+        let state = directory_section_view_state(false, true, false);
+        assert!(state.is_open_base);
+        assert!(state.is_open);
+        assert!(state.can_toggle);
     }
 }
 

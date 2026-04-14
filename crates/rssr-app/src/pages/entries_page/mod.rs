@@ -12,7 +12,9 @@ mod state;
 
 use dioxus::prelude::*;
 
-use self::browser_interactions::{initial_entry_controls_hidden, scroll_directory_item};
+use self::browser_interactions::{
+    initial_entry_controls_hidden, scroll_directory_item, sync_directory_with_entry_scroll,
+};
 use self::cards::render_entry_card;
 use self::clock::current_time_utc;
 use self::controls::{
@@ -116,6 +118,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                         }
                                         for date_group in &month.dates {
                                             section { key: "{date_group.anchor_id}", id: "{date_group.anchor_id}", "data-layout": "entry-date-group", "data-grouping-mode": "time",
+                                                "data-entry-scroll-anchor": "{date_group.anchor_id}",
+                                                "data-entry-scroll-group-anchor": "{month.anchor_id}",
                                                 div { "data-layout": "entry-group-header", "data-group-level": "date",
                                                     h4 { "data-slot": "entry-group-title", "{date_group.title}" }
                                                     p { "data-slot": "entry-group-meta", "{date_group.subtitle}" }
@@ -146,6 +150,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                         }
                                         for month in &group.months {
                                             section { key: "{month.anchor_id}", id: "{month.anchor_id}", "data-layout": "entry-date-group", "data-grouping-mode": "source",
+                                                "data-entry-scroll-anchor": "{month.anchor_id}",
+                                                "data-entry-scroll-group-anchor": "{group.anchor_id}",
                                                 div { "data-layout": "entry-group-header", "data-group-level": "date",
                                                     h4 { "data-slot": "entry-group-title", "{month.title}" }
                                                     p { "data-slot": "entry-group-meta", "{month.subtitle}" }
@@ -191,6 +197,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let read_filter = state_snapshot.read_filter;
     let starred_filter = state_snapshot.starred_filter;
     let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
+    let expanded_directory_sections = state_snapshot.expanded_directory_sections.clone();
     let current_page = state_snapshot.current_page;
     let active_directory_anchor = facade.active_directory_anchor().map(ToString::to_string);
 
@@ -198,19 +205,13 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         session.dispatch(intent::EntriesPageIntent::SetCurrentPage(state::FIRST_PAGE_NUMBER));
     });
 
-    use_reactive_task(
-        (feed_id, preferences_loaded),
-        move |(_, preferences_loaded)| {
-            session.bootstrap(!preferences_loaded, true);
-        },
-    );
+    use_reactive_task((feed_id, preferences_loaded), move |(_, preferences_loaded)| {
+        session.bootstrap(!preferences_loaded, true);
+    });
 
-    use_reactive_task(
-        (feed_id, entry_query.clone()),
-        move |(_, entry_query)| {
-            session.load_entries_query(entry_query);
-        },
-    );
+    use_reactive_task((feed_id, entry_query.clone()), move |(_, entry_query)| {
+        session.load_entries_query(entry_query);
+    });
 
     use_reactive_side_effect(
         (
@@ -240,11 +241,28 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         },
     );
 
-    use_reactive_side_effect((current_page, active_directory_anchor.clone()), move |(_, active_anchor)| {
-        if let Some(active_anchor) = active_anchor {
-            scroll_directory_item(&active_anchor);
-        }
-    });
+    use_reactive_side_effect(
+        (current_page, active_directory_anchor.clone()),
+        move |(_, active_anchor)| {
+            if let Some(active_anchor) = active_anchor {
+                scroll_directory_item(&active_anchor);
+            }
+        },
+    );
+
+    use_reactive_side_effect(
+        (
+            current_page,
+            grouping_mode,
+            facade.page_start(),
+            facade.page_end(),
+            active_directory_anchor.clone(),
+            expanded_directory_sections,
+        ),
+        move |_| {
+            sync_directory_with_entry_scroll();
+        },
+    );
 
     facade
 }

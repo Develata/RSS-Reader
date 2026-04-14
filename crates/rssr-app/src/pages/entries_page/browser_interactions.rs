@@ -100,3 +100,188 @@ pub(super) fn scroll_directory_item(anchor_id: &str) {
         "#
     ));
 }
+
+pub(super) fn sync_directory_with_entry_scroll() {
+    document::eval(
+        r#"
+        const trackerKey = "__rssrEntryDirectoryTracker";
+        const existingTracker = window[trackerKey];
+        if (existingTracker?.scheduleUpdate) {
+            existingTracker.scheduleUpdate(true);
+            return;
+        }
+
+        const isVisible = (element) =>
+            !!element && !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
+
+        const setDataState = (element, key, value) => {
+            if (element.dataset[key] !== value) {
+                element.dataset[key] = value;
+            }
+        };
+
+        const setAttributeState = (element, key, value) => {
+            if (element.getAttribute(key) !== value) {
+                element.setAttribute(key, value);
+            }
+        };
+
+        const syncGroupState = (groupAnchor) => {
+            document.querySelectorAll('[data-directory-kind="group"]').forEach((element) => {
+                const isActive = !!groupAnchor && element.dataset.directoryAnchor === groupAnchor;
+                setDataState(element, "active", isActive ? "true" : "false");
+            });
+
+            document.querySelectorAll('[data-layout="entry-directory-toggle"]').forEach((element) => {
+                const isActive = !!groupAnchor && element.dataset.directoryAnchor === groupAnchor;
+                const baseOpen = element.dataset.openBase === "true";
+                const nextOpen = isActive || baseOpen;
+                const canToggle = isActive ? "false" : "true";
+                const open = nextOpen ? "true" : "false";
+                setDataState(element, "canToggle", canToggle);
+                setDataState(element, "open", open);
+                setAttributeState(element, "aria-disabled", isActive ? "true" : "false");
+                setAttributeState(element, "aria-expanded", open);
+
+                const section = element.parentElement?.querySelector('[data-directory-section-body="true"]');
+                if (section) {
+                    setDataState(section, "open", open);
+                }
+            });
+        };
+
+        const setActiveState = (selector, anchorId) => {
+            document.querySelectorAll(selector).forEach((element) => {
+                const isActive =
+                    !!anchorId && element.dataset.directoryAnchor === anchorId ? "true" : "false";
+                setDataState(element, "active", isActive);
+            });
+        };
+
+        const findScrollTarget = (groupAnchor, itemAnchor) => {
+            const items = Array.from(document.querySelectorAll('[data-directory-kind="item"]'));
+            const groups = Array.from(document.querySelectorAll('[data-directory-kind="group"]'));
+            return (
+                items.find(
+                    (element) =>
+                        isVisible(element) && itemAnchor && element.dataset.directoryAnchor === itemAnchor
+                ) ||
+                groups.find(
+                    (element) =>
+                        isVisible(element) && groupAnchor && element.dataset.directoryAnchor === groupAnchor
+                ) ||
+                null
+            );
+        };
+
+        const selectActiveAnchor = () => {
+            const anchors = Array.from(document.querySelectorAll("[data-entry-scroll-anchor]")).filter(
+                isVisible
+            );
+            if (!anchors.length) {
+                return { groupAnchor: null, itemAnchor: null };
+            }
+
+            const threshold = 96;
+            let candidate = null;
+
+            for (const anchor of anchors) {
+                const rect = anchor.getBoundingClientRect();
+                if (rect.top <= threshold) {
+                    candidate = anchor;
+                    continue;
+                }
+
+                if (!candidate && rect.bottom >= 0) {
+                    candidate = anchor;
+                }
+                break;
+            }
+
+            candidate ||= anchors[anchors.length - 1];
+            return {
+                groupAnchor: candidate?.dataset.entryScrollGroupAnchor || null,
+                itemAnchor: candidate?.dataset.entryScrollAnchor || null,
+            };
+        };
+
+        let rafId = 0;
+        let forceSync = false;
+        let lastGroupAnchor = null;
+        let lastItemAnchor = null;
+
+        const cleanup = () => {
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = 0;
+            }
+            window.removeEventListener("scroll", onScroll);
+            window.removeEventListener("resize", onResize);
+            delete window[trackerKey];
+        };
+
+        const update = () => {
+            rafId = 0;
+            const shouldForceSync = forceSync;
+            forceSync = false;
+
+            if (!document.querySelector('[data-page="entries"]')) {
+                cleanup();
+                return;
+            }
+
+            const { groupAnchor, itemAnchor } = selectActiveAnchor();
+            const groupChanged = shouldForceSync || groupAnchor !== lastGroupAnchor;
+            const itemChanged = shouldForceSync || itemAnchor !== lastItemAnchor;
+
+            if (groupChanged) {
+                syncGroupState(groupAnchor);
+            }
+            if (itemChanged) {
+                setActiveState('[data-directory-kind="item"]', itemAnchor);
+            }
+
+            if (!groupChanged && !itemChanged) {
+                return;
+            }
+
+            lastGroupAnchor = groupAnchor;
+            lastItemAnchor = itemAnchor;
+
+            const target = findScrollTarget(groupAnchor, itemAnchor);
+            if (target) {
+                target.scrollIntoView({
+                    block: "nearest",
+                    inline: "nearest",
+                });
+            }
+        };
+
+        const scheduleUpdate = (shouldForce = false) => {
+            forceSync = forceSync || shouldForce;
+            if (rafId) {
+                return;
+            }
+            rafId = requestAnimationFrame(update);
+        };
+
+        const onScroll = () => {
+            scheduleUpdate(false);
+        };
+
+        const onResize = () => {
+            scheduleUpdate(true);
+        };
+
+        window.addEventListener("scroll", onScroll, { passive: true });
+        window.addEventListener("resize", onResize, { passive: true });
+
+        window[trackerKey] = {
+            cleanup,
+            scheduleUpdate,
+        };
+
+        scheduleUpdate(true);
+        "#,
+    );
+}

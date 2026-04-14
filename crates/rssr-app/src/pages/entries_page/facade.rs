@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::ui::AppShellState;
 use rssr_domain::{ReadFilter, StarredFilter};
 use time::OffsetDateTime;
@@ -163,8 +165,12 @@ impl EntriesPageFacade {
         &self.presenter.directory_sources
     }
 
-    pub(crate) fn expanded_directory_sources(&self) -> &std::collections::BTreeSet<String> {
-        &self.snapshot.expanded_directory_sources
+    pub(crate) fn default_expanded_directory_sections(&self) -> &BTreeSet<String> {
+        &self.presenter.default_expanded_directory_sections
+    }
+
+    pub(crate) fn expanded_directory_sections(&self) -> &BTreeSet<String> {
+        &self.snapshot.expanded_directory_sections
     }
 
     pub(crate) fn empty_entries_message(&self) -> String {
@@ -203,8 +209,8 @@ impl EntriesPageFacade {
         self.session.dispatch(EntriesPageIntent::SetSelectedFeedUrls(value));
     }
 
-    pub(crate) fn toggle_directory_source(&self, anchor_id: String) {
-        self.session.dispatch(EntriesPageIntent::ToggleDirectorySource(anchor_id));
+    pub(crate) fn toggle_directory_section(&self, anchor_id: String) {
+        self.session.dispatch(EntriesPageIntent::ToggleDirectorySection(anchor_id));
     }
 
     pub(crate) fn go_to_previous_page(&self) {

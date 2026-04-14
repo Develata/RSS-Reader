@@ -1,5 +1,7 @@
 use dioxus::prelude::*;
-use rssr_domain::{DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ENTRIES_PAGE_SIZE, StartupView, ThemeMode};
+use rssr_domain::{
+    DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ENTRIES_PAGE_SIZE, StartupView, ThemeMode,
+};
 
 use super::facade::SettingsPageFacade;
 

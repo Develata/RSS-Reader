@@ -252,8 +252,12 @@
   top: 92px;
   display: grid;
   gap: 12px;
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px 0 0 20px;
   border-left: 1px solid rgba(62, 42, 27, 0.08);
+  scrollbar-width: thin;
 }
 
 [data-slot="entry-directory-heading"] {
@@ -275,6 +279,11 @@
   gap: 6px;
 }
 
+[data-layout="entry-directory-children"][data-open="false"],
+[data-layout="entry-directory-grandchildren"][data-open="false"] {
+  display: none;
+}
+
 [data-layout="entry-directory-link"] {
   display: grid;
   gap: 3px;
@@ -287,6 +296,18 @@
   font: inherit;
   cursor: pointer;
   transition: color 120ms ease, transform 120ms ease;
+}
+
+[data-layout="entry-directory-link"][data-active="true"],
+[data-layout="entry-top-directory-chip"][data-active="true"],
+[data-layout="entry-directory-toggle"][data-active="true"] {
+  color: var(--ink);
+}
+
+[data-layout="entry-directory-link"][data-active="true"] [data-slot="entry-directory-title"],
+[data-layout="entry-top-directory-chip"][data-active="true"] [data-slot="entry-directory-title"],
+[data-layout="entry-directory-toggle"][data-active="true"] [data-slot="entry-directory-title"] {
+  font-weight: 600;
 }
 
 [data-layout="entry-directory-link"]:hover {
@@ -316,15 +337,32 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   width: 100%;
-  padding: 6px 0 6px 12px;
+  padding: 6px 0;
   border: 0;
   background: transparent;
   color: var(--muted);
   text-align: left;
+  cursor: pointer;
+  transition: color 120ms ease, transform 120ms ease;
 }
 
-[data-layout="entry-directory-toggle"][data-state="expanded"] {
+[data-layout="entry-directory-toggle"][data-open="true"] {
   color: var(--ink);
+}
+
+[data-layout="entry-directory-toggle"]:hover {
+  color: var(--ink);
+  transform: translateX(1px);
+}
+
+[data-layout="entry-directory-toggle"][data-can-toggle="false"] {
+  cursor: default;
+  transform: none;
+  pointer-events: none;
+}
+
+[data-layout="entry-directory-toggle"][data-can-toggle="false"]:hover {
+  transform: none;
 }
 
 [data-layout="entry-directory-toggle"] [data-slot="entry-directory-title"] {
@@ -337,9 +375,14 @@
   line-height: 1.4;
 }
 
+[data-layout="entry-directory-children"],
 [data-layout="entry-directory-grandchildren"] {
   padding-left: 16px;
   border-left: 1px solid rgba(62, 42, 27, 0.08);
+}
+
+[data-layout="entry-directory-grandchildren"] {
+  padding-left: 16px;
 }
 
 [data-nav="entry-directory-date"] {
