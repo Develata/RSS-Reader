@@ -70,7 +70,11 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                                 ),
                                 tone: "info".to_string(),
                             },
-                            EntriesPageIntent::BumpReload,
+                            EntriesPageIntent::PatchEntryFlags {
+                                entry_id,
+                                is_read: Some(outcome.is_read),
+                                is_starred: None,
+                            },
                         ]),
                         Err(err) => entries_status_error(format!("{err}")),
                     }
@@ -95,7 +99,11 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                                 ),
                                 tone: "info".to_string(),
                             },
-                            EntriesPageIntent::BumpReload,
+                            EntriesPageIntent::PatchEntryFlags {
+                                entry_id,
+                                is_read: None,
+                                is_starred: Some(outcome.is_starred),
+                            },
                         ]),
                         Err(err) => entries_status_error(format!("{err}")),
                     }

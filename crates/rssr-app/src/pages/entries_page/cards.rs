@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use dioxus::prelude::*;
 use rssr_domain::EntrySummary;
 use time::{OffsetDateTime, UtcOffset, macros::format_description};
@@ -7,13 +9,15 @@ use crate::router::AppRoute;
 use super::facade::EntriesPageFacade;
 
 pub(super) fn render_entry_card(
-    entry: EntrySummary,
+    entry: Arc<EntrySummary>,
     facade: EntriesPageFacade,
     list_edge: &'static str,
 ) -> Element {
     let read_title = entry.title.clone();
     let starred_title = entry.title.clone();
     let read_facade = facade.clone();
+    let read_entry = Arc::clone(&entry);
+    let starred_entry = Arc::clone(&entry);
 
     rsx! {
         li {
@@ -39,7 +43,8 @@ pub(super) fn render_entry_card(
                     "data-slot": "entry-card-action",
                     "data-action": "mark-read",
                     onclick: move |_| {
-                        read_facade.toggle_read(entry.id, read_title.clone(), entry.is_read);
+                        read_facade
+                            .toggle_read(read_entry.id, read_title.clone(), read_entry.is_read);
                     },
                     if entry.is_read { "标未读" } else { "标已读" }
                 }
@@ -49,7 +54,11 @@ pub(super) fn render_entry_card(
                     "data-slot": "entry-card-action",
                     "data-action": "toggle-starred",
                     onclick: move |_| {
-                        facade.toggle_starred(entry.id, starred_title.clone(), entry.is_starred);
+                        facade.toggle_starred(
+                            starred_entry.id,
+                            starred_title.clone(),
+                            starred_entry.is_starred,
+                        );
                     },
                     if entry.is_starred { "取消收藏" } else { "收藏" }
                 }

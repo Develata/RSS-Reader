@@ -58,6 +58,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
     let controls = render_entry_controls(&facade);
+    let load_more_facade = facade.clone();
 
     rsx! {
         section {
@@ -156,6 +157,17 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 }
                             }
                         }
+                        if facade.has_more_entries() {
+                            div { "data-layout": "entries-page-load-more",
+                                button {
+                                    class: "button",
+                                    "data-variant": "secondary",
+                                    "data-action": "show-more-entries",
+                                    onclick: move |_| load_more_facade.show_more_entries(),
+                                    "继续加载更多文章（剩余 {facade.remaining_entries_count()} 篇）"
+                                }
+                            }
+                        }
                     }
                 }
                 if !facade.group_nav_items().is_empty() {
@@ -175,7 +187,6 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
     let session = EntriesPageSession::new(feed_id, state);
     let state_snapshot = session.snapshot();
-    let reload_version = session.reload_tick();
     let entry_search = ui.entry_search();
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
     let entry_query = state_snapshot.entry_query(feed_id, query_search.clone());
@@ -187,15 +198,15 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
 
     use_reactive_task(
-        (feed_id, reload_version, preferences_loaded),
-        move |(_, _, preferences_loaded)| {
+        (feed_id, preferences_loaded),
+        move |(_, preferences_loaded)| {
             session.bootstrap(!preferences_loaded, true);
         },
     );
 
     use_reactive_task(
-        (feed_id, entry_query.clone(), reload_version),
-        move |(_, entry_query, _)| {
+        (feed_id, entry_query.clone()),
+        move |(_, entry_query)| {
             session.load_entries_query(entry_query);
         },
     );

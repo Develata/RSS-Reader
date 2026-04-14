@@ -10,6 +10,11 @@ pub(crate) enum EntriesPageIntent {
     ApplyLoadedWorkspaceState(EntriesWorkspaceState),
     SetFeeds(Vec<FeedSummary>),
     SetEntries(Vec<EntrySummary>),
+    PatchEntryFlags {
+        entry_id: i64,
+        is_read: Option<bool>,
+        is_starred: Option<bool>,
+    },
     SetStatus { message: String, tone: String },
     SetGroupingMode(EntryGroupingMode),
     SetShowArchived(bool),
@@ -17,6 +22,7 @@ pub(crate) enum EntriesPageIntent {
     SetStarredFilter(StarredFilter),
     SetSelectedFeedUrls(Vec<String>),
     SetControlsHidden(bool),
+    ShowMoreEntries,
+    RevealAllEntries,
     ToggleDirectorySource(String),
-    BumpReload,
 }

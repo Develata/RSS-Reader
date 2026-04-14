@@ -1,4 +1,3 @@
-use super::browser_interactions::scroll_to_entry_group;
 use super::facade::EntriesPageFacade;
 use super::groups::{EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem};
 use super::state::EntryGroupingMode;
@@ -15,6 +14,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
     let hide_controls_facade = facade.clone();
     let search_facade = facade.clone();
     let visible_entries_len = facade.visible_entries_len();
+    let rendered_entries_len = facade.rendered_entries_len();
     let archived_count = facade.archived_entry_count();
     let source_filter_options = facade.source_filter_options();
     let group_nav_items: &[EntryGroupNavItem] = facade.group_nav_items();
@@ -79,6 +79,10 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                         strong { "data-slot": "entry-overview-value", "{visible_entries_len}" }
                     }
                     div { "data-layout": "entry-overview-metric",
+                        span { "data-slot": "entry-overview-label", "已渲染" }
+                        strong { "data-slot": "entry-overview-value", "{rendered_entries_len}" }
+                    }
+                    div { "data-layout": "entry-overview-metric",
                         span { "data-slot": "entry-overview-label", "归档文章" }
                         strong { "data-slot": "entry-overview-value", "{archived_count}" }
                     }
@@ -98,7 +102,8 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                                 r#type: "button",
                                 onclick: {
                                     let anchor_id = item.anchor_id.clone();
-                                    move |_| scroll_to_entry_group(&anchor_id)
+                                    let facade = facade.clone();
+                                    move |_| facade.reveal_entry_group(anchor_id.clone())
                                 },
                                 span { "data-slot": "entry-directory-title", "{item.title}" }
                                 span { "data-slot": "entry-directory-meta", "{item.subtitle}" }
@@ -170,7 +175,8 @@ pub(super) fn render_entry_directory(
                                 r#type: "button",
                                 onclick: {
                                     let anchor_id = month.anchor_id.clone();
-                                    move |_| scroll_to_entry_group(&anchor_id)
+                                    let facade = facade.clone();
+                                    move |_| facade.reveal_entry_group(anchor_id.clone())
                                 },
                                 span { "data-slot": "entry-directory-title", "{month.title}" }
                                 span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
@@ -184,7 +190,8 @@ pub(super) fn render_entry_directory(
                                         r#type: "button",
                                         onclick: {
                                             let anchor_id = date.anchor_id.clone();
-                                            move |_| scroll_to_entry_group(&anchor_id)
+                                            let facade = facade.clone();
+                                            move |_| facade.reveal_entry_group(anchor_id.clone())
                                         },
                                         span { "data-slot": "entry-directory-title", "{date.title}" }
                                         span { "data-slot": "entry-directory-meta", "{date.subtitle}" }
@@ -225,7 +232,8 @@ pub(super) fn render_entry_directory(
                                                     r#type: "button",
                                                     onclick: {
                                                         let anchor_id = month.anchor_id.clone();
-                                                        move |_| scroll_to_entry_group(&anchor_id)
+                                                        let facade = facade.clone();
+                                                        move |_| facade.reveal_entry_group(anchor_id.clone())
                                                     },
                                                     span { "data-slot": "entry-directory-title", "{month.title}" }
                                                     span { "data-slot": "entry-directory-meta", "{month.subtitle}" }

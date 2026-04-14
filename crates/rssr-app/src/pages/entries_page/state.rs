@@ -5,6 +5,9 @@ use rssr_domain::{
     ReadFilter, StarredFilter, UserSettings,
 };
 
+pub(crate) const INITIAL_RENDERED_ENTRY_LIMIT: usize = 120;
+pub(crate) const RENDERED_ENTRY_BATCH_SIZE: usize = 120;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EntryGroupingMode {
     Time,
@@ -23,7 +26,7 @@ pub(crate) struct EntriesPageState {
     pub(crate) archive_after_months: u32,
     pub(crate) expanded_directory_sources: BTreeSet<String>,
     pub(crate) controls_hidden: bool,
-    pub(crate) reload_tick: u64,
+    pub(crate) rendered_entry_limit: usize,
     pub(crate) status: String,
     pub(crate) status_tone: String,
     pub(crate) preferences_loaded: bool,
@@ -44,7 +47,7 @@ impl EntriesPageState {
             archive_after_months: settings.archive_after_months,
             expanded_directory_sources: BTreeSet::new(),
             controls_hidden: initial_controls_hidden,
-            reload_tick: 0,
+            rendered_entry_limit: INITIAL_RENDERED_ENTRY_LIMIT,
             status: "正在加载文章列表…".to_string(),
             status_tone: "info".to_string(),
             preferences_loaded: false,

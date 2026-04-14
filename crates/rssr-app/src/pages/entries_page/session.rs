@@ -28,10 +28,6 @@ impl EntriesPageSession {
         self.feed_id
     }
 
-    pub(crate) fn reload_tick(self) -> u64 {
-        (self.state)().reload_tick
-    }
-
     pub(crate) fn presenter(self, now: OffsetDateTime) -> EntriesPagePresenter {
         EntriesPagePresenter::from_state(&self.snapshot(), self.feed_id, now)
     }

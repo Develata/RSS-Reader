@@ -3,6 +3,7 @@ use rssr_domain::{ReadFilter, StarredFilter};
 use time::OffsetDateTime;
 
 use super::{
+    browser_interactions::scroll_to_entry_group,
     groups::{
         EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem, EntryMonthGroup,
         EntrySourceGroup,
@@ -89,11 +90,23 @@ impl EntriesPageFacade {
     }
 
     pub(crate) fn visible_entries_len(&self) -> usize {
-        self.presenter.visible_entries.len()
+        self.presenter.visible_entries_len
     }
 
     pub(crate) fn archived_entry_count(&self) -> usize {
         self.presenter.archived_count
+    }
+
+    pub(crate) fn rendered_entries_len(&self) -> usize {
+        self.presenter.rendered_entries_len
+    }
+
+    pub(crate) fn remaining_entries_count(&self) -> usize {
+        self.presenter.remaining_entries_count
+    }
+
+    pub(crate) fn has_more_entries(&self) -> bool {
+        self.presenter.remaining_entries_count > 0
     }
 
     pub(crate) fn archived_entries_message(&self) -> String {
@@ -169,6 +182,15 @@ impl EntriesPageFacade {
 
     pub(crate) fn toggle_directory_source(&self, anchor_id: String) {
         self.session.dispatch(EntriesPageIntent::ToggleDirectorySource(anchor_id));
+    }
+
+    pub(crate) fn show_more_entries(&self) {
+        self.session.dispatch(EntriesPageIntent::ShowMoreEntries);
+    }
+
+    pub(crate) fn reveal_entry_group(&self, anchor_id: String) {
+        self.session.dispatch(EntriesPageIntent::RevealAllEntries);
+        scroll_to_entry_group(&anchor_id);
     }
 
     pub(crate) fn toggle_read(&self, entry_id: i64, title: String, is_read: bool) {
