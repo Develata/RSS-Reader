@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use rssr_infra::parser::FeedParser;
 
 const SAMPLE_FEED: &str = r#"

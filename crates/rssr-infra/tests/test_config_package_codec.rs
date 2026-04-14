@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use rssr_domain::{ConfigFeed, ConfigPackage, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::config_sync::file_format::{decode_config_package, encode_config_package};
 use serde_json::json;

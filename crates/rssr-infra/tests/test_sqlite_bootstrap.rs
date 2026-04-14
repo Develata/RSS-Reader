@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use rssr_infra::db::{
     migrate, sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
 };

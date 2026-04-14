@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use rssr_domain::{ListDensity, SettingsRepository, StartupView, ThemeMode, UserSettings};
 use rssr_infra::db::{
     migrate, settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,

@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use rssr_domain::{ConfigFeed, ConfigPackage, UserSettings};
 use rssr_infra::{
     config_sync::{
