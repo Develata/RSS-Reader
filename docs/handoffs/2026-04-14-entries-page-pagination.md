@@ -36,6 +36,8 @@
 - 设置页“阅读节奏”新增数值输入，UI 限制为 `0..=200`。
 - 保存设置时将输入 `0` 规范化为默认值 `100`，并追加提示文本。
 - 应用服务层与导入规则层统一校验最终持久值必须在 `1..=200`，拒绝 `0`、`201` 和其他越界值。
+- 补齐 `rssr-infra` 配置交换与 schema 一致性测试中的 `entries_page_size` 字段，避免 GitHub CI 在 `cargo test --workspace` 下因测试构造落后于运行时模型而编译失败。
+- 更新 `config-package.schema.json`，把 `entries_page_size` 纳入导出配置契约，并在 schema 测试里补上 `minimum = 1`、`maximum = 200` 断言。
 
 ### 文章页分页状态与派生
 
@@ -96,6 +98,11 @@
 - 正文滚动驱动目录自动对齐修复后再次执行 `cargo test -p rssr-app`：通过
 - 目录同步命名与注释整理后再次执行 `cargo check -p rssr-app`：通过
 - 目录同步命名与注释整理后再次执行 `cargo test -p rssr-app`：通过
+- CI 修复后执行 `cargo test -p rssr-infra --test test_config_package_schema_consistency`：通过
+- CI 修复后执行 `cargo test -p rssr-infra --test test_config_package_codec`：通过
+- CI 修复后执行 `cargo test -p rssr-infra --test test_config_package_io`：通过
+- CI 修复后执行 `cargo test -p rssr-infra --test test_settings_repository`：通过
+- 本地执行 `cargo test --workspace`：未作为有效验收结论，当前 Windows 环境触发 `os error 1455` 页文件不足及若干与既有工具链 / 宏展开状态相关的全局编译异常，和本次 CI 修复不在同一问题面上。
 
 ### 手工验收
 
@@ -114,6 +121,7 @@
 - 目录展开 / 收起时视口被强制拉回当前文章位置的根因已确认是“本地折叠副作用复用了带 `scrollIntoView` 的同步入口”；现已拆成“带滚动同步”和“无滚动刷新”两条路径。
 - 正文滚动时目录不再跟随的根因已确认是“滚动监听回调走了无滚动刷新路径”；现已恢复为正文滚动触发带 `scrollIntoView(nearest)` 的同步，而目录本地点击仍走无滚动路径。
 - 当前最大风险点仍然是 `browser_interactions.rs` 中的内嵌 JS 状态机，但本轮已经通过命名和注释把“左侧正文驱动可滚动同步 / 目录本地交互仅状态刷新”的边界固定下来。
+- GitHub CI 报出的 `missing field entries_page_size in initializer of UserSettings` 已修复；相关 infra 测试构造和配置 schema 现在与运行时 `UserSettings` 保持一致。
 
 ## 风险与后续事项
 

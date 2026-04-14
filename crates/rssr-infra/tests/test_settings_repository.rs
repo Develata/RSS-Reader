@@ -19,6 +19,7 @@ async fn settings_repository_persists_and_loads_settings() {
         startup_view: StartupView::LastFeed,
         refresh_interval_minutes: 45,
         archive_after_months: 6,
+        entries_page_size: 100,
         reader_font_scale: 1.2,
         custom_css: "[data-page=\"feeds\"] { opacity: 0.95; }".to_string(),
     };
@@ -56,5 +57,6 @@ async fn settings_repository_loads_legacy_settings_without_custom_css() {
 
     assert_eq!(loaded.custom_css, "");
     assert_eq!(loaded.archive_after_months, 3);
+    assert_eq!(loaded.entries_page_size, 100);
     assert_eq!(loaded.theme, ThemeMode::Light);
 }

@@ -45,6 +45,7 @@
         "startup_view",
         "refresh_interval_minutes",
         "archive_after_months",
+        "entries_page_size",
         "reader_font_scale",
         "custom_css"
       ],
@@ -68,6 +69,11 @@
         "archive_after_months": {
           "type": "integer",
           "minimum": 1
+        },
+        "entries_page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
         },
         "reader_font_scale": {
           "type": "number",

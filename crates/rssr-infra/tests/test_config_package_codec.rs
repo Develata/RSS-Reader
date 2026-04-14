@@ -97,6 +97,7 @@ fn sample_package() -> ConfigPackage {
             startup_view: StartupView::All,
             refresh_interval_minutes: 15,
             archive_after_months: 3,
+            entries_page_size: 100,
             reader_font_scale: 1.1,
             custom_css: ".feed-card { border-radius: 12px; }".to_string(),
         },
