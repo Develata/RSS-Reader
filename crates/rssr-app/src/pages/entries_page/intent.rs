@@ -21,5 +21,4 @@ pub(crate) enum EntriesPageIntent {
     GoToNextPage,
     GoToPreviousPage,
     SetControlsHidden(bool),
-    ToggleDirectorySection(String),
 }

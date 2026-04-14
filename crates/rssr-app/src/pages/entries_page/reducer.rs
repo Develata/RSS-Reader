@@ -18,7 +18,6 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         EntriesPageIntent::ApplyLoadedSettings(settings) => {
             state.archive_after_months = settings.archive_after_months;
             state.entries_page_size = settings.entries_page_size.max(1);
-            reset_directory_sections(state);
             clamp_current_page(state);
         }
         EntriesPageIntent::ApplyLoadedWorkspaceState(workspace) => {
@@ -28,7 +27,6 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.show_archived = workspace.show_archived;
             state.grouping_mode = entry_grouping_mode_from_preference(workspace.grouping_mode);
             state.current_page = FIRST_PAGE_NUMBER;
-            reset_directory_sections(state);
             state.preferences_loaded = true;
         }
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = feeds,
@@ -36,11 +34,9 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.status = format!("共 {} 篇文章。", entries.len());
             state.status_tone = "info".to_string();
             state.entries = entries;
-            reset_directory_sections(state);
             clamp_current_page(state);
         }
         EntriesPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
-            let previous_page = state.current_page;
             if let Some(entry) = state.entries.iter_mut().find(|entry| entry.id == entry_id) {
                 if let Some(is_read) = is_read {
                     entry.is_read = is_read;
@@ -55,9 +51,6 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
                 .entries
                 .retain(|entry| matches_current_filters(read_filter, starred_filter, entry));
             clamp_current_page(state);
-            if state.current_page != previous_page {
-                reset_directory_sections(state);
-            }
         }
         EntriesPageIntent::SetStatus { message, tone } => {
             state.status = message;
@@ -66,55 +59,33 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         EntriesPageIntent::SetGroupingMode(grouping_mode) => {
             state.grouping_mode = grouping_mode;
             state.current_page = FIRST_PAGE_NUMBER;
-            reset_directory_sections(state);
         }
         EntriesPageIntent::SetShowArchived(show_archived) => {
             state.show_archived = show_archived;
             state.current_page = FIRST_PAGE_NUMBER;
-            reset_directory_sections(state);
         }
         EntriesPageIntent::SetReadFilter(read_filter) => {
             state.read_filter = read_filter;
             state.current_page = FIRST_PAGE_NUMBER;
-            reset_directory_sections(state);
         }
         EntriesPageIntent::SetStarredFilter(starred_filter) => {
             state.starred_filter = starred_filter;
             state.current_page = FIRST_PAGE_NUMBER;
-            reset_directory_sections(state);
         }
         EntriesPageIntent::SetSelectedFeedUrls(selected_feed_urls) => {
             state.selected_feed_urls = selected_feed_urls;
             state.current_page = FIRST_PAGE_NUMBER;
-            reset_directory_sections(state);
         }
         EntriesPageIntent::SetCurrentPage(page) => {
-            let next_page = page.max(FIRST_PAGE_NUMBER);
-            if next_page != state.current_page {
-                reset_directory_sections(state);
-            }
-            state.current_page = next_page;
+            state.current_page = page.max(FIRST_PAGE_NUMBER);
         }
         EntriesPageIntent::GoToNextPage => {
-            let next_page = state.current_page.saturating_add(1);
-            if next_page != state.current_page {
-                reset_directory_sections(state);
-            }
-            state.current_page = next_page;
+            state.current_page = state.current_page.saturating_add(1)
         }
         EntriesPageIntent::GoToPreviousPage => {
-            let next_page = state.current_page.saturating_sub(1).max(FIRST_PAGE_NUMBER);
-            if next_page != state.current_page {
-                reset_directory_sections(state);
-            }
-            state.current_page = next_page;
+            state.current_page = state.current_page.saturating_sub(1).max(FIRST_PAGE_NUMBER);
         }
         EntriesPageIntent::SetControlsHidden(hidden) => state.controls_hidden = hidden,
-        EntriesPageIntent::ToggleDirectorySection(anchor_id) => {
-            if !state.expanded_directory_sections.insert(anchor_id.clone()) {
-                state.expanded_directory_sections.remove(&anchor_id);
-            }
-        }
     }
 }
 
@@ -146,10 +117,6 @@ fn clamp_current_page(state: &mut EntriesPageState) {
         ((total_entries - 1) / page_size) as u32 + 1
     };
     state.current_page = state.current_page.clamp(FIRST_PAGE_NUMBER, total_pages);
-}
-
-fn reset_directory_sections(state: &mut EntriesPageState) {
-    state.expanded_directory_sections.clear();
 }
 
 #[cfg(test)]
@@ -193,10 +160,9 @@ mod tests {
     }
 
     #[test]
-    fn set_entries_clamps_current_page_and_resets_directory_sections() {
+    fn set_entries_clamps_current_page() {
         let mut state = EntriesPageState::new(true);
         state.current_page = 9;
-        state.expanded_directory_sections.insert("entry-group-2026-04".to_string());
 
         reduce_entries_page_intent(
             &mut state,
@@ -204,14 +170,12 @@ mod tests {
         );
 
         assert_eq!(state.current_page, FIRST_PAGE_NUMBER);
-        assert!(state.expanded_directory_sections.is_empty());
     }
 
     #[test]
-    fn changing_filters_resets_current_page_and_directory_sections() {
+    fn changing_filters_resets_current_page() {
         let mut state = EntriesPageState::new(true);
         state.current_page = 4;
-        state.expanded_directory_sections.insert("entry-group-feed".to_string());
 
         reduce_entries_page_intent(
             &mut state,
@@ -219,17 +183,14 @@ mod tests {
         );
 
         assert_eq!(state.current_page, FIRST_PAGE_NUMBER);
-        assert!(state.expanded_directory_sections.is_empty());
     }
 
     #[test]
-    fn changing_page_resets_directory_sections() {
+    fn changing_page_updates_current_page() {
         let mut state = EntriesPageState::new(true);
-        state.expanded_directory_sections.insert("entry-group-feed".to_string());
 
         reduce_entries_page_intent(&mut state, EntriesPageIntent::SetCurrentPage(2));
 
         assert_eq!(state.current_page, 2);
-        assert!(state.expanded_directory_sections.is_empty());
     }
 }

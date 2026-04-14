@@ -1,5 +1,14 @@
+use std::collections::BTreeSet;
+
+use crate::ui::use_reactive_side_effect;
+
+use super::browser_interactions::{
+    refresh_directory_with_entry_scroll_state, scroll_to_entry_group,
+};
 use super::facade::EntriesPageFacade;
 use super::groups::{EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem};
+use super::intent::EntriesPageIntent;
+use super::session::EntriesPageSession;
 use super::state::EntryGroupingMode;
 use crate::components::{entry_filters::EntryFilters, status_banner::StatusBanner};
 use dioxus::prelude::*;
@@ -184,15 +193,76 @@ pub(super) fn render_entry_directory(
     directory_months: &[EntryDirectoryMonth],
     directory_sources: &[EntryDirectorySource],
 ) -> Element {
-    let toggled_directory_sections = facade.expanded_directory_sections();
-    let default_expanded_directory_sections = facade.default_expanded_directory_sections();
+    rsx! {
+        EntryDirectoryRail {
+            session: facade.session(),
+            current_page: facade.current_page(),
+            page_start: facade.page_start(),
+            page_end: facade.page_end(),
+            visible_entries_len: facade.visible_entries_len(),
+            default_expanded_directory_sections: facade.default_expanded_directory_sections().clone(),
+            active_directory_anchor: facade.active_directory_anchor().map(ToString::to_string),
+            grouping_mode,
+            directory_months: directory_months.to_vec(),
+            directory_sources: directory_sources.to_vec(),
+        }
+    }
+}
+
+#[component]
+fn EntryDirectoryRail(
+    session: EntriesPageSession,
+    current_page: u32,
+    page_start: usize,
+    page_end: usize,
+    visible_entries_len: usize,
+    default_expanded_directory_sections: BTreeSet<String>,
+    active_directory_anchor: Option<String>,
+    grouping_mode: EntryGroupingMode,
+    directory_months: Vec<EntryDirectoryMonth>,
+    directory_sources: Vec<EntryDirectorySource>,
+) -> Element {
+    let mut expanded_directory_sections = use_signal(|| BTreeSet::<String>::new());
+    let toggled_directory_sections = expanded_directory_sections();
+
+    use_reactive_side_effect(
+        (
+            current_page,
+            grouping_mode,
+            page_start,
+            page_end,
+            visible_entries_len,
+            active_directory_anchor.clone(),
+        ),
+        move |_| {
+            expanded_directory_sections.with_mut(|sections| {
+                if !sections.is_empty() {
+                    sections.clear();
+                }
+            });
+        },
+    );
+
+    use_reactive_side_effect(
+        (
+            current_page,
+            grouping_mode,
+            page_start,
+            page_end,
+            active_directory_anchor.clone(),
+            toggled_directory_sections.clone(),
+        ),
+        move |_| {
+            refresh_directory_with_entry_scroll_state();
+        },
+    );
 
     rsx! {
         aside { "data-layout": "entry-directory-rail",
             h3 { "data-slot": "entry-directory-heading", "目录" }
             if grouping_mode == EntryGroupingMode::Time {
                 nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
-                    for month in directory_months {
+                    for month in &directory_months {
                         {
                             let anchor_id = month.anchor_id.clone();
                             let view_state = directory_section_view_state(
@@ -201,7 +271,7 @@ pub(super) fn render_entry_directory(
                                 month.is_active,
                             );
                             let toggle_anchor = anchor_id.clone();
-                            let toggle_facade = facade.clone();
+                            let mut toggle_sections = expanded_directory_sections;
                             rsx! {
                                 div { "data-layout": "entry-directory-section", key: "{month.anchor_id}",
                                     button {
@@ -218,7 +288,11 @@ pub(super) fn render_entry_directory(
                                         aria_expanded: if view_state.is_open { "true" } else { "false" },
                                         r#type: "button",
                                         onclick: move |_| {
-                                            toggle_facade.toggle_directory_section(toggle_anchor.clone());
+                                            toggle_sections.with_mut(|sections| {
+                                                if !sections.insert(toggle_anchor.clone()) {
+                                                    sections.remove(&toggle_anchor);
+                                                }
+                                            });
                                         },
                                         span { "data-slot": "entry-directory-title", "{month.title}" }
                                         span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
@@ -241,9 +315,10 @@ pub(super) fn render_entry_directory(
                                                 onclick: {
                                                     let anchor_id = date.anchor_id.clone();
                                                     let target_page = date.target_page;
-                                                    let facade = facade.clone();
+                                                    let session = session;
                                                     move |_| {
-                                                        facade.navigate_to_directory_target(target_page, anchor_id.clone())
+                                                        session.dispatch(EntriesPageIntent::SetCurrentPage(target_page));
+                                                        scroll_to_entry_group(&anchor_id);
                                                     }
                                                 },
                                                 span { "data-slot": "entry-directory-title", "{date.title}" }
@@ -258,7 +333,7 @@ pub(super) fn render_entry_directory(
                 }
             } else {
                 nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
-                    for source in directory_sources {
+                    for source in &directory_sources {
                         {
                             let anchor_id = source.anchor_id.clone();
                             let view_state = directory_section_view_state(
@@ -267,7 +342,7 @@ pub(super) fn render_entry_directory(
                                 source.is_active,
                             );
                             let toggle_anchor = anchor_id.clone();
-                            let toggle_facade = facade.clone();
+                            let mut toggle_sections = expanded_directory_sections;
                             rsx! {
                                 div { "data-layout": "entry-directory-section", key: "{anchor_id}",
                                     button {
@@ -282,7 +357,11 @@ pub(super) fn render_entry_directory(
                                         aria_expanded: if view_state.is_open { "true" } else { "false" },
                                         "data-action": if view_state.is_open { "collapse-directory-source" } else { "expand-directory-source" },
                                         onclick: move |_| {
-                                            toggle_facade.toggle_directory_section(toggle_anchor.clone());
+                                            toggle_sections.with_mut(|sections| {
+                                                if !sections.insert(toggle_anchor.clone()) {
+                                                    sections.remove(&toggle_anchor);
+                                                }
+                                            });
                                         },
                                         span { "data-slot": "entry-directory-title", "{source.title}" }
                                         span { "data-slot": "entry-directory-meta", "{source.subtitle}" }
@@ -305,9 +384,10 @@ pub(super) fn render_entry_directory(
                                                 onclick: {
                                                     let anchor_id = month.anchor_id.clone();
                                                     let target_page = month.target_page;
-                                                    let facade = facade.clone();
+                                                    let session = session;
                                                     move |_| {
-                                                        facade.navigate_to_directory_target(target_page, anchor_id.clone())
+                                                        session.dispatch(EntriesPageIntent::SetCurrentPage(target_page));
+                                                        scroll_to_entry_group(&anchor_id);
                                                     }
                                                 },
                                                 span { "data-slot": "entry-directory-title", "{month.title}" }

@@ -101,13 +101,13 @@ pub(super) fn scroll_directory_item(anchor_id: &str) {
     ));
 }
 
-pub(super) fn sync_directory_with_entry_scroll() {
-    document::eval(
-        r#"
+fn sync_directory_with_entry_scroll_impl(scroll_target: bool) {
+    let scroll_target = if scroll_target { "true" } else { "false" };
+    let script = r#"
         const trackerKey = "__rssrEntryDirectoryTracker";
         const existingTracker = window[trackerKey];
         if (existingTracker?.scheduleUpdate) {
-            existingTracker.scheduleUpdate(true);
+            existingTracker.scheduleUpdate(true, __SCROLL_TARGET__);
             return;
         }
 
@@ -207,6 +207,7 @@ pub(super) fn sync_directory_with_entry_scroll() {
 
         let rafId = 0;
         let forceSync = false;
+        let shouldScrollTarget = true;
         let lastGroupAnchor = null;
         let lastItemAnchor = null;
 
@@ -223,7 +224,9 @@ pub(super) fn sync_directory_with_entry_scroll() {
         const update = () => {
             rafId = 0;
             const shouldForceSync = forceSync;
+            const shouldScroll = shouldScrollTarget;
             forceSync = false;
+            shouldScrollTarget = false;
 
             if (!document.querySelector('[data-page="entries"]')) {
                 cleanup();
@@ -248,17 +251,20 @@ pub(super) fn sync_directory_with_entry_scroll() {
             lastGroupAnchor = groupAnchor;
             lastItemAnchor = itemAnchor;
 
-            const target = findScrollTarget(groupAnchor, itemAnchor);
-            if (target) {
-                target.scrollIntoView({
-                    block: "nearest",
-                    inline: "nearest",
-                });
+            if (shouldScroll) {
+                const target = findScrollTarget(groupAnchor, itemAnchor);
+                if (target) {
+                    target.scrollIntoView({
+                        block: "nearest",
+                        inline: "nearest",
+                    });
+                }
             }
         };
 
-        const scheduleUpdate = (shouldForce = false) => {
+        const scheduleUpdate = (shouldForce = false, shouldScroll = false) => {
             forceSync = forceSync || shouldForce;
+            shouldScrollTarget = shouldScrollTarget || shouldScroll;
             if (rafId) {
                 return;
             }
@@ -266,7 +272,7 @@ pub(super) fn sync_directory_with_entry_scroll() {
         };
 
         const onScroll = () => {
-            scheduleUpdate(false);
+            scheduleUpdate(false, true);
         };
 
         const onResize = () => {
@@ -281,7 +287,15 @@ pub(super) fn sync_directory_with_entry_scroll() {
             scheduleUpdate,
         };
 
-        scheduleUpdate(true);
-        "#,
-    );
+        scheduleUpdate(true, __SCROLL_TARGET__);
+        "#;
+    document::eval(&script.replace("__SCROLL_TARGET__", scroll_target));
+}
+
+pub(super) fn sync_directory_with_entry_scroll() {
+    sync_directory_with_entry_scroll_impl(true);
+}
+
+pub(super) fn refresh_directory_with_entry_scroll_state() {
+    sync_directory_with_entry_scroll_impl(false);
 }

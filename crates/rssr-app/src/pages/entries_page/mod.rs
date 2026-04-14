@@ -197,7 +197,6 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let read_filter = state_snapshot.read_filter;
     let starred_filter = state_snapshot.starred_filter;
     let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
-    let expanded_directory_sections = state_snapshot.expanded_directory_sections.clone();
     let current_page = state_snapshot.current_page;
     let active_directory_anchor = facade.active_directory_anchor().map(ToString::to_string);
 
@@ -257,7 +256,6 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
             facade.page_start(),
             facade.page_end(),
             active_directory_anchor.clone(),
-            expanded_directory_sections,
         ),
         move |_| {
             sync_directory_with_entry_scroll();

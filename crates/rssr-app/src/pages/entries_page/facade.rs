@@ -95,6 +95,10 @@ impl EntriesPageFacade {
         self.presenter.visible_entries_len
     }
 
+    pub(crate) fn session(&self) -> EntriesPageSession {
+        self.session
+    }
+
     pub(crate) fn archived_entry_count(&self) -> usize {
         self.presenter.archived_count
     }
@@ -169,10 +173,6 @@ impl EntriesPageFacade {
         &self.presenter.default_expanded_directory_sections
     }
 
-    pub(crate) fn expanded_directory_sections(&self) -> &BTreeSet<String> {
-        &self.snapshot.expanded_directory_sections
-    }
-
     pub(crate) fn empty_entries_message(&self) -> String {
         if self.session.feed_id().is_some() {
             "这个订阅下还没有可显示的文章，先尝试刷新该 feed。".to_string()
@@ -207,10 +207,6 @@ impl EntriesPageFacade {
 
     pub(crate) fn set_selected_feed_urls(&self, value: Vec<String>) {
         self.session.dispatch(EntriesPageIntent::SetSelectedFeedUrls(value));
-    }
-
-    pub(crate) fn toggle_directory_section(&self, anchor_id: String) {
-        self.session.dispatch(EntriesPageIntent::ToggleDirectorySection(anchor_id));
     }
 
     pub(crate) fn go_to_previous_page(&self) {
