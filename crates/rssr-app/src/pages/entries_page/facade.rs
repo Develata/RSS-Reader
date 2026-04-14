@@ -86,7 +86,7 @@ impl EntriesPageFacade {
     }
 
     pub(crate) fn visible_entries_is_empty(&self) -> bool {
-        self.presenter.visible_entries.is_empty()
+        self.presenter.visible_entries_len == 0
     }
 
     pub(crate) fn visible_entries_len(&self) -> usize {
@@ -97,16 +97,39 @@ impl EntriesPageFacade {
         self.presenter.archived_count
     }
 
-    pub(crate) fn rendered_entries_len(&self) -> usize {
-        self.presenter.rendered_entries_len
+    pub(crate) fn page_size(&self) -> usize {
+        self.presenter.page_size
     }
 
-    pub(crate) fn remaining_entries_count(&self) -> usize {
-        self.presenter.remaining_entries_count
+    pub(crate) fn current_page(&self) -> u32 {
+        self.presenter.current_page
     }
 
-    pub(crate) fn has_more_entries(&self) -> bool {
-        self.presenter.remaining_entries_count > 0
+    pub(crate) fn total_pages(&self) -> u32 {
+        self.presenter.total_pages
+    }
+
+    pub(crate) fn page_start(&self) -> usize {
+        self.presenter.page_start
+    }
+
+    pub(crate) fn page_end(&self) -> usize {
+        self.presenter.page_end
+    }
+
+    pub(crate) fn can_go_previous_page(&self) -> bool {
+        self.current_page() > 1
+    }
+
+    pub(crate) fn can_go_next_page(&self) -> bool {
+        self.current_page() < self.total_pages()
+    }
+
+    pub(crate) fn active_directory_anchor(&self) -> Option<&str> {
+        self.presenter
+            .active_directory_anchor
+            .as_deref()
+            .or(self.presenter.active_group_anchor.as_deref())
     }
 
     pub(crate) fn archived_entries_message(&self) -> String {
@@ -184,12 +207,16 @@ impl EntriesPageFacade {
         self.session.dispatch(EntriesPageIntent::ToggleDirectorySource(anchor_id));
     }
 
-    pub(crate) fn show_more_entries(&self) {
-        self.session.dispatch(EntriesPageIntent::ShowMoreEntries);
+    pub(crate) fn go_to_previous_page(&self) {
+        self.session.dispatch(EntriesPageIntent::GoToPreviousPage);
     }
 
-    pub(crate) fn reveal_entry_group(&self, anchor_id: String) {
-        self.session.dispatch(EntriesPageIntent::RevealAllEntries);
+    pub(crate) fn go_to_next_page(&self) {
+        self.session.dispatch(EntriesPageIntent::GoToNextPage);
+    }
+
+    pub(crate) fn navigate_to_directory_target(&self, target_page: u32, anchor_id: String) {
+        self.session.dispatch(EntriesPageIntent::SetCurrentPage(target_page));
         scroll_to_entry_group(&anchor_id);
     }
 

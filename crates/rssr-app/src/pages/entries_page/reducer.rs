@@ -3,7 +3,7 @@ use rssr_domain::{ReadFilter, StarredFilter};
 
 use super::{
     intent::EntriesPageIntent, state::EntriesPageState, state::entry_grouping_mode_from_preference,
-    state::{INITIAL_RENDERED_ENTRY_LIMIT, RENDERED_ENTRY_BATCH_SIZE},
+    state::FIRST_PAGE_NUMBER,
 };
 
 pub(crate) fn dispatch_entries_page_intent(
@@ -17,6 +17,8 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
     match intent {
         EntriesPageIntent::ApplyLoadedSettings(settings) => {
             state.archive_after_months = settings.archive_after_months;
+            state.entries_page_size = settings.entries_page_size.max(1);
+            clamp_current_page(state);
         }
         EntriesPageIntent::ApplyLoadedWorkspaceState(workspace) => {
             state.read_filter = workspace.read_filter;
@@ -24,6 +26,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.selected_feed_urls = workspace.selected_feed_urls;
             state.show_archived = workspace.show_archived;
             state.grouping_mode = entry_grouping_mode_from_preference(workspace.grouping_mode);
+            state.current_page = FIRST_PAGE_NUMBER;
             state.preferences_loaded = true;
         }
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = feeds,
@@ -31,7 +34,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.status = format!("共 {} 篇文章。", entries.len());
             state.status_tone = "info".to_string();
             state.entries = entries;
-            state.rendered_entry_limit = INITIAL_RENDERED_ENTRY_LIMIT;
+            clamp_current_page(state);
         }
         EntriesPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
             if let Some(entry) = state.entries.iter_mut().find(|entry| entry.id == entry_id) {
@@ -47,26 +50,38 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state
                 .entries
                 .retain(|entry| matches_current_filters(read_filter, starred_filter, entry));
+            clamp_current_page(state);
         }
         EntriesPageIntent::SetStatus { message, tone } => {
             state.status = message;
             state.status_tone = tone;
         }
-        EntriesPageIntent::SetGroupingMode(grouping_mode) => state.grouping_mode = grouping_mode,
-        EntriesPageIntent::SetShowArchived(show_archived) => state.show_archived = show_archived,
-        EntriesPageIntent::SetReadFilter(read_filter) => state.read_filter = read_filter,
+        EntriesPageIntent::SetGroupingMode(grouping_mode) => {
+            state.grouping_mode = grouping_mode;
+            state.current_page = FIRST_PAGE_NUMBER;
+        }
+        EntriesPageIntent::SetShowArchived(show_archived) => {
+            state.show_archived = show_archived;
+            state.current_page = FIRST_PAGE_NUMBER;
+        }
+        EntriesPageIntent::SetReadFilter(read_filter) => {
+            state.read_filter = read_filter;
+            state.current_page = FIRST_PAGE_NUMBER;
+        }
         EntriesPageIntent::SetStarredFilter(starred_filter) => {
             state.starred_filter = starred_filter;
+            state.current_page = FIRST_PAGE_NUMBER;
         }
         EntriesPageIntent::SetSelectedFeedUrls(selected_feed_urls) => {
             state.selected_feed_urls = selected_feed_urls;
+            state.current_page = FIRST_PAGE_NUMBER;
+        }
+        EntriesPageIntent::SetCurrentPage(page) => state.current_page = page.max(FIRST_PAGE_NUMBER),
+        EntriesPageIntent::GoToNextPage => state.current_page = state.current_page.saturating_add(1),
+        EntriesPageIntent::GoToPreviousPage => {
+            state.current_page = state.current_page.saturating_sub(1).max(FIRST_PAGE_NUMBER);
         }
         EntriesPageIntent::SetControlsHidden(hidden) => state.controls_hidden = hidden,
-        EntriesPageIntent::ShowMoreEntries => {
-            state.rendered_entry_limit =
-                state.rendered_entry_limit.saturating_add(RENDERED_ENTRY_BATCH_SIZE);
-        }
-        EntriesPageIntent::RevealAllEntries => state.rendered_entry_limit = usize::MAX,
         EntriesPageIntent::ToggleDirectorySource(anchor_id) => {
             if !state.expanded_directory_sources.insert(anchor_id.clone()) {
                 state.expanded_directory_sources.remove(&anchor_id);
@@ -94,6 +109,17 @@ fn matches_current_filters(
     matches_read && matches_starred
 }
 
+fn clamp_current_page(state: &mut EntriesPageState) {
+    let page_size = state.page_size().max(1);
+    let total_entries = state.entries.len();
+    let total_pages = if total_entries == 0 {
+        FIRST_PAGE_NUMBER
+    } else {
+        ((total_entries - 1) / page_size) as u32 + 1
+    };
+    state.current_page = state.current_page.clamp(FIRST_PAGE_NUMBER, total_pages);
+}
+
 #[cfg(test)]
 mod tests {
     use rssr_domain::{EntrySummary, ReadFilter};
@@ -101,7 +127,7 @@ mod tests {
     use super::reduce_entries_page_intent;
     use crate::pages::entries_page::{
         intent::EntriesPageIntent,
-        state::{EntriesPageState, INITIAL_RENDERED_ENTRY_LIMIT},
+        state::{EntriesPageState, FIRST_PAGE_NUMBER},
     };
 
     fn entry(id: i64, is_read: bool) -> EntrySummary {
@@ -137,10 +163,23 @@ mod tests {
     #[test]
     fn set_entries_resets_render_limit() {
         let mut state = EntriesPageState::new(true);
-        state.rendered_entry_limit = usize::MAX;
+        state.current_page = 9;
 
         reduce_entries_page_intent(&mut state, EntriesPageIntent::SetEntries(vec![entry(1, false)]));
 
-        assert_eq!(state.rendered_entry_limit, INITIAL_RENDERED_ENTRY_LIMIT);
+        assert_eq!(state.current_page, FIRST_PAGE_NUMBER);
+    }
+
+    #[test]
+    fn changing_filters_resets_current_page() {
+        let mut state = EntriesPageState::new(true);
+        state.current_page = 4;
+
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::SetStarredFilter(rssr_domain::StarredFilter::StarredOnly),
+        );
+
+        assert_eq!(state.current_page, FIRST_PAGE_NUMBER);
     }
 }

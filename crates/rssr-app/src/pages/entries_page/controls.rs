@@ -14,7 +14,6 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
     let hide_controls_facade = facade.clone();
     let search_facade = facade.clone();
     let visible_entries_len = facade.visible_entries_len();
-    let rendered_entries_len = facade.rendered_entries_len();
     let archived_count = facade.archived_entry_count();
     let source_filter_options = facade.source_filter_options();
     let group_nav_items: &[EntryGroupNavItem] = facade.group_nav_items();
@@ -79,8 +78,8 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                         strong { "data-slot": "entry-overview-value", "{visible_entries_len}" }
                     }
                     div { "data-layout": "entry-overview-metric",
-                        span { "data-slot": "entry-overview-label", "已渲染" }
-                        strong { "data-slot": "entry-overview-value", "{rendered_entries_len}" }
+                        span { "data-slot": "entry-overview-label", "每页数量" }
+                        strong { "data-slot": "entry-overview-value", "{facade.page_size()}" }
                     }
                     div { "data-layout": "entry-overview-metric",
                         span { "data-slot": "entry-overview-label", "归档文章" }
@@ -100,10 +99,15 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                             button {
                                 "data-layout": "entry-top-directory-chip",
                                 r#type: "button",
+                                "data-state": if item.is_active { "active" } else { "idle" },
+                                "data-directory-anchor": "{item.anchor_id}",
                                 onclick: {
                                     let anchor_id = item.anchor_id.clone();
+                                    let target_page = item.target_page;
                                     let facade = facade.clone();
-                                    move |_| facade.reveal_entry_group(anchor_id.clone())
+                                    move |_| {
+                                        facade.navigate_to_directory_target(target_page, anchor_id.clone())
+                                    }
                                 },
                                 span { "data-slot": "entry-directory-title", "{item.title}" }
                                 span { "data-slot": "entry-directory-meta", "{item.subtitle}" }
@@ -172,11 +176,16 @@ pub(super) fn render_entry_directory(
                                 "data-layout": "entry-directory-link",
                                 "data-directory-level": "month",
                                 "data-nav": "entry-directory-month",
+                                "data-state": if month.is_active { "active" } else { "idle" },
+                                "data-directory-anchor": "{month.anchor_id}",
                                 r#type: "button",
                                 onclick: {
                                     let anchor_id = month.anchor_id.clone();
+                                    let target_page = month.target_page;
                                     let facade = facade.clone();
-                                    move |_| facade.reveal_entry_group(anchor_id.clone())
+                                    move |_| {
+                                        facade.navigate_to_directory_target(target_page, anchor_id.clone())
+                                    }
                                 },
                                 span { "data-slot": "entry-directory-title", "{month.title}" }
                                 span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
@@ -187,11 +196,16 @@ pub(super) fn render_entry_directory(
                                         "data-layout": "entry-directory-link",
                                         "data-directory-level": "date",
                                         "data-nav": "entry-directory-date",
+                                        "data-state": if date.is_active { "active" } else { "idle" },
+                                        "data-directory-anchor": "{date.anchor_id}",
                                         r#type: "button",
                                         onclick: {
                                             let anchor_id = date.anchor_id.clone();
+                                            let target_page = date.target_page;
                                             let facade = facade.clone();
-                                            move |_| facade.reveal_entry_group(anchor_id.clone())
+                                            move |_| {
+                                                facade.navigate_to_directory_target(target_page, anchor_id.clone())
+                                            }
                                         },
                                         span { "data-slot": "entry-directory-title", "{date.title}" }
                                         span { "data-slot": "entry-directory-meta", "{date.subtitle}" }
@@ -206,14 +220,16 @@ pub(super) fn render_entry_directory(
                     for source in directory_sources {
                         {
                             let anchor_id = source.anchor_id.clone();
-                            let is_open = expanded_directory_sources.contains(&anchor_id);
+                            let is_open =
+                                source.is_active || expanded_directory_sources.contains(&anchor_id);
                             let toggle_anchor = anchor_id.clone();
                             let toggle_facade = facade.clone();
                             rsx! {
                                 div { "data-layout": "entry-directory-section", key: "{anchor_id}",
                                     button {
                                         "data-layout": "entry-directory-toggle",
-                                        "data-state": if is_open { "expanded" } else { "collapsed" },
+                                        "data-state": if source.is_active { "active" } else if is_open { "expanded" } else { "collapsed" },
+                                        "data-directory-anchor": "{source.anchor_id}",
                                         aria_expanded: if is_open { "true" } else { "false" },
                                         "data-action": if is_open { "collapse-directory-source" } else { "expand-directory-source" },
                                         onclick: move |_| {
@@ -229,11 +245,16 @@ pub(super) fn render_entry_directory(
                                                     "data-layout": "entry-directory-link",
                                                     "data-directory-level": "month",
                                                     "data-nav": "entry-directory-month",
+                                                    "data-state": if month.is_active { "active" } else { "idle" },
+                                                    "data-directory-anchor": "{month.anchor_id}",
                                                     r#type: "button",
                                                     onclick: {
                                                         let anchor_id = month.anchor_id.clone();
+                                                        let target_page = month.target_page;
                                                         let facade = facade.clone();
-                                                        move |_| facade.reveal_entry_group(anchor_id.clone())
+                                                        move |_| {
+                                                            facade.navigate_to_directory_target(target_page, anchor_id.clone())
+                                                        }
                                                     },
                                                     span { "data-slot": "entry-directory-title", "{month.title}" }
                                                     span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
@@ -245,6 +266,44 @@ pub(super) fn render_entry_directory(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+pub(super) fn render_entry_pagination_controls(facade: &EntriesPageFacade) -> Element {
+    if facade.total_pages() <= 1 {
+        return rsx! {};
+    }
+
+    let previous_facade = facade.clone();
+    let next_facade = facade.clone();
+
+    rsx! {
+        nav { "data-layout": "entry-pagination", "aria-label": "文章分页",
+            div { "data-layout": "entry-pagination-summary",
+                "第 {facade.page_start()}-{facade.page_end()} 篇，共 {facade.visible_entries_len()} 篇"
+            }
+            div { "data-layout": "entry-pagination-actions",
+                button {
+                    class: "button",
+                    "data-variant": "secondary",
+                    "data-action": "entry-page-previous",
+                    disabled: !facade.can_go_previous_page(),
+                    onclick: move |_| previous_facade.go_to_previous_page(),
+                    "上一页"
+                }
+                span { "data-slot": "entry-pagination-status",
+                    "第 {facade.current_page()} / {facade.total_pages()} 页"
+                }
+                button {
+                    class: "button",
+                    "data-variant": "secondary",
+                    "data-action": "entry-page-next",
+                    disabled: !facade.can_go_next_page(),
+                    onclick: move |_| next_facade.go_to_next_page(),
+                    "下一页"
                 }
             }
         }

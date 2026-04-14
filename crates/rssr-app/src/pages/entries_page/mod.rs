@@ -12,10 +12,12 @@ mod state;
 
 use dioxus::prelude::*;
 
-use self::browser_interactions::initial_entry_controls_hidden;
+use self::browser_interactions::{initial_entry_controls_hidden, scroll_directory_item};
 use self::cards::render_entry_card;
 use self::clock::current_time_utc;
-use self::controls::{render_entry_controls, render_entry_directory};
+use self::controls::{
+    render_entry_controls, render_entry_directory, render_entry_pagination_controls,
+};
 use self::{facade::EntriesPageFacade, session::EntriesPageSession, state::EntriesPageState};
 use crate::{
     app::AppNav,
@@ -58,7 +60,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
     let controls = render_entry_controls(&facade);
-    let load_more_facade = facade.clone();
+    let pagination_top = render_entry_pagination_controls(&facade);
+    let pagination_bottom = render_entry_pagination_controls(&facade);
 
     rsx! {
         section {
@@ -99,6 +102,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             }
                         }
                     } else {
+                        { pagination_top }
                         div {
                             "data-layout": "entry-groups",
                             "data-state": "populated",
@@ -157,17 +161,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 }
                             }
                         }
-                        if facade.has_more_entries() {
-                            div { "data-layout": "entries-page-load-more",
-                                button {
-                                    class: "button",
-                                    "data-variant": "secondary",
-                                    "data-action": "show-more-entries",
-                                    onclick: move |_| load_more_facade.show_more_entries(),
-                                    "继续加载更多文章（剩余 {facade.remaining_entries_count()} 篇）"
-                                }
-                            }
-                        }
+                        { pagination_bottom }
                     }
                 }
                 if !facade.group_nav_items().is_empty() {
@@ -187,6 +181,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
     let session = EntriesPageSession::new(feed_id, state);
     let state_snapshot = session.snapshot();
+    let facade = EntriesPageFacade::new(ui, session, state_snapshot.clone(), current_time_utc());
     let entry_search = ui.entry_search();
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
     let entry_query = state_snapshot.entry_query(feed_id, query_search.clone());
@@ -196,6 +191,12 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let read_filter = state_snapshot.read_filter;
     let starred_filter = state_snapshot.starred_filter;
     let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
+    let current_page = state_snapshot.current_page;
+    let active_directory_anchor = facade.active_directory_anchor().map(ToString::to_string);
+
+    use_reactive_side_effect((feed_id, query_search.clone()), move |_| {
+        session.dispatch(intent::EntriesPageIntent::SetCurrentPage(state::FIRST_PAGE_NUMBER));
+    });
 
     use_reactive_task(
         (feed_id, preferences_loaded),
@@ -239,7 +240,13 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         },
     );
 
-    EntriesPageFacade::new(ui, session, state_snapshot, current_time_utc())
+    use_reactive_side_effect((current_page, active_directory_anchor.clone()), move |(_, active_anchor)| {
+        if let Some(active_anchor) = active_anchor {
+            scroll_directory_item(&active_anchor);
+        }
+    });
+
+    facade
 }
 
 fn entries_page_title(feed_id: Option<i64>) -> &'static str {

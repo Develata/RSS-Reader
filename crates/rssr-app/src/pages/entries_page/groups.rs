@@ -8,6 +8,7 @@ pub(crate) struct EntryMonthGroup {
     pub(crate) anchor_id: String,
     pub(crate) title: String,
     pub(crate) subtitle: String,
+    pub(crate) target_page: u32,
     pub(crate) dates: Vec<EntryDateGroup>,
 }
 
@@ -16,6 +17,7 @@ pub(crate) struct EntrySourceGroup {
     pub(crate) anchor_id: String,
     pub(crate) title: String,
     pub(crate) subtitle: String,
+    pub(crate) target_page: u32,
     pub(crate) months: Vec<EntrySourceMonthGroup>,
 }
 
@@ -24,6 +26,7 @@ pub(crate) struct EntrySourceMonthGroup {
     pub(crate) anchor_id: String,
     pub(crate) title: String,
     pub(crate) subtitle: String,
+    pub(crate) target_page: u32,
     pub(crate) entries: Vec<Arc<EntrySummary>>,
 }
 
@@ -32,6 +35,7 @@ pub(crate) struct EntryDateGroup {
     pub(crate) anchor_id: String,
     pub(crate) title: String,
     pub(crate) subtitle: String,
+    pub(crate) target_page: u32,
     pub(crate) sources: Vec<EntryDateSourceGroup>,
 }
 
@@ -40,6 +44,7 @@ pub(crate) struct EntryDateSourceGroup {
     pub(crate) anchor_id: String,
     pub(crate) title: String,
     pub(crate) subtitle: String,
+    pub(crate) target_page: u32,
     pub(crate) entries: Vec<Arc<EntrySummary>>,
 }
 
@@ -48,6 +53,8 @@ pub(crate) struct EntryGroupNavItem {
     pub(crate) anchor_id: String,
     pub(crate) title: String,
     pub(crate) subtitle: String,
+    pub(crate) target_page: u32,
+    pub(crate) is_active: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +62,8 @@ pub(crate) struct EntryDirectoryMonth {
     pub(crate) anchor_id: String,
     pub(crate) title: String,
     pub(crate) subtitle: String,
+    pub(crate) target_page: u32,
+    pub(crate) is_active: bool,
     pub(crate) dates: Vec<EntryDirectoryDate>,
 }
 
@@ -63,6 +72,8 @@ pub(crate) struct EntryDirectorySource {
     pub(crate) anchor_id: String,
     pub(crate) title: String,
     pub(crate) subtitle: String,
+    pub(crate) target_page: u32,
+    pub(crate) is_active: bool,
     pub(crate) months: Vec<EntryDirectoryMonth>,
 }
 
@@ -71,21 +82,26 @@ pub(crate) struct EntryDirectoryDate {
     pub(crate) anchor_id: String,
     pub(crate) title: String,
     pub(crate) subtitle: String,
+    pub(crate) target_page: u32,
+    pub(crate) is_active: bool,
 }
 
-pub(crate) fn group_entries_by_time_tree(entries: &[Arc<EntrySummary>]) -> Vec<EntryMonthGroup> {
-    let mut groups: BTreeMap<(i32, u8), Vec<Arc<EntrySummary>>> = BTreeMap::new();
+pub(crate) fn group_entries_by_time_tree(
+    entries: &[Arc<EntrySummary>],
+    page_size: usize,
+) -> Vec<EntryMonthGroup> {
+    let mut groups: BTreeMap<(i32, u8), Vec<(usize, Arc<EntrySummary>)>> = BTreeMap::new();
     let mut undated_entries = Vec::new();
 
-    for entry in entries {
+    for (index, entry) in entries.iter().enumerate() {
         if let Some(published_at) = entry.published_at {
             let published_at = published_at.to_offset(UtcOffset::UTC);
             groups
                 .entry((published_at.year(), published_at.month() as u8))
                 .or_default()
-                .push(Arc::clone(entry));
+                .push((index, Arc::clone(entry)));
         } else {
-            undated_entries.push(Arc::clone(entry));
+            undated_entries.push((index, Arc::clone(entry)));
         }
     }
 
@@ -98,7 +114,8 @@ pub(crate) fn group_entries_by_time_tree(entries: &[Arc<EntrySummary>]) -> Vec<E
                 anchor_id: group_anchor_id(&title),
                 title,
                 subtitle: format!("{} 篇文章", items.len()),
-                dates: group_date_buckets(&items),
+                target_page: page_for_index(items[0].0, page_size),
+                dates: group_date_buckets(&items, page_size),
             }
         })
         .collect::<Vec<_>>();
@@ -109,22 +126,26 @@ pub(crate) fn group_entries_by_time_tree(entries: &[Arc<EntrySummary>]) -> Vec<E
             anchor_id: group_anchor_id(&title),
             title,
             subtitle: format!("{} 篇文章", undated_entries.len()),
-            dates: group_date_buckets(&undated_entries),
+            target_page: page_for_index(undated_entries[0].0, page_size),
+            dates: group_date_buckets(&undated_entries, page_size),
         });
     }
 
     grouped
 }
 
-pub(crate) fn group_entries_by_source_tree(entries: &[Arc<EntrySummary>]) -> Vec<EntrySourceGroup> {
-    let mut groups: BTreeMap<String, Vec<Arc<EntrySummary>>> = BTreeMap::new();
+pub(crate) fn group_entries_by_source_tree(
+    entries: &[Arc<EntrySummary>],
+    page_size: usize,
+) -> Vec<EntrySourceGroup> {
+    let mut groups: BTreeMap<String, Vec<(usize, Arc<EntrySummary>)>> = BTreeMap::new();
     let mut latest_seen: BTreeMap<String, Option<OffsetDateTime>> = BTreeMap::new();
 
-    for entry in entries {
+    for (index, entry) in entries.iter().enumerate() {
         groups
             .entry(entry.feed_title.clone())
             .or_default()
-            .push(Arc::clone(entry));
+            .push((index, Arc::clone(entry)));
         let latest = latest_seen.entry(entry.feed_title.clone()).or_insert(None);
         if latest.is_none() || entry.published_at > *latest {
             *latest = entry.published_at;
@@ -141,7 +162,8 @@ pub(crate) fn group_entries_by_source_tree(entries: &[Arc<EntrySummary>]) -> Vec
                     anchor_id: group_anchor_id(&feed_title),
                     title: feed_title,
                     subtitle: format!("{} 篇文章", items.len()),
-                    months: group_source_months(&items),
+                    target_page: page_for_index(items[0].0, page_size),
+                    months: group_source_months(&items, page_size),
                 },
             )
         })
@@ -154,233 +176,59 @@ pub(crate) fn group_entries_by_source_tree(entries: &[Arc<EntrySummary>]) -> Vec
     grouped.into_iter().map(|(_, group)| group).collect()
 }
 
-pub(crate) fn limit_time_groups(
+pub(crate) fn find_active_time_anchors(
     groups: &[EntryMonthGroup],
-    mut remaining_entries: usize,
-) -> Vec<EntryMonthGroup> {
-    if remaining_entries == usize::MAX {
-        return groups.to_vec();
-    }
+    current_entry_id: Option<i64>,
+) -> (Option<String>, Option<String>) {
+    let Some(current_entry_id) = current_entry_id else {
+        return (None, None);
+    };
 
-    let mut limited_groups = Vec::new();
     for month in groups {
-        if remaining_entries == 0 {
-            break;
+        for date in &month.dates {
+            for source in &date.sources {
+                if source.entries.iter().any(|entry| entry.id == current_entry_id) {
+                    return (Some(month.anchor_id.clone()), Some(date.anchor_id.clone()));
+                }
+            }
         }
-        let dates = limit_date_groups(&month.dates, &mut remaining_entries);
-        if dates.is_empty() {
-            continue;
-        }
-        limited_groups.push(EntryMonthGroup {
-            anchor_id: month.anchor_id.clone(),
-            title: month.title.clone(),
-            subtitle: format!("{} 篇文章", count_month_entries(&dates)),
-            dates,
-        });
     }
 
-    limited_groups
+    (None, None)
 }
 
-pub(crate) fn limit_source_groups(
+pub(crate) fn find_active_source_anchors(
     groups: &[EntrySourceGroup],
-    mut remaining_entries: usize,
-) -> Vec<EntrySourceGroup> {
-    if remaining_entries == usize::MAX {
-        return groups.to_vec();
-    }
+    current_entry_id: Option<i64>,
+) -> (Option<String>, Option<String>) {
+    let Some(current_entry_id) = current_entry_id else {
+        return (None, None);
+    };
 
-    let mut limited_groups = Vec::new();
     for source in groups {
-        if remaining_entries == 0 {
-            break;
-        }
-        let months = limit_source_month_groups(&source.months, &mut remaining_entries);
-        if months.is_empty() {
-            continue;
-        }
-        limited_groups.push(EntrySourceGroup {
-            anchor_id: source.anchor_id.clone(),
-            title: source.title.clone(),
-            subtitle: format!("{} 篇文章", count_source_group_entries(&months)),
-            months,
-        });
-    }
-
-    limited_groups
-}
-
-fn limit_date_groups(
-    groups: &[EntryDateGroup],
-    remaining_entries: &mut usize,
-) -> Vec<EntryDateGroup> {
-    let mut limited_groups = Vec::new();
-    for date in groups {
-        if *remaining_entries == 0 {
-            break;
-        }
-        let sources = limit_date_source_groups(&date.sources, remaining_entries);
-        if sources.is_empty() {
-            continue;
-        }
-        limited_groups.push(EntryDateGroup {
-            anchor_id: date.anchor_id.clone(),
-            title: date.title.clone(),
-            subtitle: format!("{} 篇文章", count_date_entries(&sources)),
-            sources,
-        });
-    }
-    limited_groups
-}
-
-fn limit_date_source_groups(
-    groups: &[EntryDateSourceGroup],
-    remaining_entries: &mut usize,
-) -> Vec<EntryDateSourceGroup> {
-    let mut limited_groups = Vec::new();
-    for source in groups {
-        if *remaining_entries == 0 {
-            break;
-        }
-        let take_count = source.entries.len().min(*remaining_entries);
-        if take_count == 0 {
-            continue;
-        }
-        *remaining_entries -= take_count;
-        limited_groups.push(EntryDateSourceGroup {
-            anchor_id: source.anchor_id.clone(),
-            title: source.title.clone(),
-            subtitle: format!("{take_count} 篇文章"),
-            entries: source.entries.iter().take(take_count).cloned().collect(),
-        });
-    }
-    limited_groups
-}
-
-fn limit_source_month_groups(
-    groups: &[EntrySourceMonthGroup],
-    remaining_entries: &mut usize,
-) -> Vec<EntrySourceMonthGroup> {
-    let mut limited_groups = Vec::new();
-    for month in groups {
-        if *remaining_entries == 0 {
-            break;
-        }
-        let take_count = month.entries.len().min(*remaining_entries);
-        if take_count == 0 {
-            continue;
-        }
-        *remaining_entries -= take_count;
-        limited_groups.push(EntrySourceMonthGroup {
-            anchor_id: month.anchor_id.clone(),
-            title: month.title.clone(),
-            subtitle: format!("{take_count} 篇文章"),
-            entries: month.entries.iter().take(take_count).cloned().collect(),
-        });
-    }
-    limited_groups
-}
-
-fn group_date_buckets(entries: &[Arc<EntrySummary>]) -> Vec<EntryDateGroup> {
-    let mut groups: BTreeMap<String, Vec<Arc<EntrySummary>>> = BTreeMap::new();
-
-    for entry in entries {
-        let key =
-            format_entry_date_utc(entry.published_at).unwrap_or_else(|| "未标注日期".to_string());
-        groups.entry(key).or_default().push(Arc::clone(entry));
-    }
-
-    groups
-        .into_iter()
-        .rev()
-        .map(|(date, items)| {
-            let anchor_id = group_anchor_id(&format!("{}-{}", date, items[0].id));
-            EntryDateGroup {
-                anchor_id,
-                title: date,
-                subtitle: format!("{} 篇文章", items.len()),
-                sources: group_date_sources(&items),
+        for month in &source.months {
+            if month.entries.iter().any(|entry| entry.id == current_entry_id) {
+                return (Some(source.anchor_id.clone()), Some(month.anchor_id.clone()));
             }
-        })
-        .collect()
-}
-
-fn group_date_sources(entries: &[Arc<EntrySummary>]) -> Vec<EntryDateSourceGroup> {
-    let mut groups: BTreeMap<String, Vec<Arc<EntrySummary>>> = BTreeMap::new();
-
-    for entry in entries {
-        groups
-            .entry(entry.feed_title.clone())
-            .or_default()
-            .push(Arc::clone(entry));
-    }
-
-    groups
-        .into_iter()
-        .map(|(feed_title, items)| {
-            let anchor_id = group_anchor_id(&format!("{}-{}", feed_title, items[0].id));
-            EntryDateSourceGroup {
-                anchor_id,
-                title: feed_title,
-                subtitle: format!("{} 篇文章", items.len()),
-                entries: items,
-            }
-        })
-        .collect()
-}
-
-fn group_source_months(entries: &[Arc<EntrySummary>]) -> Vec<EntrySourceMonthGroup> {
-    let mut groups: BTreeMap<(i32, u8), Vec<Arc<EntrySummary>>> = BTreeMap::new();
-    let mut undated_entries = Vec::new();
-
-    for entry in entries {
-        if let Some(published_at) = entry.published_at {
-            let published_at = published_at.to_offset(UtcOffset::UTC);
-            groups
-                .entry((published_at.year(), published_at.month() as u8))
-                .or_default()
-                .push(Arc::clone(entry));
-        } else {
-            undated_entries.push(Arc::clone(entry));
         }
     }
 
-    let mut months = groups
-        .into_iter()
-        .rev()
-        .map(|((year, month), items)| {
-            let title = format!("{year} 年 {month:02} 月");
-            let anchor_id = group_anchor_id(&format!("{}-{}", title, items[0].id));
-            EntrySourceMonthGroup {
-                anchor_id,
-                title,
-                subtitle: format!("{} 篇文章", items.len()),
-                entries: items,
-            }
-        })
-        .collect::<Vec<_>>();
-
-    if !undated_entries.is_empty() {
-        let title = "未标注日期".to_string();
-        let anchor_id = group_anchor_id(&format!("{}-{}", title, undated_entries[0].id));
-        months.push(EntrySourceMonthGroup {
-            anchor_id,
-            title,
-            subtitle: format!("{} 篇文章", undated_entries.len()),
-            entries: undated_entries,
-        });
-    }
-
-    months
+    (None, None)
 }
 
-pub(crate) fn build_directory_months(groups: &[EntryMonthGroup]) -> Vec<EntryDirectoryMonth> {
+pub(crate) fn build_directory_months(
+    groups: &[EntryMonthGroup],
+    active_group_anchor: Option<&str>,
+    active_directory_anchor: Option<&str>,
+) -> Vec<EntryDirectoryMonth> {
     groups
         .iter()
         .map(|month| EntryDirectoryMonth {
             anchor_id: month.anchor_id.clone(),
             title: month.title.clone(),
             subtitle: month.subtitle.clone(),
+            target_page: month.target_page,
+            is_active: active_group_anchor == Some(month.anchor_id.as_str()),
             dates: month
                 .dates
                 .iter()
@@ -388,30 +236,43 @@ pub(crate) fn build_directory_months(groups: &[EntryMonthGroup]) -> Vec<EntryDir
                     anchor_id: date.anchor_id.clone(),
                     title: date.title.clone(),
                     subtitle: date.subtitle.clone(),
+                    target_page: date.target_page,
+                    is_active: active_directory_anchor == Some(date.anchor_id.as_str()),
                 })
                 .collect(),
         })
         .collect()
 }
 
-pub(crate) fn build_month_nav_items(groups: &[EntryMonthGroup]) -> Vec<EntryGroupNavItem> {
+pub(crate) fn build_month_nav_items(
+    groups: &[EntryMonthGroup],
+    active_group_anchor: Option<&str>,
+) -> Vec<EntryGroupNavItem> {
     groups
         .iter()
         .map(|group| EntryGroupNavItem {
             anchor_id: group.anchor_id.clone(),
             title: group.title.clone(),
             subtitle: group.subtitle.clone(),
+            target_page: group.target_page,
+            is_active: active_group_anchor == Some(group.anchor_id.as_str()),
         })
         .collect()
 }
 
-pub(crate) fn build_directory_sources(groups: &[EntrySourceGroup]) -> Vec<EntryDirectorySource> {
+pub(crate) fn build_directory_sources(
+    groups: &[EntrySourceGroup],
+    active_group_anchor: Option<&str>,
+    active_directory_anchor: Option<&str>,
+) -> Vec<EntryDirectorySource> {
     groups
         .iter()
         .map(|group| EntryDirectorySource {
             anchor_id: group.anchor_id.clone(),
             title: group.title.clone(),
             subtitle: group.subtitle.clone(),
+            target_page: group.target_page,
+            is_active: active_group_anchor == Some(group.anchor_id.as_str()),
             months: group
                 .months
                 .iter()
@@ -419,6 +280,8 @@ pub(crate) fn build_directory_sources(groups: &[EntrySourceGroup]) -> Vec<EntryD
                     anchor_id: month.anchor_id.clone(),
                     title: month.title.clone(),
                     subtitle: month.subtitle.clone(),
+                    target_page: month.target_page,
+                    is_active: active_directory_anchor == Some(month.anchor_id.as_str()),
                     dates: Vec::new(),
                 })
                 .collect(),
@@ -426,13 +289,18 @@ pub(crate) fn build_directory_sources(groups: &[EntrySourceGroup]) -> Vec<EntryD
         .collect()
 }
 
-pub(crate) fn build_group_nav_items(groups: &[EntrySourceGroup]) -> Vec<EntryGroupNavItem> {
+pub(crate) fn build_group_nav_items(
+    groups: &[EntrySourceGroup],
+    active_group_anchor: Option<&str>,
+) -> Vec<EntryGroupNavItem> {
     groups
         .iter()
         .map(|group| EntryGroupNavItem {
             anchor_id: group.anchor_id.clone(),
             title: group.title.clone(),
             subtitle: group.subtitle.clone(),
+            target_page: group.target_page,
+            is_active: active_group_anchor == Some(group.anchor_id.as_str()),
         })
         .collect()
 }
@@ -453,16 +321,114 @@ pub(crate) fn group_anchor_id(title: &str) -> String {
     format!("entry-group-{}", slug.trim_matches('-'))
 }
 
-fn count_month_entries(groups: &[EntryDateGroup]) -> usize {
-    groups.iter().map(|group| count_date_entries(&group.sources)).sum()
+fn group_date_buckets(
+    entries: &[(usize, Arc<EntrySummary>)],
+    page_size: usize,
+) -> Vec<EntryDateGroup> {
+    let mut groups: BTreeMap<String, Vec<(usize, Arc<EntrySummary>)>> = BTreeMap::new();
+
+    for (index, entry) in entries {
+        let key =
+            format_entry_date_utc(entry.published_at).unwrap_or_else(|| "未标注日期".to_string());
+        groups.entry(key).or_default().push((*index, Arc::clone(entry)));
+    }
+
+    groups
+        .into_iter()
+        .rev()
+        .map(|(date, items)| {
+            let anchor_id = group_anchor_id(&format!("{}-{}", date, items[0].1.id));
+            EntryDateGroup {
+                anchor_id,
+                title: date,
+                subtitle: format!("{} 篇文章", items.len()),
+                target_page: page_for_index(items[0].0, page_size),
+                sources: group_date_sources(&items, page_size),
+            }
+        })
+        .collect()
 }
 
-fn count_date_entries(groups: &[EntryDateSourceGroup]) -> usize {
-    groups.iter().map(|group| group.entries.len()).sum()
+fn group_date_sources(
+    entries: &[(usize, Arc<EntrySummary>)],
+    page_size: usize,
+) -> Vec<EntryDateSourceGroup> {
+    let mut groups: BTreeMap<String, Vec<(usize, Arc<EntrySummary>)>> = BTreeMap::new();
+
+    for (index, entry) in entries {
+        groups
+            .entry(entry.feed_title.clone())
+            .or_default()
+            .push((*index, Arc::clone(entry)));
+    }
+
+    groups
+        .into_iter()
+        .map(|(feed_title, items)| {
+            let anchor_id = group_anchor_id(&format!("{}-{}", feed_title, items[0].1.id));
+            EntryDateSourceGroup {
+                anchor_id,
+                title: feed_title,
+                subtitle: format!("{} 篇文章", items.len()),
+                target_page: page_for_index(items[0].0, page_size),
+                entries: items.into_iter().map(|(_, entry)| entry).collect(),
+            }
+        })
+        .collect()
 }
 
-fn count_source_group_entries(groups: &[EntrySourceMonthGroup]) -> usize {
-    groups.iter().map(|group| group.entries.len()).sum()
+fn group_source_months(
+    entries: &[(usize, Arc<EntrySummary>)],
+    page_size: usize,
+) -> Vec<EntrySourceMonthGroup> {
+    let mut groups: BTreeMap<(i32, u8), Vec<(usize, Arc<EntrySummary>)>> = BTreeMap::new();
+    let mut undated_entries = Vec::new();
+
+    for (index, entry) in entries {
+        if let Some(published_at) = entry.published_at {
+            let published_at = published_at.to_offset(UtcOffset::UTC);
+            groups
+                .entry((published_at.year(), published_at.month() as u8))
+                .or_default()
+                .push((*index, Arc::clone(entry)));
+        } else {
+            undated_entries.push((*index, Arc::clone(entry)));
+        }
+    }
+
+    let mut months = groups
+        .into_iter()
+        .rev()
+        .map(|((year, month), items)| {
+            let title = format!("{year} 年 {month:02} 月");
+            let anchor_id = group_anchor_id(&format!("{}-{}", title, items[0].1.id));
+            EntrySourceMonthGroup {
+                anchor_id,
+                title,
+                subtitle: format!("{} 篇文章", items.len()),
+                target_page: page_for_index(items[0].0, page_size),
+                entries: items.into_iter().map(|(_, entry)| entry).collect(),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if !undated_entries.is_empty() {
+        let title = "未标注日期".to_string();
+        let anchor_id = group_anchor_id(&format!("{}-{}", title, undated_entries[0].1.id));
+        months.push(EntrySourceMonthGroup {
+            anchor_id,
+            title,
+            subtitle: format!("{} 篇文章", undated_entries.len()),
+            target_page: page_for_index(undated_entries[0].0, page_size),
+            entries: undated_entries.into_iter().map(|(_, entry)| entry).collect(),
+        });
+    }
+
+    months
+}
+
+fn page_for_index(index: usize, page_size: usize) -> u32 {
+    (index / page_size.max(1)) as u32 + 1
 }
 
 fn format_entry_date_utc(published_at: Option<OffsetDateTime>) -> Option<String> {
@@ -477,8 +443,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        group_entries_by_source_tree, group_entries_by_time_tree, limit_source_groups,
-        limit_time_groups,
+        build_directory_months, build_group_nav_items, build_month_nav_items,
+        find_active_source_anchors, find_active_time_anchors, group_entries_by_source_tree,
+        group_entries_by_time_tree,
     };
     use rssr_domain::EntrySummary;
     use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -505,68 +472,76 @@ mod tests {
             entry(3, "Beta", "No date", None),
         ];
 
-        let groups = group_entries_by_time_tree(&entries);
+        let groups = group_entries_by_time_tree(&entries, 100);
 
         assert_eq!(groups.len(), 3);
         assert_eq!(groups[0].title, "2026 年 04 月");
         assert_eq!(groups[0].dates[0].title, "2026-04-02");
         assert_eq!(groups[0].dates[0].sources[0].title, "Beta");
         assert_eq!(groups[0].dates[0].sources[0].entries[0].title, "April two");
-        assert_eq!(groups[1].title, "2026 年 03 月");
-        assert_eq!(groups[2].title, "未标注日期");
+        assert_eq!(groups[0].target_page, 1);
     }
 
     #[test]
-    fn groups_entries_by_source_using_latest_entry_order() {
+    fn source_groups_keep_first_entry_target_page() {
         let entries = vec![
-            entry(1, "Alpha", "Older alpha", Some("2026-03-21T08:00:00Z")),
-            entry(2, "Beta", "Newest beta", Some("2026-04-02T08:00:00Z")),
-            entry(3, "Alpha", "Newest alpha", Some("2026-04-01T08:00:00Z")),
+            entry(1, "Beta", "Beta newest", Some("2026-04-05T08:00:00Z")),
+            entry(2, "Alpha", "Alpha newest", Some("2026-04-04T08:00:00Z")),
+            entry(3, "Alpha", "Alpha second", Some("2026-04-03T08:00:00Z")),
+            entry(4, "Beta", "Beta second", Some("2026-04-02T08:00:00Z")),
         ];
 
-        let groups = group_entries_by_source_tree(&entries);
+        let groups = group_entries_by_source_tree(&entries, 2);
 
-        assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].title, "Beta");
+        assert_eq!(groups[0].target_page, 1);
         assert_eq!(groups[1].title, "Alpha");
-        assert_eq!(groups[1].months[0].entries[0].title, "Newest alpha");
+        assert_eq!(groups[1].target_page, 1);
     }
 
     #[test]
-    fn limits_time_groups_by_total_entry_budget() {
+    fn finds_active_time_anchors_for_current_page_entry() {
         let entries = vec![
-            entry(1, "Alpha", "April three", Some("2026-04-03T08:00:00Z")),
+            entry(1, "Alpha", "April one", Some("2026-04-03T08:00:00Z")),
             entry(2, "Alpha", "April two", Some("2026-04-02T08:00:00Z")),
-            entry(3, "Beta", "April one", Some("2026-04-01T08:00:00Z")),
         ];
+        let groups = group_entries_by_time_tree(&entries, 100);
 
-        let groups = group_entries_by_time_tree(&entries);
-        let limited = limit_time_groups(&groups, 2);
-        let rendered_total = limited[0]
-            .dates
-            .iter()
-            .flat_map(|date| date.sources.iter())
-            .map(|source| source.entries.len())
-            .sum::<usize>();
+        let (group_anchor, directory_anchor) = find_active_time_anchors(&groups, Some(2));
 
-        assert_eq!(limited.len(), 1);
-        assert_eq!(limited[0].subtitle, "2 篇文章");
-        assert_eq!(rendered_total, 2);
+        assert_eq!(group_anchor.as_deref(), Some(groups[0].anchor_id.as_str()));
+        assert_eq!(directory_anchor.as_deref(), Some(groups[0].dates[1].anchor_id.as_str()));
     }
 
     #[test]
-    fn limits_source_groups_by_total_entry_budget() {
+    fn builds_active_nav_items_for_time_groups() {
         let entries = vec![
-            entry(1, "Alpha", "Alpha three", Some("2026-04-03T08:00:00Z")),
-            entry(2, "Alpha", "Alpha two", Some("2026-04-02T08:00:00Z")),
-            entry(3, "Beta", "Beta one", Some("2026-04-01T08:00:00Z")),
+            entry(1, "Alpha", "April one", Some("2026-04-03T08:00:00Z")),
+            entry(2, "Alpha", "March one", Some("2026-03-02T08:00:00Z")),
         ];
+        let groups = group_entries_by_time_tree(&entries, 100);
+        let nav = build_month_nav_items(&groups, Some(groups[0].anchor_id.as_str()));
+        let directory = build_directory_months(
+            &groups,
+            Some(groups[0].anchor_id.as_str()),
+            Some(groups[0].dates[0].anchor_id.as_str()),
+        );
 
-        let groups = group_entries_by_source_tree(&entries);
-        let limited = limit_source_groups(&groups, 2);
+        assert!(nav[0].is_active);
+        assert!(directory[0].is_active);
+        assert!(directory[0].dates[0].is_active);
+    }
 
-        assert_eq!(limited.len(), 1);
-        assert_eq!(limited[0].title, "Alpha");
-        assert_eq!(limited[0].months[0].entries.len(), 2);
+    #[test]
+    fn builds_active_nav_items_for_source_groups() {
+        let entries = vec![
+            entry(1, "Alpha", "Alpha", Some("2026-04-03T08:00:00Z")),
+            entry(2, "Beta", "Beta", Some("2026-04-02T08:00:00Z")),
+        ];
+        let groups = group_entries_by_source_tree(&entries, 100);
+        let (group_anchor, _) = find_active_source_anchors(&groups, Some(1));
+        let nav = build_group_nav_items(&groups, group_anchor.as_deref());
+
+        assert!(nav.iter().any(|item| item.is_active));
     }
 }

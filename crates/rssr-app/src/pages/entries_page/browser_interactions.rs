@@ -68,3 +68,35 @@ pub(super) fn scroll_to_entry_group(anchor_id: &str) {
         "#
     ));
 }
+
+pub(super) fn scroll_directory_item(anchor_id: &str) {
+    let Ok(anchor_id_json) = serde_json::to_string(anchor_id) else {
+        return;
+    };
+
+    document::eval(&format!(
+        r#"
+        const targetId = {anchor_id_json};
+        const selector = `[data-directory-anchor="${{targetId}}"]`;
+        const scrollActiveDirectory = () => {{
+            const elements = document.querySelectorAll(selector);
+            if (!elements.length) {{
+                return false;
+            }}
+
+            elements.forEach((element) => {{
+                element.scrollIntoView({{
+                    behavior: "smooth",
+                    block: "nearest",
+                    inline: "nearest"
+                }});
+            }});
+            return true;
+        }};
+
+        if (!scrollActiveDirectory()) {{
+            requestAnimationFrame(scrollActiveDirectory);
+        }}
+        "#
+    ));
+}

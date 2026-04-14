@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use rssr_domain::DEFAULT_ENTRIES_PAGE_SIZE;
 
 use super::state::SettingsPageSaveState;
 use crate::{
@@ -31,7 +32,7 @@ impl SettingsPageSaveSession {
     }
 
     pub(crate) fn save_with_message(self, success_message: impl Into<String>) {
-        let next = (self.page.draft())();
+        let mut next = (self.page.draft())();
         if let Err(err) = validate_custom_css(&next.custom_css) {
             set_status_error(
                 self.page.status_signal(),
@@ -48,7 +49,13 @@ impl SettingsPageSaveSession {
 
         let status = self.page.status_signal();
         let status_tone = self.page.status_tone_signal();
-        let success_message = success_message.into();
+        let mut success_message = success_message.into();
+        if next.entries_page_size == 0 {
+            next.entries_page_size = DEFAULT_ENTRIES_PAGE_SIZE;
+            success_message.push_str(&format!(
+                " 文章页每页数量输入为 0，已回退为默认值 {DEFAULT_ENTRIES_PAGE_SIZE}。"
+            ));
+        }
 
         spawn_ui_command(
             UiCommand::Settings(SettingsCommand::SaveAppearance {

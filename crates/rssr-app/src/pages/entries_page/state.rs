@@ -5,8 +5,7 @@ use rssr_domain::{
     ReadFilter, StarredFilter, UserSettings,
 };
 
-pub(crate) const INITIAL_RENDERED_ENTRY_LIMIT: usize = 120;
-pub(crate) const RENDERED_ENTRY_BATCH_SIZE: usize = 120;
+pub(crate) const FIRST_PAGE_NUMBER: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EntryGroupingMode {
@@ -24,9 +23,10 @@ pub(crate) struct EntriesPageState {
     pub(crate) show_archived: bool,
     pub(crate) grouping_mode: EntryGroupingMode,
     pub(crate) archive_after_months: u32,
+    pub(crate) entries_page_size: u32,
     pub(crate) expanded_directory_sources: BTreeSet<String>,
     pub(crate) controls_hidden: bool,
-    pub(crate) rendered_entry_limit: usize,
+    pub(crate) current_page: u32,
     pub(crate) status: String,
     pub(crate) status_tone: String,
     pub(crate) preferences_loaded: bool,
@@ -45,9 +45,10 @@ impl EntriesPageState {
             show_archived: workspace.show_archived,
             grouping_mode: entry_grouping_mode_from_preference(workspace.grouping_mode),
             archive_after_months: settings.archive_after_months,
+            entries_page_size: settings.entries_page_size.max(1),
             expanded_directory_sources: BTreeSet::new(),
             controls_hidden: initial_controls_hidden,
-            rendered_entry_limit: INITIAL_RENDERED_ENTRY_LIMIT,
+            current_page: FIRST_PAGE_NUMBER,
             status: "正在加载文章列表…".to_string(),
             status_tone: "info".to_string(),
             preferences_loaded: false,
@@ -71,6 +72,10 @@ impl EntriesPageState {
             search_title,
             limit: None,
         }
+    }
+
+    pub(crate) fn page_size(&self) -> usize {
+        self.entries_page_size.max(1) as usize
     }
 }
 

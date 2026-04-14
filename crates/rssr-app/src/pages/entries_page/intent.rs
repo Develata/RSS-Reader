@@ -21,8 +21,9 @@ pub(crate) enum EntriesPageIntent {
     SetReadFilter(ReadFilter),
     SetStarredFilter(StarredFilter),
     SetSelectedFeedUrls(Vec<String>),
+    SetCurrentPage(u32),
+    GoToNextPage,
+    GoToPreviousPage,
     SetControlsHidden(bool),
-    ShowMoreEntries,
-    RevealAllEntries,
     ToggleDirectorySource(String),
 }

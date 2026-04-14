@@ -12,7 +12,10 @@ pub use feed::{Feed, FeedSummary, NewFeedSubscription, normalize_feed_url};
 pub use repository::{
     AppStateRepository, EntryRepository, FeedRepository, HealthRepository, SettingsRepository,
 };
-pub use settings::{ConfigFeed, ConfigPackage, ListDensity, StartupView, ThemeMode, UserSettings};
+pub use settings::{
+    ConfigFeed, ConfigPackage, DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ENTRIES_PAGE_SIZE,
+    StartupView, ThemeMode, UserSettings,
+};
 
 pub type Result<T> = std::result::Result<T, DomainError>;
 

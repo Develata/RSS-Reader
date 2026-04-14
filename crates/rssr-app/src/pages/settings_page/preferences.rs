@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use rssr_domain::{ListDensity, StartupView, ThemeMode};
+use rssr_domain::{DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ENTRIES_PAGE_SIZE, StartupView, ThemeMode};
 
 use super::facade::SettingsPageFacade;
 
@@ -11,6 +11,7 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
     let startup_facade = facade.clone();
     let refresh_facade = facade.clone();
     let archive_facade = facade.clone();
+    let entries_page_size_facade = facade.clone();
     let font_scale_facade = facade.clone();
 
     rsx! {
@@ -103,6 +104,30 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                 });
                             }
                         }
+                    }
+                }
+                div { "data-slot": "settings-form-grid-item",
+                    label { class: "field-label", r#for: "settings-entries-page-size", "文章页每页数量" }
+                    input {
+                        id: "settings-entries-page-size",
+                        name: "entries_page_size",
+                        class: "text-input",
+                        r#type: "number",
+                        min: "0",
+                        max: "{MAX_ENTRIES_PAGE_SIZE}",
+                        step: "1",
+                        "data-field": "entries-page-size",
+                        value: "{draft.entries_page_size}",
+                        oninput: move |event| {
+                            if let Ok(size) = event.value().parse::<u32>() {
+                                entries_page_size_facade.update_draft(|next| {
+                                    next.entries_page_size = size;
+                                });
+                            }
+                        }
+                    }
+                    p { "data-slot": "page-intro",
+                        "建议设置为 80 到 100；输入 0 时保存会自动回退到默认值 {DEFAULT_ENTRIES_PAGE_SIZE}。"
                     }
                 }
                 div { "data-slot": "settings-form-grid-item",
