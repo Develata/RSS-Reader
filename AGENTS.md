@@ -63,6 +63,20 @@ specs/
 - 如果该次工作尚未提交，记录中 MUST 明确写出 `commit: pending` 或等价状态。
 - 未补 `docs/handoffs/` 记录的工作，不应视为完整交付。
 - 记录规范与模板以 `docs/handoffs/README.md` 和 `docs/handoffs/TEMPLATE.md` 为准。
+
+## Agent 架构护栏
+
+- 当即将提出或推进的设计 / 计划出现以下任一信号时，MUST 先做严谨的保守分析，再立刻向交互人员明确提出，不得静默继续推进：
+  - 代码严重分叉
+  - infra 架构被污染，平台差异回流到 application / domain 主语义
+  - 前后端大规模迁移或职责重分配（纯后端内部重构、纯前端内部重构除外）
+  - 明显违背 `docs/design/functional-design-philosophy.md`
+- 对上述几类方案，agent 默认应持保守甚至负面倾向；只有在收益、边界和迁移成本被充分论证后，才可建议继续。
+- 讨论此类方案时，必须优先说明：
+  - 哪些核心语义仍保持统一
+  - 哪些差异被限制在 infra / adapter / host capability 层
+  - 哪些迁移是新增能力，哪些迁移只是为了弥补设计错误
+  - 如果不做该方案，当前更小、更稳的替代路径是什么
 <!-- MANUAL ADDITIONS END -->
 
 ## Active Technologies

@@ -9,6 +9,9 @@ use crate::{
     SettingsService, SettingsSyncService, StartupService, SubscriptionWorkflow,
 };
 
+// 架构护栏：如果某次设计/计划开始要求严重代码分叉、污染 infra 边界、引发前后端大规模迁移
+// （纯前端内部或纯后端内部重构除外），或明显违背设计哲学，必须先停下来做保守分析并
+// 明确向交互人员提出风险；不要把这类结构性代价静默推进到 application 组合层。
 pub trait AppStateServicesPort: AppStateRepository + AppStatePort + Send + Sync {}
 
 impl<T> AppStateServicesPort for T where T: AppStateRepository + AppStatePort + Send + Sync + ?Sized {}
