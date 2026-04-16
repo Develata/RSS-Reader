@@ -12,10 +12,7 @@ use crate::application_adapters::browser::{
         get_entry_record as query_get_entry_record, list_entries as query_list_entries,
         reader_navigation as query_reader_navigation,
     },
-    state::{
-        BrowserState, PersistedEntryContent, PersistedEntryFlag, save_entry_content_patch,
-        save_entry_flag_patch, save_state_snapshot,
-    },
+    state::{BrowserState, PersistedEntryFlag, save_entry_flag_patch, save_state_snapshot},
 };
 
 use super::shared::map_persistence_error;

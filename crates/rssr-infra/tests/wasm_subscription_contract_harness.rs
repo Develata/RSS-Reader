@@ -7,7 +7,7 @@ use rssr_application::{
     AddSubscriptionInput, FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedService,
     RefreshCommit, RefreshService, RefreshStorePort, RemoveSubscriptionInput, SubscriptionWorkflow,
 };
-use rssr_domain::EntryQuery;
+use rssr_domain::{EntryIndexRepository, EntryQuery};
 use rssr_infra::application_adapters::browser::{
     adapters::{BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRepository},
     state::{

@@ -16,6 +16,7 @@
 
 - 修正纯静态 Web `count_entries()` 被 `limit` 污染的问题，保证总数/总页数语义与 native SQL 保持一致。
 - 优化 native SQLite 刷新写路径，把“每篇正文一次回查 `entry_id`”改成“整批索引写入后一次性批量解析 `entry_id`”，避免正文批量刷新时的额外逐条 `SELECT`。
+- 修正纯静态 Web 的 wasm 编译断点：补齐 browser `state` 的转换函数导出，并修复 wasm harness 对 `EntryIndexRepository` trait 的导入。
 
 ## 影响范围
 
@@ -94,6 +95,7 @@
 - `cargo test -p rssr-infra --test test_sqlite_bootstrap --test test_feed_refresh_flow --test test_application_refresh_store_adapter --test test_entry_state_and_search --test test_config_exchange_contract_harness --test test_subscription_contract_harness --test test_webdav_local_roundtrip --test test_config_package_io`：通过
 - `cargo test -p rssr-infra --test test_entry_state_and_search --test test_entry_large_dataset_performance`：通过
 - `cargo test -p rssr-infra`：通过
+- `cargo check -p rssr-infra --target wasm32-unknown-unknown --tests`：通过
 
 ### 手工验收
 
