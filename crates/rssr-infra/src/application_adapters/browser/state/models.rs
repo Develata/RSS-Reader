@@ -5,12 +5,14 @@ use time::OffsetDateTime;
 pub const STORAGE_KEY: &str = "rssr-web-state-v1";
 pub const APP_STATE_STORAGE_KEY: &str = "rssr-web-app-state-v2";
 pub const ENTRY_FLAGS_STORAGE_KEY: &str = "rssr-web-entry-flags-v1";
+pub const ENTRY_CONTENT_STORAGE_KEY: &str = "rssr-web-entry-content-v1";
 
 #[derive(Debug, Default, Clone)]
 pub struct BrowserState {
     pub core: PersistedState,
     pub app_state: PersistedAppStateSlice,
     pub entry_flags: PersistedEntryFlagsSlice,
+    pub entry_content: PersistedEntryContentSlice,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -18,7 +20,7 @@ pub struct PersistedState {
     pub next_feed_id: i64,
     pub next_entry_id: i64,
     pub feeds: Vec<PersistedFeed>,
-    pub entries: Vec<PersistedEntry>,
+    pub entries: Vec<PersistedEntryIndex>,
     pub settings: rssr_domain::UserSettings,
 }
 
@@ -42,7 +44,7 @@ pub struct PersistedFeed {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PersistedEntry {
+pub struct PersistedEntryIndex {
     pub id: i64,
     pub feed_id: i64,
     pub external_id: String,
@@ -51,12 +53,10 @@ pub struct PersistedEntry {
     pub title: String,
     pub author: Option<String>,
     pub summary: Option<String>,
-    pub content_html: Option<String>,
-    pub content_text: Option<String>,
     pub published_at: Option<OffsetDateTime>,
     pub updated_at_source: Option<OffsetDateTime>,
     pub first_seen_at: OffsetDateTime,
-    pub content_hash: Option<String>,
+    pub has_content: bool,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
 }
@@ -67,6 +67,21 @@ pub struct LoadedState {
 }
 
 pub type PersistedAppStateSlice = AppStateSnapshot;
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct PersistedEntryContentSlice {
+    pub entries: Vec<PersistedEntryContent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedEntryContent {
+    pub entry_id: i64,
+    pub feed_id: i64,
+    pub content_html: Option<String>,
+    pub content_text: Option<String>,
+    pub content_hash: Option<String>,
+    pub updated_at: OffsetDateTime,
+}
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PersistedEntryFlagsSlice {

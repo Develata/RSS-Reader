@@ -27,6 +27,68 @@ pub struct Entry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntryRecord {
+    pub id: i64,
+    pub feed_id: i64,
+    pub external_id: String,
+    pub dedup_key: String,
+    pub url: Option<Url>,
+    pub title: String,
+    pub author: Option<String>,
+    pub summary: Option<String>,
+    pub published_at: Option<OffsetDateTime>,
+    pub updated_at_source: Option<OffsetDateTime>,
+    pub first_seen_at: OffsetDateTime,
+    pub has_content: bool,
+    pub is_read: bool,
+    pub is_starred: bool,
+    pub read_at: Option<OffsetDateTime>,
+    pub starred_at: Option<OffsetDateTime>,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntryContent {
+    pub entry_id: i64,
+    pub content_html: Option<String>,
+    pub content_text: Option<String>,
+    pub content_hash: Option<String>,
+    pub updated_at: OffsetDateTime,
+}
+
+impl EntryRecord {
+    pub fn into_entry(self, content: Option<EntryContent>) -> Entry {
+        let (content_html, content_text, content_hash) = content
+            .map(|content| (content.content_html, content.content_text, content.content_hash))
+            .unwrap_or((None, None, None));
+
+        Entry {
+            id: self.id,
+            feed_id: self.feed_id,
+            external_id: self.external_id,
+            dedup_key: self.dedup_key,
+            url: self.url,
+            title: self.title,
+            author: self.author,
+            summary: self.summary,
+            content_html,
+            content_text,
+            published_at: self.published_at,
+            updated_at_source: self.updated_at_source,
+            first_seen_at: self.first_seen_at,
+            content_hash,
+            is_read: self.is_read,
+            is_starred: self.is_starred,
+            read_at: self.read_at,
+            starred_at: self.starred_at,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntrySummary {
     pub id: i64,
     pub feed_id: i64,

@@ -186,7 +186,7 @@ impl RefreshStorePort for BrowserRefreshStore {
                     feed.fetch_error = None;
                     feed.updated_at = now;
                     upsert_entries(
-                        &mut state.core,
+                        &mut state,
                         feed_id,
                         map_application_entries(update.feed.entries),
                     )?;

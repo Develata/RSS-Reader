@@ -7,7 +7,7 @@ use rssr_application::{
     AddSubscriptionInput, FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedService,
     RefreshCommit, RefreshService, RefreshStorePort, RemoveSubscriptionInput, SubscriptionWorkflow,
 };
-use rssr_domain::{EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription};
+use rssr_domain::{EntryQuery, FeedRepository, NewFeedSubscription};
 use rssr_infra::{
     application_adapters::SqliteAppStateAdapter,
     db::{
@@ -67,7 +67,11 @@ async fn build_sqlite_fixture() -> Result<SqliteFixture> {
     let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
     let app_state_repository = Arc::new(SqliteAppStateRepository::new(pool.clone()));
     let app_state_adapter = Arc::new(SqliteAppStateAdapter::new(app_state_repository.clone()));
-    let feed_service = FeedService::new(feed_repository.clone(), entry_repository.clone());
+    let feed_service = FeedService::new(
+        feed_repository.clone(),
+        entry_repository.clone(),
+        entry_repository.clone(),
+    );
     let refresh_service =
         RefreshService::new(Arc::new(UnusedRefreshSource), Arc::new(UnusedRefreshStore));
     let workflow = SubscriptionWorkflow::new(feed_service, refresh_service, app_state_adapter);

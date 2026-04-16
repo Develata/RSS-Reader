@@ -6,7 +6,7 @@ use rssr_application::{
     FeedRefreshUpdate, ParsedEntryData, ParsedFeedUpdate, RefreshCommit, RefreshHttpMetadata,
     RefreshStorePort, RefreshTarget,
 };
-use rssr_domain::{EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription};
+use rssr_domain::{EntryQuery, FeedRepository, NewFeedSubscription};
 use rssr_infra::{
     application_adapters::SqliteRefreshStore,
     db::{

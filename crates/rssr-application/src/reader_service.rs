@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rssr_domain::{Entry, EntryNavigation, EntryRepository};
+use rssr_domain::{Entry, EntryContentRepository, EntryIndexRepository, EntryNavigation};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReaderEntrySnapshot {
@@ -33,20 +33,36 @@ pub struct ToggleStarredOutcome {
 
 #[derive(Clone)]
 pub struct ReaderService {
-    entry_repository: Arc<dyn EntryRepository>,
+    entry_index_repository: Arc<dyn EntryIndexRepository>,
+    entry_content_repository: Arc<dyn EntryContentRepository>,
 }
 
 impl ReaderService {
-    pub fn new(entry_repository: Arc<dyn EntryRepository>) -> Self {
-        Self { entry_repository }
+    pub fn new(
+        entry_index_repository: Arc<dyn EntryIndexRepository>,
+        entry_content_repository: Arc<dyn EntryContentRepository>,
+    ) -> Self {
+        Self { entry_index_repository, entry_content_repository }
     }
 
     pub async fn load_entry(&self, entry_id: i64) -> anyhow::Result<ReaderEntrySnapshot> {
-        let entry = self.entry_repository.get_entry(entry_id).await.context("读取文章失败")?;
-        let navigation = if entry.is_some() {
-            self.entry_repository.reader_navigation(entry_id).await.unwrap_or_default()
+        let record =
+            self.entry_index_repository.get_entry_record(entry_id).await.context("读取文章失败")?;
+        let navigation = if record.is_some() {
+            self.entry_index_repository.reader_navigation(entry_id).await.unwrap_or_default()
         } else {
             EntryNavigation::default()
+        };
+        let entry = match record {
+            Some(record) => Some(
+                record.into_entry(
+                    self.entry_content_repository
+                        .get_content(entry_id)
+                        .await
+                        .context("读取文章正文失败")?,
+                ),
+            ),
+            None => None,
         };
 
         Ok(ReaderEntrySnapshot { entry, navigation })
@@ -54,7 +70,7 @@ impl ReaderService {
 
     pub async fn toggle_read(&self, input: ToggleReadInput) -> anyhow::Result<ToggleReadOutcome> {
         let is_read = !input.currently_read;
-        self.entry_repository
+        self.entry_index_repository
             .set_read(input.entry_id, is_read)
             .await
             .context("更新已读状态失败")?;
@@ -66,7 +82,7 @@ impl ReaderService {
         input: ToggleStarredInput,
     ) -> anyhow::Result<ToggleStarredOutcome> {
         let is_starred = !input.currently_starred;
-        self.entry_repository
+        self.entry_index_repository
             .set_starred(input.entry_id, is_starred)
             .await
             .context("更新收藏状态失败")?;
@@ -78,15 +94,18 @@ impl ReaderService {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use rssr_domain::{Entry, EntryNavigation, EntryQuery, EntryRepository, EntrySummary};
+    use rssr_domain::{
+        EntryContent, EntryContentRepository, EntryIndexRepository, EntryNavigation, EntryQuery,
+        EntryRecord, EntrySummary,
+    };
     use time::{OffsetDateTime, format_description::well_known::Rfc3339};
     use url::Url;
 
     use super::{ReaderService, ToggleReadInput, ToggleStarredInput};
 
     #[derive(Debug, Default)]
-    struct EntryRepositoryStub {
-        entry: Option<Entry>,
+    struct EntryIndexRepositoryStub {
+        entry: Option<EntryRecord>,
         navigation: EntryNavigation,
         fail_navigation: bool,
         read_calls: Mutex<Vec<(i64, bool)>>,
@@ -94,7 +113,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl EntryRepository for EntryRepositoryStub {
+    impl EntryIndexRepository for EntryIndexRepositoryStub {
         async fn list_entries(
             &self,
             _query: &EntryQuery,
@@ -102,7 +121,14 @@ mod tests {
             Ok(Vec::new())
         }
 
-        async fn get_entry(&self, _entry_id: i64) -> rssr_domain::Result<Option<Entry>> {
+        async fn count_entries(&self, _query: &EntryQuery) -> rssr_domain::Result<u64> {
+            Ok(0)
+        }
+
+        async fn get_entry_record(
+            &self,
+            _entry_id: i64,
+        ) -> rssr_domain::Result<Option<EntryRecord>> {
             Ok(self.entry.clone())
         }
 
@@ -131,9 +157,29 @@ mod tests {
         }
     }
 
-    fn entry() -> Entry {
+    #[derive(Debug, Default)]
+    struct EntryContentRepositoryStub {
+        content: Option<EntryContent>,
+    }
+
+    #[async_trait::async_trait]
+    impl EntryContentRepository for EntryContentRepositoryStub {
+        async fn get_content(&self, _entry_id: i64) -> rssr_domain::Result<Option<EntryContent>> {
+            Ok(self.content.clone())
+        }
+
+        async fn delete_for_feed(&self, _feed_id: i64) -> rssr_domain::Result<()> {
+            Ok(())
+        }
+
+        async fn delete_for_entry_ids(&self, _entry_ids: &[i64]) -> rssr_domain::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn entry_record() -> EntryRecord {
         let now = OffsetDateTime::parse("2026-04-12T00:00:00Z", &Rfc3339).expect("parse test time");
-        Entry {
+        EntryRecord {
             id: 42,
             feed_id: 7,
             external_id: "external-42".to_string(),
@@ -142,12 +188,10 @@ mod tests {
             title: "Reader item".to_string(),
             author: None,
             summary: Some("Summary".to_string()),
-            content_html: Some("<p>Body</p>".to_string()),
-            content_text: None,
             published_at: Some(now),
             updated_at_source: Some(now),
             first_seen_at: now,
-            content_hash: None,
+            has_content: true,
             is_read: false,
             is_starred: true,
             read_at: None,
@@ -157,24 +201,43 @@ mod tests {
         }
     }
 
-    fn service(repository: Arc<EntryRepositoryStub>) -> ReaderService {
-        ReaderService::new(repository)
+    fn entry_content() -> EntryContent {
+        let now = OffsetDateTime::parse("2026-04-12T00:00:00Z", &Rfc3339).expect("parse test time");
+        EntryContent {
+            entry_id: 42,
+            content_html: Some("<p>Body</p>".to_string()),
+            content_text: None,
+            content_hash: None,
+            updated_at: now,
+        }
+    }
+
+    fn service(
+        index_repository: Arc<EntryIndexRepositoryStub>,
+        content_repository: Arc<EntryContentRepositoryStub>,
+    ) -> ReaderService {
+        ReaderService::new(index_repository, content_repository)
     }
 
     #[tokio::test]
     async fn load_entry_returns_entry_and_navigation_snapshot() {
-        let repository = Arc::new(EntryRepositoryStub {
-            entry: Some(entry()),
+        let repository = Arc::new(EntryIndexRepositoryStub {
+            entry: Some(entry_record()),
             navigation: EntryNavigation {
                 previous_unread_entry_id: Some(1),
                 next_unread_entry_id: Some(2),
                 previous_feed_entry_id: Some(3),
                 next_feed_entry_id: Some(4),
             },
-            ..EntryRepositoryStub::default()
+            ..EntryIndexRepositoryStub::default()
         });
+        let content_repository =
+            Arc::new(EntryContentRepositoryStub { content: Some(entry_content()) });
 
-        let snapshot = service(repository).load_entry(42).await.expect("load reader entry");
+        let snapshot = service(repository, content_repository)
+            .load_entry(42)
+            .await
+            .expect("load reader entry");
 
         assert_eq!(snapshot.entry.expect("entry").id, 42);
         assert_eq!(snapshot.navigation.next_unread_entry_id, Some(2));
@@ -183,13 +246,18 @@ mod tests {
 
     #[tokio::test]
     async fn load_entry_keeps_navigation_best_effort() {
-        let repository = Arc::new(EntryRepositoryStub {
-            entry: Some(entry()),
+        let repository = Arc::new(EntryIndexRepositoryStub {
+            entry: Some(entry_record()),
             fail_navigation: true,
-            ..EntryRepositoryStub::default()
+            ..EntryIndexRepositoryStub::default()
         });
+        let content_repository =
+            Arc::new(EntryContentRepositoryStub { content: Some(entry_content()) });
 
-        let snapshot = service(repository).load_entry(42).await.expect("load reader entry");
+        let snapshot = service(repository, content_repository)
+            .load_entry(42)
+            .await
+            .expect("load reader entry");
 
         assert!(snapshot.entry.is_some());
         assert_eq!(snapshot.navigation, EntryNavigation::default());
@@ -197,23 +265,45 @@ mod tests {
 
     #[tokio::test]
     async fn load_entry_without_entry_does_not_require_navigation() {
-        let repository = Arc::new(EntryRepositoryStub {
+        let repository = Arc::new(EntryIndexRepositoryStub {
             entry: None,
             fail_navigation: true,
-            ..EntryRepositoryStub::default()
+            ..EntryIndexRepositoryStub::default()
         });
+        let content_repository = Arc::new(EntryContentRepositoryStub::default());
 
-        let snapshot = service(repository).load_entry(42).await.expect("load missing reader entry");
+        let snapshot = service(repository, content_repository)
+            .load_entry(42)
+            .await
+            .expect("load missing reader entry");
 
         assert!(snapshot.entry.is_none());
         assert_eq!(snapshot.navigation, EntryNavigation::default());
     }
 
     #[tokio::test]
-    async fn toggle_read_persists_inverted_state() {
-        let repository = Arc::new(EntryRepositoryStub::default());
+    async fn load_entry_allows_missing_content() {
+        let repository = Arc::new(EntryIndexRepositoryStub {
+            entry: Some(entry_record()),
+            ..EntryIndexRepositoryStub::default()
+        });
+        let content_repository = Arc::new(EntryContentRepositoryStub::default());
 
-        let outcome = service(repository.clone())
+        let snapshot =
+            service(repository, content_repository).load_entry(42).await.expect("load entry");
+
+        let entry = snapshot.entry.expect("entry");
+        assert_eq!(entry.summary.as_deref(), Some("Summary"));
+        assert!(entry.content_html.is_none());
+        assert!(entry.content_text.is_none());
+    }
+
+    #[tokio::test]
+    async fn toggle_read_persists_inverted_state() {
+        let repository = Arc::new(EntryIndexRepositoryStub::default());
+        let content_repository = Arc::new(EntryContentRepositoryStub::default());
+
+        let outcome = service(repository.clone(), content_repository)
             .toggle_read(ToggleReadInput { entry_id: 42, currently_read: false })
             .await
             .expect("toggle read");
@@ -224,9 +314,10 @@ mod tests {
 
     #[tokio::test]
     async fn toggle_starred_persists_inverted_state() {
-        let repository = Arc::new(EntryRepositoryStub::default());
+        let repository = Arc::new(EntryIndexRepositoryStub::default());
+        let content_repository = Arc::new(EntryContentRepositoryStub::default());
 
-        let outcome = service(repository.clone())
+        let outcome = service(repository.clone(), content_repository)
             .toggle_starred(ToggleStarredInput { entry_id: 42, currently_starred: true })
             .await
             .expect("toggle starred");

@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use rssr_domain::{EntryRepository, Feed, FeedRepository, NewFeedSubscription, normalize_feed_url};
+use rssr_domain::{
+    EntryContentRepository, EntryIndexRepository, Feed, FeedRepository, NewFeedSubscription,
+    normalize_feed_url,
+};
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,15 +23,17 @@ pub struct RemoveSubscriptionInput {
 #[derive(Clone)]
 pub struct FeedService {
     feed_repository: Arc<dyn FeedRepository>,
-    entry_repository: Arc<dyn EntryRepository>,
+    entry_index_repository: Arc<dyn EntryIndexRepository>,
+    entry_content_repository: Arc<dyn EntryContentRepository>,
 }
 
 impl FeedService {
     pub fn new(
         feed_repository: Arc<dyn FeedRepository>,
-        entry_repository: Arc<dyn EntryRepository>,
+        entry_index_repository: Arc<dyn EntryIndexRepository>,
+        entry_content_repository: Arc<dyn EntryContentRepository>,
     ) -> Self {
-        Self { feed_repository, entry_repository }
+        Self { feed_repository, entry_index_repository, entry_content_repository }
     }
 
     pub async fn add_subscription(&self, input: &AddSubscriptionInput) -> Result<Feed> {
@@ -45,7 +50,8 @@ impl FeedService {
 
     pub async fn remove_subscription(&self, input: RemoveSubscriptionInput) -> Result<()> {
         if input.purge_entries {
-            self.entry_repository.delete_for_feed(input.feed_id).await?;
+            self.entry_index_repository.delete_for_feed(input.feed_id).await?;
+            self.entry_content_repository.delete_for_feed(input.feed_id).await?;
         }
         Ok(self.feed_repository.set_deleted(input.feed_id, true).await?)
     }
@@ -56,8 +62,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use rssr_domain::{
-        Entry, EntryNavigation, EntryQuery, EntryRepository, Feed, FeedRepository,
-        NewFeedSubscription,
+        EntryContent, EntryContentRepository, EntryIndexRepository, EntryNavigation, EntryQuery,
+        EntryRecord, Feed, FeedRepository, NewFeedSubscription,
     };
     use time::OffsetDateTime;
 
@@ -112,12 +118,12 @@ mod tests {
         }
     }
 
-    struct EntryRepositoryStub {
+    struct EntryIndexRepositoryStub {
         deleted_feed_ids: Mutex<Vec<i64>>,
     }
 
     #[async_trait::async_trait]
-    impl EntryRepository for EntryRepositoryStub {
+    impl EntryIndexRepository for EntryIndexRepositoryStub {
         async fn list_entries(
             &self,
             _query: &EntryQuery,
@@ -125,7 +131,14 @@ mod tests {
             Ok(Vec::new())
         }
 
-        async fn get_entry(&self, _entry_id: i64) -> rssr_domain::Result<Option<Entry>> {
+        async fn count_entries(&self, _query: &EntryQuery) -> rssr_domain::Result<u64> {
+            Ok(0)
+        }
+
+        async fn get_entry_record(
+            &self,
+            _entry_id: i64,
+        ) -> rssr_domain::Result<Option<EntryRecord>> {
             Ok(None)
         }
 
@@ -150,15 +163,41 @@ mod tests {
         }
     }
 
+    struct EntryContentRepositoryStub {
+        deleted_feed_ids: Mutex<Vec<i64>>,
+    }
+
+    #[async_trait::async_trait]
+    impl EntryContentRepository for EntryContentRepositoryStub {
+        async fn get_content(&self, _entry_id: i64) -> rssr_domain::Result<Option<EntryContent>> {
+            Ok(None)
+        }
+
+        async fn delete_for_feed(&self, feed_id: i64) -> rssr_domain::Result<()> {
+            self.deleted_feed_ids.lock().expect("lock deleted feeds").push(feed_id);
+            Ok(())
+        }
+
+        async fn delete_for_entry_ids(&self, _entry_ids: &[i64]) -> rssr_domain::Result<()> {
+            Ok(())
+        }
+    }
+
     #[tokio::test]
     async fn add_subscription_normalizes_url_before_persisting() {
         let feed_repository = Arc::new(FeedRepositoryStub {
             upserted: Mutex::new(Vec::new()),
             deleted: Mutex::new(Vec::new()),
         });
-        let entry_repository =
-            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
-        let service = FeedService::new(feed_repository.clone(), entry_repository);
+        let entry_index_repository =
+            Arc::new(EntryIndexRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
+        let entry_content_repository =
+            Arc::new(EntryContentRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
+        let service = FeedService::new(
+            feed_repository.clone(),
+            entry_index_repository,
+            entry_content_repository,
+        );
 
         let feed = service
             .add_subscription(&AddSubscriptionInput {
@@ -181,9 +220,15 @@ mod tests {
             upserted: Mutex::new(Vec::new()),
             deleted: Mutex::new(Vec::new()),
         });
-        let entry_repository =
-            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
-        let service = FeedService::new(feed_repository.clone(), entry_repository.clone());
+        let entry_index_repository =
+            Arc::new(EntryIndexRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
+        let entry_content_repository =
+            Arc::new(EntryContentRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
+        let service = FeedService::new(
+            feed_repository.clone(),
+            entry_index_repository.clone(),
+            entry_content_repository.clone(),
+        );
 
         service
             .remove_subscription(RemoveSubscriptionInput { feed_id: 7, purge_entries: true })
@@ -191,7 +236,15 @@ mod tests {
             .expect("remove subscription");
 
         assert_eq!(
-            entry_repository.deleted_feed_ids.lock().expect("lock deleted feeds").as_slice(),
+            entry_index_repository.deleted_feed_ids.lock().expect("lock deleted feeds").as_slice(),
+            &[7]
+        );
+        assert_eq!(
+            entry_content_repository
+                .deleted_feed_ids
+                .lock()
+                .expect("lock deleted feeds")
+                .as_slice(),
             &[7]
         );
         assert_eq!(feed_repository.deleted.lock().expect("lock deleted").as_slice(), &[(7, true)]);
@@ -203,16 +256,31 @@ mod tests {
             upserted: Mutex::new(Vec::new()),
             deleted: Mutex::new(Vec::new()),
         });
-        let entry_repository =
-            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
-        let service = FeedService::new(feed_repository.clone(), entry_repository.clone());
+        let entry_index_repository =
+            Arc::new(EntryIndexRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
+        let entry_content_repository =
+            Arc::new(EntryContentRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
+        let service = FeedService::new(
+            feed_repository.clone(),
+            entry_index_repository.clone(),
+            entry_content_repository.clone(),
+        );
 
         service
             .remove_subscription(RemoveSubscriptionInput { feed_id: 8, purge_entries: false })
             .await
             .expect("remove subscription");
 
-        assert!(entry_repository.deleted_feed_ids.lock().expect("lock deleted feeds").is_empty());
+        assert!(
+            entry_index_repository.deleted_feed_ids.lock().expect("lock deleted feeds").is_empty()
+        );
+        assert!(
+            entry_content_repository
+                .deleted_feed_ids
+                .lock()
+                .expect("lock deleted feeds")
+                .is_empty()
+        );
         assert_eq!(feed_repository.deleted.lock().expect("lock deleted").as_slice(), &[(8, true)]);
     }
 
@@ -222,9 +290,12 @@ mod tests {
             upserted: Mutex::new(Vec::new()),
             deleted: Mutex::new(Vec::new()),
         });
-        let entry_repository =
-            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
-        let service = FeedService::new(feed_repository, entry_repository);
+        let entry_index_repository =
+            Arc::new(EntryIndexRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
+        let entry_content_repository =
+            Arc::new(EntryContentRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
+        let service =
+            FeedService::new(feed_repository, entry_index_repository, entry_content_repository);
 
         let error = service
             .add_subscription(&AddSubscriptionInput {

@@ -8,7 +8,7 @@ use rssr_application::{
     ParsedFeedUpdate, RefreshAllInput, RefreshFailure, RefreshHttpMetadata, RefreshService,
     RefreshTarget,
 };
-use rssr_domain::{EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription};
+use rssr_domain::{EntryQuery, FeedRepository, NewFeedSubscription};
 use rssr_infra::{
     application_adapters::SqliteRefreshStore,
     db::{

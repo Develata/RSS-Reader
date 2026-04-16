@@ -1,14 +1,21 @@
 use std::sync::{Arc, Mutex};
 
-use rssr_domain::{DomainError, Entry, EntryNavigation, EntryQuery, EntryRepository, EntrySummary};
+use rssr_domain::{
+    DomainError, EntryContent, EntryContentRepository, EntryIndexRepository, EntryNavigation,
+    EntryQuery, EntryRecord, EntrySummary,
+};
 
 use crate::application_adapters::browser::{
     now_utc,
     query::{
-        get_entry as query_get_entry, list_entries as query_list_entries,
+        count_entries as query_count_entries, get_entry_content as query_get_entry_content,
+        get_entry_record as query_get_entry_record, list_entries as query_list_entries,
         reader_navigation as query_reader_navigation,
     },
-    state::{BrowserState, PersistedEntryFlag, save_entry_flag_patch, save_state_snapshot},
+    state::{
+        BrowserState, PersistedEntryContent, PersistedEntryFlag, save_entry_content_patch,
+        save_entry_flag_patch, save_state_snapshot,
+    },
 };
 
 use super::shared::map_persistence_error;
@@ -25,15 +32,20 @@ impl BrowserEntryRepository {
 }
 
 #[async_trait::async_trait]
-impl EntryRepository for BrowserEntryRepository {
+impl EntryIndexRepository for BrowserEntryRepository {
     async fn list_entries(&self, query: &EntryQuery) -> rssr_domain::Result<Vec<EntrySummary>> {
         let state = self.state.lock().expect("lock state");
         Ok(query_list_entries(&state, query))
     }
 
-    async fn get_entry(&self, entry_id: i64) -> rssr_domain::Result<Option<Entry>> {
+    async fn count_entries(&self, query: &EntryQuery) -> rssr_domain::Result<u64> {
         let state = self.state.lock().expect("lock state");
-        query_get_entry(&state, entry_id).map_err(map_persistence_error)
+        Ok(query_count_entries(&state, query))
+    }
+
+    async fn get_entry_record(&self, entry_id: i64) -> rssr_domain::Result<Option<EntryRecord>> {
+        let state = self.state.lock().expect("lock state");
+        query_get_entry_record(&state, entry_id).map_err(map_persistence_error)
     }
 
     async fn reader_navigation(
@@ -114,6 +126,49 @@ impl EntryRepository for BrowserEntryRepository {
                 .collect::<Vec<_>>();
             state.core.entries.retain(|entry| entry.feed_id != feed_id);
             state.entry_flags.entries.retain(|entry| !removed_entry_ids.contains(&entry.id));
+            state
+                .entry_content
+                .entries
+                .retain(|entry| !removed_entry_ids.contains(&entry.entry_id));
+            state.clone()
+        };
+
+        save_state_snapshot(snapshot).map_err(map_persistence_error)
+    }
+}
+
+#[async_trait::async_trait]
+impl EntryContentRepository for BrowserEntryRepository {
+    async fn get_content(&self, entry_id: i64) -> rssr_domain::Result<Option<EntryContent>> {
+        let state = self.state.lock().expect("lock state");
+        query_get_entry_content(&state, entry_id).map_err(map_persistence_error)
+    }
+
+    async fn delete_for_feed(&self, feed_id: i64) -> rssr_domain::Result<()> {
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            state.entry_content.entries.retain(|entry| entry.feed_id != feed_id);
+            for entry in state.core.entries.iter_mut().filter(|entry| entry.feed_id == feed_id) {
+                entry.has_content = false;
+            }
+            state.clone()
+        };
+
+        save_state_snapshot(snapshot).map_err(map_persistence_error)
+    }
+
+    async fn delete_for_entry_ids(&self, entry_ids: &[i64]) -> rssr_domain::Result<()> {
+        if entry_ids.is_empty() {
+            return Ok(());
+        }
+
+        let snapshot = {
+            let mut state = self.state.lock().expect("lock state");
+            state.entry_content.entries.retain(|entry| !entry_ids.contains(&entry.entry_id));
+            for entry in state.core.entries.iter_mut().filter(|entry| entry_ids.contains(&entry.id))
+            {
+                entry.has_content = false;
+            }
             state.clone()
         };
 

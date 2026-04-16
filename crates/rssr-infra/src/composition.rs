@@ -41,16 +41,21 @@ pub struct NativeSqliteComposition {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn compose_native_sqlite_use_cases(pool: SqlitePool) -> NativeSqliteComposition {
-    let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
-    let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
-    let settings_repository = Arc::new(SqliteSettingsRepository::new(pool.clone()));
-    let app_state_repository = Arc::new(SqliteAppStateRepository::new(pool));
+pub fn compose_native_sqlite_use_cases(
+    index_pool: SqlitePool,
+    content_pool: SqlitePool,
+) -> NativeSqliteComposition {
+    let feed_repository = Arc::new(SqliteFeedRepository::new(index_pool.clone()));
+    let entry_repository =
+        Arc::new(SqliteEntryRepository::new_with_content_pool(index_pool.clone(), content_pool));
+    let settings_repository = Arc::new(SqliteSettingsRepository::new(index_pool.clone()));
+    let app_state_repository = Arc::new(SqliteAppStateRepository::new(index_pool));
     let app_state = Arc::new(SqliteAppStateAdapter::new(app_state_repository));
 
     let use_cases = AppUseCases::compose(AppCompositionInput {
         feed_repository: feed_repository.clone(),
-        entry_repository: entry_repository.clone(),
+        entry_index_repository: entry_repository.clone(),
+        entry_content_repository: entry_repository.clone(),
         settings_repository,
         app_state,
         refresh_source: Arc::new(InfraFeedRefreshSource::new(
@@ -78,7 +83,8 @@ pub fn compose_browser_use_cases(
 
     AppUseCases::compose(AppCompositionInput {
         feed_repository,
-        entry_repository,
+        entry_index_repository: entry_repository.clone(),
+        entry_content_repository: entry_repository,
         settings_repository,
         app_state,
         refresh_source: Arc::new(BrowserFeedRefreshSource::new(client.clone())),

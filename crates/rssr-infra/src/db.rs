@@ -10,6 +10,7 @@ use sqlx::{Pool, Sqlite, sqlite::SqlitePoolOptions};
 pub type SqlitePool = Pool<Sqlite>;
 
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../migrations");
+pub static CONTENT_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../migrations_content");
 
 pub async fn create_sqlite_pool(database_url: &str) -> anyhow::Result<SqlitePool> {
     let pool = SqlitePoolOptions::new()
@@ -22,6 +23,11 @@ pub async fn create_sqlite_pool(database_url: &str) -> anyhow::Result<SqlitePool
 
 pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
     MIGRATOR.run(pool).await?;
+    Ok(())
+}
+
+pub async fn migrate_content(pool: &SqlitePool) -> anyhow::Result<()> {
+    CONTENT_MIGRATOR.run(pool).await?;
     Ok(())
 }
 

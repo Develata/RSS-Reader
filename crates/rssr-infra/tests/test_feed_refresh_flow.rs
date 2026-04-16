@@ -1,6 +1,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use rssr_domain::{EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription};
+use rssr_domain::{EntryQuery, FeedRepository, NewFeedSubscription};
 use rssr_infra::{
     db::{
         entry_repository::{

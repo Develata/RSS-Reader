@@ -215,13 +215,16 @@ impl CliServices {
         tracing::info!(
             backend = native_backend.label(),
             database = %native_backend.database_label(),
+            content_database = %native_backend.content_database_label().unwrap_or_else(|_| "<unavailable>".to_string()),
             "初始化 CLI 本地数据库"
         );
-        let backend: Box<dyn StorageBackend> = Box::new(native_backend);
-        let pool = backend.connect().await.context("连接本地数据库失败")?;
-        backend.migrate(&pool).await.context("执行数据库迁移失败")?;
+        let index_pool = native_backend.connect().await.context("连接本地索引数据库失败")?;
+        native_backend.migrate(&index_pool).await.context("执行索引数据库迁移失败")?;
+        let content_pool =
+            native_backend.connect_content().await.context("连接本地正文数据库失败")?;
+        native_backend.migrate_content(&content_pool).await.context("执行正文数据库迁移失败")?;
 
-        let use_cases = compose_native_sqlite_use_cases(pool).use_cases;
+        let use_cases = compose_native_sqlite_use_cases(index_pool, content_pool).use_cases;
 
         Ok(Self { use_cases })
     }

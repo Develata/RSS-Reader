@@ -48,6 +48,7 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
     let settings_repository = Arc::new(SqliteSettingsRepository::new(pool));
     let service = ImportExportService::new(
         feed_repository.clone(),
+        entry_repository.clone(),
         entry_repository,
         settings_repository.clone(),
         Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),

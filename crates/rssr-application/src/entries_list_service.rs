@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rssr_domain::{EntryQuery, EntryRepository, EntrySummary};
+use rssr_domain::{EntryIndexRepository, EntryQuery, EntrySummary};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntriesListOutcome {
@@ -32,11 +32,11 @@ pub struct ToggleEntryStarredOutcome {
 
 #[derive(Clone)]
 pub struct EntriesListService {
-    entry_repository: Arc<dyn EntryRepository>,
+    entry_repository: Arc<dyn EntryIndexRepository>,
 }
 
 impl EntriesListService {
-    pub fn new(entry_repository: Arc<dyn EntryRepository>) -> Self {
+    pub fn new(entry_repository: Arc<dyn EntryIndexRepository>) -> Self {
         Self { entry_repository }
     }
 
@@ -74,7 +74,9 @@ impl EntriesListService {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use rssr_domain::{Entry, EntryNavigation, EntryQuery, EntryRepository, EntrySummary};
+    use rssr_domain::{
+        EntryIndexRepository, EntryNavigation, EntryQuery, EntryRecord, EntrySummary,
+    };
 
     use super::{EntriesListService, ToggleEntryReadInput, ToggleEntryStarredInput};
 
@@ -86,7 +88,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl EntryRepository for EntryRepositoryStub {
+    impl EntryIndexRepository for EntryRepositoryStub {
         async fn list_entries(
             &self,
             _query: &EntryQuery,
@@ -94,7 +96,14 @@ mod tests {
             Ok(self.entries.clone())
         }
 
-        async fn get_entry(&self, _entry_id: i64) -> rssr_domain::Result<Option<Entry>> {
+        async fn count_entries(&self, _query: &EntryQuery) -> rssr_domain::Result<u64> {
+            Ok(self.entries.len() as u64)
+        }
+
+        async fn get_entry_record(
+            &self,
+            _entry_id: i64,
+        ) -> rssr_domain::Result<Option<EntryRecord>> {
             Ok(None)
         }
 

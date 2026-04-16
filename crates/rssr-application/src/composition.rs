@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use rssr_domain::{AppStateRepository, EntryRepository, FeedRepository, SettingsRepository};
+use rssr_domain::{
+    AppStateRepository, EntryContentRepository, EntryIndexRepository, FeedRepository,
+    SettingsRepository,
+};
 
 use crate::{
     AppStatePort, AppStateService, ClockPort, EntriesListService, EntriesWorkspaceService,
@@ -18,7 +21,8 @@ impl<T> AppStateServicesPort for T where T: AppStateRepository + AppStatePort + 
 
 pub struct AppCompositionInput {
     pub feed_repository: Arc<dyn FeedRepository>,
-    pub entry_repository: Arc<dyn EntryRepository>,
+    pub entry_index_repository: Arc<dyn EntryIndexRepository>,
+    pub entry_content_repository: Arc<dyn EntryContentRepository>,
     pub settings_repository: Arc<dyn SettingsRepository>,
     pub app_state: Arc<dyn AppStateServicesPort>,
     pub refresh_source: Arc<dyn FeedRefreshSourcePort>,
@@ -46,8 +50,11 @@ pub struct AppUseCases {
 
 impl AppUseCases {
     pub fn compose(input: AppCompositionInput) -> Self {
-        let feed_service =
-            FeedService::new(input.feed_repository.clone(), input.entry_repository.clone());
+        let feed_service = FeedService::new(
+            input.feed_repository.clone(),
+            input.entry_index_repository.clone(),
+            input.entry_content_repository.clone(),
+        );
         let feed_catalog_service = FeedCatalogService::new(input.feed_repository.clone());
         let refresh_service = RefreshService::new(input.refresh_source, input.refresh_store);
 
@@ -69,7 +76,8 @@ impl AppUseCases {
             ),
             import_export_service: ImportExportService::new_with_app_state_cleanup_and_clock(
                 input.feed_repository.clone(),
-                input.entry_repository.clone(),
+                input.entry_index_repository.clone(),
+                input.entry_content_repository.clone(),
                 input.settings_repository,
                 input.opml_codec,
                 input.app_state,
@@ -80,14 +88,17 @@ impl AppUseCases {
                 app_state_service.clone(),
                 input.feed_repository.clone(),
             ),
-            entries_list_service: EntriesListService::new(input.entry_repository.clone()),
+            entries_list_service: EntriesListService::new(input.entry_index_repository.clone()),
             entries_workspace_service: EntriesWorkspaceService::new(
                 settings_service,
                 app_state_service,
                 input.feed_repository.clone(),
             ),
             feeds_snapshot_service: FeedsSnapshotService::new(input.feed_repository),
-            reader_service: ReaderService::new(input.entry_repository),
+            reader_service: ReaderService::new(
+                input.entry_index_repository,
+                input.entry_content_repository,
+            ),
         }
     }
 }

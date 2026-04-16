@@ -6,11 +6,13 @@ pub mod settings;
 
 pub use app_state::{AppStateSnapshot, EntriesWorkspaceState, EntryGroupingPreference};
 pub use entry::{
-    Entry, EntryNavigation, EntryQuery, EntrySummary, ReadFilter, StarredFilter, is_entry_archived,
+    Entry, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary, ReadFilter,
+    StarredFilter, is_entry_archived,
 };
 pub use feed::{Feed, FeedSummary, NewFeedSubscription, normalize_feed_url};
 pub use repository::{
-    AppStateRepository, EntryRepository, FeedRepository, HealthRepository, SettingsRepository,
+    AppStateRepository, EntryContentRepository, EntryIndexRepository, EntryRepository,
+    FeedRepository, HealthRepository, SettingsRepository,
 };
 pub use settings::{
     ConfigFeed, ConfigPackage, DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ENTRIES_PAGE_SIZE,

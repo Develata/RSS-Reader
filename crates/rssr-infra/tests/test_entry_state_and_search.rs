@@ -1,14 +1,12 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use rssr_domain::{
-    EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription, ReadFilter, StarredFilter,
-};
+use rssr_domain::{EntryQuery, FeedRepository, NewFeedSubscription, ReadFilter, StarredFilter};
 use rssr_infra::{
     db::{
         entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
         sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
     },
-    parser::FeedParser,
+    parser::{FeedParser, feed_parser::ParsedEntry},
 };
 use url::Url;
 
@@ -113,4 +111,67 @@ async fn entry_repository_updates_state_and_supports_search() {
         .expect("search title case insensitive");
     assert_eq!(searched_case_insensitive.len(), 1);
     assert_eq!(searched_case_insensitive[0].title, "Rust News");
+}
+
+#[tokio::test]
+async fn entry_repository_resolves_content_after_batch_upsert() {
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let pool = backend.connect().await.expect("connect sqlite memory");
+    migrate(&pool).await.expect("run migrations");
+
+    let feed_repository = SqliteFeedRepository::new(pool.clone());
+    let entry_repository = SqliteEntryRepository::new(pool.clone());
+
+    let feed = feed_repository
+        .upsert_subscription(&NewFeedSubscription {
+            url: Url::parse("https://example.com/content-feed.xml").expect("valid url"),
+            title: Some("Content Feed".to_string()),
+            folder: None,
+        })
+        .await
+        .expect("create feed");
+
+    let entries = vec![
+        ParsedEntry {
+            external_id: "entry-1".to_string(),
+            dedup_key: "entry-1".to_string(),
+            url: Some(Url::parse("https://example.com/entry-1").expect("valid url")),
+            title: "Entry 1".to_string(),
+            author: None,
+            summary: Some("Summary 1".to_string()),
+            content_html: Some("<p>Body 1</p>".to_string()),
+            content_text: Some("Body 1".to_string()),
+            published_at: None,
+            updated_at_source: None,
+        },
+        ParsedEntry {
+            external_id: "entry-2".to_string(),
+            dedup_key: "entry-2".to_string(),
+            url: Some(Url::parse("https://example.com/entry-2").expect("valid url")),
+            title: "Entry 2".to_string(),
+            author: None,
+            summary: Some("Summary 2".to_string()),
+            content_html: Some("<p>Body 2</p>".to_string()),
+            content_text: Some("Body 2".to_string()),
+            published_at: None,
+            updated_at_source: None,
+        },
+    ];
+
+    let resolved = entry_repository
+        .upsert_entries_and_resolve_contents(feed.id, &entries)
+        .await
+        .expect("upsert entries and resolve contents");
+    assert_eq!(resolved.len(), 2);
+    assert_ne!(resolved[0].entry_id, resolved[1].entry_id);
+
+    entry_repository.upsert_contents(feed.id, &resolved).await.expect("upsert contents");
+
+    let stored = entry_repository
+        .get_content(resolved[1].entry_id)
+        .await
+        .expect("get content")
+        .expect("content exists");
+    assert_eq!(stored.content_html.as_deref(), Some("<p>Body 2</p>"));
+    assert_eq!(stored.content_text.as_deref(), Some("Body 2"));
 }

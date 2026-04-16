@@ -63,6 +63,7 @@ async fn build_sqlite_fixture() -> anyhow::Result<SqliteFixture> {
     let service = ImportExportService::new_with_app_state_cleanup(
         feed_repository.clone(),
         entry_repository.clone(),
+        entry_repository.clone(),
         settings_repository.clone(),
         Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
         cleanup,

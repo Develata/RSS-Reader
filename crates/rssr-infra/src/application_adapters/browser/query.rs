@@ -1,10 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
 use rssr_domain::{
-    Entry, EntryNavigation, EntryQuery, EntrySummary, FeedSummary, ReadFilter, StarredFilter,
+    Entry, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary, FeedSummary,
+    ReadFilter, StarredFilter,
 };
 
-use super::state::{BrowserState, PersistedEntry, PersistedEntryFlag, to_domain_entry};
+use super::state::{
+    BrowserState, PersistedEntryFlag, PersistedEntryIndex, to_domain_content, to_domain_entry,
+    to_domain_entry_record,
+};
 
 fn build_entry_flag_index(state: &BrowserState) -> HashMap<i64, &PersistedEntryFlag> {
     state.entry_flags.entries.iter().map(|flag| (flag.id, flag)).collect()
@@ -46,6 +50,13 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
     let allowed_feed_ids = (!query.feed_ids.is_empty())
         .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
     let search_lower = query.search_title.as_ref().map(|search| search.to_lowercase());
+    let active_feed_ids = state
+        .core
+        .feeds
+        .iter()
+        .filter(|feed| !feed.is_deleted)
+        .map(|feed| feed.id)
+        .collect::<HashSet<_>>();
     let active_feed_titles = state
         .core
         .feeds
@@ -59,40 +70,14 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
         .entries
         .iter()
         .filter(|entry| {
-            let flags = entry_flags.get(&entry.id);
-            let is_read = flags.map(|flag| flag.is_read).unwrap_or(false);
-            let is_starred = flags.map(|flag| flag.is_starred).unwrap_or(false);
-            if !active_feed_titles.contains_key(&entry.feed_id) {
-                return false;
-            }
-            if let Some(feed_id) = query.feed_id
-                && entry.feed_id != feed_id
-            {
-                return false;
-            }
-            if let Some(allowed_feed_ids) = &allowed_feed_ids
-                && !allowed_feed_ids.contains(&entry.feed_id)
-            {
-                return false;
-            }
-            match query.read_filter {
-                ReadFilter::All => {}
-                ReadFilter::UnreadOnly if is_read => return false,
-                ReadFilter::ReadOnly if !is_read => return false,
-                _ => {}
-            }
-            match query.starred_filter {
-                StarredFilter::All => {}
-                StarredFilter::StarredOnly if !is_starred => return false,
-                StarredFilter::UnstarredOnly if is_starred => return false,
-                _ => {}
-            }
-            if let Some(search) = &search_lower
-                && !title_matches_search(&entry.title, search)
-            {
-                return false;
-            }
-            true
+            entry_matches_query(
+                entry,
+                entry_flags.get(&entry.id).copied(),
+                &active_feed_ids,
+                allowed_feed_ids.as_ref(),
+                search_lower.as_deref(),
+                query,
+            )
         })
         .map(|entry| {
             let flags = entry_flags.get(&entry.id);
@@ -117,6 +102,36 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
     items
 }
 
+pub fn count_entries(state: &BrowserState, query: &EntryQuery) -> u64 {
+    let entry_flags = build_entry_flag_index(state);
+    let allowed_feed_ids = (!query.feed_ids.is_empty())
+        .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
+    let search_lower = query.search_title.as_ref().map(|search| search.to_lowercase());
+    let active_feed_ids = state
+        .core
+        .feeds
+        .iter()
+        .filter(|feed| !feed.is_deleted)
+        .map(|feed| feed.id)
+        .collect::<HashSet<_>>();
+
+    state
+        .core
+        .entries
+        .iter()
+        .filter(|entry| {
+            entry_matches_query(
+                entry,
+                entry_flags.get(&entry.id).copied(),
+                &active_feed_ids,
+                allowed_feed_ids.as_ref(),
+                search_lower.as_deref(),
+                query,
+            )
+        })
+        .count() as u64
+}
+
 pub fn get_entry(state: &BrowserState, entry_id: i64) -> anyhow::Result<Option<Entry>> {
     state
         .core
@@ -125,6 +140,26 @@ pub fn get_entry(state: &BrowserState, entry_id: i64) -> anyhow::Result<Option<E
         .find(|entry| entry.id == entry_id)
         .map(|entry| to_domain_entry(state, entry))
         .transpose()
+}
+
+pub fn get_entry_record(
+    state: &BrowserState,
+    entry_id: i64,
+) -> anyhow::Result<Option<EntryRecord>> {
+    state
+        .core
+        .entries
+        .iter()
+        .find(|entry| entry.id == entry_id)
+        .map(|entry| to_domain_entry_record(state, entry))
+        .transpose()
+}
+
+pub fn get_entry_content(
+    state: &BrowserState,
+    entry_id: i64,
+) -> anyhow::Result<Option<EntryContent>> {
+    to_domain_content(state, entry_id)
 }
 
 pub fn reader_navigation(state: &BrowserState, current_entry_id: i64) -> EntryNavigation {
@@ -182,16 +217,65 @@ pub fn title_matches_search(title: &str, search_lower: &str) -> bool {
     title.to_lowercase().contains(search_lower)
 }
 
-fn compare_entry_order(left: &PersistedEntry, right: &PersistedEntry) -> std::cmp::Ordering {
+fn entry_matches_query<T>(
+    entry: &PersistedEntryIndex,
+    flags: Option<&PersistedEntryFlag>,
+    active_feeds: &HashSet<i64, T>,
+    allowed_feed_ids: Option<&HashSet<i64>>,
+    search_lower: Option<&str>,
+    query: &EntryQuery,
+) -> bool
+where
+    T: std::hash::BuildHasher,
+{
+    let is_read = flags.map(|flag| flag.is_read).unwrap_or(false);
+    let is_starred = flags.map(|flag| flag.is_starred).unwrap_or(false);
+    if !active_feeds.contains(&entry.feed_id) {
+        return false;
+    }
+    if let Some(feed_id) = query.feed_id
+        && entry.feed_id != feed_id
+    {
+        return false;
+    }
+    if let Some(allowed_feed_ids) = allowed_feed_ids
+        && !allowed_feed_ids.contains(&entry.feed_id)
+    {
+        return false;
+    }
+    match query.read_filter {
+        ReadFilter::All => {}
+        ReadFilter::UnreadOnly if is_read => return false,
+        ReadFilter::ReadOnly if !is_read => return false,
+        _ => {}
+    }
+    match query.starred_filter {
+        StarredFilter::All => {}
+        StarredFilter::StarredOnly if !is_starred => return false,
+        StarredFilter::UnstarredOnly if is_starred => return false,
+        _ => {}
+    }
+    if let Some(search) = search_lower
+        && !title_matches_search(&entry.title, search)
+    {
+        return false;
+    }
+    true
+}
+
+fn compare_entry_order(
+    left: &PersistedEntryIndex,
+    right: &PersistedEntryIndex,
+) -> std::cmp::Ordering {
     right.published_at.cmp(&left.published_at).then(right.id.cmp(&left.id))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{list_entries, reader_navigation};
+    use super::{count_entries, list_entries, reader_navigation};
     use crate::application_adapters::browser::state::{
-        BrowserState, PersistedEntry, PersistedEntryFlag, PersistedEntryFlagsSlice, PersistedFeed,
-        PersistedState,
+        BrowserState, PersistedEntryContentSlice, PersistedEntryFlag, PersistedEntryFlagsSlice,
+        PersistedEntryIndex, PersistedFeed, PersistedState,
     };
     use rssr_domain::{EntryQuery, ReadFilter};
     use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -220,7 +304,7 @@ mod tests {
             updated_at: now,
         }];
         let entries = (0..entry_count)
-            .map(|id| PersistedEntry {
+            .map(|id| PersistedEntryIndex {
                 id: id + 1,
                 feed_id: 1,
                 external_id: format!("external-{id}"),
@@ -229,12 +313,10 @@ mod tests {
                 title: format!("Performance Article {id}"),
                 author: None,
                 summary: None,
-                content_html: None,
-                content_text: None,
                 published_at: Some(now - time::Duration::minutes(id)),
                 updated_at_source: None,
                 first_seen_at: now,
-                content_hash: None,
+                has_content: false,
                 created_at: now,
                 updated_at: now,
             })
@@ -259,6 +341,7 @@ mod tests {
             },
             app_state: rssr_domain::AppStateSnapshot::default(),
             entry_flags: PersistedEntryFlagsSlice { entries: flags },
+            entry_content: PersistedEntryContentSlice::default(),
         }
     }
 
@@ -285,5 +368,14 @@ mod tests {
 
         assert!(navigation.previous_feed_entry_id.is_some());
         assert!(navigation.next_feed_entry_id.is_some());
+    }
+
+    #[test]
+    fn count_entries_ignores_limit() {
+        let state = build_state(100);
+
+        let count = count_entries(&state, &EntryQuery { limit: Some(20), ..EntryQuery::default() });
+
+        assert_eq!(count, 100);
     }
 }

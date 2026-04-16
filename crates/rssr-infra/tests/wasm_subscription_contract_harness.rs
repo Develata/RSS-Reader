@@ -7,13 +7,13 @@ use rssr_application::{
     AddSubscriptionInput, FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedService,
     RefreshCommit, RefreshService, RefreshStorePort, RemoveSubscriptionInput, SubscriptionWorkflow,
 };
-use rssr_domain::{EntryQuery, EntryRepository};
+use rssr_domain::EntryQuery;
 use rssr_infra::application_adapters::browser::{
     adapters::{BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRepository},
     state::{
-        APP_STATE_STORAGE_KEY, BrowserState, ENTRY_FLAGS_STORAGE_KEY, LoadedState,
-        PersistedAppStateSlice, PersistedEntry, PersistedFeed, PersistedState, STORAGE_KEY,
-        load_state,
+        APP_STATE_STORAGE_KEY, BrowserState, ENTRY_CONTENT_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY,
+        LoadedState, PersistedAppStateSlice, PersistedEntryContent, PersistedEntryContentSlice,
+        PersistedEntryIndex, PersistedFeed, PersistedState, STORAGE_KEY, load_state,
     },
 };
 use time::OffsetDateTime;
@@ -57,6 +57,7 @@ fn clear_browser_state_storage() {
         let _ = storage.remove_item(STORAGE_KEY);
         let _ = storage.remove_item(APP_STATE_STORAGE_KEY);
         let _ = storage.remove_item(ENTRY_FLAGS_STORAGE_KEY);
+        let _ = storage.remove_item(ENTRY_CONTENT_STORAGE_KEY);
     }
 }
 
@@ -80,8 +81,8 @@ fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
     }
 }
 
-fn sample_entry(id: i64, feed_id: i64, index: i64) -> PersistedEntry {
-    PersistedEntry {
+fn sample_entry_index(id: i64, feed_id: i64, index: i64) -> PersistedEntryIndex {
+    PersistedEntryIndex {
         id,
         feed_id,
         external_id: format!("entry-{index}"),
@@ -90,21 +91,32 @@ fn sample_entry(id: i64, feed_id: i64, index: i64) -> PersistedEntry {
         title: format!("Entry {index}"),
         author: Some("RSSR".to_string()),
         summary: Some(format!("Summary {index}")),
-        content_html: Some(format!("<p>Summary {index}</p>")),
-        content_text: Some(format!("Summary {index}")),
         published_at: Some(OffsetDateTime::UNIX_EPOCH + time::Duration::days(index)),
         updated_at_source: None,
         first_seen_at: OffsetDateTime::UNIX_EPOCH,
-        content_hash: Some(format!("hash-{index}")),
+        has_content: true,
         created_at: OffsetDateTime::UNIX_EPOCH,
         updated_at: OffsetDateTime::UNIX_EPOCH,
     }
 }
 
+fn sample_entry_content(id: i64, feed_id: i64, index: i64) -> PersistedEntryContent {
+    PersistedEntryContent {
+        entry_id: id,
+        feed_id,
+        content_html: Some(format!("<p>Summary {index}</p>")),
+        content_text: Some(format!("Summary {index}")),
+        content_hash: Some(format!("hash-{index}")),
+        updated_at: OffsetDateTime::UNIX_EPOCH,
+    }
+}
+
 fn build_workflow(state: Arc<Mutex<BrowserState>>) -> SubscriptionWorkflow {
+    let entry_repository = Arc::new(BrowserEntryRepository::new(state.clone()));
     let feed_service = FeedService::new(
         Arc::new(BrowserFeedRepository::new(state.clone())),
-        Arc::new(BrowserEntryRepository::new(state.clone())),
+        entry_repository.clone(),
+        entry_repository,
     );
     let refresh_service =
         RefreshService::new(Arc::new(UnusedRefreshSource), Arc::new(UnusedRefreshStore));
@@ -166,8 +178,11 @@ async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears
             next_feed_id: 1,
             next_entry_id: 2,
             feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
-            entries: vec![sample_entry(1, 1, 1), sample_entry(2, 1, 2)],
+            entries: vec![sample_entry_index(1, 1, 1), sample_entry_index(2, 1, 2)],
             ..PersistedState::default()
+        },
+        entry_content: PersistedEntryContentSlice {
+            entries: vec![sample_entry_content(1, 1, 1), sample_entry_content(2, 1, 2)],
         },
         app_state: PersistedAppStateSlice {
             last_opened_feed_id: Some(1),
@@ -187,6 +202,7 @@ async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears
         assert_eq!(snapshot.core.feeds.len(), 1);
         assert!(snapshot.core.feeds[0].is_deleted);
         assert!(snapshot.core.entries.is_empty());
+        assert!(snapshot.entry_content.entries.is_empty());
         assert_eq!(snapshot.app_state.last_opened_feed_id, None);
     }
 
@@ -195,6 +211,7 @@ async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears
     assert_eq!(persisted.core.feeds.len(), 1);
     assert!(persisted.core.feeds[0].is_deleted);
     assert!(persisted.core.entries.is_empty());
+    assert!(persisted.entry_content.entries.is_empty());
     assert_eq!(persisted.app_state.last_opened_feed_id, None);
 
     clear_browser_state_storage();

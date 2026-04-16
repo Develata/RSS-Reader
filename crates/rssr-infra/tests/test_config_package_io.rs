@@ -63,6 +63,7 @@ async fn config_package_roundtrip_restores_feeds_and_settings() {
 
     let export_service = ImportExportService::new(
         export_feed_repository.clone(),
+        export_entry_repository.clone(),
         export_entry_repository,
         export_settings_repository.clone(),
         Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
@@ -80,6 +81,7 @@ async fn config_package_roundtrip_restores_feeds_and_settings() {
     let import_settings_repository = Arc::new(SqliteSettingsRepository::new(import_pool));
     let import_service = ImportExportService::new(
         import_feed_repository.clone(),
+        import_entry_repository.clone(),
         import_entry_repository,
         import_settings_repository.clone(),
         Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
@@ -107,6 +109,7 @@ async fn config_import_overwrites_local_feed_membership() {
     let settings_repository = Arc::new(SqliteSettingsRepository::new(pool));
     let service = ImportExportService::new(
         feed_repository.clone(),
+        entry_repository.clone(),
         entry_repository,
         settings_repository,
         Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
@@ -151,6 +154,7 @@ async fn config_import_removes_dropped_feed_entries_and_clears_metadata() {
     let settings_repository = Arc::new(SqliteSettingsRepository::new(pool.clone()));
     let service = ImportExportService::new(
         feed_repository.clone(),
+        entry_repository.clone(),
         entry_repository.clone(),
         settings_repository,
         Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),

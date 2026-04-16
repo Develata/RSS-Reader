@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use rssr_domain::{
-    ConfigFeed, ConfigPackage, EntryRepository, FeedRepository, NewFeedSubscription,
-    SettingsRepository, normalize_feed_url,
+    ConfigFeed, ConfigPackage, EntryContentRepository, EntryIndexRepository, FeedRepository,
+    NewFeedSubscription, SettingsRepository, normalize_feed_url,
 };
 use time::OffsetDateTime;
 use url::Url;
@@ -18,7 +18,8 @@ use crate::subscription_workflow::AppStatePort;
 #[derive(Clone)]
 pub struct ImportExportService {
     feed_repository: Arc<dyn FeedRepository>,
-    entry_repository: Arc<dyn EntryRepository>,
+    entry_index_repository: Arc<dyn EntryIndexRepository>,
+    entry_content_repository: Arc<dyn EntryContentRepository>,
     settings_repository: Arc<dyn SettingsRepository>,
     opml_codec: Arc<dyn OpmlCodecPort>,
     app_state_cleanup: Arc<dyn AppStatePort>,
@@ -113,13 +114,15 @@ impl AppStatePort for NoopAppStateCleanup {
 impl ImportExportService {
     pub fn new(
         feed_repository: Arc<dyn FeedRepository>,
-        entry_repository: Arc<dyn EntryRepository>,
+        entry_index_repository: Arc<dyn EntryIndexRepository>,
+        entry_content_repository: Arc<dyn EntryContentRepository>,
         settings_repository: Arc<dyn SettingsRepository>,
         opml_codec: Arc<dyn OpmlCodecPort>,
     ) -> Self {
         Self::new_with_app_state_cleanup(
             feed_repository,
-            entry_repository,
+            entry_index_repository,
+            entry_content_repository,
             settings_repository,
             opml_codec,
             Arc::new(NoopAppStateCleanup),
@@ -128,14 +131,16 @@ impl ImportExportService {
 
     pub fn new_with_app_state_cleanup(
         feed_repository: Arc<dyn FeedRepository>,
-        entry_repository: Arc<dyn EntryRepository>,
+        entry_index_repository: Arc<dyn EntryIndexRepository>,
+        entry_content_repository: Arc<dyn EntryContentRepository>,
         settings_repository: Arc<dyn SettingsRepository>,
         opml_codec: Arc<dyn OpmlCodecPort>,
         app_state_cleanup: Arc<dyn AppStatePort>,
     ) -> Self {
         Self::new_with_app_state_cleanup_and_clock(
             feed_repository,
-            entry_repository,
+            entry_index_repository,
+            entry_content_repository,
             settings_repository,
             opml_codec,
             app_state_cleanup,
@@ -145,7 +150,8 @@ impl ImportExportService {
 
     pub fn new_with_app_state_cleanup_and_clock(
         feed_repository: Arc<dyn FeedRepository>,
-        entry_repository: Arc<dyn EntryRepository>,
+        entry_index_repository: Arc<dyn EntryIndexRepository>,
+        entry_content_repository: Arc<dyn EntryContentRepository>,
         settings_repository: Arc<dyn SettingsRepository>,
         opml_codec: Arc<dyn OpmlCodecPort>,
         app_state_cleanup: Arc<dyn AppStatePort>,
@@ -153,7 +159,8 @@ impl ImportExportService {
     ) -> Self {
         Self {
             feed_repository,
-            entry_repository,
+            entry_index_repository,
+            entry_content_repository,
             settings_repository,
             opml_codec,
             app_state_cleanup,
@@ -286,7 +293,8 @@ impl ImportExportService {
     }
 
     async fn remove_feed_with_cleanup(&self, feed_id: i64) -> Result<()> {
-        self.entry_repository.delete_for_feed(feed_id).await?;
+        self.entry_index_repository.delete_for_feed(feed_id).await?;
+        self.entry_content_repository.delete_for_feed(feed_id).await?;
         self.feed_repository.set_deleted(feed_id, true).await?;
         self.app_state_cleanup.clear_last_opened_feed_if_matches(feed_id).await
     }

@@ -2,12 +2,10 @@
 
 use std::time::Instant;
 
-use rssr_domain::{
-    EntryQuery, EntryRepository, FeedRepository, NewFeedSubscription, ReadFilter, StarredFilter,
-};
+use rssr_domain::{EntryQuery, FeedRepository, NewFeedSubscription, ReadFilter, StarredFilter};
 use rssr_infra::db::{
     entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
-    sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
+    migrate_content, sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
 };
 use sqlx::QueryBuilder;
 use time::{Duration, OffsetDateTime};
@@ -16,11 +14,14 @@ use url::Url;
 #[tokio::test]
 async fn entry_repository_handles_large_dataset_queries() {
     let backend = NativeSqliteBackend::new("sqlite::memory:");
-    let pool = backend.connect().await.expect("connect sqlite memory");
-    migrate(&pool).await.expect("run migrations");
+    let index_pool = backend.connect().await.expect("connect sqlite memory");
+    migrate(&index_pool).await.expect("run migrations");
+    let content_pool = backend.connect_content().await.expect("connect sqlite content memory");
+    migrate_content(&content_pool).await.expect("run content migrations");
 
-    let feed_repository = SqliteFeedRepository::new(pool.clone());
-    let entry_repository = SqliteEntryRepository::new(pool.clone());
+    let feed_repository = SqliteFeedRepository::new(index_pool.clone());
+    let entry_repository =
+        SqliteEntryRepository::new_with_content_pool(index_pool.clone(), content_pool.clone());
 
     let feed = feed_repository
         .upsert_subscription(&NewFeedSubscription {
@@ -35,8 +36,8 @@ async fn entry_repository_handles_large_dataset_queries() {
     for batch in (0..10_000_i64).collect::<Vec<_>>().chunks(250) {
         let mut builder = QueryBuilder::new(
             "INSERT INTO entries (feed_id, external_id, dedup_key, url, title, author, summary, \
-             content_html, content_text, published_at, updated_at_source, first_seen_at, \
-             content_hash, is_read, is_starred, read_at, starred_at, created_at, updated_at) ",
+             published_at, updated_at_source, first_seen_at, has_content, is_read, is_starred, \
+             read_at, starred_at, created_at, updated_at) ",
         );
         builder.push_values(batch.iter().copied(), |mut row, idx| {
             let stamp = (now - Duration::minutes(idx))
@@ -49,12 +50,10 @@ async fn entry_repository_handles_large_dataset_queries() {
                 .push_bind(format!("Performance Article {idx}"))
                 .push_bind(Some("Perf Bot"))
                 .push_bind(Some(format!("Summary {idx}")))
-                .push_bind(Some(format!("<p>content {idx}</p>")))
-                .push_bind(Some(format!("content {idx}")))
                 .push_bind(Some(stamp.clone()))
                 .push_bind(Option::<String>::None)
                 .push_bind(stamp.clone())
-                .push_bind(Some(format!("hash-{idx}")))
+                .push_bind(1_i64)
                 .push_bind(if idx % 3 == 0 { 1_i64 } else { 0_i64 })
                 .push_bind(if idx % 5 == 0 { 1_i64 } else { 0_i64 })
                 .push_bind(Option::<String>::None)
@@ -62,7 +61,27 @@ async fn entry_repository_handles_large_dataset_queries() {
                 .push_bind(stamp.clone())
                 .push_bind(stamp);
         });
-        builder.build().execute(&pool).await.expect("seed entry batch");
+        builder.build().execute(&index_pool).await.expect("seed entry batch");
+    }
+
+    for batch in (0..10_000_i64).collect::<Vec<_>>().chunks(250) {
+        let mut builder = QueryBuilder::new(
+            "INSERT INTO entry_contents (entry_id, feed_id, content_html, content_text, \
+             content_hash, updated_at) ",
+        );
+        builder.push_values(batch.iter().copied(), |mut row, idx| {
+            let entry_id = idx + 1;
+            let stamp = (now - Duration::minutes(idx))
+                .format(&time::format_description::well_known::Rfc3339)
+                .expect("format timestamp");
+            row.push_bind(entry_id)
+                .push_bind(feed.id)
+                .push_bind(Some(format!("<p>content {idx}</p>")))
+                .push_bind(Some(format!("content {idx}")))
+                .push_bind(Some(format!("hash-{idx}")))
+                .push_bind(stamp);
+        });
+        builder.build().execute(&content_pool).await.expect("seed content batch");
     }
 
     let start = Instant::now();

@@ -1,5 +1,6 @@
 use rssr_domain::{
-    DomainError, Entry, EntryNavigation, EntryQuery, EntryRepository, EntrySummary, ReadFilter,
+    DomainError, Entry, EntryContent, EntryContentRepository, EntryIndexRepository,
+    EntryNavigation, EntryQuery, EntryRecord, EntryRepository, EntrySummary, ReadFilter,
     Result as DomainResult, StarredFilter,
 };
 use sqlx::{QueryBuilder, Row, Sqlite};
@@ -12,7 +13,8 @@ use crate::parser::feed_parser::ParsedEntry;
 
 #[derive(Clone)]
 pub struct SqliteEntryRepository {
-    pool: SqlitePool,
+    index_pool: SqlitePool,
+    content_pool: SqlitePool,
 }
 
 #[derive(Debug, Clone)]
@@ -23,9 +25,30 @@ pub struct LocalizedEntryUpdate<'a> {
     pub localized_content_hash: &'a str,
 }
 
+#[derive(Debug, Clone)]
+struct PendingEntryContent {
+    dedup_key: String,
+    content_html: Option<String>,
+    content_text: Option<String>,
+    content_hash: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedEntryContent {
+    pub entry_id: i64,
+    pub dedup_key: String,
+    pub content_html: Option<String>,
+    pub content_text: Option<String>,
+    pub content_hash: Option<String>,
+}
+
 impl SqliteEntryRepository {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(index_pool: SqlitePool) -> Self {
+        Self::new_with_content_pool(index_pool.clone(), index_pool)
+    }
+
+    pub fn new_with_content_pool(index_pool: SqlitePool, content_pool: SqlitePool) -> Self {
+        Self { index_pool, content_pool }
     }
 
     pub async fn upsert_entries(
@@ -33,37 +56,38 @@ impl SqliteEntryRepository {
         feed_id: i64,
         entries: &[ParsedEntry],
     ) -> DomainResult<usize> {
-        let mut inserted_or_updated = 0;
+        let resolved_contents = self.upsert_entries_and_resolve_contents(feed_id, entries).await?;
+        self.upsert_contents(feed_id, &resolved_contents).await?;
+        Ok(entries.len())
+    }
+
+    pub async fn upsert_entries_and_resolve_contents(
+        &self,
+        feed_id: i64,
+        entries: &[ParsedEntry],
+    ) -> DomainResult<Vec<ResolvedEntryContent>> {
+        let mut pending_contents = Vec::new();
 
         for entry in entries {
-            let content_hash = hash_content(
-                entry.content_html.as_deref(),
-                entry.content_text.as_deref(),
-                Some(&entry.title),
-            );
             let published_at = format_optional_datetime(entry.published_at)?;
             let updated_at_source = format_optional_datetime(entry.updated_at_source)?;
             let now = now_rfc3339();
 
-            let result = sqlx::query(
+            sqlx::query(
                 r#"
                 INSERT INTO entries (
                     feed_id, external_id, dedup_key, url, title, author, summary,
-                    content_html, content_text, published_at, updated_at_source,
-                    first_seen_at, content_hash, is_read, is_starred, read_at,
-                    starred_at, created_at, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 0, 0, NULL, NULL, ?12, ?12)
+                    published_at, updated_at_source, first_seen_at, has_content, is_read,
+                    is_starred, read_at, starred_at, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, 0, 0, NULL, NULL, ?10, ?10)
                 ON CONFLICT(feed_id, dedup_key) DO UPDATE SET
                     external_id = excluded.external_id,
                     url = COALESCE(excluded.url, entries.url),
                     title = excluded.title,
                     author = excluded.author,
                     summary = excluded.summary,
-                    content_html = COALESCE(excluded.content_html, entries.content_html),
-                    content_text = COALESCE(excluded.content_text, entries.content_text),
                     published_at = COALESCE(excluded.published_at, entries.published_at),
                     updated_at_source = COALESCE(excluded.updated_at_source, entries.updated_at_source),
-                    content_hash = excluded.content_hash,
                     updated_at = excluded.updated_at
                 "#,
             )
@@ -74,22 +98,106 @@ impl SqliteEntryRepository {
             .bind(&entry.title)
             .bind(entry.author.as_deref())
             .bind(entry.summary.as_deref())
-            .bind(entry.content_html.as_deref())
-            .bind(entry.content_text.as_deref())
             .bind(published_at)
             .bind(updated_at_source)
             .bind(&now)
-            .bind(content_hash)
-            .execute(&self.pool)
+            .execute(&self.index_pool)
+            .await
+            .map_err(map_sqlx_error)?;
+
+            if entry.content_html.is_some() || entry.content_text.is_some() {
+                pending_contents.push(PendingEntryContent {
+                    dedup_key: entry.dedup_key.clone(),
+                    content_html: entry.content_html.clone(),
+                    content_text: entry.content_text.clone(),
+                    content_hash: hash_content(
+                        entry.content_html.as_deref(),
+                        entry.content_text.as_deref(),
+                        Some(&entry.title),
+                    ),
+                });
+            }
+        }
+
+        if pending_contents.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let entry_ids_by_dedup_key = self
+            .resolve_entry_ids_by_dedup_keys(
+                feed_id,
+                &pending_contents
+                    .iter()
+                    .map(|content| content.dedup_key.as_str())
+                    .collect::<Vec<_>>(),
+            )
+            .await?;
+
+        pending_contents
+            .into_iter()
+            .map(|content| {
+                let entry_id = entry_ids_by_dedup_key
+                    .get(content.dedup_key.as_str())
+                    .copied()
+                    .ok_or(DomainError::NotFound)?;
+                Ok(ResolvedEntryContent {
+                    entry_id,
+                    dedup_key: content.dedup_key,
+                    content_html: content.content_html,
+                    content_text: content.content_text,
+                    content_hash: content.content_hash,
+                })
+            })
+            .collect()
+    }
+
+    pub async fn upsert_contents(
+        &self,
+        feed_id: i64,
+        contents: &[ResolvedEntryContent],
+    ) -> DomainResult<usize> {
+        self.ensure_content_schema().await?;
+        let mut upserted = 0;
+
+        for content in contents {
+            let now = now_rfc3339();
+            let result = sqlx::query(
+                r#"
+                INSERT INTO entry_contents (
+                    entry_id, feed_id, content_html, content_text, content_hash, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                ON CONFLICT(entry_id) DO UPDATE SET
+                    feed_id = excluded.feed_id,
+                    content_html = COALESCE(excluded.content_html, entry_contents.content_html),
+                    content_text = COALESCE(excluded.content_text, entry_contents.content_text),
+                    content_hash = excluded.content_hash,
+                    updated_at = excluded.updated_at
+                "#,
+            )
+            .bind(content.entry_id)
+            .bind(feed_id)
+            .bind(content.content_html.as_deref())
+            .bind(content.content_text.as_deref())
+            .bind(content.content_hash.as_deref())
+            .bind(&now)
+            .execute(&self.content_pool)
             .await
             .map_err(map_sqlx_error)?;
 
             if result.rows_affected() > 0 {
-                inserted_or_updated += 1;
+                upserted += 1;
             }
         }
 
-        Ok(inserted_or_updated)
+        if !contents.is_empty() {
+            self.mark_has_content(
+                &contents.iter().map(|content| content.entry_id).collect::<Vec<_>>(),
+                true,
+            )
+            .await?;
+        }
+
+        Ok(upserted)
     }
 
     pub async fn update_localized_html_if_hash_matches(
@@ -97,29 +205,38 @@ impl SqliteEntryRepository {
         feed_id: i64,
         update: &LocalizedEntryUpdate<'_>,
     ) -> DomainResult<bool> {
+        self.ensure_content_schema().await?;
+        let entry_id =
+            match self.find_entry_id_by_dedup_key_optional(feed_id, update.dedup_key).await? {
+                Some(entry_id) => entry_id,
+                None => return Ok(false),
+            };
         let now = now_rfc3339();
         let result = sqlx::query(
             r#"
-            UPDATE entries
-            SET content_html = ?4,
-                content_hash = ?5,
-                updated_at = ?6
-            WHERE feed_id = ?1
-              AND dedup_key = ?2
-              AND content_hash = ?3
+            UPDATE entry_contents
+            SET content_html = ?2,
+                content_hash = ?3,
+                updated_at = ?4
+            WHERE entry_id = ?1
+              AND content_hash = ?5
             "#,
         )
-        .bind(feed_id)
-        .bind(update.dedup_key)
-        .bind(update.expected_content_hash)
+        .bind(entry_id)
         .bind(update.localized_html)
         .bind(update.localized_content_hash)
         .bind(&now)
-        .execute(&self.pool)
+        .bind(update.expected_content_hash)
+        .execute(&self.content_pool)
         .await
         .map_err(map_sqlx_error)?;
 
-        Ok(result.rows_affected() > 0)
+        if result.rows_affected() > 0 {
+            self.mark_has_content(&[entry_id], true).await?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     pub async fn has_entries_for_feed(&self, feed_id: i64) -> DomainResult<bool> {
@@ -127,7 +244,7 @@ impl SqliteEntryRepository {
             "SELECT EXISTS(SELECT 1 FROM entries WHERE feed_id = ?1 LIMIT 1)",
         )
         .bind(feed_id)
-        .fetch_one(&self.pool)
+        .fetch_one(&self.index_pool)
         .await
         .map_err(map_sqlx_error)?;
 
@@ -136,11 +253,131 @@ impl SqliteEntryRepository {
 
     pub async fn list_feed_ids_with_entries(&self) -> DomainResult<std::collections::HashSet<i64>> {
         let rows = sqlx::query_scalar::<_, i64>("SELECT DISTINCT feed_id FROM entries")
-            .fetch_all(&self.pool)
+            .fetch_all(&self.index_pool)
             .await
             .map_err(map_sqlx_error)?;
 
         Ok(rows.into_iter().collect())
+    }
+
+    pub async fn get_entry(&self, entry_id: i64) -> DomainResult<Option<Entry>> {
+        <Self as EntryRepository>::get_entry(self, entry_id).await
+    }
+
+    pub async fn list_entries(&self, query: &EntryQuery) -> DomainResult<Vec<EntrySummary>> {
+        EntryIndexRepository::list_entries(self, query).await
+    }
+
+    pub async fn count_entries(&self, query: &EntryQuery) -> DomainResult<u64> {
+        EntryIndexRepository::count_entries(self, query).await
+    }
+
+    pub async fn get_entry_record(&self, entry_id: i64) -> DomainResult<Option<EntryRecord>> {
+        EntryIndexRepository::get_entry_record(self, entry_id).await
+    }
+
+    pub async fn reader_navigation(&self, current_entry_id: i64) -> DomainResult<EntryNavigation> {
+        EntryIndexRepository::reader_navigation(self, current_entry_id).await
+    }
+
+    pub async fn set_read(&self, entry_id: i64, is_read: bool) -> DomainResult<()> {
+        EntryIndexRepository::set_read(self, entry_id, is_read).await
+    }
+
+    pub async fn set_starred(&self, entry_id: i64, is_starred: bool) -> DomainResult<()> {
+        EntryIndexRepository::set_starred(self, entry_id, is_starred).await
+    }
+
+    pub async fn get_content(&self, entry_id: i64) -> DomainResult<Option<EntryContent>> {
+        EntryContentRepository::get_content(self, entry_id).await
+    }
+
+    async fn mark_has_content(&self, entry_ids: &[i64], has_content: bool) -> DomainResult<()> {
+        if entry_ids.is_empty() {
+            return Ok(());
+        }
+
+        let mut qb = QueryBuilder::<Sqlite>::new("UPDATE entries SET has_content = ");
+        qb.push_bind(if has_content { 1_i64 } else { 0_i64 });
+        qb.push(" WHERE id IN (");
+        let mut separated = qb.separated(", ");
+        for entry_id in entry_ids {
+            separated.push_bind(entry_id);
+        }
+        qb.push(")");
+
+        qb.build().execute(&self.index_pool).await.map_err(map_sqlx_error)?;
+
+        Ok(())
+    }
+
+    async fn ensure_content_schema(&self) -> DomainResult<()> {
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS entry_contents (
+                entry_id INTEGER PRIMARY KEY,
+                feed_id INTEGER NOT NULL,
+                content_html TEXT,
+                content_text TEXT,
+                content_hash TEXT,
+                updated_at TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&self.content_pool)
+        .await
+        .map_err(map_sqlx_error)?;
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_entry_contents_feed_id ON entry_contents(feed_id)",
+        )
+        .execute(&self.content_pool)
+        .await
+        .map_err(map_sqlx_error)?;
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_entry_contents_updated_at ON entry_contents(updated_at DESC)",
+        )
+        .execute(&self.content_pool)
+        .await
+        .map_err(map_sqlx_error)?;
+        Ok(())
+    }
+
+    async fn find_entry_id_by_dedup_key_optional(
+        &self,
+        feed_id: i64,
+        dedup_key: &str,
+    ) -> DomainResult<Option<i64>> {
+        sqlx::query_scalar::<_, i64>("SELECT id FROM entries WHERE feed_id = ?1 AND dedup_key = ?2")
+            .bind(feed_id)
+            .bind(dedup_key)
+            .fetch_optional(&self.index_pool)
+            .await
+            .map_err(map_sqlx_error)
+    }
+
+    async fn resolve_entry_ids_by_dedup_keys(
+        &self,
+        feed_id: i64,
+        dedup_keys: &[&str],
+    ) -> DomainResult<std::collections::HashMap<String, i64>> {
+        if dedup_keys.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let mut qb =
+            QueryBuilder::<Sqlite>::new("SELECT dedup_key, id FROM entries WHERE feed_id = ");
+        qb.push_bind(feed_id).push(" AND dedup_key IN (");
+        let mut separated = qb.separated(", ");
+        for dedup_key in dedup_keys {
+            separated.push_bind(dedup_key);
+        }
+        qb.push(")");
+
+        let rows = qb.build().fetch_all(&self.index_pool).await.map_err(map_sqlx_error)?;
+        Ok(rows
+            .into_iter()
+            .map(|row| (row.get::<String, _>("dedup_key"), row.get::<i64, _>("id")))
+            .collect())
     }
 
     async fn find_adjacent_entry_id(
@@ -194,14 +431,14 @@ impl SqliteEntryRepository {
         qb.push(" LIMIT 1");
 
         qb.build()
-            .fetch_optional(&self.pool)
+            .fetch_optional(&self.index_pool)
             .await
             .map_err(map_sqlx_error)
             .map(|row| row.map(|row| row.get("id")))
     }
 
-    async fn row_to_entry(row: sqlx::sqlite::SqliteRow) -> DomainResult<Entry> {
-        Ok(Entry {
+    async fn row_to_entry_record(row: sqlx::sqlite::SqliteRow) -> DomainResult<EntryRecord> {
+        Ok(EntryRecord {
             id: row.try_get("id").map_err(map_sqlx_error)?,
             feed_id: row.try_get("feed_id").map_err(map_sqlx_error)?,
             external_id: row.try_get("external_id").map_err(map_sqlx_error)?,
@@ -210,8 +447,6 @@ impl SqliteEntryRepository {
             title: row.try_get("title").map_err(map_sqlx_error)?,
             author: row.try_get("author").map_err(map_sqlx_error)?,
             summary: row.try_get("summary").map_err(map_sqlx_error)?,
-            content_html: row.try_get("content_html").map_err(map_sqlx_error)?,
-            content_text: row.try_get("content_text").map_err(map_sqlx_error)?,
             published_at: parse_optional_datetime(
                 row.try_get("published_at").map_err(map_sqlx_error)?,
             )?,
@@ -219,7 +454,7 @@ impl SqliteEntryRepository {
                 row.try_get("updated_at_source").map_err(map_sqlx_error)?,
             )?,
             first_seen_at: parse_datetime(row.try_get("first_seen_at").map_err(map_sqlx_error)?)?,
-            content_hash: row.try_get("content_hash").map_err(map_sqlx_error)?,
+            has_content: row.try_get::<i64, _>("has_content").map_err(map_sqlx_error)? != 0,
             is_read: row.try_get::<i64, _>("is_read").map_err(map_sqlx_error)? != 0,
             is_starred: row.try_get::<i64, _>("is_starred").map_err(map_sqlx_error)? != 0,
             read_at: parse_optional_datetime(row.try_get("read_at").map_err(map_sqlx_error)?)?,
@@ -227,6 +462,16 @@ impl SqliteEntryRepository {
                 row.try_get("starred_at").map_err(map_sqlx_error)?,
             )?,
             created_at: parse_datetime(row.try_get("created_at").map_err(map_sqlx_error)?)?,
+            updated_at: parse_datetime(row.try_get("updated_at").map_err(map_sqlx_error)?)?,
+        })
+    }
+
+    async fn row_to_entry_content(row: sqlx::sqlite::SqliteRow) -> DomainResult<EntryContent> {
+        Ok(EntryContent {
+            entry_id: row.try_get("entry_id").map_err(map_sqlx_error)?,
+            content_html: row.try_get("content_html").map_err(map_sqlx_error)?,
+            content_text: row.try_get("content_text").map_err(map_sqlx_error)?,
+            content_hash: row.try_get("content_hash").map_err(map_sqlx_error)?,
             updated_at: parse_datetime(row.try_get("updated_at").map_err(map_sqlx_error)?)?,
         })
     }
@@ -248,7 +493,7 @@ impl SqliteEntryRepository {
             .bind(if enabled { 1_i64 } else { 0_i64 })
             .bind(now.as_deref())
             .bind(now_rfc3339())
-            .execute(&self.pool)
+            .execute(&self.index_pool)
             .await
             .map_err(map_sqlx_error)?;
 
@@ -261,7 +506,7 @@ impl SqliteEntryRepository {
 }
 
 #[async_trait::async_trait]
-impl EntryRepository for SqliteEntryRepository {
+impl EntryIndexRepository for SqliteEntryRepository {
     async fn list_entries(&self, query: &EntryQuery) -> DomainResult<Vec<EntrySummary>> {
         let mut qb = QueryBuilder::<Sqlite>::new(
             r#"
@@ -278,40 +523,7 @@ impl EntryRepository for SqliteEntryRepository {
             "#,
         );
 
-        if let Some(feed_id) = query.feed_id {
-            qb.push(" AND entries.feed_id = ").push_bind(feed_id);
-        }
-        if !query.feed_ids.is_empty() {
-            qb.push(" AND entries.feed_id IN (");
-            let mut separated = qb.separated(", ");
-            for feed_id in &query.feed_ids {
-                separated.push_bind(feed_id);
-            }
-            qb.push(")");
-        }
-        match query.read_filter {
-            ReadFilter::All => {}
-            ReadFilter::UnreadOnly => {
-                qb.push(" AND entries.is_read = 0");
-            }
-            ReadFilter::ReadOnly => {
-                qb.push(" AND entries.is_read = 1");
-            }
-        }
-        match query.starred_filter {
-            StarredFilter::All => {}
-            StarredFilter::StarredOnly => {
-                qb.push(" AND entries.is_starred = 1");
-            }
-            StarredFilter::UnstarredOnly => {
-                qb.push(" AND entries.is_starred = 0");
-            }
-        }
-        if let Some(search) = &query.search_title {
-            qb.push(" AND entries.title LIKE ")
-                .push_bind(format!("%{search}%"))
-                .push(" COLLATE NOCASE");
-        }
+        push_entry_query_filters(&mut qb, query);
 
         qb.push(
             " ORDER BY COALESCE(entries.published_at, entries.created_at) DESC, entries.id DESC",
@@ -320,7 +532,7 @@ impl EntryRepository for SqliteEntryRepository {
             qb.push(" LIMIT ").push_bind(limit as i64);
         }
 
-        let rows = qb.build().fetch_all(&self.pool).await.map_err(map_sqlx_error)?;
+        let rows = qb.build().fetch_all(&self.index_pool).await.map_err(map_sqlx_error)?;
 
         rows.into_iter()
             .map(|row| {
@@ -337,15 +549,40 @@ impl EntryRepository for SqliteEntryRepository {
             .collect()
     }
 
-    async fn get_entry(&self, entry_id: i64) -> DomainResult<Option<Entry>> {
-        let row = sqlx::query("SELECT * FROM entries WHERE id = ?1")
-            .bind(entry_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(map_sqlx_error)?;
+    async fn count_entries(&self, query: &EntryQuery) -> DomainResult<u64> {
+        let mut qb = QueryBuilder::<Sqlite>::new(
+            r#"
+            SELECT COUNT(*) AS count
+            FROM entries
+            JOIN feeds ON feeds.id = entries.feed_id
+            WHERE feeds.is_deleted = 0
+            "#,
+        );
+
+        push_entry_query_filters(&mut qb, query);
+
+        let row = qb.build().fetch_one(&self.index_pool).await.map_err(map_sqlx_error)?;
+        let count: i64 = row.get("count");
+        Ok(count as u64)
+    }
+
+    async fn get_entry_record(&self, entry_id: i64) -> DomainResult<Option<EntryRecord>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, feed_id, external_id, dedup_key, url, title, author, summary,
+                   published_at, updated_at_source, first_seen_at, has_content, is_read,
+                   is_starred, read_at, starred_at, created_at, updated_at
+            FROM entries
+            WHERE id = ?1
+            "#,
+        )
+        .bind(entry_id)
+        .fetch_optional(&self.index_pool)
+        .await
+        .map_err(map_sqlx_error)?;
 
         match row {
-            Some(row) => Ok(Some(Self::row_to_entry(row).await?)),
+            Some(row) => Ok(Some(Self::row_to_entry_record(row).await?)),
             None => Ok(None),
         }
     }
@@ -362,7 +599,7 @@ impl EntryRepository for SqliteEntryRepository {
             "#,
         )
         .bind(current_entry_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&self.index_pool)
         .await
         .map_err(map_sqlx_error)?
         else {
@@ -399,10 +636,97 @@ impl EntryRepository for SqliteEntryRepository {
     async fn delete_for_feed(&self, feed_id: i64) -> DomainResult<()> {
         sqlx::query("DELETE FROM entries WHERE feed_id = ?1")
             .bind(feed_id)
-            .execute(&self.pool)
+            .execute(&self.index_pool)
             .await
             .map_err(map_sqlx_error)?;
         Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl EntryContentRepository for SqliteEntryRepository {
+    async fn get_content(&self, entry_id: i64) -> DomainResult<Option<EntryContent>> {
+        self.ensure_content_schema().await?;
+        let row = sqlx::query(
+            r#"
+            SELECT entry_id, content_html, content_text, content_hash, updated_at
+            FROM entry_contents
+            WHERE entry_id = ?1
+            "#,
+        )
+        .bind(entry_id)
+        .fetch_optional(&self.content_pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        match row {
+            Some(row) => Ok(Some(Self::row_to_entry_content(row).await?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn delete_for_feed(&self, feed_id: i64) -> DomainResult<()> {
+        self.ensure_content_schema().await?;
+        sqlx::query("DELETE FROM entry_contents WHERE feed_id = ?1")
+            .bind(feed_id)
+            .execute(&self.content_pool)
+            .await
+            .map_err(map_sqlx_error)?;
+        Ok(())
+    }
+
+    async fn delete_for_entry_ids(&self, entry_ids: &[i64]) -> DomainResult<()> {
+        self.ensure_content_schema().await?;
+        if entry_ids.is_empty() {
+            return Ok(());
+        }
+
+        let mut qb = QueryBuilder::<Sqlite>::new("DELETE FROM entry_contents WHERE entry_id IN (");
+        let mut separated = qb.separated(", ");
+        for entry_id in entry_ids {
+            separated.push_bind(entry_id);
+        }
+        qb.push(")");
+        qb.build().execute(&self.content_pool).await.map_err(map_sqlx_error)?;
+
+        Ok(())
+    }
+}
+
+fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a EntryQuery) {
+    if let Some(feed_id) = query.feed_id {
+        qb.push(" AND entries.feed_id = ").push_bind(feed_id);
+    }
+    if !query.feed_ids.is_empty() {
+        qb.push(" AND entries.feed_id IN (");
+        let mut separated = qb.separated(", ");
+        for feed_id in &query.feed_ids {
+            separated.push_bind(feed_id);
+        }
+        qb.push(")");
+    }
+    match query.read_filter {
+        ReadFilter::All => {}
+        ReadFilter::UnreadOnly => {
+            qb.push(" AND entries.is_read = 0");
+        }
+        ReadFilter::ReadOnly => {
+            qb.push(" AND entries.is_read = 1");
+        }
+    }
+    match query.starred_filter {
+        StarredFilter::All => {}
+        StarredFilter::StarredOnly => {
+            qb.push(" AND entries.is_starred = 1");
+        }
+        StarredFilter::UnstarredOnly => {
+            qb.push(" AND entries.is_starred = 0");
+        }
+    }
+    if let Some(search) = &query.search_title {
+        qb.push(" AND entries.title LIKE ")
+            .push_bind(format!("%{search}%"))
+            .push(" COLLATE NOCASE");
     }
 }
 

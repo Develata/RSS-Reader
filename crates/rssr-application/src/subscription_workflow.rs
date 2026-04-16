@@ -95,8 +95,8 @@ mod tests {
 
     use anyhow::Result;
     use rssr_domain::{
-        Entry, EntryNavigation, EntryQuery, EntryRepository, Feed, FeedRepository, FeedSummary,
-        NewFeedSubscription,
+        EntryContent, EntryContentRepository, EntryIndexRepository, EntryNavigation, EntryQuery,
+        EntryRecord, Feed, FeedRepository, FeedSummary, NewFeedSubscription,
     };
     use time::OffsetDateTime;
     use url::Url;
@@ -169,7 +169,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl EntryRepository for EntryRepositoryStub {
+    impl EntryIndexRepository for EntryRepositoryStub {
         async fn list_entries(
             &self,
             _query: &EntryQuery,
@@ -177,7 +177,14 @@ mod tests {
             Ok(Vec::new())
         }
 
-        async fn get_entry(&self, _entry_id: i64) -> rssr_domain::Result<Option<Entry>> {
+        async fn count_entries(&self, _query: &EntryQuery) -> rssr_domain::Result<u64> {
+            Ok(0)
+        }
+
+        async fn get_entry_record(
+            &self,
+            _entry_id: i64,
+        ) -> rssr_domain::Result<Option<EntryRecord>> {
             Ok(None)
         }
 
@@ -198,6 +205,21 @@ mod tests {
 
         async fn delete_for_feed(&self, feed_id: i64) -> rssr_domain::Result<()> {
             self.deleted_feed_ids.lock().expect("lock deleted feed ids").push(feed_id);
+            Ok(())
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl EntryContentRepository for EntryRepositoryStub {
+        async fn get_content(&self, _entry_id: i64) -> rssr_domain::Result<Option<EntryContent>> {
+            Ok(None)
+        }
+
+        async fn delete_for_feed(&self, _feed_id: i64) -> rssr_domain::Result<()> {
+            Ok(())
+        }
+
+        async fn delete_for_entry_ids(&self, _entry_ids: &[i64]) -> rssr_domain::Result<()> {
             Ok(())
         }
     }
@@ -252,12 +274,15 @@ mod tests {
 
     #[tokio::test]
     async fn add_and_refresh_combines_feed_and_refresh_use_cases() {
+        let entry_repository =
+            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
         let feed_service = crate::FeedService::new(
             Arc::new(FeedRepositoryStub {
                 next_id: Mutex::new(1),
                 deleted_feed_ids: Mutex::new(Vec::new()),
             }),
-            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) }),
+            entry_repository.clone(),
+            entry_repository,
         );
         let refresh_service = crate::RefreshService::new(
             Arc::new(SourceStub),
@@ -291,13 +316,16 @@ mod tests {
 
     #[tokio::test]
     async fn add_lifecycle_can_skip_first_refresh() {
+        let entry_repository =
+            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
         let workflow = SubscriptionWorkflow::new(
             crate::FeedService::new(
                 Arc::new(FeedRepositoryStub {
                     next_id: Mutex::new(7),
                     deleted_feed_ids: Mutex::new(Vec::new()),
                 }),
-                Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) }),
+                entry_repository.clone(),
+                entry_repository,
             ),
             crate::RefreshService::new(
                 Arc::new(SourceStub),
@@ -324,13 +352,16 @@ mod tests {
 
     #[tokio::test]
     async fn add_lifecycle_can_run_first_refresh() {
+        let entry_repository =
+            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
         let workflow = SubscriptionWorkflow::new(
             crate::FeedService::new(
                 Arc::new(FeedRepositoryStub {
                     next_id: Mutex::new(3),
                     deleted_feed_ids: Mutex::new(Vec::new()),
                 }),
-                Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) }),
+                entry_repository.clone(),
+                entry_repository,
             ),
             crate::RefreshService::new(
                 Arc::new(SourceStub),
@@ -370,10 +401,13 @@ mod tests {
             next_id: Mutex::new(1),
             deleted_feed_ids: Mutex::new(Vec::new()),
         });
+        let entry_repository =
+            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
         let workflow = SubscriptionWorkflow::new(
             crate::FeedService::new(
                 feed_repository.clone(),
-                Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) }),
+                entry_repository.clone(),
+                entry_repository,
             ),
             crate::RefreshService::new(
                 Arc::new(SourceStub),

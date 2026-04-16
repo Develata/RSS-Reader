@@ -10,9 +10,10 @@ use rssr_infra::application_adapters::browser::{
         BrowserSettingsRepository,
     },
     state::{
-        APP_STATE_STORAGE_KEY, BrowserState, ENTRY_FLAGS_STORAGE_KEY, LoadedState,
-        PersistedAppStateSlice, PersistedEntry, PersistedFeed, PersistedState, STORAGE_KEY,
-        load_state,
+        APP_STATE_STORAGE_KEY, BrowserState, ENTRY_CONTENT_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY,
+        LoadedState, PersistedAppStateSlice, PersistedEntryContent, PersistedEntryContentSlice,
+        PersistedEntryFlag, PersistedEntryFlagsSlice, PersistedEntryIndex, PersistedFeed,
+        PersistedState, STORAGE_KEY, load_state,
     },
 };
 use time::OffsetDateTime;
@@ -53,6 +54,7 @@ fn clear_browser_state_storage() {
         let _ = storage.remove_item(STORAGE_KEY);
         let _ = storage.remove_item(APP_STATE_STORAGE_KEY);
         let _ = storage.remove_item(ENTRY_FLAGS_STORAGE_KEY);
+        let _ = storage.remove_item(ENTRY_CONTENT_STORAGE_KEY);
     }
 }
 
@@ -76,8 +78,8 @@ fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
     }
 }
 
-fn sample_entry(id: i64, feed_id: i64, index: i64) -> PersistedEntry {
-    PersistedEntry {
+fn sample_entry_index(id: i64, feed_id: i64, index: i64) -> PersistedEntryIndex {
+    PersistedEntryIndex {
         id,
         feed_id,
         external_id: format!("entry-{index}"),
@@ -86,21 +88,32 @@ fn sample_entry(id: i64, feed_id: i64, index: i64) -> PersistedEntry {
         title: format!("Entry {index}"),
         author: Some("RSSR".to_string()),
         summary: Some(format!("Summary {index}")),
-        content_html: Some(format!("<p>Summary {index}</p>")),
-        content_text: Some(format!("Summary {index}")),
         published_at: Some(OffsetDateTime::UNIX_EPOCH),
         updated_at_source: None,
         first_seen_at: OffsetDateTime::UNIX_EPOCH,
-        content_hash: Some(format!("hash-{index}")),
+        has_content: true,
         created_at: OffsetDateTime::UNIX_EPOCH,
         updated_at: OffsetDateTime::UNIX_EPOCH,
     }
 }
 
+fn sample_entry_content(id: i64, feed_id: i64, index: i64) -> PersistedEntryContent {
+    PersistedEntryContent {
+        entry_id: id,
+        feed_id,
+        content_html: Some(format!("<p>Summary {index}</p>")),
+        content_text: Some(format!("Summary {index}")),
+        content_hash: Some(format!("hash-{index}")),
+        updated_at: OffsetDateTime::UNIX_EPOCH,
+    }
+}
+
 fn build_service(state: Arc<Mutex<BrowserState>>) -> ImportExportService {
+    let entry_repository = Arc::new(BrowserEntryRepository::new(state.clone()));
     ImportExportService::new_with_app_state_cleanup_and_clock(
         Arc::new(BrowserFeedRepository::new(state.clone())),
-        Arc::new(BrowserEntryRepository::new(state.clone())),
+        entry_repository.clone(),
+        entry_repository,
         Arc::new(BrowserSettingsRepository::new(state.clone())),
         Arc::new(BrowserOpmlCodec),
         Arc::new(BrowserAppStateAdapter::new(state)),
@@ -154,8 +167,18 @@ async fn browser_config_exchange_import_cleans_removed_feed_entries_and_last_ope
                 sample_feed(1, "https://example.com/feed.xml", false),
                 sample_feed(2, "https://stale.example.com/rss", false),
             ],
-            entries: vec![sample_entry(1, 2, 1)],
+            entries: vec![sample_entry_index(1, 2, 1)],
             ..PersistedState::default()
+        },
+        entry_content: PersistedEntryContentSlice { entries: vec![sample_entry_content(1, 2, 1)] },
+        entry_flags: PersistedEntryFlagsSlice {
+            entries: vec![PersistedEntryFlag {
+                id: 1,
+                is_read: false,
+                is_starred: false,
+                read_at: None,
+                starred_at: None,
+            }],
         },
         app_state: PersistedAppStateSlice {
             last_opened_feed_id: Some(2),
@@ -186,6 +209,7 @@ async fn browser_config_exchange_import_cleans_removed_feed_entries_and_last_ope
             snapshot.core.feeds.iter().find(|feed| feed.id == 2).expect("dropped feed").is_deleted
         );
         assert!(snapshot.core.entries.is_empty());
+        assert!(snapshot.entry_content.entries.is_empty());
         assert_eq!(snapshot.app_state.last_opened_feed_id, None);
     }
 
@@ -195,6 +219,7 @@ async fn browser_config_exchange_import_cleans_removed_feed_entries_and_last_ope
         persisted.core.feeds.iter().find(|feed| feed.id == 2).expect("dropped feed").is_deleted
     );
     assert!(persisted.core.entries.is_empty());
+    assert!(persisted.entry_content.entries.is_empty());
     assert_eq!(persisted.app_state.last_opened_feed_id, None);
 
     clear_browser_state_storage();

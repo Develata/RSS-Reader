@@ -148,13 +148,31 @@ impl RefreshStorePort for SqliteRefreshStore {
                 }
 
                 let entries = map_application_entries(&update.feed.entries);
-                if let Err(error) = self.entry_repository.upsert_entries(feed_id, &entries).await {
+                let resolved_contents = match self
+                    .entry_repository
+                    .upsert_entries_and_resolve_contents(feed_id, &entries)
+                    .await
+                {
+                    Ok(resolved) => resolved,
+                    Err(error) => {
+                        let failure = RefreshFailure {
+                            message: format!("写入文章索引失败: {error}"),
+                            metadata: Some(update.metadata.clone()),
+                        };
+                        let _ = self.persist_failure(feed_id, &failure).await;
+                        return Err(anyhow::Error::new(error).context("写入文章索引失败"));
+                    }
+                };
+
+                if let Err(error) =
+                    self.entry_repository.upsert_contents(feed_id, &resolved_contents).await
+                {
                     let failure = RefreshFailure {
-                        message: format!("写入文章失败: {error}"),
+                        message: format!("写入文章正文失败: {error}"),
                         metadata: Some(update.metadata.clone()),
                     };
                     let _ = self.persist_failure(feed_id, &failure).await;
-                    return Err(anyhow::Error::new(error).context("写入文章失败"));
+                    return Err(anyhow::Error::new(error).context("写入文章正文失败"));
                 }
 
                 self.feed_repository

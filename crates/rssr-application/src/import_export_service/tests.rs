@@ -1,8 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use rssr_domain::{
-    ConfigFeed, ConfigPackage, Entry, EntryNavigation, EntryQuery, EntryRepository, Feed,
-    FeedRepository, FeedSummary, NewFeedSubscription, SettingsRepository, UserSettings,
+    ConfigFeed, ConfigPackage, EntryContent, EntryContentRepository, EntryIndexRepository,
+    EntryNavigation, EntryQuery, EntryRecord, Feed, FeedRepository, FeedSummary,
+    NewFeedSubscription, SettingsRepository, UserSettings,
 };
 use time::OffsetDateTime;
 use url::Url;
@@ -84,7 +85,7 @@ impl FeedRepository for StubFeedRepository {
 struct StubEntryRepository;
 
 #[async_trait::async_trait]
-impl EntryRepository for StubEntryRepository {
+impl EntryIndexRepository for StubEntryRepository {
     async fn list_entries(
         &self,
         _query: &EntryQuery,
@@ -92,7 +93,11 @@ impl EntryRepository for StubEntryRepository {
         Ok(Vec::new())
     }
 
-    async fn get_entry(&self, _entry_id: i64) -> rssr_domain::Result<Option<Entry>> {
+    async fn count_entries(&self, _query: &EntryQuery) -> rssr_domain::Result<u64> {
+        Ok(0)
+    }
+
+    async fn get_entry_record(&self, _entry_id: i64) -> rssr_domain::Result<Option<EntryRecord>> {
         Ok(None)
     }
 
@@ -112,6 +117,21 @@ impl EntryRepository for StubEntryRepository {
     }
 
     async fn delete_for_feed(&self, _feed_id: i64) -> rssr_domain::Result<()> {
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl EntryContentRepository for StubEntryRepository {
+    async fn get_content(&self, _entry_id: i64) -> rssr_domain::Result<Option<EntryContent>> {
+        Ok(None)
+    }
+
+    async fn delete_for_feed(&self, _feed_id: i64) -> rssr_domain::Result<()> {
+        Ok(())
+    }
+
+    async fn delete_for_entry_ids(&self, _entry_ids: &[i64]) -> rssr_domain::Result<()> {
         Ok(())
     }
 }
@@ -245,7 +265,7 @@ struct MemoryEntryRepository {
 }
 
 #[async_trait::async_trait]
-impl EntryRepository for MemoryEntryRepository {
+impl EntryIndexRepository for MemoryEntryRepository {
     async fn list_entries(
         &self,
         _query: &EntryQuery,
@@ -253,7 +273,11 @@ impl EntryRepository for MemoryEntryRepository {
         Ok(Vec::new())
     }
 
-    async fn get_entry(&self, _entry_id: i64) -> rssr_domain::Result<Option<Entry>> {
+    async fn count_entries(&self, _query: &EntryQuery) -> rssr_domain::Result<u64> {
+        Ok(0)
+    }
+
+    async fn get_entry_record(&self, _entry_id: i64) -> rssr_domain::Result<Option<EntryRecord>> {
         Ok(None)
     }
 
@@ -274,6 +298,21 @@ impl EntryRepository for MemoryEntryRepository {
 
     async fn delete_for_feed(&self, feed_id: i64) -> rssr_domain::Result<()> {
         self.deleted_feed_ids.lock().expect("lock deleted feed ids").push(feed_id);
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl EntryContentRepository for MemoryEntryRepository {
+    async fn get_content(&self, _entry_id: i64) -> rssr_domain::Result<Option<EntryContent>> {
+        Ok(None)
+    }
+
+    async fn delete_for_feed(&self, _feed_id: i64) -> rssr_domain::Result<()> {
+        Ok(())
+    }
+
+    async fn delete_for_entry_ids(&self, _entry_ids: &[i64]) -> rssr_domain::Result<()> {
         Ok(())
     }
 }
@@ -337,6 +376,7 @@ async fn export_config_contains_active_feeds_and_settings() {
             ],
         }),
         Arc::new(StubEntryRepository),
+        Arc::new(StubEntryRepository),
         Arc::new(StubSettingsRepository { settings: UserSettings::default() }),
         Arc::new(RecordingOpmlCodec::default()),
         Arc::new(RecordingAppStateCleanup::default()),
@@ -356,6 +396,8 @@ async fn export_config_contains_active_feeds_and_settings() {
 #[tokio::test]
 async fn remote_config_roundtrip_uses_json_payload() {
     let now = OffsetDateTime::UNIX_EPOCH;
+    let entry_repository =
+        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) });
     let service = ImportExportService::new(
         Arc::new(MemoryFeedRepository {
             feeds: Mutex::new(vec![Feed {
@@ -376,7 +418,8 @@ async fn remote_config_roundtrip_uses_json_payload() {
                 updated_at: now,
             }]),
         }),
-        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) }),
+        entry_repository.clone(),
+        entry_repository,
         Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
         Arc::new(RecordingOpmlCodec::default()),
     );
@@ -400,9 +443,12 @@ async fn remote_config_roundtrip_uses_json_payload() {
 
 #[tokio::test]
 async fn pull_remote_config_reports_missing_remote_payload() {
+    let entry_repository =
+        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) });
     let service = ImportExportService::new(
         Arc::new(MemoryFeedRepository { feeds: Mutex::new(Vec::new()) }),
-        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) }),
+        entry_repository.clone(),
+        entry_repository,
         Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
         Arc::new(RecordingOpmlCodec::default()),
     );
@@ -462,6 +508,7 @@ async fn import_config_clears_removed_feed_entries_and_metadata() {
     imported_settings.refresh_interval_minutes += 1;
     let service = ImportExportService::new_with_app_state_cleanup(
         feed_repository.clone(),
+        entry_repository.clone(),
         entry_repository.clone(),
         Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
         Arc::new(RecordingOpmlCodec::default()),
@@ -546,6 +593,7 @@ async fn pull_remote_config_cleans_up_removed_feed_app_state() {
     let service = ImportExportService::new_with_app_state_cleanup(
         feed_repository,
         entry_repository.clone(),
+        entry_repository.clone(),
         Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
         Arc::new(RecordingOpmlCodec::default()),
         cleanup.clone(),
@@ -602,6 +650,7 @@ async fn export_opml_uses_config_export_as_source_of_truth() {
             }],
         }),
         Arc::new(StubEntryRepository),
+        Arc::new(StubEntryRepository),
         Arc::new(StubSettingsRepository { settings: UserSettings::default() }),
         codec.clone(),
     );
@@ -619,9 +668,12 @@ async fn export_opml_uses_config_export_as_source_of_truth() {
 #[tokio::test]
 async fn import_opml_upserts_normalized_feeds() {
     let feed_repository = Arc::new(MemoryFeedRepository { feeds: Mutex::new(Vec::new()) });
+    let entry_repository =
+        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) });
     let service = ImportExportService::new(
         feed_repository.clone(),
-        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) }),
+        entry_repository.clone(),
+        entry_repository,
         Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
         Arc::new(RecordingOpmlCodec::with_decoded(vec![ConfigFeed {
             url: "https://example.com:443/feed.xml#top".to_string(),
