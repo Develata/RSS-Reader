@@ -8,14 +8,18 @@ pub(crate) mod support;
 use dioxus::prelude::*;
 
 use crate::{
-    app::AppNav, components::status_banner::StatusBanner,
+    app::AppNav,
+    components::status_banner::StatusBanner,
     hooks::use_mobile_back_navigation::use_mobile_back_navigation,
-    hooks::use_reader_shortcuts::use_reader_shortcuts, router::AppRoute, ui::use_reactive_task,
+    hooks::use_reader_shortcuts::use_reader_shortcuts,
+    router::AppRoute,
+    ui::{use_reactive_side_effect, use_reactive_task},
 };
 
 pub(crate) use self::session::ReaderPageSession;
 
 use self::facade::ReaderPageFacade;
+use self::reducer::dispatch_reader_page_intent;
 
 #[component]
 pub fn ReaderPage(entry_id: i64) -> Element {
@@ -150,5 +154,23 @@ fn use_reader_page_workspace(entry_id: i64) -> ReaderPageFacade {
         session.load();
     });
 
-    ReaderPageFacade::new(session, session.snapshot(), shortcuts)
+    let snapshot = session.snapshot();
+    let should_localize_assets = snapshot.body_html.is_some()
+        && snapshot.error.is_none()
+        && !snapshot.asset_localization_requested;
+
+    use_reactive_side_effect(
+        (entry_id, reload_version, should_localize_assets),
+        move |(_, _, should_localize_assets)| {
+            if should_localize_assets {
+                dispatch_reader_page_intent(
+                    state,
+                    intent::ReaderPageIntent::SetAssetLocalizationRequested,
+                );
+                session.localize_entry_assets();
+            }
+        },
+    );
+
+    ReaderPageFacade::new(session, snapshot, shortcuts)
 }

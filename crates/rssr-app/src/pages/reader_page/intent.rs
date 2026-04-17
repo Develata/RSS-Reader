@@ -4,6 +4,7 @@ use super::state::ReaderPageLoadedContent;
 pub(crate) enum ReaderPageIntent {
     BeginLoading,
     ApplyLoadedContent(ReaderPageLoadedContent),
+    SetAssetLocalizationRequested,
     SetStatus { message: String, tone: String },
     SetError(Option<String>),
     BumpReload,

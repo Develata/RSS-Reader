@@ -38,6 +38,12 @@ impl ReaderPageSession {
         }));
     }
 
+    pub(crate) fn localize_entry_assets(self) {
+        self.spawn_ui_command(UiCommand::Reader(ReaderCommand::LocalizeEntryAssets {
+            entry_id: self.entry_id,
+        }));
+    }
+
     pub(crate) fn toggle_read(self, via_shortcut: bool) {
         self.spawn_ui_command(UiCommand::Reader(ReaderCommand::ToggleRead {
             entry_id: self.entry_id,

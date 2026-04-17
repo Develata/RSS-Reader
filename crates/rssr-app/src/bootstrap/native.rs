@@ -29,7 +29,8 @@ use tokio::sync::OnceCell;
 
 use super::{
     AddSubscriptionOutcome, AutoRefreshPort, ClipboardPort, HostCapabilities,
-    RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome, RefreshPort, RemoteConfigPort,
+    ReaderAssetLocalizationOutcome, ReaderAssetPort, RefreshAllExecutionOutcome,
+    RefreshFeedExecutionOutcome, RefreshPort, RemoteConfigPort,
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -51,6 +52,11 @@ struct RefreshCapability {
 }
 
 #[derive(Clone)]
+struct ReaderAssetCapability {
+    host: Arc<AppServices>,
+}
+
+#[derive(Clone)]
 struct RemoteConfigCapability {
     host: Arc<AppServices>,
 }
@@ -61,7 +67,8 @@ struct ClipboardCapability;
 #[derive(Clone)]
 struct ImageLocalizationWorker {
     entry_repository: Arc<SqliteEntryRepository>,
-    body_asset_localizer: BodyAssetLocalizer,
+    background_asset_localizer: BodyAssetLocalizer,
+    reader_asset_localizer: BodyAssetLocalizer,
 }
 
 impl AppServices {
@@ -94,7 +101,8 @@ impl AppServices {
                     use_cases: composition.use_cases,
                     image_localization_worker: ImageLocalizationWorker {
                         entry_repository: composition.entry_repository,
-                        body_asset_localizer: BodyAssetLocalizer::new(),
+                        background_asset_localizer: BodyAssetLocalizer::new(),
+                        reader_asset_localizer: BodyAssetLocalizer::for_reader_entry(),
                     },
                     auto_refresh_started: AtomicBool::new(false),
                 }))
@@ -115,6 +123,7 @@ impl AppServices {
         HostCapabilities {
             auto_refresh: Arc::new(AutoRefreshCapability { host: Arc::clone(self) }),
             refresh: Arc::new(RefreshCapability { host: Arc::clone(self) }),
+            reader_assets: Arc::new(ReaderAssetCapability { host: Arc::clone(self) }),
             remote_config: Arc::new(RemoteConfigCapability { host: Arc::clone(self) }),
             clipboard: Arc::new(ClipboardCapability),
         }
@@ -261,6 +270,19 @@ impl RefreshCapability {
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl ReaderAssetPort for ReaderAssetCapability {
+    async fn localize_entry_assets(
+        &self,
+        entry_id: i64,
+    ) -> anyhow::Result<ReaderAssetLocalizationOutcome> {
+        let localized =
+            self.host.image_localization_worker.localize_entry_on_demand(entry_id).await?;
+        Ok(ReaderAssetLocalizationOutcome { localized })
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl RemoteConfigPort for RemoteConfigCapability {
     async fn push(
         &self,
@@ -291,15 +313,10 @@ impl ClipboardPort for ClipboardCapability {
 
 impl ImageLocalizationWorker {
     const MAX_BACKGROUND_LOCALIZED_ENTRIES: usize = 5;
-    const LOCALIZE_TIMEOUT: Duration = Duration::from_secs(
-        BodyAssetLocalizer::IMAGE_REQUEST_TIMEOUT.as_secs()
-            * BodyAssetLocalizer::max_images_per_entry() as u64
-            + 5,
-    );
 
     fn spawn(&self, feed_id: i64, entries: Vec<RefreshLocalizedEntry>) {
         let entry_repository = self.entry_repository.clone();
-        let localizer = self.body_asset_localizer.clone();
+        let localizer = self.background_asset_localizer.clone();
 
         tokio::spawn(async move {
             let mut localized_count = 0_usize;
@@ -320,7 +337,7 @@ impl ImageLocalizationWorker {
                 };
 
                 let localized_html = match tokio::time::timeout(
-                    Self::LOCALIZE_TIMEOUT,
+                    localization_timeout(&localizer),
                     localizer.localize_html_images(&original_html, entry.url.as_ref()),
                 )
                 .await
@@ -340,7 +357,8 @@ impl ImageLocalizationWorker {
                         tracing::warn!(
                             feed_id,
                             entry_url = ?entry.url,
-                            timeout_secs = Self::LOCALIZE_TIMEOUT.as_secs(),
+                            reason = "timeout",
+                            timeout_secs = localization_timeout(&localizer).as_secs(),
                             "后台正文图片本地化超时，跳过当前文章"
                         );
                         continue;
@@ -385,5 +403,186 @@ impl ImageLocalizationWorker {
                 }
             }
         });
+    }
+
+    async fn localize_entry_on_demand(&self, entry_id: i64) -> anyhow::Result<bool> {
+        let Some(entry) =
+            self.entry_repository.get_entry(entry_id).await.context("读取当前文章失败")?
+        else {
+            return Ok(false);
+        };
+
+        let Some(original_html) = entry.content_html.clone() else {
+            return Ok(false);
+        };
+
+        let Some(expected_content_hash) = entry.content_hash.clone().or_else(|| {
+            compute_entry_content_hash(
+                Some(&original_html),
+                entry.content_text.as_deref(),
+                Some(&entry.title),
+            )
+        }) else {
+            return Ok(false);
+        };
+
+        let localizer = self.reader_asset_localizer.clone();
+        let localized_html = match tokio::time::timeout(
+            localization_timeout(&localizer),
+            localizer.localize_html_images(&original_html, entry.url.as_ref()),
+        )
+        .await
+        {
+            Ok(Ok(localized_html)) if localized_html != original_html => localized_html,
+            Ok(Ok(_)) => return Ok(false),
+            Ok(Err(error)) => {
+                tracing::warn!(
+                    entry_id,
+                    feed_id = entry.feed_id,
+                    entry_url = ?entry.url,
+                    error = %error,
+                    "当前阅读文章正文图片按需本地化失败，保留原始 HTML"
+                );
+                return Ok(false);
+            }
+            Err(_) => {
+                tracing::warn!(
+                    entry_id,
+                    feed_id = entry.feed_id,
+                    entry_url = ?entry.url,
+                    reason = "timeout",
+                    timeout_secs = localization_timeout(&localizer).as_secs(),
+                    "当前阅读文章正文图片按需本地化超时，保留原始 HTML"
+                );
+                return Ok(false);
+            }
+        };
+
+        let Some(localized_content_hash) = compute_entry_content_hash(
+            Some(&localized_html),
+            entry.content_text.as_deref(),
+            Some(&entry.title),
+        ) else {
+            return Ok(false);
+        };
+
+        let updated = self
+            .entry_repository
+            .update_localized_html_if_hash_matches(
+                entry.feed_id,
+                &LocalizedEntryUpdate {
+                    dedup_key: &entry.dedup_key,
+                    expected_content_hash: &expected_content_hash,
+                    localized_html: &localized_html,
+                    localized_content_hash: &localized_content_hash,
+                },
+            )
+            .await
+            .context("写回按需本地化后的正文失败")?;
+
+        Ok(updated)
+    }
+}
+
+fn localization_timeout(localizer: &BodyAssetLocalizer) -> Duration {
+    Duration::from_secs(
+        localizer.image_request_timeout().as_secs() * localizer.max_images_per_entry() as u64 + 5,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        sync::Arc,
+        thread,
+    };
+
+    use rssr_domain::{FeedRepository, NewFeedSubscription};
+    use rssr_infra::{
+        db::{
+            entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository,
+            migrate, sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
+        },
+        parser::feed_parser::ParsedEntry,
+    };
+    use url::Url;
+
+    use super::{BodyAssetLocalizer, ImageLocalizationWorker};
+
+    #[tokio::test]
+    async fn localize_entry_on_demand_rewrites_current_entry_html() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind local image server");
+        let addr = listener.local_addr().expect("listener addr");
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept image request");
+            let mut buf = [0_u8; 4096];
+            let _ = stream.read(&mut buf).expect("read request");
+            let response = concat!(
+                "HTTP/1.1 200 OK\r\n",
+                "Connection: close\r\n",
+                "Content-Type: image/png\r\n",
+                "Content-Length: 4\r\n\r\n"
+            );
+            stream.write_all(response.as_bytes()).expect("write headers");
+            stream.write_all(&[1_u8, 2_u8, 3_u8, 4_u8]).expect("write image bytes");
+            stream.flush().expect("flush response");
+        });
+
+        let backend = NativeSqliteBackend::new("sqlite::memory:");
+        let pool = backend.connect().await.expect("connect sqlite memory");
+        migrate(&pool).await.expect("migrate sqlite");
+
+        let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
+        let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
+        let feed = feed_repository
+            .upsert_subscription(&NewFeedSubscription {
+                url: Url::parse("https://example.com/feed.xml").expect("feed url"),
+                title: Some("Example".to_string()),
+                folder: None,
+            })
+            .await
+            .expect("create feed");
+
+        let article_url = Url::parse(&format!("http://{addr}/article")).expect("article url");
+        entry_repository
+            .upsert_entries(
+                feed.id,
+                &[ParsedEntry {
+                    external_id: "entry-1".to_string(),
+                    dedup_key: "entry-1".to_string(),
+                    url: Some(article_url.clone()),
+                    title: "Entry".to_string(),
+                    author: None,
+                    summary: Some("summary".to_string()),
+                    content_html: Some(r#"<p><img src="/hero.png" alt="hero"></p>"#.to_string()),
+                    content_text: Some("summary".to_string()),
+                    published_at: None,
+                    updated_at_source: None,
+                }],
+            )
+            .await
+            .expect("insert entry");
+
+        let worker = ImageLocalizationWorker {
+            entry_repository: entry_repository.clone(),
+            background_asset_localizer: BodyAssetLocalizer::new(),
+            reader_asset_localizer: BodyAssetLocalizer::for_reader_entry(),
+        };
+
+        let updated = worker.localize_entry_on_demand(1).await.expect("localize current entry");
+        assert!(updated, "expected current reader entry to be rewritten");
+
+        let entry = entry_repository
+            .get_entry(1)
+            .await
+            .expect("load localized entry")
+            .expect("entry exists");
+        let html = entry.content_html.expect("localized html");
+        assert!(html.contains("data:image/png;base64,"));
+        assert!(!html.contains("/hero.png"));
+
+        server.join().expect("join local image server");
     }
 }

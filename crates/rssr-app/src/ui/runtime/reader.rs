@@ -26,6 +26,7 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
                             entry.content_html,
                             entry.content_text,
                             entry.summary,
+                            entry.url.as_ref(),
                         ) {
                             ReaderBody::Html(html) => (Some(html), String::new()),
                             ReaderBody::Text(text) => (None, text),
@@ -56,6 +57,20 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
                 intents
             }
             Err(err) => reader_status_error(format!("初始化应用失败：{err}")),
+        },
+        ReaderCommand::LocalizeEntryAssets { entry_id } => match UiServices::shared().await {
+            Ok(services) => match services.reader().localize_entry_assets(entry_id).await {
+                Ok(true) => reader_intents(vec![ReaderPageIntent::BumpReload]),
+                Ok(false) => Vec::new(),
+                Err(error) => {
+                    tracing::debug!(entry_id, error = %error, "当前文章正文图片按需本地化未能完成");
+                    Vec::new()
+                }
+            },
+            Err(error) => {
+                tracing::debug!(entry_id, error = %error, "初始化应用失败，跳过当前文章按需图片本地化");
+                Vec::new()
+            }
         },
         ReaderCommand::ToggleRead { entry_id, currently_read, via_shortcut } => {
             match UiServices::shared().await {

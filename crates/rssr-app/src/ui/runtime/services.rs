@@ -46,7 +46,10 @@ impl UiServices {
     }
 
     pub(crate) fn reader(&self) -> ReaderPort {
-        ReaderPort { use_cases: self.use_cases.clone() }
+        ReaderPort {
+            use_cases: self.use_cases.clone(),
+            host_capabilities: self.host_capabilities.clone(),
+        }
     }
 
     pub(crate) fn feeds(&self) -> FeedsPort {
@@ -158,6 +161,7 @@ impl SettingsPort {
 #[derive(Clone)]
 pub(crate) struct ReaderPort {
     use_cases: AppUseCases,
+    host_capabilities: HostCapabilities,
 }
 
 impl ReaderPort {
@@ -174,6 +178,10 @@ impl ReaderPort {
         input: ToggleStarredInput,
     ) -> Result<ToggleStarredOutcome> {
         self.use_cases.reader_service.toggle_starred(input).await
+    }
+
+    pub(crate) async fn localize_entry_assets(&self, entry_id: i64) -> Result<bool> {
+        Ok(self.host_capabilities.reader_assets.localize_entry_assets(entry_id).await?.localized)
     }
 }
 

@@ -31,7 +31,8 @@ use self::{
 };
 use super::{
     AddSubscriptionOutcome, AutoRefreshPort, ClipboardPort, HostCapabilities,
-    RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome, RefreshPort, RemoteConfigPort,
+    ReaderAssetLocalizationOutcome, ReaderAssetPort, RefreshAllExecutionOutcome,
+    RefreshFeedExecutionOutcome, RefreshPort, RemoteConfigPort,
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -51,6 +52,9 @@ struct AutoRefreshCapability {
 struct RefreshCapability {
     host: Arc<AppServices>,
 }
+
+#[derive(Clone)]
+struct ReaderAssetCapability;
 
 #[derive(Clone)]
 struct RemoteConfigCapability {
@@ -103,6 +107,7 @@ impl AppServices {
         HostCapabilities {
             auto_refresh: Arc::new(AutoRefreshCapability { host: Arc::clone(self) }),
             refresh: Arc::new(RefreshCapability { host: Arc::clone(self) }),
+            reader_assets: Arc::new(ReaderAssetCapability),
             remote_config: Arc::new(RemoteConfigCapability { host: Arc::clone(self) }),
             clipboard: Arc::new(ClipboardCapability),
         }
@@ -195,6 +200,17 @@ impl RefreshCapability {
                 }
             }
         }
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl ReaderAssetPort for ReaderAssetCapability {
+    async fn localize_entry_assets(
+        &self,
+        _entry_id: i64,
+    ) -> anyhow::Result<ReaderAssetLocalizationOutcome> {
+        Ok(ReaderAssetLocalizationOutcome::default())
     }
 }
 

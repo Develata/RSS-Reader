@@ -28,10 +28,16 @@ pub(crate) struct RefreshFeedExecutionOutcome {
     pub(crate) failure_message: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct ReaderAssetLocalizationOutcome {
+    pub(crate) localized: bool,
+}
+
 #[derive(Clone)]
 pub(crate) struct HostCapabilities {
     pub(crate) auto_refresh: Arc<dyn AutoRefreshPort>,
     pub(crate) refresh: Arc<dyn RefreshPort>,
+    pub(crate) reader_assets: Arc<dyn ReaderAssetPort>,
     pub(crate) remote_config: Arc<dyn RemoteConfigPort>,
     pub(crate) clipboard: Arc<dyn ClipboardPort>,
 }
@@ -46,6 +52,15 @@ pub(crate) trait RefreshPort {
     async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<AddSubscriptionOutcome>;
     async fn refresh_all(&self) -> anyhow::Result<RefreshAllExecutionOutcome>;
     async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<RefreshFeedExecutionOutcome>;
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+pub(crate) trait ReaderAssetPort {
+    async fn localize_entry_assets(
+        &self,
+        entry_id: i64,
+    ) -> anyhow::Result<ReaderAssetLocalizationOutcome>;
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]

@@ -23,6 +23,7 @@ pub(crate) struct ReaderPageState {
     pub(crate) is_read: bool,
     pub(crate) is_starred: bool,
     pub(crate) reload_tick: u64,
+    pub(crate) asset_localization_requested: bool,
     pub(crate) status: String,
     pub(crate) status_tone: String,
     pub(crate) error: Option<String>,
@@ -40,6 +41,7 @@ impl ReaderPageState {
             is_read: false,
             is_starred: false,
             reload_tick: 0,
+            asset_localization_requested: false,
             status: String::new(),
             status_tone: "info".to_string(),
             error: None,
@@ -55,6 +57,7 @@ impl ReaderPageState {
         self.navigation_state = ReaderNavigation::default();
         self.is_read = false;
         self.is_starred = false;
+        self.asset_localization_requested = false;
         self.status.clear();
         self.status_tone = "info".to_string();
         self.error = None;
