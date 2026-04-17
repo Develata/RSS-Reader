@@ -1,0 +1,20 @@
+{
+  "entries": [
+    {
+      "entry_id": 1,
+      "feed_id": 1,
+      "content_html": "<p>Demo Entry One body.</p>",
+      "content_text": "Demo Entry One body.",
+      "content_hash": "demo-entry-1",
+      "updated_at": "2026-04-10 00:00:00.0 +00:00:00"
+    },
+    {
+      "entry_id": 2,
+      "feed_id": 1,
+      "content_html": "<p>Demo Entry Two body.</p>",
+      "content_text": "Demo Entry Two body.",
+      "content_hash": "demo-entry-2",
+      "updated_at": "2026-04-10 00:00:00.0 +00:00:00"
+    }
+  ]
+}

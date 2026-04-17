@@ -182,9 +182,14 @@
 - Web 端回归阅读页渲染：部分执行
   - `dx build --platform web --package rssr-app`：通过
   - Chrome MCP 打开 `http://127.0.0.1:8097/`：通过，Web bundle 与本地 auth 门禁可正常启动
-  - 基于 `reader-demo` fixture 的静态 reader smoke：未完成
-    - 原因：当前 `tests/fixtures/browser_state/reader_demo_core.json` 仍是旧的 browser-state 形状，Chrome 灌入后会被当前 Web adapter 判定为损坏并清除
-    - 直接证据：浏览器控制台出现 `Web 本地状态恢复时发现异常`，并提示 `解析浏览器本地状态失败`
+  - 已补齐 `reader-demo` 静态 seed 到当前 browser storage schema：
+    - `reader_demo_core.json` 现改为 entry index 形状，不再内嵌正文
+    - 新增 `reader_demo_entry_content.json`
+    - `scripts/run_web_spa_regression_server.sh` 现同步写入 `ENTRY_CONTENT_STORAGE_KEY`
+    - 已确认时间字段必须继续使用当前 browser-state 既有的 `OffsetDateTime` JSON 线格式（例如 `2026-04-10 00:00:00.0 +00:00:00`），不能直接换成 RFC3339
+  - 由于 Chrome MCP 本身遇到 profile 锁，最终 reader-demo smoke 退回到同源 helper + headless Chrome：
+    - 新 profile 下通过同源 helper 注入 reader-demo 状态后，entries 页 DOM 已包含 `Demo Feed`、`Demo Entry Two`、`Demo Entry One`
+    - 说明 Web 端静态 smoke 的 seed 数据已恢复可用
 
 ## 结果
 
@@ -194,13 +199,15 @@
 - 本次交付可继续进入真实源手工回归。
 - Web 平台仍不承诺绕过浏览器 CORS/站点策略；当前修复主要改善 native 端用户可见失败率。
 - Web 侧代码已同步编译通过；但静态 `reader-demo` 冒烟基建仍需跟进到当前 browser storage schema，才能稳定覆盖 `/entries/:id` reader 路径。
+- Web 侧代码已同步编译通过；静态 `reader-demo` seed 也已修回当前 browser storage schema，至少可稳定把 Web 端拉起到真实 entries 内容。
 
 ## 风险与后续事项
 
 - 当前仍未处理 CSS `background-image`、运行时 JS 懒加载、登录态图片、强防盗链图片。
 - `picture` 块当前会把选中的单个最终资源回写到整组标签，优先保证“能显示”，不保证响应式多源策略完全保真。
 - 还缺一轮基于真实 feed 的手工 smoke，尤其是此前出现坏图的 NVIDIA/新闻站点类正文。
-- `tests/fixtures/browser_state/reader_demo_core.json` 与当前 Web browser-state schema 已经分叉；后续如果继续依赖 Chrome/static smoke，应把 `core` / `entry_content` fixture 与 `scripts/run_web_spa_regression_server.sh` 的 helper 一并升级。
+- 如果后续仍想在本机用 Windows + bash 管 `run_web_spa_regression_server.sh`，建议继续观察行尾与 `BASH_SOURCE` 路径推导；本轮已补 `RSSR_REPO_ROOT` override，但当前 WSL `/home/develata/gitclone/RSS-Reader` 与 Windows `E:\gitclone\RSS-Reader` 并非同一工作树，直接拿 WSL 路径起 helper 仍可能读到旧文件。
+- 当前静态 smoke 已能稳定覆盖 entries 内容，但还没有在同一条 headless/browser 会话里把 `/entries/2` reader 路由固化成自动回归步骤。
 - 如果桌面端代理后仍有坏图，优先查看 `rssr_app` 主进程日志里的代理告警；这时根因应已收敛为上游状态码、返回类型异常或更强的站点策略。
 - 如果再看到 `&amp;amp;` 级联文本，优先检查是否有新的 HTML 重写路径绕过了“原始序列化值保留”逻辑。
 - 如果后续仍有少量坏图，需要优先检查日志里是否是：

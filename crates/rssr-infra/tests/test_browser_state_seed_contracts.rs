@@ -44,12 +44,10 @@ struct FixturePersistedEntry {
     title: String,
     author: Option<String>,
     summary: Option<String>,
-    content_html: Option<String>,
-    content_text: Option<String>,
     published_at: Option<OffsetDateTime>,
     updated_at_source: Option<OffsetDateTime>,
     first_seen_at: OffsetDateTime,
-    content_hash: Option<String>,
+    has_content: bool,
     created_at: OffsetDateTime,
     updated_at: OffsetDateTime,
 }
@@ -62,6 +60,22 @@ struct FixturePersistedAppStateSlice {
 #[derive(Debug, Deserialize)]
 struct FixturePersistedEntryFlagsSlice {
     entries: Vec<FixturePersistedEntryFlag>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FixturePersistedEntryContentSlice {
+    entries: Vec<FixturePersistedEntryContent>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct FixturePersistedEntryContent {
+    entry_id: i64,
+    feed_id: i64,
+    content_html: Option<String>,
+    content_text: Option<String>,
+    content_hash: Option<String>,
+    updated_at: OffsetDateTime,
 }
 
 #[allow(dead_code)]
@@ -91,6 +105,7 @@ fn reader_demo_seed_core_fixture_contains_reader_smoke_shape() {
     assert_eq!(state.feeds[0].url, "https://example.com/feed.xml");
     assert!(!state.feeds[0].is_deleted);
     assert_eq!(state.entries[0].feed_id, 1);
+    assert!(state.entries[0].has_content);
 }
 
 #[test]
@@ -99,15 +114,25 @@ fn reader_demo_seed_sidecar_fixtures_expose_feed_and_entry_flags() {
         include_str!("../../../tests/fixtures/browser_state/reader_demo_app_state.json");
     let entry_flags_raw =
         include_str!("../../../tests/fixtures/browser_state/reader_demo_entry_flags.json");
+    let entry_content_raw =
+        include_str!("../../../tests/fixtures/browser_state/reader_demo_entry_content.json");
 
     let app_state: FixturePersistedAppStateSlice =
         serde_json::from_str(app_state_raw).expect("decode app state fixture");
     let entry_flags: FixturePersistedEntryFlagsSlice =
         serde_json::from_str(entry_flags_raw).expect("decode entry flags fixture");
+    let entry_content: FixturePersistedEntryContentSlice =
+        serde_json::from_str(entry_content_raw).expect("decode entry content fixture");
 
     assert_eq!(app_state.last_opened_feed_id, Some(1));
     assert_eq!(entry_flags.entries.len(), 2);
     assert_eq!(entry_flags.entries[1].id, 2);
     assert!(entry_flags.entries[1].is_starred);
     assert!(entry_flags.entries[0].is_read);
+    assert_eq!(entry_content.entries.len(), 2);
+    assert_eq!(entry_content.entries[1].entry_id, 2);
+    assert_eq!(
+        entry_content.entries[1].content_html.as_deref(),
+        Some("<p>Demo Entry Two body.</p>")
+    );
 }

@@ -45,8 +45,12 @@ if [[ ! -d "$public_dir" ]]; then
   exit 1
 fi
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "$script_dir/.." && pwd)"
+if [[ -n "${RSSR_REPO_ROOT:-}" ]]; then
+  repo_root="${RSSR_REPO_ROOT}"
+else
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  repo_root="$(cd "$script_dir/.." && pwd)"
+fi
 
 echo "Serving ${public_dir} with SPA fallback on http://127.0.0.1:${port}"
 echo "Press Ctrl+C to stop."
@@ -124,6 +128,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
         core_state = None
         app_state = None
         entry_flags = None
+        entry_content = None
 
         if seed == "reader-demo":
             fixture_root = os.path.join(repo_root, "tests", "fixtures", "browser_state")
@@ -133,6 +138,8 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
                 app_state = json.load(fh)
             with open(os.path.join(fixture_root, "reader_demo_entry_flags.json"), "r", encoding="utf-8") as fh:
                 entry_flags = json.load(fh)
+            with open(os.path.join(fixture_root, "reader_demo_entry_content.json"), "r", encoding="utf-8") as fh:
+                entry_content = json.load(fh)
 
         preset_css = load_theme_preset_css(preset)
         if core_state is not None and preset_css is not None:
@@ -155,19 +162,22 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
     const STORAGE_KEY = "rssr-web-state-v1";
     const APP_STATE_STORAGE_KEY = "rssr-web-app-state-v2";
     const ENTRY_FLAGS_STORAGE_KEY = "rssr-web-entry-flags-v1";
+    const ENTRY_CONTENT_STORAGE_KEY = "rssr-web-entry-content-v1";
     const authConfig = {f"{username}\n{password_hash}\n{salt}"!r};
     const sessionToken = {session_token!r};
     const coreState = {json.dumps(core_state, ensure_ascii=False)};
     const appState = {json.dumps(app_state, ensure_ascii=False)};
     const entryFlags = {json.dumps(entry_flags, ensure_ascii=False)};
+    const entryContent = {json.dumps(entry_content, ensure_ascii=False)};
 
     function main() {{
       localStorage.setItem(AUTH_CONFIG_KEY, authConfig);
       sessionStorage.setItem(AUTH_SESSION_KEY, sessionToken);
-      if (coreState && appState && entryFlags) {{
+      if (coreState && appState && entryFlags && entryContent) {{
         localStorage.setItem(STORAGE_KEY, JSON.stringify(coreState));
         localStorage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify(appState));
         localStorage.setItem(ENTRY_FLAGS_STORAGE_KEY, JSON.stringify(entryFlags));
+        localStorage.setItem(ENTRY_CONTENT_STORAGE_KEY, JSON.stringify(entryContent));
       }}
       location.replace(nextPath);
     }}
@@ -204,6 +214,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
       "rssr-web-state-v1",
       "rssr-web-app-state-v2",
       "rssr-web-entry-flags-v1",
+      "rssr-web-entry-content-v1",
     ];
 
     function safeParse(raw) {
@@ -221,6 +232,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
       core: safeParse(localStorage.getItem(keys[2])),
       app_state: safeParse(localStorage.getItem(keys[3])),
       entry_flags: safeParse(localStorage.getItem(keys[4])),
+      entry_content: safeParse(localStorage.getItem(keys[5])),
     };
 
     document.getElementById("dump").textContent = JSON.stringify(result, null, 2);
