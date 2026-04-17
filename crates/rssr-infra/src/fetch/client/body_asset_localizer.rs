@@ -47,19 +47,19 @@ impl BodyAssetLocalizer {
     const BACKGROUND_BUDGET: LocalizationBudget = LocalizationBudget {
         profile: "background",
         image_request_timeout: Duration::from_secs(8),
-        max_image_bytes: 1024 * 1024,
-        max_total_image_bytes: 2 * 1024 * 1024,
-        max_html_bytes: 256 * 1024,
-        max_images_per_entry: 8,
+        max_image_bytes: 3 * 1024 * 1024,
+        max_total_image_bytes: 6 * 1024 * 1024,
+        max_html_bytes: 768 * 1024,
+        max_images_per_entry: 16,
         max_concurrent_image_requests: 2,
     };
     const READER_BUDGET: LocalizationBudget = LocalizationBudget {
         profile: "reader_on_demand",
         image_request_timeout: Duration::from_secs(10),
-        max_image_bytes: 2 * 1024 * 1024,
-        max_total_image_bytes: 6 * 1024 * 1024,
-        max_html_bytes: 512 * 1024,
-        max_images_per_entry: 12,
+        max_image_bytes: 6 * 1024 * 1024,
+        max_total_image_bytes: 18 * 1024 * 1024,
+        max_html_bytes: 1536 * 1024,
+        max_images_per_entry: 24,
         max_concurrent_image_requests: 2,
     };
 
@@ -358,7 +358,7 @@ mod tests {
     async fn localize_html_images_falls_back_to_live_remote_sources_when_html_is_too_large() {
         let localizer = BodyAssetLocalizer::for_reader_entry();
         let article = Url::parse("https://blogs.nvidia.com/blog/example-post/").expect("article");
-        let padding = "x".repeat(600_000);
+        let padding = "x".repeat(1_600_000);
         let html = format!(
             r#"<base href="https://blogs.nvidia.com/wp-content/uploads/2026/04/"><div>{padding}</div><img src="/blank.gif" data-src="Filmora-1680x945.png" data-srcset="Filmora-1680x945.png 1680w, Filmora.png 1920w">"#
         );

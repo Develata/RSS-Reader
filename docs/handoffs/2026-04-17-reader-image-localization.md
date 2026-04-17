@@ -3,14 +3,14 @@
 - 日期：2026-04-17
 - 作者 / Agent：Codex
 - 分支：main
-- 当前 HEAD：d6112a1
+- 当前 HEAD：c012c6f
 - 相关 commit：pending
 - 相关 tag / release：N/A
 - 状态：`validated`
 
 ## 工作摘要
 
-实现了桌面端阅读页正文图片失败的系统性修复，并补上了一轮基于真实坏图源的收敛修补。当前这份交付额外纳入了“正文未本地化时，桌面端仍需稳定实时加载远端图片”的修复。新增修补针对三类仍然高频出现的失败：
+实现了桌面端阅读页正文图片失败的系统性修复，并补上了一轮基于真实坏图源的收敛修补。当前这份交付额外纳入了“正文未本地化时，桌面端仍需稳定实时加载远端图片”的修复，以及 2026-04-17 晚些时候追加的一轮“正文图片本地化预算放宽”。新增修补针对三类仍然高频出现的失败：
 
 - WordPress / NVIDIA feed 内把 emoji 当远端小图输出，阅读页此前会直接尝试加载 `s.w.org` 远端资源，失败后显示坏图标。
 - 正文大图同时带 `src` 和 `srcset` 时，本地化此前优先抓取更大的 `srcset` 候选，容易碰到单图预算或站点策略限制，导致本地化没落下来。
@@ -68,6 +68,20 @@
 - `BodyAssetLocalizer` 增加两套预算：
   - 后台刷新后的保守预算
   - 当前阅读文章的宽松预算
+- 2026-04-17 追加放宽后的预算如下：
+  - `background`
+    - 单图：`1 MiB -> 2 MiB`
+    - 单篇累计：`2 MiB -> 6 MiB`
+    - HTML：`256 KiB -> 768 KiB`
+    - 单篇图片数：`8 -> 16`
+  - `reader_on_demand`
+    - 单图：`2 MiB -> 6 MiB`
+    - 单篇累计：`6 MiB -> 18 MiB`
+    - HTML：`512 KiB -> 1536 KiB`
+    - 单篇图片数：`12 -> 24`
+- 连接超时、单图请求超时和抓图并发未继续放大，保持现状：
+  - 避免阅读页因为极端正文进入过长等待
+  - 避免后台批量预取对上游站点和本地 UI 造成额外压力
 - 抓图失败日志现在显式区分：
   - `unsupported_pattern`
   - `resolve_failed`
@@ -159,6 +173,8 @@
 - `cargo test -p rssr-infra --lib`：通过
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
 - `cargo fmt`：已执行
+- 2026-04-17 预算放宽追加验证：
+  - `cargo test -p rssr-infra --lib`：通过
 - 本轮新增或保留覆盖的关键测试包括：
   - `pages::reader_page::support::tests::reader_proxies_remote_images_for_desktop_runtime`
   - `pages::reader_page::support::tests::reader_proxy_rewrite_canonicalizes_polluted_alt_entities`
