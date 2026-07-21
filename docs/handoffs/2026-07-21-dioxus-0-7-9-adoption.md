@@ -55,7 +55,18 @@ speckit 生成的历史规格记录，按惯例不改写。
     本地 `Dockerfile.ci-local` 镜像需重建后才能复现 CI。
   - 传递依赖面扩大（image 编解码器族）会增加 CI 冷编译时长；如后续确认
     web/desktop 产物体积异常增长，可再评估是否向上游反馈特性裁剪。
+## 推送后 CI 首轮结果（追记）
+
+- Docker workflow：绿（15m38s，含 dioxus-cli 0.7.9 源码编译与容器运行时冒烟）。
+- CI workflow：lint-and-test / web-smoke / wasm-browser-contract ×3 全绿；
+  **android-smoke 失败** —— Gradle 构建与 APK 打包本身成功，
+  失败点是工作流断言 `lib/arm64-v8a/libdioxusmain.so`：
+  dx 0.7.9 起 Android 原生库默认名改为 `libmain.so`
+  （NativeActivity 约定，`android_lib_name()` 默认 `"main"`，
+  可经 `Dioxus.toml [android] lib_name` 覆写）。
+  修复：ci.yml 两处断言改为 `libmain.so`（跟随上游默认而非固化旧名）。
+  `prepare_android_bundle.py` 对 0.7.9 新脚手架仍兼容
+  （label / 图标注入路径未变，资源打包任务已在失败前成功执行）。
+
 - 待跟进：
-  1. 推送后观察 CI 四个 job（lint-and-test / web-smoke /
-     wasm-browser-contract ×3 / android-smoke）首轮全绿。
-  2. 上一批次遗留：CI / Linux 跑一轮真实浏览器主题矩阵回归。
+  1. 上一批次遗留：CI / Linux 跑一轮真实浏览器主题矩阵回归。

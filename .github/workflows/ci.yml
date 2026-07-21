@@ -187,7 +187,8 @@ jobs:
           cd -
           APK_PATH="$(find target/dx/rssr-app/release/android -path '*outputs/apk/debug/*.apk' | head -n1)"
           test -n "$APK_PATH"
-          unzip -l "$APK_PATH" | grep 'lib/arm64-v8a/libdioxusmain.so'
-          ! unzip -l "$APK_PATH" | grep 'lib/x86_64/libdioxusmain.so'
+          # dx 0.7.9 起原生库默认名为 libmain.so（NativeActivity 约定，可经 Dioxus.toml [android] lib_name 覆写）
+          unzip -l "$APK_PATH" | grep 'lib/arm64-v8a/libmain.so'
+          ! unzip -l "$APK_PATH" | grep 'lib/x86_64/libmain.so'
           "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" | grep "application-label:'RSS-Reader'"
           "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" | grep 'application-icon-.*rssr_launcher'
