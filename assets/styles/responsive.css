@@ -1,19 +1,19 @@
 @media (max-width: 720px) {
   .app-shell {
-    width: min(100vw - 16px, 1080px);
+    width: min(100vw - 16px, var(--shell-max-width));
     padding: 10px 0 34px;
   }
 
   [data-page]:not([data-page="reader"]),
   [data-layout="reader-page"] {
     padding: 18px;
-    border-radius: 22px;
+    border-radius: var(--radius-card);
   }
 
   [data-layout="app-nav-shell"] {
     gap: 8px;
     padding: 8px 10px;
-    border-radius: 16px;
+    border-radius: var(--radius-control);
   }
 
   [data-layout="app-nav-topline"] {
@@ -110,14 +110,14 @@
     min-height: 72px;
     width: 100%;
     padding: 12px 14px;
-    border: 1px solid rgba(62, 42, 27, 0.08);
-    border-radius: 16px;
-    background: rgba(245, 250, 255, 0.6);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-control);
+    background: var(--surface-tint);
     text-align: left;
     font: inherit;
     color: inherit;
     cursor: pointer;
-    box-shadow: 0 8px 20px rgba(63, 38, 18, 0.04);
+    box-shadow: var(--shadow-soft);
   }
 
   [data-layout="entry-top-directory-chip"] [data-slot="entry-directory-title"] {
@@ -164,7 +164,7 @@
 
   [data-layout="theme-lab"] {
     padding: 16px;
-    border-radius: 18px;
+    border-radius: var(--radius-card-sm);
   }
 
   .inline-actions {
@@ -238,14 +238,14 @@
 
 @media (max-width: 480px) {
   .app-shell {
-    width: min(100vw - 12px, 1080px);
+    width: min(100vw - 12px, var(--shell-max-width));
   }
 
   [data-layout="app-nav-shell"],
   [data-page]:not([data-page="reader"]),
   [data-layout="reader-page"] {
     padding: 16px 14px;
-    border-radius: 18px;
+    border-radius: var(--radius-card-sm);
   }
 
   [data-layout="app-nav-shell"] {
@@ -353,5 +353,21 @@
 
   [data-layout="theme-lab"] {
     padding: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-quick: 0ms;
+  }
+
+  [data-nav]:hover,
+  .icon-link-button:hover,
+  .button:hover,
+  .button:active,
+  [data-layout="entry-directory-link"]:hover,
+  [data-layout="entry-directory-toggle"]:hover,
+  [data-layout="reader-bottom-bar"] .reader-bottom-bar__button:hover {
+    transform: none;
   }
 }

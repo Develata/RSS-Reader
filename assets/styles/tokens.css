@@ -1,4 +1,15 @@
+/* ============================================================
+ * Token 层（主题作者的稳定接口）
+ *
+ * 第 1 层：基础调色板 / 字体（长期公开契约，语义不变）
+ * 第 2 层：语义 token（表面、边线、强调态、控件、布局、动效）
+ *
+ * 默认样式只允许消费 token，不允许硬编码颜色 / 圆角 / 阴影，
+ * 保证「覆写变量即可整体换肤」。
+ * ============================================================ */
+
 :root {
+  /* ---- 第 1 层：基础调色板 ---- */
   --bg: #f4efe6;
   --panel: rgba(255, 250, 242, 0.86);
   --panel-strong: #fffaf2;
@@ -15,20 +26,93 @@
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei",
     "Helvetica Neue", Arial, sans-serif;
   --reader-font-scale: 1;
+
+  /* ---- 第 2 层：应用底色 ---- */
+  --app-bg:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.78), transparent 28%),
+    radial-gradient(circle at top right, rgba(201, 181, 159, 0.16), transparent 24%),
+    linear-gradient(180deg, #f2e9dc 0%, #f9f5ef 36%, #f5efe7 100%);
+  --app-bg-dark:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 32%),
+    linear-gradient(180deg, #151515 0%, #1d1d1d 38%, #191919 100%);
+
+  /* ---- 第 2 层：边线 ---- */
+  --line-soft: rgba(62, 42, 27, 0.08);
+
+  /* ---- 第 2 层：表面 ---- */
+  --surface-panel: linear-gradient(180deg, rgba(255, 251, 246, 0.9), rgba(255, 248, 240, 0.82));
+  --surface-reader: linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(255, 250, 243, 0.95));
+  --surface-card: rgba(255, 251, 246, 0.82);
+  --surface-veil: rgba(255, 250, 242, 0.7);
+  --surface-chip: rgba(255, 252, 247, 0.58);
+  --surface-chip-hover: rgba(255, 250, 242, 0.98);
+  --surface-tint: rgba(249, 245, 239, 0.6);
+  --input-bg: rgba(255, 255, 255, 0.82);
+
+  /* ---- 第 2 层：强调态（可被 color-mix 派生覆盖） ---- */
+  --accent-soft: rgba(255, 245, 239, 0.92);
+  --accent-line: rgba(176, 74, 47, 0.28);
+  --accent-line-faint: rgba(176, 74, 47, 0.14);
+  --focus-ring-color: rgba(176, 74, 47, 0.32);
+  --focus-ring-shadow: 0 0 0 4px rgba(176, 74, 47, 0.08);
+
+  /* ---- 第 2 层：状态与语义色 ---- */
+  --danger: #8d2d1f;
+  --status-info-bg: rgba(255, 250, 242, 0.92);
+  --status-error-fg: #7c2317;
+  --status-error-bg: rgba(255, 233, 226, 0.92);
+  --status-error-border: rgba(124, 35, 23, 0.18);
+  --status-success-fg: #2f5d33;
+  --status-success-bg: rgba(235, 246, 233, 0.92);
+  --status-success-border: rgba(47, 93, 51, 0.18);
+
+  /* ---- 第 2 层：阅读页 ---- */
+  --reader-ink: #2c221d;
+  --reader-measure: 72ch;
+
+  /* ---- 第 2 层：阴影与高光 ---- */
+  --shadow-soft: 0 8px 20px rgba(63, 38, 18, 0.035);
+  --shadow-lift: 0 8px 16px rgba(63, 38, 18, 0.06);
+  --shadow-card: 0 10px 24px rgba(67, 90, 111, 0.04);
+  --shadow-float: 0 18px 36px rgba(63, 38, 18, 0.08);
+  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+
+  /* ---- 第 2 层：圆角 ---- */
+  --radius-panel: 30px;
+  --radius-card: 22px;
+  --radius-card-sm: 18px;
+  --radius-control: 16px;
+  --radius-pill: 999px;
+
+  /* ---- 第 2 层：按钮 ----
+   * 层级仿 Apple：filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危险 */
+  --button-bg: var(--accent);
+  --button-fg: #ffffff;
+  --button-shadow: 0 1px 2px rgba(63, 38, 18, 0.18);
+  --button-radius: 12px;
+  --button-min-height: 44px;
+  --button-padding: 11px 18px;
+  --button-secondary-bg: rgba(176, 74, 47, 0.1);
+  --button-secondary-fg: var(--accent-strong);
+  --button-secondary-shadow: none;
+  --button-danger-bg: #bf2f1f;
+  --button-danger-outline-bg: rgba(255, 233, 226, 0.9);
+  --button-danger-outline-fg: var(--danger);
+  --button-danger-outline-border: rgba(141, 45, 31, 0.18);
+
+  /* ---- 第 2 层：布局尺寸 ---- */
+  --shell-max-width: 1080px;
+  --rail-width: 188px;
+
+  /* ---- 第 2 层：动效 ---- */
+  --transition-quick: 120ms ease;
+
+  color-scheme: light;
 }
 
-.theme-light {
-  --bg: #f4efe6;
-  --panel: rgba(255, 250, 242, 0.86);
-  --panel-strong: #fffaf2;
-  --ink: #1f1a17;
-  --muted: #6f6257;
-  --line: rgba(62, 42, 27, 0.14);
-  --accent: #b04a2f;
-  --accent-strong: #8a351d;
-  --shadow: 0 18px 48px rgba(63, 38, 18, 0.08);
-}
-
+/* 暗色主题：只覆写 token，不重复结构样式。
+ * 注意 :root 即亮色默认值，故不再单独声明 .theme-light，
+ * 这样用户主题在亮色模式下覆写 :root 变量即可生效。 */
 .theme-dark {
   --bg: #141414;
   --panel: rgba(28, 28, 28, 0.9);
@@ -39,27 +123,53 @@
   --accent: #d27853;
   --accent-strong: #ef9d78;
   --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
-}
 
-* {
-  box-sizing: border-box;
-}
+  --line-soft: rgba(255, 255, 255, 0.06);
+  --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+  --surface-reader: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  --surface-card: rgba(255, 255, 255, 0.045);
+  --surface-veil: rgba(32, 30, 29, 0.72);
+  --surface-chip: rgba(255, 255, 255, 0.05);
+  --surface-chip-hover: rgba(255, 255, 255, 0.11);
+  --surface-tint: rgba(255, 255, 255, 0.06);
+  --input-bg: rgba(0, 0, 0, 0.28);
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  color: var(--ink);
-  font-family: var(--font-ui);
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.78), transparent 28%),
-    radial-gradient(circle at top right, rgba(201, 181, 159, 0.16), transparent 24%),
-    linear-gradient(180deg, #f2e9dc 0%, #f9f5ef 36%, #f5efe7 100%);
-}
+  --accent-soft: rgba(210, 120, 83, 0.16);
+  --accent-line: rgba(210, 120, 83, 0.4);
+  --accent-line-faint: rgba(210, 120, 83, 0.18);
+  --focus-ring-color: rgba(210, 120, 83, 0.5);
+  --focus-ring-shadow: 0 0 0 4px rgba(210, 120, 83, 0.16);
 
-.theme-dark {
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 32%),
-    linear-gradient(180deg, #151515 0%, #1d1d1d 38%, #191919 100%);
+  --danger: #ff9f8d;
+  --status-info-bg: rgba(255, 255, 255, 0.05);
+  --status-error-fg: #ffb3a3;
+  --status-error-bg: rgba(122, 42, 30, 0.3);
+  --status-error-border: rgba(255, 140, 115, 0.26);
+  --status-success-fg: #b4dcb6;
+  --status-success-bg: rgba(52, 94, 56, 0.28);
+  --status-success-border: rgba(150, 205, 158, 0.26);
+
+  --reader-ink: #e9e2d9;
+
+  --shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.25);
+  --shadow-lift: 0 8px 16px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 10px 24px rgba(0, 0, 0, 0.2);
+  --shadow-float: 0 18px 36px rgba(0, 0, 0, 0.35);
+  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  --button-bg: #c05a36;
+  --button-fg: #ffffff;
+  --button-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --button-secondary-bg: rgba(210, 120, 83, 0.16);
+  --button-secondary-fg: var(--accent-strong);
+  --button-secondary-shadow: none;
+  --button-danger-bg: #c93a2b;
+  --button-danger-outline-bg: rgba(122, 42, 30, 0.24);
+  --button-danger-outline-fg: #ffb3a3;
+  --button-danger-outline-border: rgba(255, 140, 115, 0.3);
+
+  color-scheme: dark;
+  background: var(--app-bg-dark);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -73,9 +183,95 @@ body {
     --accent: #d27853;
     --accent-strong: #ef9d78;
     --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
-    background:
-      radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 32%),
-      linear-gradient(180deg, #151515 0%, #1d1d1d 38%, #191919 100%);
+
+    --line-soft: rgba(255, 255, 255, 0.06);
+    --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+    --surface-reader: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+    --surface-card: rgba(255, 255, 255, 0.045);
+    --surface-veil: rgba(32, 30, 29, 0.72);
+    --surface-chip: rgba(255, 255, 255, 0.05);
+    --surface-chip-hover: rgba(255, 255, 255, 0.11);
+    --surface-tint: rgba(255, 255, 255, 0.06);
+    --input-bg: rgba(0, 0, 0, 0.28);
+
+    --accent-soft: rgba(210, 120, 83, 0.16);
+    --accent-line: rgba(210, 120, 83, 0.4);
+    --accent-line-faint: rgba(210, 120, 83, 0.18);
+    --focus-ring-color: rgba(210, 120, 83, 0.5);
+    --focus-ring-shadow: 0 0 0 4px rgba(210, 120, 83, 0.16);
+
+    --danger: #ff9f8d;
+    --status-info-bg: rgba(255, 255, 255, 0.05);
+    --status-error-fg: #ffb3a3;
+    --status-error-bg: rgba(122, 42, 30, 0.3);
+    --status-error-border: rgba(255, 140, 115, 0.26);
+    --status-success-fg: #b4dcb6;
+    --status-success-bg: rgba(52, 94, 56, 0.28);
+    --status-success-border: rgba(150, 205, 158, 0.26);
+
+    --reader-ink: #e9e2d9;
+
+    --shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.25);
+    --shadow-lift: 0 8px 16px rgba(0, 0, 0, 0.3);
+    --shadow-card: 0 10px 24px rgba(0, 0, 0, 0.2);
+    --shadow-float: 0 18px 36px rgba(0, 0, 0, 0.35);
+    --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+    --button-bg: #c05a36;
+    --button-fg: #ffffff;
+    --button-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    --button-secondary-bg: rgba(210, 120, 83, 0.16);
+    --button-secondary-fg: var(--accent-strong);
+    --button-secondary-shadow: none;
+    --button-danger-bg: #c93a2b;
+    --button-danger-outline-bg: rgba(122, 42, 30, 0.24);
+    --button-danger-outline-fg: #ffb3a3;
+    --button-danger-outline-border: rgba(255, 140, 115, 0.3);
+
+    color-scheme: dark;
+    background: var(--app-bg-dark);
+  }
+}
+
+/* 支持 color-mix 的引擎上，强调态从 --accent 派生：
+ * 主题作者只改 --accent 即可让 hover / 选中 / 焦点环整体跟随。
+ * 不支持的引擎回落到上面的字面量默认值。 */
+@supports (color: color-mix(in srgb, red 50%, transparent)) {
+  :root,
+  .theme-dark,
+  .theme-system {
+    --accent-soft: color-mix(in srgb, var(--accent) 10%, var(--panel-strong));
+    --accent-line: color-mix(in srgb, var(--accent) 30%, transparent);
+    --accent-line-faint: color-mix(in srgb, var(--accent) 15%, transparent);
+    --focus-ring-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    --focus-ring-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent);
+    --button-secondary-bg: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  background: var(--app-bg);
+}
+
+/* 暗色主题时把整个视口底色一起换掉（支持 :has 的引擎；
+ * 不支持时回落为仅 .app-shell 区域变暗，与旧行为一致）。 */
+body:has(.theme-dark) {
+  background: var(--app-bg-dark);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  body:has(.theme-system) {
+    background: var(--app-bg-dark);
+    color-scheme: dark;
   }
 }
 

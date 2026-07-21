@@ -381,7 +381,9 @@
 
 ## 可用 CSS 变量
 
-当前默认主题暴露的变量：
+默认样式全部通过变量消费颜色、圆角、阴影与关键布局尺寸，分为两层。
+
+### 第 1 层：基础调色板（长期契约）
 
 - `--bg`
 - `--panel`
@@ -395,7 +397,79 @@
 - `--font-display`
 - `--font-ui`
 
-建议优先覆写这些变量，再做局部布局调整。
+在支持 `color-mix` 的引擎上，hover / 选中 / 焦点环等强调态会自动从
+`--accent` 派生；只覆写 `--accent` / `--accent-strong` 即可让全部交互态跟随。
+
+### 第 2 层：语义 token
+
+应用底色与边线：
+
+- `--app-bg` / `--app-bg-dark`：视口底色（亮 / 暗）
+- `--line-soft`：组件级细边线（`--line` 用于分隔线与较强边框）
+
+表面：
+
+- `--surface-panel`：页面主面板背景
+- `--surface-reader`：阅读页面板背景
+- `--surface-card`：卡片背景（stat / feed / entry / settings / exchange）
+- `--surface-veil`：半透明浮层（顶部导航壳、筛选区等）
+- `--surface-chip` / `--surface-chip-hover`：胶囊、导航项、来源 chip
+- `--surface-tint`：冷色点缀面（搜索框、主题实验室等）
+- `--input-bg`：输入框背景
+
+强调态（可被 `color-mix` 派生覆盖）：
+
+- `--accent-soft`：选中 chip / 激活态背景
+- `--accent-line` / `--accent-line-faint`：hover / 激活边框
+- `--focus-ring-color` / `--focus-ring-shadow`：焦点环
+
+状态与语义色：
+
+- `--danger`
+- `--status-info-bg`
+- `--status-error-fg` / `--status-error-bg` / `--status-error-border`
+- `--status-success-fg` / `--status-success-bg` / `--status-success-border`
+
+阅读页：
+
+- `--reader-ink`：正文颜色
+- `--reader-measure`：正文行宽（默认 `72ch`）
+- `--reader-font-scale`：正文字号倍率（由设置页控制，主题不应覆写）
+
+阴影与圆角：
+
+- `--shadow-soft` / `--shadow-lift` / `--shadow-card` / `--shadow-float` / `--inset-highlight`
+- `--radius-panel`（页面面板）/ `--radius-card` / `--radius-card-sm` / `--radius-control` / `--radius-pill`
+
+按钮（所有 `.button` 与变体的完整样式接口；默认层级仿 Apple：
+filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危险）：
+
+- `--button-bg` / `--button-fg` / `--button-shadow`
+- `--button-radius` / `--button-min-height` / `--button-padding`
+- `--button-secondary-bg` / `--button-secondary-fg` / `--button-secondary-shadow`
+- `--button-danger-bg`
+- `--button-danger-outline-bg` / `--button-danger-outline-fg` / `--button-danger-outline-border`
+
+默认交互为 hover 轻微变暗、按下轻微缩放；主按钮为纯色填充，
+在支持 `color-mix` 的引擎上 `--button-secondary-bg` 会自动从 `--accent` 派生。
+
+布局尺寸：
+
+- `--shell-max-width`：应用内容最大宽度（默认 `1080px`）
+- `--rail-width`：文章页目录栏宽度（默认 `188px`）
+
+动效：
+
+- `--transition-quick`：交互过渡（默认 `120ms ease`）
+
+### 覆写建议
+
+- 换肤优先覆写第 1 层；需要精修再动第 2 层。
+- 亮色模式在 `:root` 覆写即可生效；如需同时定制暗色模式，在
+  `.theme-dark`（以及 `@media (prefers-color-scheme: dark)` 下的
+  `.theme-system`）中覆写同名变量。
+- 改按钮和布局尺寸时优先用 `--button-*`、`--radius-*`、`--shell-max-width`、
+  `--rail-width`、`--reader-measure`，而不是重写结构选择器。
 
 ## 常见定制示例
 
