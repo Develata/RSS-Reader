@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目定位
 
-本地优先、面向个人的极简 RSS 阅读器（Rust Edition 2024 + Dioxus 0.7.3），覆盖桌面（Windows/Linux/macOS）、Web、Android 与 CLI。
+本地优先、面向个人的极简 RSS 阅读器（Rust Edition 2024 + Dioxus 0.7.9），覆盖桌面（Windows/Linux/macOS）、Web、Android 与 CLI。
 
 产品边界长期固定为四类能力：**订阅、阅读、基本设置、基础配置交换**（`docs/design/functional-design-philosophy.md`）。超出边界的功能（AI 总结/分析、推荐流、社交、标签树/文件夹系统、文章库跨设备同步等）默认拒绝，不要实现。
 
@@ -17,7 +17,7 @@ cargo run -p rssr-app
 # CLI
 cargo run -p rssr-cli -- --help
 
-# Web 端开发（需 rustup target add wasm32-unknown-unknown 和 dioxus-cli 0.7.3）
+# Web 端开发（需 rustup target add wasm32-unknown-unknown 和 dioxus-cli 0.7.9）
 dx serve --platform web --package rssr-app
 
 # 提交前验证（与 CI 一致）
@@ -32,7 +32,7 @@ cargo test -p rssr-infra --test test_entry_state_and_search
 # 按名称过滤单元测试
 cargo test -p rssr-application <test_name>
 
-# wasm 浏览器契约测试（CI 三个 harness；需 wasm-bindgen-cli 0.2.114 + Chrome for Testing）
+# wasm 浏览器契约测试（CI 三个 harness；需 wasm-bindgen-cli 0.2.126 + Chrome for Testing）
 bash scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness
 # 其余：wasm_subscription_contract_harness / wasm_config_exchange_contract_harness
 

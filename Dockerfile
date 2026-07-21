@@ -5,7 +5,7 @@ FROM rust:1.88-bookworm AS builder
 RUN rustup target add wasm32-unknown-unknown
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    cargo install dioxus-cli --version 0.7.3 --locked
+    cargo install dioxus-cli --version 0.7.9 --locked
 
 WORKDIR /app
 

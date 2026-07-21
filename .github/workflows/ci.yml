@@ -8,7 +8,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  WASM_BINDGEN_CLI_VERSION: 0.2.114
+  WASM_BINDGEN_CLI_VERSION: 0.2.126
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -52,7 +52,7 @@ jobs:
   web-smoke:
     runs-on: ubuntu-latest
     env:
-      DIOXUS_CLI_VERSION: 0.7.3
+      DIOXUS_CLI_VERSION: 0.7.9
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -122,7 +122,7 @@ jobs:
     env:
       ANDROID_NDK_VERSION: 27.3.13750724
       ANDROID_API_LEVEL: 34
-      DIOXUS_CLI_VERSION: 0.7.3
+      DIOXUS_CLI_VERSION: 0.7.9
     steps:
       - name: Checkout
         uses: actions/checkout@v5

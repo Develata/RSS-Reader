@@ -52,11 +52,11 @@ tests/
 
 - Rust stable
 - `wasm32-unknown-unknown` target for web builds
-- Dioxus CLI `0.7.3`
+- Dioxus CLI `0.7.9`
 
 ```bash
 rustup target add wasm32-unknown-unknown
-cargo install dioxus-cli --version 0.7.3 --locked
+cargo install dioxus-cli --version 0.7.9 --locked
 ```
 
 ### Run desktop app

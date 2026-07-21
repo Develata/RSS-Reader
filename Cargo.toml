@@ -25,8 +25,8 @@ axum = { version = "0.8", features = ["form", "http1", "tokio"] }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "4", features = ["derive"] }
-dioxus = { version = "0.7.3", features = ["router"] }
-dioxus-router = "0.7.3"
+dioxus = { version = "0.7.9", features = ["router"] }
+dioxus-router = "0.7.9"
 feed-rs = "2"
 getrandom = { version = "0.2", features = ["js"] }
 hmac = "0.12"

@@ -52,7 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile minimal --default-toolchain stable \
     && rustup target add wasm32-unknown-unknown
 
-RUN cargo install wasm-bindgen-cli --version 0.2.114 --locked
+RUN cargo install wasm-bindgen-cli --version 0.2.126 --locked
 
 WORKDIR /work
 
