@@ -172,8 +172,11 @@
   background: var(--app-bg-dark);
 }
 
+/* .theme-system 跟随系统暗色；web-auth 登录门在 .app-shell 之外
+ * 拿不到主题类，同样跟随系统配色。 */
 @media (prefers-color-scheme: dark) {
-  .theme-system {
+  .theme-system,
+  [data-layout="web-auth-shell"] {
     --bg: #141414;
     --panel: rgba(28, 28, 28, 0.9);
     --panel-strong: #1c1c1c;
@@ -269,7 +272,8 @@ body:has(.theme-dark) {
 }
 
 @media (prefers-color-scheme: dark) {
-  body:has(.theme-system) {
+  body:has(.theme-system),
+  body:has([data-layout="web-auth-shell"]) {
     background: var(--app-bg-dark);
     color-scheme: dark;
   }

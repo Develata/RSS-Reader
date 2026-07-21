@@ -19,18 +19,44 @@ pub(crate) fn render_login_page(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{} 登录</title>
   <style>
+    /* 与应用默认主题的 token 对齐（assets/styles/tokens.css）：
+     * 登录页是用户进入阅读器前看到的第一屏，配色必须一致。 */
     :root {{
       color-scheme: light;
-      --bg: #f5f1ea;
-      --panel: rgba(255,255,255,0.92);
-      --line: rgba(77, 55, 35, 0.12);
-      --ink: #231b14;
-      --muted: #6b6258;
-      --accent: #6d4c35;
-      --accent-strong: #533827;
-      --danger: #9b3d2e;
-      --shadow: 0 20px 48px rgba(32, 24, 18, 0.08);
+      --bg: #f4efe6;
+      --panel: rgba(255, 250, 242, 0.92);
+      --line: rgba(62, 42, 27, 0.14);
+      --ink: #1f1a17;
+      --muted: #6f6257;
+      --accent: #b04a2f;
+      --danger: #8d2d1f;
+      --shadow: 0 18px 48px rgba(63, 38, 18, 0.08);
+      --input-bg: rgba(255, 255, 255, 0.82);
+      --focus-ring-color: rgba(176, 74, 47, 0.32);
+      --focus-ring-shadow: 0 0 0 4px rgba(176, 74, 47, 0.08);
+      --button-shadow: 0 1px 2px rgba(63, 38, 18, 0.18);
+      --page-glow: rgba(255, 255, 255, 0.7);
+      --page-top: #f2e9dc;
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    @media (prefers-color-scheme: dark) {{
+      :root {{
+        color-scheme: dark;
+        --bg: #141414;
+        --panel: rgba(28, 28, 28, 0.92);
+        --line: rgba(255, 255, 255, 0.08);
+        --ink: #f3efe8;
+        --muted: #b8aba0;
+        --accent: #c05a36;
+        --danger: #ffb3a3;
+        --shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+        --input-bg: rgba(0, 0, 0, 0.28);
+        --focus-ring-color: rgba(210, 120, 83, 0.5);
+        --focus-ring-shadow: 0 0 0 4px rgba(210, 120, 83, 0.16);
+        --button-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+        --page-glow: rgba(255, 255, 255, 0.05);
+        --page-top: #171717;
+      }}
     }}
     * {{ box-sizing: border-box; }}
     body {{
@@ -39,15 +65,15 @@ pub(crate) fn render_login_page(
       display: grid;
       place-items: center;
       background:
-        radial-gradient(circle at top, rgba(255,255,255,0.7), transparent 42%),
-        linear-gradient(180deg, #efe4d5, var(--bg));
+        radial-gradient(circle at top, var(--page-glow), transparent 42%),
+        linear-gradient(180deg, var(--page-top), var(--bg));
       color: var(--ink);
     }}
     .login-shell {{
       width: min(420px, calc(100vw - 32px));
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 20px;
+      border-radius: 22px;
       box-shadow: var(--shadow);
       padding: 28px;
     }}
@@ -80,28 +106,37 @@ pub(crate) fn render_login_page(
     input {{
       width: 100%;
       border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 12px 14px;
+      border-radius: 16px;
+      padding: 14px 16px;
       font: inherit;
-      background: rgba(255,255,255,0.95);
+      color: var(--ink);
+      background: var(--input-bg);
     }}
     input:focus {{
       outline: none;
-      border-color: rgba(109, 76, 53, 0.45);
-      box-shadow: 0 0 0 3px rgba(109, 76, 53, 0.12);
+      border-color: var(--focus-ring-color);
+      box-shadow: var(--focus-ring-shadow);
     }}
     button {{
       margin-top: 6px;
       border: none;
       border-radius: 12px;
-      padding: 12px 16px;
+      min-height: 44px;
+      padding: 11px 16px;
       font: inherit;
-      font-weight: 700;
+      font-weight: 600;
       background: var(--accent);
-      color: white;
+      color: #ffffff;
       cursor: pointer;
+      box-shadow: var(--button-shadow);
+      transition: filter 120ms ease, transform 120ms ease;
     }}
-    button:hover {{ background: var(--accent-strong); }}
+    button:hover {{ filter: brightness(0.96); }}
+    button:active {{ filter: brightness(0.9); transform: scale(0.98); }}
+    @media (prefers-reduced-motion: reduce) {{
+      button {{ transition: none; }}
+      button:active {{ transform: none; }}
+    }}
     .error {{ min-height: 22px; color: var(--danger); font-weight: 600; }}
     .note {{ margin-top: 14px; font-size: 0.92rem; }}
   </style>

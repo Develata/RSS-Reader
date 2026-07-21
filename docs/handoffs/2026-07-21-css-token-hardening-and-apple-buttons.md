@@ -52,6 +52,27 @@
 - 注意：harness 是 CSS 级验证，非真实应用回归；全量浏览器回归
   （`run_static_web_reader_theme_matrix.sh`）建议在 CI / Linux 环境跑
 
+## 追加：Web 认证界面配色统一（同日第二批）
+
+1. **`rssr-web` 服务端登录页**（`crates/rssr-web/src/auth/login_page.rs`，
+   仅 `<style>` 块变更，认证行为未动）：
+   - 原棕色独立配色（`#6d4c35`）改为与应用 token 一致的赤陶色调
+   - 按钮 / 输入框 / 焦点环与应用默认样式对齐（filled 44px 按钮、
+     hover 变暗、`prefers-reduced-motion` 守卫）
+   - 新增 `prefers-color-scheme: dark` 支持；页面底色渐变改为变量驱动
+     （修复了初版暗色 body 覆盖被后置基础规则压掉的级联问题，截图核对）
+2. **wasm 端 web-auth 门**（`tokens.css`）：`[data-layout="web-auth-shell"]`
+   位于 `.app-shell` 之外拿不到主题类，现并入系统暗色媒体块 +
+   `body:has(...)`，系统暗色下登录门跟随暗色。
+3. **主题矩阵回归**：确认瘦身后四个主题仍包含矩阵脚本 grep 的 marker 色值
+   （`#b24c3d` / `#8f3f2b` / `#8b5cf6` / `#53c0bb`），CI 兼容；完整矩阵
+   需 dx web bundle + Linux Chrome，因本机磁盘余量与 dx 版本
+   （本机 0.7.9 / CI 锁 0.7.3）继续留在 CI 执行。
+
+验证（第二批）：`cargo check -p rssr-web` ✓、`cargo test -p rssr-web`
+15 passed ✓、`cargo clippy -p rssr-web --all-targets` 无警告 ✓、
+token 契约测试 ✓；登录页亮 / 暗两态经 Chrome 截图核对。
+
 ## 当前状态、风险、待跟进
 
 - commit: 见本日提交（CLAUDE.md、token 化、按钮重做、主题瘦身、测试门分开提交）
