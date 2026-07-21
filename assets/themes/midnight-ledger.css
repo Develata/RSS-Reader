@@ -1,4 +1,11 @@
-:root {
+/* Midnight Ledger —— 暗色账本：墨青底、青碧强调、低对比分隔。
+ * 同时覆写 :root 与 .theme-dark / .theme-system，
+ * 保证无论用户主题模式设为亮 / 暗 / 跟随系统，本主题都保持一致。 */
+
+:root,
+.theme-dark,
+.theme-system {
+  /* 基础调色板 */
   --bg: #0e1417;
   --panel: rgba(16, 23, 27, 0.9);
   --panel-strong: #131b20;
@@ -8,104 +15,102 @@
   --accent: #53c0bb;
   --accent-strong: #83e4df;
   --shadow: 0 26px 70px rgba(0, 0, 0, 0.34);
-}
 
-body {
-  background:
+  /* 视口底色 */
+  --app-bg:
     radial-gradient(circle at top left, rgba(83, 192, 187, 0.12), transparent 22%),
     radial-gradient(circle at bottom right, rgba(89, 122, 170, 0.1), transparent 20%),
     linear-gradient(180deg, #0f1518 0%, #11181c 46%, #0f1519 100%);
+  --app-bg-dark: var(--app-bg);
+
+  /* 表面与边线 */
+  --line-soft: rgba(120, 170, 184, 0.08);
+  --surface-panel:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+    var(--panel);
+  --surface-reader:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    var(--panel-strong);
+  --surface-card:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    var(--panel-strong);
+  --surface-veil: linear-gradient(135deg, rgba(20, 29, 34, 0.96), rgba(16, 23, 27, 0.92));
+  --surface-chip: rgba(24, 34, 40, 0.78);
+  --surface-chip-hover: rgba(34, 46, 53, 0.96);
+  --surface-tint: rgba(89, 122, 170, 0.12);
+  --input-bg: rgba(20, 28, 33, 0.9);
+
+  /* 强调态与焦点 */
+  --accent-soft: rgba(83, 192, 187, 0.14);
+  --accent-line: rgba(83, 192, 187, 0.28);
+  --accent-line-faint: rgba(83, 192, 187, 0.16);
+  --focus-ring-color: rgba(83, 192, 187, 0.45);
+  --focus-ring-shadow: 0 0 0 4px rgba(83, 192, 187, 0.15);
+
+  /* 状态与语义色 */
+  --danger: #ffb4ab;
+  --status-info-bg: rgba(255, 255, 255, 0.04);
+  --status-error-fg: #ffb3a3;
+  --status-error-bg: rgba(122, 42, 30, 0.3);
+  --status-error-border: rgba(255, 140, 115, 0.26);
+  --status-success-fg: #b4dcb6;
+  --status-success-bg: rgba(52, 94, 56, 0.28);
+  --status-success-border: rgba(150, 205, 158, 0.26);
+
+  /* 阅读页 */
+  --reader-ink: #e7f0f2;
+  --reader-measure: 70ch;
+
+  /* 阴影与高光 */
+  --shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.25);
+  --shadow-lift: 0 8px 16px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 10px 24px rgba(0, 0, 0, 0.2);
+  --shadow-float: 0 18px 36px rgba(0, 0, 0, 0.4);
+  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* 圆角 */
+  --radius-card: 18px;
+  --radius-card-sm: 16px;
+
+  /* 按钮 */
+  --button-bg: linear-gradient(135deg, #2bb4ae 0%, #1d8f8a 100%);
+  --button-fg: #f6ffff;
+  --button-shadow:
+    0 12px 24px -12px rgba(36, 188, 179, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16);
+  --button-secondary-bg: linear-gradient(135deg, #263743 0%, #1b2831 100%);
+  --button-secondary-shadow:
+    0 10px 22px -16px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --button-danger-bg: linear-gradient(135deg, #a84a58 0%, #813341 100%);
+  --button-danger-outline-bg: rgba(43, 57, 67, 0.94);
+  --button-danger-outline-fg: #ffc8d1;
+  --button-danger-outline-border: rgba(168, 74, 88, 0.24);
+
+  color-scheme: dark;
 }
 
+/* ---- 少量视觉精修 ---- */
+
 [data-layout="app-nav-shell"] {
-  background: linear-gradient(135deg, rgba(20, 29, 34, 0.96), rgba(16, 23, 27, 0.92));
-  border-color: rgba(120, 170, 184, 0.08);
+  border-color: rgba(120, 170, 184, 0.12);
+}
+
+[data-nav]:hover {
+  border-color: rgba(83, 192, 187, 0.28);
 }
 
 [data-slot="page-title"] {
   letter-spacing: -0.04em;
 }
 
-[data-nav] {
-  background: rgba(24, 34, 40, 0.78);
-}
-
-[data-nav]:hover {
-  background: rgba(34, 46, 53, 0.96);
-  border-color: rgba(83, 192, 187, 0.28);
-}
-
-[data-page]:not([data-page="reader"]),
-[data-layout="reader-page"] {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
-    var(--panel);
-}
-
 .button {
-  background: linear-gradient(135deg, #2bb4ae 0%, #1d8f8a 100%);
-  color: #f6ffff;
-  box-shadow:
-    0 12px 24px -12px rgba(36, 188, 179, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.16);
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
 }
 
-.button:hover {
-  background: linear-gradient(135deg, #34c6bf 0%, #239b96 100%);
-  box-shadow:
-    0 16px 28px -14px rgba(36, 188, 179, 0.58),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.16);
-}
-
 .button[data-variant="secondary"] {
-  background: linear-gradient(135deg, #263743 0%, #1b2831 100%);
   color: #eaf4f6;
-  box-shadow:
-    0 10px 22px -16px rgba(0, 0, 0, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.button[data-variant="secondary"]:hover {
-  background: linear-gradient(135deg, #2c3f4d 0%, #21303a 100%);
-}
-
-.button[data-variant="danger"] {
-  background: linear-gradient(135deg, #a84a58 0%, #813341 100%);
-  color: #fff5f7;
-  box-shadow:
-    0 12px 22px -14px rgba(168, 74, 88, 0.46),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-
-.button[data-variant="danger"]:hover {
-  background: linear-gradient(135deg, #bc5768 0%, #903b4c 100%);
-}
-
-.button[data-variant="danger-outline"] {
-  background: rgba(43, 57, 67, 0.94);
-  color: #ffc8d1;
-  border: 1px solid rgba(168, 74, 88, 0.24);
-  box-shadow: none;
-}
-
-.button[data-variant="danger-outline"]:hover {
-  background: rgba(51, 66, 77, 0.98);
-}
-
-[data-layout="feed-card"],
-[data-layout="entry-card"],
-[data-layout="exchange-card"],
-[data-layout="settings-card"],
-[data-layout="stat-card"],
-[data-layout="reader-page"],
-[data-layout="theme-card"] {
-  border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
-    var(--panel-strong);
 }
 
 [data-layout="theme-card"][data-state="active"] {
@@ -124,21 +129,6 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
-[data-page="entries"] [data-slot="entry-card-meta"],
-[data-page="reader"] [data-slot="reader-meta"] {
-  color: #b8cbd1;
-}
-
 [data-page="reader"] [data-layout="reader-body"] {
-  max-width: 70ch;
-  margin: 0 auto;
-  font-size: 1.1rem;
-  color: #e7f0f2;
-}
-
-.text-input,
-.text-area,
-.select-input {
-  background: rgba(20, 28, 33, 0.9);
-  color: var(--ink);
+  color: var(--reader-ink);
 }

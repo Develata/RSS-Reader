@@ -1,4 +1,8 @@
+/* Forest Desk —— 玻璃拟态：紫渐变底、毛玻璃面板、胶囊按钮、悬停浮起。
+ * 配色与控件通过 token 覆写；毛玻璃与动效是本主题的个性，保留具体规则。 */
+
 :root {
+  /* 基础调色板 */
   --bg: transparent;
   --panel: rgba(255, 255, 255, 0.45);
   --panel-strong: rgba(255, 255, 255, 0.68);
@@ -10,6 +14,58 @@
   --shadow: 0 16px 40px rgba(31, 38, 135, 0.14);
   --font-display: "Inter", "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-ui: "Inter", "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+
+  /* 表面与边线 */
+  --line-soft: rgba(255, 255, 255, 0.72);
+  --surface-panel: var(--panel);
+  --surface-reader: var(--panel);
+  --surface-card: var(--panel-strong);
+  --surface-veil: rgba(255, 255, 255, 0.56);
+  --surface-chip: transparent;
+  --surface-chip-hover: rgba(255, 255, 255, 0.82);
+  --surface-tint: rgba(255, 255, 255, 0.4);
+  --input-bg: rgba(255, 255, 255, 0.86);
+  --reader-ink: #243041;
+  --reader-measure: 69ch;
+
+  /* 强调态与焦点 */
+  --accent-line: rgba(139, 92, 246, 0.42);
+  --accent-line-faint: rgba(139, 92, 246, 0.18);
+  --accent-soft: rgba(237, 230, 253, 0.9);
+  --focus-ring-color: rgba(147, 102, 247, 0.7);
+  --focus-ring-shadow: 0 0 0 4px rgba(147, 102, 247, 0.18);
+
+  /* 阴影 */
+  --shadow-soft: 0 4px 24px rgba(31, 38, 135, 0.06);
+  --shadow-lift: 0 6px 16px rgba(139, 92, 246, 0.14);
+  --shadow-card: 0 4px 14px rgba(31, 38, 135, 0.05);
+  --shadow-float: 0 18px 36px rgba(31, 38, 135, 0.16);
+
+  /* 圆角 */
+  --radius-panel: 24px;
+  --radius-card: 18px;
+  --radius-card-sm: 18px;
+  --radius-control: 14px;
+
+  /* 按钮：胶囊形 */
+  --button-bg: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  --button-fg: #ffffff;
+  --button-radius: 999px;
+  --button-shadow:
+    0 10px 22px -7px rgba(109, 40, 217, 0.55),
+    0 6px 12px -8px rgba(109, 40, 217, 0.6),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25);
+  --button-secondary-bg: rgba(255, 255, 255, 0.62);
+  --button-secondary-shadow:
+    0 8px 18px -10px rgba(31, 38, 135, 0.18),
+    inset 0 1px 1px rgba(255, 255, 255, 0.42);
+  --button-danger-bg: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+  --button-danger-outline-bg: rgba(255, 245, 248, 0.82);
+  --button-danger-outline-fg: #9a2744;
+  --button-danger-outline-border: rgba(154, 39, 68, 0.16);
+
+  /* 布局 */
+  --shell-max-width: 1120px;
 }
 
 body {
@@ -20,16 +76,12 @@ body {
   background-attachment: fixed;
 }
 
-.app-shell {
-  width: min(1120px, calc(100vw - 34px));
-}
+/* ---- 毛玻璃个性 ---- */
 
 [data-layout="app-nav-shell"] {
   padding: 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.5);
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.56);
-  box-shadow: 0 4px 24px rgba(31, 38, 135, 0.06);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
 }
@@ -37,7 +89,6 @@ body {
 [data-nav] {
   border: none;
   border-radius: 12px;
-  background: transparent;
   color: var(--muted);
   font-weight: 600;
   transition:
@@ -49,17 +100,12 @@ body {
 
 [data-nav]:hover {
   transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.82);
   color: var(--accent-strong);
-  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.14);
 }
 
 [data-page]:not([data-page="reader"]),
 [data-layout="reader-page"] {
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
+  border-color: var(--line);
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
 }
@@ -75,10 +121,8 @@ body {
 [data-layout="exchange-card"],
 [data-layout="settings-card"],
 [data-layout="theme-card"] {
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: 18px;
-  background: var(--panel-strong);
-  box-shadow: 0 4px 14px rgba(31, 38, 135, 0.05);
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: var(--shadow-card);
   transition:
     transform 220ms ease,
     box-shadow 220ms ease,
@@ -93,7 +137,6 @@ body {
 }
 
 [data-layout="theme-card"][data-state="active"] {
-  border-color: rgba(139, 92, 246, 0.42);
   box-shadow:
     0 0 0 1px rgba(139, 92, 246, 0.18),
     0 16px 36px rgba(87, 63, 181, 0.12);
@@ -101,24 +144,13 @@ body {
 
 [data-slot="feed-card-title"],
 [data-slot="entry-card-title"] {
-  color: var(--ink);
   font-weight: 700;
   letter-spacing: -0.01em;
-}
-
-[data-slot="entry-card-meta"],
-[data-slot="feed-card-meta"],
-[data-slot="reader-meta"],
-[data-slot="page-intro"] {
-  color: #556273;
 }
 
 .text-input,
 .text-area,
 .select-input {
-  border: 1px solid rgba(255, 255, 255, 0.82);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.86);
   box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.03);
   transition:
     border-color 180ms ease,
@@ -129,25 +161,18 @@ body {
 .text-input:focus,
 .text-area:focus,
 .select-input:focus {
-  outline: none;
-  border-color: rgba(147, 102, 247, 0.7);
   background: rgba(255, 255, 255, 0.98);
   box-shadow:
-    0 0 0 4px rgba(147, 102, 247, 0.18),
+    var(--focus-ring-shadow),
     inset 0 2px 4px rgba(15, 23, 42, 0.03);
 }
 
+/* ---- 按钮动效个性 ---- */
+
 .button {
   border: none;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
-  color: #ffffff;
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow:
-    0 10px 22px -7px rgba(109, 40, 217, 0.55),
-    0 6px 12px -8px rgba(109, 40, 217, 0.6),
-    inset 0 1px 1px rgba(255, 255, 255, 0.25);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   transition:
     transform 220ms ease,
@@ -158,12 +183,7 @@ body {
 
 .button:hover {
   transform: translateY(-2px);
-  background: linear-gradient(135deg, #976af9 0%, #7a39e3 100%);
-  filter: brightness(1.02);
-  box-shadow:
-    0 14px 28px -8px rgba(109, 40, 217, 0.62),
-    0 8px 14px -10px rgba(109, 40, 217, 0.66),
-    inset 0 1px 1px rgba(255, 255, 255, 0.32);
+  filter: brightness(1.04);
 }
 
 .button:active {
@@ -174,65 +194,20 @@ body {
 }
 
 .button[data-variant="secondary"] {
-  background: rgba(255, 255, 255, 0.62);
   color: #243247;
   border: 1px solid rgba(255, 255, 255, 0.86);
-  box-shadow:
-    0 8px 18px -10px rgba(31, 38, 135, 0.18),
-    inset 0 1px 1px rgba(255, 255, 255, 0.42);
   text-shadow: none;
 }
 
 .button[data-variant="secondary"]:hover {
-  background: rgba(255, 255, 255, 0.92);
   color: #1c2840;
-  box-shadow: 0 10px 20px -12px rgba(31, 38, 135, 0.26);
 }
 
-.button[data-variant="danger"] {
-  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
-  box-shadow:
-    0 10px 22px -7px rgba(220, 38, 38, 0.5),
-    inset 0 1px 1px rgba(255, 255, 255, 0.24);
-}
-
-.button[data-variant="danger"]:hover {
-  background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
-  box-shadow:
-    0 14px 28px -8px rgba(220, 38, 38, 0.58),
-    inset 0 1px 1px rgba(255, 255, 255, 0.32);
-}
-
-.button[data-variant="danger-outline"] {
-  background: rgba(255, 245, 248, 0.82);
-  color: #9a2744;
-  border: 1px solid rgba(154, 39, 68, 0.16);
-  box-shadow: none;
-}
-
-.button[data-variant="danger-outline"]:hover {
-  background: rgba(255, 250, 251, 0.96);
-  box-shadow: 0 8px 18px -14px rgba(154, 39, 68, 0.35);
-}
-
-.icon-link-button {
-  background: rgba(255, 255, 255, 0.62);
-  border-color: rgba(255, 255, 255, 0.74);
-  box-shadow: 0 8px 18px -12px rgba(31, 38, 135, 0.2);
-}
-
-.icon-link-button:hover {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(147, 102, 247, 0.22);
-  color: var(--accent-strong);
-}
+/* ---- 阅读页 ---- */
 
 [data-page="reader"] [data-layout="reader-body"] {
-  max-width: 69ch;
-  margin: 0 auto;
   font-size: 1.12rem;
   line-height: 1.88;
-  color: #243041;
 }
 
 [data-page="reader"] [data-slot="reader-meta"] {
