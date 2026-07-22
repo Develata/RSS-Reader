@@ -1,12 +1,12 @@
 const ATLAS_SIDEBAR: &str = include_str!("../../../assets/themes/atlas-sidebar.css");
 const NEWSPRINT: &str = include_str!("../../../assets/themes/newsprint.css");
-const FOREST_DESK: &str = include_str!("../../../assets/themes/forest-desk.css");
+const AMETHYST_GLASS: &str = include_str!("../../../assets/themes/amethyst-glass.css");
 const MIDNIGHT_LEDGER: &str = include_str!("../../../assets/themes/midnight-ledger.css");
 
 const THEMES: &[(&str, &str)] = &[
     ("atlas-sidebar.css", ATLAS_SIDEBAR),
     ("newsprint.css", NEWSPRINT),
-    ("forest-desk.css", FOREST_DESK),
+    ("amethyst-glass.css", AMETHYST_GLASS),
     ("midnight-ledger.css", MIDNIGHT_LEDGER),
 ];
 

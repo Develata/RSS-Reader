@@ -1,5 +1,7 @@
-/* Newsprint —— 报纸风：亚麻底、细栏线、平面无阴影、小圆角、大写导航。
- * 主要通过覆写默认样式的 token 实现，仅保留少量结构与排版个性规则。 */
+/* Newsprint —— 报纸风：亚麻底、细栏线、平面无阴影、小圆角、衬线正文。
+ * 主要通过覆写默认样式的 token 实现，仅保留少量结构与排版个性规则。
+ * 暗色模式（.theme-dark / 跟随系统）为「夜间铅字」：炭黑纸面、暖纸白油墨，
+ * 保持无投影的平面印刷质感。 */
 
 :root {
   /* 基础调色板 */
@@ -62,13 +64,137 @@
   --shell-max-width: 1100px;
 }
 
-/* 栏线底纹需要 background-size，无法只靠 --app-bg 表达 */
+/* 暗色：夜间铅字。投影保持 none，平面质感不随模式变化。 */
+.theme-dark {
+  --bg: #1a1613;
+  --panel: rgba(32, 27, 22, 0.94);
+  --panel-strong: #241e18;
+  --ink: #e9e0d0;
+  --muted: #a3947f;
+  --line: rgba(233, 224, 208, 0.16);
+  --accent: #d67f5c;
+  --accent-strong: #e8a184;
+  --shadow: none;
+
+  --line-soft: rgba(233, 224, 208, 0.12);
+  --surface-panel:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 28%),
+    var(--panel);
+  --surface-reader: var(--surface-panel);
+  --surface-card: rgba(36, 30, 24, 0.85);
+  --surface-veil: linear-gradient(180deg, rgba(40, 33, 27, 0.97), rgba(30, 25, 20, 0.94));
+  --surface-chip: rgba(233, 224, 208, 0.06);
+  --surface-chip-hover: rgba(233, 224, 208, 0.12);
+  --surface-tint: rgba(233, 224, 208, 0.05);
+  --input-bg: rgba(18, 15, 12, 0.7);
+  --reader-ink: #e5dccb;
+
+  --shadow-soft: none;
+  --shadow-lift: none;
+  --shadow-card: none;
+  --shadow-float: 0 14px 30px rgba(0, 0, 0, 0.5);
+  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  --button-bg: linear-gradient(180deg, #a24a33 0%, #7c3423 100%);
+  --button-fg: #fff3e9;
+  --button-shadow:
+    0 8px 16px -10px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+  --button-secondary-bg: linear-gradient(180deg, #4a3b30 0%, #332821 100%);
+  --button-secondary-shadow:
+    0 8px 16px -11px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --button-danger-bg: linear-gradient(180deg, #9c392c 0%, #772a20 100%);
+  --button-danger-outline-bg: rgba(60, 25, 18, 0.5);
+  --button-danger-outline-fg: #ffb3a3;
+  --button-danger-outline-border: rgba(255, 140, 115, 0.24);
+}
+
+@media (prefers-color-scheme: dark) {
+  .theme-system {
+    --bg: #1a1613;
+    --panel: rgba(32, 27, 22, 0.94);
+    --panel-strong: #241e18;
+    --ink: #e9e0d0;
+    --muted: #a3947f;
+    --line: rgba(233, 224, 208, 0.16);
+    --accent: #d67f5c;
+    --accent-strong: #e8a184;
+    --shadow: none;
+
+    --line-soft: rgba(233, 224, 208, 0.12);
+    --surface-panel:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 28%),
+      var(--panel);
+    --surface-reader: var(--surface-panel);
+    --surface-card: rgba(36, 30, 24, 0.85);
+    --surface-veil: linear-gradient(180deg, rgba(40, 33, 27, 0.97), rgba(30, 25, 20, 0.94));
+    --surface-chip: rgba(233, 224, 208, 0.06);
+    --surface-chip-hover: rgba(233, 224, 208, 0.12);
+    --surface-tint: rgba(233, 224, 208, 0.05);
+    --input-bg: rgba(18, 15, 12, 0.7);
+    --reader-ink: #e5dccb;
+
+    --shadow-soft: none;
+    --shadow-lift: none;
+    --shadow-card: none;
+    --shadow-float: 0 14px 30px rgba(0, 0, 0, 0.5);
+    --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+    --button-bg: linear-gradient(180deg, #a24a33 0%, #7c3423 100%);
+    --button-fg: #fff3e9;
+    --button-shadow:
+      0 8px 16px -10px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+    --button-secondary-bg: linear-gradient(180deg, #4a3b30 0%, #332821 100%);
+    --button-secondary-shadow:
+      0 8px 16px -11px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --button-danger-bg: linear-gradient(180deg, #9c392c 0%, #772a20 100%);
+    --button-danger-outline-bg: rgba(60, 25, 18, 0.5);
+    --button-danger-outline-fg: #ffb3a3;
+    --button-danger-outline-border: rgba(255, 140, 115, 0.24);
+  }
+}
+
+/* 栏线底纹需要 background-size，无法只靠 --app-bg 表达。
+ * body 在 .app-shell 之外拿不到主题类上的变量，故暗色底纹用 :has 显式声明。 */
 body {
   background:
     linear-gradient(90deg, rgba(131, 93, 58, 0.05) 0, rgba(131, 93, 58, 0.05) 1px, transparent 1px),
     linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 26%),
     linear-gradient(180deg, #f0e5d4 0%, #ebe0cf 42%, #e4d6c1 100%);
   background-size: 22px 22px, auto, auto;
+}
+
+body:has(.theme-dark) {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(233, 224, 208, 0.04) 0,
+      rgba(233, 224, 208, 0.04) 1px,
+      transparent 1px
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 26%),
+    linear-gradient(180deg, #1c1815 0%, #191512 100%);
+  background-size: 22px 22px, auto, auto;
+}
+
+@media (prefers-color-scheme: dark) {
+  body:has(.theme-system) {
+    background:
+      linear-gradient(
+        90deg,
+        rgba(233, 224, 208, 0.04) 0,
+        rgba(233, 224, 208, 0.04) 1px,
+        transparent 1px
+      ),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 26%),
+      linear-gradient(180deg, #1c1815 0%, #191512 100%);
+    background-size: 22px 22px, auto, auto;
+  }
 }
 
 .app-shell {
@@ -85,7 +211,6 @@ body {
 
 [data-nav] {
   border-radius: 8px;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 0.82rem;
 }
@@ -120,12 +245,18 @@ body {
   gap: 10px;
 }
 
+/* ---- 报纸排版：衬线正文、两端对齐 ---- */
+
 [data-page="reader"] [data-layout="reader-body"] {
+  font-family: var(--font-display);
   font-size: 1.07rem;
   line-height: 1.92;
+  text-align: justify;
+  hyphens: auto;
 }
 
 [data-page="reader"] [data-slot="reader-body-html"] p,
 [data-page="reader"] [data-slot="reader-body-html"] li {
   hanging-punctuation: first last;
+  text-wrap: pretty;
 }

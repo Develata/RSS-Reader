@@ -75,7 +75,7 @@ THEME_FIXTURE_ROOT = os.path.join(repo_root, "assets", "themes")
 THEME_PRESET_FILES = {
     "atlas-sidebar": "atlas-sidebar.css",
     "newsprint": "newsprint.css",
-    "forest-desk": "forest-desk.css",
+    "amethyst-glass": "amethyst-glass.css",
     "midnight-ledger": "midnight-ledger.css",
 }
 

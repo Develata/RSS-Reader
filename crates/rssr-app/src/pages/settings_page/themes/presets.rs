@@ -9,7 +9,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
     let preset_choice = facade.preset_choice();
     let atlas_facade = facade.clone();
     let newsprint_facade = facade.clone();
-    let forest_facade = facade.clone();
+    let amethyst_facade = facade.clone();
     let midnight_facade = facade.clone();
     let clear_facade = facade.clone();
     let apply_selected_facade = facade.clone();
@@ -33,7 +33,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     option { value: "custom", "自定义主题" }
                     option { value: "atlas-sidebar", "Atlas Sidebar" }
                     option { value: "newsprint", "Newsprint" }
-                    option { value: "forest-desk", "Amethyst Glass" }
+                    option { value: "amethyst-glass", "Amethyst Glass" }
                     option { value: "midnight-ledger", "Midnight Ledger" }
                 }
                 button {
@@ -65,8 +65,8 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     class: "button",
                     "data-variant": "secondary",
                     "data-action": "apply-theme-preset",
-                    "data-theme-preset": "forest-desk",
-                    onclick: move |_| forest_facade.apply_builtin_theme("forest-desk"),
+                    "data-theme-preset": "amethyst-glass",
+                    onclick: move |_| amethyst_facade.apply_builtin_theme("amethyst-glass"),
                     "Amethyst Glass"
                 }
                 button {

@@ -90,7 +90,7 @@ cat >"$summary_file" <<EOF
 - default.html
 - atlas-sidebar.html
 - newsprint.html
-- forest-desk.html
+- amethyst-glass.html
 - midnight-ledger.html
 - *.png
 
@@ -135,10 +135,10 @@ if [[ "$ready" != "true" ]]; then
   exit 1
 fi
 
-theme_keys=("none" "atlas-sidebar" "newsprint" "forest-desk" "midnight-ledger")
+theme_keys=("none" "atlas-sidebar" "newsprint" "amethyst-glass" "midnight-ledger")
 theme_labels=("默认主题" "Atlas Sidebar" "Newsprint" "Amethyst Glass" "Midnight Ledger")
 theme_markers=("" "#b24c3d" "#8f3f2b" "#8b5cf6" "#53c0bb")
-theme_slugs=("default" "atlas-sidebar" "newsprint" "forest-desk" "midnight-ledger")
+theme_slugs=("default" "atlas-sidebar" "newsprint" "amethyst-glass" "midnight-ledger")
 
 run_theme_check() {
   local theme_key="$1"

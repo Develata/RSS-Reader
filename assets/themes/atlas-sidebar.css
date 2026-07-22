@@ -1,5 +1,7 @@
 /* Atlas Sidebar —— 宽幅工作台：顶部导航改为左侧固定栏，冷灰蓝底、圆润卡片。
- * 配色与控件通过 token 覆写；侧栏网格重排是本主题的结构性个性，保留具体规则。 */
+ * 配色与控件通过 token 覆写；侧栏网格重排是本主题的结构性个性，保留具体规则。
+ * 暗色模式（.theme-dark / 跟随系统）为深板岩配色，侧栏底色经
+ * --atlas-rail-bg 主题局部变量随模式切换。 */
 
 :root {
   /* 基础调色板 */
@@ -51,32 +53,162 @@
 
   /* 宽幅布局 */
   --shell-max-width: 1500px;
+
+  /* 主题局部变量：侧栏底色 / 投影（暗色块覆写） */
+  --atlas-rail-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(237, 233, 224, 0.94)),
+    rgba(255, 255, 255, 0.9);
+  --atlas-rail-shadow: 0 18px 36px rgba(32, 41, 55, 0.06);
 }
 
-/* 坐标纸底纹需要 background-size，保留 body 规则 */
+/* 暗色：深板岩 + 暖砖强调。只覆写 token，结构规则共用。 */
+.theme-dark {
+  --bg: #161a22;
+  --panel: rgba(30, 35, 46, 0.92);
+  --panel-strong: #202634;
+  --ink: #e6e9f0;
+  --muted: #95a0b1;
+  --line: rgba(148, 163, 184, 0.16);
+  --accent: #d0684f;
+  --accent-strong: #e58a70;
+  --shadow: 0 24px 56px rgba(0, 0, 0, 0.4);
+
+  --line-soft: rgba(148, 163, 184, 0.12);
+  --surface-panel:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0)),
+    var(--panel);
+  --surface-reader: var(--surface-panel);
+  --surface-card: var(--panel-strong);
+  --surface-chip: rgba(255, 255, 255, 0.06);
+  --surface-chip-hover: rgba(255, 255, 255, 0.11);
+  --surface-tint: rgba(35, 42, 56, 0.6);
+  --input-bg: rgba(15, 19, 27, 0.6);
+  --reader-ink: #dde3ec;
+
+  --shadow-card: 0 10px 24px rgba(0, 0, 0, 0.28);
+
+  --button-bg: linear-gradient(135deg, #b34f3c 0%, #8a3527 100%);
+  --button-fg: #fff8f4;
+  --button-shadow:
+    0 12px 22px -14px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  --button-secondary-bg: linear-gradient(135deg, #3c4c63 0%, #2b3a4f 100%);
+  --button-secondary-shadow:
+    0 10px 18px -16px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --button-danger-bg: linear-gradient(135deg, #a83f38 0%, #832521 100%);
+  --button-danger-outline-bg: rgba(90, 38, 30, 0.32);
+  --button-danger-outline-fg: #ffb3a3;
+  --button-danger-outline-border: rgba(255, 140, 115, 0.28);
+
+  --atlas-rail-bg:
+    linear-gradient(180deg, rgba(42, 49, 63, 0.98), rgba(28, 33, 44, 0.96)),
+    #1d2330;
+  --atlas-rail-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
+}
+
+@media (prefers-color-scheme: dark) {
+  .theme-system {
+    --bg: #161a22;
+    --panel: rgba(30, 35, 46, 0.92);
+    --panel-strong: #202634;
+    --ink: #e6e9f0;
+    --muted: #95a0b1;
+    --line: rgba(148, 163, 184, 0.16);
+    --accent: #d0684f;
+    --accent-strong: #e58a70;
+    --shadow: 0 24px 56px rgba(0, 0, 0, 0.4);
+
+    --line-soft: rgba(148, 163, 184, 0.12);
+    --surface-panel:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0)),
+      var(--panel);
+    --surface-reader: var(--surface-panel);
+    --surface-card: var(--panel-strong);
+    --surface-chip: rgba(255, 255, 255, 0.06);
+    --surface-chip-hover: rgba(255, 255, 255, 0.11);
+    --surface-tint: rgba(35, 42, 56, 0.6);
+    --input-bg: rgba(15, 19, 27, 0.6);
+    --reader-ink: #dde3ec;
+
+    --shadow-card: 0 10px 24px rgba(0, 0, 0, 0.28);
+
+    --button-bg: linear-gradient(135deg, #b34f3c 0%, #8a3527 100%);
+    --button-fg: #fff8f4;
+    --button-shadow:
+      0 12px 22px -14px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+    --button-secondary-bg: linear-gradient(135deg, #3c4c63 0%, #2b3a4f 100%);
+    --button-secondary-shadow:
+      0 10px 18px -16px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --button-danger-bg: linear-gradient(135deg, #a83f38 0%, #832521 100%);
+    --button-danger-outline-bg: rgba(90, 38, 30, 0.32);
+    --button-danger-outline-fg: #ffb3a3;
+    --button-danger-outline-border: rgba(255, 140, 115, 0.28);
+
+    --atlas-rail-bg:
+      linear-gradient(180deg, rgba(42, 49, 63, 0.98), rgba(28, 33, 44, 0.96)),
+      #1d2330;
+    --atlas-rail-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
+  }
+}
+
+/* 坐标纸底纹需要 background-size，保留 body 规则。
+ * body 在 .app-shell 之外拿不到主题类上的变量，故暗色底纹用 :has 显式声明。 */
 body {
   background:
     linear-gradient(90deg, rgba(31, 36, 48, 0.05) 0, rgba(31, 36, 48, 0.05) 1px, transparent 1px),
     radial-gradient(circle at top right, rgba(178, 76, 61, 0.08), transparent 18%),
     linear-gradient(180deg, #f6f3ec 0%, #ece8de 100%);
-  background-size: 28px 28px, auto;
+  background-size: 28px 28px, auto, auto;
 }
 
-/* ---- 结构性个性：顶部导航重排为左侧固定栏 ---- */
+body:has(.theme-dark) {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(148, 163, 184, 0.05) 0,
+      rgba(148, 163, 184, 0.05) 1px,
+      transparent 1px
+    ),
+    radial-gradient(circle at top right, rgba(208, 104, 79, 0.1), transparent 18%),
+    linear-gradient(180deg, #1a1f29 0%, #151923 100%);
+  background-size: 28px 28px, auto, auto;
+}
+
+@media (prefers-color-scheme: dark) {
+  body:has(.theme-system) {
+    background:
+      linear-gradient(
+        90deg,
+        rgba(148, 163, 184, 0.05) 0,
+        rgba(148, 163, 184, 0.05) 1px,
+        transparent 1px
+      ),
+      radial-gradient(circle at top right, rgba(208, 104, 79, 0.1), transparent 18%),
+      linear-gradient(180deg, #1a1f29 0%, #151923 100%);
+    background-size: 28px 28px, auto, auto;
+  }
+}
+
+/* ---- 结构性个性：顶部导航重排为左侧固定栏 ----
+ * 普通页面与阅读页共用同一套侧栏规则，选择器合并声明。 */
 
 [data-page]:not([data-page="reader"]),
 [data-layout="reader-page"] {
   margin-top: 0;
-}
-
-[data-page]:not([data-page="reader"]) {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   gap: 18px 24px;
 }
 
-[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] {
+[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"],
+[data-layout="reader-page"] > [data-layout="app-nav-shell"] {
   grid-column: 1;
+  /* span 大于任何页面的实际行数即可整列占位；多余的隐式行高度为 0 */
   grid-row: 1 / span 12;
   position: sticky;
   top: 24px;
@@ -87,77 +219,26 @@ body {
   align-self: start;
   padding: 24px 22px;
   border-radius: 26px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(237, 233, 224, 0.94)),
-    rgba(255, 255, 255, 0.9);
-  box-shadow: 0 18px 36px rgba(32, 41, 55, 0.06);
+  background: var(--atlas-rail-bg);
+  box-shadow: var(--atlas-rail-shadow);
 }
 
-[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-layout="app-nav-links"] {
-  display: grid;
-  width: 100%;
-  gap: 10px;
-}
-
-[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-nav] {
-  border-radius: 18px;
-  text-align: center;
-}
-
-[data-page]:not([data-page="reader"]) > [data-slot="page-title"],
-[data-page]:not([data-page="reader"]) > [data-slot="page-intro"],
-[data-page]:not([data-page="reader"]) > [data-layout="status-banner"],
-[data-page]:not([data-page="reader"]) > [data-layout="stats-grid"],
-[data-page]:not([data-page="reader"]) > [data-layout="feed-form"],
-[data-page]:not([data-page="reader"]) > [data-layout="exchange-grid"],
-[data-page]:not([data-page="reader"]) > [data-layout="feed-list"],
-[data-page]:not([data-page="reader"]) > [data-layout="entry-filters"],
-[data-page]:not([data-page="reader"]) > [data-layout="entry-list"],
-[data-page]:not([data-page="reader"]) > [data-layout="settings-grid"] {
-  grid-column: 2;
-}
-
-[data-layout="reader-page"] {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 18px 24px;
-}
-
-[data-layout="reader-page"] > [data-layout="app-nav-shell"] {
-  grid-column: 1;
-  grid-row: 1 / span 6;
-  position: sticky;
-  top: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-content: start;
-  align-self: start;
-  padding: 24px 22px;
-  border-radius: 26px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(237, 233, 224, 0.94)),
-    rgba(255, 255, 255, 0.9);
-  box-shadow: 0 18px 36px rgba(32, 41, 55, 0.06);
-}
-
+[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-layout="app-nav-links"],
 [data-layout="reader-page"] > [data-layout="app-nav-shell"] [data-layout="app-nav-links"] {
   display: grid;
   width: 100%;
   gap: 10px;
 }
 
+[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-nav],
 [data-layout="reader-page"] > [data-layout="app-nav-shell"] [data-nav] {
   border-radius: 18px;
   text-align: center;
 }
 
-[data-layout="reader-page"] > [data-slot="reader-title"],
-[data-layout="reader-page"] > [data-slot="reader-meta"],
-[data-layout="reader-page"] > [data-layout="status-banner"],
-[data-layout="reader-page"] > [data-layout="reader-toolbar"],
-[data-layout="reader-page"] > [data-layout="reader-pagination"],
-[data-layout="reader-page"] > [data-layout="reader-body"] {
+/* 除侧栏外的所有顶层子块进主内容列；新增页面区块无需登记即可正确落位 */
+[data-page]:not([data-page="reader"]) > :not([data-layout="app-nav-shell"]),
+[data-layout="reader-page"] > :not([data-layout="app-nav-shell"]) {
   grid-column: 2;
 }
 

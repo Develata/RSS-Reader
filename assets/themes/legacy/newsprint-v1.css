@@ -1,0 +1,131 @@
+/* Newsprint —— 报纸风：亚麻底、细栏线、平面无阴影、小圆角、大写导航。
+ * 主要通过覆写默认样式的 token 实现，仅保留少量结构与排版个性规则。 */
+
+:root {
+  /* 基础调色板 */
+  --bg: #ece1cf;
+  --panel: rgba(252, 248, 239, 0.95);
+  --panel-strong: #fdf9f1;
+  --ink: #241d16;
+  --muted: #6f6253;
+  --line: rgba(82, 61, 41, 0.18);
+  --accent: #8f3f2b;
+  --accent-strong: #6d2f20;
+  --shadow: none;
+
+  /* 表面与边线 */
+  --line-soft: rgba(67, 50, 33, 0.16);
+  --surface-panel:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0) 28%),
+    var(--panel);
+  --surface-reader: var(--surface-panel);
+  --surface-card: rgba(253, 249, 241, 0.82);
+  --surface-veil: linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(245, 236, 221, 0.92));
+  --surface-chip: rgba(255, 252, 247, 0.72);
+  --surface-chip-hover: rgba(255, 252, 247, 0.98);
+  --surface-tint: rgba(246, 239, 227, 0.7);
+  --input-bg: rgba(255, 253, 249, 0.84);
+  --reader-ink: #2b211a;
+
+  /* 平面化：去掉大部分投影，仅保留悬浮底栏可读性 */
+  --shadow-soft: none;
+  --shadow-lift: none;
+  --shadow-card: none;
+  --shadow-float: 0 14px 30px rgba(54, 36, 21, 0.12);
+  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+
+  /* 印刷感小圆角 */
+  --radius-panel: 10px;
+  --radius-card: 8px;
+  --radius-card-sm: 8px;
+  --radius-control: 8px;
+
+  /* 按钮 */
+  --button-bg: linear-gradient(180deg, #a94c34 0%, #863827 100%);
+  --button-fg: #fff7ef;
+  --button-radius: 10px;
+  --button-shadow:
+    0 8px 16px -10px rgba(88, 48, 21, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+  --button-secondary-bg: linear-gradient(180deg, #45372d 0%, #30251e 100%);
+  --button-secondary-shadow:
+    0 8px 16px -11px rgba(35, 25, 17, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --button-danger-bg: linear-gradient(180deg, #b14335 0%, #8d2f25 100%);
+  --button-danger-outline-bg:
+    linear-gradient(180deg, rgba(255, 247, 242, 0.98), rgba(252, 236, 228, 0.96));
+  --button-danger-outline-fg: #8d2d1f;
+  --button-danger-outline-border: rgba(141, 45, 31, 0.14);
+
+  /* 布局 */
+  --shell-max-width: 1100px;
+}
+
+/* 栏线底纹需要 background-size，无法只靠 --app-bg 表达 */
+body {
+  background:
+    linear-gradient(90deg, rgba(131, 93, 58, 0.05) 0, rgba(131, 93, 58, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 26%),
+    linear-gradient(180deg, #f0e5d4 0%, #ebe0cf 42%, #e4d6c1 100%);
+  background-size: 22px 22px, auto, auto;
+}
+
+.app-shell {
+  padding-top: 10px;
+}
+
+[data-layout="app-nav-shell"] {
+  padding: 8px 10px;
+}
+
+[data-layout="app-nav-links"] {
+  gap: 8px;
+}
+
+[data-nav] {
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.82rem;
+}
+
+[data-slot="page-title"],
+[data-slot="reader-title"] {
+  letter-spacing: -0.05em;
+}
+
+[data-slot="feed-card-title"],
+[data-slot="entry-card-title"] {
+  font-family: var(--font-display);
+  font-size: 1.16rem;
+  line-height: 1.28;
+}
+
+.button {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.button[data-variant="secondary"] {
+  color: #fff8f0;
+}
+
+[data-page="feeds"] [data-layout="stats-grid"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+[data-page="feeds"] [data-layout="feed-list"],
+[data-page="entries"] [data-layout="entry-list"] {
+  gap: 10px;
+}
+
+[data-page="reader"] [data-layout="reader-body"] {
+  font-size: 1.07rem;
+  line-height: 1.92;
+}
+
+[data-page="reader"] [data-slot="reader-body-html"] p,
+[data-page="reader"] [data-slot="reader-body-html"] li {
+  hanging-punctuation: first last;
+}

@@ -184,7 +184,7 @@ async function runReaderThemeMatrix(client) {
   await selectorExists(client, '[data-page="settings"] [data-layout="theme-gallery"]');
   await selectorExists(client, '[data-field="preset-theme-select"]');
 
-  for (const theme of ['atlas-sidebar', 'newsprint', 'forest-desk', 'midnight-ledger']) {
+  for (const theme of ['atlas-sidebar', 'newsprint', 'amethyst-glass', 'midnight-ledger']) {
     console.log(`theme reader ${theme}: start`);
     await clickSelector(client, `button[data-action="apply-theme-preset"][data-theme-preset="${theme}"]`);
     await selectorExists(client, `article[data-theme-preset="${theme}"][data-state="active"]`);

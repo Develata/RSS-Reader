@@ -1,0 +1,417 @@
+/* Amethyst Glass —— 玻璃拟态：紫渐变底、毛玻璃面板、胶囊按钮、悬停浮起。
+ * 配色与控件通过 token 覆写；毛玻璃与动效是本主题的个性，保留具体规则。
+ * 性能约定：视口渐变放在 body::before 固定合成层（不用 background-attachment:
+ * fixed，避免破坏滚动快速路径）；模糊半径控制在 12px 以内且不叠加大面积区域。
+ * 暗色模式（.theme-dark / 跟随系统）为深紫夜玻璃；随模式翻转的结构色一律经
+ * --glass-* 主题局部变量表达，结构规则本身不区分模式。 */
+
+:root {
+  /* 基础调色板 */
+  --bg: transparent;
+  --panel: rgba(255, 255, 255, 0.5);
+  --panel-strong: rgba(255, 255, 255, 0.68);
+  --ink: #1f2937;
+  --muted: #4b5563;
+  --line: rgba(255, 255, 255, 0.62);
+  --accent: #8b5cf6;
+  --accent-strong: #6d28d9;
+  --shadow: 0 16px 40px rgba(31, 38, 135, 0.14);
+  --font-display: "Inter", "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-ui: "Inter", "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+
+  /* 视口底色（body 不在 .app-shell 内，只能从 :root 取值） */
+  --app-bg-dark: linear-gradient(135deg, #241b45 0%, #101b33 100%);
+
+  /* 表面与边线 */
+  --line-soft: rgba(255, 255, 255, 0.72);
+  --surface-panel: var(--panel);
+  --surface-reader: var(--panel);
+  --surface-card: var(--panel-strong);
+  --surface-veil: rgba(255, 255, 255, 0.56);
+  --surface-chip: transparent;
+  --surface-chip-hover: rgba(255, 255, 255, 0.82);
+  --surface-tint: rgba(255, 255, 255, 0.4);
+  --input-bg: rgba(255, 255, 255, 0.86);
+  --reader-ink: #243041;
+  --reader-measure: 69ch;
+
+  /* 强调态与焦点 */
+  --accent-line: rgba(139, 92, 246, 0.42);
+  --accent-line-faint: rgba(139, 92, 246, 0.18);
+  --accent-soft: rgba(237, 230, 253, 0.9);
+  --focus-ring-color: rgba(147, 102, 247, 0.7);
+  --focus-ring-shadow: 0 0 0 4px rgba(147, 102, 247, 0.18);
+
+  /* 阴影 */
+  --shadow-soft: 0 4px 24px rgba(31, 38, 135, 0.06);
+  --shadow-lift: 0 6px 16px rgba(139, 92, 246, 0.14);
+  --shadow-card: 0 4px 14px rgba(31, 38, 135, 0.05);
+  --shadow-float: 0 18px 36px rgba(31, 38, 135, 0.16);
+
+  /* 圆角 */
+  --radius-panel: 24px;
+  --radius-card: 18px;
+  --radius-card-sm: 18px;
+  --radius-control: 14px;
+
+  /* 按钮：胶囊形 */
+  --button-bg: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  --button-fg: #ffffff;
+  --button-radius: 999px;
+  --button-shadow:
+    0 10px 22px -7px rgba(109, 40, 217, 0.55),
+    0 6px 12px -8px rgba(109, 40, 217, 0.6),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25);
+  --button-secondary-bg: rgba(255, 255, 255, 0.62);
+  --button-secondary-shadow:
+    0 8px 18px -10px rgba(31, 38, 135, 0.18),
+    inset 0 1px 1px rgba(255, 255, 255, 0.42);
+  --button-danger-bg: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+  --button-danger-outline-bg: rgba(255, 245, 248, 0.82);
+  --button-danger-outline-fg: #9a2744;
+  --button-danger-outline-border: rgba(154, 39, 68, 0.16);
+
+  /* 布局 */
+  --shell-max-width: 1120px;
+
+  /* 主题局部变量：随亮暗翻转的结构色（暗色块覆写） */
+  --glass-nav-border: rgba(255, 255, 255, 0.5);
+  --glass-card-border: rgba(255, 255, 255, 0.8);
+  --glass-card-border-hover: rgba(255, 255, 255, 0.95);
+  --glass-card-hover-shadow: 0 12px 28px rgba(31, 38, 135, 0.12);
+  --glass-input-focus-bg: rgba(255, 255, 255, 0.98);
+  --glass-secondary-fg: #243247;
+  --glass-secondary-fg-hover: #1c2840;
+  --glass-secondary-border: rgba(255, 255, 255, 0.86);
+  --glass-meta-border: rgba(255, 255, 255, 0.55);
+}
+
+/* 暗色：深紫夜玻璃。 */
+.theme-dark {
+  --bg: transparent;
+  --panel: rgba(34, 28, 60, 0.5);
+  --panel-strong: rgba(44, 37, 76, 0.66);
+  --ink: #ece8fa;
+  --muted: #b6afd6;
+  --line: rgba(196, 181, 253, 0.24);
+  --accent: #a78bfa;
+  --accent-strong: #c4b5fd;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+
+  --line-soft: rgba(196, 181, 253, 0.2);
+  --surface-panel: var(--panel);
+  --surface-reader: var(--panel);
+  --surface-card: var(--panel-strong);
+  --surface-veil: rgba(34, 28, 60, 0.6);
+  --surface-chip: transparent;
+  --surface-chip-hover: rgba(196, 181, 253, 0.16);
+  --surface-tint: rgba(196, 181, 253, 0.08);
+  --input-bg: rgba(18, 14, 38, 0.6);
+  --reader-ink: #e7e2f6;
+
+  --accent-line: rgba(167, 139, 250, 0.5);
+  --accent-line-faint: rgba(167, 139, 250, 0.24);
+  --accent-soft: rgba(139, 92, 246, 0.24);
+  --focus-ring-color: rgba(196, 181, 253, 0.6);
+  --focus-ring-shadow: 0 0 0 4px rgba(167, 139, 250, 0.22);
+
+  --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --shadow-lift: 0 6px 16px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.3);
+  --shadow-float: 0 18px 36px rgba(0, 0, 0, 0.5);
+  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  --button-bg: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  --button-fg: #ffffff;
+  --button-shadow:
+    0 10px 22px -7px rgba(0, 0, 0, 0.5),
+    0 6px 12px -8px rgba(0, 0, 0, 0.55),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  --button-secondary-bg: rgba(196, 181, 253, 0.14);
+  --button-secondary-shadow:
+    0 8px 18px -10px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1px rgba(255, 255, 255, 0.08);
+  --button-danger-bg: linear-gradient(135deg, #dc3545 0%, #9f1c2e 100%);
+  --button-danger-outline-bg: rgba(80, 22, 38, 0.4);
+  --button-danger-outline-fg: #ffb3c1;
+  --button-danger-outline-border: rgba(255, 179, 193, 0.26);
+
+  --glass-nav-border: rgba(196, 181, 253, 0.18);
+  --glass-card-border: rgba(196, 181, 253, 0.14);
+  --glass-card-border-hover: rgba(196, 181, 253, 0.3);
+  --glass-card-hover-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+  --glass-input-focus-bg: rgba(30, 24, 54, 0.98);
+  --glass-secondary-fg: #e9e4fb;
+  --glass-secondary-fg-hover: #f4f1ff;
+  --glass-secondary-border: rgba(196, 181, 253, 0.3);
+  --glass-meta-border: rgba(196, 181, 253, 0.2);
+}
+
+@media (prefers-color-scheme: dark) {
+  .theme-system {
+    --bg: transparent;
+    --panel: rgba(34, 28, 60, 0.5);
+    --panel-strong: rgba(44, 37, 76, 0.66);
+    --ink: #ece8fa;
+    --muted: #b6afd6;
+    --line: rgba(196, 181, 253, 0.24);
+    --accent: #a78bfa;
+    --accent-strong: #c4b5fd;
+    --shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+
+    --line-soft: rgba(196, 181, 253, 0.2);
+    --surface-panel: var(--panel);
+    --surface-reader: var(--panel);
+    --surface-card: var(--panel-strong);
+    --surface-veil: rgba(34, 28, 60, 0.6);
+    --surface-chip: transparent;
+    --surface-chip-hover: rgba(196, 181, 253, 0.16);
+    --surface-tint: rgba(196, 181, 253, 0.08);
+    --input-bg: rgba(18, 14, 38, 0.6);
+    --reader-ink: #e7e2f6;
+
+    --accent-line: rgba(167, 139, 250, 0.5);
+    --accent-line-faint: rgba(167, 139, 250, 0.24);
+    --accent-soft: rgba(139, 92, 246, 0.24);
+    --focus-ring-color: rgba(196, 181, 253, 0.6);
+    --focus-ring-shadow: 0 0 0 4px rgba(167, 139, 250, 0.22);
+
+    --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.3);
+    --shadow-lift: 0 6px 16px rgba(0, 0, 0, 0.35);
+    --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.3);
+    --shadow-float: 0 18px 36px rgba(0, 0, 0, 0.5);
+    --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+    --button-bg: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+    --button-fg: #ffffff;
+    --button-shadow:
+      0 10px 22px -7px rgba(0, 0, 0, 0.5),
+      0 6px 12px -8px rgba(0, 0, 0, 0.55),
+      inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    --button-secondary-bg: rgba(196, 181, 253, 0.14);
+    --button-secondary-shadow:
+      0 8px 18px -10px rgba(0, 0, 0, 0.4),
+      inset 0 1px 1px rgba(255, 255, 255, 0.08);
+    --button-danger-bg: linear-gradient(135deg, #dc3545 0%, #9f1c2e 100%);
+    --button-danger-outline-bg: rgba(80, 22, 38, 0.4);
+    --button-danger-outline-fg: #ffb3c1;
+    --button-danger-outline-border: rgba(255, 179, 193, 0.26);
+
+    --glass-nav-border: rgba(196, 181, 253, 0.18);
+    --glass-card-border: rgba(196, 181, 253, 0.14);
+    --glass-card-border-hover: rgba(196, 181, 253, 0.3);
+    --glass-card-hover-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+    --glass-input-focus-bg: rgba(30, 24, 54, 0.98);
+    --glass-secondary-fg: #e9e4fb;
+    --glass-secondary-fg-hover: #f4f1ff;
+    --glass-secondary-border: rgba(196, 181, 253, 0.3);
+    --glass-meta-border: rgba(196, 181, 253, 0.2);
+  }
+}
+
+/* ---- 视口渐变：固定合成层 ----
+ * 渐变画在 position: fixed 的 body::before 上，滚动时零重绘；
+ * body 自身仅留纯色兜底。暗色底纹用 :has 显式声明（body 拿不到主题类变量）。 */
+
+body {
+  background: #cfc0f2;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.32), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(139, 92, 246, 0.18), transparent 24%),
+    linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
+}
+
+body:has(.theme-dark)::before {
+  background:
+    radial-gradient(circle at top left, rgba(167, 139, 250, 0.16), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(76, 29, 149, 0.35), transparent 26%),
+    linear-gradient(135deg, #241b45 0%, #101b33 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  body:has(.theme-system)::before {
+    background:
+      radial-gradient(circle at top left, rgba(167, 139, 250, 0.16), transparent 30%),
+      radial-gradient(circle at bottom right, rgba(76, 29, 149, 0.35), transparent 26%),
+      linear-gradient(135deg, #241b45 0%, #101b33 100%);
+  }
+}
+
+/* ---- 毛玻璃个性 ---- */
+
+[data-layout="app-nav-shell"] {
+  padding: 10px 14px;
+  border-color: var(--glass-nav-border);
+  border-radius: 20px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+[data-nav] {
+  border: none;
+  border-radius: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  transition:
+    transform 180ms ease,
+    color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+[data-nav]:hover {
+  transform: translateY(-2px);
+  color: var(--accent-strong);
+}
+
+[data-page]:not([data-page="reader"]),
+[data-layout="reader-page"] {
+  border-color: var(--line);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+[data-slot="page-title"],
+[data-slot="reader-title"] {
+  letter-spacing: -0.045em;
+}
+
+[data-layout="stat-card"],
+[data-layout="feed-card"],
+[data-layout="entry-card"],
+[data-layout="exchange-card"],
+[data-layout="settings-card"],
+[data-layout="theme-card"] {
+  border-color: var(--glass-card-border);
+  box-shadow: var(--shadow-card);
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+[data-layout="feed-card"]:hover,
+[data-layout="entry-card"]:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--glass-card-hover-shadow);
+  border-color: var(--glass-card-border-hover);
+}
+
+[data-layout="theme-card"][data-state="active"] {
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.18),
+    0 16px 36px rgba(87, 63, 181, 0.12);
+}
+
+[data-slot="feed-card-title"],
+[data-slot="entry-card-title"] {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.text-input,
+.text-area,
+.select-input {
+  box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.03);
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.text-input:focus,
+.text-area:focus,
+.select-input:focus {
+  background: var(--glass-input-focus-bg);
+  box-shadow:
+    var(--focus-ring-shadow),
+    inset 0 2px 4px rgba(15, 23, 42, 0.03);
+}
+
+/* ---- 按钮动效个性 ---- */
+
+.button {
+  border: none;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition:
+    transform 220ms ease,
+    background 220ms ease,
+    box-shadow 220ms ease,
+    filter 220ms ease;
+}
+
+.button:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.04);
+}
+
+.button:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 5px 12px -8px rgba(109, 40, 217, 0.55),
+    inset 0 1px 1px rgba(255, 255, 255, 0.14);
+}
+
+.button[data-variant="secondary"] {
+  color: var(--glass-secondary-fg);
+  border: 1px solid var(--glass-secondary-border);
+  text-shadow: none;
+}
+
+.button[data-variant="secondary"]:hover {
+  color: var(--glass-secondary-fg-hover);
+}
+
+/* ---- 阅读页 ---- */
+
+[data-page="reader"] [data-layout="reader-body"] {
+  font-size: 1.12rem;
+  line-height: 1.88;
+}
+
+[data-page="reader"] [data-slot="reader-meta"] {
+  margin-bottom: 32px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--glass-meta-border);
+}
+
+[data-page="reader"] [data-action="mark-read"],
+[data-page="reader"] [data-action="toggle-starred"] {
+  min-width: 6rem;
+}
+
+/* ---- 动效可及性：减少动态偏好下关闭位移与过渡 ---- */
+
+@media (prefers-reduced-motion: reduce) {
+  [data-nav],
+  .button,
+  .text-input,
+  .text-area,
+  .select-input,
+  [data-layout="stat-card"],
+  [data-layout="feed-card"],
+  [data-layout="entry-card"],
+  [data-layout="exchange-card"],
+  [data-layout="settings-card"],
+  [data-layout="theme-card"] {
+    transition: none;
+  }
+
+  [data-nav]:hover,
+  .button:hover,
+  .button:active,
+  [data-layout="feed-card"]:hover,
+  [data-layout="entry-card"]:hover {
+    transform: none;
+  }
+}
