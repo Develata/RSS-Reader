@@ -4,7 +4,8 @@
 - 作者 / Agent：Claude Code (math-architect)
 - 分支：main
 - 当前 HEAD：9405f26
-- 相关 commit：9405f26（feat，主题整体优化 + 更名 + legacy 识别）
+- 相关 commit：9405f26（feat，主题整体优化 + 更名 + legacy 识别）、
+  后续 fix：`detect_preset_key` 行尾无关比较（见下）
 - 相关 tag / release：N/A
 - 状态：`validated`（自动化验证通过；视觉效果待用户实测确认）
 
@@ -62,6 +63,11 @@
   风格一致地显式声明。
 - `detect_preset_key` 从 if-else 链改为现行 key 循环 + legacy 循环，新增单测：
   legacy 文本映射到现行 key、冻结副本与现行 CSS 确实不同（防冻结形同虚设）。
+- **行尾无关比较**（后续 fix）：识别改用 `css_text_eq`（字节迭代过滤 `\r`，零分配）。
+  此前逐字节比对会因构建平台检出行尾不同（CI 为 LF、本机 autocrlf 为 CRLF）而失配：
+  例如 Web 端（CI 构建）应用主题后经 WebDAV 同步到本机构建的桌面端，会退化显示
+  「自定义主题」。该缺口为既有问题，legacy 机制同样受益。冻结副本的«逐字节不可改»
+  约束相应放宽为«行尾以外逐字节不可改»。
 
 ## 验证与验收
 

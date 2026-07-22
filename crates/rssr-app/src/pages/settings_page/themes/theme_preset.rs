@@ -44,18 +44,25 @@ pub(crate) fn preset_display_name(key: &str) -> &'static str {
     }
 }
 
+/// 主题身份比较：忽略回车符。主题文本会经由不同平台的检出（CRLF/LF）
+/// 嵌入二进制或持久化到配置，行尾差异不构成不同主题。零分配，UTF-8
+/// 字节级等价即字符串等价。
+fn css_text_eq(left: &str, right: &str) -> bool {
+    left.bytes().filter(|&byte| byte != b'\r').eq(right.bytes().filter(|&byte| byte != b'\r'))
+}
+
 pub(crate) fn detect_preset_key(raw: &str) -> &'static str {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return "none";
     }
     for key in ["atlas-sidebar", "newsprint", "amethyst-glass", "midnight-ledger"] {
-        if trimmed == preset_css(key).trim() {
+        if css_text_eq(trimmed, preset_css(key).trim()) {
             return key;
         }
     }
     for (key, css) in LEGACY_PRESET_CSS {
-        if trimmed == css.trim() {
+        if css_text_eq(trimmed, css.trim()) {
             return key;
         }
     }
@@ -121,12 +128,22 @@ mod tests {
     }
 
     #[test]
+    fn detect_preset_key_ignores_line_ending_differences() {
+        let current_crlf = newsprint_theme_css().replace('\n', "\r\n");
+        assert_eq!(detect_preset_key(&current_crlf), "newsprint");
+
+        for (expected_key, legacy_css) in LEGACY_PRESET_CSS {
+            let legacy_crlf = legacy_css.replace('\n', "\r\n");
+            assert_eq!(detect_preset_key(&legacy_crlf), *expected_key);
+        }
+    }
+
+    #[test]
     fn legacy_css_differs_from_current_presets() {
-        use super::preset_css;
+        use super::{css_text_eq, preset_css};
         for (key, legacy_css) in LEGACY_PRESET_CSS {
-            assert_ne!(
-                legacy_css.trim(),
-                preset_css(key).trim(),
+            assert!(
+                !css_text_eq(legacy_css.trim(), preset_css(key).trim()),
                 "legacy copy of {key} is identical to current css; freeze is redundant"
             );
         }
