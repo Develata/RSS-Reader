@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 use crate::ui::AppShellState;
 use rssr_domain::{ReadFilter, StarredFilter};
@@ -16,22 +16,25 @@ use super::{
     state::{EntriesPageState, EntryGroupingMode},
 };
 
+// snapshot/presenter 以 Arc 持有：facade 克隆必须保持 O(1)，防止再次出现
+// 按卡片深拷贝全量文章列表导致的内存放大。
 #[derive(Clone)]
 pub(crate) struct EntriesPageFacade {
     ui: AppShellState,
     session: EntriesPageSession,
-    snapshot: EntriesPageState,
-    presenter: EntriesPagePresenter,
+    snapshot: Arc<EntriesPageState>,
+    presenter: Arc<EntriesPagePresenter>,
 }
 
 impl EntriesPageFacade {
     pub(crate) fn new(
         ui: AppShellState,
         session: EntriesPageSession,
-        snapshot: EntriesPageState,
+        snapshot: Arc<EntriesPageState>,
         now: OffsetDateTime,
     ) -> Self {
-        let presenter = session.presenter(now);
+        let presenter =
+            Arc::new(EntriesPagePresenter::from_state(&snapshot, session.feed_id(), now));
         Self { ui, session, snapshot, presenter }
     }
 
@@ -220,13 +223,5 @@ impl EntriesPageFacade {
     pub(crate) fn navigate_to_directory_target(&self, target_page: u32, anchor_id: String) {
         self.session.dispatch(EntriesPageIntent::SetCurrentPage(target_page));
         scroll_to_entry_group(&anchor_id);
-    }
-
-    pub(crate) fn toggle_read(&self, entry_id: i64, title: String, is_read: bool) {
-        self.session.toggle_read(entry_id, title, is_read);
-    }
-
-    pub(crate) fn toggle_starred(&self, entry_id: i64, title: String, is_starred: bool) {
-        self.session.toggle_starred(entry_id, title, is_starred);
     }
 }

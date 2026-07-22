@@ -6,16 +6,15 @@ use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::router::AppRoute;
 
-use super::facade::EntriesPageFacade;
+use super::session::EntriesPageSession;
 
 pub(super) fn render_entry_card(
     entry: Arc<EntrySummary>,
-    facade: EntriesPageFacade,
+    session: EntriesPageSession,
     list_edge: &'static str,
 ) -> Element {
     let read_title = entry.title.clone();
     let starred_title = entry.title.clone();
-    let read_facade = facade.clone();
     let read_entry = Arc::clone(&entry);
     let starred_entry = Arc::clone(&entry);
 
@@ -43,8 +42,7 @@ pub(super) fn render_entry_card(
                     "data-slot": "entry-card-action",
                     "data-action": "mark-read",
                     onclick: move |_| {
-                        read_facade
-                            .toggle_read(read_entry.id, read_title.clone(), read_entry.is_read);
+                        session.toggle_read(read_entry.id, read_title.clone(), read_entry.is_read);
                     },
                     if entry.is_read { "标未读" } else { "标已读" }
                 }
@@ -54,7 +52,7 @@ pub(super) fn render_entry_card(
                     "data-slot": "entry-card-action",
                     "data-action": "toggle-starred",
                     onclick: move |_| {
-                        facade.toggle_starred(
+                        session.toggle_starred(
                             starred_entry.id,
                             starred_title.clone(),
                             starred_entry.is_starred,

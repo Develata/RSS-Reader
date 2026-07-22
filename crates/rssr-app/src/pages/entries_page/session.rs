@@ -2,12 +2,10 @@ use dioxus::prelude::*;
 
 use super::{
     browser_interactions::remember_entry_controls_hidden, intent::EntriesPageIntent,
-    presenter::EntriesPagePresenter, reducer::dispatch_entries_page_intent,
-    state::EntriesPageState,
+    reducer::dispatch_entries_page_intent, state::EntriesPageState,
 };
 use crate::ui::{EntriesCommand, UiCommand, UiIntent, spawn_projected_ui_command};
 use rssr_domain::EntryQuery;
-use time::OffsetDateTime;
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct EntriesPageSession {
@@ -26,10 +24,6 @@ impl EntriesPageSession {
 
     pub(crate) fn feed_id(self) -> Option<i64> {
         self.feed_id
-    }
-
-    pub(crate) fn presenter(self, now: OffsetDateTime) -> EntriesPagePresenter {
-        EntriesPagePresenter::from_state(&self.snapshot(), self.feed_id, now)
     }
 
     pub(crate) fn bootstrap(self, load_preferences: bool, load_feeds: bool) {

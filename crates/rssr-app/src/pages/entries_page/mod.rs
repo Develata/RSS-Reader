@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 mod browser_interactions;
 mod cards;
 mod clock;
@@ -62,6 +64,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
 
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
+    let session = facade.session();
     let controls = render_entry_controls(&facade);
     let pagination_top = render_entry_pagination_controls(&facade);
     let pagination_bottom = render_entry_pagination_controls(&facade);
@@ -133,7 +136,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                         }
                                                         ul { "data-layout": "entry-list", "data-state": "populated",
                                                             for (index , entry) in source.entries.iter().enumerate() {
-                                                                { render_entry_card(entry.clone(), facade.clone(), list_edge_state(index, source.entries.len())) }
+                                                                { render_entry_card(entry.clone(), session, list_edge_state(index, source.entries.len())) }
                                                             }
                                                         }
                                                     }
@@ -159,7 +162,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                 }
                                                 ul { "data-layout": "entry-list", "data-state": "populated",
                                                     for (index , entry) in month.entries.iter().enumerate() {
-                                                        { render_entry_card(entry.clone(), facade.clone(), list_edge_state(index, month.entries.len())) }
+                                                        { render_entry_card(entry.clone(), session, list_edge_state(index, month.entries.len())) }
                                                     }
                                                 }
                                             }
@@ -187,8 +190,9 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
 fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> EntriesPageFacade {
     let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
     let session = EntriesPageSession::new(feed_id, state);
-    let state_snapshot = session.snapshot();
-    let facade = EntriesPageFacade::new(ui, session, state_snapshot.clone(), current_time_utc());
+    let state_snapshot = Arc::new(session.snapshot());
+    let facade =
+        EntriesPageFacade::new(ui, session, Arc::clone(&state_snapshot), current_time_utc());
     let entry_search = ui.entry_search();
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
     let entry_query = state_snapshot.entry_query(feed_id, query_search.clone());
