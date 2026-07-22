@@ -44,13 +44,13 @@ jobs:
         uses: ./.github/actions/cleanup-github-runner
 
       - name: Install Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install Android SDK packages
         run: |
@@ -184,7 +184,7 @@ jobs:
           fi
 
       - name: Upload Android artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-android
           path: release-assets/*
@@ -228,7 +228,7 @@ jobs:
           if (-not (Test-Path verify/cli/rssr-cli.exe)) { throw "missing rssr-cli.exe in Windows CLI archive" }
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-windows
           path: release-assets/*
@@ -296,7 +296,7 @@ jobs:
           tar -tzf release-assets/rssr-cli-linux-x86_64.tar.gz | grep '^rssr-cli$'
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-linux
           path: release-assets/*
@@ -339,7 +339,7 @@ jobs:
           tar -tzf release-assets/RSS-Reader-web.tar.gz | grep -E '^public/assets/rssr-app_bg-.*\.wasm$'
 
       - name: Upload web artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-web
           path: release-assets/*
@@ -404,7 +404,7 @@ jobs:
           tar -tzf release-assets/rssr-cli-${{ matrix.suffix }}.tar.gz | grep '^rssr-cli$'
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.suffix }}
           path: release-assets/*
@@ -419,12 +419,12 @@ jobs:
       - build-web
     steps:
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-assets
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           files: |
