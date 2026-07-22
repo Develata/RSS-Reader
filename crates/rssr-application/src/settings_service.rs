@@ -59,8 +59,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_zero_entries_page_size() {
-        let mut settings = UserSettings::default();
-        settings.entries_page_size = 0;
+        let settings = UserSettings { entries_page_size: 0, ..UserSettings::default() };
 
         let err = service().save(&settings).await.expect_err("reject zero page size");
 
@@ -69,8 +68,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_entries_page_size_above_upper_bound() {
-        let mut settings = UserSettings::default();
-        settings.entries_page_size = 201;
+        let settings = UserSettings { entries_page_size: 201, ..UserSettings::default() };
 
         let err = service().save(&settings).await.expect_err("reject large page size");
 

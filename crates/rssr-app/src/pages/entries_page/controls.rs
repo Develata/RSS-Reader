@@ -220,7 +220,7 @@ fn EntryDirectoryRail(
     directory_months: Vec<EntryDirectoryMonth>,
     directory_sources: Vec<EntryDirectorySource>,
 ) -> Element {
-    let mut expanded_directory_sections = use_signal(|| BTreeSet::<String>::new());
+    let mut expanded_directory_sections = use_signal(BTreeSet::<String>::new);
     let toggled_directory_sections = expanded_directory_sections();
 
     use_reactive_side_effect(
@@ -403,35 +403,6 @@ fn EntryDirectoryRail(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::directory_section_view_state;
-
-    #[test]
-    fn active_directory_section_stays_open_and_cannot_toggle() {
-        let state = directory_section_view_state(true, true, true);
-        assert!(!state.is_open_base);
-        assert!(state.is_open);
-        assert!(!state.can_toggle);
-    }
-
-    #[test]
-    fn inactive_current_page_section_can_be_collapsed() {
-        let state = directory_section_view_state(true, true, false);
-        assert!(!state.is_open_base);
-        assert!(!state.is_open);
-        assert!(state.can_toggle);
-    }
-
-    #[test]
-    fn off_page_section_can_be_manually_opened() {
-        let state = directory_section_view_state(false, true, false);
-        assert!(state.is_open_base);
-        assert!(state.is_open);
-        assert!(state.can_toggle);
-    }
-}
-
 pub(super) fn render_entry_pagination_controls(facade: &EntriesPageFacade) -> Element {
     if facade.total_pages() <= 1 {
         return rsx! {};
@@ -467,5 +438,34 @@ pub(super) fn render_entry_pagination_controls(facade: &EntriesPageFacade) -> El
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::directory_section_view_state;
+
+    #[test]
+    fn active_directory_section_stays_open_and_cannot_toggle() {
+        let state = directory_section_view_state(true, true, true);
+        assert!(!state.is_open_base);
+        assert!(state.is_open);
+        assert!(!state.can_toggle);
+    }
+
+    #[test]
+    fn inactive_current_page_section_can_be_collapsed() {
+        let state = directory_section_view_state(true, true, false);
+        assert!(!state.is_open_base);
+        assert!(!state.is_open);
+        assert!(state.can_toggle);
+    }
+
+    #[test]
+    fn off_page_section_can_be_manually_opened() {
+        let state = directory_section_view_state(false, true, false);
+        assert!(state.is_open_base);
+        assert!(state.is_open);
+        assert!(state.can_toggle);
     }
 }

@@ -77,43 +77,39 @@ impl LocalizableImageDocument {
 
         for (tag_index, tag) in tags.iter().enumerate() {
             if tag.is_end_tag {
-                if tag.name == "picture" {
-                    if let Some(frame) = picture_stack.pop() {
-                        image_markup_count += frame.source_tag_indices.len()
-                            + usize::from(frame.img_tag_index.is_some());
-                        let candidate =
-                            frame.source_candidates.into_iter().next().or(frame.img_candidate);
+                if tag.name == "picture"
+                    && let Some(frame) = picture_stack.pop()
+                {
+                    image_markup_count +=
+                        frame.source_tag_indices.len() + usize::from(frame.img_tag_index.is_some());
+                    let candidate =
+                        frame.source_candidates.into_iter().next().or(frame.img_candidate);
 
-                        match candidate {
-                            Some(raw_source) if slots.len() < max_images => {
-                                match resolve_asset_url(
-                                    &raw_source,
-                                    document_base.as_ref(),
-                                    base_url,
-                                ) {
-                                    Some(resolved_url) => {
-                                        let mut rewrite_targets = frame
-                                            .source_tag_indices
-                                            .into_iter()
-                                            .map(|tag_index| ImageRewriteTarget {
-                                                tag_index,
-                                                kind: ImageRewriteKind::Source,
-                                            })
-                                            .collect::<Vec<_>>();
-                                        if let Some(img_tag_index) = frame.img_tag_index {
-                                            rewrite_targets.push(ImageRewriteTarget {
-                                                tag_index: img_tag_index,
-                                                kind: ImageRewriteKind::Img,
-                                            });
-                                        }
-                                        slots.push(ImageSlot { resolved_url, rewrite_targets });
+                    match candidate {
+                        Some(raw_source) if slots.len() < max_images => {
+                            match resolve_asset_url(&raw_source, document_base.as_ref(), base_url) {
+                                Some(resolved_url) => {
+                                    let mut rewrite_targets = frame
+                                        .source_tag_indices
+                                        .into_iter()
+                                        .map(|tag_index| ImageRewriteTarget {
+                                            tag_index,
+                                            kind: ImageRewriteKind::Source,
+                                        })
+                                        .collect::<Vec<_>>();
+                                    if let Some(img_tag_index) = frame.img_tag_index {
+                                        rewrite_targets.push(ImageRewriteTarget {
+                                            tag_index: img_tag_index,
+                                            kind: ImageRewriteKind::Img,
+                                        });
                                     }
-                                    None => unresolved_slot_count += 1,
+                                    slots.push(ImageSlot { resolved_url, rewrite_targets });
                                 }
+                                None => unresolved_slot_count += 1,
                             }
-                            Some(_) => {}
-                            None => unsupported_slot_count += 1,
                         }
+                        Some(_) => {}
+                        None => unsupported_slot_count += 1,
                     }
                 }
                 continue;
@@ -500,10 +496,10 @@ fn normalize_source_tag_for_live_display(
 ) -> Option<String> {
     let mut changes = BTreeMap::new();
 
-    if let Some(raw_src) = attribute_value(tag, "src") {
-        if let Some(resolved) = resolve_asset_url(raw_src, document_base_url, fallback_base_url) {
-            changes.insert("src".to_string(), Some(resolved.to_string()));
-        }
+    if let Some(raw_src) = attribute_value(tag, "src")
+        && let Some(resolved) = resolve_asset_url(raw_src, document_base_url, fallback_base_url)
+    {
+        changes.insert("src".to_string(), Some(resolved.to_string()));
     }
 
     if let Some(srcset) = normalize_srcset_attribute(tag, document_base_url, fallback_base_url) {
@@ -581,12 +577,11 @@ fn split_srcset_candidate(raw: &str) -> Option<(&str, &str)> {
 
 fn srcset_candidate(tag: &HtmlTag, srcset_attrs: &[&str]) -> Option<String> {
     for attr in srcset_attrs {
-        if let Some(value) = attribute_value(tag, attr) {
-            if let Some(candidate) = select_best_srcset_candidate(value) {
-                if !should_skip_asset(&candidate) {
-                    return Some(candidate);
-                }
-            }
+        if let Some(value) = attribute_value(tag, attr)
+            && let Some(candidate) = select_best_srcset_candidate(value)
+            && !should_skip_asset(&candidate)
+        {
+            return Some(candidate);
         }
     }
 
@@ -786,10 +781,8 @@ fn decode_html_entity(entity: &str) -> Option<char> {
 fn decode_numeric_html_entity(entity: &str) -> Option<char> {
     let value = if let Some(hex) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
         u32::from_str_radix(hex, 16).ok()?
-    } else if let Some(decimal) = entity.strip_prefix('#') {
-        decimal.parse::<u32>().ok()?
     } else {
-        return None;
+        entity.strip_prefix('#')?.parse::<u32>().ok()?
     };
 
     char::from_u32(value)

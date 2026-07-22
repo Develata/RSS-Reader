@@ -473,10 +473,8 @@ fn decode_html_entity(entity: &str) -> Option<char> {
 fn decode_numeric_html_entity(entity: &str) -> Option<char> {
     let value = if let Some(hex) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
         u32::from_str_radix(hex, 16).ok()?
-    } else if let Some(decimal) = entity.strip_prefix('#') {
-        decimal.parse::<u32>().ok()?
     } else {
-        return None;
+        entity.strip_prefix('#')?.parse::<u32>().ok()?
     };
 
     char::from_u32(value)

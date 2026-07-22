@@ -146,10 +146,10 @@ async fn desktop_image_proxy_response(
     request = request
         .header(reqwest::header::USER_AGENT, DESKTOP_IMAGE_PROXY_USER_AGENT)
         .header(reqwest::header::ACCEPT_LANGUAGE, "zh-CN,zh;q=0.9,en;q=0.8");
-    if let Some(referer) = referer {
-        if let Ok(referer_url) = url::Url::parse(&referer) {
-            request = request.header(reqwest::header::REFERER, referer_url.as_str());
-        }
+    if let Some(referer) = referer
+        && let Ok(referer_url) = url::Url::parse(&referer)
+    {
+        request = request.header(reqwest::header::REFERER, referer_url.as_str());
     }
 
     let response = match request.send().await {

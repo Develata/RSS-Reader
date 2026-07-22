@@ -48,8 +48,7 @@ mod tests {
 
     #[test]
     fn rejects_config_package_with_zero_entries_page_size() {
-        let mut settings = UserSettings::default();
-        settings.entries_page_size = 0;
+        let settings = UserSettings { entries_page_size: 0, ..UserSettings::default() };
         let package = ConfigPackage {
             version: 2,
             exported_at: OffsetDateTime::UNIX_EPOCH,

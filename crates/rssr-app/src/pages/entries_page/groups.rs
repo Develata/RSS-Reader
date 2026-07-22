@@ -3,6 +3,8 @@ use std::{collections::BTreeMap, sync::Arc};
 use rssr_domain::EntrySummary;
 use time::{OffsetDateTime, UtcOffset};
 
+type MonthKeyedEntries = BTreeMap<(i32, u8), Vec<(usize, Arc<EntrySummary>)>>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct EntryMonthGroup {
     pub(crate) anchor_id: String,
@@ -90,7 +92,7 @@ pub(crate) fn group_entries_by_time_tree(
     entries: &[Arc<EntrySummary>],
     page_size: usize,
 ) -> Vec<EntryMonthGroup> {
-    let mut groups: BTreeMap<(i32, u8), Vec<(usize, Arc<EntrySummary>)>> = BTreeMap::new();
+    let mut groups = MonthKeyedEntries::new();
     let mut undated_entries = Vec::new();
 
     for (index, entry) in entries.iter().enumerate() {
@@ -375,7 +377,7 @@ fn group_source_months(
     entries: &[(usize, Arc<EntrySummary>)],
     page_size: usize,
 ) -> Vec<EntrySourceMonthGroup> {
-    let mut groups: BTreeMap<(i32, u8), Vec<(usize, Arc<EntrySummary>)>> = BTreeMap::new();
+    let mut groups = MonthKeyedEntries::new();
     let mut undated_entries = Vec::new();
 
     for (index, entry) in entries {
