@@ -3,8 +3,8 @@
 - 日期：2026-07-22
 - 作者 / Agent：Claude Code (math-architect)
 - 分支：main
-- 当前 HEAD：e7f1372
-- 相关 commit：pending
+- 当前 HEAD：9faacc1
+- 相关 commit：a5f8753（fix，内存修复）、9faacc1（chore，clippy 1.97 清理）
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -71,7 +71,7 @@
 
 ## 结果
 
-- 可合并；未提交（工作区改动待用户确认 commit 拆分：内存修复 fix + lint 清理 chore 建议分开）。
+- 已按 fix + chore 两个 commit 提交至 main（a5f8753、9faacc1），未推送。
 - 用户可见影响：文章列表页常驻内存显著下降；点击卡片按钮行为不变。
 
 ## 风险与后续事项
