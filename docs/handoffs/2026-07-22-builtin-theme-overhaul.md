@@ -3,8 +3,8 @@
 - 日期：2026-07-22
 - 作者 / Agent：Claude Code (math-architect)
 - 分支：main
-- 当前 HEAD：（提交后回填）
-- 相关 commit：（提交后回填）
+- 当前 HEAD：9405f26
+- 相关 commit：9405f26（feat，主题整体优化 + 更名 + legacy 识别）
 - 相关 tag / release：N/A
 - 状态：`validated`（自动化验证通过；视觉效果待用户实测确认）
 
@@ -82,7 +82,7 @@
 
 ## 结果
 
-- 未提交（待用户确认提交拆分）。
+- 已作为单个 feat commit 提交至 main（9405f26），未推送。
 - 用户可见影响：三套主题获得完整暗色模式；Amethyst 滚动性能与可及性改善；
   Newsprint 正文更具报纸质感；主题下拉与卡片的 key 显示为 amethyst-glass。
 
