@@ -4,7 +4,6 @@ use crate::pages::feeds_page::facade::FeedsPageFacade;
 
 #[component]
 pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
-    let paste_facade = facade.clone();
     let input_facade = facade.clone();
     let add_facade = facade.clone();
 
@@ -23,14 +22,11 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
                         "data-field": "feed-url-input",
                         value: "{facade.feed_url()}",
                         placeholder: "https://example.com/feed.xml",
-                        onkeydown: move |event| {
-                            if !is_paste_shortcut(&event) {
-                                return;
-                            }
-
-                            event.prevent_default();
-                            paste_facade.paste_feed_url();
-                        },
+                        // 这里刻意**不**拦截 Ctrl/Cmd+V：输入框本身的原生粘贴在所有平台都可用。
+                        // 之前的做法是先 prevent_default 再走 ClipboardPort 读剪贴板，但桌面端的
+                        // ClipboardPort 实现是无条件报错，Firefox 上 navigator.clipboard.readText
+                        // 不存在时又会静默返回空——结果原生粘贴被吞掉，用户每次粘贴要么吃一个
+                        // 错误横幅，要么什么都没发生。只有 Chromium 系 Web 端这条路径是通的。
                         oninput: move |event| input_facade.set_feed_url(event.value())
                     }
                     button {
@@ -51,11 +47,4 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
             }
         }
     }
-}
-
-fn is_paste_shortcut(event: &KeyboardEvent) -> bool {
-    let modifiers = event.modifiers();
-    let has_paste_modifier =
-        modifiers.contains(Modifiers::META) || modifiers.contains(Modifiers::CONTROL);
-    has_paste_modifier && event.key().to_string().eq_ignore_ascii_case("v")
 }

@@ -21,7 +21,6 @@ pub(crate) enum FeedsPageIntent {
     ImportConfigRequested,
     ExportOpmlRequested,
     ImportOpmlRequested,
-    PasteFeedUrlRequested,
     SnapshotLoaded(Result<FeedsPageSnapshot, String>),
     ConfigTextExported(String),
     OpmlTextExported(String),

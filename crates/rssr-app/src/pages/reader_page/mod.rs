@@ -39,9 +39,14 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             "data-page": "reader",
             "data-layout": "reader-page",
             "data-state": if facade.error().is_some() { "error" } else { "loaded" },
-            tabindex: 0,
-            onkeydown: move |event| shortcuts.call(event),
             AppNav {}
+            // 快捷键处理器必须挂在**不包含 AppNav** 的容器上。此前挂在外层 article 上，
+            // 而 AppNav 里的搜索框就在它内部：keydown 冒泡上来后，在搜索框里打一个 m
+            // 就会把当前文章标记为已读，打 f 会切换收藏，方向键还会直接换页。
+            div {
+                "data-layout": "reader-shortcut-scope",
+                tabindex: 0,
+                onkeydown: move |event| shortcuts.call(event),
             header { class: "reader-header", "data-layout": "reader-header",
                 h2 { class: "reader-title", "data-slot": "reader-title", "{facade.title()}" }
             }
@@ -139,6 +144,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label", "下一未读" }
                     }
                 }
+            }
             }
         }
     }

@@ -12,13 +12,15 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
     match command {
         ReaderCommand::LoadEntry { entry_id } => match UiServices::shared().await {
             Ok(services) => {
-                let mut intents = vec![UiIntent::ReaderPage(ReaderPageIntent::BeginLoading)];
+                // BeginLoading 由 session 在发起加载前同步派发，这里只产出结果。
+                let mut intents = Vec::new();
                 match services.reader().load_entry(entry_id).await {
                     Ok(snapshot) => {
                         let Some(entry) = snapshot.entry else {
-                            intents.push(UiIntent::ReaderPage(ReaderPageIntent::SetError(Some(
-                                "文章不存在".to_string(),
-                            ))));
+                            intents.push(UiIntent::ReaderPage(ReaderPageIntent::SetError {
+                                entry_id,
+                                error: Some("文章不存在".to_string()),
+                            }));
                             return intents;
                         };
 
@@ -46,13 +48,15 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
                             is_starred: entry.is_starred,
                             navigation_state: snapshot.navigation,
                         };
-                        intents.push(UiIntent::ReaderPage(ReaderPageIntent::ApplyLoadedContent(
+                        intents.push(UiIntent::ReaderPage(ReaderPageIntent::ApplyLoadedContent {
+                            entry_id,
                             content,
-                        )));
+                        }));
                     }
-                    Err(err) => intents.push(UiIntent::ReaderPage(ReaderPageIntent::SetError(
-                        Some(err.to_string()),
-                    ))),
+                    Err(err) => intents.push(UiIntent::ReaderPage(ReaderPageIntent::SetError {
+                        entry_id,
+                        error: Some(err.to_string()),
+                    })),
                 }
                 intents
             }

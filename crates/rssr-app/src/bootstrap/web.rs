@@ -1,7 +1,5 @@
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
-#[path = "web/clipboard.rs"]
-mod clipboard;
 #[path = "web/exchange.rs"]
 mod exchange;
 #[path = "web/refresh.rs"]
@@ -23,16 +21,15 @@ use time::OffsetDateTime;
 use tokio::sync::OnceCell;
 
 use self::{
-    clipboard::read_browser_clipboard_text,
     exchange::{
         pull_remote_config as pull_exchange_remote, push_remote_config as push_exchange_remote,
     },
     refresh::ensure_auto_refresh_started as start_auto_refresh,
 };
 use super::{
-    AddSubscriptionOutcome, AutoRefreshPort, ClipboardPort, HostCapabilities,
-    ReaderAssetLocalizationOutcome, ReaderAssetPort, RefreshAllExecutionOutcome,
-    RefreshFeedExecutionOutcome, RefreshPort, RemoteConfigPort,
+    AddSubscriptionOutcome, AutoRefreshPort, HostCapabilities, ReaderAssetLocalizationOutcome,
+    ReaderAssetPort, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome, RefreshPort,
+    RemoteConfigPort,
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -60,9 +57,6 @@ struct ReaderAssetCapability;
 struct RemoteConfigCapability {
     host: Arc<AppServices>,
 }
-
-#[derive(Clone)]
-struct ClipboardCapability;
 
 #[derive(Clone)]
 struct BrowserClock;
@@ -109,7 +103,6 @@ impl AppServices {
             refresh: Arc::new(RefreshCapability { host: Arc::clone(self) }),
             reader_assets: Arc::new(ReaderAssetCapability),
             remote_config: Arc::new(RemoteConfigCapability { host: Arc::clone(self) }),
-            clipboard: Arc::new(ClipboardCapability),
         }
     }
 }
@@ -242,13 +235,6 @@ impl RemoteConfigPort for RemoteConfigCapability {
     }
 }
 
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl ClipboardPort for ClipboardCapability {
-    async fn read_text(&self) -> anyhow::Result<Option<String>> {
-        read_browser_clipboard_text().await
-    }
-}
 #[cfg(test)]
 mod tests {
     use rssr_infra::application_adapters::browser::query::title_matches_search;

@@ -85,8 +85,4 @@ impl FeedsPageSession {
     pub(crate) fn remove_feed(self, feed_id: i64, feed_title: String) {
         self.dispatch_intent(FeedsPageIntent::RemoveFeedRequested { feed_id, feed_title });
     }
-
-    pub(crate) fn paste_feed_url(self) {
-        self.dispatch_intent(FeedsPageIntent::PasteFeedUrlRequested);
-    }
 }

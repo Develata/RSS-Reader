@@ -39,7 +39,6 @@ pub(crate) struct HostCapabilities {
     pub(crate) refresh: Arc<dyn RefreshPort>,
     pub(crate) reader_assets: Arc<dyn ReaderAssetPort>,
     pub(crate) remote_config: Arc<dyn RemoteConfigPort>,
-    pub(crate) clipboard: Arc<dyn ClipboardPort>,
 }
 
 pub(crate) trait AutoRefreshPort {
@@ -76,12 +75,6 @@ pub(crate) trait RemoteConfigPort {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<RemoteConfigPullOutcome>;
-}
-
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub(crate) trait ClipboardPort {
-    async fn read_text(&self) -> anyhow::Result<Option<String>>;
 }
 
 /// 下次自动刷新的时刻。`OffsetDateTime + Duration` 在越界时是 panic 的，而刷新间隔可能来自

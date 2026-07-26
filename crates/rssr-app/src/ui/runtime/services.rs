@@ -230,8 +230,4 @@ impl FeedsPort {
     pub(crate) async fn import_opml(&self, raw: &str) -> Result<OpmlImportOutcome> {
         self.use_cases.import_export_service.import_opml(raw).await
     }
-
-    pub(crate) async fn read_clipboard_text(&self) -> Result<Option<String>> {
-        self.host_capabilities.clipboard.read_text().await
-    }
 }

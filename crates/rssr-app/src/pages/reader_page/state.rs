@@ -14,6 +14,8 @@ pub(crate) struct ReaderPageLoadedContent {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ReaderPageState {
+    /// 当前页面代表哪篇文章。异步加载结果回来时用它判断是否已经过期。
+    pub(crate) current_entry_id: i64,
     pub(crate) title: String,
     pub(crate) body_text: String,
     pub(crate) body_html: Option<String>,
@@ -32,6 +34,7 @@ pub(crate) struct ReaderPageState {
 impl ReaderPageState {
     pub(crate) fn new() -> Self {
         Self {
+            current_entry_id: 0,
             title: "正在加载…".to_string(),
             body_text: String::new(),
             body_html: None,
@@ -48,7 +51,17 @@ impl ReaderPageState {
         }
     }
 
-    pub(crate) fn begin_loading(&mut self) {
+    /// 开始加载 `entry_id`。
+    ///
+    /// 只有在真的换了文章时才清空状态提示：切换已读/收藏也会走一次重载，
+    /// 如果无条件清空，「已标记为已读」这类提示会在一次 DB 读的时间内就被抹掉。
+    pub(crate) fn begin_loading(&mut self, entry_id: i64) {
+        let switched_entry = self.current_entry_id != entry_id;
+        self.current_entry_id = entry_id;
+        if switched_entry {
+            self.status.clear();
+            self.status_tone = "info".to_string();
+        }
         self.title = "正在加载…".to_string();
         self.body_text.clear();
         self.body_html = None;
@@ -58,8 +71,6 @@ impl ReaderPageState {
         self.is_read = false;
         self.is_starred = false;
         self.asset_localization_requested = false;
-        self.status.clear();
-        self.status_tone = "info".to_string();
         self.error = None;
     }
 }

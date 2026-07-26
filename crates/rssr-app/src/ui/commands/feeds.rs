@@ -9,5 +9,4 @@ pub(crate) enum FeedsCommand {
     ImportConfig { raw: String },
     ExportOpml,
     ImportOpml { raw: String },
-    ReadFeedUrlFromClipboard,
 }

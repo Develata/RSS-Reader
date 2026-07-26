@@ -33,6 +33,12 @@ impl ReaderPageSession {
     }
 
     pub(crate) fn load(self) {
+        // 同步先把「正在加载哪篇」写进状态，再发起异步加载：既让加载中态真的渲染得出来，
+        // 也给后续结果提供判断是否过期的依据。
+        dispatch_reader_page_intent(
+            self.state,
+            super::intent::ReaderPageIntent::BeginLoading { entry_id: self.entry_id },
+        );
         self.spawn_ui_command(UiCommand::Reader(ReaderCommand::LoadEntry {
             entry_id: self.entry_id,
         }));

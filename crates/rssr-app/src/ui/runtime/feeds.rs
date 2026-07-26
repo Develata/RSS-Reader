@@ -175,14 +175,6 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
-        FeedsCommand::ReadFeedUrlFromClipboard => match UiServices::shared().await {
-            Ok(services) => match services.feeds().read_clipboard_text().await {
-                Ok(Some(text)) => feeds_intents(vec![FeedsPageIntent::FeedUrlChanged(text)]),
-                Ok(None) => Vec::new(),
-                Err(err) => feeds_status_error(format!("读取系统剪贴板失败：{err}")),
-            },
-            Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
-        },
     }
 }
 

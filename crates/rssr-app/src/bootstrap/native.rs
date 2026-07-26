@@ -28,9 +28,9 @@ use time::OffsetDateTime;
 use tokio::sync::OnceCell;
 
 use super::{
-    AddSubscriptionOutcome, AutoRefreshPort, ClipboardPort, HostCapabilities,
-    ReaderAssetLocalizationOutcome, ReaderAssetPort, RefreshAllExecutionOutcome,
-    RefreshFeedExecutionOutcome, RefreshPort, RemoteConfigPort,
+    AddSubscriptionOutcome, AutoRefreshPort, HostCapabilities, ReaderAssetLocalizationOutcome,
+    ReaderAssetPort, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome, RefreshPort,
+    RemoteConfigPort,
 };
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -60,9 +60,6 @@ struct ReaderAssetCapability {
 struct RemoteConfigCapability {
     host: Arc<AppServices>,
 }
-
-#[derive(Clone)]
-struct ClipboardCapability;
 
 #[derive(Clone)]
 struct ImageLocalizationWorker {
@@ -125,7 +122,6 @@ impl AppServices {
             refresh: Arc::new(RefreshCapability { host: Arc::clone(self) }),
             reader_assets: Arc::new(ReaderAssetCapability { host: Arc::clone(self) }),
             remote_config: Arc::new(RemoteConfigCapability { host: Arc::clone(self) }),
-            clipboard: Arc::new(ClipboardCapability),
         }
     }
 }
@@ -300,14 +296,6 @@ impl RemoteConfigPort for RemoteConfigCapability {
     ) -> anyhow::Result<RemoteConfigPullOutcome> {
         let remote = WebDavConfigSync::new(endpoint, remote_path)?;
         self.host.use_cases.import_export_service.pull_remote_config(&remote).await
-    }
-}
-
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl ClipboardPort for ClipboardCapability {
-    async fn read_text(&self) -> anyhow::Result<Option<String>> {
-        anyhow::bail!("当前平台不支持从系统剪贴板读取订阅地址")
     }
 }
 

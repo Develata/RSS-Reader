@@ -80,10 +80,6 @@ pub(crate) fn reduce_feeds_page_intent(
             clear_pending_confirmations(state);
             vec![UiCommand::Feeds(FeedsCommand::ImportOpml { raw: state.opml_text.clone() })]
         }
-        FeedsPageIntent::PasteFeedUrlRequested => {
-            clear_pending_confirmations(state);
-            vec![UiCommand::Feeds(FeedsCommand::ReadFeedUrlFromClipboard)]
-        }
         FeedsPageIntent::SnapshotLoaded(result) => {
             match result {
                 Ok(snapshot) => {

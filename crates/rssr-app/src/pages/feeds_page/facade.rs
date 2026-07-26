@@ -132,8 +132,4 @@ impl FeedsPageFacade {
     pub(crate) fn remove_feed(&self, feed_id: i64, feed_title: String) {
         self.session.remove_feed(feed_id, feed_title);
     }
-
-    pub(crate) fn paste_feed_url(&self) {
-        self.session.paste_feed_url();
-    }
 }
