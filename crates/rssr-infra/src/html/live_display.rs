@@ -835,7 +835,11 @@ pub(super) fn looks_like_wordpress_emoji_asset(raw: &str) -> bool {
     lower.contains("s.w.org/images/core/emoji/") || lower.contains("/wp-includes/images/smilies/")
 }
 
-#[cfg(test)]
+// 与 `LocalizableImageDocument` 等类型同样按 target 门控：这些用例里有一半直接使用那些
+// 仅原生端编译的类型，不门控的话 `cargo check --target wasm32 --all-targets` 会因未解析导入
+// 而失败。单元测试本身只在宿主上跑（wasm 只做 check），因此不损失任何实际覆盖；而
+// `normalize_html_for_live_display` 两端是同一份代码，宿主上的用例即可覆盖它。
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use std::collections::BTreeMap;
 
