@@ -212,6 +212,11 @@ cargo check -p rssr-app --target aarch64-linux-android
 - OPML 导入 / 导出
 - WebDAV 配置同步
 
+WebDAV 端点如果需要登录，把凭据写进 endpoint 即可（形如
+`https://用户名:密码@dav.example.com/base/`）：程序会取出凭据走 HTTP Basic 认证，并把它从
+请求地址上剥掉。endpoint 只保存在设置页的当前会话里，既不写入本地数据库，也不会进入配置包，
+因此不会被导出或推送到远端。用户名或密码含 `@`、`:` 等字符时请按 URL 规则百分号编码。
+
 配置交换的原则是：
 
 - 迁移订阅与设置

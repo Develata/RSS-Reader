@@ -31,8 +31,11 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                             class: "text-input",
                             "data-field": "webdav-endpoint",
                             value: "{facade.endpoint()}",
-                            placeholder: "https://dav.example.com/base/",
+                            placeholder: "https://用户名:密码@dav.example.com/base/",
                             oninput: move |event| endpoint_facade.set_endpoint(event.value())
+                        }
+                        p { "data-slot": "page-intro",
+                            "需要登录的 WebDAV 服务，请把凭据写进 endpoint（形如 https://用户名:密码@主机/路径/）。该地址只保存在当前会话，不会写入配置包。"
                         }
                     }
                     div { "data-slot": "settings-form-grid-item",

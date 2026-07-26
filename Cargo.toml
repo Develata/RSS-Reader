@@ -30,6 +30,7 @@ dioxus-router = "0.7.9"
 feed-rs = "2"
 getrandom = { version = "0.2", features = ["js"] }
 hmac = "0.12"
+percent-encoding = "2"
 quick-xml = "0.37"
 rand_core = { version = "0.6", features = ["getrandom"] }
 regex = "1"

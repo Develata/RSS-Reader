@@ -5281,6 +5281,7 @@ dependencies = [
  "chrono",
  "feed-rs",
  "js-sys",
+ "percent-encoding",
  "quick-xml 0.37.5",
  "regex",
  "reqwest",
