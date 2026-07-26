@@ -43,7 +43,10 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
         EntriesCommand::LoadEntries { query } => match UiServices::shared().await {
             Ok(services) => match services.entries().list_entries(&query).await {
                 Ok(outcome) => {
-                    vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries(outcome.entries))]
+                    vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries {
+                        entries: outcome.entries,
+                        archived_count: outcome.archived_count as usize,
+                    })]
                 }
                 Err(err) => entries_status_error(format!("{err}")),
             },

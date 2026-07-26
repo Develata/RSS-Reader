@@ -125,11 +125,43 @@ pub enum StarredFilter {
     UnstarredOnly,
 }
 
+/// 自动归档筛选。
+///
+/// 归档只看 `published_at`：没有发布时间的条目永远不算归档（与 [`is_entry_archived`] 一致）。
+/// 这个筛选此前是在页面层对全量结果做的内存过滤，意味着每次查询都要把已归档的文章也一并
+/// 读出来再丢掉；放进查询后由存储层直接筛掉，两个平台共用同一套语义。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ArchiveFilter {
+    /// 不施加归档约束。
+    #[default]
+    All,
+    /// 只要未归档的：`published_at IS NULL OR published_at >= cutoff`。
+    ExcludeArchived { cutoff: OffsetDateTime },
+    /// 只要已归档的：`published_at IS NOT NULL AND published_at < cutoff`，用于统计被隐藏的数量。
+    OnlyArchived { cutoff: OffsetDateTime },
+}
+
+impl ArchiveFilter {
+    /// 由「当前时间 + 归档阈值」构造出排除已归档的筛选；阈值为 0 或算不出分界时返回 [`Self::All`]。
+    pub fn exclude_archived(now: OffsetDateTime, archive_after_months: u32) -> Self {
+        match archive_cutoff_at(now, archive_after_months) {
+            Some(cutoff) => Self::ExcludeArchived { cutoff },
+            None => Self::All,
+        }
+    }
+
+    /// 与 [`Self::exclude_archived`] 相对：只统计被归档隐藏掉的条目。
+    pub fn only_archived(now: OffsetDateTime, archive_after_months: u32) -> Option<Self> {
+        archive_cutoff_at(now, archive_after_months).map(|cutoff| Self::OnlyArchived { cutoff })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct EntryQuery {
     pub feed_id: Option<i64>,
     pub read_filter: ReadFilter,
     pub starred_filter: StarredFilter,
+    pub archive_filter: ArchiveFilter,
     pub feed_ids: Vec<i64>,
     pub search_title: Option<String>,
     pub limit: Option<u32>,
@@ -143,19 +175,23 @@ pub fn is_entry_archived(
     let Some(published_at) = published_at else {
         return false;
     };
-    if archive_after_months == 0 {
-        return false;
-    }
-    let Some(cutoff) = archive_cutoff(now, archive_after_months) else {
+    let Some(cutoff) = archive_cutoff_at(now, archive_after_months) else {
         return false;
     };
 
     published_at.to_offset(UtcOffset::UTC) < cutoff
 }
 
-/// 返回归档分界时刻；当 `archive_after_months` 大到把分界推出 `Date` 支持的年份区间时返回
-/// `None`。归档只是隐藏旧文章，因此算不出分界时按“不归档”处理，永远不会因为一个越界的
+/// 返回归档分界时刻；当 `archive_after_months` 为 0，或大到把分界推出 `Date` 支持的年份区间时
+/// 返回 `None`。归档只是隐藏旧文章，因此算不出分界时按“不归档”处理，永远不会因为一个越界的
 /// 设置值而 panic。全程使用 i64 运算，避免 `u32 as i32` 回绕成负数把分界推到未来。
+pub fn archive_cutoff_at(now: OffsetDateTime, archive_after_months: u32) -> Option<OffsetDateTime> {
+    if archive_after_months == 0 {
+        return None;
+    }
+    archive_cutoff(now, archive_after_months)
+}
+
 fn archive_cutoff(now: OffsetDateTime, archive_after_months: u32) -> Option<OffsetDateTime> {
     let now = now.to_offset(UtcOffset::UTC);
     let total_month_index = now.year() as i64 * 12 + (month_to_number(now.month()) as i64 - 1)

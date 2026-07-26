@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rssr_domain::{
-    DomainError, Entry, EntryContent, EntryContentRepository, EntryIndexRepository,
+    ArchiveFilter, DomainError, Entry, EntryContent, EntryContentRepository, EntryIndexRepository,
     EntryNavigation, EntryQuery, EntryRecord, EntryRepository, EntrySummary, ReadFilter,
     Result as DomainResult, StarredFilter,
 };
@@ -751,11 +751,33 @@ fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a En
             qb.push(" AND entries.is_starred = 0");
         }
     }
+    // 归档只看 published_at；没有发布时间的条目永远不算归档，必须显式保留 NULL。
+    match query.archive_filter {
+        ArchiveFilter::All => {}
+        ArchiveFilter::ExcludeArchived { cutoff } => {
+            qb.push(" AND (entries.published_at IS NULL OR entries.published_at >= ")
+                .push_bind(format_archive_cutoff(cutoff))
+                .push(")");
+        }
+        ArchiveFilter::OnlyArchived { cutoff } => {
+            qb.push(" AND entries.published_at IS NOT NULL AND entries.published_at < ")
+                .push_bind(format_archive_cutoff(cutoff));
+        }
+    }
     if let Some(search) = &query.search_title {
         qb.push(" AND entries.title LIKE ")
             .push_bind(format!("%{search}%"))
             .push(" COLLATE NOCASE");
     }
+}
+
+/// `published_at` 以 RFC3339 UTC 字符串存储，比较也在字符串上进行，因此分界必须用同一种
+/// 格式渲染，否则字典序比较会失真。写入侧统一走 UTC，这里同样先转 UTC。
+fn format_archive_cutoff(cutoff: OffsetDateTime) -> String {
+    cutoff
+        .to_offset(time::UtcOffset::UTC)
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_default()
 }
 
 fn map_sqlx_error(error: sqlx::Error) -> DomainError {

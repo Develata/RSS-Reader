@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use rssr_domain::{
-    Entry, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary, FeedSummary,
-    ReadFilter, StarredFilter,
+    ArchiveFilter, Entry, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary,
+    FeedSummary, ReadFilter, StarredFilter,
 };
 use time::OffsetDateTime;
 
@@ -257,6 +257,20 @@ where
         StarredFilter::StarredOnly if !is_starred => return false,
         StarredFilter::UnstarredOnly if is_starred => return false,
         _ => {}
+    }
+    // 与原生端 SQL 保持同一语义：归档只看 published_at，没有发布时间的条目永不算归档。
+    match query.archive_filter {
+        ArchiveFilter::All => {}
+        ArchiveFilter::ExcludeArchived { cutoff } => {
+            if entry.published_at.is_some_and(|published_at| published_at < cutoff) {
+                return false;
+            }
+        }
+        ArchiveFilter::OnlyArchived { cutoff } => {
+            if !entry.published_at.is_some_and(|published_at| published_at < cutoff) {
+                return false;
+            }
+        }
     }
     if let Some(search) = search_lower
         && !title_matches_search(&entry.title, search)

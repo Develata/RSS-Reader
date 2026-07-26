@@ -30,10 +30,11 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.preferences_loaded = true;
         }
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = feeds,
-        EntriesPageIntent::SetEntries(entries) => {
+        EntriesPageIntent::SetEntries { entries, archived_count } => {
             state.status = format!("共 {} 篇文章。", entries.len());
             state.status_tone = "info".to_string();
             state.entries = entries;
+            state.archived_count = archived_count;
             clamp_current_page(state);
         }
         EntriesPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
@@ -166,7 +167,7 @@ mod tests {
 
         reduce_entries_page_intent(
             &mut state,
-            EntriesPageIntent::SetEntries(vec![entry(1, false)]),
+            EntriesPageIntent::SetEntries { entries: vec![entry(1, false)], archived_count: 0 },
         );
 
         assert_eq!(state.current_page, FIRST_PAGE_NUMBER);

@@ -9,7 +9,7 @@ pub(crate) enum EntriesPageIntent {
     ApplyLoadedSettings(UserSettings),
     ApplyLoadedWorkspaceState(EntriesWorkspaceState),
     SetFeeds(Vec<FeedSummary>),
-    SetEntries(Vec<EntrySummary>),
+    SetEntries { entries: Vec<EntrySummary>, archived_count: usize },
     PatchEntryFlags { entry_id: i64, is_read: Option<bool>, is_starred: Option<bool> },
     SetStatus { message: String, tone: String },
     SetGroupingMode(EntryGroupingMode),

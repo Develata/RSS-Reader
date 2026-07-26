@@ -2,7 +2,6 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use crate::ui::AppShellState;
 use rssr_domain::{ReadFilter, StarredFilter};
-use time::OffsetDateTime;
 
 use super::{
     browser_interactions::scroll_to_entry_group,
@@ -27,14 +26,14 @@ pub(crate) struct EntriesPageFacade {
 }
 
 impl EntriesPageFacade {
+    /// presenter 由调用方通过 `use_memo` 缓存后传入：它是 state 的纯函数，没必要每次重绘
+    /// 都重建一遍分组树。
     pub(crate) fn new(
         ui: AppShellState,
         session: EntriesPageSession,
         snapshot: Arc<EntriesPageState>,
-        now: OffsetDateTime,
+        presenter: Arc<EntriesPagePresenter>,
     ) -> Self {
-        let presenter =
-            Arc::new(EntriesPagePresenter::from_state(&snapshot, session.feed_id(), now));
         Self { ui, session, snapshot, presenter }
     }
 

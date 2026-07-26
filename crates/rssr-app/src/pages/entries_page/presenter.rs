@@ -1,7 +1,5 @@
 use std::{collections::BTreeSet, sync::Arc};
 
-use time::OffsetDateTime;
-
 use super::{
     groups::{
         EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem, EntryMonthGroup,
@@ -12,7 +10,7 @@ use super::{
     state::{EntriesPageState, EntryGroupingMode},
 };
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct EntriesPagePresenter {
     pub(crate) archived_count: usize,
     pub(crate) visible_entries_len: usize,
@@ -33,24 +31,15 @@ pub(crate) struct EntriesPagePresenter {
 }
 
 impl EntriesPagePresenter {
-    pub(crate) fn from_state(
-        state: &EntriesPageState,
-        feed_id: Option<i64>,
-        now: OffsetDateTime,
-    ) -> Self {
-        let mut archived_count = 0;
-        let mut visible_entries = Vec::with_capacity(state.entries.len());
-
-        for entry in &state.entries {
-            let is_archived =
-                rssr_domain::is_entry_archived(entry.published_at, state.archive_after_months, now);
-            if is_archived {
-                archived_count += 1;
-            }
-            if state.show_archived || !is_archived {
-                visible_entries.push(Arc::new(entry.clone()));
-            }
-        }
+    /// 从当前状态派生这一屏要渲染的内容。
+    ///
+    /// 归档筛选与计数已经由存储层完成（见 `EntriesPageState::entry_query` 与
+    /// `EntriesListService::list_entries`），因此这里拿到的 `state.entries` 就是可显示集合，
+    /// 不再需要当前时间；这也让本函数变成状态的纯函数，可以被 `use_memo` 缓存，避免每次
+    /// 重绘都重建一遍分组树。
+    pub(crate) fn from_state(state: &EntriesPageState, feed_id: Option<i64>) -> Self {
+        let archived_count = state.archived_count;
+        let visible_entries = state.entries.iter().cloned().map(Arc::new).collect::<Vec<_>>();
 
         let visible_entries_len = visible_entries.len();
         let page_size = state.page_size();
@@ -216,8 +205,7 @@ mod tests {
             feed(2, "Beta", "https://example.com/beta.xml"),
         ];
 
-        let presenter =
-            EntriesPagePresenter::from_state(&state, None, parse_datetime("2026-04-13T08:00:00Z"));
+        let presenter = EntriesPagePresenter::from_state(&state, None);
 
         assert_eq!(presenter.visible_entries_len, 4);
         assert_eq!(presenter.current_page, 2);
@@ -251,8 +239,7 @@ mod tests {
             entry(2, 2, "Beta", "2026-04-03T08:00:00Z"),
         ];
 
-        let presenter =
-            EntriesPagePresenter::from_state(&state, None, parse_datetime("2026-04-13T08:00:00Z"));
+        let presenter = EntriesPagePresenter::from_state(&state, None);
 
         assert_eq!(presenter.active_group_anchor.as_deref(), Some("entry-group-beta"));
         assert!(presenter.group_nav_items.iter().any(|item| item.is_active));

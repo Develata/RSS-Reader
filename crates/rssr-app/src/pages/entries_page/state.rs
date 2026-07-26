@@ -1,9 +1,10 @@
 use std::collections::BTreeSet;
 
 use rssr_domain::{
-    EntriesWorkspaceState, EntryGroupingPreference, EntryQuery, EntrySummary, FeedSummary,
-    ReadFilter, StarredFilter, UserSettings,
+    ArchiveFilter, EntriesWorkspaceState, EntryGroupingPreference, EntryQuery, EntrySummary,
+    FeedSummary, ReadFilter, StarredFilter, UserSettings,
 };
+use time::OffsetDateTime;
 
 pub(crate) const FIRST_PAGE_NUMBER: u32 = 1;
 
@@ -16,6 +17,8 @@ pub(crate) enum EntryGroupingMode {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct EntriesPageState {
     pub(crate) entries: Vec<EntrySummary>,
+    /// 被归档筛选排除掉的条目数，由存储层 COUNT 得出。
+    pub(crate) archived_count: usize,
     pub(crate) feeds: Vec<FeedSummary>,
     pub(crate) read_filter: ReadFilter,
     pub(crate) starred_filter: StarredFilter,
@@ -37,6 +40,7 @@ impl EntriesPageState {
         let workspace = EntriesWorkspaceState::default();
         Self {
             entries: Vec::new(),
+            archived_count: 0,
             feeds: Vec::new(),
             read_filter: workspace.read_filter,
             starred_filter: workspace.starred_filter,
@@ -53,15 +57,25 @@ impl EntriesPageState {
         }
     }
 
+    /// 构造这一屏对应的查询。
+    ///
+    /// 归档筛选放在查询里由存储层执行：页面层不再把已归档文章一并读回来再在内存里过滤。
+    /// `now` 由调用方传入，便于测试固定时间。
     pub(crate) fn entry_query(
         &self,
         feed_id: Option<i64>,
         search_title: Option<String>,
+        now: OffsetDateTime,
     ) -> EntryQuery {
         EntryQuery {
             feed_id,
             read_filter: self.read_filter,
             starred_filter: self.starred_filter,
+            archive_filter: if self.show_archived {
+                ArchiveFilter::All
+            } else {
+                ArchiveFilter::exclude_archived(now, self.archive_after_months)
+            },
             feed_ids: if feed_id.is_some() {
                 Vec::new()
             } else {

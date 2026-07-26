@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rssr_domain::{EntryIndexRepository, EntryQuery, EntrySummary};
+use rssr_domain::{ArchiveFilter, EntryIndexRepository, EntryQuery, EntrySummary};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntriesListOutcome {
     pub entries: Vec<EntrySummary>,
+    /// 因自动归档而被本次查询排除掉的条目数，用于提示「已归档 N 篇」。
+    ///
+    /// 由一次 COUNT 查询得到，而不是把已归档的文章也读回来再在页面上数一遍。
+    pub archived_count: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,9 +44,27 @@ impl EntriesListService {
         Self { entry_repository }
     }
 
+    /// 读取一页文章，并在同一次用例里数出被归档隐藏的条目数。
+    ///
+    /// 归档筛选与计数都发生在存储层：页面层不再为了「数一下有多少被归档」而把已归档的文章
+    /// 全量读回内存。
     pub async fn list_entries(&self, query: &EntryQuery) -> anyhow::Result<EntriesListOutcome> {
         let entries = self.entry_repository.list_entries(query).await.context("读取文章失败")?;
-        Ok(EntriesListOutcome { entries })
+        let archived_count = match query.archive_filter {
+            ArchiveFilter::ExcludeArchived { cutoff } => {
+                let archived_query = EntryQuery {
+                    archive_filter: ArchiveFilter::OnlyArchived { cutoff },
+                    ..query.clone()
+                };
+                self.entry_repository
+                    .count_entries(&archived_query)
+                    .await
+                    .context("统计已归档文章数失败")?
+            }
+            ArchiveFilter::All | ArchiveFilter::OnlyArchived { .. } => 0,
+        };
+
+        Ok(EntriesListOutcome { entries, archived_count })
     }
 
     pub async fn toggle_read(

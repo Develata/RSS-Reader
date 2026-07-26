@@ -23,7 +23,10 @@ use self::clock::current_time_utc;
 use self::controls::{
     render_entry_controls, render_entry_directory, render_entry_pagination_controls,
 };
-use self::{facade::EntriesPageFacade, session::EntriesPageSession, state::EntriesPageState};
+use self::{
+    facade::EntriesPageFacade, presenter::EntriesPagePresenter, session::EntriesPageSession,
+    state::EntriesPageState,
+};
 use crate::{
     app::AppNav,
     components::status_banner::StatusBanner,
@@ -191,11 +194,15 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
     let session = EntriesPageSession::new(feed_id, state);
     let state_snapshot = Arc::new(session.snapshot());
+    // presenter 是 state 的纯函数（归档筛选已下沉到查询层），因此可以缓存：分组树只在状态
+    // 真正变化时重建一次，而不是每次重绘都重建两棵（全量 + 当页）。
+    let presenter =
+        use_memo(move || Arc::new(EntriesPagePresenter::from_state(&session.snapshot(), feed_id)));
     let facade =
-        EntriesPageFacade::new(ui, session, Arc::clone(&state_snapshot), current_time_utc());
+        EntriesPageFacade::new(ui, session, Arc::clone(&state_snapshot), presenter.cloned());
     let entry_search = ui.entry_search();
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
-    let entry_query = state_snapshot.entry_query(feed_id, query_search.clone());
+    let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), current_time_utc());
     let preferences_loaded = state_snapshot.preferences_loaded;
     let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
     let show_archived = state_snapshot.show_archived;
