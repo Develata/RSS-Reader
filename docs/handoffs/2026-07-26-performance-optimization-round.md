@@ -3,8 +3,8 @@
 - 日期：2026-07-26
 - 作者 / Agent：Claude (math-architect)
 - 分支：main
-- 当前 HEAD：e248098
-- 相关 commit：`3a07b94`（索引恢复）、`2be5118`（本轮优化）、`e248098`（复核后的修正）
+- 当前 HEAD：77c85fe
+- 相关 commit：`3a07b94`（索引恢复）、`2be5118`（本轮优化）、`e248098`（对抗式复核修正）、`77c85fe`（正确性复核修正）
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -109,13 +109,71 @@ presenter 每次重建都要把可见集合交给分组树，此前 `state.entri
 - 一个我没提到的额外收益：`EntrySummary` 派生 `Eq`，因此 `Arc<EntrySummary>` 的比较走
   指针快路径，presenter 的 `PartialEq` 结构比较从「比两个 String」变成「比指针」。
 
+## 正确性复核结果（第二个子代理）与随之的修正（`77c85fe`）
+
+第二个子代理独立复核了 Arc 改动的可见行为、`toggle_source_selection` 的等价性、以及并发度 4
+的安全性。它独立地也定位到了 WAL 与连接池这两点（我已先行修掉），并另外报了两个 HIGH。
+
+### 确认无误
+
+- **Arc 改动不存在跨 mutation 的陈旧读**：`state.entries[i]` 的 `Arc` 始终至少有两个持有者
+  （state 自身 + facade 持有的 `Arc<EntriesPageState>` 快照），因此 `Arc::make_mut` 实际总走
+  「克隆后替换」，presenter 里的旧 `Arc` 保持旧值——与此前「presenter 深拷贝出独立副本」
+  的可见行为一致。重渲染链路也通：置脏 → memo 重算 → `PartialEq` 发现差异 → 传播 →
+  `render_entry_card` 是普通函数无 props memo 拦截。
+- **`toggle_source_selection` 与原逻辑逐条等价**（含 `String`/`str` 比较语义、不排序的移除
+  分支、`push + sort + dedup` 的新增分支）。
+- **并发提交不会死锁**：`SqliteRefreshStore::commit` 全程没有跨库嵌套持有——
+  `upsert_entries_and_resolve_contents` 先 `tx.commit()` 再做后续查询，`upsert_contents`
+  先提交 content 事务再回 index 库跑 `mark_has_content`，`feed_repository` 全是单语句自动提交。
+  不存在 index→content 与 content→index 的循环等待。
+- 持 `MutexGuard` 跨 localStorage 写入不构成问题：区间内没有 `.await`，`setItem` 不会回调进
+  Rust（`storage` 事件只投递给其他文档）。
+
+### 两个 HIGH（都不是新代码，但被并发化从死路径变成主路径）
+
+1. **单个订阅失败会 abort 兄弟任务并丢弃整轮结果**（`refresh_service.rs`）。
+   `outcomes.push(outcome?)` 的 `?` 会在 `JoinSet` 仍有在飞任务时返回，`JoinSet::drop` abort
+   剩余任务——它们可能正停在写事务里（sqlx 会回滚，但该订阅会留在「元数据已更新、条目未写入」
+   的半更新状态）；而且整轮结果连同已成功的订阅一起丢掉，既不做图片本地化也给不出 per-feed
+   失败报告。并发度为 1 时这条分支根本不会走，因此这是并发化引入的**新**失败模式，
+   而 30s busy_timeout 之后的 `SQLITE_BUSY` 正是最可能的触发源。
+   已改为把单个订阅的失败收敛成该订阅的 `Failed`，`Err` 只留给整轮级前置失败；
+   任务 panic 按 task id 归到对应订阅；结果按 `feed_id` 排序消除完成顺序造成的行序抖动。
+2. **WAL 的启用是尽力而为且无人校验**（`db.rs`）。已改为启动时实测 journal 模式，
+   不是 `wal` 就 warn 并把并发度退回串行，并把实际模式写进启动日志。
+
+### 其余按复核意见一并收拾
+
+- 并发度常量收敛到 `rssr_application::DEFAULT_REFRESH_CONCURRENCY`，池大小由它推导，
+  桌面端与 CLI 都引用它（此前三处各写字面量，改一处不会让另两处报错）。
+- `is_memory_database` 也认 `sqlite://:memory:` 与裸 `:memory:`。
+- `entry_filters` 注释此前夸大改进（每个 chip 仍克隆一份选中集合，省掉的只是多余的
+  `sort + dedup`），已如实改写并删掉多余的 `url` 克隆。
+- browser 端 `save_entry_flags_slice` 注释补上适用范围（单标签页内权威；跨标签页整片覆盖
+  会丢另一个标签的标记改动——不是新问题，但覆盖频率变高）。
+- 并发写测试的说明改为如实：并发写那一半并不能区分 WAL 与回滚日志（两种模式都有
+  busy_timeout，且写事务第一条就是写、不存在读升级），真正起守护作用的是 journal 模式断言；
+  去掉重言式断言；两个池都关闭。**清理保持尽力而为、不做断言**——我一度把它写成硬断言，
+  结果在整套跑时偶发失败：句柄释放到文件可删之间有 OS 时间差，断言它就是制造 flaky。
+- `WebAuthGate` 把 hook 调用移到提前 return 之前，消除 hook 顺序隐雷。
+- `app.rs` 恢复「仅在已认证时读 settings」的短路语义：无条件读会让登录门禁也订阅 settings。
+
+### 复核指出、但**未改**的两项
+
+- `content_pool` 也用 8 条连接（每条连接一个 OS 后台线程，两库峰值 16 线程）。
+  content 库同样有最多 4 个并发写者（`upsert_contents`）加阅读页读取，判断 8 可接受；
+  若要精简可给两个池分别设容量。
+- 跨标签页的标记同步需要走 `storage` 事件，属于新增能力，不在本轮范围。
+
 ## 验证与验收
 
 ### 自动化验证
 
 - `cargo fmt --all --check`：通过
 - `cargo clippy --workspace --all-targets -- -D warnings`：通过（exit 0）
-- `cargo test --workspace`：通过（32 个测试二进制全部 ok，0 failed）
+- `cargo test --workspace`：**连续两次**全绿（各 32 个测试二进制，0 failed）——
+  第二次是为了确认清理逻辑改回尽力而为之后不再偶发失败
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
 - 新增测试：
   - `rssr-infra`：`test_concurrent_refresh_writes` —— 4 个订阅各 60 条并发批量写入必须
