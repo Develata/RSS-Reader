@@ -67,7 +67,13 @@ pub fn save_app_state_slice(slice: &PersistedAppStateSlice) -> anyhow::Result<()
 /// 直接写入调用方已持有的权威标记集合。
 ///
 /// 此前这里会先把 localStorage 里的全部标记读出来 + JSON 解析一遍，再线性查找合并——
-/// 但调用方刚刚改完内存里的 `state.entry_flags`，那份才是权威值，这次读取与解析纯属多余。
+/// 在**同一个标签页内**，调用方刚改完的内存 `state.entry_flags` 就是权威值（所有 browser
+/// adapter 共享同一个 `Arc<Mutex<BrowserState>>`），那次读取与解析纯属多余。
+///
+/// 取舍：跨标签页时两个标签各有自己的内存副本，整片覆盖会丢掉另一个标签的标记改动，
+/// 而先读后合并能按条目保住它。这不是新引入的问题——`save_state_snapshot` 本来就整片覆盖
+/// 同一批 key——但覆盖频率从「刷新/存设置时」变成了「每次切已读/收藏」。
+/// 真要支持多标签页，应该走 `storage` 事件做跨标签同步，而不是靠这里的读改写。
 /// 标记数量随「历史上读过/收藏过的文章数」单调增长，不受归档窗口限制，因此这次省掉的
 /// 是一份会一直变大的开销。
 pub fn save_entry_flags_slice(slice: &PersistedEntryFlagsSlice) -> anyhow::Result<()> {

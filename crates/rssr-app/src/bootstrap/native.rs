@@ -6,9 +6,10 @@ use std::time::Duration;
 
 use anyhow::Context;
 use rssr_application::{
-    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, RefreshAllInput,
-    RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RefreshLocalizedEntry,
-    RemoteConfigPullOutcome, RemoteConfigPushOutcome,
+    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, DEFAULT_REFRESH_CONCURRENCY,
+    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
+    RefreshLocalizedEntry, RemoteConfigPullOutcome, RemoteConfigPushOutcome,
+    SERIAL_REFRESH_CONCURRENCY,
 };
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::UserSettings;
@@ -39,6 +40,11 @@ pub struct AppServices {
     use_cases: AppUseCases,
     image_localization_worker: ImageLocalizationWorker,
     auto_refresh_started: AtomicBool,
+    /// 启动时按实际生效的 journal 模式确定的刷新并发度。
+    ///
+    /// 不能假定 WAL 启用成功：`PRAGMA journal_mode=WAL` 在不支持共享内存的文件系统上
+    /// 会静默留在回滚日志模式，而那种模式下并发写者只能互相干等、还会阻塞读。
+    refresh_concurrency: usize,
 }
 
 #[derive(Clone)]
@@ -70,14 +76,6 @@ struct ImageLocalizationWorker {
 
 impl AppServices {
     const AUTO_REFRESH_RETRY_DELAY: Duration = Duration::from_secs(30);
-    /// 「刷新全部」的并发度。
-    ///
-    /// 之前是 1，即完全串行：配合每个源 30s 的请求超时，N 个源最坏要等 N x 30s，
-    /// 而 `RefreshService::refresh_all` 里的 JoinSet 并发分支等于从未被用到。
-    /// 4 是个保守值——同时只对 4 个（通常互不相同的）站点发请求。
-    /// 注意这不会放大图片下载：`BodyAssetLocalizer` 的信号量是 `Arc` 共享的，
-    /// 无论多少个本地化任务在跑，并发图片请求上限仍是 2。
-    const REFRESH_ALL_CONCURRENCY: usize = 4;
 
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES
@@ -99,6 +97,22 @@ impl AppServices {
                     .await
                     .context("执行正文数据库迁移失败")?;
 
+                // 实测一次 journal 模式再决定并发度：WAL 没启用成功时退回串行，
+                // 否则并发写者会互相干等并把前台查询一起卡住。
+                let journal_mode = rssr_infra::db::effective_journal_mode(&index_pool)
+                    .await
+                    .unwrap_or_else(|_| "unknown".to_string());
+                let refresh_concurrency = if journal_mode == "wal" {
+                    DEFAULT_REFRESH_CONCURRENCY
+                } else {
+                    tracing::warn!(
+                        journal_mode = %journal_mode,
+                        "数据库未运行在 WAL 模式（可能位于不支持共享内存的文件系统），                         刷新退回串行以避免写者互相阻塞"
+                    );
+                    SERIAL_REFRESH_CONCURRENCY
+                };
+                tracing::info!(journal_mode = %journal_mode, refresh_concurrency, "本地数据库就绪");
+
                 let composition = compose_native_sqlite_use_cases(index_pool, content_pool);
 
                 Ok(Arc::new(Self {
@@ -109,6 +123,7 @@ impl AppServices {
                         reader_asset_localizer: BodyAssetLocalizer::for_reader_entry(),
                     },
                     auto_refresh_started: AtomicBool::new(false),
+                    refresh_concurrency,
                 }))
             })
             .await
@@ -212,7 +227,7 @@ impl RefreshPort for RefreshCapability {
             .host
             .use_cases
             .refresh_service
-            .refresh_all(RefreshAllInput { max_concurrency: AppServices::REFRESH_ALL_CONCURRENCY })
+            .refresh_all(RefreshAllInput { max_concurrency: self.host.refresh_concurrency })
             .await?;
         self.handle_refresh_all_outcome(outcome)
     }

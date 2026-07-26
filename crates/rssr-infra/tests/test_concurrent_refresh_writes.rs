@@ -2,10 +2,15 @@
 
 //! 「刷新全部」并发度从 1 提到 4 之后的守护测试。
 //!
-//! SQLite 同一时刻只允许一个写者。多个刷新任务各自开启写事务批量写入 entries 时，
-//! 如果 journal 模式或 busy_timeout 不合适，就会拿到 `SQLITE_BUSY`（database is locked），
-//! 表现为刷新偶发失败。这个测试针对**文件型**数据库（不是 `:memory:`，后者连接池只有 1）
-//! 跑并发写，确保并发刷新不会互相把对方顶掉。
+//! 真正起守护作用的是那条 `PRAGMA journal_mode` 断言。
+//!
+//! 并发写这一半**并不能**区分 WAL 与回滚日志：两种模式都设了 busy_timeout，而这里的写事务
+//! 第一条语句就是写（不存在「先读后升级」），SQLite 的 busy handler 会正常介入让写者排队，
+//! 因此回滚模式下这段大概也能通过。它验证的是「并发批量写不会互相顶掉」这件事本身。
+//!
+//! journal 模式的断言才是关键：WAL 决定了写者是否阻塞读者，而刷新并发度正是依据它决定的
+//! （见 `rssr-app` 启动时的实测）。测试必须针对**文件型**数据库——`:memory:` 不支持 WAL，
+//! 且连接池只有 1。
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -53,9 +58,10 @@ async fn concurrent_feed_writes_do_not_hit_sqlite_busy() {
     backend.migrate(&index_pool).await.expect("migrate index db");
     let content_pool = backend.connect_content().await.expect("connect content db");
     backend.migrate_content(&content_pool).await.expect("migrate content db");
+    let content_pool_handle = content_pool.clone();
 
-    // 并发写能成立的前提是 WAL：回滚日志模式下第二个写者会直接吃到 SQLITE_BUSY。
-    // 这里断言出来，是为了将来有人改 `SqliteConnectOptions` 时能立刻看到代价。
+    // 刷新并发度依据实际生效的 journal 模式决定，因此这里把它断言出来：
+    // 有人改 `SqliteConnectOptions` 导致静默退回 `delete` 时，这条会立刻失败。
     let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
         .fetch_one(&index_pool)
         .await
@@ -97,8 +103,9 @@ async fn concurrent_feed_writes_do_not_hit_sqlite_busy() {
 
     while let Some(joined) = tasks.join_next().await {
         let written = joined.expect("refresh task should not panic");
-        let written = written.expect("concurrent batch write should not fail with SQLITE_BUSY");
-        assert_eq!(written as i64, ENTRIES_PER_FEED);
+        // 只断言「没有失败」：`upsert_entries` 无条件返回 `entries.len()`，
+        // 拿返回值和入参比是重言式，真正的验证是后面的 count_entries。
+        written.expect("concurrent batch write should not fail with SQLITE_BUSY");
     }
 
     let total = entry_repository
@@ -107,7 +114,17 @@ async fn concurrent_feed_writes_do_not_hit_sqlite_busy() {
         .expect("count entries after concurrent writes");
     assert_eq!(total as i64, FEED_COUNT * ENTRIES_PER_FEED);
 
+    // 两个池都要关：只关 index 的话 content 库文件在 Windows 上仍被占用，
+    // 临时目录连同 `-wal` / `-shm` 会一直堆积。
     index_pool.close().await;
+    content_pool_handle.close().await;
 
-    let _ = std::fs::remove_dir_all(&base_dir);
+    // 清理是尽力而为，**不做断言**：句柄释放到文件可删之间存在 OS 层的时间差，
+    // 断言它会让这个测试变成偶发失败——而清理本身并不是这个测试要验证的行为。
+    for _ in 0..10 {
+        if std::fs::remove_dir_all(&base_dir).is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
 }

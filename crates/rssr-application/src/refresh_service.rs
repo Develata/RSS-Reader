@@ -69,6 +69,18 @@ pub enum RefreshCommit {
     Failed { failure: RefreshFailure },
 }
 
+/// 「刷新全部」的默认并发度。
+///
+/// 这是一个跨 crate 的不变量的锚点：连接池大小必须大于它（见
+/// `rssr_infra::db::default_sqlite_max_connections`），否则刷新任务会占满池、把界面查询挤掉。
+/// 桌面端与 CLI 都引用这个常量，不要各自写字面量。
+pub const DEFAULT_REFRESH_CONCURRENCY: usize = 4;
+
+/// 无法确认数据库处于 WAL 模式时退回的并发度。
+///
+/// 回滚日志模式下写者会阻塞读者，并发写只能靠 busy_timeout 干等，因此退回串行。
+pub const SERIAL_REFRESH_CONCURRENCY: usize = 1;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RefreshAllInput {
     pub max_concurrency: usize,
@@ -250,6 +262,15 @@ impl RefreshService {
         self.refresh_target(target).await
     }
 
+    /// 刷新全部订阅。
+    ///
+    /// 单个订阅的失败**不会**中断整轮：它会变成该订阅的 [`RefreshFeedResult::Failed`]，
+    /// 这也是 [`RefreshAllOutcome`] 本来就建模了 per-feed 失败的原因。
+    /// 返回 `Err` 只留给整轮级别的前置失败（例如读不出订阅列表）。
+    ///
+    /// 这一点在并发化之后变得关键：此前用 `?` 传播单个订阅的错误，会在 `JoinSet` 仍有在飞任务时
+    /// 直接返回，`JoinSet` 析构会 abort 那些任务——它们可能正停在写事务里，而且整轮结果连同
+    /// 已经成功的订阅一起被丢掉（既不做图片本地化，也给不出 per-feed 失败报告）。
     pub async fn refresh_all(&self, input: RefreshAllInput) -> Result<RefreshAllOutcome> {
         let targets = self.store.list_targets().await.context("读取订阅列表失败")?;
 
@@ -258,7 +279,7 @@ impl RefreshService {
             let _ = input;
             let mut outcomes = Vec::with_capacity(targets.len());
             for target in targets {
-                outcomes.push(self.refresh_target(target).await?);
+                outcomes.push(self.refresh_target_reporting(target).await);
             }
             return Ok(RefreshAllOutcome { feeds: outcomes });
         }
@@ -270,7 +291,7 @@ impl RefreshService {
         if max_concurrency == 1 {
             let mut outcomes = Vec::with_capacity(targets.len());
             for target in targets {
-                outcomes.push(self.refresh_target(target).await?);
+                outcomes.push(self.refresh_target_reporting(target).await);
             }
             return Ok(RefreshAllOutcome { feeds: outcomes });
         }
@@ -280,29 +301,65 @@ impl RefreshService {
             let mut outcomes = Vec::with_capacity(targets.len());
             let mut target_iter = targets.into_iter();
             let mut in_flight = JoinSet::new();
+            // 任务 id -> 订阅身份：任务 panic 时 join 不回任何结果，靠这张表把它记成该订阅的失败，
+            // 而不是让一个 bug 把整轮刷新变成一条笼统错误。
+            let mut pending: std::collections::HashMap<tokio::task::Id, (i64, String)> =
+                std::collections::HashMap::new();
 
             loop {
                 while in_flight.len() < max_concurrency {
                     let Some(target) = target_iter.next() else {
                         break;
                     };
+                    let identity = (target.feed_id, target.url.to_string());
                     let service = self.clone();
-                    in_flight.spawn(async move { service.refresh_target(target).await });
+                    let handle = in_flight
+                        .spawn(async move { service.refresh_target_reporting(target).await });
+                    pending.insert(handle.id(), identity);
                 }
 
-                let Some(result) = in_flight.join_next().await else {
+                let Some(result) = in_flight.join_next_with_id().await else {
                     break;
                 };
 
                 match result {
-                    Ok(outcome) => outcomes.push(outcome?),
-                    Err(error) => {
-                        return Err(anyhow::Error::new(error).context("后台刷新任务意外结束"));
+                    Ok((task_id, outcome)) => {
+                        pending.remove(&task_id);
+                        outcomes.push(outcome);
+                    }
+                    Err(join_error) => {
+                        if let Some((feed_id, url)) = pending.remove(&join_error.id()) {
+                            outcomes.push(RefreshFeedOutcome {
+                                feed_id,
+                                url,
+                                result: RefreshFeedResult::Failed {
+                                    message: format!("刷新任务意外结束: {join_error}"),
+                                },
+                            });
+                        }
                     }
                 }
             }
 
+            // 完成顺序是非确定的，按 feed_id 归一，避免失败提示的行序在界面与 CLI 里抖动。
+            outcomes.sort_by_key(|outcome| outcome.feed_id);
+
             Ok(RefreshAllOutcome { feeds: outcomes })
+        }
+    }
+
+    /// 把「这一个订阅刷新失败」收敛成该订阅的 `Failed` 结果。
+    async fn refresh_target_reporting(&self, target: RefreshTarget) -> RefreshFeedOutcome {
+        let feed_id = target.feed_id;
+        let url = target.url.to_string();
+
+        match self.refresh_target(target).await {
+            Ok(outcome) => outcome,
+            Err(error) => RefreshFeedOutcome {
+                feed_id,
+                url,
+                result: RefreshFeedResult::Failed { message: error.to_string() },
+            },
         }
     }
 
@@ -627,6 +684,71 @@ mod tests {
             store.commits.lock().expect("lock commits")[0].1,
             RefreshCommit::NotModified { .. }
         ));
+    }
+
+    /// 并发分支专用的 source stub：按 target 应答，而不是按调用次序从队列里 pop。
+    struct KeyedSourceStub;
+
+    #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+    impl FeedRefreshSourcePort for KeyedSourceStub {
+        async fn refresh(&self, _target: &RefreshTarget) -> Result<FeedRefreshSourceOutput> {
+            Ok(FeedRefreshSourceOutput::NotModified(RefreshHttpMetadata::default()))
+        }
+    }
+
+    /// 对某一个 feed 的 commit 报错，用来验证单个订阅失败不会带走整轮。
+    struct FailingCommitStore {
+        targets: Vec<RefreshTarget>,
+        failing_feed_id: i64,
+    }
+
+    #[async_trait::async_trait]
+    impl RefreshStorePort for FailingCommitStore {
+        async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
+            Ok(self.targets.clone())
+        }
+
+        async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
+            Ok(self.targets.iter().find(|target| target.feed_id == feed_id).cloned())
+        }
+
+        async fn commit(&self, feed_id: i64, _commit: RefreshCommit) -> Result<()> {
+            if feed_id == self.failing_feed_id {
+                anyhow::bail!("提交失败");
+            }
+            Ok(())
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_refresh_reports_one_feed_failure_without_dropping_the_round() {
+        let targets = (1..=6)
+            .map(|feed_id| sample_target(feed_id, &format!("https://example.com/{feed_id}.xml")))
+            .collect::<Vec<_>>();
+        let service = RefreshService::new(
+            Arc::new(KeyedSourceStub),
+            Arc::new(FailingCommitStore { targets, failing_feed_id: 3 }),
+        );
+
+        let outcome = service
+            .refresh_all(RefreshAllInput { max_concurrency: 4 })
+            .await
+            .expect("单个订阅失败不应让整轮刷新返回 Err");
+
+        // 六个订阅都要有结果，而不是「一个失败就整轮丢掉」。
+        assert_eq!(outcome.feeds.len(), 6);
+        // 完成顺序不确定，因此结果必须按 feed_id 归一，否则失败提示行序会抖动。
+        assert_eq!(
+            outcome.feeds.iter().map(|feed| feed.feed_id).collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6]
+        );
+
+        let summary = outcome.summary();
+        assert_eq!(summary.failed_count, 1);
+        assert_eq!(summary.not_modified_count, 5);
+        assert_eq!(summary.failures[0].feed_id, 3);
     }
 
     #[tokio::test]

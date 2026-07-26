@@ -100,9 +100,11 @@ pub fn EntryFilters(
                         for (_feed_id, title, url) in available_sources {
                             {
                                 let is_selected = selected_feed_urls.contains(&url);
-                                // 只在真的被点击时才算出新的选中集合。此前对每个 chip 都提前构造
-                                // 一份候选 Vec（O(来源数 x 已选数) 次克隆），而其中只有被点的那一个会用到。
-                                let toggled_url = url.clone();
+                                // 只在真的被点击时才算出新的选中集合：此前对每个 chip 都提前
+                                // 构造一份候选 Vec 并做 push + sort + dedup，而其中只有被点的
+                                // 那一个会被用到。
+                                // 注意仍然为每个 chip 克隆了一份当前选中集合（闭包要拥有它），
+                                // 省掉的是那次多余的排序去重，不是这份克隆本身。
                                 let current_selection = selected_feed_urls.clone();
                                 rsx! {
                                     label {
@@ -113,7 +115,7 @@ pub fn EntryFilters(
                                             r#type: "checkbox",
                                             "data-field": "entry-source-filter",
                                             checked: is_selected,
-                                            onchange: move |_| on_change_selected_feed_urls.call(toggle_source_selection(&current_selection, &toggled_url))
+                                            onchange: move |_| on_change_selected_feed_urls.call(toggle_source_selection(&current_selection, &url))
                                         }
                                         span { "{title}" }
                                     }

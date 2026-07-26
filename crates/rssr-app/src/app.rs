@@ -39,11 +39,13 @@ pub fn App() -> Element {
 
     use_authenticated_shell_bus(auth, settings);
 
-    // 每次 `settings()` 都会克隆一整份 UserSettings（含完整 custom_css 文本）。
-    // 这里只读一次，后面复用同一份快照。
-    let current_settings = settings();
+    // 每次 `settings()` 都会克隆一整份 UserSettings（含完整 custom_css 文本），
+    // 此前这里一次渲染要读 5 次。改为只读一次后面复用。
+    //
+    // 仍然只在已认证时读：读取会让本组件订阅 settings 信号，未认证时无条件读会把登录门禁
+    // 也挂到 settings 的变更上——保持原来的短路语义。
     let authenticated = auth() == WebAuthState::Authenticated;
-    let has_custom_css = !current_settings.custom_css.trim().is_empty();
+    let current_settings = if authenticated { Some(settings()) } else { None };
 
     rsx! {
         document::Meta {
@@ -51,14 +53,14 @@ pub fn App() -> Element {
             content: "width=device-width, initial-scale=1, viewport-fit=cover"
         }
         style { {APP_STYLESHEET} }
-        if authenticated && has_custom_css {
-            style { id: "user-custom-css", "{current_settings.custom_css}" }
-        }
-        if authenticated {
+        if let Some(settings) = current_settings {
+            if !settings.custom_css.trim().is_empty() {
+                style { id: "user-custom-css", "{settings.custom_css}" }
+            }
             div {
-                class: "app-shell {theme_class(current_settings.theme)}",
-                "data-density": "{density_state(current_settings.list_density)}",
-                style: "--reader-font-scale: {current_settings.reader_font_scale};",
+                class: "app-shell {theme_class(settings.theme)}",
+                "data-density": "{density_state(settings.list_density)}",
+                style: "--reader-font-scale: {settings.reader_font_scale};",
                 RoutableApp {}
             }
         } else if auth() == WebAuthState::PendingServerProbe {
@@ -174,11 +176,14 @@ fn WebAuthLoadingGate() -> Element {
 
 #[component]
 fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Element {
+    // hook 必须在任何提前 return 之前调用：`use_web_auth_gate_shell` 内部有多个
+    // `use_signal` 和一个 `use_effect`，一旦某次渲染走了下面的提前 return 而另一次没有，
+    // hook 调用顺序就会错位。当前那条分支实际不可达，但顺序依赖不该留成隐雷。
+    let shell = use_web_auth_gate_shell(state);
+
     if matches!(state, WebAuthState::Authenticated | WebAuthState::PendingServerProbe) {
         return rsx! { WebAuthLoadingGate {} };
     }
-
-    let shell = use_web_auth_gate_shell(state);
 
     rsx! {
         div { "data-layout": "web-auth-shell",
