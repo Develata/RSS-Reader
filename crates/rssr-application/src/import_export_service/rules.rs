@@ -1,5 +1,8 @@
 use anyhow::{Context, Result, ensure};
-use rssr_domain::{ConfigPackage, MAX_ENTRIES_PAGE_SIZE, UserSettings, normalize_feed_url};
+use rssr_domain::{
+    ConfigPackage, MAX_ARCHIVE_AFTER_MONTHS, MAX_ENTRIES_PAGE_SIZE, MAX_REFRESH_INTERVAL_MINUTES,
+    UserSettings, normalize_feed_url,
+};
 use url::Url;
 
 pub(super) fn import_field(value: Option<String>, existed: bool) -> Option<String> {
@@ -26,8 +29,14 @@ pub(super) fn validate_config_package(package: &ConfigPackage) -> Result<()> {
 }
 
 fn validate_settings(settings: &UserSettings) -> Result<()> {
-    ensure!(settings.refresh_interval_minutes >= 1, "刷新间隔必须大于等于 1 分钟");
-    ensure!(settings.archive_after_months >= 1, "自动归档阈值必须大于等于 1 个月");
+    ensure!(
+        (1..=MAX_REFRESH_INTERVAL_MINUTES).contains(&settings.refresh_interval_minutes),
+        "刷新间隔必须在 1 到 {MAX_REFRESH_INTERVAL_MINUTES} 分钟之间"
+    );
+    ensure!(
+        (1..=MAX_ARCHIVE_AFTER_MONTHS).contains(&settings.archive_after_months),
+        "自动归档阈值必须在 1 到 {MAX_ARCHIVE_AFTER_MONTHS} 个月之间"
+    );
     ensure!(
         (1..=MAX_ENTRIES_PAGE_SIZE).contains(&settings.entries_page_size),
         "文章页每页数量必须在 1 到 {MAX_ENTRIES_PAGE_SIZE} 之间"

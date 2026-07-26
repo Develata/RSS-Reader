@@ -4,6 +4,7 @@ use rssr_domain::{
     Entry, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary, FeedSummary,
     ReadFilter, StarredFilter,
 };
+use time::OffsetDateTime;
 
 use super::state::{
     BrowserState, PersistedEntryFlag, PersistedEntryIndex, to_domain_content, to_domain_entry,
@@ -65,7 +66,9 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
         .map(|feed| (feed.id, feed.title.clone().unwrap_or_else(|| feed.url.clone())))
         .collect::<HashMap<_, _>>();
 
-    let mut items = state
+    // 先在仍带 `created_at` 的持久化条目上排序，再投影成 `EntrySummary`：`EntrySummary` 没有
+    // `created_at`，一旦投影完就无法再复现 `COALESCE(published_at, created_at)` 这个排序键。
+    let mut matched = state
         .core
         .entries
         .iter()
@@ -79,6 +82,14 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
                 query,
             )
         })
+        .collect::<Vec<_>>();
+    matched.sort_by(|left, right| compare_entry_order(left, right));
+    if let Some(limit) = query.limit {
+        matched.truncate(limit as usize);
+    }
+
+    matched
+        .into_iter()
         .map(|entry| {
             let flags = entry_flags.get(&entry.id);
             EntrySummary {
@@ -91,15 +102,7 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
                 is_starred: flags.map(|flag| flag.is_starred).unwrap_or(false),
             }
         })
-        .collect::<Vec<_>>();
-
-    items.sort_by(|left, right| {
-        right.published_at.cmp(&left.published_at).then(right.id.cmp(&left.id))
-    });
-    if let Some(limit) = query.limit {
-        items.truncate(limit as usize);
-    }
-    items
+        .collect()
 }
 
 pub fn count_entries(state: &BrowserState, query: &EntryQuery) -> u64 {
@@ -263,11 +266,19 @@ where
     true
 }
 
+/// 必须与原生端 SQL 的
+/// `ORDER BY COALESCE(entries.published_at, entries.created_at) DESC, entries.id DESC` 等价。
+/// 之前浏览器端只按 `published_at` 排序，缺 `published_at` 的条目在 Web 上被一律排到末尾，
+/// 与桌面端顺序不一致；列表顺序和阅读页上一篇/下一篇导航都依赖同一个排序键。
+fn entry_index_sort_key(entry: &PersistedEntryIndex) -> (OffsetDateTime, i64) {
+    (entry.published_at.unwrap_or(entry.created_at), entry.id)
+}
+
 fn compare_entry_order(
     left: &PersistedEntryIndex,
     right: &PersistedEntryIndex,
 ) -> std::cmp::Ordering {
-    right.published_at.cmp(&left.published_at).then(right.id.cmp(&left.id))
+    entry_index_sort_key(right).cmp(&entry_index_sort_key(left))
 }
 
 #[cfg(test)]

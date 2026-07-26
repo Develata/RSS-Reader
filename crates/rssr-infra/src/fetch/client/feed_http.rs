@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::Context;
 use reqwest::header;
 
@@ -5,9 +7,20 @@ use super::feed_response::{
     FeedResponseStatus, classify_feed_response_status, http_metadata_from_headers,
 };
 
-#[derive(Debug, Clone, Default)]
+/// 单个 feed 的抓取上限。刷新全部订阅默认是串行的，没有超时的话一个不响应的源就能把整轮
+/// 刷新（以及后台自动刷新循环）永久挂住。
+const FEED_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const FEED_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[derive(Debug, Clone)]
 pub struct FetchClient {
     inner: reqwest::Client,
+}
+
+impl Default for FetchClient {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -31,7 +44,12 @@ pub enum FetchResult {
 
 impl FetchClient {
     pub fn new() -> Self {
-        Self { inner: reqwest::Client::new() }
+        let inner = reqwest::Client::builder()
+            .timeout(FEED_REQUEST_TIMEOUT)
+            .connect_timeout(FEED_CONNECT_TIMEOUT)
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+        Self { inner }
     }
 
     pub async fn fetch(&self, request: &FetchRequest) -> anyhow::Result<FetchResult> {

@@ -1,7 +1,10 @@
 use std::{collections::HashSet, fs, path::Path};
 
 use anyhow::{anyhow, ensure};
-use rssr_domain::{ConfigPackage, normalize_feed_url as normalize_domain_feed_url};
+use rssr_domain::{
+    ConfigPackage, MAX_ARCHIVE_AFTER_MONTHS, MAX_ENTRIES_PAGE_SIZE, MAX_REFRESH_INTERVAL_MINUTES,
+    normalize_feed_url as normalize_domain_feed_url,
+};
 use url::Url;
 
 pub fn encode_config_package(package: &ConfigPackage) -> anyhow::Result<String> {
@@ -25,10 +28,22 @@ pub fn write_config_package(path: impl AsRef<Path>, package: &ConfigPackage) -> 
     Ok(())
 }
 
+// 这里的规则必须与 `rssr_application::import_export_service::rules` 保持一致：两边校验的是同一个
+// 配置包契约，任何一边放宽都会让一份包在导入路径通过、在文件路径被拒（或反之）。
 pub fn validate_config_package(package: &ConfigPackage) -> anyhow::Result<()> {
-    ensure!(package.version >= 1, "配置包版本必须大于等于 1");
-    ensure!(package.settings.refresh_interval_minutes >= 1, "刷新间隔必须大于等于 1 分钟");
-    ensure!(package.settings.archive_after_months >= 1, "自动归档阈值必须大于等于 1 个月");
+    ensure!(package.version == 2, "配置包版本必须等于 2");
+    ensure!(
+        (1..=MAX_REFRESH_INTERVAL_MINUTES).contains(&package.settings.refresh_interval_minutes),
+        "刷新间隔必须在 1 到 {MAX_REFRESH_INTERVAL_MINUTES} 分钟之间"
+    );
+    ensure!(
+        (1..=MAX_ARCHIVE_AFTER_MONTHS).contains(&package.settings.archive_after_months),
+        "自动归档阈值必须在 1 到 {MAX_ARCHIVE_AFTER_MONTHS} 个月之间"
+    );
+    ensure!(
+        (1..=MAX_ENTRIES_PAGE_SIZE).contains(&package.settings.entries_page_size),
+        "文章页每页数量必须在 1 到 {MAX_ENTRIES_PAGE_SIZE} 之间"
+    );
     ensure!(
         (0.8..=1.5).contains(&package.settings.reader_font_scale),
         "阅读字号缩放必须在 0.8 到 1.5 之间"

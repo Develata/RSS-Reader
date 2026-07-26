@@ -15,8 +15,8 @@ pub use repository::{
     FeedRepository, HealthRepository, SettingsRepository,
 };
 pub use settings::{
-    ConfigFeed, ConfigPackage, DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ENTRIES_PAGE_SIZE,
-    StartupView, ThemeMode, UserSettings,
+    ConfigFeed, ConfigPackage, DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ARCHIVE_AFTER_MONTHS,
+    MAX_ENTRIES_PAGE_SIZE, MAX_REFRESH_INTERVAL_MINUTES, StartupView, ThemeMode, UserSettings,
 };
 
 pub type Result<T> = std::result::Result<T, DomainError>;

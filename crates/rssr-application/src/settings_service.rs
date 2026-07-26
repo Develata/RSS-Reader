@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::{Result, ensure};
-use rssr_domain::{MAX_ENTRIES_PAGE_SIZE, SettingsRepository, UserSettings};
+use rssr_domain::{
+    MAX_ARCHIVE_AFTER_MONTHS, MAX_ENTRIES_PAGE_SIZE, MAX_REFRESH_INTERVAL_MINUTES,
+    SettingsRepository, UserSettings,
+};
 
 #[derive(Clone)]
 pub struct SettingsService {
@@ -18,8 +21,14 @@ impl SettingsService {
     }
 
     pub async fn save(&self, settings: &UserSettings) -> Result<()> {
-        ensure!(settings.refresh_interval_minutes >= 1, "刷新间隔必须大于等于 1 分钟");
-        ensure!(settings.archive_after_months >= 1, "自动归档阈值必须大于等于 1 个月");
+        ensure!(
+            (1..=MAX_REFRESH_INTERVAL_MINUTES).contains(&settings.refresh_interval_minutes),
+            "刷新间隔必须在 1 到 {MAX_REFRESH_INTERVAL_MINUTES} 分钟之间"
+        );
+        ensure!(
+            (1..=MAX_ARCHIVE_AFTER_MONTHS).contains(&settings.archive_after_months),
+            "自动归档阈值必须在 1 到 {MAX_ARCHIVE_AFTER_MONTHS} 个月之间"
+        );
         ensure!(
             (1..=MAX_ENTRIES_PAGE_SIZE).contains(&settings.entries_page_size),
             "文章页每页数量必须在 1 到 {MAX_ENTRIES_PAGE_SIZE} 之间"

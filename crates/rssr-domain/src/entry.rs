@@ -146,22 +146,26 @@ pub fn is_entry_archived(
     if archive_after_months == 0 {
         return false;
     }
+    let Some(cutoff) = archive_cutoff(now, archive_after_months) else {
+        return false;
+    };
 
-    published_at.to_offset(UtcOffset::UTC) < archive_cutoff(now, archive_after_months)
+    published_at.to_offset(UtcOffset::UTC) < cutoff
 }
 
-fn archive_cutoff(now: OffsetDateTime, archive_after_months: u32) -> OffsetDateTime {
+/// 返回归档分界时刻；当 `archive_after_months` 大到把分界推出 `Date` 支持的年份区间时返回
+/// `None`。归档只是隐藏旧文章，因此算不出分界时按“不归档”处理，永远不会因为一个越界的
+/// 设置值而 panic。全程使用 i64 运算，避免 `u32 as i32` 回绕成负数把分界推到未来。
+fn archive_cutoff(now: OffsetDateTime, archive_after_months: u32) -> Option<OffsetDateTime> {
     let now = now.to_offset(UtcOffset::UTC);
-    let total_month_index =
-        now.year() * 12 + (month_to_number(now.month()) as i32 - 1) - archive_after_months as i32;
-    let cutoff_year = total_month_index.div_euclid(12);
-    let cutoff_month = (total_month_index.rem_euclid(12) + 1) as u8;
-    let cutoff_month = month_from_number(cutoff_month);
+    let total_month_index = now.year() as i64 * 12 + (month_to_number(now.month()) as i64 - 1)
+        - archive_after_months as i64;
+    let cutoff_year = i32::try_from(total_month_index.div_euclid(12)).ok()?;
+    let cutoff_month = month_from_number((total_month_index.rem_euclid(12) + 1) as u8);
     let cutoff_day = now.day().min(last_day_of_month(cutoff_year, cutoff_month));
-    let cutoff_date =
-        Date::from_calendar_date(cutoff_year, cutoff_month, cutoff_day).expect("valid cutoff");
+    let cutoff_date = Date::from_calendar_date(cutoff_year, cutoff_month, cutoff_day).ok()?;
 
-    PrimitiveDateTime::new(cutoff_date, now.time()).assume_utc()
+    Some(PrimitiveDateTime::new(cutoff_date, now.time()).assume_utc())
 }
 
 fn last_day_of_month(year: i32, month: Month) -> u8 {
@@ -224,6 +228,17 @@ mod tests {
         assert!(is_entry_archived(Some(old_entry), 3, now));
         assert!(!is_entry_archived(Some(recent_entry), 3, now));
         assert!(!is_entry_archived(None, 3, now));
+    }
+
+    #[test]
+    fn out_of_range_archive_threshold_never_panics_and_archives_nothing() {
+        let now = OffsetDateTime::parse("2026-04-01T10:00:00Z", &Rfc3339).expect("parse now");
+        let entry = OffsetDateTime::parse("2020-01-01T00:00:00Z", &Rfc3339).expect("parse entry");
+
+        // 分界被推到 `Date` 支持年份之前：算不出分界就不归档，而不是 panic。
+        assert!(!is_entry_archived(Some(entry), 4_000_000, now));
+        // `u32 as i32` 曾在这里回绕成负数，把分界推到未来并把所有文章都判成已归档。
+        assert!(!is_entry_archived(Some(entry), u32::MAX, now));
     }
 
     #[test]

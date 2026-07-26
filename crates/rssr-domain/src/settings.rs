@@ -3,6 +3,11 @@ use time::OffsetDateTime;
 
 pub const DEFAULT_ENTRIES_PAGE_SIZE: u32 = 100;
 pub const MAX_ENTRIES_PAGE_SIZE: u32 = 200;
+/// 自动归档阈值上限（100 年）。除了挡住无意义的输入，也保证归档分界永远落在
+/// `time::Date` 支持的年份区间内，见 [`crate::entry::is_entry_archived`]。
+pub const MAX_ARCHIVE_AFTER_MONTHS: u32 = 1200;
+/// 自动刷新间隔上限（1 年）。保证 `上次刷新时间 + 间隔` 不会把 `OffsetDateTime` 加溢出。
+pub const MAX_REFRESH_INTERVAL_MINUTES: u32 = 525_600;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

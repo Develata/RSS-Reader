@@ -135,7 +135,7 @@ impl RefreshStorePort for SqliteRefreshStore {
                     .context("更新订阅抓取状态失败")?;
             }
             RefreshCommit::Updated { update } => {
-                let parsed_feed = map_application_feed(&update.feed);
+                let parsed_feed = map_application_feed_metadata(&update.feed);
                 if let Err(error) =
                     self.feed_repository.update_feed_metadata(feed_id, &parsed_feed).await
                 {
@@ -238,12 +238,15 @@ fn map_parsed_entry(entry: ParsedEntry) -> ParsedEntryData {
     }
 }
 
-fn map_application_feed(feed: &ParsedFeedUpdate) -> ParsedFeed {
+/// `update_feed_metadata` 只读 title / site_url / description，因此不把条目一起克隆进来。
+/// 之前这里会把整批条目深拷贝一次，紧接着 `map_application_entries` 又拷贝一次，等于每轮刷新
+/// 都为一批用不到的条目付两次分配。
+fn map_application_feed_metadata(feed: &ParsedFeedUpdate) -> ParsedFeed {
     ParsedFeed {
         title: feed.title.clone(),
         site_url: feed.site_url.clone(),
         description: feed.description.clone(),
-        entries: map_application_entries(&feed.entries),
+        entries: Vec::new(),
     }
 }
 

@@ -110,8 +110,8 @@ fn normalize_entry(
         return Ok(None);
     }
 
-    let published_at = entry.published.map(to_offset_datetime);
-    let updated_at_source = entry.updated.map(to_offset_datetime);
+    let published_at = entry.published.and_then(to_offset_datetime);
+    let updated_at_source = entry.updated.and_then(to_offset_datetime);
     let stable_source_id = normalize_source_entry_id(&entry.id, url.as_ref());
     let external_id = if stable_source_id.is_empty() {
         url.as_ref()
@@ -180,12 +180,14 @@ fn text_content(text: &Text) -> String {
     text.content.clone()
 }
 
-fn to_offset_datetime<Tz>(value: chrono::DateTime<Tz>) -> OffsetDateTime
+/// feed 的日期完全由远端控制，`chrono` 能表示的年份区间比 `time::OffsetDateTime` 宽，因此越界的
+/// 日期只丢弃这一个时间戳，不要让整轮刷新 panic。
+fn to_offset_datetime<Tz>(value: chrono::DateTime<Tz>) -> Option<OffsetDateTime>
 where
     Tz: chrono::TimeZone,
     Tz::Offset: Send + Sync,
 {
-    OffsetDateTime::from_unix_timestamp(value.timestamp()).expect("valid unix timestamp")
+    OffsetDateTime::from_unix_timestamp(value.timestamp()).ok()
 }
 
 #[cfg(test)]
