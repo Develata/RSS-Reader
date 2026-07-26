@@ -3,8 +3,8 @@
 - 日期：2026-07-26
 - 作者 / Agent：Claude (math-architect)
 - 分支：main
-- 当前 HEAD：pending（本记录随同一批改动提交）
-- 相关 commit：pending
+- 当前 HEAD：`d70b2b5`
+- 相关 commit：`d70b2b5`（代码与本记录同一个提交）
 - 相关 tag / release：`v0.1.10` 之后，尚未发布
 - 状态：`validated`
 
