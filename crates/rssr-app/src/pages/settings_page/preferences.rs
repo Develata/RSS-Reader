@@ -1,6 +1,8 @@
 use dioxus::prelude::*;
 use rssr_domain::{
-    DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ENTRIES_PAGE_SIZE, StartupView, ThemeMode,
+    DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ARCHIVE_AFTER_MONTHS, MAX_ENTRIES_PAGE_SIZE,
+    MAX_REFRESH_INTERVAL_MINUTES, StartupView, ThemeMode,
+    validation::{MAX_READER_FONT_SCALE, MIN_READER_FONT_SCALE},
 };
 
 use super::facade::SettingsPageFacade;
@@ -80,6 +82,10 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         id: "settings-refresh-interval",
                         name: "refresh_interval_minutes",
                         class: "text-input",
+                        r#type: "number",
+                        min: "1",
+                        max: "{MAX_REFRESH_INTERVAL_MINUTES}",
+                        step: "1",
                         "data-field": "refresh-interval",
                         value: "{draft.refresh_interval_minutes}",
                         oninput: move |event| {
@@ -97,6 +103,10 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         id: "settings-archive-after-months",
                         name: "archive_after_months",
                         class: "text-input",
+                        r#type: "number",
+                        min: "1",
+                        max: "{MAX_ARCHIVE_AFTER_MONTHS}",
+                        step: "1",
                         "data-field": "archive-after-months",
                         value: "{draft.archive_after_months}",
                         oninput: move |event| {
@@ -138,6 +148,10 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         id: "settings-reader-font-scale",
                         name: "reader_font_scale",
                         class: "text-input",
+                        r#type: "number",
+                        min: "{MIN_READER_FONT_SCALE}",
+                        max: "{MAX_READER_FONT_SCALE}",
+                        step: "0.05",
                         "data-field": "reader-font-scale",
                         value: "{draft.reader_font_scale}",
                         oninput: move |event| {

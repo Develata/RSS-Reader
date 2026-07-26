@@ -149,11 +149,6 @@ impl ArchiveFilter {
             None => Self::All,
         }
     }
-
-    /// 与 [`Self::exclude_archived`] 相对：只统计被归档隐藏掉的条目。
-    pub fn only_archived(now: OffsetDateTime, archive_after_months: u32) -> Option<Self> {
-        archive_cutoff_at(now, archive_after_months).map(|cutoff| Self::OnlyArchived { cutoff })
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
