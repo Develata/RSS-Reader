@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::collections::BTreeSet;
 
 use super::{
     groups::{
@@ -39,7 +39,8 @@ impl EntriesPagePresenter {
     /// 重绘都重建一遍分组树。
     pub(crate) fn from_state(state: &EntriesPageState, feed_id: Option<i64>) -> Self {
         let archived_count = state.archived_count;
-        let visible_entries = state.entries.iter().cloned().map(Arc::new).collect::<Vec<_>>();
+        // 只是 Arc 指针拷贝，不再深拷贝每条 EntrySummary。
+        let visible_entries = state.entries.clone();
 
         let visible_entries_len = visible_entries.len();
         let page_size = state.page_size();
@@ -153,6 +154,8 @@ impl EntriesPagePresenter {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use rssr_domain::{EntrySummary, FeedSummary};
     use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -163,8 +166,8 @@ mod tests {
         OffsetDateTime::parse(raw, &Rfc3339).expect("parse datetime")
     }
 
-    fn entry(id: i64, feed_id: i64, feed_title: &str, published_at: &str) -> EntrySummary {
-        EntrySummary {
+    fn entry(id: i64, feed_id: i64, feed_title: &str, published_at: &str) -> Arc<EntrySummary> {
+        Arc::new(EntrySummary {
             id,
             feed_id,
             title: format!("Entry {id}"),
@@ -172,7 +175,7 @@ mod tests {
             published_at: Some(parse_datetime(published_at)),
             is_read: false,
             is_starred: false,
-        }
+        })
     }
 
     fn feed(id: i64, title: &str, url: &str) -> FeedSummary {

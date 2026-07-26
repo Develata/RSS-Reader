@@ -200,6 +200,9 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// CLI 的「刷新全部」并发度，与桌面端保持一致：串行刷新在源较多时会被逐个超时拖满。
+const CLI_REFRESH_CONCURRENCY: usize = 4;
+
 struct CliServices {
     use_cases: AppUseCases,
 }
@@ -270,7 +273,7 @@ impl CliServices {
         let outcome = self
             .use_cases
             .refresh_service
-            .refresh_all(RefreshAllInput { max_concurrency: 1 })
+            .refresh_all(RefreshAllInput { max_concurrency: CLI_REFRESH_CONCURRENCY })
             .await?;
         ensure_refresh_all_succeeded(&outcome)
     }

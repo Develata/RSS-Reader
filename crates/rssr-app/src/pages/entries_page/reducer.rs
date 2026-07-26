@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use dioxus::prelude::*;
 use rssr_domain::{ReadFilter, StarredFilter};
 
@@ -33,12 +35,14 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         EntriesPageIntent::SetEntries { entries, archived_count } => {
             state.status = format!("共 {} 篇文章。", entries.len());
             state.status_tone = "info".to_string();
-            state.entries = entries;
+            state.entries = entries.into_iter().map(Arc::new).collect();
             state.archived_count = archived_count;
             clamp_current_page(state);
         }
         EntriesPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
             if let Some(entry) = state.entries.iter_mut().find(|entry| entry.id == entry_id) {
+                // 只有被点的那一条需要真正写入，其余条目继续共享原有 Arc。
+                let entry = Arc::make_mut(entry);
                 if let Some(is_read) = is_read {
                     entry.is_read = is_read;
                 }
@@ -122,6 +126,8 @@ fn clamp_current_page(state: &mut EntriesPageState) {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use rssr_domain::{EntrySummary, ReadFilter};
 
     use super::reduce_entries_page_intent;
@@ -146,7 +152,7 @@ mod tests {
     fn patch_entry_flags_removes_entry_that_no_longer_matches_filter() {
         let mut state = EntriesPageState::new(true);
         state.read_filter = ReadFilter::UnreadOnly;
-        state.entries = vec![entry(1, false)];
+        state.entries = vec![Arc::new(entry(1, false))];
 
         reduce_entries_page_intent(
             &mut state,

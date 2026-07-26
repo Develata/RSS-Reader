@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 use rssr_domain::{
     ArchiveFilter, EntriesWorkspaceState, EntryGroupingPreference, EntryQuery, EntrySummary,
@@ -16,7 +16,10 @@ pub(crate) enum EntryGroupingMode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct EntriesPageState {
-    pub(crate) entries: Vec<EntrySummary>,
+    /// 以 `Arc` 持有：presenter 每次重建都要把可见集合交给分组树，直接存
+    /// `Vec<EntrySummary>` 的话每次都要深拷贝每条的 title / feed_title 两个 String。
+    /// 卡片组件本来就接收 `Arc<EntrySummary>`，这里对齐后重建只剩指针拷贝。
+    pub(crate) entries: Vec<Arc<EntrySummary>>,
     /// 被归档筛选排除掉的条目数，由存储层 COUNT 得出。
     pub(crate) archived_count: usize,
     pub(crate) feeds: Vec<FeedSummary>,

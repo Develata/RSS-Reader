@@ -39,20 +39,26 @@ pub fn App() -> Element {
 
     use_authenticated_shell_bus(auth, settings);
 
+    // 每次 `settings()` 都会克隆一整份 UserSettings（含完整 custom_css 文本）。
+    // 这里只读一次，后面复用同一份快照。
+    let current_settings = settings();
+    let authenticated = auth() == WebAuthState::Authenticated;
+    let has_custom_css = !current_settings.custom_css.trim().is_empty();
+
     rsx! {
         document::Meta {
             name: "viewport",
             content: "width=device-width, initial-scale=1, viewport-fit=cover"
         }
         style { {APP_STYLESHEET} }
-        if auth() == WebAuthState::Authenticated && !settings().custom_css.trim().is_empty() {
-            style { id: "user-custom-css", "{settings().custom_css}" }
+        if authenticated && has_custom_css {
+            style { id: "user-custom-css", "{current_settings.custom_css}" }
         }
-        if auth() == WebAuthState::Authenticated {
+        if authenticated {
             div {
-                class: "app-shell {theme_class(settings().theme)}",
-                "data-density": "{density_state(settings().list_density)}",
-                style: "--reader-font-scale: {settings().reader_font_scale};",
+                class: "app-shell {theme_class(current_settings.theme)}",
+                "data-density": "{density_state(current_settings.list_density)}",
+                style: "--reader-font-scale: {current_settings.reader_font_scale};",
                 RoutableApp {}
             }
         } else if auth() == WebAuthState::PendingServerProbe {

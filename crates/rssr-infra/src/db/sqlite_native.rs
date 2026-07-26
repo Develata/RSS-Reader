@@ -2,11 +2,11 @@ use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use sqlx::sqlite::SqlitePoolOptions;
 
 use crate::db::{
-    SqlitePool, create_sqlite_pool, default_sqlite_max_connections, migrate, migrate_content,
-    storage_backend::StorageBackend,
+    SqlitePool, connect_options_for_path, create_sqlite_pool, default_sqlite_max_connections,
+    migrate, migrate_content, storage_backend::StorageBackend,
 };
 
 #[derive(Debug, Clone)]
@@ -130,7 +130,8 @@ async fn connect_sqlite_path(database_path: &Path) -> anyhow::Result<SqlitePool>
             .with_context(|| format!("创建本地数据库目录失败: {}", parent.display()))?;
     }
 
-    let options = SqliteConnectOptions::new().filename(database_path).create_if_missing(true);
+    // WAL + busy_timeout 由 `connect_options_for_path` 统一设置：并发刷新依赖它。
+    let options = connect_options_for_path(database_path);
 
     SqlitePoolOptions::new()
         .max_connections(default_sqlite_max_connections(database_path.to_string_lossy().as_ref()))

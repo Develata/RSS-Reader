@@ -100,19 +100,10 @@ pub fn EntryFilters(
                         for (_feed_id, title, url) in available_sources {
                             {
                                 let is_selected = selected_feed_urls.contains(&url);
-                                let next_selected_feed_urls = if is_selected {
-                                    selected_feed_urls
-                                        .iter()
-                                        .filter(|current| **current != url)
-                                        .cloned()
-                                        .collect::<Vec<_>>()
-                                } else {
-                                    let mut urls = selected_feed_urls.clone();
-                                    urls.push(url.clone());
-                                    urls.sort();
-                                    urls.dedup();
-                                    urls
-                                };
+                                // 只在真的被点击时才算出新的选中集合。此前对每个 chip 都提前构造
+                                // 一份候选 Vec（O(来源数 x 已选数) 次克隆），而其中只有被点的那一个会用到。
+                                let toggled_url = url.clone();
+                                let current_selection = selected_feed_urls.clone();
                                 rsx! {
                                     label {
                                         "data-layout": "entry-filters-source-chip",
@@ -122,7 +113,7 @@ pub fn EntryFilters(
                                             r#type: "checkbox",
                                             "data-field": "entry-source-filter",
                                             checked: is_selected,
-                                            onchange: move |_| on_change_selected_feed_urls.call(next_selected_feed_urls.clone())
+                                            onchange: move |_| on_change_selected_feed_urls.call(toggle_source_selection(&current_selection, &toggled_url))
                                         }
                                         span { "{title}" }
                                     }
@@ -133,5 +124,44 @@ pub fn EntryFilters(
                 }
             }
         }
+    }
+}
+
+/// 在已选来源集合里切换一个 URL，返回排序去重后的新集合。
+fn toggle_source_selection(selected: &[String], url: &str) -> Vec<String> {
+    if selected.iter().any(|current| current == url) {
+        return selected.iter().filter(|current| current.as_str() != url).cloned().collect();
+    }
+
+    let mut next = selected.to_vec();
+    next.push(url.to_string());
+    next.sort();
+    next.dedup();
+    next
+}
+
+#[cfg(test)]
+mod tests {
+    use super::toggle_source_selection;
+
+    #[test]
+    fn adds_then_removes_a_source_keeping_the_set_sorted_and_deduped() {
+        let selected = vec!["https://b.example/feed".to_string()];
+
+        let added = toggle_source_selection(&selected, "https://a.example/feed");
+        assert_eq!(
+            added,
+            vec!["https://a.example/feed".to_string(), "https://b.example/feed".to_string(),]
+        );
+
+        let removed = toggle_source_selection(&added, "https://a.example/feed");
+        assert_eq!(removed, selected);
+    }
+
+    #[test]
+    fn toggling_an_already_selected_source_does_not_duplicate_it() {
+        let selected = vec!["https://a.example/feed".to_string()];
+
+        assert!(toggle_source_selection(&selected, "https://a.example/feed").is_empty());
     }
 }

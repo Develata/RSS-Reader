@@ -70,7 +70,14 @@ struct ImageLocalizationWorker {
 
 impl AppServices {
     const AUTO_REFRESH_RETRY_DELAY: Duration = Duration::from_secs(30);
-    const REFRESH_ALL_CONCURRENCY: usize = 1;
+    /// 「刷新全部」的并发度。
+    ///
+    /// 之前是 1，即完全串行：配合每个源 30s 的请求超时，N 个源最坏要等 N x 30s，
+    /// 而 `RefreshService::refresh_all` 里的 JoinSet 并发分支等于从未被用到。
+    /// 4 是个保守值——同时只对 4 个（通常互不相同的）站点发请求。
+    /// 注意这不会放大图片下载：`BodyAssetLocalizer` 的信号量是 `Arc` 共享的，
+    /// 无论多少个本地化任务在跑，并发图片请求上限仍是 2。
+    const REFRESH_ALL_CONCURRENCY: usize = 4;
 
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES

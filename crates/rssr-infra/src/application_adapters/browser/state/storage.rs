@@ -4,8 +4,8 @@ use web_sys::{Storage, window};
 
 use super::{
     APP_STATE_STORAGE_KEY, BrowserState, ENTRY_CONTENT_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY,
-    LoadedState, PersistedAppStateSlice, PersistedEntryContent, PersistedEntryContentSlice,
-    PersistedEntryFlag, PersistedEntryFlagsSlice, STORAGE_KEY,
+    LoadedState, PersistedAppStateSlice, PersistedEntryContentSlice, PersistedEntryFlag,
+    PersistedEntryFlagsSlice, STORAGE_KEY,
 };
 
 pub fn load_state() -> LoadedState {
@@ -75,23 +75,6 @@ pub fn save_entry_flag_patch(flag: PersistedEntryFlag) -> anyhow::Result<()> {
     }
 
     save_storage_key(&storage, ENTRY_FLAGS_STORAGE_KEY, serde_json::to_string(&slice)?)
-}
-
-pub fn save_entry_content_patch(content: PersistedEntryContent) -> anyhow::Result<()> {
-    let Some(storage) = browser_storage() else {
-        return Ok(());
-    };
-
-    let mut slice = load_entry_content_slice(&storage).unwrap_or_default();
-    if let Some(existing) =
-        slice.entries.iter_mut().find(|current| current.entry_id == content.entry_id)
-    {
-        *existing = content;
-    } else {
-        slice.entries.push(content);
-    }
-
-    save_storage_key(&storage, ENTRY_CONTENT_STORAGE_KEY, serde_json::to_string(&slice)?)
 }
 
 fn save_serialized_state(raw: String) -> anyhow::Result<()> {

@@ -11,7 +11,4 @@ pub use models::{
     PersistedEntryFlag, PersistedEntryFlagsSlice, PersistedEntryIndex, PersistedFeed,
     PersistedState, STORAGE_KEY,
 };
-pub use storage::{
-    load_state, save_app_state_slice, save_entry_content_patch, save_entry_flag_patch,
-    save_state_snapshot,
-};
+pub use storage::{load_state, save_app_state_slice, save_entry_flag_patch, save_state_snapshot};
