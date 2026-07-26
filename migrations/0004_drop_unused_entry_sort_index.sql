@@ -1,0 +1,23 @@
+-- 删除 0003 引入的 idx_entries_sort_key。
+--
+-- 0003 一次建了三个表达式索引，但用 EXPLAIN QUERY PLAN 在 20000 条 entries / 20 个 feeds
+-- 且执行过 ANALYZE 的库上实测后，这个「全局」变体一条真实查询都用不上：
+--
+--   * 列表与计数（list_entries / count_entries）都要 JOIN feeds 过滤 is_deleted，
+--     SQLite 会从 feeds 侧驱动，走 idx_entries_feed_sort_key，排序仍落到 TEMP B-TREE；
+--     换成 idx_entries_sort_key 也不会被选中。
+--   * 阅读导航的两种形态各自命中带前缀的变体：
+--     「上一/下一未读」→ idx_entries_unread_sort_key（在排序表达式上 seek）
+--     「同订阅上一/下一篇」→ idx_entries_feed_sort_key（同样是 seek）
+--
+-- 也就是说它只有写入成本（每条 entry 插入多维护一棵 B-tree），没有读取收益。
+-- 另外两个索引确实有效，保留。
+--
+-- 不修改 0003 本身：sqlx 会校验已应用迁移的校验和，改动已跑过的迁移会让现有库启动失败。
+--
+-- 附带结论（不在本迁移处理）：列表查询的 ORDER BY 之所以仍要 TEMP B-TREE，是因为它必须
+-- JOIN feeds 过滤软删除的订阅。要让排序也走索引，得先把「订阅是否已删除」这个条件从
+-- 连接里拿掉（例如反规范化到 entries，或确立“软删除订阅必然没有 entries”的强不变量），
+-- 这是需要单独设计的改动。
+
+DROP INDEX IF EXISTS idx_entries_sort_key;
