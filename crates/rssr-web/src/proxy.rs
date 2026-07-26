@@ -1,4 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
 use axum::{
@@ -22,12 +22,12 @@ pub(crate) struct FeedProxyQuery {
 }
 
 pub(crate) async fn feed_proxy(Query(query): Query<FeedProxyQuery>) -> impl IntoResponse {
-    let upstream_url = match validate_proxy_target(&query.url).await {
-        Ok(url) => url,
+    let (upstream_url, upstream_addr) = match resolve_validated_target(&query.url).await {
+        Ok(target) => target,
         Err(err) => return (StatusCode::BAD_REQUEST, err).into_response(),
     };
 
-    let response = match fetch_proxied_feed(upstream_url).await {
+    let response = match fetch_proxied_feed(upstream_url, upstream_addr).await {
         Ok(response) => response,
         Err(err) => return (StatusCode::BAD_GATEWAY, err).into_response(),
     };
@@ -88,18 +88,28 @@ fn validate_proxy_host(url: &Url) -> Result<(String, u16), String> {
     Ok((host.to_string(), port))
 }
 
-async fn validate_proxy_target(raw: &str) -> Result<Url, String> {
+/// 解析主机名并校验解析结果，返回校验通过的地址本身。
+///
+/// 必须把地址一起返回：如果只校验、之后再让 HTTP 客户端按域名重新解析一次，攻击者控制的
+/// DNS 可以在两次解析之间换成 127.0.0.1 之类的内网地址（DNS rebinding）。调用方要把这个
+/// 地址钉死给客户端用，保证「校验的」和「实际连接的」是同一个 IP。
+async fn resolve_validated_target(raw: &str) -> Result<(Url, SocketAddr), String> {
     let url = parse_proxy_feed_url(raw)?;
     let (host, port) = validate_proxy_host(&url)?;
     let resolved = tokio::net::lookup_host((host.as_str(), port))
         .await
-        .map_err(|_| "无法解析 feed 主机名。".to_string())?;
+        .map_err(|_| "无法解析 feed 主机名。".to_string())?
+        .collect::<Vec<_>>();
 
-    if resolved.map(|addr| addr.ip()).any(is_disallowed_proxy_ip) {
+    let Some(first) = resolved.first().copied() else {
+        return Err("无法解析 feed 主机名。".to_string());
+    };
+    // 只要有任意一条解析结果落在内网就整体拒绝，不去挑一个“看起来安全”的。
+    if resolved.iter().any(|addr| is_disallowed_proxy_ip(addr.ip())) {
         return Err("出于安全原因，禁止代理内网或本地地址。".to_string());
     }
 
-    Ok(url)
+    Ok((url, first))
 }
 
 fn is_disallowed_proxy_ip(ip: IpAddr) -> bool {
@@ -175,16 +185,31 @@ async fn read_body_with_limit(
     Ok(buffered)
 }
 
-async fn fetch_proxied_feed(initial_url: Url) -> Result<reqwest::Response, String> {
-    let client = reqwest::Client::builder()
+/// 每一跳都用「校验时得到的地址」新建一个客户端并把域名钉到该地址上。
+///
+/// 仍然按域名发请求（而不是直接拿 IP 拼 URL），这样 Host 头与 TLS SNI 保持正确；
+/// `resolve` 只是替换掉这一次的 DNS 解析结果。重定向同理：每跳都要重新校验并重新钉。
+fn pinned_client(url: &Url, addr: SocketAddr) -> Result<reqwest::Client, String> {
+    let host = url.host_str().ok_or_else(|| "feed URL 缺少主机名。".to_string())?;
+
+    reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(PROXY_REQUEST_TIMEOUT)
         .connect_timeout(PROXY_CONNECT_TIMEOUT)
+        .resolve(host, addr)
         .build()
-        .map_err(|err| format!("初始化 feed 代理客户端失败：{err}"))?;
+        .map_err(|err| format!("初始化 feed 代理客户端失败：{err}"))
+}
+
+async fn fetch_proxied_feed(
+    initial_url: Url,
+    initial_addr: SocketAddr,
+) -> Result<reqwest::Response, String> {
     let mut current_url = initial_url;
+    let mut current_addr = initial_addr;
 
     for _ in 0..5 {
+        let client = pinned_client(&current_url, current_addr)?;
         let response = client
             .get(current_url.clone())
             .header(
@@ -207,7 +232,9 @@ async fn fetch_proxied_feed(initial_url: Url) -> Result<reqwest::Response, Strin
         let redirected = current_url
             .join(location)
             .map_err(|_| "feed 代理收到非法的重定向地址。".to_string())?;
-        current_url = validate_proxy_target(redirected.as_str()).await?;
+        let (next_url, next_addr) = resolve_validated_target(redirected.as_str()).await?;
+        current_url = next_url;
+        current_addr = next_addr;
     }
 
     Err("feed 代理重定向次数过多。".to_string())
