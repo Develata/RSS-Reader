@@ -98,7 +98,11 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
                             },
                             tone: "info".to_string(),
                         },
-                        ReaderPageIntent::BumpReload,
+                        ReaderPageIntent::PatchEntryFlags {
+                            entry_id,
+                            is_read: Some(outcome.is_read),
+                            is_starred: None,
+                        },
                     ]),
                     Err(err) => reader_status_error(format!("{err}")),
                 },
@@ -128,7 +132,11 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
                                 },
                                 tone: "info".to_string(),
                             },
-                            ReaderPageIntent::BumpReload,
+                            ReaderPageIntent::PatchEntryFlags {
+                                entry_id,
+                                is_read: None,
+                                is_starred: Some(outcome.is_starred),
+                            },
                         ]),
                         Err(err) => reader_status_error(format!("{err}")),
                     }

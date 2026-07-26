@@ -17,6 +17,13 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
     let archive_facade = facade.clone();
     let entries_page_size_facade = facade.clone();
     let font_scale_facade = facade.clone();
+    let mut invalid = use_signal(InvalidNumericFields::default);
+    // 置位时记下当时的草稿值；渲染时只有仍然相等才显示提示。草稿被外部整体替换
+    // （从 WebDAV 拉取配置、恢复设置）后，值不再匹配，提示自动失效。
+    let refresh_value = draft.refresh_interval_minutes;
+    let archive_value = draft.archive_after_months;
+    let page_size_value = draft.entries_page_size;
+    let font_scale_value = draft.reader_font_scale;
 
     rsx! {
         div { "data-layout": "settings-card-section", "data-section": "reading-preferences",
@@ -89,12 +96,20 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         "data-field": "refresh-interval",
                         value: "{draft.refresh_interval_minutes}",
                         oninput: move |event| {
-                            if let Ok(minutes) = event.value().parse::<u32>() {
-                                refresh_facade.update_draft(|next| {
-                                    next.refresh_interval_minutes = minutes;
-                                });
+                            match event.value().parse::<u32>() {
+                                Ok(minutes) => {
+                                    invalid.write().refresh_interval = None;
+                                    refresh_facade
+                                        .update_draft(|next| {
+                                            next.refresh_interval_minutes = minutes;
+                                        });
+                                }
+                                Err(_) => invalid.write().refresh_interval = Some(refresh_value),
                             }
                         }
+                    }
+                    if invalid().refresh_interval == Some(refresh_value) {
+                        p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                 }
                 div { "data-slot": "settings-form-grid-item",
@@ -110,12 +125,20 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         "data-field": "archive-after-months",
                         value: "{draft.archive_after_months}",
                         oninput: move |event| {
-                            if let Ok(months) = event.value().parse::<u32>() {
-                                archive_facade.update_draft(|next| {
-                                    next.archive_after_months = months;
-                                });
+                            match event.value().parse::<u32>() {
+                                Ok(months) => {
+                                    invalid.write().archive_after_months = None;
+                                    archive_facade
+                                        .update_draft(|next| {
+                                            next.archive_after_months = months;
+                                        });
+                                }
+                                Err(_) => invalid.write().archive_after_months = Some(archive_value),
                             }
                         }
+                    }
+                    if invalid().archive_after_months == Some(archive_value) {
+                        p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                 }
                 div { "data-slot": "settings-form-grid-item",
@@ -131,12 +154,22 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         "data-field": "entries-page-size",
                         value: "{draft.entries_page_size}",
                         oninput: move |event| {
-                            if let Ok(size) = event.value().parse::<u32>() {
-                                entries_page_size_facade.update_draft(|next| {
-                                    next.entries_page_size = size;
-                                });
+                            match event.value().parse::<u32>() {
+                                Ok(size) => {
+                                    invalid.write().entries_page_size = None;
+                                    entries_page_size_facade
+                                        .update_draft(|next| {
+                                            next.entries_page_size = size;
+                                        });
+                                }
+                                Err(_) => {
+                                    invalid.write().entries_page_size = Some(page_size_value);
+                                }
                             }
                         }
+                    }
+                    if invalid().entries_page_size == Some(page_size_value) {
+                        p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                     p { "data-slot": "page-intro",
                         "建议设置为 80 到 100；输入 0 时保存会自动回退到默认值 {DEFAULT_ENTRIES_PAGE_SIZE}。"
@@ -155,18 +188,52 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         "data-field": "reader-font-scale",
                         value: "{draft.reader_font_scale}",
                         oninput: move |event| {
-                            if let Ok(scale) = event.value().parse::<f32>() {
-                                font_scale_facade.update_draft(|next| {
-                                    next.reader_font_scale = scale;
-                                });
+                            match event.value().parse::<f32>() {
+                                Ok(scale) => {
+                                    invalid.write().reader_font_scale = None;
+                                    font_scale_facade
+                                        .update_draft(|next| {
+                                            next.reader_font_scale = scale;
+                                        });
+                                }
+                                Err(_) => {
+                                    invalid.write().reader_font_scale = Some(font_scale_value);
+                                }
                             }
                         }
+                    }
+                    if invalid().reader_font_scale == Some(font_scale_value) {
+                        p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                 }
             }
         }
     }
 }
+
+/// 哪些数值输入框的内容当前无法解析，以及**置位时草稿里的值**。
+///
+/// 这几个框此前是 `if let Ok(..)` 没有 `else`：清空或输入非数字时草稿悄悄保留旧值，
+/// 界面显示的却是用户刚输入的内容，保存写回的是旧值且全程无提示。这里只补提示，
+/// 不改变「解析失败就不写入草稿」的既有行为。
+///
+/// 记的是值而不是一个布尔，是为了让提示能自己失效：草稿被整体替换后
+/// （`SettingsPageSession::apply_loaded_settings` / `restore_settings`，对应「从 WebDAV
+/// 拉取配置」与「恢复设置」），这里存的值与新草稿不再相等，提示自动不再显示。
+/// 用布尔的话，提示会残留在一个已经被换成合法值的输入框下面，说着「当前输入不是有效数字」。
+///
+/// 这样做不需要 `use_effect`：判定发生在渲染期的比较里，不往信号里写东西，
+/// 因此也不会给每次按键多加一次渲染。
+#[derive(Clone, Copy, PartialEq, Default)]
+struct InvalidNumericFields {
+    refresh_interval: Option<u32>,
+    archive_after_months: Option<u32>,
+    entries_page_size: Option<u32>,
+    reader_font_scale: Option<f32>,
+}
+
+/// 只在输入无法解析时出现，复用 `page-intro` 槽位，不引入新的样式面。
+const NUMERIC_INPUT_HINT: &str = "当前输入不是有效数字，尚未记入草稿；保存时会沿用上一次的有效值。";
 
 fn theme_value(value: ThemeMode) -> &'static str {
     match value {

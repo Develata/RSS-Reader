@@ -39,6 +39,19 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
             }
             state.error = error;
         }
+        ReaderPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
+            // 与 ApplyLoadedContent / SetError 同样的归属校验：快速翻页时先发出的切换请求
+            // 可能在换文章之后才落地，那时这条结果属于上一篇，必须丢弃。
+            if entry_id != state.current_entry_id {
+                return;
+            }
+            if let Some(is_read) = is_read {
+                state.is_read = is_read;
+            }
+            if let Some(is_starred) = is_starred {
+                state.is_starred = is_starred;
+            }
+        }
         ReaderPageIntent::BumpReload => state.reload_tick += 1,
     }
 }
@@ -106,6 +119,77 @@ mod tests {
         // 换到另一篇时才清空。
         reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 8 });
         assert!(state.status.is_empty());
+    }
+
+    /// 本轮改动要拿到的东西：切换已读/收藏只动两个布尔字段，正文、标题、来源、发布时间与
+    /// 导航状态都必须原样保留。此前这条路径走 `BumpReload`，`begin_loading` 会把它们全清空，
+    /// 用户每点一次「标已读」，正在读的文章就整篇闪一下。
+    #[test]
+    fn patch_entry_flags_keeps_the_article_on_screen() {
+        let mut state = ReaderPageState::new();
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 7 });
+        reduce_reader_page_intent(
+            &mut state,
+            ReaderPageIntent::ApplyLoadedContent { entry_id: 7, content: loaded_content("Story") },
+        );
+        let before = state.clone();
+
+        reduce_reader_page_intent(
+            &mut state,
+            ReaderPageIntent::PatchEntryFlags {
+                entry_id: 7,
+                is_read: Some(true),
+                is_starred: None,
+            },
+        );
+
+        assert!(state.is_read, "已读标记应当被写入");
+        assert!(!state.is_starred, "未指定的标记不应被改动");
+        assert_eq!(state.title, before.title);
+        assert_eq!(state.body_text, before.body_text);
+        assert_eq!(state.body_html, before.body_html);
+        assert_eq!(state.source, before.source);
+        assert_eq!(state.published_at, before.published_at);
+        assert_eq!(state.navigation_state, before.navigation_state);
+        assert_eq!(state.reload_tick, before.reload_tick, "不应触发整页重载");
+        assert_eq!(
+            state.asset_localization_requested, before.asset_localization_requested,
+            "不应把正文图片本地化重新排一遍"
+        );
+
+        reduce_reader_page_intent(
+            &mut state,
+            ReaderPageIntent::PatchEntryFlags {
+                entry_id: 7,
+                is_read: None,
+                is_starred: Some(true),
+            },
+        );
+        assert!(state.is_read, "只改收藏时已读标记应当保持");
+        assert!(state.is_starred);
+    }
+
+    /// 与正文加载结果同样的归属校验：翻页后迟到的切换结果属于上一篇，必须丢弃。
+    #[test]
+    fn patch_entry_flags_from_a_previous_entry_is_discarded() {
+        let mut state = ReaderPageState::new();
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 2 });
+        reduce_reader_page_intent(
+            &mut state,
+            ReaderPageIntent::ApplyLoadedContent { entry_id: 2, content: loaded_content("Second") },
+        );
+
+        reduce_reader_page_intent(
+            &mut state,
+            ReaderPageIntent::PatchEntryFlags {
+                entry_id: 1,
+                is_read: Some(true),
+                is_starred: Some(true),
+            },
+        );
+
+        assert!(!state.is_read, "上一篇的切换结果不应改到当前这篇");
+        assert!(!state.is_starred);
     }
 
     #[test]

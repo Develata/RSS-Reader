@@ -57,12 +57,84 @@ pub fn validate_user_settings(settings: &UserSettings) -> crate::Result<()> {
     Ok(())
 }
 
-/// 校验配置包：版本、设置取值范围，以及归一化后不允许出现重复的 feed URL。
+/// 校验自定义 CSS 的括号、引号与注释是否闭合。
+///
+/// 返回原始原因字符串而不是 [`DomainError`]，因为两个调用方要用不同的方式包装它：
+/// 设置页直接拼进面向用户的提示，配置包校验则包成 `DomainError`。
+///
+/// **这不是安全边界**：它只保证这段 CSS 不会因为没闭合的括号而把后续样式吃掉，
+/// 不试图限制 CSS 能表达什么。自定义 CSS 本来就是用户自己写给自己的应用的。
+///
+/// 注意本函数**不参与** [`validate_user_settings`]：设置页保存路径上的调用点
+/// （`settings_page/save/session.rs` 与 `theme_apply.rs`）在本函数搬进 domain 之前就已经
+/// 在调用它了，语义与提示文案保持不变；而把它塞进 `validate_user_settings` 会让它
+/// 顺带作用到所有写设置的路径上，可能突然拒绝用户早已存好的 CSS。
+pub fn validate_custom_css(raw: &str) -> Result<(), &'static str> {
+    let mut stack = Vec::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut in_comment = false;
+    let mut escaped = false;
+    let mut chars = raw.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if in_comment {
+            if ch == '*' && chars.peek() == Some(&'/') {
+                let _ = chars.next();
+                in_comment = false;
+            }
+            continue;
+        }
+
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' if in_single_quote || in_double_quote => escaped = true,
+            '\'' if !in_double_quote => in_single_quote = !in_single_quote,
+            '"' if !in_single_quote => in_double_quote = !in_double_quote,
+            '/' if !in_single_quote && !in_double_quote && chars.peek() == Some(&'*') => {
+                let _ = chars.next();
+                in_comment = true;
+            }
+            '{' | '(' | '[' if !in_single_quote && !in_double_quote => stack.push(ch),
+            '}' | ')' | ']' if !in_single_quote && !in_double_quote => {
+                let Some(open) = stack.pop() else {
+                    return Err("存在未匹配的右括号或右花括号");
+                };
+                if !matches!((open, ch), ('{', '}') | ('(', ')') | ('[', ']')) {
+                    return Err("括号或花括号没有正确配对");
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if in_comment {
+        return Err("注释没有正确闭合");
+    }
+    if in_single_quote || in_double_quote {
+        return Err("字符串引号没有正确闭合");
+    }
+    if !stack.is_empty() {
+        return Err("存在未闭合的括号或花括号");
+    }
+
+    Ok(())
+}
+
+/// 校验配置包：版本、设置取值范围、自定义 CSS 是否闭合，以及归一化后不允许出现重复的 feed URL。
 pub fn validate_config_package(package: &ConfigPackage) -> crate::Result<()> {
     if package.version != CONFIG_PACKAGE_VERSION {
         return Err(invalid(format!("配置包版本必须等于 {CONFIG_PACKAGE_VERSION}")));
     }
     validate_user_settings(&package.settings)?;
+    // 导入与 WebDAV 拉取此前完全不看 custom_css，一段没闭合的 CSS 会直接进 `<style>`，
+    // 把后面的样式规则整段吃掉。设置页保存路径早就有这道校验，这里补上的是导入侧的缺口。
+    validate_custom_css(&package.settings.custom_css)
+        .map_err(|reason| invalid(format!("自定义 CSS 格式无效：{reason}")))?;
 
     let mut seen_urls = HashSet::with_capacity(package.feeds.len());
     for feed in &package.feeds {
@@ -86,7 +158,10 @@ pub fn parse_and_normalize_feed_url(raw: &str) -> crate::Result<String> {
 mod tests {
     use time::OffsetDateTime;
 
-    use super::{CONFIG_PACKAGE_VERSION, validate_config_package, validate_user_settings};
+    use super::{
+        CONFIG_PACKAGE_VERSION, validate_config_package, validate_custom_css,
+        validate_user_settings,
+    };
     use crate::settings::{ConfigFeed, ConfigPackage, UserSettings};
 
     fn package(feeds: Vec<ConfigFeed>, settings: UserSettings) -> ConfigPackage {
@@ -154,6 +229,63 @@ mod tests {
         let error = validate_config_package(&invalid).expect_err("expected rejection");
 
         assert!(error.to_string().contains("重复的 feed URL"));
+    }
+
+    #[test]
+    fn accepts_css_with_quotes_comments_and_nesting() {
+        let cases = [
+            "",
+            ":root { --x: 1px; }",
+            "/* } 注释里的右花括号不算 */ a { color: red; }",
+            "a::after { content: \"}\"; }",
+            "a::after { content: '{'; }",
+            "a::after { content: \"\\\"\"; }",
+            "@media (min-width: 40rem) { a { color: red; } }",
+            "a { background: url(data:image/svg+xml;base64,AAAA); }",
+        ];
+
+        for case in cases {
+            assert!(validate_custom_css(case).is_ok(), "应当接受：{case}");
+        }
+    }
+
+    #[test]
+    fn rejects_css_that_would_swallow_following_rules() {
+        let cases = [
+            ("a { color: red;", "存在未闭合的括号或花括号"),
+            ("a { color: red; } }", "存在未匹配的右括号或右花括号"),
+            ("a { color: red; ]", "括号或花括号没有正确配对"),
+            ("a { content: \"未闭合; }", "字符串引号没有正确闭合"),
+            ("/* 未闭合注释 a { color: red; }", "注释没有正确闭合"),
+        ];
+
+        for (case, expected) in cases {
+            assert_eq!(validate_custom_css(case), Err(expected), "应当拒绝：{case}");
+        }
+    }
+
+    /// 导入路径此前完全不看 `custom_css`，一段没闭合的 CSS 会直接进 `<style>`。
+    #[test]
+    fn rejects_config_package_with_unbalanced_custom_css() {
+        let invalid = package(
+            Vec::new(),
+            UserSettings { custom_css: "a { color: red;".to_string(), ..UserSettings::default() },
+        );
+
+        let error = validate_config_package(&invalid).expect_err("expected rejection");
+
+        assert!(error.to_string().contains("自定义 CSS 格式无效"));
+    }
+
+    /// 反面：设置页保存路径不经过 `validate_config_package`，也不该因为 CSS 校验而改变行为。
+    /// `validate_user_settings` 必须继续放行任何 `custom_css`，否则用户早已存好的 CSS
+    /// 可能在某次保存时突然被拒。
+    #[test]
+    fn user_settings_validation_ignores_custom_css() {
+        let settings =
+            UserSettings { custom_css: "a { color: red;".to_string(), ..UserSettings::default() };
+
+        assert!(validate_user_settings(&settings).is_ok());
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use crate::pages::settings_page::facade::SettingsPageFacade;
 
 use super::theme_preset::detect_preset_key;
-use super::theme_validation::validate_custom_css;
+use rssr_domain::validation::validate_custom_css;
 
 pub(super) fn apply_custom_css_from_raw(
     facade: &SettingsPageFacade,

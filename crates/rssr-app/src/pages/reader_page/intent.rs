@@ -20,5 +20,15 @@ pub(crate) enum ReaderPageIntent {
         entry_id: i64,
         error: Option<String>,
     },
+    /// 只回写被切换的标记，不重载整篇文章。
+    ///
+    /// 切换已读/收藏此前走 `BumpReload`，而 `begin_loading` 会清空标题、正文、来源、发布时间
+    /// 与导航状态——用户每点一次「标已读」，正在读的文章就会整篇闪一下再重绘。
+    /// 标记只影响两个布尔字段，用不着整页重载。
+    PatchEntryFlags {
+        entry_id: i64,
+        is_read: Option<bool>,
+        is_starred: Option<bool>,
+    },
     BumpReload,
 }
