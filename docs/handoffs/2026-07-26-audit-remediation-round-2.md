@@ -3,8 +3,9 @@
 - 日期：2026-07-26
 - 作者 / Agent：Claude (math-architect)
 - 分支：main
-- 当前 HEAD：98f38a1
-- 相关 commit：`ce83443`、`981cc0e`、`8e3ef7a`、`98f38a1`（前置轮次见 `84169c5`）
+- 当前 HEAD：c360759
+- 相关 commit：`ce83443`、`981cc0e`、`8e3ef7a`、`98f38a1`、`b5de972`、`c360759`
+  （前置轮次见 `84169c5`）
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -85,6 +86,22 @@
   `ConfigPackage`，放在这里不会被 `export_config` 导出、也不会被推到远端。
 - 补上超时与 4MB 响应上限；401/403 时提示凭据写法。
 
+### 设置输入上下界（`b5de972`）
+
+- 刷新间隔、归档阈值、阅读字号缩放三个输入框改为 `number` 并带 `min`/`max`/`step`，
+  上下界直接引用 domain 常量。此前是自由文本框，用户可以直接输入越界值——正是上一轮
+  第一个 panic 的来源。现在 UI、application 校验、domain 常量三处对齐。
+- 移除 `ArchiveFilter::only_archived`：该变体在 `EntriesListService` 里是就地构造的，
+  这个辅助函数从未被调用。
+
+### feed 代理的 DNS rebinding（`c360759`）
+
+- `/feed-proxy` 此前先用 `lookup_host` 校验解析结果，然后仍按域名把请求交给 reqwest，
+  客户端会**再解析一次**。两次解析之间，攻击者控制的 DNS 可以换成内网地址绕过校验。
+- 改为把校验通过的 `SocketAddr` 一并返回，并用 `ClientBuilder::resolve` 把域名钉到该地址，
+  保证「校验的」与「实际连接的」是同一个 IP；仍按域名发请求以保持 Host 头与 TLS SNI 正确。
+- 重定向每跳都重新校验并重新钉，不复用上一跳的解析结果。
+
 ## 验证与验收
 
 ### 自动化验证
@@ -124,10 +141,7 @@
 2. **桌面图片代理链路「注册了但走不通」**：`main.rs` 里的 `rssr-img://` 协议处理器可用
    且有测试，但没有任何地方会产出该 scheme 的地址，且 ammonia 白名单也不含它。
    常量已从页面层移到唯一使用方 `main.rs` 并注明现状，需要决定接通还是整体删除。
-3. **SSRF 的 DNS rebinding TOCTOU**：`/feed-proxy` 先解析域名做校验、再按域名发起请求，
-   两次解析之间存在时间窗。彻底修复需要解析一次后直接连校验过的 IP 并覆写 Host/SNI。
-   当前该端点在登录之后才可达，影响有限。
-4. **`rssr-web` 认证测试**已串行化，但根因是这些测试依赖进程级环境变量；
+3. **`rssr-web` 认证测试**已串行化，但根因是这些测试依赖进程级环境变量；
    若后续新增同类测试，记得一并取 `auth::test_env::lock()`。
 
 ## 给下一位 Agent 的备注
