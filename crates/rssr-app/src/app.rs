@@ -80,7 +80,6 @@ pub fn AppNav() -> Element {
     let show_nav_shell = shell.clone();
     let hide_nav_shell = shell.clone();
     let submit_search_shell = shell.clone();
-    let focus_search_shell = shell.clone();
     let update_search_shell = shell.clone();
 
     if shell.nav_hidden() {
@@ -143,7 +142,6 @@ pub fn AppNav() -> Element {
                     r#type: "search",
                     placeholder: "搜索文章标题",
                     value: "{shell.entry_search()}",
-                    onfocus: move |_| focus_search_shell.focus_search(),
                     oninput: move |event| {
                         update_search_shell.set_entry_search(event.value());
                     },

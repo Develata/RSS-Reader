@@ -1,11 +1,10 @@
 //! 阅读页的显示辅助。
 //!
-//! 这里只做「显示什么」的选择和时间格式化。正文的解析、地址归一化与消毒全部在
+//! 这里只做「显示哪一份正文」这一个选择。正文的解析、地址归一化与消毒全部在
 //! `rssr_infra::html`：本文件曾经自带一整套标签解析器、HTML 实体解码和 WordPress emoji
-//! 启发式（与 infra 里的实现重复），外加一批为已放弃的桌面图片代理方案留下的死代码。
+//! 启发式（与 infra 里的实现重复）。时间格式化已并入 `crate::datetime`。
 
 use rssr_infra::html::{looks_like_html_fragment, sanitize_reader_html};
-use time::{OffsetDateTime, UtcOffset, macros::format_description};
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,19 +40,9 @@ pub(crate) fn select_reader_body(
     ReaderBody::Text(content_text.or(summary).unwrap_or_else(|| "暂无正文".to_string()))
 }
 
-pub(crate) fn format_reader_datetime_utc(published_at: Option<OffsetDateTime>) -> Option<String> {
-    const READER_DATETIME_FORMAT: &[time::format_description::FormatItem<'static>] =
-        format_description!("[year]-[month]-[day] [hour]:[minute] UTC");
-
-    published_at
-        .and_then(|value| value.to_offset(UtcOffset::UTC).format(READER_DATETIME_FORMAT).ok())
-}
-
 #[cfg(test)]
 mod tests {
-    use time::OffsetDateTime;
-
-    use super::{ReaderBody, format_reader_datetime_utc, select_reader_body};
+    use super::{ReaderBody, select_reader_body};
 
     #[test]
     fn reader_prefers_full_html_over_summary_text() {
@@ -116,19 +105,5 @@ mod tests {
         );
 
         assert_eq!(body, ReaderBody::Text("plain text body".to_string()));
-    }
-
-    #[test]
-    fn reader_formats_published_time_in_utc_without_seconds() {
-        let published_at = OffsetDateTime::parse(
-            "2026-03-29T19:45:33+08:00",
-            &time::format_description::well_known::Rfc3339,
-        )
-        .expect("parse rfc3339");
-
-        assert_eq!(
-            format_reader_datetime_utc(Some(published_at)).as_deref(),
-            Some("2026-03-29 11:45 UTC")
-        );
     }
 }

@@ -1,8 +1,9 @@
 use crate::{
+    datetime::format_datetime_utc,
     pages::reader_page::{
         intent::ReaderPageIntent,
         state::ReaderPageLoadedContent,
-        support::{ReaderBody, format_reader_datetime_utc, select_reader_body},
+        support::{ReaderBody, select_reader_body},
     },
     ui::{commands::ReaderCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
@@ -42,7 +43,7 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
                                 .url
                                 .map(|url| url.to_string())
                                 .unwrap_or_else(|| "无原文链接".to_string()),
-                            published_at: format_reader_datetime_utc(entry.published_at)
+                            published_at: format_datetime_utc(entry.published_at)
                                 .unwrap_or_else(|| "未知发布时间".to_string()),
                             is_read: entry.is_read,
                             is_starred: entry.is_starred,

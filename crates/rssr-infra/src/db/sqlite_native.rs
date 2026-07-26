@@ -82,20 +82,30 @@ impl StorageBackend for NativeSqliteBackend {
     }
 }
 
-fn default_database_path() -> anyhow::Result<PathBuf> {
+/// 本地可写数据目录：两个数据库以及其它随安装位置走的本地文件都放在这里。
+///
+/// 对外暴露是为了让「数据文件放哪」只有这一处权威定义。此前只有数据库需要它，
+/// 于是路径规则藏在私有函数里；现在界面偏好也要落盘，调用方再各自拼一遍
+/// `current_exe()/RSS-Reader` 就会出现两份会各自漂移的定义。
+pub fn local_data_dir() -> anyhow::Result<PathBuf> {
+    Ok(local_data_dir_in_base_dir(&local_data_base_dir()?))
+}
+
+fn local_data_base_dir() -> anyhow::Result<PathBuf> {
     #[cfg(target_os = "android")]
     {
-        let base_dir = android_data_base_dir()?;
-        return Ok(database_path_in_base_dir(&base_dir));
+        android_data_base_dir()
     }
 
     #[cfg(not(target_os = "android"))]
     {
         let executable_path = std::env::current_exe().context("无法定位可执行文件路径")?;
-        let base_dir = executable_path.parent().context("无法定位可执行文件所在目录")?;
-
-        Ok(database_path_in_base_dir(base_dir))
+        executable_path.parent().map(Path::to_path_buf).context("无法定位可执行文件所在目录")
     }
+}
+
+fn default_database_path() -> anyhow::Result<PathBuf> {
+    Ok(database_path_in_base_dir(&local_data_base_dir()?))
 }
 
 #[cfg(target_os = "android")]
@@ -110,8 +120,14 @@ fn android_data_base_dir() -> anyhow::Result<PathBuf> {
         .context("Android 环境未提供可写的 HOME 目录")
 }
 
+const LOCAL_DATA_DIR_NAME: &str = "RSS-Reader";
+
+fn local_data_dir_in_base_dir(base_dir: &Path) -> PathBuf {
+    base_dir.join(LOCAL_DATA_DIR_NAME)
+}
+
 fn database_path_in_base_dir(base_dir: &Path) -> PathBuf {
-    base_dir.join("RSS-Reader").join("rss-reader.db")
+    local_data_dir_in_base_dir(base_dir).join("rss-reader.db")
 }
 
 fn content_database_path(index_database_path: &Path) -> PathBuf {
@@ -183,7 +199,7 @@ fn append_content_suffix(path: &str) -> String {
 mod tests {
     use super::{
         NativeSqliteBackend, append_content_suffix, content_database_path,
-        database_path_in_base_dir,
+        database_path_in_base_dir, local_data_dir_in_base_dir,
     };
     use crate::db::storage_backend::StorageBackend;
     use std::{
@@ -195,6 +211,17 @@ mod tests {
     fn database_path_uses_project_subdirectory() {
         let path = database_path_in_base_dir(Path::new("/tmp/example"));
         assert_eq!(path, Path::new("/tmp/example/RSS-Reader/rss-reader.db"));
+    }
+
+    /// 数据库与其它本地文件必须落在同一个目录里：`local_data_dir` 是对外的那个入口，
+    /// 它一旦和数据库目录漂开，界面偏好就会写到用户找不到、卸载时也清不掉的地方。
+    #[test]
+    fn local_data_dir_is_the_directory_holding_the_database() {
+        let base = Path::new("/tmp/example");
+        let data_dir = local_data_dir_in_base_dir(base);
+
+        assert_eq!(data_dir, Path::new("/tmp/example/RSS-Reader"));
+        assert_eq!(database_path_in_base_dir(base).parent(), Some(data_dir.as_path()));
     }
 
     #[test]

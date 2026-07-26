@@ -3,6 +3,7 @@ mod helpers;
 mod runtime;
 mod shell;
 mod shell_browser;
+mod shell_prefs;
 mod snapshot;
 
 pub(crate) use self::{

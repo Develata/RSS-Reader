@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 use rssr_domain::EntrySummary;
-use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
-use crate::router::AppRoute;
+use crate::{datetime::format_date_utc, router::AppRoute};
 
 use super::{facade::EntriesPageFacade, groups::EntryCardRef, session::EntriesPageSession};
 
@@ -49,7 +48,7 @@ fn render_entry_card(
             }
             div { "data-slot": "entry-card-meta",
                 "{entry.feed_title}"
-                if let Some(date) = format_entry_date_utc(entry.published_at) { " · {date}" }
+                if let Some(date) = format_date_utc(entry.published_at) { " · {date}" }
                 if entry.is_read { " · 已读" } else { " · 未读" }
                 if entry.is_starred { " · 已收藏" }
             }
@@ -91,13 +90,6 @@ fn list_edge_state(position: usize, total: usize) -> &'static str {
         (index, len) if index + 1 == len => "end",
         _ => "middle",
     }
-}
-
-fn format_entry_date_utc(published_at: Option<OffsetDateTime>) -> Option<String> {
-    const ENTRY_DATE_FORMAT: &[time::format_description::FormatItem<'static>] =
-        format_description!("[year]-[month]-[day]");
-
-    published_at.and_then(|value| value.to_offset(UtcOffset::UTC).format(ENTRY_DATE_FORMAT).ok())
 }
 
 #[cfg(test)]

@@ -1,55 +1,10 @@
 use dioxus::prelude::*;
 
-pub(crate) fn initial_entry_search() -> String {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-            && let Ok(Some(value)) = storage.get_item("rssr-entry-search")
-        {
-            return value;
-        }
-    }
-
-    String::new()
-}
-
-pub(crate) fn remember_entry_search(_value: &str) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-        {
-            let _ = storage.set_item("rssr-entry-search", _value);
-        }
-    }
-}
-
-pub(crate) fn initial_nav_hidden() -> bool {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-            && let Ok(Some(value)) = storage.get_item("rssr-nav-hidden")
-        {
-            return value == "1";
-        }
-    }
-
-    false
-}
-
-pub(crate) fn remember_nav_hidden(_hidden: bool) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(Some(storage)) = window.local_storage()
-        {
-            let _ = storage.set_item("rssr-nav-hidden", if _hidden { "1" } else { "0" });
-        }
-    }
-}
-
+/// 本地门禁通过之后进入阅读器。
+///
+/// Web 端整页重载而不是就地切状态：解锁会换掉 `localStorage` 里可读的数据集，
+/// 重载是让所有已挂载的组件都从新数据重新起一遍最省事、也最不容易漏的做法。
+/// 重载失败（例如被浏览器策略拦下）才回落到就地切换。
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn complete_web_auth_transition(on_authenticated: EventHandler<()>) {
     if let Some(window) = web_sys::window()

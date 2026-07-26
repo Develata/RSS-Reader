@@ -5,9 +5,9 @@ use rssr_domain::UserSettings;
 use crate::{
     router::AppRoute,
     status::{set_status_error, set_status_info},
-    ui::shell_browser::{
-        complete_web_auth_transition, initial_entry_search, initial_nav_hidden,
-        remember_entry_search, remember_nav_hidden,
+    ui::shell_browser::complete_web_auth_transition,
+    ui::shell_prefs::{
+        initial_entry_search, initial_nav_hidden, remember_entry_search, remember_nav_hidden,
     },
     ui::{ShellCommand, UiCommand, UiIntent, collect_projected_ui_command, visit_ui_command},
     web_auth::{
@@ -46,11 +46,13 @@ impl AppShellState {
         self.nav_hidden.set(true);
     }
 
+    /// 只有提交（回车）才跳转到文章页。
+    ///
+    /// 此前搜索框的 `onfocus` 也调用了一份同样的跳转，于是点进搜索框会立刻换路由，
+    /// 把刚点中的那个 input 卸载掉，焦点随之丢失——想搜索得点两次。搜索词存在
+    /// [`AppShellState`] 里而不在页面里，因此跳转前输入的内容会原样带到文章页，
+    /// 去掉 `onfocus` 不会丢任何东西。
     pub(crate) fn submit_search(self, navigator: Navigator) {
-        navigator.push(AppRoute::EntriesPage {});
-    }
-
-    pub(crate) fn focus_search(self, navigator: Navigator) {
         navigator.push(AppRoute::EntriesPage {});
     }
 }
@@ -94,10 +96,6 @@ impl AppNavShell {
 
     pub(crate) fn submit_search(&self) {
         self.shell.submit_search(self.navigator);
-    }
-
-    pub(crate) fn focus_search(&self) {
-        self.shell.focus_search(self.navigator);
     }
 }
 

@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 
 use time::{OffsetDateTime, UtcOffset};
 
+use crate::datetime::format_date_utc;
+
 /// 分组键：条目在**完整可见列表**中的下标，加上分组真正依赖的那几个字段。
 ///
 /// 刻意不含 `title` / `is_read` / `is_starred`：分组结构与它们无关，把它们挡在类型之外，
@@ -362,8 +364,7 @@ fn group_date_buckets(entries: &[EntryGroupKey<'_>], page_size: usize) -> Vec<En
     let mut groups: BTreeMap<String, Vec<EntryGroupKey<'_>>> = BTreeMap::new();
 
     for entry in entries {
-        let key =
-            format_entry_date_utc(entry.published_at).unwrap_or_else(|| "未标注日期".to_string());
+        let key = format_date_utc(entry.published_at).unwrap_or_else(|| "未标注日期".to_string());
         groups.entry(key).or_default().push(*entry);
     }
 
@@ -460,13 +461,6 @@ fn group_source_months(
 
 fn page_for_index(index: usize, page_size: usize) -> u32 {
     (index / page_size.max(1)) as u32 + 1
-}
-
-fn format_entry_date_utc(published_at: Option<OffsetDateTime>) -> Option<String> {
-    const ENTRY_DATE_FORMAT: &[time::format_description::FormatItem<'static>] =
-        time::macros::format_description!("[year]-[month]-[day]");
-
-    published_at.and_then(|value| value.to_offset(UtcOffset::UTC).format(ENTRY_DATE_FORMAT).ok())
 }
 
 #[cfg(test)]
