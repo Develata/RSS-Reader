@@ -81,10 +81,15 @@ pub(super) fn local_web_auth_enabled() -> bool {
     super::is_local_protection_host(&hostname)
 }
 
-/// 整页跳到服务端登录页。
+/// 整页跳到服务端登录页，并带上当前路由。
 ///
 /// 服务端会话过期时必须走这条路：本地浏览器门禁与服务端登录是两套互不相关的凭据，
 /// 把用户引去创建本地凭据既解决不了问题，还会留下一组永远用不上的 localStorage 凭据。
+///
+/// 带 `next` 是为了与服务端自己的 302 行为一致（`rssr-web` 的 `require_auth` 会保留目标路径）；
+/// 不带的话同一个「会话过期」事件，走服务端重定向能回到原页面、走这里却被扔回首页。
+/// 服务端的 `sanitize_next` 会拒掉 `//` 与外域，所以这里不引入新的跳转风险。
+#[cfg(target_arch = "wasm32")]
 pub(super) fn redirect_to_server_login() {
     let Some(window) = web_sys::window() else {
         return;
@@ -92,5 +97,18 @@ pub(super) fn redirect_to_server_login() {
     let Some(origin) = browser_origin() else {
         return;
     };
-    let _ = window.location().set_href(&format!("{origin}/login"));
+
+    let location = window.location();
+    let next = match (location.pathname(), location.search()) {
+        (Ok(path), Ok(query)) => format!("{path}{query}"),
+        (Ok(path), Err(_)) => path,
+        _ => String::new(),
+    };
+
+    let target = if next.is_empty() || next == "/" {
+        format!("{origin}/login")
+    } else {
+        format!("{origin}/login?next={}", urlencoding::encode(&next))
+    };
+    let _ = location.set_href(&target);
 }

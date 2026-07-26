@@ -22,6 +22,14 @@ impl EntriesPageSession {
         (self.state)()
     }
 
+    /// 借用状态而不是克隆整份。
+    ///
+    /// `snapshot()` 会深拷贝整个 `EntriesPageState`（含 status / selected_feed_urls / feeds），
+    /// 用在「每次状态变化都要跑一遍」的投影里代价白扔。`Readable::with` 同样会建立订阅。
+    pub(crate) fn with_state<R>(self, read: impl FnOnce(&EntriesPageState) -> R) -> R {
+        self.state.with(read)
+    }
+
     pub(crate) fn feed_id(self) -> Option<i64> {
         self.feed_id
     }

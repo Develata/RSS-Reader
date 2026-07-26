@@ -16,12 +16,20 @@ use super::{
 ///
 /// Dioxus 的信号订阅粒度是「整个信号」，读任何一个字段都会订阅整份 `EntriesPageState`，
 /// 于是 `SetStatus`、`SetControlsHidden` 这类与分组毫无关系的 intent 也会让 presenter 失效、
-/// 重建两棵分组树。把依赖收窄成这个投影后，可以用 memo 链：
-/// 投影 memo 每次状态变化都会重算（很便宜），但它的值没变时，presenter memo 不会重算。
+/// 重建两棵分组树。把依赖收窄成这个投影后，可以用 memo 链：投影 memo 每次状态变化都会重算，
+/// 但它的值没变时，presenter memo 不会重算。
+///
+/// 代价说明（别把它当成零成本）：重算一次投影是 N 次 `Arc` 指针拷贝加一次 `feeds` 深拷贝
+/// （`FeedSummary` 含三个 `String`，订阅数量级通常是几十）。比较则基本是指针比较——
+/// `EntrySummary` 派生了 `Eq`，`Arc<T: Eq>` 的相等判断走 `ptr_eq` 短路。
+/// 换掉的是两棵分组树的重建，因此净赚，但不是免费。
 ///
 /// 注意这里**不包含** `status` / `status_tone` / `controls_hidden` / `show_archived` /
 /// 读取与收藏筛选 / `selected_feed_urls` / `archive_after_months` / `preferences_loaded`——
 /// 归档筛选已经下沉到查询层，筛选变化会走一次重新加载并以 `SetEntries` 收尾。
+///
+/// `archived_count` 在这里不是因为它影响分组（presenter 只是原样透传给
+/// `facade.archived_entry_count()`），而是因为 presenter 要暴露它。
 #[derive(Clone, PartialEq)]
 pub(crate) struct EntriesPresenterInput {
     entries: Vec<Arc<EntrySummary>>,
@@ -30,6 +38,9 @@ pub(crate) struct EntriesPresenterInput {
     current_page: u32,
     feeds: Vec<FeedSummary>,
     grouping_mode: EntryGroupingMode,
+    /// 保留在投影里，好让「按订阅浏览 ⇒ 无来源筛选项」这条不变量继续由 `from_input` 强制执行，
+    /// 而不是退化成一句「调用方保证 feeds 已经是空的」的注释。标量，只随路由变化。
+    feed_id: Option<i64>,
 }
 
 impl EntriesPresenterInput {
@@ -41,8 +52,9 @@ impl EntriesPresenterInput {
             entries_page_size: state.entries_page_size,
             current_page: state.current_page,
             // 订阅列表只在 bootstrap 时变化；参与比较是为了让来源筛选项跟着更新。
-            feeds: if feed_id.is_some() { Vec::new() } else { state.feeds.clone() },
+            feeds: state.feeds.clone(),
             grouping_mode: state.grouping_mode,
+            feed_id,
         }
     }
 
@@ -79,8 +91,8 @@ impl EntriesPagePresenter {
     /// 不再需要当前时间。输入是一个窄投影，因此本函数只在真正影响输出的字段变化时才会重跑。
     pub(crate) fn from_input(input: &EntriesPresenterInput) -> Self {
         let archived_count = input.archived_count;
-        // 只是 Arc 指针拷贝，不再深拷贝每条 EntrySummary。
-        let visible_entries = input.entries.clone();
+        // 借用即可：输入本身是借来的，条目只以 `&[_]` 形式传给分组函数。
+        let visible_entries = &input.entries;
 
         let visible_entries_len = visible_entries.len();
         let page_size = input.page_size();
@@ -97,12 +109,16 @@ impl EntriesPagePresenter {
         let paged_entries = visible_entries[page_start_index..page_end_index].to_vec();
         let page_start = if visible_entries_len == 0 { 0 } else { page_start_index + 1 };
         let page_end = if visible_entries_len == 0 { 0 } else { page_end_index };
-        // `input.feeds` 在按订阅浏览时本就是空的（见 `EntriesPresenterInput::from_state`）。
-        let source_filter_options = input
-            .feeds
-            .iter()
-            .map(|feed| (feed.id, feed.title.clone(), feed.url.clone()))
-            .collect::<Vec<_>>();
+        // 按订阅浏览时没有来源筛选项——这条不变量在使用点强制执行。
+        let source_filter_options = if input.feed_id.is_some() {
+            Vec::new()
+        } else {
+            input
+                .feeds
+                .iter()
+                .map(|feed| (feed.id, feed.title.clone(), feed.url.clone()))
+                .collect::<Vec<_>>()
+        };
 
         let current_entry_id = paged_entries.first().map(|entry| entry.id);
 
@@ -117,7 +133,7 @@ impl EntriesPagePresenter {
             active_directory_anchor,
         ) = match input.grouping_mode {
             EntryGroupingMode::Time => {
-                let all_groups = group_entries_by_time_tree(&visible_entries, page_size);
+                let all_groups = group_entries_by_time_tree(visible_entries, page_size);
                 let paged_groups = group_entries_by_time_tree(&paged_entries, page_size);
                 let default_expanded_directory_sections =
                     paged_groups.iter().map(|group| group.anchor_id.clone()).collect();
@@ -142,7 +158,7 @@ impl EntriesPagePresenter {
                 )
             }
             EntryGroupingMode::Source => {
-                let all_groups = group_entries_by_source_tree(&visible_entries, page_size);
+                let all_groups = group_entries_by_source_tree(visible_entries, page_size);
                 let paged_groups = group_entries_by_source_tree(&paged_entries, page_size);
                 let default_expanded_directory_sections =
                     paged_groups.iter().map(|group| group.anchor_id.clone()).collect();
@@ -228,10 +244,10 @@ mod tests {
         }
     }
 
-    /// memo 链能省下重建的前提：与分组无关的状态变化必须让投影保持**相等**。
-    /// 这些字段一旦被误加进 `EntriesPresenterInput`，分组树就会重新为状态提示之类的变化重建。
+    /// memo 链能省下重建的前提：不参与渲染派生的状态变化必须让投影保持**相等**。
+    /// 这些字段一旦被误加进 `EntriesPresenterInput`，分组树就会为状态提示之类的变化重建。
     #[test]
-    fn presenter_input_ignores_state_that_does_not_affect_grouping() {
+    fn presenter_input_excludes_state_that_does_not_change_rendering() {
         let mut state = EntriesPageState::new(true);
         state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")];
         let baseline = EntriesPresenterInput::from_state(&state, None);
@@ -253,9 +269,13 @@ mod tests {
         );
     }
 
-    /// 反面：真正影响输出的字段必须让投影不相等，否则界面不会更新。
+    /// 反面：投影里的每个字段变化都必须让投影不相等，否则界面不会更新。
+    ///
+    /// 注意 `archived_count` 并不影响**分组**，它只是被 presenter 原样透传给
+    /// `facade.archived_entry_count()`；它在投影里是因为 presenter 要暴露它，
+    /// 所以这里断言的是「投影字段变化能被看见」，不是「它影响分组」。
     #[test]
-    fn presenter_input_tracks_state_that_does_affect_grouping() {
+    fn presenter_input_includes_every_field_that_changes_rendering() {
         let mut state = EntriesPageState::new(true);
         state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")];
         let baseline = EntriesPresenterInput::from_state(&state, None);
@@ -281,6 +301,30 @@ mod tests {
         flagged.entries =
             vec![Arc::new(EntrySummary { is_read: true, ..(*state.entries[0]).clone() })];
         assert!(baseline != EntriesPresenterInput::from_state(&flagged, None));
+
+        // 订阅列表变化必须被看见，否则来源筛选下拉框不会刷新——这正是本组测试要防的症状。
+        let mut refeeded = state.clone();
+        refeeded.feeds = vec![feed(1, "Alpha", "https://example.com/alpha.xml")];
+        assert!(baseline != EntriesPresenterInput::from_state(&refeeded, None));
+    }
+
+    /// 「按订阅浏览 ⇒ 无来源筛选项」这条不变量由 `from_input` 强制执行，
+    /// 因此 `feed_id` 必须留在投影里，且两条路由要给出不同结果。
+    #[test]
+    fn browsing_a_single_feed_hides_the_source_filter() {
+        let mut state = EntriesPageState::new(true);
+        state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")];
+        state.feeds = vec![feed(1, "Alpha", "https://example.com/alpha.xml")];
+
+        let all_feeds = EntriesPresenterInput::from_state(&state, None);
+        let single_feed = EntriesPresenterInput::from_state(&state, Some(1));
+        assert!(all_feeds != single_feed, "路由不同必须让投影不同");
+
+        assert_eq!(EntriesPagePresenter::from_input(&all_feeds).source_filter_options.len(), 1);
+        assert!(
+            EntriesPagePresenter::from_input(&single_feed).source_filter_options.is_empty(),
+            "按订阅浏览时不应再给出来源筛选项"
+        );
     }
 
     #[test]

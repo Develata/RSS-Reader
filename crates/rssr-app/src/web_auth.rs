@@ -99,14 +99,21 @@ pub async fn probe_server_gate() -> ServerGateProbe {
         return ServerGateProbe::Absent;
     }
 
+    // 拿不到 origin 说明连 window 都没有，不是网络故障；此时没有可探测的服务端门禁。
     let Some(origin) = browser::browser_origin() else {
-        return ServerGateProbe::Unreachable;
+        return ServerGateProbe::Absent;
     };
     let probe_url = format!("{origin}/session-probe");
 
     match reqwest::Client::new().get(probe_url).send().await {
         Ok(response) if response.status() == reqwest::StatusCode::NO_CONTENT => {
             ServerGateProbe::Authenticated
+        }
+        // 5xx 是服务端/反向代理故障，不是会话过期。若按过期处理去跳 /login，那个地址同样
+        // 打不开——等于把「网络错误就整页跳转」这个错误换个入口重现一遍。
+        Ok(response) if response.status().is_server_error() => {
+            tracing::warn!(status = response.status().as_u16(), "服务端登录状态探测返回服务端错误");
+            ServerGateProbe::Unreachable
         }
         Ok(_) => ServerGateProbe::SessionExpired,
         Err(error) => {

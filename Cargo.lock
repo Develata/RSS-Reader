@@ -5221,6 +5221,7 @@ dependencies = [
  "tracing-subscriber",
  "tracing-wasm",
  "url",
+ "urlencoding",
  "uuid",
  "wasm-bindgen-futures",
  "web-sys",

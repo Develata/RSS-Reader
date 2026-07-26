@@ -202,10 +202,13 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     // （只做 Arc 指针拷贝与少量标量）。关键在于它的值没变时，第二个 memo 不会重算，
     // 于是 `SetStatus`（每次切换已读/收藏都会发一条）、`SetControlsHidden` 这类与分组
     // 无关的 intent 不再重建两棵分组树。
-    let presenter_input =
-        use_memo(move || EntriesPresenterInput::from_state(&session.snapshot(), feed_id));
-    let presenter =
-        use_memo(move || Arc::new(EntriesPagePresenter::from_input(&presenter_input())));
+    let presenter_input = use_memo(move || {
+        session.with_state(|state| EntriesPresenterInput::from_state(state, feed_id))
+    });
+    let presenter = use_memo(move || {
+        // `presenter_input()` 会克隆整份投影；`with` 直接借用（`from_input` 是纯函数）。
+        presenter_input.with(|input| Arc::new(EntriesPagePresenter::from_input(input)))
+    });
     let facade =
         EntriesPageFacade::new(ui, session, Arc::clone(&state_snapshot), presenter.cloned());
     let entry_search = ui.entry_search();
