@@ -5,8 +5,12 @@ use url::Url;
 const IMG_LAZY_SOURCE_ATTRIBUTES: &[&str] =
     &["data-src", "data-original", "data-lazy-src", "data-orig-file"];
 const IMG_SRCSET_ATTRIBUTES: &[&str] = &["data-srcset", "srcset"];
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 const SOURCE_SRCSET_ATTRIBUTES: &[&str] = &["data-srcset", "srcset"];
 
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LocalizableImageDocument {
     tags: Vec<HtmlTag>,
@@ -16,18 +20,24 @@ pub(crate) struct LocalizableImageDocument {
     unsupported_slot_count: usize,
 }
 
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ImageSlot {
     resolved_url: Url,
     rewrite_targets: Vec<ImageRewriteTarget>,
 }
 
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ImageRewriteKind {
     Img,
     Source,
 }
 
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ImageRewriteTarget {
     tag_index: usize,
@@ -35,14 +45,14 @@ struct ImageRewriteTarget {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct HtmlTag {
-    start: usize,
-    end: usize,
-    name: String,
+pub(super) struct HtmlTag {
+    pub(super) start: usize,
+    pub(super) end: usize,
+    pub(super) name: String,
     original_name: String,
     raw: String,
     attributes: Vec<HtmlAttribute>,
-    is_end_tag: bool,
+    pub(super) is_end_tag: bool,
     self_closing: bool,
 }
 
@@ -53,6 +63,8 @@ struct HtmlAttribute {
     value: Option<String>,
 }
 
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Default)]
 struct PictureFrame {
     source_candidates: Vec<String>,
@@ -61,6 +73,8 @@ struct PictureFrame {
     img_tag_index: Option<usize>,
 }
 
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 impl LocalizableImageDocument {
     pub(crate) fn parse(
         html: &str,
@@ -223,6 +237,8 @@ impl LocalizableImageDocument {
     }
 }
 
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 impl ImageSlot {
     pub(crate) fn resolved_url(&self) -> &Url {
         &self.resolved_url
@@ -259,12 +275,14 @@ pub fn normalize_html_for_live_display(html: &str, base_url: Option<&Url>) -> St
     apply_tag_rewrites(html, &tags, rewrites)
 }
 
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn normalize_image_content_type(raw: &str) -> Option<String> {
     let mime = raw.split(';').next()?.trim().to_ascii_lowercase();
     mime.starts_with("image/").then_some(mime)
 }
 
-fn parse_html_tags(raw: &str) -> Vec<HtmlTag> {
+pub(super) fn parse_html_tags(raw: &str) -> Vec<HtmlTag> {
     let bytes = raw.as_bytes();
     let mut tags = Vec::new();
     let mut index = 0_usize;
@@ -432,6 +450,8 @@ fn resolve_document_base_url(tags: &[HtmlTag], base_url: Option<&Url>) -> Option
         .or_else(|| base_url.cloned())
 }
 
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 fn img_candidate(tag: &HtmlTag) -> Option<String> {
     for attr in IMG_LAZY_SOURCE_ATTRIBUTES {
         if let Some(value) = attribute_value(tag, attr).filter(|value| !should_skip_asset(value)) {
@@ -446,13 +466,15 @@ fn img_candidate(tag: &HtmlTag) -> Option<String> {
     srcset_candidate(tag, IMG_SRCSET_ATTRIBUTES)
 }
 
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 fn source_candidate(tag: &HtmlTag) -> Option<String> {
     srcset_candidate(tag, SOURCE_SRCSET_ATTRIBUTES).or_else(|| {
         attribute_value(tag, "src").filter(|value| !should_skip_asset(value)).map(ToOwned::to_owned)
     })
 }
 
-fn attribute_value<'a>(tag: &'a HtmlTag, attr: &str) -> Option<&'a str> {
+pub(super) fn attribute_value<'a>(tag: &'a HtmlTag, attr: &str) -> Option<&'a str> {
     tag.attributes
         .iter()
         .find(|candidate| candidate.name == attr)
@@ -630,6 +652,8 @@ pub(crate) fn resolve_asset_url(
         .filter(|resolved| matches!(resolved.scheme(), "http" | "https"))
 }
 
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+#[cfg(not(target_arch = "wasm32"))]
 fn rewrite_tag_for_localized_asset(
     tag: &HtmlTag,
     kind: ImageRewriteKind,
@@ -806,7 +830,7 @@ fn looks_like_placeholder_asset(raw: &str) -> bool {
         || lower.ends_with("/pixel.gif")
 }
 
-fn looks_like_wordpress_emoji_asset(raw: &str) -> bool {
+pub(super) fn looks_like_wordpress_emoji_asset(raw: &str) -> bool {
     let lower = raw.to_ascii_lowercase();
     lower.contains("s.w.org/images/core/emoji/") || lower.contains("/wp-includes/images/smilies/")
 }

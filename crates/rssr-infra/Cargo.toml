@@ -6,6 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+ammonia.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true

@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::Semaphore;
 use url::Url;
 
-use super::image_html::{LocalizableImageDocument, normalize_html_for_live_display};
+use crate::html::{LocalizableImageDocument, normalize_html_for_live_display};
 
 #[derive(Debug, Clone)]
 pub struct BodyAssetLocalizer {
@@ -149,8 +149,7 @@ impl BodyAssetLocalizer {
 
         let raw_content_type =
             response.headers().get(header::CONTENT_TYPE).and_then(|value| value.to_str().ok());
-        let content_type =
-            raw_content_type.and_then(super::image_html::normalize_image_content_type);
+        let content_type = raw_content_type.and_then(crate::html::normalize_image_content_type);
         let Some(content_type) = content_type else {
             return Err(FetchImageError::NonImageContentType(
                 raw_content_type.map(ToOwned::to_owned),
@@ -338,7 +337,7 @@ async fn read_image_bytes_with_limit(
 
 #[cfg(test)]
 mod tests {
-    use crate::fetch::client::image_html::{self, LocalizableImageDocument};
+    use crate::html::{self, LocalizableImageDocument};
 
     use super::BodyAssetLocalizer;
     use url::Url;
@@ -361,12 +360,12 @@ mod tests {
     }
 
     #[test]
-    fn normalize_image_content_type_delegates_to_image_html_module() {
+    fn normalize_image_content_type_delegates_to_html_module() {
         assert_eq!(
-            image_html::normalize_image_content_type("image/png; charset=binary").as_deref(),
+            html::normalize_image_content_type("image/png; charset=binary").as_deref(),
             Some("image/png")
         );
-        assert_eq!(image_html::normalize_image_content_type("text/html"), None);
+        assert_eq!(html::normalize_image_content_type("text/html"), None);
     }
 
     #[test]

@@ -61,7 +61,7 @@ fn main() {
 
     let config =
         Config::new().with_window(window).with_menu(None).with_asynchronous_custom_protocol(
-            crate::pages::reader_page::support::DESKTOP_IMAGE_PROXY_SCHEME,
+            DESKTOP_IMAGE_PROXY_SCHEME,
             |_webview_id, request: HttpRequest<Vec<u8>>, responder: RequestAsyncResponder| {
                 tokio::spawn(async move {
                     responder.respond(desktop_image_proxy_response(request).await);
@@ -81,6 +81,16 @@ fn main() {
         Icon::from_rgba(image.into_raw(), width, height).ok()
     }
 }
+
+/// 桌面端自定义协议名。常量原本放在阅读页的 support 模块里，但页面层不该持有桌面运行时的
+/// 协议定义；这里是它唯一的使用方。
+///
+/// 注意：这条链路目前是**注册了但走不通**的。协议处理器本身可用且有测试覆盖，但正文里没有
+/// 任何地方会产出 `rssr-img://` 地址（产出侧一直挂着 `#[allow(dead_code)]` 从未被调用），
+/// 而且 `sanitize_reader_html` 的 ammonia 白名单也不含这个 scheme，即使产出了也会被消毒掉。
+/// 要么把它接起来，要么整体删掉，不要让它继续以「看起来在用」的样子留着。
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+const DESKTOP_IMAGE_PROXY_SCHEME: &str = "rssr-img";
 
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
 const DESKTOP_IMAGE_PROXY_USER_AGENT: &str = concat!(
@@ -106,13 +116,7 @@ async fn desktop_image_proxy_response(
 ) -> dioxus::desktop::wry::http::Response<Cow<'static, [u8]>> {
     let request_uri = request.uri().to_string();
     let parsed = url::Url::parse(&request_uri)
-        .or_else(|_| {
-            url::Url::parse(&format!(
-                "{}:{}",
-                crate::pages::reader_page::support::DESKTOP_IMAGE_PROXY_SCHEME,
-                request_uri
-            ))
-        })
+        .or_else(|_| url::Url::parse(&format!("{}:{}", DESKTOP_IMAGE_PROXY_SCHEME, request_uri)))
         .ok();
     let Some(parsed) = parsed else {
         return simple_proxy_response(400, "invalid proxy request uri");
@@ -243,7 +247,7 @@ mod tests {
         };
         let uri = format!(
             "{}://fetch?target={}&referer={}",
-            crate::pages::reader_page::support::DESKTOP_IMAGE_PROXY_SCHEME,
+            super::DESKTOP_IMAGE_PROXY_SCHEME,
             encode(&format!("http://{addr}/image.png")),
             encode("https://blogs.nvidia.com/blog/example-post/")
         );

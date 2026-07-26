@@ -5197,21 +5197,16 @@ dependencies = [
 name = "rssr-app"
 version = "0.1.0"
 dependencies = [
- "ammonia",
  "anyhow",
  "async-trait",
  "base64",
- "chrono",
  "console_error_panic_hook",
  "dioxus",
  "dioxus-router",
- "feed-rs",
  "gloo-file",
  "gloo-timers",
  "image",
  "js-sys",
- "quick-xml 0.37.5",
- "regex",
  "reqwest",
  "rfd",
  "rssr-application",
@@ -5279,6 +5274,7 @@ dependencies = [
 name = "rssr-infra"
 version = "0.1.0"
 dependencies = [
+ "ammonia",
  "anyhow",
  "async-trait",
  "base64",
