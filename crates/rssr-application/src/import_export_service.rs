@@ -184,7 +184,12 @@ impl ImportExportService {
 
         let settings = self.settings_repository.load().await?;
 
-        Ok(ConfigPackage { version: 2, exported_at: self.clock.now_utc(), feeds, settings })
+        Ok(ConfigPackage {
+            version: rssr_domain::CONFIG_PACKAGE_VERSION,
+            exported_at: self.clock.now_utc(),
+            feeds,
+            settings,
+        })
     }
 
     pub async fn import_config_package(

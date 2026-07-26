@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
-use rssr_domain::{
-    MAX_ARCHIVE_AFTER_MONTHS, MAX_ENTRIES_PAGE_SIZE, MAX_REFRESH_INTERVAL_MINUTES,
-    SettingsRepository, UserSettings,
-};
+use anyhow::Result;
+use rssr_domain::{SettingsRepository, UserSettings};
 
 #[derive(Clone)]
 pub struct SettingsService {
@@ -20,23 +17,9 @@ impl SettingsService {
         Ok(self.repository.load().await?)
     }
 
+    /// 取值范围校验的唯一实现在 `rssr_domain::validation`，与配置包导入共用同一套规则。
     pub async fn save(&self, settings: &UserSettings) -> Result<()> {
-        ensure!(
-            (1..=MAX_REFRESH_INTERVAL_MINUTES).contains(&settings.refresh_interval_minutes),
-            "刷新间隔必须在 1 到 {MAX_REFRESH_INTERVAL_MINUTES} 分钟之间"
-        );
-        ensure!(
-            (1..=MAX_ARCHIVE_AFTER_MONTHS).contains(&settings.archive_after_months),
-            "自动归档阈值必须在 1 到 {MAX_ARCHIVE_AFTER_MONTHS} 个月之间"
-        );
-        ensure!(
-            (1..=MAX_ENTRIES_PAGE_SIZE).contains(&settings.entries_page_size),
-            "文章页每页数量必须在 1 到 {MAX_ENTRIES_PAGE_SIZE} 之间"
-        );
-        ensure!(
-            (0.8..=1.5).contains(&settings.reader_font_scale),
-            "阅读字号缩放必须在 0.8 到 1.5 之间"
-        );
+        rssr_domain::validate_user_settings(settings)?;
         Ok(self.repository.save(settings).await?)
     }
 }

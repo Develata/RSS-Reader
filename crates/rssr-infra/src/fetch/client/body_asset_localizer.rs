@@ -157,17 +157,7 @@ impl BodyAssetLocalizer {
             ));
         };
 
-        let bytes = response.bytes().await.map_err(|error| {
-            if error.is_timeout() {
-                FetchImageError::Timeout
-            } else {
-                FetchImageError::Read(error.to_string())
-            }
-        })?;
-        if bytes.len() > max_bytes {
-            return Err(FetchImageError::TooLarge { byte_len: bytes.len(), max_bytes });
-        }
-
+        let bytes = read_image_bytes_with_limit(response, max_bytes).await?;
         let byte_len = bytes.len();
         Ok((format!("data:{content_type};base64,{}", BASE64.encode(bytes)), byte_len))
     }
@@ -307,6 +297,43 @@ impl Default for BodyAssetLocalizer {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// 边下边累计并在超限时立刻放弃。此前是先 `response.bytes()` 把整张图读完再比大小，
+/// 一个恶意或损坏的图片地址（正文 HTML 完全由远端控制）就能让进程按响应体大小吃内存。
+/// `Content-Length` 只是快速路径，真正的上限由累计检查保证。
+async fn read_image_bytes_with_limit(
+    mut response: reqwest::Response,
+    max_bytes: usize,
+) -> Result<Vec<u8>, FetchImageError> {
+    if let Some(content_length) = response.content_length()
+        && content_length > max_bytes as u64
+    {
+        return Err(FetchImageError::TooLarge { byte_len: content_length as usize, max_bytes });
+    }
+
+    let mut buffered = Vec::new();
+    loop {
+        let chunk = response.chunk().await.map_err(|error| {
+            if error.is_timeout() {
+                FetchImageError::Timeout
+            } else {
+                FetchImageError::Read(error.to_string())
+            }
+        })?;
+        let Some(chunk) = chunk else {
+            break;
+        };
+        if buffered.len() + chunk.len() > max_bytes {
+            return Err(FetchImageError::TooLarge {
+                byte_len: buffered.len() + chunk.len(),
+                max_bytes,
+            });
+        }
+        buffered.extend_from_slice(&chunk);
+    }
+
+    Ok(buffered)
 }
 
 #[cfg(test)]

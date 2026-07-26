@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rssr_domain::{
     DomainError, Entry, EntryContent, EntryContentRepository, EntryIndexRepository,
     EntryNavigation, EntryQuery, EntryRecord, EntryRepository, EntrySummary, ReadFilter,
@@ -5,6 +7,7 @@ use rssr_domain::{
 };
 use sqlx::{QueryBuilder, Row, Sqlite};
 use time::OffsetDateTime;
+use tokio::sync::OnceCell;
 use url::Url;
 
 use crate::db::SqlitePool;
@@ -15,6 +18,10 @@ use crate::parser::feed_parser::ParsedEntry;
 pub struct SqliteEntryRepository {
     index_pool: SqlitePool,
     content_pool: SqlitePool,
+    /// 正文库建表只需要保证一次。此前每次读正文都会执行一遍
+    /// `CREATE TABLE IF NOT EXISTS` + 两条 `CREATE INDEX IF NOT EXISTS`，
+    /// 等于每打开一篇文章多付三次 SQL 往返。
+    content_schema_ready: Arc<OnceCell<()>>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +55,7 @@ impl SqliteEntryRepository {
     }
 
     pub fn new_with_content_pool(index_pool: SqlitePool, content_pool: SqlitePool) -> Self {
-        Self { index_pool, content_pool }
+        Self { index_pool, content_pool, content_schema_ready: Arc::new(OnceCell::new()) }
     }
 
     pub async fn upsert_entries(
@@ -67,11 +74,14 @@ impl SqliteEntryRepository {
         entries: &[ParsedEntry],
     ) -> DomainResult<Vec<ResolvedEntryContent>> {
         let mut pending_contents = Vec::new();
+        // 一次刷新常常写入几十上百条：不包事务的话每条 INSERT 都是一次隐式事务，
+        // 每条都要各自 fsync。包成一个事务后整批只提交一次，同时让整批写入变成原子的。
+        let mut tx = self.index_pool.begin().await.map_err(map_sqlx_error)?;
+        let now = now_rfc3339();
 
         for entry in entries {
             let published_at = format_optional_datetime(entry.published_at)?;
             let updated_at_source = format_optional_datetime(entry.updated_at_source)?;
-            let now = now_rfc3339();
 
             sqlx::query(
                 r#"
@@ -101,7 +111,7 @@ impl SqliteEntryRepository {
             .bind(published_at)
             .bind(updated_at_source)
             .bind(&now)
-            .execute(&self.index_pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_sqlx_error)?;
 
@@ -118,6 +128,8 @@ impl SqliteEntryRepository {
                 });
             }
         }
+
+        tx.commit().await.map_err(map_sqlx_error)?;
 
         if pending_contents.is_empty() {
             return Ok(Vec::new());
@@ -157,10 +169,16 @@ impl SqliteEntryRepository {
         contents: &[ResolvedEntryContent],
     ) -> DomainResult<usize> {
         self.ensure_content_schema().await?;
+        if contents.is_empty() {
+            return Ok(0);
+        }
+
         let mut upserted = 0;
+        // 与索引库同理：整批正文写入合并成一个事务，避免逐条隐式提交。
+        let mut tx = self.content_pool.begin().await.map_err(map_sqlx_error)?;
+        let now = now_rfc3339();
 
         for content in contents {
-            let now = now_rfc3339();
             let result = sqlx::query(
                 r#"
                 INSERT INTO entry_contents (
@@ -180,7 +198,7 @@ impl SqliteEntryRepository {
             .bind(content.content_text.as_deref())
             .bind(content.content_hash.as_deref())
             .bind(&now)
-            .execute(&self.content_pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_sqlx_error)?;
 
@@ -189,13 +207,13 @@ impl SqliteEntryRepository {
             }
         }
 
-        if !contents.is_empty() {
-            self.mark_has_content(
-                &contents.iter().map(|content| content.entry_id).collect::<Vec<_>>(),
-                true,
-            )
-            .await?;
-        }
+        tx.commit().await.map_err(map_sqlx_error)?;
+
+        self.mark_has_content(
+            &contents.iter().map(|content| content.entry_id).collect::<Vec<_>>(),
+            true,
+        )
+        .await?;
 
         Ok(upserted)
     }
@@ -311,7 +329,17 @@ impl SqliteEntryRepository {
         Ok(())
     }
 
+    /// 正文库的权威 schema 在 `migrations_content/`；这里只是兜底，覆盖那些没有跑过
+    /// 正文库迁移就直接构造仓储的入口（例如把索引库 pool 同时当正文库用的测试）。
+    /// 用 `OnceCell` 保证每个仓储实例最多执行一次。
     async fn ensure_content_schema(&self) -> DomainResult<()> {
+        self.content_schema_ready
+            .get_or_try_init(|| async { self.create_content_schema().await })
+            .await
+            .copied()
+    }
+
+    async fn create_content_schema(&self) -> DomainResult<()> {
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS entry_contents (

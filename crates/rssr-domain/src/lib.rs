@@ -3,6 +3,7 @@ pub mod entry;
 pub mod feed;
 pub mod repository;
 pub mod settings;
+pub mod validation;
 
 pub use app_state::{AppStateSnapshot, EntriesWorkspaceState, EntryGroupingPreference};
 pub use entry::{
@@ -17,6 +18,10 @@ pub use repository::{
 pub use settings::{
     ConfigFeed, ConfigPackage, DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ARCHIVE_AFTER_MONTHS,
     MAX_ENTRIES_PAGE_SIZE, MAX_REFRESH_INTERVAL_MINUTES, StartupView, ThemeMode, UserSettings,
+};
+pub use validation::{
+    CONFIG_PACKAGE_VERSION, parse_and_normalize_feed_url, validate_config_package,
+    validate_user_settings,
 };
 
 pub type Result<T> = std::result::Result<T, DomainError>;

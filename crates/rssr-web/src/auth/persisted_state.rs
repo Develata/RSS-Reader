@@ -141,6 +141,8 @@ mod tests {
 
     #[test]
     fn auth_state_file_prefers_userprofile_when_home_is_missing() {
+        let _env_guard = crate::auth::test_env::lock();
+
         unsafe {
             remove_test_var("RSS_READER_WEB_AUTH_STATE_FILE");
             remove_test_var("HOME");

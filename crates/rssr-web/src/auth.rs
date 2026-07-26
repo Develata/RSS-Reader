@@ -37,6 +37,25 @@ pub(crate) struct AppState {
     pub(crate) login_throttle: Arc<Mutex<HashMap<String, LoginThrottleState>>>,
 }
 
+/// 环境变量是进程级的，而 `cargo test` 默认多线程并行跑同一个测试二进制。
+/// 认证配置相关的测试会 set/remove `HOME`、`RSS_READER_WEB_AUTH_STATE_FILE` 等变量，
+/// 并行执行时会互相踩掉对方刚设置的值（表现为偶发失败、重跑又通过）。
+/// 所有改动进程环境变量的测试都必须先取这把锁。
+#[cfg(test)]
+pub(crate) mod test_env {
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    /// 忽略 poisoning：某个测试 panic 不应该把其余测试全部连带失败。
+    pub(crate) fn lock() -> MutexGuard<'static, ()> {
+        ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
 #[derive(Deserialize, Default)]
 pub(crate) struct LoginQuery {
     next: Option<String>,
@@ -215,6 +234,7 @@ mod tests {
 
     #[test]
     fn plaintext_password_bootstraps_persisted_hash_file() {
+        let _env_guard = test_env::lock();
         let auth_file = std::env::temp_dir().join(format!(
             "rssr-web-auth-{}-{}.json",
             std::process::id(),
@@ -237,6 +257,7 @@ mod tests {
 
     #[test]
     fn persisted_hash_is_used_without_password_env() {
+        let _env_guard = test_env::lock();
         let auth_file = std::env::temp_dir().join(format!(
             "rssr-web-auth-{}-{}.json",
             std::process::id(),
@@ -262,6 +283,7 @@ mod tests {
 
     #[test]
     fn missing_session_secret_is_generated_and_persisted() {
+        let _env_guard = test_env::lock();
         let auth_file = std::env::temp_dir().join(format!(
             "rssr-web-auth-{}-{}.json",
             std::process::id(),
@@ -282,6 +304,7 @@ mod tests {
 
     #[test]
     fn persisted_session_secret_is_reused() {
+        let _env_guard = test_env::lock();
         let auth_file = std::env::temp_dir().join(format!(
             "rssr-web-auth-{}-{}.json",
             std::process::id(),
@@ -334,6 +357,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn persisted_auth_state_file_uses_owner_only_permissions() {
+        let _env_guard = test_env::lock();
         use std::os::unix::fs::PermissionsExt;
 
         let auth_file = std::env::temp_dir().join(format!(

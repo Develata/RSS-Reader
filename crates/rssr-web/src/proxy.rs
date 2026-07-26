@@ -1,4 +1,5 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::time::Duration;
 
 use axum::{
     body::Body,
@@ -8,6 +9,12 @@ use axum::{
 };
 use reqwest::Url;
 use serde::Deserialize;
+
+/// 代理是登录后才可达的，但仍然不能无上限地把上游响应整个读进内存：
+/// 一个 feed URL 指向超大文件就足以把服务打爆。
+const MAX_PROXIED_FEED_BYTES: usize = 8 * 1024 * 1024;
+const PROXY_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const PROXY_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Deserialize)]
 pub(crate) struct FeedProxyQuery {
@@ -29,12 +36,9 @@ pub(crate) async fn feed_proxy(Query(query): Query<FeedProxyQuery>) -> impl Into
     let content_type = response.headers().get(header::CONTENT_TYPE).cloned();
     let etag = response.headers().get(header::ETAG).cloned();
     let last_modified = response.headers().get(header::LAST_MODIFIED).cloned();
-    let body = match response.bytes().await {
+    let body = match read_body_with_limit(response, MAX_PROXIED_FEED_BYTES).await {
         Ok(body) => body,
-        Err(err) => {
-            return (StatusCode::BAD_GATEWAY, format!("读取 feed 代理响应失败：{err}"))
-                .into_response();
-        }
+        Err(err) => return (StatusCode::BAD_GATEWAY, err).into_response(),
     };
 
     let mut proxied = Response::builder().status(status);
@@ -146,9 +150,36 @@ fn is_documentation_ipv6(ip: Ipv6Addr) -> bool {
     octets[0] == 0x20 && octets[1] == 0x01 && octets[2] == 0x0d && octets[3] == 0xb8
 }
 
+/// 边下边累计字节数，一超过上限立刻放弃。先看 `Content-Length` 只能挡住诚实的上游，
+/// 真正的保护来自流式累计。
+async fn read_body_with_limit(
+    mut response: reqwest::Response,
+    max_bytes: usize,
+) -> Result<Vec<u8>, String> {
+    if let Some(content_length) = response.content_length()
+        && content_length > max_bytes as u64
+    {
+        return Err(format!("feed 响应体积超过 {max_bytes} 字节上限。"));
+    }
+
+    let mut buffered = Vec::new();
+    while let Some(chunk) =
+        response.chunk().await.map_err(|err| format!("读取 feed 代理响应失败：{err}"))?
+    {
+        if buffered.len() + chunk.len() > max_bytes {
+            return Err(format!("feed 响应体积超过 {max_bytes} 字节上限。"));
+        }
+        buffered.extend_from_slice(&chunk);
+    }
+
+    Ok(buffered)
+}
+
 async fn fetch_proxied_feed(initial_url: Url) -> Result<reqwest::Response, String> {
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
+        .timeout(PROXY_REQUEST_TIMEOUT)
+        .connect_timeout(PROXY_CONNECT_TIMEOUT)
         .build()
         .map_err(|err| format!("初始化 feed 代理客户端失败：{err}"))?;
     let mut current_url = initial_url;
