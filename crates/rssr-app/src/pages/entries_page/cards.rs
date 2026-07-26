@@ -6,9 +6,27 @@ use time::{OffsetDateTime, UtcOffset, macros::format_description};
 
 use crate::router::AppRoute;
 
-use super::session::EntriesPageSession;
+use super::{facade::EntriesPageFacade, groups::EntryCardRef, session::EntriesPageSession};
 
-pub(super) fn render_entry_card(
+/// 按分组树里的引用渲染一张卡片。
+///
+/// 条目在渲染时才从最新状态解析，因此分组树只需要携带 `(下标, id)`，不必携带
+/// `title` / `is_read` / `is_starred`——这也是切换已读/收藏不再重建分组树的原因。
+pub(super) fn render_entry_card_at(
+    facade: &EntriesPageFacade,
+    card: EntryCardRef,
+    position: usize,
+    total: usize,
+) -> Element {
+    let Some(entry) = facade.entry_at(card) else {
+        // 条目已不在当前列表里（罕见，见 `entry_at`）：少渲染一张卡片，不要让整页 panic。
+        return rsx! {};
+    };
+
+    render_entry_card(entry, facade.session(), list_edge_state(position, total))
+}
+
+fn render_entry_card(
     entry: Arc<EntrySummary>,
     session: EntriesPageSession,
     list_edge: &'static str,
@@ -65,9 +83,33 @@ pub(super) fn render_entry_card(
     }
 }
 
+fn list_edge_state(position: usize, total: usize) -> &'static str {
+    match (position, total) {
+        (_, 0) => "single",
+        (0, 1) => "single",
+        (0, _) => "start",
+        (index, len) if index + 1 == len => "end",
+        _ => "middle",
+    }
+}
+
 fn format_entry_date_utc(published_at: Option<OffsetDateTime>) -> Option<String> {
     const ENTRY_DATE_FORMAT: &[time::format_description::FormatItem<'static>] =
         format_description!("[year]-[month]-[day]");
 
     published_at.and_then(|value| value.to_offset(UtcOffset::UTC).format(ENTRY_DATE_FORMAT).ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::list_edge_state;
+
+    #[test]
+    fn marks_list_edges_by_position() {
+        assert_eq!(list_edge_state(0, 0), "single");
+        assert_eq!(list_edge_state(0, 1), "single");
+        assert_eq!(list_edge_state(0, 3), "start");
+        assert_eq!(list_edge_state(1, 3), "middle");
+        assert_eq!(list_edge_state(2, 3), "end");
+    }
 }

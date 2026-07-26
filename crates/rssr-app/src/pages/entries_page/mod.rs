@@ -18,7 +18,7 @@ use self::browser_interactions::{
     initial_entry_controls_hidden, scroll_directory_item,
     sync_entry_directory_with_viewport_alignment,
 };
-use self::cards::render_entry_card;
+use self::cards::render_entry_card_at;
 use self::clock::current_time_utc;
 use self::controls::{
     render_entry_controls, render_entry_directory, render_entry_pagination_controls,
@@ -69,7 +69,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
 
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
-    let session = facade.session();
     let controls = render_entry_controls(&facade);
     let pagination_top = render_entry_pagination_controls(&facade);
     let pagination_bottom = render_entry_pagination_controls(&facade);
@@ -140,8 +139,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                             p { "data-slot": "entry-group-meta", "{source.subtitle}" }
                                                         }
                                                         ul { "data-layout": "entry-list", "data-state": "populated",
-                                                            for (index , entry) in source.entries.iter().enumerate() {
-                                                                { render_entry_card(entry.clone(), session, list_edge_state(index, source.entries.len())) }
+                                                            for (position , card) in source.entry_cards.iter().copied().enumerate() {
+                                                                { render_entry_card_at(&facade, card, position, source.entry_cards.len()) }
                                                             }
                                                         }
                                                     }
@@ -166,8 +165,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                     p { "data-slot": "entry-group-meta", "{month.subtitle}" }
                                                 }
                                                 ul { "data-layout": "entry-list", "data-state": "populated",
-                                                    for (index , entry) in month.entries.iter().enumerate() {
-                                                        { render_entry_card(entry.clone(), session, list_edge_state(index, month.entries.len())) }
+                                                    for (position , card) in month.entry_cards.iter().copied().enumerate() {
+                                                        { render_entry_card_at(&facade, card, position, month.entry_cards.len()) }
                                                     }
                                                 }
                                             }
@@ -290,14 +289,4 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
 
 fn entries_page_title(feed_id: Option<i64>) -> &'static str {
     if feed_id.is_some() { "订阅文章" } else { "文章" }
-}
-
-fn list_edge_state(index: usize, len: usize) -> &'static str {
-    match (index, len) {
-        (_, 0) => "single",
-        (0, 1) => "single",
-        (0, _) => "start",
-        (i, l) if i + 1 == l => "end",
-        _ => "middle",
-    }
 }

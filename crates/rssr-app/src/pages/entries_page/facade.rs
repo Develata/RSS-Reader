@@ -1,13 +1,13 @@
 use std::{collections::BTreeSet, sync::Arc};
 
 use crate::ui::AppShellState;
-use rssr_domain::{ReadFilter, StarredFilter};
+use rssr_domain::{EntrySummary, ReadFilter, StarredFilter};
 
 use super::{
     browser_interactions::scroll_to_entry_group,
     groups::{
-        EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem, EntryMonthGroup,
-        EntrySourceGroup,
+        EntryCardRef, EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem,
+        EntryMonthGroup, EntrySourceGroup,
     },
     intent::EntriesPageIntent,
     presenter::EntriesPagePresenter,
@@ -95,6 +95,38 @@ impl EntriesPageFacade {
 
     pub(crate) fn visible_entries_len(&self) -> usize {
         self.presenter.visible_entries_len
+    }
+
+    /// 按分组树里的引用解析条目。卡片的 `title` / `is_read` / `is_starred` 一律走这里
+    /// 从最新 snapshot 取，因此分组树不必为标记切换重建。
+    ///
+    /// 正常情况下 `card.index` 直接命中：投影相等（presenter memo 因此复用旧树）就意味着
+    /// 条目数量与每个下标处的条目都没变，见 `GroupingEntries` 的 `PartialEq`。
+    ///
+    /// 但下标只是**快路径**，`card.id` 才是判据。分组树取自 memo 缓存，而它要跟上一次状态写入
+    /// 需要两跳，两跳的保证强度不同（已核对 dioxus 0.7.9 源码）：
+    ///
+    /// 1. **状态信号 → 投影 memo**：靠调度器次序。写入只把投影 memo 的 `dirty` 置真并唤醒它的
+    ///    重算任务，`dirty` 不会自己传到 presenter memo 上。`dioxus-core/src/scheduler.rs:203-222`
+    ///    在脏 scope 与脏 task 的 `ScopeOrder` 相等时让 `Work::PollTask` 胜出，因此投影 memo
+    ///    先重算、写回自己的信号，presenter memo 才被标脏。**这一跳依赖调度器内部次序。**
+    /// 2. **投影 memo → presenter memo**：无条件成立。`dioxus-signals/src/memo.rs:166-196`
+    ///    在读取时 `swap` 掉 `dirty` 并就地同步重算，所以第 1 跳标脏后，这里读到的一定是新值。
+    ///    注意反过来不成立：**没被标脏的 memo 直接返回缓存值，不会去看上游**（同处 else 分支），
+    ///    所以第 2 跳救不了第 1 跳。
+    ///
+    /// 于是第 1 跳一旦在某个路径上不成立，只按下标解析就会把**另一篇文章**渲染到这个位置上
+    /// （连 `key` 也会跟着错）。校验 id 之后，最坏情况退化成「这张卡片这一帧没渲染」，
+    /// 下一帧投影追上后自然恢复。这就是这里不省这次整数比较的原因。
+    pub(crate) fn entry_at(&self, card: EntryCardRef) -> Option<Arc<EntrySummary>> {
+        let entries = &self.snapshot.entries;
+        if let Some(entry) = entries.get(card.index)
+            && entry.id == card.id
+        {
+            return Some(Arc::clone(entry));
+        }
+        // 兜底：O(N) 但极罕见；条目已被移出列表时返回 None。
+        entries.iter().find(|entry| entry.id == card.id).map(Arc::clone)
     }
 
     pub(crate) fn session(&self) -> EntriesPageSession {
