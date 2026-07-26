@@ -118,9 +118,15 @@ pub(crate) fn use_authenticated_shell_bus(
             // 是两套互不相关的凭据，回落会把用户引去创建一组永远用不上的本地凭据。
             match probe_server_gate().await {
                 ServerGateProbe::Authenticated => auth.set(WebAuthState::Authenticated),
-                ServerGateProbe::SessionExpired | ServerGateProbe::Unreachable => {
-                    recover_from_expired_server_session();
-                }
+                // 明确收到了「未通过认证」的应答：跳服务端登录页，这是这类部署唯一的恢复路径。
+                ServerGateProbe::SessionExpired => recover_from_expired_server_session(),
+                // 探测本身失败（离线、网络抖动）时**不跳转**：Web 端的数据在 localStorage 里，
+                // 断网时页面本可以继续渲染，跳去 /login 只会得到一个加载失败的页面，
+                // 把一个还能用的会话直接毁掉。
+                //
+                // 直接放行是安全的：客户端这道门禁不是安全边界——服务端的 require_auth 对每个
+                // 请求都会重新校验，会话真的失效时相关请求自然会失败。
+                ServerGateProbe::Unreachable => auth.set(WebAuthState::Authenticated),
                 // 没有服务端门禁，才轮到本地判定（含回环主机检查）。
                 ServerGateProbe::Absent => auth.set(auth_state()),
             }
