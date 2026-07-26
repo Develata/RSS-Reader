@@ -80,3 +80,17 @@ pub(super) fn local_web_auth_enabled() -> bool {
     };
     super::is_local_protection_host(&hostname)
 }
+
+/// 整页跳到服务端登录页。
+///
+/// 服务端会话过期时必须走这条路：本地浏览器门禁与服务端登录是两套互不相关的凭据，
+/// 把用户引去创建本地凭据既解决不了问题，还会留下一组永远用不上的 localStorage 凭据。
+pub(super) fn redirect_to_server_login() {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Some(origin) = browser_origin() else {
+        return;
+    };
+    let _ = window.location().set_href(&format!("{origin}/login"));
+}

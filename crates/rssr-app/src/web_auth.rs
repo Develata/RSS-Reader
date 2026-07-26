@@ -74,21 +74,52 @@ pub fn auth_state() -> WebAuthState {
     local_auth_state()
 }
 
+/// 服务端会话探测的结果。
+///
+/// 必须区分「会话过期」与「连不上」：此前两者都被压成 `false`，随后一律回落到
+/// `local_auth_state()`，于是正式部署上会话一过期，用户就被引导去创建一组与服务端登录
+/// 毫无关系的本地凭据。
+/// 原生端只会产出 `Absent`（没有服务端门禁这个概念），其余分支仅在 wasm 上构造。
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServerGateProbe {
+    /// 没有服务端门禁，走本地判定。
+    Absent,
+    /// 会话有效。
+    Authenticated,
+    /// 有门禁但会话无效（`/session-probe` 在 `require_auth` 之后，过期时不会回 204）。
+    SessionExpired,
+    /// 探测本身失败（网络抖动、离线等），无法判定。
+    Unreachable,
+}
+
 #[cfg(target_arch = "wasm32")]
-pub async fn verify_server_gate() -> bool {
+pub async fn probe_server_gate() -> ServerGateProbe {
     if !browser::server_gate_present() {
-        return false;
+        return ServerGateProbe::Absent;
     }
 
     let Some(origin) = browser::browser_origin() else {
-        return false;
+        return ServerGateProbe::Unreachable;
     };
     let probe_url = format!("{origin}/session-probe");
 
     match reqwest::Client::new().get(probe_url).send().await {
-        Ok(response) => response.status() == reqwest::StatusCode::NO_CONTENT,
-        Err(_) => false,
+        Ok(response) if response.status() == reqwest::StatusCode::NO_CONTENT => {
+            ServerGateProbe::Authenticated
+        }
+        Ok(_) => ServerGateProbe::SessionExpired,
+        Err(error) => {
+            tracing::warn!(error = %error, "确认服务端登录状态失败");
+            ServerGateProbe::Unreachable
+        }
     }
+}
+
+/// 服务端会话过期时的恢复动作：整页跳到服务端登录页。
+#[cfg(target_arch = "wasm32")]
+pub fn recover_from_expired_server_session() {
+    browser::redirect_to_server_login();
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -107,14 +138,12 @@ pub fn local_auth_state() -> WebAuthState {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub async fn verify_server_gate() -> bool {
-    false
+pub async fn probe_server_gate() -> ServerGateProbe {
+    ServerGateProbe::Absent
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn local_auth_state() -> WebAuthState {
-    WebAuthState::Authenticated
-}
+pub fn recover_from_expired_server_session() {}
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn auth_state() -> WebAuthState {

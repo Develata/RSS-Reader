@@ -24,7 +24,9 @@ use self::controls::{
     render_entry_controls, render_entry_directory, render_entry_pagination_controls,
 };
 use self::{
-    facade::EntriesPageFacade, presenter::EntriesPagePresenter, session::EntriesPageSession,
+    facade::EntriesPageFacade,
+    presenter::{EntriesPagePresenter, EntriesPresenterInput},
+    session::EntriesPageSession,
     state::EntriesPageState,
 };
 use crate::{
@@ -194,10 +196,16 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
     let session = EntriesPageSession::new(feed_id, state);
     let state_snapshot = Arc::new(session.snapshot());
-    // presenter 是 state 的纯函数（归档筛选已下沉到查询层），因此可以缓存：分组树只在状态
-    // 真正变化时重建一次，而不是每次重绘都重建两棵（全量 + 当页）。
+    // memo 链：先把状态收窄成 presenter 真正依赖的投影，再由它推导 presenter。
+    //
+    // 信号订阅粒度是「整个信号」，所以第一个 memo 每次状态变化都会重算——但它很便宜
+    // （只做 Arc 指针拷贝与少量标量）。关键在于它的值没变时，第二个 memo 不会重算，
+    // 于是 `SetStatus`（每次切换已读/收藏都会发一条）、`SetControlsHidden` 这类与分组
+    // 无关的 intent 不再重建两棵分组树。
+    let presenter_input =
+        use_memo(move || EntriesPresenterInput::from_state(&session.snapshot(), feed_id));
     let presenter =
-        use_memo(move || Arc::new(EntriesPagePresenter::from_state(&session.snapshot(), feed_id)));
+        use_memo(move || Arc::new(EntriesPagePresenter::from_input(&presenter_input())));
     let facade =
         EntriesPageFacade::new(ui, session, Arc::clone(&state_snapshot), presenter.cloned());
     let entry_search = ui.entry_search();

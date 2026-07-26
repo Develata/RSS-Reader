@@ -11,8 +11,8 @@ use crate::{
     },
     ui::{ShellCommand, UiCommand, UiIntent, collect_projected_ui_command, visit_ui_command},
     web_auth::{
-        WebAuthState, configured_username, local_auth_state, login, setup_credentials,
-        verify_server_gate,
+        ServerGateProbe, WebAuthState, auth_state, configured_username, login, probe_server_gate,
+        recover_from_expired_server_session, setup_credentials,
     },
 };
 
@@ -114,10 +114,15 @@ pub(crate) fn use_authenticated_shell_bus(
     use_resource(move || async move {
         let current_auth = auth();
         if current_auth == WebAuthState::PendingServerProbe {
-            if verify_server_gate().await {
-                auth.set(WebAuthState::Authenticated);
-            } else {
-                auth.set(local_auth_state());
+            // 关键：门禁存在时**不能**回落到 local_auth_state()。本地浏览器门禁与服务端登录
+            // 是两套互不相关的凭据，回落会把用户引去创建一组永远用不上的本地凭据。
+            match probe_server_gate().await {
+                ServerGateProbe::Authenticated => auth.set(WebAuthState::Authenticated),
+                ServerGateProbe::SessionExpired | ServerGateProbe::Unreachable => {
+                    recover_from_expired_server_session();
+                }
+                // 没有服务端门禁，才轮到本地判定（含回环主机检查）。
+                ServerGateProbe::Absent => auth.set(auth_state()),
             }
             return;
         }

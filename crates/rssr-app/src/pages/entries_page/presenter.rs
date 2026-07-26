@@ -1,4 +1,6 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
+
+use rssr_domain::{EntrySummary, FeedSummary};
 
 use super::{
     groups::{
@@ -9,6 +11,45 @@ use super::{
     },
     state::{EntriesPageState, EntryGroupingMode},
 };
+
+/// presenter 真正依赖的那部分状态。
+///
+/// Dioxus 的信号订阅粒度是「整个信号」，读任何一个字段都会订阅整份 `EntriesPageState`，
+/// 于是 `SetStatus`、`SetControlsHidden` 这类与分组毫无关系的 intent 也会让 presenter 失效、
+/// 重建两棵分组树。把依赖收窄成这个投影后，可以用 memo 链：
+/// 投影 memo 每次状态变化都会重算（很便宜），但它的值没变时，presenter memo 不会重算。
+///
+/// 注意这里**不包含** `status` / `status_tone` / `controls_hidden` / `show_archived` /
+/// 读取与收藏筛选 / `selected_feed_urls` / `archive_after_months` / `preferences_loaded`——
+/// 归档筛选已经下沉到查询层，筛选变化会走一次重新加载并以 `SetEntries` 收尾。
+#[derive(Clone, PartialEq)]
+pub(crate) struct EntriesPresenterInput {
+    entries: Vec<Arc<EntrySummary>>,
+    archived_count: usize,
+    entries_page_size: u32,
+    current_page: u32,
+    feeds: Vec<FeedSummary>,
+    grouping_mode: EntryGroupingMode,
+}
+
+impl EntriesPresenterInput {
+    pub(crate) fn from_state(state: &EntriesPageState, feed_id: Option<i64>) -> Self {
+        Self {
+            // 只是 Arc 指针拷贝。
+            entries: state.entries.clone(),
+            archived_count: state.archived_count,
+            entries_page_size: state.entries_page_size,
+            current_page: state.current_page,
+            // 订阅列表只在 bootstrap 时变化；参与比较是为了让来源筛选项跟着更新。
+            feeds: if feed_id.is_some() { Vec::new() } else { state.feeds.clone() },
+            grouping_mode: state.grouping_mode,
+        }
+    }
+
+    fn page_size(&self) -> usize {
+        self.entries_page_size.max(1) as usize
+    }
+}
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct EntriesPagePresenter {
@@ -31,41 +72,37 @@ pub(crate) struct EntriesPagePresenter {
 }
 
 impl EntriesPagePresenter {
-    /// 从当前状态派生这一屏要渲染的内容。
+    /// 从 [`EntriesPresenterInput`] 派生这一屏要渲染的内容。
     ///
     /// 归档筛选与计数已经由存储层完成（见 `EntriesPageState::entry_query` 与
-    /// `EntriesListService::list_entries`），因此这里拿到的 `state.entries` 就是可显示集合，
-    /// 不再需要当前时间；这也让本函数变成状态的纯函数，可以被 `use_memo` 缓存，避免每次
-    /// 重绘都重建一遍分组树。
-    pub(crate) fn from_state(state: &EntriesPageState, feed_id: Option<i64>) -> Self {
-        let archived_count = state.archived_count;
+    /// `EntriesListService::list_entries`），因此这里拿到的条目就是可显示集合，
+    /// 不再需要当前时间。输入是一个窄投影，因此本函数只在真正影响输出的字段变化时才会重跑。
+    pub(crate) fn from_input(input: &EntriesPresenterInput) -> Self {
+        let archived_count = input.archived_count;
         // 只是 Arc 指针拷贝，不再深拷贝每条 EntrySummary。
-        let visible_entries = state.entries.clone();
+        let visible_entries = input.entries.clone();
 
         let visible_entries_len = visible_entries.len();
-        let page_size = state.page_size();
+        let page_size = input.page_size();
         let total_pages = if visible_entries_len == 0 {
             0
         } else {
             ((visible_entries_len - 1) / page_size) as u32 + 1
         };
         let current_page =
-            if total_pages == 0 { 1 } else { state.current_page.min(total_pages).max(1) };
+            if total_pages == 0 { 1 } else { input.current_page.min(total_pages).max(1) };
         let page_start_index =
             if total_pages == 0 { 0 } else { ((current_page - 1) as usize) * page_size };
         let page_end_index = visible_entries_len.min(page_start_index.saturating_add(page_size));
         let paged_entries = visible_entries[page_start_index..page_end_index].to_vec();
         let page_start = if visible_entries_len == 0 { 0 } else { page_start_index + 1 };
         let page_end = if visible_entries_len == 0 { 0 } else { page_end_index };
-        let source_filter_options = if feed_id.is_some() {
-            Vec::new()
-        } else {
-            state
-                .feeds
-                .iter()
-                .map(|feed| (feed.id, feed.title.clone(), feed.url.clone()))
-                .collect::<Vec<_>>()
-        };
+        // `input.feeds` 在按订阅浏览时本就是空的（见 `EntriesPresenterInput::from_state`）。
+        let source_filter_options = input
+            .feeds
+            .iter()
+            .map(|feed| (feed.id, feed.title.clone(), feed.url.clone()))
+            .collect::<Vec<_>>();
 
         let current_entry_id = paged_entries.first().map(|entry| entry.id);
 
@@ -78,7 +115,7 @@ impl EntriesPagePresenter {
             group_nav_items,
             active_group_anchor,
             active_directory_anchor,
-        ) = match state.grouping_mode {
+        ) = match input.grouping_mode {
             EntryGroupingMode::Time => {
                 let all_groups = group_entries_by_time_tree(&visible_entries, page_size);
                 let paged_groups = group_entries_by_time_tree(&paged_entries, page_size);
@@ -159,7 +196,7 @@ mod tests {
     use rssr_domain::{EntrySummary, FeedSummary};
     use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-    use super::EntriesPagePresenter;
+    use super::{EntriesPagePresenter, EntriesPresenterInput};
     use crate::pages::entries_page::state::{EntriesPageState, EntryGroupingMode};
 
     fn parse_datetime(raw: &str) -> OffsetDateTime {
@@ -191,6 +228,61 @@ mod tests {
         }
     }
 
+    /// memo 链能省下重建的前提：与分组无关的状态变化必须让投影保持**相等**。
+    /// 这些字段一旦被误加进 `EntriesPresenterInput`，分组树就会重新为状态提示之类的变化重建。
+    #[test]
+    fn presenter_input_ignores_state_that_does_not_affect_grouping() {
+        let mut state = EntriesPageState::new(true);
+        state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")];
+        let baseline = EntriesPresenterInput::from_state(&state, None);
+
+        // 每次切换已读/收藏都会附带发一条 SetStatus。
+        state.status = "已将《X》标记为已读。".to_string();
+        state.status_tone = "info".to_string();
+        state.controls_hidden = !state.controls_hidden;
+        state.show_archived = !state.show_archived;
+        state.read_filter = rssr_domain::ReadFilter::UnreadOnly;
+        state.starred_filter = rssr_domain::StarredFilter::StarredOnly;
+        state.selected_feed_urls = vec!["https://example.com/a.xml".to_string()];
+        state.archive_after_months = 12;
+        state.preferences_loaded = true;
+
+        assert!(
+            baseline == EntriesPresenterInput::from_state(&state, None),
+            "与分组无关的状态变化不应让 presenter 投影发生变化，否则分组树会被无谓重建"
+        );
+    }
+
+    /// 反面：真正影响输出的字段必须让投影不相等，否则界面不会更新。
+    #[test]
+    fn presenter_input_tracks_state_that_does_affect_grouping() {
+        let mut state = EntriesPageState::new(true);
+        state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")];
+        let baseline = EntriesPresenterInput::from_state(&state, None);
+
+        let mut paged = state.clone();
+        paged.current_page = 2;
+        assert!(baseline != EntriesPresenterInput::from_state(&paged, None));
+
+        let mut resized = state.clone();
+        resized.entries_page_size = 5;
+        assert!(baseline != EntriesPresenterInput::from_state(&resized, None));
+
+        let mut regrouped = state.clone();
+        regrouped.grouping_mode = EntryGroupingMode::Source;
+        assert!(baseline != EntriesPresenterInput::from_state(&regrouped, None));
+
+        let mut counted = state.clone();
+        counted.archived_count = 3;
+        assert!(baseline != EntriesPresenterInput::from_state(&counted, None));
+
+        // 已读标记变化必须被看见：卡片的已读/未读文案来自条目本身。
+        let mut flagged = state.clone();
+        flagged.entries =
+            vec![Arc::new(EntrySummary { is_read: true, ..(*state.entries[0]).clone() })];
+        assert!(baseline != EntriesPresenterInput::from_state(&flagged, None));
+    }
+
     #[test]
     fn presenter_uses_page_slice_for_rendering_and_full_scope_for_directory() {
         let mut state = EntriesPageState::new(true);
@@ -208,7 +300,8 @@ mod tests {
             feed(2, "Beta", "https://example.com/beta.xml"),
         ];
 
-        let presenter = EntriesPagePresenter::from_state(&state, None);
+        let presenter =
+            EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
 
         assert_eq!(presenter.visible_entries_len, 4);
         assert_eq!(presenter.current_page, 2);
@@ -242,7 +335,8 @@ mod tests {
             entry(2, 2, "Beta", "2026-04-03T08:00:00Z"),
         ];
 
-        let presenter = EntriesPagePresenter::from_state(&state, None);
+        let presenter =
+            EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
 
         assert_eq!(presenter.active_group_anchor.as_deref(), Some("entry-group-beta"));
         assert!(presenter.group_nav_items.iter().any(|item| item.is_active));
