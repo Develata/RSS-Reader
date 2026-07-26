@@ -1,0 +1,32 @@
+-- 恢复 0004 误删的 idx_entries_sort_key。
+--
+-- 0004 的判断基于一条**不具代表性**的测试查询（只 SELECT entries.id）：那种情况下
+-- idx_entries_feed_sort_key 对 entries 是覆盖索引、idx_feeds_is_deleted 对 feeds 是覆盖索引，
+-- 规划器于是宁可多排一次序也走覆盖索引，看起来这个索引没用。
+--
+-- 但 list_entries 真正要取的是
+--   entries.id, entries.feed_id, entries.title,
+--   COALESCE(feeds.title, feeds.url) AS feed_title,
+--   entries.published_at, entries.is_read, entries.is_starred
+-- entries 侧无法被任何窄索引覆盖，feeds 侧也必须回表取 title。用真实 SELECT 列表实测
+-- （20000 条 entries / 20 个 feeds / 已 ANALYZE）：
+--
+--   有 idx_entries_sort_key：
+--     SCAN entries USING INDEX idx_entries_sort_key
+--     BLOOM FILTER ON feeds (id=?)
+--     SEARCH feeds USING INTEGER PRIMARY KEY (rowid=?)
+--     —— 没有 TEMP B-TREE，输出天然有序
+--
+--   没有它（即 0004 之后）：
+--     SCAN feeds
+--     SEARCH entries USING INDEX idx_entries_feed_sort_key (feed_id=?)
+--     USE TEMP B-TREE FOR ORDER BY
+--     —— 退化成全量排序
+--
+-- 所以 0004 实际上让文章列表变慢了。这条索引还是把「按排序键顺序扫 entries」这个计划
+-- 变得可选的关键；后续如果给列表加上 LIMIT/OFFSET 分页，它还能让扫描提前终止。
+--
+-- 教训：评估索引必须用生产查询的真实 SELECT 列表，覆盖索引与否会直接改变规划器的选择。
+
+CREATE INDEX IF NOT EXISTS idx_entries_sort_key
+    ON entries(COALESCE(published_at, created_at) DESC, id DESC);
