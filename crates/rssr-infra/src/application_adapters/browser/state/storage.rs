@@ -4,8 +4,8 @@ use web_sys::{Storage, window};
 
 use super::{
     APP_STATE_STORAGE_KEY, BrowserState, ENTRY_CONTENT_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY,
-    LoadedState, PersistedAppStateSlice, PersistedEntryContentSlice, PersistedEntryFlag,
-    PersistedEntryFlagsSlice, STORAGE_KEY,
+    LoadedState, PersistedAppStateSlice, PersistedEntryContentSlice, PersistedEntryFlagsSlice,
+    STORAGE_KEY,
 };
 
 pub fn load_state() -> LoadedState {
@@ -49,7 +49,10 @@ pub fn load_state() -> LoadedState {
     }
 }
 
-pub fn save_state_snapshot(state: BrowserState) -> anyhow::Result<()> {
+/// 按引用接收：此前是按值，于是每个调用方都要 `state.clone()` 深拷贝整个浏览器状态
+/// （全部订阅 + 全部条目 + 全部标记 + **全部正文**），而这里其实只读不写。
+/// 刷新提交和保存设置都会走到这条路径。
+pub fn save_state_snapshot(state: &BrowserState) -> anyhow::Result<()> {
     save_serialized_state(serde_json::to_string(&state.core)?)?;
     save_app_state_slice_internal(&state.app_state)?;
     save_entry_flags_slice_internal(&state.entry_flags)?;
@@ -61,20 +64,14 @@ pub fn save_app_state_slice(slice: &PersistedAppStateSlice) -> anyhow::Result<()
     save_app_state_slice_internal(slice)
 }
 
-pub fn save_entry_flag_patch(flag: PersistedEntryFlag) -> anyhow::Result<()> {
-    let Some(storage) = browser_storage() else {
-        return Ok(());
-    };
-
-    let mut slice = load_entry_flags_slice(&storage).unwrap_or_default();
-
-    if let Some(existing) = slice.entries.iter_mut().find(|current| current.id == flag.id) {
-        *existing = flag;
-    } else {
-        slice.entries.push(flag);
-    }
-
-    save_storage_key(&storage, ENTRY_FLAGS_STORAGE_KEY, serde_json::to_string(&slice)?)
+/// 直接写入调用方已持有的权威标记集合。
+///
+/// 此前这里会先把 localStorage 里的全部标记读出来 + JSON 解析一遍，再线性查找合并——
+/// 但调用方刚刚改完内存里的 `state.entry_flags`，那份才是权威值，这次读取与解析纯属多余。
+/// 标记数量随「历史上读过/收藏过的文章数」单调增长，不受归档窗口限制，因此这次省掉的
+/// 是一份会一直变大的开销。
+pub fn save_entry_flags_slice(slice: &PersistedEntryFlagsSlice) -> anyhow::Result<()> {
+    save_entry_flags_slice_internal(slice)
 }
 
 fn save_serialized_state(raw: String) -> anyhow::Result<()> {

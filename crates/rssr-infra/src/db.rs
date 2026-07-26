@@ -64,6 +64,14 @@ pub async fn migrate_content(pool: &SqlitePool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 文件库的连接池大小。
+///
+/// 必须**大于**刷新并发度（`REFRESH_ALL_CONCURRENCY`，当前为 4）：每个刷新任务在批量写入
+/// 期间会独占一条连接（整批包在一个事务里），如果池大小恰好等于并发度，四个刷新任务就能把
+/// 池占满，界面查询和正文图片本地化的写回只能排队等连接——表现为刷新时界面卡住。
+/// 8 给 UI 读取与本地化写回留出余量。
+///
+/// 内存库只能用 1：`sqlite::memory:` 的每条连接都是各自独立的空库。
 pub(crate) fn default_sqlite_max_connections(database_url: &str) -> u32 {
-    if is_memory_database(database_url) { 1 } else { 4 }
+    if is_memory_database(database_url) { 1 } else { 8 }
 }

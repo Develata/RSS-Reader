@@ -24,12 +24,10 @@ impl SettingsRepository for BrowserSettingsRepository {
     }
 
     async fn save(&self, settings: &UserSettings) -> rssr_domain::Result<()> {
-        let snapshot = {
+        {
             let mut state = self.state.lock().expect("lock state");
             state.core.settings = settings.clone();
-            state.clone()
-        };
-
-        save_state_snapshot(snapshot).map_err(map_persistence_error)
+            save_state_snapshot(&state).map_err(map_persistence_error)
+        }
     }
 }

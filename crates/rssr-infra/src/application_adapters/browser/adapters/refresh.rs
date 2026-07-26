@@ -150,7 +150,7 @@ impl RefreshStorePort for BrowserRefreshStore {
     }
 
     async fn commit(&self, feed_id: i64, commit: RefreshCommit) -> Result<()> {
-        let snapshot = {
+        {
             let mut state = self.state.lock().expect("lock state");
             let now = now_utc();
             let feed = state
@@ -202,10 +202,8 @@ impl RefreshStorePort for BrowserRefreshStore {
                 }
             }
 
-            state.clone()
-        };
-
-        save_state_snapshot(snapshot)
+            save_state_snapshot(&state)
+        }
     }
 }
 

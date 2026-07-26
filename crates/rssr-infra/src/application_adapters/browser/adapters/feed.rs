@@ -33,11 +33,11 @@ impl FeedRepository for BrowserFeedRepository {
         let normalized_title = normalize_optional_text(new_feed.title.clone());
         let normalized_folder = normalize_optional_text(new_feed.folder.clone());
 
-        let (feed, snapshot) = {
+        let feed = {
             let mut state = self.state.lock().expect("lock state");
             let now = now_utc();
 
-            if let Some(feed) =
+            let feed = if let Some(feed) =
                 state.core.feeds.iter_mut().find(|feed| feed.url == normalized_url.as_str())
             {
                 if new_feed.title.is_some() {
@@ -48,7 +48,7 @@ impl FeedRepository for BrowserFeedRepository {
                 }
                 feed.is_deleted = false;
                 feed.updated_at = now;
-                (feed.clone(), state.clone())
+                feed.clone()
             } else {
                 state.core.next_feed_id += 1;
                 let persisted = PersistedFeed {
@@ -69,16 +69,18 @@ impl FeedRepository for BrowserFeedRepository {
                     updated_at: now,
                 };
                 state.core.feeds.push(persisted.clone());
-                (persisted, state.clone())
-            }
+                persisted
+            };
+
+            save_state_snapshot(&state).map_err(map_persistence_error)?;
+            feed
         };
 
-        save_state_snapshot(snapshot).map_err(map_persistence_error)?;
         persisted_feed_to_domain(&feed)
     }
 
     async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> rssr_domain::Result<()> {
-        let snapshot = {
+        {
             let mut state = self.state.lock().expect("lock state");
             let feed = state
                 .core
@@ -88,10 +90,8 @@ impl FeedRepository for BrowserFeedRepository {
                 .ok_or(DomainError::NotFound)?;
             feed.is_deleted = is_deleted;
             feed.updated_at = now_utc();
-            state.clone()
-        };
-
-        save_state_snapshot(snapshot).map_err(map_persistence_error)
+            save_state_snapshot(&state).map_err(map_persistence_error)
+        }
     }
 
     async fn list_feeds(&self) -> rssr_domain::Result<Vec<Feed>> {

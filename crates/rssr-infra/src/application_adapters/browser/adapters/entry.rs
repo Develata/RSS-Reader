@@ -12,7 +12,7 @@ use crate::application_adapters::browser::{
         get_entry_record as query_get_entry_record, list_entries as query_list_entries,
         reader_navigation as query_reader_navigation,
     },
-    state::{BrowserState, PersistedEntryFlag, save_entry_flag_patch, save_state_snapshot},
+    state::{BrowserState, PersistedEntryFlag, save_entry_flags_slice, save_state_snapshot},
 };
 
 use super::shared::map_persistence_error;
@@ -54,65 +54,59 @@ impl EntryIndexRepository for BrowserEntryRepository {
     }
 
     async fn set_read(&self, entry_id: i64, is_read: bool) -> rssr_domain::Result<()> {
-        let entry = {
-            let mut state = self.state.lock().expect("lock state");
-            let now = now_utc();
-            let entry = state.entry_flags.entries.iter_mut().find(|entry| entry.id == entry_id);
+        let mut state = self.state.lock().expect("lock state");
+        let now = now_utc();
 
-            if let Some(entry) = entry {
+        match state.entry_flags.entries.iter_mut().find(|entry| entry.id == entry_id) {
+            Some(entry) => {
                 entry.is_read = is_read;
                 entry.read_at = is_read.then_some(now);
-                entry.clone()
-            } else {
+            }
+            None => {
                 if !state.core.entries.iter().any(|entry| entry.id == entry_id) {
                     return Err(DomainError::NotFound);
                 }
-                let flag = PersistedEntryFlag {
+                state.entry_flags.entries.push(PersistedEntryFlag {
                     id: entry_id,
                     is_read,
                     is_starred: false,
                     read_at: is_read.then_some(now),
                     starred_at: None,
-                };
-                state.entry_flags.entries.push(flag.clone());
-                flag
+                });
             }
-        };
+        }
 
-        save_entry_flag_patch(entry).map_err(map_persistence_error)
+        save_entry_flags_slice(&state.entry_flags).map_err(map_persistence_error)
     }
 
     async fn set_starred(&self, entry_id: i64, is_starred: bool) -> rssr_domain::Result<()> {
-        let entry = {
-            let mut state = self.state.lock().expect("lock state");
-            let now = now_utc();
-            let entry = state.entry_flags.entries.iter_mut().find(|entry| entry.id == entry_id);
+        let mut state = self.state.lock().expect("lock state");
+        let now = now_utc();
 
-            if let Some(entry) = entry {
+        match state.entry_flags.entries.iter_mut().find(|entry| entry.id == entry_id) {
+            Some(entry) => {
                 entry.is_starred = is_starred;
                 entry.starred_at = is_starred.then_some(now);
-                entry.clone()
-            } else {
+            }
+            None => {
                 if !state.core.entries.iter().any(|entry| entry.id == entry_id) {
                     return Err(DomainError::NotFound);
                 }
-                let flag = PersistedEntryFlag {
+                state.entry_flags.entries.push(PersistedEntryFlag {
                     id: entry_id,
                     is_read: false,
                     is_starred,
                     read_at: None,
                     starred_at: is_starred.then_some(now),
-                };
-                state.entry_flags.entries.push(flag.clone());
-                flag
+                });
             }
-        };
+        }
 
-        save_entry_flag_patch(entry).map_err(map_persistence_error)
+        save_entry_flags_slice(&state.entry_flags).map_err(map_persistence_error)
     }
 
     async fn delete_for_feed(&self, feed_id: i64) -> rssr_domain::Result<()> {
-        let snapshot = {
+        {
             let mut state = self.state.lock().expect("lock state");
             let removed_entry_ids = state
                 .core
@@ -127,10 +121,8 @@ impl EntryIndexRepository for BrowserEntryRepository {
                 .entry_content
                 .entries
                 .retain(|entry| !removed_entry_ids.contains(&entry.entry_id));
-            state.clone()
-        };
-
-        save_state_snapshot(snapshot).map_err(map_persistence_error)
+            save_state_snapshot(&state).map_err(map_persistence_error)
+        }
     }
 }
 
@@ -142,16 +134,14 @@ impl EntryContentRepository for BrowserEntryRepository {
     }
 
     async fn delete_for_feed(&self, feed_id: i64) -> rssr_domain::Result<()> {
-        let snapshot = {
+        {
             let mut state = self.state.lock().expect("lock state");
             state.entry_content.entries.retain(|entry| entry.feed_id != feed_id);
             for entry in state.core.entries.iter_mut().filter(|entry| entry.feed_id == feed_id) {
                 entry.has_content = false;
             }
-            state.clone()
-        };
-
-        save_state_snapshot(snapshot).map_err(map_persistence_error)
+            save_state_snapshot(&state).map_err(map_persistence_error)
+        }
     }
 
     async fn delete_for_entry_ids(&self, entry_ids: &[i64]) -> rssr_domain::Result<()> {
@@ -159,16 +149,14 @@ impl EntryContentRepository for BrowserEntryRepository {
             return Ok(());
         }
 
-        let snapshot = {
+        {
             let mut state = self.state.lock().expect("lock state");
             state.entry_content.entries.retain(|entry| !entry_ids.contains(&entry.entry_id));
             for entry in state.core.entries.iter_mut().filter(|entry| entry_ids.contains(&entry.id))
             {
                 entry.has_content = false;
             }
-            state.clone()
-        };
-
-        save_state_snapshot(snapshot).map_err(map_persistence_error)
+            save_state_snapshot(&state).map_err(map_persistence_error)
+        }
     }
 }
