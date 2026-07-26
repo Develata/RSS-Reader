@@ -166,19 +166,38 @@ presenter 每次重建都要把可见集合交给分组树，此前 `state.entri
   若要精简可给两个池分别设容量。
 - 跨标签页的标记同步需要走 `storage` 事件，属于新增能力，不在本轮范围。
 
+## 自我复核发现的归档分界精度分叉（已修）
+
+推送前自己再过一遍时，查出归档分界存在**三处实现互相分叉**的真实缺陷，已修并补了回归测试。
+
+`archive_cutoff_at` 由 `now` 派生分界，而 `OffsetDateTime::now_utc()` 带纳秒，于是分界形如
+`…45.1791035Z`；条目的 `published_at` 则全是整秒（解析走 `from_unix_timestamp`），形如 `…45Z`。
+
+- Rust（`is_entry_archived`）比较 `OffsetDateTime`：整秒条目 < 带纳秒分界 ⇒ **已归档**。
+- SQLite 适配器在 RFC3339 **字符串**上比较：`"…45Z"` 与 `"…45.179Z"` 逐字符比时
+  `'Z'`(0x5A) > `'.'`(0x2E) ⇒ 条目 >= 分界 ⇒ **未归档**。
+
+后果是同一篇文章既出现在列表里、又被计入「已归档 N 篇」。实测复现（见下）后，
+把分界截断到整秒：三处实现的精度对齐，字符串比较重新等价于时间比较。
+
+新增 `test_archive_filter_parity`：用带纳秒的真实 `now` 求分界，在分界前一秒／分界当刻／
+分界后一秒各插一条，断言 SQL 过滤结果与 `is_entry_archived` 逐条一致，且可见数与已归档计数互补。
+修复前该测试失败（SQL 多显示一条），修复后通过。
+
 ## 验证与验收
 
 ### 自动化验证
 
 - `cargo fmt --all --check`：通过
 - `cargo clippy --workspace --all-targets -- -D warnings`：通过（exit 0）
-- `cargo test --workspace`：**连续两次**全绿（各 32 个测试二进制，0 failed）——
-  第二次是为了确认清理逻辑改回尽力而为之后不再偶发失败
+- `cargo test --workspace`：全绿（33 个测试二进制，0 failed）；清理逻辑改回尽力而为后
+  连续两次运行无偶发失败
 - `cargo check -p rssr-app --target wasm32-unknown-unknown`：通过
 - 新增测试：
   - `rssr-infra`：`test_concurrent_refresh_writes` —— 4 个订阅各 60 条并发批量写入必须
     全部成功，并**断言 journal 模式为 WAL**，防止以后改连接选项时静默退回 `delete`。
   - `rssr-app`：`toggle_source_selection` 两条。
+  - `rssr-infra`：`test_archive_filter_parity` —— 归档分界的跨实现一致性。
 
 ### 手工验收
 

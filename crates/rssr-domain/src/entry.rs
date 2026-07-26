@@ -196,7 +196,17 @@ fn archive_cutoff(now: OffsetDateTime, archive_after_months: u32) -> Option<Offs
     let cutoff_day = now.day().min(last_day_of_month(cutoff_year, cutoff_month));
     let cutoff_date = Date::from_calendar_date(cutoff_year, cutoff_month, cutoff_day).ok()?;
 
-    Some(PrimitiveDateTime::new(cutoff_date, now.time()).assume_utc())
+    // 分界必须截断到整秒。
+    //
+    // 三处实现要对同一批条目给出同一答案：本函数（`is_entry_archived`）、SQLite 适配器
+    // （在 RFC3339 **字符串**上比较），以及浏览器适配器（比较 `OffsetDateTime`）。
+    // 条目的 `published_at` 全都是整秒（解析走 `from_unix_timestamp`），而 `now` 带纳秒。
+    // 不截断的话字符串比较会失真：`"…45Z"` 与 `"…45.179Z"` 逐字符比时 `'Z'`(0x5A) > `'.'`(0x2E)，
+    // 于是 SQL 认为「整秒条目 >= 带纳秒分界」而 Rust 认为它更早——同一条文章在列表里出现、
+    // 却被算进已归档计数。
+    let cutoff_time = now.time().replace_nanosecond(0).ok()?;
+
+    Some(PrimitiveDateTime::new(cutoff_date, cutoff_time).assume_utc())
 }
 
 fn last_day_of_month(year: i32, month: Month) -> u8 {
