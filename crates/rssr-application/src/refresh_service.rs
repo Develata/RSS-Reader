@@ -244,6 +244,54 @@ pub trait RefreshStorePort: Send + Sync {
     async fn list_targets(&self) -> Result<Vec<RefreshTarget>>;
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>>;
     async fn commit(&self, feed_id: i64, commit: RefreshCommit) -> Result<()>;
+
+    /// 打开一个写入批次：批次期间的 [`RefreshStorePort::commit`] 只需保证改动对后续读取可见，
+    /// 真正的落盘可以推迟到 [`RefreshStorePort::end_batch`]。
+    ///
+    /// 默认空实现。事务型存储（SQLite）每次 `commit` 就已经落盘，没有可推迟的东西；
+    /// 需要整片重写的存储（浏览器 `localStorage`）才靠它把「每个订阅重写一次全库」压成
+    /// 「整轮重写一次」。
+    ///
+    /// **不变量**：批次一旦打开，必须以 `end_batch` 或 `abort_batch` 收尾。
+    /// 这一条由 `refresh_all` 里的 [`RefreshBatchGuard`] 强制，不靠调用方自觉。
+    /// 重复打开也必须是安全的：实现方要先把上一个没关掉的批次冲掉。
+    async fn begin_batch(&self) -> Result<()> {
+        Ok(())
+    }
+
+    /// 关闭批次，把批次内累积的改动一次性落盘。批次内没有发生过 `commit` 时不产生写入。
+    async fn end_batch(&self) -> Result<()> {
+        Ok(())
+    }
+
+    /// 放弃批次：关掉批次状态，并尽力把已经累积的改动落盘。
+    ///
+    /// **必须是同步的**，因为它要能从 [`RefreshBatchGuard`] 的 `Drop` 里调用——
+    /// 而 future 被取消时能跑的只有析构。也因此它没有返回值：这条路径上没有任何地方
+    /// 可以上报错误，实现方只能自己记日志。
+    ///
+    /// **必须幂等**：正常路径上 `end_batch` 之后守卫析构还会再调一次，那时应当什么都不做。
+    fn abort_batch(&self) {}
+}
+
+/// 保证批次一定被关掉的守卫。
+///
+/// 光靠「`begin_batch` 与 `end_batch` 之间不写 `?`」是不够的：Web 端刷新任务是
+/// Dioxus 作用域绑定的 `spawn`（`rssr-app` 的 `spawn_projected_ui_command`），
+/// 用户在刷新途中离开订阅页，组件一卸载整个 future 就被 drop，`end_batch` 永远等不到。
+/// 那样批次会永久停在打开状态，此后**批次外**的提交（单订阅刷新、添加订阅的首刷）
+/// 全都只改内存不落盘，而且不报错——正是最难被发现的那种丢数据。
+///
+/// 守卫不设「解除」开关：`abort_batch` 要求幂等，正常收尾后再调一次是空操作，
+/// 这样就不存在「已解除但还没 `end_batch`」的窗口。
+struct RefreshBatchGuard<'a> {
+    store: &'a dyn RefreshStorePort,
+}
+
+impl Drop for RefreshBatchGuard<'_> {
+    fn drop(&mut self) {
+        self.store.abort_batch();
+    }
 }
 
 #[derive(Clone)]
@@ -274,6 +322,49 @@ impl RefreshService {
     pub async fn refresh_all(&self, input: RefreshAllInput) -> Result<RefreshAllOutcome> {
         let targets = self.store.list_targets().await.context("读取订阅列表失败")?;
 
+        // 整轮刷新算一个写入批次。
+        //
+        // 守卫在 `begin_batch` 的结果被 `?` 掉之前就建立：那次调用即使失败，实现方也可能
+        // 已经把批次置为打开，带着 `?` 直接返回会把它永久留在打开状态。
+        // 守卫同时兜住 future 被取消的情况——见 [`RefreshBatchGuard`]，这条路径在 Web 上
+        // 只需要用户在刷新途中离开订阅页就会发生。
+        let begun = self.store.begin_batch().await;
+        let _batch = RefreshBatchGuard { store: self.store.as_ref() };
+        begun.context("打开刷新写入批次失败")?;
+
+        let mut outcomes = self.refresh_targets(targets, input).await;
+        self.end_batch_or_mark_failed(&mut outcomes).await;
+
+        Ok(RefreshAllOutcome { feeds: outcomes })
+    }
+
+    /// 关闭批次并落盘；写失败时把本轮的非失败结果一律改写成失败。
+    ///
+    /// 批次没写进去还报成功是在骗人——重开页面时这些条目并不存在，
+    /// 而且下游会照着这份结果去做图片本地化。改写成失败也与「每次 commit 各自落盘」时代的
+    /// 行为一致：那时写入失败同样会让对应订阅报错。
+    async fn end_batch_or_mark_failed(&self, outcomes: &mut [RefreshFeedOutcome]) {
+        let Err(error) = self.store.end_batch().await else {
+            return;
+        };
+
+        let message = format!("刷新结果写入本地存储失败: {error}");
+        for outcome in outcomes.iter_mut() {
+            if !matches!(outcome.result, RefreshFeedResult::Failed { .. }) {
+                outcome.result = RefreshFeedResult::Failed { message: message.clone() };
+            }
+        }
+    }
+
+    /// 逐个刷新订阅并把每个的结果收敛成 [`RefreshFeedOutcome`]，本身不会返回 `Err`。
+    ///
+    /// 平台差异只在「串行还是并发」这一点上：wasm 没有可用的多线程运行时，走串行；
+    /// 原生端按 `max_concurrency` 走 `JoinSet`。两边产出的语义完全一致。
+    async fn refresh_targets(
+        &self,
+        targets: Vec<RefreshTarget>,
+        input: RefreshAllInput,
+    ) -> Vec<RefreshFeedOutcome> {
         #[cfg(target_arch = "wasm32")]
         {
             let _ = input;
@@ -281,7 +372,7 @@ impl RefreshService {
             for target in targets {
                 outcomes.push(self.refresh_target_reporting(target).await);
             }
-            return Ok(RefreshAllOutcome { feeds: outcomes });
+            return outcomes;
         }
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -293,10 +384,20 @@ impl RefreshService {
             for target in targets {
                 outcomes.push(self.refresh_target_reporting(target).await);
             }
-            return Ok(RefreshAllOutcome { feeds: outcomes });
+            return outcomes;
         }
 
         #[cfg(not(target_arch = "wasm32"))]
+        self.refresh_targets_concurrent(targets, max_concurrency).await
+    }
+
+    /// 原生端的并发分支：最多 `max_concurrency` 个订阅同时在飞。
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn refresh_targets_concurrent(
+        &self,
+        targets: Vec<RefreshTarget>,
+        max_concurrency: usize,
+    ) -> Vec<RefreshFeedOutcome> {
         {
             let mut outcomes = Vec::with_capacity(targets.len());
             let mut target_iter = targets.into_iter();
@@ -344,7 +445,7 @@ impl RefreshService {
             // 完成顺序是非确定的，按 feed_id 归一，避免失败提示的行序在界面与 CLI 里抖动。
             outcomes.sort_by_key(|outcome| outcome.feed_id);
 
-            Ok(RefreshAllOutcome { feeds: outcomes })
+            outcomes
         }
     }
 
@@ -718,6 +819,155 @@ mod tests {
                 anyhow::bail!("提交失败");
             }
             Ok(())
+        }
+    }
+
+    /// 按调用次序记录端口调用，用来验证批次确实是整轮的外壳而不是每个订阅各开一个。
+    struct BatchRecordingStore {
+        targets: Vec<RefreshTarget>,
+        calls: Mutex<Vec<String>>,
+        end_batch_error: Option<String>,
+    }
+
+    impl BatchRecordingStore {
+        fn new(targets: Vec<RefreshTarget>, end_batch_error: Option<&str>) -> Self {
+            Self {
+                targets,
+                calls: Mutex::new(Vec::new()),
+                end_batch_error: end_batch_error.map(ToOwned::to_owned),
+            }
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().expect("lock calls").clone()
+        }
+
+        fn record(&self, call: &str) {
+            self.calls.lock().expect("lock calls").push(call.to_string());
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl RefreshStorePort for BatchRecordingStore {
+        async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
+            Ok(self.targets.clone())
+        }
+
+        async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
+            Ok(self.targets.iter().find(|target| target.feed_id == feed_id).cloned())
+        }
+
+        async fn commit(&self, feed_id: i64, _commit: RefreshCommit) -> Result<()> {
+            self.record(&format!("commit:{feed_id}"));
+            Ok(())
+        }
+
+        async fn begin_batch(&self) -> Result<()> {
+            self.record("begin");
+            Ok(())
+        }
+
+        fn abort_batch(&self) {
+            self.record("abort");
+        }
+
+        async fn end_batch(&self) -> Result<()> {
+            self.record("end");
+            match &self.end_batch_error {
+                Some(message) => anyhow::bail!("{message}"),
+                None => Ok(()),
+            }
+        }
+    }
+
+    /// 整轮刷新只开一个批次，且所有 commit 都落在批次内。
+    ///
+    /// 这条断言的是浏览器存储省下整片重写的前提：批次要是退化成「每个订阅一对 begin/end」，
+    /// 写入次数就一次没少。
+    #[tokio::test]
+    async fn refresh_all_wraps_the_whole_round_in_a_single_write_batch() {
+        let targets = (1..=3)
+            .map(|feed_id| sample_target(feed_id, &format!("https://example.com/{feed_id}.xml")))
+            .collect::<Vec<_>>();
+        let store = Arc::new(BatchRecordingStore::new(targets, None));
+
+        let outcome = RefreshService::new(Arc::new(KeyedSourceStub), store.clone())
+            .refresh_all(RefreshAllInput { max_concurrency: 1 })
+            .await
+            .expect("refresh all");
+
+        assert_eq!(outcome.feeds.len(), 3);
+        assert_eq!(
+            store.calls(),
+            vec!["begin", "commit:1", "commit:2", "commit:3", "end", "abort"],
+            "批次必须包住整轮，而不是每个订阅各开一次"
+        );
+        // 末尾那次 `abort` 来自批次守卫析构。它必须是幂等的空操作——
+        // 守卫刻意不设「解除」开关，否则就会出现「已解除但还没 end_batch」的取消窗口。
+    }
+
+    /// 刷新途中 future 被取消时，批次必须被关掉。
+    ///
+    /// Web 端刷新任务绑定在订阅页组件的作用域上，用户刷新途中切走页面，整个 future 就被 drop，
+    /// `end_batch` 永远等不到。少了守卫的话批次会永久停在打开状态，此后单订阅刷新与
+    /// 添加订阅的首刷都只改内存不落盘，而且一声不吭。
+    #[tokio::test]
+    async fn a_cancelled_round_still_closes_the_batch() {
+        struct HangingSourceStub;
+
+        #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+        #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+        impl FeedRefreshSourcePort for HangingSourceStub {
+            async fn refresh(&self, _target: &RefreshTarget) -> Result<FeedRefreshSourceOutput> {
+                std::future::pending().await
+            }
+        }
+
+        let targets = vec![sample_target(1, "https://example.com/1.xml")];
+        let store = Arc::new(BatchRecordingStore::new(targets, None));
+        let service = RefreshService::new(Arc::new(HangingSourceStub), store.clone());
+
+        let cancelled = tokio::time::timeout(
+            std::time::Duration::from_millis(50),
+            service.refresh_all(RefreshAllInput { max_concurrency: 1 }),
+        )
+        .await;
+
+        assert!(cancelled.is_err(), "抓取永不返回，这一轮必须是被超时取消的");
+        assert_eq!(
+            store.calls(),
+            vec!["begin", "abort"],
+            "取消路径上必须留下 abort，否则批次就永久开着了"
+        );
+    }
+
+    /// 批次落盘失败时，本轮不能报成功。
+    ///
+    /// 抓取确实成功了，但结果没写进存储——重开页面时这些条目并不存在。
+    /// 这里报成功还会让下游照着这份结果去做图片本地化。
+    #[tokio::test]
+    async fn a_failed_batch_write_turns_the_whole_round_into_failures() {
+        let targets = (1..=2)
+            .map(|feed_id| sample_target(feed_id, &format!("https://example.com/{feed_id}.xml")))
+            .collect::<Vec<_>>();
+        let store = Arc::new(BatchRecordingStore::new(targets, Some("存储配额已满")));
+
+        let outcome = RefreshService::new(Arc::new(KeyedSourceStub), store.clone())
+            .refresh_all(RefreshAllInput { max_concurrency: 1 })
+            .await
+            .expect("落盘失败也不该把整轮变成 Err——per-feed 结果仍要交回去");
+
+        assert_eq!(outcome.feeds.len(), 2);
+        for feed in &outcome.feeds {
+            match &feed.result {
+                super::RefreshFeedResult::Failed { message } => {
+                    assert!(
+                        message.contains("存储配额已满"),
+                        "失败原因要带上真正的写入错误：{message}"
+                    );
+                }
+                other => panic!("批次没写成功时不该报成功：{other:?}"),
+            }
         }
     }
 

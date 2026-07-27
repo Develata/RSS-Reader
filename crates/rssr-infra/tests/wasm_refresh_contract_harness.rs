@@ -470,3 +470,175 @@ async fn browser_refresh_store_commit_failed_preserves_previous_success_timestam
 
     clear_browser_state_storage();
 }
+
+fn store_with_one_feed() -> (Arc<Mutex<BrowserState>>, BrowserRefreshStore) {
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState {
+            next_feed_id: 1,
+            feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
+            ..PersistedState::default()
+        },
+        ..BrowserState::default()
+    }));
+    let store = BrowserRefreshStore::new(state.clone());
+    (state, store)
+}
+
+fn not_modified_with_etag(etag: &str) -> RefreshCommit {
+    RefreshCommit::NotModified {
+        metadata: RefreshHttpMetadata { etag: Some(etag.to_string()), last_modified: None },
+    }
+}
+
+/// 批次内的 `commit` 立刻对内存可见，但不落盘；`end_batch` 才写一次。
+///
+/// 这是整个批次机制的意义所在：`save_state_snapshot` 每次都要把全库重新序列化写回
+/// `localStorage`，而这发生在主线程上。逐个订阅写会让刷新期间页面按订阅数成比例卡顿。
+/// 「内存立刻可见」这一半同样要断言——页面读的是同一份共享内存状态，
+/// 推迟落盘不能让刷新中途的界面读到旧值。
+#[wasm_bindgen_test]
+async fn browser_refresh_store_defers_the_write_until_the_batch_ends() {
+    clear_browser_state_storage();
+    let (state, store) = store_with_one_feed();
+
+    store.begin_batch().await.expect("begin batch");
+    store.commit(1, not_modified_with_etag("etag-batched")).await.expect("commit in batch");
+
+    assert_eq!(
+        state.lock().expect("lock state").core.feeds[0].etag.as_deref(),
+        Some("etag-batched"),
+        "批次内的改动必须立刻对内存可见"
+    );
+    assert!(
+        load_state().state.core.feeds.is_empty(),
+        "批次没结束就不该写 localStorage——这正是省下的那些整片重写"
+    );
+
+    store.end_batch().await.expect("end batch");
+
+    let LoadedState { state: persisted, warning } = load_state();
+    assert!(warning.is_none());
+    assert_eq!(persisted.core.feeds[0].etag.as_deref(), Some("etag-batched"));
+
+    clear_browser_state_storage();
+}
+
+/// 空批次不产生写入。
+///
+/// 整轮所有订阅都返回 304 是常态，那种情况下不该白白整片重写一次全库。
+#[wasm_bindgen_test]
+async fn browser_refresh_store_batch_without_commits_writes_nothing() {
+    clear_browser_state_storage();
+    let (_state, store) = store_with_one_feed();
+
+    store.begin_batch().await.expect("begin batch");
+    store.end_batch().await.expect("end batch");
+
+    assert!(load_state().state.core.feeds.is_empty(), "没有 commit 的批次不该产生写入");
+
+    clear_browser_state_storage();
+}
+
+/// 漏掉 `end_batch` 时，下一次 `begin_batch` 要把上一批改动落盘而不是丢掉。
+///
+/// 这是批次机制的安全网：写入推迟意味着「有人忘了关批次」会变成丢数据，
+/// 因此重开批次必须先冲掉上一批。最坏退化成「晚一轮才写」，而不是永久丢失。
+#[wasm_bindgen_test]
+async fn browser_refresh_store_reopening_a_batch_flushes_the_unclosed_one() {
+    clear_browser_state_storage();
+    let (_state, store) = store_with_one_feed();
+
+    store.begin_batch().await.expect("begin batch");
+    store.commit(1, not_modified_with_etag("etag-orphaned")).await.expect("commit in batch");
+    // 故意不调用 end_batch，直接开下一轮。
+    store.begin_batch().await.expect("reopen batch");
+
+    assert_eq!(
+        load_state().state.core.feeds[0].etag.as_deref(),
+        Some("etag-orphaned"),
+        "重开批次必须先把上一批没关掉的改动写下去"
+    );
+
+    store.end_batch().await.expect("end batch");
+    clear_browser_state_storage();
+}
+
+/// 批次外的 `commit` 行为不变：立刻落盘。
+///
+/// `refresh_all` 之外还有单订阅刷新与添加订阅时的提交，它们不开批次。
+/// 「不开批次就是原来的行为」是这次改动不影响那些路径的依据。
+#[wasm_bindgen_test]
+async fn browser_refresh_store_commit_outside_a_batch_still_writes_immediately() {
+    clear_browser_state_storage();
+    let (_state, store) = store_with_one_feed();
+
+    store.commit(1, not_modified_with_etag("etag-unbatched")).await.expect("commit outside batch");
+
+    assert_eq!(
+        load_state().state.core.feeds[0].etag.as_deref(),
+        Some("etag-unbatched"),
+        "没有批次时 commit 必须像改动前一样立刻落盘"
+    );
+
+    clear_browser_state_storage();
+}
+
+/// 批次被中断后，存储必须回到「立刻落盘」的正常状态。
+///
+/// Web 端刷新任务绑定在订阅页组件作用域上，用户刷新途中切走页面，整个 future 就被 drop，
+/// `end_batch` 永远等不到，由批次守卫的析构调用 `abort_batch` 兜底。
+/// 少了这条兜底，`active` 会永久停在 true：此后单订阅刷新与添加订阅的首刷都只改内存不落盘，
+/// 用户看到的是「刷新按钮没反应」，刷新页面后条目全空——而且全程不报错。
+#[wasm_bindgen_test]
+async fn browser_refresh_store_abort_flushes_and_restores_immediate_writes() {
+    clear_browser_state_storage();
+    let (_state, store) = store_with_one_feed();
+
+    store.begin_batch().await.expect("begin batch");
+    store.commit(1, not_modified_with_etag("etag-interrupted")).await.expect("commit in batch");
+
+    // 等价于刷新 future 在这里被取消：守卫析构调用 abort_batch。
+    store.abort_batch();
+
+    assert_eq!(
+        load_state().state.core.feeds[0].etag.as_deref(),
+        Some("etag-interrupted"),
+        "中断时已经抓到的改动要尽力落盘，而不是随批次一起丢掉"
+    );
+
+    store.commit(1, not_modified_with_etag("etag-after-abort")).await.expect("commit after abort");
+
+    assert_eq!(
+        load_state().state.core.feeds[0].etag.as_deref(),
+        Some("etag-after-abort"),
+        "批次被中断之后，后续的批次外提交不能继续被吞掉"
+    );
+
+    clear_browser_state_storage();
+}
+
+/// `abort_batch` 幂等：正常收尾后守卫析构还会再调一次，那一次必须什么都不写。
+///
+/// 守卫刻意不设「解除」开关（那会留出「已解除但还没 end_batch」的取消窗口），
+/// 因此幂等性是它成立的前提。
+#[wasm_bindgen_test]
+async fn browser_refresh_store_abort_after_end_batch_writes_nothing() {
+    clear_browser_state_storage();
+    let (state, store) = store_with_one_feed();
+
+    store.begin_batch().await.expect("begin batch");
+    store.commit(1, not_modified_with_etag("etag-done")).await.expect("commit in batch");
+    store.end_batch().await.expect("end batch");
+
+    // 绕过 commit 直接改内存：abort 若真的又写了一次，这个值就会被带进 localStorage。
+    state.lock().expect("lock state").core.feeds[0].title = Some("只在内存里".to_string());
+    store.abort_batch();
+
+    assert_eq!(
+        load_state().state.core.feeds[0].title.as_deref(),
+        Some("Feed 1"),
+        "end_batch 之后的 abort 必须是空操作"
+    );
+
+    clear_browser_state_storage();
+}
