@@ -219,23 +219,23 @@ The release workflow publishes:
 - `rssr-cli-macos-x86_64.tar.gz`
 - `RSS-Reader-macos-aarch64.tar.gz`
 - `rssr-cli-macos-aarch64.tar.gz`
-- `RSS-Reader-android-arm64-v8a-debug.apk`
+- `RSS-Reader-android-arm64-v8a-release.apk` (install this one)
+- `RSS-Reader-android-arm64-v8a-release.aab` (app stores only)
 - `RSS-Reader-web.tar.gz`
-
-If Android signing secrets are configured, the release workflow also publishes:
-
-- `RSS-Reader-android-arm64-v8a-release.apk`
-- `RSS-Reader-android-arm64-v8a-release.aab`
 
 Current automatic release targets are:
 
 - Windows desktop
 - Linux desktop
 - macOS desktop
-- Android debug APK
+- Android release APK + AAB, signed
 - Web static bundle
 
-The Android pipeline always publishes an unsigned `arm64-v8a` debug APK for installation testing on modern devices. If signing secrets are configured, it also publishes a signed `arm64-v8a` release APK and AAB.
+The Android target requires signing secrets. On a tag release a missing secret fails `build-android` outright rather than silently falling back to a debug APK. A manual `workflow_dispatch` may still fall back, so the other platforms can be exercised without touching the keys. The signed APK and the debug APK are never published together: they carry different signatures, so offering both invites installing the wrong one.
+
+A debug APK cannot be used to upgrade an existing install. It is signed with a throwaway key that CI regenerates on every run, so each release carries a different certificate and Android rejects the update as a signature mismatch — which most device installers report as a checksum or verification failure. Moving from a debug build to a signed release build requires an uninstall too, and uninstalling erases local subscriptions and downloaded article bodies, so export OPML first.
+
+`versionCode` and `versionName` are derived from the release tag (`v0.1.13` → `versionCode=113`, `versionName=0.1.13`), not from the workspace `Cargo.toml` version.
 
 Android signing secrets expected by GitHub Actions:
 

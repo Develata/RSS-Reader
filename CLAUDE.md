@@ -71,7 +71,8 @@ cargo run -p rssr-web -- --print-password-hash adminadmin
 
 - Web 端受浏览器 CORS 限制：部分 feed 桌面端可刷、Web 直连失败，需经 `rssr-web` 的 `/feed-proxy` 验证。
 - Web 端持久化是 `localStorage` 序列化状态，不是 SQLite；不要把两套语义混写。
-- Android 本地打包需在 `dx bundle` 后运行 `python3 scripts/prepare_android_bundle.py`，再用生成的 Gradle 工程出 APK。
+- Android 本地打包需在 `dx bundle` 后运行 `python3 scripts/prepare_android_bundle.py`，再用生成的 Gradle 工程出 APK。发布流水线额外传 `--release-tag`，把 tag 转成 `versionCode` / `versionName`（`Cargo.toml` 版本号长期停在 0.1.0，不能作为版本来源）。
+- Android 发布产物的断言只认资源名（`aapt2 dump resources` 里的 `mipmap/rssr_launcher`），不认文件路径：release 会跑 `optimizeReleaseResources` 压缩资源路径，按路径断言的写法只在 debug 上成立。
 
 ## 代码风格
 

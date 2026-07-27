@@ -17,6 +17,9 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+  # Android 的 versionCode / versionName 只能来自这里：workspace Cargo.toml 长期停在 0.1.0，
+  # 而 dx 脚手架固定生成 versionCode = 1。
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
   DIOXUS_CLI_VERSION: 0.7.9
 
 concurrency:
@@ -35,6 +38,16 @@ jobs:
             secrets.ANDROID_KEY_ALIAS != '' &&
             secrets.ANDROID_KEY_PASSWORD != '' }}
     steps:
+      # 打 tag 发布时签名密钥是硬要求。少了它整段签名逻辑连同 debug 密钥守卫都会被
+      # `if: env.ANDROID_RELEASE_READY == 'true'` 跳过，然后安安静静发一个 debug APK——
+      # 用户侧的表现就是这次事故本身（覆盖安装「校验失败」），而 CI 全绿。
+      # workflow_dispatch 仍允许降级，方便不碰密钥地验证其它平台。
+      - name: Require Android signing for tag releases
+        if: github.event_name == 'push' && env.ANDROID_RELEASE_READY != 'true'
+        run: |
+          echo "::error::tag 发布必须配置 ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD"
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v5
         with:
@@ -98,18 +111,36 @@ jobs:
         run: |
           rm -rf target/dx/rssr-app/release/android
           dx bundle --platform android --package rssr-app --target aarch64-linux-android --release --debug-symbols false
-          python3 scripts/prepare_android_bundle.py target/dx/rssr-app/release/android/app/app/src/main
+          python3 scripts/prepare_android_bundle.py \
+            target/dx/rssr-app/release/android/app/app/src/main \
+            --release-tag "$RELEASE_TAG"
+
+          # versionCode 复用脚本里那份实现，不在 shell 里重写一遍公式——
+          # 两处各写一份迟早会漂移，而漂移的表现是断言恒真。
+          ANDROID_VERSION_CODE="$(python3 -c 'import sys; sys.path.insert(0, "scripts"); from prepare_android_bundle import parse_release_tag; print(parse_release_tag(sys.argv[1])[0])' "$RELEASE_TAG")"
+          echo "ANDROID_VERSION_CODE=$ANDROID_VERSION_CODE" >> "$GITHUB_ENV"
+
           cd target/dx/rssr-app/release/android/app
           ./gradlew assembleDebug --no-daemon --console=plain
           cd -
 
       - name: Validate Android debug APK branding
         run: |
+          AAPT="$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
           APK_PATH="$(find target/dx/rssr-app/release/android -path '*outputs/apk/debug/*.apk' | head -n1)"
           test -n "$APK_PATH"
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" | grep "application-label:'RSS-Reader'"
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" | grep 'application-icon-.*rssr_launcher'
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" | grep "targetSdkVersion:'34'"
+          "$AAPT" dump badging "$APK_PATH" > badging-debug.txt
+
+          grep -F "application-label:'RSS-Reader'" badging-debug.txt
+          grep -E 'application-icon-.*rssr_launcher' badging-debug.txt
+          grep -F "targetSdkVersion:'34'" badging-debug.txt
+
+          # 版本号在 debug 包上就断言一次：它和 release 包出自同一份被 patch 过的 Gradle 文件，
+          # 这里失败可以省掉后面那次昂贵的 release 构建。versionCode 必须一起断言——
+          # 「versionCode 永远是 1、用户升不了级」正是这次要修的问题，只断言 versionName
+          # 等于没验到点子上。
+          grep -F "versionName='${RELEASE_TAG#v}'" badging-debug.txt
+          grep -F "versionCode='${ANDROID_VERSION_CODE}'" badging-debug.txt
 
       - name: Prepare Android release signing
         if: env.ANDROID_RELEASE_READY == 'true'
@@ -150,37 +181,85 @@ jobs:
       - name: Validate Android release branding
         if: env.ANDROID_RELEASE_READY == 'true'
         run: |
+          AAPT="$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
+          AAPT2="$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt2"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner"
           RELEASE_APK_PATH="$(find target/dx/rssr-app/release/android -path '*outputs/apk/release/*.apk' | head -n1)"
           RELEASE_AAB_PATH="$(find target/dx/rssr-app/release/android -path '*outputs/bundle/release/*.aab' | head -n1)"
           test -n "$RELEASE_APK_PATH"
           test -n "$RELEASE_AAB_PATH"
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$RELEASE_APK_PATH" | grep "application-label:'RSS-Reader'"
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$RELEASE_APK_PATH" | grep 'application-icon-.*rssr_launcher'
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$RELEASE_APK_PATH" | grep "targetSdkVersion:'34'"
-          unzip -l "$RELEASE_AAB_PATH" | grep 'rssr_launcher'
+
+          # 先一次性落盘再断言。`工具 | grep` 这种写法在工具缺失或失败时会退化成
+          # 「grep 读到空输入」：正向断言（grep 到才算过）会响亮失败，没问题；但**反向**
+          # 断言（grep 到就报错）会静默通过。下面的 debug 签名守卫正是反向断言，
+          # 必须先让工具自己的退出码炸出来，否则 apksigner 一旦缺失，守卫形同虚设。
+          "$AAPT" dump badging "$RELEASE_APK_PATH" > badging.txt
+          "$AAPT2" dump resources "$RELEASE_APK_PATH" > resources.txt
+          "$APKSIGNER" verify --print-certs "$RELEASE_APK_PATH" > certs.txt
+
+          echo "--- badging ---"; head -n 20 badging.txt
+          echo "--- mipmap 资源 ---"; grep -E 'mipmap/' resources.txt || true
+          echo "--- 签名证书 ---"; grep -E 'certificate (DN|SHA-256)' certs.txt || true
+
+          grep -F "application-label:'RSS-Reader'" badging.txt
+          grep -F "targetSdkVersion:'34'" badging.txt
+          grep -F "versionName='${RELEASE_TAG#v}'" badging.txt
+          grep -F "versionCode='${ANDROID_VERSION_CODE}'" badging.txt
+
+          # 图标要端到端地断言：既要资源名对，又要它确实是 manifest 解析出来的那个图标。
+          # 只查「资源表里存在 rssr_launcher」是不够的——图标属性丢失时，脚手架默认的
+          # ic_launcher 会顶上，而我们拷进去的 png 仍在资源表里，两个弱断言都能过。
+          # release 会跑 optimizeReleaseResources 把 res/mipmap-*/rssr_launcher.png 压成
+          # res/xY.png，所以只能先从 badging 拿解析后的路径，再回资源表查它属于哪个资源名。
+          ICON_PATH="$(sed -n "s/^application: .*icon='\([^']*\)'.*/\1/p" badging.txt | head -n1)"
+          test -n "$ICON_PATH"
+          awk -v p="$ICON_PATH" '/^ *resource /{cur=$3} index($0,p){print cur}' resources.txt \
+            | sort -u | grep -qx 'mipmap/rssr_launcher'
+
+          # AAB 里资源名以明文存在 protobuf 资源表中，不受路径压缩影响。
+          unzip -l "$RELEASE_AAB_PATH" | grep -q 'base/resources.pb'
+          unzip -p "$RELEASE_AAB_PATH" base/resources.pb | grep -qa 'rssr_launcher'
+
+          # 兜住这次事故的源头：签名一旦悄悄退回 debug 密钥，装机端就会再次「校验失败」。
+          # 先正向断言「确实存在签名者」，再反向断言「不是 debug 证书」。
+          grep -q 'Signer #1 certificate DN:' certs.txt
+          if grep -q 'CN=Android Debug' certs.txt; then
+            echo "::error::release APK 仍由 debug 密钥签名，签名配置没有生效"
+            exit 1
+          fi
 
       - name: Archive Android artifacts
         run: |
           mkdir -p release-assets
-          cp target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk \
-             release-assets/RSS-Reader-android-arm64-v8a-debug.apk
           if [ "$ANDROID_RELEASE_READY" = "true" ]; then
+            # 配了签名密钥就只发正式包。debug 包用的是 CI 每次现生成的临时密钥，签名和正式包对不上，
+            # 两个 APK 并排挂在 Release 页上，用户装错一个就会再次撞上「签名不一致装不上」。
             cp target/dx/rssr-app/release/android/app/app/build/outputs/apk/release/app-release.apk \
               release-assets/RSS-Reader-android-arm64-v8a-release.apk
             cp target/dx/rssr-app/release/android/app/app/build/outputs/bundle/release/app-release.aab \
               release-assets/RSS-Reader-android-arm64-v8a-release.aab
+          else
+            cp target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk \
+               release-assets/RSS-Reader-android-arm64-v8a-debug.apk
           fi
 
       - name: Smoke-check archived Android artifacts
         run: |
-          test -f release-assets/RSS-Reader-android-arm64-v8a-debug.apk
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging release-assets/RSS-Reader-android-arm64-v8a-debug.apk | grep "application-label:'RSS-Reader'"
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging release-assets/RSS-Reader-android-arm64-v8a-debug.apk | grep "targetSdkVersion:'34'"
+          AAPT="$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
           if [ "$ANDROID_RELEASE_READY" = "true" ]; then
             test -f release-assets/RSS-Reader-android-arm64-v8a-release.apk
             test -f release-assets/RSS-Reader-android-arm64-v8a-release.aab
-            "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging release-assets/RSS-Reader-android-arm64-v8a-release.apk | grep "targetSdkVersion:'34'"
-            unzip -l release-assets/RSS-Reader-android-arm64-v8a-release.aab | grep 'rssr_launcher'
+            test ! -f release-assets/RSS-Reader-android-arm64-v8a-debug.apk
+            "$AAPT" dump badging release-assets/RSS-Reader-android-arm64-v8a-release.apk > badging-archived.txt
+            grep -F "application-label:'RSS-Reader'" badging-archived.txt
+            grep -F "targetSdkVersion:'34'" badging-archived.txt
+            grep -F "versionName='${RELEASE_TAG#v}'" badging-archived.txt
+            grep -F "versionCode='${ANDROID_VERSION_CODE}'" badging-archived.txt
+          else
+            test -f release-assets/RSS-Reader-android-arm64-v8a-debug.apk
+            "$AAPT" dump badging release-assets/RSS-Reader-android-arm64-v8a-debug.apk > badging-archived.txt
+            grep -F "application-label:'RSS-Reader'" badging-archived.txt
+            grep -F "targetSdkVersion:'34'" badging-archived.txt
           fi
 
       - name: Upload Android artifact

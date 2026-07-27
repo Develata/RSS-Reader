@@ -181,7 +181,11 @@ jobs:
         run: |
           rm -rf target/dx/rssr-app/release/android
           dx bundle --platform android --package rssr-app --target aarch64-linux-android --release --debug-symbols false
-          python3 scripts/prepare_android_bundle.py target/dx/rssr-app/release/android/app/app/src/main
+          # 带上假 tag：让 --release-tag → parse_release_tag → patch_gradle_version 这条链
+          # 进日常 CI。否则它只在真正打 tag 时才第一次执行，正是「只在发布路径上跑」的老毛病。
+          python3 scripts/prepare_android_bundle.py \
+            target/dx/rssr-app/release/android/app/app/src/main \
+            --release-tag v9.87.65
           cd target/dx/rssr-app/release/android/app
           ./gradlew assembleDebug --no-daemon --console=plain
           cd -
@@ -190,5 +194,10 @@ jobs:
           # dx 0.7.9 起原生库默认名为 libmain.so（NativeActivity 约定，可经 Dioxus.toml [android] lib_name 覆写）
           unzip -l "$APK_PATH" | grep 'lib/arm64-v8a/libmain.so'
           ! unzip -l "$APK_PATH" | grep 'lib/x86_64/libmain.so'
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" | grep "application-label:'RSS-Reader'"
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" | grep 'application-icon-.*rssr_launcher'
+          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" > badging-ci.txt
+          grep -F "application-label:'RSS-Reader'" badging-ci.txt
+          grep -E 'application-icon-.*rssr_launcher' badging-ci.txt
+          # v9.87.65 → 9 * 10000 + 87 * 100 + 65。断言的是 AGP 最终采纳的值，
+          # 不只是「字符串写进了 Gradle 文件」。
+          grep -F "versionCode='98765'" badging-ci.txt
+          grep -F "versionName='9.87.65'" badging-ci.txt

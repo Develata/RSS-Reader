@@ -87,22 +87,22 @@ RSS-Reader 是一个以 Rust 为核心、基于 Dioxus 构建的跨平台阅读�
 - `RSS-Reader-macos-x86_64.tar.gz`
 - `RSS-Reader-macos-aarch64.tar.gz`
 - `RSS-Reader-web.tar.gz`
-- `RSS-Reader-android-arm64-v8a-debug.apk`
+- `RSS-Reader-android-arm64-v8a-release.apk`（Android 安装包，装这个）
+- `RSS-Reader-android-arm64-v8a-release.aab`（应用商店用，普通用户不需要）
 
-另外还会附带 CLI 和部分 Android release 产物：
+另外还会附带 CLI：
 
 - `rssr-cli-windows-x86_64.zip`
 - `rssr-cli-linux-x86_64.tar.gz`
 - `rssr-cli-macos-x86_64.tar.gz`
 - `rssr-cli-macos-aarch64.tar.gz`
-- `RSS-Reader-android-arm64-v8a-release.apk`
-- `RSS-Reader-android-arm64-v8a-release.aab`
 
 说明：
 
-- Android 默认发布的是适用于真机的 `arm64-v8a` Debug APK
-- Android release APK / AAB 只有在仓库配置签名 secrets 后才会一起出现
-- 如果你本地自己执行 `dx bundle --platform android ...`，记得随后运行 `python3 scripts/prepare_android_bundle.py target/dx/rssr-app/release/android/app/app/src/main`，再进入生成的 Gradle 工程执行一次 `./gradlew assembleDebug` 或 `assembleRelease`，这样 Android 启动图标、应用显示名，以及 `targetSdk / compileSdk` 才会真正打进 APK / AAB，避免被系统提示“此应用是针对旧版安卓开发的”
+- 仓库配置了签名 secrets 时，Android 只发布正式签名的 `arm64-v8a` release APK 与 AAB；未配置时退回发布 debug APK。两者不会同时出现——它们签名不同，并排挂着会让人装错
+- **debug APK 无法用于升级**：它由 CI 每次现生成的临时密钥签名，每个版本的证书都不一样，覆盖安装会被系统以“校验失败 / 签名不一致”拒绝。从 debug 包换到正式签名包同样需要先卸载，卸载会清空本机订阅与已下载正文，务必先导出 OPML
+- Android 的 `versionCode` / `versionName` 来自发布 tag（`v0.1.13` → `versionCode=113`、`versionName=0.1.13`），不取工作区 `Cargo.toml` 的版本号
+- 如果你本地自己执行 `dx bundle --platform android ...`，记得随后运行 `python3 scripts/prepare_android_bundle.py target/dx/rssr-app/release/android/app/app/src/main`（本地调试可不带 `--release-tag`，版本号保持脚手架默认值），再进入生成的 Gradle 工程执行一次 `./gradlew assembleDebug` 或 `assembleRelease`，这样 Android 启动图标、应用显示名，以及 `targetSdk / compileSdk` 才会真正打进 APK / AAB，避免被系统提示“此应用是针对旧版安卓开发的”
 - Windows 桌面端通常需要系统已安装 WebView2 Runtime
 
 ### 方式二：本地编译
@@ -275,12 +275,11 @@ Web 端当前使用浏览器本地持久化状态，而不是和桌面端完全�
 - Linux desktop
 - macOS desktop
 - Web 静态包
-- Android debug APK
+- Android release APK + AAB（正式签名）
 
-如果配置了 Android signing secrets，还会额外发布：
-
-- Android release APK
-- Android release AAB
+Android 那一项要求仓库已配置 signing secrets：打 tag 发布时缺少任何一个 secret 都会直接让
+`build-android` 失败，而不是悄悄退回 debug 包。手动 `workflow_dispatch` 仍允许在未配置密钥时
+降级发布 debug APK，便于不碰密钥地验证其它平台。
 
 ### Docker / Compose
 
