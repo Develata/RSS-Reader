@@ -3,10 +3,10 @@
 - 日期：2026-07-27
 - 作者 / Agent：Claude Code
 - 分支：main
-- 当前 HEAD：36626b0
-- 相关 commit：36626b0
-- 相关 tag / release：v0.1.13（tag 已推，Release 尚未发布成功）
-- 状态：`draft`
+- 当前 HEAD：217caf8
+- 相关 commit：36626b0（主体改动）、217caf8（产物取值与诊断修正）
+- 相关 tag / release：v0.1.13（指向 217caf8，Release 已发布）
+- 状态：`released`
 
 ## 工作摘要
 
@@ -96,21 +96,52 @@ Android 发布包此前一直由 CI 每次现生成的 debug keystore 签名，�
   只是以前断言在更早一步就失败，从没走到这里。
 - 一并暴露的诊断缺陷：这一步的断言全是 `grep -q` / `test`，成功时静默，
   失败时日志上只剩一个 `exit 1`，无法定位是哪一条。
+- 排查方式：没有靠反复跑 CI 猜，而是本地用
+  `aapt2 optimize --shorten-resource-paths` 在已发布的 v0.1.12 APK 上复现 release 的资源
+  路径压缩。结果反而**排除**了当时最可疑的图标回查逻辑（`res/Mx.png` → `mipmap/rssr_launcher`
+  本地通过），把矛头指向产物取值。后来真 runner 上打出的路径同样是 `res/Mx.png`，说明这次
+  本地复现是忠实的。
+- **v0.1.13 最终成功（run 30282565174，tag 移到 217caf8 后自动重跑）**：7 个 job 全绿，
+  含 `publish-release`。校验步骤逐条打点全部通过：
+
+  ```
+  Signer #1 certificate DN: CN=RSS-Reader, O=Develata, C=CN
+  [检查] 应用图标解析路径 = res/Mx.png
+  [检查] 该路径对应资源名 = mipmap/rssr_launcher
+  [通过] release 产物校验全部通过
+  ```
+
+  AAB 的 `base/resources.pb` 布局假设也在这一轮得到证实。
 
 ### 手工验收
 
-- 真机安装签名包并确认可用：**未执行**，见下方风险
+- 下载已发布的 `RSS-Reader-android-arm64-v8a-release.apk` 独立复验（不依赖流水线自述）：通过
+  - 签名：`CN=RSS-Reader, O=Develata, C=CN`，SHA-256
+    `4ed80b39e18b306e7072cbe258c7adf99ea9223d9026a81f9e78a6fb1f95dc17`
+    ——**这就是本应用此后的长期身份，所有后续版本都必须是这一枚**
+  - `versionCode='113' versionName='0.1.13'`、`application: label='RSS-Reader' icon='res/Mx.png'`
+  - `application-debuggable`：已消失（debug 包是带的）
+  - Release 页只有 `-release.apk` 与 `-release.aab`，没有 debug APK 并排
+- 真机安装并确认可正常启动：**未执行**，见下方风险
 
 ## 结果
 
-- 可合并。但**发布链未经一次真实成功运行**，合入后应先 `workflow_dispatch` 干跑再打正式 tag。
+- 已发布。v0.1.13 于 2026-07-27T16:09:20Z 发布，非 draft，11 个附件。
 - 用户影响：换用正式签名包需要先卸载（证书与 debug 包不同），卸载会清空 Android 本地订阅与已下载正文（`$HOME/RSS-Reader/rss-reader.db`），**务必先导出 OPML**。此后所有升级都能直接覆盖。
+- 从 v0.1.13 起 Android 具备可持续的升级能力：签名固定、versionCode 随 tag 递增、
+  Release 页不再并排放两个签名不同的 APK。
 
 ## 风险与后续事项
 
 - **release 包是 R8 minify 过的**（构建日志可见 `minifyReleaseWithR8`），debug 包不是。Dioxus / wry 经 JNI 反射用到的类有被 R8 剥掉的风险，可能构建成功但启动即崩。**真机验收前不要认为它等价于「签名版 debug 包」**；若崩溃，先回退安装 debug APK 并补 ProGuard keep 规则。
-- keystore 一旦丢失，后续所有升级都会再次断掉，且只能靠再一次卸载恢复。
-- 本次新增的 release 侧断言（`aapt2 dump resources` 输出格式、AAB `base/resources.pb` 明文命中、图标路径回查）**都从未在真 runner 上跑过**，只在本地用已发布的 APK 验证过等价逻辑。
+- keystore 一旦丢失，后续所有升级都会再次断掉，且只能靠再一次卸载恢复。证书指纹
+  `4ed80b39e18b306e…` 是此后不可更改的身份，务必把 `.jks` 与口令离线备份。
+- 密钥轮换会**响亮**地打断发布：四个 secret 少任何一个，tag 发布都会在
+  `Require Android signing for tag releases` 直接失败。这是有意的，但轮换时必须四个一起换。
+- **release 侧断言只在打 tag 时才会执行**，日常 CI 结构上够不到（它们全在
+  `if: env.ANDROID_RELEASE_READY == 'true'` 分支里）。`--release-tag` 那条链已由 CI 用假 tag
+  `v9.87.65` 覆盖，但签名守卫、图标回查、AAB 资源表这三条仍然只有发布时才跑。
+  下次改这一段时，要预期「第一次真发布才暴露问题」。
 - `patch_gradle` 若同时遇到 `build.gradle` 与 `build.gradle.kts`，两个都会被要求含 versionCode，缺的那个会硬失败。dx 目前只生成 `.kts`，暂不构成问题；属于响亮失败，不是静默。
 - build-tools 版本 `34.0.0` 在 release.yml 里硬编码多处，升级时需一并改。
 
