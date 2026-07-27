@@ -3,10 +3,10 @@
 - 日期：2026-07-27
 - 作者 / Agent：Claude Code
 - 分支：main
-- 当前 HEAD：e31b44f
-- 相关 commit：pending
-- 相关 tag / release：N/A
-- 状态：`validated`
+- 当前 HEAD：57753d1
+- 相关 commit：57753d1
+- 相关 tag / release：v0.1.12
+- 状态：`released`
 
 ## 工作摘要
 
@@ -117,12 +117,25 @@ application 层（`refresh_service.rs`）：
 
 ### 手工验收
 
-- 桌面端实跑：未执行。桌面端走 SQLite 存储，两个新方法都是默认空实现，`refresh_targets` 的并发分支代码逐字搬运未改；行为不变由 `cargo test --workspace` 覆盖（含并发刷新的既有测试）。
+Web 部署态实跑：`dx bundle --platform web --release` 出包，`rssr-web` 托管，Chrome 实际操作，三个真实订阅（Rust Blog / This Week in Rust 成功，Mozilla Blog 因 CORS 失败——正好构成一轮混合结果）。
+
+- **写入次数实测**：在 wasm 模块加载**之前**用 `initScript` 钩住 `Storage.prototype.setItem`，一轮三订阅的「刷新全部」记录到 **4 次 `setItem`、628,949 字节**，即整轮恰好一次全量快照。改动前同样一轮是 3 次提交 × 4 个 key = 12 次、约 1.9 MB。按订阅数线性放大。
+- **中断轮次后仍能落盘**（本次最关键的回归点）：点「刷新全部」后 120 ms 切到文章页（订阅页组件卸载 → Dioxus 丢弃刷新任务 → future 被取消），再回到订阅页刷新单个订阅——`last_fetched_at` 从 `09:32:08` 前进到 `09:32:57`，确实写进了 `localStorage`。没有批次守卫时这次写入会被静默吞掉。
+- 添加订阅 + 首刷（批次外路径）：通过，10 条条目落盘。
+- 混合轮次：失败订阅的 `fetch_error` 与成功订阅的时间戳都正确落盘。
+- 硬刷新后：3 个订阅、14 条条目、14 份正文、失败记录全部完好。
+- 同一轮顺带验收了另一个待发布提交（shell prefs）：搜索词 `rust` 与导航收起状态都跨刷新保持。
+
+- 桌面端实跑：未执行。桌面端走 SQLite 存储，三个新方法都是默认空实现，`refresh_targets` 的并发分支代码逐字搬运未改；行为不变由 `cargo test --workspace` 与 CI 覆盖。
+
+### 踩到的坑（供下一位参考）
+
+第一次做写入次数测量时拿到「0 次写入」，但界面时间戳明明前进了。**没有直接采信这个数字**，而是去读 `localStorage` 里的持久化状态做交叉验证，发现存储其实已经更新——是钩子没生效：`localStorage.setItem = fn` 对 `Storage` 这种 exotic 对象会变成存一个名为 `setItem` 的**存储项**而不是覆盖方法；改钩 `Storage.prototype.setItem` 后 JS 侧生效了，但 wasm-bindgen 的胶水在模块初始化时就已经拿到了方法引用，仍然抓不到。最终靠 `navigate_page` 的 `initScript` 在模块加载前打补丁才测准。若当时采信那个 0，就会去追一个根本不存在的 bug。
 
 ## 结果
 
-- 可合并。
-- 用户影响：仅 Web 端。刷新期间的主线程写入从「订阅数 × 全库」降到「整轮 1 次全库」，且整轮全 304 时降到 0 次。桌面 / Android / CLI 行为逐字节不变。
+- 已随 `v0.1.12` 发布。
+- 用户影响：仅 Web 端。刷新期间的主线程写入从「订阅数 × 全库」降到「整轮 1 次全库」（实测 3 订阅一轮 4 次 `setItem` / 629 KB，改动前为 12 次 / ~1.9 MB），且整轮全 304 时降到 0 次。桌面 / Android / CLI 行为逐字节不变。
 - 代价：落盘时机从「每个订阅提交后」推迟到「整轮结束」。刷新中途关标签页会丢掉本轮已抓取但未落盘的条目。RSS 抓取是幂等的，下一轮刷新会重新取回，因此实际损失是「多刷一次」而不是数据损坏。这一取舍是本次改动唯一的负面影响，已与用户确认接受。
 
 ## 风险与后续事项
