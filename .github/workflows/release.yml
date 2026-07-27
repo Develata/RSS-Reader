@@ -127,8 +127,10 @@ jobs:
       - name: Validate Android debug APK branding
         run: |
           AAPT="$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
-          APK_PATH="$(find target/dx/rssr-app/release/android -path '*outputs/apk/debug/*.apk' | head -n1)"
-          test -n "$APK_PATH"
+          # 与 Archive 步骤同一条确定路径，不用 `find | head -n1`（同一批输出目录里
+          # 可能不止一个候选产物，挑中哪个取决于目录顺序）。
+          APK_PATH=target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK_PATH"
           "$AAPT" dump badging "$APK_PATH" > badging-debug.txt
 
           grep -F "application-label:'RSS-Reader'" badging-debug.txt
@@ -184,10 +186,19 @@ jobs:
           AAPT="$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
           AAPT2="$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt2"
           APKSIGNER="$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner"
-          RELEASE_APK_PATH="$(find target/dx/rssr-app/release/android -path '*outputs/apk/release/*.apk' | head -n1)"
-          RELEASE_AAB_PATH="$(find target/dx/rssr-app/release/android -path '*outputs/bundle/release/*.aab' | head -n1)"
-          test -n "$RELEASE_APK_PATH"
-          test -n "$RELEASE_AAB_PATH"
+          OUT_DIR=target/dx/rssr-app/release/android/app/app/build/outputs
+          RELEASE_APK_PATH="$OUT_DIR/apk/release/app-release.apk"
+          RELEASE_AAB_PATH="$OUT_DIR/bundle/release/app-release.aab"
+
+          # 用确定路径，不用 `find | head -n1`。`dx bundle` 自己也会往
+          # bundle/release/ 里放一个 RssrApp-*.aab，而它产于 prepare_android_bundle.py
+          # 打图标之前——`find` 在两个 aab 之间挑中哪个取决于目录顺序，挑中 dx 那个就
+          # 必然查不到 rssr_launcher。这两条路径与下面 Archive 步骤实际拷贝的完全一致。
+          if [ ! -f "$RELEASE_APK_PATH" ] || [ ! -f "$RELEASE_AAB_PATH" ]; then
+            echo "::error::找不到预期的 release 产物"
+            ls -l "$OUT_DIR/apk/release" "$OUT_DIR/bundle/release" || true
+            exit 1
+          fi
 
           # 先一次性落盘再断言。`工具 | grep` 这种写法在工具缺失或失败时会退化成
           # 「grep 读到空输入」：正向断言（grep 到才算过）会响亮失败，没问题；但**反向**
@@ -197,14 +208,18 @@ jobs:
           "$AAPT2" dump resources "$RELEASE_APK_PATH" > resources.txt
           "$APKSIGNER" verify --print-certs "$RELEASE_APK_PATH" > certs.txt
 
-          echo "--- badging ---"; head -n 20 badging.txt
+          echo "--- 产物 ---"; ls -l "$RELEASE_APK_PATH" "$RELEASE_AAB_PATH"
+          echo "--- badging ---"; grep -E "^(package|targetSdkVersion|application):" badging.txt || true
           echo "--- mipmap 资源 ---"; grep -E 'mipmap/' resources.txt || true
           echo "--- 签名证书 ---"; grep -E 'certificate (DN|SHA-256)' certs.txt || true
 
-          grep -F "application-label:'RSS-Reader'" badging.txt
-          grep -F "targetSdkVersion:'34'" badging.txt
-          grep -F "versionName='${RELEASE_TAG#v}'" badging.txt
-          grep -F "versionCode='${ANDROID_VERSION_CODE}'" badging.txt
+          # 下面每条断言都先报出自己在查什么。`grep -q` / `test` 成功时是静默的，
+          # 一串静默断言里失败任何一条，日志上都只剩一个 exit 1，根本定位不到是哪条。
+          echo "[检查] 应用名 / targetSdk / 版本号"
+          grep -F "application-label:'RSS-Reader'" badging.txt > /dev/null
+          grep -F "targetSdkVersion:'34'" badging.txt > /dev/null
+          grep -F "versionName='${RELEASE_TAG#v}'" badging.txt > /dev/null
+          grep -F "versionCode='${ANDROID_VERSION_CODE}'" badging.txt > /dev/null
 
           # 图标要端到端地断言：既要资源名对，又要它确实是 manifest 解析出来的那个图标。
           # 只查「资源表里存在 rssr_launcher」是不够的——图标属性丢失时，脚手架默认的
@@ -212,21 +227,28 @@ jobs:
           # release 会跑 optimizeReleaseResources 把 res/mipmap-*/rssr_launcher.png 压成
           # res/xY.png，所以只能先从 badging 拿解析后的路径，再回资源表查它属于哪个资源名。
           ICON_PATH="$(sed -n "s/^application: .*icon='\([^']*\)'.*/\1/p" badging.txt | head -n1)"
+          echo "[检查] 应用图标解析路径 = ${ICON_PATH:-<空>}"
           test -n "$ICON_PATH"
-          awk -v p="$ICON_PATH" '/^ *resource /{cur=$3} index($0,p){print cur}' resources.txt \
-            | sort -u | grep -qx 'mipmap/rssr_launcher'
+          ICON_RES="$(awk -v p="$ICON_PATH" '/^ *resource /{cur=$3} index($0,p){print cur}' resources.txt | sort -u)"
+          echo "[检查] 该路径对应资源名 = ${ICON_RES:-<空>}"
+          test "$ICON_RES" = "mipmap/rssr_launcher"
 
           # AAB 里资源名以明文存在 protobuf 资源表中，不受路径压缩影响。
-          unzip -l "$RELEASE_AAB_PATH" | grep -q 'base/resources.pb'
-          unzip -p "$RELEASE_AAB_PATH" base/resources.pb | grep -qa 'rssr_launcher'
+          echo "[检查] AAB 资源表"
+          unzip -l "$RELEASE_AAB_PATH" | grep -q 'base/resources.pb' \
+            || { echo "::error::AAB 里没有 base/resources.pb"; unzip -l "$RELEASE_AAB_PATH" | head -n 30; exit 1; }
+          unzip -p "$RELEASE_AAB_PATH" base/resources.pb | grep -qa 'rssr_launcher' \
+            || { echo "::error::AAB 资源表里没有 rssr_launcher"; exit 1; }
 
           # 兜住这次事故的源头：签名一旦悄悄退回 debug 密钥，装机端就会再次「校验失败」。
           # 先正向断言「确实存在签名者」，再反向断言「不是 debug 证书」。
+          echo "[检查] 签名证书"
           grep -q 'Signer #1 certificate DN:' certs.txt
           if grep -q 'CN=Android Debug' certs.txt; then
             echo "::error::release APK 仍由 debug 密钥签名，签名配置没有生效"
             exit 1
           fi
+          echo "[通过] release 产物校验全部通过"
 
       - name: Archive Android artifacts
         run: |

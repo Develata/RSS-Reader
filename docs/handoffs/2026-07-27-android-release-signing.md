@@ -5,7 +5,7 @@
 - 分支：main
 - 当前 HEAD：36626b0
 - 相关 commit：36626b0
-- 相关 tag / release：暂无（下一个 tag 生效）
+- 相关 tag / release：v0.1.13（tag 已推，Release 尚未发布成功）
 - 状态：`draft`
 
 ## 工作摘要
@@ -74,10 +74,32 @@ Android 发布包此前一直由 CI 每次现生成的 debug keystore 签名，�
 - 图标路径 → 资源名映射在真实 APK 上实测：`res/mipmap-mdpi-v4/rssr_launcher.png` → `mipmap/rssr_launcher`
 - `cargo` 全家桶：未执行（本次不涉及 Rust 改动）
 
+### 真实 runner 结果
+
+- CI（run 30277018137，commit 361caca）：全绿。`android-smoke` 用假 tag `v9.87.65` 实跑，
+  APK 里读出 `versionCode='98765' versionName='9.87.65'`——证明 AGP 确实采纳了写进去的值，
+  不只是「字符串写进了 Gradle 文件」。
+- **`workflow_dispatch` 对旧 tag 干跑是行不通的**（两次失败：30265063348、30277963825）。
+  本工作流 `checkout` 用的是 `ref: refs/tags/<tag>`，即工作流 YAML 来自默认分支而代码来自 tag。
+  拿新流水线去跑老 tag，必然新旧混搭——第二次就直接报
+  `usage: prepare_android_bundle.py <android-app-src-main-dir>`（老脚本不认 `--release-tag`）。
+  **结论：流水线改动只能由「包含该改动的 tag」来验证。**
+- v0.1.13（run 30279983390，tag 指向 361caca）：`build-android` 在
+  `Validate Android release branding` 失败，但前面几步全过，拿到两个关键事实：
+  - **签名链已打通**：`Signer #1 certificate DN: CN=RSS-Reader, O=Develata, C=CN`，
+    SHA-256 `4ed80b39e18b306e…`，不再是 `CN=Android Debug`。
+  - 正式包版本号正确：`versionCode='113' versionName='0.1.13'`。
+- 失败根因：`RELEASE_AAB_PATH` 用 `find … -path '*outputs/bundle/release/*.aab' | head -n1`
+  取产物，而 `dx bundle` 自己也会在**同一个目录**产出 `RssrApp-aarch64-linux-android.aab`，
+  且它生成于 `prepare_android_bundle.py` 打图标**之前**。`find` 挑中哪个取决于目录顺序，
+  挑中 dx 那个就必然查不到 `rssr_launcher`。这是原代码就有的隐患（老写法同一行也用 `find`），
+  只是以前断言在更早一步就失败，从没走到这里。
+- 一并暴露的诊断缺陷：这一步的断言全是 `grep -q` / `test`，成功时静默，
+  失败时日志上只剩一个 `exit 1`，无法定位是哪一条。
+
 ### 手工验收
 
 - 真机安装签名包并确认可用：**未执行**，见下方风险
-- 用 `workflow_dispatch` 做一次干跑：**未执行**
 
 ## 结果
 
