@@ -3,8 +3,8 @@
 - 日期：2026-07-27
 - 作者 / Agent：Claude Code
 - 分支：main
-- 当前 HEAD：110275c
-- 相关 commit：pending
+- 当前 HEAD：36626b0
+- 相关 commit：36626b0
 - 相关 tag / release：暂无（下一个 tag 生效）
 - 状态：`draft`
 
