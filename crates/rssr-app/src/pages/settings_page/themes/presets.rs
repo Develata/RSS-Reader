@@ -33,7 +33,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     option { value: "custom", "自定义主题" }
                     option { value: "atlas-sidebar", "Atlas Sidebar" }
                     option { value: "newsprint", "Newsprint" }
-                    option { value: "amethyst-glass", "Amethyst Glass" }
+                    option { value: "amethyst-glass", "Amethyst Glass（实验）" }
                     option { value: "midnight-ledger", "Midnight Ledger" }
                 }
                 button {
@@ -67,7 +67,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "amethyst-glass",
                     onclick: move |_| amethyst_facade.apply_builtin_theme("amethyst-glass"),
-                    "Amethyst Glass"
+                    "Amethyst Glass（实验）"
                 }
                 button {
                     class: "button",

@@ -100,19 +100,19 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                     }
                 }
                 div { "data-layout": "entry-overview",
-                    div { "data-layout": "entry-overview-metric",
+                    div { "data-layout": "entry-overview-metric", "data-tone": "primary",
                         span { "data-slot": "entry-overview-label", "当前结果" }
                         strong { "data-slot": "entry-overview-value", "{visible_entries_len}" }
                     }
-                    div { "data-layout": "entry-overview-metric",
+                    div { "data-layout": "entry-overview-metric", "data-tone": "secondary",
                         span { "data-slot": "entry-overview-label", "每页数量" }
                         strong { "data-slot": "entry-overview-value", "{facade.page_size()}" }
                     }
-                    div { "data-layout": "entry-overview-metric",
+                    div { "data-layout": "entry-overview-metric", "data-tone": "secondary",
                         span { "data-slot": "entry-overview-label", "归档文章" }
                         strong { "data-slot": "entry-overview-value", "{archived_count}" }
                     }
-                    div { "data-layout": "entry-overview-metric", "data-tone": "summary",
+                    div { "data-layout": "entry-overview-metric", "data-tone": "secondary",
                         span { "data-slot": "entry-overview-label", "当前组织" }
                         strong {
                             "data-slot": "entry-overview-value",

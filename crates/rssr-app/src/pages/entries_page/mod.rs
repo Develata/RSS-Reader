@@ -15,8 +15,7 @@ mod state;
 use dioxus::prelude::*;
 
 use self::browser_interactions::{
-    initial_entry_controls_hidden, scroll_directory_item,
-    sync_entry_directory_with_viewport_alignment,
+    scroll_directory_item, sync_entry_directory_with_viewport_alignment,
 };
 use self::cards::render_entry_card_at;
 use self::clock::current_time_utc;
@@ -29,6 +28,7 @@ use self::{
     session::EntriesPageSession,
     state::EntriesPageState,
 };
+use crate::ui::initial_entry_controls_hidden;
 use crate::{
     app::AppNav,
     components::status_banner::StatusBanner,

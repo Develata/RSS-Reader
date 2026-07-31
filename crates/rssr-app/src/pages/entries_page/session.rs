@@ -1,10 +1,11 @@
 use dioxus::prelude::*;
 
 use super::{
-    browser_interactions::remember_entry_controls_hidden, intent::EntriesPageIntent,
-    reducer::dispatch_entries_page_intent, state::EntriesPageState,
+    intent::EntriesPageIntent, reducer::dispatch_entries_page_intent, state::EntriesPageState,
 };
-use crate::ui::{EntriesCommand, UiCommand, UiIntent, spawn_projected_ui_command};
+use crate::ui::{
+    EntriesCommand, UiCommand, UiIntent, remember_entry_controls_hidden, spawn_projected_ui_command,
+};
 use rssr_domain::EntryQuery;
 
 #[derive(Clone, Copy, PartialEq)]

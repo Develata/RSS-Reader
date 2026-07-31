@@ -159,7 +159,7 @@
 
 [data-layout="reader-bottom-bar"] {
   position: sticky;
-  bottom: 18px;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
@@ -217,6 +217,13 @@
 [data-slot="reader-bottom-bar-label"] {
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+/* 键盘快捷键提示只对有能力按键盘的设备展示；触屏（coarse pointer、无 hover）隐藏。 */
+@media (hover: none), (pointer: coarse) {
+  [data-slot="reader-bottom-bar-shortcut"] {
+    display: none;
+  }
 }
 
 [data-layout="web-auth-shell"] {

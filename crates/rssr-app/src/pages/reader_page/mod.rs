@@ -118,7 +118,10 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                             read_facade.toggle_read(false);
                         },
                         span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", "{facade.read_toggle_icon()}" }
-                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label", "{facade.read_toggle_label()}" }
+                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label",
+                            "{facade.read_toggle_text()}"
+                            span { class: "reader-bottom-bar__shortcut", "data-slot": "reader-bottom-bar-shortcut", "（M）" }
+                        }
                     }
                     button {
                         class: "reader-bottom-bar__button",
@@ -128,7 +131,10 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                             starred_facade.toggle_starred(false);
                         },
                         span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", "{facade.starred_toggle_icon()}" }
-                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label", "收藏（F）" }
+                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label",
+                            "收藏"
+                            span { class: "reader-bottom-bar__shortcut", "data-slot": "reader-bottom-bar-shortcut", "（F）" }
+                        }
                     }
                     button {
                         class: "reader-bottom-bar__button",

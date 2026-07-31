@@ -19,5 +19,6 @@ pub(crate) use self::{
         AppShellState, use_app_nav_shell, use_app_shell_state, use_authenticated_shell_bus,
         use_startup_route_bus, use_web_auth_gate_shell,
     },
+    shell_prefs::{initial_entry_controls_hidden, remember_entry_controls_hidden},
     snapshot::UiIntent,
 };

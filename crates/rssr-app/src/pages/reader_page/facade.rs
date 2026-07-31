@@ -92,8 +92,8 @@ impl ReaderPageFacade {
         if self.is_read() { "○" } else { "✓" }
     }
 
-    pub(crate) fn read_toggle_label(&self) -> &'static str {
-        if self.is_read() { "未读（M）" } else { "已读（M）" }
+    pub(crate) fn read_toggle_text(&self) -> &'static str {
+        if self.is_read() { "未读" } else { "已读" }
     }
 
     pub(crate) fn read_state(&self) -> &'static str {

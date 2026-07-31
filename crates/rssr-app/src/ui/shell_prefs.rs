@@ -1,6 +1,6 @@
-//! 顶栏搜索词与导航收起状态的持久化，三端行为一致。
+//! 顶栏搜索词、导航收起状态与文章区控件收起状态的持久化，三端行为一致。
 //!
-//! 这两项此前只有 Web 端存进 `localStorage`，桌面与 Android 每次启动都回到「未筛选、导航展开」。
+//! 这几项此前只有 Web 端存进 `localStorage`，桌面与 Android 每次启动都回到「未筛选、导航展开」。
 //! 同一个界面元素在不同平台记不记得住，属于平台差异漏进了产品语义，因此统一为三端都记住。
 //!
 //! **必须是同步读写。** `use_app_shell_state` 在首帧就要拿到值。若改走 `AppStateSnapshot`
@@ -8,10 +8,12 @@
 //! Web 端现有的体验会退化出一次闪烁。为此这里不进 domain / application，
 //! 就是一层宿主能力适配。
 //!
-//! 落盘格式（原生端）：数据库同目录下的 `shell-prefs.json`。字段全部 `#[serde(default)]`，
+//! 落盘格式（原生端）：数据库同目录下的 `shell-prefs.json`。字段全部走 `Default` 兜底，
 //! 文件缺失、损坏、字段增减一律回落到默认值，不做版本协商也不做迁移——这是一份随时可以
-//! 丢弃重建的界面偏好，为它引入迁移责任不划算。Web 端沿用原有的两个
-//! `localStorage` 键，老用户已经存下的值不会因为这次改动丢失。
+//! 丢弃重建的界面偏好，为它引入迁移责任不划算。注意 `entry_controls_hidden` 的默认值是
+//! `true`（控件默认收起），因此 `ShellPrefs` 手写 `Default` 实现而不是派生——派生的
+//! `bool::default()` 会把老文件里缺失的该字段读成「展开」，等于倒退默认体验。
+//! Web 端沿用原有的 `localStorage` 键，老用户已经存下的值不会因为这次改动丢失。
 
 #[cfg(not(target_arch = "wasm32"))]
 mod platform {
@@ -22,11 +24,21 @@ mod platform {
 
     use serde::{Deserialize, Serialize};
 
-    #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     #[serde(default)]
     struct ShellPrefs {
         entry_search: String,
         nav_hidden: bool,
+        entry_controls_hidden: bool,
+    }
+
+    /// 控件默认收起：老版本写出的偏好文件没有 `entry_controls_hidden` 字段，
+    /// 反序列化走 `Default` 兜底时必须落回 `true`，否则老用户升级后控件
+    /// 会莫名变成展开。
+    impl Default for ShellPrefs {
+        fn default() -> Self {
+            Self { entry_search: String::new(), nav_hidden: false, entry_controls_hidden: true }
+        }
     }
 
     /// 进程内缓存。有它之后写入不必先读盘做 read-modify-write，
@@ -133,13 +145,25 @@ mod platform {
         update(|prefs| prefs.nav_hidden = hidden);
     }
 
+    pub(super) fn initial_entry_controls_hidden() -> bool {
+        locked().entry_controls_hidden
+    }
+
+    pub(super) fn remember_entry_controls_hidden(hidden: bool) {
+        update(|prefs| prefs.entry_controls_hidden = hidden);
+    }
+
     #[cfg(test)]
     mod tests {
         use super::{ShellPrefs, decode};
 
         #[test]
         fn round_trips_through_the_on_disk_form() {
-            let prefs = ShellPrefs { entry_search: "rust".to_string(), nav_hidden: true };
+            let prefs = ShellPrefs {
+                entry_search: "rust".to_string(),
+                nav_hidden: true,
+                entry_controls_hidden: false,
+            };
             let encoded = serde_json::to_string(&prefs).expect("encode prefs");
 
             assert_eq!(decode(&encoded), prefs);
@@ -170,12 +194,23 @@ mod platform {
         fn missing_fields_default_and_unknown_fields_are_ignored() {
             assert_eq!(
                 decode(r#"{"entry_search": "rust"}"#),
-                ShellPrefs { entry_search: "rust".to_string(), nav_hidden: false }
+                ShellPrefs { entry_search: "rust".to_string(), ..ShellPrefs::default() }
             );
             assert_eq!(
                 decode(r#"{"nav_hidden": true, "future_field": {"a": 1}}"#),
-                ShellPrefs { entry_search: String::new(), nav_hidden: true }
+                ShellPrefs {
+                    entry_search: String::new(),
+                    nav_hidden: true,
+                    ..ShellPrefs::default()
+                }
             );
+        }
+
+        /// 老版本写出的文件没有 `entry_controls_hidden`：兜底必须落在「收起」，
+        /// 不能落在 `bool` 派生默认的「展开」。
+        #[test]
+        fn missing_entry_controls_hidden_defaults_to_collapsed() {
+            assert!(decode(r#"{"entry_search": "rust"}"#).entry_controls_hidden);
         }
     }
 }
@@ -185,6 +220,7 @@ mod platform {
     /// 键名沿用改动前的取值，老用户存在浏览器里的搜索词与导航状态继续生效。
     const ENTRY_SEARCH_KEY: &str = "rssr-entry-search";
     const NAV_HIDDEN_KEY: &str = "rssr-nav-hidden";
+    const ENTRY_CONTROLS_HIDDEN_KEY: &str = "rssr-entry-controls-hidden";
 
     fn storage() -> Option<web_sys::Storage> {
         web_sys::window()?.local_storage().ok().flatten()
@@ -213,6 +249,18 @@ mod platform {
             let _ = storage.set_item(NAV_HIDDEN_KEY, if hidden { "1" } else { "0" });
         }
     }
+
+    pub(super) fn initial_entry_controls_hidden() -> bool {
+        storage()
+            .and_then(|storage| storage.get_item(ENTRY_CONTROLS_HIDDEN_KEY).ok().flatten())
+            .is_none_or(|value| value == "1")
+    }
+
+    pub(super) fn remember_entry_controls_hidden(hidden: bool) {
+        if let Some(storage) = storage() {
+            let _ = storage.set_item(ENTRY_CONTROLS_HIDDEN_KEY, if hidden { "1" } else { "0" });
+        }
+    }
 }
 
 pub(crate) fn initial_entry_search() -> String {
@@ -229,4 +277,12 @@ pub(crate) fn initial_nav_hidden() -> bool {
 
 pub(crate) fn remember_nav_hidden(hidden: bool) {
     platform::remember_nav_hidden(hidden);
+}
+
+pub(crate) fn initial_entry_controls_hidden() -> bool {
+    platform::initial_entry_controls_hidden()
+}
+
+pub(crate) fn remember_entry_controls_hidden(hidden: bool) {
+    platform::remember_entry_controls_hidden(hidden);
 }

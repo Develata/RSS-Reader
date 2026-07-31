@@ -42,8 +42,8 @@ pub fn FeedsPage() -> Element {
                 StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string() }
             }
             FeedComposeSection { facade: facade.clone() }
-            ConfigExchangeSection { facade: facade.clone() }
-            SavedFeedsSection { facade }
+            SavedFeedsSection { facade: facade.clone() }
+            ConfigExchangeSection { facade }
         }
     }
 }

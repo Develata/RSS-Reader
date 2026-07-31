@@ -38,7 +38,7 @@ pub(crate) fn preset_display_name(key: &str) -> &'static str {
     match key {
         "atlas-sidebar" => "Atlas Sidebar",
         "newsprint" => "Newsprint",
-        "amethyst-glass" => "Amethyst Glass",
+        "amethyst-glass" => "Amethyst Glass（实验）",
         "midnight-ledger" => "Midnight Ledger",
         _ => "自定义主题",
     }
@@ -90,7 +90,7 @@ pub(super) fn builtin_theme_presets() -> [BuiltinThemePreset; 4] {
         },
         BuiltinThemePreset {
             key: "amethyst-glass",
-            name: "Amethyst Glass",
+            name: "Amethyst Glass（实验）",
             swatches: ["#e0c3fc", "#8b5cf6", "#1f2937"],
         },
         BuiltinThemePreset {
