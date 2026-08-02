@@ -5,15 +5,15 @@
 - 审查与补全：Codex
 - 分支：main
 - 当前实现 commit：`48b15e4e8549ffe6e0cc9c4eed707d9eeb00f55c`
-- 相关 commit：`48b15e4e8549ffe6e0cc9c4eed707d9eeb00f55c`
-- 相关 tag / release：`v0.1.14`（计划发布）
-- 状态：`validated on Web and API 37; v0.1.14 release pending; exact API 35 run pending`
+- 相关 commit：`48b15e4e8549ffe6e0cc9c4eed707d9eeb00f55c`、`e0ed5844604404fb27bfc80ff50641d5220f4b09`
+- 相关 tag / release：`v0.1.14`（已发布）
+- 状态：`released as v0.1.14; validated on Web and API 37; exact API 35 run remains an observation`
 
 ## 结论
 
-原 handoff 的三个 UI 改动方向正确，但“validated / 可合并”证据不足：目录 mask 在滚动中点会提前离散切换为 `none`，360×800 只有手工记录，Shell 文件在 Windows 棡出中仍可能因 CRLF 失败，且 `title`/按钮数量的表述过强。本轮已修复这些问题，并补完 C7 Android SAF 导出和 C20 safe-area 全量样式适配。
+原 handoff 的三个 UI 改动方向正确，但“validated / 可合并”证据不足：目录 mask 在滚动中点会提前离散切换为 `none`，360×800 只有手工记录，Shell 文件在 Windows 检出中仍可能因 CRLF 失败，且 `title`/按钮数量的表述过强。本轮已修复这些问题，并补完 C7 Android SAF 导出和 C20 safe-area 全量样式适配。
 
-实现与现有自动化均已通过；Android 设备矩阵使用现有 API 37 模拟器验证，未在本机缺失的 API 35 system image 上精确复跑。因此本文不恢复为无条件 `validated / 可合并`。
+实现与现有自动化均已通过，并已发布为 `v0.1.14`。Android 设备矩阵使用现有 API 37 模拟器验证，未在本机缺失的 API 35 system image 上精确复跑；该差异继续作为后续观察项保留，不再阻塞本次已完成的 release。
 
 ## 审查问题与处理
 
@@ -131,6 +131,16 @@ bash scripts/run_static_web_small_viewport_smoke.sh \
 - 首次本地复跑曾因生成目录残留 x86_64 库得到 31.5 MB 多 ABI 包；发布 workflow 本就会清理该目录。移动旧生成目录后干净复跑确认并非代码包体回归。
 - 干净 Gradle 首轮曾因旧 Gradle daemon PID 44936 持有 R8 `classes.dex` 失败；Windows Restart Manager 精确确认锁持有者，`gradlew --stop` 后相同任务串行复跑通过，属于本机生成目录生命周期问题。
 
+### v0.1.14 发布与发布后验包
+
+- tag `v0.1.14` 指向 `e0ed5844604404fb27bfc80ff50641d5220f4b09`；正式 Release：<https://github.com/Develata/RSS-Reader/releases/tag/v0.1.14>。
+- [主分支 CI run `30752096008`](https://github.com/Develata/RSS-Reader/actions/runs/30752096008)、[tag Release run `30752385597`](https://github.com/Develata/RSS-Reader/actions/runs/30752385597)、[Docker run `30752385594`](https://github.com/Develata/RSS-Reader/actions/runs/30752385594) 均成功；Release 的 Web、Windows、Linux、macOS x86_64/aarch64、Android 构建与 `publish-release` 全部成功。
+- Release 共发布 11 个预期资产；Android 仅发布正式 APK/AAB，没有 debug APK。
+- 重新下载已发布 APK 独立验包：16,184,477 字节，SHA-256 `ef345bda6f98528cb9f4c317be02d72e17b219b46db71c085a05401bc05cf8a1`，与 GitHub asset digest 一致。
+- APK 为 `versionCode=114`、`versionName=0.1.14`、minSdk 24、targetSdk 34；只含 `lib/arm64-v8a/libmain.so`。
+- APK Signature Scheme v2 验证通过；唯一签名证书为 `CN=RSS-Reader, O=Develata, C=CN`，不是 Android debug 证书。
+- Manifest 权限只有 `INTERNET` 与框架生成的内部 dynamic receiver 权限，不含读取、写入或管理外部存储权限。
+
 ### Android C20 设备验收
 
 - API 37 debug 路径确实启用 edge-to-edge；WebView 145 支持 `env(safe-area-inset-*)`。
@@ -144,7 +154,7 @@ bash scripts/run_static_web_small_viewport_smoke.sh \
 
 ## 剩余边界与缺口
 
-- 本机没有 API 35 system image，且 C 盘空间不足以安装新的多 GB image；本轮用更高的 API 37 执行 API 35+ debug edge-to-edge 分支。合并前若要求逐字满足矩阵，应在 API 35 模拟器复跑同一套姿态/导航/IME 检查。
+- 本机没有 API 35 system image，且 C 盘空间不足以安装新的多 GB image；本轮用更高的 API 37 执行 API 35+ debug edge-to-edge 分支。后续若需要精确 API 35 证据，应复跑同一套姿态/导航/IME 检查。
 - Windows Git Bash 已在当前未提交工作树真实通过，但没有另建 fresh checkout；未来 checkout 的 LF 行为由 `.gitattributes`、`git check-attr eol=lf` 和全脚本 0 CR 字节扫描共同约束。
 - Android 主题文件导入仍未实现。
 - targetSdk 升级不在本批；正式升级时按当时 Play 要求评估直接升 API 36，而不是机械停在 35。
@@ -152,7 +162,7 @@ bash scripts/run_static_web_small_viewport_smoke.sh \
 
 ## 工作区与交接
 
-- 实现已提交为 `48b15e4e8549ffe6e0cc9c4eed707d9eeb00f55c`；本文件的候选元数据更新位于紧随其后的 documentation-only commit。
-- 当前阶段尚未 push、未打 tag、未创建 release；计划 tag 为 `v0.1.14`。
+- 实现已提交为 `48b15e4e8549ffe6e0cc9c4eed707d9eeb00f55c`；候选元数据 commit 为 `e0ed5844604404fb27bfc80ff50641d5220f4b09`。
+- `main` 与 tag `v0.1.14` 已推送，GitHub Release 与 Docker 发布均已完成。
 - 工作区原有其他未提交修改均保留；不要用 reset/checkout 清理。
-- 只有补完 API 35 精确设备复跑（或由维护者明确接受 API 37 替代证据）后，才把状态改回无条件 `validated / 可合并`。
+- 精确 API 35 设备复跑、Android 主题导入、targetSdk 升级仍属于后续工作，不回写为本次 release 已完成项。
