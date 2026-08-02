@@ -4,8 +4,8 @@
 - 原作者 / Agent：opencode (k3-256k)
 - 审查与补全：Codex
 - 分支：main
-- 当前 HEAD：`a86885eae44056ed9d90c8fd80d21ef4af252f9d`
-- 相关 commit：pending
+- 当前实现 commit：`48b15e4e8549ffe6e0cc9c4eed707d9eeb00f55c`
+- 相关 commit：`48b15e4e8549ffe6e0cc9c4eed707d9eeb00f55c`
 - 相关 tag / release：`v0.1.14`（计划发布）
 - 状态：`validated on Web and API 37; v0.1.14 release pending; exact API 35 run pending`
 
@@ -152,7 +152,7 @@ bash scripts/run_static_web_small_viewport_smoke.sh \
 
 ## 工作区与交接
 
-- HEAD 仍为 `a86885eae44056ed9d90c8fd80d21ef4af252f9d`；所有实现均未提交。
-- 未 push、未打 tag、未创建 release。
+- 实现已提交为 `48b15e4e8549ffe6e0cc9c4eed707d9eeb00f55c`；本文件的候选元数据更新位于紧随其后的 documentation-only commit。
+- 当前阶段尚未 push、未打 tag、未创建 release；计划 tag 为 `v0.1.14`。
 - 工作区原有其他未提交修改均保留；不要用 reset/checkout 清理。
 - 只有补完 API 35 精确设备复跑（或由维护者明确接受 API 37 替代证据）后，才把状态改回无条件 `validated / 可合并`。

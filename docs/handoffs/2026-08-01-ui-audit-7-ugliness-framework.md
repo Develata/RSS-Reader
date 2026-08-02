@@ -3,8 +3,8 @@
 - 日期：2026-08-01
 - 作者 / Agent：opencode (k3-256k)
 - 分支：main
-- 当前 HEAD：a86885e
-- 相关 commit：pending
+- 当前实现 commit：`48b15e4e8549ffe6e0cc9c4eed707d9eeb00f55c`
+- 相关 commit：`48b15e4e8549ffe6e0cc9c4eed707d9eeb00f55c`
 - 相关 tag / release：`v0.1.14`（计划发布）
 - 状态：`validated`
 
@@ -90,7 +90,7 @@
 
 ## 结果
 
-- 可合并；commit: pending（等用户指示，不主动 commit/push）。
+- 已进入 `v0.1.14` 发布候选；实现 commit：`48b15e4e8549ffe6e0cc9c4eed707d9eeb00f55c`。
 - 用户影响：阅读页不再被单条极端标题拖入横向滚动；三处破坏性二次确认在按钮旁可见；设置页数值属性干净。
 
 ## 风险与后续事项
