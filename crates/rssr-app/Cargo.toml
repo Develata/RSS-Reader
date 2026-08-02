@@ -31,6 +31,8 @@ webbrowser.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 dioxus = { workspace = true, features = ["mobile"] }
+jni = "0.21.1"
+ndk-context = "0.1.1"
 rssr-infra = { path = "../rssr-infra" }
 webbrowser.workspace = true
 

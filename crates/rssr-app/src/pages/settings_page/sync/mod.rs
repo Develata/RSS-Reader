@@ -73,6 +73,11 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                         "{facade.remote_pull_button_label()}"
                     }
                 }
+                if facade.is_remote_pull_pending() {
+                    p { "data-slot": "confirm-hint",
+                        "WebDAV 下载配置会覆盖当前订阅集合，并清理缺失订阅的本地文章；再次点击「确认下载并覆盖」才会执行。"
+                    }
+                }
             }
         }
     }

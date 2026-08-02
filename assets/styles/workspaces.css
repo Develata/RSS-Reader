@@ -289,6 +289,14 @@
   color: var(--danger);
 }
 
+[data-slot="confirm-hint"] {
+  margin: 10px 0 0;
+  color: var(--danger);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
 [data-slot="entry-card-meta"] {
   margin-top: 8px;
   min-width: 0;

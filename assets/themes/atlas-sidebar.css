@@ -211,7 +211,7 @@ body:has(.theme-dark) {
   /* span 大于任何页面的实际行数即可整列占位；多余的隐式行高度为 0 */
   grid-row: 1 / span 12;
   position: sticky;
-  top: 24px;
+  top: calc(24px + var(--safe-area-top));
   display: flex;
   flex-direction: column;
   gap: 10px;

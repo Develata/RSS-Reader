@@ -180,6 +180,7 @@
   font-size: 1.08rem;
   font-weight: 600;
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
 [data-layout="entry-filters"] {
@@ -232,11 +233,18 @@
   border-radius: var(--radius-pill);
   background: var(--surface-chip);
   color: var(--muted);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
   transition:
     border-color var(--transition-quick),
     background-color var(--transition-quick),
     color var(--transition-quick);
+}
+
+[data-layout="entry-filters-source-chip"] span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 [data-layout="entry-filters-source-chip"][data-state="selected"] {
@@ -255,10 +263,10 @@
 
 [data-layout="entry-directory-rail"] {
   position: sticky;
-  top: 92px;
+  top: calc(92px + var(--safe-area-top));
   display: grid;
   gap: 12px;
-  max-height: calc(100vh - 112px);
+  max-height: calc(100vh - 112px - var(--safe-area-top) - var(--safe-area-bottom));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 8px 0 0 20px;

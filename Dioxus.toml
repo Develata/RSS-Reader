@@ -2,6 +2,7 @@
 name = "RSS-Reader"
 default_platform = "desktop"
 out_dir = "dist"
+android_main_activity = "../../android/MainActivity.kt"
 
 [bundle]
 identifier = "io.github.develata.rssreader"

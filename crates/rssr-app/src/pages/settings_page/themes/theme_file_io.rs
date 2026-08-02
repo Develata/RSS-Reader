@@ -41,8 +41,7 @@ pub(super) fn trigger_css_file_input_in_browser() -> anyhow::Result<()> {
 pub(super) async fn save_css_file(raw: &str) -> anyhow::Result<bool> {
     #[cfg(target_os = "android")]
     {
-        let _ = raw;
-        anyhow::bail!("Android 端暂未接入系统文件保存器，请先复制 CSS 内容后手动保存。");
+        return super::theme_android_export::save_css_file_with_android_picker(raw).await;
     }
 
     #[cfg(not(target_os = "android"))]

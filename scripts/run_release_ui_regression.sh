@@ -169,6 +169,11 @@ run_browser_contracts() {
 }
 
 run_fixed_smokes() {
+  local web_profile_args=(--debug)
+  if [[ "$profile" == "release" ]]; then
+    web_profile_args=(--release)
+  fi
+
   {
     echo "Running static web reader theme matrix..."
     bash scripts/run_static_web_reader_theme_matrix.sh \
@@ -179,6 +184,7 @@ run_fixed_smokes() {
     echo "Running static web small viewport smoke..."
     bash scripts/run_static_web_small_viewport_smoke.sh \
       --skip-build \
+      "${web_profile_args[@]}" \
       --port "$((port + 11))" \
       --log-dir "$log_dir/static-web-small-viewport-smoke"
 

@@ -63,6 +63,9 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
                     p { "data-slot": "feed-card-meta", "data-state": "error", "最近失败：{error}" }
                 }
             }
+            if facade.is_delete_pending_for(feed_id) {
+                p { "data-slot": "confirm-hint", "再次点击「确认删除」将删除订阅：{feed.title}" }
+            }
             div { "data-layout": "feed-card-actions",
                 button {
                     class: "button",

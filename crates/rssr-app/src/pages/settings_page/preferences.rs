@@ -182,11 +182,11 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         name: "reader_font_scale",
                         class: "text-input",
                         r#type: "number",
-                        min: "{MIN_READER_FONT_SCALE}",
-                        max: "{MAX_READER_FONT_SCALE}",
+                        min: format!("{MIN_READER_FONT_SCALE}"),
+                        max: format!("{MAX_READER_FONT_SCALE}"),
                         step: "0.05",
                         "data-field": "reader-font-scale",
-                        value: "{draft.reader_font_scale}",
+                        value: format!("{}", draft.reader_font_scale),
                         oninput: move |event| {
                             match event.value().parse::<f32>() {
                                 Ok(scale) => {

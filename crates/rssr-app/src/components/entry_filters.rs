@@ -110,6 +110,8 @@ pub fn EntryFilters(
                                     label {
                                         "data-layout": "entry-filters-source-chip",
                                         "data-state": if is_selected { "selected" } else { "unselected" },
+                                        "aria-label": "{title}",
+                                        title: "{title}",
                                         input {
                                             class: "sr-only",
                                             r#type: "checkbox",

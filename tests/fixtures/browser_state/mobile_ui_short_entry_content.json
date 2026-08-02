@@ -1,0 +1,12 @@
+{
+  "entries": [
+    {
+      "entry_id": 2,
+      "feed_id": 1,
+      "content_html": "<p>Short mobile fixture body.</p>",
+      "content_text": "Short mobile fixture body.",
+      "content_hash": "mobile-ui-short-entry-2",
+      "updated_at": "2026-08-01 10:00:00.0 +00:00:00"
+    }
+  ]
+}

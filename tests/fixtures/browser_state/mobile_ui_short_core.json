@@ -1,0 +1,51 @@
+{
+  "next_feed_id": 2,
+  "next_entry_id": 3,
+  "feeds": [
+    {
+      "id": 1,
+      "url": "https://example.com/mobile-ui-short.xml",
+      "title": "Short Mobile Fixture",
+      "site_url": null,
+      "description": null,
+      "icon_url": null,
+      "folder": null,
+      "etag": null,
+      "last_modified": null,
+      "last_fetched_at": "2099-01-01 00:00:00.0 +00:00:00",
+      "last_success_at": "2099-01-01 00:00:00.0 +00:00:00",
+      "fetch_error": null,
+      "is_deleted": false,
+      "created_at": "2026-08-01 00:00:00.0 +00:00:00",
+      "updated_at": "2026-08-01 00:00:00.0 +00:00:00"
+    }
+  ],
+  "entries": [
+    {
+      "id": 2,
+      "feed_id": 1,
+      "external_id": "mobile-ui-short-entry",
+      "dedup_key": "mobile-ui-short-entry",
+      "url": "https://example.com/mobile-ui/short",
+      "title": "Short directory fixture entry",
+      "author": "RSSR",
+      "summary": "A one-month fixture must not render a false overflow hint.",
+      "published_at": "2026-08-01 08:00:00.0 +00:00:00",
+      "updated_at_source": null,
+      "first_seen_at": "2026-08-01 09:00:00.0 +00:00:00",
+      "has_content": true,
+      "created_at": "2026-08-01 09:00:00.0 +00:00:00",
+      "updated_at": "2026-08-01 09:00:00.0 +00:00:00"
+    }
+  ],
+  "settings": {
+    "theme": "system",
+    "list_density": "comfortable",
+    "startup_view": "all",
+    "refresh_interval_minutes": 30,
+    "archive_after_months": 120,
+    "entries_page_size": 100,
+    "reader_font_scale": 1.0,
+    "custom_css": ""
+  }
+}

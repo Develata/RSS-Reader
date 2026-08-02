@@ -2,158 +2,13 @@ const cdpBase = process.env.CDP_BASE ?? 'http://127.0.0.1:9225';
 const staticBase = process.env.STATIC_BASE ?? 'http://127.0.0.1:8112';
 const rssrWebBase = process.env.RSSR_WEB_BASE ?? 'http://127.0.0.1:18098';
 const keepBrowserOpen = process.env.KEEP_BROWSER_OPEN === 'true';
-const slowMs = Number.parseInt(process.env.SLOW_MS ?? '200', 10);
-const cdpCommandTimeoutMs = Number.parseInt(process.env.CDP_COMMAND_TIMEOUT_MS ?? '15000', 10);
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function newPage(url = 'about:blank') {
-  const resp = await fetch(`${cdpBase}/json/new?${encodeURIComponent(url)}`, {
-    method: 'PUT',
-  });
-  if (!resp.ok) {
-    throw new Error(`newPage failed ${resp.status}: ${await resp.text()}`);
-  }
-  return await resp.json();
-}
-
-function connect(wsUrl) {
-  const ws = new WebSocket(wsUrl);
-  let id = 0;
-  const pending = new Map();
-  const eventWaiters = new Map();
-
-  ws.addEventListener('message', (event) => {
-    const msg = JSON.parse(event.data);
-    if (msg.method && eventWaiters.has(msg.method)) {
-      const waiters = eventWaiters.get(msg.method);
-      eventWaiters.delete(msg.method);
-      for (const resolve of waiters) {
-        resolve(msg.params ?? {});
-      }
-    }
-
-    if (!msg.id || !pending.has(msg.id)) {
-      return;
-    }
-
-    const { resolve, reject, timeout } = pending.get(msg.id);
-    pending.delete(msg.id);
-    clearTimeout(timeout);
-    if (msg.error) {
-      reject(new Error(JSON.stringify(msg.error)));
-    } else {
-      resolve(msg.result);
-    }
-  });
-
-  const ready = new Promise((resolve, reject) => {
-    ws.addEventListener('open', resolve, { once: true });
-    ws.addEventListener('error', reject, { once: true });
-  });
-
-  ws.addEventListener('close', () => {
-    for (const [msgId, { reject, timeout, method }] of pending) {
-      clearTimeout(timeout);
-      reject(new Error(`CDP socket closed while waiting for ${method}#${msgId}`));
-    }
-    pending.clear();
-  });
-
-  async function send(method, params = {}) {
-    await ready;
-    const msgId = ++id;
-    ws.send(JSON.stringify({ id: msgId, method, params }));
-    return await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        pending.delete(msgId);
-        reject(new Error(`Timed out waiting for CDP response ${method}#${msgId}`));
-      }, cdpCommandTimeoutMs);
-      pending.set(msgId, { method, resolve, reject, timeout });
-    });
-  }
-
-  return {
-    send,
-    waitForEvent(method, timeoutMs = 20000) {
-      return new Promise((resolve, reject) => {
-        let timeout = null;
-        const resolveOnce = (params) => {
-          if (timeout !== null) {
-            clearTimeout(timeout);
-          }
-          resolve(params);
-        };
-        const waiters = eventWaiters.get(method) ?? [];
-        waiters.push(resolveOnce);
-        eventWaiters.set(method, waiters);
-        timeout = setTimeout(() => {
-          const activeWaiters = eventWaiters.get(method);
-          if (!activeWaiters) {
-            return;
-          }
-          const index = activeWaiters.indexOf(resolveOnce);
-          if (index >= 0) {
-            activeWaiters.splice(index, 1);
-          }
-          if (activeWaiters.length === 0) {
-            eventWaiters.delete(method);
-          }
-          reject(new Error(`Timed out waiting for CDP event ${method}`));
-        }, timeoutMs);
-      });
-    },
-    close: () => ws.close(),
-  };
-}
-
-async function waitFor(client, expression, timeoutMs = 20000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const result = await client.send('Runtime.evaluate', {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-    });
-    if (result.result?.value) {
-      return result.result.value;
-    }
-    await sleep(500);
-  }
-  throw new Error(`Timed out waiting for ${expression}`);
-}
-
-async function selectorExists(client, selector, timeoutMs = 20000) {
-  return await waitFor(
-    client,
-    `document.querySelector(${JSON.stringify(selector)}) !== null`,
-    timeoutMs,
-  );
-}
-
-async function navigate(client, url) {
-  const loaded = client.waitForEvent('Page.loadEventFired', 5000).catch(() => null);
-  await client.send('Page.navigate', { url });
-  await loaded;
-  await sleep(slowMs);
-}
-
-async function clickSelector(client, selector) {
-  const expression = `(() => {
-    const target = document.querySelector(${JSON.stringify(selector)});
-    if (!target) return false;
-    target.click();
-    return true;
-  })()`;
-  const result = await client.send('Runtime.evaluate', {
-    expression,
-    returnByValue: true,
-  });
-  if (!result.result.value) {
-    throw new Error(`Could not click ${selector}`);
-  }
-  await sleep(slowMs);
-}
+import {
+  clickSelector,
+  connect,
+  navigate,
+  newPage,
+  selectorExists,
+} from './cdp_session.mjs';
 
 async function runStaticPageChecks(client) {
   const setup = `${staticBase}/__codex/setup-local-auth?username=smoke&password=smoke-pass-123&seed=reader-demo&next=/entries`;
@@ -236,7 +91,7 @@ async function runRssrWebFeedSmoke(client) {
 }
 
 async function run() {
-  const page = await newPage('about:blank');
+  const page = await newPage('about:blank', cdpBase);
   const client = connect(page.webSocketDebuggerUrl);
 
   try {

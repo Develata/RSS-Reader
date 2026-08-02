@@ -47,6 +47,11 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
                         "{facade.config_import_button_label()}"
                     }
                 }
+                if facade.is_config_import_pending() {
+                    p { "data-slot": "confirm-hint",
+                        "导入配置会按配置包覆盖当前订阅集合，并清理缺失订阅的本地文章；再次点击「确认覆盖导入」才会执行。"
+                    }
+                }
             }
             div { "data-layout": "exchange-card", "data-section": "opml",
                 div { "data-slot": "settings-card-header",

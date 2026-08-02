@@ -115,7 +115,7 @@ impl SettingsPageFacade {
     }
 
     pub(crate) fn theme_apply_button_label(&self, preset_key: &str) -> &'static str {
-        if self.is_theme_preset_active(preset_key) { "当前已选" } else { "使用这套主题" }
+        if self.is_theme_preset_active(preset_key) { "当前已选" } else { "应用这套主题" }
     }
 
     pub(crate) fn remove_theme_preset(&self, preset_key: &str, preset_name: &str) {

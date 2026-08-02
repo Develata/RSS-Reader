@@ -71,12 +71,18 @@ port = int(sys.argv[2])
 repo_root = os.path.abspath(sys.argv[3])
 HELPER_PATH = "/__codex/setup-local-auth"
 DUMP_PATH = "/__codex/dump-browser-state"
+MOBILE_UI_FEED_PATH = "/__codex/mobile-ui-feed.xml"
 THEME_FIXTURE_ROOT = os.path.join(repo_root, "assets", "themes")
 THEME_PRESET_FILES = {
     "atlas-sidebar": "atlas-sidebar.css",
     "newsprint": "newsprint.css",
     "amethyst-glass": "amethyst-glass.css",
     "midnight-ledger": "midnight-ledger.css",
+}
+BROWSER_STATE_SEEDS = {
+    "reader-demo": "reader_demo",
+    "mobile-ui-overflow": "mobile_ui_overflow",
+    "mobile-ui-short": "mobile_ui_short",
 }
 
 
@@ -86,6 +92,20 @@ def load_theme_preset_css(key):
         return None
     with open(os.path.join(THEME_FIXTURE_ROOT, filename), "r", encoding="utf-8") as fh:
         return fh.read()
+
+
+def load_browser_state_seed(key):
+    prefix = BROWSER_STATE_SEEDS.get(key)
+    if prefix is None:
+        return None
+
+    fixture_root = os.path.join(repo_root, "tests", "fixtures", "browser_state")
+    result = []
+    for suffix in ("core", "app_state", "entry_flags", "entry_content"):
+        path = os.path.join(fixture_root, f"{prefix}_{suffix}.json")
+        with open(path, "r", encoding="utf-8") as fh:
+            result.append(json.load(fh))
+    return tuple(result)
 
 
 def to_base64_url(raw_bytes):
@@ -130,16 +150,16 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
         entry_flags = None
         entry_content = None
 
-        if seed == "reader-demo":
-            fixture_root = os.path.join(repo_root, "tests", "fixtures", "browser_state")
-            with open(os.path.join(fixture_root, "reader_demo_core.json"), "r", encoding="utf-8") as fh:
-                core_state = json.load(fh)
-            with open(os.path.join(fixture_root, "reader_demo_app_state.json"), "r", encoding="utf-8") as fh:
-                app_state = json.load(fh)
-            with open(os.path.join(fixture_root, "reader_demo_entry_flags.json"), "r", encoding="utf-8") as fh:
-                entry_flags = json.load(fh)
-            with open(os.path.join(fixture_root, "reader_demo_entry_content.json"), "r", encoding="utf-8") as fh:
-                entry_content = json.load(fh)
+        if seed:
+            loaded_seed = load_browser_state_seed(seed)
+            if loaded_seed is None:
+                self.send_error(400, f"Unknown browser state seed: {seed}")
+                return
+            core_state, app_state, entry_flags, entry_content = loaded_seed
+            if seed.startswith("mobile-ui-"):
+                feed_url = f"http://127.0.0.1:{port}{MOBILE_UI_FEED_PATH}?seed={seed}"
+                for feed in core_state.get("feeds", []):
+                    feed["url"] = feed_url
 
         preset_css = load_theme_preset_css(preset)
         if core_state is not None and preset_css is not None:
@@ -193,6 +213,40 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
         encoded = html.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def _mobile_ui_feed(self):
+        seed = parse_qs(urlparse(self.path).query).get("seed", ["mobile-ui-overflow"])[0]
+        if seed == "mobile-ui-short":
+            title = "Short Mobile Fixture"
+            guid = "mobile-ui-short-entry"
+            entry_title = "Short directory fixture entry"
+        else:
+            title = "用于验证移动端来源筛选单行截断与完整可访问名称的超长订阅源标题 RSS Reader Mobile Regression Fixture"
+            guid = "mobile-ui-2026-08"
+            entry_title = "2026 年 8 月移动端目录回归条目"
+
+        xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>{title}</title>
+    <link>https://example.com/mobile-ui</link>
+    <description>Deterministic mobile UI smoke feed.</description>
+    <item>
+      <guid>{guid}</guid>
+      <link>https://example.com/mobile-ui/{guid}</link>
+      <title>{entry_title}</title>
+      <pubDate>Sat, 01 Aug 2026 08:00:00 GMT</pubDate>
+      <description>Deterministic mobile UI smoke entry.</description>
+    </item>
+  </channel>
+</rss>"""
+        encoded = xml.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/rss+xml; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
         self.wfile.write(encoded)
@@ -252,6 +306,8 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
             return self._auth_helper_page()
         if path == DUMP_PATH:
             return self._dump_browser_state_page()
+        if path == MOBILE_UI_FEED_PATH:
+            return self._mobile_ui_feed()
         existing = self._translate_existing_path()
         if existing is not None:
             return super().do_GET()
@@ -259,7 +315,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_HEAD(self):
-        if urlparse(self.path).path in {HELPER_PATH, DUMP_PATH}:
+        if urlparse(self.path).path in {HELPER_PATH, DUMP_PATH, MOBILE_UI_FEED_PATH}:
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()

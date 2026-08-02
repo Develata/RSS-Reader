@@ -1,15 +1,15 @@
 .app-shell {
-  width: min(var(--shell-max-width), calc(100vw - 32px));
+  width: min(var(--shell-max-width), calc(100% - 32px));
   margin: 0 auto;
-  padding: 14px 0 56px;
+  padding: calc(14px + var(--safe-area-top)) 0 calc(56px + var(--safe-area-bottom));
   /* 主题类挂在本元素上：color 必须在这里重新求值，
    * 否则后代继承 body 在 :root 亮色值下算出的 ink。 */
   color: var(--ink);
 }
 
 .app-shell[data-density="compact"] {
-  width: min(calc(var(--shell-max-width) - 40px), calc(100vw - 28px));
-  padding-top: 10px;
+  width: min(calc(var(--shell-max-width) - 40px), calc(100% - 28px));
+  padding-top: calc(10px + var(--safe-area-top));
 }
 
 [data-layout="app-nav-shell"] {
@@ -23,13 +23,13 @@
   box-shadow: var(--shadow-soft);
   backdrop-filter: blur(10px);
   position: sticky;
-  top: 8px;
+  top: calc(8px + var(--safe-area-top));
   z-index: 10;
 }
 
 [data-layout="app-nav-reveal"] {
   position: sticky;
-  top: 8px;
+  top: calc(8px + var(--safe-area-top));
   z-index: 10;
   display: flex;
   justify-content: flex-end;
@@ -224,8 +224,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
@@ -291,6 +291,7 @@
   margin-top: 8px;
   font-size: 2rem;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .status-banner {

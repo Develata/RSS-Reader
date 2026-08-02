@@ -41,7 +41,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     "data-variant": "secondary",
                     "data-action": "apply-selected-theme",
                     onclick: move |_| apply_selected_facade.apply_selected_theme(),
-                    "载入所选主题"
+                    "应用所选主题"
                 }
             }
             div { "data-layout": "theme-preset-quick-actions",
@@ -51,7 +51,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "atlas-sidebar",
                     onclick: move |_| atlas_facade.apply_builtin_theme("atlas-sidebar"),
-                    "Atlas Sidebar"
+                    "应用 Atlas Sidebar"
                 }
                 button {
                     class: "button",
@@ -59,7 +59,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "newsprint",
                     onclick: move |_| newsprint_facade.apply_builtin_theme("newsprint"),
-                    "Newsprint"
+                    "应用 Newsprint"
                 }
                 button {
                     class: "button",
@@ -67,7 +67,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "amethyst-glass",
                     onclick: move |_| amethyst_facade.apply_builtin_theme("amethyst-glass"),
-                    "Amethyst Glass（实验）"
+                    "应用 Amethyst Glass（实验）"
                 }
                 button {
                     class: "button",
@@ -75,7 +75,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                     "data-action": "apply-theme-preset",
                     "data-theme-preset": "midnight-ledger",
                     onclick: move |_| { midnight_facade.apply_builtin_theme("midnight-ledger") },
-                    "Midnight Ledger"
+                    "应用 Midnight Ledger"
                 }
                 button {
                     class: "button",

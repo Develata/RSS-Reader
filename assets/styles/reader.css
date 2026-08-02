@@ -19,6 +19,7 @@
   font-size: clamp(2rem, 3vw, 2.7rem);
   line-height: 1.14;
   letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
 }
 
 [data-layout="reader-toolbar"] {
@@ -39,6 +40,7 @@
   color: var(--muted);
   font-size: 0.95rem;
   line-height: 1.7;
+  overflow-wrap: anywhere;
 }
 
 [data-layout="reader-body"] {
@@ -159,7 +161,7 @@
 
 [data-layout="reader-bottom-bar"] {
   position: sticky;
-  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(18px + var(--safe-area-bottom));
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;

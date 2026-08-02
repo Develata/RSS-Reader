@@ -1,7 +1,7 @@
 @media (max-width: 720px) {
   .app-shell {
-    width: min(100vw - 16px, var(--shell-max-width));
-    padding: 10px 0 34px;
+    width: min(calc(100% - 16px), var(--shell-max-width));
+    padding: calc(10px + var(--safe-area-top)) 0 calc(34px + var(--safe-area-bottom));
   }
 
   [data-page]:not([data-page="reader"]),
@@ -106,6 +106,13 @@
     margin: 0 0 14px;
     padding: 2px 2px 8px;
     scrollbar-width: thin;
+  }
+
+  @supports (animation-timeline: scroll(self inline)) {
+    [data-layout="entry-top-directory"] {
+      animation: entry-top-directory-overflow-hint 1s steps(1, jump-end) both;
+      animation-timeline: scroll(self inline);
+    }
   }
 
   [data-layout="entry-top-directory-chip"] {
@@ -231,8 +238,8 @@
   }
 
   [data-layout="reader-bottom-bar"] {
-    width: min(100%, calc(100vw - 22px));
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    width: calc(100% - 22px);
+    bottom: calc(10px + var(--safe-area-bottom));
     gap: 8px;
     padding: 8px;
     border-radius: 20px;
@@ -250,7 +257,7 @@
 
 @media (max-width: 480px) {
   .app-shell {
-    width: min(100vw - 12px, var(--shell-max-width));
+    width: min(calc(100% - 12px), var(--shell-max-width));
   }
 
   [data-layout="app-nav-shell"],
@@ -365,6 +372,15 @@
 
   [data-layout="theme-lab"] {
     padding: 14px;
+  }
+}
+
+@keyframes entry-top-directory-overflow-hint {
+  from {
+    mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+  }
+  to {
+    mask-image: none;
   }
 }
 

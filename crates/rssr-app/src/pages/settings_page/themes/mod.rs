@@ -1,5 +1,7 @@
 mod lab;
 mod presets;
+#[cfg(target_os = "android")]
+mod theme_android_export;
 mod theme_apply;
 mod theme_file_io;
 mod theme_io;

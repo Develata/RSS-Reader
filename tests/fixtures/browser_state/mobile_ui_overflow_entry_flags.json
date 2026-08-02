@@ -1,0 +1,15 @@
+{
+  "entries": [
+    { "id": 1, "is_read": false, "is_starred": false, "read_at": null, "starred_at": null },
+    { "id": 2, "is_read": false, "is_starred": true, "read_at": null, "starred_at": "2025-11-01 10:00:00.0 +00:00:00" },
+    { "id": 3, "is_read": false, "is_starred": false, "read_at": null, "starred_at": null },
+    { "id": 4, "is_read": false, "is_starred": false, "read_at": null, "starred_at": null },
+    { "id": 5, "is_read": false, "is_starred": false, "read_at": null, "starred_at": null },
+    { "id": 6, "is_read": false, "is_starred": false, "read_at": null, "starred_at": null },
+    { "id": 7, "is_read": false, "is_starred": false, "read_at": null, "starred_at": null },
+    { "id": 8, "is_read": false, "is_starred": false, "read_at": null, "starred_at": null },
+    { "id": 9, "is_read": false, "is_starred": false, "read_at": null, "starred_at": null },
+    { "id": 10, "is_read": false, "is_starred": false, "read_at": null, "starred_at": null },
+    { "id": 11, "is_read": false, "is_starred": false, "read_at": null, "starred_at": null }
+  ]
+}
