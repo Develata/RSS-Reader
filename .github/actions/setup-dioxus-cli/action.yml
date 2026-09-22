@@ -1,5 +1,5 @@
 name: Setup Dioxus CLI
-description: Cache and install the pinned Dioxus CLI version
+description: Cache and verify an isolated installation of the pinned Dioxus CLI
 
 inputs:
   version:
@@ -11,19 +11,29 @@ runs:
   steps:
     - name: Cache Dioxus CLI
       id: cache-dioxus-cli
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
-        path: |
-          ~/.cargo/bin/dx
-          ~/.cargo/.crates.toml
-          ~/.cargo/.crates2.json
-        key: ${{ runner.os }}-dioxus-cli-${{ inputs.version }}
+        path: ~/.cache/rssr-tools/dioxus/${{ inputs.version }}
+        key: dioxus-cli-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
 
     - name: Install Dioxus CLI
       if: steps.cache-dioxus-cli.outputs.cache-hit != 'true'
       shell: bash
-      run: cargo install dioxus-cli --version "${{ inputs.version }}" --locked
+      env:
+        TOOL_VERSION: ${{ inputs.version }}
+      run: cargo install dioxus-cli --version "$TOOL_VERSION" --locked --root "$HOME/.cache/rssr-tools/dioxus/$TOOL_VERSION"
 
     - name: Verify Dioxus CLI
       shell: bash
-      run: dx --version
+      env:
+        TOOL_VERSION: ${{ inputs.version }}
+      run: |
+        tool_bin="$HOME/.cache/rssr-tools/dioxus/$TOOL_VERSION/bin"
+        version_output="$("$tool_bin/dx" --version)"
+        read -r tool_name actual_version _ <<< "$version_output"
+        if [[ "$tool_name" != dioxus || "$actual_version" != "$TOOL_VERSION" ]]; then
+          echo "Expected Dioxus CLI $TOOL_VERSION, got: $version_output" >&2
+          exit 1
+        fi
+        echo "$version_output"
+        echo "$tool_bin" >> "$GITHUB_PATH"

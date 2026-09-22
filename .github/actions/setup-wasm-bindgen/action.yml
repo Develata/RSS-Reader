@@ -9,7 +9,7 @@ runs:
   steps:
     - name: Cache wasm-bindgen tools
       id: cache
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.cache/rssr-tools/wasm-bindgen/${{ inputs.version }}
         key: wasm-bindgen-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}

@@ -14,10 +14,6 @@ defaults:
   run:
     shell: bash
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  WASM_BINDGEN_CLI_VERSION: 0.2.126
-
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -28,29 +24,42 @@ jobs:
     timeout-minutes: 10
     outputs:
       packages: ${{ steps.matrix.outputs.packages }}
+      harnesses: ${{ steps.matrix.outputs.harnesses }}
+      wasm-bindgen-version: ${{ steps.matrix.outputs.wasm-bindgen-version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: Read workspace members from Cargo
         id: matrix
         run: |
           cargo metadata --locked --no-deps --format-version 1 > metadata.json
           python3 - <<'PY'
-          import json, os
+          import json, os, tomllib
           with open('metadata.json') as source:
               metadata = json.load(source)
           members = set(metadata['workspace_members'])
           packages = sorted(p['name'] for p in metadata['packages'] if p['id'] in members)
+          infra = next(p for p in metadata['packages'] if p['name'] == 'rssr-infra')
+          harnesses = sorted(t['name'] for t in infra['targets']
+                            if 'test' in t['kind'] and t['name'].startswith('wasm_')
+                            and t['name'].endswith('_contract_harness'))
+          with open('Cargo.lock', 'rb') as source:
+              versions = {p['version'] for p in tomllib.load(source)['package']
+                          if p['name'] == 'wasm-bindgen'}
           assert packages, 'workspace matrix must not be empty'
+          assert harnesses, 'wasm contract matrix must not be empty'
+          assert len(versions) == 1, 'expected one locked wasm-bindgen version'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('packages=' + json.dumps(packages) + '\n')
+              output.write('harnesses=' + json.dumps(harnesses) + '\n')
+              output.write('wasm-bindgen-version=' + versions.pop() + '\n')
           PY
 
   format:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -60,10 +69,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      - name: Lint GitHub workflows with verified actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+        run: |
+          tool_dir="$RUNNER_TEMP/actionlint"
+          mkdir -p "$tool_dir"
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          release="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 "$release/$archive" -o "$tool_dir/$archive"
+          curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 "$release/actionlint_${ACTIONLINT_VERSION}_checksums.txt" -o "$tool_dir/checksums.txt"
+          (cd "$tool_dir" && grep -F "  $archive" checksums.txt | sha256sum --check --strict)
+          tar -xzf "$tool_dir/$archive" -C "$tool_dir" actionlint
+          command -v shellcheck
+          "$tool_dir/actionlint" -color
       - name: Check standalone Rust acceptance runner
         run: |
           rustfmt --edition 2024 --check scripts/wasm_contract_runner.rs
@@ -84,7 +107,7 @@ jobs:
       PACKAGE: ${{ matrix.package }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Cleanup runner
         uses: ./.github/actions/cleanup-github-runner
@@ -127,7 +150,7 @@ jobs:
       DIOXUS_CLI_VERSION: 0.7.9
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Cleanup runner
         uses: ./.github/actions/cleanup-github-runner
@@ -139,6 +162,8 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          key: web-build
 
       - name: Setup Dioxus CLI
         uses: ./.github/actions/setup-dioxus-cli
@@ -173,10 +198,11 @@ jobs:
     env:
       PRESET: ${{ matrix.preset }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
+          package-manager-cache: false
       - uses: actions/download-artifact@v8
         with:
           name: ci-web-public
@@ -203,20 +229,13 @@ jobs:
             target/ci-ui/${{ matrix.preset }}/*.html
           retention-days: 7
 
-  wasm-browser-contract:
+  wasm-contract-build:
+    needs: workspace
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    strategy:
-      fail-fast: false
-      max-parallel: 3
-      matrix:
-        harness:
-          - wasm_refresh_contract_harness
-          - wasm_subscription_contract_harness
-          - wasm_config_exchange_contract_harness
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Cleanup runner
         uses: ./.github/actions/cleanup-github-runner
@@ -229,18 +248,56 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          key: wasm-${{ matrix.harness }}
+          key: wasm-contract-build
 
-      - name: Install wasm-bindgen test runner
+      - name: Compile all contract harnesses once using Cargo's artifact paths
+        env:
+          HARNESSES: ${{ join(fromJSON(needs.workspace.outputs.harnesses), ' ') }}
+        run: |
+          read -r -a harnesses <<< "$HARNESSES"
+          bash scripts/run_wasm_contract_harness.sh --prepare "$RUNNER_TEMP/ci-wasm-contracts" "${harnesses[@]}"
+
+      - name: Share the exact contract artifacts with browser jobs
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-wasm-contracts
+          path: ${{ runner.temp }}/ci-wasm-contracts/
+          if-no-files-found: error
+          retention-days: 3
+
+      # Warm the shared native tool cache before the parallel jobs start.
+      - name: Prepare pinned wasm-bindgen test runner
         uses: ./.github/actions/setup-wasm-bindgen
         with:
-          version: ${{ env.WASM_BINDGEN_CLI_VERSION }}
+          version: ${{ needs.workspace.outputs.wasm-bindgen-version }}
+
+  wasm-browser-contract:
+    needs: [workspace, wasm-contract-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        harness: ${{ fromJSON(needs.workspace.outputs.harnesses) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/download-artifact@v8
+        with:
+          name: ci-wasm-contracts
+          path: ${{ runner.temp }}/ci-wasm-contracts/
+      - uses: ./.github/actions/setup-wasm-bindgen
+        with:
+          version: ${{ needs.workspace.outputs.wasm-bindgen-version }}
 
       - name: Setup Chrome for Testing
         uses: ./.github/actions/setup-browser-tests
 
       - name: Run wasm browser contract harness
-        run: bash scripts/run_wasm_contract_harness.sh "${{ matrix.harness }}"
+        env:
+          HARNESS: ${{ matrix.harness }}
+        run: bash scripts/run_wasm_contract_harness.sh --prebuilt "$RUNNER_TEMP/ci-wasm-contracts" "$HARNESS"
 
   android-smoke:
     runs-on: ubuntu-latest
@@ -251,7 +308,7 @@ jobs:
       DIOXUS_CLI_VERSION: 0.7.9
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Cleanup runner
         uses: ./.github/actions/cleanup-github-runner
@@ -262,7 +319,7 @@ jobs:
           targets: aarch64-linux-android
 
       - name: Install Java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -298,6 +355,8 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          key: android-build
 
       - name: Setup Dioxus CLI
         uses: ./.github/actions/setup-dioxus-cli
@@ -340,7 +399,7 @@ jobs:
   # Keep the former required-check name stable, now aggregating every module.
   lint-and-test:
     if: always()
-    needs: [workspace, format, test-tools, native-module, web-smoke, web-ui, wasm-browser-contract, android-smoke]
+    needs: [workspace, format, test-tools, native-module, web-smoke, web-ui, wasm-contract-build, wasm-browser-contract, android-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

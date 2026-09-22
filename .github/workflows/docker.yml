@@ -8,26 +8,24 @@ on:
       - "v*"
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 permissions:
   contents: read
   packages: write
 
 concurrency:
   group: docker-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
   publish-image:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       SMOKE_IMAGE: rss-reader-smoke:${{ github.sha }}
       SHOULD_PUSH_IMAGE: ${{ startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Cleanup runner
         uses: ./.github/actions/cleanup-github-runner
@@ -35,11 +33,11 @@ jobs:
           prune-docker: "true"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
         if: env.SHOULD_PUSH_IMAGE == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -48,7 +46,7 @@ jobs:
       - name: Extract Docker metadata
         if: env.SHOULD_PUSH_IMAGE == 'true'
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/develata/rss-reader
           tags: |
@@ -57,7 +55,7 @@ jobs:
             type=sha
 
       - name: Build smoke image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -82,7 +80,7 @@ jobs:
             "$SMOKE_IMAGE"
 
           for ((attempt = 1; attempt <= 20; attempt++)); do
-            if curl --fail --silent http://127.0.0.1:18080/healthz >/dev/null; then
+            if curl --fail --silent --connect-timeout 2 --max-time 3 http://127.0.0.1:18080/healthz >/dev/null; then
               exit 0
             fi
             sleep 2
@@ -94,7 +92,7 @@ jobs:
 
       - name: Build and push image
         if: env.SHOULD_PUSH_IMAGE == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile

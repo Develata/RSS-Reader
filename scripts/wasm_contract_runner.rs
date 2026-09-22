@@ -1,11 +1,11 @@
-//! Cargo owns artifact selection; this adapter only isolates browser test execution.
+//! Cargo owns artifact selection; this adapter collects or isolates browser test execution.
 //! Compile with rustc, without adding an acceptance dependency to a product crate.
 
 use std::{
     env,
     ffi::OsString,
     fs,
-    io::{self, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
     process::{Command, ExitCode, ExitStatus},
     time::{SystemTime, UNIX_EPOCH},
@@ -13,13 +13,9 @@ use std::{
 
 fn main() -> ExitCode {
     let arguments: Vec<_> = env::args_os().skip(1).collect();
-    let result = if arguments.first().is_some_and(|argument| argument == "--artifact") {
-        run_artifact(&arguments[1..], Path::new("wasm-bindgen-test-runner"))
-    } else {
-        run_harnesses(&arguments)
-    };
+    let result = dispatch(&arguments);
     match result {
-        Ok(status) => ExitCode::from(status.code().unwrap_or(1) as u8),
+        Ok(code) => code,
         Err(error) => {
             eprintln!("wasm contract runner: {error}");
             ExitCode::FAILURE
@@ -27,28 +23,80 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_harnesses(harnesses: &[OsString]) -> io::Result<ExitStatus> {
-    let executable = env::current_exe()?;
-    cargo_command(harnesses, &executable)?.status()
+fn exit_code(status: ExitStatus) -> ExitCode {
+    ExitCode::from(status.code().unwrap_or(1) as u8)
 }
 
-fn cargo_command(harnesses: &[OsString], executable: &Path) -> io::Result<Command> {
-    if harnesses.is_empty()
-        || harnesses.iter().any(|harness| {
-            harness.to_str().is_none_or(|name| {
-                name.is_empty()
-                    || !name
-                        .bytes()
-                        .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+fn dispatch(arguments: &[OsString]) -> io::Result<ExitCode> {
+    let browser_runner = Path::new("wasm-bindgen-test-runner");
+    match arguments.first().and_then(|argument| argument.to_str()) {
+        Some("--artifact") => run_artifact(&arguments[1..], browser_runner).map(exit_code),
+        Some("--prepare") if arguments.len() >= 3 => {
+            let executable = env::current_exe()?;
+            prepare_bundle(Path::new(&arguments[1]), &arguments[2..], |directory| {
+                cargo_command(
+                    &arguments[2..],
+                    &[executable.into(), "--collect".into(), directory.into()],
+                )?
+                .status()
             })
-        })
-    {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "expected harness name(s)"));
+            .map(exit_code)
+        }
+        Some("--collect") if arguments.len() == 3 => {
+            collect_artifact(Path::new(&arguments[1]), Path::new(&arguments[2]))?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Some("--prebuilt") if arguments.len() == 3 => {
+            let artifact = prebuilt_artifact(Path::new(&arguments[1]), &arguments[2])?;
+            run_artifact(&[artifact.into()], browser_runner).map(exit_code)
+        }
+        Some(argument) if argument.starts_with("--") => Err(invalid_input(
+            "expected --prepare DIR HARNESS..., --prebuilt DIR HARNESS, or HARNESS...",
+        )),
+        _ => run_harnesses(arguments).map(exit_code),
     }
-    let configuration = format!(
-        "target.wasm32-unknown-unknown.runner = [{}, \"--artifact\"]",
-        json_string(path_text(executable)?)
-    );
+}
+
+fn run_harnesses(harnesses: &[OsString]) -> io::Result<ExitStatus> {
+    let executable = env::current_exe()?;
+    cargo_command(harnesses, &[executable.into(), "--artifact".into()])?.status()
+}
+
+fn invalid_input(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidInput, message.into())
+}
+
+fn harness_names(harnesses: &[OsString]) -> io::Result<Vec<&str>> {
+    let mut names = Vec::with_capacity(harnesses.len());
+    for harness in harnesses {
+        let name = harness.to_str().ok_or_else(|| invalid_input("harness is not valid UTF-8"))?;
+        if name.is_empty()
+            || !name.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+            || name.starts_with('-')
+            || names.contains(&name)
+        {
+            return Err(invalid_input("expected distinct harness names"));
+        }
+        names.push(name);
+    }
+    if names.is_empty() {
+        return Err(invalid_input("expected harness name(s)"));
+    }
+    Ok(names)
+}
+
+fn cargo_command(harnesses: &[OsString], runner: &[OsString]) -> io::Result<Command> {
+    harness_names(harnesses)?;
+    let runner = runner
+        .iter()
+        .map(|argument| {
+            argument
+                .to_str()
+                .map(json_string)
+                .ok_or_else(|| invalid_input("runner argument is not valid UTF-8"))
+        })
+        .collect::<io::Result<Vec<_>>>()?;
+    let configuration = format!("target.wasm32-unknown-unknown.runner = [{}]", runner.join(", "));
     let mut command = Command::new("cargo");
     command.args([
         "test",
@@ -64,6 +112,109 @@ fn cargo_command(harnesses: &[OsString], executable: &Path) -> io::Result<Comman
         command.arg("--test").arg(harness);
     }
     Ok(command)
+}
+
+const PENDING_MANIFEST: &str = "pending-harnesses.txt";
+const MANIFEST: &str = "harnesses.txt";
+
+fn prepare_bundle(
+    directory: &Path,
+    harnesses: &[OsString],
+    collect: impl FnOnce(&Path) -> io::Result<ExitStatus>,
+) -> io::Result<ExitStatus> {
+    let names = harness_names(harnesses)?;
+    if let Some(parent) = directory.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)?;
+    }
+    // create_dir, rather than create_dir_all, rejects every pre-existing destination.
+    // Only a fully collected bundle gains its manifest, so --prebuilt cannot run it early.
+    fs::create_dir(directory)?;
+    let mut prepared = TemporaryDirectory(directory.to_owned());
+    let directory = directory.canonicalize()?;
+    fs::write(directory.join(PENDING_MANIFEST), names.join("\n") + "\n")?;
+    let status = collect(&directory)?;
+    if status.success() {
+        validate_bundle(&directory, PENDING_MANIFEST)?;
+        fs::rename(directory.join(PENDING_MANIFEST), directory.join(MANIFEST))?;
+        prepared.0.clear(); // Keep only the complete bundle; Drop cleans every failure path.
+    }
+    Ok(status)
+}
+
+fn manifest_names(directory: &Path, manifest: &str) -> io::Result<Vec<String>> {
+    let text = fs::read_to_string(directory.join(manifest))?;
+    let names: Vec<OsString> = text.lines().map(OsString::from).collect();
+    Ok(harness_names(&names)?.into_iter().map(str::to_owned).collect())
+}
+
+fn validate_wasm(path: &Path) -> io::Result<()> {
+    let mut header = [0; 8];
+    fs::File::open(path)?.read_exact(&mut header)?;
+    if header != *b"\0asm\x01\0\0\0" {
+        return Err(invalid_input(format!("not a WebAssembly module: {}", path.display())));
+    }
+    Ok(())
+}
+
+fn collect_artifact(directory: &Path, artifact: &Path) -> io::Result<()> {
+    let names = manifest_names(directory, PENDING_MANIFEST)?;
+    let stem = artifact
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .ok_or_else(|| invalid_input("Cargo artifact has no UTF-8 file stem"))?;
+    let (name, hash) = stem
+        .rsplit_once('-')
+        .ok_or_else(|| invalid_input("Cargo artifact must include its build hash"))?;
+    if artifact.extension().is_none_or(|extension| extension != "wasm")
+        || hash.is_empty()
+        || !hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(invalid_input("Cargo supplied an unexpected harness artifact"));
+    }
+    // rustc normalizes target-name hyphens in artifact filenames. Require one unique match.
+    let mut matches = names.iter().filter(|expected| expected.replace('-', "_") == name);
+    let name =
+        matches.next().ok_or_else(|| invalid_input("Cargo supplied an unrequested harness"))?;
+    if matches.next().is_some() {
+        return Err(invalid_input("harness names map to the same Cargo artifact"));
+    }
+    validate_wasm(artifact)?;
+    // create_new ensures repeated target execution cannot silently replace an artifact.
+    let mut target = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(directory.join(format!("{name}.wasm")))?;
+    io::copy(&mut fs::File::open(artifact)?, &mut target)?;
+    Ok(())
+}
+
+fn validate_bundle(directory: &Path, manifest: &str) -> io::Result<Vec<String>> {
+    let names = manifest_names(directory, manifest)?;
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let allowed = name == manifest
+            || names.iter().any(|expected| name == format!("{expected}.wasm").as_str());
+        if !allowed || !entry.file_type()?.is_file() {
+            return Err(invalid_input(format!(
+                "unexpected bundle entry: {}",
+                entry.path().display()
+            )));
+        }
+    }
+    for name in &names {
+        validate_wasm(&directory.join(format!("{name}.wasm")))?;
+    }
+    Ok(names)
+}
+
+fn prebuilt_artifact(directory: &Path, harness: &OsString) -> io::Result<PathBuf> {
+    let requested = harness_names(std::slice::from_ref(harness))?[0];
+    let names = validate_bundle(directory, MANIFEST)?;
+    if !names.iter().any(|name| name == requested) {
+        return Err(invalid_input("requested harness is absent from the bundle manifest"));
+    }
+    directory.join(format!("{requested}.wasm")).canonicalize()
 }
 
 fn run_artifact(arguments: &[OsString], program: &Path) -> io::Result<ExitStatus> {
@@ -169,6 +320,9 @@ impl TemporaryDirectory {
 
 impl Drop for TemporaryDirectory {
     fn drop(&mut self) {
+        if self.0.as_os_str().is_empty() {
+            return;
+        }
         if let Err(error) = fs::remove_dir_all(&self.0) {
             let _ = writeln!(io::stderr(), "could not remove {}: {error}", self.0.display());
         }
@@ -196,9 +350,8 @@ mod tests {
 
     #[test]
     fn cargo_selects_multiple_targets_and_receives_an_unambiguous_runner_array() {
-        let command =
-            cargo_command(&["first".into(), "second".into()], Path::new("/中文 空格/\"runner"))
-                .unwrap();
+        let runner = ["/中文 空格/\"runner".into(), "--artifact".into()];
+        let command = cargo_command(&["first".into(), "second".into()], &runner).unwrap();
         let arguments: Vec<_> = command.get_args().collect();
         assert_eq!(
             &arguments[..7],
@@ -218,9 +371,153 @@ mod tests {
             "target.wasm32-unknown-unknown.runner = [\"/中文 空格/\\\"runner\", \"--artifact\"]"
         );
         assert_eq!(&arguments[8..], ["--test", "first", "--test", "second"].map(OsStr::new));
-        for invalid in [vec![], vec!["--artifact".into(), "".into()], vec!["../bad".into()]] {
-            assert!(cargo_command(&invalid, Path::new("runner")).is_err());
+        for invalid in [
+            vec![],
+            vec!["--artifact".into(), "".into()],
+            vec!["../bad".into()],
+            vec!["same".into(), "same".into()],
+        ] {
+            assert!(cargo_command(&invalid, &runner).is_err());
         }
+    }
+
+    fn write_wasm(path: &Path) {
+        fs::write(path, b"\0asm\x01\0\0\0").unwrap();
+    }
+
+    #[cfg(unix)]
+    fn process_status(code: u8) -> ExitStatus {
+        Command::new("sh").args(["-c", &format!("exit {code}")]).status().unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn prepare_selects_cargo_artifacts_and_publishes_only_the_complete_bundle() {
+        let fixture = TemporaryDirectory::create().unwrap();
+        let source = fixture.0.join("中文 输入 with spaces");
+        fs::create_dir(&source).unwrap();
+        let destination = fixture.0.join("fresh target/中文 产物 \" bundle");
+        let harnesses = ["first".into(), "second-harness".into()];
+        for name in ["first-abcd.wasm", "second_harness-1234.wasm"] {
+            write_wasm(&source.join(name));
+        }
+        // A stale target beside the actual Cargo paths must never be selected by a glob.
+        fs::write(source.join("first-9999.wasm"), "stale").unwrap();
+        let status = prepare_bundle(&destination, &harnesses, |directory| {
+            collect_artifact(directory, &source.join("first-abcd.wasm"))?;
+            assert!(prebuilt_artifact(directory, &"first".into()).is_err());
+            collect_artifact(directory, &source.join("second_harness-1234.wasm"))?;
+            Ok(process_status(0))
+        })
+        .unwrap();
+        assert!(status.success());
+        assert!(!destination.join(PENDING_MANIFEST).exists());
+        for name in ["first", "second-harness"] {
+            let artifact = prebuilt_artifact(&destination, &name.into()).unwrap();
+            assert_eq!(artifact, destination.join(format!("{name}.wasm")));
+            assert_eq!(fs::read(artifact).unwrap(), b"\0asm\x01\0\0\0");
+        }
+        assert!(prebuilt_artifact(&destination, &"unknown".into()).is_err());
+        assert!(prebuilt_artifact(&destination, &"../first".into()).is_err());
+        let manifest = fs::read(destination.join(MANIFEST)).unwrap();
+        assert!(
+            prepare_bundle(&destination, &harnesses, |_| panic!("must not run Cargo")).is_err()
+        );
+        assert_eq!(fs::read(destination.join(MANIFEST)).unwrap(), manifest);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn prepare_cleans_partial_output_on_cargo_failure_incomplete_success_and_io_error() {
+        let fixture = TemporaryDirectory::create().unwrap();
+        let artifact = fixture.0.join("first-abcd.wasm");
+        write_wasm(&artifact);
+        for mode in ["cargo failure", "incomplete success", "io error"] {
+            let destination = fixture.0.join(mode);
+            let result =
+                prepare_bundle(&destination, &["first".into(), "missing".into()], |directory| {
+                    collect_artifact(directory, &artifact)?;
+                    match mode {
+                        "cargo failure" => Ok(process_status(7)),
+                        "incomplete success" => Ok(process_status(0)),
+                        _ => Err(io::Error::other("cannot start Cargo")),
+                    }
+                });
+            if mode == "cargo failure" {
+                assert_eq!(result.unwrap().code(), Some(7));
+            } else {
+                assert!(result.is_err());
+            }
+            assert!(!destination.exists(), "{mode} left a partial bundle");
+        }
+    }
+
+    #[test]
+    fn collection_rejects_unrequested_corrupt_and_repeated_targets() {
+        let fixture = TemporaryDirectory::create().unwrap();
+        let destination = fixture.0.join("bundle");
+        fs::create_dir(&destination).unwrap();
+        fs::write(destination.join(PENDING_MANIFEST), "first\n").unwrap();
+        for name in ["unrequested-abcd.wasm", "first-nonhex.wasm", "first.wasm", "first-abcd.txt"] {
+            let artifact = fixture.0.join(name);
+            write_wasm(&artifact);
+            assert!(collect_artifact(&destination, &artifact).is_err(), "accepted {name}");
+        }
+        let artifact = fixture.0.join("first-abcd.wasm");
+        fs::write(&artifact, "not wasm").unwrap();
+        assert!(collect_artifact(&destination, &artifact).is_err());
+        assert!(!destination.join("first.wasm").exists());
+        write_wasm(&artifact);
+        collect_artifact(&destination, &artifact).unwrap();
+        assert!(collect_artifact(&destination, &artifact).is_err());
+        fs::write(destination.join(PENDING_MANIFEST), "first-other\nfirst_other\n").unwrap();
+        let ambiguous = fixture.0.join("first_other-abcd.wasm");
+        write_wasm(&ambiguous);
+        assert!(collect_artifact(&destination, &ambiguous).is_err());
+    }
+
+    #[test]
+    fn prebuilt_rejects_missing_corrupt_extra_files_and_duplicate_manifest_entries() {
+        let fixture = TemporaryDirectory::create().unwrap();
+        fs::write(fixture.0.join(MANIFEST), "first\n").unwrap();
+        let name = OsString::from("first");
+        assert!(prebuilt_artifact(&fixture.0, &name).is_err());
+        let artifact = fixture.0.join("first.wasm");
+        fs::write(&artifact, "bad").unwrap();
+        assert!(prebuilt_artifact(&fixture.0, &name).is_err());
+        write_wasm(&artifact);
+        assert!(prebuilt_artifact(&fixture.0, &name).is_ok());
+        let stale = fixture.0.join("first-stale.wasm");
+        write_wasm(&stale);
+        assert!(prebuilt_artifact(&fixture.0, &name).is_err());
+        fs::remove_file(stale).unwrap();
+        for manifest in ["", "first\nfirst\n", "../first\n", "first\n\n", "first\nmissing\n"] {
+            fs::write(fixture.0.join(MANIFEST), manifest).unwrap();
+            assert!(prebuilt_artifact(&fixture.0, &name).is_err(), "accepted {manifest:?}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn prebuilt_rejects_symlinks_and_prepare_preserves_existing_directories() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = TemporaryDirectory::create().unwrap();
+        let destination = fixture.0.join("bundle");
+        fs::create_dir(&destination).unwrap();
+        let artifact = fixture.0.join("source.wasm");
+        write_wasm(&artifact);
+        fs::write(destination.join(MANIFEST), "first\n").unwrap();
+        symlink(&artifact, destination.join("first.wasm")).unwrap();
+        assert!(prebuilt_artifact(&destination, &"first".into()).is_err());
+        assert!(
+            prepare_bundle(&destination, &["first".into()], |_| panic!("must not run")).is_err()
+        );
+        assert!(destination.join("first.wasm").exists());
+        let alias = fixture.0.join("alias");
+        symlink(&destination, &alias).unwrap();
+        assert!(prepare_bundle(&alias, &["first".into()], |_| panic!("must not run")).is_err());
+        assert!(destination.join("first.wasm").exists());
     }
 
     #[test]

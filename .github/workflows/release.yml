@@ -15,7 +15,6 @@ permissions:
   contents: write
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
   # Android 的 versionCode / versionName 只能来自这里：workspace Cargo.toml 长期停在 0.1.0，
   # 而 dx 脚手架固定生成 versionCode = 1。
@@ -23,12 +22,13 @@ env:
   DIOXUS_CLI_VERSION: 0.7.9
 
 concurrency:
-  group: release-${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
-  cancel-in-progress: true
+  group: release-${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       ANDROID_NDK_VERSION: 27.3.13750724
       ANDROID_API_LEVEL: 34
@@ -49,7 +49,7 @@ jobs:
           exit 1
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_REF }}
 
@@ -57,7 +57,7 @@ jobs:
         uses: ./.github/actions/cleanup-github-runner
 
       - name: Install Java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -67,7 +67,7 @@ jobs:
 
       - name: Install Android SDK packages
         run: |
-          yes | sdkmanager --licenses
+          sdkmanager --licenses < <(yes)
           sdkmanager \
             "platform-tools" \
             "platforms;android-34" \
@@ -76,8 +76,8 @@ jobs:
 
       - name: Configure Android toolchain
         run: |
-          ANDROID_NDK_DIR="$(find "$ANDROID_SDK_ROOT/ndk" -mindepth 1 -maxdepth 1 -type d | sort | tail -n1)"
-          test -n "$ANDROID_NDK_DIR"
+          ANDROID_NDK_DIR="$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION"
+          test -d "$ANDROID_NDK_DIR"
           ANDROID_LLVM_BIN="$ANDROID_NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
           echo "$ANDROID_LLVM_BIN" >> "$GITHUB_PATH"
           {
@@ -105,14 +105,14 @@ jobs:
       - name: Prefetch Gradle distribution
         run: |
           mkdir -p "$HOME/.gradle/wrapper/dists/gradle-9.1.0-bin/9agqghryom9wkf8r80qlhnts3"
-          curl -L --fail --retry 3 --retry-delay 2 \
+          curl -L --fail --retry 3 --retry-delay 2 --connect-timeout 15 --max-time 180 \
             -o "$HOME/.gradle/wrapper/dists/gradle-9.1.0-bin/9agqghryom9wkf8r80qlhnts3/gradle-9.1.0-bin.zip" \
             https://services.gradle.org/distributions/gradle-9.1.0-bin.zip
 
       - name: Build Android debug APK
         run: |
           rm -rf target/dx/rssr-app/release/android
-          dx bundle --platform android --package rssr-app --target aarch64-linux-android --release --debug-symbols false
+          dx bundle --locked --platform android --package rssr-app --target aarch64-linux-android --release --debug-symbols false
           python3 scripts/prepare_android_bundle.py \
             target/dx/rssr-app/release/android/app/app/src/main \
             --release-tag "$RELEASE_TAG"
@@ -291,12 +291,14 @@ jobs:
         with:
           name: release-android
           path: release-assets/*
+          if-no-files-found: error
 
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_REF }}
 
@@ -308,8 +310,8 @@ jobs:
 
       - name: Build Windows binaries
         run: |
-          cargo build --release -p rssr-app
-          cargo build --release -p rssr-cli
+          cargo build --locked --release -p rssr-app
+          cargo build --locked --release -p rssr-cli
 
       - name: Archive Windows app
         shell: pwsh
@@ -335,12 +337,14 @@ jobs:
         with:
           name: release-windows
           path: release-assets/*
+          if-no-files-found: error
 
   build-linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_REF }}
 
@@ -379,8 +383,8 @@ jobs:
       - name: Build Linux app bundle and CLI
         run: |
           rm -rf target/linux-bundle
-          dx bundle --platform desktop --package-types deb --package rssr-app --release --out-dir target/linux-bundle
-          cargo build --release -p rssr-cli
+          dx bundle --locked --platform desktop --package-types deb --package rssr-app --release --out-dir target/linux-bundle
+          cargo build --locked --release -p rssr-cli
 
       - name: Archive Linux artifacts
         run: |
@@ -403,12 +407,14 @@ jobs:
         with:
           name: release-linux
           path: release-assets/*
+          if-no-files-found: error
 
   build-web:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_REF }}
 
@@ -429,7 +435,7 @@ jobs:
           version: ${{ env.DIOXUS_CLI_VERSION }}
 
       - name: Build web bundle
-        run: dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
+        run: dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
 
       - name: Archive web bundle
         run: |
@@ -446,9 +452,11 @@ jobs:
         with:
           name: release-web
           path: release-assets/*
+          if-no-files-found: error
 
   build-macos:
     runs-on: macos-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -459,7 +467,7 @@ jobs:
             suffix: macos-aarch64
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_REF }}
 
@@ -470,6 +478,8 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
 
       - name: Setup Dioxus CLI
         uses: ./.github/actions/setup-dioxus-cli
@@ -487,8 +497,8 @@ jobs:
       - name: Build macOS app bundle and CLI
         run: |
           rm -rf target/macos-bundle/${{ matrix.suffix }}
-          dx bundle --platform desktop --package-types macos --package rssr-app --target ${{ matrix.target }} --release --out-dir target/macos-bundle/${{ matrix.suffix }}
-          cargo build --release --target ${{ matrix.target }} -p rssr-cli
+          dx bundle --locked --platform desktop --package-types macos --package rssr-app --target ${{ matrix.target }} --release --out-dir target/macos-bundle/${{ matrix.suffix }}
+          cargo build --locked --release --target ${{ matrix.target }} -p rssr-cli
 
       - name: Archive macOS artifacts
         run: |
@@ -511,9 +521,11 @@ jobs:
         with:
           name: release-${{ matrix.suffix }}
           path: release-assets/*
+          if-no-files-found: error
 
   publish-release:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs:
       - build-android
       - build-windows
