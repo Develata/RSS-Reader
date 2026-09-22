@@ -126,7 +126,7 @@ enum CliStartupView {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt().with_env_filter("info").init();
+    tracing_subscriber::fmt().with_env_filter("info").with_writer(std::io::stderr).init();
 
     let cli = Cli::parse();
     let services = CliServices::new(cli.database_url.as_deref()).await?;
