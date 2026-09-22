@@ -60,9 +60,30 @@ export function connect(wsUrl, commandTimeoutMs = defaultCommandTimeoutMs) {
   });
 
   const ready = new Promise((resolve, reject) => {
-    ws.addEventListener('open', resolve, { once: true });
-    ws.addEventListener('error', reject, { once: true });
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      ws.removeEventListener('open', opened);
+      ws.removeEventListener('error', failed);
+      ws.removeEventListener('close', closed);
+      callback(value);
+    };
+    const opened = () => finish(resolve);
+    const failed = () => finish(reject, new Error('CDP WebSocket connection failed'));
+    const closed = () => finish(reject, new Error('CDP socket closed before handshake completed'));
+    const timeout = setTimeout(() => {
+      finish(reject, new Error(`Timed out waiting for CDP WebSocket handshake after ${commandTimeoutMs}ms`));
+      ws.close();
+    }, commandTimeoutMs);
+    ws.addEventListener('open', opened, { once: true });
+    ws.addEventListener('error', failed, { once: true });
+    ws.addEventListener('close', closed, { once: true });
   });
+  // Connection failure may arrive before the caller sends its first command.
+  // Keep ready rejected for send(), while preventing an unhandled rejection.
+  ready.catch(() => {});
 
   ws.addEventListener('close', () => {
     for (const [messageId, { reject, timeout, method }] of pending) {

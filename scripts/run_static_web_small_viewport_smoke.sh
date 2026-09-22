@@ -231,6 +231,20 @@ if [[ "$ready" != "true" ]]; then
   exit 1
 fi
 
+# Dioxus injects document::Title into the template at build time. Check the
+# actual served bundle so a stale template title cannot appear twice before
+# the client runtime mounts and corrects document.title.
+python3 - "target/dx/rssr-app/${profile}/web/public/index.html" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+index = Path(sys.argv[1]).read_text(encoding="utf-8")
+titles = re.findall(r"<title>(.*?)</title>", index, flags=re.IGNORECASE | re.DOTALL)
+if titles != ["RSS-Reader"]:
+    raise SystemExit(f"Unexpected initial Web title in {sys.argv[1]}: {titles!r}")
+PY
+
 "$chrome_bin" \
   --headless=new \
   --disable-gpu \

@@ -19,6 +19,7 @@ bash scripts/run_static_web_small_viewport_smoke.sh
 - 依次载入 `mobile-ui-overflow`、`mobile-ui-short` 与 `home-reader` fixture；
 - 在 `/entries`、`/feeds`、`/settings`、`/entries/2` 和 `1280×800` 桌面回归上执行断言；
 - 任一断言、浏览器 console error 或错误 overlay 出现时返回非零。
+- 在启动浏览器前检查实际构建的初始 HTML 标题恰好是 `RSS-Reader`，防止模板占位标题与 Dioxus `document::Title` 拼接。
 
 ## 常用参数
 
@@ -44,6 +45,7 @@ HTTP 端口由 `--port` 指定（默认 8091，允许 1..55535），CDP 使用�
 - R / Reader 返回始终可见，所有顶栏图标有可访问名称、title 和 44px 点击区域；旧导航折叠偏好不再隐藏 R；
 - 搜索开关、Esc、Enter 与 S / Settings 导航；检查非 reduced-motion 下搜索展开动画的实际 computed declaration；输入法 composing 的 Esc 不收起搜索；只有首页再次点击 R 才发起刷新；
 - CDP 暂停真实同源 RSS 请求，验证 R 与自动刷新合并，整轮完成后每个 fixture feed 恰好请求一次；连续 R / Feeds 刷新去重、页面卸载后整轮继续、Reader DOM 与滚动不受刷新影响、部分失败后可重试；
+- Reader 中刷新进行、成功和失败反馈均不覆盖标题；保留 live region、完整 title 以及 R 的结果小标记（DOM 断言不等同于辅助技术实机验收）；
 - 单份分页在页面中部仍位于视口，翻页后回到起点；真实 CDP touch 验证短拖动、非顶部不触发，以及顶部阈值和 R 共用刷新状态；
 - 图片采用原渲染 data URI，原 sanitizer 仍剔除 inline handler；原生 modal、Esc / Enter / 关闭按钮 / 背景、焦点和滚动恢复；`2000×12000` 竖图与 `12000×2000` 横图限制在查看器视口内；
 - Home、分页与图片使用实际 CDP tap 检查命中区域；图片打开时 history back 释放 body lock 并恢复目标页滚动，forward 后连续开关图片恢复正文滚动及焦点；
@@ -54,6 +56,8 @@ HTTP 端口由 `--port` 指定（默认 8091，允许 1..55535），CDP 使用�
 - 小屏订阅页的两个辅助统计同排显示，地址输入仍位于视口内。
 
 Android 实机长按选择手柄、系统返回、pinch zoom，以及 macOS Cmd+C/Cmd+A 不由 Chrome touch emulation 代替验收。未接实机时必须保持未验证。
+
+同一浏览器断言模块还提供 Windows 原生 WebView2 的显式 target 连接模式，见[原生隔离与执行说明](./manual-regression.md#复用现有断言检查-windows-原生窗口)。原生模式不使用此处的浏览器 seed 或视口模拟，结果与 Web 分开记录。
 
 ## 结果记录
 
