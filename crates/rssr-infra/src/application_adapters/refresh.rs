@@ -147,7 +147,7 @@ impl RefreshStorePort for SqliteRefreshStore {
                     return Err(anyhow::Error::new(error).context("更新订阅元数据失败"));
                 }
 
-                let entries = map_application_entries(&update.feed.entries);
+                let entries = map_application_entries(update.feed.entries);
                 let resolved_contents = match self
                     .entry_repository
                     .upsert_entries_and_resolve_contents(feed_id, &entries)
@@ -196,13 +196,16 @@ impl RefreshStorePort for SqliteRefreshStore {
 }
 
 fn map_refresh_target(feed: rssr_domain::Feed, has_entries: bool) -> RefreshTarget {
-    let (etag, last_modified) = if has_entries {
+    // Failure metadata describes the received response, not a successfully persisted cache.
+    // Sending its validators can yield 304 forever after a partial index/content write. Keep
+    // the stored metadata and last-success history, but retry a full response until success.
+    let (etag, last_modified) = if has_entries && feed.fetch_error.is_none() {
         (feed.etag, feed.last_modified)
     } else {
         tracing::debug!(
             feed_id = feed.id,
             url = %feed.url,
-            "订阅本地无文章缓存，跳过条件请求并强制全量抓取"
+            "订阅本地无文章缓存或上次刷新失败，跳过条件请求并强制全量抓取"
         );
         (None, None)
     };
@@ -250,20 +253,72 @@ fn map_application_feed_metadata(feed: &ParsedFeedUpdate) -> ParsedFeed {
     }
 }
 
-fn map_application_entries(entries: &[ParsedEntryData]) -> Vec<ParsedEntry> {
+// `commit` owns the update: move the strings into the adapter representation instead of
+// retaining a second copy of every body until the SQLite writes finish.
+fn map_application_entries(entries: Vec<ParsedEntryData>) -> Vec<ParsedEntry> {
     entries
-        .iter()
+        .into_iter()
         .map(|entry| ParsedEntry {
-            external_id: entry.external_id.clone(),
-            dedup_key: entry.dedup_key.clone(),
-            url: entry.url.clone(),
-            title: entry.title.clone(),
-            author: entry.author.clone(),
-            summary: entry.summary.clone(),
-            content_html: entry.content_html.clone(),
-            content_text: entry.content_text.clone(),
+            external_id: entry.external_id,
+            dedup_key: entry.dedup_key,
+            url: entry.url,
+            title: entry.title,
+            author: entry.author,
+            summary: entry.summary,
+            content_html: entry.content_html,
+            content_text: entry.content_text,
             published_at: entry.published_at,
             updated_at_source: entry.updated_at_source,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{hint::black_box, time::Instant};
+
+    use super::{ParsedEntryData, map_application_entries};
+
+    /// Run explicitly in release mode; fixture construction and result destruction are outside
+    /// the measured adapter conversion. This measures mapping only, not network or SQLite I/O.
+    #[test]
+    #[ignore = "explicit refresh adapter microbenchmark"]
+    fn refresh_entry_mapping_performance_probe() {
+        for count in [800, 2_000] {
+            let fixture = (0..count)
+                .map(|id| ParsedEntryData {
+                    external_id: format!("entry-{id}"),
+                    dedup_key: format!("dedup-{id}"),
+                    url: Some(
+                        url::Url::parse(&format!("https://example.com/articles/{id}"))
+                            .expect("fixture URL"),
+                    ),
+                    title: format!("中文文章 {id} with spaces"),
+                    author: Some("Fixture author".to_string()),
+                    summary: Some("Summary with UTF-8 内容".repeat(8)),
+                    content_html: Some(format!("<p>{}</p>", "html内容 ".repeat(800))),
+                    content_text: Some("正文 text ".repeat(400)),
+                    published_at: Some(time::OffsetDateTime::UNIX_EPOCH),
+                    updated_at_source: None,
+                })
+                .collect::<Vec<_>>();
+            let mut elapsed = std::time::Duration::ZERO;
+            const ITERATIONS: u32 = 40;
+            for iteration in 0..ITERATIONS + 5 {
+                let entries = fixture.clone();
+                let start = Instant::now();
+                let mapped = map_application_entries(black_box(entries));
+                let duration = start.elapsed();
+                black_box(&mapped);
+                assert_eq!(mapped.len(), count);
+                if iteration >= 5 {
+                    elapsed += duration;
+                }
+            }
+            println!(
+                "REFRESH_MAPPING entries={count} iterations={ITERATIONS} mean_us={:.3}",
+                elapsed.as_secs_f64() * 1_000_000.0 / f64::from(ITERATIONS)
+            );
+        }
+    }
 }
