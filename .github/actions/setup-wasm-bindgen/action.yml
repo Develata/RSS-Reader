@@ -1,0 +1,29 @@
+name: Setup wasm-bindgen test runner
+description: Cache the pinned native test tools separately from Cargo build artifacts
+inputs:
+  version:
+    description: Exact wasm-bindgen version matching Cargo.lock
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Cache wasm-bindgen tools
+      id: cache
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/rssr-tools/wasm-bindgen/${{ inputs.version }}
+        key: wasm-bindgen-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
+    - name: Install wasm-bindgen tools
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        TOOL_VERSION: ${{ inputs.version }}
+      run: cargo install wasm-bindgen-cli --version "$TOOL_VERSION" --locked --root "$HOME/.cache/rssr-tools/wasm-bindgen/$TOOL_VERSION"
+    - name: Verify pinned runner
+      shell: bash
+      env:
+        TOOL_VERSION: ${{ inputs.version }}
+      run: |
+        tool_bin="$HOME/.cache/rssr-tools/wasm-bindgen/$TOOL_VERSION/bin"
+        test "$("$tool_bin/wasm-bindgen-test-runner" --version)" = "wasm-bindgen-test-runner $TOOL_VERSION"
+        echo "$tool_bin" >> "$GITHUB_PATH"

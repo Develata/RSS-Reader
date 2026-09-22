@@ -71,6 +71,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+web_profile_args=("--${profile}")
+
 if [[ -z "$log_dir" ]]; then
   log_dir="target/release-ui-regression/$(date +%Y%m%d-%H%M%S)"
 fi
@@ -90,6 +92,9 @@ write_summary() {
   local web_status="$3"
   local fixed_smoke_status="$4"
   local spa_status="$5"
+  if [[ "$skip_automated" == "true" ]]; then
+    automated_status="skipped"
+  fi
 
   cat >"$summary_file" <<EOF
 # 发布前 UI 预检结果
@@ -143,14 +148,18 @@ EOF
 }
 
 public_dir="target/dx/rssr-app/${profile}/web/public"
+bundle_ready="false"
 
 ensure_web_bundle() {
+  if [[ "$bundle_ready" == "true" ]]; then
+    return
+  fi
   if [[ "$skip_build" != "true" ]]; then
     echo "Building rssr-app web bundle (${profile})..."
     if [[ "$profile" == "release" ]]; then
-      dx build --platform web --package rssr-app --release >/dev/null
+      dx build --platform web --package rssr-app --release --locked >/dev/null
     else
-      dx build --platform web --package rssr-app >/dev/null
+      dx build --platform web --package rssr-app --locked >/dev/null
     fi
   fi
 
@@ -158,26 +167,24 @@ ensure_web_bundle() {
     echo "Web build output not found: $public_dir" >&2
     exit 1
   fi
+  bundle_ready="true"
 }
 
 run_browser_contracts() {
   {
-    bash scripts/run_wasm_refresh_contract_harness.sh
-    bash scripts/run_wasm_subscription_contract_harness.sh
-    bash scripts/run_wasm_config_exchange_contract_harness.sh
+    bash scripts/run_wasm_contract_harness.sh \
+      wasm_refresh_contract_harness \
+      wasm_subscription_contract_harness \
+      wasm_config_exchange_contract_harness
   } 2>&1 | tee "$browser_contract_log"
 }
 
 run_fixed_smokes() {
-  local web_profile_args=(--debug)
-  if [[ "$profile" == "release" ]]; then
-    web_profile_args=(--release)
-  fi
-
   {
     echo "Running static web reader theme matrix..."
     bash scripts/run_static_web_reader_theme_matrix.sh \
       --skip-build \
+      "${web_profile_args[@]}" \
       --port "$((port + 10))" \
       --log-dir "$log_dir/static-web-reader-theme-matrix"
 
@@ -191,18 +198,21 @@ run_fixed_smokes() {
     echo "Running rssr-web proxy feed smoke..."
     bash scripts/run_rssr_web_proxy_feed_smoke.sh \
       --skip-build \
+      "${web_profile_args[@]}" \
       --port "$((web_port + 10))" \
       --log-dir "$log_dir/rssr-web-proxy-feed-smoke"
 
     echo "Running rssr-web browser feed smoke..."
     bash scripts/run_rssr_web_browser_feed_smoke.sh \
       --skip-build \
+      "${web_profile_args[@]}" \
       --port "$((web_port + 11))" \
       --log-dir "$log_dir/rssr-web-browser-feed-smoke"
   } 2>&1 | tee "$fixed_smoke_log"
 }
 
-run_rssr_web_smoke() {
+# A subshell owns the server: EXIT also runs if a probe/assertion aborts under -e.
+run_rssr_web_smoke() (
   local auth_state_file="$log_dir/rssr-web-auth.json"
   local entries_headers="$log_dir/rssr-web-entries.headers"
   local login_headers="$log_dir/rssr-web-login.headers"
@@ -214,29 +224,51 @@ run_rssr_web_smoke() {
   local cookie_jar="$log_dir/rssr-web.cookies"
   local pid=""
 
+  # Refuse an existing listener rather than accepting its health/login responses.
+  python3 - "$web_port" <<'PY'
+import socket, sys
+with socket.socket() as probe:
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        probe.bind(('127.0.0.1', int(sys.argv[1])))
+    except OSError as error:
+        sys.exit(f'rssr-web smoke port is unavailable: {error}')
+PY
+
   RSS_READER_WEB_BIND="127.0.0.1:${web_port}" \
   RSS_READER_WEB_STATIC_DIR="$public_dir" \
   RSS_READER_WEB_USERNAME="smoke" \
   RSS_READER_WEB_PASSWORD="smoke-pass-123" \
   RSS_READER_WEB_SESSION_SECRET="release-ui-regression-session-secret-0123456789" \
   RSS_READER_WEB_AUTH_STATE_FILE="$auth_state_file" \
-  cargo run -p rssr-web >"$web_log" 2>&1 &
+  cargo run --locked -p rssr-web >"$web_log" 2>&1 &
   pid=$!
 
-  cleanup() {
+  trap '
     if [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1; then
       kill "$pid" >/dev/null 2>&1 || true
       wait "$pid" >/dev/null 2>&1 || true
     fi
-  }
-  trap cleanup RETURN
+  ' EXIT
 
+  curl() { command curl --connect-timeout 2 --max-time 10 "$@"; }
+
+  local ready="false"
   for _ in {1..30}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "rssr-web exited before readiness; see $web_log" >&2
+      exit 1
+    fi
     if curl -fsS "http://127.0.0.1:${web_port}/healthz" >/dev/null 2>&1; then
+      ready="true"
       break
     fi
     sleep 1
   done
+  if [[ "$ready" != true ]]; then
+    echo "rssr-web did not become ready; see $web_log" >&2
+    exit 1
+  fi
 
   curl -fsS -D "$login_headers" -o /dev/null "http://127.0.0.1:${web_port}/login"
   curl -sS -D "$entries_headers" -o /dev/null "http://127.0.0.1:${web_port}/entries"
@@ -270,7 +302,8 @@ run_rssr_web_smoke() {
   curl -sS -b "$cookie_jar" -D "$logout_headers" -o /dev/null "http://127.0.0.1:${web_port}/logout"
   grep -Eq "^HTTP/.* 30[237]" "$logout_headers"
   grep -Eq "location: /login|Location: /login" "$logout_headers"
-}
+  kill -0 "$pid"
+)
 
 write_summary \
   "pending" \
@@ -282,14 +315,13 @@ write_summary \
 if [[ "$skip_automated" != "true" ]]; then
   echo "Running release UI automated gates..."
   {
-    cargo check -p rssr-app
-    cargo check -p rssr-app --target wasm32-unknown-unknown
-    cargo test -p rssr-app
-    cargo test -p rssr-app --test test_builtin_theme_contracts
-    cargo test -p rssr-infra --test test_refresh_contract_harness
-    cargo test -p rssr-infra --test test_subscription_contract_harness
-    cargo test -p rssr-infra --test test_config_exchange_contract_harness
-    cargo test -p rssr-web
+    cargo check --locked -p rssr-app --target wasm32-unknown-unknown
+    cargo test --locked -p rssr-app
+    cargo test --locked -p rssr-infra \
+      --test test_refresh_contract_harness \
+      --test test_subscription_contract_harness \
+      --test test_config_exchange_contract_harness
+    cargo test --locked -p rssr-web
   } 2>&1 | tee "$automated_log"
 fi
 
@@ -319,6 +351,7 @@ if [[ "$with_rssr_web" == "true" ]]; then
     echo "Running rssr-web browser feed smoke..."
     bash scripts/run_rssr_web_browser_feed_smoke.sh \
       --skip-build \
+      "${web_profile_args[@]}" \
       --port "$((web_port + 1))" \
       --log-dir "$log_dir/rssr-web-browser-feed-smoke" \
       >"$web_browser_feed_log" 2>&1
@@ -370,8 +403,6 @@ if [[ "$profile" == "release" ]]; then
 else
   server_args+=(--debug)
 fi
-if [[ "$skip_build" == "true" ]]; then
-  server_args+=(--skip-build)
-fi
+server_args+=(--skip-build)
 
 exec bash scripts/run_web_spa_regression_server.sh "${server_args[@]}"

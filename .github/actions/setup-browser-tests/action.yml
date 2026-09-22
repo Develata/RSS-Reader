@@ -1,0 +1,38 @@
+name: Setup browser test tools
+description: Cache the exact Chrome version and optionally its matching WebDriver
+inputs:
+  with-driver:
+    description: Install ChromeDriver for wasm contracts (CDP UI checks do not need it)
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Resolve Chrome version
+      id: chrome
+      shell: bash
+      run: |
+        version="$(bash scripts/setup_chrome_for_testing.sh --resolve-version)"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+    - name: Cache Chrome
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/chrome-for-testing/${{ steps.chrome.outputs.version }}/chrome-linux64
+        key: chrome-${{ runner.os }}-${{ runner.arch }}-${{ steps.chrome.outputs.version }}
+    - name: Cache ChromeDriver
+      if: inputs.with-driver == 'true'
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/chrome-for-testing/${{ steps.chrome.outputs.version }}/chromedriver-linux64
+        key: chromedriver-${{ runner.os }}-${{ runner.arch }}-${{ steps.chrome.outputs.version }}
+    - name: Install and verify browser tools
+      shell: bash
+      env:
+        CHROME_VERSION: ${{ steps.chrome.outputs.version }}
+        WITH_DRIVER: ${{ inputs.with-driver }}
+      run: |
+        bash scripts/setup_chrome_for_testing.sh "$CHROME_VERSION" "$HOME/.cache/chrome-for-testing" "$HOME/.local/bin" "$WITH_DRIVER"
+        "$HOME/.local/bin/google-chrome" --version | grep -F "$CHROME_VERSION"
+        if [[ "$WITH_DRIVER" == true ]]; then
+          "$HOME/.local/bin/chromedriver" --version | grep -F "$CHROME_VERSION"
+        fi
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"

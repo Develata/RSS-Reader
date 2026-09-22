@@ -5,6 +5,14 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -15,8 +23,65 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-and-test:
+  workspace:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      packages: ${{ steps.matrix.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Read workspace members from Cargo
+        id: matrix
+        run: |
+          cargo metadata --locked --no-deps --format-version 1 > metadata.json
+          python3 - <<'PY'
+          import json, os
+          with open('metadata.json') as source:
+              metadata = json.load(source)
+          members = set(metadata['workspace_members'])
+          packages = sorted(p['name'] for p in metadata['packages'] if p['id'] in members)
+          assert packages, 'workspace matrix must not be empty'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('packages=' + json.dumps(packages) + '\n')
+          PY
+
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  test-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Check standalone Rust acceptance runner
+        run: |
+          rustfmt --edition 2024 --check scripts/wasm_contract_runner.rs
+          mkdir -p target/test-tools
+          clippy-driver --edition 2024 --test scripts/wasm_contract_runner.rs -o target/test-tools/wasm-runner-tests -D warnings
+          target/test-tools/wasm-runner-tests
+
+  native-module:
+    needs: workspace
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        package: ${{ fromJSON(needs.workspace.outputs.packages) }}
+    env:
+      PACKAGE: ${{ matrix.package }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -25,6 +90,7 @@ jobs:
         uses: ./.github/actions/cleanup-github-runner
 
       - name: Install system dependencies
+        if: matrix.package == 'rssr-app'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -36,21 +102,27 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          key: native-${{ matrix.package }}
 
-      - name: Format check
-        run: cargo fmt --all --check
+      - name: Module Clippy
+        run: cargo clippy --locked -p "$PACKAGE" --all-targets -- -D warnings
 
-      - name: Workspace tests
-        run: cargo test --workspace
+      - name: Module tests including doc tests
+        run: cargo test --locked -p "$PACKAGE"
 
       - name: CLI smoke
-        run: cargo run -p rssr-cli -- --help
+        if: matrix.package == 'rssr-cli'
+        run: cargo run --locked -p rssr-cli -- --help
 
   web-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     env:
       DIOXUS_CLI_VERSION: 0.7.9
     steps:
@@ -74,15 +146,69 @@ jobs:
           version: ${{ env.DIOXUS_CLI_VERSION }}
 
       - name: Wasm target check
-        run: cargo check -p rssr-app --target wasm32-unknown-unknown
+        run: cargo check --locked -p rssr-app --target wasm32-unknown-unknown
 
       - name: Web bundle smoke
-        run: dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
+        run: |
+          dx bundle --platform web --package rssr-app --release --locked --debug-symbols false --out-dir target/web-dist
+          test -s target/dx/rssr-app/release/web/public/index.html
+
+      - name: Share the exact Web build with UI jobs
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-web-public
+          path: target/dx/rssr-app/release/web/public/
+          if-no-files-found: error
+          retention-days: 3
+
+  web-ui:
+    needs: web-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        preset: [default, atlas-sidebar, newsprint, amethyst-glass, midnight-ledger]
+    env:
+      PRESET: ${{ matrix.preset }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v8
+        with:
+          name: ci-web-public
+          path: target/dx/rssr-app/release/web/public/
+      - name: Setup Chrome for Testing
+        uses: ./.github/actions/setup-browser-tests
+        with:
+          with-driver: 'false'
+      - name: Real UI assertions at mobile and desktop viewports
+        run: |
+          args=(--release --skip-build --chrome-bin "$HOME/.local/bin/google-chrome" --log-dir "target/ci-ui/$PRESET")
+          if [[ "$PRESET" != default ]]; then args+=(--preset "$PRESET"); fi
+          bash scripts/run_static_web_small_viewport_smoke.sh "${args[@]}"
+      - name: Preserve UI evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-ui-${{ matrix.preset }}
+          path: |
+            target/ci-ui/${{ matrix.preset }}/*.json
+            target/ci-ui/${{ matrix.preset }}/*.md
+            target/ci-ui/${{ matrix.preset }}/*.log
+            target/ci-ui/${{ matrix.preset }}/*.png
+            target/ci-ui/${{ matrix.preset }}/*.html
+          retention-days: 7
 
   wasm-browser-contract:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix:
         harness:
           - wasm_refresh_contract_harness
@@ -95,11 +221,6 @@ jobs:
       - name: Cleanup runner
         uses: ./.github/actions/cleanup-github-runner
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y curl python3 unzip
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -107,18 +228,23 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm-${{ matrix.harness }}
 
       - name: Install wasm-bindgen test runner
-        run: cargo install wasm-bindgen-cli --version "${WASM_BINDGEN_CLI_VERSION}" --locked
+        uses: ./.github/actions/setup-wasm-bindgen
+        with:
+          version: ${{ env.WASM_BINDGEN_CLI_VERSION }}
 
       - name: Setup Chrome for Testing
-        run: bash scripts/setup_chrome_for_testing.sh
+        uses: ./.github/actions/setup-browser-tests
 
       - name: Run wasm browser contract harness
         run: bash scripts/run_wasm_contract_harness.sh "${{ matrix.harness }}"
 
   android-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     env:
       ANDROID_NDK_VERSION: 27.3.13750724
       ANDROID_API_LEVEL: 34
@@ -146,7 +272,9 @@ jobs:
 
       - name: Install Android SDK packages
         run: |
-          yes | sdkmanager --licenses
+          # sdkmanager closes stdin after the final prompt; avoid treating yes's
+          # expected SIGPIPE as a license failure under GitHub's pipefail shell.
+          sdkmanager --licenses < <(yes)
           sdkmanager \
             "platform-tools" \
             "platforms;android-34" \
@@ -155,16 +283,18 @@ jobs:
 
       - name: Configure Android toolchain
         run: |
-          ANDROID_NDK_DIR="$(find "$ANDROID_SDK_ROOT/ndk" -mindepth 1 -maxdepth 1 -type d | sort | tail -n1)"
-          test -n "$ANDROID_NDK_DIR"
+          ANDROID_NDK_DIR="$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION"
+          test -d "$ANDROID_NDK_DIR"
           ANDROID_LLVM_BIN="$ANDROID_NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_DIR" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_DIR" >> "$GITHUB_ENV"
           echo "$ANDROID_LLVM_BIN" >> "$GITHUB_PATH"
-          echo "CC_aarch64_linux_android=$ANDROID_LLVM_BIN/aarch64-linux-android${ANDROID_API_LEVEL}-clang" >> "$GITHUB_ENV"
-          echo "AR_aarch64_linux_android=$ANDROID_LLVM_BIN/llvm-ar" >> "$GITHUB_ENV"
-          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_LLVM_BIN/aarch64-linux-android${ANDROID_API_LEVEL}-clang" >> "$GITHUB_ENV"
+          {
+            echo "ANDROID_HOME=$ANDROID_SDK_ROOT"
+            echo "ANDROID_NDK_HOME=$ANDROID_NDK_DIR"
+            echo "ANDROID_NDK_ROOT=$ANDROID_NDK_DIR"
+            echo "CC_aarch64_linux_android=$ANDROID_LLVM_BIN/aarch64-linux-android${ANDROID_API_LEVEL}-clang"
+            echo "AR_aarch64_linux_android=$ANDROID_LLVM_BIN/llvm-ar"
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_LLVM_BIN/aarch64-linux-android${ANDROID_API_LEVEL}-clang"
+          } >> "$GITHUB_ENV"
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -175,25 +305,30 @@ jobs:
           version: ${{ env.DIOXUS_CLI_VERSION }}
 
       - name: Android target smoke check
-        run: cargo check -p rssr-app --target aarch64-linux-android
+        run: cargo check --locked -p rssr-app --target aarch64-linux-android
 
       - name: Android bundle smoke
         run: |
           rm -rf target/dx/rssr-app/release/android
-          dx bundle --platform android --package rssr-app --target aarch64-linux-android --release --debug-symbols false
+          dx bundle --platform android --package rssr-app --target aarch64-linux-android --release --locked --debug-symbols false
           # 带上假 tag：让 --release-tag → parse_release_tag → patch_gradle_version 这条链
           # 进日常 CI。否则它只在真正打 tag 时才第一次执行，正是「只在发布路径上跑」的老毛病。
           python3 scripts/prepare_android_bundle.py \
             target/dx/rssr-app/release/android/app/app/src/main \
             --release-tag v9.87.65
-          cd target/dx/rssr-app/release/android/app
-          ./gradlew assembleDebug --no-daemon --console=plain
-          cd -
+          (
+            cd target/dx/rssr-app/release/android/app
+            ./gradlew assembleDebug --no-daemon --console=plain
+          )
           APK_PATH="$(find target/dx/rssr-app/release/android -path '*outputs/apk/debug/*.apk' | head -n1)"
           test -n "$APK_PATH"
           # dx 0.7.9 起原生库默认名为 libmain.so（NativeActivity 约定，可经 Dioxus.toml [android] lib_name 覆写）
-          unzip -l "$APK_PATH" | grep 'lib/arm64-v8a/libmain.so'
-          ! unzip -l "$APK_PATH" | grep 'lib/x86_64/libmain.so'
+          unzip -l "$APK_PATH" > apk-files-ci.txt
+          grep -F 'lib/arm64-v8a/libmain.so' apk-files-ci.txt
+          if grep -F 'lib/x86_64/libmain.so' apk-files-ci.txt; then
+            echo '::error::ARM64 smoke APK unexpectedly contains an x86_64 native library'
+            exit 1
+          fi
           "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging "$APK_PATH" > badging-ci.txt
           grep -F "application-label:'RSS-Reader'" badging-ci.txt
           grep -E 'application-icon-.*rssr_launcher' badging-ci.txt
@@ -201,3 +336,24 @@ jobs:
           # 不只是「字符串写进了 Gradle 文件」。
           grep -F "versionCode='98765'" badging-ci.txt
           grep -F "versionName='9.87.65'" badging-ci.txt
+
+  # Keep the former required-check name stable, now aggregating every module.
+  lint-and-test:
+    if: always()
+    needs: [workspace, format, test-tools, native-module, web-smoke, web-ui, wasm-browser-contract, android-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all acceptance modules to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          results = json.loads(os.environ['RESULTS'])
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('| Module | Result |\n| --- | --- |\n')
+              for name, result in results.items():
+                  summary.write(f"| {name} | {result['result']} |\n")
+          sys.exit(0 if results and all(r['result'] == 'success' for r in results.values()) else 1)
+          PY
