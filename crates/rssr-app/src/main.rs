@@ -32,6 +32,19 @@ fn init_tracing() {
         .init();
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+fn native_document_head() -> String {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+    let icon = STANDARD.encode(include_bytes!("../../../assets/branding/rssr-mark.svg"));
+    // Native Title updates the window, not document.title. Inject both branding
+    // values before App mounts so WebView never probes a missing /favicon.ico.
+    format!(
+        r#"<script>document.title = {title:?};</script><link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,{icon}">"#,
+        title = app::APP_NAME,
+    )
+}
+
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
 fn main() {
     use dioxus::desktop::{Config, LogicalSize, WindowBuilder, tao::window::Icon};
@@ -42,7 +55,7 @@ fn main() {
 
     let window_icon = load_window_icon();
     let window = WindowBuilder::new()
-        .with_title("RSS-Reader")
+        .with_title(app::APP_NAME)
         .with_window_icon(window_icon)
         .with_inner_size(LogicalSize::new(1280.0, 900.0))
         .with_visible(true)
@@ -53,7 +66,8 @@ fn main() {
         .with_maximizable(true)
         .with_closable(true);
 
-    let config = Config::new().with_window(window).with_menu(None);
+    let config =
+        Config::new().with_window(window).with_menu(None).with_custom_head(native_document_head());
     LaunchBuilder::new().with_cfg(config).launch(app::App);
 
     fn load_window_icon() -> Option<Icon> {
@@ -74,7 +88,9 @@ fn main() {
     use dioxus::prelude::LaunchBuilder;
 
     init_tracing();
-    let config = Config::new().with_close_behaviour(WindowCloseBehaviour::WindowHides);
+    let config = Config::new()
+        .with_close_behaviour(WindowCloseBehaviour::WindowHides)
+        .with_custom_head(native_document_head());
     LaunchBuilder::new().with_cfg(config).launch(app::App);
 }
 

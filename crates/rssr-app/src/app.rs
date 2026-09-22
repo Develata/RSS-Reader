@@ -12,7 +12,7 @@ use crate::{
     web_auth::{WebAuthState, auth_state},
 };
 
-const APP_NAME: &str = "RSS-Reader";
+pub(crate) const APP_NAME: &str = "RSS-Reader";
 const WEB_AUTH_MARKUP: &str = include_str!("../../../assets/branding/rssr-mark.svg");
 const APP_STYLESHEET: &str = concat!(
     include_str!("../../../assets/styles/tokens.css"),
@@ -48,6 +48,7 @@ pub fn App() -> Element {
     let current_settings = if authenticated { Some(settings()) } else { None };
 
     rsx! {
+        document::Title { "{APP_NAME}" }
         document::Meta {
             name: "viewport",
             content: "width=device-width, initial-scale=1, viewport-fit=cover"
@@ -83,6 +84,11 @@ pub fn AppNav(on_back: Option<EventHandler<()>>) -> Element {
     let submit_shell = shell.clone();
     let update_shell = shell.clone();
     let refresh = shell.refresh_state();
+    let home_title = if refresh.label().is_empty() {
+        "Read / 首页；在首页再次点击刷新全部订阅".to_string()
+    } else {
+        format!("Read / 首页；{}；在首页再次点击刷新全部订阅", refresh.label())
+    };
     let navigator = use_navigator();
 
     rsx! {
@@ -102,7 +108,7 @@ pub fn AppNav(on_back: Option<EventHandler<()>>) -> Element {
                 button {
                     class: "icon-link-button", "data-slot": "app-nav-brand",
                     "data-action": "activate-home", "data-refresh-state": refresh.phase(),
-                    r#type: "button", aria_label: "Read / 首页", title: "Read / 首页；在首页再次点击刷新全部订阅",
+                    r#type: "button", aria_label: "Read / 首页", title: home_title,
                     aria_busy: refresh.is_refreshing(),
                     onclick: move |_| home_shell.activate_home(),
                     span { "data-slot": "app-nav-brand-mark", aria_hidden: "true", "R" }

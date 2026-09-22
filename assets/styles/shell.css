@@ -92,6 +92,41 @@
   animation: refresh-feedback-dismiss 6s steps(1, jump-end) forwards;
 }
 @keyframes refresh-feedback-dismiss { to { visibility: hidden; } }
+/* Reader keeps its text unobstructed, including when a completed refresh is
+ * carried across navigation. Retain the live region and show a small Home badge;
+ * the full result also remains in the button title and on non-reading pages. */
+[data-page="reader"] [data-slot="manual-refresh-status"] {
+  top: auto;
+  right: auto;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  animation: none;
+}
+[data-page="reader"] [data-slot="app-nav-brand"] { position: relative; }
+[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="finished"]::after,
+[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="error"]::after {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 50%;
+  background: var(--panel-strong);
+  color: var(--accent);
+  font-size: 0.7rem;
+  line-height: 1;
+}
+[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="finished"]::after { content: "✓"; }
+[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="error"]::after { content: "!"; color: var(--danger); }
 @media (prefers-reduced-motion: reduce) {
   [data-layout="app-nav-search"], [data-slot="app-nav-brand"] { animation: none; }
 }
