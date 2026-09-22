@@ -33,9 +33,9 @@ done
 if [[ "$skip_build" != "true" ]]; then
   echo "Building rssr-app web bundle (${profile})..."
   if [[ "$profile" == "release" ]]; then
-    dx build --platform web --package rssr-app --release >/dev/null
+    dx build --platform web --package rssr-app --release --locked >/dev/null
   else
-    dx build --platform web --package rssr-app >/dev/null
+    dx build --platform web --package rssr-app --locked >/dev/null
   fi
 fi
 
@@ -55,7 +55,7 @@ fi
 echo "Serving ${public_dir} with SPA fallback on http://127.0.0.1:${port}"
 echo "Press Ctrl+C to stop."
 
-python3 - "$public_dir" "$port" "$repo_root" <<'PY'
+exec python3 - "$public_dir" "$port" "$repo_root" <<'PY'
 import base64
 import hashlib
 import http.server
@@ -71,6 +71,7 @@ port = int(sys.argv[2])
 repo_root = os.path.abspath(sys.argv[3])
 HELPER_PATH = "/__codex/setup-local-auth"
 DUMP_PATH = "/__codex/dump-browser-state"
+HOME_FEED_REQUESTS = {}
 MOBILE_UI_FEED_PATH = "/__codex/mobile-ui-feed.xml"
 THEME_FIXTURE_ROOT = os.path.join(repo_root, "assets", "themes")
 THEME_PRESET_FILES = {
@@ -83,6 +84,7 @@ BROWSER_STATE_SEEDS = {
     "reader-demo": "reader_demo",
     "mobile-ui-overflow": "mobile_ui_overflow",
     "mobile-ui-short": "mobile_ui_short",
+    "home-reader": "mobile_ui_overflow",
 }
 
 
@@ -105,6 +107,25 @@ def load_browser_state_seed(key):
         path = os.path.join(fixture_root, f"{prefix}_{suffix}.json")
         with open(path, "r", encoding="utf-8") as fh:
             result.append(json.load(fh))
+    if key == "home-reader":
+        core, app, flags, content = result
+        core["settings"]["entries_page_size"] = 2
+        core["feeds"][0]["title"] = "完整来源名称 " + "LongUnbrokenSourceName" * 8
+        second = dict(core["feeds"][0], id=2, title="第二个来源 Second Feed")
+        core["feeds"].append(second)
+        core["next_feed_id"] = 3
+        image = base64.b64encode(b'<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="1200" height="800" fill="#356f9b"/><text x="80" y="400" fill="white" font-size="90">RSS Reader image</text></svg>').decode("ascii")
+        content["entries"][0]["content_html"] += (
+            '<p><a href="https://example.com/reader-link">正文链接：查看补充说明</a></p>'
+            + '<pre><code>' + 'long_code_token_' * 30 + '</code></pre>'
+            + '<p><img src="data:image/svg+xml;base64,' + image + '" alt="本地图片 Local chart" onclick="window.__unsafeImage = true"></p>'
+            + ''.join(
+                '<p><img alt="' + label + '" src="data:image/svg+xml;base64,'
+                + base64.b64encode(f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"><rect width="100%" height="100%" fill="#356f9b"/></svg>'.encode()).decode("ascii") + '"></p>'
+                for label, width, height in [("超大竖图", 2000, 12000), ("超大横图", 12000, 2000)]
+            )
+            + ''.join(f'<p>阅读位置 {index}：可以正常选择并复制正文。 Native selection stays available.</p>' for index in range(25))
+        )
     return tuple(result)
 
 
@@ -156,10 +177,10 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(400, f"Unknown browser state seed: {seed}")
                 return
             core_state, app_state, entry_flags, entry_content = loaded_seed
-            if seed.startswith("mobile-ui-"):
+            if seed.startswith("mobile-ui-") or seed == "home-reader":
                 feed_url = f"http://127.0.0.1:{port}{MOBILE_UI_FEED_PATH}?seed={seed}"
                 for feed in core_state.get("feeds", []):
-                    feed["url"] = feed_url
+                    feed["url"] = feed_url + f"&feed={feed['id']}"
 
         preset_css = load_theme_preset_css(preset)
         if core_state is not None and preset_css is not None:
@@ -219,7 +240,14 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
 
     def _mobile_ui_feed(self):
         seed = parse_qs(urlparse(self.path).query).get("seed", ["mobile-ui-overflow"])[0]
-        if seed == "mobile-ui-short":
+        feed_id = parse_qs(urlparse(self.path).query).get("feed", ["1"])[0]
+        if seed == "home-reader":
+            title = "完整来源名称 " + "LongUnbrokenSourceName" * 8 if feed_id == "1" else "第二个来源 Second Feed"
+            HOME_FEED_REQUESTS[feed_id] = HOME_FEED_REQUESTS.get(feed_id, 0) + 1
+            version = HOME_FEED_REQUESTS[feed_id]
+            guid = f"manual-refresh-new-{feed_id}-{version}"
+            entry_title = f"手动刷新新增文章 {feed_id} / {version}"
+        elif seed == "mobile-ui-short":
             title = "Short Mobile Fixture"
             guid = "mobile-ui-short-entry"
             entry_title = "Short directory fixture entry"

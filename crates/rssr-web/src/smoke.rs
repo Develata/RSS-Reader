@@ -111,10 +111,12 @@ pub(crate) async fn browser_feed_smoke(State(state): State<AppState>) -> impl In
     }}
 
     function setInputValue(input, value) {{
+      // Dioxus reads DOM events in the iframe's realm.
+      const FrameEvent = input.ownerDocument.defaultView.Event;
       input.focus();
       input.value = value;
-      input.dispatchEvent(new Event("input", {{ bubbles: true, composed: true }}));
-      input.dispatchEvent(new Event("change", {{ bubbles: true, composed: true }}));
+      input.dispatchEvent(new FrameEvent("input", {{ bubbles: true, composed: true }}));
+      input.dispatchEvent(new FrameEvent("change", {{ bubbles: true, composed: true }}));
     }}
 
     async function main() {{
@@ -234,6 +236,10 @@ pub(crate) async fn browser_feed_smoke(State(state): State<AppState>) -> impl In
 }
 
 pub(crate) async fn feed_fixture() -> impl IntoResponse {
+    // Keep this success-path fixture visible under the default archive window as time passes.
+    let published_at = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc2822)
+        .expect("current timestamp formats as an RSS date");
     let xml = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -245,7 +251,7 @@ pub(crate) async fn feed_fixture() -> impl IntoResponse {
       <guid>{}</guid>
       <title>{}</title>
       <link>{}</link>
-      <pubDate>Fri, 10 Apr 2026 12:00:00 GMT</pubDate>
+      <pubDate>{published_at}</pubDate>
       <description><![CDATA[<p>Codex smoke feed entry body.</p>]]></description>
     </item>
   </channel>

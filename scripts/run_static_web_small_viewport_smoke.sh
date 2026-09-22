@@ -225,7 +225,7 @@ if ! "$node_bin" "$node_script_arg" \
 - commit：$(git rev-parse --short HEAD)
 - profile：${profile}
 - viewport：${viewport_width}×${viewport_height} @ DPR 3
-- fixtures：mobile-ui-overflow、mobile-ui-short
+- fixtures：mobile-ui-overflow、mobile-ui-short、home-reader
 - chrome：${chrome_bin}
 - 结果：失败
 - 断言：${log_dir}/assertions.json
@@ -242,7 +242,7 @@ cat >"$summary_file" <<EOF
 - commit：$(git rev-parse --short HEAD)
 - profile：${profile}
 - viewport：${viewport_width}×${viewport_height} @ DPR 3
-- fixtures：mobile-ui-overflow、mobile-ui-short
+- fixtures：mobile-ui-overflow、mobile-ui-short、home-reader
 - preset：${preset:-default}
 - chrome：${chrome_bin}
 - 结果：通过
@@ -251,7 +251,8 @@ cat >"$summary_file" <<EOF
 
 - assertions.json
 - entries / feeds / settings / reader 的 HTML 与 PNG
-- entries-short-directory、entries-desktop 的 HTML 与 PNG
+- entries-short-directory、entries-desktop、reader-desktop 的 HTML 与 PNG
+- reader-search、reader-image-viewer、entries-persistent-pagination、sources-full-names 的 HTML 与 PNG
 - static-web.log、chrome.log
 EOF
 
