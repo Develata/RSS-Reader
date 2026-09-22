@@ -8,6 +8,7 @@ mod facade;
 mod groups;
 pub(crate) mod intent;
 mod presenter;
+mod pull_refresh;
 mod reducer;
 mod session;
 mod state;
@@ -70,14 +71,14 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
     let controls = render_entry_controls(&facade);
-    let pagination_top = render_entry_pagination_controls(&facade);
-    let pagination_bottom = render_entry_pagination_controls(&facade);
+    let pagination = render_entry_pagination_controls(&facade);
 
     rsx! {
         section {
             "data-page": "entries",
             "data-entry-scope": if feed_id.is_some() { "feed" } else { "all" },
             AppNav {}
+            if feed_id.is_none() { pull_refresh::PullRefresh {} }
             div { "data-layout": "entries-layout",
                 div { "data-layout": "entries-main",
                     div { "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "entries",
@@ -112,7 +113,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             }
                         }
                     } else {
-                        { pagination_top }
                         div {
                             "data-layout": "entry-groups",
                             "data-state": "populated",
@@ -175,7 +175,6 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 }
                             }
                         }
-                        { pagination_bottom }
                     }
                 }
                 if !facade.group_nav_items().is_empty() {
@@ -188,12 +187,14 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                 }
             }
         }
+        { pagination }
     }
 }
 
 fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> EntriesPageFacade {
     let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
-    let session = EntriesPageSession::new(feed_id, state);
+    let query_generation = use_signal(|| 0);
+    let session = EntriesPageSession::new(feed_id, state, query_generation);
     let state_snapshot = Arc::new(session.snapshot());
     // memo 链：先把状态收窄成 presenter 真正依赖的投影，再由它推导 presenter。
     //
@@ -214,6 +215,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
     let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), current_time_utc());
     let preferences_loaded = state_snapshot.preferences_loaded;
+    let refresh_revision = ui.refresh_revision();
     let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
     let show_archived = state_snapshot.show_archived;
     let read_filter = state_snapshot.read_filter;
@@ -226,13 +228,19 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         session.dispatch(intent::EntriesPageIntent::SetCurrentPage(state::FIRST_PAGE_NUMBER));
     });
 
-    use_reactive_task((feed_id, preferences_loaded), move |(_, preferences_loaded)| {
-        session.bootstrap(!preferences_loaded, true);
-    });
+    use_reactive_task(
+        (feed_id, preferences_loaded, refresh_revision),
+        move |(_, preferences_loaded, _)| {
+            session.bootstrap(!preferences_loaded, true);
+        },
+    );
 
-    use_reactive_task((feed_id, entry_query.clone()), move |(_, entry_query)| {
-        session.load_entries_query(entry_query);
-    });
+    use_reactive_task(
+        (feed_id, entry_query.clone(), refresh_revision),
+        move |(_, entry_query, _)| {
+            session.load_entries_query(entry_query);
+        },
+    );
 
     use_reactive_side_effect(
         (

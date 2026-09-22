@@ -3,6 +3,7 @@ use rssr_domain::FeedSummary;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FeedsPageState {
     pub(crate) feed_url: String,
+    pub(crate) adding_feed_url: Option<String>,
     pub(crate) config_text: String,
     pub(crate) opml_text: String,
     pub(crate) pending_config_import: bool,
@@ -19,6 +20,7 @@ impl FeedsPageState {
     pub(crate) fn new() -> Self {
         Self {
             feed_url: String::new(),
+            adding_feed_url: None,
             config_text: String::new(),
             opml_text: String::new(),
             pending_config_import: false,

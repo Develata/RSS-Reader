@@ -1,3 +1,4 @@
+use dioxus::core::{Runtime, current_scope_id};
 use dioxus::prelude::*;
 use dioxus_router::Navigator;
 use rssr_domain::UserSettings;
@@ -6,9 +7,8 @@ use crate::{
     router::AppRoute,
     status::{set_status_error, set_status_info},
     ui::shell_browser::complete_web_auth_transition,
-    ui::shell_prefs::{
-        initial_entry_search, initial_nav_hidden, remember_entry_search, remember_nav_hidden,
-    },
+    ui::shell_prefs::{initial_entry_search, remember_entry_search},
+    ui::shell_state::{HomeAction, ManualRefreshState, NavMode, resolve_home_action},
     ui::{ShellCommand, UiCommand, UiIntent, collect_projected_ui_command, visit_ui_command},
     web_auth::{
         ServerGateProbe, WebAuthState, auth_state, configured_username, login, probe_server_gate,
@@ -16,10 +16,13 @@ use crate::{
     },
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) struct AppShellState {
     entry_search: Signal<String>,
-    nav_hidden: Signal<bool>,
+    nav_mode: Signal<NavMode>,
+    refresh: Signal<ManualRefreshState>,
+    refresh_revision: Signal<u64>,
+    owner: ScopeId,
 }
 
 impl AppShellState {
@@ -27,82 +30,109 @@ impl AppShellState {
         (self.entry_search)()
     }
 
-    pub(crate) fn nav_hidden(self) -> bool {
-        (self.nav_hidden)()
-    }
-
     pub(crate) fn set_entry_search(mut self, value: String) {
         remember_entry_search(&value);
         self.entry_search.set(value);
     }
 
-    pub(crate) fn show_nav(mut self) {
-        remember_nav_hidden(false);
-        self.nav_hidden.set(false);
+    pub(crate) fn refresh_state(self) -> ManualRefreshState {
+        self.refresh.read().clone()
+    }
+    pub(crate) fn refresh_revision(self) -> u64 {
+        *self.refresh_revision.read()
     }
 
-    pub(crate) fn hide_nav(mut self) {
-        remember_nav_hidden(true);
-        self.nav_hidden.set(true);
+    /// All manual refresh triggers use this synchronous gate and the App-owned task.
+    /// Completion invalidates list snapshots only; Reader never subscribes to this revision.
+    pub(crate) fn manual_refresh(mut self) {
+        if !self.refresh.write().begin() {
+            return;
+        }
+        Runtime::current().in_scope(self.owner, || {
+            spawn(async move {
+                let intents =
+                    crate::ui::execute_ui_command(UiCommand::Shell(ShellCommand::ManualRefresh))
+                        .await;
+                for intent in intents {
+                    if let Some((message, tone)) = intent.into_status() {
+                        self.refresh
+                            .set(ManualRefreshState::Finished { message, failed: tone == "error" });
+                    }
+                }
+                // Failed batches can still have committed some subscriptions.
+                self.refresh_revision += 1;
+            })
+        });
     }
 
-    /// 只有提交（回车）才跳转到文章页。
-    ///
-    /// 此前搜索框的 `onfocus` 也调用了一份同样的跳转，于是点进搜索框会立刻换路由，
-    /// 把刚点中的那个 input 卸载掉，焦点随之丢失——想搜索得点两次。搜索词存在
-    /// [`AppShellState`] 里而不在页面里，因此跳转前输入的内容会原样带到文章页，
-    /// 去掉 `onfocus` 不会丢任何东西。
     pub(crate) fn submit_search(self, navigator: Navigator) {
         navigator.push(AppRoute::EntriesPage {});
     }
 }
 
 pub(crate) fn use_app_shell_state() -> AppShellState {
-    let entry_search = use_signal(initial_entry_search);
-    let nav_hidden = use_signal(initial_nav_hidden);
-    AppShellState { entry_search, nav_hidden }
+    AppShellState {
+        entry_search: use_signal(initial_entry_search),
+        nav_mode: use_signal(NavMode::default),
+        refresh: use_signal(ManualRefreshState::default),
+        refresh_revision: use_signal(|| 0),
+        owner: current_scope_id(),
+    }
 }
 
 #[derive(Clone)]
 pub(crate) struct AppNavShell {
     shell: AppShellState,
     navigator: Navigator,
+    route: AppRoute,
 }
 
 impl AppNavShell {
-    pub(crate) fn nav_hidden(&self) -> bool {
-        self.shell.nav_hidden()
+    pub(crate) fn is_search(&self) -> bool {
+        *self.shell.nav_mode.read() == NavMode::Search
     }
-
     pub(crate) fn nav_state(&self) -> &'static str {
-        if self.nav_hidden() { "collapsed" } else { "expanded" }
+        if self.is_search() { "search" } else { "normal" }
     }
-
+    pub(crate) fn is_reader(&self) -> bool {
+        matches!(self.route, AppRoute::ReaderPage { .. })
+    }
     pub(crate) fn entry_search(&self) -> String {
         self.shell.entry_search()
     }
-
     pub(crate) fn set_entry_search(&self, value: String) {
         self.shell.set_entry_search(value);
     }
-
-    pub(crate) fn show_nav(&self) {
-        self.shell.show_nav();
+    pub(crate) fn refresh_state(&self) -> ManualRefreshState {
+        self.shell.refresh_state()
     }
 
-    pub(crate) fn hide_nav(&self) {
-        self.shell.hide_nav();
+    pub(crate) fn toggle_search(&mut self) {
+        let mode = self.shell.nav_mode.peek().toggle();
+        self.shell.nav_mode.set(mode);
     }
-
+    pub(crate) fn close_search(&mut self) {
+        self.shell.nav_mode.set(NavMode::Normal);
+    }
     pub(crate) fn submit_search(&self) {
         self.shell.submit_search(self.navigator);
+    }
+    pub(crate) fn activate_home(&self) {
+        match resolve_home_action(&self.route) {
+            HomeAction::Navigate => {
+                self.navigator.push(AppRoute::EntriesPage {});
+            }
+            HomeAction::ManualRefresh => self.shell.manual_refresh(),
+        }
     }
 }
 
 pub(crate) fn use_app_nav_shell() -> AppNavShell {
-    let shell = use_context::<AppShellState>();
-    let navigator = use_navigator();
-    AppNavShell { shell, navigator }
+    AppNavShell {
+        shell: use_context::<AppShellState>(),
+        navigator: use_navigator(),
+        route: use_route::<AppRoute>(),
+    }
 }
 
 pub(crate) fn use_authenticated_shell_bus(

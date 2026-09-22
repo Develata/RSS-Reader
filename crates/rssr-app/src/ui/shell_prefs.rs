@@ -1,10 +1,10 @@
-//! 顶栏搜索词、导航收起状态与文章区控件收起状态的持久化，三端行为一致。
+//! 顶栏搜索词与文章区控件收起状态的持久化。旧 nav_hidden 字段/键不再读取，R 始终可见。
 //!
-//! 这几项此前只有 Web 端存进 `localStorage`，桌面与 Android 每次启动都回到「未筛选、导航展开」。
+//! 这几项此前只有 Web 端存进 `localStorage`，桌面与 Android 每次启动都回到默认搜索和筛选控件状态。
 //! 同一个界面元素在不同平台记不记得住，属于平台差异漏进了产品语义，因此统一为三端都记住。
 //!
 //! **必须是同步读写。** `use_app_shell_state` 在首帧就要拿到值。若改走 `AppStateSnapshot`
-//! 那条异步链路，首帧会先渲染成空搜索框加展开的导航，下一帧才跳成持久化的值——
+//! 那条异步链路，首帧会先渲染成空搜索框，下一帧才跳成持久化的值——
 //! Web 端现有的体验会退化出一次闪烁。为此这里不进 domain / application，
 //! 就是一层宿主能力适配。
 //!
@@ -28,7 +28,6 @@ mod platform {
     #[serde(default)]
     struct ShellPrefs {
         entry_search: String,
-        nav_hidden: bool,
         entry_controls_hidden: bool,
     }
 
@@ -37,7 +36,7 @@ mod platform {
     /// 会莫名变成展开。
     impl Default for ShellPrefs {
         fn default() -> Self {
-            Self { entry_search: String::new(), nav_hidden: false, entry_controls_hidden: true }
+            Self { entry_search: String::new(), entry_controls_hidden: true }
         }
     }
 
@@ -72,7 +71,7 @@ mod platform {
         .as_ref()
     }
 
-    /// 中毒说明此前有线程持锁时 panic 了。这里存的是两个随时可再生的界面字段，
+    /// 中毒说明此前有线程持锁时 panic 了。这里存的是随时可再生的界面字段，
     /// 与其此后整个进程静默丢掉用户的每一次输入，不如接着用最后那份值。
     fn locked() -> std::sync::MutexGuard<'static, ShellPrefs> {
         cached().lock().unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -137,14 +136,6 @@ mod platform {
         update(|prefs| prefs.entry_search = value.to_string());
     }
 
-    pub(super) fn initial_nav_hidden() -> bool {
-        locked().nav_hidden
-    }
-
-    pub(super) fn remember_nav_hidden(hidden: bool) {
-        update(|prefs| prefs.nav_hidden = hidden);
-    }
-
     pub(super) fn initial_entry_controls_hidden() -> bool {
         locked().entry_controls_hidden
     }
@@ -159,11 +150,8 @@ mod platform {
 
         #[test]
         fn round_trips_through_the_on_disk_form() {
-            let prefs = ShellPrefs {
-                entry_search: "rust".to_string(),
-                nav_hidden: true,
-                entry_controls_hidden: false,
-            };
+            let prefs =
+                ShellPrefs { entry_search: "rust".to_string(), entry_controls_hidden: false };
             let encoded = serde_json::to_string(&prefs).expect("encode prefs");
 
             assert_eq!(decode(&encoded), prefs);
@@ -175,12 +163,12 @@ mod platform {
         #[test]
         fn every_kind_of_damaged_file_falls_back_to_defaults() {
             let cases = [
-                "",                         // 空文件（写到一半掉电）
-                "{",                        // 截断的 JSON
-                "null",                     // 合法 JSON，但不是对象
-                "[]",                       // 类型对不上
-                r#"{"entry_search": 7}"#,   // 字段类型对不上
-                r#"{"nav_hidden": "yes"}"#, // 同上
+                "",                                    // 空文件（写到一半掉电）
+                "{",                                   // 截断的 JSON
+                "null",                                // 合法 JSON，但不是对象
+                "[]",                                  // 类型对不上
+                r#"{"entry_search": 7}"#,              // 字段类型对不上
+                r#"{"entry_controls_hidden": "yes"}"#, // 同上；旧 nav_hidden 已是可忽略字段
             ];
 
             for case in cases {
@@ -197,12 +185,10 @@ mod platform {
                 ShellPrefs { entry_search: "rust".to_string(), ..ShellPrefs::default() }
             );
             assert_eq!(
-                decode(r#"{"nav_hidden": true, "future_field": {"a": 1}}"#),
-                ShellPrefs {
-                    entry_search: String::new(),
-                    nav_hidden: true,
-                    ..ShellPrefs::default()
-                }
+                decode(
+                    r#"{"entry_search": "中文 search", "nav_hidden": true, "future_field": {"a": 1}}"#
+                ),
+                ShellPrefs { entry_search: "中文 search".to_string(), ..ShellPrefs::default() }
             );
         }
 
@@ -217,9 +203,8 @@ mod platform {
 
 #[cfg(target_arch = "wasm32")]
 mod platform {
-    /// 键名沿用改动前的取值，老用户存在浏览器里的搜索词与导航状态继续生效。
+    /// 键名沿用改动前的取值，老用户存在浏览器里的搜索词继续生效；旧导航折叠键不再读取。
     const ENTRY_SEARCH_KEY: &str = "rssr-entry-search";
-    const NAV_HIDDEN_KEY: &str = "rssr-nav-hidden";
     const ENTRY_CONTROLS_HIDDEN_KEY: &str = "rssr-entry-controls-hidden";
 
     fn storage() -> Option<web_sys::Storage> {
@@ -235,18 +220,6 @@ mod platform {
     pub(super) fn remember_entry_search(value: &str) {
         if let Some(storage) = storage() {
             let _ = storage.set_item(ENTRY_SEARCH_KEY, value);
-        }
-    }
-
-    pub(super) fn initial_nav_hidden() -> bool {
-        storage()
-            .and_then(|storage| storage.get_item(NAV_HIDDEN_KEY).ok().flatten())
-            .is_some_and(|value| value == "1")
-    }
-
-    pub(super) fn remember_nav_hidden(hidden: bool) {
-        if let Some(storage) = storage() {
-            let _ = storage.set_item(NAV_HIDDEN_KEY, if hidden { "1" } else { "0" });
         }
     }
 
@@ -269,14 +242,6 @@ pub(crate) fn initial_entry_search() -> String {
 
 pub(crate) fn remember_entry_search(value: &str) {
     platform::remember_entry_search(value);
-}
-
-pub(crate) fn initial_nav_hidden() -> bool {
-    platform::initial_nav_hidden()
-}
-
-pub(crate) fn remember_nav_hidden(hidden: bool) {
-    platform::remember_nav_hidden(hidden);
 }
 
 pub(crate) fn initial_entry_controls_hidden() -> bool {

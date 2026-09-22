@@ -413,7 +413,7 @@ pub(super) fn render_entry_pagination_controls(facade: &EntriesPageFacade) -> El
 
     rsx! {
         nav { "data-layout": "entry-pagination", "aria-label": "文章分页",
-            div { "data-layout": "entry-pagination-summary",
+            div { class: "sr-only", "data-layout": "entry-pagination-summary",
                 "第 {facade.page_start()}-{facade.page_end()} 篇，共 {facade.visible_entries_len()} 篇"
             }
             div { "data-layout": "entry-pagination-actions",
@@ -421,20 +421,22 @@ pub(super) fn render_entry_pagination_controls(facade: &EntriesPageFacade) -> El
                     class: "button",
                     "data-variant": "secondary",
                     "data-action": "entry-page-previous",
+                    aria_label: "上一页", title: "上一页",
                     disabled: !facade.can_go_previous_page(),
                     onclick: move |_| previous_facade.go_to_previous_page(),
-                    "上一页"
+                    "‹"
                 }
                 span { "data-slot": "entry-pagination-status",
-                    "第 {facade.current_page()} / {facade.total_pages()} 页"
+                    "{facade.current_page()} / {facade.total_pages()}"
                 }
                 button {
                     class: "button",
                     "data-variant": "secondary",
                     "data-action": "entry-page-next",
+                    aria_label: "下一页", title: "下一页",
                     disabled: !facade.can_go_next_page(),
                     onclick: move |_| next_facade.go_to_next_page(),
-                    "下一页"
+                    "›"
                 }
             }
         }

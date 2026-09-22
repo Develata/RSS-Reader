@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use super::{intent::FeedsPageIntent, state::FeedsPageState};
-use crate::ui::{FeedsCommand, UiCommand};
+use crate::ui::{FeedsCommand, ShellCommand, UiCommand};
 
 pub(crate) fn dispatch_feeds_page_intent(
     mut state: Signal<FeedsPageState>,
@@ -34,12 +34,27 @@ pub(crate) fn reduce_feeds_page_intent(
             Vec::new()
         }
         FeedsPageIntent::AddFeedRequested => {
+            if state.adding_feed_url.is_some() {
+                return Vec::new();
+            }
             clear_pending_confirmations(state);
+            state.adding_feed_url = Some(state.feed_url.clone());
             vec![UiCommand::Feeds(FeedsCommand::AddFeed { raw_url: state.feed_url.clone() })]
+        }
+        FeedsPageIntent::AddFeedFinished { saved } => {
+            // Adding includes the first network refresh. Keep a new address typed while
+            // that request was running; only the successfully submitted draft is cleared.
+            if let Some(submitted_url) = state.adding_feed_url.take()
+                && saved
+                && state.feed_url == submitted_url
+            {
+                state.feed_url.clear();
+            }
+            Vec::new()
         }
         FeedsPageIntent::RefreshAllRequested => {
             clear_pending_confirmations(state);
-            vec![UiCommand::Feeds(FeedsCommand::RefreshAll)]
+            vec![UiCommand::Shell(ShellCommand::ManualRefresh)]
         }
         FeedsPageIntent::RefreshFeedRequested { feed_id, feed_title } => {
             clear_pending_confirmations(state);
@@ -209,7 +224,7 @@ mod tests {
         assert_eq!(effects.len(), 1);
         assert_eq!(state.pending_delete_feed, None);
         match &effects[0] {
-            UiCommand::Feeds(FeedsCommand::RefreshAll) => {}
+            UiCommand::Shell(ShellCommand::ManualRefresh) => {}
             other => panic!("unexpected effect: {other:?}"),
         }
     }

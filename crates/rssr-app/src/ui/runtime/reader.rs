@@ -65,8 +65,9 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
         },
         ReaderCommand::LocalizeEntryAssets { entry_id } => match UiServices::shared().await {
             Ok(services) => match services.reader().localize_entry_assets(entry_id).await {
-                Ok(true) => reader_intents(vec![ReaderPageIntent::BumpReload]),
-                Ok(false) => Vec::new(),
+                // 缓存写回供下次打开使用。即使仍在同一篇，也不替换正在阅读的 HTML：
+                // 这会销毁原生选区、图片焦点及当前滚动位置。
+                Ok(_) => Vec::new(),
                 Err(error) => {
                     tracing::debug!(entry_id, error = %error, "当前文章正文图片按需本地化未能完成");
                     Vec::new()

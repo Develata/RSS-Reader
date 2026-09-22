@@ -13,13 +13,21 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
                 div { "data-slot": "feed-compose-card-header",
                     h3 { "data-slot": "card-title", "新增订阅" }
                 }
-                div { "data-layout": "feed-form",
+                form {
+                    "data-layout": "feed-form",
+                    onsubmit: move |event| {
+                        event.prevent_default();
+                        add_facade.add_feed();
+                    },
                     label { class: "sr-only", r#for: "feed-url-input", "订阅地址" }
                     input {
                         id: "feed-url-input",
                         name: "feed_url",
                         class: "text-input",
                         "data-field": "feed-url-input",
+                        inputmode: "url",
+                        autocapitalize: "off",
+                        spellcheck: "false",
                         value: "{facade.feed_url()}",
                         placeholder: "https://example.com/feed.xml",
                         // 这里刻意**不**拦截 Ctrl/Cmd+V：输入框本身的原生粘贴在所有平台都可用。
@@ -33,13 +41,16 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
                         class: "button",
                         "data-variant": "primary",
                         "data-action": "add-feed",
-                        onclick: move |_| add_facade.add_feed(),
-                        "添加订阅"
+                        r#type: "submit",
+                        disabled: facade.is_adding_feed(),
+                        "aria-busy": facade.is_adding_feed(),
+                        if facade.is_adding_feed() { "正在添加…" } else { "添加订阅" }
                     }
                     button {
                         class: "button",
                         "data-variant": "secondary",
                         "data-action": "refresh-all",
+                        r#type: "button",
                         onclick: move |_| facade.refresh_all(),
                         "刷新全部"
                     }

@@ -40,6 +40,7 @@ pub struct AppServices {
     use_cases: AppUseCases,
     image_localization_worker: ImageLocalizationWorker,
     auto_refresh_started: AtomicBool,
+    refresh_flight: super::refresh_flight::RefreshFlight,
     /// 启动时按实际生效的 journal 模式确定的刷新并发度。
     ///
     /// 不能假定 WAL 启用成功：`PRAGMA journal_mode=WAL` 在不支持共享内存的文件系统上
@@ -123,6 +124,7 @@ impl AppServices {
                         reader_asset_localizer: BodyAssetLocalizer::for_reader_entry(),
                     },
                     auto_refresh_started: AtomicBool::new(false),
+                    refresh_flight: super::refresh_flight::RefreshFlight::default(),
                     refresh_concurrency,
                 }))
             })
@@ -223,13 +225,18 @@ impl RefreshPort for RefreshCapability {
     }
 
     async fn refresh_all(&self) -> anyhow::Result<RefreshAllExecutionOutcome> {
-        let outcome = self
-            .host
-            .use_cases
-            .refresh_service
-            .refresh_all(RefreshAllInput { max_concurrency: self.host.refresh_concurrency })
-            .await?;
-        self.handle_refresh_all_outcome(outcome)
+        self.host
+            .refresh_flight
+            .run(async {
+                let outcome = self
+                    .host
+                    .use_cases
+                    .refresh_service
+                    .refresh_all(RefreshAllInput { max_concurrency: self.host.refresh_concurrency })
+                    .await?;
+                self.handle_refresh_all_outcome(outcome)
+            })
+            .await
     }
 
     async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<RefreshFeedExecutionOutcome> {

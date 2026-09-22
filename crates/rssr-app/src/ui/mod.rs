@@ -4,6 +4,7 @@ mod runtime;
 mod shell;
 mod shell_browser;
 mod shell_prefs;
+mod shell_state;
 mod snapshot;
 
 pub(crate) use self::{

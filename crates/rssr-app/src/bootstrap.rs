@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use rssr_application::{RemoteConfigPullOutcome, RemoteConfigPushOutcome};
 
+mod refresh_flight;
+
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "bootstrap/native.rs"]
 mod imp;

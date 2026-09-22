@@ -14,6 +14,7 @@ pub(crate) enum FeedsPageIntent {
     ConfigTextChanged(String),
     OpmlTextChanged(String),
     AddFeedRequested,
+    AddFeedFinished { saved: bool },
     RefreshAllRequested,
     RefreshFeedRequested { feed_id: i64, feed_title: String },
     RemoveFeedRequested { feed_id: i64, feed_title: String },

@@ -31,16 +31,17 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.current_page = FIRST_PAGE_NUMBER;
             state.preferences_loaded = true;
         }
-        EntriesPageIntent::SetFeeds(feeds) => state.feeds = feeds,
+        EntriesPageIntent::SetFeeds(feeds) => state.feeds = Arc::new(feeds),
         EntriesPageIntent::SetEntries { entries, archived_count } => {
             state.status = format!("共 {} 篇文章。", entries.len());
             state.status_tone = "info".to_string();
-            state.entries = entries.into_iter().map(Arc::new).collect();
+            state.entries = Arc::new(entries.into_iter().map(Arc::new).collect());
             state.archived_count = archived_count;
             clamp_current_page(state);
         }
         EntriesPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
-            if let Some(entry) = state.entries.iter_mut().find(|entry| entry.id == entry_id) {
+            let entries = Arc::make_mut(&mut state.entries);
+            if let Some(entry) = entries.iter_mut().find(|entry| entry.id == entry_id) {
                 // 只有被点的那一条需要真正写入，其余条目继续共享原有 Arc。
                 let entry = Arc::make_mut(entry);
                 if let Some(is_read) = is_read {
@@ -52,9 +53,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             }
             let read_filter = state.read_filter;
             let starred_filter = state.starred_filter;
-            state
-                .entries
-                .retain(|entry| matches_current_filters(read_filter, starred_filter, entry));
+            entries.retain(|entry| matches_current_filters(read_filter, starred_filter, entry));
             clamp_current_page(state);
         }
         EntriesPageIntent::SetStatus { message, tone } => {
@@ -83,9 +82,11 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         }
         EntriesPageIntent::SetCurrentPage(page) => {
             state.current_page = page.max(FIRST_PAGE_NUMBER);
+            clamp_current_page(state);
         }
         EntriesPageIntent::GoToNextPage => {
-            state.current_page = state.current_page.saturating_add(1)
+            state.current_page = state.current_page.saturating_add(1);
+            clamp_current_page(state);
         }
         EntriesPageIntent::GoToPreviousPage => {
             state.current_page = state.current_page.saturating_sub(1).max(FIRST_PAGE_NUMBER);
@@ -152,7 +153,7 @@ mod tests {
     fn patch_entry_flags_removes_entry_that_no_longer_matches_filter() {
         let mut state = EntriesPageState::new(true);
         state.read_filter = ReadFilter::UnreadOnly;
-        state.entries = vec![Arc::new(entry(1, false))];
+        state.entries = vec![Arc::new(entry(1, false))].into();
 
         reduce_entries_page_intent(
             &mut state,
@@ -195,9 +196,49 @@ mod tests {
     #[test]
     fn changing_page_updates_current_page() {
         let mut state = EntriesPageState::new(true);
+        state.entries_page_size = 1;
+        state.entries = vec![Arc::new(entry(1, false)), Arc::new(entry(2, false))].into();
 
         reduce_entries_page_intent(&mut state, EntriesPageIntent::SetCurrentPage(2));
 
         assert_eq!(state.current_page, 2);
+    }
+
+    #[test]
+    fn pagination_clamps_and_preserves_filters_and_source_selection() {
+        let mut state = EntriesPageState::new(true);
+        state.entries_page_size = 1;
+        state.entries = vec![Arc::new(entry(1, false)), Arc::new(entry(2, false))].into();
+        state.selected_feed_urls = vec!["https://example.com/中文 feed".into()];
+        state.read_filter = ReadFilter::UnreadOnly;
+        let workspace = state.clone();
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::GoToPreviousPage);
+        assert_eq!(state.current_page, 1);
+        for _ in 0..3 {
+            reduce_entries_page_intent(&mut state, EntriesPageIntent::GoToNextPage);
+        }
+        assert_eq!(state.current_page, 2);
+        assert_eq!(state.read_filter, workspace.read_filter);
+        assert_eq!(state.selected_feed_urls, workspace.selected_feed_urls);
+        assert_eq!(state.grouping_mode, workspace.grouping_mode);
+    }
+
+    #[test]
+    fn flag_updates_preserve_previous_shared_snapshot() {
+        let mut state = EntriesPageState::new(true);
+        state.entries = vec![Arc::new(entry(1, false)), Arc::new(entry(2, false))].into();
+        let snapshot = state.clone();
+        assert!(Arc::ptr_eq(&state.entries, &snapshot.entries));
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::PatchEntryFlags {
+                entry_id: 1,
+                is_read: Some(true),
+                is_starred: None,
+            },
+        );
+        assert!(!snapshot.entries[0].is_read);
+        assert!(state.entries[0].is_read);
+        assert!(Arc::ptr_eq(&state.entries[1], &snapshot.entries[1]));
     }
 }

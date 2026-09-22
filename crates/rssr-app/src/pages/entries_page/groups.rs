@@ -176,12 +176,12 @@ pub(crate) fn group_entries_by_source_tree<'a>(
     entries: &[EntryGroupKey<'a>],
     page_size: usize,
 ) -> Vec<EntrySourceGroup> {
-    let mut groups: BTreeMap<&'a str, Vec<EntryGroupKey<'a>>> = BTreeMap::new();
-    let mut latest_seen: BTreeMap<&'a str, Option<OffsetDateTime>> = BTreeMap::new();
+    let mut groups: BTreeMap<&'a str, (Option<OffsetDateTime>, Vec<EntryGroupKey<'a>>)> =
+        BTreeMap::new();
 
     for entry in entries {
-        groups.entry(entry.feed_title).or_default().push(*entry);
-        let latest = latest_seen.entry(entry.feed_title).or_insert(None);
+        let (latest, items) = groups.entry(entry.feed_title).or_default();
+        items.push(*entry);
         if latest.is_none() || entry.published_at > *latest {
             *latest = entry.published_at;
         }
@@ -189,8 +189,7 @@ pub(crate) fn group_entries_by_source_tree<'a>(
 
     let mut grouped = groups
         .into_iter()
-        .map(|(feed_title, items)| {
-            let latest = latest_seen.get(feed_title).and_then(|value| *value);
+        .map(|(feed_title, (latest, items))| {
             (
                 latest,
                 EntrySourceGroup {
@@ -361,17 +360,19 @@ pub(crate) fn group_anchor_id(title: &str) -> String {
 }
 
 fn group_date_buckets(entries: &[EntryGroupKey<'_>], page_size: usize) -> Vec<EntryDateGroup> {
-    let mut groups: BTreeMap<String, Vec<EntryGroupKey<'_>>> = BTreeMap::new();
+    let mut groups: BTreeMap<Option<time::Date>, Vec<EntryGroupKey<'_>>> = BTreeMap::new();
 
     for entry in entries {
-        let key = format_date_utc(entry.published_at).unwrap_or_else(|| "未标注日期".to_string());
+        let key = entry.published_at.map(|at| at.to_offset(UtcOffset::UTC).date());
         groups.entry(key).or_default().push(*entry);
     }
 
     groups
         .into_iter()
         .rev()
-        .map(|(date, items)| {
+        .map(|(_, items)| {
+            let date =
+                format_date_utc(items[0].published_at).unwrap_or_else(|| "未标注日期".to_string());
             let anchor_id = group_anchor_id(&format!("{}-{}", date, items[0].id));
             EntryDateGroup {
                 anchor_id,
@@ -388,10 +389,12 @@ fn group_date_sources<'a>(
     entries: &[EntryGroupKey<'a>],
     page_size: usize,
 ) -> Vec<EntryDateSourceGroup> {
-    let mut groups: BTreeMap<&'a str, Vec<EntryGroupKey<'a>>> = BTreeMap::new();
+    // Leaves only expose card references. Build that final vector directly instead of
+    // allocating a temporary vector of complete keys and copying it into a second one.
+    let mut groups: BTreeMap<&'a str, Vec<EntryCardRef>> = BTreeMap::new();
 
     for entry in entries {
-        groups.entry(entry.feed_title).or_default().push(*entry);
+        groups.entry(entry.feed_title).or_default().push(EntryCardRef::from_key(entry));
     }
 
     groups
@@ -403,7 +406,7 @@ fn group_date_sources<'a>(
                 title: feed_title.to_string(),
                 subtitle: format!("{} 篇文章", items.len()),
                 target_page: page_for_index(items[0].index, page_size),
-                entry_cards: items.iter().map(EntryCardRef::from_key).collect(),
+                entry_cards: items,
             }
         })
         .collect()
@@ -413,7 +416,7 @@ fn group_source_months(
     entries: &[EntryGroupKey<'_>],
     page_size: usize,
 ) -> Vec<EntrySourceMonthGroup> {
-    let mut groups = MonthKeyedEntries::new();
+    let mut groups: BTreeMap<(i32, u8), Vec<EntryCardRef>> = BTreeMap::new();
     let mut undated_entries = Vec::new();
 
     for entry in entries {
@@ -422,9 +425,9 @@ fn group_source_months(
             groups
                 .entry((published_at.year(), published_at.month() as u8))
                 .or_default()
-                .push(*entry);
+                .push(EntryCardRef::from_key(entry));
         } else {
-            undated_entries.push(*entry);
+            undated_entries.push(EntryCardRef::from_key(entry));
         }
     }
 
@@ -439,7 +442,7 @@ fn group_source_months(
                 title,
                 subtitle: format!("{} 篇文章", items.len()),
                 target_page: page_for_index(items[0].index, page_size),
-                entry_cards: items.iter().map(EntryCardRef::from_key).collect(),
+                entry_cards: items,
             }
         })
         .collect::<Vec<_>>();
@@ -452,7 +455,7 @@ fn group_source_months(
             title,
             subtitle: format!("{} 篇文章", undated_entries.len()),
             target_page: page_for_index(undated_entries[0].index, page_size),
-            entry_cards: undated_entries.iter().map(EntryCardRef::from_key).collect(),
+            entry_cards: undated_entries,
         });
     }
 
@@ -545,6 +548,51 @@ mod tests {
         assert_eq!(groups[0].target_page, 1);
         assert_eq!(groups[1].title, "Alpha");
         assert_eq!(groups[1].target_page, 1);
+    }
+
+    #[test]
+    fn source_buckets_preserve_latest_sort_ties_missing_dates_and_leaf_order() {
+        let entries = vec![
+            key(7, 1, "Zulu", Some("2026-04-03T08:00:00Z")),
+            key(8, 2, "Alpha", Some("2026-04-01T08:00:00Z")),
+            key(9, 3, "Beta", None),
+            key(10, 4, "Alpha", Some("2026-04-03T10:00:00+02:00")),
+            key(11, 5, "Beta", Some("2026-03-01T08:00:00Z")),
+            key(12, 6, "未标日期", None),
+        ];
+        let groups = group_entries_by_source_tree(&entries, 4);
+
+        assert_eq!(
+            groups.iter().map(|group| group.title.as_str()).collect::<Vec<_>>(),
+            vec!["Alpha", "Zulu", "Beta", "未标日期"]
+        );
+        assert_eq!(groups[0].target_page, 3);
+        assert_eq!(groups[0].months[0].subtitle, "2 篇文章");
+        assert_eq!(cards(&groups[0].months[0].entry_cards), vec![(8, 2), (10, 4)]);
+        assert_eq!(groups[2].months[0].title, "2026 年 03 月");
+        assert_eq!(cards(&groups[2].months[0].entry_cards), vec![(11, 5)]);
+        assert_eq!(groups[2].months[1].title, "未标注日期");
+        assert_eq!(cards(&groups[2].months[1].entry_cards), vec![(9, 3)]);
+        assert_eq!(groups[3].months[0].target_page, 4);
+    }
+
+    #[test]
+    fn date_source_leaves_preserve_utc_day_and_absolute_indices() {
+        let entries = vec![
+            key(13, 21, "来源 甲", Some("2026-04-02T00:30:00+02:00")),
+            key(14, 22, "来源 甲", Some("2026-04-01T22:00:00Z")),
+            key(15, 23, "来源 乙", Some("2026-04-01T21:00:00Z")),
+        ];
+        let groups = group_entries_by_time_tree(&entries, 4);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].dates.len(), 1);
+        let date = &groups[0].dates[0];
+        assert_eq!(date.title, "2026-04-01");
+        assert_eq!(date.subtitle, "3 篇文章");
+        let source = date.sources.iter().find(|source| source.title == "来源 甲").unwrap();
+        assert_eq!(source.target_page, 4);
+        assert_eq!(source.subtitle, "2 篇文章");
+        assert_eq!(cards(&source.entry_cards), vec![(13, 21), (14, 22)]);
     }
 
     #[test]

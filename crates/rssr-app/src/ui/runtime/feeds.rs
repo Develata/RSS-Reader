@@ -22,48 +22,17 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
-        FeedsCommand::AddFeed { raw_url } => match UiServices::shared().await {
-            Ok(services) => match services.feeds().add_subscription(&raw_url).await {
-                Ok(AddSubscriptionOutcome::SavedAndRefreshed) => feeds_intents(vec![
-                    FeedsPageIntent::FeedUrlChanged(String::new()),
-                    FeedsPageIntent::SetStatus {
-                        message: "订阅已保存并完成首次刷新。".to_string(),
-                        tone: "info".to_string(),
-                    },
-                    FeedsPageIntent::BumpReload,
-                ]),
-                Ok(AddSubscriptionOutcome::SavedRefreshFailed { message }) => feeds_intents(vec![
-                    FeedsPageIntent::FeedUrlChanged(String::new()),
-                    FeedsPageIntent::SetStatus {
-                        message: format!("订阅已保存，但首次刷新失败：{message}"),
-                        tone: "error".to_string(),
-                    },
-                    FeedsPageIntent::BumpReload,
-                ]),
-                Err(err) => feeds_status_error(format!("保存订阅失败：{err}")),
-            },
-            Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
-        },
-        FeedsCommand::RefreshAll => match UiServices::shared().await {
-            Ok(services) => match services.feeds().refresh_all().await {
-                Ok(outcome) => feeds_intents(vec![
-                    FeedsPageIntent::SetStatus {
-                        message: outcome.failure_message.as_ref().map_or_else(
-                            || "刷新完成。".to_string(),
-                            |failure| format!("刷新完成，但部分订阅失败：{failure}"),
-                        ),
-                        tone: if outcome.failure_message.is_some() {
-                            "error".to_string()
-                        } else {
-                            "info".to_string()
-                        },
-                    },
-                    FeedsPageIntent::BumpReload,
-                ]),
-                Err(err) => feeds_status_error(format!("刷新失败：{err}")),
-            },
-            Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
-        },
+        FeedsCommand::AddFeed { raw_url } => {
+            let result = match UiServices::shared().await {
+                Ok(services) => services
+                    .feeds()
+                    .add_subscription(&raw_url)
+                    .await
+                    .map_err(|err| format!("{err:#}")),
+                Err(err) => Err(format!("初始化应用失败：{err}")),
+            };
+            add_feed_result(result)
+        }
         FeedsCommand::RefreshFeed { feed_id, feed_title } => match UiServices::shared().await {
             Ok(services) => match services.feeds().refresh_feed(feed_id).await {
                 Ok(outcome) => feeds_intents(vec![
@@ -191,4 +160,57 @@ fn feeds_status_error(message: impl Into<String>) -> Vec<UiIntent> {
 
 fn opml_import_summary(outcome: &OpmlImportOutcome) -> String {
     format!("{} 个订阅", outcome.imported_feed_count)
+}
+
+fn add_feed_result(result: Result<AddSubscriptionOutcome, String>) -> Vec<UiIntent> {
+    let (saved, message, tone) = match result {
+        Ok(AddSubscriptionOutcome::SavedAndRefreshed) => {
+            (true, "订阅已保存并完成首次刷新。".to_string(), "info")
+        }
+        Ok(AddSubscriptionOutcome::SavedRefreshFailed { message }) => {
+            (true, format!("订阅已保存，但首次刷新失败：{message}"), "error")
+        }
+        Err(message) => (false, message, "error"),
+    };
+    let mut intents = vec![
+        FeedsPageIntent::AddFeedFinished { saved },
+        FeedsPageIntent::SetStatus { message, tone: tone.to_string() },
+    ];
+    if saved {
+        intents.push(FeedsPageIntent::BumpReload);
+    }
+    feeds_intents(intents)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_add_outcome_releases_gate_and_only_saved_subscriptions_reload() {
+        for (result, expected_saved, expected_tone) in [
+            (Ok(AddSubscriptionOutcome::SavedAndRefreshed), true, "info"),
+            (
+                Ok(AddSubscriptionOutcome::SavedRefreshFailed { message: "offline".into() }),
+                true,
+                "error",
+            ),
+            (Err("invalid feed URL".into()), false, "error"),
+        ] {
+            let intents = add_feed_result(result)
+                .into_iter()
+                .filter_map(UiIntent::into_feeds_page_intent)
+                .collect::<Vec<_>>();
+            assert!(
+                matches!(intents.first(), Some(FeedsPageIntent::AddFeedFinished { saved }) if *saved == expected_saved)
+            );
+            assert!(
+                matches!(&intents[1], FeedsPageIntent::SetStatus { tone, .. } if tone == expected_tone)
+            );
+            assert_eq!(
+                intents.iter().any(|intent| matches!(intent, FeedsPageIntent::BumpReload)),
+                expected_saved
+            );
+        }
+    }
 }

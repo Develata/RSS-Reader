@@ -17,6 +17,10 @@ impl FeedsPageFacade {
         &self.snapshot.feed_url
     }
 
+    pub(crate) fn is_adding_feed(&self) -> bool {
+        self.snapshot.adding_feed_url.is_some()
+    }
+
     pub(crate) fn set_feed_url(&self, value: String) {
         self.session.set_feed_url(value);
     }

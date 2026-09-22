@@ -201,7 +201,7 @@ body:has(.theme-dark) {
 [data-layout="reader-page"] {
   margin-top: 0;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 18px 24px;
 }
 
@@ -217,7 +217,8 @@ body:has(.theme-dark) {
   gap: 10px;
   align-content: start;
   align-self: start;
-  padding: 24px 22px;
+  /* Keep the shared five-icon Reader row and expanded search usable in the rail. */
+  padding: 8px;
   border-radius: 26px;
   background: var(--atlas-rail-bg);
   box-shadow: var(--atlas-rail-shadow);
@@ -225,9 +226,8 @@ body:has(.theme-dark) {
 
 [data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-layout="app-nav-links"],
 [data-layout="reader-page"] > [data-layout="app-nav-shell"] [data-layout="app-nav-links"] {
-  display: grid;
-  width: 100%;
-  gap: 10px;
+  display: flex;
+  gap: 6px;
 }
 
 [data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-nav],
@@ -279,7 +279,8 @@ body:has(.theme-dark) {
 
   [data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"],
   [data-layout="reader-page"] > [data-layout="app-nav-shell"] {
-    position: static;
+    position: sticky;
+    top: calc(8px + var(--safe-area-top));
     margin-bottom: 20px;
   }
 
@@ -287,6 +288,6 @@ body:has(.theme-dark) {
   [data-layout="reader-page"] > [data-layout="app-nav-shell"] [data-layout="app-nav-links"] {
     position: static;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 }

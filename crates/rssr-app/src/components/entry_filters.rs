@@ -96,7 +96,7 @@ pub fn EntryFilters(
             if !available_sources.is_empty() {
                 div { "data-layout": "entry-filters-sources",
                     p { "data-slot": "entry-filters-sources-label", "按来源筛选" }
-                    div { "data-layout": "entry-filters-source-grid",
+                    div { "data-layout": "entry-filters-source-grid", role: "group", aria_label: "选择来源",
                         for (_feed_id, title, url) in available_sources {
                             {
                                 let is_selected = selected_feed_urls.contains(&url);
@@ -113,7 +113,6 @@ pub fn EntryFilters(
                                         "aria-label": "{title}",
                                         title: "{title}",
                                         input {
-                                            class: "sr-only",
                                             r#type: "checkbox",
                                             "data-field": "entry-source-filter",
                                             checked: is_selected,

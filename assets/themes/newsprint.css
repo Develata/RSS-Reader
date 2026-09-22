@@ -249,7 +249,7 @@ body:has(.theme-dark) {
 
 [data-page="reader"] [data-layout="reader-body"] {
   font-family: var(--font-display);
-  font-size: 1.07rem;
+  font-size: calc(1.07rem * var(--reader-font-scale, 1));
   line-height: 1.92;
   text-align: justify;
   hyphens: auto;

@@ -245,10 +245,12 @@ impl EntriesPageFacade {
 
     pub(crate) fn go_to_previous_page(&self) {
         self.session.dispatch(EntriesPageIntent::GoToPreviousPage);
+        super::browser_interactions::scroll_to_page_start();
     }
 
     pub(crate) fn go_to_next_page(&self) {
         self.session.dispatch(EntriesPageIntent::GoToNextPage);
+        super::browser_interactions::scroll_to_page_start();
     }
 
     pub(crate) fn navigate_to_directory_target(&self, target_page: u32, anchor_id: String) {

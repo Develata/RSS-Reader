@@ -375,7 +375,7 @@ body:has(.theme-dark)::before {
 /* ---- 阅读页 ---- */
 
 [data-page="reader"] [data-layout="reader-body"] {
-  font-size: 1.12rem;
+  font-size: calc(1.12rem * var(--reader-font-scale, 1));
   line-height: 1.88;
 }
 

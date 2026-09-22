@@ -10,40 +10,6 @@
     border-radius: var(--radius-card);
   }
 
-  [data-layout="app-nav-shell"] {
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: var(--radius-control);
-  }
-
-  [data-layout="app-nav-topline"] {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 6px;
-  }
-
-  [data-layout="app-nav-search"] {
-    min-width: 0;
-  }
-
-  [data-layout="app-nav-links"] {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-  }
-
-  [data-layout="app-nav-links"] [data-nav] {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    min-height: 44px;
-    text-align: center;
-  }
-
-  [data-layout="app-nav-reveal"] {
-    justify-content: flex-end;
-  }
-
   [data-slot="page-title"] {
     font-size: 1.7rem;
   }
@@ -55,6 +21,21 @@
 
   [data-slot="page-header-actions"] .icon-link-button {
     align-self: flex-end;
+  }
+
+  [data-page="feeds"] > [data-layout="stats-grid"][data-layout-variant="airy"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  [data-page="feeds"] > [data-layout="stats-grid"][data-layout-variant="airy"] > [data-layout="stat-card"] {
+    min-width: 0;
+    padding: 12px;
+  }
+
+  [data-page="feeds"] [data-slot="stat-card-label"] {
+    overflow-wrap: anywhere;
   }
 
   [data-layout="feed-form"] {
@@ -150,7 +131,7 @@
 
   [data-layout="entry-filters-source-grid"] {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 
   [data-layout="entry-source-group"] [data-layout="entry-group-header"],
@@ -224,7 +205,7 @@
   }
 
   [data-layout="reader-body"] {
-    font-size: 1rem;
+    font-size: calc(1rem * var(--reader-font-scale, 1));
     line-height: 1.75;
   }
 
@@ -260,66 +241,10 @@
     width: min(calc(100% - 12px), var(--shell-max-width));
   }
 
-  [data-layout="app-nav-shell"],
   [data-page]:not([data-page="reader"]),
   [data-layout="reader-page"] {
     padding: 16px 14px;
     border-radius: var(--radius-card-sm);
-  }
-
-  [data-layout="app-nav-shell"] {
-    padding: 7px 8px;
-    gap: 6px;
-  }
-
-  [data-layout="app-nav-reveal"] {
-    margin-bottom: 8px;
-  }
-
-  [data-slot="app-nav-reveal-button"] {
-    min-height: 32px;
-    min-width: 32px;
-    padding: 7px;
-  }
-
-  [data-slot="app-nav-brand"] {
-    padding-right: 0;
-  }
-
-  [data-slot="app-nav-brand-name"] {
-    display: none;
-  }
-
-  [data-slot="app-nav-brand-mark"] {
-    width: 22px;
-    height: 22px;
-    font-size: 0.72rem;
-  }
-
-  [data-layout="app-nav-search"] {
-    padding: 0 8px;
-    border-radius: 12px;
-  }
-
-  [data-slot="app-nav-search-input"] {
-    padding: 7px 0;
-    font-size: 0.9rem;
-  }
-
-  [data-slot="app-nav-search-hint"] {
-    display: none;
-  }
-
-  [data-layout="app-nav-links"] [data-nav] {
-    min-height: 44px;
-    padding: 7px 8px;
-    font-size: 0.88rem;
-  }
-
-  [data-slot="app-nav-collapse"] {
-    width: 44px;
-    height: 44px;
-    font-size: 0.92rem;
   }
 
   [data-slot="page-title"] {
@@ -336,7 +261,7 @@
   }
 
   [data-layout="reader-body"] {
-    font-size: 0.97rem;
+    font-size: calc(0.97rem * var(--reader-font-scale, 1));
   }
 
   [data-slot="reader-title"] {

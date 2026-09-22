@@ -52,7 +52,6 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
                 state.is_starred = is_starred;
             }
         }
-        ReaderPageIntent::BumpReload => state.reload_tick += 1,
     }
 }
 
@@ -151,7 +150,7 @@ mod tests {
         assert_eq!(state.source, before.source);
         assert_eq!(state.published_at, before.published_at);
         assert_eq!(state.navigation_state, before.navigation_state);
-        assert_eq!(state.reload_tick, before.reload_tick, "不应触发整页重载");
+        assert_eq!(state.load_generation, before.load_generation, "不应触发整页重载");
         assert_eq!(
             state.asset_localization_requested, before.asset_localization_requested,
             "不应把正文图片本地化重新排一遍"

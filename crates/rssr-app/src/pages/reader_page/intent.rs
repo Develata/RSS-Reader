@@ -30,5 +30,4 @@ pub(crate) enum ReaderPageIntent {
         is_read: Option<bool>,
         is_starred: Option<bool>,
     },
-    BumpReload,
 }

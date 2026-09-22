@@ -75,79 +75,74 @@ pub fn App() -> Element {
 }
 
 #[component]
-pub fn AppNav() -> Element {
+pub fn AppNav(on_back: Option<EventHandler<()>>) -> Element {
     let shell = use_app_nav_shell();
-    let show_nav_shell = shell.clone();
-    let hide_nav_shell = shell.clone();
-    let submit_search_shell = shell.clone();
-    let update_search_shell = shell.clone();
-
-    if shell.nav_hidden() {
-        return rsx! {
-            div { "data-layout": "app-nav-reveal", "data-state": "{shell.nav_state()}",
-                button {
-                    "data-slot": "app-nav-reveal-button",
-                    "data-action": "show-top-nav",
-                    onclick: move |_| {
-                        show_nav_shell.show_nav();
-                    },
-                    span { "data-slot": "app-nav-reveal-icon", "≡" }
-                }
-            }
-        };
-    }
+    let home_shell = shell.clone();
+    let mut toggle_shell = shell.clone();
+    let mut escape_shell = shell.clone();
+    let submit_shell = shell.clone();
+    let update_shell = shell.clone();
+    let refresh = shell.refresh_state();
+    let navigator = use_navigator();
 
     rsx! {
-        nav { "data-layout": "app-nav-shell", "data-state": "{shell.nav_state()}",
+        nav { "data-layout": "app-nav-shell", "data-state": shell.nav_state(), aria_label: "主导航",
             div { "data-layout": "app-nav-topline",
-                Link {
-                    "data-slot": "app-nav-brand",
-                    to: AppRoute::EntriesPage {},
-                    aria_label: APP_NAME,
-                    span { "data-slot": "app-nav-brand-mark", "R" }
-                    span { "data-slot": "app-nav-brand-name", "{APP_NAME}" }
-                }
-                div { "data-layout": "app-nav-links",
-                    Link { "data-nav": "feeds", to: AppRoute::FeedsPage {}, "订阅" }
-                    Link { "data-nav": "entries", to: AppRoute::EntriesPage {}, "文章" }
-                    Link { "data-nav": "settings", to: AppRoute::SettingsPage {}, "设置" }
+                if shell.is_reader() {
+                    button {
+                        class: "icon-link-button", "data-nav": "back", r#type: "button",
+                        aria_label: "返回", title: "返回",
+                        onclick: move |_| {
+                            if let Some(on_back) = on_back { on_back.call(()); }
+                            else { crate::hooks::use_mobile_back_navigation::navigate_back(navigator, Some(AppRoute::EntriesPage {})); }
+                        },
+                        span { aria_hidden: "true", "←" }
+                    }
                 }
                 button {
-                    "data-slot": "app-nav-collapse",
-                    "data-action": "hide-top-nav",
-                    r#type: "button",
-                    aria_label: "收起顶部导航",
-                    title: "收起顶部导航",
-                    onclick: move |_| {
-                        hide_nav_shell.hide_nav();
-                    },
-                    "×"
+                    class: "icon-link-button", "data-slot": "app-nav-brand",
+                    "data-action": "activate-home", "data-refresh-state": refresh.phase(),
+                    r#type: "button", aria_label: "Read / 首页", title: "Read / 首页；在首页再次点击刷新全部订阅",
+                    aria_busy: refresh.is_refreshing(),
+                    onclick: move |_| home_shell.activate_home(),
+                    span { "data-slot": "app-nav-brand-mark", aria_hidden: "true", "R" }
+                }
+                button {
+                    class: "icon-link-button", "data-action": "toggle-search", r#type: "button",
+                    aria_label: "搜索", title: "展开 / 收起搜索", aria_expanded: shell.is_search(),
+                    aria_controls: "app-nav-search-input",
+                    onclick: move |_| toggle_shell.toggle_search(),
+                    svg { width: "20", height: "20", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", "aria-hidden": "true",
+                        circle { cx: "10", cy: "10", r: "6" }
+                        path { d: "m15 15 6 6" }
+                    }
+                }
+                if shell.is_search() {
+                    form {
+                        "data-layout": "app-nav-search",
+                        onsubmit: move |event| { event.prevent_default(); submit_shell.submit_search(); },
+                        input {
+                            id: "app-nav-search-input", "data-slot": "app-nav-search-input", "data-field": "entry-search",
+                            r#type: "search", placeholder: "搜索文章标题", aria_label: "搜索文章标题",
+                            value: shell.entry_search(),
+                            onmounted: move |event| async move { let _ = event.set_focus(true).await; },
+                            oninput: move |event| update_shell.set_entry_search(event.value()),
+                            onkeydown: move |event| {
+                                if event.key() == Key::Escape && event.modifiers().is_empty() && !event.is_composing() {
+                                    escape_shell.close_search();
+                                    document::eval("document.querySelector('[data-action=toggle-search]')?.focus()");
+                                }
+                            },
+                        }
+                    }
+                } else {
+                    div { "data-layout": "app-nav-links",
+                        Link { class: "icon-link-button", "data-nav": "feeds", to: AppRoute::FeedsPage {}, aria_label: "订阅", title: "Subscribe / 订阅", span { aria_hidden: "true", "S" } }
+                        Link { class: "icon-link-button", "data-nav": "settings", to: AppRoute::SettingsPage {}, aria_label: "设置", title: "设置", span { aria_hidden: "true", "⚙" } }
+                    }
                 }
             }
-            form {
-                "data-layout": "app-nav-search",
-                onsubmit: move |event| {
-                    event.prevent_default();
-                    submit_search_shell.submit_search();
-                },
-                label {
-                    "data-slot": "app-nav-search-icon",
-                    r#for: "app-nav-search-input",
-                    "⌕"
-                }
-                input {
-                    id: "app-nav-search-input",
-                    "data-slot": "app-nav-search-input",
-                    "data-field": "entry-search",
-                    r#type: "search",
-                    placeholder: "搜索文章标题",
-                    value: "{shell.entry_search()}",
-                    oninput: move |event| {
-                        update_search_shell.set_entry_search(event.value());
-                    },
-                }
-                span { "data-slot": "app-nav-search-hint", "Enter" }
-            }
+            output { "data-slot": "manual-refresh-status", "data-state": refresh.phase(), role: "status", aria_live: "polite", "{refresh.label()}" }
         }
     }
 }

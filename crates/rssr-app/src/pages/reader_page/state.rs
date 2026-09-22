@@ -24,7 +24,8 @@ pub(crate) struct ReaderPageState {
     pub(crate) navigation_state: ReaderNavigation,
     pub(crate) is_read: bool,
     pub(crate) is_starred: bool,
-    pub(crate) reload_tick: u64,
+    /// 每次加载递增：A → B → A 后，第一次 A 的结果也必须视为过期。
+    pub(crate) load_generation: u64,
     pub(crate) asset_localization_requested: bool,
     pub(crate) status: String,
     pub(crate) status_tone: String,
@@ -43,7 +44,7 @@ impl ReaderPageState {
             navigation_state: ReaderNavigation::default(),
             is_read: false,
             is_starred: false,
-            reload_tick: 0,
+            load_generation: 0,
             asset_localization_requested: false,
             status: String::new(),
             status_tone: "info".to_string(),
@@ -53,11 +54,11 @@ impl ReaderPageState {
 
     /// 开始加载 `entry_id`。
     ///
-    /// 只有在真的换了文章时才清空状态提示：切换已读/收藏也会走一次重载，
-    /// 如果无条件清空，「已标记为已读」这类提示会在一次 DB 读的时间内就被抹掉。
+    /// 同一篇的显式重载保留提示，切换文章时清空提示。
     pub(crate) fn begin_loading(&mut self, entry_id: i64) {
         let switched_entry = self.current_entry_id != entry_id;
         self.current_entry_id = entry_id;
+        self.load_generation = self.load_generation.wrapping_add(1);
         if switched_entry {
             self.status.clear();
             self.status_tone = "info".to_string();

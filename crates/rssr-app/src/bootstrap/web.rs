@@ -38,6 +38,7 @@ pub struct AppServices {
     client: reqwest::Client,
     use_cases: AppUseCases,
     auto_refresh_started: AtomicBool,
+    refresh_flight: super::refresh_flight::RefreshFlight,
 }
 
 #[derive(Clone)]
@@ -83,6 +84,7 @@ impl AppServices {
                     client,
                     use_cases,
                     auto_refresh_started: AtomicBool::new(false),
+                    refresh_flight: super::refresh_flight::RefreshFlight::default(),
                 }))
             })
             .await
@@ -140,9 +142,18 @@ impl RefreshPort for RefreshCapability {
     }
 
     async fn refresh_all(&self) -> anyhow::Result<RefreshAllExecutionOutcome> {
-        let outcome =
-            self.host.use_cases.refresh_service.refresh_all(RefreshAllInput::default()).await?;
-        self.handle_refresh_all_outcome(outcome)
+        self.host
+            .refresh_flight
+            .run(async {
+                let outcome = self
+                    .host
+                    .use_cases
+                    .refresh_service
+                    .refresh_all(RefreshAllInput::default())
+                    .await?;
+                self.handle_refresh_all_outcome(outcome)
+            })
+            .await
     }
 
     async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<RefreshFeedExecutionOutcome> {

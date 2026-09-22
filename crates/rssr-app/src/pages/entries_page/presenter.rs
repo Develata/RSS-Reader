@@ -22,12 +22,12 @@ use super::{
 /// 这层封装是刻意的：直接放 `Vec<Arc<EntrySummary>>` 的话，日后往分组标题里加一句
 /// 「未读 N 篇」就会读到过期标记，而且不会有任何编译错误提示。
 #[derive(Clone)]
-pub(crate) struct GroupingEntries(Vec<Arc<EntrySummary>>);
+pub(crate) struct GroupingEntries(Arc<Vec<Arc<EntrySummary>>>);
 
 impl GroupingEntries {
     /// 只做 `Arc` 指针拷贝。
-    fn new(entries: &[Arc<EntrySummary>]) -> Self {
-        Self(entries.to_vec())
+    fn new(entries: &Arc<Vec<Arc<EntrySummary>>>) -> Self {
+        Self(Arc::clone(entries))
     }
 
     fn len(&self) -> usize {
@@ -60,14 +60,15 @@ impl PartialEq for GroupingEntries {
     /// **两份投影相等 ⇒ 条目数量相同，且每个下标处仍是同一条目**，
     /// 所以缓存里那棵没重算的分组树，它的下标依旧有效。
     fn eq(&self, other: &Self) -> bool {
-        self.0.len() == other.0.len()
-            && self.0.iter().zip(other.0.iter()).all(|(left, right)| {
-                // 没被改动的条目共享同一个 Arc，指针相等即可短路。
-                Arc::ptr_eq(left, right)
-                    || (left.id == right.id
-                        && left.published_at == right.published_at
-                        && left.feed_title == right.feed_title)
-            })
+        Arc::ptr_eq(&self.0, &other.0)
+            || (self.0.len() == other.0.len()
+                && self.0.iter().zip(other.0.iter()).all(|(left, right)| {
+                    // 没被改动的条目共享同一个 Arc，指针相等即可短路。
+                    Arc::ptr_eq(left, right)
+                        || (left.id == right.id
+                            && left.published_at == right.published_at
+                            && left.feed_title == right.feed_title)
+                }))
     }
 }
 
@@ -78,10 +79,8 @@ impl PartialEq for GroupingEntries {
 /// 重建两棵分组树。把依赖收窄成这个投影后，可以用 memo 链：投影 memo 每次状态变化都会重算，
 /// 但它的值没变时，presenter memo 不会重算。
 ///
-/// 代价说明（别把它当成零成本）：重算一次投影是 N 次 `Arc` 指针拷贝加一次 `feeds` 深拷贝
-/// （`FeedSummary` 含三个 `String`，订阅数量级通常是几十）。条目比较基本是指针比较——
-/// 未改动的条目共享 `Arc`，`GroupingEntries::eq` 以 `ptr_eq` 短路。
-/// 换掉的是两棵分组树的重建，因此净赚，但不是免费。
+/// 集合以 Arc 共享。仅 UI 状态变化时投影构造和条目比较均为 O(1)；条目标记写入
+/// 通过 copy-on-write 更新集合，比较仍只读取分组键，因此不会因标记变化重建分组树。
 ///
 /// 注意这里**不包含** `status` / `status_tone` / `controls_hidden` / `show_archived` /
 /// 读取与收藏筛选 / `selected_feed_urls` / `archive_after_months` / `preferences_loaded`——
@@ -95,7 +94,7 @@ pub(crate) struct EntriesPresenterInput {
     archived_count: usize,
     entries_page_size: u32,
     current_page: u32,
-    feeds: Vec<FeedSummary>,
+    feeds: Arc<Vec<FeedSummary>>,
     grouping_mode: EntryGroupingMode,
     /// 保留在投影里，好让「按订阅浏览 ⇒ 无来源筛选项」这条不变量继续由 `from_input` 强制执行，
     /// 而不是退化成一句「调用方保证 feeds 已经是空的」的注释。标量，只随路由变化。
@@ -346,7 +345,7 @@ mod tests {
 
     /// 模拟 `PatchEntryFlags`：`Arc::make_mut` 只会换掉被点那一条的 `Arc`。
     fn replace_entry(state: &mut EntriesPageState, position: usize, entry: EntrySummary) {
-        state.entries[position] = Arc::new(entry);
+        Arc::make_mut(&mut state.entries)[position] = Arc::new(entry);
     }
 
     /// 收集分组树叶子里的引用（两种分组模式各只有一棵树是非空的）。
@@ -371,12 +370,75 @@ mod tests {
         leaf_cards(presenter).into_iter().map(|card| card.index).collect()
     }
 
+    /// Reproducible CPU projection probe; excludes storage, browser layout and network.
+    /// Run alone in release mode with --ignored --nocapture --test-threads=1.
+    #[test]
+    #[ignore = "manual performance measurement"]
+    fn measure_entries_projection() {
+        use std::{hint::black_box, time::Instant};
+        for count in [800, 2000] {
+            let mut state = EntriesPageState::new(true);
+            state.entries_page_size = 50;
+            state.entries = (0..count)
+                .map(|index| {
+                    let mut item = entry(
+                        index,
+                        index % 40,
+                        &format!("来源 {}", index % 40),
+                        "2026-09-01T08:00:00Z",
+                    );
+                    Arc::make_mut(&mut item).published_at = Some(
+                        parse_datetime("2026-09-01T08:00:00Z") - time::Duration::hours(index * 7),
+                    );
+                    item
+                })
+                .collect::<Vec<_>>()
+                .into();
+            state.feeds = (0..40)
+                .map(|index| {
+                    feed(index, &format!("来源 {index}"), &format!("https://example.com/{index}"))
+                })
+                .collect::<Vec<_>>()
+                .into();
+            let start = Instant::now();
+            for _ in 0..10_000 {
+                black_box(state.clone());
+            }
+            println!("entries={count} snapshot_ns={}", start.elapsed().as_nanos() / 10_000);
+            let start = Instant::now();
+            let original = EntriesPresenterInput::from_state(&state, None);
+            for _ in 0..10_000 {
+                let input = EntriesPresenterInput::from_state(black_box(&state), None);
+                black_box(input == original);
+            }
+            println!("entries={count} input_and_eq_ns={}", start.elapsed().as_nanos() / 10_000);
+            let grouping_keys = original.entries.grouping_keys();
+            let start = Instant::now();
+            for _ in 0..300 {
+                black_box(super::group_entries_by_source_tree(black_box(&grouping_keys), 50));
+            }
+            println!("entries={count} source_tree_ns={}", start.elapsed().as_nanos() / 300);
+            for mode in [EntryGroupingMode::Time, EntryGroupingMode::Source] {
+                state.grouping_mode = mode;
+                let input = EntriesPresenterInput::from_state(&state, None);
+                let start = Instant::now();
+                for _ in 0..300 {
+                    black_box(EntriesPagePresenter::from_input(black_box(&input)));
+                }
+                println!(
+                    "entries={count} mode={mode:?} presenter_ns={}",
+                    start.elapsed().as_nanos() / 300
+                );
+            }
+        }
+    }
+
     /// memo 链能省下重建的前提：不参与渲染派生的状态变化必须让投影保持**相等**。
     /// 这些字段一旦被误加进 `EntriesPresenterInput`，分组树就会为状态提示之类的变化重建。
     #[test]
     fn presenter_input_excludes_state_that_does_not_change_rendering() {
         let mut state = EntriesPageState::new(true);
-        state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")];
+        state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
         let baseline = EntriesPresenterInput::from_state(&state, None);
 
         // 每次切换已读/收藏都会附带发一条 SetStatus。
@@ -404,7 +466,7 @@ mod tests {
     #[test]
     fn only_grouping_relevant_entry_fields_invalidate_the_projection() {
         let mut state = EntriesPageState::new(true);
-        state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")];
+        state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
         let baseline = EntriesPresenterInput::from_state(&state, None);
         let original = (*state.entries[0]).clone();
 
@@ -464,7 +526,7 @@ mod tests {
 
         // PatchEntryFlags 里的 retain 会因筛选把条目移出列表，那是真正的结构变化。
         let mut shortened = state.clone();
-        shortened.entries.clear();
+        Arc::make_mut(&mut shortened.entries).clear();
         assert!(
             baseline != EntriesPresenterInput::from_state(&shortened, None),
             "条目数量变化必须让投影失效"
@@ -479,7 +541,7 @@ mod tests {
     #[test]
     fn presenter_input_includes_every_field_that_changes_rendering() {
         let mut state = EntriesPageState::new(true);
-        state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")];
+        state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
         let baseline = EntriesPresenterInput::from_state(&state, None);
 
         let mut paged = state.clone();
@@ -500,7 +562,7 @@ mod tests {
 
         // 订阅列表变化必须被看见，否则来源筛选下拉框不会刷新——这正是本组测试要防的症状。
         let mut refeeded = state.clone();
-        refeeded.feeds = vec![feed(1, "Alpha", "https://example.com/alpha.xml")];
+        refeeded.feeds = vec![feed(1, "Alpha", "https://example.com/alpha.xml")].into();
         assert!(baseline != EntriesPresenterInput::from_state(&refeeded, None));
     }
 
@@ -515,7 +577,8 @@ mod tests {
             entry(2, 1, "Alpha", "2026-04-03T08:00:00Z"),
             entry(3, 2, "Beta", "2026-04-02T08:00:00Z"),
             entry(4, 2, "Beta", "2026-04-01T08:00:00Z"),
-        ];
+        ]
+        .into();
         let ids_before = state.entries.iter().map(|entry| entry.id).collect::<Vec<_>>();
 
         let before = EntriesPresenterInput::from_state(&state, None);
@@ -576,7 +639,8 @@ mod tests {
             entry(2, 1, "Alpha", "2026-04-03T08:00:00Z"),
             entry(3, 2, "Beta", "2026-04-02T08:00:00Z"),
             entry(4, 2, "Beta", "2026-04-01T08:00:00Z"),
-        ];
+        ]
+        .into();
 
         let time_presenter =
             EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
@@ -593,8 +657,8 @@ mod tests {
     #[test]
     fn browsing_a_single_feed_hides_the_source_filter() {
         let mut state = EntriesPageState::new(true);
-        state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")];
-        state.feeds = vec![feed(1, "Alpha", "https://example.com/alpha.xml")];
+        state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
+        state.feeds = vec![feed(1, "Alpha", "https://example.com/alpha.xml")].into();
 
         let all_feeds = EntriesPresenterInput::from_state(&state, None);
         let single_feed = EntriesPresenterInput::from_state(&state, Some(1));
@@ -618,11 +682,13 @@ mod tests {
             entry(2, 1, "Alpha", "2026-04-03T08:00:00Z"),
             entry(3, 2, "Beta", "2026-04-02T08:00:00Z"),
             entry(4, 2, "Beta", "2026-04-01T08:00:00Z"),
-        ];
+        ]
+        .into();
         state.feeds = vec![
             feed(1, "Alpha", "https://example.com/alpha.xml"),
             feed(2, "Beta", "https://example.com/beta.xml"),
-        ];
+        ]
+        .into();
 
         let presenter =
             EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
@@ -657,7 +723,8 @@ mod tests {
         state.entries = vec![
             entry(1, 1, "Alpha", "2026-04-04T08:00:00Z"),
             entry(2, 2, "Beta", "2026-04-03T08:00:00Z"),
-        ];
+        ]
+        .into();
 
         let presenter =
             EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));

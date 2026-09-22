@@ -9,6 +9,10 @@
  * ============================================================ */
 
 :root {
+  --image-viewer-bg: rgba(12, 14, 18, 0.96);
+  --image-viewer-backdrop: rgba(0, 0, 0, 0.75);
+  --image-viewer-control-bg: #252831;
+  --image-viewer-ink: #ffffff;
   /* Android/WebView edge-to-edge 与带缺口视口的统一安全区契约。 */
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
@@ -59,7 +63,7 @@
   --accent-soft: rgba(255, 245, 239, 0.92);
   --accent-line: rgba(176, 74, 47, 0.28);
   --accent-line-faint: rgba(176, 74, 47, 0.14);
-  --focus-ring-color: rgba(176, 74, 47, 0.32);
+  --focus-ring-color: var(--accent-strong);
   --focus-ring-shadow: 0 0 0 4px rgba(176, 74, 47, 0.08);
 
   /* ---- 第 2 层：状态与语义色 ---- */
@@ -143,7 +147,7 @@
   --accent-soft: rgba(210, 120, 83, 0.16);
   --accent-line: rgba(210, 120, 83, 0.4);
   --accent-line-faint: rgba(210, 120, 83, 0.18);
-  --focus-ring-color: rgba(210, 120, 83, 0.5);
+  --focus-ring-color: var(--accent-strong);
   --focus-ring-shadow: 0 0 0 4px rgba(210, 120, 83, 0.16);
 
   --danger: #ff9f8d;
@@ -206,7 +210,7 @@
     --accent-soft: rgba(210, 120, 83, 0.16);
     --accent-line: rgba(210, 120, 83, 0.4);
     --accent-line-faint: rgba(210, 120, 83, 0.18);
-    --focus-ring-color: rgba(210, 120, 83, 0.5);
+    --focus-ring-color: var(--accent-strong);
     --focus-ring-shadow: 0 0 0 4px rgba(210, 120, 83, 0.16);
 
     --danger: #ff9f8d;
@@ -252,7 +256,7 @@
     --accent-soft: color-mix(in srgb, var(--accent) 10%, var(--panel-strong));
     --accent-line: color-mix(in srgb, var(--accent) 30%, transparent);
     --accent-line-faint: color-mix(in srgb, var(--accent) 15%, transparent);
-    --focus-ring-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    --focus-ring-color: var(--accent-strong);
     --focus-ring-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent);
     --button-secondary-bg: color-mix(in srgb, var(--accent) 12%, transparent);
   }

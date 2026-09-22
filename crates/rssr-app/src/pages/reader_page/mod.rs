@@ -1,4 +1,5 @@
 mod facade;
+mod image_viewer;
 pub(crate) mod intent;
 mod reducer;
 mod session;
@@ -10,7 +11,7 @@ use dioxus::prelude::*;
 use crate::{
     app::AppNav,
     components::status_banner::StatusBanner,
-    hooks::use_mobile_back_navigation::use_mobile_back_navigation,
+    hooks::use_mobile_back_navigation::{navigate_back, use_mobile_back_navigation_with_dismiss},
     hooks::use_reader_shortcuts::use_reader_shortcuts,
     router::AppRoute,
     ui::{use_reactive_side_effect, use_reactive_task},
@@ -23,7 +24,11 @@ use self::reducer::dispatch_reader_page_intent;
 
 #[component]
 pub fn ReaderPage(entry_id: i64) -> Element {
-    use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
+    let mut viewer = image_viewer::use_reader_image_viewer(entry_id);
+    use_mobile_back_navigation_with_dismiss(Some(AppRoute::EntriesPage {}), move || {
+        let mut viewer = viewer;
+        viewer.write().close()
+    });
 
     let navigator = use_navigator();
     let facade = use_reader_page_workspace(entry_id);
@@ -39,7 +44,9 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             "data-page": "reader",
             "data-layout": "reader-page",
             "data-state": if facade.error().is_some() { "error" } else { "loaded" },
-            AppNav {}
+            AppNav { on_back: move |_| {
+                if !viewer.write().close() { navigate_back(navigator, Some(AppRoute::EntriesPage {})); }
+            } }
             // 快捷键处理器必须挂在**不包含 AppNav** 的容器上。此前挂在外层 article 上，
             // 而 AppNav 里的搜索框就在它内部：keydown 冒泡上来后，在搜索框里打一个 m
             // 就会把当前文章标记为已读，打 f 会切换收藏，方向键还会直接换页。
@@ -49,15 +56,6 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 onkeydown: move |event| shortcuts.call(event),
             header { class: "reader-header", "data-layout": "reader-header",
                 h2 { class: "reader-title", "data-slot": "reader-title", "{facade.title()}" }
-            }
-                div { class: "reader-toolbar inline-actions", "data-layout": "reader-toolbar",
-                    button {
-                        class: "button inline-actions__item",
-                        "data-variant": "secondary",
-                        "data-nav": "back",
-                        onclick: move |_| navigator.go_back(),
-                        "返回上一页"
-                }
             }
             div { class: "reader-meta-block", "data-layout": "reader-meta-block",
                 p { class: "reader-meta", "data-slot": "reader-meta", "来源：{facade.source()}" }
@@ -153,6 +151,9 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             }
             }
         }
+        if let image_viewer::ImageViewerState::Open(image) = viewer() {
+            image_viewer::ReaderImageViewer { image, on_close: move |_| { viewer.write().close(); } }
+        }
     }
 }
 
@@ -160,9 +161,7 @@ fn use_reader_page_workspace(entry_id: i64) -> ReaderPageFacade {
     let state = use_signal(state::ReaderPageState::new);
     let session = ReaderPageSession::new(entry_id, state);
     let shortcuts = use_reader_shortcuts(session);
-    let reload_version = session.reload_tick();
-
-    use_reactive_task((entry_id, reload_version), move |_| {
+    use_reactive_task(entry_id, move |_| {
         session.load();
     });
 
@@ -172,8 +171,8 @@ fn use_reader_page_workspace(entry_id: i64) -> ReaderPageFacade {
         && !snapshot.asset_localization_requested;
 
     use_reactive_side_effect(
-        (entry_id, reload_version, should_localize_assets),
-        move |(_, _, should_localize_assets)| {
+        (entry_id, should_localize_assets),
+        move |(_, should_localize_assets)| {
             if should_localize_assets {
                 dispatch_reader_page_intent(
                     state,

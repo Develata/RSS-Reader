@@ -16,13 +16,12 @@ pub(crate) enum EntryGroupingMode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct EntriesPageState {
-    /// 以 `Arc` 持有：presenter 每次重建都要把可见集合交给分组树，直接存
-    /// `Vec<EntrySummary>` 的话每次都要深拷贝每条的 title / feed_title 两个 String。
-    /// 卡片组件本来就接收 `Arc<EntrySummary>`，这里对齐后重建只剩指针拷贝。
-    pub(crate) entries: Vec<Arc<EntrySummary>>,
+    /// Snapshots and presenter inputs share the immutable collection. Flag changes copy
+    /// its pointer vector only when necessary, then clone only the changed EntrySummary.
+    pub(crate) entries: Arc<Vec<Arc<EntrySummary>>>,
     /// 被归档筛选排除掉的条目数，由存储层 COUNT 得出。
     pub(crate) archived_count: usize,
-    pub(crate) feeds: Vec<FeedSummary>,
+    pub(crate) feeds: Arc<Vec<FeedSummary>>,
     pub(crate) read_filter: ReadFilter,
     pub(crate) starred_filter: StarredFilter,
     pub(crate) selected_feed_urls: Vec<String>,
@@ -42,9 +41,9 @@ impl EntriesPageState {
         let settings = UserSettings::default();
         let workspace = EntriesWorkspaceState::default();
         Self {
-            entries: Vec::new(),
+            entries: Arc::default(),
             archived_count: 0,
-            feeds: Vec::new(),
+            feeds: Arc::default(),
             read_filter: workspace.read_filter,
             starred_filter: workspace.starred_filter,
             selected_feed_urls: workspace.selected_feed_urls,

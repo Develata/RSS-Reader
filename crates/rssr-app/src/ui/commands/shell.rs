@@ -2,4 +2,5 @@
 pub(crate) enum ShellCommand {
     LoadAuthenticatedShell,
     ResolveStartupRoute,
+    ManualRefresh,
 }

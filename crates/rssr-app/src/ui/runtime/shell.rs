@@ -10,6 +10,20 @@ use rssr_application::StartupTarget;
 
 pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
     match command {
+        ShellCommand::ManualRefresh => match UiServices::shared().await {
+            Ok(services) => match services.feeds().refresh_all().await {
+                Ok(outcome) => vec![UiIntent::SetStatus {
+                    message: outcome.failure_message.as_ref().map_or_else(
+                        || "刷新完成。".to_string(),
+                        |failure| format!("刷新完成，但部分订阅失败：{failure}"),
+                    ),
+                    tone: if outcome.failure_message.is_some() { "error" } else { "info" }
+                        .to_string(),
+                }],
+                Err(err) => status_error(format!("刷新失败：{err}")),
+            },
+            Err(err) => status_error(format!("初始化应用失败：{err}")),
+        },
         ShellCommand::LoadAuthenticatedShell => match UiServices::shared().await {
             Ok(services) => {
                 let shell = services.shell();
