@@ -67,20 +67,18 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --full
 
 至少先通过：
 
-- `cargo check -p rssr-app`
-- `cargo check -p rssr-app --target wasm32-unknown-unknown`
-- `cargo test -p rssr-app`
-- `cargo test -p rssr-app --test test_builtin_theme_contracts`
-- `cargo test -p rssr-infra --test test_refresh_contract_harness`
-- `cargo test -p rssr-infra --test test_subscription_contract_harness`
-- `cargo test -p rssr-infra --test test_config_exchange_contract_harness`
-- `cargo test -p rssr-web`
+- `cargo check --locked -p rssr-app --target wasm32-unknown-unknown`
+- `cargo test --locked -p rssr-app`（包含 builtin theme 契约，不重复单跑）
+- `cargo test --locked -p rssr-infra --test test_refresh_contract_harness --test test_subscription_contract_harness --test test_config_exchange_contract_harness`
+- `cargo test --locked -p rssr-web`
 
 如果启用 `--with-browser-contracts`，还会补：
 
-- `bash scripts/run_wasm_refresh_contract_harness.sh`
-- `bash scripts/run_wasm_subscription_contract_harness.sh`
-- `bash scripts/run_wasm_config_exchange_contract_harness.sh`
+- `bash scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness wasm_subscription_contract_harness wasm_config_exchange_contract_harness`
+
+三个原有单模块脚本入口继续保留。统一入口通过 std-only Rust runner 与 Cargo 的 target runner 机制执行精确产物，每个浏览器运行使用独立临时配置和 profile；不再按 mtime 寻找 wasm 或覆盖 crate 中的 `webdriver.json`。本地一个 Cargo 构建多个 harness 后串行运行浏览器；CI 独立 runner 仍按模块并发。
+
+同一次发布预检最多构建一次相同 profile 的 Web 包，后续固定 smoke 和静态服务器复用它；该标记不跨进程持久化。`--skip-build` 仍由调用者明确选择。部署壳 smoke 拒绝已占用端口，并确认本次启动的进程存活；HTTP 请求有超时，探测或断言失败也会清理本次服务。静态 SPA 入口使用 exec，让调用方持有的 PID 就是服务进程。
 
 如果启用 `--with-fixed-smokes`，还会补：
 

@@ -92,6 +92,8 @@
 - facade
 - semantic DOM
 
+页面 session 还负责自己发起的异步结果归属：Entries 只接纳最新查询，Reader 按文章身份及加载代际隔离迟到结果，Settings 保存区分提交快照与后续草稿。这些均为 UI 生命周期状态，不下沉到 domain / application，也不让 CSS 决定业务命令。
+
 不再负责：
 
 - 直接拉 `AppServices::shared()`
@@ -109,7 +111,9 @@
 - 认证壳状态
 - startup route 壳
 - 顶部导航壳
-- 全局搜索输入壳
+- 全局搜索输入壳与 `NavMode::Normal / Search`
+- 用户手动刷新任务的 App scope 生命周期、in-flight 去重和列表失效 revision（实际刷新仍派发 `ShellCommand::ManualRefresh`）
+- 与自动刷新重叠时，由现有 host `RefreshCapability` 中共用的 `RefreshFlight` 合并请求；抓取、并发度及存储仍由原 use case / host 负责
 - Web auth gate 壳
 
 典型接口见：
@@ -125,7 +129,7 @@
 
 它不应负责：
 
-- 订阅刷新
+- 订阅刷新的抓取、解析、持久化和资格规则
 - 文章读取
 - 配置导入导出
 - 设置持久化

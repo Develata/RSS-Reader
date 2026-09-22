@@ -41,12 +41,44 @@
 >
 > - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
 
+### Home、搜索与阅读交互
+
+顶部常态为 `[R] [搜索] [S] [设置]`，Reader 最左侧增加返回图标。R 同时是 brand / Read / Home，没有独立“文章”导航按钮。
+
+| 稳定接口 | Rust 语义 / 结果 |
+| --- | --- |
+| `data-action="activate-home"` | `resolve_home_action(AppRoute)`：只有全局 `EntriesPage` 返回 `ManualRefresh`；其他路由只导航到全局文章页 |
+| `data-action="refresh-all"`、首页下拉刷新 | 与 Home 再次点击共用 `AppShellState::manual_refresh` → `ShellCommand::ManualRefresh` → 既有 `RefreshPort` / application 刷新用例 |
+| `data-action="toggle-search"` | shell 的 `NavMode::Normal / Search`；搜索态收起 S / Settings，保留 R / Reader 返回 |
+| `data-field="entry-search"` | shell 持有并持久化搜索词；Enter 进入全局文章页按标题搜索，Esc 退出搜索态（输入法 composing 期间放行 Esc） |
+| `data-nav="feeds"` / `settings` / `back` | 纯导航；返回按钮和 Android 系统返回复用 history / fallback 策略 |
+| `data-action="entry-page-previous"` / `entry-page-next` | 既有 Entries reducer 更新并限制页号，保持筛选和分组，滚至新页起点 |
+| `data-action="open-reader-image"` / `close-reader-image` | `ImageViewerState::Closed / Open`，复用已渲染图片地址；Esc、背景或 Android back 同样关闭 |
+
+手动刷新在 App scope 中运行，同步取得 in-flight 状态，连续 R、下拉和订阅页“刷新全部”不会重复创建批次。页面卸载不取消该任务。完成或部分失败后 revision 只让列表与订阅快照重取；Reader 正文不订阅刷新 revision。自动刷新继续使用现有 host 调度；host capability 内的共享 `RefreshFlight` 让自动与手动的重叠请求等待同一轮结果，不改变阅读页加载语义。进行中任务被取消时，等待者收到错误，下一次请求可以重试；不缓存已完成的刷新结果。
+
+文章列表的 `LoadEntries` 查询保持页面生命周期，并以页面内 generation 校验结果：只有最新发起的查询可发布列表、归档计数和状态，旧查询晚到的成功或失败都被丢弃，避免刷新与筛选切换交错时显示错误结果。该校验不改变写入命令或全局刷新任务的生命周期。
+
+下拉刷新仅在全局文章页、页面已到顶部且向下拖动至少 80 CSS px 后松手触发；横向、多指、文本选择、表单操作及嵌套滚动区不参与。被动 DOM bridge 只传坐标、滚动和目标事实；Rust 决定 pulling / armed，刷新反馈复用 shell 的 refreshing / finished / error。没有字母 R 快捷键，也没有全局 `touch preventDefault`。
+
+图片 bridge 仅对已消毒正文中的图片增加点击/键盘入口，不改变 sanitizer。Rust 持有 viewer 状态，原生 modal dialog 承担焦点约束和背景隔离；DOM 适配锁定并恢复滚动。正文、标题、metadata 的选择和复制沿用原生行为，带 modifier 的阅读快捷键继续放行。
+
+Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换文章再返回同一篇也不会接纳上次访问的迟到结果。图片本地化只更新缓存，不触发当前正文重载；下次打开文章使用新的本地引用，避免正文替换打断滚动、选区或图片查看器。
+
+`data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好被忽略，搜索词与文章筛选折叠偏好保留。`app-nav-shell` 的 `data-state` 现为 `normal` / `search`。
+
+来源选择继续保留 `entry-filters-source-chip` selector 兼容用户主题，但视觉为带可见 checkbox 的换行选择行；选择区有纵向滚动上限，名称本身不省略。分页只渲染一份 `entry-pagination`，位于页面 panel 的同级，固定于视口下方并预留 safe-area / 内容末尾空间。
+
 ### 订阅相关
 
 - 添加订阅
 - 删除订阅
 - 刷新单个订阅
 - 刷新全部订阅
+
+`feed-form` 使用原生 submit；地址输入 Enter 与 `data-action="add-feed"` 调用同一添加命令。`refresh-all` 为独立 button，不提交地址输入。
+
+Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以 disabled / `aria-busy` 提示；输入仍可编辑，成功仅清空未变化的已提交地址，失败释放 pending 并保留输入。`LoadSnapshot` 以页面内 query generation 丢弃旧查询的成功和错误，避免刷新、添加与删除交错时旧统计覆盖新结果。两者均属于共享 Rust 页面交互，不改变 application 用例或增加平台分支。
 
 ### 阅读相关
 
@@ -72,6 +104,8 @@
 - 清空当前自定义 CSS
 - 上传 WebDAV 配置
 - 下载 WebDAV 配置
+
+所有外观保存入口共用同步 pending gate。一次保存针对点击时的草稿快照；期间的新编辑继续留在草稿中，完成提示明确其尚未保存。失败不会恢复旧值覆盖草稿。该策略属于页面 session，不改变 settings application 用例。
 
 ### 配置交换相关
 
@@ -109,6 +143,8 @@
 
 - `rssr-cli show-settings`
 - `rssr-cli save-settings ...`
+
+结构化导出与 `show-settings` 的 stdout 只含结果数据；诊断日志写入 stderr。导出可直接重定向后再导入；失败返回非零退出码。
 
 ---
 
@@ -180,8 +216,12 @@
 - `data-action="remove-theme-preset"`
 - `data-action="clear-custom-css"`
 - `data-action="open-github-repo"`
-- `data-action="show-top-nav"`
-- `data-action="hide-top-nav"`
+- `data-action="activate-home"`
+- `data-action="toggle-search"`
+- `data-action="entry-page-previous"`
+- `data-action="entry-page-next"`
+- `data-action="open-reader-image"`
+- `data-action="close-reader-image"`
 
 如果未来需要新增命令，应优先保持这个命名风格：
 
@@ -378,7 +418,8 @@
 - `data-layout="entry-filters"`
 - `data-layout="reader-page"`
 - `data-layout="reader-header"`
-- `data-layout="reader-toolbar"`
+- `data-layout="reader-image-viewer"`
+- `data-layout="reader-image-viewport"`
 - `data-layout="reader-body"`
 - `data-layout="reader-bottom-bar"`
 - `data-slot="page-header-actions"`

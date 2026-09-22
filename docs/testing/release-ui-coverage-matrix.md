@@ -34,6 +34,15 @@
 | 静态 Web 真实阅读页 `/entries/2` | 固定 smoke | `bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2` | P1 | 已固定 demo seed |
 | 静态 Web `/reader` 多主题矩阵 | 固定 smoke | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_reader_theme_matrix.sh` | P1 | 默认主题 + 4 个内置主题 |
 | 静态 Web 小视口关键路径 | 自动化 | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_small_viewport_smoke.sh` | P1 | 默认 `360×800` / DPR 3；确定性长/短 fixture，覆盖几何、computed-style、可访问性、console 与桌面回归断言 |
+| Home / search / manual refresh / pull / pagination / image viewer | 自动化 | `scripts/run_static_web_small_viewport_smoke.sh` + `rssr-app` reducer/resolver 单测 | P1 | 整轮 RSS 请求计数、真实 tap 命中、图片卸载/重开、DOM 稳定、触摸阈值、鼠标选择/复制；复用既有固定 smoke |
+| Entries 并发列表查询结果顺序 | 自动化 | `cargo test --locked -p rssr-app --bin rssr-app pages::entries_page::session::tests` | P1 | 实际 Dioxus task + oneshot 控制完成次序，旧成功/失败不能覆盖最新结果 |
+| Reader 旧异步结果隔离、Settings 保存草稿 | 自动化 | `rssr-app` Reader / Settings session 测试 | P1 | 实际 VirtualDom + oneshot：A→B→A、保存中编辑、重复保存、失败重试 |
+| 订阅重复提交、进行中编辑、快照乱序 | 自动化 | Feeds session / runtime 测试 + 既有 small viewport smoke | P1 | Rust oneshot 与实际浏览器暂停首刷请求，验证 pending、重试、下一地址保留和旧快照拒绝 |
+| SQLite 刷新写失败后重试 | 自动化 | `cargo test --locked -p rssr-infra --test test_application_refresh_store_adapter` | P1 | 真实索引 / 正文库 trigger 注入失败，重试完整抓取，成功后恢复条件请求 |
+| wasm runner 产物身份与并发隔离 | 自动化 | CI `test-tools` + 三个原有 wasm harness 入口 | P1 | Cargo 指定真实 wasm，独立配置/profile，std-only Rust 子进程测试覆盖并发失败清理；不能替代真实浏览器契约 |
+| CLI 结构化 stdout / stderr | 自动化 | `cargo test --locked -p rssr-cli --test test_stdout_contract` | P1 | 实际CLI进程，JSON / OPML 导出再导入、中文空格路径、失败非零 |
+| 字号偏好、正文链接 / 长代码、Enter 订阅 | 自动化 | `scripts/run_static_web_small_viewport_smoke.sh` | P1 | 真实保存字号后手机 / 桌面生效，局部代码滚动，表单与刷新互不误触 |
+| Android 选择手柄、系统返回、图片缩放 | 实机待验 | Android 实机 + 本轮 handoff | P1 | Web touch emulation 不证明原生 WebView / 系统交互 |
 | `rssr-web` 登录 / 会话 / `/feeds` `/settings` 基础壳 | 自动化 | `bash scripts/run_release_ui_regression.sh --with-rssr-web` | P1 | 已覆盖登录、`/session-probe`、登出 |
 | `rssr-web` 代理链路 `/feed-proxy` 返回真实 XML | 固定 smoke | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_rssr_web_proxy_feed_smoke.sh` | P1 | 当前默认验证阮一峰 Atom |
 | 静态 Web `/reader` 多主题下的视觉细节 | 固定 smoke + 手工结论 | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_reader_theme_matrix.sh` + 查看 `target/static-web-reader-theme-matrix/<ts>/*.png` | P2 | 2026-04-10 基线已人工通过；后续发布仍需复看新产物 |
@@ -46,6 +55,8 @@
 | 小视口下 `rssr-web` 部署壳登录后路径 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` + 手工调视口 | P3 | 当前小视口 smoke 只固定了静态 Web |
 
 ## 当前结论
+
+CI 执行关系、按 crate / theme / harness 的并发上限和失败汇总见[主线验证矩阵](mainline-validation-matrix.md#github-ci-并发矩阵)。工作流中的 Web UI 矩阵直接运行这里的既有 small viewport assertions，不维护另一份验收规则。
 
 当前发布前回归已经把这几类 **P1** 能力固定下来：
 

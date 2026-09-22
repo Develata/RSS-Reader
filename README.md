@@ -33,7 +33,9 @@ RSS-Reader 是一个以 Rust 为核心、基于 Dioxus 构建的跨平台阅读�
 - 刷新单个订阅或全部订阅
 - 文章列表、阅读页、已读 / 收藏 / 搜索
 - 阅读页支持：
-  - 返回上一页
+  - 左上角返回上一页
+  - 正文图片点击放大；关闭按钮、背景或 Esc 关闭并恢复阅读位置
+  - 沿用系统原生文字选择、复制与全选
   - 上一篇未读 / 下一篇未读
   - 上一篇同订阅文章 / 下一篇同订阅文章
 
@@ -136,10 +138,13 @@ dx serve --platform web --package rssr-app
 ### 验证
 
 ```bash
-cargo fmt --all
-cargo test --workspace
-cargo check -p rssr-app --target wasm32-unknown-unknown
+cargo fmt --all --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace
+cargo check --locked -p rssr-app --target wasm32-unknown-unknown
 ```
+
+CI 按 workspace crate 并发执行测试和 Clippy，Web release 包构建一次后分发给默认及四个内置主题的真实 UI 验收，另有 wasm 契约和 Android 构建任务。并发、汇总门禁及本地分模块命令见[主线验证矩阵](docs/testing/mainline-validation-matrix.md)。
 
 ### 常用命令
 
@@ -161,7 +166,9 @@ cargo check -p rssr-app --target aarch64-linux-android
 
 ### 1. 添加订阅
 
-打开“订阅”页，输入一个 RSS / Atom feed URL，然后点击“添加订阅”。
+打开“订阅”页，输入一个 RSS / Atom feed URL，然后按 Enter 或点击“添加订阅”。
+
+添加和首次刷新期间会显示“正在添加…”，重复提交不会再启动一轮；可以继续输入下一个地址，当前操作完成后会保留这份新输入。失败时保留地址供重试。
 
 建议优先用桌面端测试真实远端 feed，因为：
 
@@ -169,6 +176,10 @@ cargo check -p rssr-app --target aarch64-linux-android
 - Web 端只有目标站点允许跨域时才能直接刷新远端 feed
 
 ### 2. 阅读文章
+
+顶部 R 是 Read / Home：从其他页面点击只返回全部文章页；已经在首页时再次点击会刷新全部订阅。进行中的手动刷新会去重，切换页面仍继续。手机也可在首页滚到顶部后下拉刷新。
+
+放大镜展开 / 收起标题搜索，Enter 搜索，Esc 收起；S 进入订阅，齿轮进入设置。来源筛选显示完整名称，多页列表底部保留可随时触达的分页按钮。
 
 “文章”页支持：
 
@@ -187,6 +198,8 @@ cargo check -p rssr-app --target aarch64-linux-android
 - 快捷键 `M` 切换已读，`F` 切换收藏
 - 快捷键 `←` 跳到上一篇未读，`→` 跳到下一篇未读
 
+设置中的阅读字号缩放在手机、桌面及内置主题中均生效。正文链接保留下划线，较长代码块可在块内横向滚动，不会撑宽整页。
+
 ### 3. 切换主题
 
 “设置”页支持：
@@ -197,6 +210,8 @@ cargo check -p rssr-app --target aarch64-linux-android
 - 预置主题按钮
 - 主题下拉
 - 主题卡片切换
+
+保存期间仍可编辑；完成提示会区分已保存内容和随后尚未保存的草稿。失败时保留草稿供修改后重试。
 
 如果你想自定义外观但不想手写 CSS，可以先读：
 
@@ -211,6 +226,8 @@ cargo check -p rssr-app --target aarch64-linux-android
 - 配置包 JSON 导入 / 导出
 - OPML 导入 / 导出
 - WebDAV 配置同步
+
+CLI 的 `export-config`、`export-opml` 和 `show-settings` 将数据写入 stdout，诊断写入 stderr，可以直接重定向到文件后再导入，无须清理日志。
 
 WebDAV 端点如果需要登录，把凭据写进 endpoint 即可（形如
 `https://用户名:密码@dav.example.com/base/`）：程序会取出凭据走 HTTP Basic 认证，并把它从
@@ -263,6 +280,7 @@ Web 端当前使用浏览器本地持久化状态，而不是和桌面端完全�
 - 桌面端 / Android 会在刷新成功后，于后台尽量把正文里的图片资源本地化进缓存 HTML
 - 这样已经成功缓存过的图片，在远端删除后仍然可读
 - 图片本地化不会再阻塞“新增订阅 / 刷新订阅”的主流程；即使图片抓取失败或超时，刷新本身仍然成功
+- 正在显示的正文不会因后台本地化完成而重载；新缓存会在下一次打开该文章时使用
 - Web 端正文也会缓存，但图片本地化受浏览器 CORS 限制，可能保留远端 URL
 
 ## 发布与交付

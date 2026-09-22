@@ -66,6 +66,8 @@ bash scripts/run_rssr_web_browser_feed_smoke.sh --release
 
 它不验证真实外部站点的 network / CORS failure。
 
+helper 在 iframe 所属的 window 中构造输入事件，避免跨 realm 的模拟事件被 Web renderer 当作空输入。fixture 使用当前 UTC 日期，防止固定历史日期随时间进入默认归档窗口而造成误报；文章 GUID 仍固定，重复刷新继续验证同一篇文章。
+
 真实外部 feed 与 `/feed-proxy` 部署壳链路由 [`rssr-web` 代理 Feed Smoke](./rssr-web-proxy-feed-smoke.md) 覆盖。纯静态 Web 的 CORS 限制归入 [环境限制索引](./environment-limitations.md)。
 
 ## 结果记录

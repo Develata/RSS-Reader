@@ -8,6 +8,10 @@
 - 让页面重构不轻易打碎主题
 - 给手写主题和 AI 生成主题提供同一份约束
 
+> 顶栏交互更新：R 始终可见；`app-nav-shell[data-state]` 使用 `normal` / `search`。R 的 `activate-home` 包含显式用户刷新，不能替换为 `data-nav="entries"`。旧 show/hide-top-nav、brand-name、reader-toolbar 已退役。来源 `entry-filters-source-chip` 现在是完整名称换行选择行；请勿用 ellipsis 隐藏核心名称。`entry-pagination` 是页面 panel 的同级固定控件，主题应保留底部内容空间。完整行为见 [命令参考](./frontend-command-reference.md#home搜索与阅读交互)。
+
+内置 Atlas Sidebar 保留桌面侧栏，但为共用的五图标 Reader 行预留 280px；移动端顶栏仍保持 sticky。目录名称和计数按行换行，避免极端来源名挤掉计数。
+
 ## 使用原则
 
 - 优先使用：
@@ -213,8 +217,12 @@
 - `data-action="push-webdav"`
 - `data-action="pull-webdav"`
 - `data-action="open-github-repo"`
-- `data-action="show-top-nav"`
-- `data-action="hide-top-nav"`
+- `data-action="activate-home"`
+- `data-action="toggle-search"`
+- `data-action="entry-page-previous"`
+- `data-action="entry-page-next"`
+- `data-action="open-reader-image"`
+- `data-action="close-reader-image"`
 
 说明：
 
@@ -299,7 +307,8 @@
 
 - `data-layout="reader-page"`
 - `data-layout="reader-header"`
-- `data-layout="reader-toolbar"`
+- `data-layout="reader-image-viewer"`
+- `data-layout="reader-image-viewport"`
 - `data-layout="reader-meta-block"`
 - `data-layout="reader-body"`
 - `data-layout="reader-pagination"`
@@ -309,7 +318,8 @@
 
 - `data-slot="app-nav-brand"`
 - `data-slot="app-nav-brand-mark"`
-- `data-slot="app-nav-brand-name"`
+- `data-slot="manual-refresh-status"`
+- `data-slot="pull-refresh"`
 - `data-slot="app-nav-search-input"`
 - `data-slot="entry-directory-heading"`
 - `data-slot="entry-directory-title"`
@@ -434,6 +444,8 @@
 
 - `--reader-ink`：正文颜色
 - `--reader-measure`：正文行宽（默认 `72ch`）
+- `--image-viewer-bg` / `--image-viewer-backdrop`：图片查看器与遮罩背景
+- `--image-viewer-control-bg` / `--image-viewer-ink`：查看器关闭控件背景与文字
 - `--reader-font-scale`：正文字号倍率（由设置页控制，主题不应覆写）
 
 阴影与圆角：

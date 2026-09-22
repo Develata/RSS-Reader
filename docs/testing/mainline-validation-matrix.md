@@ -28,6 +28,44 @@
 
 - 如果 `cargo test --workspace` 只剩 `test_webdav_local_roundtrip` 在受限环境中失败，不应直接判定为功能回归；先查 [环境限制索引](./environment-limitations.md)
 
+## GitHub CI 并发矩阵
+
+[ci.yml](../../.github/workflows/ci.yml) 每次 main push / PR（或手动触发）均覆盖所有 workspace crate。模块列表直接来自锁定依赖的 `cargo metadata`，没有额外的路径选测规则；避免共享代码或新 crate 被遗漏。业务依赖方向仍由 Cargo 决定，独立 runner 只拆分验收执行。
+
+| Job / matrix | 自动验收 | 并发上限 / 超时 |
+| --- | --- | --- |
+| `workspace`、`format` | 生成完整模块列表；`cargo fmt --all --check` | 独立运行，各 10 分钟 |
+| `test-tools` | std-only Rust wasm runner 的 rustfmt、Clippy、单测及子进程隔离 | 独立运行，10 分钟 |
+| `native-module` / 6 crates | `cargo clippy --locked -p <crate> --all-targets -- -D warnings`；`cargo test --locked -p <crate>`（含 doc tests）；CLI help | 4 / 每模块 35 分钟 |
+| `web-smoke` | wasm check、Dioxus 0.7.9 release bundle，上传实际 public 包 | 40 分钟 |
+| `web-ui` / default + 4 builtin themes | 下载同一次 Web 构建，既有 small viewport smoke 的 360×800 / 1280×800、真实请求、输入、选择、图片与设置验收 | 3 / 每主题 15 分钟 |
+| `wasm-browser-contract` / 3 harnesses | refresh / subscription / config exchange 浏览器契约，构建使用 `--locked` | 3 / 每 harness 35 分钟 |
+| `android-smoke` | 锁定 NDK / ARM64 check、bundle、APK 资源 / ABI / version 断言 | 50 分钟 |
+| `lint-and-test` | 汇总所有 jobs，只有全部 success 才通过；失败、取消、意外跳过均拒绝 | 5 分钟 |
+
+```mermaid
+flowchart LR
+  W[Cargo workspace] --> N[Native modules × 6]
+  B[Web build once] --> U[UI themes × 5]
+  F[Format] --> G[lint-and-test gate]
+  T[Rust acceptance runner] --> G
+  N --> G
+  U --> G
+  C[Wasm contracts × 3] --> G
+  A[Android smoke] --> G
+```
+
+- 同一 PR / ref 的旧 CI run 会被新 run 取消；不同 PR 不共用 concurrency group。每个 matrix 使用 `fail-fast: false`，保留其他模块的完整结果。
+- 上表上限是各 matrix 的上限，不是整个 workflow 的全局配额；实际并发还取决于 GitHub runner 配额。
+- Rust cache 按 native crate / wasm harness 区分，只有 UI crate 安装 GTK / WebKit。UI job 不重复编译 Web，不上传浏览器 profile；Web 包保留 3 天，断言 / 日志 / 截图保留 7 天。
+- wasm-bindgen 工具在独立安装目录按 OS / 架构 / 精确版本缓存，命中后仍核对实际 runner 版本；不覆盖全局 Cargo 安装登记。Chrome 按解析出的精确版本缓存，只有 wasm job 安装匹配的 ChromeDriver；CDP UI job 只用 Chrome。冷缓存和远端缓存服务耗时仍需真实 run 测量。
+- 保留原 `lint-and-test` 检查名作为最终汇总，不自动修改仓库 branch protection / 发布权限。新增工作流配置仍需提交后由真实 GitHub run 验证，不能把本地检查视为已部署 CI。
+- 并发语义参考 [GitHub matrix](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/run-job-variations) 与 [workflow concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)。
+
+本地可用上表 `-p <crate>` 命令分模块定位，完整检查仍保留 `cargo test --locked --workspace` 和 `cargo clippy --locked --workspace --all-targets -- -D warnings`。在同一工作目录启动多个 Cargo 通常会争用 target 锁；CI 的并发来自独立 runner，而不是后台启动多个争用同一构建目录的进程。
+
+wasm 验收规则由现有 Rust harness 持有，执行适配位于 `scripts/wasm_contract_runner.rs`（std-only，直接 rustc 编译，无产品依赖和新 crate）。Cargo target runner 提供本次编译的真实 artifact，支持自定义 `CARGO_TARGET_DIR`；每次运行使用独立 webdriver 配置和 profile，并保留测试参数与失败退出码。薄 Shell 只保留环境预检、编译工具和转发。配置文件路径使用 wasm-bindgen 0.2.126 的 [`WASM_BINDGEN_TEST_WEBDRIVER_JSON` 接口](https://github.com/wasm-bindgen/wasm-bindgen/blob/0.2.126/crates/cli/src/wasm_bindgen_test_runner/headless.rs#L129)；默认 test / driver 超时为 60 / 15 秒，允许现有环境变量覆盖。真实浏览器结果不能由 stub runner 或 `--no-run` 编译替代。
+
 ## 主线最小验证矩阵
 
 | 能力项 | 自动化入口 | 是否需要手工 smoke | 是否受环境限制 | 通过标准 |
@@ -37,7 +75,7 @@
 | config/exchange | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_config_package_codec`；`cargo test -p rssr-infra --test test_config_package_io`；`cargo test -p rssr-infra --test test_opml_interop`；`cargo test -p rssr-infra --test test_config_exchange_contract_harness`；`bash scripts/run_wasm_config_exchange_contract_harness.sh` | 是 | 中 | JSON / OPML roundtrip 可用；损坏或非法配置被拒绝；导入后订阅与设置恢复符合预期；browser persisted-state 与 sqlite contract 保持一致 |
 | reader rendering | `cargo test -p rssr-app`；`cargo check -p rssr-app --target wasm32-unknown-unknown` | 是 | 中 | 阅读页优先展示完整 HTML；HTML-like fallback 不再被原样显示标签；内容经过清洗 |
 | web startup | `cargo check -p rssr-app --target wasm32-unknown-unknown`；`cargo test -p rssr-web` | 是 | 中 | 首屏可交互；无黑屏、无页面无响应；主要路由切换正常；Console 无新的 panic / 死循环 |
-| paste/input | 当前无专门自动化入口；由 `cargo test -p rssr-app` 提供基础兜底 | 是 | 中 | 新增订阅输入框可聚焦、可粘贴、可提交；至少另一个设置输入框无明显阻断 |
+| paste/input | `rssr-app` Feeds session 测试；既有 small viewport smoke 的真实键盘输入 / Enter / pending 场景 | 是 | 中 | 新增订阅可聚焦、提交；重复提交去重、期间新输入保留；原生粘贴及平台输入法继续实机补查 |
 | settings save | `cargo test -p rssr-infra --test test_settings_repository`；`cargo test -p rssr-infra --test test_config_package_codec` | 是 | 低 | 非法边界值被拒绝；合法值可保存并持久化；刷新或重启后仍保持 |
 | remote pull cleanup | `cargo test -p rssr-infra --test test_webdav_local_roundtrip`；`cargo test -p rssr-infra --test test_config_package_io` | 是 | 高 | 远端删除的 feed 会从本地移除；相关 entries 与 app state 被清理 |
 

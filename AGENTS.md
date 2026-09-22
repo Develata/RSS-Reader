@@ -49,6 +49,12 @@ specs/
 - `001-minimal-rss-reader`：新增极简个人 RSS 阅读器 MVP 的规格、计划、数据模型、契约和快速开始文档
 
 <!-- MANUAL ADDITIONS START -->
+## 本地提交授权
+
+- 用户已授权：任务完成并做完相称验证后，可按职责分批进行本地 commit，无需逐次确认。
+- 仅提交该任务范围内已理解的改动，保留任务外 dirty / staged / untracked 内容；在 handoff 中记录提交与验证结果。
+- 此授权不包含 push、打 tag、发布或触发远端工作流；用户后续明确要求不提交时，以该要求为准。
+
 ## Agent 交接记录要求
 
 - 每次 agent 完成一次可交付工作后，MUST 在 `docs/handoffs/` 新增或更新一份固定格式的交接记录。
