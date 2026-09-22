@@ -28,10 +28,6 @@ impl SettingsPageSession {
         Self { theme, draft, preset_choice, status, status_tone }
     }
 
-    pub(crate) fn theme(self) -> ThemeController {
-        self.theme
-    }
-
     pub(crate) fn draft(self) -> Signal<UserSettings> {
         self.draft
     }
@@ -73,14 +69,23 @@ impl SettingsPageSession {
         self.theme.settings.set(settings);
     }
 
-    pub(crate) fn restore_settings(
+    /// Persisted settings and editable input are different snapshots while a save is pending.
+    /// Keep subsequent edits, including a newly selected preset, for the next explicit save.
+    pub(crate) fn apply_saved_settings(
         mut self,
         settings: UserSettings,
-        preset_choice: impl Into<String>,
-    ) {
-        self.preset_choice.set(preset_choice.into());
-        self.draft.set(settings.clone());
+        submitted_draft: &UserSettings,
+        submitted_preset: &str,
+    ) -> bool {
+        if *self.draft.peek() == *submitted_draft {
+            self.draft.set(settings.clone());
+        }
+        if self.preset_choice.peek().as_str() == submitted_preset {
+            self.preset_choice.set(detect_preset_key(&self.draft.peek().custom_css).to_string());
+        }
+        let has_unsaved_edits = *self.draft.peek() != settings;
         self.theme.settings.set(settings);
+        has_unsaved_edits
     }
 
     pub(crate) fn set_status(self, message: impl Into<String>, tone: impl Into<String>) {

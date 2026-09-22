@@ -34,12 +34,6 @@ pub(crate) async fn apply_projected_ui_command<T>(
     apply_projected_ui_intents(intents, project, apply);
 }
 
-pub(crate) fn spawn_ui_command(command: UiCommand, apply: impl FnOnce(Vec<UiIntent>) + 'static) {
-    spawn(async move {
-        apply(execute_ui_command(command).await);
-    });
-}
-
 pub(crate) fn spawn_projected_ui_command<T: 'static>(
     command: UiCommand,
     project: fn(UiIntent) -> Option<T>,
