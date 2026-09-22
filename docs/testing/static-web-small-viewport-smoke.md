@@ -31,6 +31,8 @@ bash scripts/run_static_web_small_viewport_smoke.sh --release
 
 发布聚合入口 `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 会自动调用此门禁，并继承聚合入口的 debug/release profile。
 
+HTTP 端口由 `--port` 指定（默认 8091，允许 1..55535），CDP 使用该端口加 10000。脚本启动前拒绝已占用的任一端口，就绪检查和断言完成时都确认本次子进程仍在运行；不能借用开发机旧服务取得通过结果。HTTP 探测具有连接 / 请求超时，失败或中断时只清理本次启动的服务和浏览器，终止等待有上限。本地 GUI 验收继续串行执行；GitHub 矩阵使用独立 runner。
+
 ## 自动断言
 
 - 视口精确为 `360×800`，根文档无横向溢出；

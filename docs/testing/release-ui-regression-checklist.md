@@ -76,7 +76,7 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --full
 
 - `bash scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness wasm_subscription_contract_harness wasm_config_exchange_contract_harness`
 
-三个原有单模块脚本入口继续保留。统一入口通过 std-only Rust runner 与 Cargo 的 target runner 机制执行精确产物，每个浏览器运行使用独立临时配置和 profile；不再按 mtime 寻找 wasm 或覆盖 crate 中的 `webdriver.json`。本地一个 Cargo 构建多个 harness 后串行运行浏览器；CI 独立 runner 仍按模块并发。
+三个原有单模块脚本入口继续保留。统一入口通过 std-only Rust runner 与 Cargo 的 target runner 机制执行精确产物，每个浏览器运行使用独立临时配置和 profile；不再按 mtime 寻找 wasm 或覆盖 crate 中的 `webdriver.json`。本地一个 Cargo 构建多个 harness 后串行运行浏览器；CI 先通过 `--prepare` 构建一次，再在独立 runner 通过 `--prebuilt` 按模块并发，准备产物成功不等于契约通过。详见 [主线矩阵](mainline-validation-matrix.md)。
 
 同一次发布预检最多构建一次相同 profile 的 Web 包，后续固定 smoke 和静态服务器复用它；该标记不跨进程持久化。`--skip-build` 仍由调用者明确选择。部署壳 smoke 拒绝已占用端口，并确认本次启动的进程存活；HTTP 请求有超时，探测或断言失败也会清理本次服务。静态 SPA 入口使用 exec，让调用方持有的 PID 就是服务进程。
 

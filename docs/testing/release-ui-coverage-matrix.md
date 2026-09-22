@@ -39,7 +39,7 @@
 | Reader 旧异步结果隔离、Settings 保存草稿 | 自动化 | `rssr-app` Reader / Settings session 测试 | P1 | 实际 VirtualDom + oneshot：A→B→A、保存中编辑、重复保存、失败重试 |
 | 订阅重复提交、进行中编辑、快照乱序 | 自动化 | Feeds session / runtime 测试 + 既有 small viewport smoke | P1 | Rust oneshot 与实际浏览器暂停首刷请求，验证 pending、重试、下一地址保留和旧快照拒绝 |
 | SQLite 刷新写失败后重试 | 自动化 | `cargo test --locked -p rssr-infra --test test_application_refresh_store_adapter` | P1 | 真实索引 / 正文库 trigger 注入失败，重试完整抓取，成功后恢复条件请求 |
-| wasm runner 产物身份与并发隔离 | 自动化 | CI `test-tools` + 三个原有 wasm harness 入口 | P1 | Cargo 指定真实 wasm，独立配置/profile，std-only Rust 子进程测试覆盖并发失败清理；不能替代真实浏览器契约 |
+| wasm runner 产物身份与并发隔离 | 自动化 | CI `test-tools` / `wasm-contract-build` + 三个 wasm 执行 job；原有单模块入口 | P1 | Cargo 一次准备真实 wasm，拒绝残缺/重复产物，再分模块并发执行；独立配置/profile，std-only Rust 子进程测试覆盖失败清理；不能替代真实浏览器契约 |
 | CLI 结构化 stdout / stderr | 自动化 | `cargo test --locked -p rssr-cli --test test_stdout_contract` | P1 | 实际CLI进程，JSON / OPML 导出再导入、中文空格路径、失败非零 |
 | 字号偏好、正文链接 / 长代码、Enter 订阅 | 自动化 | `scripts/run_static_web_small_viewport_smoke.sh` | P1 | 真实保存字号后手机 / 桌面生效，局部代码滚动，表单与刷新互不误触 |
 | Android 选择手柄、系统返回、图片缩放 | 实机待验 | Android 实机 + 本轮 handoff | P1 | Web touch emulation 不证明原生 WebView / 系统交互 |

@@ -30,16 +30,17 @@
 
 ## GitHub CI 并发矩阵
 
-[ci.yml](../../.github/workflows/ci.yml) 每次 main push / PR（或手动触发）均覆盖所有 workspace crate。模块列表直接来自锁定依赖的 `cargo metadata`，没有额外的路径选测规则；避免共享代码或新 crate 被遗漏。业务依赖方向仍由 Cargo 决定，独立 runner 只拆分验收执行。
+[ci.yml](../../.github/workflows/ci.yml) 每次 main push / PR（或手动触发）均覆盖所有 workspace crate。模块列表及 `rssr-infra` 的 `wasm_*_contract_harness` 列表直接来自锁定依赖的 `cargo metadata`，wasm-bindgen 工具版本读取 `Cargo.lock`，不再手工维护第二份列表 / 版本。没有额外的路径选测规则；避免共享代码或新 crate 被遗漏。业务依赖方向仍由 Cargo 决定，独立 runner 只拆分验收执行。
 
 | Job / matrix | 自动验收 | 并发上限 / 超时 |
 | --- | --- | --- |
 | `workspace`、`format` | 生成完整模块列表；`cargo fmt --all --check` | 独立运行，各 10 分钟 |
-| `test-tools` | std-only Rust wasm runner 的 rustfmt、Clippy、单测及子进程隔离 | 独立运行，10 分钟 |
+| `test-tools` | actionlint 1.7.12（官方校验和验证下载）；std-only Rust wasm runner 的 rustfmt、Clippy、单测及子进程隔离 | 独立运行，10 分钟 |
 | `native-module` / 6 crates | `cargo clippy --locked -p <crate> --all-targets -- -D warnings`；`cargo test --locked -p <crate>`（含 doc tests）；CLI help | 4 / 每模块 35 分钟 |
 | `web-smoke` | wasm check、Dioxus 0.7.9 release bundle，上传实际 public 包 | 40 分钟 |
 | `web-ui` / default + 4 builtin themes | 下载同一次 Web 构建，既有 small viewport smoke 的 360×800 / 1280×800、真实请求、输入、选择、图片与设置验收 | 3 / 每主题 15 分钟 |
-| `wasm-browser-contract` / 3 harnesses | refresh / subscription / config exchange 浏览器契约，构建使用 `--locked` | 3 / 每 harness 35 分钟 |
+| `wasm-contract-build` | 一个锁定依赖的 Cargo 调用准备全部 harness，上传精确产物；预热 wasm-bindgen 工具缓存 | 35 分钟 |
+| `wasm-browser-contract` / 3 harnesses | 下载同一批产物，分别运行 refresh / subscription / config exchange 浏览器契约，不再运行 Cargo | 3 / 每 harness 15 分钟 |
 | `android-smoke` | 锁定 NDK / ARM64 check、bundle、APK 资源 / ABI / version 断言 | 50 分钟 |
 | `lint-and-test` | 汇总所有 jobs，只有全部 success 才通过；失败、取消、意外跳过均拒绝 | 5 分钟 |
 
@@ -51,20 +52,50 @@ flowchart LR
   T[Rust acceptance runner] --> G
   N --> G
   U --> G
-  C[Wasm contracts × 3] --> G
+  W --> CB[Wasm build once]
+  CB --> C[Wasm contracts × 3]
+  C --> G
   A[Android smoke] --> G
 ```
 
 - 同一 PR / ref 的旧 CI run 会被新 run 取消；不同 PR 不共用 concurrency group。每个 matrix 使用 `fail-fast: false`，保留其他模块的完整结果。
 - 上表上限是各 matrix 的上限，不是整个 workflow 的全局配额；实际并发还取决于 GitHub runner 配额。
-- Rust cache 按 native crate / wasm harness 区分，只有 UI crate 安装 GTK / WebKit。UI job 不重复编译 Web，不上传浏览器 profile；Web 包保留 3 天，断言 / 日志 / 截图保留 7 天。
-- wasm-bindgen 工具在独立安装目录按 OS / 架构 / 精确版本缓存，命中后仍核对实际 runner 版本；不覆盖全局 Cargo 安装登记。Chrome 按解析出的精确版本缓存，只有 wasm job 安装匹配的 ChromeDriver；CDP UI job 只用 Chrome。冷缓存和远端缓存服务耗时仍需真实 run 测量。
+- Rust cache 按 native crate / Web / Android / wasm 构建职责区分，只有 UI crate 安装 GTK / WebKit。UI job 不重复编译 Web，wasm job 不重复编译契约；不上传浏览器 profile。Web / wasm 包保留 3 天，UI 断言 / 日志 / 截图保留 7 天。
+- wasm-bindgen / Dioxus 工具在独立安装目录按 OS / 架构 / 精确版本缓存，命中后仍核对实际版本；不覆盖全局 Cargo 安装登记。wasm 构建 job 先预热工具缓存，后续三个 job 通常直接恢复，缓存不可用时仍允许安装。Chrome 按解析出的精确版本缓存，只有 wasm job 安装匹配的 ChromeDriver；CDP UI job 只用 Chrome。冷缓存、artifact 传输和远端缓存服务耗时仍需真实 run 测量，编译次数减少不等于已证明总耗时同比下降。
 - 保留原 `lint-and-test` 检查名作为最终汇总，不自动修改仓库 branch protection / 发布权限。新增工作流配置仍需提交后由真实 GitHub run 验证，不能把本地检查视为已部署 CI。
 - 并发语义参考 [GitHub matrix](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/run-job-variations) 与 [workflow concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)。
 
 本地可用上表 `-p <crate>` 命令分模块定位，完整检查仍保留 `cargo test --locked --workspace` 和 `cargo clippy --locked --workspace --all-targets -- -D warnings`。在同一工作目录启动多个 Cargo 通常会争用 target 锁；CI 的并发来自独立 runner，而不是后台启动多个争用同一构建目录的进程。
 
 wasm 验收规则由现有 Rust harness 持有，执行适配位于 `scripts/wasm_contract_runner.rs`（std-only，直接 rustc 编译，无产品依赖和新 crate）。Cargo target runner 提供本次编译的真实 artifact，支持自定义 `CARGO_TARGET_DIR`；每次运行使用独立 webdriver 配置和 profile，并保留测试参数与失败退出码。薄 Shell 只保留环境预检、编译工具和转发。配置文件路径使用 wasm-bindgen 0.2.126 的 [`WASM_BINDGEN_TEST_WEBDRIVER_JSON` 接口](https://github.com/wasm-bindgen/wasm-bindgen/blob/0.2.126/crates/cli/src/wasm_bindgen_test_runner/headless.rs#L129)；默认 test / driver 超时为 60 / 15 秒，允许现有环境变量覆盖。真实浏览器结果不能由 stub runner 或 `--no-run` 编译替代。
+
+CI 使用 `bash scripts/run_wasm_contract_harness.sh --prepare <新目录> <harness...>` 准备产物，随后独立 job 使用 `--prebuilt <下载目录> <harness>` 执行。交付目录放在 `RUNNER_TEMP`，不进入 Cargo target 缓存。准备阶段通过 Cargo runner 收集本次真实路径；成功且集合完整后才发布正式 manifest，已有目录、重复或缺失产物均拒绝。准备成功只说明构建产物齐全，不能冒充浏览器契约通过。原单模块入口和本地多 harness 构建后运行的接口不变。
+
+Cargo JSON / TOML 事实解析、GitHub `needs` JSON 摘要仍使用短 Python 适配。没有为几行解析新增 Rust crate 或手写通用解析器；构建产物选择、交付检查与执行隔离留在既有 Rust 工具。
+
+### GitHub Actions 版本维护
+
+2026-09-22 联网核对官方 releases、major ref 与 `action.yml` 后使用下列稳定 major。表中精确版是查询快照；浮动 major 后续可能更新，不能视为永久固定版本。
+
+| Action | 使用 ref | 查询时最新稳定版 |
+| --- | --- | --- |
+| actions/checkout | v7 | [v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1) |
+| actions/setup-node | v7 | [v7.0.0](https://github.com/actions/setup-node/releases/tag/v7.0.0) |
+| actions/setup-java | v6 | [v6.0.1](https://github.com/actions/setup-java/releases/tag/v6.0.1) |
+| actions/cache | v6 | [v6.1.0](https://github.com/actions/cache/releases/tag/v6.1.0) |
+| actions/upload-artifact | v7 | [v7.0.1](https://github.com/actions/upload-artifact/releases/tag/v7.0.1) |
+| actions/download-artifact | v8 | [v8.0.1](https://github.com/actions/download-artifact/releases/tag/v8.0.1) |
+| android-actions/setup-android | v4 | [v4.0.4](https://github.com/android-actions/setup-android/releases/tag/v4.0.4) |
+| docker/setup-buildx-action | v4 | [v4.4.1](https://github.com/docker/setup-buildx-action/releases/tag/v4.4.1) |
+| docker/login-action | v4 | [v4.6.0](https://github.com/docker/login-action/releases/tag/v4.6.0) |
+| docker/metadata-action | v6 | [v6.2.0](https://github.com/docker/metadata-action/releases/tag/v6.2.0) |
+| docker/build-push-action | v7 | [v7.4.0](https://github.com/docker/build-push-action/releases/tag/v7.4.0) |
+| Swatinem/rust-cache | v2 | [v2.9.2](https://github.com/Swatinem/rust-cache/releases/tag/v2.9.2) |
+| softprops/action-gh-release | v3 | [v3.0.3](https://github.com/softprops/action-gh-release/releases/tag/v3.0.3) |
+
+以上 JavaScript Actions 均原生使用 Node 24，已移除强制 runtime 的过渡环境变量。`dtolnay/rust-toolchain@stable` 为 composite，继续跟踪 stable。setup-node 安装的 Node 22 与 Action runtime 是不同层；浏览器脚本无 npm 安装步骤，显式关闭自动 package-manager cache。Dioxus / wasm-bindgen / Android NDK 仍按项目兼容版本锁定，不随 Actions 主版本升级产品依赖。
+
+[Dependabot](../../.github/dependabot.yml) 每周检查 github-actions 并合并为更新 PR，仍需验收后合并，不自动发布。Release 对 push tag / 手动同 tag 使用同一个 concurrency 身份，不中断正在发布的 run；Docker tag run 同样保留执行。各 job 有有限超时，Release 构建使用 `--locked`，Android 选择精确 NDK 路径。上传、签名、发布权限和触发边界保持原有契约。
 
 ## 主线最小验证矩阵
 
