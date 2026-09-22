@@ -65,6 +65,11 @@ if [[ ! "$viewport" =~ ^([0-9]+),([0-9]+)$ ]]; then
 fi
 viewport_width="${BASH_REMATCH[1]}"
 viewport_height="${BASH_REMATCH[2]}"
+if [[ ! "$port" =~ ^[0-9]{1,5}$ ]] || ((10#$port < 1 || 10#$port > 55535)); then
+  echo "Invalid port '${port}'; expected 1..55535 (CDP uses port + 10000)" >&2
+  exit 1
+fi
+port="$((10#$port))"
 
 resolve_chrome_bin() {
   if command -v "$chrome_bin" >/dev/null 2>&1; then
@@ -153,25 +158,68 @@ if [[ "$skip_build" == "true" ]]; then
   server_args+=(--skip-build)
 fi
 
-bash scripts/run_web_spa_regression_server.sh "${server_args[@]}" >"$server_log" 2>&1 &
-server_pid=$!
+# Probe both listeners before starting either process. An existing HTTP/CDP
+# endpoint must never make a failed new instance look like a successful smoke.
+python3 - "$port" "$cdp_port" <<'PY'
+import contextlib
+import socket
+import sys
+
+with contextlib.ExitStack() as stack:
+    for label, port in zip(('HTTP', 'CDP'), sys.argv[1:]):
+        probe = stack.enter_context(socket.socket())
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind(('127.0.0.1', int(port)))
+        except OSError as error:
+            sys.exit(f'{label} smoke port {port} is unavailable: {error}')
+PY
+
+server_pid=""
 chrome_pid=""
 
-cleanup() {
-  if [[ -n "$chrome_pid" ]] && kill -0 "$chrome_pid" >/dev/null 2>&1; then
-    kill "$chrome_pid" >/dev/null 2>&1 || true
-    wait "$chrome_pid" >/dev/null 2>&1 || true
+stop_owned_process() {
+  local pid="$1"
+  if [[ -z "$pid" ]]; then
+    return
   fi
-  if kill -0 "$server_pid" >/dev/null 2>&1; then
-    kill "$server_pid" >/dev/null 2>&1 || true
-    wait "$server_pid" >/dev/null 2>&1 || true
+  if kill -0 "$pid" >/dev/null 2>&1; then
+    kill "$pid" >/dev/null 2>&1 || true
+    for _ in {1..30}; do
+      if ! kill -0 "$pid" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.1
+    done
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      kill -KILL "$pid" >/dev/null 2>&1 || true
+    fi
+  fi
+  wait "$pid" >/dev/null 2>&1 || true
+}
+
+cleanup() {
+  stop_owned_process "$chrome_pid"
+  stop_owned_process "$server_pid"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+require_running() {
+  if ! kill -0 "$1" >/dev/null 2>&1; then
+    echo "$2 exited before smoke completion; see $3" >&2
+    exit 1
   fi
 }
-trap cleanup EXIT INT TERM
+
+bash scripts/run_web_spa_regression_server.sh "${server_args[@]}" >"$server_log" 2>&1 &
+server_pid=$!
 
 ready="false"
 for _ in {1..60}; do
-  if curl -fsS "http://127.0.0.1:${port}/entries" >/dev/null 2>&1; then
+  require_running "$server_pid" "Static web server" "$server_log"
+  if curl --connect-timeout 2 --max-time 5 -fsS "http://127.0.0.1:${port}/entries" >/dev/null 2>&1; then
     ready="true"
     break
   fi
@@ -199,7 +247,9 @@ chrome_pid=$!
 
 cdp_ready="false"
 for _ in {1..30}; do
-  if curl -fsS "http://127.0.0.1:${cdp_port}/json/version" >/dev/null 2>&1; then
+  require_running "$server_pid" "Static web server" "$server_log"
+  require_running "$chrome_pid" "Chrome" "$chrome_log"
+  if curl --connect-timeout 2 --max-time 5 -fsS "http://127.0.0.1:${cdp_port}/json/version" >/dev/null 2>&1; then
     cdp_ready="true"
     break
   fi
@@ -211,6 +261,8 @@ if [[ "$cdp_ready" != "true" ]]; then
   exit 1
 fi
 
+require_running "$server_pid" "Static web server" "$server_log"
+require_running "$chrome_pid" "Chrome" "$chrome_log"
 if ! "$node_bin" "$node_script_arg" \
   --cdp-base "http://127.0.0.1:${cdp_port}" \
   --static-base "http://127.0.0.1:${port}" \
@@ -235,6 +287,8 @@ EOF
   exit 1
 fi
 
+require_running "$server_pid" "Static web server" "$server_log"
+require_running "$chrome_pid" "Chrome" "$chrome_log"
 cat >"$summary_file" <<EOF
 # Static Web 小视口 Smoke
 
