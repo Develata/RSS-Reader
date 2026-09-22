@@ -194,7 +194,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
 fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> EntriesPageFacade {
     let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
     let query_generation = use_signal(|| 0);
-    let session = EntriesPageSession::new(feed_id, state, query_generation);
+    let bootstrap_generation = use_signal(|| 0);
+    let session = EntriesPageSession::new(feed_id, state, query_generation, bootstrap_generation);
     let state_snapshot = Arc::new(session.snapshot());
     // memo 链：先把状态收窄成 presenter 真正依赖的投影，再由它推导 presenter。
     //
@@ -214,7 +215,8 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let entry_search = ui.entry_search();
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
     let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), current_time_utc());
-    let preferences_loaded = state_snapshot.preferences_loaded;
+    let preferences_loaded = state_snapshot.preferences_load.is_loaded();
+    let entries_ready = state_snapshot.preferences_load.can_load_entries();
     let refresh_revision = ui.refresh_revision();
     let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
     let show_archived = state_snapshot.show_archived;
@@ -228,17 +230,14 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         session.dispatch(intent::EntriesPageIntent::SetCurrentPage(state::FIRST_PAGE_NUMBER));
     });
 
-    use_reactive_task(
-        (feed_id, preferences_loaded, refresh_revision),
-        move |(_, preferences_loaded, _)| {
-            session.bootstrap(!preferences_loaded, true);
-        },
-    );
+    use_reactive_task((feed_id, refresh_revision), move |_| session.bootstrap());
 
     use_reactive_task(
-        (feed_id, entry_query.clone(), refresh_revision),
-        move |(_, entry_query, _)| {
-            session.load_entries_query(entry_query);
+        (feed_id, entries_ready, entry_query.clone(), refresh_revision),
+        move |(_, entries_ready, entry_query, _)| {
+            if entries_ready {
+                session.load_entries_query(entry_query);
+            }
         },
     );
 

@@ -83,7 +83,7 @@ impl PartialEq for GroupingEntries {
 /// 通过 copy-on-write 更新集合，比较仍只读取分组键，因此不会因标记变化重建分组树。
 ///
 /// 注意这里**不包含** `status` / `status_tone` / `controls_hidden` / `show_archived` /
-/// 读取与收藏筛选 / `selected_feed_urls` / `archive_after_months` / `preferences_loaded`——
+/// 读取与收藏筛选 / `selected_feed_urls` / `archive_after_months` / `preferences_load`——
 /// 归档筛选已经下沉到查询层，筛选变化会走一次重新加载并以 `SetEntries` 收尾。
 ///
 /// `archived_count` 在这里不是因为它影响分组（presenter 只是原样透传给
@@ -450,7 +450,7 @@ mod tests {
         state.starred_filter = rssr_domain::StarredFilter::StarredOnly;
         state.selected_feed_urls = vec!["https://example.com/a.xml".to_string()];
         state.archive_after_months = 12;
-        state.preferences_loaded = true;
+        state.preferences_load = crate::pages::entries_page::state::PreferencesLoadState::Loaded;
 
         assert!(
             baseline == EntriesPresenterInput::from_state(&state, None),

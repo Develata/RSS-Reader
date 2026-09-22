@@ -14,6 +14,26 @@ pub(crate) enum EntryGroupingMode {
     Source,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) enum PreferencesLoadState {
+    #[default]
+    Pending,
+    Loaded,
+    // Failed preferences may fall back for reading, but must never be saved over
+    // the persisted values that could not be read.
+    Unavailable(String),
+}
+
+impl PreferencesLoadState {
+    pub(crate) fn can_load_entries(&self) -> bool {
+        !matches!(self, Self::Pending)
+    }
+
+    pub(crate) fn is_loaded(&self) -> bool {
+        matches!(self, Self::Loaded)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct EntriesPageState {
     /// Snapshots and presenter inputs share the immutable collection. Flag changes copy
@@ -33,7 +53,7 @@ pub(crate) struct EntriesPageState {
     pub(crate) current_page: u32,
     pub(crate) status: String,
     pub(crate) status_tone: String,
-    pub(crate) preferences_loaded: bool,
+    pub(crate) preferences_load: PreferencesLoadState,
 }
 
 impl EntriesPageState {
@@ -55,7 +75,7 @@ impl EntriesPageState {
             current_page: FIRST_PAGE_NUMBER,
             status: "正在加载文章列表…".to_string(),
             status_tone: "info".to_string(),
-            preferences_loaded: false,
+            preferences_load: PreferencesLoadState::Pending,
         }
     }
 

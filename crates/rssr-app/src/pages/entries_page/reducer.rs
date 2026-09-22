@@ -5,7 +5,7 @@ use rssr_domain::{ReadFilter, StarredFilter};
 
 use super::{
     intent::EntriesPageIntent, state::EntriesPageState, state::FIRST_PAGE_NUMBER,
-    state::entry_grouping_mode_from_preference,
+    state::PreferencesLoadState, state::entry_grouping_mode_from_preference,
 };
 
 pub(crate) fn dispatch_entries_page_intent(
@@ -29,12 +29,29 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.show_archived = workspace.show_archived;
             state.grouping_mode = entry_grouping_mode_from_preference(workspace.grouping_mode);
             state.current_page = FIRST_PAGE_NUMBER;
-            state.preferences_loaded = true;
+        }
+        EntriesPageIntent::PreferencesLoaded => {
+            if matches!(state.preferences_load, PreferencesLoadState::Unavailable(_)) {
+                state.status = format!("共 {} 篇文章。", state.entries.len());
+                state.status_tone = "info".to_string();
+            }
+            state.preferences_load = PreferencesLoadState::Loaded;
+        }
+        EntriesPageIntent::PreferencesUnavailable(message) => {
+            state.status = message.clone();
+            state.status_tone = "error".to_string();
+            state.preferences_load = PreferencesLoadState::Unavailable(message);
         }
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = Arc::new(feeds),
         EntriesPageIntent::SetEntries { entries, archived_count } => {
-            state.status = format!("共 {} 篇文章。", entries.len());
-            state.status_tone = "info".to_string();
+            if let PreferencesLoadState::Unavailable(message) = &state.preferences_load {
+                state.status =
+                    format!("{message}；文章偏好暂不保存，共 {} 篇文章。", entries.len());
+                state.status_tone = "error".to_string();
+            } else {
+                state.status = format!("共 {} 篇文章。", entries.len());
+                state.status_tone = "info".to_string();
+            }
             state.entries = Arc::new(entries.into_iter().map(Arc::new).collect());
             state.archived_count = archived_count;
             clamp_current_page(state);
