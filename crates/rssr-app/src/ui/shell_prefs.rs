@@ -55,17 +55,13 @@ mod platform {
     fn prefs_path() -> Option<&'static PathBuf> {
         static PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
         PATH.get_or_init(|| {
-            let dir = match rssr_infra::db::sqlite_native::local_data_dir() {
+            let dir = match rssr_infra::db::sqlite_native::ensure_local_data_dir() {
                 Ok(dir) => dir,
                 Err(error) => {
-                    tracing::debug!(%error, "无法定位本地数据目录，界面偏好本次不持久化");
+                    tracing::debug!(%error, "准备本地数据目录失败，界面偏好本次不持久化");
                     return None;
                 }
             };
-            if let Err(error) = std::fs::create_dir_all(&dir) {
-                tracing::debug!(%error, "创建本地数据目录失败，界面偏好本次不持久化");
-                return None;
-            }
             Some(dir.join("shell-prefs.json"))
         })
         .as_ref()

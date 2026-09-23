@@ -73,8 +73,8 @@ pub async fn migrate_content(pool: &SqlitePool) -> anyhow::Result<()> {
 ///
 /// `PRAGMA journal_mode=WAL` 在无法转换时**不报错**：SQLite 把实际生效的模式作为结果行返回，
 /// 而 `execute` 会把这一行丢掉。不支持共享内存的文件系统（网络共享、部分同步盘）上，
-/// 程序会静默留在回滚日志模式。桌面端数据库就放在可执行文件同目录，便携安装被放进同步盘
-/// 并不罕见，因此并发写之前必须实测一次而不是假定成功。
+/// 程序会静默留在回滚日志模式。便携版数据库位于可执行文件同目录，放进同步盘
+/// 并不罕见；Linux 安装版也可能配置自定义 XDG 数据目录，因此并发写之前必须实测。
 pub async fn effective_journal_mode(pool: &SqlitePool) -> anyhow::Result<String> {
     let mode: String = sqlx::query_scalar("PRAGMA journal_mode").fetch_one(pool).await?;
     Ok(mode.to_ascii_lowercase())

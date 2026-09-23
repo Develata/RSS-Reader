@@ -359,7 +359,9 @@ jobs:
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
             libsoup-3.0-dev \
-            libxdo-dev
+            libxdo-dev \
+            xauth \
+            xvfb
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -391,16 +393,22 @@ jobs:
           mkdir -p release-assets
           APP_DEB_PATH="$(find target/linux-bundle -maxdepth 1 -name '*.deb' | head -n1)"
           test -n "$APP_DEB_PATH"
-          cp "$APP_DEB_PATH" release-assets/RSS-Reader-linux-x86_64.deb
+          bash scripts/prepare_linux_deb.sh "$APP_DEB_PATH" "$RELEASE_TAG" release-assets/RSS-Reader-linux-x86_64.deb
           tar -C target/release -czf release-assets/rssr-cli-linux-x86_64.tar.gz rssr-cli
 
       - name: Smoke-check Linux artifacts
         run: |
           test -f release-assets/RSS-Reader-linux-x86_64.deb
+          test "$(dpkg-deb -f release-assets/RSS-Reader-linux-x86_64.deb Version)" = "${RELEASE_TAG#v}"
           dpkg-deb -f release-assets/RSS-Reader-linux-x86_64.deb Package | grep '^rssr-app$\|^rss-reader$\|^io.github.develata.rssreader$'
           dpkg-deb -c release-assets/RSS-Reader-linux-x86_64.deb | grep 'usr/bin/rssr-app$\|usr/bin/RSS-Reader$\|usr/bin/rss-reader$'
           dpkg-deb -c release-assets/RSS-Reader-linux-x86_64.deb | grep 'usr/share/applications/.*\.desktop$'
           tar -tzf release-assets/rssr-cli-linux-x86_64.tar.gz | grep '^rssr-cli$'
+
+      - name: Install package and smoke-test ordinary-user startup
+        run: |
+          sudo apt-get install -y ./release-assets/RSS-Reader-linux-x86_64.deb
+          bash scripts/smoke_linux_deb_unprivileged.sh
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v7

@@ -93,6 +93,8 @@ jobs:
           mkdir -p target/test-tools
           clippy-driver --edition 2024 --test scripts/wasm_contract_runner.rs -o target/test-tools/wasm-runner-tests -D warnings
           target/test-tools/wasm-runner-tests
+      - name: Check Linux Debian metadata adapter
+        run: bash scripts/test_prepare_linux_deb.sh
 
   native-module:
     needs: workspace

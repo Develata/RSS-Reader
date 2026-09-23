@@ -57,7 +57,7 @@ cargo run -p rssr-web -- --print-password-hash adminadmin
 
 关键约束：**平台差异只允许存在于 infra / adapter / host capability 层**，application/domain 的语义必须跨平台统一。UI 组件里禁止直接写 SQL、HTTP 或 feed/OPML/JSON 解析。
 
-桌面端数据库在首次启动时自动创建于可执行文件同目录 `RSS-Reader/rss-reader.db` 并执行迁移。
+Linux `/usr/bin` 安装版的数据库首次启动时创建于 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`）；其它桌面/便携版仍在可执行文件同目录 `RSS-Reader/`。路径规则集中在 `rssr-infra::db::sqlite_native`，索引库、正文库及界面偏好共用它。
 
 ## 仓库规则（来自 AGENTS.md，必须遵守）
 

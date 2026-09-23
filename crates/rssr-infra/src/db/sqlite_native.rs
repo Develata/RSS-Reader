@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+#[cfg(target_os = "linux")]
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -30,7 +32,7 @@ impl NativeSqliteBackend {
     }
 
     pub fn from_default_location() -> anyhow::Result<Self> {
-        Ok(Self::with_path(default_database_path()?))
+        Ok(Self::with_path(ensure_local_data_dir()?.join("rss-reader.db")))
     }
 
     pub fn database_label(&self) -> String {
@@ -82,30 +84,74 @@ impl StorageBackend for NativeSqliteBackend {
     }
 }
 
-/// 本地可写数据目录：两个数据库以及其它随安装位置走的本地文件都放在这里。
+/// 本地可写数据目录：两个数据库和界面偏好始终使用同一解析规则。
 ///
-/// 对外暴露是为了让「数据文件放哪」只有这一处权威定义。此前只有数据库需要它，
-/// 于是路径规则藏在私有函数里；现在界面偏好也要落盘，调用方再各自拼一遍
-/// `current_exe()/RSS-Reader` 就会出现两份会各自漂移的定义。
+/// Linux 系统安装包位于 /usr/bin，数据遵循 XDG；便携版仍跟随可执行文件。
+/// Android 和其它桌面平台保留原有路径，避免无意拆分已有数据。
 pub fn local_data_dir() -> anyhow::Result<PathBuf> {
-    Ok(local_data_dir_in_base_dir(&local_data_base_dir()?))
-}
-
-fn local_data_base_dir() -> anyhow::Result<PathBuf> {
     #[cfg(target_os = "android")]
     {
-        android_data_base_dir()
+        Ok(local_data_dir_in_base_dir(&android_data_base_dir()?))
     }
 
     #[cfg(not(target_os = "android"))]
     {
         let executable_path = std::env::current_exe().context("无法定位可执行文件路径")?;
-        executable_path.parent().map(Path::to_path_buf).context("无法定位可执行文件所在目录")
+        let executable_dir = executable_path.parent().context("无法定位可执行文件所在目录")?;
+        #[cfg(target_os = "linux")]
+        {
+            linux_local_data_dir(
+                executable_dir,
+                std::env::var_os("XDG_DATA_HOME").as_deref(),
+                std::env::var_os("HOME").as_deref(),
+            )
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            Ok(local_data_dir_in_base_dir(executable_dir))
+        }
     }
 }
 
-fn default_database_path() -> anyhow::Result<PathBuf> {
-    Ok(database_path_in_base_dir(&local_data_base_dir()?))
+/// 创建目录时限制新目录的权限；已有目录及其权限不作更改。
+pub fn ensure_local_data_dir() -> anyhow::Result<PathBuf> {
+    let dir = local_data_dir()?;
+    create_local_data_dir(&dir)?;
+    Ok(dir)
+}
+
+fn create_local_data_dir(dir: &Path) -> anyhow::Result<()> {
+    #[cfg(unix)]
+    let result = {
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new().recursive(true).mode(0o700).create(dir)
+    };
+    #[cfg(not(unix))]
+    let result = std::fs::create_dir_all(dir);
+    result.with_context(|| format!("创建本地数据目录失败: {}", dir.display()))
+}
+
+#[cfg(target_os = "linux")]
+fn linux_local_data_dir(
+    executable_dir: &Path,
+    xdg_data_home: Option<&OsStr>,
+    home: Option<&OsStr>,
+) -> anyhow::Result<PathBuf> {
+    if executable_dir != Path::new("/usr/bin") {
+        return Ok(local_data_dir_in_base_dir(executable_dir));
+    }
+
+    let data_home = xdg_data_home
+        .map(Path::new)
+        .filter(|path| path.is_absolute())
+        .map(Path::to_path_buf)
+        .or_else(|| {
+            home.map(Path::new)
+                .filter(|path| path.is_absolute())
+                .map(|path| path.join(".local/share"))
+        })
+        .context("Linux 安装版需要绝对路径 XDG_DATA_HOME 或 HOME 才能保存本地数据")?;
+    Ok(data_home.join("rss-reader"))
 }
 
 #[cfg(target_os = "android")]
@@ -124,10 +170,6 @@ const LOCAL_DATA_DIR_NAME: &str = "RSS-Reader";
 
 fn local_data_dir_in_base_dir(base_dir: &Path) -> PathBuf {
     base_dir.join(LOCAL_DATA_DIR_NAME)
-}
-
-fn database_path_in_base_dir(base_dir: &Path) -> PathBuf {
-    local_data_dir_in_base_dir(base_dir).join("rss-reader.db")
 }
 
 fn content_database_path(index_database_path: &Path) -> PathBuf {
@@ -198,8 +240,8 @@ fn append_content_suffix(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        NativeSqliteBackend, append_content_suffix, content_database_path,
-        database_path_in_base_dir, local_data_dir_in_base_dir,
+        NativeSqliteBackend, append_content_suffix, content_database_path, create_local_data_dir,
+        local_data_dir_in_base_dir,
     };
     use crate::db::storage_backend::StorageBackend;
     use std::{
@@ -207,9 +249,60 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn installed_linux_uses_xdg_and_portable_linux_keeps_adjacent_data() {
+        use super::linux_local_data_dir;
+        use std::ffi::OsStr;
+
+        let installed = Path::new("/usr/bin");
+        let xdg = Some(OsStr::new("/home/张 三/数据目录"));
+        let home = Some(OsStr::new("/home/张 三"));
+        assert_eq!(
+            linux_local_data_dir(installed, xdg, home).unwrap(),
+            Path::new("/home/张 三/数据目录/rss-reader")
+        );
+        assert_eq!(
+            linux_local_data_dir(installed, None, home).unwrap(),
+            Path::new("/home/张 三/.local/share/rss-reader")
+        );
+        for invalid_xdg in ["", "relative/path"] {
+            assert_eq!(
+                linux_local_data_dir(installed, Some(OsStr::new(invalid_xdg)), home).unwrap(),
+                Path::new("/home/张 三/.local/share/rss-reader")
+            );
+        }
+        assert!(linux_local_data_dir(installed, None, None).is_err());
+        assert!(linux_local_data_dir(installed, xdg, None).is_ok());
+        assert!(linux_local_data_dir(installed, None, Some(OsStr::new("relative"))).is_err());
+        assert_eq!(
+            linux_local_data_dir(Path::new("/home/张 三/portable"), xdg, home).unwrap(),
+            Path::new("/home/张 三/portable/RSS-Reader")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn new_local_data_directory_is_private_but_existing_permissions_stay_unchanged() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("rssr-目录 {nonce}"));
+        let data_dir = base.join("nested/rss-reader");
+        create_local_data_dir(&data_dir).unwrap();
+        assert_eq!(std::fs::metadata(&data_dir).unwrap().permissions().mode() & 0o777, 0o700);
+        std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o750)).unwrap();
+        create_local_data_dir(&data_dir).unwrap();
+        assert_eq!(std::fs::metadata(&data_dir).unwrap().permissions().mode() & 0o777, 0o750);
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
     #[test]
     fn database_path_uses_project_subdirectory() {
-        let path = database_path_in_base_dir(Path::new("/tmp/example"));
+        let path = local_data_dir_in_base_dir(Path::new("/tmp/example")).join("rss-reader.db");
         assert_eq!(path, Path::new("/tmp/example/RSS-Reader/rss-reader.db"));
     }
 
@@ -221,7 +314,7 @@ mod tests {
         let data_dir = local_data_dir_in_base_dir(base);
 
         assert_eq!(data_dir, Path::new("/tmp/example/RSS-Reader"));
-        assert_eq!(database_path_in_base_dir(base).parent(), Some(data_dir.as_path()));
+        assert_eq!(data_dir.join("rss-reader.db").parent(), Some(data_dir.as_path()));
     }
 
     #[test]
@@ -259,5 +352,39 @@ mod tests {
         let _ = std::fs::remove_file(format!("{}-wal", database_path.display()));
         let _ = std::fs::remove_file(format!("{}-shm", database_path.display()));
         let _ = std::fs::remove_dir_all(base_dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn installed_path_opens_both_databases_under_private_xdg_directory() {
+        use super::linux_local_data_dir;
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("rssr-xdg-中文 {nonce}"));
+        let xdg_home = base.join("用户 数据");
+        let dir = linux_local_data_dir(
+            Path::new("/usr/bin"),
+            Some(xdg_home.as_os_str()),
+            Some(base.as_os_str()),
+        )
+        .unwrap();
+        create_local_data_dir(&dir).unwrap();
+        let backend = NativeSqliteBackend::with_path(dir.join("rss-reader.db"));
+        let index = backend.connect().await.unwrap();
+        backend.migrate(&index).await.unwrap();
+        let content = backend.connect_content().await.unwrap();
+        backend.migrate_content(&content).await.unwrap();
+        index.close().await;
+        content.close().await;
+        assert!(dir.join("rss-reader.db").is_file());
+        assert!(dir.join("rss-reader-content.db").is_file());
+
+        let reopened = backend.connect().await.unwrap();
+        assert!(crate::db::effective_journal_mode(&reopened).await.is_ok());
+        reopened.close().await;
+        std::fs::remove_dir_all(base).unwrap();
     }
 }

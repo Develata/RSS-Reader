@@ -34,7 +34,7 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
 
 上表按已发布的 `v0.1.16` 产物核对。`main` 上的后续修复只有在新版本发布后才会进入下载包；具体变更和验收范围请以对应 Release 说明为准。Android 已有正式签名 APK / AAB，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。
 
-**Linux 安装包限制：** `v0.1.16` 的 `.deb` 把程序装在 `/usr/bin`，当前程序却尝试在可执行文件目录下创建数据目录。普通账户通常无权写入 `/usr/bin`，因此这份包尚不能视为普通用户可正常启动的安装包；发布流水线只检查了包结构，未覆盖安装后的首次启动。修复需要单独处理数据目录与既有数据迁移。
+**Linux 安装包限制：** 已发布的 `v0.1.16` `.deb` 仍会尝试在 `/usr/bin` 下写数据，普通账户不能依赖它正常启动。`main` 已将 `/usr/bin` 安装版改为使用 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`），并为后续发布增加普通用户安装启动检查；这些修改只有进入新 Release 后才会对下载包生效。
 
 ## 日常使用
 
@@ -48,7 +48,7 @@ Reader 快捷键：`M` 切换已读、`F` 切换收藏、`←` / `→` 跳转上
 
 ## 本地数据与边界
 
-桌面端在可执行文件同目录的 `RSS-Reader/` 下创建 `rss-reader.db`（索引）和 `rss-reader-content.db`（正文）。SQLite 的 `-wal`、`-shm` 是正常附属文件；备份时先退出应用，或连同 WAL 一起复制。Android 使用应用沙箱内的本地 SQLite；卸载应用会清除本地数据，请先导出配置。Web 将状态序列化保存到当前浏览器的 `localStorage`，它与桌面数据库互不共享；清除站点数据也会清除本地文章库。
+Linux `/usr/bin` 安装版在 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`）保存数据；Windows、macOS 和 Linux 便携版仍在可执行文件同目录的 `RSS-Reader/` 保存数据。目录中包含 `rss-reader.db`（索引）、`rss-reader-content.db`（正文），还可能有 `shell-prefs.json`。SQLite 的 `-wal`、`-shm` 是正常附属文件；备份时先退出应用，再复制整个目录。旧版如曾以管理员身份在 `/usr/bin/RSS-Reader/` 产生数据，升级后不会自动迁移；请在应用退出后备份并由管理员将完整目录复制到新位置、改为当前用户所有。Android 使用应用沙箱内的本地 SQLite；卸载应用会清除本地数据，请先导出配置。Web 将状态序列化保存到当前浏览器的 `localStorage`，它与桌面数据库互不共享；清除站点数据也会清除本地文章库。
 
 RSS-Reader 缓存 feed 提供的正文，不主动抓取原网站补全全文。桌面端和 Android 会尽量把正文图片本地化；Web 受浏览器 CORS 限制。JSON / OPML / WebDAV 交换的是订阅与设置，**不是文章库、已读状态或收藏的跨设备同步**。直接运行静态 Web 包时，某些 feed 会因 CORS 无法刷新；`rssr-web` 提供带登录的同源 `/feed-proxy`，见 [Web 部署指南](./docs/deployment/web.md)。
 
