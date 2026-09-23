@@ -245,7 +245,12 @@ async function checkEntriesOverflow(client) {
       const maximum = directory.scrollWidth - directory.clientWidth;
       async function readAt(fraction) {
         directory.scrollLeft = maximum * fraction;
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        // Headless Chrome may throttle animation frames under CI load. Keep the
+        // style assertion bounded so a stalled frame cannot hang the CDP call.
+        await Promise.race([
+          new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+          new Promise((resolve) => setTimeout(resolve, 1000)),
+        ]);
         const style = getComputedStyle(directory);
         return {
           fraction,
@@ -385,16 +390,20 @@ async function checkShortDirectory(client) {
   await ensureEntryControlsOpen(client);
   const evidence = await evaluate(
     client,
-    `new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+    `(async () => {
+      await Promise.race([
+        new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+        new Promise((resolve) => setTimeout(resolve, 1000)),
+      ]);
       const directory = document.querySelector('[data-layout="entry-top-directory"]');
       const style = getComputedStyle(directory);
-      resolve({
+      return {
         chips: directory.querySelectorAll('[data-layout="entry-top-directory-chip"]').length,
         scrollWidth: directory.scrollWidth,
         clientWidth: directory.clientWidth,
         maskImage: style.maskImage || style.webkitMaskImage,
-      });
-    })))`,
+      };
+    })()`,
   );
   assertThat(
     'short directory has no overflow',
