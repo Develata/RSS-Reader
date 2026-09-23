@@ -23,7 +23,7 @@
 ### 1. `test_webdav_local_roundtrip` 的 loopback 端口权限限制
 
 - 受影响入口：
-  - [test_webdav_local_roundtrip.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/tests/test_webdav_local_roundtrip.rs)
+  - [test_webdav_local_roundtrip.rs](../../crates/rssr-infra/tests/test_webdav_local_roundtrip.rs)
   - `cargo test --workspace`
   - `cargo test -p rssr-infra --test test_webdav_local_roundtrip`
 - 触发环境：

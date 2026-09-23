@@ -14,7 +14,7 @@
 
 ## 脚本
 
-- [run_rssr_web_browser_feed_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_feed_smoke.sh)
+- [run_rssr_web_browser_feed_smoke.sh](../../scripts/run_rssr_web_browser_feed_smoke.sh)
 
 ## 最短用法
 

@@ -41,7 +41,7 @@ browser 端 refresh 可以粗分成两半：
 
 ## 脚本
 
-- [run_rssr_web_proxy_feed_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_proxy_feed_smoke.sh)
+- [run_rssr_web_proxy_feed_smoke.sh](../../scripts/run_rssr_web_proxy_feed_smoke.sh)
 
 ## 最短用法
 
@@ -76,10 +76,10 @@ bash scripts/run_rssr_web_proxy_feed_smoke.sh --feed-url https://github.blog/fee
 
 对应实现入口：
 
-- [feed_request.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/feed_request.rs)
-- [feed_response.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/feed_response.rs)
-- [feed.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/feed.rs)
-- [adapters/refresh.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/adapters/refresh.rs)
+- [feed_request.rs](../../crates/rssr-infra/src/application_adapters/browser/feed_request.rs)
+- [feed_response.rs](../../crates/rssr-infra/src/application_adapters/browser/feed_response.rs)
+- [feed.rs](../../crates/rssr-infra/src/application_adapters/browser/feed.rs)
+- [adapters/refresh.rs](../../crates/rssr-infra/src/application_adapters/browser/adapters/refresh.rs)
 
 ### 请求顺序
 

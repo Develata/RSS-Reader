@@ -58,4 +58,4 @@
 - 冷启动、订阅添加、刷新和阅读形成连续闭环，过程中无明显长时间停顿。
 - 无更新刷新不会制造重复文章，也不会产生明显阻塞。
 - 已缓存文章在离线状态下仍可稳定打开。
-- 结果满足 [spec.md](/home/develata/gitclone/RSS-Reader/specs/001-minimal-rss-reader/spec.md) 中 `SC-001` 和 `SC-003` 的主观响应性要求。
+- 结果满足 [spec.md](../../../specs/001-minimal-rss-reader/spec.md) 中 `SC-001` 和 `SC-003` 的主观响应性要求。

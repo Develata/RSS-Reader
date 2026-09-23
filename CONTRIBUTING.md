@@ -52,16 +52,16 @@ RSS-Reader 的核心边界长期只围绕四类能力：
 ## 提交前建议执行
 
 ```bash
-cargo fmt --all
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo fmt --all --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace
 ```
 
 如果改动影响 Web 交互，建议再补做一轮：
 
-- `dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e`
+- `dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e`
 - 使用 `rssr-web` 做浏览器回归
-- 更新 [全局浏览器回归报告](./docs/testing/global-browser-regression.md)
+- 更新[发布前 UI 覆盖矩阵](./docs/testing/release-ui-coverage-matrix.md)及相关浏览器 smoke 断言
 
 ## 文档同步
 

@@ -63,4 +63,4 @@
 
 - 在大数据量样本下，列表浏览、筛选切换和标题搜索保持可响应。
 - 已读 / 收藏状态切换与列表、阅读页显示一致，且重启后不丢失。
-- 结果满足 [spec.md](/home/develata/gitclone/RSS-Reader/specs/001-minimal-rss-reader/spec.md) 中 `SC-002` 的要求。
+- 结果满足 [spec.md](../../../specs/001-minimal-rss-reader/spec.md) 中 `SC-002` 的要求。

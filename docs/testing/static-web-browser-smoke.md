@@ -6,7 +6,7 @@
 
 ## 脚本
 
-- [run_static_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_static_web_browser_smoke.sh)
+- [run_static_web_browser_smoke.sh](../../scripts/run_static_web_browser_smoke.sh)
 
 ## 最短用法
 

@@ -2,11 +2,11 @@
 
 这个目录保存**按日期持续追加**的工程交接记录，用来承接每次 agent 工作后的真实上下文。
 
-它和 [agent-handoff.md](/home/develata/gitclone/RSS-Reader/docs/agent-handoff.md) 的分工不同：
+它和 2026-04 的[历史总览](../agent-handoff.md)分工不同：
 
-- [agent-handoff.md](/home/develata/gitclone/RSS-Reader/docs/agent-handoff.md)
-  - 长期稳定的项目总览
-  - 适合新 agent 快速建立整体认知
+- [agent-handoff.md](../agent-handoff.md)
+  - 记录当时的项目背景与架构快照
+  - 不代表后来发布和实机验收的当前状态
 - `docs/handoffs/`
   - 按日期和版本滚动的交接日志
   - 适合了解“最近到底改了什么、验到了哪里、还有什么风险”
@@ -25,7 +25,7 @@
 
 ## 固定格式
 
-所有记录都 MUST 基于 [TEMPLATE.md](/home/develata/gitclone/RSS-Reader/docs/handoffs/TEMPLATE.md) 编写，并至少包含以下部分：
+所有记录都 MUST 基于 [TEMPLATE.md](./TEMPLATE.md) 编写，并至少包含以下部分：
 
 1. 元数据
    - 日期
@@ -63,8 +63,8 @@
 
 ## 历史交接说明
 
-在本目录建立之前的历史上下文，继续保留在：
+在本目录建立之前的历史上下文仍保留在：
 
-- [agent-handoff.md](/home/develata/gitclone/RSS-Reader/docs/agent-handoff.md)
+- [agent-handoff.md](../agent-handoff.md)
 
 后续新工作统一落到 `docs/handoffs/`。

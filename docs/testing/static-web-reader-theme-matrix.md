@@ -10,7 +10,7 @@
 
 ## 脚本
 
-- [run_static_web_reader_theme_matrix.sh](/home/develata/gitclone/RSS-Reader/scripts/run_static_web_reader_theme_matrix.sh)
+- [run_static_web_reader_theme_matrix.sh](../../scripts/run_static_web_reader_theme_matrix.sh)
 
 ## 最短用法
 

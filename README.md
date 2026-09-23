@@ -1,141 +1,66 @@
 # RSS-Reader
 
-一个本地优先、面向个人使用的极简 RSS 阅读器。  
-它优先解决“顺手订阅、稳定刷新、舒服阅读、可离线查看、易于迁移”这些实际问题，而不是做成一个厚重的平台。
+> 打开订阅，直接阅读。
 
-[English README](./docs/README.en.md) | [文档索引](./docs/README.md) | [贡献说明](./CONTRIBUTING.md) | [MIT License](./LICENSE)
+RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把订阅、刷新、筛选和阅读放在一条简短的使用路径上；桌面、Web、Android 和 CLI 复用同一套核心能力。文章库留在当前设备，配置可以通过 JSON、OPML 或可选的 WebDAV 迁移。
 
-## 为什么做这个项目
+[下载最新版本](https://github.com/Develata/RSS-Reader/releases/latest) · [发布说明](https://github.com/Develata/RSS-Reader/releases) · [English](./docs/README.en.md) · [文档](./docs/README.md) · [报告问题](https://github.com/Develata/RSS-Reader/issues)
 
-RSS-Reader 是一个以 Rust 为核心、基于 Dioxus 构建的跨平台阅读器，当前重点覆盖：
+## 30 秒开始阅读
 
-- 桌面端日常阅读
-- Web 端浏览器验证与静态部署
-- Android Debug APK 构建与后续移动端演进
-- 本地 SQLite 持久化
-- JSON / OPML 配置交换
-- 可选 WebDAV 配置同步
-- CLI 自动化与自定义 CSS 主题
+1. 在 [Releases](https://github.com/Develata/RSS-Reader/releases/latest) 选择适合设备的附件：
 
-如果你需要的是这样一种工具，这个项目会比较合适：
+   | 设备 | 桌面 / 安装附件 | 开始使用 |
+   | --- | --- | --- |
+   | Windows x64 | `RSS-Reader-windows-x86_64.zip` | 解压到可写目录，运行 `RSS-Reader.exe`；系统需有 WebView2 Runtime |
+   | Linux x64 | `RSS-Reader-linux-x86_64.deb` | 已发布；普通账户启动的目录写权限问题见下方说明 |
+   | macOS Intel / Apple Silicon | `RSS-Reader-macos-x86_64.tar.gz` / `RSS-Reader-macos-aarch64.tar.gz` | 解压到可写目录，打开 `RSS-Reader.app` |
+   | Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | 安装 APK；AAB 是应用商店产物，不能直接安装 |
+   | Web | `RSS-Reader-web.tar.gz` | 静态站点包；需要受保护的登录和跨域 feed 代抓时使用 [Web 部署指南](./docs/deployment/web.md) |
 
-- 不想把订阅数据交给第三方平台
-- 希望桌面端优先、浏览器也能跑
-- 需要离线阅读能力，而不只是在线看摘要
-- 希望订阅配置能导出、迁移、脚本化
-- 想自己写 CSS 主题，或者让 AI 帮你生成主题
+2. 打开应用，在 **S**（Subscribe）页输入 RSS / Atom 地址并添加订阅。
+3. 点击 **R**（Read / Home）查看文章；已在首页时再次点击 **R** 可手动刷新全部订阅。
 
-## 当前能力
+上表按已发布的 `v0.1.15` 产物核对。`main` 上的后续修复只有在新版本发布后才会进入下载包；具体变更和验收范围请以对应 Release 说明为准。Android 已有正式签名 APK / AAB，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。
 
-### 阅读与订阅
+**Linux 安装包限制：** `v0.1.15` 的 `.deb` 把程序装在 `/usr/bin`，当前程序却尝试在可执行文件目录下创建数据目录。普通账户通常无权写入 `/usr/bin`，因此这份包尚不能视为普通用户可正常启动的安装包；发布流水线只检查了包结构，未覆盖安装后的首次启动。修复需要单独处理数据目录与既有数据迁移。
 
-- 添加 / 删除 RSS feed
-- 刷新单个订阅或全部订阅
-- 文章列表、阅读页、已读 / 收藏 / 搜索
-- 阅读页支持：
-  - 左上角返回上一页
-  - 正文图片点击放大；关闭按钮、背景或 Esc 关闭并恢复阅读位置
-  - 沿用系统原生文字选择、复制与全选；桌面端右键可使用 WebView 的原生菜单
-  - 上一篇未读 / 下一篇未读
-  - 上一篇同订阅文章 / 下一篇同订阅文章
+## 日常使用
 
-### 本地优先
+- **导航与刷新：** R 始终可见。从阅读页或其他页面点击 R 只返回全部文章页；已在首页再次点击才刷新全部订阅。连续触发复用进行中的刷新，手机首页还可在滚动到顶部后下拉刷新。
+- **搜索与筛选：** 放大镜展开标题搜索框，Enter 搜索，Esc 收起。文章列表可按来源、未读、收藏等条件筛选；来源名完整显示，多页时分页按钮保持可触达。
+- **阅读：** 左上角返回；可切换已读和收藏、跳转相邻文章、点击正文图片放大。正文保留原生文字选择与复制行为。刷新不会突然替换正在看的正文。
+- **设置与迁移：** 齿轮进入设置，支持内置主题和自定义 CSS；JSON / OPML 用于配置交换，可选 WebDAV 同步配置。
+- **自动化：** `rssr-cli` 支持订阅管理、刷新、设置和配置导入导出；运行 `cargo run --locked -p rssr-cli -- --help` 查看命令。
 
-- 桌面端使用本地 SQLite
-- Web 使用浏览器本地持久化状态（当前实现为 `localStorage` 序列化状态文件）
-- feed 提供多少正文，就缓存多少正文
-- 桌面端 / Android 会在 feed 刷新完成后，尽量把正文中的图片资源在后台本地化进缓存 HTML
-- Web 端正文也会缓存，但图片本地化受浏览器 CORS 约束
+Reader 快捷键：`M` 切换已读、`F` 切换收藏、`←` / `→` 跳转上一篇 / 下一篇未读。输入框中与带 Ctrl / Cmd 等修饰键的原生编辑操作不应被阅读快捷键接管。
 
-### 配置与迁移
+## 本地数据与边界
 
-- 导入 / 导出配置包 JSON
-- 导入 / 导出 OPML
-- WebDAV 上传 / 下载配置
-- 自定义 CSS 主题、主题卡片、预置主题切换
+桌面端在可执行文件同目录的 `RSS-Reader/` 下创建 `rss-reader.db`（索引）和 `rss-reader-content.db`（正文）。SQLite 的 `-wal`、`-shm` 是正常附属文件；备份时先退出应用，或连同 WAL 一起复制。Android 使用应用沙箱内的本地 SQLite；卸载应用会清除本地数据，请先导出配置。Web 将状态序列化保存到当前浏览器的 `localStorage`，它与桌面数据库互不共享；清除站点数据也会清除本地文章库。
 
-### 自动化
+RSS-Reader 缓存 feed 提供的正文，不主动抓取原网站补全全文。桌面端和 Android 会尽量把正文图片本地化；Web 受浏览器 CORS 限制。JSON / OPML / WebDAV 交换的是订阅与设置，**不是文章库、已读状态或收藏的跨设备同步**。直接运行静态 Web 包时，某些 feed 会因 CORS 无法刷新；`rssr-web` 提供带登录的同源 `/feed-proxy`，见 [Web 部署指南](./docs/deployment/web.md)。
 
-- `rssr-cli` 可用于：
-  - 列出订阅
-  - 添加 / 删除 feed
-  - 刷新订阅
-  - 导入 / 导出配置
-  - 导入 / 导出 OPML
-  - 查看 / 保存设置
-  - 推送 / 拉取 WebDAV 配置
+项目的长期范围是订阅、阅读、基本设置和基础配置交换；不做推荐流、社交平台或 AI 内容加工。设计依据见[功能设计哲学](./docs/design/functional-design-philosophy.md)。
 
-## 平台状态
+## 从源码运行与验证
 
-| 平台 | 当前状态 |
-| --- | --- |
-| Windows Desktop | 可发布 |
-| Linux Desktop | 可发布 |
-| macOS Desktop | 可发布 |
-| Web | 可发布 |
-| Android Debug APK | 已接入 |
-| Android Signed Release APK / AAB | 已有 workflow，待 secrets 与正式验收 |
-
-## 下载安装
-
-### 方式一：直接下载 GitHub Release
-
-如果你只是想使用，不想自己编译，最简单的方式是直接下载 GitHub Release 附件。
-
-当前会发布这些产物：
-
-- `RSS-Reader-windows-x86_64.zip`
-- `RSS-Reader-linux-x86_64.tar.gz`
-- `RSS-Reader-macos-x86_64.tar.gz`
-- `RSS-Reader-macos-aarch64.tar.gz`
-- `RSS-Reader-web.tar.gz`
-- `RSS-Reader-android-arm64-v8a-release.apk`（Android 安装包，装这个）
-- `RSS-Reader-android-arm64-v8a-release.aab`（应用商店用，普通用户不需要）
-
-另外还会附带 CLI：
-
-- `rssr-cli-windows-x86_64.zip`
-- `rssr-cli-linux-x86_64.tar.gz`
-- `rssr-cli-macos-x86_64.tar.gz`
-- `rssr-cli-macos-aarch64.tar.gz`
-
-说明：
-
-- 仓库配置了签名 secrets 时，Android 只发布正式签名的 `arm64-v8a` release APK 与 AAB；未配置时退回发布 debug APK。两者不会同时出现——它们签名不同，并排挂着会让人装错
-- **debug APK 无法用于升级**：它由 CI 每次现生成的临时密钥签名，每个版本的证书都不一样，覆盖安装会被系统以“校验失败 / 签名不一致”拒绝。从 debug 包换到正式签名包同样需要先卸载，卸载会清空本机订阅与已下载正文，务必先导出 OPML
-- Android 的 `versionCode` / `versionName` 来自发布 tag（`v0.1.13` → `versionCode=113`、`versionName=0.1.13`），不取工作区 `Cargo.toml` 的版本号
-- 如果你本地自己执行 `dx bundle --platform android ...`，记得随后运行 `python3 scripts/prepare_android_bundle.py target/dx/rssr-app/release/android/app/app/src/main`（本地调试可不带 `--release-tag`，版本号保持脚手架默认值），再进入生成的 Gradle 工程执行一次 `./gradlew assembleDebug` 或 `assembleRelease`，这样 Android 启动图标、应用显示名，以及 `targetSdk / compileSdk` 才会真正打进 APK / AAB，避免被系统提示“此应用是针对旧版安卓开发的”
-- Windows 桌面端通常需要系统已安装 WebView2 Runtime
-
-### 方式二：本地编译
-
-如果你要改代码、调试、或自己出包，可以本地编译。
-
-## 快速开始
-
-### 桌面端本地开发
+需要 Rust 稳定版；Web 开发还需要 `wasm32-unknown-unknown` target 与 Dioxus CLI `0.7.9`。
 
 ```bash
-cargo run -p rssr-app
-```
+# 桌面端
+cargo run --locked -p rssr-app
 
-### Web 端本地开发
-
-```bash
+# Web 开发
 rustup target add wasm32-unknown-unknown
 cargo install dioxus-cli --version 0.7.9 --locked
 dx serve --platform web --package rssr-app
+
+# CLI
+cargo run --locked -p rssr-cli -- --help
 ```
 
-注意：
-
-- Web 端远端 feed 是否能抓取，取决于目标站点是否允许跨域请求
-- 有些 feed 在 desktop / Android 正常，在 Web 会被浏览器 CORS 限制拦住
-- 如果你通过 `rssr-web` 部署 Web 版本，服务端会代抓 feed，所以像 `https://www.ruanyifeng.com/blog/atom.xml` 这类会被浏览器 CORS 拦住的源也能正常订阅
-- Web 端为避免浏览器缓存导致“刷新看起来没生效”，会在刷新 feed 时附加 cache-busting 参数
-- `https://blogs.nvidia.com/feed/` 这类源在浏览器里通常可直接使用；`https://www.ruanyifeng.com/blog/atom.xml` 这类源请优先通过 `rssr-web` / Docker 部署方式验证
-
-### 验证
+提交前的基础检查：
 
 ```bash
 cargo fmt --all --check
@@ -144,599 +69,14 @@ cargo test --locked --workspace
 cargo check --locked -p rssr-app --target wasm32-unknown-unknown
 ```
 
-CI 按 workspace crate 并发执行测试和 Clippy，Web release 包构建一次后分发给默认及四个内置主题的真实 UI 验收，另有 wasm 契约和 Android 构建任务。并发、汇总门禁及本地分模块命令见[主线验证矩阵](docs/testing/mainline-validation-matrix.md)。
+页面或移动端交互改动还应按环境补充 Android target、Web/原生 UI 验收。CI 分模块并行执行 Rust 检查、Web 浏览器契约及 Android 构建；每条路径与环境限制见[主线验证矩阵](./docs/testing/mainline-validation-matrix.md)。编译通过不等于 Android 或 macOS 实机已验收。
 
-### 常用命令
+## 发布与文档
 
-```bash
-# 桌面端
-cargo run -p rssr-app
+- [使用指南](./docs/user-guide.md)：订阅、搜索、阅读、主题、WebDAV 和本地备份。
+- [Web / Docker 部署与登录配置](./docs/deployment/web.md)：GHCR、Compose、生产环境、`/feed-proxy`。
+- [Android 构建与验收状态](./docs/roadmaps/android-release-roadmap.md)：本地 APK、签名与待测设备行为。
+- [文档索引](./docs/README.md)：设计、测试、交接记录。
+- [贡献说明](./CONTRIBUTING.md) · [MIT License](./LICENSE)。
 
-# CLI
-cargo run -p rssr-cli -- --help
-
-# 仅检查 web target
-cargo check -p rssr-app --target wasm32-unknown-unknown
-
-# Android smoke check
-cargo check -p rssr-app --target aarch64-linux-android
-```
-
-## 如何使用
-
-### 1. 添加订阅
-
-打开“订阅”页，输入一个 RSS / Atom feed URL，然后按 Enter 或点击“添加订阅”。
-
-添加和首次刷新期间会显示“正在添加…”，重复提交不会再启动一轮；可以继续输入下一个地址，当前操作完成后会保留这份新输入。失败时保留地址供重试。
-
-建议优先用桌面端测试真实远端 feed，因为：
-
-- 桌面端不会受浏览器 CORS 限制
-- Web 端只有目标站点允许跨域时才能直接刷新远端 feed
-
-### 2. 阅读文章
-
-顶部 R 是 Read / Home：从其他页面点击只返回全部文章页；已经在首页时再次点击会刷新全部订阅。进行中的手动刷新会去重，切换页面仍继续。成功提示约 1 秒后收起，错误提示保留更久以便阅读。手机也可在首页滚到顶部后下拉刷新。
-
-放大镜展开 / 收起标题搜索，Enter 搜索，Esc 收起；窄侧栏中输入框会换到下一行以保持可读。S 进入订阅，齿轮进入设置。来源筛选显示完整名称，多页列表底部保留可随时触达的分页按钮。
-
-“文章”页支持：
-
-- 标题搜索
-- 仅未读
-- 仅收藏
-- 进入阅读页
-
-阅读页支持：
-
-- 返回上一页
-- 标记已读 / 未读
-- 收藏 / 取消收藏
-- 上一篇未读 / 下一篇未读
-- 上一篇同订阅文章 / 下一篇同订阅文章
-- 快捷键 `M` 切换已读，`F` 切换收藏
-- 快捷键 `←` 跳到上一篇未读，`→` 跳到下一篇未读
-
-设置中的阅读字号缩放在手机、桌面及内置主题中均生效。正文链接保留下划线，较长代码块可在块内横向滚动，不会撑宽整页。
-
-### 3. 切换主题
-
-“设置”页支持：
-
-- 直接编辑自定义 CSS
-- 导入主题文件
-- 导出当前 CSS
-- 预置主题按钮
-- 主题下拉
-- 主题卡片切换
-
-保存期间仍可编辑；完成提示会区分已保存内容和随后尚未保存的草稿。失败时保留草稿供修改后重试。
-
-如果你想自定义外观但不想手写 CSS，可以先读：
-
-- [功能设计哲学](./docs/design/functional-design-philosophy.md)
-- [前端命令与界面接口清单](./docs/design/frontend-command-reference.md)
-- [主题作者选择器参考](./docs/design/theme-author-selector-reference.md)
-
-### 4. 导入导出
-
-当前支持：
-
-- 配置包 JSON 导入 / 导出
-- OPML 导入 / 导出
-- WebDAV 配置同步
-
-CLI 的 `export-config`、`export-opml` 和 `show-settings` 将数据写入 stdout，诊断写入 stderr，可以直接重定向到文件后再导入，无须清理日志。
-
-WebDAV 端点如果需要登录，把凭据写进 endpoint 即可（形如
-`https://用户名:密码@dav.example.com/base/`）：程序会取出凭据走 HTTP Basic 认证，并把它从
-请求地址上剥掉。endpoint 只保存在设置页的当前会话里，既不写入本地数据库，也不会进入配置包，
-因此不会被导出或推送到远端。用户名或密码含 `@`、`:` 等字符时请按 URL 规则百分号编码。
-
-配置交换的原则是：
-
-- 迁移订阅与设置
-- 不把它做成一个云端数据库同步平台
-- 本地阅读库仍然以本地为主
-
-## 数据存储与缓存
-
-### 桌面端
-
-桌面端使用本地 SQLite。
-
-默认数据库会自动创建在可执行文件同目录下的 `RSS-Reader/rss-reader.db`。首次启动时程序会自动：
-
-- 创建数据目录
-- 创建 SQLite 数据库
-- 执行迁移
-
-索引库与正文库是两个文件（`rss-reader.db` 与 `rss-reader-content.db`）。两者都以
-WAL（write-ahead logging）模式打开，因此目录里还会出现 `-wal` / `-shm` 两个附属文件——
-它们是 SQLite 的正常组成部分，不要单独删除。选择 WAL 的原因是「后台刷新写入」与
-「前台阅读查询」会并发发生：回滚日志模式下写事务会阻塞读，刷新时界面会卡；WAL 下读不再被写阻塞。
-备份时请连同 `-wal` 文件一起复制，或先正常退出程序（退出时 WAL 会被合并回主库）。
-
-### Web 端
-
-Web 端当前使用浏览器本地持久化状态，而不是和桌面端完全相同的 SQLite 文件实现。
-
-当前实现特征：
-
-- 状态序列化后持久化在浏览器本地存储中
-- 刷新页面、重新打开浏览器标签页后仍会保留订阅、文章、已读、收藏和设置
-- 这条实现路线优先保证当前 Web 版可用性与跨浏览器稳定性
-
-### 正文缓存策略
-
-当前缓存边界是：
-
-- feed 提供多少正文，就缓存多少正文
-- 不默认抓取站点原网页去补全文
-
-另外：
-
-- 桌面端 / Android 会在刷新成功后，于后台尽量把正文里的图片资源本地化进缓存 HTML
-- 这样已经成功缓存过的图片，在远端删除后仍然可读
-- 图片本地化不会再阻塞“新增订阅 / 刷新订阅”的主流程；即使图片抓取失败或超时，刷新本身仍然成功
-- 正在显示的正文不会因后台本地化完成而重载；新缓存会在下一次打开该文章时使用
-- Web 端正文也会缓存，但图片本地化受浏览器 CORS 限制，可能保留远端 URL
-
-## 发布与交付
-
-### GitHub Release 产物
-
-当前 release workflow 会发布：
-
-- Windows desktop
-- Linux desktop
-- macOS desktop
-- Web 静态包
-- Android release APK + AAB（正式签名）
-
-Android 那一项要求仓库已配置 signing secrets：打 tag 发布时缺少任何一个 secret 都会直接让
-`build-android` 失败，而不是悄悄退回 debug 包。手动 `workflow_dispatch` 仍允许在未配置密钥时
-降级发布 debug APK，便于不碰密钥地验证其它平台。
-
-### Docker / Compose
-
-仓库包含 **Web 版本** 的容器化部署支持。
-
-当前镜像运行的是一个很薄的 `rssr-web` 服务进程，它负责：
-
-- 显示用户名 / 密码登录页
-- 在服务端校验凭据
-- 签发 `HttpOnly` 会话 cookie
-- 登录后再提供 Dioxus Web 静态资源与 SPA 路由回退
-
-它 **不是** 桌面端、CLI、Android 或本地开发运行所需的依赖；只有 Docker / GHCR 的 Web 部署镜像才会用到它。
-
-如果你本地开发或运行原生版本，完全不需要这层部署服务：
-
-- 桌面端：`cargo run -p rssr-app`
-- Web 开发：`dx serve --platform web --package rssr-app`
-
-如果你要验证 Web 部署态的完整能力，尤其是：
-
-- 用户名 / 密码登录
-- 同源 `/feed-proxy`
-- CORS 受限源（例如 `https://www.ruanyifeng.com/blog/atom.xml`）
-
-推荐直接本地运行 `rssr-web`：
-
-```bash
-dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e
-
-cargo run -p rssr-web -- --print-password-hash adminadmin
-
-RSS_READER_WEB_BIND=127.0.0.1:8060 \
-RSS_READER_WEB_STATIC_DIR=target/web-e2e/public \
-RSS_READER_WEB_USERNAME=admin \
-RSS_READER_WEB_PASSWORD_HASH='<把上一步输出粘贴到这里>' \
-RSS_READER_WEB_SESSION_SECRET=01234567890123456789012345678901 \
-cargo run -p rssr-web
-```
-
-然后访问 `http://127.0.0.1:8060/login`，用 `admin / adminadmin` 登录后测试 feed 导入与刷新。
-
-### 手动修改 Web 登录用户名 / 密码
-
-`rssr-web` 的登录账号由环境变量控制，最常用的就是这三项：
-
-- `RSS_READER_WEB_USERNAME`
-- `RSS_READER_WEB_PASSWORD_HASH`
-- `RSS_READER_WEB_SESSION_SECRET`
-
-推荐按下面的顺序手动修改：
-
-1. 先生成一个新的 Argon2 密码哈希：
-
-```bash
-cargo run -p rssr-web -- --print-password-hash '请换成你自己的强密码'
-```
-
-2. 然后在启动 `rssr-web` 或 `docker compose` 之前，替换环境变量：
-
-```bash
-export RSS_READER_WEB_USERNAME='请换成你的用户名'
-export RSS_READER_WEB_PASSWORD_HASH='把上一步输出的 Argon2 哈希粘贴到这里'
-export RSS_READER_WEB_SESSION_SECRET='至少32字符的随机长串'
-```
-
-3. 重新启动服务：
-
-```bash
-cargo run -p rssr-web
-```
-
-或者：
-
-```bash
-docker compose up -d
-```
-
-补充说明：
-
-- `RSS_READER_WEB_PASSWORD_HASH` 变了以后，旧密码会立即失效
-- `RSS_READER_WEB_USERNAME` 变了以后，登录页就必须使用新用户名
-- `RSS_READER_WEB_SESSION_SECRET` 变了以后，旧会话 cookie 会失效，用户需要重新登录
-- 部署环境不要再保存明文密码，优先只保留 Argon2 哈希
-
-### 直接拉取 GitHub 镜像运行
-
-默认的 [docker-compose.yml](./docker-compose.yml) 是“直接拉取 GitHub Container Registry 镜像”的部署模板，不会在本地重新构建镜像。
-
-如果你是从零开始在服务器上部署，最实用的方式是直接准备一个 `.env` 和一个 `compose.yaml`。
-
-### 最小 `compose.yaml` 模板
-
-```yaml
-services:
-  rss-reader:
-    image: ghcr.io/develata/rss-reader:latest
-    environment:
-      RSS_READER_WEB_USERNAME: ${RSS_READER_WEB_USERNAME}
-      RSS_READER_WEB_PASSWORD_HASH: ${RSS_READER_WEB_PASSWORD_HASH:-}
-      RSS_READER_WEB_PASSWORD: ${RSS_READER_WEB_PASSWORD:-}
-      RSS_READER_WEB_SESSION_SECRET: ${RSS_READER_WEB_SESSION_SECRET:-}
-      RSS_READER_WEB_AUTH_STATE_FILE: ${RSS_READER_WEB_AUTH_STATE_FILE:-/app/auth/auth.json}
-      RSS_READER_WEB_ENV: ${RSS_READER_WEB_ENV:-development}
-      RSS_READER_WEB_SECURE_COOKIE: ${RSS_READER_WEB_SECURE_COOKIE:-false}
-      RSS_READER_WEB_TRUST_PROXY_HEADERS: ${RSS_READER_WEB_TRUST_PROXY_HEADERS:-false}
-      RSS_READER_WEB_SESSION_TTL_HOURS: ${RSS_READER_WEB_SESSION_TTL_HOURS:-12}
-    ports:
-      - "${RSS_READER_PORT:-8039}:8080"
-    volumes:
-      - rss-reader-auth:/app/auth
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-volumes:
-  rss-reader-auth:
-```
-
-### 配套 `.env` 模板
-
-```dotenv
-RSS_READER_WEB_USERNAME=admin
-RSS_READER_WEB_PASSWORD=adminadmin
-RSS_READER_WEB_AUTH_STATE_FILE=/app/auth/auth.json
-RSS_READER_WEB_ENV=development
-RSS_READER_WEB_SECURE_COOKIE=false
-RSS_READER_WEB_TRUST_PROXY_HEADERS=false
-RSS_READER_PORT=8039
-```
-
-准备好这两个文件后，直接启动：
-
-```bash
-docker compose up -d
-```
-
-首次启动时，如果你只提供：
-
-- `RSS_READER_WEB_USERNAME`
-- `RSS_READER_WEB_PASSWORD`
-
-程序会自动做两件事，并写入 `RSS_READER_WEB_AUTH_STATE_FILE`：
-
-- 生成 Argon2 密码哈希
-- 生成随机 `session secret`
-
-后续只要这个认证状态文件还在，单纯重启 `rssr-web` / Docker **不会**触发“首次登录重新设置账号密码”。
-重启只会重新读取环境变量，并继续使用已经持久化的哈希与 secret。
-在 Unix/Linux 环境下，认证状态文件会以仅当前用户可读写的权限写入。
-
-默认访问：
-
-```text
-http://127.0.0.1:8039
-```
-
-### 这些环境变量分别是什么
-
-`rssr-web` 常用环境变量可以分成三类：
-
-- 必填：
-  - `RSS_READER_WEB_USERNAME`
-    - Web 登录用户名
-- 二选一：
-  - `RSS_READER_WEB_PASSWORD_HASH`
-    - Argon2 密码哈希
-    - 推荐正式部署使用
-  - `RSS_READER_WEB_PASSWORD`
-    - 明文密码
-    - 可用于首次启动时自动生成哈希并持久化
-- 可选：
-  - `RSS_READER_WEB_AUTH_STATE_FILE`
-    - 持久化保存 Argon2 哈希和 session secret 的认证状态文件路径
-    - 默认是当前用户主目录下的 `.rssr-web-auth.json`
-  - `RSS_READER_WEB_SESSION_SECRET`
-    - 用来签发和校验会话 cookie 的密钥
-    - 如果不填，程序会在首次启动时自动生成并写入 `RSS_READER_WEB_AUTH_STATE_FILE`
-    - 如果显式填写，长度至少 32 个字符
-  - `RSS_READER_WEB_ENV`
-    - `development` 或 `production`
-    - 默认 `development`
-  - `RSS_READER_WEB_SECURE_COOKIE`
-    - `true` 时 cookie 只通过 HTTPS 发送
-    - 默认 `false`
-  - `RSS_READER_WEB_TRUST_PROXY_HEADERS`
-    - 是否信任 `X-Forwarded-For` / `X-Real-IP`
-    - 默认 `false`
-    - 只有在 `rssr-web` 明确部署在你自己的反向代理后面时才建议开启
-  - `RSS_READER_WEB_SESSION_TTL_HOURS`
-    - 登录会话有效期，单位小时
-    - 默认 `12`
-  - `RSS_READER_PORT`
-    - Docker 对外暴露端口
-    - 默认 `8039`
-  - `RSS_READER_IMAGE`
-    - 自定义镜像名
-    - 默认 `ghcr.io/develata/rss-reader:latest`
-
-额外说明：
-
-- `RSS_READER_WEB_PASSWORD_HASH` 和 `RSS_READER_WEB_PASSWORD` 是二选一
-- 如果两者都不填，但认证状态文件里已经有哈希，程序会继续使用那个已持久化哈希
-- `RSS_READER_WEB_SESSION_SECRET` 如果不填，程序会优先复用认证状态文件里的 secret；只有首次缺失时才会自动生成
-- 程序会把生成结果写入认证状态文件，但**不会**自动回填到 `.env`、`compose.yaml` 或容器平台变量面板
-
-### 本地开发版 compose 模板
-
-如果你只是想尽快在本地跑起来，可以直接使用明文密码：
-
-```yaml
-services:
-  rss-reader:
-    image: ghcr.io/develata/rss-reader:latest
-    environment:
-      RSS_READER_WEB_USERNAME: admin
-      RSS_READER_WEB_PASSWORD: adminadmin
-      RSS_READER_WEB_AUTH_STATE_FILE: /app/auth/auth.json
-      RSS_READER_WEB_ENV: development
-      RSS_READER_WEB_SECURE_COOKIE: "false"
-      RSS_READER_WEB_TRUST_PROXY_HEADERS: "false"
-      RSS_READER_WEB_SESSION_TTL_HOURS: "12"
-    ports:
-      - "8039:8080"
-    volumes:
-      - rss-reader-auth:/app/auth
-    restart: unless-stopped
-
-volumes:
-  rss-reader-auth:
-```
-
-说明：
-
-- 这种方式只适合本地开发、临时测试、局域网自用
-- 首次启动时，程序会自动生成 Argon2 哈希并写入 `RSS_READER_WEB_AUTH_STATE_FILE`
-- 首次启动时，如果你没有填写 `RSS_READER_WEB_SESSION_SECRET`，程序也会自动生成一个随机 secret 并写入同一个状态文件
-- 之后即使移除 `RSS_READER_WEB_PASSWORD`，只要认证状态文件和卷还在，仍然可以继续登录
-- 后续重启容器不会再次进入“首次设置”流程；除非你删除认证状态文件或显式更换用户名/密码/secret
-- 更稳的做法是：
-  - 首次启动成功后，删除明文 `RSS_READER_WEB_PASSWORD`
-  - 只保留认证状态文件或改成显式 `RSS_READER_WEB_PASSWORD_HASH`
-
-### 正式部署版 compose 模板
-
-如果你要正式部署到服务器，推荐只使用 Argon2 哈希：
-
-```yaml
-services:
-  rss-reader:
-    image: ghcr.io/develata/rss-reader:latest
-    environment:
-      RSS_READER_WEB_USERNAME: admin
-      RSS_READER_WEB_PASSWORD_HASH: "$argon2id$..."
-      RSS_READER_WEB_AUTH_STATE_FILE: "/app/auth/auth.json"
-      RSS_READER_WEB_ENV: "production"
-      RSS_READER_WEB_SECURE_COOKIE: "true"
-      RSS_READER_WEB_TRUST_PROXY_HEADERS: "true"
-      RSS_READER_WEB_SESSION_TTL_HOURS: "12"
-    ports:
-      - "8039:8080"
-    volumes:
-      - rss-reader-auth:/app/auth
-    restart: unless-stopped
-
-volumes:
-  rss-reader-auth:
-```
-
-如果你只想直接填密码，然后让程序自动生成哈希，需要注意：
-
-- 当前 `rssr-web` 已支持“首次启动时自动把明文密码转成 Argon2 哈希，并写入认证状态文件”
-- `RSS_READER_WEB_SESSION_SECRET` 也支持首次自动生成并写入认证状态文件
-- 但它**不会自动把哈希回填到 `.env`、`compose.yaml` 或容器平台变量面板**
-- 如果你想把配置彻底切换到显式哈希，仍然可以手动生成：
-
-```bash
-cargo run -p rssr-web -- --print-password-hash '请换成你自己的强密码'
-```
-
-- 然后把输出粘贴到 `RSS_READER_WEB_PASSWORD_HASH`
-
-原因很简单：
-
-- 服务可以生成哈希
-- 也可以生成 session secret
-- 但它并不知道你希望把这些值写回哪里
-  - `.env`
-  - `compose.yaml`
-  - CI/CD secret
-  - 容器平台变量面板
-
-所以现在的设计是：
-
-- 本地开发：可以直接用 `RSS_READER_WEB_PASSWORD`，程序会自动生成并持久化哈希
-- 本地开发：如果不填 `RSS_READER_WEB_SESSION_SECRET`，程序也会自动生成并持久化
-- 正式部署：
-  - 最稳的是直接使用 `RSS_READER_WEB_PASSWORD_HASH`
-  - 最稳的 session secret 方式仍然是由你自己提供一个高熵随机值
-  - 也可以先用 `RSS_READER_WEB_PASSWORD` 启动一次，让程序生成并持久化哈希，再移除明文密码
-  - 只有在服务明确运行在你控制的反向代理后面时，才建议设置 `RSS_READER_WEB_TRUST_PROXY_HEADERS=true`
-
-如果你想手动轮换登录配置：
-
-1. 改用户名：
-   - 修改 `RSS_READER_WEB_USERNAME`
-   - 重启服务
-2. 改密码：
-   - 重新填写 `RSS_READER_WEB_PASSWORD`
-   - 或生成新的 `RSS_READER_WEB_PASSWORD_HASH`
-   - 重启服务
-3. 让所有旧登录态失效：
-   - 修改 `RSS_READER_WEB_SESSION_SECRET`
-   - 或删除 `RSS_READER_WEB_AUTH_STATE_FILE`
-   - 重启服务
-
-也支持通过环境变量覆盖镜像名和端口：
-
-```bash
-RSS_READER_WEB_USERNAME=admin \
-RSS_READER_WEB_PASSWORD_HASH='请替换成 Argon2 密码哈希' \
-RSS_READER_WEB_SESSION_SECRET='至少32字符的随机长串' \
-RSS_READER_IMAGE=ghcr.io/develata/rss-reader:latest \
-RSS_READER_PORT=8090 \
-docker compose up -d
-```
-
-如果你不想用 compose，也可以直接运行镜像：
-
-```bash
-docker run --rm \
-  -p 8039:8080 \
-  -e RSS_READER_WEB_USERNAME=admin \
-  -e RSS_READER_WEB_PASSWORD_HASH='请替换成 Argon2 密码哈希' \
-  -e RSS_READER_WEB_SESSION_SECRET='至少32字符的随机长串' \
-  ghcr.io/develata/rss-reader:latest
-```
-
-说明：
-
-- 推荐先生成密码哈希：
-
-```bash
-cargo run -p rssr-web -- --print-password-hash '请改成你自己的强密码'
-```
-
-- 部署环境请使用 `RSS_READER_WEB_PASSWORD_HASH`，不要继续保存明文密码
-- `RSS_READER_WEB_SESSION_SECRET` 请使用长度至少 32 的随机字符串
-- `RSS_READER_WEB_TRUST_PROXY_HEADERS` 默认应保持 `false`
-- 只有当 `rssr-web` 部署在你自己可控的反向代理后面时，才建议设为 `true`
-- 生产环境建议同时设置：
-  - `RSS_READER_WEB_ENV=production`
-  - `RSS_READER_WEB_SECURE_COOKIE=true`
-- 如果启用了反向代理并希望限速按真实客户端 IP 生效，可再设置：
-  - `RSS_READER_WEB_TRUST_PROXY_HEADERS=true`
-- 如果启用了 `RSS_READER_WEB_ENV=production`，但没有开启 `RSS_READER_WEB_SECURE_COOKIE=true`，服务会拒绝启动
-- 本地 HTTP 测试时可保持 `RSS_READER_WEB_ENV=development`
-
-### 本地构建镜像
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
-```
-
-这会在保留 compose 默认端口配置的同时，覆盖成“从当前工作区构建镜像”。
-
-如果你只想手动验证 Dockerfile，也可以直接：
-
-```bash
-docker build -t rss-reader-web .
-```
-
-容器内会带基础健康检查，适合本地部署和简单服务器场景。
-
-### 什么时候用 Docker，什么时候不用
-
-推荐使用 Docker 的场景：
-
-- 想部署带登录门禁的 Web 版本到服务器
-- 想快速拉起一个受保护的浏览器入口
-- 不想安装 Rust / Dioxus CLI
-
-不推荐使用 Docker 的场景：
-
-- 想用桌面端离线阅读体验
-- 想直接测试 Windows / Linux / macOS 原生二进制
-- 想调试桌面端系统行为
-
-## 文档导航
-
-更完整的说明放在 [`docs/`](./docs/README.md)：
-
-- [英文 README](./docs/README.en.md)
-- [设计文档索引](./docs/design/README.md)
-- [Android 发布路线图](./docs/roadmaps/android-release-roadmap.md)
-- [测试与回归索引](./docs/testing/README.md)
-
-## 仓库结构
-
-```text
-crates/
-├── rssr-app/
-├── rssr-cli/
-├── rssr-web/
-├── rssr-application/
-├── rssr-domain/
-└── rssr-infra/
-
-assets/
-docs/
-migrations/
-specs/
-tests/
-```
-
-## 常见问题
-
-### 1. 为什么 Web 端有些 feed 刷新失败？
-
-因为浏览器会受 CORS 限制。
-很多 feed 在桌面端能正常抓取，但在 Web 端会被目标站点阻止跨域请求。
-
-### 2. 为什么桌面端和 Web 端的缓存体验不完全一样？
-
-因为桌面端 / Android 对正文图片本地化更完整；Web 端会受浏览器安全策略限制。
-
-### 3. 为什么 Release 里还有 `rssr-cli`？
-
-CLI 主要给自动化、脚本和高级用户使用。
-普通用户只下载 `rssr-app` 即可。
-
-### 4. Windows 双击运行需要额外安装什么吗？
-
-通常需要系统具备 Microsoft WebView2 Runtime。很多 Windows 10/11 机器已经预装。
-
-## 开源协议
-
-本项目使用 [MIT License](./LICENSE)。
+常见问题：Windows 运行通常需要 WebView2 Runtime；Web 直连 feed 受目标站点 CORS 策略影响；CLI 附件面向脚本和高级用户，普通阅读只需应用附件。若 Android 安装遇到签名不匹配，先确认当前包与已安装版本的签名身份；卸载前务必导出配置，避免丢失本地数据。

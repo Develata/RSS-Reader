@@ -155,4 +155,4 @@ Cargo JSON / TOML 事实解析、GitHub `needs` JSON 摘要仍使用短 Python �
 - [发布前 UI 回归清单](./release-ui-regression-checklist.md)
 - [手工回归测试清单](./manual-regression.md)
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
-- [2026-04-08-daily-rollup](/home/develata/gitclone/RSS-Reader/docs/handoffs/2026-04-08-daily-rollup.md)
+- [最近交接记录](../handoffs/README.md)

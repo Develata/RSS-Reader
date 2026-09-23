@@ -387,4 +387,4 @@ bash scripts/run_static_web_small_viewport_smoke.sh
 - [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
 - [环境限制索引](./environment-limitations.md)
-- [Web SPA 回归服务脚本](/home/develata/gitclone/RSS-Reader/docs/design/web-spa-regression-server.md)
+- [Web SPA 回归服务脚本](../design/web-spa-regression-server.md)

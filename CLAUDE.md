@@ -39,7 +39,7 @@ bash scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness
 # Web 部署态验证（登录 + /feed-proxy，用于 CORS 受限源）
 dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e
 cargo run -p rssr-web -- --print-password-hash adminadmin
-# 然后按 README「发布与交付」一节设置 RSS_READER_WEB_* 环境变量启动 rssr-web
+# 然后按 docs/deployment/web.md 设置 RSS_READER_WEB_* 环境变量启动 rssr-web
 ```
 
 ## 架构

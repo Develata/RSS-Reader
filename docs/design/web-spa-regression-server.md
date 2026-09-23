@@ -50,9 +50,9 @@ bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/
 
 ## 脚本
 
-- [run_web_spa_regression_server.sh](/home/develata/gitclone/RSS-Reader/scripts/run_web_spa_regression_server.sh)
-- [run_windows_chrome_visible_regression.sh](/home/develata/gitclone/RSS-Reader/scripts/run_windows_chrome_visible_regression.sh)
-- [rssr_visible_regression.mjs](/home/develata/gitclone/RSS-Reader/scripts/browser/rssr_visible_regression.mjs)
+- [run_web_spa_regression_server.sh](../../scripts/run_web_spa_regression_server.sh)
+- [run_windows_chrome_visible_regression.sh](../../scripts/run_windows_chrome_visible_regression.sh)
+- [rssr_visible_regression.mjs](../../scripts/browser/rssr_visible_regression.mjs)
 
 ## 用法
 

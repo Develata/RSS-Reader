@@ -9,7 +9,7 @@
 
 从 2026-04-06 起，滚动式交接记录统一追加到：
 
-- [docs/handoffs/README.md](/home/develata/gitclone/RSS-Reader/docs/handoffs/README.md)
+- [docs/handoffs/README.md](handoffs/README.md)
 
 阅读顺序建议是：
 
@@ -97,15 +97,15 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 
 为了后续过渡到多 Agent 协作，当前已经新增了 5 个模块级 `AGENTS.md`：
 
-- [crates/rssr-app/src/bootstrap/web/AGENTS.md](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/web/AGENTS.md)
-- [crates/rssr-app/src/pages/AGENTS.md](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/AGENTS.md)
-- [crates/rssr-web/src/auth/AGENTS.md](/home/develata/gitclone/RSS-Reader/crates/rssr-web/src/auth/AGENTS.md)
-- [crates/rssr-infra/src/db/AGENTS.md](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/db/AGENTS.md)
-- [crates/rssr-application/src/import_export_service/AGENTS.md](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/import_export_service/AGENTS.md)
+- [crates/rssr-app/src/bootstrap/web/AGENTS.md](../crates/rssr-app/src/bootstrap/web/AGENTS.md)
+- [crates/rssr-app/src/pages/AGENTS.md](../crates/rssr-app/src/pages/AGENTS.md)
+- [crates/rssr-web/src/auth/AGENTS.md](../crates/rssr-web/src/auth/AGENTS.md)
+- [crates/rssr-infra/src/db/AGENTS.md](../crates/rssr-infra/src/db/AGENTS.md)
+- [crates/rssr-application/src/import_export_service/AGENTS.md](../crates/rssr-application/src/import_export_service/AGENTS.md)
 
 它们的定位是：
 
-- 根级 [AGENTS.md](/home/develata/gitclone/RSS-Reader/AGENTS.md) 负责全局规则
+- 根级 [AGENTS.md](../AGENTS.md) 负责全局规则
 - 模块级 `AGENTS.md` 负责局部边界和注意事项
 
 **不要继续把 `AGENTS.md` 铺满所有小目录。**  
@@ -117,9 +117,9 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 
 真正的产品边界以这几份文档为准：
 
-- [spec.md](/home/develata/gitclone/RSS-Reader/specs/001-minimal-rss-reader/spec.md)
-- [plan.md](/home/develata/gitclone/RSS-Reader/specs/001-minimal-rss-reader/plan.md)
-- [docs/design/functional-design-philosophy.md](/home/develata/gitclone/RSS-Reader/docs/design/functional-design-philosophy.md)
+- [spec.md](../specs/001-minimal-rss-reader/spec.md)
+- [plan.md](../specs/001-minimal-rss-reader/plan.md)
+- [docs/design/functional-design-philosophy.md](design/functional-design-philosophy.md)
 
 需要特别记住的几条：
 
@@ -205,7 +205,7 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 - 之前出现过：
   - 安装后提示“针对旧版安卓开发”
   - 原因是生成工程的 `targetSdk/compileSdk` 没真正改到
-  - 现在 [prepare_android_bundle.py](/home/develata/gitclone/RSS-Reader/scripts/prepare_android_bundle.py) 会 patch 生成的 Gradle 文件到 `34`
+  - 现在 [prepare_android_bundle.py](../scripts/prepare_android_bundle.py) 会 patch 生成的 Gradle 文件到 `34`
 - 之前出现过：
   - 返回键直接退出 app
   - 现在已经接成优先走应用内导航
@@ -304,11 +304,11 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 
 下一个 agent 接手时，优先关注：
 
-- [.github/workflows/ci.yml](/home/develata/gitclone/RSS-Reader/.github/workflows/ci.yml)
-- [.github/workflows/release.yml](/home/develata/gitclone/RSS-Reader/.github/workflows/release.yml)
-- [.github/workflows/docker.yml](/home/develata/gitclone/RSS-Reader/.github/workflows/docker.yml)
-- [.github/actions/setup-dioxus-cli/action.yml](/home/develata/gitclone/RSS-Reader/.github/actions/setup-dioxus-cli/action.yml)
-- [.github/actions/cleanup-github-runner/action.yml](/home/develata/gitclone/RSS-Reader/.github/actions/cleanup-github-runner/action.yml)
+- [.github/workflows/ci.yml](../.github/workflows/ci.yml)
+- [.github/workflows/release.yml](../.github/workflows/release.yml)
+- [.github/workflows/docker.yml](../.github/workflows/docker.yml)
+- [.github/actions/setup-dioxus-cli/action.yml](../.github/actions/setup-dioxus-cli/action.yml)
+- [.github/actions/cleanup-github-runner/action.yml](../.github/actions/cleanup-github-runner/action.yml)
 
 当前这些 workflow 已经包含：
 
@@ -333,13 +333,13 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 如果今天换人接手，建议按这个顺序理解项目：
 
 1. 先读：
-   - 根级 [AGENTS.md](/home/develata/gitclone/RSS-Reader/AGENTS.md)
+   - 根级 [AGENTS.md](../AGENTS.md)
    - 本文档
-   - [docs/design/functional-design-philosophy.md](/home/develata/gitclone/RSS-Reader/docs/design/functional-design-philosophy.md)
+   - [docs/design/functional-design-philosophy.md](design/functional-design-philosophy.md)
 2. 再看：
-   - [spec.md](/home/develata/gitclone/RSS-Reader/specs/001-minimal-rss-reader/spec.md)
-   - [plan.md](/home/develata/gitclone/RSS-Reader/specs/001-minimal-rss-reader/plan.md)
-   - [tasks.md](/home/develata/gitclone/RSS-Reader/specs/001-minimal-rss-reader/tasks.md)
+   - [spec.md](../specs/001-minimal-rss-reader/spec.md)
+   - [plan.md](../specs/001-minimal-rss-reader/plan.md)
+   - [tasks.md](../specs/001-minimal-rss-reader/tasks.md)
 3. 然后按所改模块，进入对应模块级 `AGENTS.md`
 4. 如果是发布问题，先看 workflow，再看 tag 指向
 5. 如果是 Android / Docker / Web 部署态问题，优先按“平台边界”排查，不要先怀疑领域层

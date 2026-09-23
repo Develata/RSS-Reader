@@ -1,16 +1,13 @@
 # 路线图文档
 
-这个目录收纳尚未完全并入当前稳定交付范围、但已经进入规划或部分落地的平台与发布路线。
+这个目录记录平台交付的当前状态与尚待验收的工作；历史阶段结论保留在 `docs/handoffs/`。
 
 ## 当前文档
 
-- [Android 安装包落地清单](./android-release-roadmap.md)
+- [Android 构建与验收状态](./android-release-roadmap.md)
 
 ## 使用建议
 
-- 如果你想判断“现在 Android 到底做到哪一步了”：
-  - 直接看 [Android 安装包落地清单](./android-release-roadmap.md) 的“当前状态”和“当前结论”
-- 如果你想继续推进 Android：
-  - 从“分阶段实施”开始看
-- 如果你想确认是否已经进入正式发布条件：
-  - 重点看签名、真机验收和 GitHub Release 产物说明
+- 想判断 Android 的构建、签名和公开产物状态：看[Android 构建与验收状态](./android-release-roadmap.md)。
+- 想继续推进 Android：看[待完成的设备验收](./android-release-roadmap.md#待完成的设备验收)。
+- 想核对具体 `v0.1.15` 发布证据：看[发布交接记录](../handoffs/2026-09-22-v0.1.15-release.md)。

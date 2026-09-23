@@ -1,401 +1,70 @@
 # RSS-Reader
 
-[Repository README](../README.md) | [Contributing](../CONTRIBUTING.md)
+> Subscribe, then read.
 
-A local-first RSS reader built with Rust and Dioxus.
+RSS-Reader is a local-first RSS reader built with Rust and Dioxus. Desktop, Web, Android, and CLI share the same core subscription and reading behavior. Your article library stays on the current device; JSON, OPML, and optional WebDAV exchange subscriptions and settings.
 
-This project focuses on practical reading workflows instead of branding-heavy UI or backend-heavy infrastructure:
+[Latest release](https://github.com/Develata/RSS-Reader/releases/latest) · [Release notes](https://github.com/Develata/RSS-Reader/releases) · [中文](../README.md) · [Documentation](./README.md) · [Issues](https://github.com/Develata/RSS-Reader/issues)
 
-- desktop app for everyday use
-- web build for browser testing and static deployment
-- Android debug APK build path
-- local SQLite persistence
-- JSON / OPML config exchange
-- optional WebDAV config sync
-- custom CSS theming with preset themes
-- companion CLI for automation
+## Get started
 
-## What ships today
+Download the appropriate asset from [Releases](https://github.com/Develata/RSS-Reader/releases/latest):
 
-- `rssr-app`
-  - Dioxus desktop app
-  - Dioxus web app
-- `rssr-cli`
-  - add/remove feeds
-  - refresh feeds
-  - import/export config JSON
-  - import/export OPML
-  - inspect/save settings
-  - push/pull WebDAV config
+| Device | App asset | Start |
+| --- | --- | --- |
+| Windows x64 | `RSS-Reader-windows-x86_64.zip` | Extract to a writable directory and run `RSS-Reader.exe`; WebView2 Runtime is usually required |
+| Linux x64 | `RSS-Reader-linux-x86_64.deb` | Published, but see the writable-data-directory limitation below |
+| macOS Intel / Apple Silicon | `RSS-Reader-macos-x86_64.tar.gz` / `RSS-Reader-macos-aarch64.tar.gz` | Extract to a writable directory and open `RSS-Reader.app` |
+| Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | Install the APK; the AAB is for app stores |
+| Web | `RSS-Reader-web.tar.gz` | Static site bundle; use [`rssr-web`](./deployment/web.md) for login and a same-origin feed proxy |
 
-## Repository layout
+Open **S** (Subscribe), add an RSS or Atom URL, then select **R** (Read / Home). From another page, R navigates home; when already home, R manually refreshes all feeds. Repeated clicks share the in-flight refresh. On mobile, pull down at the top of Home to request the same refresh.
 
-```text
-crates/
-├── rssr-app/
-├── rssr-cli/
-├── rssr-web/
-├── rssr-application/
-├── rssr-domain/
-└── rssr-infra/
+The table matches the published `v0.1.15` assets. Changes on `main` do not enter a download until a later release. Android's signed APK/AAB was built and checked, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine.
 
-assets/
-docs/
-migrations/
-specs/
-tests/
-```
+**Linux package limitation:** The `v0.1.15` `.deb` installs the executable under `/usr/bin`, while the current app creates its data directory next to that executable. An ordinary account normally cannot write there, so a successful package-structure check does not establish that this package can initialize after installation. Fixing this requires an explicit data-location and existing-data migration decision.
 
-## Local development
+## Reading workflow
 
-### Prerequisites
+- Use the search icon to expand title search; Enter searches, Esc closes it. Filter entries by source, unread status, or favorite status. Long source names remain readable and pagination stays reachable.
+- In Reader, use the top-left back button, toggle read/favorite, move to nearby articles, or open a body image in the viewer. Native text selection and copy remain available. Refreshing does not replace the article you are reading.
+- Reader shortcuts: `M` toggles read status, `F` toggles favorite, and `←` / `→` move to the previous / next unread article. Native editing shortcuts with Ctrl or Cmd are left alone.
+- Settings provide built-in themes and custom CSS. `rssr-cli` covers feed management, refresh, settings, and configuration import/export.
 
-- Rust stable
-- `wasm32-unknown-unknown` target for web builds
-- Dioxus CLI `0.7.9`
+## Local data and limits
+
+Desktop stores its SQLite index and article-body databases next to the executable in `RSS-Reader/`. Exit the app before copying those files for a backup, or include the SQLite WAL files. Android stores its databases in the app sandbox; uninstalling removes local data. Web stores serialized state in that browser's `localStorage`; clearing site data removes the local article library.
+
+The reader caches the body provided by the feed; it does not fetch the source page to reconstruct full text. Desktop and Android attempt to localize body images. Direct browser builds can be blocked by feed CORS policies; the login-protected `rssr-web` host offers a same-origin `/feed-proxy`. JSON, OPML, and WebDAV exchange subscriptions and settings, **not** article bodies, read history, or favorites across devices. See the [Web deployment guide](./deployment/web.md).
+
+The product stays focused on subscriptions, reading, basic settings, and basic configuration exchange. See the [functional design philosophy](./design/functional-design-philosophy.md).
+
+## Build and verify
+
+Rust stable is required. Web development also needs the `wasm32-unknown-unknown` target and Dioxus CLI `0.7.9`.
 
 ```bash
+cargo run --locked -p rssr-app
+cargo run --locked -p rssr-cli -- --help
+
 rustup target add wasm32-unknown-unknown
 cargo install dioxus-cli --version 0.7.9 --locked
-```
-
-### Run desktop app
-
-```bash
-cargo run -p rssr-app
-```
-
-If you are running under WSLg and see `libEGL` / `MESA` warnings, try:
-
-```bash
-GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 GSK_RENDERER=cairo WEBKIT_DISABLE_DMABUF_RENDERER=1 cargo run -p rssr-app
-```
-
-### Run web app
-
-```bash
 dx serve --platform web --package rssr-app
 ```
 
-Notes:
-- browser builds can only refresh remote feeds that allow cross-origin requests
-- some feeds work on desktop/mobile but fail in web due to CORS
-- the web build adds a cache-busting query when refreshing feeds to avoid browser `304` cache behavior blocking updates
-
-### Change the web login username and password manually
-
-`rssr-web` reads its login settings from environment variables:
-
-- `RSS_READER_WEB_USERNAME`
-- `RSS_READER_WEB_PASSWORD_HASH`
-- `RSS_READER_WEB_SESSION_SECRET`
-
-Recommended flow:
-
-1. Generate a new Argon2 password hash:
-
 ```bash
-cargo run -p rssr-web -- --print-password-hash 'replace-this-with-a-strong-password'
+cargo fmt --all --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace
+cargo check --locked -p rssr-app --target wasm32-unknown-unknown
 ```
 
-2. Export the new values before starting `rssr-web` or `docker compose`:
-
-```bash
-export RSS_READER_WEB_USERNAME='replace-this-with-your-username'
-export RSS_READER_WEB_PASSWORD_HASH='paste-the-argon2-hash-here'
-export RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters'
-```
-
-3. Restart the service.
-
-Notes:
-
-- changing `RSS_READER_WEB_PASSWORD_HASH` invalidates the old password immediately
-- changing `RSS_READER_WEB_USERNAME` means the login page must use the new username
-- changing `RSS_READER_WEB_SESSION_SECRET` invalidates all existing sessions
-
-### Build Android debug APK
-
-Install the Android Rust targets:
-
-```bash
-rustup target add aarch64-linux-android x86_64-linux-android
-```
-
-Required local tooling:
-- JDK 21
-- Android SDK command line tools
-- Android NDK
-- Android platform tools
-- Android platform 33+
-- Android build-tools 34.0.0
-
-Example environment:
-
-```bash
-export JAVA_HOME="$HOME/.local/jdks/temurin-21"
-export ANDROID_SDK_ROOT="$HOME/.local/android-sdk"
-export ANDROID_HOME="$ANDROID_SDK_ROOT"
-export ANDROID_NDK_HOME="$(find "$ANDROID_SDK_ROOT/ndk" -maxdepth 1 -mindepth 1 -type d | sort | tail -n 1)"
-export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
-export PATH="$JAVA_HOME/bin:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-```
-
-Validate the Android target:
-
-```bash
-cargo check -p rssr-app --target aarch64-linux-android
-```
-
-Build a debug APK:
-
-```bash
-dx bundle --platform android --package rssr-app --target aarch64-linux-android --release --debug-symbols false
-python3 scripts/prepare_android_bundle.py target/dx/rssr-app/release/android/app/app/src/main
-cd target/dx/rssr-app/release/android/app
-./gradlew assembleDebug --no-daemon --console=plain
-```
-
-Output:
-
-```text
-target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk
-```
-
-The extra patch step rewrites the generated Android launcher resources and SDK levels so the packaged app name, icon, and privacy-related Android target level stay aligned with the desktop release (`RSS-Reader` / `RSSR`) and the current Android target. Because the patch modifies the generated Gradle project, you must rebuild the APK after patching or the old default launcher assets and SDK settings will remain in the packaged output.
-
-### Run CLI
-
-```bash
-cargo run -p rssr-cli -- --help
-```
-
-Examples:
-
-```bash
-cargo run -p rssr-cli -- list-feeds
-cargo run -p rssr-cli -- add-feed https://example.com/feed.xml
-cargo run -p rssr-cli -- export-config --output ./config.json
-cargo run -p rssr-cli -- save-settings --custom-css-file ./assets/themes/newsprint.css
-```
-
-## Verification
-
-```bash
-cargo fmt --all
-cargo test --workspace
-cargo check -p rssr-app --target wasm32-unknown-unknown
-```
-
-## Desktop packaging
-
-### Windows
-
-Build on a Windows host:
-
-```powershell
-cargo build --release -p rssr-app
-```
-
-Output:
-
-```text
-target\\release\\rssr-app.exe
-```
-
-Notes:
-- the desktop app is a native Windows executable
-- Microsoft WebView2 Runtime is typically required on the target machine
-
-### GitHub Release artifacts
-
-The release workflow publishes:
-
-- `RSS-Reader-windows-x86_64.zip`
-- `rssr-cli-windows-x86_64.zip`
-- `RSS-Reader-linux-x86_64.tar.gz`
-- `rssr-cli-linux-x86_64.tar.gz`
-- `RSS-Reader-macos-x86_64.tar.gz`
-- `rssr-cli-macos-x86_64.tar.gz`
-- `RSS-Reader-macos-aarch64.tar.gz`
-- `rssr-cli-macos-aarch64.tar.gz`
-- `RSS-Reader-android-arm64-v8a-release.apk` (install this one)
-- `RSS-Reader-android-arm64-v8a-release.aab` (app stores only)
-- `RSS-Reader-web.tar.gz`
-
-Current automatic release targets are:
-
-- Windows desktop
-- Linux desktop
-- macOS desktop
-- Android release APK + AAB, signed
-- Web static bundle
-
-The Android target requires signing secrets. On a tag release a missing secret fails `build-android` outright rather than silently falling back to a debug APK. A manual `workflow_dispatch` may still fall back, so the other platforms can be exercised without touching the keys. The signed APK and the debug APK are never published together: they carry different signatures, so offering both invites installing the wrong one.
-
-A debug APK cannot be used to upgrade an existing install. It is signed with a throwaway key that CI regenerates on every run, so each release carries a different certificate and Android rejects the update as a signature mismatch — which most device installers report as a checksum or verification failure. Moving from a debug build to a signed release build requires an uninstall too, and uninstalling erases local subscriptions and downloaded article bodies, so export OPML first.
-
-`versionCode` and `versionName` are derived from the release tag (`v0.1.13` → `versionCode=113`, `versionName=0.1.13`), not from the workspace `Cargo.toml` version.
-
-Android signing secrets expected by GitHub Actions:
-
-- `ANDROID_KEYSTORE_BASE64`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
-
-`dx serve` supports additional platform modes, but not all of them map cleanly to end-user GitHub Release assets. iOS, server, and liveview targets are not yet published as release attachments.
-
-Tag a release to trigger it:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-## Docker and docker compose
-
-Docker support is for the web build.
-
-The published image runs a small `rssr-web` process.
-
-It handles:
-
-- a username/password login page
-- server-side credential validation
-- signed `HttpOnly` session cookies
-- serving the Dioxus web bundle only after login
-
-It is **not** a runtime dependency of the desktop app, CLI, Android build, or local development workflow.
-
-You do not need this deployment-time web service for:
-
-- `cargo run -p rssr-app`
-- `dx serve --platform web --package rssr-app`
-
-### Pull and run the published image
-
-The default [docker-compose.yml](../docker-compose.yml) is a pull-only deployment template for the image published to GHCR:
-
-```bash
-export RSS_READER_WEB_USERNAME=admin
-export RSS_READER_WEB_PASSWORD='replace-this-with-a-strong-password'
-export RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters'
-export RSS_READER_WEB_AUTH_STATE_FILE='/app/auth/auth.json'
-export RSS_READER_WEB_TRUST_PROXY_HEADERS=false
-docker compose up -d
-```
-
-On the first boot, if you only provide:
-
-- `RSS_READER_WEB_USERNAME`
-- `RSS_READER_WEB_PASSWORD`
-
-`rssr-web` will automatically:
-
-- generate an Argon2 password hash
-- generate a random session secret
-- persist both values to `RSS_READER_WEB_AUTH_STATE_FILE`
-
-As long as that auth state file remains available, restarting `rssr-web` or Docker will **not** trigger a first-time credential setup flow again. Restarts simply reload the persisted auth state.
-On Unix-like systems, the auth state file is written with owner-only permissions.
-
-Then open:
-
-```text
-http://127.0.0.1:8039
-```
-
-Override the image tag or host port if needed:
-
-```bash
-RSS_READER_WEB_USERNAME=admin \
-RSS_READER_WEB_PASSWORD_HASH='replace-this-with-an-argon2-password-hash' \
-RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters' \
-RSS_READER_IMAGE=ghcr.io/develata/rss-reader:latest \
-RSS_READER_PORT=8090 \
-docker compose up -d
-```
-
-You can also run the image directly:
-
-```bash
-docker run --rm \
-  -p 8039:8080 \
-  -e RSS_READER_WEB_USERNAME=admin \
-  -e RSS_READER_WEB_PASSWORD_HASH='replace-this-with-an-argon2-password-hash' \
-  -e RSS_READER_WEB_SESSION_SECRET='use-a-random-secret-with-at-least-32-characters' \
-  ghcr.io/develata/rss-reader:latest
-```
-
-Notes:
-- generate a password hash with:
-
-```bash
-cargo run -p rssr-web -- --print-password-hash 'replace-this-with-a-strong-password'
-```
-
-- `rssr-web` can bootstrap an Argon2 hash from `RSS_READER_WEB_PASSWORD` and persist it to `RSS_READER_WEB_AUTH_STATE_FILE`
-- if `RSS_READER_WEB_SESSION_SECRET` is missing, `rssr-web` can also generate and persist a random session secret to `RSS_READER_WEB_AUTH_STATE_FILE`
-- generated values are persisted to the auth state file, but are not written back into `.env`, `compose.yaml`, or your hosting control panel
-- production deployments should still prefer `RSS_READER_WEB_PASSWORD_HASH`, or remove the plaintext password after the first successful bootstrap
-- `RSS_READER_WEB_SESSION_SECRET` should be a random string with at least 32 characters
-- `RSS_READER_WEB_TRUST_PROXY_HEADERS` defaults to `false`
-- only enable `RSS_READER_WEB_TRUST_PROXY_HEADERS=true` when `rssr-web` is behind a reverse proxy you control
-- production deployments should also set:
-  - `RSS_READER_WEB_ENV=production`
-  - `RSS_READER_WEB_SECURE_COOKIE=true`
-- local HTTP testing can keep `RSS_READER_WEB_ENV=development`
-
-To rotate credentials later:
-
-1. change `RSS_READER_WEB_USERNAME` to change the login name
-2. change `RSS_READER_WEB_PASSWORD` or `RSS_READER_WEB_PASSWORD_HASH` to replace the password
-3. change `RSS_READER_WEB_SESSION_SECRET`, or delete `RSS_READER_WEB_AUTH_STATE_FILE`, to invalidate existing sessions
-
-### Local image build
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
-```
-
-This keeps the same compose defaults, but overrides the service to build from the current workspace instead of pulling from GHCR.
-
-## CI/CD
-
-This repository includes three GitHub Actions workflows:
-
-- `ci.yml`
-  - formatting
-  - workspace tests
-  - wasm target check
-  - Android target smoke check
-- `release.yml`
-  - builds release artifacts on tags
-  - publishes GitHub Release assets
-- `docker.yml`
-  - builds and pushes a GHCR image
-
-## Reading cache behavior
-
-- the reader caches whatever body HTML/text the feed already provides
-- desktop and Android can localize many body images into cached HTML for better offline reading
-- web builds are limited by browser CORS rules, so remote body images may stay on their original URLs even when the article body itself is cached locally
-- when the web app is deployed through `rssr-web`, the server can proxy feed fetches, so feeds such as `https://www.ruanyifeng.com/blog/atom.xml` still work even though a plain browser build would hit CORS
-
-## Docs
-
-See the docs index:
-
-- [docs index](./README.md)
-- [design index](./design/README.md)
-- [functional design philosophy](./design/functional-design-philosophy.md)
-- [frontend command and interface reference](./design/frontend-command-reference.md)
-- [theme selector reference](./design/theme-author-selector-reference.md)
-- [testing index](./testing/README.md)
-- [Android release roadmap](./roadmaps/android-release-roadmap.md)
-- [manual regression notes](./testing/manual-regression.md)
-
-## License
-
-MIT
+The [mainline validation matrix](./testing/mainline-validation-matrix.md) explains the parallel CI jobs, platform checks, and remaining manual acceptance. A successful build alone does not establish Android or macOS device behavior.
+
+## More documentation
+
+- [Detailed user guide](./user-guide.md) (Chinese): subscriptions, reading, themes, WebDAV, and backups.
+- [Web / Docker deployment](./deployment/web.md): GHCR, Compose, login, and `/feed-proxy`.
+- [Android build and acceptance status](./roadmaps/android-release-roadmap.md).
+- [Design](./design/README.md), [testing](./testing/README.md), and [contributing](../CONTRIBUTING.md).
+- [MIT License](../LICENSE).

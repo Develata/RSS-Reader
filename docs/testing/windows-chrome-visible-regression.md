@@ -9,8 +9,8 @@
 
 ## 固定入口
 
-- [run_windows_chrome_visible_regression.sh](/home/develata/gitclone/RSS-Reader/scripts/run_windows_chrome_visible_regression.sh)
-- [rssr_visible_regression.mjs](/home/develata/gitclone/RSS-Reader/scripts/browser/rssr_visible_regression.mjs)
+- [run_windows_chrome_visible_regression.sh](../../scripts/run_windows_chrome_visible_regression.sh)
+- [rssr_visible_regression.mjs](../../scripts/browser/rssr_visible_regression.mjs)
 
 ## 最短用法
 
