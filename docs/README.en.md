@@ -24,16 +24,16 @@ Download the appropriate asset from [Releases](https://github.com/Develata/RSS-R
 | Device | App asset | Start |
 | --- | --- | --- |
 | Windows x64 | `RSS-Reader-windows-x86_64.zip` | Extract to a writable directory and run `RSS-Reader.exe`; WebView2 Runtime is usually required |
-| Linux x64 | `RSS-Reader-linux-x86_64.deb` | Published, but see the writable-data-directory limitation below |
+| Linux x64 | `RSS-Reader-linux-x86_64.deb` | Install where the package dependencies are available; data is stored under the user's XDG data directory |
 | macOS Intel / Apple Silicon | `RSS-Reader-macos-x86_64.tar.gz` / `RSS-Reader-macos-aarch64.tar.gz` | Extract to a writable directory and open `RSS-Reader.app` |
 | Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | Install the APK; the AAB is for app stores |
 | Web | `RSS-Reader-web.tar.gz` | Static site bundle; use [`rssr-web`](./deployment/web.md) for login and a same-origin feed proxy |
 
 Open **S** (Subscribe), add an RSS or Atom URL, then select **R** (Read / Home). From another page, R navigates home; when already home, R manually refreshes all feeds. Repeated clicks share the in-flight refresh. On mobile, pull down at the top of Home to request the same refresh.
 
-The table matches the published `v0.1.16` assets. Changes on `main` do not enter a download until a later release. Android's signed APK/AAB was built and checked, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine.
+The table matches the published `v0.1.17` assets; see the [release notes](https://github.com/Develata/RSS-Reader/releases/tag/v0.1.17) for the exact changes and validation scope. Android's signed APK/AAB was built and checked, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine.
 
-**Linux package limitation:** The published `v0.1.16` `.deb` still tries to write under `/usr/bin` and does not declare its linked library dependencies, so it cannot be relied on to start as an ordinary user. The fix on `main` puts data for the `/usr/bin` installation in `$XDG_DATA_HOME/rss-reader/` (or `~/.local/share/rss-reader/` when unset), generates runtime dependencies, and adds an ordinary-user installation smoke to future releases. Downloaded packages will only include these fixes after a new release.
+**Linux package:** `v0.1.17` fixes the earlier `.deb` data-directory permission problem and declares its linked library dependencies. The release workflow installed this package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking database creation and reuse in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
 
 ## Reading workflow
 

@@ -24,7 +24,7 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
    | 设备 | 桌面 / 安装附件 | 开始使用 |
    | --- | --- | --- |
    | Windows x64 | `RSS-Reader-windows-x86_64.zip` | 解压到可写目录，运行 `RSS-Reader.exe`；系统需有 WebView2 Runtime |
-   | Linux x64 | `RSS-Reader-linux-x86_64.deb` | 已发布；普通账户启动的目录写权限问题见下方说明 |
+   | Linux x64 | `RSS-Reader-linux-x86_64.deb` | 在满足包内依赖的系统安装；数据写入当前用户的 XDG 数据目录 |
    | macOS Intel / Apple Silicon | `RSS-Reader-macos-x86_64.tar.gz` / `RSS-Reader-macos-aarch64.tar.gz` | 解压到可写目录，打开 `RSS-Reader.app` |
    | Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | 安装 APK；AAB 是应用商店产物，不能直接安装 |
    | Web | `RSS-Reader-web.tar.gz` | 静态站点包；需要受保护的登录和跨域 feed 代抓时使用 [Web 部署指南](./docs/deployment/web.md) |
@@ -32,9 +32,9 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
 2. 打开应用，在 **S**（Subscribe）页输入 RSS / Atom 地址并添加订阅。
 3. 点击 **R**（Read / Home）查看文章；已在首页时再次点击 **R** 可手动刷新全部订阅。
 
-上表按已发布的 `v0.1.16` 产物核对。`main` 上的后续修复只有在新版本发布后才会进入下载包；具体变更和验收范围请以对应 Release 说明为准。Android 已有正式签名 APK / AAB，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。
+上表按已发布的 `v0.1.17` 产物核对；具体变更和验收范围见[本版 Release 说明](https://github.com/Develata/RSS-Reader/releases/tag/v0.1.17)。Android 已有正式签名 APK / AAB，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。
 
-**Linux 安装包限制：** 已发布的 `v0.1.16` `.deb` 仍会尝试在 `/usr/bin` 下写数据，而且包内未声明所需的动态库依赖，普通账户不能依赖它正常启动。`main` 已将 `/usr/bin` 安装版改为使用 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`），并为后续发布增加运行时依赖生成和普通用户安装启动检查；这些修改只有进入新 Release 后才会对下载包生效。
+**Linux 安装包：** `v0.1.17` 已修复旧版 `.deb` 的普通用户写权限和动态库依赖缺失问题。发布流水线在 Ubuntu 24.04 安装本版包后，以普通用户在 Xvfb 下两次启动，验证中文与空格路径中的数据库创建和复用。包的最低库版本来自 Ubuntu 24.04 构建环境；其它发行版应先核对 `.deb` 的 `Depends`，不能据此推定旧版发行版兼容。
 
 ## 日常使用
 
