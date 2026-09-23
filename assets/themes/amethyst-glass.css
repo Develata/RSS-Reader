@@ -255,6 +255,10 @@ body:has(.theme-dark)::before {
   -webkit-backdrop-filter: blur(12px);
 }
 
+@media (max-width: 480px) {
+  [data-layout="app-nav-shell"] { padding-inline: 8px; }
+}
+
 [data-nav] {
   border: none;
   border-radius: 12px;
