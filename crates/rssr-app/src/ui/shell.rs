@@ -6,7 +6,7 @@ use rssr_domain::UserSettings;
 use crate::{
     router::AppRoute,
     status::{set_status_error, set_status_info},
-    ui::shell_browser::complete_web_auth_transition,
+    ui::shell_browser::{complete_web_auth_transition, wait_for_refresh_feedback},
     ui::shell_prefs::{initial_entry_search, remember_entry_search},
     ui::shell_state::{HomeAction, ManualRefreshState, NavMode, resolve_home_action},
     ui::{ShellCommand, UiCommand, UiIntent, collect_projected_ui_command, visit_ui_command},
@@ -53,14 +53,35 @@ impl AppShellState {
                 let intents =
                     crate::ui::execute_ui_command(UiCommand::Shell(ShellCommand::ManualRefresh))
                         .await;
+                let mut failed = true;
+                let mut completed = false;
                 for intent in intents {
                     if let Some((message, tone)) = intent.into_status() {
-                        self.refresh
-                            .set(ManualRefreshState::Finished { message, failed: tone == "error" });
+                        failed = tone == "error";
+                        completed = true;
+                        self.refresh.set(ManualRefreshState::Finished { message, failed });
                     }
+                }
+                if !completed {
+                    self.refresh.set(ManualRefreshState::Finished {
+                        message: "刷新未返回结果。".to_string(),
+                        failed,
+                    });
                 }
                 // Failed batches can still have committed some subscriptions.
                 self.refresh_revision += 1;
+                let completed_revision = *self.refresh_revision.peek();
+                spawn(async move {
+                    wait_for_refresh_feedback(std::time::Duration::from_secs(if failed {
+                        6
+                    } else {
+                        1
+                    }))
+                    .await;
+                    self.refresh
+                        .write()
+                        .dismiss_if_current(*self.refresh_revision.peek(), completed_revision);
+                });
             })
         });
     }

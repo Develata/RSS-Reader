@@ -14,6 +14,7 @@
 
 [data-layout="app-nav-shell"] {
   position: sticky;
+  container-type: inline-size;
   top: calc(8px + var(--safe-area-top));
   z-index: 10;
   margin: 0 0 14px;
@@ -69,6 +70,14 @@
 [data-slot="app-nav-search-input"]:focus-visible {
   outline: 2px solid var(--focus-ring-color);
 }
+/* A persisted narrow sidebar theme can leave only a few pixels for the
+ * search field. Keep the input readable when the nav itself is narrow. */
+@container (max-width: 280px) {
+  [data-layout="app-nav-topline"] { flex-wrap: wrap; }
+  [data-layout="app-nav-topline"] > [data-layout="app-nav-search"] {
+    flex: 1 0 100%;
+  }
+}
 /* Feedback stays outside layout: a finishing/error batch must not move Reader text. */
 [data-slot="manual-refresh-status"] {
   position: absolute;
@@ -87,11 +96,6 @@
 }
 [data-slot="manual-refresh-status"]:empty { display: none; }
 [data-slot="manual-refresh-status"][data-state="error"] { color: var(--status-error-fg); }
-[data-slot="manual-refresh-status"][data-state="finished"],
-[data-slot="manual-refresh-status"][data-state="error"] {
-  animation: refresh-feedback-dismiss 6s steps(1, jump-end) forwards;
-}
-@keyframes refresh-feedback-dismiss { to { visibility: hidden; } }
 /* Reader keeps its text unobstructed, including when a completed refresh is
  * carried across navigation. Retain the live region and show a small Home badge;
  * the full result also remains in the button title and on non-reading pages. */

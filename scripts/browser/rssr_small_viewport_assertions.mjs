@@ -94,21 +94,21 @@ async function setViewport(client, viewportWidth, viewportHeight, mobile, dpr) {
   });
 }
 
-function setupUrl(seed, nextPath) {
+function setupUrl(seed, nextPath, themePreset = preset) {
   const params = new URLSearchParams({
     username: 'smoke',
     password: 'smoke-pass-123',
     seed,
     next: nextPath,
   });
-  if (preset) {
-    params.set('preset', preset);
+  if (themePreset) {
+    params.set('preset', themePreset);
   }
   return `${staticBase}/__codex/setup-local-auth?${params}`;
 }
 
-async function seedAndNavigate(client, seed, nextPath, marker) {
-  await navigate(client, setupUrl(seed, nextPath));
+async function seedAndNavigate(client, seed, nextPath, marker, themePreset = preset) {
+  await navigate(client, setupUrl(seed, nextPath, themePreset));
   await selectorExists(client, marker, 30000);
   await sleep(300);
 }
@@ -520,6 +520,22 @@ async function shellEvidence(client, reader = false) {
   return result;
 }
 
+async function searchInputEvidence(client) {
+  const result = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-field="entry-search"]');
+    if (!input) return null;
+    const rect = input.getBoundingClientRect();
+    const style = getComputedStyle(input);
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return {width:rect.width, height:rect.height, visibility:style.visibility,
+      display:style.display, hit:hit === input, focused:document.activeElement === input};
+  })()`);
+  assertThat('expanded search field is visible and wide enough to type into',
+    result && result.width >= 140 && result.height >= 40 && result.visibility === 'visible' &&
+    result.display !== 'none' && result.hit && result.focused, result);
+  return result;
+}
+
 async function checkReaderRefreshFeedback(client, label) {
   const evidence = await evaluate(client, `(async () => {
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -609,16 +625,25 @@ async function checkHomeRefreshAndGestures(client) {
     hold = false;
     await client.send('Fetch.continueRequest', {requestId: pending.shift()});
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'finished'`);
+    assertThat('successful manual refresh shows a completion message', await evaluate(client,
+      `document.querySelector('[data-slot="manual-refresh-status"]').textContent.includes('刷新完成')`));
+    await sleep(1150);
+    await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'idle'`);
+    assertThat('successful manual refresh feedback clears instead of returning on navigation', await evaluate(client,
+      `document.querySelector('[data-slot="manual-refresh-status"]').textContent === '' && !document.querySelector('[data-action="activate-home"]').title.includes('刷新完成')`));
     await waitFor(client, `JSON.parse(localStorage.getItem('rssr-web-state-v1')).feeds.every(f => !f.last_fetched_at.startsWith('2099'))`);
     assertThat('automatic and manual refresh complete one shared batch',
       requestCount === 2 && requestsByFeed.size === 2 && [...requestsByFeed.values()].every(count => count === 1),
       {requestCount, requestsByFeed: Object.fromEntries(requestsByFeed)});
     await clickSelector(client, '[data-slot="entry-card-title"]');
     await selectorExists(client, '[data-page="reader"]');
+    assertThat('finished refresh does not reappear when Reader mounts', await evaluate(client,
+      `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'idle' && document.querySelector('[data-slot="manual-refresh-status"]').textContent === ''`));
     const normalShell = await shellEvidence(client, true);
     const initialRequests = requestCount;
     await clickSelector(client, '[data-action="toggle-search"]');
     await selectorExists(client, '[data-field="entry-search"]');
+    await searchInputEvidence(client);
     const searchShell = await shellEvidence(client, true);
     const animation = await evaluate(client, `getComputedStyle(document.querySelector('[data-layout="app-nav-search"]')).animationName`);
     assertThat('search reveal animation has a valid computed declaration', animation === 'search-reveal', {animation});
@@ -636,6 +661,8 @@ async function checkHomeRefreshAndGestures(client) {
     await clickSelector(client, '[data-action="activate-home"]');
     await selectorExists(client, '[data-page="entries"][data-entry-scope="all"]');
     assertThat('Reader to Home only navigates', requestCount === initialRequests, {initialRequests, requestCount});
+    assertThat('finished refresh does not reappear on Home', await evaluate(client,
+      `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'idle' && document.querySelector('[data-slot="manual-refresh-status"]').textContent === ''`));
     await shellEvidence(client);
     await selectorExists(client, '[data-layout="entry-pagination"]');
     const pagination = await evaluate(client, `(() => {
@@ -1074,6 +1101,7 @@ async function checkNativeWindow(client, target) {
   await selectorExists(client, '[data-layout="entry-groups"][data-state="populated"]');
   const normalShell = await shellEvidence(client);
   await nativeClick(client, 'native search expands', '[data-action="toggle-search"]', `!!document.querySelector('[data-field="entry-search"]')`, false);
+  await searchInputEvidence(client);
   const searchShell = await shellEvidence(client);
   assertThat('native search preserves shell height and replaces secondary navigation',
     Math.abs(normalShell.height - searchShell.height) <= 1 && await evaluate(client,
@@ -1145,6 +1173,12 @@ async function checkNativeWindow(client, target) {
 
 async function checkNativeReader(client) {
   await shellEvidence(client, true);
+  assertThat('native Reader does not cancel the browser context menu', await evaluate(client, `(() => {
+    const body = document.querySelector('[data-slot="reader-body-html"]');
+    const event = new MouseEvent('contextmenu', {bubbles:true, cancelable:true, button:2});
+    body.dispatchEvent(event);
+    return !event.defaultPrevented;
+  })()`));
   await checkReaderRefreshFeedback(client, 'native Reader refresh feedback');
   assertThat('native Reader has no pull gesture surface', !(await selectorExistsOptional(client, '[data-slot="pull-refresh"]')));
   const common = await commonPageEvidence(client);
@@ -1195,6 +1229,25 @@ async function checkNativeReader(client) {
   await captureArtifact(client, 'native-reader');
 }
 
+async function checkNarrowSidebarSearch(client) {
+  await setViewport(client, 1280, 800, false, 1);
+  for (const themePreset of ['atlas-sidebar', 'atlas-sidebar-v1']) {
+    await seedAndNavigate(client, 'home-reader', '/entries', '[data-page="entries"]', themePreset);
+    await clickSelector(client, '[data-action="toggle-search"]');
+    const entriesInput = await searchInputEvidence(client);
+    assertThat(`${themePreset} narrow sidebar gives search its own row without page overflow`,
+      entriesInput.width >= 140 && await evaluate(client,
+        `document.documentElement.scrollWidth <= innerWidth + 1 && getComputedStyle(document.querySelector('[data-layout="app-nav-topline"]')).flexWrap === 'wrap'`),
+      entriesInput);
+    if (themePreset.endsWith('-v1')) await captureArtifact(client, 'legacy-atlas-search-entries');
+    await navigate(client, `${staticBase}/entries/2`);
+    await selectorExists(client, '[data-slot="reader-body-html"]');
+    await clickSelector(client, '[data-action="toggle-search"]');
+    await searchInputEvidence(client);
+    if (themePreset.endsWith('-v1')) await captureArtifact(client, 'legacy-atlas-search-reader');
+  }
+}
+
 async function run() {
   await mkdir(artifactDir, { recursive: true });
   let client;
@@ -1242,6 +1295,7 @@ async function run() {
       await checkReadingPreferencesAndFeedInput(client);
       await checkShortDirectory(client);
       await checkDesktop(client);
+      await checkNarrowSidebarSearch(client);
     }
 
     assertThat('browser console has no errors', consoleErrors.length === 0, consoleErrors);

@@ -66,8 +66,14 @@ fn main() {
         .with_maximizable(true)
         .with_closable(true);
 
-    let config =
-        Config::new().with_window(window).with_menu(None).with_custom_head(native_document_head());
+    let config = Config::new()
+        .with_window(window)
+        .with_menu(None)
+        // Release builds disable WebView context menus by default. Keep the
+        // native Copy/Select All actions available while reading. Dioxus
+        // 0.7.9 also enables WebView devtools with this setting.
+        .with_disable_context_menu(false)
+        .with_custom_head(native_document_head());
     LaunchBuilder::new().with_cfg(config).launch(app::App);
 
     fn load_window_icon() -> Option<Icon> {
@@ -90,6 +96,7 @@ fn main() {
     init_tracing();
     let config = Config::new()
         .with_close_behaviour(WindowCloseBehaviour::WindowHides)
+        .with_disable_context_menu(false)
         .with_custom_head(native_document_head());
     LaunchBuilder::new().with_cfg(config).launch(app::App);
 }

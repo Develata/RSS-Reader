@@ -76,6 +76,7 @@ MOBILE_UI_FEED_PATH = "/__codex/mobile-ui-feed.xml"
 THEME_FIXTURE_ROOT = os.path.join(repo_root, "assets", "themes")
 THEME_PRESET_FILES = {
     "atlas-sidebar": "atlas-sidebar.css",
+    "atlas-sidebar-v1": "legacy/atlas-sidebar-v1.css",
     "newsprint": "newsprint.css",
     "amethyst-glass": "amethyst-glass.css",
     "midnight-ledger": "midnight-ledger.css",

@@ -57,7 +57,7 @@
 
 手动刷新在 App scope 中运行，同步取得 in-flight 状态，连续 R、下拉和订阅页“刷新全部”不会重复创建批次。页面卸载不取消该任务。完成或部分失败后 revision 只让列表与订阅快照重取；Reader 正文不订阅刷新 revision。自动刷新继续使用现有 host 调度；host capability 内的共享 `RefreshFlight` 让自动与手动的重叠请求等待同一轮结果，不改变阅读页加载语义。进行中任务被取消时，等待者收到错误，下一次请求可以重试；不缓存已完成的刷新结果。
 
-默认样式在 Reader 中只通过 R 的进行中动画与成功 / 错误小标记显示刷新反馈，避免提示浮层盖住标题或正文；`manual-refresh-status` 的 live region 与 R 的完整 `title` 提示保留，其他页面仍显示文字结果。此呈现差异不改变刷新命令、状态或生命周期。
+默认样式在 Reader 中只通过 R 的进行中动画与成功 / 错误小标记显示刷新反馈，避免提示浮层盖住标题或正文；反馈期间 `manual-refresh-status` 的 live region 与 R 的完整 `title` 提示保留，其他页面显示文字结果。成功结果约 1 秒、错误结果约 6 秒后由 App 级状态清除，避免页面切换后重现旧提示；旧计时器不能清除新一轮刷新。此呈现差异不改变刷新命令或任务生命周期。
 
 文章列表的 `LoadEntries` 查询保持页面生命周期，并以页面内 generation 校验结果：只有最新发起的查询可发布列表、归档计数和状态，旧查询晚到的成功或失败都被丢弃，避免刷新与筛选切换交错时显示错误结果。该校验不改变写入命令或全局刷新任务的生命周期。
 
@@ -65,11 +65,13 @@
 
 下拉刷新仅在全局文章页、页面已到顶部且向下拖动至少 80 CSS px 后松手触发；横向、多指、文本选择、表单操作及嵌套滚动区不参与。被动 DOM bridge 只传坐标、滚动和目标事实；Rust 决定 pulling / armed，刷新反馈复用 shell 的 refreshing / finished / error。没有字母 R 快捷键，也没有全局 `touch preventDefault`。
 
-图片 bridge 仅对已消毒正文中的图片增加点击/键盘入口，不改变 sanitizer。Rust 持有 viewer 状态，原生 modal dialog 承担焦点约束和背景隔离；DOM 适配锁定并恢复滚动。正文、标题、metadata 的选择和复制沿用原生行为，带 modifier 的阅读快捷键继续放行。
+图片 bridge 仅对已消毒正文中的图片增加点击/键盘入口，不改变 sanitizer。Rust 持有 viewer 状态，原生 modal dialog 承担焦点约束和背景隔离；DOM 适配锁定并恢复滚动。正文、标题、metadata 的选择和复制沿用原生行为，带 modifier 的阅读快捷键继续放行；原生端 release WebView 允许系统右键菜单，不接管剪贴板。
 
 Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换文章再返回同一篇也不会接纳上次访问的迟到结果。图片本地化只更新缓存，不触发当前正文重载；下次打开文章使用新的本地引用，避免正文替换打断滚动、选区或图片查看器。
 
 `data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好被忽略，搜索词与文章筛选折叠偏好保留。`app-nav-shell` 的 `data-state` 现为 `normal` / `search`。
+
+搜索输入框保持 shell 级状态；当持久化的旧版侧栏 CSS 把导航压窄时，导航行允许换行，输入框占满下一行，避免只露出极窄的一截。
 
 来源选择继续保留 `entry-filters-source-chip` selector 兼容用户主题，但视觉为带可见 checkbox 的换行选择行；选择区有纵向滚动上限，名称本身不省略。分页只渲染一份 `entry-pagination`，位于页面 panel 的同级，固定于视口下方并预留 safe-area / 内容末尾空间。
 

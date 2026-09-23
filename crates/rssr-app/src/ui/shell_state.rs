@@ -56,6 +56,18 @@ impl ManualRefreshState {
         matches!(self, Self::Refreshing)
     }
 
+    pub(crate) fn dismiss_if_current(
+        &mut self,
+        current_revision: u64,
+        completed_revision: u64,
+    ) -> bool {
+        if current_revision != completed_revision || !matches!(self, Self::Finished { .. }) {
+            return false;
+        }
+        *self = Self::Idle;
+        true
+    }
+
     pub(crate) fn label(&self) -> &str {
         match self {
             Self::Idle => "",
@@ -110,5 +122,18 @@ mod tests {
             assert!(state.begin());
             assert!(!state.begin());
         }
+    }
+
+    #[test]
+    fn old_feedback_timeout_cannot_clear_a_new_refresh() {
+        let mut state = ManualRefreshState::Finished { message: "完成".into(), failed: false };
+        assert!(!state.dismiss_if_current(2, 1));
+        assert!(matches!(state, ManualRefreshState::Finished { .. }));
+        assert!(state.begin());
+        assert!(!state.dismiss_if_current(1, 1));
+        state = ManualRefreshState::Finished { message: "新结果".into(), failed: false };
+        assert!(!state.dismiss_if_current(2, 1));
+        assert!(state.dismiss_if_current(2, 2));
+        assert_eq!(state, ManualRefreshState::Idle);
     }
 }
