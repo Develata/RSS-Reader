@@ -9,6 +9,7 @@ use axum::{
 };
 use reqwest::Url;
 use serde::Deserialize;
+use url::Host;
 
 /// 代理是登录后才可达的，但仍然不能无上限地把上游响应整个读进内存：
 /// 一个 feed URL 指向超大文件就足以把服务打爆。
@@ -63,29 +64,35 @@ fn parse_proxy_feed_url(raw: &str) -> Result<Url, String> {
     Ok(url)
 }
 
-fn validate_proxy_host(url: &Url) -> Result<(String, u16), String> {
-    let host = url.host_str().ok_or_else(|| "feed URL 缺少主机名。".to_string())?;
+enum ValidatedHost {
+    Domain { name: String, port: u16 },
+    Address(SocketAddr),
+}
 
-    if host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost") {
-        return Err("出于安全原因，禁止代理 localhost 地址。".to_string());
-    }
-
+fn validate_proxy_host(url: &Url) -> Result<ValidatedHost, String> {
     let port =
         url.port_or_known_default().ok_or_else(|| "无法确定 feed URL 的端口。".to_string())?;
-
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        return if is_disallowed_proxy_ip(ip) {
-            Err("出于安全原因，禁止代理内网或本地地址。".to_string())
-        } else {
-            Ok((host.to_string(), port))
-        };
+    match url.host().ok_or_else(|| "feed URL 缺少主机名。".to_string())? {
+        Host::Ipv4(ip) => validate_proxy_ip(IpAddr::V4(ip), port),
+        Host::Ipv6(ip) => validate_proxy_ip(IpAddr::V6(ip), port),
+        Host::Domain(name) => {
+            if name.eq_ignore_ascii_case("localhost") || name.ends_with(".localhost") {
+                return Err("出于安全原因，禁止代理 localhost 地址。".to_string());
+            }
+            if name.ends_with(".local") {
+                return Err("出于安全原因，禁止代理 .local 内网域名。".to_string());
+            }
+            Ok(ValidatedHost::Domain { name: name.to_string(), port })
+        }
     }
+}
 
-    if host.ends_with(".local") {
-        return Err("出于安全原因，禁止代理 .local 内网域名。".to_string());
+fn validate_proxy_ip(ip: IpAddr, port: u16) -> Result<ValidatedHost, String> {
+    if is_disallowed_proxy_ip(ip) {
+        Err("出于安全原因，禁止代理内网或本地地址。".to_string())
+    } else {
+        Ok(ValidatedHost::Address(SocketAddr::new(ip, port)))
     }
-
-    Ok((host.to_string(), port))
 }
 
 /// 解析主机名并校验解析结果，返回校验通过的地址本身。
@@ -95,11 +102,16 @@ fn validate_proxy_host(url: &Url) -> Result<(String, u16), String> {
 /// 地址钉死给客户端用，保证「校验的」和「实际连接的」是同一个 IP。
 async fn resolve_validated_target(raw: &str) -> Result<(Url, SocketAddr), String> {
     let url = parse_proxy_feed_url(raw)?;
-    let (host, port) = validate_proxy_host(&url)?;
-    let resolved = tokio::net::lookup_host((host.as_str(), port))
-        .await
-        .map_err(|_| "无法解析 feed 主机名。".to_string())?
-        .collect::<Vec<_>>();
+    let (host, port) = match validate_proxy_host(&url)? {
+        ValidatedHost::Address(addr) => return Ok((url, addr)),
+        ValidatedHost::Domain { name, port } => (name, port),
+    };
+    let resolved =
+        tokio::time::timeout(PROXY_CONNECT_TIMEOUT, tokio::net::lookup_host((host.as_str(), port)))
+            .await
+            .map_err(|_| "解析 feed 主机名超时。".to_string())?
+            .map_err(|_| "无法解析 feed 主机名。".to_string())?
+            .collect::<Vec<_>>();
 
     let Some(first) = resolved.first().copied() else {
         return Err("无法解析 feed 主机名。".to_string());
@@ -115,7 +127,9 @@ async fn resolve_validated_target(raw: &str) -> Result<(Url, SocketAddr), String
 fn is_disallowed_proxy_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => {
-            ip.is_private()
+            ip.octets()[0] == 0
+                || ip.octets()[0] >= 240
+                || ip.is_private()
                 || ip.is_loopback()
                 || ip.is_link_local()
                 || ip.is_broadcast()
@@ -133,7 +147,7 @@ fn is_disallowed_proxy_ip(ip: IpAddr) -> bool {
                 || ip.is_unique_local()
                 || ip.is_unicast_link_local()
                 || is_documentation_ipv6(ip)
-                || ip == Ipv6Addr::LOCALHOST
+                || ip.to_ipv4().is_some_and(|v4| is_disallowed_proxy_ip(IpAddr::V4(v4)))
         }
     }
 }
@@ -190,15 +204,14 @@ async fn read_body_with_limit(
 /// 仍然按域名发请求（而不是直接拿 IP 拼 URL），这样 Host 头与 TLS SNI 保持正确；
 /// `resolve` 只是替换掉这一次的 DNS 解析结果。重定向同理：每跳都要重新校验并重新钉。
 fn pinned_client(url: &Url, addr: SocketAddr) -> Result<reqwest::Client, String> {
-    let host = url.host_str().ok_or_else(|| "feed URL 缺少主机名。".to_string())?;
-
-    reqwest::Client::builder()
+    let mut builder = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(PROXY_REQUEST_TIMEOUT)
-        .connect_timeout(PROXY_CONNECT_TIMEOUT)
-        .resolve(host, addr)
-        .build()
-        .map_err(|err| format!("初始化 feed 代理客户端失败：{err}"))
+        .connect_timeout(PROXY_CONNECT_TIMEOUT);
+    if let Some(Host::Domain(host)) = url.host() {
+        builder = builder.resolve(host, addr);
+    }
+    builder.build().map_err(|err| format!("初始化 feed 代理客户端失败：{err}"))
 }
 
 async fn fetch_proxied_feed(
@@ -260,5 +273,27 @@ mod tests {
             validate_proxy_host(&Url::parse("http://169.254.169.254/latest/meta-data").unwrap())
                 .is_err()
         );
+        assert!(validate_proxy_host(&Url::parse("http://0.0.0.1/feed.xml").unwrap()).is_err());
+        for target in [
+            "http://[::1]/feed.xml",
+            "http://[::ffff:0.0.0.1]/feed.xml",
+            "http://[::ffff:127.0.0.1]/feed.xml",
+            "http://[::ffff:169.254.169.254]/feed.xml",
+            "http://[::ffff:192.168.1.2]/feed.xml",
+            "http://[fc00::1]/feed.xml",
+        ] {
+            assert!(validate_proxy_host(&Url::parse(target).unwrap()).is_err(), "{target}");
+        }
+    }
+
+    #[tokio::test]
+    async fn public_literal_addresses_are_pinned_without_dns_lookup() {
+        for (raw, expected) in [
+            ("http://8.8.8.8/feed.xml", "8.8.8.8:80"),
+            ("https://[2606:4700::1111]/feed.xml", "[2606:4700::1111]:443"),
+        ] {
+            let (_, addr) = resolve_validated_target(raw).await.expect("public literal");
+            assert_eq!(addr, expected.parse::<SocketAddr>().unwrap());
+        }
     }
 }

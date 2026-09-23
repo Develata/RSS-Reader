@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf};
 
-use anyhow::{Context, ensure};
+use anyhow::Context;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, ConfigImportOutcome,
@@ -60,9 +60,9 @@ struct RemoveFeedArgs {
 
 #[derive(Args, Debug)]
 struct RefreshArgs {
-    #[arg(long)]
+    #[arg(long, conflicts_with = "all")]
     feed_id: Option<i64>,
-    #[arg(long)]
+    #[arg(long, required_unless_present = "feed_id")]
     all: bool,
 }
 
@@ -148,7 +148,6 @@ async fn main() -> anyhow::Result<()> {
                 services.refresh_feed(feed_id).await?;
                 println!("订阅已刷新：{feed_id}");
             } else {
-                ensure!(args.all || args.feed_id.is_none(), "请传入 --all 或 --feed-id");
                 services.refresh_all().await?;
                 println!("全部订阅已刷新。");
             }

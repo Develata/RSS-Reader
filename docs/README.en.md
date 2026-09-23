@@ -33,7 +33,7 @@ Open **S** (Subscribe), add an RSS or Atom URL, then select **R** (Read / Home).
 
 The table matches the published `v0.1.16` assets. Changes on `main` do not enter a download until a later release. Android's signed APK/AAB was built and checked, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine.
 
-**Linux package limitation:** The published `v0.1.16` `.deb` still tries to write under `/usr/bin` and cannot be relied on to start as an ordinary user. The fix on `main` puts data for the `/usr/bin` installation in `$XDG_DATA_HOME/rss-reader/` (or `~/.local/share/rss-reader/` when unset), and a future release workflow will check installed startup as an ordinary user. Downloaded packages will only include this fix after a new release.
+**Linux package limitation:** The published `v0.1.16` `.deb` still tries to write under `/usr/bin` and does not declare its linked library dependencies, so it cannot be relied on to start as an ordinary user. The fix on `main` puts data for the `/usr/bin` installation in `$XDG_DATA_HOME/rss-reader/` (or `~/.local/share/rss-reader/` when unset), generates runtime dependencies, and adds an ordinary-user installation smoke to future releases. Downloaded packages will only include these fixes after a new release.
 
 ## Reading workflow
 
@@ -45,6 +45,8 @@ The table matches the published `v0.1.16` assets. Changes on `main` do not enter
 ## Local data and limits
 
 The Linux `/usr/bin` installation stores data in `$XDG_DATA_HOME/rss-reader/` (or `~/.local/share/rss-reader/` when unset). Windows, macOS, and portable Linux builds continue to use `RSS-Reader/` next to the executable. The directory contains the SQLite index and article-body databases plus `shell-prefs.json`. Exit the app before backing up the whole directory, including any SQLite WAL files. Data created by an earlier root-run package under `/usr/bin/RSS-Reader/` is not migrated automatically; after exiting, back it up and have an administrator copy the complete directory to the new location and give it to the user. Android stores its databases in the app sandbox; uninstalling removes local data. Web stores serialized state in that browser's `localStorage`; clearing site data removes the local article library.
+
+A separately extracted Linux CLI remains portable and uses its own executable-adjacent database by default. To manage the installed desktop app's database, pass the global `--database-url` option pointing to the installed data directory's `rss-reader.db`.
 
 The reader caches the body provided by the feed; it does not fetch the source page to reconstruct full text. Desktop and Android attempt to localize body images. Direct browser builds can be blocked by feed CORS policies; the login-protected `rssr-web` host offers a same-origin `/feed-proxy`. JSON, OPML, and WebDAV exchange subscriptions and settings, **not** article bodies, read history, or favorites across devices. See the [Web deployment guide](./deployment/web.md).
 

@@ -23,4 +23,5 @@ tokio = { workspace = true, features = ["fs", "net", "rt-multi-thread", "signal"
 tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+url.workspace = true
 urlencoding.workspace = true

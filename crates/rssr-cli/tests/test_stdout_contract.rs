@@ -72,3 +72,19 @@ fn failed_command_leaves_stdout_empty_and_exits_nonzero() {
     assert!(output.stdout.is_empty(), "diagnostics must not become machine-readable output");
     assert!(!output.stderr.is_empty());
 }
+
+#[test]
+fn refresh_requires_exactly_one_target_before_opening_database() {
+    let workspace = Workspace::new();
+    for arguments in [vec!["refresh"], vec!["refresh", "--all", "--feed-id", "1"]] {
+        let output = workspace.run(&arguments);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(!output.stderr.is_empty());
+        assert!(!workspace.0.join("reader.db").exists());
+    }
+
+    let output = workspace.run(&["refresh", "--all"]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(workspace.0.join("reader.db").exists());
+}

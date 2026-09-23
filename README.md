@@ -34,7 +34,7 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
 
 上表按已发布的 `v0.1.16` 产物核对。`main` 上的后续修复只有在新版本发布后才会进入下载包；具体变更和验收范围请以对应 Release 说明为准。Android 已有正式签名 APK / AAB，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。
 
-**Linux 安装包限制：** 已发布的 `v0.1.16` `.deb` 仍会尝试在 `/usr/bin` 下写数据，普通账户不能依赖它正常启动。`main` 已将 `/usr/bin` 安装版改为使用 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`），并为后续发布增加普通用户安装启动检查；这些修改只有进入新 Release 后才会对下载包生效。
+**Linux 安装包限制：** 已发布的 `v0.1.16` `.deb` 仍会尝试在 `/usr/bin` 下写数据，而且包内未声明所需的动态库依赖，普通账户不能依赖它正常启动。`main` 已将 `/usr/bin` 安装版改为使用 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`），并为后续发布增加运行时依赖生成和普通用户安装启动检查；这些修改只有进入新 Release 后才会对下载包生效。
 
 ## 日常使用
 

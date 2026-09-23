@@ -136,6 +136,8 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 - `rssr-cli refresh --all`
 - `rssr-cli refresh --feed-id <id>`
 
+`refresh` 必须且只能指定其中一个目标；参数无效时在打开本地数据库前退出。
+
 ### 配置交换相关
 
 - `rssr-cli export-config [--output <path>]`

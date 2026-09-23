@@ -24,7 +24,7 @@ Reader 左上角是返回按钮。`M` 切换已读，`F` 切换收藏，`←` / 
 
 齿轮进入设置。可选内置主题，也能编辑、导入或导出自定义 CSS。想写自己的主题，先看[主题作者选择器参考](./design/theme-author-selector-reference.md)；主题只改变呈现，不负责刷新或导航逻辑。
 
-配置交换支持 JSON 配置包、OPML 和 WebDAV 上传 / 下载。它用于迁移订阅和设置，不同步文章库、已读或收藏。CLI 对应命令见 `cargo run --locked -p rssr-cli -- --help`；`export-config`、`export-opml`、`show-settings` 的数据写入 stdout，诊断写入 stderr，可直接重定向到文件。
+配置交换支持 JSON 配置包、OPML 和 WebDAV 上传 / 下载。它用于迁移订阅和设置，不同步文章库、已读或收藏。CLI 对应命令见 `cargo run --locked -p rssr-cli -- --help`；刷新需明确指定 `refresh --all` 或 `refresh --feed-id <id>`，两者不能同时指定。`export-config`、`export-opml`、`show-settings` 的数据写入 stdout，诊断写入 stderr，可直接重定向到文件。
 
 需要登录的 WebDAV 服务可在设置页 Endpoint 中填 `https://用户名:密码@dav.example.com/base/`。客户端会把凭据从请求 URL 中剥离，改用 HTTP Basic；Endpoint 只保存在当前设置会话，不进入本地配置包或导出的数据。用户名或密码含 `@`、`:` 等保留字符时，按 URL 规则百分号编码。避免在截图或共享屏幕时暴露当前输入框中的凭据。
 
@@ -32,6 +32,8 @@ Reader 左上角是返回按钮。`M` 切换已读，`F` 切换收藏，`←` / 
 
 Linux `/usr/bin` 安装版的数据目录是 `$XDG_DATA_HOME/rss-reader/`，未设置该变量时为 `~/.local/share/rss-reader/`。Windows、macOS 和 Linux 便携版仍使用可执行文件同目录的 `RSS-Reader/`。索引库、正文库、界面偏好与 SQLite WAL 文件都应纳入本地备份；先正常退出应用，再复制整个数据目录。Web 的数据绑定当前浏览器存储与站点 origin，清除站点数据会删除本地阅读库。Android 卸载会清除应用沙箱内的数据库和缓存；导出配置只能保住订阅与设置，不能保住正文和阅读状态。
 
-已发布的 `v0.1.16` Linux `.deb` 仍有普通用户写权限问题；`main` 的修复须等待新版本发布。若旧版曾以管理员身份在 `/usr/bin/RSS-Reader/` 产生数据，新版不会自动读取或迁移它：退出应用后先备份，管理员再将完整目录复制到新位置并改为当前用户所有。普通便携版无需迁移，仍读取原位置。
+单独解压的 Linux CLI 仍按便携版规则从自身旁边找数据库；若要操作 `.deb` 桌面端的数据，请用全局 `--database-url` 明确指向上述数据目录里的 `rss-reader.db`，避免误以为两个不同目录中的库会自动合并。
+
+已发布的 `v0.1.16` Linux `.deb` 仍有普通用户写权限问题，包内也未声明程序所需的动态库依赖；`main` 的修复须等待新版本发布。若旧版曾以管理员身份在 `/usr/bin/RSS-Reader/` 产生数据，新版不会自动读取或迁移它：退出应用后先备份，管理员再将完整目录复制到新位置并改为当前用户所有。普通便携版无需迁移，仍读取原位置。
 
 发布包和设备验收状态见[根 README](../README.md)与[Android 构建与验收状态](./roadmaps/android-release-roadmap.md)。
