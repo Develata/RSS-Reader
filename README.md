@@ -2,6 +2,13 @@
 
 > 打开订阅，直接阅读。
 
+<p align="center">
+  <a href="https://github.com/Develata/RSS-Reader/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Develata/RSS-Reader?display_name=tag"></a>
+  <a href="https://github.com/Develata/RSS-Reader/actions/workflows/ci.yml?query=branch%3Amain"><img alt="CI" src="https://github.com/Develata/RSS-Reader/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/github/license/Develata/RSS-Reader"></a>
+  <a href="#30-秒开始阅读"><img alt="Release targets: Windows, Linux, macOS, Android, Web" src="https://img.shields.io/badge/Targets-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20Web-0078D4"></a>
+</p>
+
 RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把订阅、刷新、筛选和阅读放在一条简短的使用路径上；桌面、Web、Android 和 CLI 复用同一套核心能力。文章库留在当前设备，配置可以通过 JSON、OPML 或可选的 WebDAV 迁移。
 
 [下载最新版本](https://github.com/Develata/RSS-Reader/releases/latest) · [发布说明](https://github.com/Develata/RSS-Reader/releases) · [English](./docs/README.en.md) · [文档](./docs/README.md) · [报告问题](https://github.com/Develata/RSS-Reader/issues)
