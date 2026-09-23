@@ -31,9 +31,9 @@ Download the appropriate asset from [Releases](https://github.com/Develata/RSS-R
 
 Open **S** (Subscribe), add an RSS or Atom URL, then select **R** (Read / Home). From another page, R navigates home; when already home, R manually refreshes all feeds. Repeated clicks share the in-flight refresh. On mobile, pull down at the top of Home to request the same refresh.
 
-The table matches the published `v0.1.15` assets. Changes on `main` do not enter a download until a later release. Android's signed APK/AAB was built and checked, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine.
+The table matches the published `v0.1.16` assets. Changes on `main` do not enter a download until a later release. Android's signed APK/AAB was built and checked, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine.
 
-**Linux package limitation:** The `v0.1.15` `.deb` installs the executable under `/usr/bin`, while the current app creates its data directory next to that executable. An ordinary account normally cannot write there, so a successful package-structure check does not establish that this package can initialize after installation. Fixing this requires an explicit data-location and existing-data migration decision.
+**Linux package limitation:** The `v0.1.16` `.deb` installs the executable under `/usr/bin`, while the current app creates its data directory next to that executable. An ordinary account normally cannot write there, so a successful package-structure check does not establish that this package can initialize after installation. Fixing this requires an explicit data-location and existing-data migration decision.
 
 ## Reading workflow
 
