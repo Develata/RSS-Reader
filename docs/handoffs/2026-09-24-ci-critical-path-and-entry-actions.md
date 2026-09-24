@@ -5,7 +5,7 @@
 - 分支：main
 - 当前 HEAD（工作开始时）：543b03f
 - 相关 commit：4d97613（CI 清理 / Gradle 缓存）、1989ce6（刷新串行路径 + wasm Clippy）、40fcff9（文章列表动作与筛选开关）；本文与文档随后提交
-- 相关 tag / release：N/A（未 push、未 tag）
+- 相关 tag / release：N/A（已按 Develata 授权 push main，未 tag）
 - 状态：`validated`（本地可执行范围；CI 耗时收益待远端运行确认）
 
 ## 工作摘要
@@ -60,7 +60,7 @@
 
 ## 风险与后续事项
 
-- 未采纳：导航 R / S / ⚙ 改为 SVG 图标（补丁留在会话 scratchpad，未提交）。R / S 是 README 与使用指南中的产品记号，属于品牌取舍，需 Develata 决定。
+- 导航：经 Develata 确认，S 改为 RSS 波纹 SVG、⚙ 改为滑杆 SVG（与搜索图标同一描边体系，避免字母需记忆、emoji 跨平台字体不一致），R 保留为品牌与首页。README / README.en / 使用指南同步更新；`assets/readme/rss-reader-overview.png` 仍是旧图标，待下次截图更新。该组合此前随第一次 Web 包跑过 default smoke（128 项通过）。
 - 未采纳：`upsert_entries_and_resolve_contents` 对正文字符串的 clone。量级约为每订阅每次刷新 1 MB 以内，远小于网络与 SQLite 成本，不值得改公共签名。
 - 可考虑给 small viewport smoke 增加动作按钮文字 / 背景对比度断言，防止主题覆盖再次造成不可读。
 

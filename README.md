@@ -29,7 +29,7 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
    | Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | 安装 APK；AAB 是应用商店产物，不能直接安装 |
    | Web | `RSS-Reader-web.tar.gz` | 静态站点包；需要受保护的登录和跨域 feed 代抓时使用 [Web 部署指南](./docs/deployment/web.md) |
 
-2. 打开应用，在 **S**（Subscribe）页输入 RSS / Atom 地址并添加订阅。
+2. 打开应用，点顶栏的订阅图标（RSS 波纹）进入订阅页，输入 RSS / Atom 地址并添加订阅。
 3. 点击 **R**（Read / Home）查看文章；已在首页时再次点击 **R** 可手动刷新全部订阅。
 
 上表按已发布的 `v0.1.18` 产物核对；具体变更和验收范围见[本版 Release 说明](https://github.com/Develata/RSS-Reader/releases/tag/v0.1.18)。Android 已有正式签名 APK / AAB，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。
@@ -41,7 +41,7 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
 - **导航与刷新：** R 始终可见。从阅读页或其他页面点击 R 只返回全部文章页；已在首页再次点击才刷新全部订阅。连续触发复用进行中的刷新，手机首页还可在滚动到顶部后下拉刷新。
 - **搜索与筛选：** 放大镜展开标题搜索框，Enter 搜索，Esc 收起。文章列表可按来源、未读、收藏等条件筛选；来源名完整显示，多页时分页按钮保持可触达。
 - **阅读：** 左上角返回；可切换已读和收藏、跳转相邻文章、点击正文图片放大。正文保留原生文字选择与复制行为。刷新不会突然替换正在看的正文。
-- **设置与迁移：** 齿轮进入设置，支持内置主题和自定义 CSS；JSON / OPML 用于配置交换，可选 WebDAV 同步配置。
+- **设置与迁移：** 滑杆图标进入设置，支持内置主题和自定义 CSS；JSON / OPML 用于配置交换，可选 WebDAV 同步配置。
 - **自动化：** `rssr-cli` 支持订阅管理、刷新、设置和配置导入导出；运行 `cargo run --locked -p rssr-cli -- --help` 查看命令。
 
 Reader 快捷键：`M` 切换已读、`F` 切换收藏、`←` / `→` 跳转上一篇 / 下一篇未读。输入框中与带 Ctrl / Cmd 等修饰键的原生编辑操作不应被阅读快捷键接管。

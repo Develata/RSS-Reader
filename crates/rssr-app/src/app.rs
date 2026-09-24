@@ -143,8 +143,22 @@ pub fn AppNav(on_back: Option<EventHandler<()>>) -> Element {
                     }
                 } else {
                     div { "data-layout": "app-nav-links",
-                        Link { class: "icon-link-button", "data-nav": "feeds", to: AppRoute::FeedsPage {}, aria_label: "订阅", title: "Subscribe / 订阅", span { aria_hidden: "true", "S" } }
-                        Link { class: "icon-link-button", "data-nav": "settings", to: AppRoute::SettingsPage {}, aria_label: "设置", title: "设置", span { aria_hidden: "true", "⚙" } }
+                        Link { class: "icon-link-button", "data-nav": "feeds", to: AppRoute::FeedsPage {}, aria_label: "订阅", title: "Subscribe / 订阅",
+                            // 订阅用通行的 feed 波纹图形；单个字母 "S" 需要用户记忆含义。
+                            svg { width: "20", height: "20", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", stroke_linecap: "round", "aria-hidden": "true",
+                                path { d: "M5 11a8 8 0 0 1 8 8" }
+                                path { d: "M5 5a14 14 0 0 1 14 14" }
+                                circle { cx: "6", cy: "18", r: "1.5", fill: "currentColor", stroke: "none" }
+                            }
+                        }
+                        Link { class: "icon-link-button", "data-nav": "settings", to: AppRoute::SettingsPage {}, aria_label: "设置", title: "设置",
+                            // 与搜索图标同一描边体系；"⚙" 字符在各平台会落到不同 emoji 字体。
+                            svg { width: "20", height: "20", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", stroke_linecap: "round", "aria-hidden": "true",
+                                path { d: "M4 7h10M18 7h2M4 17h4M12 17h8" }
+                                circle { cx: "16", cy: "7", r: "2" }
+                                circle { cx: "10", cy: "17", r: "2" }
+                            }
+                        }
                     }
                 }
             }
