@@ -365,30 +365,22 @@ impl RefreshService {
         targets: Vec<RefreshTarget>,
         input: RefreshAllInput,
     ) -> Vec<RefreshFeedOutcome> {
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = input;
-            let mut outcomes = Vec::with_capacity(targets.len());
-            for target in targets {
-                outcomes.push(self.refresh_target_reporting(target).await);
+            let max_concurrency = input.max_concurrency.max(1);
+            if max_concurrency > 1 {
+                return self.refresh_targets_concurrent(targets, max_concurrency).await;
             }
-            return outcomes;
         }
+        #[cfg(target_arch = "wasm32")]
+        let _ = input;
 
-        #[cfg(not(target_arch = "wasm32"))]
-        let max_concurrency = input.max_concurrency.max(1);
-
-        #[cfg(not(target_arch = "wasm32"))]
-        if max_concurrency == 1 {
-            let mut outcomes = Vec::with_capacity(targets.len());
-            for target in targets {
-                outcomes.push(self.refresh_target_reporting(target).await);
-            }
-            return outcomes;
+        // 串行路径：wasm 始终走这里，原生端在 `max_concurrency == 1` 时走这里。
+        let mut outcomes = Vec::with_capacity(targets.len());
+        for target in targets {
+            outcomes.push(self.refresh_target_reporting(target).await);
         }
-
-        #[cfg(not(target_arch = "wasm32"))]
-        self.refresh_targets_concurrent(targets, max_concurrency).await
+        outcomes
     }
 
     /// 原生端的并发分支：最多 `max_concurrency` 个订阅同时在飞。

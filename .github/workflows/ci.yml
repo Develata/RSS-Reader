@@ -161,6 +161,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: clippy
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -172,8 +173,10 @@ jobs:
         with:
           version: ${{ env.DIOXUS_CLI_VERSION }}
 
-      - name: Wasm target check
-        run: cargo check --locked -p rssr-app --target wasm32-unknown-unknown
+      # 原生模块 job 的 clippy 看不到 cfg(target_arch = "wasm32") 分支；
+      # 这里对 wasm 目标跑 clippy（覆盖 rssr-app 及其路径依赖），成本与 cargo check 相当。
+      - name: Wasm target Clippy
+        run: cargo clippy --locked -p rssr-app --target wasm32-unknown-unknown -- -D warnings
 
       - name: Web bundle smoke
         run: |
