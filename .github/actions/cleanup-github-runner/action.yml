@@ -1,22 +1,41 @@
 name: Cleanup GitHub Runner
-description: Reclaim disk space on fresh GitHub-hosted runners before heavy builds
+description: Reclaim disk space on GitHub-hosted runners only when free space is actually low
 
 inputs:
   prune-docker:
     description: Whether to prune Docker images and builder cache
     required: false
     default: "false"
+  min-free-gb:
+    description: Skip cleanup when the root filesystem already has at least this many GiB free
+    required: false
+    default: "40"
 
 runs:
   using: composite
   steps:
-    - name: Show disk usage before cleanup
+    # 当前 ubuntu-latest 根分区空闲约 86 GiB，远超任何一个 job 的需要；
+    # 无条件 rm -rf 实测耗时 7–105 s，且落在 rssr-app 模块的关键路径上。
+    # 只在空闲空间低于阈值（镜像变小或换成自托管 runner）时才清理。
+    - name: Check free disk space
+      id: disk
       if: runner.os == 'Linux'
       shell: bash
-      run: df -h
+      env:
+        MIN_FREE_GB: ${{ inputs.min-free-gb }}
+      run: |
+        df -h /
+        avail_gb="$(df --output=avail -BG / | tail -n1 | tr -dc '0-9')"
+        if (( avail_gb >= MIN_FREE_GB )); then
+          echo "Free space ${avail_gb} GiB >= ${MIN_FREE_GB} GiB; skipping toolchain cleanup."
+          echo "needed=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "Free space ${avail_gb} GiB < ${MIN_FREE_GB} GiB; cleaning up."
+          echo "needed=true" >> "$GITHUB_OUTPUT"
+        fi
 
     - name: Remove unused preinstalled toolchains
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && steps.disk.outputs.needed == 'true'
       shell: bash
       run: |
         sudo rm -rf /usr/share/dotnet || true
@@ -33,6 +52,6 @@ runs:
         docker builder prune -af || true
 
     - name: Show disk usage after cleanup
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && (steps.disk.outputs.needed == 'true' || inputs.prune-docker == 'true')
       shell: bash
-      run: df -h
+      run: df -h /

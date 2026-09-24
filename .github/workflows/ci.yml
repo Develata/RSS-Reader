@@ -365,6 +365,20 @@ jobs:
         with:
           version: ${{ env.DIOXUS_CLI_VERSION }}
 
+      # dx 生成的 Gradle 工程每次都要重新下载 wrapper 分发包与 AGP 依赖；
+      # 这些输入只随 dx 版本和仓库内 Android 模板变化，适合按它们做键缓存。
+      - name: Cache Gradle
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            !~/.gradle/caches/**/*.lock
+            !~/.gradle/caches/**/gc.properties
+          key: gradle-${{ runner.os }}-dx${{ env.DIOXUS_CLI_VERSION }}-${{ hashFiles('Dioxus.toml', 'android/**', 'scripts/prepare_android_bundle.py') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-dx${{ env.DIOXUS_CLI_VERSION }}-
+
       - name: Android target smoke check
         run: cargo check --locked -p rssr-app --target aarch64-linux-android
 
