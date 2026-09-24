@@ -205,6 +205,8 @@ async fn read_body_with_limit(
 /// `resolve` 只是替换掉这一次的 DNS 解析结果。重定向同理：每跳都要重新校验并重新钉。
 fn pinned_client(url: &Url, addr: SocketAddr) -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
+        // An environment proxy can resolve the host elsewhere, bypassing our pinned IP.
+        .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(PROXY_REQUEST_TIMEOUT)
         .connect_timeout(PROXY_CONNECT_TIMEOUT);
@@ -256,6 +258,54 @@ async fn fetch_proxied_feed(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn pinned_client_ignores_environment_proxy() {
+        const CHILD: &str = "RSSR_TEST_PINNED_PROXY_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            // Isolate environment changes from parallel tests and reqwest's proxy cache.
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+            child
+                .args([
+                    "--exact",
+                    "proxy::tests::pinned_client_ignores_environment_proxy",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1");
+            for key in
+                ["HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"]
+            {
+                child.env(key, "http://127.0.0.1:0");
+            }
+            child.env("NO_PROXY", "").env("no_proxy", "");
+            let output = child.output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                axum::Router::new()
+                    .route("/feed", axum::routing::get(|| async { "pinned fixture" })),
+            )
+            .await
+            .unwrap();
+        });
+        let url = Url::parse(&format!("http://feed.example.invalid:{}/feed", addr.port())).unwrap();
+        let result = pinned_client(&url, addr).unwrap().get(url).send().await;
+        server.abort();
+        assert_eq!(
+            result.expect("must reach the pinned address directly").status(),
+            StatusCode::OK
+        );
+    }
 
     #[test]
     fn parse_proxy_feed_url_only_allows_http_and_https() {

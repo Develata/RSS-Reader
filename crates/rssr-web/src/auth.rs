@@ -164,7 +164,14 @@ pub(crate) async fn require_auth(
 
 fn sanitize_next(next: Option<&str>) -> &str {
     match next {
-        Some(path) if path.starts_with('/') && !path.starts_with("//") => path,
+        Some(path)
+            if path.starts_with('/')
+                && !path.starts_with("//")
+                // Browsers normalize backslashes and strip some controls before resolving URLs.
+                && !path.bytes().any(|byte| byte == b'\\' || byte.is_ascii_control()) =>
+        {
+            path
+        }
         _ => "/",
     }
 }
@@ -223,6 +230,22 @@ mod tests {
         assert_eq!(sanitize_next(Some("https://evil.example")), "/");
         assert_eq!(sanitize_next(Some("//evil.example")), "/");
         assert_eq!(sanitize_next(Some("/entries/1")), "/entries/1");
+    }
+
+    #[test]
+    fn sanitized_login_redirect_stays_same_origin_and_is_a_valid_header() {
+        let origin = url::Url::parse("https://reader.example/").unwrap();
+        for input in
+            ["/\\evil.example", "/\t/evil.example", "/\n/evil.example", "/entries\r\nX-Test: bad"]
+        {
+            let target = sanitize_next(Some(input));
+            assert_eq!(origin.join(target).unwrap().origin(), origin.origin(), "{input:?}");
+            assert!(axum::http::HeaderValue::from_str(target).is_ok(), "{input:?}");
+        }
+        assert_eq!(
+            sanitize_next(Some("/entries?q=%E4%B8%AD%E6%96%87")),
+            "/entries?q=%E4%B8%AD%E6%96%87"
+        );
     }
 
     #[test]

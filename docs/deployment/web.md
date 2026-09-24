@@ -4,6 +4,8 @@
 
 `/feed-proxy` 只代理公开的 HTTP(S) feed：本地和内网地址（包括 IPv4 映射的 IPv6 地址）会被拒绝；DNS 解析限时，重定向每跳重新校验目标。部署在内网的私有 feed 不能通过这个入口抓取。
 
+此入口直接连接校验后固定的目标 IP，不继承 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 等环境代理，以免代理端再次解析主机名而绕过目标校验。部署环境需允许服务器直接访问公开 feed。
+
 ## 使用已发布镜像
 
 仓库根目录的 [`docker-compose.yml`](../../docker-compose.yml) 直接拉取 `ghcr.io/develata/rss-reader:latest`，默认映射宿主端口 `8039` 到容器 `8080`。在克隆的仓库中创建仅供本机使用的 `.env`：
