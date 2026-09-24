@@ -55,8 +55,10 @@ pub(crate) fn connect_options_for_path(path: &std::path::Path) -> SqliteConnectO
 /// 这个判断同时决定池大小、是否发 WAL pragma，因此几种写法都要认出来：
 /// `sqlite::memory:`、`sqlite://:memory:`、裸 `:memory:`，以及带 `mode=memory` 的 URI。
 pub(crate) fn is_memory_database(database_url: &str) -> bool {
-    matches!(database_url, "sqlite::memory:" | "sqlite://:memory:" | ":memory:")
-        || database_url.contains("mode=memory")
+    let (database, query) = database_url.split_once('?').unwrap_or((database_url, ""));
+    matches!(database, "sqlite::memory:" | "sqlite://:memory:" | ":memory:")
+        || url::form_urlencoded::parse(query.as_bytes())
+            .any(|(key, value)| key == "mode" && value == "memory")
 }
 
 pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
@@ -88,14 +90,37 @@ pub async fn effective_journal_mode(pool: &SqlitePool) -> anyhow::Result<String>
 /// [`rssr_application::DEFAULT_REFRESH_CONCURRENCY`] 推导，避免两个数字各自漂移。
 ///
 /// 余量留给：UI 的列表/计数查询、阅读页正文读取、以及图片本地化的写回。
-///
-/// 内存库只能用 1：`sqlite::memory:` 的每条连接都是各自独立的空库。
-pub(crate) fn default_sqlite_max_connections(database_url: &str) -> u32 {
-    const POOL_HEADROOM: usize = 4;
+pub(crate) const FILE_SQLITE_MAX_CONNECTIONS: u32 =
+    (rssr_application::DEFAULT_REFRESH_CONCURRENCY + 4) as u32;
 
-    if is_memory_database(database_url) {
-        1
-    } else {
-        (rssr_application::DEFAULT_REFRESH_CONCURRENCY + POOL_HEADROOM) as u32
+/// 内存库统一限制为一个连接，避免依赖连接间的共享缓存行为。
+pub(crate) fn default_sqlite_max_connections(database_url: &str) -> u32 {
+    if is_memory_database(database_url) { 1 } else { FILE_SQLITE_MAX_CONNECTIONS }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn memory_classification_uses_url_components() {
+        for url in [
+            "sqlite::memory:",
+            "sqlite://:memory:?cache=shared",
+            ":memory:?cache=private",
+            "sqlite://named?mode=memory",
+            "sqlite://named?mode=%6demory",
+        ] {
+            assert!(is_memory_database(url), "{url}");
+            assert_eq!(default_sqlite_max_connections(url), 1);
+        }
+        for url in [
+            "sqlite://mode=memory.db?mode=rwc",
+            "sqlite://file.db?vfs=mode=memory",
+            "sqlite://file.db?mode=memory-extra",
+        ] {
+            assert!(!is_memory_database(url), "{url}");
+            assert!(default_sqlite_max_connections(url) > 1);
+        }
     }
 }

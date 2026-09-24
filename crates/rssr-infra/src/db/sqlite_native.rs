@@ -7,8 +7,8 @@ use anyhow::Context;
 use sqlx::sqlite::SqlitePoolOptions;
 
 use crate::db::{
-    SqlitePool, connect_options_for_path, create_sqlite_pool, default_sqlite_max_connections,
-    migrate, migrate_content, storage_backend::StorageBackend,
+    FILE_SQLITE_MAX_CONNECTIONS, SqlitePool, connect_options_for_path, create_sqlite_pool,
+    is_memory_database, migrate, migrate_content, storage_backend::StorageBackend,
 };
 
 #[derive(Debug, Clone)]
@@ -192,14 +192,14 @@ async fn connect_sqlite_path(database_path: &Path) -> anyhow::Result<SqlitePool>
     let options = connect_options_for_path(database_path);
 
     SqlitePoolOptions::new()
-        .max_connections(default_sqlite_max_connections(database_path.to_string_lossy().as_ref()))
+        .max_connections(FILE_SQLITE_MAX_CONNECTIONS)
         .connect_with(options)
         .await
         .with_context(|| format!("打开本地数据库失败: {}", database_path.display()))
 }
 
 fn derive_content_database_url(database_url: &str) -> anyhow::Result<String> {
-    if database_url == "sqlite::memory:" || database_url.contains("mode=memory") {
+    if is_memory_database(database_url) {
         return Ok(database_url.to_string());
     }
 
@@ -326,6 +326,60 @@ mod tests {
     #[test]
     fn append_content_suffix_preserves_extension() {
         assert_eq!(append_content_suffix("C:/tmp/rss-reader.db"), "C:/tmp/rss-reader-content.db");
+    }
+
+    #[test]
+    fn content_url_preserves_all_memory_spellings() {
+        for url in [
+            "sqlite://:memory:",
+            ":memory:",
+            "sqlite::memory:?cache=shared",
+            "sqlite://named?mode=%6demory",
+        ] {
+            assert_eq!(super::derive_content_database_url(url).unwrap(), url);
+        }
+    }
+
+    #[tokio::test]
+    async fn memory_text_in_filename_keeps_disk_databases_separate() {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let base = std::env::temp_dir().join(format!("rssr-url-中文 {nonce}"));
+        std::fs::create_dir_all(&base).unwrap();
+        let path = base.join("mode=memory.db");
+        let backend = NativeSqliteBackend::new(format!("sqlite://{}?mode=rwc", path.display()));
+        let index = backend.connect().await.unwrap();
+        let content = backend.connect_content().await.unwrap();
+        let index_path: String =
+            sqlx::query_scalar("SELECT file FROM pragma_database_list WHERE name='main'")
+                .fetch_one(&index)
+                .await
+                .unwrap();
+        let content_path: String =
+            sqlx::query_scalar("SELECT file FROM pragma_database_list WHERE name='main'")
+                .fetch_one(&content)
+                .await
+                .unwrap();
+        let mode = crate::db::effective_journal_mode(&index).await.unwrap();
+        index.close().await;
+        content.close().await;
+        std::fs::remove_dir_all(base).unwrap();
+        assert_ne!(index_path, content_path, "index and content must not share a disk file");
+        assert_eq!(mode, "wal");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn filesystem_path_is_not_parsed_as_a_database_url() {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let base = std::env::temp_dir().join(format!("rssr-literal-path-{nonce}"));
+        let backend = NativeSqliteBackend::with_path(base.join("literal?mode=memory"));
+        let pool = backend.connect().await.unwrap();
+        let max_connections = pool.options().get_max_connections();
+        let mode = crate::db::effective_journal_mode(&pool).await.unwrap();
+        pool.close().await;
+        std::fs::remove_dir_all(base).unwrap();
+        assert_eq!(max_connections, crate::db::FILE_SQLITE_MAX_CONNECTIONS);
+        assert_eq!(mode, "wal");
     }
 
     #[tokio::test]
