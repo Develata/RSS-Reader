@@ -9,7 +9,7 @@ fi
 input=$1
 tag=$2
 output=$3
-if [[ ! -f $input || $input == "$output" ]]; then
+if [[ ! -f $input || $input == "$output" || $input -ef $output || -d $output ]]; then
   echo "expected an existing input, a distinct output, and a vX.Y.Z release tag" >&2
   exit 2
 fi

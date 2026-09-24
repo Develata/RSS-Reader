@@ -34,6 +34,20 @@ if bash "$repo_root/scripts/prepare_linux_deb.sh" \
 fi
 test ! -e "$temp_dir/rejected.deb"
 
+ln "$temp_dir/original.deb" "$temp_dir/hardlink.deb"
+ln -s "$temp_dir/original.deb" "$temp_dir/symlink.deb"
+mkdir "$temp_dir/output-directory"
+for output in "$temp_dir/./original.deb" "$temp_dir/hardlink.deb" \
+  "$temp_dir/symlink.deb" "$temp_dir/output-directory"; do
+  if bash "$repo_root/scripts/prepare_linux_deb.sh" \
+    "$temp_dir/original.deb" v0.1.17 "$output" >/dev/null 2>&1; then
+    echo "unsafe output was accepted: $output" >&2
+    exit 1
+  fi
+done
+test "$(dpkg-deb -f "$temp_dir/original.deb" Version)" = 0.1.0
+test ! -e "$temp_dir/output-directory/repacked.deb"
+
 printf 'Depends: existing-runtime\n' >> "$temp_dir/input/DEBIAN/control"
 dpkg-deb --build --root-owner-group "$temp_dir/input" "$temp_dir/existing-depends.deb" >/dev/null
 if bash "$repo_root/scripts/prepare_linux_deb.sh" \
