@@ -176,12 +176,14 @@
     width: 100%;
   }
 
-  [data-layout="entry-card-actions"] {
+  /* 文章列表的动作保持内容宽度的胶囊并排；整行按钮会让每篇文章被两条色带压住。
+     订阅卡片的动作（刷新 / 删除）仍按整行排列。 */
+  [data-layout="feed-card-actions"] {
     display: grid;
     grid-template-columns: 1fr;
   }
 
-  [data-slot="entry-card-action"] {
+  [data-layout="feed-card-actions"] [data-slot="entry-card-action"] {
     width: 100%;
   }
 

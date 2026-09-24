@@ -59,6 +59,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                         "data-direction": "down",
                         aria_hidden: "true"
                     }
+                    span { "data-slot": "entry-controls-toggle-label", "筛选与组织" }
                 }
             }
         } else {
@@ -178,6 +179,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                             "data-direction": "up",
                             aria_hidden: "true"
                         }
+                        span { "data-slot": "entry-controls-toggle-label", "收起筛选" }
                     }
                 }
             }

@@ -52,8 +52,10 @@
 }
 
 [data-layout="entry-controls-toggle"] {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   width: 100%;
   min-height: 44px;
   padding: 0;
@@ -76,6 +78,12 @@
   outline: 2px solid var(--focus-ring-color);
   outline-offset: 3px;
   color: var(--ink);
+}
+
+/* 只有箭头时需要用户猜它控制什么；可见文字让入口可被直接认出。 */
+[data-slot="entry-controls-toggle-label"] {
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
 [data-slot="entry-controls-toggle-chevron"] {
@@ -504,6 +512,30 @@
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 14px;
+}
+
+/* 列表里每篇文章都重复这组动作：它们是次要控件，不应比标题更抢眼。
+   用描边胶囊代替实色块。选择器特意高于主题里的 `.button[data-variant="secondary"]`：
+   内置主题给次级按钮配的是深色底 + 浅色字，只继承其字色会在透明底上看不见。
+   这里只取每个主题都定义的表面 token（ink / muted / line / line-soft）。 */
+[data-layout="entry-card-actions"] .button[data-slot="entry-card-action"] {
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  box-shadow: none;
+  text-shadow: none;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.92rem;
+}
+
+[data-layout="entry-card-actions"] .button[data-slot="entry-card-action"]:hover,
+[data-layout="entry-card-actions"] .button[data-slot="entry-card-action"]:focus-visible {
+  border-color: currentColor;
+  background: var(--line-soft);
+  color: var(--ink);
+  filter: none;
 }
 
 /* Sibling of the page panel, so its backdrop-filter cannot trap fixed positioning. */
