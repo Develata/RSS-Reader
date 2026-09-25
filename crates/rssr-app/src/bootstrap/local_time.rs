@@ -55,7 +55,8 @@ fn offset_at(timestamp: OffsetDateTime) -> Option<UtcOffset> {
     }
 }
 
-#[cfg(all(test, not(target_arch = "wasm32"), not(target_os = "android")))]
+// 子进程靠 TZ 环境变量切换时区；chrono 只在 Unix 后端读取 TZ，Windows 走系统 API 会忽略它。
+#[cfg(all(test, unix, not(target_os = "android")))]
 mod tests {
     use super::*;
 

@@ -177,3 +177,12 @@ node scripts/browser/rssr_task1_acceptance.cjs
 - 使用真实浏览器回归脚本前先构建最新 Web bundle 并启动现有 SPA fixture server；指定本机 Playwright 与 Chrome 路径即可，无须增加 npm 产品依赖。
 - 授权更新：用户后续明确表示“可以自动commit”，覆盖此前仅修改工作树的限制；授权不包含 push / tag / release。
 - 提交前再次核对文件清单，运行 `cargo fmt --all --check` 与 `git diff --check`，均退出 0。实现代码未在本次提交阶段改变，沿用上述真实测试结果与环境阻塞记录。
+
+## Claude 复核修正（2026-09-25）
+
+- 复核范围：`5e0d8e5..bc0bfce` 全部产品代码 diff，对照本文记录的已确认决定（来源全部未读口径、元信息固定顺序、独立原文入口、设备本地时间）。
+- 修正 1：`bootstrap/local_time.rs` 的时区子进程测试改为仅在 `unix` 上编译。原因：测试靠子进程 `TZ` 切换时区，chrono 0.4.45 只在 `offset/local/unix.rs` 读取 `TZ`，Windows 后端走系统 API 会忽略它，在非纽约时区的 Windows 机器上该测试必然失败（CI 只在 Ubuntu 跑测试，因此未暴露）。
+- 修正 2：`tokens.css` 全局 `a { color: inherit; text-decoration: none; }` 使“打开原文”在默认主题下与普通文本无法区分；为 `[data-action="open-original"]` 补上与正文链接一致的强调色、下划线与 focus-visible 样式。
+- 复核验证（本机 WSL，缺 GTK/WebKit 开发库）：`cargo fmt --all --check` 0；`cargo clippy --locked --workspace --exclude rssr-app --all-targets -- -D warnings` 0；`cargo test --locked --workspace --exclude rssr-app` 186 passed / 0 failed；`cargo check` 与 `cargo clippy -D warnings` 于 `rssr-app --target wasm32-unknown-unknown` 均 0。
+- 未验证：修正 1 的 cfg 变更未能在本机编译 rssr-app 原生测试（缺 GTK），需在 Windows 上运行 `cargo test -p rssr-app local_time` 确认该测试被跳过、其余通过；修正 2 未做浏览器截图验收。`wasm_subscription_contract_harness` 未重跑（本机无 chromedriver，wasm-bindgen 为 0.2.128 而非要求的 0.2.126）。
+- 后续风险（未修改）：Android 列表加载对每条文章做一次 JNI 时区查询，大列表下的开销未测；`set_starred` 未获得与 `set_read` 对称的持久化失败回滚；`scripts/browser/rssr_task1_acceptance.cjs` 依赖本机 node + Playwright 路径，未接入 CI。

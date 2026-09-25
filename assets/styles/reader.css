@@ -363,4 +363,13 @@
   align-items: center;
   min-height: 44px;
   overflow-wrap: anywhere;
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: from-font;
+}
+
+[data-action="open-original"]:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 3px;
 }
