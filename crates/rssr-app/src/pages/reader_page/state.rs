@@ -6,6 +6,8 @@ pub(crate) struct ReaderPageLoadedContent {
     pub(crate) body_text: String,
     pub(crate) body_html: Option<String>,
     pub(crate) source: String,
+    pub(crate) author: Option<String>,
+    pub(crate) original_url: Option<String>,
     pub(crate) published_at: String,
     pub(crate) navigation_state: ReaderNavigation,
     pub(crate) is_read: bool,
@@ -20,6 +22,8 @@ pub(crate) struct ReaderPageState {
     pub(crate) body_text: String,
     pub(crate) body_html: Option<String>,
     pub(crate) source: String,
+    pub(crate) author: Option<String>,
+    pub(crate) original_url: Option<String>,
     pub(crate) published_at: String,
     pub(crate) navigation_state: ReaderNavigation,
     pub(crate) is_read: bool,
@@ -40,6 +44,8 @@ impl ReaderPageState {
             body_text: String::new(),
             body_html: None,
             source: String::new(),
+            author: None,
+            original_url: None,
             published_at: "未知发布时间".to_string(),
             navigation_state: ReaderNavigation::default(),
             is_read: false,
@@ -67,6 +73,8 @@ impl ReaderPageState {
         self.body_text.clear();
         self.body_html = None;
         self.source.clear();
+        self.author = None;
+        self.original_url = None;
         self.published_at = "未知发布时间".to_string();
         self.navigation_state = ReaderNavigation::default();
         self.is_read = false;

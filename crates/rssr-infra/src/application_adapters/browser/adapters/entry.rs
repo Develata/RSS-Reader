@@ -56,6 +56,12 @@ impl EntryIndexRepository for BrowserEntryRepository {
     async fn set_read(&self, entry_id: i64, is_read: bool) -> rssr_domain::Result<()> {
         let mut state = self.state.lock().expect("lock state");
         let now = now_utc();
+        let previous = state
+            .entry_flags
+            .entries
+            .iter()
+            .position(|entry| entry.id == entry_id)
+            .map(|index| (index, state.entry_flags.entries[index].clone()));
 
         match state.entry_flags.entries.iter_mut().find(|entry| entry.id == entry_id) {
             Some(entry) => {
@@ -76,7 +82,16 @@ impl EntryIndexRepository for BrowserEntryRepository {
             }
         }
 
-        save_entry_flags_slice(&state.entry_flags).map_err(map_persistence_error)
+        if let Err(error) = save_entry_flags_slice(&state.entry_flags) {
+            match previous {
+                Some((index, entry)) => state.entry_flags.entries[index] = entry,
+                None => {
+                    state.entry_flags.entries.pop();
+                }
+            }
+            return Err(map_persistence_error(error));
+        }
+        Ok(())
     }
 
     async fn set_starred(&self, entry_id: i64, is_starred: bool) -> rssr_domain::Result<()> {

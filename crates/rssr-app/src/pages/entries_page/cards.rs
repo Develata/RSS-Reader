@@ -3,7 +3,7 @@ use std::sync::Arc;
 use dioxus::prelude::*;
 use rssr_domain::EntrySummary;
 
-use crate::{datetime::format_date_utc, router::AppRoute};
+use crate::{datetime::format_date, router::AppRoute};
 
 use super::{facade::EntriesPageFacade, groups::EntryCardRef, session::EntriesPageSession};
 
@@ -48,7 +48,7 @@ fn render_entry_card(
             }
             div { "data-slot": "entry-card-meta",
                 "{entry.feed_title}"
-                if let Some(date) = format_date_utc(entry.published_at) { " · {date}" }
+                if let Some(date) = format_date(entry.published_at) { " · {date}" }
                 if entry.is_read { " · 已读" } else { " · 未读" }
                 if entry.is_starred { " · 已收藏" }
             }

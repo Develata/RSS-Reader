@@ -31,7 +31,15 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
             Ok(services) => match services.entries().list_entries(&query).await {
                 Ok(outcome) => {
                     vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries {
-                        entries: outcome.entries,
+                        entries: outcome
+                            .entries
+                            .into_iter()
+                            .map(|mut entry| {
+                                entry.published_at =
+                                    entry.published_at.map(crate::datetime::local_timestamp);
+                                entry
+                            })
+                            .collect(),
                         archived_count: outcome.archived_count as usize,
                     })]
                 }

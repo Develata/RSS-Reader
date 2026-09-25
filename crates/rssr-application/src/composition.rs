@@ -94,10 +94,11 @@ impl AppUseCases {
                 app_state_service,
                 input.feed_repository.clone(),
             ),
-            feeds_snapshot_service: FeedsSnapshotService::new(input.feed_repository),
+            feeds_snapshot_service: FeedsSnapshotService::new(input.feed_repository.clone()),
             reader_service: ReaderService::new(
                 input.entry_index_repository,
                 input.entry_content_repository,
+                input.feed_repository,
             ),
         }
     }

@@ -166,7 +166,12 @@ impl EntriesPageSession {
 
     fn spawn_ui_command(self, command: UiCommand) {
         spawn_projected_ui_command(command, UiIntent::into_entries_page_intent, move |intent| {
+            let read_changed =
+                matches!(&intent, EntriesPageIntent::PatchEntryFlags { is_read: Some(_), .. });
             self.dispatch(intent);
+            if read_changed {
+                self.bootstrap();
+            }
         });
     }
 }

@@ -28,6 +28,14 @@ impl ReaderPageFacade {
         &self.snapshot.title
     }
 
+    pub(crate) fn author(&self) -> Option<&str> {
+        self.snapshot.author.as_deref()
+    }
+
+    pub(crate) fn original_url(&self) -> Option<&str> {
+        self.snapshot.original_url.as_deref()
+    }
+
     pub(crate) fn source(&self) -> &str {
         &self.snapshot.source
     }

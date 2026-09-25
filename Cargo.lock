@@ -5200,6 +5200,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64",
+ "chrono",
  "console_error_panic_hook",
  "dioxus",
  "dioxus-router",
@@ -5241,6 +5242,7 @@ dependencies = [
  "serde_json",
  "time",
  "tokio",
+ "tracing",
  "url",
 ]
 

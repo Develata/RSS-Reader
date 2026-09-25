@@ -200,6 +200,7 @@
 
 ### 文章与阅读
 
+- `data-action="open-original"`：原文外部打开入口（无 URL 时不渲染）
 - `data-action="mark-read"`
 - `data-action="toggle-starred"`
 - `data-action="group-by-source"`
@@ -330,6 +331,7 @@
 - `data-slot="feed-card-title"`
 - `data-slot="feed-card-meta"`
 - `data-slot="entry-card-title"`
+- `data-slot="entry-filters-source-unread-count"`：来源全部未读数，含 0，弱化行内数字
 - `data-slot="entry-card-meta"`
 - `data-slot="page-intro"`
 - `data-slot="reader-title"`
@@ -594,3 +596,15 @@ cargo run -p rssr-cli -- save-settings --custom-css-file assets/themes/newsprint
 cargo run -p rssr-cli -- save-settings --custom-css-file assets/themes/amethyst-glass.css
 cargo run -p rssr-cli -- save-settings --custom-css-file assets/themes/midnight-ledger.css
 ```
+
+## 阅读元信息与来源未读数
+
+`reader-meta-block` 内顺序为订阅名、可选作者、发布时间及独立 `open-original` 链接。
+长文本允许换行；原文入口触控高度至少 44px。原生复用 Dioxus 的外部导航处理器，
+Web 使用 `_blank` 与 `rel="noopener noreferrer"`，不触发阅读状态重置。
+完整时间显示设备本地数值偏移，零偏移或回退显示 UTC；卡片与年月日分组共用加载时转换后的时间。
+
+`data-layout="entry-filters-source-chip"` 继续保留。数字槽位
+`data-slot="entry-filters-source-unread-count"` 使用弱化行内文本；控件可访问名称仍为来源名，
+通过 `aria-describedby` 关联“未读 N 篇”，可见数字不重复朗读。
+计数来自 `FeedSummary.unread_count`，不由当前文章集合计算；成功标记后重查订阅汇总，失败不预减计数。

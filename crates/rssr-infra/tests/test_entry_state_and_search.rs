@@ -251,3 +251,47 @@ async fn entry_repository_resolves_content_after_batch_upsert() {
     assert_eq!(stored.content_html.as_deref(), Some("<p>Body 2</p>"));
     assert_eq!(stored.content_text.as_deref(), Some("Body 2"));
 }
+
+#[tokio::test]
+async fn unread_summaries_are_global_idempotent_and_unchanged_on_failure() {
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let pool = backend.connect().await.unwrap();
+    migrate(&pool).await.unwrap();
+    let feeds = std::sync::Arc::new(SqliteFeedRepository::new(pool.clone()));
+    let entries = std::sync::Arc::new(SqliteEntryRepository::new(pool));
+    let feed = feeds
+        .upsert_subscription(&NewFeedSubscription {
+            url: Url::parse("https://example.com/feed.xml").unwrap(),
+            title: Some("Example Feed".into()),
+            folder: None,
+        })
+        .await
+        .unwrap();
+    let parsed = FeedParser::new().parse(SAMPLE_FEED).unwrap();
+    entries.upsert_entries(feed.id, &parsed.entries).await.unwrap();
+    let all = entries.list_entries(&EntryQuery::default()).await.unwrap();
+    let reader =
+        rssr_application::ReaderService::new(entries.clone(), entries.clone(), feeds.clone());
+    let snapshot = reader.load_entry(all[0].id).await.unwrap();
+    assert_eq!(snapshot.feed_title.as_deref(), Some("Example Feed"));
+    assert_eq!(snapshot.entry.unwrap().id, all[0].id);
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 2);
+    entries.set_read(all[0].id, true).await.unwrap();
+    entries.set_read(all[0].id, true).await.unwrap();
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
+    entries
+        .list_entries(&EntryQuery {
+            search_title: Some("no match".into()),
+            archive_filter: ArchiveFilter::All,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
+    assert!(entries.set_read(i64::MAX, true).await.is_err());
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
+    entries.set_read(all[1].id, true).await.unwrap();
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 0);
+    entries.set_read(all[0].id, false).await.unwrap();
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
+}

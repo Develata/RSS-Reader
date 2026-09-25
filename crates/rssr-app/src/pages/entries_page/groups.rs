@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use time::{OffsetDateTime, UtcOffset};
+use time::OffsetDateTime;
 
-use crate::datetime::format_date_utc;
+use crate::datetime::format_date;
 
 /// 分组键：条目在**完整可见列表**中的下标，加上分组真正依赖的那几个字段。
 ///
@@ -15,6 +15,7 @@ pub(crate) struct EntryGroupKey<'a> {
     pub(crate) index: usize,
     pub(crate) id: i64,
     pub(crate) feed_title: &'a str,
+    /// UI-local timestamp: month, date buckets and cards must use its retained offset.
     pub(crate) published_at: Option<OffsetDateTime>,
 }
 
@@ -133,7 +134,6 @@ pub(crate) fn group_entries_by_time_tree(
 
     for entry in entries {
         if let Some(published_at) = entry.published_at {
-            let published_at = published_at.to_offset(UtcOffset::UTC);
             groups
                 .entry((published_at.year(), published_at.month() as u8))
                 .or_default()
@@ -363,7 +363,7 @@ fn group_date_buckets(entries: &[EntryGroupKey<'_>], page_size: usize) -> Vec<En
     let mut groups: BTreeMap<Option<time::Date>, Vec<EntryGroupKey<'_>>> = BTreeMap::new();
 
     for entry in entries {
-        let key = entry.published_at.map(|at| at.to_offset(UtcOffset::UTC).date());
+        let key = entry.published_at.map(|at| at.date());
         groups.entry(key).or_default().push(*entry);
     }
 
@@ -372,7 +372,7 @@ fn group_date_buckets(entries: &[EntryGroupKey<'_>], page_size: usize) -> Vec<En
         .rev()
         .map(|(_, items)| {
             let date =
-                format_date_utc(items[0].published_at).unwrap_or_else(|| "未标注日期".to_string());
+                format_date(items[0].published_at).unwrap_or_else(|| "未标注日期".to_string());
             let anchor_id = group_anchor_id(&format!("{}-{}", date, items[0].id));
             EntryDateGroup {
                 anchor_id,
@@ -421,7 +421,6 @@ fn group_source_months(
 
     for entry in entries {
         if let Some(published_at) = entry.published_at {
-            let published_at = published_at.to_offset(UtcOffset::UTC);
             groups
                 .entry((published_at.year(), published_at.month() as u8))
                 .or_default()
@@ -577,17 +576,18 @@ mod tests {
     }
 
     #[test]
-    fn date_source_leaves_preserve_utc_day_and_absolute_indices() {
+    fn date_source_leaves_preserve_local_day_and_absolute_indices() {
         let entries = vec![
             key(13, 21, "来源 甲", Some("2026-04-02T00:30:00+02:00")),
-            key(14, 22, "来源 甲", Some("2026-04-01T22:00:00Z")),
-            key(15, 23, "来源 乙", Some("2026-04-01T21:00:00Z")),
+            key(14, 22, "来源 甲", Some("2026-04-02T01:00:00+02:00")),
+            key(15, 23, "来源 乙", Some("2026-04-02T01:30:00+02:00")),
         ];
         let groups = group_entries_by_time_tree(&entries, 4);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].dates.len(), 1);
         let date = &groups[0].dates[0];
-        assert_eq!(date.title, "2026-04-01");
+        assert_eq!(date.title, "2026-04-02");
+        assert_eq!(Some(date.title.clone()), crate::datetime::format_date(entries[0].published_at));
         assert_eq!(date.subtitle, "3 篇文章");
         let source = date.sources.iter().find(|source| source.title == "来源 甲").unwrap();
         assert_eq!(source.target_page, 4);

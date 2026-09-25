@@ -24,6 +24,7 @@ url.workspace = true
 
 [target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
 dioxus = { workspace = true, features = ["desktop"] }
+chrono.workspace = true
 image = { version = "0.25", default-features = false, features = ["png"] }
 rfd.workspace = true
 rssr-infra = { path = "../rssr-infra" }

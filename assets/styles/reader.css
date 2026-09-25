@@ -351,3 +351,16 @@
   max-height: 100%;
   object-fit: contain;
 }
+
+[data-layout="reader-meta-block"],
+[data-slot="reader-meta"] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-action="open-original"] {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}

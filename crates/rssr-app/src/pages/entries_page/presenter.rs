@@ -67,6 +67,8 @@ impl PartialEq for GroupingEntries {
                     Arc::ptr_eq(left, right)
                         || (left.id == right.id
                             && left.published_at == right.published_at
+                            && left.published_at.map(|at| at.offset())
+                                == right.published_at.map(|at| at.offset())
                             && left.feed_title == right.feed_title)
                 }))
     }
@@ -129,7 +131,7 @@ pub(crate) struct EntriesPagePresenter {
     pub(crate) total_pages: u32,
     pub(crate) page_start: usize,
     pub(crate) page_end: usize,
-    pub(crate) source_filter_options: Vec<(i64, String, String)>,
+    pub(crate) source_filter_options: Vec<(i64, String, String, u32)>,
     pub(crate) source_grouped_entries: Vec<EntrySourceGroup>,
     pub(crate) time_grouped_entries: Vec<EntryMonthGroup>,
     pub(crate) directory_months: Vec<EntryDirectoryMonth>,
@@ -173,7 +175,7 @@ impl EntriesPagePresenter {
             input
                 .feeds
                 .iter()
-                .map(|feed| (feed.id, feed.title.clone(), feed.url.clone()))
+                .map(|feed| (feed.id, feed.title.clone(), feed.url.clone(), feed.unread_count))
                 .collect::<Vec<_>>()
         };
 

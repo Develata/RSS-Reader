@@ -264,3 +264,69 @@ async fn browser_subscription_remove_preserves_other_last_opened_feed() {
 
     clear_browser_state_storage();
 }
+
+#[wasm_bindgen_test]
+async fn reader_metadata_and_global_unread_counts_survive_failed_flag_writes() {
+    use rssr_application::ReaderService;
+    use rssr_domain::FeedRepository;
+    clear_browser_state_storage();
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState {
+            feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
+            entries: vec![sample_entry_index(1, 1, 1), sample_entry_index(2, 1, 2)],
+            ..Default::default()
+        },
+        entry_content: PersistedEntryContentSlice { entries: vec![sample_entry_content(1, 1, 1)] },
+        ..Default::default()
+    }));
+    let entries = Arc::new(BrowserEntryRepository::new(state.clone()));
+    let feeds = Arc::new(BrowserFeedRepository::new(state.clone()));
+    let reader = ReaderService::new(entries.clone(), entries.clone(), feeds.clone());
+    let snapshot = reader.load_entry(1).await.unwrap();
+    assert_eq!(snapshot.feed_title, feeds.get_feed(1).await.unwrap().unwrap().title);
+    assert!(snapshot.entry.unwrap().content_html.is_some());
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 2);
+    entries.set_read(1, true).await.unwrap();
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
+    entries.set_read(1, true).await.unwrap();
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
+    entries
+        .list_entries(&EntryQuery {
+            search_title: Some("does not match".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
+    entries.set_read(2, true).await.unwrap();
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 0);
+    entries.set_read(1, false).await.unwrap();
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
+
+    // Force the browser's real storage API to fail, exercising rollback for an existing flag
+    // and a newly inserted flag. Restore the API before asserting to avoid test contamination.
+    {
+        let mut baseline = state.lock().unwrap();
+        baseline.entry_flags.entries.retain(|entry| entry.id != 2);
+        rssr_infra::application_adapters::browser::state::save_entry_flags_slice(
+            &baseline.entry_flags,
+        )
+        .unwrap();
+    }
+    let storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
+    let persisted_before = storage.get_item(ENTRY_FLAGS_STORAGE_KEY).unwrap();
+    js_sys::eval("globalThis.__rssrSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function() { throw new DOMException('test quota', 'QuotaExceededError'); };").unwrap();
+    let failed = entries.set_read(1, true).await;
+    let failed_new = entries.set_read(2, true).await;
+    js_sys::eval(
+        "Storage.prototype.setItem = globalThis.__rssrSetItem; delete globalThis.__rssrSetItem;",
+    )
+    .unwrap();
+    assert!(failed.is_err());
+    assert!(failed_new.is_err());
+    assert_eq!(storage.get_item(ENTRY_FLAGS_STORAGE_KEY).unwrap(), persisted_before);
+    assert!(!entries.get_entry_record(1).await.unwrap().unwrap().is_read);
+    assert!(!entries.get_entry_record(2).await.unwrap().unwrap().is_read);
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 2);
+    clear_browser_state_storage();
+}

@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use rssr_application::{RemoteConfigPullOutcome, RemoteConfigPushOutcome};
 
+pub(crate) mod external_link;
+pub(crate) mod local_time;
 mod refresh_flight;
 
 #[cfg(not(target_arch = "wasm32"))]

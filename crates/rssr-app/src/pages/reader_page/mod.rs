@@ -59,7 +59,19 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             }
             div { class: "reader-meta-block", "data-layout": "reader-meta-block",
                 p { class: "reader-meta", "data-slot": "reader-meta", "来源：{facade.source()}" }
+                if let Some(author) = facade.author() {
+                    p { class: "reader-meta", "data-slot": "reader-meta", "作者：{author}" }
+                }
                 p { class: "reader-meta", "data-slot": "reader-meta", "发布时间：{facade.published_at()}" }
+                if let Some(url) = facade.original_url() {
+                    a {
+                        "data-action": "open-original",
+                        href: "{url}",
+                        target: crate::bootstrap::external_link::TARGET,
+                        rel: "noopener noreferrer",
+                        "打开原文"
+                    }
+                }
             }
             if let Some(message) = facade.error() {
                 StatusBanner { message: message.to_string(), tone: "error".to_string() }

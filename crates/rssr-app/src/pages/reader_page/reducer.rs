@@ -20,6 +20,8 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
             state.body_text = content.body_text;
             state.body_html = content.body_html;
             state.source = content.source;
+            state.author = content.author;
+            state.original_url = content.original_url;
             state.published_at = content.published_at;
             state.navigation_state = content.navigation_state;
             state.is_read = content.is_read;
@@ -66,6 +68,8 @@ mod tests {
             body_text: format!("{title} body"),
             body_html: None,
             source: "https://example.com/post".to_string(),
+            author: None,
+            original_url: None,
             published_at: "2026-07-26 10:00 UTC".to_string(),
             navigation_state: Default::default(),
             is_read: false,

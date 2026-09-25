@@ -110,6 +110,8 @@ mod tests {
                 body_text: format!("{title} body"),
                 body_html: None,
                 source: "Feed".into(),
+                author: None,
+                original_url: None,
                 published_at: "Unknown".into(),
                 navigation_state: ReaderNavigation::default(),
                 is_read: false,

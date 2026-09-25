@@ -584,3 +584,9 @@ html:has([data-page="entries"][data-entry-scope="all"]) { overscroll-behavior-y:
 .app-shell[data-density="compact"] [data-slot="entry-directory-meta"] {
   font-size: 0.78rem;
 }
+
+[data-slot="entry-filters-source-unread-count"] {
+  color: var(--muted);
+  font-weight: normal;
+  white-space: nowrap;
+}

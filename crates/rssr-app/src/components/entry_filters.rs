@@ -6,7 +6,7 @@ pub fn EntryFilters(
     search: String,
     read_filter: ReadFilter,
     starred_filter: StarredFilter,
-    available_sources: Vec<(i64, String, String)>,
+    available_sources: Vec<(i64, String, String, u32)>,
     selected_feed_urls: Vec<String>,
     on_search: EventHandler<String>,
     on_change_read_filter: EventHandler<ReadFilter>,
@@ -97,7 +97,7 @@ pub fn EntryFilters(
                 div { "data-layout": "entry-filters-sources",
                     p { "data-slot": "entry-filters-sources-label", "按来源筛选" }
                     div { "data-layout": "entry-filters-source-grid", role: "group", aria_label: "选择来源",
-                        for (_feed_id, title, url) in available_sources {
+                        for (feed_id, title, url, unread_count) in available_sources {
                             {
                                 let is_selected = selected_feed_urls.contains(&url);
                                 // 只在真的被点击时才算出新的选中集合：此前对每个 chip 都提前
@@ -115,10 +115,20 @@ pub fn EntryFilters(
                                         input {
                                             r#type: "checkbox",
                                             "data-field": "entry-source-filter",
+                                            "aria-label": "{title}",
+                                            "aria-describedby": "source-unread-{feed_id}",
                                             checked: is_selected,
                                             onchange: move |_| on_change_selected_feed_urls.call(toggle_source_selection(&current_selection, &url))
                                         }
-                                        span { "{title}" }
+                                        span {
+                                            "{title}"
+                                            span {
+                                                "data-slot": "entry-filters-source-unread-count",
+                                                "aria-hidden": "true",
+                                                " · {unread_count}"
+                                            }
+                                        }
+                                        span { class: "sr-only", id: "source-unread-{feed_id}", "未读 {unread_count} 篇" }
                                     }
                                 }
                             }

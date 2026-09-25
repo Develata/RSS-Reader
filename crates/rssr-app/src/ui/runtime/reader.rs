@@ -1,5 +1,5 @@
 use crate::{
-    datetime::format_datetime_utc,
+    datetime::format_datetime,
     pages::reader_page::{
         intent::ReaderPageIntent,
         state::ReaderPageLoadedContent,
@@ -39,11 +39,13 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
                             title: entry.title,
                             body_text,
                             body_html,
-                            source: entry
+                            source: snapshot.feed_title.unwrap_or_else(|| "未知来源".to_string()),
+                            author: entry.author.filter(|author| !author.trim().is_empty()),
+                            original_url: entry
                                 .url
-                                .map(|url| url.to_string())
-                                .unwrap_or_else(|| "无原文链接".to_string()),
-                            published_at: format_datetime_utc(entry.published_at)
+                                .filter(|url| matches!(url.scheme(), "http" | "https"))
+                                .map(|url| url.to_string()),
+                            published_at: format_datetime(entry.published_at)
                                 .unwrap_or_else(|| "未知发布时间".to_string()),
                             is_read: entry.is_read,
                             is_starred: entry.is_starred,

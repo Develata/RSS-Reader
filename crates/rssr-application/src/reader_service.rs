@@ -1,12 +1,15 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rssr_domain::{Entry, EntryContentRepository, EntryIndexRepository, EntryNavigation};
+use rssr_domain::{
+    Entry, EntryContentRepository, EntryIndexRepository, EntryNavigation, FeedRepository,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReaderEntrySnapshot {
     pub entry: Option<Entry>,
     pub navigation: EntryNavigation,
+    pub feed_title: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,14 +38,16 @@ pub struct ToggleStarredOutcome {
 pub struct ReaderService {
     entry_index_repository: Arc<dyn EntryIndexRepository>,
     entry_content_repository: Arc<dyn EntryContentRepository>,
+    feed_repository: Arc<dyn FeedRepository>,
 }
 
 impl ReaderService {
     pub fn new(
         entry_index_repository: Arc<dyn EntryIndexRepository>,
         entry_content_repository: Arc<dyn EntryContentRepository>,
+        feed_repository: Arc<dyn FeedRepository>,
     ) -> Self {
-        Self { entry_index_repository, entry_content_repository }
+        Self { entry_index_repository, entry_content_repository, feed_repository }
     }
 
     pub async fn load_entry(&self, entry_id: i64) -> anyhow::Result<ReaderEntrySnapshot> {
@@ -65,7 +70,22 @@ impl ReaderService {
             None => None,
         };
 
-        Ok(ReaderEntrySnapshot { entry, navigation })
+        let feed_title = match entry.as_ref() {
+            Some(entry) => match self.feed_repository.get_feed(entry.feed_id).await {
+                Ok(Some(feed)) => Some(
+                    feed.title
+                        .filter(|title| !title.trim().is_empty())
+                        .unwrap_or_else(|| feed.url.to_string()),
+                ),
+                Ok(None) => None,
+                Err(error) => {
+                    tracing::warn!(feed_id = entry.feed_id, %error, "读取订阅元信息失败，保留正文");
+                    None
+                }
+            },
+            None => None,
+        };
+        Ok(ReaderEntrySnapshot { entry, navigation, feed_title })
     }
 
     pub async fn toggle_read(&self, input: ToggleReadInput) -> anyhow::Result<ToggleReadOutcome> {
@@ -177,6 +197,82 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct FeedRepositoryStub {
+        feed: Option<rssr_domain::Feed>,
+        fail: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl rssr_domain::FeedRepository for FeedRepositoryStub {
+        async fn upsert_subscription(
+            &self,
+            _: &rssr_domain::NewFeedSubscription,
+        ) -> rssr_domain::Result<rssr_domain::Feed> {
+            unreachable!()
+        }
+        async fn set_deleted(&self, _: i64, _: bool) -> rssr_domain::Result<()> {
+            unreachable!()
+        }
+        async fn list_feeds(&self) -> rssr_domain::Result<Vec<rssr_domain::Feed>> {
+            unreachable!()
+        }
+        async fn list_summaries(&self) -> rssr_domain::Result<Vec<rssr_domain::FeedSummary>> {
+            unreachable!()
+        }
+        async fn get_feed(&self, feed_id: i64) -> rssr_domain::Result<Option<rssr_domain::Feed>> {
+            assert_eq!(feed_id, 7);
+            if self.fail {
+                return Err(rssr_domain::DomainError::Persistence("feed unavailable".into()));
+            }
+            Ok(self.feed.clone())
+        }
+    }
+
+    fn feed(title: Option<&str>) -> rssr_domain::Feed {
+        rssr_domain::Feed {
+            id: 7,
+            url: Url::parse("https://example.com/feed").unwrap(),
+            title: title.map(str::to_string),
+            site_url: None,
+            description: None,
+            icon_url: None,
+            folder: None,
+            etag: None,
+            last_modified: None,
+            last_fetched_at: None,
+            last_success_at: None,
+            fetch_error: None,
+            is_deleted: false,
+            created_at: OffsetDateTime::UNIX_EPOCH,
+            updated_at: OffsetDateTime::UNIX_EPOCH,
+        }
+    }
+
+    #[tokio::test]
+    async fn metadata_is_independent_and_best_effort() {
+        for (feed, fail, expected) in [
+            (Some(feed(Some("Source"))), false, Some("Source")),
+            (Some(feed(None)), false, Some("https://example.com/feed")),
+            (Some(feed(Some("  "))), false, Some("https://example.com/feed")),
+            (None, false, None),
+            (None, true, None),
+        ] {
+            let mut record = entry_record();
+            record.author = Some("Writer".into());
+            let service = ReaderService::new(
+                Arc::new(EntryIndexRepositoryStub { entry: Some(record), ..Default::default() }),
+                Arc::new(EntryContentRepositoryStub { content: Some(entry_content()) }),
+                Arc::new(FeedRepositoryStub { feed, fail }),
+            );
+            let snapshot = service.load_entry(42).await.unwrap();
+            assert_eq!(snapshot.feed_title.as_deref(), expected);
+            let entry = snapshot.entry.unwrap();
+            assert_eq!(entry.author.as_deref(), Some("Writer"));
+            assert_eq!(entry.content_html.as_deref(), Some("<p>Body</p>"));
+        }
+    }
+
     fn entry_record() -> EntryRecord {
         let now = OffsetDateTime::parse("2026-04-12T00:00:00Z", &Rfc3339).expect("parse test time");
         EntryRecord {
@@ -216,7 +312,11 @@ mod tests {
         index_repository: Arc<EntryIndexRepositoryStub>,
         content_repository: Arc<EntryContentRepositoryStub>,
     ) -> ReaderService {
-        ReaderService::new(index_repository, content_repository)
+        ReaderService::new(
+            index_repository,
+            content_repository,
+            Arc::new(FeedRepositoryStub::default()),
+        )
     }
 
     #[tokio::test]
@@ -278,6 +378,7 @@ mod tests {
             .expect("load missing reader entry");
 
         assert!(snapshot.entry.is_none());
+        assert!(snapshot.feed_title.is_none());
         assert_eq!(snapshot.navigation, EntryNavigation::default());
     }
 
