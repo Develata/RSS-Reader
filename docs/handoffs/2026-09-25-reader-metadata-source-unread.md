@@ -6,7 +6,9 @@
 - 实施前 HEAD：5e0d8e52d28d835580255f8cb9a921690fa74ff0
 - 相关 commit：本记录所在的 `feat(reader): organize metadata and show source unread counts` 本地提交；用户在后续消息中明确授权 commit，未 push / tag / release。
 - 相关 tag / release：N/A
-- 状态：`draft`（实现与 Web 专项验收完成，原生全量验证存在环境阻塞）
+- 状态：`draft`（实现与 Web 专项验收完成；后续已补齐原生全量测试、Android ARM64 check 和浏览器契约测试，仍缺 Android 运行与桌面系统浏览器打开验收）
+
+后续验证以 [跨平台补验记录](2026-09-25-task1-platform-validation.md) 为准。本文以下命令表保留实施提交时的原始结果，不覆盖当时的失败证据。
 
 ## 工作摘要
 
