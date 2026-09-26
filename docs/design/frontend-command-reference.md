@@ -75,7 +75,9 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 
 位置采集发生在操作边界：DOM 捕获阶段的控件点击、左右方向键切文、表单提交与浏览器 `popstate`。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
 
-`data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好被忽略，搜索词与文章筛选折叠偏好保留。`app-nav-shell` 的 `data-state` 现为 `normal` / `search`。
+`data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好仍被忽略，搜索词与文章筛选折叠偏好保留。`app-nav-shell` 的 `data-state` 为 `normal` / `search` / `collapsed`。
+
+`data-action="toggle-nav"` / `data-slot="app-nav-toggle"` 是顶栏最右侧的收起/展开按钮，`aria-expanded` 表示导航展开状态，`aria-controls="app-nav-content"` 指向内容区域。收起时只有箭头按钮可交互，刷新 live region 仍可向辅助技术报告结果。状态由 App shell 在本次运行内共享，跨页保留但不写入配置；收起关闭搜索模式但保留搜索词。Rust 负责显隐与状态，CSS 控制向左收拢后的 44px 占位和窄箭头外观。`AppNav` 实现集中于 `components/app_nav.rs`，原 `app::AppNav` 导出保持兼容。
 
 搜索输入框保持 shell 级状态；当持久化的旧版侧栏 CSS 把导航压窄时，导航行允许换行，输入框占满下一行，避免只露出极窄的一截。
 

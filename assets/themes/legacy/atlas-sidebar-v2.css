@@ -213,7 +213,7 @@ body:has(.theme-dark) {
   position: sticky;
   top: calc(24px + var(--safe-area-top));
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   gap: 10px;
   align-content: start;
   align-self: start;
@@ -222,12 +222,6 @@ body:has(.theme-dark) {
   border-radius: 26px;
   background: var(--atlas-rail-bg);
   box-shadow: var(--atlas-rail-shadow);
-}
-
-@media (min-width: 961px) {
-  [data-page]:has(> [data-layout="app-nav-shell"][data-state="collapsed"]) {
-    grid-template-columns: 44px minmax(0, 1fr);
-  }
 }
 
 [data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-layout="app-nav-links"],

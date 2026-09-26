@@ -10,11 +10,13 @@
 - 让页面重构不轻易打碎主题
 - 给手写主题和 AI 生成主题提供同一份约束
 
-> 顶栏交互更新：R 始终可见；`app-nav-shell[data-state]` 使用 `normal` / `search`。R 的 `activate-home` 包含显式用户刷新，不能替换为 `data-nav="entries"`。旧 show/hide-top-nav、brand-name、reader-toolbar 已退役。来源 `entry-filters-source-chip` 现在是完整名称换行选择行；请勿用 ellipsis 隐藏核心名称。`entry-pagination` 是页面 panel 的同级固定控件，主题应保留底部内容空间。完整行为见 [命令参考](./frontend-command-reference.md#home搜索与阅读交互)。
+> 顶栏交互更新：`app-nav-shell[data-state]` 使用 `normal` / `search` / `collapsed`。展开时可用 R；收起时仅保留 `data-action="toggle-nav"` / `data-slot="app-nav-toggle"` 窄箭头，触控范围至少 44×44px。R 的 `activate-home` 包含显式用户刷新，不能替换为 `data-nav="entries"`。旧 show/hide-top-nav、brand-name、reader-toolbar 已退役。来源 `entry-filters-source-chip` 现在是完整名称换行选择行；请勿用 ellipsis 隐藏核心名称。`entry-pagination` 是页面 panel 的同级固定控件，主题应保留底部内容空间。完整行为见 [命令参考](./frontend-command-reference.md#home搜索与阅读交互)。
 
 文章列表每篇文章的「标已读 / 收藏」（`entry-card-actions` 内的 `.button[data-slot="entry-card-action"]`）默认是描边胶囊，只取 `--ink` / `--muted` / `--line` / `--line-soft`，特异性高于 `.button[data-variant="secondary"]`；主题要改它们请直接使用这条 selector。收起的筛选开关 `entry-controls-toggle` 内含可见文字 `entry-controls-toggle-label`。
 
 内置 Atlas Sidebar 保留桌面侧栏，但为共用的五图标 Reader 行预留 280px；移动端顶栏仍保持 sticky。目录名称和计数按行换行，避免极端来源名挤掉计数。
+
+导航的箭头固定在导航容器右上侧，不依赖链接数量。收起时内容由 Rust 移除，主题不得保留不可见的导航占位；新版 Atlas Sidebar 同时将侧栏列缩至 44px。旧版 CSS 仍可识别为该主题，旧自定义侧栏布局需自行适配列宽。导航无尺寸过渡动画，避免收起时逐帧重排正文。
 
 ## 使用原则
 

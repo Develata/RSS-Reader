@@ -20,6 +20,7 @@ use crate::{
 pub(crate) struct AppShellState {
     entry_search: Signal<String>,
     nav_mode: Signal<NavMode>,
+    nav_collapsed: Signal<bool>,
     refresh: Signal<ManualRefreshState>,
     refresh_revision: Signal<u64>,
     owner: ScopeId,
@@ -95,6 +96,7 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
     AppShellState {
         entry_search: use_signal(initial_entry_search),
         nav_mode: use_signal(NavMode::default),
+        nav_collapsed: use_signal(|| false),
         refresh: use_signal(ManualRefreshState::default),
         refresh_revision: use_signal(|| 0),
         owner: current_scope_id(),
@@ -113,7 +115,23 @@ impl AppNavShell {
         *self.shell.nav_mode.read() == NavMode::Search
     }
     pub(crate) fn nav_state(&self) -> &'static str {
-        if self.is_search() { "search" } else { "normal" }
+        if self.is_collapsed() {
+            "collapsed"
+        } else if self.is_search() {
+            "search"
+        } else {
+            "normal"
+        }
+    }
+    pub(crate) fn is_collapsed(&self) -> bool {
+        *self.shell.nav_collapsed.read()
+    }
+    pub(crate) fn toggle_collapsed(&mut self) {
+        let collapsed = !*self.shell.nav_collapsed.peek();
+        self.shell.nav_collapsed.set(collapsed);
+        if collapsed {
+            self.close_search();
+        }
     }
     pub(crate) fn is_reader(&self) -> bool {
         matches!(self.route, AppRoute::ReaderPage { .. })
