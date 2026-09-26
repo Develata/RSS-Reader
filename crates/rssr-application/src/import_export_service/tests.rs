@@ -86,6 +86,19 @@ struct StubEntryRepository;
 
 #[async_trait::async_trait]
 impl EntryIndexRepository for StubEntryRepository {
+    async fn preview_mark_read(
+        &self,
+        _query: &EntryQuery,
+    ) -> rssr_domain::Result<rssr_domain::MarkReadPreview> {
+        Err(rssr_domain::DomainError::InvalidInput("此测试替身不支持批量操作".into()))
+    }
+    async fn mark_read_if_unchanged(
+        &self,
+        _preview: &rssr_domain::MarkReadPreview,
+    ) -> rssr_domain::Result<rssr_domain::MarkReadOutcome> {
+        Err(rssr_domain::DomainError::InvalidInput("此测试替身不支持批量操作".into()))
+    }
+
     async fn list_entries(
         &self,
         _query: &EntryQuery,
@@ -266,6 +279,19 @@ struct MemoryEntryRepository {
 
 #[async_trait::async_trait]
 impl EntryIndexRepository for MemoryEntryRepository {
+    async fn preview_mark_read(
+        &self,
+        _query: &EntryQuery,
+    ) -> rssr_domain::Result<rssr_domain::MarkReadPreview> {
+        Err(rssr_domain::DomainError::InvalidInput("此测试替身不支持批量操作".into()))
+    }
+    async fn mark_read_if_unchanged(
+        &self,
+        _preview: &rssr_domain::MarkReadPreview,
+    ) -> rssr_domain::Result<rssr_domain::MarkReadOutcome> {
+        Err(rssr_domain::DomainError::InvalidInput("此测试替身不支持批量操作".into()))
+    }
+
     async fn list_entries(
         &self,
         _query: &EntryQuery,

@@ -535,6 +535,49 @@ impl SqliteEntryRepository {
 
 #[async_trait::async_trait]
 impl EntryIndexRepository for SqliteEntryRepository {
+    async fn preview_mark_read(
+        &self,
+        query: &EntryQuery,
+    ) -> DomainResult<rssr_domain::MarkReadPreview> {
+        let query = EntryQuery { limit: None, ..query.clone() };
+        let ids = unread_selection(
+            &mut *self.index_pool.acquire().await.map_err(map_sqlx_error)?,
+            &query,
+        )
+        .await?;
+        Ok(rssr_domain::MarkReadPreview { query, unread_entry_ids: ids })
+    }
+    async fn mark_read_if_unchanged(
+        &self,
+        preview: &rssr_domain::MarkReadPreview,
+    ) -> DomainResult<rssr_domain::MarkReadOutcome> {
+        // 先取得写锁，比较与 UPDATE 之间不允许其他写者改变匹配集合。
+        let mut tx = self.index_pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+        let query = EntryQuery { limit: None, ..preview.query.clone() };
+        let ids = unread_selection(&mut tx, &query).await?;
+        if ids != preview.unread_entry_ids {
+            tx.rollback().await.map_err(map_sqlx_error)?;
+            return Ok(rssr_domain::MarkReadOutcome::SelectionChanged {
+                preview: rssr_domain::MarkReadPreview { query, unread_entry_ids: ids },
+            });
+        }
+        let changed_count = if ids.is_empty() {
+            0
+        } else {
+            let now = OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339)
+                .map_err(|e| DomainError::Persistence(e.to_string()))?;
+            let mut qb = QueryBuilder::<Sqlite>::new("UPDATE entries SET is_read = 1, read_at = ");
+            qb.push_bind(now.clone()).push(", updated_at = ").push_bind(now);
+            qb.push(" WHERE id IN (SELECT entries.id FROM entries JOIN feeds ON feeds.id = entries.feed_id WHERE feeds.is_deleted = 0 AND entries.is_read = 0");
+            push_entry_query_filters(&mut qb, &query);
+            qb.push(")");
+            qb.build().execute(&mut *tx).await.map_err(map_sqlx_error)?.rows_affected()
+        };
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(rssr_domain::MarkReadOutcome::Applied { changed_count })
+    }
+
     async fn list_entries(&self, query: &EntryQuery) -> DomainResult<Vec<EntrySummary>> {
         let mut qb = QueryBuilder::<Sqlite>::new(
             r#"
@@ -820,4 +863,23 @@ fn now_rfc3339() -> String {
     OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .expect("format current time")
+}
+
+async fn unread_selection(
+    connection: &mut sqlx::SqliteConnection,
+    query: &EntryQuery,
+) -> DomainResult<Vec<i64>> {
+    let mut qb = QueryBuilder::<Sqlite>::new(
+        "SELECT entries.id FROM entries JOIN feeds ON feeds.id = entries.feed_id WHERE feeds.is_deleted = 0 AND entries.is_read = 0",
+    );
+    push_entry_query_filters(&mut qb, query);
+    qb.push(" ORDER BY entries.id");
+    Ok(qb
+        .build()
+        .fetch_all(connection)
+        .await
+        .map_err(map_sqlx_error)?
+        .into_iter()
+        .map(|row| row.get("id"))
+        .collect())
 }

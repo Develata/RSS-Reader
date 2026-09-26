@@ -47,3 +47,9 @@ Linux `/usr/bin` 安装版的数据目录是 `$XDG_DATA_HOME/rss-reader/`，未�
 `v0.1.17` Linux `.deb` 已声明实际动态库依赖，发布流水线在 Ubuntu 24.04 完成了普通用户安装后两次启动和数据复用检查。若 `v0.1.16` 或更早版本曾以管理员身份在 `/usr/bin/RSS-Reader/` 产生数据，新版不会自动读取或迁移它：退出应用后先备份，管理员再将完整目录复制到新位置并改为当前用户所有。普通便携版无需迁移，仍读取原位置。其它发行版安装前请核对包内 `Depends` 是否满足。
 
 发布包和设备验收状态见[根 README](../README.md)与[Android 构建与验收状态](./roadmaps/android-release-roadmap.md)。
+
+## 批量标为已读
+
+在文章页点击“将筛选结果标为已读”，查看未读篇数，再确认或取消。范围包含当前筛选的全部分页，搜索词、来源、收藏和归档条件均生效，收藏文章不会被额外排除。确认前匹配文章发生变化时会显示新的数量并要求重新确认。失败不改变已读状态；成功后更新当前列表和订阅未读数。没有撤销入口。
+
+CLI：`rssr-cli mark-read --all --search Rust --read-filter unread --starred-filter all --archive-filter active` 只预览；添加 `--yes` 执行。也可用 `--feed-id <id>` 替换 `--all`。归档可选 `active|all|archived`，已读可选 `all|unread|read`，收藏可选 `all|starred|unstarred`。

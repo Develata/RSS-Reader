@@ -30,6 +30,54 @@ impl BrowserEntryRepository {
 
 #[async_trait::async_trait]
 impl EntryIndexRepository for BrowserEntryRepository {
+    async fn preview_mark_read(
+        &self,
+        query: &EntryQuery,
+    ) -> rssr_domain::Result<rssr_domain::MarkReadPreview> {
+        let state = self.state.lock().map_err(|e| DomainError::Persistence(e.to_string()))?;
+        let query = EntryQuery { limit: None, ..query.clone() };
+        let unread_entry_ids =
+            crate::application_adapters::browser::query::unread_selection(&state, &query);
+        Ok(rssr_domain::MarkReadPreview { query, unread_entry_ids })
+    }
+    async fn mark_read_if_unchanged(
+        &self,
+        preview: &rssr_domain::MarkReadPreview,
+    ) -> rssr_domain::Result<rssr_domain::MarkReadOutcome> {
+        let mut state = self.state.lock().map_err(|e| DomainError::Persistence(e.to_string()))?;
+        let query = EntryQuery { limit: None, ..preview.query.clone() };
+        let ids = crate::application_adapters::browser::query::unread_selection(&state, &query);
+        if ids != preview.unread_entry_ids {
+            return Ok(rssr_domain::MarkReadOutcome::SelectionChanged {
+                preview: rssr_domain::MarkReadPreview { query, unread_entry_ids: ids },
+            });
+        }
+        if ids.is_empty() {
+            return Ok(rssr_domain::MarkReadOutcome::Applied { changed_count: 0 });
+        }
+        let previous = state.entry_flags.clone();
+        let now = now_utc();
+        let mut missing = ids.iter().copied().collect::<std::collections::HashSet<_>>();
+        for flag in &mut state.entry_flags.entries {
+            if missing.remove(&flag.id) {
+                flag.is_read = true;
+                flag.read_at = Some(now);
+            }
+        }
+        state.entry_flags.entries.extend(missing.into_iter().map(|id| PersistedEntryFlag {
+            id,
+            is_read: true,
+            is_starred: false,
+            read_at: Some(now),
+            starred_at: None,
+        }));
+        if let Err(error) = save_entry_flags_slice(&state.entry_flags) {
+            state.entry_flags = previous;
+            return Err(map_persistence_error(error));
+        }
+        Ok(rssr_domain::MarkReadOutcome::Applied { changed_count: ids.len() as u64 })
+    }
+
     async fn list_entries(&self, query: &EntryQuery) -> rssr_domain::Result<Vec<EntrySummary>> {
         let state = self.state.lock().expect("lock state");
         Ok(query_list_entries(&state, query))

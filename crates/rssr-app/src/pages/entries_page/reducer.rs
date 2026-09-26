@@ -17,6 +17,48 @@ pub(crate) fn dispatch_entries_page_intent(
 
 pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: EntriesPageIntent) {
     match intent {
+        EntriesPageIntent::BeginBulk { writing } => {
+            state.bulk_generation = state.bulk_generation.wrapping_add(1);
+            state.bulk_busy = true;
+            state.bulk_writing = writing;
+        }
+        EntriesPageIntent::CancelBulk => {
+            state.bulk_preview = None;
+            if !state.bulk_writing {
+                state.bulk_generation = state.bulk_generation.wrapping_add(1);
+                state.bulk_busy = false;
+            }
+        }
+        EntriesPageIntent::BulkPreview(preview) => {
+            let changed = state.bulk_writing;
+            state.bulk_busy = false;
+            state.bulk_writing = false;
+            state.status = if changed {
+                "匹配的未读文章已变化，请重新确认。".into()
+            } else if preview.unread_entry_ids.is_empty() {
+                "当前筛选下没有未读文章。".into()
+            } else {
+                "请确认批量已读范围。".into()
+            };
+            state.status_tone = "info".into();
+            state.bulk_preview = Some(preview);
+        }
+        EntriesPageIntent::BulkApplied(count) => {
+            state.bulk_busy = false;
+            state.bulk_writing = false;
+            state.bulk_preview = None;
+            state.bulk_revision = state.bulk_revision.wrapping_add(1);
+            state.bulk_notice = Some(format!("已将 {count} 篇文章标为已读。"));
+            state.status = format!("已将 {count} 篇文章标为已读。");
+            state.status_tone = "success".into();
+        }
+        EntriesPageIntent::BulkFailed(message) => {
+            state.bulk_busy = false;
+            state.bulk_writing = false;
+            state.status = message;
+            state.status_tone = "error".into();
+        }
+
         EntriesPageIntent::ApplyLoadedSettings(settings) => {
             state.archive_after_months = settings.archive_after_months;
             state.entries_page_size = settings.entries_page_size.max(1);
@@ -52,6 +94,10 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             } else {
                 state.status = format!("共 {} 篇文章。", entries.len());
                 state.status_tone = "info".to_string();
+            }
+            if let Some(message) = state.bulk_notice.take() {
+                state.status = message;
+                state.status_tone = "success".into();
             }
             state.entries = Arc::new(entries.into_iter().map(Arc::new).collect());
             state.archived_count = archived_count;

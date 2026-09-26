@@ -20,6 +20,38 @@ pub(crate) struct EntriesPageSession {
 }
 
 impl EntriesPageSession {
+    pub(crate) fn preview_mark_read(self, query: EntryQuery) {
+        self.spawn_bulk(EntriesCommand::PreviewMarkRead { query }, false);
+    }
+    pub(crate) fn confirm_mark_read(self) {
+        let preview = self.state.peek().bulk_preview.clone();
+        if let Some(preview) = preview
+            && !preview.unread_entry_ids.is_empty()
+        {
+            self.spawn_bulk(EntriesCommand::ConfirmMarkRead { preview }, true);
+        }
+    }
+    fn spawn_bulk(self, command: EntriesCommand, writing: bool) {
+        if self.state.peek().bulk_busy {
+            return;
+        }
+        self.dispatch(EntriesPageIntent::BeginBulk { writing });
+        let generation = self.state.peek().bulk_generation;
+        spawn(async move {
+            let intents = execute_ui_command(UiCommand::Entries(command)).await;
+            if self.state.peek().bulk_generation != generation {
+                return;
+            }
+            for intent in intents.into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                let applied = matches!(&intent, EntriesPageIntent::BulkApplied(_));
+                self.dispatch(intent);
+                if applied {
+                    self.bootstrap();
+                }
+            }
+        });
+    }
+
     pub(crate) fn new(
         feed_id: Option<i64>,
         state: Signal<EntriesPageState>,

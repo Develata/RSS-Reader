@@ -484,3 +484,9 @@ Web 使用 `_blank` 与 `rel="noopener noreferrer"`，不触发阅读状态重�
 `data-slot="entry-filters-source-unread-count"` 使用弱化行内文本；控件可访问名称仍为来源名，
 通过 `aria-describedby` 关联“未读 N 篇”，可见数字不重复朗读。
 计数来自 `FeedSummary.unread_count`，不由当前文章集合计算；成功标记后重查订阅汇总，失败不预减计数。
+
+## 按筛选批量已读
+
+`EntriesCommand::PreviewMarkRead { query }` 冻结当前查询，忽略分页限制，返回排序后的未读 ID 集合；`ConfirmMarkRead { preview }` 在存储锁/事务内重新比较完整集合。变化时返回新预览并要求再次确认，未变化时一次批量写入。查询范围变化取消待确认预览；写入期间拒绝重复提交，已开始的写入不因筛选变化而取消。成功后加载当前查询、夹紧页码并 bootstrap 权威订阅计数。列表状态反馈放在筛选折叠区外。
+
+稳定接口：`data-layout=entry-bulk-read`，`data-state=idle|confirm`，`data-action=preview-mark-filtered-read|confirm-mark-filtered-read|cancel-mark-filtered-read`。按钮忙态 disabled/aria-busy，触控目标至少 44px。

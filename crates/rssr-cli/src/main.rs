@@ -27,6 +27,7 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Command {
     ListFeeds,
+    MarkRead(MarkReadArgs),
     AddFeed(AddFeedArgs),
     RemoveFeed(RemoveFeedArgs),
     Refresh(RefreshArgs),
@@ -38,6 +39,42 @@ enum Command {
     SaveSettings(SaveSettingsArgs),
     PushWebdav(WebDavArgs),
     PullWebdav(WebDavArgs),
+}
+
+#[derive(Args, Debug)]
+struct MarkReadArgs {
+    #[arg(long, conflicts_with = "feed_id", required_unless_present = "feed_id")]
+    all: bool,
+    #[arg(long, conflicts_with = "all")]
+    feed_id: Vec<i64>,
+    #[arg(long)]
+    search: Option<String>,
+    #[arg(long, value_enum, default_value = "all")]
+    read_filter: BulkReadFilter,
+    #[arg(long, value_enum, default_value = "all")]
+    starred_filter: BulkStarredFilter,
+    #[arg(long, value_enum, default_value = "active")]
+    archive_filter: BulkArchiveFilter,
+    #[arg(long)]
+    yes: bool,
+}
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum BulkReadFilter {
+    All,
+    Unread,
+    Read,
+}
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum BulkStarredFilter {
+    All,
+    Starred,
+    Unstarred,
+}
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum BulkArchiveFilter {
+    Active,
+    All,
+    Archived,
 }
 
 #[derive(Args, Debug)]
@@ -132,6 +169,62 @@ async fn main() -> anyhow::Result<()> {
     let services = CliServices::new(cli.database_url.as_deref()).await?;
 
     match cli.command {
+        Command::MarkRead(args) => {
+            use rssr_domain::{
+                ArchiveFilter, EntryQuery, MarkReadOutcome, ReadFilter, StarredFilter,
+            };
+            let settings = services.use_cases.settings_service.load().await?;
+            let cutoff = rssr_domain::archive_cutoff_at(
+                time::OffsetDateTime::now_utc(),
+                settings.archive_after_months,
+            );
+            let archive_filter = match args.archive_filter {
+                BulkArchiveFilter::All => ArchiveFilter::All,
+                BulkArchiveFilter::Active => cutoff
+                    .map_or(ArchiveFilter::All, |cutoff| ArchiveFilter::ExcludeArchived { cutoff }),
+                BulkArchiveFilter::Archived => match cutoff {
+                    Some(cutoff) => ArchiveFilter::OnlyArchived { cutoff },
+                    None => {
+                        println!("当前归档设置下没有归档文章，待标记 0 篇。");
+                        return Ok(());
+                    }
+                },
+            };
+            let query = EntryQuery {
+                feed_ids: args.feed_id,
+                search_title: args.search,
+                read_filter: match args.read_filter {
+                    BulkReadFilter::All => ReadFilter::All,
+                    BulkReadFilter::Unread => ReadFilter::UnreadOnly,
+                    BulkReadFilter::Read => ReadFilter::ReadOnly,
+                },
+                starred_filter: match args.starred_filter {
+                    BulkStarredFilter::All => StarredFilter::All,
+                    BulkStarredFilter::Starred => StarredFilter::StarredOnly,
+                    BulkStarredFilter::Unstarred => StarredFilter::UnstarredOnly,
+                },
+                archive_filter,
+                ..EntryQuery::default()
+            };
+            let service = &services.use_cases.entries_list_service;
+            let preview = service.preview_mark_read(&query).await?;
+            if !args.yes {
+                println!(
+                    "将把 {} 篇未读文章标为已读；未执行。添加 --yes 执行。",
+                    preview.unread_entry_ids.len()
+                );
+            } else {
+                match service.mark_read_if_unchanged(&preview).await? {
+                    MarkReadOutcome::Applied { changed_count } => {
+                        println!("已将 {changed_count} 篇文章标为已读。")
+                    }
+                    MarkReadOutcome::SelectionChanged { preview } => anyhow::bail!(
+                        "匹配集合已变化，当前 {} 篇未读文章；未执行，请重新运行。",
+                        preview.unread_entry_ids.len()
+                    ),
+                }
+            }
+        }
         Command::ListFeeds => print_feeds(&services.list_feeds().await?),
         Command::AddFeed(args) => {
             services

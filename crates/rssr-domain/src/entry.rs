@@ -294,3 +294,15 @@ mod tests {
         assert!(!is_entry_archived(Some(boundary_entry), 3, now));
     }
 }
+
+/// 冻结筛选条件与完整未读集合；分页限制在预览时清除。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkReadPreview {
+    pub query: EntryQuery,
+    pub unread_entry_ids: Vec<i64>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MarkReadOutcome {
+    Applied { changed_count: u64 },
+    SelectionChanged { preview: MarkReadPreview },
+}

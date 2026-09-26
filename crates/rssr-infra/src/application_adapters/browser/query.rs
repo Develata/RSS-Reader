@@ -404,3 +404,34 @@ mod tests {
         assert_eq!(count, 100);
     }
 }
+
+/// 与列表共用筛选谓词，但不复制标题或排序整份 EntrySummary。
+pub fn unread_selection(state: &BrowserState, query: &EntryQuery) -> Vec<i64> {
+    let flags = build_entry_flag_index(state);
+    let allowed = (!query.feed_ids.is_empty())
+        .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
+    let search = query.search_title.as_ref().map(|s| s.to_lowercase());
+    let active =
+        state.core.feeds.iter().filter(|f| !f.is_deleted).map(|f| f.id).collect::<HashSet<_>>();
+    let mut ids = state
+        .core
+        .entries
+        .iter()
+        .filter(|entry| {
+            let flag = flags.get(&entry.id).copied();
+            !flag.is_some_and(|f| f.is_read)
+                && entry_matches_query(
+                    entry,
+                    flag,
+                    &active,
+                    allowed.as_ref(),
+                    search.as_deref(),
+                    query,
+                )
+        })
+        .map(|e| e.id)
+        .collect::<Vec<_>>();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}

@@ -610,3 +610,7 @@ Web 使用 `_blank` 与 `rel="noopener noreferrer"`，不触发阅读状态重�
 `data-slot="entry-filters-source-unread-count"` 使用弱化行内文本；控件可访问名称仍为来源名，
 通过 `aria-describedby` 关联“未读 N 篇”，可见数字不重复朗读。
 计数来自 `FeedSummary.unread_count`，不由当前文章集合计算；成功标记后重查订阅汇总，失败不预减计数。
+
+## 批量已读
+
+`[data-layout=entry-bulk-read]` 为可换行的行内操作区，`data-state` 为 `idle` 或 `confirm`。按钮动作接口为 `preview-mark-filtered-read`、`confirm-mark-filtered-read`、`cancel-mark-filtered-read`，沿用 `data-slot=confirm-hint`。样式在 `assets/styles/entries.css`，按钮最小高度 44px；反馈复用 StatusBanner。

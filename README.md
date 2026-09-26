@@ -92,3 +92,7 @@ cargo check --locked -p rssr-app --target wasm32-unknown-unknown
 - [贡献说明](./CONTRIBUTING.md) · [MIT License](./LICENSE)。
 
 常见问题：Windows 运行通常需要 WebView2 Runtime；Web 直连 feed 受目标站点 CORS 策略影响；CLI 附件面向脚本和高级用户，普通阅读只需应用附件。若 Android 安装遇到签名不匹配，先确认当前包与已安装版本的签名身份；卸载前务必导出配置，避免丢失本地数据。
+
+### 按筛选批量已读
+
+文章页可预览并确认将当前筛选下所有分页的未读文章标为已读；保留搜索、来源、收藏和归档条件。匹配集合变化时要求重新确认。CLI 使用 `mark-read --all` 或 `mark-read --feed-id <id>` 预览，添加 `--yes` 执行。

@@ -34,6 +34,22 @@ impl EntriesPageFacade {
         self.snapshot.entries_loaded && self.snapshot.current_page == self.presenter.current_page
     }
 
+    pub(crate) fn bulk_busy(&self) -> bool {
+        self.snapshot.bulk_busy
+    }
+    pub(crate) fn bulk_preview(&self) -> Option<&rssr_domain::MarkReadPreview> {
+        self.snapshot.bulk_preview.as_ref()
+    }
+    pub(crate) fn preview_mark_read(&self) {
+        let search = self.ui.entry_search();
+        let search = (!search.trim().is_empty()).then_some(search);
+        self.session.preview_mark_read(self.snapshot.entry_query(
+            self.session.feed_id(),
+            search,
+            super::clock::current_time_utc(),
+        ));
+    }
+
     /// presenter 由调用方通过 `use_memo` 缓存后传入：它是 state 的纯函数，没必要每次重绘
     /// 都重建一遍分组树。
     pub(crate) fn new(
@@ -216,6 +232,9 @@ impl EntriesPageFacade {
     }
 
     pub(crate) fn empty_entries_message(&self) -> String {
+        if self.snapshot.bulk_revision > 0 {
+            return "当前筛选下没有文章。".into();
+        }
         if self.session.feed_id().is_some() {
             "这个订阅下还没有可显示的文章，先尝试刷新该 feed。".to_string()
         } else {

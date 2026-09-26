@@ -6,6 +6,12 @@ use super::state::EntryGroupingMode;
 
 #[derive(Debug, Clone)]
 pub(crate) enum EntriesPageIntent {
+    BeginBulk { writing: bool },
+    CancelBulk,
+    BulkPreview(rssr_domain::MarkReadPreview),
+    BulkApplied(u64),
+    BulkFailed(String),
+
     ApplyLoadedSettings(UserSettings),
     ApplyLoadedWorkspaceState(EntriesWorkspaceState),
     PreferencesLoaded,

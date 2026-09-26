@@ -8,7 +8,8 @@ pub mod validation;
 pub use app_state::{AppStateSnapshot, EntriesWorkspaceState, EntryGroupingPreference};
 pub use entry::{
     ArchiveFilter, Entry, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary,
-    ReadFilter, StarredFilter, archive_cutoff_at, is_entry_archived,
+    MarkReadOutcome, MarkReadPreview, ReadFilter, StarredFilter, archive_cutoff_at,
+    is_entry_archived,
 };
 pub use feed::{Feed, FeedSummary, NewFeedSubscription, normalize_feed_url};
 pub use repository::{

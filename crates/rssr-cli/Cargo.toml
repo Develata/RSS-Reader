@@ -13,6 +13,7 @@ rssr-application = { path = "../rssr-application" }
 rssr-domain = { path = "../rssr-domain" }
 rssr-infra = { path = "../rssr-infra" }
 serde_json.workspace = true
+time.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

@@ -40,6 +40,19 @@ pub struct EntriesListService {
 }
 
 impl EntriesListService {
+    pub async fn preview_mark_read(
+        &self,
+        query: &EntryQuery,
+    ) -> anyhow::Result<rssr_domain::MarkReadPreview> {
+        self.entry_repository.preview_mark_read(query).await.context("预览批量已读失败")
+    }
+    pub async fn mark_read_if_unchanged(
+        &self,
+        preview: &rssr_domain::MarkReadPreview,
+    ) -> anyhow::Result<rssr_domain::MarkReadOutcome> {
+        self.entry_repository.mark_read_if_unchanged(preview).await.context("批量标为已读失败")
+    }
+
     pub fn new(entry_repository: Arc<dyn EntryIndexRepository>) -> Self {
         Self { entry_repository }
     }
@@ -111,6 +124,19 @@ mod tests {
 
     #[async_trait::async_trait]
     impl EntryIndexRepository for EntryRepositoryStub {
+        async fn preview_mark_read(
+            &self,
+            _query: &EntryQuery,
+        ) -> rssr_domain::Result<rssr_domain::MarkReadPreview> {
+            Err(rssr_domain::DomainError::InvalidInput("此测试替身不支持批量操作".into()))
+        }
+        async fn mark_read_if_unchanged(
+            &self,
+            _preview: &rssr_domain::MarkReadPreview,
+        ) -> rssr_domain::Result<rssr_domain::MarkReadOutcome> {
+            Err(rssr_domain::DomainError::InvalidInput("此测试替身不支持批量操作".into()))
+        }
+
         async fn list_entries(
             &self,
             _query: &EntryQuery,

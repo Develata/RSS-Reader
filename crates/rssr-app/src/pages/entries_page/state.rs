@@ -36,6 +36,13 @@ impl PreferencesLoadState {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct EntriesPageState {
+    pub(crate) bulk_preview: Option<rssr_domain::MarkReadPreview>,
+    pub(crate) bulk_busy: bool,
+    pub(crate) bulk_writing: bool,
+    pub(crate) bulk_generation: u64,
+    pub(crate) bulk_revision: u64,
+    pub(crate) bulk_notice: Option<String>,
+
     /// Snapshots and presenter inputs share the immutable collection. Flag changes copy
     /// its pointer vector only when necessary, then clone only the changed EntrySummary.
     pub(crate) entries: Arc<Vec<Arc<EntrySummary>>>,
@@ -62,6 +69,12 @@ impl EntriesPageState {
         let settings = UserSettings::default();
         let workspace = EntriesWorkspaceState::default();
         Self {
+            bulk_preview: None,
+            bulk_busy: false,
+            bulk_writing: false,
+            bulk_generation: 0,
+            bulk_revision: 0,
+            bulk_notice: None,
             entries: Arc::default(),
             archived_count: 0,
             feeds: Arc::default(),

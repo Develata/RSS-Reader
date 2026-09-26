@@ -66,6 +66,19 @@ pub(crate) struct EntriesPort {
 }
 
 impl EntriesPort {
+    pub(crate) async fn preview_mark_read(
+        &self,
+        query: &EntryQuery,
+    ) -> Result<rssr_domain::MarkReadPreview> {
+        self.use_cases.entries_list_service.preview_mark_read(query).await
+    }
+    pub(crate) async fn mark_read_if_unchanged(
+        &self,
+        preview: &rssr_domain::MarkReadPreview,
+    ) -> Result<rssr_domain::MarkReadOutcome> {
+        self.use_cases.entries_list_service.mark_read_if_unchanged(preview).await
+    }
+
     pub(crate) async fn bootstrap(
         &self,
         input: EntriesBootstrapInput,

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 mod browser_interactions;
+mod bulk;
 mod cards;
 mod clock;
 mod controls;
@@ -100,6 +101,13 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             }
                         }
                     }
+                if facade.has_status_message() {
+                    StatusBanner {
+                        message: facade.status_message().to_string(),
+                        tone: facade.status_tone().to_string(),
+                    }
+                }
+                    { bulk::render_bulk_controls(&facade) }
                     { controls }
                     if facade.entries_is_empty() {
                         div { "data-layout": "entries-page-state", "data-state": "empty",
@@ -221,6 +229,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let preferences_loaded = state_snapshot.preferences_load.is_loaded();
     let entries_ready = state_snapshot.preferences_load.can_load_entries();
     let refresh_revision = ui.refresh_revision();
+    let bulk_revision = state_snapshot.bulk_revision;
     let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
     let show_archived = state_snapshot.show_archived;
     let read_filter = state_snapshot.read_filter;
@@ -229,6 +238,19 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let current_page = state_snapshot.current_page;
     let active_directory_anchor = facade.active_directory_anchor().map(ToString::to_string);
 
+    use_reactive_side_effect(
+        (
+            feed_id,
+            query_search.clone(),
+            show_archived,
+            read_filter,
+            starred_filter,
+            selected_feed_urls.clone(),
+        ),
+        move |_| {
+            session.dispatch(intent::EntriesPageIntent::CancelBulk);
+        },
+    );
     let mut previous_search = use_signal(|| (feed_id, query_search.clone()));
     use_reactive_side_effect((feed_id, query_search.clone()), move |next| {
         // 首次挂载不是筛选切换；异步加载可能先完成，不能随后把恢复页码重置为 1。
@@ -241,8 +263,8 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     use_reactive_task((feed_id, refresh_revision), move |_| session.bootstrap());
 
     use_reactive_task(
-        (feed_id, entries_ready, entry_query.clone(), refresh_revision),
-        move |(_, entries_ready, entry_query, _)| {
+        (feed_id, entries_ready, entry_query.clone(), refresh_revision, bulk_revision),
+        move |(_, entries_ready, entry_query, _, _)| {
             if entries_ready {
                 session.load_entries_query(entry_query);
             }

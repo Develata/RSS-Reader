@@ -595,3 +595,12 @@ html:has([data-page="entries"][data-entry-scope="all"]) { overscroll-behavior-y:
 [data-layout="entry-card"][data-return-highlight="true"] {
   background: var(--accent-soft);
 }
+[data-layout="entry-bulk-read"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-block: 0.75rem;
+}
+[data-layout="entry-bulk-read"] [data-slot="confirm-hint"] { flex-basis: 100%; margin: 0; }
+[data-layout="entry-bulk-read"] button { min-height: 44px; }

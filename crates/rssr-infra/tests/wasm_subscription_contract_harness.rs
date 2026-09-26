@@ -330,3 +330,80 @@ async fn reader_metadata_and_global_unread_counts_survive_failed_flag_writes() {
     assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 2);
     clear_browser_state_storage();
 }
+
+#[path = "support/bulk_read_cases.rs"]
+mod bulk_cases;
+
+#[wasm_bindgen_test]
+async fn browser_bulk_read_matches_sqlite_cases_and_rolls_back_failed_storage() {
+    use rssr_domain::MarkReadOutcome;
+    use rssr_infra::application_adapters::browser::state::PersistedEntryFlag;
+    clear_browser_state_storage();
+    let mut browser = BrowserState {
+        core: PersistedState {
+            feeds: vec![
+                sample_feed(1, "https://example.com/1", false),
+                sample_feed(2, "https://example.com/2", false),
+            ],
+            entries: bulk_cases::ROWS
+                .iter()
+                .map(|&(id, feed_id, title, old, _, _)| {
+                    let mut entry = sample_entry_index(id, feed_id, id);
+                    entry.title = title.into();
+                    entry.published_at = bulk_cases::published(id, old);
+                    entry
+                })
+                .collect(),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    browser.entry_flags.entries = bulk_cases::ROWS
+        .iter()
+        .map(|&(id, _, _, _, starred, read)| PersistedEntryFlag {
+            id,
+            is_read: read,
+            is_starred: starred,
+            read_at: None,
+            starred_at: None,
+        })
+        .collect();
+    let state = Arc::new(Mutex::new(browser));
+    let entries = BrowserEntryRepository::new(state.clone());
+    for (query, expected) in bulk_cases::cases() {
+        let preview = entries.preview_mark_read(&query).await.unwrap();
+        assert_eq!(preview.unread_entry_ids, expected, "{query:?}");
+        assert_eq!(preview.query.limit, None);
+    }
+    let original = entries.preview_mark_read(&EntryQuery::default()).await.unwrap();
+    entries.set_read(1, true).await.unwrap();
+    entries.set_read(5, false).await.unwrap();
+    assert!(matches!(
+        entries.mark_read_if_unchanged(&original).await.unwrap(),
+        MarkReadOutcome::SelectionChanged { .. }
+    ));
+    let fresh = entries.preview_mark_read(&EntryQuery::default()).await.unwrap();
+    let before = serde_json::to_value(&state.lock().unwrap().entry_flags).unwrap();
+    js_sys::eval("globalThis.__bulkSet = Storage.prototype.setItem; globalThis.__bulkWrites = 0; Storage.prototype.setItem = function(k,v) { if(k==='rssr-web-entry-flags-v1'){globalThis.__bulkWrites++;throw new DOMException('quota','QuotaExceededError');}return globalThis.__bulkSet.call(this,k,v); };").unwrap();
+    let failed = entries.mark_read_if_unchanged(&fresh).await;
+    let writes = js_sys::eval("globalThis.__bulkWrites").unwrap().as_f64().unwrap();
+    js_sys::eval("Storage.prototype.setItem=globalThis.__bulkSet;delete globalThis.__bulkSet;delete globalThis.__bulkWrites;").unwrap();
+    assert!(failed.is_err());
+    assert_eq!(writes, 1.0);
+    assert_eq!(serde_json::to_value(&state.lock().unwrap().entry_flags).unwrap(), before);
+    js_sys::eval("globalThis.__bulkSet = Storage.prototype.setItem;globalThis.__bulkWrites=0;Storage.prototype.setItem=function(k,v){if(k==='rssr-web-entry-flags-v1')globalThis.__bulkWrites++;return globalThis.__bulkSet.call(this,k,v);};").unwrap();
+    let result = entries.mark_read_if_unchanged(&fresh).await;
+    let writes = js_sys::eval("globalThis.__bulkWrites").unwrap().as_f64().unwrap();
+    js_sys::eval("Storage.prototype.setItem=globalThis.__bulkSet;delete globalThis.__bulkSet;delete globalThis.__bulkWrites;").unwrap();
+    assert_eq!(result.unwrap(), MarkReadOutcome::Applied { changed_count: 5 });
+    assert_eq!(writes, 1.0);
+    for id in fresh.unread_entry_ids {
+        assert!(entries.get_entry_record(id).await.unwrap().unwrap().read_at.is_some());
+    }
+    let empty = entries.preview_mark_read(&EntryQuery::default()).await.unwrap();
+    assert_eq!(
+        entries.mark_read_if_unchanged(&empty).await.unwrap(),
+        MarkReadOutcome::Applied { changed_count: 0 }
+    );
+    clear_browser_state_storage();
+}

@@ -20,6 +20,12 @@ pub trait FeedRepository: Send + Sync {
 
 #[async_trait::async_trait]
 pub trait EntryIndexRepository: Send + Sync {
+    async fn preview_mark_read(&self, query: &EntryQuery) -> crate::Result<crate::MarkReadPreview>;
+    async fn mark_read_if_unchanged(
+        &self,
+        preview: &crate::MarkReadPreview,
+    ) -> crate::Result<crate::MarkReadOutcome>;
+
     async fn list_entries(&self, query: &EntryQuery) -> crate::Result<Vec<EntrySummary>>;
     async fn count_entries(&self, query: &EntryQuery) -> crate::Result<u64>;
     async fn get_entry_record(&self, entry_id: i64) -> crate::Result<Option<EntryRecord>>;

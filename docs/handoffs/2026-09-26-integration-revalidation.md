@@ -63,3 +63,11 @@
 - 基线与实现的原生 1280×900 Inspector 专项均退出 0：基线正文重开 0，实现恢复 3200；实现列表返回仍为 2500。
 - Web 重建、positions.cjs、delayed-image.cjs 全部退出 0，覆盖 360×800 / 1280×800。
 - 任务 2 达到提交条件；首次提交本记录的 commit 包含任务 2 与本次颜色 token 修复。Android 运行及物理滚轮仍不在已验证结论中。
+
+## 本地提交与任务 3 集成
+
+- 任务 2 已本地提交：`4d0532e`，未 push。主工作树提交后干净。
+- 任务 3 从原隔离 worktree 以独立临时 Git index 生成补丁，在主工作树三方应用；原 worktree 的 dirty/index 保留。
+- 解决 entries.css、entries_page/facade.rs、entries_page/mod.rs 三处重叠：同时保留返回高亮、分页恢复和批量确认；搜索首次挂载不重置页码，筛选变化仍取消批量预览。
+- 集成后的任务 3 正在复验，commit: pending。
+- 任务 3 合并后所有通用检查退出 0；subscription harness 5 项通过，Web 两视口 bulk 验收和任务 2 位置交叉回归退出 0。5 万条本次预览 182ms / 应用 598ms。
