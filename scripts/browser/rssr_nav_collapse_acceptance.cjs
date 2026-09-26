@@ -12,6 +12,8 @@ const artifacts = process.env.ARTIFACT_DIR || 'target/global-review/browser';
     for (const width of [360, 1280]) {
       for (const theme of ['none', 'atlas-sidebar', 'newsprint', 'amethyst-glass', 'midnight-ledger']) {
         const page = await browser.newPage({ viewport: { width, height: 800 } });
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
         page.setDefaultTimeout(15000);
         await page.goto(`${base}/__codex/setup-local-auth?seed=reader-demo&next=/entries/1`);
         await page.locator('[data-page="reader"][data-position-ready="true"]').waitFor();
@@ -67,6 +69,7 @@ const artifacts = process.env.ARTIFACT_DIR || 'target/global-review/browser';
         await page.reload();
         await toggle.waitFor();
         assert.equal(await nav.getAttribute('data-state'), 'normal', 'new session starts expanded');
+        assert.deepEqual(errors, [], 'no uncaught browser errors');
         console.log(JSON.stringify({ width, theme, expanded, collapsed, status: 'pass' }));
         await page.close();
       }

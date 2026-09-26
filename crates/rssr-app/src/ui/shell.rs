@@ -20,7 +20,6 @@ use crate::{
 pub(crate) struct AppShellState {
     entry_search: Signal<String>,
     nav_mode: Signal<NavMode>,
-    nav_collapsed: Signal<bool>,
     refresh: Signal<ManualRefreshState>,
     refresh_revision: Signal<u64>,
     owner: ScopeId,
@@ -96,7 +95,6 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
     AppShellState {
         entry_search: use_signal(initial_entry_search),
         nav_mode: use_signal(NavMode::default),
-        nav_collapsed: use_signal(|| false),
         refresh: use_signal(ManualRefreshState::default),
         refresh_revision: use_signal(|| 0),
         owner: current_scope_id(),
@@ -115,23 +113,18 @@ impl AppNavShell {
         *self.shell.nav_mode.read() == NavMode::Search
     }
     pub(crate) fn nav_state(&self) -> &'static str {
-        if self.is_collapsed() {
-            "collapsed"
-        } else if self.is_search() {
-            "search"
-        } else {
-            "normal"
+        match *self.shell.nav_mode.read() {
+            NavMode::Normal => "normal",
+            NavMode::Search => "search",
+            NavMode::Collapsed => "collapsed",
         }
     }
     pub(crate) fn is_collapsed(&self) -> bool {
-        *self.shell.nav_collapsed.read()
+        *self.shell.nav_mode.read() == NavMode::Collapsed
     }
     pub(crate) fn toggle_collapsed(&mut self) {
-        let collapsed = !*self.shell.nav_collapsed.peek();
-        self.shell.nav_collapsed.set(collapsed);
-        if collapsed {
-            self.close_search();
-        }
+        let mode = self.shell.nav_mode.peek().toggle_collapsed();
+        self.shell.nav_mode.set(mode);
     }
     pub(crate) fn is_reader(&self) -> bool {
         matches!(self.route, AppRoute::ReaderPage { .. })
@@ -147,11 +140,12 @@ impl AppNavShell {
     }
 
     pub(crate) fn toggle_search(&mut self) {
-        let mode = self.shell.nav_mode.peek().toggle();
+        let mode = self.shell.nav_mode.peek().toggle_search();
         self.shell.nav_mode.set(mode);
     }
     pub(crate) fn close_search(&mut self) {
-        self.shell.nav_mode.set(NavMode::Normal);
+        let mode = self.shell.nav_mode.peek().close_search();
+        self.shell.nav_mode.set(mode);
     }
     pub(crate) fn submit_search(&self) {
         self.shell.submit_search(self.navigator);

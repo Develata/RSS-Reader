@@ -49,7 +49,7 @@
 | --- | --- |
 | `data-action="activate-home"` | `resolve_home_action(AppRoute)`：只有全局 `EntriesPage` 返回 `ManualRefresh`；其他路由只导航到全局文章页 |
 | `data-action="refresh-all"`、首页下拉刷新 | 与 Home 再次点击共用 `AppShellState::manual_refresh` → `ShellCommand::ManualRefresh` → 既有 `RefreshPort` / application 刷新用例 |
-| `data-action="toggle-search"` | shell 的 `NavMode::Normal / Search`；搜索态收起 S / Settings，保留 R / Reader 返回 |
+| `data-action="toggle-search"` | shell 的 `NavMode::Normal / Search` 切换；与 `Collapsed` 共用单一状态，收起时搜索操作不展开导航 |
 | `data-field="entry-search"` | shell 持有并持久化搜索词；Enter 进入全局文章页按标题搜索，Esc 退出搜索态（输入法 composing 期间放行 Esc） |
 | `data-nav="feeds"` / `settings` / `back` | 纯导航；返回按钮和 Android 系统返回复用 history / fallback 策略 |
 | `data-action="entry-page-previous"` / `entry-page-next` | 既有 Entries reducer 更新并限制页号，保持筛选和分组，滚至新页起点 |
@@ -73,7 +73,7 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 
 返回列表的文章可有 `data-return-highlight="true"`，约 2 秒后移除；这是定位提示，不代表已读。`data-position-key` / `data-position-page` / `data-position-ready` / `data-position-entry` 是内部桥接字段，不作为用户主题接口。Web 页面刷新或应用结束清除位置，位置不参与配置交换。
 
-位置采集发生在操作边界：DOM 捕获阶段的控件点击、左右方向键切文、表单提交与浏览器 `popstate`。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
+位置采集发生在操作边界：DOM 捕获阶段的控件点击、阅读区内无修饰键的左右方向键切文、表单提交与浏览器 `popstate`。搜索框光标移动、带修饰键及输入法组词期间的按键不采集位置，阅读快捷键同样放行组词输入。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
 
 `data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好仍被忽略，搜索词与文章筛选折叠偏好保留。`app-nav-shell` 的 `data-state` 为 `normal` / `search` / `collapsed`。
 

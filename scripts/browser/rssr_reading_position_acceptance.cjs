@@ -9,6 +9,8 @@ const base = process.env.STATIC_BASE || 'http://127.0.0.1:8099';
   try {
     for (const width of [360, 1280]) {
       const page = await browser.newPage({ viewport: { width, height: 800 } });
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
       page.setDefaultTimeout(15000);
       const ready = async () => {
         await page.locator('[data-page="reader"][data-position-ready="true"]').waitFor();
@@ -50,6 +52,29 @@ const base = process.env.STATIC_BASE || 'http://127.0.0.1:8099';
       await page.waitForTimeout(300);
       assert.equal(await page.evaluate(() => window.__positionReads), 0,
         'continuous scrolling must not scan reader blocks');
+      // Editing the shell search is outside the reader shortcut scope. Caret movement
+      // must not scan a long article, even though an article remains open underneath.
+      await page.locator('[data-action="toggle-search"]').click();
+      await page.locator('[data-field="entry-search"]').fill('caret movement');
+      await page.evaluate(() => { window.__positionReads = 0; });
+      await page.keyboard.press('ArrowLeft');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
+      assert.equal(await page.evaluate(() => window.__positionReads), 0,
+        'search caret movement must not scan reader blocks');
+      assert.equal(new URL(page.url()).pathname, '/entries/1');
+      await page.locator('[data-field="entry-search"]').fill('');
+      await page.keyboard.press('Escape');
+      await page.evaluate(() => document.querySelector('[data-layout="reader-shortcut-scope"]').focus({ preventScroll: true }));
+      const forward = await page.locator('[data-nav="next-unread-entry"]').isEnabled();
+      const arrow = forward ? 'ArrowRight' : 'ArrowLeft';
+      await page.keyboard.press(`Control+${arrow}`);
+      await page.evaluate(key => document.activeElement.dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true, isComposing: true })), arrow);
+      await page.waitForTimeout(200);
+      assert.equal(new URL(page.url()).pathname, '/entries/1', 'modified/composing keys must not navigate');
+      assert.equal(await page.evaluate(() => window.__positionReads), 0,
+        'modified/composing keys must not scan reader blocks');
       const saved = await y();
       assert(saved > 1000);
       // Browser history has no preceding DOM click: it must capture the departing article.
@@ -57,7 +82,6 @@ const base = process.env.STATIC_BASE || 'http://127.0.0.1:8099';
       await page.locator('a[href="/entries/1"]').first().click();
       await ready();
       assert(Math.abs(await y() - saved) < 4, `browser-back capture: ${saved} -> ${await y()}`);
-      const forward = await page.locator('[data-nav="next-unread-entry"]').isEnabled();
       const adjacent = forward ? 'next-unread-entry' : 'previous-unread-entry';
       await page.evaluate(() => document.querySelector('[data-layout="reader-shortcut-scope"]').focus({ preventScroll: true }));
       await page.keyboard.press(forward ? 'ArrowRight' : 'ArrowLeft');
@@ -84,8 +108,9 @@ const base = process.env.STATIC_BASE || 'http://127.0.0.1:8099';
         await ready();
         assert(Math.abs(await y() - expected) < 4, `${edge} capture`);
       }
-      console.log(JSON.stringify({ width, scrollLayoutReads: 0, browserBack: 'pass',
+      console.log(JSON.stringify({ width, scrollLayoutReads: 0, editingLayoutReads: 0, composingKeys: 'pass', browserBack: 'pass',
         keyboard: 'pass', nativeCaptureBridge: 'pass', topAndBottom: 'pass' }));
+      assert.deepEqual(errors, [], 'no uncaught browser errors');
       await page.close();
     }
   } finally {

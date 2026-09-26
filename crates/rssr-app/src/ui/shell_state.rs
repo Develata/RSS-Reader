@@ -6,13 +6,26 @@ pub(crate) enum NavMode {
     #[default]
     Normal,
     Search,
+    Collapsed,
 }
 
 impl NavMode {
-    pub(crate) fn toggle(self) -> Self {
+    pub(crate) fn toggle_search(self) -> Self {
         match self {
             Self::Normal => Self::Search,
             Self::Search => Self::Normal,
+            Self::Collapsed => Self::Collapsed,
+        }
+    }
+
+    pub(crate) fn close_search(self) -> Self {
+        if self == Self::Search { Self::Normal } else { self }
+    }
+
+    pub(crate) fn toggle_collapsed(self) -> Self {
+        match self {
+            Self::Normal | Self::Search => Self::Collapsed,
+            Self::Collapsed => Self::Normal,
         }
     }
 }
@@ -105,9 +118,17 @@ mod tests {
     }
 
     #[test]
-    fn search_is_a_two_state_toggle() {
-        assert_eq!(NavMode::Normal.toggle(), NavMode::Search);
-        assert_eq!(NavMode::Search.toggle(), NavMode::Normal);
+    fn collapsing_search_reopens_normal_and_hidden_search_events_do_not_expand_nav() {
+        let search = NavMode::Normal.toggle_search();
+        assert_eq!(search, NavMode::Search);
+        assert_eq!(search.toggle_search(), NavMode::Normal);
+        assert_eq!(search.close_search(), NavMode::Normal);
+        let collapsed = search.toggle_collapsed();
+        assert_eq!(collapsed, NavMode::Collapsed);
+        assert_eq!(NavMode::Normal.toggle_collapsed(), collapsed);
+        assert_eq!(collapsed.close_search(), collapsed);
+        assert_eq!(collapsed.toggle_search(), collapsed);
+        assert_eq!(collapsed.toggle_collapsed(), NavMode::Normal);
     }
 
     #[test]

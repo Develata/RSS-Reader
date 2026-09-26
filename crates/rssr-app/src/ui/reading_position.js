@@ -50,7 +50,13 @@ const onClick = event => {
     emit('capture', selected);
 };
 const onKeyNavigation = event => {
-    if (['ArrowLeft','ArrowRight'].includes(event.key)) emit('capture');
+    // 与 reader-shortcut-scope 内的 Rust 快捷键边界一致。搜索光标移动和系统组合键
+    // 不会切文，也不应为它们扫描整篇正文。
+    if (!['ArrowLeft','ArrowRight'].includes(event.key)
+        || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing
+        || !(event.target instanceof Element)
+        || !event.target.closest('[data-layout="reader-shortcut-scope"]')) return;
+    emit('capture');
 };
 const onLeave = () => emit('capture');
 const observer = new MutationObserver(schedule);
