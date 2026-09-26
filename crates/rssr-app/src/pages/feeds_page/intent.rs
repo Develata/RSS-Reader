@@ -9,6 +9,9 @@ pub(crate) struct FeedsPageSnapshot {
 
 #[derive(Debug, Clone)]
 pub(crate) enum FeedsPageIntent {
+    FeedCandidates { page_url: url::Url, candidates: Vec<rssr_application::FeedDiscoveryCandidate> },
+    SelectFeedCandidate(usize),
+    CancelFeedCandidates,
     LoadRequested,
     FeedUrlChanged(String),
     ConfigTextChanged(String),

@@ -13,6 +13,19 @@ impl FeedsPageFacade {
         Self { session, snapshot }
     }
 
+    pub(super) fn feed_candidates(&self) -> &[rssr_application::FeedDiscoveryCandidate] {
+        self.snapshot
+            .feed_candidates
+            .as_ref()
+            .map(|(_, candidates)| candidates.as_slice())
+            .unwrap_or(&[])
+    }
+    pub(super) fn select_feed_candidate(&self, index: usize) {
+        self.session.dispatch_intent(super::intent::FeedsPageIntent::SelectFeedCandidate(index));
+    }
+    pub(super) fn cancel_feed_candidates(&self) {
+        self.session.dispatch_intent(super::intent::FeedsPageIntent::CancelFeedCandidates);
+    }
     pub(crate) fn feed_url(&self) -> &str {
         &self.snapshot.feed_url
     }

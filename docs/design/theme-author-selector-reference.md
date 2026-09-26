@@ -614,3 +614,7 @@ Web 使用 `_blank` 与 `rel="noopener noreferrer"`，不触发阅读状态重�
 ## 批量已读
 
 `[data-layout=entry-bulk-read]` 为可换行的行内操作区，`data-state` 为 `idle` 或 `confirm`。按钮动作接口为 `preview-mark-filtered-read`、`confirm-mark-filtered-read`、`cancel-mark-filtered-read`，沿用 `data-slot=confirm-hint`。样式在 `assets/styles/entries.css`，按钮最小高度 44px；反馈复用 StatusBanner。
+
+## 网站首页发现候选
+
+`[data-layout=feed-discovery-candidates]` 垂直排列候选；`[data-action=select-feed-candidate]` 是至少44px的选择按钮，`[data-slot=feed-candidate-url]` 显示可换行地址；取消为 `data-action=cancel-feed-discovery`。样式位于 assets/styles/workspaces.css。

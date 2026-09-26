@@ -38,6 +38,7 @@ async fn sql_archive_filter_agrees_with_is_entry_archived_at_the_second_boundary
 
     let feed = feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/parity.xml").expect("valid url"),
             title: None,
             folder: None,

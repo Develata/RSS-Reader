@@ -18,6 +18,7 @@ pub use imp::{AppServices, ReaderNavigation};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AddSubscriptionOutcome {
+    NeedsSelection { page_url: url::Url, candidates: Vec<rssr_application::FeedDiscoveryCandidate> },
     SavedAndRefreshed,
     SavedRefreshFailed { message: String },
 }
@@ -52,7 +53,11 @@ pub(crate) trait AutoRefreshPort {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub(crate) trait RefreshPort {
-    async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<AddSubscriptionOutcome>;
+    async fn add_subscription(
+        &self,
+        raw_url: &str,
+        fallback_site_url: Option<url::Url>,
+    ) -> anyhow::Result<AddSubscriptionOutcome>;
     async fn refresh_all(&self) -> anyhow::Result<RefreshAllExecutionOutcome>;
     async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<RefreshFeedExecutionOutcome>;
 }

@@ -209,8 +209,12 @@ impl FeedsPort {
         self.use_cases.feeds_snapshot_service.load_snapshot().await
     }
 
-    pub(crate) async fn add_subscription(&self, raw_url: &str) -> Result<AddSubscriptionOutcome> {
-        self.host_capabilities.refresh.add_subscription(raw_url).await
+    pub(crate) async fn add_subscription(
+        &self,
+        raw_url: &str,
+        fallback_site_url: Option<url::Url>,
+    ) -> Result<AddSubscriptionOutcome> {
+        self.host_capabilities.refresh.add_subscription(raw_url, fallback_site_url).await
     }
 
     pub(crate) async fn refresh_all(&self) -> Result<RefreshAllExecutionOutcome> {

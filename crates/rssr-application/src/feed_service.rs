@@ -37,10 +37,33 @@ impl FeedService {
     }
 
     pub async fn add_subscription(&self, input: &AddSubscriptionInput) -> Result<Feed> {
+        self.add_subscription_with_site(input, None).await
+    }
+
+    pub(crate) async fn ensure_not_subscribed(&self, url: &Url) -> Result<()> {
+        let url = normalize_feed_url(url);
+        if self
+            .feed_repository
+            .list_feeds()
+            .await?
+            .iter()
+            .any(|feed| !feed.is_deleted && normalize_feed_url(&feed.url) == url)
+        {
+            anyhow::bail!("该地址已订阅：{url}");
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn add_subscription_with_site(
+        &self,
+        input: &AddSubscriptionInput,
+        site_url: Option<Url>,
+    ) -> Result<Feed> {
         let url = normalize_feed_url(&Url::parse(&input.url).context("订阅 URL 不合法")?);
         Ok(self
             .feed_repository
             .upsert_subscription(&NewFeedSubscription {
+                site_url,
                 url,
                 title: input.title.clone(),
                 folder: input.folder.clone(),

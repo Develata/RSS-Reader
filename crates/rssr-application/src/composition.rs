@@ -25,6 +25,7 @@ pub struct AppCompositionInput {
     pub entry_content_repository: Arc<dyn EntryContentRepository>,
     pub settings_repository: Arc<dyn SettingsRepository>,
     pub app_state: Arc<dyn AppStateServicesPort>,
+    pub subscription_probe: Arc<dyn crate::SubscriptionProbePort>,
     pub refresh_source: Arc<dyn FeedRefreshSourcePort>,
     pub refresh_store: Arc<dyn RefreshStorePort>,
     pub opml_codec: Arc<dyn OpmlCodecPort>,
@@ -73,6 +74,7 @@ impl AppUseCases {
                 feed_service.clone(),
                 refresh_service,
                 input.app_state.clone(),
+                input.subscription_probe,
             ),
             import_export_service: ImportExportService::new_with_app_state_cleanup_and_clock(
                 input.feed_repository.clone(),

@@ -47,6 +47,7 @@ async fn entry_repository_updates_state_and_supports_search() {
 
     let feed = feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
             folder: None,
@@ -129,6 +130,7 @@ async fn entry_repository_applies_archive_filter_in_query() {
 
     let feed = feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/archive-feed.xml").expect("valid url"),
             title: Some("Archive Feed".to_string()),
             folder: None,
@@ -200,6 +202,7 @@ async fn entry_repository_resolves_content_after_batch_upsert() {
 
     let feed = feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/content-feed.xml").expect("valid url"),
             title: Some("Content Feed".to_string()),
             folder: None,
@@ -261,6 +264,7 @@ async fn unread_summaries_are_global_idempotent_and_unchanged_on_failure() {
     let entries = std::sync::Arc::new(SqliteEntryRepository::new(pool));
     let feed = feeds
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").unwrap(),
             title: Some("Example Feed".into()),
             folder: None,

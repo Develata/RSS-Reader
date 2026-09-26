@@ -51,7 +51,7 @@ impl FeedsPageSession {
         self.dispatch_intent(FeedsPageIntent::LoadRequested);
     }
 
-    fn dispatch_intent(self, intent: FeedsPageIntent) {
+    pub(super) fn dispatch_intent(self, intent: FeedsPageIntent) {
         self.dispatch_intent_with(intent, execute_ui_command);
     }
 
@@ -151,7 +151,7 @@ mod tests {
         let (sender, receiver) = oneshot::channel();
         let mut receiver = Some(receiver);
         session.dispatch_intent_with(FeedsPageIntent::AddFeedRequested, |command| {
-            let UiCommand::Feeds(FeedsCommand::AddFeed { raw_url }) = command else {
+            let UiCommand::Feeds(FeedsCommand::AddFeed { raw_url, .. }) = command else {
                 panic!("expected subscription command")
             };
             assert_eq!(raw_url, expected_url);

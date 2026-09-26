@@ -51,6 +51,7 @@ async fn refresh_flow_stores_feed_and_deduplicated_entries() {
 
     let feed = feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
             folder: None,
@@ -101,6 +102,7 @@ async fn localized_writeback_does_not_override_newer_refresh_content() {
 
     let feed = feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
             folder: None,

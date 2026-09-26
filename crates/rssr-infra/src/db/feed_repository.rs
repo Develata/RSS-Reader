@@ -124,8 +124,8 @@ impl FeedRepository for SqliteFeedRepository {
 
         sqlx::query(
             r#"
-            INSERT INTO feeds (url, title, folder, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?4)
+            INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url)
+            VALUES (?1, ?2, ?3, ?4, ?4, ?5)
             ON CONFLICT(url) DO UPDATE SET
                 title = CASE
                     WHEN excluded.title IS NULL THEN feeds.title
@@ -135,6 +135,7 @@ impl FeedRepository for SqliteFeedRepository {
                     WHEN excluded.folder IS NULL THEN feeds.folder
                     ELSE NULLIF(excluded.folder, '')
                 END,
+                site_url = COALESCE(excluded.site_url, feeds.site_url),
                 is_deleted = 0,
                 updated_at = excluded.updated_at
             "#,
@@ -143,6 +144,7 @@ impl FeedRepository for SqliteFeedRepository {
         .bind(new_feed.title.as_deref())
         .bind(new_feed.folder.as_deref())
         .bind(&now)
+        .bind(new_feed.site_url.as_ref().map(Url::as_str))
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_error)?;

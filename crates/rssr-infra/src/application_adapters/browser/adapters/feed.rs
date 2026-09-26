@@ -46,6 +46,9 @@ impl FeedRepository for BrowserFeedRepository {
                 if new_feed.folder.is_some() {
                     feed.folder = normalized_folder.clone();
                 }
+                if let Some(site_url) = &new_feed.site_url {
+                    feed.site_url = Some(site_url.to_string());
+                }
                 feed.is_deleted = false;
                 feed.updated_at = now;
                 feed.clone()
@@ -55,7 +58,7 @@ impl FeedRepository for BrowserFeedRepository {
                     id: state.core.next_feed_id,
                     url: normalized_url.to_string(),
                     title: normalized_title,
-                    site_url: None,
+                    site_url: new_feed.site_url.as_ref().map(ToString::to_string),
                     description: None,
                     icon_url: None,
                     folder: normalized_folder,

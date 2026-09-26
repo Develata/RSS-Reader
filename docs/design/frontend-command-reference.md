@@ -490,3 +490,9 @@ Web 使用 `_blank` 与 `rel="noopener noreferrer"`，不触发阅读状态重�
 `EntriesCommand::PreviewMarkRead { query }` 冻结当前查询，忽略分页限制，返回排序后的未读 ID 集合；`ConfirmMarkRead { preview }` 在存储锁/事务内重新比较完整集合。变化时返回新预览并要求再次确认，未变化时一次批量写入。查询范围变化取消待确认预览；写入期间拒绝重复提交，已开始的写入不因筛选变化而取消。成功后加载当前查询、夹紧页码并 bootstrap 权威订阅计数。列表状态反馈放在筛选折叠区外。
 
 稳定接口：`data-layout=entry-bulk-read`，`data-state=idle|confirm`，`data-action=preview-mark-filtered-read|confirm-mark-filtered-read|cancel-mark-filtered-read`。按钮忙态 disabled/aria-busy，触控目标至少 44px。
+
+## 订阅自动发现
+
+`FeedsCommand::AddFeed` 增加可选 `fallback_site_url`；RefreshPort 同步透传。host 调用 SubscriptionWorkflow.prepare_subscription，Ready 进入 add_prepared_subscription，NeedsSelection 返回订阅页候选。UI 不抓取或解析 HTML。候选到达时核对当前草稿；改输入取消候选，添加期间仍由 adding_feed_url 去重，成功只清除对应草稿。候选标题 / URL 作为文本渲染。
+
+新增 `data-layout=feed-discovery-candidates`、`data-action=select-feed-candidate|cancel-feed-discovery`、`data-slot=feed-candidate-url`。既有 feed-form 原生 submit、add-feed 稳定接口保留。

@@ -11,12 +11,47 @@ pub async fn web_fetch_feed_response(
     client: &reqwest::Client,
     raw: &str,
 ) -> anyhow::Result<reqwest::Response> {
-    let request_urls = web_refresh_request_urls(raw)?;
+    Ok(fetch_web_response(client, raw, false).await?.0)
+}
+
+pub(crate) async fn web_fetch_subscription_response(
+    client: &reqwest::Client,
+    raw: &str,
+) -> anyhow::Result<(reqwest::Response, url::Url)> {
+    let (response, is_proxy) = fetch_web_response(client, raw, true).await?;
+    let final_url = if is_proxy {
+        response
+            .headers()
+            .get("x-rssr-final-url")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| url::Url::parse(value).ok())
+            .filter(|url| matches!(url.scheme(), "http" | "https"))
+            .context("订阅代理未提供最终地址，请升级服务端后重试，或使用可直连的 feed 地址。")?
+    } else {
+        response.url().clone()
+    };
+    Ok((response, final_url))
+}
+
+async fn fetch_web_response(
+    client: &reqwest::Client,
+    raw: &str,
+    discovery: bool,
+) -> anyhow::Result<(reqwest::Response, bool)> {
+    let mut request_urls = web_refresh_request_urls(raw)?;
+    if discovery {
+        for request in &mut request_urls {
+            if request.kind == super::feed_request::WebFeedRequestKind::Direct {
+                request.url = raw.to_string();
+            }
+        }
+    }
     let mut last_error = None;
 
     for (index, request) in request_urls.iter().enumerate() {
         let response = client
             .get(&request.url)
+            .timeout(std::time::Duration::from_secs(30))
             .header(
                 header::ACCEPT,
                 "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
@@ -26,16 +61,24 @@ pub async fn web_fetch_feed_response(
 
         match response {
             Ok(response)
-                if should_fallback_web_feed_request(
-                    index,
-                    request_urls.len(),
-                    request,
-                    &response,
-                ) =>
+                if !(discovery
+                    && request.kind == super::feed_request::WebFeedRequestKind::Proxy
+                    && response.headers().contains_key("x-rssr-final-url"))
+                    && should_fallback_web_feed_request(
+                        index,
+                        request_urls.len(),
+                        request,
+                        &response,
+                    ) =>
             {
                 continue;
             }
-            Ok(response) => return Ok(response),
+            Ok(response) => {
+                return Ok((
+                    response,
+                    request.kind == super::feed_request::WebFeedRequestKind::Proxy,
+                ));
+            }
             Err(error) => last_error = Some(error),
         }
     }

@@ -17,9 +17,41 @@ pub(crate) fn reduce_feeds_page_intent(
     intent: FeedsPageIntent,
 ) -> Vec<UiCommand> {
     match intent {
+        FeedsPageIntent::FeedCandidates { page_url, candidates } => {
+            if state.adding_feed_url.as_deref() == Some(state.feed_url.as_str()) {
+                state.feed_candidates = Some((page_url, candidates));
+                state.status = "发现多个订阅，请选择一个地址。".into();
+                state.status_tone = "info".into();
+            }
+            Vec::new()
+        }
+        FeedsPageIntent::CancelFeedCandidates => {
+            state.feed_candidates = None;
+            state.status.clear();
+            Vec::new()
+        }
+        FeedsPageIntent::SelectFeedCandidate(index) => {
+            if state.adding_feed_url.is_some() {
+                return Vec::new();
+            }
+            let Some((page_url, candidates)) = &state.feed_candidates else {
+                return Vec::new();
+            };
+            let Some(candidate) = candidates.get(index) else {
+                return Vec::new();
+            };
+            let command = FeedsCommand::AddFeed {
+                raw_url: candidate.url.to_string(),
+                fallback_site_url: Some(page_url.clone()),
+            };
+            state.adding_feed_url = Some(state.feed_url.clone());
+            state.feed_candidates = None;
+            vec![UiCommand::Feeds(command)]
+        }
         FeedsPageIntent::LoadRequested => vec![UiCommand::Feeds(FeedsCommand::LoadSnapshot)],
         FeedsPageIntent::FeedUrlChanged(value) => {
             clear_pending_confirmations(state);
+            state.feed_candidates = None;
             state.feed_url = value;
             Vec::new()
         }
@@ -39,7 +71,10 @@ pub(crate) fn reduce_feeds_page_intent(
             }
             clear_pending_confirmations(state);
             state.adding_feed_url = Some(state.feed_url.clone());
-            vec![UiCommand::Feeds(FeedsCommand::AddFeed { raw_url: state.feed_url.clone() })]
+            vec![UiCommand::Feeds(FeedsCommand::AddFeed {
+                raw_url: state.feed_url.clone(),
+                fallback_site_url: None,
+            })]
         }
         FeedsPageIntent::AddFeedFinished { saved } => {
             // Adding includes the first network refresh. Keep a new address typed while

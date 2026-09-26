@@ -53,3 +53,11 @@ Linux `/usr/bin` 安装版的数据目录是 `$XDG_DATA_HOME/rss-reader/`，未�
 在文章页点击“将筛选结果标为已读”，查看未读篇数，再确认或取消。范围包含当前筛选的全部分页，搜索词、来源、收藏和归档条件均生效，收藏文章不会被额外排除。确认前匹配文章发生变化时会显示新的数量并要求重新确认。失败不改变已读状态；成功后更新当前列表和订阅未读数。没有撤销入口。
 
 CLI：`rssr-cli mark-read --all --search Rust --read-filter unread --starred-filter all --archive-filter active` 只预览；添加 `--yes` 执行。也可用 `--feed-id <id>` 替换 `--all`。归档可选 `active|all|archived`，已读可选 `all|unread|read`，收藏可选 `all|starred|unstarred`。
+
+## 用网站首页添加订阅
+
+“新增订阅”可输入网站首页。程序先尝试解析 feed，只有 HTML 才读取 head 内的 RSS/Atom 声明。一个候选自动添加；多个候选列出标题及地址，选择一个继续，或取消。修改输入会清除原候选。保存的是最终 feed 地址，网站地址优先采用 feed 自带信息，否则采用发现它的页面地址。已订阅时保留输入并提示，不刷新既有订阅。
+
+页面没有声明时最多验证四个常见路径，无可用 feed 时保留输入并报错。每次响应最多 8 MiB，请求有 30 秒超时；Web 沿用代理 / 直连回退，直连仍受 CORS 限制。部署态代理需同步升级以提供重定向后的地址。
+
+CLI `add-feed <首页>` 使用相同发现流程；多个候选列出 URL 并非零退出，不进入交互。`--skip-refresh` 只保存验证后的订阅元信息，不导入文章。普通添加复用探测时的 feed 内容进行首次入库。

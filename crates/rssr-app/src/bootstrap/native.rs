@@ -201,19 +201,35 @@ impl AutoRefreshPort for AutoRefreshCapability {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl RefreshPort for RefreshCapability {
-    async fn add_subscription(&self, raw_url: &str) -> anyhow::Result<AddSubscriptionOutcome> {
-        let outcome = self
-            .host
-            .use_cases
-            .subscription_workflow
-            .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
-                subscription: AddSubscriptionInput {
-                    url: raw_url.to_string(),
-                    title: None,
-                    folder: None,
+    async fn add_subscription(
+        &self,
+        raw_url: &str,
+        fallback_site_url: Option<url::Url>,
+    ) -> anyhow::Result<AddSubscriptionOutcome> {
+        let workflow = &self.host.use_cases.subscription_workflow;
+        let prepared = match workflow.prepare_subscription(raw_url).await? {
+            rssr_application::PrepareSubscriptionOutcome::Ready(prepared) => {
+                prepared.with_fallback_site_url(fallback_site_url)
+            }
+            rssr_application::PrepareSubscriptionOutcome::NeedsSelection {
+                page_url,
+                candidates,
+            } => {
+                return Ok(AddSubscriptionOutcome::NeedsSelection { page_url, candidates });
+            }
+        };
+        let outcome = workflow
+            .add_prepared_subscription(
+                AddSubscriptionLifecycleInput {
+                    subscription: AddSubscriptionInput {
+                        url: raw_url.to_string(),
+                        title: None,
+                        folder: None,
+                    },
+                    refresh_after_add: true,
                 },
-                refresh_after_add: true,
-            })
+                prepared,
+            )
             .await
             .context("保存订阅失败")?;
         let refresh = outcome.first_refresh.expect("refresh_after_add produces refresh outcome");
@@ -555,6 +571,7 @@ mod tests {
         let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
         let feed = feed_repository
             .upsert_subscription(&NewFeedSubscription {
+                site_url: None,
                 url: Url::parse("https://example.com/feed.xml").expect("feed url"),
                 title: Some("Example".to_string()),
                 folder: None,

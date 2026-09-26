@@ -17,11 +17,30 @@ use rssr_infra::application_adapters::browser::{
     },
 };
 use time::OffsetDateTime;
+use url::Url;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 struct UnusedRefreshSource;
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl rssr_application::SubscriptionProbePort for UnusedRefreshSource {
+    async fn probe(&self, url: &Url) -> Result<rssr_application::SubscriptionProbeOutcome> {
+        Ok(rssr_application::SubscriptionProbeOutcome::Feed {
+            url: url.clone(),
+            update: rssr_application::FeedRefreshUpdate {
+                metadata: Default::default(),
+                feed: rssr_application::ParsedFeedUpdate {
+                    title: None,
+                    site_url: Some(Url::parse("https://site.example/").unwrap()),
+                    description: None,
+                    entries: Vec::new(),
+                },
+            },
+        })
+    }
+}
 
 #[async_trait::async_trait(?Send)]
 impl FeedRefreshSourcePort for UnusedRefreshSource {
@@ -121,7 +140,12 @@ fn build_workflow(state: Arc<Mutex<BrowserState>>) -> SubscriptionWorkflow {
     let refresh_service =
         RefreshService::new(Arc::new(UnusedRefreshSource), Arc::new(UnusedRefreshStore));
     let app_state = Arc::new(BrowserAppStateAdapter::new(state));
-    SubscriptionWorkflow::new(feed_service, refresh_service, app_state)
+    SubscriptionWorkflow::new(
+        feed_service,
+        refresh_service,
+        app_state,
+        Arc::new(UnusedRefreshSource),
+    )
 }
 
 #[wasm_bindgen_test]
@@ -146,17 +170,18 @@ async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
             folder: Some("Reading".to_string()),
         })
         .await
-        .expect("add normalized duplicate");
+        .expect_err("duplicate must not modify existing subscription");
 
-    assert_eq!(first.id, second.id);
-    assert_eq!(second.url.as_str(), "https://example.com/feed.xml");
+    assert!(second.to_string().contains("已订阅"));
+    assert_eq!(first.site_url.as_ref().unwrap().as_str(), "https://site.example/");
+    assert_eq!(first.url.as_str(), "https://example.com/feed.xml");
 
     {
         let snapshot = state.lock().expect("lock state");
         assert_eq!(snapshot.core.feeds.len(), 1);
         assert_eq!(snapshot.core.feeds[0].url, "https://example.com/feed.xml");
-        assert_eq!(snapshot.core.feeds[0].title.as_deref(), Some("Updated Title"));
-        assert_eq!(snapshot.core.feeds[0].folder.as_deref(), Some("Reading"));
+        assert_eq!(snapshot.core.feeds[0].title.as_deref(), Some("Example"));
+        assert_eq!(snapshot.core.feeds[0].folder.as_deref(), Some("Inbox"));
         assert!(!snapshot.core.feeds[0].is_deleted);
     }
 
@@ -164,7 +189,7 @@ async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
     assert!(warning.is_none());
     assert_eq!(persisted.core.feeds.len(), 1);
     assert_eq!(persisted.core.feeds[0].url, "https://example.com/feed.xml");
-    assert_eq!(persisted.core.feeds[0].title.as_deref(), Some("Updated Title"));
+    assert_eq!(persisted.core.feeds[0].title.as_deref(), Some("Example"));
 
     clear_browser_state_storage();
 }
@@ -406,4 +431,11 @@ async fn browser_bulk_read_matches_sqlite_cases_and_rolls_back_failed_storage() 
         MarkReadOutcome::Applied { changed_count: 0 }
     );
     clear_browser_state_storage();
+}
+
+#[path = "support/discovery_cases.rs"]
+mod discovery_cases;
+#[wasm_bindgen_test]
+fn browser_discovery_parser_matches_native() {
+    discovery_cases::assert_discovery_cases();
 }

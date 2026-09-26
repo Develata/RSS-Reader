@@ -80,6 +80,7 @@ async fn concurrent_feed_writes_do_not_hit_sqlite_busy() {
     for feed_index in 0..FEED_COUNT {
         let feed = feed_repository
             .upsert_subscription(&NewFeedSubscription {
+                site_url: None,
                 url: Url::parse(&format!("https://example.com/feed-{feed_index}.xml"))
                     .expect("valid url"),
                 title: Some(format!("Feed {feed_index}")),

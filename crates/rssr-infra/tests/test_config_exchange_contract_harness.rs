@@ -114,6 +114,7 @@ async fn config_exchange_contract_json_roundtrip_restores_feeds_and_settings() {
     export_fixture
         .feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
             folder: Some("Tech".to_string()),
@@ -123,6 +124,7 @@ async fn config_exchange_contract_json_roundtrip_restores_feeds_and_settings() {
     export_fixture
         .feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://news.example.com/rss").expect("valid url"),
             title: Some("News".to_string()),
             folder: None,
@@ -161,6 +163,7 @@ async fn config_exchange_contract_import_cleans_removed_feed_entries_and_last_op
     let retained_feed = fixture
         .feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Retained".to_string()),
             folder: Some("Inbox".to_string()),
@@ -170,6 +173,7 @@ async fn config_exchange_contract_import_cleans_removed_feed_entries_and_last_op
     let dropped_feed = fixture
         .feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://stale.example.com/rss").expect("valid url"),
             title: Some("Dropped".to_string()),
             folder: None,
@@ -259,6 +263,7 @@ async fn config_exchange_contract_remote_push_and_pull_roundtrip() {
     export_fixture
         .feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
             folder: Some("Inbox".to_string()),

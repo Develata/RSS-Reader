@@ -22,6 +22,24 @@ use time::OffsetDateTime;
 use url::Url;
 
 struct UnusedRefreshSource;
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl rssr_application::SubscriptionProbePort for UnusedRefreshSource {
+    async fn probe(&self, url: &Url) -> Result<rssr_application::SubscriptionProbeOutcome> {
+        Ok(rssr_application::SubscriptionProbeOutcome::Feed {
+            url: url.clone(),
+            update: rssr_application::FeedRefreshUpdate {
+                metadata: Default::default(),
+                feed: rssr_application::ParsedFeedUpdate {
+                    title: None,
+                    site_url: None,
+                    description: None,
+                    entries: Vec::new(),
+                },
+            },
+        })
+    }
+}
 
 #[async_trait::async_trait]
 impl FeedRefreshSourcePort for UnusedRefreshSource {
@@ -74,7 +92,12 @@ async fn build_sqlite_fixture() -> Result<SqliteFixture> {
     );
     let refresh_service =
         RefreshService::new(Arc::new(UnusedRefreshSource), Arc::new(UnusedRefreshStore));
-    let workflow = SubscriptionWorkflow::new(feed_service, refresh_service, app_state_adapter);
+    let workflow = SubscriptionWorkflow::new(
+        feed_service,
+        refresh_service,
+        app_state_adapter,
+        Arc::new(UnusedRefreshSource),
+    );
 
     Ok(SqliteFixture { workflow, feed_repository, entry_repository, app_state_repository, pool })
 }
@@ -115,17 +138,17 @@ async fn subscription_contract_add_normalizes_and_deduplicates_urls() {
             folder: Some("Reading".to_string()),
         })
         .await
-        .expect("add normalized duplicate");
+        .expect_err("duplicate must not modify existing subscription");
 
-    assert_eq!(first.id, second.id);
-    assert_eq!(second.url.as_str(), "https://example.com/feed.xml");
+    assert!(second.to_string().contains("已订阅"));
+    assert_eq!(first.url.as_str(), "https://example.com/feed.xml");
 
     let feeds = fixture.feed_repository.list_feeds().await.expect("list feeds");
     assert_eq!(feeds.len(), 1);
     assert_eq!(feeds[0].id, first.id);
     assert_eq!(feeds[0].url.as_str(), "https://example.com/feed.xml");
-    assert_eq!(feeds[0].title.as_deref(), Some("Updated Title"));
-    assert_eq!(feeds[0].folder.as_deref(), Some("Reading"));
+    assert_eq!(feeds[0].title.as_deref(), Some("Example"));
+    assert_eq!(feeds[0].folder.as_deref(), Some("Inbox"));
 }
 
 #[tokio::test]
@@ -135,6 +158,7 @@ async fn subscription_contract_remove_purges_entries_soft_deletes_feed_and_clear
     let feed = fixture
         .feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example".to_string()),
             folder: None,
@@ -189,6 +213,7 @@ async fn subscription_contract_remove_preserves_other_last_opened_feed() {
     let retained_feed = fixture
         .feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/retained.xml").expect("valid url"),
             title: Some("Retained".to_string()),
             folder: None,
@@ -198,6 +223,7 @@ async fn subscription_contract_remove_preserves_other_last_opened_feed() {
     let removed_feed = fixture
         .feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/removed.xml").expect("valid url"),
             title: Some("Removed".to_string()),
             folder: None,

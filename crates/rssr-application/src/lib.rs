@@ -11,7 +11,9 @@ pub mod refresh_service;
 pub mod settings_service;
 pub mod settings_sync_service;
 pub mod startup_service;
+mod subscription_discovery;
 pub mod subscription_workflow;
+pub use subscription_discovery::*;
 
 pub use app_state_service::AppStateService;
 pub use composition::{AppCompositionInput, AppStateServicesPort, AppUseCases};

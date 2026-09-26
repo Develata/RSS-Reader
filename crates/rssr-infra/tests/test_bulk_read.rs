@@ -25,6 +25,7 @@ async fn sqlite_bulk_scope_confirmation_atomic_failure_and_zero() {
             .upsert_subscription(&NewFeedSubscription {
                 url: Url::parse(&format!("https://example.com/{feed_id}")).unwrap(),
                 title: None,
+                site_url: None,
                 folder: None,
             })
             .await

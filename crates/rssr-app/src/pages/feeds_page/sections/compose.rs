@@ -6,12 +6,28 @@ use crate::pages::feeds_page::facade::FeedsPageFacade;
 pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
     let input_facade = facade.clone();
     let add_facade = facade.clone();
+    let refresh_facade = facade.clone();
+    let cancel_facade = facade.clone();
 
     rsx! {
         div { "data-layout": "feed-workbench-single",
             div { "data-layout": "feed-compose-card",
                 div { "data-slot": "feed-compose-card-header",
                     h3 { "data-slot": "card-title", "新增订阅" }
+                }
+                if !facade.feed_candidates().is_empty() {
+                    div { "data-layout": "feed-discovery-candidates",
+                        for (index, candidate) in facade.feed_candidates().iter().enumerate() {
+                            button { class: "button", "data-variant": "secondary", "data-action": "select-feed-candidate",
+                                disabled: facade.is_adding_feed(),
+                                onclick: { let facade = facade.clone(); move |_| facade.select_feed_candidate(index) },
+                                if let Some(title) = &candidate.title { span { "{title}" } }
+                                span { "data-slot": "feed-candidate-url", "{candidate.url}" }
+                            }
+                        }
+                        button { class: "button", "data-variant": "secondary", "data-action": "cancel-feed-discovery",
+                            onclick: move |_| cancel_facade.cancel_feed_candidates(), "取消" }
+                    }
                 }
                 form {
                     "data-layout": "feed-form",
@@ -29,7 +45,7 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
                         autocapitalize: "off",
                         spellcheck: "false",
                         value: "{facade.feed_url()}",
-                        placeholder: "https://example.com/feed.xml",
+                        placeholder: "网站首页或 RSS/Atom 地址",
                         // 这里刻意**不**拦截 Ctrl/Cmd+V：输入框本身的原生粘贴在所有平台都可用。
                         // 之前的做法是先 prevent_default 再走 ClipboardPort 读剪贴板，但桌面端的
                         // ClipboardPort 实现是无条件报错，Firefox 上 navigator.clipboard.readText
@@ -51,7 +67,7 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
                         "data-variant": "secondary",
                         "data-action": "refresh-all",
                         r#type: "button",
-                        onclick: move |_| facade.refresh_all(),
+                        onclick: move |_| refresh_facade.refresh_all(),
                         "刷新全部"
                     }
                 }

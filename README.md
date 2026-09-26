@@ -96,3 +96,7 @@ cargo check --locked -p rssr-app --target wasm32-unknown-unknown
 ### 按筛选批量已读
 
 文章页可预览并确认将当前筛选下所有分页的未读文章标为已读；保留搜索、来源、收藏和归档条件。匹配集合变化时要求重新确认。CLI 使用 `mark-read --all` 或 `mark-read --feed-id <id>` 预览，添加 `--yes` 执行。
+
+### 网站首页订阅
+
+新增订阅支持网站首页与 RSS/Atom URL。首页声明单个 feed 时自动添加，多个时选择；没有声明时只探测 `/feed`、`/rss.xml`、`/atom.xml`、`/index.xml` 四个路径。CLI 同样支持发现；多个候选会列出地址并以非零退出码结束，需选定 URL 后重试。`--skip-refresh` 仍验证并解析订阅地址，但不导入文章。

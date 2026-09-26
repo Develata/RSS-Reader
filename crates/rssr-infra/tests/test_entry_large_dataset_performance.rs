@@ -25,6 +25,7 @@ async fn entry_repository_handles_large_dataset_queries() {
 
     let feed = feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Perf Feed".to_string()),
             folder: Some("Perf".to_string()),

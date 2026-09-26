@@ -30,6 +30,7 @@ async fn sqlite_refresh_store_persists_updated_feed_metadata_entries_and_fetch_s
 
     let feed = feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example".to_string()),
             folder: Some("Tech".to_string()),
@@ -115,6 +116,7 @@ async fn sqlite_refresh_store_forces_full_fetch_when_feed_has_no_entries() {
 
     let feed = feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example".to_string()),
             folder: None,
@@ -205,6 +207,7 @@ async fn check_retry_after_failed_write(fail_content: bool) {
     let store = Arc::new(SqliteRefreshStore::new(feeds.clone(), entries.clone()));
     let feed = feeds
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/recovery.xml").expect("fixture URL"),
             title: None,
             folder: None,

@@ -305,6 +305,16 @@ impl RefreshService {
         Self { source, store }
     }
 
+    /// 复用添加订阅时已获取的 feed，首次入库不再发起第二次请求。
+    pub async fn apply_prepared_update(
+        &self,
+        feed_id: i64,
+        update: FeedRefreshUpdate,
+    ) -> Result<RefreshFeedOutcome> {
+        let target = self.store.get_target(feed_id).await?.context("订阅不存在")?;
+        self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await
+    }
+
     pub async fn refresh_feed(&self, feed_id: i64) -> Result<RefreshFeedOutcome> {
         let target = self.store.get_target(feed_id).await?.context("订阅不存在")?;
         self.refresh_target(target).await
@@ -465,6 +475,14 @@ impl RefreshService {
             }),
         };
 
+        self.apply_source_output(target, source_output).await
+    }
+
+    async fn apply_source_output(
+        &self,
+        target: RefreshTarget,
+        source_output: FeedRefreshSourceOutput,
+    ) -> Result<RefreshFeedOutcome> {
         match source_output {
             FeedRefreshSourceOutput::NotModified(metadata) => {
                 self.store

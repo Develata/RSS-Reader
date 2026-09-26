@@ -61,6 +61,7 @@ async fn build_sqlite_fixture(
     for raw in feed_urls {
         let feed = feed_repository
             .upsert_subscription(&NewFeedSubscription {
+                site_url: None,
                 url: Url::parse(raw).with_context(|| format!("parse seeded feed url: {raw}"))?,
                 title: None,
                 folder: None,

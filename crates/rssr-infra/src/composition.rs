@@ -58,6 +58,9 @@ pub fn compose_native_sqlite_use_cases(
         entry_content_repository: entry_repository.clone(),
         settings_repository,
         app_state,
+        subscription_probe: Arc::new(crate::subscription_probe::HttpSubscriptionProbe::new(
+            reqwest::Client::new(),
+        )),
         refresh_source: Arc::new(InfraFeedRefreshSource::new(
             FetchClient::new(),
             FeedParser::new(),
@@ -87,6 +90,9 @@ pub fn compose_browser_use_cases(
         entry_content_repository: entry_repository,
         settings_repository,
         app_state,
+        subscription_probe: Arc::new(crate::subscription_probe::HttpSubscriptionProbe::new(
+            client.clone(),
+        )),
         refresh_source: Arc::new(BrowserFeedRefreshSource::new(client.clone())),
         refresh_store: Arc::new(BrowserRefreshStore::new(state)),
         opml_codec: Arc::new(BrowserOpmlCodec),

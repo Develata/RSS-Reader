@@ -71,3 +71,10 @@
 - 解决 entries.css、entries_page/facade.rs、entries_page/mod.rs 三处重叠：同时保留返回高亮、分页恢复和批量确认；搜索首次挂载不重置页码，筛选变化仍取消批量预览。
 - 集成后的任务 3 正在复验，commit: pending。
 - 任务 3 合并后所有通用检查退出 0；subscription harness 5 项通过，Web 两视口 bulk 验收和任务 2 位置交叉回归退出 0。5 万条本次预览 182ms / 应用 598ms。
+
+## 任务 4 集成
+
+- 任务 3 已本地提交 `a1aae97`，提交后主工作树干净，未 push。
+- 任务 4 在该提交上三方合并；保留批量已读与阅读位置的文档及浏览器契约，同时补充 test_bulk_read 的 NewFeedSubscription.site_url 构造。
+- 原任务 4 worktree / index 保留；本次主线集成 commit: pending。
+- 任务 4 全部通用检查退出 0；三个 wasm harness 为 6 / 19 / 3 项通过，Web 两视口及真实 HTTP 直连通过，CLI 0 / 预期1 / 0 和独立数据库断言符合预期。

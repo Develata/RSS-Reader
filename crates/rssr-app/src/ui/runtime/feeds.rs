@@ -22,11 +22,11 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
-        FeedsCommand::AddFeed { raw_url } => {
+        FeedsCommand::AddFeed { raw_url, fallback_site_url } => {
             let result = match UiServices::shared().await {
                 Ok(services) => services
                     .feeds()
-                    .add_subscription(&raw_url)
+                    .add_subscription(&raw_url, fallback_site_url)
                     .await
                     .map_err(|err| format!("{err:#}")),
                 Err(err) => Err(format!("初始化应用失败：{err}")),
@@ -163,7 +163,17 @@ fn opml_import_summary(outcome: &OpmlImportOutcome) -> String {
 }
 
 fn add_feed_result(result: Result<AddSubscriptionOutcome, String>) -> Vec<UiIntent> {
+    let result = match result {
+        Ok(AddSubscriptionOutcome::NeedsSelection { page_url, candidates }) => {
+            return feeds_intents(vec![
+                FeedsPageIntent::FeedCandidates { page_url, candidates },
+                FeedsPageIntent::AddFeedFinished { saved: false },
+            ]);
+        }
+        result => result,
+    };
     let (saved, message, tone) = match result {
+        Ok(AddSubscriptionOutcome::NeedsSelection { .. }) => unreachable!(),
         Ok(AddSubscriptionOutcome::SavedAndRefreshed) => {
             (true, "订阅已保存并完成首次刷新。".to_string(), "info")
         }

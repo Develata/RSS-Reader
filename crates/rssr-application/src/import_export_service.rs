@@ -212,6 +212,7 @@ impl ImportExportService {
 
             self.feed_repository
                 .upsert_subscription(&NewFeedSubscription {
+                    site_url: None,
                     url,
                     title: import_field(feed.title.clone(), existed),
                     folder: import_field(feed.folder.clone(), existed),
@@ -264,6 +265,7 @@ impl ImportExportService {
                 current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
             self.feed_repository
                 .upsert_subscription(&NewFeedSubscription {
+                    site_url: None,
                     url,
                     title: import_field(feed.title, existed),
                     folder: import_field(feed.folder, existed),

@@ -33,6 +33,7 @@ pub(crate) async fn feed_proxy(Query(query): Query<FeedProxyQuery>) -> impl Into
         Err(err) => return (StatusCode::BAD_GATEWAY, err).into_response(),
     };
 
+    let final_url = response.url().to_string();
     let status = response.status();
     let content_type = response.headers().get(header::CONTENT_TYPE).cloned();
     let etag = response.headers().get(header::ETAG).cloned();
@@ -42,7 +43,7 @@ pub(crate) async fn feed_proxy(Query(query): Query<FeedProxyQuery>) -> impl Into
         Err(err) => return (StatusCode::BAD_GATEWAY, err).into_response(),
     };
 
-    let mut proxied = Response::builder().status(status);
+    let mut proxied = Response::builder().status(status).header("x-rssr-final-url", final_url);
     if let Some(value) = content_type {
         proxied = proxied.header(header::CONTENT_TYPE, value);
     }

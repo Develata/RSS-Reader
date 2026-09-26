@@ -56,6 +56,7 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
 
     feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
             folder: Some("Inbox".to_string()),
@@ -181,6 +182,7 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
 
     feed_repository
         .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
             url: Url::parse("https://stale.example.com/rss").expect("valid url"),
             title: Some("Stale".to_string()),
             folder: None,

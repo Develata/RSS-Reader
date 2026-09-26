@@ -312,3 +312,8 @@
   margin-top: 12px;
   gap: 10px;
 }
+
+[data-layout="feed-discovery-candidates"] { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+[data-layout="feed-discovery-candidates"] button { min-height: 44px; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+[data-slot="feed-candidate-url"] { display: block; overflow-wrap: anywhere; }
+[data-action="select-feed-candidate"] { flex-direction: column; align-items: stretch; text-align: left; }

@@ -35,6 +35,7 @@ pub struct FeedSummary {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewFeedSubscription {
+    pub site_url: Option<Url>,
     pub url: Url,
     pub title: Option<String>,
     // `folder` 仅用于导入导出保真，不应扩展为产品主线里的文件夹系统。

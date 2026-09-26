@@ -32,7 +32,8 @@ pub struct AddSubscriptionLifecycleOutcome {
 
 #[derive(Clone)]
 pub struct SubscriptionWorkflow {
-    feed_service: FeedService,
+    pub(crate) feed_service: FeedService,
+    pub(crate) probe: Arc<dyn crate::SubscriptionProbePort>,
     refresh_service: RefreshService,
     app_state: Arc<dyn AppStatePort>,
 }
@@ -42,8 +43,9 @@ impl SubscriptionWorkflow {
         feed_service: FeedService,
         refresh_service: RefreshService,
         app_state: Arc<dyn AppStatePort>,
+        probe: Arc<dyn crate::SubscriptionProbePort>,
     ) -> Self {
-        Self { feed_service, refresh_service, app_state }
+        Self { feed_service, refresh_service, app_state, probe }
     }
 
     pub async fn add_subscription(&self, input: &AddSubscriptionInput) -> Result<Feed> {
@@ -74,9 +76,42 @@ impl SubscriptionWorkflow {
         &self,
         input: AddSubscriptionLifecycleInput,
     ) -> Result<AddSubscriptionLifecycleOutcome> {
-        let feed = self.feed_service.add_subscription(&input.subscription).await?;
+        let prepared = match self.prepare_subscription(&input.subscription.url).await? {
+            crate::PrepareSubscriptionOutcome::Ready(prepared) => prepared,
+            crate::PrepareSubscriptionOutcome::NeedsSelection { candidates, .. } => {
+                anyhow::bail!(
+                    "发现多个订阅，请选择 feed URL 后重新添加：\n{}",
+                    candidates
+                        .iter()
+                        .map(|candidate| format!(
+                            "{} {}",
+                            candidate.url,
+                            candidate.title.as_deref().unwrap_or("")
+                        ))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                );
+            }
+        };
+        self.add_prepared_subscription(input, prepared).await
+    }
+
+    pub async fn add_prepared_subscription(
+        &self,
+        mut input: AddSubscriptionLifecycleInput,
+        prepared: crate::PreparedSubscription,
+    ) -> Result<AddSubscriptionLifecycleOutcome> {
+        self.feed_service.ensure_not_subscribed(&prepared.url).await?;
+        input.subscription.url = prepared.url.to_string();
+        if input.subscription.title.is_none() {
+            input.subscription.title = prepared.update.feed.title.clone();
+        }
+        let feed = self
+            .feed_service
+            .add_subscription_with_site(&input.subscription, prepared.update.feed.site_url.clone())
+            .await?;
         let first_refresh = if input.refresh_after_add {
-            Some(self.refresh_service.refresh_feed(feed.id).await?)
+            Some(self.refresh_service.apply_prepared_update(feed.id, prepared.update).await?)
         } else {
             None
         };
@@ -238,6 +273,24 @@ mod tests {
     }
 
     struct SourceStub;
+    #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+    impl crate::SubscriptionProbePort for SourceStub {
+        async fn probe(&self, url: &Url) -> Result<crate::SubscriptionProbeOutcome> {
+            Ok(crate::SubscriptionProbeOutcome::Feed {
+                url: url.clone(),
+                update: FeedRefreshUpdate {
+                    metadata: RefreshHttpMetadata::default(),
+                    feed: ParsedFeedUpdate {
+                        title: Some("Example".into()),
+                        site_url: None,
+                        description: None,
+                        entries: Vec::new(),
+                    },
+                },
+            })
+        }
+    }
 
     #[async_trait::async_trait]
     impl crate::FeedRefreshSourcePort for SourceStub {
@@ -312,6 +365,7 @@ mod tests {
             feed_service,
             refresh_service,
             Arc::new(AppStateStub { cleared_feed_ids: Mutex::new(Vec::new()) }),
+            Arc::new(SourceStub),
         );
 
         let outcome: AddSubscriptionAndRefreshOutcome = workflow
@@ -345,6 +399,7 @@ mod tests {
                 Arc::new(StoreStub { targets: Vec::new() }),
             ),
             Arc::new(AppStateStub { cleared_feed_ids: Mutex::new(Vec::new()) }),
+            Arc::new(SourceStub),
         );
 
         let outcome = workflow
@@ -388,6 +443,7 @@ mod tests {
                 }),
             ),
             Arc::new(AppStateStub { cleared_feed_ids: Mutex::new(Vec::new()) }),
+            Arc::new(SourceStub),
         );
 
         let outcome = workflow
@@ -427,6 +483,7 @@ mod tests {
                 Arc::new(StoreStub { targets: Vec::new() }),
             ),
             app_state.clone(),
+            Arc::new(SourceStub),
         );
 
         workflow
