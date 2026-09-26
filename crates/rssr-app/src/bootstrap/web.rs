@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, atomic::AtomicBool};
+use std::sync::{Arc, atomic::AtomicBool};
 
 /// Register before Dioxus history so the old DOM still exists on browser back/forward.
 pub(crate) fn install_history_capture() {
@@ -25,7 +25,7 @@ use rssr_application::{
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::UserSettings;
 use rssr_infra::application_adapters::browser::{
-    adapters::BrowserRemoteConfigStore, now_utc, state::load_state,
+    adapters::BrowserRemoteConfigStore, now_utc, state::BrowserStore,
 };
 use rssr_infra::composition::compose_browser_use_cases;
 use time::OffsetDateTime;
@@ -83,11 +83,7 @@ impl AppServices {
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES
             .get_or_try_init(|| async {
-                let loaded = load_state();
-                if let Some(warning) = loaded.warning.as_deref() {
-                    tracing::warn!(warning = warning, "Web 本地状态恢复时发现异常");
-                }
-                let state = Arc::new(Mutex::new(loaded.state));
+                let state = BrowserStore::open().await?;
                 let client = reqwest::Client::new();
                 let use_cases =
                     compose_browser_use_cases(state, client.clone(), Arc::new(BrowserClock));

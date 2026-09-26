@@ -29,6 +29,7 @@
 - [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
 - [Static Web `/reader` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
 - [Static Web 小视口 Smoke](./static-web-small-viewport-smoke.md)
+- [Web 多标签存储一致性脚本](../../scripts/browser/rssr_storage_consistency_acceptance.cjs)：复用 SPA regression server，`STATIC_BASE` 指向服务；覆盖两视口、并发标记、失败发布与重试，使用已安装的 Playwright / Chromium。
 - [Windows Chrome 可见窗口回归](./windows-chrome-visible-regression.md)
 - [Chrome MCP 目标浏览器](./chrome-mcp-target.md)
 

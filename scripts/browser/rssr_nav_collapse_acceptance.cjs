@@ -1,3 +1,4 @@
+const { installStorageHelpers } = require('./storage_helpers.cjs');
 // Uses the existing SPA regression server; supply NODE_PATH and CHROME_BIN as needed.
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -12,6 +13,7 @@ const artifacts = process.env.ARTIFACT_DIR || 'target/global-review/browser';
     for (const width of [360, 1280]) {
       for (const theme of ['none', 'atlas-sidebar', 'newsprint', 'amethyst-glass', 'midnight-ledger']) {
         const page = await browser.newPage({ viewport: { width, height: 800 } });
+        await installStorageHelpers(page.context());
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
         page.setDefaultTimeout(15000);
@@ -19,10 +21,10 @@ const artifacts = process.env.ARTIFACT_DIR || 'target/global-review/browser';
         await page.locator('[data-page="reader"][data-position-ready="true"]').waitFor();
         const css = theme === 'none' ? '' : await fs.readFile(`assets/themes/${theme}.css`, 'utf8');
         await page.evaluate(css => {
-          const key = 'rssr-web-state-v1', state = JSON.parse(localStorage.getItem(key));
-          state.settings.custom_css = css;
-          state.settings.archive_after_months = 0;
-          localStorage.setItem(key, JSON.stringify(state));
+          return window.__rssrTestMutateSlice('rssr-web-state-v1', state => {
+            state.settings.custom_css = css;
+            state.settings.archive_after_months = 0;
+          });
         }, css);
         await page.reload();
         const nav = page.locator('[data-layout="app-nav-shell"]');
@@ -35,6 +37,7 @@ const artifacts = process.env.ARTIFACT_DIR || 'target/global-review/browser';
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'expanded overflow');
         if (['none', 'atlas-sidebar'].includes(theme)) await page.screenshot({ path: `${artifacts}/${theme}-${width}-expanded.png` });
         await page.locator('[data-action="toggle-search"]').click();
+        assert((await page.locator('[data-field="entry-search"]').boundingBox()).width >= 140, 'search input remains usable beside collapse control');
         await page.locator('[data-field="entry-search"]').fill('preserved query');
         await toggle.click();
         assert.equal(await nav.getAttribute('data-state'), 'collapsed');

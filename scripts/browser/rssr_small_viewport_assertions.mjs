@@ -12,6 +12,10 @@ import {
   waitFor,
 } from './cdp_session.mjs';
 
+// Inspect the currently published slice; alternating slots keep interrupted writes invisible.
+const committedCore = `JSON.parse(localStorage.getItem('rssr-web-state-v1' +
+  (JSON.parse(localStorage.getItem('rssr-web-commit-v1'))?.revisions[0] % 2 === 1 ? '-next' : '')))`;
+
 function parseOptions(argv) {
   const options = new Map();
   for (let index = 0; index < argv.length; index += 2) {
@@ -198,7 +202,9 @@ async function checkEntriesOverflow(client) {
           height: chipRect.height,
           title: chip.getAttribute('title'),
           ariaLabel: chip.getAttribute('aria-label'),
-          text: span.textContent,
+          // The nested count has its own aria-describedby text; the control name is the title.
+          text: [...span.childNodes].filter(node => node.nodeType === Node.TEXT_NODE)
+            .map(node => node.textContent).join(''),
           scrollWidth: span.scrollWidth,
           clientWidth: span.clientWidth,
           whiteSpace: style.whiteSpace,
@@ -505,6 +511,17 @@ async function tapSelector(client, selector) {
   await client.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
 }
 
+// Programmatic scrollTo is fixture setup, not user input. Send real wheel input first
+// so pending entry-position restoration yields, just as it does when a person scrolls.
+async function beginManualScroll(client, page = "reader") {
+  await selectorExists(client, `[data-page="${page}"][data-position-ready="true"]`);
+  const point = await evaluate(client, '({x:innerWidth / 2, y:innerHeight / 2})');
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseWheel', ...point, deltaX: 0, deltaY: 1,
+  });
+  await evaluate(client, 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+}
+
 async function shellEvidence(client, reader = false) {
   const result = await evaluate(client, `(() => {
     const nav = document.querySelector('[data-layout="app-nav-shell"]');
@@ -635,12 +652,12 @@ async function checkHomeRefreshAndGestures(client) {
     await client.send('Fetch.continueRequest', {requestId: pending.shift()});
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'finished'`);
     assertThat('successful manual refresh shows a completion message', await evaluate(client,
-      `document.querySelector('[data-slot="manual-refresh-status"]').textContent.includes('刷新完成')`));
+      `/新增 [0-9]+ 篇文章|没有新文章/.test(document.querySelector('[data-slot="manual-refresh-status"]').textContent)`));
     await sleep(1150);
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'idle'`);
     assertThat('successful manual refresh feedback clears instead of returning on navigation', await evaluate(client,
-      `document.querySelector('[data-slot="manual-refresh-status"]').textContent === '' && !document.querySelector('[data-action="activate-home"]').title.includes('刷新完成')`));
-    await waitFor(client, `JSON.parse(localStorage.getItem('rssr-web-state-v1')).feeds.every(f => !f.last_fetched_at.startsWith('2099'))`);
+      `document.querySelector('[data-slot="manual-refresh-status"]').textContent === '' && !/新增 [0-9]+ 篇文章|没有新文章/.test(document.querySelector('[data-action="activate-home"]').title)`));
+    await waitFor(client, `${committedCore}.feeds.every(f => !f.last_fetched_at.startsWith('2099'))`);
     assertThat('automatic and manual refresh complete one shared batch',
       requestCount === 2 && requestsByFeed.size === 2 && [...requestsByFeed.values()].every(count => count === 1),
       {requestCount, requestsByFeed: Object.fromEntries(requestsByFeed)});
@@ -656,7 +673,10 @@ async function checkHomeRefreshAndGestures(client) {
     const searchShell = await shellEvidence(client, true);
     const animation = await evaluate(client, `getComputedStyle(document.querySelector('[data-layout="app-nav-search"]')).animationName`);
     assertThat('search reveal animation has a valid computed declaration', animation === 'search-reveal', {animation});
-    assertThat('search mode preserves shell height', Math.abs(normalShell.height - searchShell.height) <= 1, {normalShell, searchShell});
+    const wraps = await evaluate(client, `getComputedStyle(document.querySelector('[data-layout="app-nav-topline"]')).flexWrap === 'wrap'`);
+    const heightChange = searchShell.height - normalShell.height;
+    assertThat('search adds at most one row in narrow navigation and preserves wide shell height',
+      heightChange >= -1 && heightChange <= (wraps ? 51 : 1), {normalShell, searchShell, wraps});
     assertThat('search replaces subscription/settings while retaining back and Home', await evaluate(client, `!document.querySelector('[data-nav="feeds"]') && !document.querySelector('[data-nav="settings"]') && document.activeElement.matches('[data-field="entry-search"]')`));
     await captureArtifact(client, 'reader-search');
     await evaluate(client, `document.querySelector('[data-field="entry-search"]').dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', code:'Escape', bubbles:true, isComposing:true}))`);
@@ -723,6 +743,7 @@ async function checkHomeRefreshAndGestures(client) {
     await selectorExists(client, '[data-slot="entry-card-title"]');
     await clickSelector(client, '[data-slot="entry-card-title"]');
     await selectorExists(client, '[data-layout="reader-body"]');
+    await beginManualScroll(client);
     await evaluate(client, `window.__readerBeforeRefresh = document.querySelector('[data-layout="reader-body"]'); window.__readerTextBeforeRefresh = window.__readerBeforeRefresh.innerHTML; window.scrollTo(0, 80); window.__readerScroll = scrollY`);
     await checkReaderRefreshFeedback(client, 'refreshing while reading');
     hold = false;
@@ -800,11 +821,15 @@ async function selectorExistsOptional(client, selector) {
 
 async function checkReaderImagesAndSelection(client) {
   await seedAndNavigate(client, 'home-reader', '/entries/2', '[data-action="open-reader-image"]');
+  await selectorExists(client, '[data-page="reader"][data-position-ready="true"]');
+  await beginManualScroll(client);
   await shellEvidence(client, true);
   assertThat('Reader has no pull gesture surface', !(await selectorExistsOptional(client, '[data-slot="pull-refresh"]')));
-  const source = await evaluate(client, `(() => {
+  const source = await evaluate(client, `(async () => {
     const image = document.querySelector('[data-action="open-reader-image"]');
-    image.scrollIntoView({block: 'center'});
+    await image.decode();
+    image.scrollIntoView({block: 'center', behavior: 'instant'});
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     window.__imageScroll = scrollY;
     return {src: image.currentSrc, inlineHandler: image.hasAttribute('onclick')};
   })()`);
@@ -897,18 +922,21 @@ async function checkImageViewerLifecycle(client) {
   // A small recorded offset remains valid when the list remounts on page one.
   // This lifecycle check uses the link handler; image/pagination hit testing is
   // covered separately above with real CDP taps.
+  await beginManualScroll(client, 'entries');
   await evaluate(client, 'window.scrollTo(0, 120)');
   const homeScroll = await evaluate(client, 'scrollY');
   await clickSelector(client, imageEntry);
   await selectorExists(client, '[data-action="open-reader-image"]');
+  await beginManualScroll(client);
   const readerRoute = await evaluate(client, 'location.pathname');
   await evaluate(client, `document.querySelector('[data-action="open-reader-image"]').scrollIntoView({block:'center'})`);
   await tapSelector(client, '[data-action="open-reader-image"]');
   await waitFor(client, `document.querySelector('[data-layout="reader-image-viewer"]')?.open === true`);
   await evaluate(client, 'history.back()');
   await waitFor(client, `location.pathname === '/entries' && document.querySelector('[data-page="entries"]') && document.body.style.position !== 'fixed'`);
-  // Wait past both the router RAF and the asynchronous viewer cleanup.
-  await sleep(150);
+  // History restoration waits for the asynchronous list query and its saved page.
+  await selectorExists(client, '[data-page="entries"][data-position-ready="true"]');
+  await waitFor(client, `Math.abs(scrollY - ${homeScroll}) <= 1`);
   const afterBack = await evaluate(client, `({scroll:scrollY, position:document.body.style.position,
     top:document.body.style.top, viewer:!!document.querySelector('[data-layout="reader-image-viewer"]')})`);
   assertThat('leaving Reader with an open image releases lock and restores Home scroll',
@@ -916,6 +944,7 @@ async function checkImageViewerLifecycle(client) {
     {homeScroll, afterBack});
   await evaluate(client, 'history.forward()');
   await waitFor(client, `location.pathname === ${JSON.stringify(readerRoute)} && !!document.querySelector('[data-action="open-reader-image"]')`);
+  await beginManualScroll(client);
   await evaluate(client, `document.querySelector('[data-action="open-reader-image"]').scrollIntoView({block:'center'})`);
   const readerScroll = await evaluate(client, 'scrollY');
   for (let iteration = 0; iteration < 3; iteration++) {
@@ -954,7 +983,7 @@ async function checkReadingPreferencesAndFeedInput(client) {
   await key(client, 'a', 'KeyA', 2);
   await client.send('Input.insertText', {text:'1.25'});
   await clickSelector(client, '[data-action="save-settings"]');
-  await waitFor(client, `JSON.parse(localStorage.getItem('rssr-web-state-v1')).settings.reader_font_scale === 1.25`);
+  await waitFor(client, `${committedCore}.settings.reader_font_scale === 1.25`);
   // Reopen through a real persisted setting, not an injected CSS variable.
   await navigate(client, `${staticBase}/entries/2`);
   await selectorExists(client, '[data-action="open-reader-image"]');
@@ -968,7 +997,7 @@ async function checkReadingPreferencesAndFeedInput(client) {
   await captureArtifact(client, 'reader-scaled');
   await clickSelector(client, '[data-nav="feeds"]');
   await selectorExists(client, '[data-field="feed-url-input"]');
-  const before = await evaluate(client, `JSON.parse(localStorage.getItem('rssr-web-state-v1')).feeds.filter(f => !f.is_deleted).length`);
+  const before = await evaluate(client, `${committedCore}.feeds.filter(f => !f.is_deleted).length`);
   const feedUrl = `${staticBase}/__codex/mobile-ui-feed.xml?seed=mobile-ui-short&feed=keyboard-submit`;
   await evaluate(client, `document.querySelector('[data-field="feed-url-input"]').focus()`);
   await client.send('Input.insertText', {text:feedUrl});
@@ -979,10 +1008,10 @@ async function checkReadingPreferencesAndFeedInput(client) {
   })()`);
   assertThat('subscription input has a visible keyboard focus indicator', focus.visible && focus.outline !== 'none' && focus.width >= 2, focus);
   await key(client, 'Enter', 'Enter');
-  await waitFor(client, `JSON.parse(localStorage.getItem('rssr-web-state-v1')).feeds.filter(f => !f.is_deleted).length === ${before + 1}`);
+  await waitFor(client, `${committedCore}.feeds.filter(f => !f.is_deleted).length === ${before + 1}`);
   await waitFor(client, `document.querySelector('[data-field="feed-url-input"]').value === ''`);
   assertThat('Enter adds the subscription exactly once', await evaluate(client,
-    `JSON.parse(localStorage.getItem('rssr-web-state-v1')).feeds.filter(f => !f.is_deleted && f.url === ${JSON.stringify(feedUrl)}).length === 1`));
+    `${committedCore}.feeds.filter(f => !f.is_deleted && f.url === ${JSON.stringify(feedUrl)}).length === 1`));
   // Pause the actual first refresh so duplicate submission and draft editing have
   // deterministic overlap, without timing sleeps or changing production code.
   const slowFeedUrl = `${staticBase}/__codex/mobile-ui-feed.xml?seed=mobile-ui-short&feed=pending-submit`;
@@ -1009,7 +1038,7 @@ async function checkReadingPreferencesAndFeedInput(client) {
       await evaluate(client, `document.querySelector('[data-field="feed-url-input"]').value === ${JSON.stringify(nextDraftUrl)}`));
     assertThat('repeated pending submits produce one refresh and do not add the next draft',
       pausedRequests.length === 1 && await evaluate(client,
-        `JSON.parse(localStorage.getItem('rssr-web-state-v1')).feeds.filter(f => !f.is_deleted).length === ${before + 2}`), {requests:pausedRequests.length});
+        `${committedCore}.feeds.filter(f => !f.is_deleted).length === ${before + 2}`), {requests:pausedRequests.length});
   } finally {
     offPaused();
     await client.send('Fetch.disable');
@@ -1020,7 +1049,7 @@ async function checkReadingPreferencesAndFeedInput(client) {
   await clickSelector(client, '[data-action="refresh-all"]');
   await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'finished'`);
   assertThat('refresh button does not submit the subscription form', await evaluate(client,
-    `document.querySelector('[data-field="feed-url-input"]').value === 'https://example.com/should-not-submit.xml' && JSON.parse(localStorage.getItem('rssr-web-state-v1')).feeds.filter(f => !f.is_deleted).length === ${before + 2}`));
+    `document.querySelector('[data-field="feed-url-input"]').value === 'https://example.com/should-not-submit.xml' && ${committedCore}.feeds.filter(f => !f.is_deleted).length === ${before + 2}`));
 }
 
 async function nativePage() {

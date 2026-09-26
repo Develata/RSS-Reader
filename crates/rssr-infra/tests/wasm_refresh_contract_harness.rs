@@ -1,7 +1,5 @@
 #![cfg(target_arch = "wasm32")]
 
-use std::sync::{Arc, Mutex};
-
 use reqwest::StatusCode;
 use rssr_application::{
     FeedRefreshSourceOutput, FeedRefreshUpdate, ParsedEntryData, ParsedFeedUpdate, RefreshCommit,
@@ -11,10 +9,7 @@ use rssr_infra::application_adapters::browser::{
     adapters::{
         BrowserRefreshStore, classify_browser_refresh_body, classify_browser_refresh_status,
     },
-    state::{
-        APP_STATE_STORAGE_KEY, BrowserState, ENTRY_FLAGS_STORAGE_KEY, LoadedState, PersistedFeed,
-        PersistedState, STORAGE_KEY, load_state,
-    },
+    state::{BrowserState, BrowserStore, PersistedFeed, PersistedState},
 };
 use time::OffsetDateTime;
 use url::Url;
@@ -22,15 +17,10 @@ use wasm_bindgen_test::wasm_bindgen_test;
 
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
-fn clear_browser_state_storage() {
-    if let Some(storage) =
-        web_sys::window().and_then(|window| window.local_storage().ok()).flatten()
-    {
-        let _ = storage.remove_item(STORAGE_KEY);
-        let _ = storage.remove_item(APP_STATE_STORAGE_KEY);
-        let _ = storage.remove_item(ENTRY_FLAGS_STORAGE_KEY);
-    }
-}
+#[path = "support/browser_storage.rs"]
+#[allow(dead_code)]
+mod browser_storage;
+use browser_storage::{clear_browser_state_storage, persisted_state, seed_state};
 
 fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
     PersistedFeed {
@@ -191,7 +181,7 @@ fn browser_refresh_source_classifies_bad_xml_body_as_parse_failure() {
 async fn browser_refresh_store_lists_only_active_targets() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 2,
             feeds: vec![
@@ -201,7 +191,8 @@ async fn browser_refresh_store_lists_only_active_targets() {
             ..PersistedState::default()
         },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let store = BrowserRefreshStore::new(state);
 
     let targets = store.list_targets().await.expect("list targets");
@@ -217,7 +208,7 @@ async fn browser_refresh_store_lists_only_active_targets() {
 async fn browser_refresh_store_get_target_normalizes_url_and_skips_deleted_feeds() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 2,
             feeds: vec![
@@ -227,7 +218,8 @@ async fn browser_refresh_store_get_target_normalizes_url_and_skips_deleted_feeds
             ..PersistedState::default()
         },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let store = BrowserRefreshStore::new(state);
 
     let active = store.get_target(1).await.expect("get active target").expect("target exists");
@@ -247,14 +239,15 @@ async fn browser_refresh_store_get_target_normalizes_url_and_skips_deleted_feeds
 async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 1,
             feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
             ..PersistedState::default()
         },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let store = BrowserRefreshStore::new(state.clone());
 
     store
@@ -271,7 +264,7 @@ async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
         .expect("commit not modified");
 
     {
-        let snapshot = state.lock().expect("lock state");
+        let snapshot = state.snapshot().await.expect("snapshot");
         assert_eq!(snapshot.core.feeds.len(), 1);
         assert_eq!(snapshot.core.feeds[0].etag.as_deref(), Some("etag-1"));
         assert_eq!(
@@ -283,8 +276,7 @@ async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
         assert_eq!(snapshot.core.feeds[0].fetch_error, None);
     }
 
-    let LoadedState { state: persisted, warning } = load_state();
-    assert!(warning.is_none());
+    let persisted = persisted_state().await;
     assert_eq!(persisted.core.feeds.len(), 1);
     assert_eq!(persisted.core.feeds[0].etag.as_deref(), Some("etag-1"));
 
@@ -295,14 +287,15 @@ async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
 async fn browser_refresh_store_commit_updated_persists_feed_metadata_and_entries() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 1,
             feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
             ..PersistedState::default()
         },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let store = BrowserRefreshStore::new(state.clone());
 
     store
@@ -327,7 +320,7 @@ async fn browser_refresh_store_commit_updated_persists_feed_metadata_and_entries
         .expect("commit updated");
 
     {
-        let snapshot = state.lock().expect("lock state");
+        let snapshot = state.snapshot().await.expect("snapshot");
         assert_eq!(snapshot.core.feeds.len(), 1);
         assert_eq!(snapshot.core.feeds[0].title.as_deref(), Some("Updated Feed"));
         assert_eq!(snapshot.core.feeds[0].site_url.as_deref(), Some("https://example.com/"));
@@ -342,8 +335,7 @@ async fn browser_refresh_store_commit_updated_persists_feed_metadata_and_entries
         assert_eq!(snapshot.core.entries[1].title, "Entry 2");
     }
 
-    let LoadedState { state: persisted, warning } = load_state();
-    assert!(warning.is_none());
+    let persisted = persisted_state().await;
     assert_eq!(persisted.core.entries.len(), 2);
     assert_eq!(persisted.core.feeds[0].title.as_deref(), Some("Updated Feed"));
 
@@ -357,10 +349,11 @@ async fn browser_refresh_store_commit_updated_clears_previous_fetch_error() {
     let mut feed = sample_feed(1, "https://example.com/feed.xml", false);
     feed.fetch_error = Some("previous failure".to_string());
 
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState { next_feed_id: 1, feeds: vec![feed], ..PersistedState::default() },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let store = BrowserRefreshStore::new(state.clone());
 
     store
@@ -381,7 +374,7 @@ async fn browser_refresh_store_commit_updated_clears_previous_fetch_error() {
         .await
         .expect("commit updated");
 
-    let snapshot = state.lock().expect("lock state");
+    let snapshot = state.snapshot().await.expect("snapshot");
     assert_eq!(snapshot.core.feeds[0].fetch_error, None);
 
     clear_browser_state_storage();
@@ -391,14 +384,15 @@ async fn browser_refresh_store_commit_updated_clears_previous_fetch_error() {
 async fn browser_refresh_store_commit_failed_persists_error_without_success_timestamp() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 1,
             feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
             ..PersistedState::default()
         },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let store = BrowserRefreshStore::new(state.clone());
 
     store
@@ -418,7 +412,7 @@ async fn browser_refresh_store_commit_failed_persists_error_without_success_time
         .expect("commit failed");
 
     {
-        let snapshot = state.lock().expect("lock state");
+        let snapshot = state.snapshot().await.expect("snapshot");
         assert_eq!(snapshot.core.feeds[0].etag.as_deref(), Some("etag-failed"));
         assert_eq!(
             snapshot.core.feeds[0].last_modified.as_deref(),
@@ -430,8 +424,7 @@ async fn browser_refresh_store_commit_failed_persists_error_without_success_time
         assert!(snapshot.core.entries.is_empty());
     }
 
-    let LoadedState { state: persisted, warning } = load_state();
-    assert!(warning.is_none());
+    let persisted = persisted_state().await;
     assert_eq!(persisted.core.feeds[0].fetch_error.as_deref(), Some("network timeout"));
 
     clear_browser_state_storage();
@@ -447,10 +440,11 @@ async fn browser_refresh_store_commit_failed_preserves_previous_success_timestam
     feed.last_success_at = Some(previous_success);
     feed.last_fetched_at = Some(previous_fetch);
 
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState { next_feed_id: 1, feeds: vec![feed], ..PersistedState::default() },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let store = BrowserRefreshStore::new(state.clone());
 
     store
@@ -463,7 +457,7 @@ async fn browser_refresh_store_commit_failed_preserves_previous_success_timestam
         .await
         .expect("commit failed");
 
-    let snapshot = state.lock().expect("lock state");
+    let snapshot = state.snapshot().await.expect("snapshot");
     assert_eq!(snapshot.core.feeds[0].last_success_at, Some(previous_success));
     assert_ne!(snapshot.core.feeds[0].last_fetched_at, Some(previous_fetch));
     assert_eq!(snapshot.core.feeds[0].fetch_error.as_deref(), Some("still failing"));
@@ -471,15 +465,16 @@ async fn browser_refresh_store_commit_failed_preserves_previous_success_timestam
     clear_browser_state_storage();
 }
 
-fn store_with_one_feed() -> (Arc<Mutex<BrowserState>>, BrowserRefreshStore) {
-    let state = Arc::new(Mutex::new(BrowserState {
+async fn store_with_one_feed() -> (BrowserStore, BrowserRefreshStore) {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 1,
             feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
             ..PersistedState::default()
         },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let store = BrowserRefreshStore::new(state.clone());
     (state, store)
 }
@@ -490,63 +485,56 @@ fn not_modified_with_etag(etag: &str) -> RefreshCommit {
     }
 }
 
-/// 批次内的 `commit` 立刻对内存可见，但不落盘；`end_batch` 才写一次。
-///
-/// 这是整个批次机制的意义所在：`save_state_snapshot` 每次都要把全库重新序列化写回
-/// `localStorage`，而这发生在主线程上。逐个订阅写会让刷新期间页面按订阅数成比例卡顿。
-/// 「内存立刻可见」这一半同样要断言——页面读的是同一份共享内存状态，
-/// 推迟落盘不能让刷新中途的界面读到旧值。
+/// 每个订阅提交返回前必须落盘，页面退出不应丢失已经报告成功的结果。
 #[wasm_bindgen_test]
-async fn browser_refresh_store_defers_the_write_until_the_batch_ends() {
+async fn browser_refresh_store_commits_are_durable_before_the_batch_ends() {
     clear_browser_state_storage();
-    let (state, store) = store_with_one_feed();
+    let (state, store) = store_with_one_feed().await;
 
     store.begin_batch().await.expect("begin batch");
     store.commit(1, not_modified_with_etag("etag-batched")).await.expect("commit in batch");
 
     assert_eq!(
-        state.lock().expect("lock state").core.feeds[0].etag.as_deref(),
+        state.snapshot().await.expect("snapshot").core.feeds[0].etag.as_deref(),
         Some("etag-batched"),
         "批次内的改动必须立刻对内存可见"
     );
-    assert!(
-        load_state().state.core.feeds.is_empty(),
-        "批次没结束就不该写 localStorage——这正是省下的那些整片重写"
-    );
+    assert_eq!(persisted_state().await.core.feeds[0].etag.as_deref(), Some("etag-batched"));
 
     store.end_batch().await.expect("end batch");
 
-    let LoadedState { state: persisted, warning } = load_state();
-    assert!(warning.is_none());
+    let persisted = persisted_state().await;
     assert_eq!(persisted.core.feeds[0].etag.as_deref(), Some("etag-batched"));
 
     clear_browser_state_storage();
 }
 
-/// 空批次不产生写入。
-///
-/// 整轮所有订阅都返回 304 是常态，那种情况下不该白白整片重写一次全库。
+/// 空批次不发布新版本。
 #[wasm_bindgen_test]
 async fn browser_refresh_store_batch_without_commits_writes_nothing() {
     clear_browser_state_storage();
-    let (_state, store) = store_with_one_feed();
+    let (_state, store) = store_with_one_feed().await;
 
+    let before = browser_storage::storage()
+        .get_item(rssr_infra::application_adapters::browser::state::COMMIT_STORAGE_KEY)
+        .unwrap();
     store.begin_batch().await.expect("begin batch");
     store.end_batch().await.expect("end batch");
-
-    assert!(load_state().state.core.feeds.is_empty(), "没有 commit 的批次不该产生写入");
+    assert_eq!(
+        browser_storage::storage()
+            .get_item(rssr_infra::application_adapters::browser::state::COMMIT_STORAGE_KEY)
+            .unwrap(),
+        before
+    );
 
     clear_browser_state_storage();
 }
 
-/// 漏掉 `end_batch` 时，下一次 `begin_batch` 要把上一批改动落盘而不是丢掉。
-///
-/// 这是批次机制的安全网：写入推迟意味着「有人忘了关批次」会变成丢数据，
-/// 因此重开批次必须先冲掉上一批。最坏退化成「晚一轮才写」，而不是永久丢失。
+/// 漏掉 end_batch 不影响已提交结果。
 #[wasm_bindgen_test]
-async fn browser_refresh_store_reopening_a_batch_flushes_the_unclosed_one() {
+async fn browser_refresh_store_reopening_a_batch_preserves_durable_results() {
     clear_browser_state_storage();
-    let (_state, store) = store_with_one_feed();
+    let (_state, store) = store_with_one_feed().await;
 
     store.begin_batch().await.expect("begin batch");
     store.commit(1, not_modified_with_etag("etag-orphaned")).await.expect("commit in batch");
@@ -554,9 +542,9 @@ async fn browser_refresh_store_reopening_a_batch_flushes_the_unclosed_one() {
     store.begin_batch().await.expect("reopen batch");
 
     assert_eq!(
-        load_state().state.core.feeds[0].etag.as_deref(),
+        persisted_state().await.core.feeds[0].etag.as_deref(),
         Some("etag-orphaned"),
-        "重开批次必须先把上一批没关掉的改动写下去"
+        "重开批次保留上轮已提交结果"
     );
 
     store.end_batch().await.expect("end batch");
@@ -570,12 +558,12 @@ async fn browser_refresh_store_reopening_a_batch_flushes_the_unclosed_one() {
 #[wasm_bindgen_test]
 async fn browser_refresh_store_commit_outside_a_batch_still_writes_immediately() {
     clear_browser_state_storage();
-    let (_state, store) = store_with_one_feed();
+    let (_state, store) = store_with_one_feed().await;
 
     store.commit(1, not_modified_with_etag("etag-unbatched")).await.expect("commit outside batch");
 
     assert_eq!(
-        load_state().state.core.feeds[0].etag.as_deref(),
+        persisted_state().await.core.feeds[0].etag.as_deref(),
         Some("etag-unbatched"),
         "没有批次时 commit 必须像改动前一样立刻落盘"
     );
@@ -583,16 +571,11 @@ async fn browser_refresh_store_commit_outside_a_batch_still_writes_immediately()
     clear_browser_state_storage();
 }
 
-/// 批次被中断后，存储必须回到「立刻落盘」的正常状态。
-///
-/// Web 端刷新任务绑定在订阅页组件作用域上，用户刷新途中切走页面，整个 future 就被 drop，
-/// `end_batch` 永远等不到，由批次守卫的析构调用 `abort_batch` 兜底。
-/// 少了这条兜底，`active` 会永久停在 true：此后单订阅刷新与添加订阅的首刷都只改内存不落盘，
-/// 用户看到的是「刷新按钮没反应」，刷新页面后条目全空——而且全程不报错。
+/// 取消刷新保留此前成功提交，后续操作仍可正常落盘。
 #[wasm_bindgen_test]
-async fn browser_refresh_store_abort_flushes_and_restores_immediate_writes() {
+async fn browser_refresh_store_abort_preserves_commits_and_subsequent_writes() {
     clear_browser_state_storage();
-    let (_state, store) = store_with_one_feed();
+    let (_state, store) = store_with_one_feed().await;
 
     store.begin_batch().await.expect("begin batch");
     store.commit(1, not_modified_with_etag("etag-interrupted")).await.expect("commit in batch");
@@ -601,15 +584,15 @@ async fn browser_refresh_store_abort_flushes_and_restores_immediate_writes() {
     store.abort_batch();
 
     assert_eq!(
-        load_state().state.core.feeds[0].etag.as_deref(),
+        persisted_state().await.core.feeds[0].etag.as_deref(),
         Some("etag-interrupted"),
-        "中断时已经抓到的改动要尽力落盘，而不是随批次一起丢掉"
+        "中断不丢失已成功提交的改动"
     );
 
     store.commit(1, not_modified_with_etag("etag-after-abort")).await.expect("commit after abort");
 
     assert_eq!(
-        load_state().state.core.feeds[0].etag.as_deref(),
+        persisted_state().await.core.feeds[0].etag.as_deref(),
         Some("etag-after-abort"),
         "批次被中断之后，后续的批次外提交不能继续被吞掉"
     );
@@ -617,29 +600,24 @@ async fn browser_refresh_store_abort_flushes_and_restores_immediate_writes() {
     clear_browser_state_storage();
 }
 
-/// `abort_batch` 幂等：正常收尾后守卫析构还会再调一次，那一次必须什么都不写。
-///
-/// 守卫刻意不设「解除」开关（那会留出「已解除但还没 end_batch」的取消窗口），
-/// 因此幂等性是它成立的前提。
+/// 正常收尾后重复 abort 也不发布新版本。
 #[wasm_bindgen_test]
 async fn browser_refresh_store_abort_after_end_batch_writes_nothing() {
-    clear_browser_state_storage();
-    let (state, store) = store_with_one_feed();
-
-    store.begin_batch().await.expect("begin batch");
-    store.commit(1, not_modified_with_etag("etag-done")).await.expect("commit in batch");
-    store.end_batch().await.expect("end batch");
-
-    // 绕过 commit 直接改内存：abort 若真的又写了一次，这个值就会被带进 localStorage。
-    state.lock().expect("lock state").core.feeds[0].title = Some("只在内存里".to_string());
+    let (_state, store) = store_with_one_feed().await;
+    store.begin_batch().await.unwrap();
+    store.commit(1, not_modified_with_etag("etag-done")).await.unwrap();
+    store.end_batch().await.unwrap();
+    let before = browser_storage::storage()
+        .get_item(rssr_infra::application_adapters::browser::state::COMMIT_STORAGE_KEY)
+        .unwrap();
     store.abort_batch();
-
+    store.abort_batch();
     assert_eq!(
-        load_state().state.core.feeds[0].title.as_deref(),
-        Some("Feed 1"),
-        "end_batch 之后的 abort 必须是空操作"
+        browser_storage::storage()
+            .get_item(rssr_infra::application_adapters::browser::state::COMMIT_STORAGE_KEY)
+            .unwrap(),
+        before
     );
-
     clear_browser_state_storage();
 }
 
@@ -648,19 +626,186 @@ mod refresh_count_cases;
 #[wasm_bindgen_test]
 async fn browser_counts_only_real_inserts_including_same_batch_duplicates() {
     clear_browser_state_storage();
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 1,
             feeds: vec![sample_feed(1, "https://example.com/count", false)],
             ..Default::default()
         },
         ..Default::default()
-    }));
+    })
+    .await;
     let store = BrowserRefreshStore::new(state.clone());
     refresh_count_cases::verify_counts(&store, 1).await;
-    assert_eq!(state.lock().unwrap().core.entries.len(), 3);
-    let LoadedState { state: persisted, warning } = load_state();
-    assert!(warning.is_none());
+    assert_eq!(state.snapshot().await.unwrap().core.entries.len(), 3);
+    let persisted = persisted_state().await;
     assert_eq!(persisted.core.entries.len(), 3);
     clear_browser_state_storage();
+}
+
+#[wasm_bindgen_test]
+async fn failed_refresh_at_each_publication_stage_keeps_old_content_and_index() {
+    for fail_at in 1..=3 {
+        let (state, store) = store_with_one_feed().await;
+        let before = serde_json::to_value(&state.snapshot().await.unwrap().core).unwrap();
+        js_sys::eval(&format!(r#"
+            globalThis.__set = Storage.prototype.setItem;
+            globalThis.__writes = 0;
+            Storage.prototype.setItem = function(k,v) {{
+                if (++globalThis.__writes === {fail_at}) throw new DOMException('quota', 'QuotaExceededError');
+                return __set.call(this,k,v);
+            }};
+        "#)).unwrap();
+        let result = store
+            .commit(
+                1,
+                RefreshCommit::Updated {
+                    update: FeedRefreshUpdate {
+                        metadata: RefreshHttpMetadata::default(),
+                        feed: ParsedFeedUpdate {
+                            title: Some("New title".into()),
+                            site_url: None,
+                            description: None,
+                            entries: vec![sample_entry(1)],
+                        },
+                    },
+                },
+            )
+            .await;
+        js_sys::eval("Storage.prototype.setItem = __set; delete globalThis.__set;").unwrap();
+        assert!(result.is_err(), "stage {fail_at} must not report inserted_count success");
+        assert_eq!(serde_json::to_value(&state.snapshot().await.unwrap().core).unwrap(), before);
+        let persisted = persisted_state().await;
+        assert_eq!(serde_json::to_value(&persisted.core).unwrap(), before);
+        assert!(persisted.entry_content.entries.is_empty());
+        // Orphan staged slices from the failed transaction must not affect the next commit.
+        store.commit(1, not_modified_with_etag("recovered")).await.unwrap();
+        assert_eq!(persisted_state().await.core.feeds[0].etag.as_deref(), Some("recovered"));
+        assert!(persisted_state().await.core.entries.is_empty());
+    }
+}
+
+#[wasm_bindgen_test]
+async fn refresh_after_other_tab_deletes_feed_does_not_resurrect_it() {
+    use rssr_domain::FeedRepository;
+    use rssr_infra::application_adapters::browser::adapters::BrowserFeedRepository;
+    let (_, store) = store_with_one_feed().await;
+    assert!(store.get_target(1).await.unwrap().is_some());
+    BrowserFeedRepository::new(BrowserStore::open().await.unwrap())
+        .set_deleted(1, true)
+        .await
+        .unwrap();
+    assert!(store.commit(1, not_modified_with_etag("late response")).await.is_err());
+    assert!(persisted_state().await.core.feeds[0].is_deleted);
+}
+
+#[wasm_bindgen_test]
+async fn metadata_only_refreshes_do_not_rewrite_flags_or_bodies() {
+    let mut fixture = BrowserState::default();
+    fixture.core.next_feed_id = 20;
+    fixture.core.feeds =
+        (1..=20).map(|id| sample_feed(id, &format!("https://example.com/{id}"), false)).collect();
+    let store = BrowserRefreshStore::new(seed_state(fixture).await);
+    js_sys::eval(r#"
+        globalThis.__set = Storage.prototype.setItem;
+        globalThis.__writes = [];
+        Storage.prototype.setItem = function(k,v) { __writes.push([k,v.length]); return __set.call(this,k,v); };
+    "#).unwrap();
+    let start = js_sys::Date::now();
+    let mut results = Vec::new();
+    for id in 1..=20 {
+        results.push(store.commit(id, not_modified_with_etag("unchanged")).await);
+    }
+    let elapsed = js_sys::Date::now() - start;
+    let writes = js_sys::eval(
+        r#"
+        Storage.prototype.setItem = __set; delete globalThis.__set;
+        JSON.stringify(__writes);
+    "#,
+    )
+    .unwrap()
+    .as_string()
+    .unwrap();
+    for result in results {
+        result.unwrap();
+    }
+    assert!(!writes.contains("entry-content"));
+    assert!(!writes.contains("entry-flags"));
+    let writes: Vec<(String, usize)> = serde_json::from_str(&writes).unwrap();
+    assert_eq!(writes.len(), 40); // Core plus commit head per successful subscription.
+    wasm_bindgen_test::console_log!(
+        "20 metadata commits: {} ms, {} chars written",
+        elapsed,
+        writes.iter().map(|(_, len)| len).sum::<usize>()
+    );
+}
+
+#[wasm_bindgen_test]
+async fn multiple_content_commits_preserve_all_feeds_and_report_write_volume() {
+    let mut fixture = BrowserState::default();
+    fixture.core.next_feed_id = 12;
+    fixture.core.feeds =
+        (1..=12).map(|id| sample_feed(id, &format!("https://example.com/{id}"), false)).collect();
+    let store = BrowserRefreshStore::new(seed_state(fixture).await);
+    js_sys::eval(r#"
+        globalThis.__set = Storage.prototype.setItem;
+        globalThis.__writes = [];
+        Storage.prototype.setItem = function(k,v) { __writes.push([k,v.length]); return __set.call(this,k,v); };
+    "#).unwrap();
+    let start = js_sys::Date::now();
+    let mut results = Vec::new();
+    for id in 1..=12 {
+        let entries = (1..=10)
+            .map(|index| {
+                let mut entry = sample_entry(index);
+                entry.content_html = Some(format!("<p>{}</p>", "x".repeat(2048)));
+                entry.content_text = Some("x".repeat(2048));
+                entry
+            })
+            .collect();
+        results.push(
+            store
+                .commit(
+                    id,
+                    RefreshCommit::Updated {
+                        update: FeedRefreshUpdate {
+                            metadata: RefreshHttpMetadata::default(),
+                            feed: ParsedFeedUpdate {
+                                title: None,
+                                site_url: None,
+                                description: None,
+                                entries,
+                            },
+                        },
+                    },
+                )
+                .await,
+        );
+    }
+    let elapsed = js_sys::Date::now() - start;
+    let raw = js_sys::eval(
+        r#"
+        Storage.prototype.setItem = __set; delete globalThis.__set;
+        JSON.stringify(__writes);
+    "#,
+    )
+    .unwrap()
+    .as_string()
+    .unwrap();
+    for result in results {
+        assert_eq!(result.unwrap().inserted_count, 10);
+    }
+    assert!(!raw.contains("entry-flags"));
+    let writes: Vec<(String, usize)> = serde_json::from_str(&raw).unwrap();
+    assert_eq!(writes.len(), 36);
+    let state = persisted_state().await;
+    assert_eq!(state.core.entries.len(), 120);
+    assert_eq!(state.entry_content.entries.len(), 120);
+    wasm_bindgen_test::console_log!(
+        "12 content commits, 120 articles (2 KiB HTML + 2 KiB text): {} ms, {} chars written; final core+body size {} bytes",
+        elapsed,
+        writes.iter().map(|(_, len)| len).sum::<usize>(),
+        serde_json::to_string(&state.core).unwrap().len()
+            + serde_json::to_string(&state.entry_content).unwrap().len()
+    );
 }

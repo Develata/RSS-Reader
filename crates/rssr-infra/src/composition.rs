@@ -28,10 +28,9 @@ use {
             BrowserFeedRepository, BrowserOpmlCodec, BrowserRefreshStore,
             BrowserSettingsRepository,
         },
-        state::BrowserState,
+        state::BrowserStore,
     },
     rssr_application::ClockPort,
-    std::sync::Mutex,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -75,7 +74,7 @@ pub fn compose_native_sqlite_use_cases(
 
 #[cfg(target_arch = "wasm32")]
 pub fn compose_browser_use_cases(
-    state: Arc<Mutex<BrowserState>>,
+    state: BrowserStore,
     client: reqwest::Client,
     clock: Arc<dyn ClockPort>,
 ) -> AppUseCases {

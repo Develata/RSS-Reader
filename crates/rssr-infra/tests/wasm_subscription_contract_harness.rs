@@ -1,6 +1,6 @@
 #![cfg(target_arch = "wasm32")]
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::{Result, bail};
 use rssr_application::{
@@ -11,9 +11,9 @@ use rssr_domain::{EntryIndexRepository, EntryQuery};
 use rssr_infra::application_adapters::browser::{
     adapters::{BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRepository},
     state::{
-        APP_STATE_STORAGE_KEY, BrowserState, ENTRY_CONTENT_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY,
-        LoadedState, PersistedAppStateSlice, PersistedEntryContent, PersistedEntryContentSlice,
-        PersistedEntryIndex, PersistedFeed, PersistedState, STORAGE_KEY, load_state,
+        BrowserState, BrowserStore, ENTRY_FLAGS_STORAGE_KEY, PersistedAppStateSlice,
+        PersistedEntryContent, PersistedEntryContentSlice, PersistedEntryIndex, PersistedFeed,
+        PersistedState,
     },
 };
 use time::OffsetDateTime;
@@ -21,6 +21,14 @@ use url::Url;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+#[path = "support/browser_storage.rs"]
+#[allow(dead_code)]
+mod browser_storage;
+use browser_storage::{clear_browser_state_storage, persisted_state, seed_state};
+
+#[path = "support/browser_storage_cases.rs"]
+mod browser_storage_cases;
 
 struct UnusedRefreshSource;
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -70,17 +78,6 @@ impl RefreshStorePort for UnusedRefreshStore {
         _commit: RefreshCommit,
     ) -> Result<rssr_application::RefreshCommitOutcome> {
         bail!("refresh store should not be used in subscription harness")
-    }
-}
-
-fn clear_browser_state_storage() {
-    if let Some(storage) =
-        web_sys::window().and_then(|window| window.local_storage().ok()).flatten()
-    {
-        let _ = storage.remove_item(STORAGE_KEY);
-        let _ = storage.remove_item(APP_STATE_STORAGE_KEY);
-        let _ = storage.remove_item(ENTRY_FLAGS_STORAGE_KEY);
-        let _ = storage.remove_item(ENTRY_CONTENT_STORAGE_KEY);
     }
 }
 
@@ -134,7 +131,7 @@ fn sample_entry_content(id: i64, feed_id: i64, index: i64) -> PersistedEntryCont
     }
 }
 
-fn build_workflow(state: Arc<Mutex<BrowserState>>) -> SubscriptionWorkflow {
+fn build_workflow(state: BrowserStore) -> SubscriptionWorkflow {
     let entry_repository = Arc::new(BrowserEntryRepository::new(state.clone()));
     let feed_service = FeedService::new(
         Arc::new(BrowserFeedRepository::new(state.clone())),
@@ -156,7 +153,7 @@ fn build_workflow(state: Arc<Mutex<BrowserState>>) -> SubscriptionWorkflow {
 async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(BrowserState::default()));
+    let state = seed_state(BrowserState::default()).await;
     let workflow = build_workflow(state.clone());
 
     let first = workflow
@@ -181,7 +178,7 @@ async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
     assert_eq!(first.url.as_str(), "https://example.com/feed.xml");
 
     {
-        let snapshot = state.lock().expect("lock state");
+        let snapshot = state.snapshot().await.expect("snapshot");
         assert_eq!(snapshot.core.feeds.len(), 1);
         assert_eq!(snapshot.core.feeds[0].url, "https://example.com/feed.xml");
         assert_eq!(snapshot.core.feeds[0].title.as_deref(), Some("Example"));
@@ -189,8 +186,7 @@ async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
         assert!(!snapshot.core.feeds[0].is_deleted);
     }
 
-    let LoadedState { state: persisted, warning } = load_state();
-    assert!(warning.is_none());
+    let persisted = persisted_state().await;
     assert_eq!(persisted.core.feeds.len(), 1);
     assert_eq!(persisted.core.feeds[0].url, "https://example.com/feed.xml");
     assert_eq!(persisted.core.feeds[0].title.as_deref(), Some("Example"));
@@ -202,7 +198,7 @@ async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
 async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears_matching_state() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 1,
             next_entry_id: 2,
@@ -218,7 +214,8 @@ async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears
             ..PersistedAppStateSlice::default()
         },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let workflow = build_workflow(state.clone());
 
     workflow
@@ -227,7 +224,7 @@ async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears
         .expect("remove subscription");
 
     {
-        let snapshot = state.lock().expect("lock state");
+        let snapshot = state.snapshot().await.expect("snapshot");
         assert_eq!(snapshot.core.feeds.len(), 1);
         assert!(snapshot.core.feeds[0].is_deleted);
         assert!(snapshot.core.entries.is_empty());
@@ -235,8 +232,7 @@ async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears
         assert_eq!(snapshot.app_state.last_opened_feed_id, None);
     }
 
-    let LoadedState { state: persisted, warning } = load_state();
-    assert!(warning.is_none());
+    let persisted = persisted_state().await;
     assert_eq!(persisted.core.feeds.len(), 1);
     assert!(persisted.core.feeds[0].is_deleted);
     assert!(persisted.core.entries.is_empty());
@@ -250,7 +246,7 @@ async fn browser_subscription_remove_purges_entries_soft_deletes_feed_and_clears
 async fn browser_subscription_remove_preserves_other_last_opened_feed() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 2,
             feeds: vec![
@@ -264,7 +260,8 @@ async fn browser_subscription_remove_preserves_other_last_opened_feed() {
             ..PersistedAppStateSlice::default()
         },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let workflow = build_workflow(state.clone());
 
     workflow
@@ -273,7 +270,7 @@ async fn browser_subscription_remove_preserves_other_last_opened_feed() {
         .expect("remove subscription");
 
     {
-        let snapshot = state.lock().expect("lock state");
+        let snapshot = state.snapshot().await.expect("snapshot");
         assert_eq!(snapshot.app_state.last_opened_feed_id, Some(1));
         assert!(
             snapshot.core.feeds.iter().find(|feed| feed.id == 2).expect("removed feed").is_deleted
@@ -287,8 +284,7 @@ async fn browser_subscription_remove_preserves_other_last_opened_feed() {
         .expect("list entries");
     assert!(entries.is_empty());
 
-    let LoadedState { state: persisted, warning } = load_state();
-    assert!(warning.is_none());
+    let persisted = persisted_state().await;
     assert_eq!(persisted.app_state.last_opened_feed_id, Some(1));
 
     clear_browser_state_storage();
@@ -299,7 +295,7 @@ async fn reader_metadata_and_global_unread_counts_survive_failed_flag_writes() {
     use rssr_application::ReaderService;
     use rssr_domain::FeedRepository;
     clear_browser_state_storage();
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
             entries: vec![sample_entry_index(1, 1, 1), sample_entry_index(2, 1, 2)],
@@ -307,7 +303,8 @@ async fn reader_metadata_and_global_unread_counts_survive_failed_flag_writes() {
         },
         entry_content: PersistedEntryContentSlice { entries: vec![sample_entry_content(1, 1, 1)] },
         ..Default::default()
-    }));
+    })
+    .await;
     let entries = Arc::new(BrowserEntryRepository::new(state.clone()));
     let feeds = Arc::new(BrowserFeedRepository::new(state.clone()));
     let reader = ReaderService::new(entries.clone(), entries.clone(), feeds.clone());
@@ -335,15 +332,11 @@ async fn reader_metadata_and_global_unread_counts_survive_failed_flag_writes() {
     // Force the browser's real storage API to fail, exercising rollback for an existing flag
     // and a newly inserted flag. Restore the API before asserting to avoid test contamination.
     {
-        let mut baseline = state.lock().unwrap();
+        let mut baseline = state.snapshot().await.unwrap();
         baseline.entry_flags.entries.retain(|entry| entry.id != 2);
-        rssr_infra::application_adapters::browser::state::save_entry_flags_slice(
-            &baseline.entry_flags,
-        )
-        .unwrap();
+        seed_state(baseline).await;
     }
-    let storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
-    let persisted_before = storage.get_item(ENTRY_FLAGS_STORAGE_KEY).unwrap();
+    let persisted_before = browser_storage::committed_slice(ENTRY_FLAGS_STORAGE_KEY);
     js_sys::eval("globalThis.__rssrSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function() { throw new DOMException('test quota', 'QuotaExceededError'); };").unwrap();
     let failed = entries.set_read(1, true).await;
     let failed_new = entries.set_read(2, true).await;
@@ -357,7 +350,7 @@ async fn reader_metadata_and_global_unread_counts_survive_failed_flag_writes() {
     assert!(failed_new.is_err());
     assert!(failed_star.is_err());
     assert!(failed_new_star.is_err());
-    assert_eq!(storage.get_item(ENTRY_FLAGS_STORAGE_KEY).unwrap(), persisted_before);
+    assert_eq!(browser_storage::committed_slice(ENTRY_FLAGS_STORAGE_KEY), persisted_before);
     assert!(!entries.get_entry_record(1).await.unwrap().unwrap().is_read);
     assert!(!entries.get_entry_record(2).await.unwrap().unwrap().is_read);
     assert!(!entries.get_entry_record(1).await.unwrap().unwrap().is_starred);
@@ -466,7 +459,7 @@ async fn browser_bulk_read_matches_sqlite_cases_and_rolls_back_failed_storage() 
             starred_at: None,
         })
         .collect();
-    let state = Arc::new(Mutex::new(browser));
+    let state = seed_state(browser).await;
     let entries = BrowserEntryRepository::new(state.clone());
     for (query, expected) in bulk_cases::cases() {
         let preview = entries.preview_mark_read(&query).await.unwrap();
@@ -481,15 +474,15 @@ async fn browser_bulk_read_matches_sqlite_cases_and_rolls_back_failed_storage() 
         MarkReadOutcome::SelectionChanged { .. }
     ));
     let fresh = entries.preview_mark_read(&EntryQuery::default()).await.unwrap();
-    let before = serde_json::to_value(&state.lock().unwrap().entry_flags).unwrap();
-    js_sys::eval("globalThis.__bulkSet = Storage.prototype.setItem; globalThis.__bulkWrites = 0; Storage.prototype.setItem = function(k,v) { if(k==='rssr-web-entry-flags-v1'){globalThis.__bulkWrites++;throw new DOMException('quota','QuotaExceededError');}return globalThis.__bulkSet.call(this,k,v); };").unwrap();
+    let before = serde_json::to_value(&state.snapshot().await.unwrap().entry_flags).unwrap();
+    js_sys::eval("globalThis.__bulkSet = Storage.prototype.setItem; globalThis.__bulkWrites = 0; Storage.prototype.setItem = function(k,v) { if(k.startsWith('rssr-web-entry-flags-v1')){globalThis.__bulkWrites++;throw new DOMException('quota','QuotaExceededError');}return globalThis.__bulkSet.call(this,k,v); };").unwrap();
     let failed = entries.mark_read_if_unchanged(&fresh).await;
     let writes = js_sys::eval("globalThis.__bulkWrites").unwrap().as_f64().unwrap();
     js_sys::eval("Storage.prototype.setItem=globalThis.__bulkSet;delete globalThis.__bulkSet;delete globalThis.__bulkWrites;").unwrap();
     assert!(failed.is_err());
     assert_eq!(writes, 1.0);
-    assert_eq!(serde_json::to_value(&state.lock().unwrap().entry_flags).unwrap(), before);
-    js_sys::eval("globalThis.__bulkSet = Storage.prototype.setItem;globalThis.__bulkWrites=0;Storage.prototype.setItem=function(k,v){if(k==='rssr-web-entry-flags-v1')globalThis.__bulkWrites++;return globalThis.__bulkSet.call(this,k,v);};").unwrap();
+    assert_eq!(serde_json::to_value(&state.snapshot().await.unwrap().entry_flags).unwrap(), before);
+    js_sys::eval("globalThis.__bulkSet = Storage.prototype.setItem;globalThis.__bulkWrites=0;Storage.prototype.setItem=function(k,v){if(k.startsWith('rssr-web-entry-flags-v1'))globalThis.__bulkWrites++;return globalThis.__bulkSet.call(this,k,v);};").unwrap();
     let result = entries.mark_read_if_unchanged(&fresh).await;
     let writes = js_sys::eval("globalThis.__bulkWrites").unwrap().as_f64().unwrap();
     js_sys::eval("Storage.prototype.setItem=globalThis.__bulkSet;delete globalThis.__bulkSet;delete globalThis.__bulkWrites;").unwrap();

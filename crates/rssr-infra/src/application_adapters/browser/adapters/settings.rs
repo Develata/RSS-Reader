@@ -1,33 +1,29 @@
-use std::sync::{Arc, Mutex};
-
+use super::shared::map_store_error;
+use crate::application_adapters::browser::state::{BrowserStore, Changes};
 use rssr_domain::{SettingsRepository, UserSettings};
-
-use crate::application_adapters::browser::state::{BrowserState, save_state_snapshot};
-
-use super::shared::map_persistence_error;
 
 #[derive(Clone)]
 pub struct BrowserSettingsRepository {
-    state: Arc<Mutex<BrowserState>>,
+    store: BrowserStore,
 }
-
 impl BrowserSettingsRepository {
-    pub fn new(state: Arc<Mutex<BrowserState>>) -> Self {
-        Self { state }
+    pub fn new(store: BrowserStore) -> Self {
+        Self { store }
     }
 }
-
 #[async_trait::async_trait]
 impl SettingsRepository for BrowserSettingsRepository {
     async fn load(&self) -> rssr_domain::Result<UserSettings> {
-        Ok(self.state.lock().expect("lock state").core.settings.clone())
+        self.store.read(|state| Ok(state.core.settings.clone())).await.map_err(map_store_error)
     }
-
     async fn save(&self, settings: &UserSettings) -> rssr_domain::Result<()> {
-        {
-            let mut state = self.state.lock().expect("lock state");
-            state.core.settings = settings.clone();
-            save_state_snapshot(&state).map_err(map_persistence_error)
-        }
+        let settings = settings.clone();
+        self.store
+            .update(move |state| {
+                state.core.settings = settings;
+                Ok(((), Changes::CORE))
+            })
+            .await
+            .map_err(map_store_error)
     }
 }

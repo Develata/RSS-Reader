@@ -1,3 +1,4 @@
+const { installStorageHelpers } = require('./storage_helpers.cjs');
 // Run against scripts/run_web_spa_regression_server.sh with an installed Playwright.
 // NODE_PATH may point to the existing Playwright installation; no product dependency is added.
 const { chromium } = require('playwright');
@@ -12,22 +13,23 @@ const check = (name, data = {}) => { results.push({ name, ...data }); console.lo
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN });
   try {
     const context = await browser.newContext({ viewport: { width: 360, height: 800 }, timezoneId: 'America/New_York' });
+    await installStorageHelpers(context);
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     await page.goto(`${base}/__codex/setup-local-auth?seed=reader-demo&next=/entries/2`);
     await page.locator('[data-slot="reader-title"]').filter({ hasText: 'Demo Entry Two' }).waitFor();
     const long = '长来源LongUnbrokenSource'.repeat(25);
     await page.evaluate(({long}) => {
-      const key='rssr-web-state-v1', state=JSON.parse(localStorage.getItem(key));
-      state.settings.archive_after_months=0;
-      state.settings.refresh_interval_minutes=10080;
-      state.feeds[0].title=long;
-      state.feeds[0].last_success_at='2026-03-08 07:00:00.0 +00:00:00';
-      state.entries[0].published_at='2026-03-08 06:59:59.0 +00:00:00';
-      state.entries[1].published_at='2026-03-08 07:00:00.0 +00:00:00';
-      state.entries[1].author='长作者Author'.repeat(35);
-      state.entries[1].url='https://example.com/'+ 'long-url'.repeat(80);
-      localStorage.setItem(key,JSON.stringify(state));
+      return window.__rssrTestMutateSlice('rssr-web-state-v1', state => {
+        state.settings.archive_after_months=0;
+        state.settings.refresh_interval_minutes=10080;
+        state.feeds[0].title=long;
+        state.feeds[0].last_success_at='2026-03-08 07:00:00.0 +00:00:00';
+        state.entries[0].published_at='2026-03-08 06:59:59.0 +00:00:00';
+        state.entries[1].published_at='2026-03-08 07:00:00.0 +00:00:00';
+        state.entries[1].author='长作者Author'.repeat(35);
+        state.entries[1].url='https://example.com/'+ 'long-url'.repeat(80);
+      });
     }, {long});
     await page.reload();
     await page.getByText('发布时间：2026-03-08 03:00 UTC-04:00', {exact:true}).waitFor();
@@ -78,7 +80,7 @@ const check = (name, data = {}) => { results.push({ name, ...data }); console.lo
     await page.locator('[data-field="show-archived"]').click();
     assert.equal((await count.textContent()).trim(),'· 1');
     check('列表标未读更新权威计数，搜索及归档筛选不改变计数');
-    await page.evaluate(()=>{globalThis.savedSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='rssr-web-entry-flags-v1')throw new DOMException('test quota','QuotaExceededError');return savedSetItem.call(this,key,value);};});
+    await page.evaluate(()=>{globalThis.savedSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key.startsWith('rssr-web-entry-flags-v1'))throw new DOMException('test quota','QuotaExceededError');return savedSetItem.call(this,key,value);};});
     const unreadButton=page.locator('[data-action="mark-read"]').filter({hasText:'标已读'}).first();
     await unreadButton.click();
     await page.locator('[data-state="error"]').first().waitFor();
@@ -93,10 +95,10 @@ const check = (name, data = {}) => { results.push({ name, ...data }); console.lo
     check('同一会话展示 DST 前后两个不同偏移');
     // Re-seed missing metadata in storage, reload the app to exercise direct reader loading.
     await page.evaluate(()=>{
-      const key='rssr-web-state-v1',state=JSON.parse(localStorage.getItem(key));
-      state.feeds[0].title=null;
-      state.entries[0].author='   ';state.entries[0].published_at=null;state.entries[0].url=null;
-      localStorage.setItem(key,JSON.stringify(state));
+      return window.__rssrTestMutateSlice('rssr-web-state-v1', state => {
+        state.feeds[0].title=null;
+        state.entries[0].author='   ';state.entries[0].published_at=null;state.entries[0].url=null;
+      });
     });
     await page.reload();
     await page.getByText('来源：https://example.com/feed.xml',{exact:true}).waitFor();
@@ -105,7 +107,7 @@ const check = (name, data = {}) => { results.push({ name, ...data }); console.lo
     assert.equal(await page.locator('[data-slot="reader-meta"]').count(),2);
     check('缺标题回退订阅 URL；空作者和缺原文隐藏；缺时间显示未知');
     // An orphan can still be read when feed metadata is not obtainable.
-    await page.evaluate(()=>{const key='rssr-web-state-v1',state=JSON.parse(localStorage.getItem(key));state.feeds=[];localStorage.setItem(key,JSON.stringify(state));});
+    await page.evaluate(()=>{return window.__rssrTestMutateSlice('rssr-web-state-v1', state => {state.feeds=[];});});
     await page.reload();
     await page.getByText('来源：未知来源',{exact:true}).waitFor();
     await page.getByText('Demo Entry One body.',{exact:true}).waitFor();
@@ -119,14 +121,15 @@ const check = (name, data = {}) => { results.push({ name, ...data }); console.lo
     ]) {
       const ctx=await browser.newContext({viewport:{width:360,height:800},timezoneId});
       if(fail) await ctx.addInitScript(()=>{Date.prototype.getTimezoneOffset=()=>NaN;});
+      await installStorageHelpers(ctx);
       const pg=await ctx.newPage();pg.setDefaultTimeout(15000);
       await pg.goto(`${base}/__codex/setup-local-auth?seed=reader-demo&next=/entries/2`);
       await pg.getByText('Demo Entry Two',{exact:true}).waitFor();
       await pg.evaluate(()=>{
-        const key='rssr-web-state-v1',state=JSON.parse(localStorage.getItem(key));
-        state.settings.archive_after_months=0;
-        for(const entry of state.entries)entry.published_at='2026-03-01 00:15:00.0 +00:00:00';
-        localStorage.setItem(key,JSON.stringify(state));
+        return window.__rssrTestMutateSlice('rssr-web-state-v1', state => {
+          state.settings.archive_after_months=0;
+          for(const entry of state.entries)entry.published_at='2026-03-01 00:15:00.0 +00:00:00';
+        });
       });
       await pg.reload();
       await pg.getByText(`发布时间：${full}`,{exact:true}).waitFor();

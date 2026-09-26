@@ -116,12 +116,14 @@
 [data-slot="app-nav-search-input"]:focus-visible {
   outline: 2px solid var(--focus-ring-color);
 }
-/* A persisted narrow sidebar theme can leave only a few pixels for the
- * search field. Keep the input readable when the nav itself is narrow. */
-@container (max-width: 280px) {
+/* Keep the original 280px search layout budget plus the collapse control's
+ * 48px reservation; otherwise mobile search shrinks before this row can wrap. */
+@container (max-width: 328px) {
   [data-layout="app-nav-topline"] { flex-wrap: wrap; }
   [data-layout="app-nav-topline"] > [data-layout="app-nav-search"] {
     flex: 1 0 100%;
+    /* The toggle occupies the first row only; give the search row that space back. */
+    margin-right: -48px;
   }
 }
 /* Feedback stays outside layout: a finishing/error batch must not move Reader text. */

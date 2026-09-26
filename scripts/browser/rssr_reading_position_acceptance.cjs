@@ -1,3 +1,4 @@
+const { installStorageHelpers } = require('./storage_helpers.cjs');
 // bun scripts/browser/rssr_reading_position_acceptance.cjs
 // Reuses the SPA regression server and installed Playwright (NODE_PATH / CHROME_BIN).
 const { chromium } = require('playwright');
@@ -9,6 +10,7 @@ const base = process.env.STATIC_BASE || 'http://127.0.0.1:8099';
   try {
     for (const width of [360, 1280]) {
       const page = await browser.newPage({ viewport: { width, height: 800 } });
+      await installStorageHelpers(page.context());
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
       page.setDefaultTimeout(15000);
@@ -19,18 +21,16 @@ const base = process.env.STATIC_BASE || 'http://127.0.0.1:8099';
       const y = () => page.evaluate(() => scrollY);
       await page.goto(`${base}/__codex/setup-local-auth?seed=reader-demo&next=/entries/1`);
       await ready();
-      await page.evaluate(() => {
-        const key = 'rssr-web-state-v1';
-        const state = JSON.parse(localStorage.getItem(key));
-        state.settings.archive_after_months = 0;
-        localStorage.setItem(key, JSON.stringify(state));
-        const contentKey = 'rssr-web-entry-content-v1';
-        const content = JSON.parse(localStorage.getItem(contentKey));
-        for (const entry of content.entries) {
-          entry.content_html = Array.from({ length: 2000 }, (_, i) =>
-            `<p>Block ${i}: ${'Reading position performance. '.repeat(12)}</p>`).join('');
-        }
-        localStorage.setItem(contentKey, JSON.stringify(content));
+      await page.evaluate(async () => {
+        await window.__rssrTestMutateSlice('rssr-web-state-v1', state => {
+          state.settings.archive_after_months = 0;
+        });
+        await window.__rssrTestMutateSlice('rssr-web-entry-content-v1', content => {
+          for (const entry of content.entries) {
+            entry.content_html = Array.from({ length: 2000 }, (_, i) =>
+              `<p>Block ${i}: ${'Reading position performance. '.repeat(12)}</p>`).join('');
+          }
+        });
       });
       await page.goto(`${base}/entries`);
       await page.locator('a[href="/entries/1"]').first().click();

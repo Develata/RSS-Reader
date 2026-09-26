@@ -61,11 +61,6 @@ pub struct PersistedEntryIndex {
     pub updated_at: OffsetDateTime,
 }
 
-pub struct LoadedState {
-    pub state: BrowserState,
-    pub warning: Option<String>,
-}
-
 pub type PersistedAppStateSlice = AppStateSnapshot;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

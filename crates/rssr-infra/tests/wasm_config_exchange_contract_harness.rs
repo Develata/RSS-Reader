@@ -10,16 +10,20 @@ use rssr_infra::application_adapters::browser::{
         BrowserSettingsRepository,
     },
     state::{
-        APP_STATE_STORAGE_KEY, BrowserState, ENTRY_CONTENT_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY,
-        LoadedState, PersistedAppStateSlice, PersistedEntryContent, PersistedEntryContentSlice,
-        PersistedEntryFlag, PersistedEntryFlagsSlice, PersistedEntryIndex, PersistedFeed,
-        PersistedState, STORAGE_KEY, load_state,
+        BrowserState, BrowserStore, PersistedAppStateSlice, PersistedEntryContent,
+        PersistedEntryContentSlice, PersistedEntryFlag, PersistedEntryFlagsSlice,
+        PersistedEntryIndex, PersistedFeed, PersistedState,
     },
 };
 use time::OffsetDateTime;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+#[path = "support/browser_storage.rs"]
+#[allow(dead_code)]
+mod browser_storage;
+use browser_storage::{clear_browser_state_storage, persisted_state, seed_state};
 
 #[derive(Default)]
 struct MemoryRemoteConfigStore {
@@ -44,17 +48,6 @@ struct FixedClock;
 impl ClockPort for FixedClock {
     fn now_utc(&self) -> OffsetDateTime {
         OffsetDateTime::UNIX_EPOCH
-    }
-}
-
-fn clear_browser_state_storage() {
-    if let Some(storage) =
-        web_sys::window().and_then(|window| window.local_storage().ok()).flatten()
-    {
-        let _ = storage.remove_item(STORAGE_KEY);
-        let _ = storage.remove_item(APP_STATE_STORAGE_KEY);
-        let _ = storage.remove_item(ENTRY_FLAGS_STORAGE_KEY);
-        let _ = storage.remove_item(ENTRY_CONTENT_STORAGE_KEY);
     }
 }
 
@@ -108,7 +101,7 @@ fn sample_entry_content(id: i64, feed_id: i64, index: i64) -> PersistedEntryCont
     }
 }
 
-fn build_service(state: Arc<Mutex<BrowserState>>) -> ImportExportService {
+fn build_service(state: BrowserStore) -> ImportExportService {
     let entry_repository = Arc::new(BrowserEntryRepository::new(state.clone()));
     ImportExportService::new_with_app_state_cleanup_and_clock(
         Arc::new(BrowserFeedRepository::new(state.clone())),
@@ -130,7 +123,7 @@ async fn browser_config_exchange_export_json_captures_active_feeds_and_settings(
         custom_css: "[data-page=\"feeds\"] { gap: 8px; }".to_string(),
         ..UserSettings::default()
     };
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 2,
             feeds: vec![
@@ -141,7 +134,8 @@ async fn browser_config_exchange_export_json_captures_active_feeds_and_settings(
             ..PersistedState::default()
         },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let service = build_service(state);
 
     let raw = service.export_config_json().await.expect("export config json");
@@ -159,7 +153,7 @@ async fn browser_config_exchange_export_json_captures_active_feeds_and_settings(
 async fn browser_config_exchange_import_cleans_removed_feed_entries_and_last_opened_state() {
     clear_browser_state_storage();
 
-    let state = Arc::new(Mutex::new(BrowserState {
+    let state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 2,
             next_entry_id: 1,
@@ -184,8 +178,8 @@ async fn browser_config_exchange_import_cleans_removed_feed_entries_and_last_ope
             last_opened_feed_id: Some(2),
             ..PersistedAppStateSlice::default()
         },
-        ..BrowserState::default()
-    }));
+    })
+    .await;
     let service = build_service(state.clone());
 
     service
@@ -203,7 +197,7 @@ async fn browser_config_exchange_import_cleans_removed_feed_entries_and_last_ope
         .expect("import config package");
 
     {
-        let snapshot = state.lock().expect("lock state");
+        let snapshot = state.snapshot().await.expect("snapshot");
         assert_eq!(snapshot.core.feeds.len(), 2);
         assert!(
             snapshot.core.feeds.iter().find(|feed| feed.id == 2).expect("dropped feed").is_deleted
@@ -213,8 +207,7 @@ async fn browser_config_exchange_import_cleans_removed_feed_entries_and_last_ope
         assert_eq!(snapshot.app_state.last_opened_feed_id, None);
     }
 
-    let LoadedState { state: persisted, warning } = load_state();
-    assert!(warning.is_none());
+    let persisted = persisted_state().await;
     assert!(
         persisted.core.feeds.iter().find(|feed| feed.id == 2).expect("dropped feed").is_deleted
     );
@@ -229,7 +222,7 @@ async fn browser_config_exchange_import_cleans_removed_feed_entries_and_last_ope
 async fn browser_config_exchange_remote_pull_roundtrip_restores_feed_and_settings() {
     clear_browser_state_storage();
 
-    let export_state = Arc::new(Mutex::new(BrowserState {
+    let export_state = seed_state(BrowserState {
         core: PersistedState {
             next_feed_id: 1,
             feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
@@ -241,27 +234,27 @@ async fn browser_config_exchange_remote_pull_roundtrip_restores_feed_and_setting
             ..PersistedState::default()
         },
         ..BrowserState::default()
-    }));
+    })
+    .await;
     let export_service = build_service(export_state);
     let remote = Arc::new(MemoryRemoteConfigStore::default());
     export_service.push_remote_config(remote.as_ref()).await.expect("push remote config");
 
-    let import_state = Arc::new(Mutex::new(BrowserState::default()));
+    let import_state = seed_state(BrowserState::default()).await;
     let import_service = build_service(import_state.clone());
     let pulled = import_service.pull_remote_config(remote.as_ref()).await.expect("pull remote");
     assert!(pulled.found());
     assert_eq!(pulled.import.as_ref().expect("import outcome").imported_feed_count, 1);
 
     {
-        let snapshot = import_state.lock().expect("lock state");
+        let snapshot = import_state.snapshot().await.expect("snapshot");
         assert_eq!(snapshot.core.feeds.len(), 1);
         assert_eq!(snapshot.core.feeds[0].url, "https://example.com/feed.xml");
         assert_eq!(snapshot.core.settings.refresh_interval_minutes, 10);
         assert_eq!(snapshot.core.settings.custom_css, ".reader-shell { max-width: 72ch; }");
     }
 
-    let LoadedState { state: persisted, warning } = load_state();
-    assert!(warning.is_none());
+    let persisted = persisted_state().await;
     assert_eq!(persisted.core.feeds.len(), 1);
     assert_eq!(persisted.core.settings.refresh_interval_minutes, 10);
 

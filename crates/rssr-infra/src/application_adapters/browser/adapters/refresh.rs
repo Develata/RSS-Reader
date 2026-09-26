@@ -1,8 +1,3 @@
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-};
-
 use anyhow::{Context, Result};
 use reqwest::{StatusCode, header};
 use rssr_application::{
@@ -14,7 +9,7 @@ use rssr_application::{
 use crate::application_adapters::browser::{
     feed::{ParsedEntry, ParsedFeed, parse_feed, web_fetch_feed_response},
     now_utc,
-    state::{BrowserState, save_state_snapshot, upsert_entries},
+    state::{BrowserStore, Changes, upsert_entries},
 };
 
 use super::shared::map_persistence_error;
@@ -99,201 +94,124 @@ pub fn classify_browser_refresh_body(
     }
 }
 
-/// 批次状态放在 `Arc` 里而不是直接内嵌：本类型是 `Clone` 的，而克隆出来的副本
-/// 必须与原件共享同一个批次——否则一份克隆开着批次、另一份看到 `active == false`，
-/// 就会出现「以为推迟了其实立刻写」或反过来的错配。
+/// Feed commits are durable before returning their inserted count. The default batch hooks
+/// are no-ops, as on SQLite; no speculative shared snapshot is flushed on Drop.
 #[derive(Clone)]
 pub struct BrowserRefreshStore {
-    state: Arc<Mutex<BrowserState>>,
-    batch: Arc<RefreshWriteBatch>,
+    store: BrowserStore,
 }
-
-/// 一轮刷新的写入批次状态。
-///
-/// `localStorage` 只能整片覆盖：`save_state_snapshot` 每次都要把全部订阅、全部条目索引、
-/// 全部标记与**全部正文**重新序列化一遍写回去。逐个订阅提交时这份开销要乘以订阅数，
-/// 而且发生在主线程上——订阅一多，刷新期间整个页面就是卡住的。批次把它压回整轮一次。
-///
-/// 只用 `AtomicBool` 而不是再加一把锁：这个适配器只在 wasm 上编译，浏览器里是单线程执行，
-/// 这里不存在真正的竞争，用原子量只是为了能在 `&self` 上改。
-#[derive(Default)]
-struct RefreshWriteBatch {
-    /// 批次进行中：`commit` 只改内存，不落盘。
-    active: AtomicBool,
-    /// 批次内至少发生过一次 `commit`，`end_batch` 才需要真的写一次。
-    dirty: AtomicBool,
-}
-
 impl BrowserRefreshStore {
-    pub fn new(state: Arc<Mutex<BrowserState>>) -> Self {
-        Self { state, batch: Arc::new(RefreshWriteBatch::default()) }
-    }
-
-    /// 批次内累积过改动才落盘。
-    ///
-    /// 没有改动就不写：整轮所有订阅都返回 304 是常态，那种情况下不该白白整片重写一次全库。
-    ///
-    /// 写失败时把脏标记放回去。清标记发生在写之前，若不还原，这批「还在内存里、尚未落盘」的
-    /// 改动就再也没有机会被重试了——下一次冲刷会以为无事可做。
-    fn flush_if_dirty(&self) -> Result<()> {
-        if !self.batch.dirty.swap(false, Ordering::SeqCst) {
-            return Ok(());
-        }
-
-        let state = self.state.lock().expect("lock state");
-        save_state_snapshot(&state).inspect_err(|_| {
-            self.batch.dirty.store(true, Ordering::SeqCst);
-        })
+    pub fn new(store: BrowserStore) -> Self {
+        Self { store }
     }
 }
-
 #[async_trait::async_trait]
 impl RefreshStorePort for BrowserRefreshStore {
     async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
-        let state = self.state.lock().expect("lock state");
-        state
-            .core
-            .feeds
-            .iter()
-            .filter(|feed| !feed.is_deleted)
-            .map(|feed| {
-                Ok(RefreshTarget {
-                    feed_id: feed.id,
-                    url: rssr_domain::normalize_feed_url(
-                        &url::Url::parse(&feed.url).map_err(map_persistence_error)?,
-                    ),
-                    etag: feed.etag.clone(),
-                    last_modified: feed.last_modified.clone(),
-                })
+        self.store
+            .read(|state| {
+                state
+                    .core
+                    .feeds
+                    .iter()
+                    .filter(|feed| !feed.is_deleted)
+                    .map(refresh_target)
+                    .collect()
             })
-            .collect()
+            .await
     }
-
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
-        let state = self.state.lock().expect("lock state");
-        state
-            .core
-            .feeds
-            .iter()
-            .find(|feed| feed.id == feed_id && !feed.is_deleted)
-            .map(|feed| {
-                Ok(RefreshTarget {
-                    feed_id: feed.id,
-                    url: rssr_domain::normalize_feed_url(
-                        &url::Url::parse(&feed.url).map_err(map_persistence_error)?,
-                    ),
-                    etag: feed.etag.clone(),
-                    last_modified: feed.last_modified.clone(),
-                })
+        self.store
+            .read(move |state| {
+                state
+                    .core
+                    .feeds
+                    .iter()
+                    .find(|feed| feed.id == feed_id && !feed.is_deleted)
+                    .map(refresh_target)
+                    .transpose()
             })
-            .transpose()
+            .await
     }
-
     async fn commit(
         &self,
         feed_id: i64,
         commit: RefreshCommit,
     ) -> Result<rssr_application::RefreshCommitOutcome> {
-        {
-            let mut state = self.state.lock().expect("lock state");
-            let now = now_utc();
-            let feed = state
-                .core
-                .feeds
-                .iter_mut()
-                .find(|feed| feed.id == feed_id)
-                .context("订阅不存在")?;
-
-            // 在动内存之前就标脏。`RefreshCommit::Updated` 会先改完 feed 元数据再走
-            // `upsert_entries`，后者失败时带 `?` 返回——那时元数据已经改了。
-            // 把标脏放在末尾的话这份改动就不会被计入批次，`end_batch` 什么都不写，
-            // 内存与存储从此长期不一致。
-            let batching = self.batch.active.load(Ordering::SeqCst);
-            if batching {
-                self.batch.dirty.store(true, Ordering::SeqCst);
-            }
-
-            let mut inserted_count = 0;
-            match commit {
-                RefreshCommit::NotModified { metadata } => {
-                    feed.etag = metadata.etag;
-                    feed.last_modified = metadata.last_modified;
-                    feed.last_fetched_at = Some(now);
-                    feed.last_success_at = Some(now);
-                    feed.fetch_error = None;
-                    feed.updated_at = now;
-                }
-                RefreshCommit::Updated { update } => {
-                    if update.feed.title.is_some() {
-                        feed.title = update.feed.title;
-                    }
-                    if update.feed.site_url.is_some() {
-                        feed.site_url = update.feed.site_url.map(|url| url.to_string());
-                    }
-                    if update.feed.description.is_some() {
-                        feed.description = update.feed.description;
-                    }
-                    feed.etag = update.metadata.etag;
-                    feed.last_modified = update.metadata.last_modified;
-                    feed.last_fetched_at = Some(now);
-                    feed.last_success_at = Some(now);
-                    feed.fetch_error = None;
-                    feed.updated_at = now;
-                    inserted_count = upsert_entries(
-                        &mut state,
-                        feed_id,
-                        map_application_entries(update.feed.entries),
-                    )?;
-                }
-                RefreshCommit::Failed { failure } => {
-                    if let Some(metadata) = failure.metadata {
+        self.store
+            .update(move |state| {
+                let now = now_utc();
+                // Do not resurrect a feed removed while HTTP was in flight.
+                let feed = state
+                    .core
+                    .feeds
+                    .iter_mut()
+                    .find(|feed| feed.id == feed_id && !feed.is_deleted)
+                    .context("订阅不存在或已删除")?;
+                let mut inserted_count = 0;
+                let mut changes = Changes::CORE;
+                match commit {
+                    RefreshCommit::NotModified { metadata } => {
                         feed.etag = metadata.etag;
                         feed.last_modified = metadata.last_modified;
+                        feed.last_fetched_at = Some(now);
+                        feed.last_success_at = Some(now);
+                        feed.fetch_error = None;
+                        feed.updated_at = now;
                     }
-                    feed.last_fetched_at = Some(now);
-                    feed.fetch_error = Some(failure.message);
-                    feed.updated_at = now;
+                    RefreshCommit::Updated { update } => {
+                        if update.feed.title.is_some() {
+                            feed.title = update.feed.title;
+                        }
+                        if update.feed.site_url.is_some() {
+                            feed.site_url = update.feed.site_url.map(|url| url.to_string());
+                        }
+                        if update.feed.description.is_some() {
+                            feed.description = update.feed.description;
+                        }
+                        feed.etag = update.metadata.etag;
+                        feed.last_modified = update.metadata.last_modified;
+                        feed.last_fetched_at = Some(now);
+                        feed.last_success_at = Some(now);
+                        feed.fetch_error = None;
+                        feed.updated_at = now;
+                        if update.feed.entries.iter().any(|entry| {
+                            entry.content_html.is_some() || entry.content_text.is_some()
+                        }) {
+                            changes = changes | Changes::CONTENT;
+                        }
+                        inserted_count = upsert_entries(
+                            state,
+                            feed_id,
+                            map_application_entries(update.feed.entries),
+                        )?;
+                    }
+                    RefreshCommit::Failed { failure } => {
+                        if let Some(metadata) = failure.metadata {
+                            feed.etag = metadata.etag;
+                            feed.last_modified = metadata.last_modified;
+                        }
+                        feed.last_fetched_at = Some(now);
+                        feed.fetch_error = Some(failure.message);
+                        feed.updated_at = now;
+                    }
                 }
-            }
-
-            // 批次进行中就此返回：改动已经落在共享的内存状态里，页面那一侧照样读得到，
-            // 真正的整片写盘推迟到 `end_batch` 一次做完。
-            if batching {
-                return Ok(rssr_application::RefreshCommitOutcome { inserted_count });
-            }
-
-            save_state_snapshot(&state)?;
-            Ok(rssr_application::RefreshCommitOutcome { inserted_count })
-        }
+                Ok((rssr_application::RefreshCommitOutcome { inserted_count }, changes))
+            })
+            .await
     }
-
-    async fn begin_batch(&self) -> Result<()> {
-        // 先冲掉上一个没关掉的批次，再无条件开张。
-        //
-        // 冲刷失败也要开张：若在这里带着 `?` 返回而把 `active` 留在上一轮的 `true`，
-        // 存储就会停在「只改内存不落盘」的状态，而调用方拿到的只是一个开批次失败的错误，
-        // 根本看不出后续提交都被吞了。错误照样上报，但状态必须是确定的。
-        let flushed = self.flush_if_dirty();
-        self.batch.active.store(true, Ordering::SeqCst);
-        flushed
-    }
-
-    async fn end_batch(&self) -> Result<()> {
-        self.batch.active.store(false, Ordering::SeqCst);
-        self.flush_if_dirty()
-    }
-
-    /// 幂等：`end_batch` 正常收尾后批次守卫析构还会再调一次，那时两个标志都已清零，
-    /// `flush_if_dirty` 直接返回，不会产生第二次写入。
-    ///
-    /// 这条路径没有地方可以上报错误（它从 `Drop` 里被调用），因此落盘失败只能记日志。
-    /// 脏标记会被 `flush_if_dirty` 还原，下一轮刷新开张时还会再试一次。
-    fn abort_batch(&self) {
-        self.batch.active.store(false, Ordering::SeqCst);
-        if let Err(error) = self.flush_if_dirty() {
-            tracing::warn!(%error, "刷新批次被中断且落盘失败，本轮抓取的改动仍留在内存里");
-        }
-    }
+}
+fn refresh_target(
+    feed: &crate::application_adapters::browser::state::PersistedFeed,
+) -> Result<RefreshTarget> {
+    Ok(RefreshTarget {
+        feed_id: feed.id,
+        url: rssr_domain::normalize_feed_url(
+            &url::Url::parse(&feed.url).map_err(map_persistence_error)?,
+        ),
+        etag: feed.etag.clone(),
+        last_modified: feed.last_modified.clone(),
+    })
 }
 
 fn map_parsed_feed(parsed: ParsedFeed) -> ParsedFeedUpdate {

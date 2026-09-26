@@ -79,7 +79,7 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 
 `data-action="toggle-nav"` / `data-slot="app-nav-toggle"` 是顶栏最右侧的收起/展开按钮，`aria-expanded` 表示导航展开状态，`aria-controls="app-nav-content"` 指向内容区域。收起时只有箭头按钮可交互，刷新 live region 仍可向辅助技术报告结果。状态由 App shell 在本次运行内共享，跨页保留但不写入配置；收起关闭搜索模式但保留搜索词。Rust 负责显隐与状态，CSS 控制向左收拢后的 44px 占位和窄箭头外观。`AppNav` 实现集中于 `components/app_nav.rs`，原 `app::AppNav` 导出保持兼容。
 
-搜索输入框保持 shell 级状态；当持久化的旧版侧栏 CSS 把导航压窄时，导航行允许换行，输入框占满下一行，避免只露出极窄的一截。
+搜索输入框保持 shell 级状态；窄屏或持久化的旧版侧栏 CSS 把导航压窄时，导航行允许换行，输入框占满下一行。换行预算包含收起按钮预留的 48px，避免新增箭头把输入框挤窄。
 
 来源选择继续保留 `entry-filters-source-chip` selector 兼容用户主题，但视觉为带可见 checkbox 的换行选择行；选择区有纵向滚动上限，名称本身不省略。分页只渲染一份 `entry-pagination`，位于页面 panel 的同级，固定于视口下方并预留 safe-area / 内容末尾空间。
 
@@ -504,5 +504,11 @@ Web 使用 `_blank` 与 `rel="noopener noreferrer"`，不触发阅读状态重�
 ## 刷新实际新增计数
 
 RefreshStorePort.commit 返回 RefreshCommitOutcome.inserted_count；Updated.entry_count 保留解析条目数语义，新增 inserted_count 由存储实际插入结果提供，RefreshAllSummary 累加成功 Updated。批次 commit 的计数只有 end_batch 成功后才可发布；结束落盘失败沿用原逻辑把结果改为失败。SQLite索引/正文分库的既有部分失败边界不变。
+
+Web adapter 的每个 `commit` 在返回前完成持久化，批次 hooks 与 SQLite 一样为空操作；不再以共享的未提交内存状态延迟整轮写回。刷新只保存 core，以及存在正文更新时的 content；标记只保存 flags。一个订阅的索引与正文通过一次提交记录发布，写入失败不会计入成功新增数，已有成功订阅不回滚。
+
+所有 Web repository 通过 `BrowserStore` 协调同源标签页：Web Lock 内读取最新版本、应用操作、暂存变化片段，最后发布 `rssr-web-commit-v1`。每片使用固定两个槽位，版本未变化时复用内存，正常标记操作不重新解析或序列化正文。锁只覆盖本地事务，不覆盖 HTTP；排队超过 5 秒报错，调用者取消后不会补写排队操作。锁内序列化是保持读取版本到提交之间互斥的必要边界，不能套用旧的“锁外写盘”建议拆开事务。
+
+该协议属于 browser adapter，不改变 application/domain trait、命令、SQLite schema 或 `data-*` 接口。现有四片 JSON 的内容结构不变，但活跃存储键由提交记录的版本确定；外部工具不能再假定原键总是最新。初次打开验证并接入旧数据，损坏或不可访问时保留原值并报错。升级需重新加载旧标签页；当前没有跨标签主动重载 UI 的事件通道。
 
 host 的 RefreshAllExecutionOutcome 透传 inserted_count / total_count / failed_count，RefreshFeedExecutionOutcome 透传 inserted_count。shell区分成功、部分失败、全失败。成功3秒、错误6秒；单订阅页反馈通过 revision 与消息匹配避免旧定时器清除新结果。自动刷新静默、阅读页图标规则、RefreshFlight、批次收尾及稳定 data-* 接口均不变。

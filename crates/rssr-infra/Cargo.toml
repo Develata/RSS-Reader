@@ -36,7 +36,9 @@ sqlx = { version = "0.8", default-features = false, features = ["macros", "migra
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "stream"] }
-uuid = { version = "1", features = ["js"] }
+uuid = { version = "1", features = ["js", "v4"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["Location", "Storage", "Window"] }
 
 [dev-dependencies]

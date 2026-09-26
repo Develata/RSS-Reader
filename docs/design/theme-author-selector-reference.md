@@ -12,6 +12,8 @@
 
 > 顶栏交互更新：`app-nav-shell[data-state]` 使用 `normal` / `search` / `collapsed`。展开时可用 R；收起时仅保留 `data-action="toggle-nav"` / `data-slot="app-nav-toggle"` 窄箭头，触控范围至少 44×44px。R 的 `activate-home` 包含显式用户刷新，不能替换为 `data-nav="entries"`。旧 show/hide-top-nav、brand-name、reader-toolbar 已退役。来源 `entry-filters-source-chip` 现在是完整名称换行选择行；请勿用 ellipsis 隐藏核心名称。`entry-pagination` 是页面 panel 的同级固定控件，主题应保留底部内容空间。完整行为见 [命令参考](./frontend-command-reference.md#home搜索与阅读交互)。
 
+窄导航中的搜索输入应可换到下一行；默认容器断点为 328px，包含收起按钮的 48px 预留；搜索换行后使用首行箭头下方的完整行宽。主题覆盖导航宽度时应一起保留输入宽度和箭头触控空间，无新增选择器接口。
+
 文章列表每篇文章的「标已读 / 收藏」（`entry-card-actions` 内的 `.button[data-slot="entry-card-action"]`）默认是描边胶囊，只取 `--ink` / `--muted` / `--line` / `--line-soft`，特异性高于 `.button[data-variant="secondary"]`；主题要改它们请直接使用这条 selector。收起的筛选开关 `entry-controls-toggle` 内含可见文字 `entry-controls-toggle-label`。
 
 内置 Atlas Sidebar 保留桌面侧栏，但为共用的五图标 Reader 行预留 280px；移动端顶栏仍保持 sticky。目录名称和计数按行换行，避免极端来源名挤掉计数。

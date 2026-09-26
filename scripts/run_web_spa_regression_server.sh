@@ -212,20 +212,26 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
     const entryFlags = {json.dumps(entry_flags, ensure_ascii=False)};
     const entryContent = {json.dumps(entry_content, ensure_ascii=False)};
 
-    function main() {{
+    async function main() {{
       localStorage.setItem(AUTH_CONFIG_KEY, authConfig);
       sessionStorage.setItem(AUTH_SESSION_KEY, sessionToken);
       if (coreState && appState && entryFlags && entryContent) {{
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(coreState));
-        localStorage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify(appState));
-        localStorage.setItem(ENTRY_FLAGS_STORAGE_KEY, JSON.stringify(entryFlags));
-        localStorage.setItem(ENTRY_CONTENT_STORAGE_KEY, JSON.stringify(entryContent));
+        await navigator.locks.request("rssr-browser-state-v1", () => {{
+          localStorage.removeItem("rssr-web-commit-v1");
+          for (const key of [STORAGE_KEY, APP_STATE_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY, ENTRY_CONTENT_STORAGE_KEY]) {{
+            localStorage.removeItem(key + "-next");
+          }}
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(coreState));
+          localStorage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify(appState));
+          localStorage.setItem(ENTRY_FLAGS_STORAGE_KEY, JSON.stringify(entryFlags));
+          localStorage.setItem(ENTRY_CONTENT_STORAGE_KEY, JSON.stringify(entryContent));
+        }});
       }}
       location.replace(nextPath);
     }}
 
     try {{
-      main();
+      main().catch(error => {{ document.body.textContent = String(error); }});
     }} catch (error) {{
       document.body.innerHTML = `<pre>${{String(error)}}</pre>`;
     }}
@@ -309,16 +315,20 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
       }
     }
 
-    const result = {
-      auth_config_present: localStorage.getItem(keys[0]) != null,
-      auth_session_present: sessionStorage.getItem(keys[1]) != null,
-      core: safeParse(localStorage.getItem(keys[2])),
-      app_state: safeParse(localStorage.getItem(keys[3])),
-      entry_flags: safeParse(localStorage.getItem(keys[4])),
-      entry_content: safeParse(localStorage.getItem(keys[5])),
-    };
-
-    document.getElementById("dump").textContent = JSON.stringify(result, null, 2);
+    navigator.locks.request("rssr-browser-state-v1", () => {
+      const commit = safeParse(localStorage.getItem("rssr-web-commit-v1"));
+      const slice = (index) => {
+        const key = keys[index + 2] + (commit?.revisions?.[index] % 2 === 1 ? "-next" : "");
+        return safeParse(localStorage.getItem(key));
+      };
+      const result = {
+        auth_config_present: localStorage.getItem(keys[0]) != null,
+        auth_session_present: sessionStorage.getItem(keys[1]) != null,
+        commit,
+        core: slice(0), app_state: slice(1), entry_flags: slice(2), entry_content: slice(3),
+      };
+      document.getElementById("dump").textContent = JSON.stringify(result, null, 2);
+    });
   </script>
 </body>
 </html>"""
