@@ -50,7 +50,7 @@ cargo run -p rssr-web -- --print-password-hash adminadmin
 - **`rssr-application`** — 用例服务（`RefreshService`、`ReaderService`、`EntriesListService`、`ImportExportService`、`SubscriptionWorkflow` 等）。`composition.rs` 中的 `AppUseCases::compose(AppCompositionInput)` 用端口 trait（`FeedRefreshSourcePort`、`RefreshStorePort`、`OpmlCodecPort`、`ClockPort`、`AppStatePort`）组装全部服务，平台无关。
 - **`rssr-infra`** — 端口适配器，按编译目标二选一（`lib.rs` 中 `#[cfg(not(target_arch = "wasm32"))]` 门控）：
   - **原生（桌面/Android）**：sqlx SQLite，**索引库与正文库是两个独立数据库**（迁移分别在 `migrations/` 与 `migrations_content/`）；reqwest 抓取 + `BodyAssetLocalizer` 正文图片本地化；feed-rs/quick-xml 解析；OPML 编解码；WebDAV 配置同步。入口 `compose_native_sqlite_use_cases(index_pool, content_pool)`。
-  - **wasm32**：`application_adapters/browser/` 下的适配器包一个 `Arc<Mutex<BrowserState>>`（序列化到 `localStorage`）；`db`/`fetch`/`parser`/`config_sync` 模块在 wasm 上不编译。入口 `compose_browser_use_cases`。
+  - **wasm32**：`application_adapters/browser/` 下的适配器共用 `BrowserStore`，通过 Web Locks 协调 `localStorage` 四片数据，以单一提交头发布；缓存按版本同步，刷新逐订阅持久化，仅正文记录变化时写正文片。`db`/`fetch`/`parser`/`config_sync` 模块在 wasm 上不编译。入口 `compose_browser_use_cases`。
 - **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 与 `bootstrap/web.rs` 按平台选择组装并暴露 host capabilities（刷新、剪贴板、图片本地化、远程配置）；`ui/` 分 shell / commands / runtime；`pages/` 只调用 `AppServices`。
 - **`rssr-cli`** — 复用同一 application 层的自动化入口。
 - **`rssr-web`** — 仅用于 Web 部署的薄 axum 服务：Argon2 登录、HttpOnly 会话 cookie、静态包托管 + SPA 回退、`/feed-proxy` 服务端代抓（绕过浏览器 CORS）。桌面端、CLI、本地开发都不依赖它。

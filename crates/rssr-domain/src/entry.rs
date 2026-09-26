@@ -54,6 +54,7 @@ pub struct EntryContent {
     pub content_html: Option<String>,
     pub content_text: Option<String>,
     pub content_hash: Option<String>,
+    /// Last change to this content record (including its hash), not the last fetch time.
     pub updated_at: OffsetDateTime,
 }
 

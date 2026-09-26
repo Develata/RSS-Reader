@@ -22,6 +22,73 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 mod browser_storage;
 use browser_storage::{clear_browser_state_storage, persisted_state, seed_state};
 
+#[path = "support/refresh_content_cases.rs"]
+mod refresh_content_cases;
+
+#[wasm_bindgen_test]
+async fn browser_refresh_only_updates_changed_content_records() {
+    use rssr_infra::application_adapters::browser::adapters::BrowserEntryRepository;
+    let (state, store) = store_with_one_feed().await;
+    let entries = BrowserEntryRepository::new(state);
+    refresh_content_cases::verify_content_changes(&store, &entries, &entries, 1).await;
+}
+
+#[wasm_bindgen_test]
+async fn browser_refresh_bounds_streams_and_preserves_decoding_and_failures() {
+    use rssr_application::{FeedRefreshSourcePort, RefreshTarget};
+    use rssr_infra::application_adapters::browser::adapters::BrowserFeedRefreshSource;
+    let source = BrowserFeedRefreshSource::new(reqwest::Client::new());
+    let target = RefreshTarget {
+        feed_id: 1,
+        url: Url::parse("https://example.com/feed.xml").unwrap(),
+        etag: None,
+        last_modified: None,
+    };
+    for mode in ["exact", "header", "stream", "charset", "error", "not-modified"] {
+        js_sys::eval(&format!(r#"globalThis.__bodyMode = '{mode}';"#)).unwrap();
+        js_sys::eval(r#"
+            globalThis.__fetch = globalThis.fetch;
+            globalThis.fetch = async function(request) {
+                const limit = 8 * 1024 * 1024;
+                const mode = globalThis.__bodyMode;
+                const xml = '<rss version="2.0"><channel><title>Caf\u00e9</title><description>Feed</description></channel></rss>';
+                const prefix = mode === 'charset' ? Uint8Array.from(xml, ch => ch.charCodeAt(0)) : new TextEncoder().encode(xml);
+                let remaining = mode === 'exact' ? limit : mode === 'charset' ? prefix.length : limit + 1;
+                let first = true;
+                const stream = new ReadableStream({ pull(controller) {
+                    if (mode === 'error') { controller.error(new Error('body disconnected')); return; }
+                    if (!remaining) { controller.close(); return; }
+                    const chunk = new Uint8Array(Math.min(65536, remaining)).fill(32);
+                    if (first) { chunk.set(prefix); first = false; }
+                    remaining -= chunk.length;
+                    controller.enqueue(chunk);
+                }});
+                const headers = { 'Content-Type': mode === 'charset' ? 'application/rss+xml; charset=windows-1252' : 'application/rss+xml', 'ETag': 'test-body' };
+                if (mode === 'header') headers['Content-Length'] = String(limit + 1);
+                const response = new Response(mode === 'not-modified' ? null : stream, {status: mode === 'not-modified' ? 304 : 200, headers});
+                Object.defineProperty(response, 'url', {value: request.url});
+                return response;
+            };
+        "#).unwrap();
+        let result = source.refresh(&target).await;
+        js_sys::eval("globalThis.fetch = __fetch; delete globalThis.__fetch;").unwrap();
+        let result = result.unwrap();
+        match (mode, result) {
+            ("exact" | "charset", FeedRefreshSourceOutput::Updated(update)) => {
+                assert_eq!(update.feed.title.as_deref(), Some("Café"));
+            }
+            ("not-modified", FeedRefreshSourceOutput::NotModified(_)) => {}
+            ("header" | "stream" | "error", FeedRefreshSourceOutput::Failed(failure)) => {
+                assert_eq!(failure.metadata.unwrap().etag.as_deref(), Some("test-body"));
+                if mode != "error" {
+                    assert!(failure.message.contains("8 MiB"), "{}", failure.message);
+                }
+            }
+            (mode, other) => panic!("unexpected {mode} outcome: {other:?}"),
+        }
+    }
+}
+
 fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
     PersistedFeed {
         id,
@@ -808,4 +875,69 @@ async fn multiple_content_commits_preserve_all_feeds_and_report_write_volume() {
         serde_json::to_string(&state.core).unwrap().len()
             + serde_json::to_string(&state.entry_content).unwrap().len()
     );
+}
+
+#[wasm_bindgen_test]
+async fn repeated_content_commits_report_write_volume() {
+    let mut fixture = BrowserState::default();
+    fixture.core.next_feed_id = 12;
+    fixture.core.feeds =
+        (1..=12).map(|id| sample_feed(id, &format!("https://example.com/{id}"), false)).collect();
+    let store = BrowserRefreshStore::new(seed_state(fixture).await);
+    let commit = || RefreshCommit::Updated {
+        update: FeedRefreshUpdate {
+            metadata: RefreshHttpMetadata::default(),
+            feed: ParsedFeedUpdate {
+                title: None,
+                site_url: None,
+                description: None,
+                entries: (1..=10)
+                    .map(|index| {
+                        let mut entry = sample_entry(index);
+                        entry.content_html = Some(format!("<p>{}</p>", "x".repeat(2048)));
+                        entry.content_text = Some("x".repeat(2048));
+                        entry
+                    })
+                    .collect(),
+            },
+        },
+    };
+    for id in 1..=12 {
+        assert_eq!(store.commit(id, commit()).await.unwrap().inserted_count, 10);
+    }
+    for _ in 0..3 {
+        js_sys::eval(r#"
+            globalThis.__set = Storage.prototype.setItem;
+            globalThis.__writes = [];
+            Storage.prototype.setItem = function(k,v) { __writes.push([k,v.length]); return __set.call(this,k,v); };
+        "#).unwrap();
+        let start = js_sys::Date::now();
+        let mut results = Vec::new();
+        for id in 1..=12 {
+            results.push(store.commit(id, commit()).await);
+        }
+        let elapsed = js_sys::Date::now() - start;
+        let raw = js_sys::eval(
+            "Storage.prototype.setItem = __set; delete globalThis.__set; JSON.stringify(__writes)",
+        )
+        .unwrap()
+        .as_string()
+        .unwrap();
+        for result in results {
+            assert_eq!(result.unwrap().inserted_count, 0);
+        }
+        let writes: Vec<(String, usize)> = serde_json::from_str(&raw).unwrap();
+        assert_eq!(writes.len(), 24); // Core + head, with no unchanged body or flag writes.
+        assert!(!raw.contains("entry-content"));
+        assert!(!raw.contains("entry-flags"));
+        wasm_bindgen_test::console_log!(
+            "12 identical content commits, 120 articles (2 KiB HTML + 2 KiB text): {} ms, {} writes, {} chars written",
+            elapsed,
+            writes.len(),
+            writes.iter().map(|(_, len)| len).sum::<usize>()
+        );
+    }
+    let persisted = persisted_state().await;
+    assert_eq!(persisted.core.entries.len(), 120);
+    assert_eq!(persisted.entry_content.entries.len(), 120);
 }

@@ -2,14 +2,15 @@
 mod html;
 
 use anyhow::{Context, Result, bail};
-use futures_util::StreamExt;
 use reqwest::header;
 use rssr_application::{
     FeedRefreshUpdate, RefreshHttpMetadata, SubscriptionProbeOutcome, SubscriptionProbePort,
 };
 use url::Url;
 
-pub const MAX_SUBSCRIPTION_BYTES: usize = 8 * 1024 * 1024;
+use crate::feed_body::read_feed_text;
+
+pub const MAX_SUBSCRIPTION_BYTES: usize = crate::feed_body::MAX_FEED_RESPONSE_BYTES;
 
 #[derive(Clone)]
 pub struct HttpSubscriptionProbe {
@@ -63,27 +64,7 @@ impl SubscriptionProbePort for HttpSubscriptionProbe {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("")
             .to_string();
-        if response.content_length().is_some_and(|length| length > MAX_SUBSCRIPTION_BYTES as u64) {
-            bail!("订阅响应超过 8 MiB 上限。");
-        }
-        let mut bytes = Vec::new();
-        let stream = response.bytes_stream();
-        futures_util::pin_mut!(stream);
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.context("读取订阅响应失败")?;
-            if chunk.len() > MAX_SUBSCRIPTION_BYTES - bytes.len() {
-                bail!("订阅响应超过 8 MiB 上限。");
-            }
-            bytes.extend_from_slice(&chunk);
-        }
-        let charset = content_type.split(';').skip(1).find_map(|part| {
-            let (key, value) = part.trim().split_once('=')?;
-            key.eq_ignore_ascii_case("charset").then(|| value.trim().trim_matches('"'))
-        });
-        let encoding = charset
-            .and_then(|label| encoding_rs::Encoding::for_label(label.as_bytes()))
-            .unwrap_or(encoding_rs::UTF_8);
-        let (body, _, _) = encoding.decode(&bytes);
+        let body = read_feed_text(response).await?;
         classify_subscription_response(final_url, metadata, &content_type, &body)
     }
 }

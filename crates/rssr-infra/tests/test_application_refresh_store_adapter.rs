@@ -292,6 +292,56 @@ async fn sqlite_refresh_retries_index_after_write_failure_instead_of_accepting_3
 #[path = "support/refresh_count_cases.rs"]
 mod refresh_count_cases;
 
+#[path = "support/refresh_content_cases.rs"]
+mod refresh_content_cases;
+
+#[tokio::test]
+async fn sqlite_refresh_only_updates_changed_content_records() {
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let pool = backend.connect().await.unwrap();
+    migrate(&pool).await.unwrap();
+    let feeds = Arc::new(SqliteFeedRepository::new(pool.clone()));
+    let entries = Arc::new(SqliteEntryRepository::new(pool.clone()));
+    let feed = feeds
+        .upsert_subscription(&NewFeedSubscription {
+            url: Url::parse("https://example.com/content.xml").unwrap(),
+            title: None,
+            site_url: None,
+            folder: None,
+        })
+        .await
+        .unwrap();
+    let store = SqliteRefreshStore::new(feeds, entries.clone());
+    refresh_content_cases::verify_content_changes(
+        &store,
+        entries.as_ref(),
+        entries.as_ref(),
+        feed.id,
+    )
+    .await;
+
+    // Observe actual database writes rather than relying on a clock tick between refreshes.
+    sqlx::query("CREATE TRIGGER reject_redundant_update BEFORE UPDATE ON entry_contents BEGIN SELECT RAISE(FAIL, 'redundant content write'); END")
+        .execute(&pool).await.unwrap();
+    let content = entries.get_content(1).await.unwrap().unwrap();
+    assert_eq!(
+        entries
+            .upsert_contents(
+                feed.id,
+                &[rssr_infra::db::entry_repository::ResolvedEntryContent {
+                    entry_id: 1,
+                    dedup_key: "entry".into(),
+                    content_html: content.content_html,
+                    content_text: content.content_text,
+                    content_hash: content.content_hash,
+                }]
+            )
+            .await
+            .unwrap(),
+        0
+    );
+}
+
 #[tokio::test]
 async fn sqlite_counts_only_real_inserts_including_same_batch_duplicates() {
     let backend = NativeSqliteBackend::new("sqlite::memory:");

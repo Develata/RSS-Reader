@@ -56,7 +56,15 @@ impl FeedRefreshSourcePort for BrowserFeedRefreshSource {
             return Ok(output);
         }
 
-        let body = response.text().await.context("读取 feed 响应正文失败")?;
+        let body = match crate::feed_body::read_feed_text(response).await {
+            Ok(body) => body,
+            Err(error) => {
+                return Ok(FeedRefreshSourceOutput::Failed(RefreshFailure {
+                    message: format!("读取 feed 响应正文失败: {error:#}"),
+                    metadata: Some(metadata),
+                }));
+            }
+        };
 
         Ok(classify_browser_refresh_body(metadata, &body))
     }
@@ -175,16 +183,15 @@ impl RefreshStorePort for BrowserRefreshStore {
                         feed.last_success_at = Some(now);
                         feed.fetch_error = None;
                         feed.updated_at = now;
-                        if update.feed.entries.iter().any(|entry| {
-                            entry.content_html.is_some() || entry.content_text.is_some()
-                        }) {
-                            changes = changes | Changes::CONTENT;
-                        }
-                        inserted_count = upsert_entries(
+                        let outcome = upsert_entries(
                             state,
                             feed_id,
                             map_application_entries(update.feed.entries),
                         )?;
+                        inserted_count = outcome.inserted_count;
+                        if outcome.content_changed {
+                            changes = changes | Changes::CONTENT;
+                        }
                     }
                     RefreshCommit::Failed { failure } => {
                         if let Some(metadata) = failure.metadata {

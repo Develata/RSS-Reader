@@ -4,6 +4,7 @@ pub mod composition;
 pub mod config_sync;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod db;
+mod feed_body;
 mod feed_normalization;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod fetch;

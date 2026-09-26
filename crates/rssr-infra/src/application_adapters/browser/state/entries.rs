@@ -67,12 +67,18 @@ pub fn to_domain_content(
         .transpose()
 }
 
+#[derive(Debug, Default)]
+pub struct EntryUpsertOutcome {
+    pub inserted_count: u64,
+    pub content_changed: bool,
+}
+
 pub fn upsert_entries(
     state: &mut BrowserState,
     feed_id: i64,
     entries: Vec<ParsedEntry>,
-) -> anyhow::Result<u64> {
-    let mut inserted_count = 0;
+) -> anyhow::Result<EntryUpsertOutcome> {
+    let mut outcome = EntryUpsertOutcome::default();
     for entry in entries {
         let content_hash = hash_content(
             entry.content_html.as_deref(),
@@ -88,13 +94,13 @@ pub fn upsert_entries(
             .iter_mut()
             .find(|current| current.feed_id == feed_id && current.dedup_key == entry.dedup_key)
         {
-            existing.external_id = entry.external_id.clone();
+            existing.external_id = entry.external_id;
             if let Some(url) = entry.url.as_ref() {
                 existing.url = Some(url.to_string());
             }
-            existing.title = entry.title.clone();
-            existing.author = entry.author.clone();
-            existing.summary = entry.summary.clone();
+            existing.title = entry.title;
+            existing.author = entry.author;
+            existing.summary = entry.summary;
             existing.published_at = entry.published_at.or(existing.published_at);
             existing.updated_at_source = entry.updated_at_source.or(existing.updated_at_source);
             existing.has_content = existing.has_content || has_content;
@@ -102,17 +108,17 @@ pub fn upsert_entries(
             existing.id
         } else {
             state.core.next_entry_id += 1;
-            inserted_count += 1;
+            outcome.inserted_count += 1;
             let entry_id = state.core.next_entry_id;
             state.core.entries.push(PersistedEntryIndex {
                 id: entry_id,
                 feed_id,
-                external_id: entry.external_id.clone(),
-                dedup_key: entry.dedup_key.clone(),
+                external_id: entry.external_id,
+                dedup_key: entry.dedup_key,
                 url: entry.url.as_ref().map(ToString::to_string),
-                title: entry.title.clone(),
-                author: entry.author.clone(),
-                summary: entry.summary.clone(),
+                title: entry.title,
+                author: entry.author,
+                summary: entry.summary,
                 published_at: entry.published_at,
                 updated_at_source: entry.updated_at_source,
                 first_seen_at: now,
@@ -124,26 +130,44 @@ pub fn upsert_entries(
         };
 
         if has_content {
-            upsert_entry_content(
+            outcome.content_changed |= upsert_entry_content(
                 &mut state.entry_content,
                 PersistedEntryContent {
                     entry_id,
                     feed_id,
-                    content_html: entry.content_html.clone(),
-                    content_text: entry.content_text.clone(),
+                    content_html: entry.content_html,
+                    content_text: entry.content_text,
                     content_hash,
                     updated_at: now,
                 },
             );
         }
     }
-    Ok(inserted_count)
+    Ok(outcome)
 }
 
-fn upsert_entry_content(slice: &mut PersistedEntryContentSlice, content: PersistedEntryContent) {
+fn upsert_entry_content(
+    slice: &mut PersistedEntryContentSlice,
+    content: PersistedEntryContent,
+) -> bool {
     if let Some(existing) =
         slice.entries.iter_mut().find(|current| current.entry_id == content.entry_id)
     {
+        // Compare the merged values, not just the hash: absent fields preserve cached data,
+        // and older hashes do not distinguish every possible partition of HTML/text/title.
+        if existing.feed_id == content.feed_id
+            && existing.content_hash == content.content_hash
+            && content
+                .content_html
+                .as_ref()
+                .is_none_or(|html| existing.content_html.as_ref() == Some(html))
+            && content
+                .content_text
+                .as_ref()
+                .is_none_or(|text| existing.content_text.as_ref() == Some(text))
+        {
+            return false;
+        }
         existing.feed_id = content.feed_id;
         if content.content_html.is_some() {
             existing.content_html = content.content_html;
@@ -156,4 +180,5 @@ fn upsert_entry_content(slice: &mut PersistedEntryContentSlice, content: Persist
     } else {
         slice.entries.push(content);
     }
+    true
 }

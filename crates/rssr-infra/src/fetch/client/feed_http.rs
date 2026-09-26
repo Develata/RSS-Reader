@@ -3,12 +3,13 @@ use std::time::Duration;
 use anyhow::Context;
 use reqwest::header;
 
+use crate::feed_body::read_feed_text;
+
 use super::feed_response::{
     FeedResponseStatus, classify_feed_response_status, http_metadata_from_headers,
 };
 
-/// 单个 feed 的抓取上限。刷新全部订阅默认是串行的，没有超时的话一个不响应的源就能把整轮
-/// 刷新（以及后台自动刷新循环）永久挂住。
+/// 单个 feed 的抓取上限，包含响应体读取；一个不响应的源不能让整轮刷新永久等待。
 const FEED_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const FEED_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -56,7 +57,7 @@ impl FetchClient {
         let mut builder = self.inner.get(&request.url).header(
             header::ACCEPT,
             "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
-        );
+        ).timeout(FEED_REQUEST_TIMEOUT);
 
         if let Some(etag) = &request.etag {
             builder = builder.header(header::IF_NONE_MATCH, etag);
@@ -72,7 +73,7 @@ impl FetchClient {
         }
 
         let response = response.error_for_status().context("feed 抓取返回非成功状态")?;
-        let body = response.text().await.context("读取 feed 响应正文失败")?;
+        let body = read_feed_text(response).await?;
 
         Ok(FetchResult::Fetched { body, metadata })
     }

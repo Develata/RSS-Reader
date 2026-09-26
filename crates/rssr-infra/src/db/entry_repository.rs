@@ -190,6 +190,8 @@ impl SqliteEntryRepository {
         Ok(EntryUpsertOutcome { contents, inserted_count })
     }
 
+    /// Return the number of inserted or changed content records. An identical refresh keeps
+    /// the content timestamp; the feed and entry index still record the latest refresh.
     pub async fn upsert_contents(
         &self,
         feed_id: i64,
@@ -217,6 +219,10 @@ impl SqliteEntryRepository {
                     content_text = COALESCE(excluded.content_text, entry_contents.content_text),
                     content_hash = excluded.content_hash,
                     updated_at = excluded.updated_at
+                WHERE entry_contents.feed_id IS NOT excluded.feed_id
+                   OR entry_contents.content_html IS NOT COALESCE(excluded.content_html, entry_contents.content_html)
+                   OR entry_contents.content_text IS NOT COALESCE(excluded.content_text, entry_contents.content_text)
+                   OR entry_contents.content_hash IS NOT excluded.content_hash
                 "#,
             )
             .bind(content.entry_id)
