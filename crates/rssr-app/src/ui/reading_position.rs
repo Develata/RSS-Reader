@@ -28,6 +28,7 @@ pub(crate) fn remembered_page(key: &str) -> Option<u32> {
 struct Fact {
     kind: String,
     visit: u64,
+    sequence: u64,
     key: String,
     page: u32,
     now: f64,
@@ -38,6 +39,7 @@ struct Fact {
 #[derive(Serialize)]
 struct Command {
     visit: u64,
+    sequence: u64,
     anchor: Option<String>,
     y: Option<f64>,
     watch: bool,
@@ -61,6 +63,37 @@ fn target_y(point: &Point, actual_y: f64, anchor_top: Option<f64>, max_y: f64) -
         return 0.0;
     }
     y.clamp(0.0, max_y.max(0.0))
+}
+
+fn save_capture(fact: Fact) {
+    if fact.kind != "capture" {
+        return;
+    }
+    let mut point = fact.point;
+    if point.y <= 0.0 {
+        point.anchor = None;
+        point.offset = 0.0;
+    }
+    POSITIONS.with_borrow_mut(|positions| {
+        positions.insert(fact.key, Saved { page: fact.page, point });
+    });
+}
+
+// Android 系统返回键不经过 DOM 点击；先取得旧正文位置，再让宿主执行导航。
+#[cfg(target_os = "android")]
+pub(crate) async fn capture_current_position() {
+    let eval = document::eval(
+        "const event = new CustomEvent('rssr-capture-position', {detail:{fact:null}});\n\
+         document.dispatchEvent(event); return event.detail.fact;",
+    );
+    match tokio::time::timeout(std::time::Duration::from_millis(500), eval).await {
+        Ok(Ok(value)) => {
+            if let Ok(Some(fact)) = serde_json::from_value::<Option<Fact>>(value) {
+                save_capture(fact);
+            }
+        }
+        result => tracing::warn!(?result, "返回前读取位置失败，继续导航"),
+    }
 }
 
 pub(crate) fn use_reading_positions() {
@@ -102,6 +135,7 @@ pub(crate) fn use_reading_positions() {
                 }
                 let mut command = Command {
                     visit: fact.visit,
+                    sequence: fact.sequence,
                     anchor: None,
                     y: None,
                     watch: false,
@@ -121,15 +155,8 @@ pub(crate) fn use_reading_positions() {
                             fact.max_y,
                         ));
                     }
-                } else if fact.kind != "visit" {
-                    let mut point = fact.point;
-                    if point.y <= 0.0 {
-                        point.anchor = None;
-                        point.offset = 0.0;
-                    }
-                    POSITIONS.with_borrow_mut(|positions| {
-                        positions.insert(fact.key.clone(), Saved { page: fact.page, point });
-                    });
+                } else if fact.kind == "capture" {
+                    save_capture(fact);
                 }
                 if eval.send(command).is_err() {
                     break;
@@ -143,11 +170,40 @@ pub(crate) fn use_reading_positions() {
 mod tests {
     use super::*;
     #[test]
+    fn only_operation_capture_saves_position_and_top_clears_anchor() {
+        POSITIONS.with_borrow_mut(HashMap::clear);
+        let fact = |kind: &str, y| Fact {
+            kind: kind.into(),
+            visit: 1,
+            sequence: 1,
+            key: "reader:1".into(),
+            page: 1,
+            now: 0.0,
+            point: Point { y, anchor: Some("block:2:P:text".into()), offset: 120.0 },
+            max_y: 1000.0,
+            anchor_top: None,
+        };
+        save_capture(fact("capture", 600.0));
+        for kind in ["input", "layout", "visit", "context", "scroll"] {
+            save_capture(fact(kind, 0.0));
+        }
+        POSITIONS.with_borrow(|positions| {
+            assert_eq!(positions["reader:1"].point.y, 600.0);
+        });
+        save_capture(fact("capture", 0.0));
+        POSITIONS.with_borrow(|positions| {
+            assert_eq!(positions["reader:1"].point.y, 0.0);
+            assert!(positions["reader:1"].point.anchor.is_none());
+        });
+        POSITIONS.with_borrow_mut(HashMap::clear);
+    }
+    #[test]
     fn restoration_stops_on_input_navigation_context_change_and_deadline() {
         let active = Restoration { visit: 2, started: 100.0, point: Point::default() };
         let mut fact = Fact {
             kind: "layout".into(),
             visit: 2,
+            sequence: 1,
             key: "reader:1".into(),
             page: 1,
             now: 200.0,

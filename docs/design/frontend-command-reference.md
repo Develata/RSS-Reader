@@ -73,6 +73,8 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 
 返回列表的文章可有 `data-return-highlight="true"`，约 2 秒后移除；这是定位提示，不代表已读。`data-position-key` / `data-position-page` / `data-position-ready` / `data-position-entry` 是内部桥接字段，不作为用户主题接口。Web 页面刷新或应用结束清除位置，位置不参与配置交换。
 
+位置采集发生在操作边界：DOM 捕获阶段的控件点击、左右方向键切文、表单提交与浏览器 `popstate`。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
+
 `data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好被忽略，搜索词与文章筛选折叠偏好保留。`app-nav-shell` 的 `data-state` 现为 `normal` / `search`。
 
 搜索输入框保持 shell 级状态；当持久化的旧版侧栏 CSS 把导航压窄时，导航行允许换行，输入框占满下一行，避免只露出极窄的一截。

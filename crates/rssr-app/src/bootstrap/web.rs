@@ -1,5 +1,16 @@
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
+/// Register before Dioxus history so the old DOM still exists on browser back/forward.
+pub(crate) fn install_history_capture() {
+    if let Err(error) = js_sys::eval(
+        "window.addEventListener('popstate', () => {\n\
+         document.dispatchEvent(new Event('rssr-history-leave'));\n\
+         }, true);",
+    ) {
+        tracing::warn!(?error, "无法安装浏览器返回位置采集");
+    }
+}
+
 #[path = "web/exchange.rs"]
 mod exchange;
 #[path = "web/refresh.rs"]

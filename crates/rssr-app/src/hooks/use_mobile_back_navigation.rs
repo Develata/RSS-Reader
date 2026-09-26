@@ -11,6 +11,19 @@ use dioxus::mobile::{
 };
 use dioxus::prelude::*;
 
+#[cfg(target_os = "android")]
+thread_local! {
+    static BACK_CAPTURE_PENDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+#[cfg(target_os = "android")]
+struct BackCaptureGuard;
+#[cfg(target_os = "android")]
+impl Drop for BackCaptureGuard {
+    fn drop(&mut self) {
+        BACK_CAPTURE_PENDING.set(false);
+    }
+}
+
 #[cfg(any(target_os = "android", all(test, not(target_arch = "wasm32"))))]
 fn is_back_navigation_key(
     state: tao::event::ElementState,
@@ -33,6 +46,34 @@ fn is_back_navigation_key(
 
 /// The toolbar and native back key share history/fallback policy.
 pub(crate) fn navigate_back(navigator: Navigator, fallback_route: Option<AppRoute>) -> bool {
+    #[cfg(target_os = "android")]
+    {
+        if !navigator.can_go_back()
+            && !fallback_route
+                .as_ref()
+                .is_some_and(|target| history().current_route() != target.to_string())
+        {
+            return false;
+        }
+        if BACK_CAPTURE_PENDING.replace(true) {
+            return true;
+        }
+        let guard = BackCaptureGuard;
+        let route = history().current_route();
+        spawn(async move {
+            let _guard = guard;
+            crate::ui::reading_position::capture_current_position().await;
+            if history().current_route() == route {
+                finish_back_navigation(navigator, fallback_route);
+            }
+        });
+        true
+    }
+    #[cfg(not(target_os = "android"))]
+    finish_back_navigation(navigator, fallback_route)
+}
+
+fn finish_back_navigation(navigator: Navigator, fallback_route: Option<AppRoute>) -> bool {
     if navigator.can_go_back() {
         navigator.go_back();
         return true;

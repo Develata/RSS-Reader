@@ -14,6 +14,8 @@ mod imp;
 #[path = "bootstrap/web.rs"]
 mod imp;
 
+#[cfg(target_arch = "wasm32")]
+pub(crate) use imp::install_history_capture;
 pub use imp::{AppServices, ReaderNavigation};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
