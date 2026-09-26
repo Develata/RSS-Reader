@@ -18,8 +18,8 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
             }
             state.title = content.title;
             state.content_loaded = true;
-            state.body_text = content.body_text;
-            state.body_html = content.body_html;
+            state.body_text = content.body_text.into();
+            state.body_html = content.body_html.map(Into::into);
             state.source = content.source;
             state.author = content.author;
             state.original_url = content.original_url;

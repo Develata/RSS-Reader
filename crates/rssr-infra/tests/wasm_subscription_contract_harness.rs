@@ -347,17 +347,86 @@ async fn reader_metadata_and_global_unread_counts_survive_failed_flag_writes() {
     js_sys::eval("globalThis.__rssrSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function() { throw new DOMException('test quota', 'QuotaExceededError'); };").unwrap();
     let failed = entries.set_read(1, true).await;
     let failed_new = entries.set_read(2, true).await;
+    let failed_star = entries.set_starred(1, true).await;
+    let failed_new_star = entries.set_starred(2, true).await;
     js_sys::eval(
         "Storage.prototype.setItem = globalThis.__rssrSetItem; delete globalThis.__rssrSetItem;",
     )
     .unwrap();
     assert!(failed.is_err());
     assert!(failed_new.is_err());
+    assert!(failed_star.is_err());
+    assert!(failed_new_star.is_err());
     assert_eq!(storage.get_item(ENTRY_FLAGS_STORAGE_KEY).unwrap(), persisted_before);
     assert!(!entries.get_entry_record(1).await.unwrap().unwrap().is_read);
     assert!(!entries.get_entry_record(2).await.unwrap().unwrap().is_read);
+    assert!(!entries.get_entry_record(1).await.unwrap().unwrap().is_starred);
+    assert!(!entries.get_entry_record(2).await.unwrap().unwrap().is_starred);
+    entries.set_starred(1, true).await.unwrap();
+    entries.set_starred(2, true).await.unwrap();
+    assert!(entries.get_entry_record(1).await.unwrap().unwrap().is_starred);
+    assert!(entries.get_entry_record(2).await.unwrap().unwrap().is_starred);
     assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 2);
     clear_browser_state_storage();
+}
+
+#[wasm_bindgen_test]
+fn navigation_matches_list_order_with_missing_dates_ties_deleted_feeds_and_sparse_flags() {
+    use rssr_domain::EntryNavigation;
+    use rssr_infra::application_adapters::browser::{query, state::PersistedEntryFlag};
+    let mut state = BrowserState::default();
+    state.core.feeds =
+        (1..=3).map(|id| sample_feed(id, &format!("https://example.com/{id}"), id == 3)).collect();
+    state.core.entries = (1..=128)
+        .map(|id| {
+            let mut entry = sample_entry_index(id, id % 4 + 1, id);
+            let time = OffsetDateTime::UNIX_EPOCH + time::Duration::hours(id * 17 % 13);
+            entry.published_at = (id % 3 != 0).then_some(time);
+            entry.created_at = time;
+            entry
+        })
+        .rev()
+        .collect();
+    state.entry_flags.entries = (1..=128)
+        .filter(|id| id % 5 == 0)
+        .map(|id| PersistedEntryFlag {
+            id,
+            is_read: true,
+            is_starred: false,
+            read_at: None,
+            starred_at: None,
+        })
+        .collect();
+    let ordered = query::list_entries(&state, &EntryQuery::default());
+    for id in 0..=129 {
+        let expected = ordered
+            .iter()
+            .position(|entry| entry.id == id)
+            .map(|index| {
+                let current = &ordered[index];
+                let before = &ordered[..index];
+                let after = &ordered[index + 1..];
+                EntryNavigation {
+                    previous_unread_entry_id: before
+                        .iter()
+                        .rev()
+                        .find(|e| !e.is_read)
+                        .map(|e| e.id),
+                    next_unread_entry_id: after.iter().find(|e| !e.is_read).map(|e| e.id),
+                    previous_feed_entry_id: before
+                        .iter()
+                        .rev()
+                        .find(|e| e.feed_id == current.feed_id)
+                        .map(|e| e.id),
+                    next_feed_entry_id: after
+                        .iter()
+                        .find(|e| e.feed_id == current.feed_id)
+                        .map(|e| e.id),
+                }
+            })
+            .unwrap_or_default();
+        assert_eq!(query::reader_navigation(&state, id), expected, "article {id}");
+    }
 }
 
 #[path = "support/bulk_read_cases.rs"]

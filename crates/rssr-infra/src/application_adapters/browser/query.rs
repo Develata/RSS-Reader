@@ -183,37 +183,43 @@ pub fn reader_navigation(state: &BrowserState, current_entry_id: i64) -> EntryNa
         return EntryNavigation::default();
     };
 
-    let mut ordered_entries = state
-        .core
-        .entries
-        .iter()
-        .filter(|entry| active_feed_ids.contains(&entry.feed_id))
-        .collect::<Vec<_>>();
-    ordered_entries.sort_by(|left, right| compare_entry_order(left, right));
-    let mut navigation = EntryNavigation::default();
-
-    if let Some(index) = ordered_entries.iter().position(|entry| entry.id == current_entry_id) {
-        navigation.previous_unread_entry_id = ordered_entries[..index]
-            .iter()
-            .rev()
-            .find(|entry| !entry_flags.get(&entry.id).map(|flag| flag.is_read).unwrap_or(false))
-            .map(|entry| entry.id);
-        navigation.next_unread_entry_id = ordered_entries[index + 1..]
-            .iter()
-            .find(|entry| !entry_flags.get(&entry.id).map(|flag| flag.is_read).unwrap_or(false))
-            .map(|entry| entry.id);
-        navigation.previous_feed_entry_id = ordered_entries[..index]
-            .iter()
-            .rev()
-            .find(|entry| entry.feed_id == current_entry.feed_id)
-            .map(|entry| entry.id);
-        navigation.next_feed_entry_id = ordered_entries[index + 1..]
-            .iter()
-            .find(|entry| entry.feed_id == current_entry.feed_id)
-            .map(|entry| entry.id);
+    // 四个相邻目标只需要最近的前驱/后继，不必复制并排序全部文章。
+    // key 与列表排序相同；每个候选槽只保留该方向距离当前 key 最近的条目。
+    // 时间 O(entries + flags + feeds)，额外空间仅为现有 flags/feeds 查询索引。
+    let current_key = entry_index_sort_key(current_entry);
+    let mut previous_unread = None;
+    let mut next_unread = None;
+    let mut previous_feed = None;
+    let mut next_feed = None;
+    for entry in &state.core.entries {
+        if !active_feed_ids.contains(&entry.feed_id) || entry.id == current_entry_id {
+            continue;
+        }
+        let key = entry_index_sort_key(entry);
+        let previous = key > current_key;
+        let closer = |candidate: Option<(OffsetDateTime, i64)>| {
+            candidate
+                .is_none_or(|candidate| if previous { key < candidate } else { key > candidate })
+        };
+        if !entry_flags.get(&entry.id).is_some_and(|flag| flag.is_read) {
+            let slot = if previous { &mut previous_unread } else { &mut next_unread };
+            if closer(*slot) {
+                *slot = Some(key);
+            }
+        }
+        if entry.feed_id == current_entry.feed_id {
+            let slot = if previous { &mut previous_feed } else { &mut next_feed };
+            if closer(*slot) {
+                *slot = Some(key);
+            }
+        }
     }
-
-    navigation
+    EntryNavigation {
+        previous_unread_entry_id: previous_unread.map(|(_, id)| id),
+        next_unread_entry_id: next_unread.map(|(_, id)| id),
+        previous_feed_entry_id: previous_feed.map(|(_, id)| id),
+        next_feed_entry_id: next_feed.map(|(_, id)| id),
+    }
 }
 
 pub fn title_matches_search(title: &str, search_lower: &str) -> bool {

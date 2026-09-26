@@ -1,4 +1,5 @@
 use crate::bootstrap::ReaderNavigation;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ReaderPageLoadedContent {
@@ -20,8 +21,9 @@ pub(crate) struct ReaderPageState {
     /// 当前页面代表哪篇文章。异步加载结果回来时用它判断是否已经过期。
     pub(crate) current_entry_id: i64,
     pub(crate) title: String,
-    pub(crate) body_text: String,
-    pub(crate) body_html: Option<String>,
+    // 页面快照与按钮闭包共享不可变正文，切换标记不深拷贝整篇文章。
+    pub(crate) body_text: Arc<str>,
+    pub(crate) body_html: Option<Arc<str>>,
     pub(crate) source: String,
     pub(crate) author: Option<String>,
     pub(crate) original_url: Option<String>,
@@ -43,7 +45,7 @@ impl ReaderPageState {
             content_loaded: false,
             current_entry_id: 0,
             title: "正在加载…".to_string(),
-            body_text: String::new(),
+            body_text: Arc::from(""),
             body_html: None,
             source: String::new(),
             author: None,
@@ -73,7 +75,7 @@ impl ReaderPageState {
             self.status_tone = "info".to_string();
         }
         self.title = "正在加载…".to_string();
-        self.body_text.clear();
+        self.body_text = Arc::from("");
         self.body_html = None;
         self.source.clear();
         self.author = None;

@@ -23,11 +23,11 @@ impl ReaderPageSession {
     }
 
     pub(crate) fn previous_entry_target(self) -> Option<i64> {
-        previous_entry_target((self.state)().navigation_state)
+        previous_entry_target(self.state.read().navigation_state)
     }
 
     pub(crate) fn next_entry_target(self) -> Option<i64> {
-        next_entry_target((self.state)().navigation_state)
+        next_entry_target(self.state.read().navigation_state)
     }
 
     pub(crate) fn load(self) {
@@ -55,7 +55,7 @@ impl ReaderPageSession {
     pub(crate) fn toggle_read(self, via_shortcut: bool) {
         self.spawn_ui_command(UiCommand::Reader(ReaderCommand::ToggleRead {
             entry_id: self.entry_id,
-            currently_read: (self.state)().is_read,
+            currently_read: self.state.peek().is_read,
             via_shortcut,
         }));
     }
@@ -63,7 +63,7 @@ impl ReaderPageSession {
     pub(crate) fn toggle_starred(self, via_shortcut: bool) {
         self.spawn_ui_command(UiCommand::Reader(ReaderCommand::ToggleStarred {
             entry_id: self.entry_id,
-            currently_starred: (self.state)().is_starred,
+            currently_starred: self.state.peek().is_starred,
             via_shortcut,
         }));
     }
@@ -158,7 +158,7 @@ mod tests {
     fn older_load_cannot_replace_the_same_entry_after_round_trip() {
         let state = round_trip_with_delayed_result(loaded(1, "Original A"), true);
         assert_eq!(state.title, "Latest A");
-        assert_eq!(state.body_text, "Latest A body");
+        assert_eq!(state.body_text.as_ref(), "Latest A body");
     }
 
     #[test]
@@ -215,7 +215,7 @@ mod tests {
             let state = session.snapshot();
             assert!(state.is_read);
             assert_eq!(state.title, "Current");
-            assert_eq!(state.body_text, "Current body");
+            assert_eq!(state.body_text.as_ref(), "Current body");
         });
     }
 }

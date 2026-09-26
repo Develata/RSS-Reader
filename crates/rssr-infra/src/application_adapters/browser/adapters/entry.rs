@@ -26,6 +26,44 @@ impl BrowserEntryRepository {
     pub fn new(state: Arc<Mutex<BrowserState>>) -> Self {
         Self { state }
     }
+
+    /// 标记操作共用持久化边界；写失败只回滚本次条目，避免内存状态领先于存储。
+    fn update_flags(
+        &self,
+        entry_id: i64,
+        update: impl FnOnce(&mut PersistedEntryFlag),
+    ) -> rssr_domain::Result<()> {
+        let mut state =
+            self.state.lock().map_err(|error| DomainError::Persistence(error.to_string()))?;
+        let index = state.entry_flags.entries.iter().position(|entry| entry.id == entry_id);
+        let previous = index.map(|index| state.entry_flags.entries[index].clone());
+        let index = match index {
+            Some(index) => index,
+            None => {
+                if !state.core.entries.iter().any(|entry| entry.id == entry_id) {
+                    return Err(DomainError::NotFound);
+                }
+                state.entry_flags.entries.push(PersistedEntryFlag {
+                    id: entry_id,
+                    is_read: false,
+                    is_starred: false,
+                    read_at: None,
+                    starred_at: None,
+                });
+                state.entry_flags.entries.len() - 1
+            }
+        };
+        update(&mut state.entry_flags.entries[index]);
+        if let Err(error) = save_entry_flags_slice(&state.entry_flags) {
+            if let Some(previous) = previous {
+                state.entry_flags.entries[index] = previous;
+            } else {
+                state.entry_flags.entries.pop();
+            }
+            return Err(map_persistence_error(error));
+        }
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -102,70 +140,17 @@ impl EntryIndexRepository for BrowserEntryRepository {
     }
 
     async fn set_read(&self, entry_id: i64, is_read: bool) -> rssr_domain::Result<()> {
-        let mut state = self.state.lock().expect("lock state");
-        let now = now_utc();
-        let previous = state
-            .entry_flags
-            .entries
-            .iter()
-            .position(|entry| entry.id == entry_id)
-            .map(|index| (index, state.entry_flags.entries[index].clone()));
-
-        match state.entry_flags.entries.iter_mut().find(|entry| entry.id == entry_id) {
-            Some(entry) => {
-                entry.is_read = is_read;
-                entry.read_at = is_read.then_some(now);
-            }
-            None => {
-                if !state.core.entries.iter().any(|entry| entry.id == entry_id) {
-                    return Err(DomainError::NotFound);
-                }
-                state.entry_flags.entries.push(PersistedEntryFlag {
-                    id: entry_id,
-                    is_read,
-                    is_starred: false,
-                    read_at: is_read.then_some(now),
-                    starred_at: None,
-                });
-            }
-        }
-
-        if let Err(error) = save_entry_flags_slice(&state.entry_flags) {
-            match previous {
-                Some((index, entry)) => state.entry_flags.entries[index] = entry,
-                None => {
-                    state.entry_flags.entries.pop();
-                }
-            }
-            return Err(map_persistence_error(error));
-        }
-        Ok(())
+        self.update_flags(entry_id, |entry| {
+            entry.is_read = is_read;
+            entry.read_at = is_read.then(now_utc);
+        })
     }
 
     async fn set_starred(&self, entry_id: i64, is_starred: bool) -> rssr_domain::Result<()> {
-        let mut state = self.state.lock().expect("lock state");
-        let now = now_utc();
-
-        match state.entry_flags.entries.iter_mut().find(|entry| entry.id == entry_id) {
-            Some(entry) => {
-                entry.is_starred = is_starred;
-                entry.starred_at = is_starred.then_some(now);
-            }
-            None => {
-                if !state.core.entries.iter().any(|entry| entry.id == entry_id) {
-                    return Err(DomainError::NotFound);
-                }
-                state.entry_flags.entries.push(PersistedEntryFlag {
-                    id: entry_id,
-                    is_read: false,
-                    is_starred,
-                    read_at: None,
-                    starred_at: is_starred.then_some(now),
-                });
-            }
-        }
-
-        save_entry_flags_slice(&state.entry_flags).map_err(map_persistence_error)
+        self.update_flags(entry_id, |entry| {
+            entry.is_starred = is_starred;
+            entry.starred_at = is_starred.then(now_utc);
+        })
     }
 
     async fn delete_for_feed(&self, feed_id: i64) -> rssr_domain::Result<()> {
