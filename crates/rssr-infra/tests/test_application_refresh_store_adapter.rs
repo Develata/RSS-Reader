@@ -288,3 +288,27 @@ async fn sqlite_refresh_retries_content_after_write_failure_instead_of_accepting
 async fn sqlite_refresh_retries_index_after_write_failure_instead_of_accepting_304() {
     check_retry_after_failed_write(false).await;
 }
+
+#[path = "support/refresh_count_cases.rs"]
+mod refresh_count_cases;
+
+#[tokio::test]
+async fn sqlite_counts_only_real_inserts_including_same_batch_duplicates() {
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let pool = backend.connect().await.unwrap();
+    migrate(&pool).await.unwrap();
+    let feeds = Arc::new(SqliteFeedRepository::new(pool.clone()));
+    let entries = Arc::new(SqliteEntryRepository::new(pool));
+    let feed = feeds
+        .upsert_subscription(&NewFeedSubscription {
+            url: Url::parse("https://example.com/count").unwrap(),
+            site_url: None,
+            title: None,
+            folder: None,
+        })
+        .await
+        .unwrap();
+    let store = SqliteRefreshStore::new(feeds.clone(), entries);
+    refresh_count_cases::verify_counts(&store, feed.id).await;
+    assert_eq!(feeds.list_summaries().await.unwrap()[0].entry_count, 3);
+}

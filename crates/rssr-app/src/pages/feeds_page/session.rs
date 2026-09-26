@@ -75,6 +75,8 @@ impl FeedsPageSession {
                         *generation
                     })
                 });
+            let single_refresh =
+                matches!(command, UiCommand::Feeds(FeedsCommand::RefreshFeed { .. }));
             let task = execute(command);
             spawn(async move {
                 let intents = task.await;
@@ -84,6 +86,16 @@ impl FeedsPageSession {
                 }
                 for intent in intents.into_iter().filter_map(UiIntent::into_feeds_page_intent) {
                     self.dispatch_intent(intent);
+                }
+                if single_refresh {
+                    let (revision, message, failed) = self.state.with(|state| {
+                        (state.status_revision, state.status.clone(), state.status_tone == "error")
+                    });
+                    crate::ui::wait_for_refresh_feedback(std::time::Duration::from_secs(
+                        if failed { 6 } else { 3 },
+                    ))
+                    .await;
+                    self.dispatch_intent(FeedsPageIntent::ClearRefreshStatus { revision, message });
                 }
             });
         }

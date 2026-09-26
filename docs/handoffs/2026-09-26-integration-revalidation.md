@@ -78,3 +78,11 @@
 - 任务 4 在该提交上三方合并；保留批量已读与阅读位置的文档及浏览器契约，同时补充 test_bulk_read 的 NewFeedSubscription.site_url 构造。
 - 原任务 4 worktree / index 保留；本次主线集成 commit: pending。
 - 任务 4 全部通用检查退出 0；三个 wasm harness 为 6 / 19 / 3 项通过，Web 两视口及真实 HTTP 直连通过，CLI 0 / 预期1 / 0 和独立数据库断言符合预期。
+
+## 任务 5 集成
+
+- 任务 4 已本地提交 `3930289`，提交后主工作树干净，未 push。
+- 任务 5 已合入：保留订阅候选状态与刷新反馈 revision 清除逻辑；任务 4 的 apply_prepared_update 仍经统一 apply_source_output 取得真实 inserted_count。
+- 为新增插入计数测试补齐 site_url=None；SQLite 批量已读事务方法与刷新插入计数事务方法均保留。任务 5 原隔离工作树 / index 保留。
+- 任务 5 全部通用检查退出 0，最终 workspace 为 303 passed / 2 ignored；三个 wasm harness 为 20 / 6 / 3 项通过。
+- 最终同一 Web bundle 的任务 2–5 全部交叉回归退出 0，CLI 真实 HTTP 与 SQLite 断言确认新增 1 / 0 / 2 / 0。

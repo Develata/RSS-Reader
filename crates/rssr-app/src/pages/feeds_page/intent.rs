@@ -12,6 +12,8 @@ pub(crate) enum FeedsPageIntent {
     FeedCandidates { page_url: url::Url, candidates: Vec<rssr_application::FeedDiscoveryCandidate> },
     SelectFeedCandidate(usize),
     CancelFeedCandidates,
+
+    ClearRefreshStatus { revision: u64, message: String },
     LoadRequested,
     FeedUrlChanged(String),
     ConfigTextChanged(String),

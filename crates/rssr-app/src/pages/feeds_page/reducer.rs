@@ -48,6 +48,13 @@ pub(crate) fn reduce_feeds_page_intent(
             state.feed_candidates = None;
             vec![UiCommand::Feeds(command)]
         }
+
+        FeedsPageIntent::ClearRefreshStatus { revision, message } => {
+            if state.status_revision == revision && state.status == message {
+                state.status.clear();
+            }
+            Vec::new()
+        }
         FeedsPageIntent::LoadRequested => vec![UiCommand::Feeds(FeedsCommand::LoadSnapshot)],
         FeedsPageIntent::FeedUrlChanged(value) => {
             clear_pending_confirmations(state);
@@ -162,6 +169,7 @@ pub(crate) fn reduce_feeds_page_intent(
             Vec::new()
         }
         FeedsPageIntent::SetStatus { message, tone } => {
+            state.status_revision = state.status_revision.wrapping_add(1);
             state.status = message;
             state.status_tone = tone;
             Vec::new()

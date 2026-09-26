@@ -25,11 +25,15 @@ pub(crate) enum AddSubscriptionOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RefreshAllExecutionOutcome {
+    pub(crate) inserted_count: u64,
+    pub(crate) total_count: usize,
+    pub(crate) failed_count: usize,
     pub(crate) failure_message: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RefreshFeedExecutionOutcome {
+    pub(crate) inserted_count: u64,
     pub(crate) failure_message: Option<String>,
 }
 

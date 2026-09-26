@@ -642,3 +642,25 @@ async fn browser_refresh_store_abort_after_end_batch_writes_nothing() {
 
     clear_browser_state_storage();
 }
+
+#[path = "support/refresh_count_cases.rs"]
+mod refresh_count_cases;
+#[wasm_bindgen_test]
+async fn browser_counts_only_real_inserts_including_same_batch_duplicates() {
+    clear_browser_state_storage();
+    let state = Arc::new(Mutex::new(BrowserState {
+        core: PersistedState {
+            next_feed_id: 1,
+            feeds: vec![sample_feed(1, "https://example.com/count", false)],
+            ..Default::default()
+        },
+        ..Default::default()
+    }));
+    let store = BrowserRefreshStore::new(state.clone());
+    refresh_count_cases::verify_counts(&store, 1).await;
+    assert_eq!(state.lock().unwrap().core.entries.len(), 3);
+    let LoadedState { state: persisted, warning } = load_state();
+    assert!(warning.is_none());
+    assert_eq!(persisted.core.entries.len(), 3);
+    clear_browser_state_storage();
+}

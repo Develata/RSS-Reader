@@ -189,7 +189,11 @@ impl RefreshStorePort for BrowserRefreshStore {
             .transpose()
     }
 
-    async fn commit(&self, feed_id: i64, commit: RefreshCommit) -> Result<()> {
+    async fn commit(
+        &self,
+        feed_id: i64,
+        commit: RefreshCommit,
+    ) -> Result<rssr_application::RefreshCommitOutcome> {
         {
             let mut state = self.state.lock().expect("lock state");
             let now = now_utc();
@@ -209,6 +213,7 @@ impl RefreshStorePort for BrowserRefreshStore {
                 self.batch.dirty.store(true, Ordering::SeqCst);
             }
 
+            let mut inserted_count = 0;
             match commit {
                 RefreshCommit::NotModified { metadata } => {
                     feed.etag = metadata.etag;
@@ -234,7 +239,7 @@ impl RefreshStorePort for BrowserRefreshStore {
                     feed.last_success_at = Some(now);
                     feed.fetch_error = None;
                     feed.updated_at = now;
-                    upsert_entries(
+                    inserted_count = upsert_entries(
                         &mut state,
                         feed_id,
                         map_application_entries(update.feed.entries),
@@ -254,10 +259,11 @@ impl RefreshStorePort for BrowserRefreshStore {
             // 批次进行中就此返回：改动已经落在共享的内存状态里，页面那一侧照样读得到，
             // 真正的整片写盘推迟到 `end_batch` 一次做完。
             if batching {
-                return Ok(());
+                return Ok(rssr_application::RefreshCommitOutcome { inserted_count });
             }
 
-            save_state_snapshot(&state)
+            save_state_snapshot(&state)?;
+            Ok(rssr_application::RefreshCommitOutcome { inserted_count })
         }
     }
 

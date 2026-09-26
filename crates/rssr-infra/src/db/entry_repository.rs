@@ -49,6 +49,12 @@ pub struct ResolvedEntryContent {
     pub content_hash: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct EntryUpsertOutcome {
+    pub contents: Vec<ResolvedEntryContent>,
+    pub inserted_count: u64,
+}
+
 impl SqliteEntryRepository {
     pub fn new(index_pool: SqlitePool) -> Self {
         Self::new_with_content_pool(index_pool.clone(), index_pool)
@@ -73,10 +79,24 @@ impl SqliteEntryRepository {
         feed_id: i64,
         entries: &[ParsedEntry],
     ) -> DomainResult<Vec<ResolvedEntryContent>> {
+        Ok(self.upsert_entries_with_outcome(feed_id, entries).await?.contents)
+    }
+
+    pub async fn upsert_entries_with_outcome(
+        &self,
+        feed_id: i64,
+        entries: &[ParsedEntry],
+    ) -> DomainResult<EntryUpsertOutcome> {
         let mut pending_contents = Vec::new();
         // 一次刷新常常写入几十上百条：不包事务的话每条 INSERT 都是一次隐式事务，
         // 每条都要各自 fsync。包成一个事务后整批只提交一次，同时让整批写入变成原子的。
-        let mut tx = self.index_pool.begin().await.map_err(map_sqlx_error)?;
+        let mut tx = self.index_pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+        // 同一写事务内的行数差只反映真实新增；冲突更新和同批重复键不计数。
+        let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entries WHERE feed_id = ?1")
+            .bind(feed_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_sqlx_error)?;
         let now = now_rfc3339();
 
         for entry in entries {
@@ -129,10 +149,16 @@ impl SqliteEntryRepository {
             }
         }
 
+        let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entries WHERE feed_id = ?1")
+            .bind(feed_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_sqlx_error)?;
+        let inserted_count = (after - before) as u64;
         tx.commit().await.map_err(map_sqlx_error)?;
 
         if pending_contents.is_empty() {
-            return Ok(Vec::new());
+            return Ok(EntryUpsertOutcome { contents: Vec::new(), inserted_count });
         }
 
         let entry_ids_by_dedup_key = self
@@ -145,7 +171,7 @@ impl SqliteEntryRepository {
             )
             .await?;
 
-        pending_contents
+        let contents = pending_contents
             .into_iter()
             .map(|content| {
                 let entry_id = entry_ids_by_dedup_key
@@ -160,7 +186,8 @@ impl SqliteEntryRepository {
                     content_hash: content.content_hash,
                 })
             })
-            .collect()
+            .collect::<DomainResult<Vec<_>>>()?;
+        Ok(EntryUpsertOutcome { contents, inserted_count })
     }
 
     pub async fn upsert_contents(

@@ -13,10 +13,7 @@ pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
         ShellCommand::ManualRefresh => match UiServices::shared().await {
             Ok(services) => match services.feeds().refresh_all().await {
                 Ok(outcome) => vec![UiIntent::SetStatus {
-                    message: outcome.failure_message.as_ref().map_or_else(
-                        || "刷新完成。".to_string(),
-                        |failure| format!("刷新完成，但部分订阅失败：{failure}"),
-                    ),
+                    message: refresh_message(&outcome),
                     tone: if outcome.failure_message.is_some() { "error" } else { "info" }
                         .to_string(),
                 }],
@@ -65,4 +62,15 @@ fn resolve_with_fallback(message: impl Into<String>) -> Vec<UiIntent> {
         UiIntent::SetStatus { message: message.into(), tone: "error".to_string() },
         UiIntent::StartupRouteResolved(StartupRouteSnapshot { route: AppRoute::EntriesPage {} }),
     ]
+}
+
+fn refresh_message(outcome: &crate::bootstrap::RefreshAllExecutionOutcome) -> String {
+    let success = super::new_entries_message(outcome.inserted_count);
+    match &outcome.failure_message {
+        Some(failure) if outcome.total_count > 0 && outcome.failed_count == outcome.total_count => {
+            format!("刷新失败：{failure}")
+        }
+        Some(failure) => format!("{success}，部分订阅失败：{failure}"),
+        None => format!("{success}。"),
+    }
 }

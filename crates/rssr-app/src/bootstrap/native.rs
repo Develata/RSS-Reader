@@ -266,7 +266,8 @@ impl RefreshCapability {
         &self,
         outcome: RefreshAllOutcome,
     ) -> anyhow::Result<RefreshAllExecutionOutcome> {
-        let failure_lines = outcome.joined_failure_lines();
+        let summary = outcome.summary();
+        let failure_lines = summary.joined_failure_lines();
 
         for feed in outcome.feeds {
             match feed.result {
@@ -283,23 +284,32 @@ impl RefreshCapability {
             }
         }
 
-        Ok(RefreshAllExecutionOutcome { failure_message: failure_lines })
+        Ok(RefreshAllExecutionOutcome {
+            failure_message: failure_lines,
+            inserted_count: summary.inserted_count,
+            total_count: summary.total_count,
+            failed_count: summary.failed_count,
+        })
     }
 
     fn handle_refresh_feed_outcome(
         &self,
         outcome: RefreshFeedOutcome,
     ) -> RefreshFeedExecutionOutcome {
+        let inserted_count = outcome.inserted_count();
         let failure_message = outcome.failure_line();
         match outcome.result {
             RefreshFeedResult::Updated { localization_entries, .. } => {
                 self.host.image_localization_worker.spawn(outcome.feed_id, localization_entries);
-                RefreshFeedExecutionOutcome { failure_message: None }
+                RefreshFeedExecutionOutcome { inserted_count, failure_message: None }
             }
-            RefreshFeedResult::NotModified => RefreshFeedExecutionOutcome { failure_message: None },
+            RefreshFeedResult::NotModified => {
+                RefreshFeedExecutionOutcome { inserted_count, failure_message: None }
+            }
             RefreshFeedResult::Failed { message } => {
                 tracing::warn!(feed_id = outcome.feed_id, error = %message, "刷新订阅失败");
                 RefreshFeedExecutionOutcome {
+                    inserted_count,
                     failure_message: Some(
                         failure_message.unwrap_or_else(|| "刷新订阅失败".to_string()),
                     ),

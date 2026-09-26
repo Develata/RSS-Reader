@@ -69,7 +69,12 @@ mod tests {
                 if failed {
                     anyhow::bail!("fixture failure");
                 }
-                Ok(RefreshAllExecutionOutcome { failure_message: None })
+                Ok(RefreshAllExecutionOutcome {
+                    inserted_count: 0,
+                    total_count: 0,
+                    failed_count: 0,
+                    failure_message: None,
+                })
             };
             let (first, second) = tokio::join!(flight.run(request()), flight.run(request()));
             assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -112,7 +117,14 @@ mod tests {
         assert!(error.to_string().contains("已中断"));
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(1),
-            flight.run(async { Ok(RefreshAllExecutionOutcome { failure_message: None }) }),
+            flight.run(async {
+                Ok(RefreshAllExecutionOutcome {
+                    inserted_count: 0,
+                    total_count: 0,
+                    failed_count: 0,
+                    failure_message: None,
+                })
+            }),
         )
         .await
         .expect("retry must not hang")

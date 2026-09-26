@@ -321,8 +321,12 @@ mod tests {
             Ok(self.targets.iter().find(|target| target.feed_id == feed_id).cloned())
         }
 
-        async fn commit(&self, _feed_id: i64, _commit: crate::RefreshCommit) -> Result<()> {
-            Ok(())
+        async fn commit(
+            &self,
+            _feed_id: i64,
+            _commit: crate::RefreshCommit,
+        ) -> Result<crate::RefreshCommitOutcome> {
+            Ok(Default::default())
         }
     }
 

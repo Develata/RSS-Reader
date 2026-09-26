@@ -64,7 +64,11 @@ impl RefreshStorePort for UnusedRefreshStore {
         bail!("refresh store should not be used in subscription harness")
     }
 
-    async fn commit(&self, _feed_id: i64, _commit: RefreshCommit) -> Result<()> {
+    async fn commit(
+        &self,
+        _feed_id: i64,
+        _commit: RefreshCommit,
+    ) -> Result<rssr_application::RefreshCommitOutcome> {
         bail!("refresh store should not be used in subscription harness")
     }
 }

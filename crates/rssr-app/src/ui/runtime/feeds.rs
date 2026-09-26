@@ -38,7 +38,12 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
                 Ok(outcome) => feeds_intents(vec![
                     FeedsPageIntent::SetStatus {
                         message: outcome.failure_message.as_ref().map_or_else(
-                            || format!("已刷新订阅：{feed_title}"),
+                            || {
+                                format!(
+                                    "{}：{feed_title}",
+                                    super::new_entries_message(outcome.inserted_count)
+                                )
+                            },
                             |failure| format!("刷新订阅失败：{failure}"),
                         ),
                         tone: if outcome.failure_message.is_some() {

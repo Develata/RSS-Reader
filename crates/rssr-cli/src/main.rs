@@ -239,10 +239,8 @@ async fn main() -> anyhow::Result<()> {
         Command::Refresh(args) => {
             if let Some(feed_id) = args.feed_id {
                 services.refresh_feed(feed_id).await?;
-                println!("订阅已刷新：{feed_id}");
             } else {
                 services.refresh_all().await?;
-                println!("全部订阅已刷新。");
             }
         }
         Command::ExportConfig(args) => {
@@ -364,12 +362,20 @@ impl CliServices {
             .refresh_service
             .refresh_all(RefreshAllInput { max_concurrency: DEFAULT_REFRESH_CONCURRENCY })
             .await?;
+        for feed in &outcome.feeds {
+            if feed.is_success() {
+                println!("订阅 {}：{}", feed.feed_id, new_entries_message(feed.inserted_count()));
+            }
+        }
+        println!("合计：{}", new_entries_message(outcome.summary().inserted_count));
         ensure_refresh_all_succeeded(&outcome)
     }
 
     async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
         let outcome = self.use_cases.refresh_service.refresh_feed(feed_id).await?;
-        ensure_refresh_feed_succeeded(&outcome)
+        ensure_refresh_feed_succeeded(&outcome)?;
+        println!("订阅 {feed_id}：{}", new_entries_message(outcome.inserted_count()));
+        Ok(())
     }
 
     async fn export_config_json(&self) -> anyhow::Result<String> {
@@ -498,4 +504,8 @@ fn ensure_refresh_all_succeeded(outcome: &RefreshAllOutcome) -> anyhow::Result<(
         anyhow::bail!("部分订阅刷新失败: {failures}");
     }
     Ok(())
+}
+
+fn new_entries_message(count: u64) -> String {
+    if count == 0 { "没有新文章".into() } else { format!("新增 {count} 篇文章") }
 }

@@ -71,7 +71,8 @@ pub fn upsert_entries(
     state: &mut BrowserState,
     feed_id: i64,
     entries: Vec<ParsedEntry>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<u64> {
+    let mut inserted_count = 0;
     for entry in entries {
         let content_hash = hash_content(
             entry.content_html.as_deref(),
@@ -101,6 +102,7 @@ pub fn upsert_entries(
             existing.id
         } else {
             state.core.next_entry_id += 1;
+            inserted_count += 1;
             let entry_id = state.core.next_entry_id;
             state.core.entries.push(PersistedEntryIndex {
                 id: entry_id,
@@ -135,7 +137,7 @@ pub fn upsert_entries(
             );
         }
     }
-    Ok(())
+    Ok(inserted_count)
 }
 
 fn upsert_entry_content(slice: &mut PersistedEntryContentSlice, content: PersistedEntryContent) {

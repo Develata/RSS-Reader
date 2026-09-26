@@ -57,7 +57,7 @@
 
 手动刷新在 App scope 中运行，同步取得 in-flight 状态，连续 R、下拉和订阅页“刷新全部”不会重复创建批次。页面卸载不取消该任务。完成或部分失败后 revision 只让列表与订阅快照重取；Reader 正文不订阅刷新 revision。自动刷新继续使用现有 host 调度；host capability 内的共享 `RefreshFlight` 让自动与手动的重叠请求等待同一轮结果，不改变阅读页加载语义。进行中任务被取消时，等待者收到错误，下一次请求可以重试；不缓存已完成的刷新结果。
 
-默认样式在 Reader 中只通过 R 的进行中动画与成功 / 错误小标记显示刷新反馈，避免提示浮层盖住标题或正文；反馈期间 `manual-refresh-status` 的 live region 与 R 的完整 `title` 提示保留，其他页面显示文字结果。成功结果约 1 秒、错误结果约 6 秒后由 App 级状态清除，避免页面切换后重现旧提示；旧计时器不能清除新一轮刷新。此呈现差异不改变刷新命令或任务生命周期。
+默认样式在 Reader 中只通过 R 的进行中动画与成功 / 错误小标记显示刷新反馈，避免提示浮层盖住标题或正文；反馈期间 `manual-refresh-status` 的 live region 与 R 的完整 `title` 提示保留，其他页面显示文字结果。成功结果约 3 秒、错误结果约 6 秒后由 App 级状态清除，避免页面切换后重现旧提示；旧计时器不能清除新一轮刷新。此呈现差异不改变刷新命令或任务生命周期。
 
 文章列表的 `LoadEntries` 查询保持页面生命周期，并以页面内 generation 校验结果：只有最新发起的查询可发布列表、归档计数和状态，旧查询晚到的成功或失败都被丢弃，避免刷新与筛选切换交错时显示错误结果。该校验不改变写入命令或全局刷新任务的生命周期。
 
@@ -496,3 +496,9 @@ Web 使用 `_blank` 与 `rel="noopener noreferrer"`，不触发阅读状态重�
 `FeedsCommand::AddFeed` 增加可选 `fallback_site_url`；RefreshPort 同步透传。host 调用 SubscriptionWorkflow.prepare_subscription，Ready 进入 add_prepared_subscription，NeedsSelection 返回订阅页候选。UI 不抓取或解析 HTML。候选到达时核对当前草稿；改输入取消候选，添加期间仍由 adding_feed_url 去重，成功只清除对应草稿。候选标题 / URL 作为文本渲染。
 
 新增 `data-layout=feed-discovery-candidates`、`data-action=select-feed-candidate|cancel-feed-discovery`、`data-slot=feed-candidate-url`。既有 feed-form 原生 submit、add-feed 稳定接口保留。
+
+## 刷新实际新增计数
+
+RefreshStorePort.commit 返回 RefreshCommitOutcome.inserted_count；Updated.entry_count 保留解析条目数语义，新增 inserted_count 由存储实际插入结果提供，RefreshAllSummary 累加成功 Updated。批次 commit 的计数只有 end_batch 成功后才可发布；结束落盘失败沿用原逻辑把结果改为失败。SQLite索引/正文分库的既有部分失败边界不变。
+
+host 的 RefreshAllExecutionOutcome 透传 inserted_count / total_count / failed_count，RefreshFeedExecutionOutcome 透传 inserted_count。shell区分成功、部分失败、全失败。成功3秒、错误6秒；单订阅页反馈通过 revision 与消息匹配避免旧定时器清除新结果。自动刷新静默、阅读页图标规则、RefreshFlight、批次收尾及稳定 data-* 接口均不变。

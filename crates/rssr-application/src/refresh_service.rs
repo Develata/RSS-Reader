@@ -95,8 +95,14 @@ impl Default for RefreshAllInput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RefreshFeedResult {
     NotModified,
-    Updated { entry_count: usize, localization_entries: Vec<RefreshLocalizedEntry> },
-    Failed { message: String },
+    Updated {
+        entry_count: usize,
+        inserted_count: u64,
+        localization_entries: Vec<RefreshLocalizedEntry>,
+    },
+    Failed {
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,6 +122,13 @@ pub struct RefreshFeedOutcome {
 }
 
 impl RefreshFeedOutcome {
+    pub fn inserted_count(&self) -> u64 {
+        match self.result {
+            RefreshFeedResult::Updated { inserted_count, .. } => inserted_count,
+            _ => 0,
+        }
+    }
+
     pub fn is_success(&self) -> bool {
         !matches!(self.result, RefreshFeedResult::Failed { .. })
     }
@@ -165,7 +178,10 @@ impl RefreshAllOutcome {
 
         for outcome in &self.feeds {
             match &outcome.result {
-                RefreshFeedResult::Updated { .. } => summary.updated_count += 1,
+                RefreshFeedResult::Updated { inserted_count, .. } => {
+                    summary.updated_count += 1;
+                    summary.inserted_count += inserted_count;
+                }
                 RefreshFeedResult::NotModified => summary.not_modified_count += 1,
                 RefreshFeedResult::Failed { .. } => {
                     summary.failed_count += 1;
@@ -206,6 +222,7 @@ impl RefreshAllOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RefreshAllSummary {
+    pub inserted_count: u64,
     pub total_count: usize,
     pub updated_count: usize,
     pub not_modified_count: usize,
@@ -239,11 +256,21 @@ pub trait FeedRefreshSourcePort: Send + Sync {
     async fn refresh(&self, target: &RefreshTarget) -> Result<FeedRefreshSourceOutput>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RefreshCommitOutcome {
+    pub inserted_count: u64,
+}
+
 #[async_trait::async_trait]
 pub trait RefreshStorePort: Send + Sync {
     async fn list_targets(&self) -> Result<Vec<RefreshTarget>>;
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>>;
-    async fn commit(&self, feed_id: i64, commit: RefreshCommit) -> Result<()>;
+    /// 返回真实新增索引数；批次内的计数需等 end_batch 成功后才可发布。
+    async fn commit(
+        &self,
+        feed_id: i64,
+        commit: RefreshCommit,
+    ) -> Result<crate::RefreshCommitOutcome>;
 
     /// 打开一个写入批次：批次期间的 [`RefreshStorePort::commit`] 只需保证改动对后续读取可见，
     /// 真正的落盘可以推迟到 [`RefreshStorePort::end_batch`]。
@@ -500,11 +527,16 @@ impl RefreshService {
             FeedRefreshSourceOutput::Updated(update) => {
                 let entry_count = update.feed.entries.len();
                 let localization_entries = build_localization_entries(&update.feed.entries);
-                self.store.commit(target.feed_id, RefreshCommit::Updated { update }).await?;
+                let committed =
+                    self.store.commit(target.feed_id, RefreshCommit::Updated { update }).await?;
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),
-                    result: RefreshFeedResult::Updated { entry_count, localization_entries },
+                    result: RefreshFeedResult::Updated {
+                        entry_count,
+                        inserted_count: committed.inserted_count,
+                        localization_entries,
+                    },
                 })
             }
             FeedRefreshSourceOutput::Failed(failure) => {
@@ -576,9 +608,13 @@ mod tests {
             Ok(self.targets.iter().find(|target| target.feed_id == feed_id).cloned())
         }
 
-        async fn commit(&self, feed_id: i64, commit: RefreshCommit) -> Result<()> {
+        async fn commit(
+            &self,
+            feed_id: i64,
+            commit: RefreshCommit,
+        ) -> Result<crate::RefreshCommitOutcome> {
             self.commits.lock().expect("lock commits").push((feed_id, commit));
-            Ok(())
+            Ok(Default::default())
         }
     }
 
@@ -650,7 +686,8 @@ mod tests {
                     feed_id: 1,
                     url: "https://example.com/one.xml".to_string(),
                     result: super::RefreshFeedResult::Updated {
-                        entry_count: 2,
+                        entry_count: 7,
+                        inserted_count: 2,
                         localization_entries: Vec::new(),
                     },
                 },
@@ -670,6 +707,7 @@ mod tests {
         let summary = outcome.summary();
 
         assert_eq!(summary.total_count, 3);
+        assert_eq!(summary.inserted_count, 2);
         assert_eq!(summary.updated_count, 1);
         assert_eq!(summary.not_modified_count, 1);
         assert_eq!(summary.failed_count, 1);
@@ -734,7 +772,7 @@ mod tests {
         let outcome = service.refresh_feed(4).await.expect("refresh feed");
 
         match outcome.result {
-            super::RefreshFeedResult::Updated { entry_count, localization_entries } => {
+            super::RefreshFeedResult::Updated { entry_count, localization_entries, .. } => {
                 assert_eq!(entry_count, 2);
                 assert_eq!(localization_entries.len(), 1);
                 assert_eq!(localization_entries[0].dedup_key, "entry-1");
@@ -824,11 +862,15 @@ mod tests {
             Ok(self.targets.iter().find(|target| target.feed_id == feed_id).cloned())
         }
 
-        async fn commit(&self, feed_id: i64, _commit: RefreshCommit) -> Result<()> {
+        async fn commit(
+            &self,
+            feed_id: i64,
+            _commit: RefreshCommit,
+        ) -> Result<crate::RefreshCommitOutcome> {
             if feed_id == self.failing_feed_id {
                 anyhow::bail!("提交失败");
             }
-            Ok(())
+            Ok(Default::default())
         }
     }
 
@@ -867,9 +909,15 @@ mod tests {
             Ok(self.targets.iter().find(|target| target.feed_id == feed_id).cloned())
         }
 
-        async fn commit(&self, feed_id: i64, _commit: RefreshCommit) -> Result<()> {
+        async fn commit(
+            &self,
+            feed_id: i64,
+            _commit: RefreshCommit,
+        ) -> Result<crate::RefreshCommitOutcome> {
             self.record(&format!("commit:{feed_id}"));
-            Ok(())
+            Ok(crate::RefreshCommitOutcome {
+                inserted_count: u64::from(matches!(_commit, RefreshCommit::Updated { .. })),
+            })
         }
 
         async fn begin_batch(&self) -> Result<()> {
@@ -968,6 +1016,7 @@ mod tests {
             .expect("落盘失败也不该把整轮变成 Err——per-feed 结果仍要交回去");
 
         assert_eq!(outcome.feeds.len(), 2);
+        assert_eq!(outcome.summary().inserted_count, 0);
         for feed in &outcome.feeds {
             match &feed.result {
                 super::RefreshFeedResult::Failed { message } => {

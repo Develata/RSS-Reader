@@ -120,7 +120,12 @@ impl RefreshStorePort for SqliteRefreshStore {
         Ok(Some(map_refresh_target(feed, has_entries)))
     }
 
-    async fn commit(&self, feed_id: i64, commit: RefreshCommit) -> Result<()> {
+    async fn commit(
+        &self,
+        feed_id: i64,
+        commit: RefreshCommit,
+    ) -> Result<rssr_application::RefreshCommitOutcome> {
+        let mut inserted_count = 0;
         match commit {
             RefreshCommit::NotModified { metadata } => {
                 self.feed_repository
@@ -150,7 +155,7 @@ impl RefreshStorePort for SqliteRefreshStore {
                 let entries = map_application_entries(update.feed.entries);
                 let resolved_contents = match self
                     .entry_repository
-                    .upsert_entries_and_resolve_contents(feed_id, &entries)
+                    .upsert_entries_with_outcome(feed_id, &entries)
                     .await
                 {
                     Ok(resolved) => resolved,
@@ -164,8 +169,11 @@ impl RefreshStorePort for SqliteRefreshStore {
                     }
                 };
 
-                if let Err(error) =
-                    self.entry_repository.upsert_contents(feed_id, &resolved_contents).await
+                inserted_count = resolved_contents.inserted_count;
+                if let Err(error) = self
+                    .entry_repository
+                    .upsert_contents(feed_id, &resolved_contents.contents)
+                    .await
                 {
                     let failure = RefreshFailure {
                         message: format!("写入文章正文失败: {error}"),
@@ -191,7 +199,7 @@ impl RefreshStorePort for SqliteRefreshStore {
             }
         }
 
-        Ok(())
+        Ok(rssr_application::RefreshCommitOutcome { inserted_count })
     }
 }
 

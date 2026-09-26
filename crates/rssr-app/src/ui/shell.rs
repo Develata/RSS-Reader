@@ -75,7 +75,7 @@ impl AppShellState {
                     wait_for_refresh_feedback(std::time::Duration::from_secs(if failed {
                         6
                     } else {
-                        1
+                        3
                     }))
                     .await;
                     self.refresh
