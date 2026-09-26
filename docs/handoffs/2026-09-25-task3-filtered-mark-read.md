@@ -2,15 +2,17 @@
 
 - 日期：2026-09-25
 - 作者 / Agent：Codex
-- 分支：detached worktree `.handoff/worktrees/task3`
-- 当前 HEAD：2ba826a
-- 相关 commit：pending
+- 分支：main（原隔离 worktree 如有则保留）
+- 当前 HEAD：fc717c0（2026-09-26 集成完成时）
+- 相关 commit：a1aae97
 - 相关 tag / release：N/A
-- 状态：`draft`
+- 状态：`validated`
 
 ## 工作摘要
 
-实现全部分页的当前筛选批量已读，预览冻结查询与完整未读 ID 集合；确认时原子校验集合，变化需重新确认。环境检查未全通过，按用户决定保留改动但不提交。
+实现完整筛选结果的批量已读，包含集合变化重确认、原子写入与失败回滚。
+
+2026-09-26 已集成复验并本地提交。初轮受环境阻塞的记录保留供追溯；当前结论以末尾补验为准。
 
 ## 影响范围
 
@@ -28,6 +30,8 @@
 - CLI 新增 `mark-read (--all|--feed-id <id>) [--search] [--read-filter all|unread|read] [--starred-filter all|starred|unstarred] [--archive-filter active|all|archived] [--yes]`，未带 yes 只预览。
 
 ## 验证与验收
+
+以下为 2026-09-25 初轮记录；2026-09-26 最终结果见末尾补验。
 
 ### 自动化验证
 
@@ -60,7 +64,7 @@ CLI 初次 fixture 数据库未创建失败（code 14）；改用已有 SQLite U
 
 ## 结果
 
-已验证 Web 主流程、两种存储契约与 CLI；不是全平台通过，不可按验收门槛提交。无 commit / push / tag。
+本轮确认范围通过，已本地提交 a1aae97，未 push / tag / release。Android 仅编译；其余平台及输入方式的验证边界见末尾补验。
 
 ## 风险与后续事项
 
@@ -123,3 +127,7 @@ CLI 初次 fixture 数据库未创建失败（code 14）；改用已有 SQLite U
 - 合并后 Web 构建与 browser.cjs 退出 0；360×800 / 1280×800 的 60 条跨三页、59 条重确认、单次写入、零结果和失败回滚通过。
 - 合并后任务 2 positions.cjs 回归退出 0，两视口列表/正文/分页恢复与主动输入取消均保持正确。
 - 本轮确认范围已通过，任务 3 达到本地提交条件；原隔离 worktree 仍保留未提交副本，不做清理。
+
+## 集成交付补充文件
+
+- `docs/handoffs/2026-09-26-integration-revalidation.md`：汇总开发依赖、各任务最终检查、提交及保留工作树状态。

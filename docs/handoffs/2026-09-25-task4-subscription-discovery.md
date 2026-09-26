@@ -2,15 +2,17 @@
 
 - 日期：2026-09-25
 - 作者 / Agent：Codex
-- 分支：detached worktree `.handoff/worktrees/task4`
-- 当前 HEAD：2ba826a
-- 相关 commit：pending
+- 分支：main（原隔离 worktree 如有则保留）
+- 当前 HEAD：fc717c0（2026-09-26 集成完成时）
+- 相关 commit：3930289
 - 相关 tag / release：N/A
-- 状态：`draft`
+- 状态：`validated`
 
 ## 工作摘要
 
-添加订阅支持网站首页；共享 application 发现流程，infra 有界 HTTP 与 HTML 解析，UI 多候选选择，CLI 非交互列出候选。原生环境检查仍阻塞，保留未提交。
+实现网站首页的 RSS/Atom 发现、候选选择和有界路径探测，GUI/CLI 共用用例。
+
+2026-09-26 已集成复验并本地提交。初轮受环境阻塞的记录保留供追溯；当前结论以末尾补验为准。
 
 ## 影响范围
 
@@ -42,6 +44,8 @@
 - 稳定选择器：`data-layout=feed-discovery-candidates`、`data-action=select-feed-candidate|cancel-feed-discovery`、`data-slot=feed-candidate-url`；旧 feed-form/add-feed 保留。样式在 workspaces.css。
 
 ## 验证与验收
+
+以下为 2026-09-25 初轮记录；2026-09-26 最终结果见末尾补验。
 
 ### 自动化验证
 
@@ -78,7 +82,7 @@ CLI 实际 HTTP fixture：`add-feed /single --skip-refresh` 退出0，DB文章0�
 
 ## 结果
 
-已验证 native 存储用例、Web UI、CLI与相关wasm契约。全平台验收未达标，不提交，不推送。
+本轮确认范围通过，已本地提交 3930289，未 push / tag / release。Android 仅编译；其余平台及输入方式的验证边界见末尾补验。
 
 ## 风险与后续事项
 
@@ -156,3 +160,8 @@ CLI 实际 HTTP fixture：`add-feed /single --skip-refresh` 退出0，DB文章0�
 - 合并后 Web build、browser.cjs、direct-browser.cjs 均退出 0：360×800 / 1280×800 单候选、多候选、重复订阅不抓取、site_url 回退与 feed 信息优先、四次路径探测、无横向溢出通过；真实 HTTP 8101 / CORS 直连发现和首次刷新通过。已查看最新 360px 候选截图。
 - 当前 CLI build 退出 0；本地 HTTP `/single --skip-refresh` 退出 0，`/multi` 预期退出 1 并列出候选，直接 `/atom.xml` 添加退出 0。独立 SQLite 断言退出 0：两个订阅中只有直接添加的订阅包含 1 篇文章，skip-refresh 订阅没有文章。
 - 本轮确认范围已通过，任务 4 达到本地提交条件；Android 仅编译，未作运行验收。
+
+## 集成交付补充文件
+
+- `docs/handoffs/2026-09-26-integration-revalidation.md`：汇总开发依赖、各任务最终检查、提交及保留工作树状态。
+- `crates/rssr-infra/tests/test_bulk_read.rs`：为任务 3 测试补齐新增 site_url 字段，保留原筛选案例。

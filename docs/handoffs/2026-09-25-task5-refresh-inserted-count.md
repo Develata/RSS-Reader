@@ -2,15 +2,17 @@
 
 - 日期：2026-09-25
 - 作者 / Agent：Codex
-- 分支：detached worktree `.handoff/worktrees/task5`
-- 当前 HEAD：2ba826a
-- 相关 commit：pending
+- 分支：main（原隔离 worktree 如有则保留）
+- 当前 HEAD：fc717c0（2026-09-26 集成完成时）
+- 相关 commit：fc717c0
 - 相关 tag / release：N/A
-- 状态：`draft`
+- 状态：`validated`
 
 ## 工作摘要
 
-存储层返回真实新增数量，手动刷新显示新增/零新增、部分失败与全部失败；保持自动刷新静默及阅读页图标规则。缺原生依赖/NDK，全平台检查未通过，不提交。
+实现存储真实新增计数和手动刷新反馈，保持自动刷新静默与阅读页仅图标。
+
+2026-09-26 已集成复验并本地提交。初轮受环境阻塞的记录保留供追溯；当前结论以末尾补验为准。
 
 ## 影响范围
 
@@ -37,6 +39,8 @@
 - trait其余方法、数据库schema、CLI参数、稳定data-*接口均不变。
 
 ## 验证与验收
+
+以下为 2026-09-25 初轮记录；2026-09-26 最终结果见末尾补验。
 
 ### 自动化验证
 
@@ -72,7 +76,7 @@ CLI真实HTTPfixture验证 `refresh --all` 首次1/再次0，`refresh --feed-id 
 
 ## 结果
 
-Web反馈、CLI、native及browser存储计数均有执行证据；不是全平台验收完成。未commit/push/tag。
+本轮确认范围通过，已本地提交 fc717c0，未 push / tag / release。Android 仅编译；其余平台及输入方式的验证边界见末尾补验。
 
 ## 风险与后续事项
 
@@ -132,3 +136,7 @@ Web反馈、CLI、native及browser存储计数均有执行证据；不是全平�
 - 最终 Web build 退出 0；同一最终 bundle 串行运行任务 5、4、3 browser.cjs、任务 4 direct-browser.cjs 和任务 2 positions.cjs，全部退出 0。覆盖 360×800 / 1280×800 新增提示、3秒/6秒期限、部分失败、全失败、自动刷新静默、Reader 仅图标、候选发现、批量已读与分页/正文位置恢复；最新 360px 截图已查看。
 - 同步修正前端命令文档原有“成功约1秒”为约3秒，用户指南明确历史版本与当前行为，避免只追加章节造成时间说明矛盾。
 - 本轮确认范围通过，任务 5 达到本地提交条件；Android 本轮没有运行验收。日志见 target/integration-validation/task5-* 与 final-*。
+
+## 集成交付补充文件
+
+- `docs/handoffs/2026-09-26-integration-revalidation.md`：汇总开发依赖、各任务最终检查、提交及保留工作树状态。
