@@ -795,13 +795,17 @@ async function checkHomeRefreshAndGestures(client) {
     await waitForPaused(pending);
     await clickSelector(client, '[data-slot="entry-card-title"]');
     await selectorExists(client, '[data-layout="reader-body"]');
-    await evaluate(client, `window.scrollTo(0, 80); window.__errorReaderScroll = scrollY; window.__errorReaderBody = document.querySelector('[data-layout="reader-body"]')`);
+    await beginManualScroll(client);
+    await evaluate(client, `window.scrollTo(0, 80); window.__errorReaderScroll = scrollY; window.__errorReaderBody = document.querySelector('[data-layout="reader-body"]'); window.__errorReaderReady = document.querySelector('[data-page="reader"]').dataset.positionReady`);
     hold = false;
     await client.send('Fetch.fulfillRequest', {requestId: pending.shift(), responseCode: 200,
       responseHeaders: [{name:'Content-Type',value:'application/rss+xml'}], body: Buffer.from('invalid RSS fixture').toString('base64')});
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'error'`);
     assertThat('refresh failure is exposed and releases the gate', await evaluate(client, `document.querySelector('[data-slot="manual-refresh-status"]').textContent.includes('失败')`));
-    assertThat('refresh failure also preserves Reader position', await evaluate(client, `document.querySelector('[data-layout="reader-body"]') === window.__errorReaderBody && Math.abs(scrollY - window.__errorReaderScroll) <= 1`));
+    const errorReaderPosition = await evaluate(client, `({sameBody: document.querySelector('[data-layout="reader-body"]') === window.__errorReaderBody,
+      before: window.__errorReaderScroll, after: scrollY, readyBefore: window.__errorReaderReady,
+      readyAfter: document.querySelector('[data-page="reader"]').dataset.positionReady})`);
+    assertThat('refresh failure also preserves Reader position', errorReaderPosition.sameBody && Math.abs(errorReaderPosition.after - errorReaderPosition.before) <= 1, errorReaderPosition);
     await checkReaderRefreshFeedback(client, 'refresh failed while reading');
     await clickSelector(client, '[data-action="activate-home"]');
     await selectorExists(client, '[data-page="entries"]');

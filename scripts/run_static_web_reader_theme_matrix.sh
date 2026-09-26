@@ -147,29 +147,14 @@ run_theme_check() {
   local slug="$4"
   local helper_url="http://127.0.0.1:${port}/__codex/setup-local-auth?username=${username}&password=${password}&seed=${seed}&next=${next_path}"
   local html_file="$log_dir/${slug}.html"
-  local screenshot_file="$log_dir/${slug}.png"
 
   if [[ "$theme_key" != "none" ]]; then
     helper_url="${helper_url}&preset=${theme_key}"
   fi
 
-  "$chrome_bin" \
-    --headless=new \
-    --disable-gpu \
-    --no-sandbox \
-    --window-size=1440,1200 \
-    --virtual-time-budget=8000 \
-    --screenshot="$screenshot_file" \
-    "$helper_url" >/dev/null 2>&1
-
-  "$chrome_bin" \
-    --headless=new \
-    --disable-gpu \
-    --no-sandbox \
-    --window-size=1440,1200 \
-    --virtual-time-budget=8000 \
-    --dump-dom \
-    "$helper_url" >"$html_file"
+  "${NODE_BIN:-node}" scripts/browser/capture_smoke_page.mjs \
+    "$helper_url" '[data-page="reader"][data-position-ready="true"] [data-slot^="reader-body-"]' \
+    "$log_dir/$slug" "$chrome_bin"
 
   rg -q 'data-page="reader"' "$html_file"
   rg -q 'data-layout="reader-page"' "$html_file"

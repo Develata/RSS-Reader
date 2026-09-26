@@ -97,6 +97,14 @@
   - 真实 browser 执行应优先放到 GitHub Actions `ubuntu-latest`
   - 如需本地复验，优先在非 WSL Linux 宿主上执行同一脚本
 
+### 5. Fake-IP DNS 与 feed 代理的 SSRF 防护
+
+- 受影响入口：`scripts/run_rssr_web_proxy_feed_smoke.sh`、部署壳 `/feed-proxy`。
+- 现象：本机网络把公共域名解析为 `198.18.0.0/15` 测试地址；代理返回 HTTP 400，提示禁止代理内网或本地地址。可用 `getent ahostsv4 <域名>` 核实实际解析结果。
+- 该网段被代理的现有地址检查明确拒绝；不能把此失败记为真实远端 feed 验收通过，也不应为了 smoke 放宽 SSRF 防护。
+- 复验：在不使用 Fake-IP DNS 的网络中运行相同脚本。登录、同源 fixture 添加/刷新可继续通过 `scripts/run_rssr_web_browser_feed_smoke.sh` 验证，但不替代真实远端代理链路。
+- 2026-09-26 的 WSL/Linux 复现与证据见 [发布准备交接](../handoffs/2026-09-26-push-and-release-readiness.md)。
+
 ## 与 handoff 的关系
 
 - 本页负责长期维护的环境限制索引

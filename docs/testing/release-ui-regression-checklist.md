@@ -80,6 +80,8 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --full
 
 同一次发布预检最多构建一次相同 profile 的 Web 包，后续固定 smoke 和静态服务器复用它；该标记不跨进程持久化。`--skip-build` 仍由调用者明确选择。部署壳 smoke 拒绝已占用端口，并确认本次启动的进程存活；HTTP 请求有超时，探测或断言失败也会清理本次服务。静态 SPA 入口使用 exec，让调用方持有的 PID 就是服务进程。
 
+Reader 主题矩阵和部署壳浏览器 smoke 共用 `scripts/browser/capture_smoke_page.mjs`，通过现有 CDP 工具等待实际页面就绪，再从同一次加载保存 DOM 与截图。它们不以固定虚拟时间预算代替 Web Locks / 异步加载完成；默认总等待 45 秒，退出时停止本次 Chrome 并删除独立临时 profile。运行时可用 Node.js 22+ 或 `NODE_BIN=bun`，Chrome 通过 `CHROME_BIN` 选择。
+
 如果启用 `--with-fixed-smokes`，还会补：
 
 - `bash scripts/run_static_web_reader_theme_matrix.sh --skip-build`

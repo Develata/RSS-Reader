@@ -148,27 +148,9 @@ fi
 
 helper_url="http://127.0.0.1:${port}/__codex/browser-feed-smoke"
 
-google-chrome \
-  --headless=new \
-  --no-sandbox \
-  --disable-dev-shm-usage \
-  --disable-gpu \
-  --run-all-compositor-stages-before-draw \
-  --virtual-time-budget=120000 \
-  --window-size=1440,1200 \
-  --dump-dom \
-  "$helper_url" >"$dom_file" 2>"$chrome_log"
-
-google-chrome \
-  --headless=new \
-  --no-sandbox \
-  --disable-dev-shm-usage \
-  --disable-gpu \
-  --run-all-compositor-stages-before-draw \
-  --virtual-time-budget=120000 \
-  --window-size=1440,1200 \
-  --screenshot="$screenshot_file" \
-  "$helper_url" >>"$chrome_log" 2>&1
+"${NODE_BIN:-node}" scripts/browser/capture_smoke_page.mjs \
+  "$helper_url" '[data-smoke="rssr-web-browser-feed-smoke"][data-result="pass"]' \
+  "$log_dir/browser-feed-smoke" "${CHROME_BIN:-google-chrome}" >"$chrome_log" 2>&1
 
 grep -q 'data-smoke="rssr-web-browser-feed-smoke"' "$dom_file"
 grep -q 'data-result="pass"' "$dom_file"
