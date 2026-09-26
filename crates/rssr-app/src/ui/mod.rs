@@ -1,5 +1,6 @@
 mod commands;
 mod helpers;
+pub(crate) mod reading_position;
 mod runtime;
 mod shell;
 mod shell_browser;

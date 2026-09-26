@@ -44,6 +44,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         }
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = Arc::new(feeds),
         EntriesPageIntent::SetEntries { entries, archived_count } => {
+            state.entries_loaded = true;
             if let PreferencesLoadState::Unavailable(message) = &state.preferences_load {
                 state.status =
                     format!("{message}；文章偏好暂不保存，共 {} 篇文章。", entries.len());

@@ -26,6 +26,14 @@ pub(crate) struct EntriesPageFacade {
 }
 
 impl EntriesPageFacade {
+    pub(crate) fn position_key(&self) -> String {
+        self.snapshot.position_key(self.session.feed_id(), Some(&self.ui.entry_search()))
+    }
+
+    pub(crate) fn positions_ready(&self) -> bool {
+        self.snapshot.entries_loaded && self.snapshot.current_page == self.presenter.current_page
+    }
+
     /// presenter 由调用方通过 `use_memo` 缓存后传入：它是 state 的纯函数，没必要每次重绘
     /// 都重建一遍分组树。
     pub(crate) fn new(

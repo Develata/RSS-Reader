@@ -77,6 +77,9 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
         section {
             "data-page": "entries",
             "data-entry-scope": if feed_id.is_some() { "feed" } else { "all" },
+            "data-position-key": facade.position_key(),
+            "data-position-page": "{facade.current_page()}",
+            "data-position-ready": if facade.positions_ready() { "true" } else { "false" },
             AppNav {}
             if feed_id.is_none() { pull_refresh::PullRefresh {} }
             div { "data-layout": "entries-layout",
@@ -226,8 +229,13 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let current_page = state_snapshot.current_page;
     let active_directory_anchor = facade.active_directory_anchor().map(ToString::to_string);
 
-    use_reactive_side_effect((feed_id, query_search.clone()), move |_| {
-        session.dispatch(intent::EntriesPageIntent::SetCurrentPage(state::FIRST_PAGE_NUMBER));
+    let mut previous_search = use_signal(|| (feed_id, query_search.clone()));
+    use_reactive_side_effect((feed_id, query_search.clone()), move |next| {
+        // 首次挂载不是筛选切换；异步加载可能先完成，不能随后把恢复页码重置为 1。
+        if *previous_search.peek() != next {
+            previous_search.set(next);
+            session.dispatch(intent::EntriesPageIntent::SetCurrentPage(state::FIRST_PAGE_NUMBER));
+        }
     });
 
     use_reactive_task((feed_id, refresh_revision), move |_| session.bootstrap());

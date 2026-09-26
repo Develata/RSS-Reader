@@ -51,6 +51,7 @@ pub(crate) struct EntriesPageState {
     pub(crate) entries_page_size: u32,
     pub(crate) controls_hidden: bool,
     pub(crate) current_page: u32,
+    pub(crate) entries_loaded: bool,
     pub(crate) status: String,
     pub(crate) status_tone: String,
     pub(crate) preferences_load: PreferencesLoadState,
@@ -73,6 +74,7 @@ impl EntriesPageState {
             entries_page_size: settings.entries_page_size.max(1),
             controls_hidden: initial_controls_hidden,
             current_page: FIRST_PAGE_NUMBER,
+            entries_loaded: false,
             status: "正在加载文章列表…".to_string(),
             status_tone: "info".to_string(),
             preferences_load: PreferencesLoadState::Pending,
@@ -110,6 +112,20 @@ impl EntriesPageState {
 
     pub(crate) fn page_size(&self) -> usize {
         self.entries_page_size.max(1) as usize
+    }
+
+    pub(crate) fn position_key(&self, feed_id: Option<i64>, search: Option<&str>) -> String {
+        format!(
+            "list:{feed_id:?}:{:?}:{:?}:{:?}:{}:{}:{}:{:?}:{:?}",
+            self.read_filter,
+            self.starred_filter,
+            self.grouping_mode,
+            self.show_archived,
+            self.archive_after_months,
+            self.entries_page_size,
+            self.selected_feed_urls,
+            search.unwrap_or_default().trim()
+        )
     }
 }
 

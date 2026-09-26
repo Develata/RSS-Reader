@@ -39,6 +39,7 @@ fn render_entry_card(
         li {
             key: "{entry.id}",
             "data-layout": "entry-card",
+            "data-position-entry": "{entry.id}",
             "data-variant": "reading",
             "data-list-edge": "{list_edge}",
             Link {

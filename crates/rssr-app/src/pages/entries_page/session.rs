@@ -81,12 +81,26 @@ impl EntriesPageSession {
     }
 
     pub(crate) fn load_entries_query(self, query: EntryQuery) {
-        self.spawn_entries_query(execute_ui_command(UiCommand::Entries(
-            EntriesCommand::LoadEntries { query },
-        )));
+        let key = self.state.peek().position_key(self.feed_id, query.search_title.as_deref());
+        let return_page = (!self.state.peek().entries_loaded)
+            .then(|| crate::ui::reading_position::remembered_page(&key))
+            .flatten();
+        self.spawn_entries_query_with_return(
+            execute_ui_command(UiCommand::Entries(EntriesCommand::LoadEntries { query })),
+            return_page,
+        );
     }
 
-    fn spawn_entries_query(mut self, query: impl Future<Output = Vec<UiIntent>> + 'static) {
+    #[cfg(test)]
+    fn spawn_entries_query(self, query: impl Future<Output = Vec<UiIntent>> + 'static) {
+        self.spawn_entries_query_with_return(query, None);
+    }
+
+    fn spawn_entries_query_with_return(
+        mut self,
+        query: impl Future<Output = Vec<UiIntent>> + 'static,
+        return_page: Option<u32>,
+    ) {
         if !self.state.peek().preferences_load.can_load_entries() {
             return;
         }
@@ -103,7 +117,11 @@ impl EntriesPageSession {
                 return;
             }
             for intent in intents.into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                let loaded = matches!(&intent, EntriesPageIntent::SetEntries { .. });
                 self.dispatch(intent);
+                if loaded && let Some(page) = return_page {
+                    self.dispatch(EntriesPageIntent::SetCurrentPage(page));
+                }
             }
         });
     }
@@ -242,6 +260,40 @@ mod tests {
         let state = complete_older_query_after_latest(loaded(1));
         assert_eq!(state.entries[0].id, 2);
         assert_eq!(state.status_tone, "info");
+    }
+
+    #[test]
+    fn returning_page_is_applied_after_entries_arrive_and_clamped() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let session = dom.in_scope(ScopeId::APP, || {
+            let mut state = EntriesPageState::new(true);
+            state.entries_page_size = 1;
+            let session =
+                EntriesPageSession::new(None, Signal::new(state), Signal::new(0), Signal::new(0));
+            session.dispatch(EntriesPageIntent::PreferencesLoaded);
+            session.spawn_entries_query_with_return(
+                async {
+                    let mut intents = loaded(1);
+                    if let UiIntent::EntriesPage(EntriesPageIntent::SetEntries {
+                        entries, ..
+                    }) = &mut intents[0]
+                    {
+                        let mut second = entries[0].clone();
+                        second.id = 2;
+                        entries.push(second);
+                    }
+                    intents
+                },
+                Some(9),
+            );
+            session
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert!(session.snapshot().entries_loaded);
+            assert_eq!(session.snapshot().current_page, 2);
+        });
     }
 
     #[test]

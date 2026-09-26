@@ -16,6 +16,7 @@ pub(crate) struct ReaderPageLoadedContent {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ReaderPageState {
+    pub(crate) content_loaded: bool,
     /// 当前页面代表哪篇文章。异步加载结果回来时用它判断是否已经过期。
     pub(crate) current_entry_id: i64,
     pub(crate) title: String,
@@ -39,6 +40,7 @@ pub(crate) struct ReaderPageState {
 impl ReaderPageState {
     pub(crate) fn new() -> Self {
         Self {
+            content_loaded: false,
             current_entry_id: 0,
             title: "正在加载…".to_string(),
             body_text: String::new(),
@@ -62,6 +64,7 @@ impl ReaderPageState {
     ///
     /// 同一篇的显式重载保留提示，切换文章时清空提示。
     pub(crate) fn begin_loading(&mut self, entry_id: i64) {
+        self.content_loaded = false;
         let switched_entry = self.current_entry_id != entry_id;
         self.current_entry_id = entry_id;
         self.load_generation = self.load_generation.wrapping_add(1);

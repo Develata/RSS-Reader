@@ -31,6 +31,7 @@ const APP_STYLESHEET: &str = concat!(
 #[component]
 #[allow(non_snake_case)]
 pub fn App() -> Element {
+    crate::ui::reading_position::use_reading_positions();
     let settings = use_signal(AppServices::default_settings);
     let mut auth = use_signal(auth_state);
     let shell = use_app_shell_state();

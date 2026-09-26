@@ -1,5 +1,7 @@
 # 主题作者 Selector 参考
 
+文章列表返回定位使用 `[data-layout="entry-card"][data-return-highlight="true"]`，短暂显示淡背景；不得把它解释为已读或收藏状态。主题应避免在这里改变尺寸、位置或加入闪烁动画。内部 `data-position-*` 字段用于 DOM 测量，不是主题稳定接口。
+
 这份文档面向自定义主题作者，记录当前 UI 中可长期依赖的稳定样式接口。
 
 目标：

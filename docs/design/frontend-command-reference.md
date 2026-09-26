@@ -69,6 +69,10 @@
 
 Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换文章再返回同一篇也不会接纳上次访问的迟到结果。图片本地化只更新缓存，不触发当前正文重载；下次打开文章使用新的本地引用，避免正文替换打断滚动、选区或图片查看器。
 
+位置记忆由 UI runtime 的 `reading_position` 管理，仅保留本次运行内的分页和坐标/锚点；没有 domain/application、数据库或 CLI 契约变化。列表只在初次加载成功后恢复分页，等待 presenter 与页码一致后才进行 DOM 恢复；主动筛选或翻页不会套用旧位置。以文章 ID 和视口偏移定位，找不到时回退到有效滚动范围内的原坐标。Reader 使用正文块锚点与偏移，顶部不因元信息高度变化而离开顶部。DOM bridge 提供测量、导航代次、时钟与用户输入事实，Rust 决定恢复、回退与停止，最多校正 2 秒；用户主动输入或导航会终止校正。图片 dialog 锁定滚动期间不记录临时坐标。
+
+返回列表的文章可有 `data-return-highlight="true"`，约 2 秒后移除；这是定位提示，不代表已读。`data-position-key` / `data-position-page` / `data-position-ready` / `data-position-entry` 是内部桥接字段，不作为用户主题接口。Web 页面刷新或应用结束清除位置，位置不参与配置交换。
+
 `data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好被忽略，搜索词与文章筛选折叠偏好保留。`app-nav-shell` 的 `data-state` 现为 `normal` / `search`。
 
 搜索输入框保持 shell 级状态；当持久化的旧版侧栏 CSS 把导航压窄时，导航行允许换行，输入框占满下一行，避免只露出极窄的一截。

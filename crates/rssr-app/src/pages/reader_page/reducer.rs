@@ -17,6 +17,7 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
                 return;
             }
             state.title = content.title;
+            state.content_loaded = true;
             state.body_text = content.body_text;
             state.body_html = content.body_html;
             state.source = content.source;

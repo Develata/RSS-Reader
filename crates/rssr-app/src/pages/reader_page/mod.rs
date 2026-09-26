@@ -42,6 +42,8 @@ pub fn ReaderPage(entry_id: i64) -> Element {
         article {
             class: "reader-page",
             "data-page": "reader",
+            "data-position-key": "reader:{entry_id}",
+            "data-position-ready": if facade.positions_ready(entry_id) { "true" } else { "false" },
             "data-layout": "reader-page",
             "data-state": if facade.error().is_some() { "error" } else { "loaded" },
             AppNav { on_back: move |_| {

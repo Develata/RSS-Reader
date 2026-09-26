@@ -590,3 +590,8 @@ html:has([data-page="entries"][data-entry-scope="all"]) { overscroll-behavior-y:
   font-weight: normal;
   white-space: nowrap;
 }
+
+/* 返回文章列表时短暂定位刚打开的文章，不改变已读状态。 */
+[data-layout="entry-card"][data-return-highlight="true"] {
+  background: var(--accent-soft);
+}
