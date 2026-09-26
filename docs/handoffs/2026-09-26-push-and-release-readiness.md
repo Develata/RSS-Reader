@@ -4,9 +4,9 @@
 - 作者 / Agent：Codex
 - 分支：main
 - 当前 HEAD：105b7474579276a910e535dac03cf810c42caf2a（本轮开始）
-- 相关 commit：105b747 已推送；验收脚本与本记录归入本记录所在提交
+- 相关 commit：105b747、6c64915 均已推送；本次文档补记归入本记录最后更新所在提交
 - 相关 tag / release：远端最新为 v0.1.19；候选 v0.1.20，本轮尚未创建或推送 tag
-- 状态：`validated`（本地修复验证通过；新提交的完整远端 CI 尚待执行）
+- 状态：`validated`（6c64915 本地与远端自动化通过；正式发布仍有下述验收缺口）
 
 ## 工作摘要
 
@@ -38,6 +38,14 @@
 - [CI 36248375463](https://github.com/Develata/RSS-Reader/actions/runs/36248375463)：失败。21 个 job 中 `web-ui (amethyst-glass)` 与依赖它的汇总 `lint-and-test` 失败，其余通过，包括 Android smoke、原生、wasm 与其他主题。
 - [Docker 36248375497](https://github.com/Develata/RSS-Reader/actions/runs/36248375497)：成功。main 执行镜像构建和健康检查，不推送版本镜像。
 
+### 修复提交的远端复验
+
+- `git -c push.followTags=false push origin HEAD:refs/heads/main`：退出 0；`105b747..6c64915`，远端完整 SHA 为 `6c649152c856b8ba0af265bbd0276d9f3d250ed9`。
+- [CI 36249306730](https://github.com/Develata/RSS-Reader/actions/runs/36249306730)：21/21 job 成功，含 5 个 Web 主题、3 个 wasm 契约 harness、原生模块与 Android smoke。`gh run watch 36249306730 --exit-status --interval 15` 退出 0。
+- [Docker 36249306754](https://github.com/Develata/RSS-Reader/actions/runs/36249306754)：成功，镜像构建及容器健康检查通过。`gh run watch 36249306754 --exit-status --interval 15` 退出 0。
+- Android 发布需要的 4 个 GitHub secret 名称均存在；未读取其值，名称存在不证明下一次签名发布成功。
+- 最后补记只修改本交接，未改变上述已验证的源码、脚本或 workflow；补记提交触发的新 CI 应另看其实际状态，不能把 6c64915 的运行结果标为其他 SHA。
+
 ### 本地自动化验证
 
 本轮复用 105b747 的已有 debug Web 构建；Amethyst 对照使用上述 CI 下载的同一份 release Web 产物，放在隔离的 `target/tag-readiness/repro/target/`，未覆盖已有 release 构建。运行环境为 WSL/Linux、Bun、Playwright 自带 Chromium 1234；Chrome 路径通过 `CHROME_BIN` 指定。
@@ -59,7 +67,7 @@
 
 真实代理失败证据：`getent ahostsv4 www.ruanyifeng.com` 返回 `198.18.0.172`，其他公共域名也落入 `198.18.0.0/15`；`feed-proxy.headers` 为 HTTP 400，响应提示禁止内网或本地地址。这是现有防护的预期拒绝，未修改网络设置或安全规则。
 
-本次没有在本地重复整套 cargo / wasm harness：Rust 生产代码未改，105b747 的完整本地记录见 [刷新边界与写入成本](2026-09-26-refresh-bounds-and-write-cost.md)，首轮远端相应 job 也已通过。脚本修复提交推送后仍应以新提交的完整远端 CI 为最终主线结论。
+本次没有在本地重复整套 cargo / wasm harness：Rust 生产代码未改，105b747 的完整本地记录见 [刷新边界与写入成本](2026-09-26-refresh-bounds-and-write-cost.md)。6c64915 的远端完整复验结果见上。
 
 ### 浏览器与图像验收
 
@@ -70,15 +78,15 @@
 
 ## 结果
 
-- 已验证：105b747 成功推送；两个验收脚本问题均有复现和修复后的真实浏览器证据。
+- 已验证：105b747 与 6c64915 成功推送；两个验收脚本问题均有复现和修复后的真实浏览器证据；6c64915 的 CI 21/21 与 Docker 成功。
 - 推断：首轮 Amethyst 失败由测试输入未取消位置校正引起，同一 release 产物的前后对照支持此判断，未发现需修改产品的证据。
-- 未验证：修复提交的远端完整 CI（推送后再看）；本机无法覆盖正常 DNS 下的真实远端 feed 代理；设备交互和下一版本发布安装包。
+- 未验证：正常 DNS 下的真实远端 feed 代理；设备交互和下一版本发布安装包。本次检查 `adb devices -l` 无连接设备，SDK 中无已安装的 emulator 入口。
 - 本轮未创建 tag、未触发 Release、未发布 Docker 版本镜像。推送 `v*` tag 会自动发布安装包与 Docker，不能把主线 CI 成功表述为 Release 已成功。
 
 ## 风险与后续事项
 
 - 在不使用 Fake-IP DNS 的网络补跑真实远端代理 smoke，不能用同源 fixture 代替。
-- 核对修复提交的 CI 全部成功后再判断候选 v0.1.20；发布说明保留设备验收边界。
+- 候选版本为 v0.1.20。按 [发布覆盖矩阵](../testing/release-ui-coverage-matrix.md) 的 P1 定义，建议补齐真实远端代理及 Android 选择手柄 / 系统返回 / 图片缩放验收后再推正式发布 tag；主线自动化成功不等于全部发布验收完成。
 - 产物保留在忽略目录 `target/tag-readiness/`。原有 `.handoff/` 排除规则与任务外 worktree 未动。
 
 ## 给下一位 Agent 的备注
