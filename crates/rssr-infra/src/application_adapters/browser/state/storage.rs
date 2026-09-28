@@ -181,6 +181,28 @@ fn publish(
     Ok(())
 }
 
+/// Called under the same Web Lock as transaction; existing/corrupt data is never replaced.
+pub(super) fn initialize_if_pristine(cache: &mut Cache, initial: BrowserState) -> Result<()> {
+    let storage = storage()?;
+    let mut pristine = get(&storage, COMMIT_STORAGE_KEY)?.is_none();
+    if pristine {
+        for key in KEYS {
+            if get(&storage, key)?.is_some() || get(&storage, &format!("{key}-next"))?.is_some() {
+                pristine = false;
+                break;
+            }
+        }
+    }
+    transaction(cache, move |state| {
+        if pristine {
+            *state = initial;
+            Ok(((), Changes::CORE | Changes::APP_STATE | Changes::FLAGS | Changes::CONTENT))
+        } else {
+            Ok(((), Changes::NONE))
+        }
+    })
+}
+
 pub(super) fn transaction<T>(
     cache: &mut Cache,
     operation: impl FnOnce(&mut BrowserState) -> Result<(T, Changes)>,

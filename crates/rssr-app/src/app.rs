@@ -60,6 +60,14 @@ pub fn App() -> Element {
                 class: "app-shell {theme_class(settings.theme)}",
                 "data-density": "{density_state(settings.list_density)}",
                 style: "--reader-font-scale: {settings.reader_font_scale};",
+                if crate::demo::ENABLED {
+                    aside { "data-slot": "pages-demo-notice", role: "note",
+                        StatusBanner {
+                            message: crate::demo::NOTICE.to_string(),
+                            tone: "info".to_string(),
+                        }
+                    }
+                }
                 RoutableApp {}
             }
         } else if auth() == WebAuthState::PendingServerProbe {

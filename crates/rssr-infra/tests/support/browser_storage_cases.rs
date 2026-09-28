@@ -257,3 +257,27 @@ async fn missing_head_with_newer_slots_is_not_mistaken_for_an_empty_legacy_datab
     assert!(storage().get_item(ENTRY_FLAGS_STORAGE_KEY).unwrap().is_none());
     assert!(storage().get_item(COMMIT_STORAGE_KEY).unwrap().is_none());
 }
+
+#[wasm_bindgen_test]
+async fn initial_state_is_atomic_and_never_replaces_existing_data() {
+    clear_browser_state_storage();
+    let (first, second) = tokio::join!(
+        BrowserStore::open_with_initial_state(fixture()),
+        BrowserStore::open_with_initial_state(BrowserState::default()),
+    );
+    let first = first.unwrap().snapshot().await.unwrap();
+    let second = second.unwrap().snapshot().await.unwrap();
+    assert_eq!(first.core.entries.len(), second.core.entries.len());
+    assert_eq!(first.core.entries.len(), first.entry_content.entries.len() * 2);
+
+    clear_browser_state_storage();
+    BrowserStore::open().await.unwrap();
+    let reopened = BrowserStore::open_with_initial_state(fixture()).await.unwrap();
+    assert!(reopened.snapshot().await.unwrap().core.entries.is_empty());
+
+    clear_browser_state_storage();
+    storage().set_item(STORAGE_KEY, "broken").unwrap();
+    assert!(BrowserStore::open_with_initial_state(fixture()).await.is_err());
+    assert_eq!(storage().get_item(STORAGE_KEY).unwrap().as_deref(), Some("broken"));
+    clear_browser_state_storage();
+}

@@ -5,6 +5,10 @@ inputs:
   version:
     description: Dioxus CLI version to install
     required: true
+  allow-source-fallback:
+    description: Explicitly permit a slow locked source build if no upstream binary is available
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -16,12 +20,27 @@ runs:
         path: ~/.cache/rssr-tools/dioxus/${{ inputs.version }}
         key: dioxus-cli-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
 
+    - name: Setup cargo-binstall on cache miss
+      if: steps.cache-dioxus-cli.outputs.cache-hit != 'true'
+      uses: ./.github/actions/setup-cargo-binstall
+
     - name: Install Dioxus CLI
       if: steps.cache-dioxus-cli.outputs.cache-hit != 'true'
       shell: bash
       env:
         TOOL_VERSION: ${{ inputs.version }}
-      run: cargo install dioxus-cli --version "$TOOL_VERSION" --locked --root "$HOME/.cache/rssr-tools/dioxus/$TOOL_VERSION"
+        ALLOW_SOURCE_FALLBACK: ${{ inputs.allow-source-fallback }}
+      run: |
+        tool_root="$HOME/.cache/rssr-tools/dioxus/$TOOL_VERSION"
+        if ! cargo binstall dioxus-cli --version "=$TOOL_VERSION" --locked --no-confirm \
+          --strategies crate-meta-data --root "$tool_root"; then
+          if [[ "$ALLOW_SOURCE_FALLBACK" != true ]]; then
+            echo '::error::Dioxus binary installation failed; source fallback is disabled.'
+            exit 1
+          fi
+          echo '::warning::Explicit source fallback enabled; compiling Dioxus CLI.'
+          cargo install dioxus-cli --version "=$TOOL_VERSION" --locked --root "$tool_root"
+        fi
 
     - name: Verify Dioxus CLI
       shell: bash

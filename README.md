@@ -90,6 +90,7 @@ cargo check --locked -p rssr-app --target wasm32-unknown-unknown
 
 - [使用指南](./docs/user-guide.md)：订阅、搜索、阅读、主题、WebDAV 和本地备份。
 - [Web / Docker 部署与登录配置](./docs/deployment/web.md)：GHCR、Compose、生产环境、`/feed-proxy`。
+- [GitHub Pages 静态演示](./docs/deployment/github-pages.md)：真实 Dioxus Web bundle、合成样例、CORS 能力降级。
 - [Android 构建与验收状态](./docs/roadmaps/android-release-roadmap.md)：本地 APK、签名与待测设备行为。
 - [文档索引](./docs/README.md)：设计、测试、交接记录。
 - [贡献说明](./CONTRIBUTING.md) · [MIT License](./LICENSE)。

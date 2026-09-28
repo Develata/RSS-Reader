@@ -4,6 +4,9 @@ inputs:
   version:
     description: Exact wasm-bindgen version matching Cargo.lock
     required: true
+  allow-source-fallback:
+    description: Explicitly allow a slow locked source build if binary installation fails
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -13,17 +16,32 @@ runs:
       with:
         path: ~/.cache/rssr-tools/wasm-bindgen/${{ inputs.version }}
         key: wasm-bindgen-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
+    - name: Setup cargo-binstall on cache miss
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: ./.github/actions/setup-cargo-binstall
     - name: Install wasm-bindgen tools
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         TOOL_VERSION: ${{ inputs.version }}
-      run: cargo install wasm-bindgen-cli --version "$TOOL_VERSION" --locked --root "$HOME/.cache/rssr-tools/wasm-bindgen/$TOOL_VERSION"
+        ALLOW_SOURCE_FALLBACK: ${{ inputs.allow-source-fallback }}
+      run: |
+        tool_root="$HOME/.cache/rssr-tools/wasm-bindgen/$TOOL_VERSION"
+        if ! cargo binstall wasm-bindgen-cli --version "=$TOOL_VERSION" --locked --no-confirm \
+          --strategies crate-meta-data --root "$tool_root"; then
+          if [[ "$ALLOW_SOURCE_FALLBACK" != true ]]; then
+            echo '::error::wasm-bindgen binary installation failed; source fallback is disabled.'
+            exit 1
+          fi
+          echo '::warning::Explicit source fallback enabled; compiling wasm-bindgen CLI.'
+          cargo install wasm-bindgen-cli --version "=$TOOL_VERSION" --locked --root "$tool_root"
+        fi
     - name: Verify pinned runner
       shell: bash
       env:
         TOOL_VERSION: ${{ inputs.version }}
       run: |
         tool_bin="$HOME/.cache/rssr-tools/wasm-bindgen/$TOOL_VERSION/bin"
+        test "$("$tool_bin/wasm-bindgen" --version)" = "wasm-bindgen $TOOL_VERSION"
         test "$("$tool_bin/wasm-bindgen-test-runner" --version)" = "wasm-bindgen-test-runner $TOOL_VERSION"
         echo "$tool_bin" >> "$GITHUB_PATH"

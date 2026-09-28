@@ -33,6 +33,14 @@ impl BrowserStore {
         Ok(store)
     }
 
+    /// Seed only storage with no committed, legacy or staged slices, under the Web Lock.
+    /// Existing data (including an intentionally empty database) is never replaced.
+    pub async fn open_with_initial_state(initial: BrowserState) -> Result<Self> {
+        let store = Self::default();
+        store.with_cache(move |cache| storage::initialize_if_pristine(cache, initial)).await?;
+        Ok(store)
+    }
+
     /// A detached diagnostic/export snapshot; normal repository queries borrow the cache.
     pub async fn snapshot(&self) -> Result<BrowserState> {
         self.read(|state| Ok(state.clone())).await
@@ -48,6 +56,14 @@ impl BrowserStore {
     pub(crate) async fn update<T: Send + 'static>(
         &self,
         operation: impl FnOnce(&mut BrowserState) -> Result<(T, Changes)> + Send + 'static,
+    ) -> Result<T> {
+        self.with_cache(move |cache| storage::transaction(cache, operation)).await
+    }
+
+    /// Only locking, cancellation and cache access; callers own storage semantics.
+    async fn with_cache<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&mut Cache) -> Result<T> + Send + 'static,
     ) -> Result<T> {
         // JS futures stay on the host executor. The repository's existing Send future only
         // waits on a Rust channel; no unsafe Send wrapper or domain platform branch is needed.
@@ -67,7 +83,7 @@ impl BrowserStore {
                 if let Some(operation) = operation.take() {
                     *output.borrow_mut() = Some((|| {
                         let mut cache = cache.lock().map_err(|e| anyhow::anyhow!(e.to_string()))?;
-                        storage::transaction(&mut cache, operation)
+                        operation(&mut cache)
                     })());
                 }
             });
