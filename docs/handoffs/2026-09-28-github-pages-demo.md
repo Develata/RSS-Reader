@@ -4,9 +4,9 @@
 - 作者 / Agent：Codex
 - 分支：main
 - 基础 HEAD：dbe68e11fdbf93769bfa876831113a17928108ab
-- 相关 commit：本记录所属功能提交；远端验收结果另行记录
+- 相关 commit：功能 `a275b0e`；smoke 修复 / 部署 `3e0d199`；本记录最后一次更新为纯文档提交
 - 相关 tag / release：v0.1.20 发布记录
-- 状态：用户已授权提交、推送；远端 CI / 部署待验收
+- 状态：已提交、部署成功；主 CI、Pages 与 Docker smoke 均通过
 
 ## 工作摘要
 
@@ -47,7 +47,7 @@
 
 ## 结果
 
-补丁可供审查与应用；最终发布前必须让 Pages build 和原有 wasm 契约 CI 通过。
+功能和 smoke 修复已进入 main；Pages 已部署真实 Dioxus bundle，主 CI、Wasm 浏览器契约与 Docker smoke 均成功。最终运行证据见文末。
 
 ## 风险与后续事项
 
@@ -88,3 +88,16 @@
 - 修复：仅对 `Document` 类型、HTTP 404、同 origin + pathname 的目标路由豁免；任何非文档资源 404、其它路由、500、运行时错误与外部请求仍失败。
 - [主 CI](https://github.com/Develata/RSS-Reader/actions/runs/36451614234) 的三组 Wasm 浏览器契约已通过；subscription harness 19/19，包含新增原子初始化与已有数据保护用例；五主题 Web UI 已通过。完整运行最终状态待回读。
 - 修复验证：`node --check scripts/browser/pages_smoke.mjs`、`git diff --check` 通过；修复的真实浏览器回归由后续 Pages run 验证。
+
+## 最终远端验收（2026-09-28）
+
+- 部署源码：`3e0d199d9ddd4494e8c24e1156f47a8018805a84`。
+- [Pages 36452167159](https://github.com/Develata/RSS-Reader/actions/runs/36452167159)：build、CDP smoke、产物上传与 deploy 全部成功；部署日志于 16:38:20 UTC 报告 success。
+- [CI 36452166565](https://github.com/Develata/RSS-Reader/actions/runs/36452166565)：21/21 jobs 成功，包括聚合 lint-and-test、Android bundle、六个 native module、三组 Wasm 浏览器契约、五主题 Web UI。首次功能提交的 CI 36451614234 同样成功。
+- [Docker 36452166434](https://github.com/Develata/RSS-Reader/actions/runs/36452166434)：镜像构建与容器运行验收成功；main 按既有规则不推送 tag 镜像。
+- Pages 日志确认 dx / wasm-bindgen / Chrome 命中版本缓存；真实 release bundle 构建约 109.74 秒，Web asset tools 缓存成功保存。
+- CDP 成功日志：`Pages smoke passed: actual reader, 404 deep link, prefix, persistence, blocked add/refresh`；没有放宽外部网络请求或资源加载错误断言。
+- 公开地址：[https://develata.github.io/RSS-Reader/](https://develata.github.io/RSS-Reader/)。独立 HTTP 回读首页与 hash JS 均 200；hash WASM 200、Content-Type 为 application/wasm、magic 为 0061736d；`/entries/2` 返回预期 404 并包含同一应用入口，`/404.html` 为 200。
+- 浏览器功能验收在 GitHub runner 对同一发布 bundle 执行；公开域名补充 HTTP / 资源检查，没有将 HTTP 检查冒充线上浏览器交互验收。
+- 结束后仅提交本交接文档，使用 `[skip ci]` 避免为相同源码重复执行全套构建；不修改 workflow、测试或分支保护。已部署版本保持 `3e0d199`。
+- 已收敛本轮 Pages 失败，无待修复 CI 错误。Windows / macOS 安装器与设备交互仍未在本轮执行；未打新 release tag。
