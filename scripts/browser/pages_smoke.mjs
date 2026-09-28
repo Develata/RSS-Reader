@@ -11,8 +11,16 @@ const client = connect((await newPage()).webSocketDebuggerUrl);
 const failures = [];
 const network = [];
 client.on('Runtime.exceptionThrown', (event) => failures.push(event));
-client.on('Network.responseReceived', ({ response }) => {
-  if (response.status >= 400 && response.url !== direct && !response.url.endsWith('/favicon.ico')) failures.push(response.url);
+client.on('Network.responseReceived', ({ response, type }) => {
+  // Dioxus normalizes away the query before reload. Pages returns the same
+  // expected document 404 for both URLs; failed assets must still be reported.
+  const url = new URL(response.url);
+  const route = new URL(direct);
+  const expectedFallback = response.status === 404 && type === 'Document'
+    && url.origin === route.origin && url.pathname === route.pathname;
+  if (response.status >= 400 && !expectedFallback && !response.url.endsWith('/favicon.ico')) {
+    failures.push({ url: response.url, status: response.status, type });
+  }
 });
 client.on('Network.loadingFailed', (event) => {
   if (!event.canceled) failures.push(event);

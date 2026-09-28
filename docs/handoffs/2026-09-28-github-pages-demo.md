@@ -79,3 +79,12 @@
 - 推送前通过 GitHub API 确认 main 仍为基础 HEAD，无并发源码更新；再次 `git diff --check` 通过。
 - 本次提交包含 19 个已审查文件，复用前述构建验证；完整浏览器验收交由 GitHub runner 执行。
 - 远端运行链接及最终部署结果待 CI 完成后补充。
+
+## 首次远端验收与修复
+
+- 功能提交：`a275b0ed7c738ead5e6743d5eb38aa832ab1e588`；CLI 无推送凭据，使用已连接 GitHub Git Data API 创建等价 tree / commit 并以非 force 更新 main。未改变仓库保护规则。
+- [首次 Pages 运行](https://github.com/Develata/RSS-Reader/actions/runs/36451614213)：真实 release 构建成功；CDP 依次完成 reader、子路径、收藏持久化、添加和刷新阻断断言，最后错误汇总失败，部署被跳过。
+- 原因：Dioxus 规范化路由去掉 `?pages-smoke=1`，reload 的同一文档返回预期 HTTP 404；测试只按完整 URL 豁免首次直达，误将 reload 归为资源错误。
+- 修复：仅对 `Document` 类型、HTTP 404、同 origin + pathname 的目标路由豁免；任何非文档资源 404、其它路由、500、运行时错误与外部请求仍失败。
+- [主 CI](https://github.com/Develata/RSS-Reader/actions/runs/36451614234) 的三组 Wasm 浏览器契约已通过；subscription harness 19/19，包含新增原子初始化与已有数据保护用例；五主题 Web UI 已通过。完整运行最终状态待回读。
+- 修复验证：`node --check scripts/browser/pages_smoke.mjs`、`git diff --check` 通过；修复的真实浏览器回归由后续 Pages run 验证。
