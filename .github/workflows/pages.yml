@@ -68,7 +68,7 @@ jobs:
       - name: Pages metadata
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Select deployment base path
         env:
           CONFIGURED_BASE: ${{ steps.pages.outputs.base_path }}
@@ -102,7 +102,7 @@ jobs:
           path: target/pages-smoke/
           if-no-files-found: ignore
           retention-days: 3
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           path: target/dx/rssr-app/release/web/public
@@ -139,4 +139,4 @@ jobs:
       - name: Deploy
         if: steps.current.outputs.deploy == 'true'
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
