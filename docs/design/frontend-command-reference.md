@@ -90,9 +90,17 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 
 `feed-form` 使用原生 submit；地址输入 Enter 与 `data-action="add-feed"` 调用同一添加命令。`refresh-all` 为独立 button，不提交地址输入。
 
+订阅页“刷新全部”直接读取 shell 的共享刷新状态；任一入口启动刷新后，该按钮同步显示“正在刷新…”、原生 `disabled` 与 `aria-busy="true"`，结束后恢复。页面不另建刷新中的局部状态。
+
 Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以 disabled / `aria-busy` 提示；输入仍可编辑，成功仅清空未变化的已提交地址，失败释放 pending 并保留输入。`LoadSnapshot` 以页面内 query generation 丢弃旧查询的成功和错误，避免刷新、添加与删除交错时旧统计覆盖新结果。两者均属于共享 Rust 页面交互，不改变 application 用例或增加平台分支。
 
 ### 阅读相关
+
+四个主要页面的主标题为 `h1`，应用自身的小节标题按层级递进；Reader 正文中的来源 HTML 保留内容标题语义，不作为应用导航层级改写。字号由稳定的 `data-slot` 样式控制。
+
+`data-layout="reader-shortcut-scope"` 是可用 Tab 进入的具名 `region`，提供 M / F / 左右方向键说明和可见焦点。快捷键仍限定在阅读区，带修饰键或输入法组合中的事件放行。收藏按钮的固定名称与 `aria-pressed` 搭配，底栏四个装饰图标均为 `aria-hidden="true"`。
+
+动态操作结果使用持续挂载的 `StatusBanner` live region：`role="status"`、`aria-live="polite"`、`aria-atomic="true"`。空消息区域保留在可访问树中但不占布局空间；加载/成功/错误更新文本时不抢焦点。静态空列表或归档说明不参与播报。颜色状态继续使用 `data-state="info|success|error"`，不把错误色自动映射成打断式通知。
 
 - 标记已读 / 未读
 - 切换收藏

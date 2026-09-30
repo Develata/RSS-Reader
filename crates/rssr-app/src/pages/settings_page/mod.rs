@@ -50,7 +50,7 @@ pub fn SettingsPage() -> Element {
         section { "data-page": "settings",
             AppNav {}
             div { "data-slot": "page-section-header", "data-layout": "page-header", "data-section": "settings",
-                h2 { "data-slot": "page-title", "设置" }
+                h1 { "data-slot": "page-title", "设置" }
                 div { "data-slot": "page-header-actions",
                     button {
                         class: "icon-link-button",
@@ -73,9 +73,7 @@ pub fn SettingsPage() -> Element {
                     }
                 }
             }
-            if facade.has_status_message() {
-                StatusBanner { message: facade.status_message(), tone: facade.status_tone() }
-            }
+            StatusBanner { message: facade.status_message(), tone: facade.status_tone(), announce: true }
             div { "data-layout": "settings-grid",
                 AppearanceSettingsCard { facade: facade.clone() }
                 WebDavSettingsCard { facade }

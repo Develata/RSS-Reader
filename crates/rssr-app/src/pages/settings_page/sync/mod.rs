@@ -16,11 +16,11 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
     rsx! {
         div { "data-layout": "settings-card", "data-section": "webdav-sync",
             div { "data-slot": "settings-card-header",
-                h3 { "data-slot": "card-title", "WebDAV 配置交换" }
+                h2 { "data-slot": "card-title", "WebDAV 配置交换" }
             }
             div { "data-layout": "settings-card-section", "data-section": "webdav-endpoint",
                 div { "data-slot": "settings-card-section-header",
-                    h4 { "data-slot": "settings-card-section-title", "远端配置端点" }
+                    h3 { "data-slot": "settings-card-section-title", "远端配置端点" }
                 }
                 div { "data-layout": "settings-form-grid",
                     div { "data-slot": "settings-form-grid-item",
@@ -54,7 +54,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
             }
             div { "data-layout": "settings-card-section", "data-section": "webdav-actions",
                 div { "data-slot": "settings-card-section-header",
-                    h4 { "data-slot": "settings-card-section-title", "同步动作" }
+                    h3 { "data-slot": "settings-card-section-title", "同步动作" }
                 }
                 div { class: "inline-actions", "data-layout": "settings-card-actions",
                     button {

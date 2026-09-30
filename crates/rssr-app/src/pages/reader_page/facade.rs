@@ -65,10 +65,6 @@ impl ReaderPageFacade {
         &self.snapshot.status_tone
     }
 
-    pub(crate) fn has_status_message(&self) -> bool {
-        !self.status_message().is_empty()
-    }
-
     pub(crate) fn error(&self) -> Option<&str> {
         self.snapshot.error.as_deref()
     }

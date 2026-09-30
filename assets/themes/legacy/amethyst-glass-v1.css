@@ -39,7 +39,7 @@
   --accent-line: rgba(139, 92, 246, 0.42);
   --accent-line-faint: rgba(139, 92, 246, 0.18);
   --accent-soft: rgba(237, 230, 253, 0.9);
-  --focus-ring-color: var(--accent-strong);
+  --focus-ring-color: rgba(147, 102, 247, 0.7);
   --focus-ring-shadow: 0 0 0 4px rgba(147, 102, 247, 0.18);
 
   /* 阴影 */
@@ -271,7 +271,7 @@ body:has(.theme-dark)::before {
     box-shadow 180ms ease;
 }
 
-[data-nav]:hover:not(:disabled) {
+[data-nav]:hover {
   transform: translateY(-2px);
   color: var(--accent-strong);
 }
@@ -354,12 +354,12 @@ body:has(.theme-dark)::before {
     filter 220ms ease;
 }
 
-.button:hover:not(:disabled) {
+.button:hover {
   transform: translateY(-2px);
   filter: brightness(1.04);
 }
 
-.button:active:not(:disabled) {
+.button:active {
   transform: translateY(1px);
   box-shadow:
     0 5px 12px -8px rgba(109, 40, 217, 0.55),
@@ -372,7 +372,7 @@ body:has(.theme-dark)::before {
   text-shadow: none;
 }
 
-.button[data-variant="secondary"]:hover:not(:disabled) {
+.button[data-variant="secondary"]:hover {
   color: var(--glass-secondary-fg-hover);
 }
 
@@ -411,9 +411,9 @@ body:has(.theme-dark)::before {
     transition: none;
   }
 
-  [data-nav]:hover:not(:disabled),
-  .button:hover:not(:disabled),
-  .button:active:not(:disabled),
+  [data-nav]:hover,
+  .button:hover,
+  .button:active,
   [data-layout="feed-card"]:hover,
   [data-layout="entry-card"]:hover {
     transform: none;

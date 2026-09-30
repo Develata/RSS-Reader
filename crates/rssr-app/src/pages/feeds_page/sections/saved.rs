@@ -19,7 +19,7 @@ pub(crate) fn SavedFeedsSection(facade: FeedsPageFacade) -> Element {
 
     rsx! {
         div { "data-layout": "exchange-header", "data-section": "saved-feeds",
-            h3 { "data-slot": "card-title", "已保存订阅" }
+            h2 { "data-slot": "card-title", "已保存订阅" }
         }
         ul { "data-layout": "feed-list", "data-state": "{facade.feeds_list_state()}",
             for feed in facade.feeds() {

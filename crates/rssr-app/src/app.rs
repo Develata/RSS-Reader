@@ -115,7 +115,7 @@ fn WebAuthGate(state: WebAuthState, on_authenticated: EventHandler<()>) -> Eleme
                 }
                 h1 { "data-slot": "web-auth-title", "{shell.title()}" }
                 p { "data-slot": "web-auth-intro", "{shell.intro()}" }
-                StatusBanner { message: shell.status(), tone: shell.status_tone() }
+                StatusBanner { message: shell.status(), tone: shell.status_tone(), announce: true }
                 form {
                     "data-layout": "web-auth-form",
                     onsubmit: move |event| {

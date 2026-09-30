@@ -342,6 +342,21 @@ async function checkFeeds(client) {
     evidence.stats.length === 2 && Math.abs(evidence.stats[0].top - evidence.stats[1].top) <= 1 &&
     evidence.stats[0].right <= evidence.stats[1].left && evidence.inputBottom <= evidence.viewportHeight, evidence);
   await captureArtifact(client, 'feeds');
+
+  // A live region must exist before an asynchronous result is inserted. Mounting
+  // an already-populated banner can look correct while remaining silent to AT.
+  const initialFeedback = await evaluate(client, `(() => {
+    const region = document.querySelector('[data-page="feeds"] [data-layout="status-banner"][role="status"]');
+    window.__feedsFeedbackRegion = region;
+    return region && {text:region.textContent.trim(), live:region.getAttribute('aria-live'), atomic:region.getAttribute('aria-atomic'), display:getComputedStyle(region).display};
+  })()`);
+  assertThat('Feeds mounts an empty polite live region before an operation',
+    initialFeedback && initialFeedback.text === '' && initialFeedback.live === 'polite' &&
+    initialFeedback.atomic === 'true' && initialFeedback.display !== 'none', initialFeedback);
+  await clickSelector(client, '[data-action="export-config"]');
+  await waitFor(client, `document.querySelector('[data-page="feeds"] [data-layout="status-banner"][role="status"]')?.textContent.includes('已导出配置包 JSON')`);
+  assertThat('asynchronous feedback updates the existing live region without moving focus',
+    await evaluate(client, `document.querySelector('[data-page="feeds"] [data-layout="status-banner"][role="status"]') === window.__feedsFeedbackRegion && document.activeElement !== window.__feedsFeedbackRegion`));
 }
 
 async function checkReader(client) {
@@ -384,6 +399,18 @@ async function checkReader(client) {
     evidence.shortcuts,
   );
   await captureArtifact(client, 'reader');
+  const readerSemantics = await evaluate(client, `(() => {
+    const region = document.querySelector('[data-layout="reader-shortcut-scope"]');
+    const star = document.querySelector('[data-action="toggle-starred"]');
+    return {role:region.getAttribute('role'), name:region.getAttribute('aria-label'),
+      help:document.getElementById(region.getAttribute('aria-describedby'))?.textContent,
+      pressed:star.getAttribute('aria-pressed'), state:star.dataset.state,
+      icons:[...document.querySelectorAll('[data-slot="reader-bottom-bar-icon"]')].map(e=>e.getAttribute('aria-hidden'))};
+  })()`);
+  assertThat('Reader exposes a named shortcut region and the favorite state without decorative glyphs',
+    readerSemantics.role === 'region' && readerSemantics.name && readerSemantics.help &&
+    readerSemantics.pressed === String(readerSemantics.state === 'starred') &&
+    readerSemantics.icons.length === 4 && readerSemantics.icons.every(value=>value === 'true'), readerSemantics);
 }
 
 async function checkShortDirectory(client) {
@@ -737,6 +764,12 @@ async function checkHomeRefreshAndGestures(client) {
     assertThat('repeated Home activation starts one batch', requestCount === beforeRefresh + 1 && pending.length === 1, {beforeRefresh, requestCount, pending: pending.length});
     await clickSelector(client, '[data-nav="feeds"]');
     await selectorExists(client, '[data-action="refresh-all"]');
+    const refreshBusy = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-action="refresh-all"]');
+      return {disabled:button.disabled, busy:button.getAttribute('aria-busy'), text:button.textContent.trim(), opacity:getComputedStyle(button).opacity};
+    })()`);
+    assertThat('Feeds reflects a refresh started on Home with disabled busy feedback',
+      refreshBusy.disabled && refreshBusy.busy === 'true' && refreshBusy.text === '正在刷新…' && Number(refreshBusy.opacity) < 1, refreshBusy);
     await clickSelector(client, '[data-action="refresh-all"]');
     assertThat('Feeds refresh uses the same in-flight gate', requestCount === beforeRefresh + 1, {requestCount});
     await clickSelector(client, '[data-action="activate-home"]');
@@ -1052,6 +1085,10 @@ async function checkReadingPreferencesAndFeedInput(client) {
   await client.send('Input.insertText', {text:'https://example.com/should-not-submit.xml'});
   await clickSelector(client, '[data-action="refresh-all"]');
   await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'finished'`);
+  assertThat('Feeds refresh button becomes available after the shared task finishes', await evaluate(client, `(() => {
+    const button = document.querySelector('[data-action="refresh-all"]');
+    return !button.disabled && button.getAttribute('aria-busy') === 'false' && button.textContent.trim() === '刷新全部';
+  })()`));
   assertThat('refresh button does not submit the subscription form', await evaluate(client,
     `document.querySelector('[data-field="feed-url-input"]').value === 'https://example.com/should-not-submit.xml' && ${committedCore}.feeds.filter(f => !f.is_deleted).length === ${before + 2}`));
 }

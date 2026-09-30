@@ -26,7 +26,7 @@ pub fn FeedsPage() -> Element {
         section { "data-page": "feeds",
             AppNav {}
             div { "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "feeds",
-                h2 { "data-slot": "page-title", "订阅" }
+                h1 { "data-slot": "page-title", "订阅" }
             }
             div { "data-layout": "stats-grid", "data-layout-variant": "airy",
                 div { "data-layout": "stat-card", "data-stat": "feeds",
@@ -38,9 +38,7 @@ pub fn FeedsPage() -> Element {
                     div { "data-slot": "stat-card-value", "{facade.total_entry_count()}" }
                 }
             }
-            if facade.has_status_message() {
-                StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string() }
-            }
+            StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string(), announce: true }
             FeedComposeSection { facade: facade.clone() }
             SavedFeedsSection { facade: facade.clone() }
             ConfigExchangeSection { facade }

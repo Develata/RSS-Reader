@@ -19,7 +19,7 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
             "data-layout": "theme-presets",
             "data-section": "settings-theme-presets",
             div { "data-slot": "settings-card-section-header",
-                h4 { "data-slot": "settings-card-section-title", "内置主题预设" }
+                h3 { "data-slot": "settings-card-section-title", "内置主题预设" }
             }
             div { class: "inline-actions", "data-layout": "theme-preset-selector",
                 select {

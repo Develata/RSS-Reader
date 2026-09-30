@@ -54,10 +54,16 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             // 就会把当前文章标记为已读，打 f 会切换收藏，方向键还会直接换页。
             div {
                 "data-layout": "reader-shortcut-scope",
+                role: "region",
+                aria_label: "文章阅读区",
+                aria_describedby: "reader-shortcuts-help",
                 tabindex: 0,
                 onkeydown: move |event| shortcuts.call(event),
+            p { id: "reader-shortcuts-help", class: "sr-only",
+                "阅读区内可用 M 切换已读，F 切换收藏，左右方向键切换未读文章。"
+            }
             header { class: "reader-header", "data-layout": "reader-header",
-                h2 { class: "reader-title", "data-slot": "reader-title", "{facade.title()}" }
+                h1 { class: "reader-title", "data-slot": "reader-title", "{facade.title()}" }
             }
             div { class: "reader-meta-block", "data-layout": "reader-meta-block",
                 p { class: "reader-meta", "data-slot": "reader-meta", "来源：{facade.source()}" }
@@ -75,12 +81,12 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     }
                 }
             }
-            if let Some(message) = facade.error() {
-                StatusBanner { message: message.to_string(), tone: "error".to_string() }
-            } else {
-                if facade.has_status_message() {
-                    StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string() }
-                }
+            StatusBanner {
+                message: facade.error().unwrap_or_else(|| facade.status_message()).to_string(),
+                tone: (if facade.error().is_some() { "error" } else { facade.status_tone() }).to_string(),
+                announce: true,
+            }
+            if facade.error().is_none() {
                 div { class: "reader-body", "data-layout": "reader-body", "data-state": "{facade.body_state()}",
                     if let Some(html) = facade.body_html() {
                         div { class: "reader-html", "data-slot": "reader-body-html", dangerous_inner_html: "{html}" }
@@ -119,7 +125,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                                 navigator.push(AppRoute::ReaderPage { entry_id: target });
                             }
                         },
-                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", "‹" }
+                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "‹" }
                         span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label", "上一未读" }
                     }
                     button {
@@ -129,7 +135,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         onclick: move |_| {
                             read_facade.toggle_read(false);
                         },
-                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", "{facade.read_toggle_icon()}" }
+                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "{facade.read_toggle_icon()}" }
                         span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label",
                             "{facade.read_toggle_text()}"
                             span { class: "reader-bottom-bar__shortcut", "data-slot": "reader-bottom-bar-shortcut", "（M）" }
@@ -139,10 +145,11 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         class: "reader-bottom-bar__button",
                         "data-state": "{facade.starred_state()}",
                         "data-action": "toggle-starred",
+                        aria_pressed: facade.is_starred(),
                         onclick: move |_| {
                             starred_facade.toggle_starred(false);
                         },
-                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", "{facade.starred_toggle_icon()}" }
+                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "{facade.starred_toggle_icon()}" }
                         span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label",
                             "收藏"
                             span { class: "reader-bottom-bar__shortcut", "data-slot": "reader-bottom-bar-shortcut", "（F）" }
@@ -158,7 +165,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                                 navigator.push(AppRoute::ReaderPage { entry_id: target });
                             }
                         },
-                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", "›" }
+                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "›" }
                         span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label", "下一未读" }
                     }
                 }

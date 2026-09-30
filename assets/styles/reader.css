@@ -13,6 +13,11 @@
   margin-bottom: 10px;
 }
 
+[data-layout="reader-shortcut-scope"]:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 6px;
+}
+
 [data-slot="reader-title"] {
   margin: 0;
   font-family: var(--font-display);

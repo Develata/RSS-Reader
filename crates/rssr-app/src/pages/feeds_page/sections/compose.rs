@@ -8,12 +8,13 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
     let add_facade = facade.clone();
     let refresh_facade = facade.clone();
     let cancel_facade = facade.clone();
+    let refreshing = facade.is_refreshing();
 
     rsx! {
         div { "data-layout": "feed-workbench-single",
             div { "data-layout": "feed-compose-card",
                 div { "data-slot": "feed-compose-card-header",
-                    h3 { "data-slot": "card-title", "新增订阅" }
+                    h2 { "data-slot": "card-title", "新增订阅" }
                 }
                 if !facade.feed_candidates().is_empty() {
                     div { "data-layout": "feed-discovery-candidates",
@@ -67,8 +68,10 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
                         "data-variant": "secondary",
                         "data-action": "refresh-all",
                         r#type: "button",
+                        disabled: refreshing,
+                        aria_busy: refreshing,
                         onclick: move |_| refresh_facade.refresh_all(),
-                        "刷新全部"
+                        if refreshing { "正在刷新…" } else { "刷新全部" }
                     }
                 }
             }

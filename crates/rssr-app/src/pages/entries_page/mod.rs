@@ -50,8 +50,8 @@ pub fn StartupPage() -> Element {
     rsx! {
         section { "data-page": "entries",
             AppNav {}
-            h2 { "data-slot": "page-title", "文章" }
-            StatusBanner { message: status(), tone: status_tone() }
+            h1 { "data-slot": "page-title", "文章" }
+            StatusBanner { message: status(), tone: status_tone(), announce: true }
         }
     }
 }
@@ -87,7 +87,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                 div { "data-layout": "entries-main",
                     div { "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "entries",
                         div { "data-slot": "page-section-row",
-                            h2 { "data-slot": "page-title", "{entries_page_title(feed_id)}" }
+                            h1 { "data-slot": "page-title", "{entries_page_title(feed_id)}" }
                         }
                     }
                     if feed_id.is_some() {
@@ -101,12 +101,11 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                             }
                         }
                     }
-                if facade.has_status_message() {
                     StatusBanner {
                         message: facade.status_message().to_string(),
                         tone: facade.status_tone().to_string(),
+                        announce: true,
                     }
-                }
                     { bulk::render_bulk_controls(&facade) }
                     { controls }
                     if facade.entries_is_empty() {
@@ -132,7 +131,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 for month in facade.time_grouped_entries() {
                                     section { key: "{month.anchor_id}", id: "{month.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "time", "data-group-level": "month",
                                         div { "data-layout": "entry-group-header", "data-group-level": "primary",
-                                            h3 { "data-slot": "entry-group-title", "{month.title}" }
+                                            h2 { "data-slot": "entry-group-title", "{month.title}" }
                                             p { "data-slot": "entry-group-meta", "{month.subtitle}" }
                                         }
                                         for date_group in &month.dates {
@@ -140,13 +139,13 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                 "data-entry-scroll-anchor": "{date_group.anchor_id}",
                                                 "data-entry-scroll-group-anchor": "{month.anchor_id}",
                                                 div { "data-layout": "entry-group-header", "data-group-level": "date",
-                                                    h4 { "data-slot": "entry-group-title", "{date_group.title}" }
+                                                    h3 { "data-slot": "entry-group-title", "{date_group.title}" }
                                                     p { "data-slot": "entry-group-meta", "{date_group.subtitle}" }
                                                 }
                                                 for source in &date_group.sources {
                                                     section { key: "{source.anchor_id}", id: "{source.anchor_id}", "data-layout": "entry-source-group", "data-grouping-mode": "time",
                                                         div { "data-layout": "entry-group-header", "data-group-level": "source",
-                                                            h5 { "data-slot": "entry-group-title", "{source.title}" }
+                                                            h4 { "data-slot": "entry-group-title", "{source.title}" }
                                                             p { "data-slot": "entry-group-meta", "{source.subtitle}" }
                                                         }
                                                         ul { "data-layout": "entry-list", "data-state": "populated",
@@ -164,7 +163,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 for group in facade.source_grouped_entries() {
                                     section { key: "{group.title}", id: "{group.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "source", "data-group-level": "source",
                                         div { "data-layout": "entry-group-header", "data-group-level": "primary",
-                                            h3 { "data-slot": "entry-group-title", "{group.title}" }
+                                            h2 { "data-slot": "entry-group-title", "{group.title}" }
                                             p { "data-slot": "entry-group-meta", "{group.subtitle}" }
                                         }
                                         for month in &group.months {
@@ -172,7 +171,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                                 "data-entry-scroll-anchor": "{month.anchor_id}",
                                                 "data-entry-scroll-group-anchor": "{group.anchor_id}",
                                                 div { "data-layout": "entry-group-header", "data-group-level": "date",
-                                                    h4 { "data-slot": "entry-group-title", "{month.title}" }
+                                                    h3 { "data-slot": "entry-group-title", "{month.title}" }
                                                     p { "data-slot": "entry-group-meta", "{month.subtitle}" }
                                                 }
                                                 ul { "data-layout": "entry-list", "data-state": "populated",

@@ -370,6 +370,10 @@
   resize: vertical;
 }
 
+.app-shell input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
 .field-label {
   display: block;
   margin: 12px 0 8px;
@@ -414,11 +418,17 @@
   border: 1px solid var(--button-danger-outline-border);
 }
 
-.button:hover {
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.button:hover:not(:disabled) {
   filter: brightness(0.96);
 }
 
-.button:active {
+.button:active:not(:disabled) {
   filter: brightness(0.9);
   transform: scale(0.98);
 }

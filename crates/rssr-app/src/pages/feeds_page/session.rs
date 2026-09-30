@@ -31,6 +31,10 @@ impl FeedsPageSession {
         self.state.read().reload_tick
     }
 
+    pub(crate) fn is_refreshing(self) -> bool {
+        self.shell.refresh_state().is_refreshing()
+    }
+
     pub(crate) fn set_feed_url(self, value: String) {
         self.dispatch_intent(FeedsPageIntent::FeedUrlChanged(value));
     }

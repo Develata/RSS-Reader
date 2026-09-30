@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：main
 - 当前 HEAD：`dbe68e1`（开始核对时）
-- 相关 commit：pending（文档阶段独立提交，随后进入已授权的 UI 优化）
+- 相关 commit：`379ac22`（文档阶段独立提交，随后进入已授权的 UI 优化）
 - 相关 tag / release：本次不发布；发布状态引用仓库 `v0.1.20` 交接记录
 - 状态：`validated`
 

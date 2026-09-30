@@ -530,7 +530,7 @@
   font-size: 0.92rem;
 }
 
-[data-layout="entry-card-actions"] .button[data-slot="entry-card-action"]:hover,
+[data-layout="entry-card-actions"] .button[data-slot="entry-card-action"]:hover:not(:disabled),
 [data-layout="entry-card-actions"] .button[data-slot="entry-card-action"]:focus-visible {
   border-color: currentColor;
   background: var(--line-soft);

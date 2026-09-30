@@ -44,7 +44,7 @@
   --accent-soft: rgba(83, 192, 187, 0.14);
   --accent-line: rgba(83, 192, 187, 0.28);
   --accent-line-faint: rgba(83, 192, 187, 0.16);
-  --focus-ring-color: var(--accent-strong);
+  --focus-ring-color: rgba(83, 192, 187, 0.45);
   --focus-ring-shadow: 0 0 0 4px rgba(83, 192, 187, 0.15);
 
   /* 状态与语义色 */
@@ -97,7 +97,7 @@
   border-color: rgba(120, 170, 184, 0.12);
 }
 
-[data-nav]:hover:not(:disabled) {
+[data-nav]:hover {
   border-color: rgba(83, 192, 187, 0.28);
 }
 

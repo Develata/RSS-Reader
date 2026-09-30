@@ -230,7 +230,7 @@ facade 是页面边界对象，不是简单 DTO。
 
 例如：
 
-- `has_status_message()`
+- `status_message()` / `status_tone()`（动态 live region 持续挂载，不按空消息卸载）
 - `save_button_label()`
 - `config_import_button_label()`
 - `remove_feed_button_label(...)`

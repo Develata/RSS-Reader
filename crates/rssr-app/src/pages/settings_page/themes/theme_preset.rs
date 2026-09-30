@@ -21,7 +21,15 @@ const LEGACY_PRESET_CSS: &[(&str, &str)] = &[
     ("atlas-sidebar", include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v2.css")),
     ("atlas-sidebar", include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v1.css")),
     ("newsprint", include_str!("../../../../../../assets/themes/legacy/newsprint-v1.css")),
+    (
+        "amethyst-glass",
+        include_str!("../../../../../../assets/themes/legacy/amethyst-glass-v1.css"),
+    ),
     ("amethyst-glass", include_str!("../../../../../../assets/themes/legacy/forest-desk-v1.css")),
+    (
+        "midnight-ledger",
+        include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v1.css"),
+    ),
 ];
 
 pub(crate) fn preset_css(key: &str) -> &'static str {

@@ -56,6 +56,8 @@ CLI：`rssr-cli mark-read --all --search Rust --read-filter unread --starred-fil
 
 点顶栏的滑杆图标进入设置。基础设置（包括浅色 / 深色 / 跟随系统）先修改草稿，点“保存设置”生效。应用内置主题或清空主题会立即提交；编辑 CSS 后需保存。Web 与桌面可导入 / 导出 CSS 文件，Android 可通过系统文件界面导出，CSS 文件导入尚未实现。想写自己的主题，先看[主题作者选择器参考](./design/theme-author-selector-reference.md)；主题只改变呈现，不负责刷新或导航逻辑。
 
+已保存的主题 CSS 是当时的快照，升级不会自动覆盖。内置主题更新后，重新应用对应预设即可使用新样式；旧版内置主题仍保留原来的名称与移除入口。
+
 配置交换支持 JSON 配置包、OPML 和 WebDAV 上传 / 下载。它用于迁移订阅和设置，不同步文章库、已读或收藏。CLI 对应命令见 `cargo run --locked -p rssr-cli -- --help`；刷新需明确指定 `refresh --all` 或 `refresh --feed-id <id>`，两者不能同时指定。`export-config`、`export-opml`、`show-settings` 的数据写入 stdout，诊断写入 stderr，可直接重定向到文件。
 
 需要登录的 WebDAV 服务可在设置页 Endpoint 中填 `https://用户名:密码@dav.example.com/base/`。客户端会把凭据从请求 URL 中剥离，改用 HTTP Basic；Endpoint 只保存在当前设置会话，不进入本地配置包或导出的数据。用户名或密码含 `@`、`:` 等保留字符时，按 URL 规则百分号编码。避免在截图或共享屏幕时暴露当前输入框中的凭据。

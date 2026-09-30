@@ -68,10 +68,6 @@ impl SettingsPageFacade {
         self.page.status_tone()
     }
 
-    pub(crate) fn has_status_message(&self) -> bool {
-        !self.status_message().is_empty()
-    }
-
     pub(crate) fn set_status(&self, message: impl Into<String>, tone: impl Into<String>) {
         self.page.set_status(message, tone);
     }

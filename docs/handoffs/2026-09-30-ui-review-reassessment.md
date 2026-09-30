@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：main
 - 当前 HEAD：dbe68e1
-- 相关 commit：pending
+- 相关 commit：`379ac22`（随文档刷新一并提交）
 - 相关 tag / release：N/A（未发布）
 - 状态：`validated`（仅完成源码核查与指定色对数值核算）
 

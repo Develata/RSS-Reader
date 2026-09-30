@@ -84,7 +84,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
             "data-layout": "theme-lab",
             "data-section": "settings-theme-lab",
             div { "data-slot": "settings-card-section-header",
-                h4 { "data-slot": "settings-card-section-title", "主题实验室" }
+                h3 { "data-slot": "settings-card-section-title", "主题实验室" }
             }
             label { class: "field-label", r#for: "settings-custom-css", "自定义 CSS" }
             textarea {

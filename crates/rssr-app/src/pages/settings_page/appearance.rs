@@ -10,7 +10,7 @@ pub(crate) fn AppearanceSettingsCard(facade: SettingsPageFacade) -> Element {
     rsx! {
         div { "data-layout": "settings-card", "data-section": "appearance",
             div { "data-slot": "settings-card-header",
-                h3 { "data-slot": "card-title", "阅读外观" }
+                h2 { "data-slot": "card-title", "阅读外观" }
             }
             ReadingPreferencesSection { facade: facade.clone() }
             ThemeSettingsSections { facade: facade.clone() }

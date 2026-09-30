@@ -28,7 +28,7 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
     rsx! {
         div { "data-layout": "settings-card-section", "data-section": "reading-preferences",
             div { "data-slot": "settings-card-section-header",
-                h4 { "data-slot": "settings-card-section-title", "阅读节奏" }
+                h3 { "data-slot": "settings-card-section-title", "阅读节奏" }
             }
             div { "data-layout": "settings-form-grid",
                 div { "data-slot": "settings-form-grid-item",

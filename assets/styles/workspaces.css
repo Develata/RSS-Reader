@@ -33,6 +33,7 @@
 
 [data-slot="card-title"] {
   margin: 0;
+  font-size: 1.17em;
 }
 
 [data-layout="exchange-header"] {

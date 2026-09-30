@@ -13,7 +13,7 @@ pub(crate) fn ConfigExchangeSection(facade: FeedsPageFacade) -> Element {
 
     rsx! {
         div { "data-layout": "exchange-header", "data-section": "config-exchange",
-            h3 { "data-slot": "card-title", "配置交换" }
+            h2 { "data-slot": "card-title", "配置交换" }
         }
         div { "data-layout": "exchange-grid",
             div { "data-layout": "exchange-card", "data-section": "config-json",

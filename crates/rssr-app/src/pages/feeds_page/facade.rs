@@ -34,6 +34,10 @@ impl FeedsPageFacade {
         self.snapshot.adding_feed_url.is_some()
     }
 
+    pub(crate) fn is_refreshing(&self) -> bool {
+        self.session.is_refreshing()
+    }
+
     pub(crate) fn set_feed_url(&self, value: String) {
         self.session.set_feed_url(value);
     }
@@ -112,10 +116,6 @@ impl FeedsPageFacade {
 
     pub(crate) fn status_tone(&self) -> &str {
         &self.snapshot.status_tone
-    }
-
-    pub(crate) fn has_status_message(&self) -> bool {
-        !self.status_message().is_empty()
     }
 
     pub(crate) fn add_feed(&self) {

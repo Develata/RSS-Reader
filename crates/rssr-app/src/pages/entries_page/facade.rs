@@ -105,10 +105,6 @@ impl EntriesPageFacade {
         &self.snapshot.status_tone
     }
 
-    pub(crate) fn has_status_message(&self) -> bool {
-        !self.status_message().is_empty()
-    }
-
     pub(crate) fn entries_is_empty(&self) -> bool {
         self.snapshot.entries.is_empty()
     }

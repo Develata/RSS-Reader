@@ -253,7 +253,7 @@ fn EntryDirectoryRail(
 
     rsx! {
         aside { "data-layout": "entry-directory-rail",
-            h3 { "data-slot": "entry-directory-heading", "目录" }
+            h2 { "data-slot": "entry-directory-heading", "目录" }
             if grouping_mode == EntryGroupingMode::Time {
                 nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
                     for month in &directory_months {
