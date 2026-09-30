@@ -144,6 +144,12 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.selected_feed_urls = selected_feed_urls;
             state.current_page = FIRST_PAGE_NUMBER;
         }
+        EntriesPageIntent::ClearFilters => {
+            state.read_filter = ReadFilter::All;
+            state.starred_filter = StarredFilter::All;
+            state.selected_feed_urls.clear();
+            state.current_page = FIRST_PAGE_NUMBER;
+        }
         EntriesPageIntent::SetCurrentPage(page) => {
             state.current_page = page.max(FIRST_PAGE_NUMBER);
             clamp_current_page(state);

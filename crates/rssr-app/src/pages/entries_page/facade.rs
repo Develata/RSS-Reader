@@ -69,6 +69,53 @@ impl EntriesPageFacade {
         self.ui.set_entry_search(value);
     }
 
+    pub(crate) fn clear_filters(&self) {
+        self.ui.set_entry_search(String::new());
+        self.session.dispatch(EntriesPageIntent::ClearFilters);
+    }
+
+    fn has_source_filter(&self) -> bool {
+        self.session.feed_id().is_none() && !self.snapshot.selected_feed_urls.is_empty()
+    }
+
+    fn has_active_filters(&self) -> bool {
+        !self.entry_search().trim().is_empty()
+            || self.read_filter() != ReadFilter::All
+            || self.starred_filter() != StarredFilter::All
+            || self.has_source_filter()
+    }
+
+    pub(crate) fn active_filter_summary(&self) -> Option<String> {
+        let mut parts = Vec::new();
+        let search = self.entry_search();
+        if !search.trim().is_empty() {
+            parts.push(format!("标题：{}", search.trim()));
+        }
+        match self.read_filter() {
+            ReadFilter::UnreadOnly => parts.push("仅未读".to_string()),
+            ReadFilter::ReadOnly => parts.push("仅已读".to_string()),
+            ReadFilter::All => {}
+        }
+        match self.starred_filter() {
+            StarredFilter::StarredOnly => parts.push("仅收藏".to_string()),
+            StarredFilter::UnstarredOnly => parts.push("仅未收藏".to_string()),
+            StarredFilter::All => {}
+        }
+        if self.has_source_filter() {
+            let selected = self.selected_feed_urls();
+            let single_source = (selected.len() == 1)
+                .then(|| {
+                    self.source_filter_options().iter().find(|(_, _, url, _)| url == &selected[0])
+                })
+                .flatten();
+            parts.push(match single_source {
+                Some((_, title, _, _)) => format!("来源：{title}"),
+                None => format!("来源：{} 个订阅", selected.len()),
+            });
+        }
+        (!parts.is_empty()).then(|| parts.join(" · "))
+    }
+
     pub(crate) fn controls_hidden(&self) -> bool {
         self.snapshot.controls_hidden
     }
@@ -228,13 +275,18 @@ impl EntriesPageFacade {
     }
 
     pub(crate) fn empty_entries_message(&self) -> String {
-        if self.snapshot.bulk_revision > 0 {
-            return "当前筛选下没有文章。".into();
+        if self.has_active_filters() {
+            return "当前筛选没有匹配的文章，可清除筛选后查看。".into();
+        }
+        if self.archived_entry_count() > 0 && !self.show_archived() {
+            return self.archived_entries_state_message().to_string();
         }
         if self.session.feed_id().is_some() {
-            "这个订阅下还没有可显示的文章，先尝试刷新该 feed。".to_string()
+            "这个订阅还没有文章，可刷新订阅获取内容。".to_string()
+        } else if self.snapshot.feeds.is_empty() {
+            "还没有订阅，前往订阅页添加订阅并刷新。".to_string()
         } else {
-            "没有可显示的文章，先去订阅页添加并刷新 feed。".to_string()
+            "暂无文章，可刷新订阅获取内容。".to_string()
         }
     }
 

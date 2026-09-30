@@ -40,12 +40,25 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
     let selected_sources_facade = facade.clone();
     let hide_controls_facade = facade.clone();
     let search_facade = facade.clone();
+    let clear_filters_facade = facade.clone();
     let visible_entries_len = facade.visible_entries_len();
     let archived_count = facade.archived_entry_count();
     let source_filter_options = facade.source_filter_options();
     let group_nav_items: &[EntryGroupNavItem] = facade.group_nav_items();
 
     rsx! {
+        if let Some(summary) = facade.active_filter_summary() {
+            div { "data-layout": "entry-filter-summary", role: "group", aria_label: "当前筛选",
+                p { "data-slot": "entry-filter-summary-text", "筛选：{summary}" }
+                button {
+                    class: "button",
+                    "data-variant": "secondary",
+                    "data-action": "clear-entry-filters",
+                    onclick: move |_| clear_filters_facade.clear_filters(),
+                    "清除筛选"
+                }
+            }
+        }
         if facade.controls_hidden() {
             div { "data-layout": "entry-controls-reveal",
                 button {

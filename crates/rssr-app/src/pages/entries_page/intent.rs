@@ -25,6 +25,7 @@ pub(crate) enum EntriesPageIntent {
     SetReadFilter(ReadFilter),
     SetStarredFilter(StarredFilter),
     SetSelectedFeedUrls(Vec<String>),
+    ClearFilters,
     SetCurrentPage(u32),
     GoToNextPage,
     GoToPreviousPage,

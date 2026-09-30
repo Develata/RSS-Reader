@@ -134,6 +134,23 @@
   gap: 14px;
 }
 
+[data-layout="entry-filter-summary"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 12px 0;
+}
+
+[data-slot="entry-filter-summary-text"] {
+  flex: 1 1 14rem;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
 [data-layout="entry-controls-reveal"] {
   display: flex;
   align-items: center;
