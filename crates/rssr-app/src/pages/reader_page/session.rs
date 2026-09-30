@@ -89,11 +89,11 @@ impl ReaderPageSession {
 }
 
 fn previous_entry_target(navigation: ReaderNavigation) -> Option<i64> {
-    navigation.previous_unread_entry_id.or(navigation.previous_feed_entry_id)
+    navigation.previous_unread_entry_id
 }
 
 fn next_entry_target(navigation: ReaderNavigation) -> Option<i64> {
-    navigation.next_unread_entry_id.or(navigation.next_feed_entry_id)
+    navigation.next_unread_entry_id
 }
 
 #[cfg(test)]

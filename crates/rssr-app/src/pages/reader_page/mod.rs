@@ -85,6 +85,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 message: facade.error().unwrap_or_else(|| facade.status_message()).to_string(),
                 tone: (if facade.error().is_some() { "error" } else { facade.status_tone() }).to_string(),
                 announce: true,
+                visually_hidden: facade.error().is_none() && facade.status_tone() != "error",
             }
             if facade.error().is_none() {
                 div { class: "reader-body", "data-layout": "reader-body", "data-state": "{facade.body_state()}",
@@ -118,6 +119,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     button {
                         class: "reader-bottom-bar__button",
                         disabled: !facade.has_previous_entry_target(),
+                        title: if facade.has_previous_entry_target() { "上一篇未读文章" } else { "此方向没有未读文章" },
                         "data-state": "{facade.previous_entry_state()}",
                         "data-nav": "previous-unread-entry",
                         onclick: move |_| {
@@ -158,6 +160,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                     button {
                         class: "reader-bottom-bar__button",
                         disabled: !facade.has_next_entry_target(),
+                        title: if facade.has_next_entry_target() { "下一篇未读文章" } else { "此方向没有未读文章" },
                         "data-state": "{facade.next_entry_state()}",
                         "data-nav": "next-unread-entry",
                         onclick: move |_| {
