@@ -156,6 +156,10 @@ impl EntriesPageFacade {
         self.snapshot.entries.is_empty()
     }
 
+    pub(crate) fn entries_loaded(&self) -> bool {
+        self.snapshot.entries_loaded
+    }
+
     pub(crate) fn visible_entries_is_empty(&self) -> bool {
         self.presenter.visible_entries_len == 0
     }

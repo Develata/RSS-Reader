@@ -109,10 +109,12 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     { bulk::render_bulk_controls(&facade) }
                     { controls }
                     if facade.entries_is_empty() {
-                        div { "data-layout": "entries-page-state", "data-state": "empty",
-                            StatusBanner {
-                                message: facade.empty_entries_message(),
-                                tone: "info".to_string()
+                        if facade.entries_loaded() {
+                            div { "data-layout": "entries-page-state", "data-state": "empty",
+                                StatusBanner {
+                                    message: facade.empty_entries_message(),
+                                    tone: "info".to_string()
+                                }
                             }
                         }
                     } else if facade.visible_entries_is_empty() {

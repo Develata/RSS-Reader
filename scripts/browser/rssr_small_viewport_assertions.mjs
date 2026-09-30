@@ -418,6 +418,68 @@ async function checkReader(client) {
     readerSemantics.icons.length === 4 && readerSemantics.icons.every(value=>value === 'true'), readerSemantics);
 }
 
+async function checkEntriesInitialization(client) {
+  await seedAndNavigate(client, 'mobile-ui-short', '/entries', '[data-page="entries"][data-position-ready="true"]');
+  const lockerTarget = await newPage('about:blank', cdpBase);
+  const locker = connect(lockerTarget.webSocketDebuggerUrl);
+  try {
+    await locker.send('Page.enable');
+    await locker.send('Runtime.enable');
+    await navigate(locker, setupUrl('', '/entries'));
+    await selectorExists(locker, '[data-page="entries"][data-position-ready="true"]');
+    await evaluate(locker, `new Promise(ready => {
+      navigator.locks.request('rssr-browser-state-v1', () => new Promise(release => {
+        window.__releaseEntriesLock = release;
+        ready();
+      }));
+    })`);
+    await navigate(client, `${staticBase}/entries`);
+    await selectorExists(client, '[data-page="entries"]');
+    const pending = await evaluate(client, `({
+      ready:document.querySelector('[data-page="entries"]').dataset.positionReady,
+      message:document.querySelector('[data-layout="entries-main"] > [role="status"]').textContent,
+      empty:!!document.querySelector('[data-layout="entries-page-state"]')
+    })`);
+    assertThat('pending entries do not claim the library is empty',
+      pending.ready === 'false' && pending.message.includes('正在加载') && !pending.empty, pending);
+  } finally {
+    try {
+      await evaluate(locker, 'window.__releaseEntriesLock?.()');
+    } finally {
+      await client.send('Target.closeTarget', {targetId:lockerTarget.id});
+      locker.close();
+    }
+  }
+  await selectorExists(client, '[data-slot="entry-card-title"]');
+  assertThat('entries recover after the initialization lock is released', await evaluate(client,
+    `document.querySelector('[data-page="entries"]').dataset.positionReady === 'true'`));
+
+  const {identifier} = await client.send('Page.addScriptToEvaluateOnNewDocument', {source:`
+    const getItem = Storage.prototype.getItem;
+    Storage.prototype.getItem = function(key) {
+      if (key === 'rssr-web-commit-v1') throw new DOMException('test read failure', 'SecurityError');
+      return getItem.call(this, key);
+    };
+  `});
+  try {
+    await navigate(client, `${staticBase}/entries`);
+    await selectorExists(client, '[data-layout="entries-main"] > [role="status"][data-state="error"]');
+    const failed = await evaluate(client, `({
+      message:document.querySelector('[data-layout="entries-main"] > [role="status"]').textContent,
+      empty:!!document.querySelector('[data-layout="entries-page-state"]')
+    })`);
+    assertThat('failed initial reads expose the error without an empty-library claim',
+      failed.message.includes('读取浏览器本地存储失败') && !failed.empty, failed);
+  } finally {
+    await client.send('Page.removeScriptToEvaluateOnNewDocument', {identifier});
+    await navigate(client, `${staticBase}/entries`);
+  }
+  await selectorExists(client, '[data-slot="entry-card-title"]');
+  assertThat('reopening after a read failure preserves existing entries', await evaluate(client,
+    `document.querySelector('[data-page="entries"]').dataset.positionReady === 'true' &&
+     !document.querySelector('[data-layout="entries-main"] > [role="status"][data-state="error"]')`));
+}
+
 async function checkPrimaryWorkflow(client) {
   const tap = async selector => {
     await evaluate(client, `document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center', behavior:'instant'})`);
@@ -1495,6 +1557,7 @@ async function run() {
       await checkSettings(client);
       await checkFeeds(client);
       await checkReader(client);
+      await checkEntriesInitialization(client);
       await checkPrimaryWorkflow(client);
       await checkHomeRefreshAndGestures(client);
       await checkReaderImagesAndSelection(client);
