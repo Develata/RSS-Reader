@@ -6,6 +6,10 @@ license.workspace = true
 authors.workspace = true
 build = "build.rs"
 
+[features]
+# Public, offline demonstration of the real Web app; never enabled by default.
+pages-demo = []
+
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true

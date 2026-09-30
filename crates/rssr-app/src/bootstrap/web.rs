@@ -83,6 +83,10 @@ impl AppServices {
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES
             .get_or_try_init(|| async {
+                #[cfg(feature = "pages-demo")]
+                let state =
+                    BrowserStore::open_with_initial_state(crate::demo::initial_state()?).await?;
+                #[cfg(not(feature = "pages-demo"))]
                 let state = BrowserStore::open().await?;
                 let client = reqwest::Client::new();
                 let use_cases =
@@ -118,7 +122,9 @@ impl AppServices {
 
 impl AutoRefreshPort for AutoRefreshCapability {
     fn ensure_started(&self) {
-        start_auto_refresh(&self.host);
+        if !crate::demo::ENABLED {
+            start_auto_refresh(&self.host);
+        }
     }
 }
 
@@ -130,6 +136,7 @@ impl RefreshPort for RefreshCapability {
         raw_url: &str,
         fallback_site_url: Option<url::Url>,
     ) -> anyhow::Result<AddSubscriptionOutcome> {
+        crate::demo::require_network()?;
         let workflow = &self.host.use_cases.subscription_workflow;
         let prepared = match workflow.prepare_subscription(raw_url).await? {
             rssr_application::PrepareSubscriptionOutcome::Ready(prepared) => {
@@ -165,6 +172,7 @@ impl RefreshPort for RefreshCapability {
     }
 
     async fn refresh_all(&self) -> anyhow::Result<RefreshAllExecutionOutcome> {
+        crate::demo::require_network()?;
         self.host
             .refresh_flight
             .run(async {
@@ -180,6 +188,7 @@ impl RefreshPort for RefreshCapability {
     }
 
     async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<RefreshFeedExecutionOutcome> {
+        crate::demo::require_network()?;
         let outcome = self.host.use_cases.refresh_service.refresh_feed(feed_id).await?;
         Ok(self.handle_refresh_feed_outcome(outcome))
     }
@@ -257,6 +266,7 @@ impl RemoteConfigPort for RemoteConfigCapability {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<RemoteConfigPushOutcome> {
+        crate::demo::require_network()?;
         push_exchange_remote(
             &self.host.use_cases.import_export_service,
             &BrowserRemoteConfigStore::new(self.host.client.clone(), endpoint, remote_path),
@@ -269,6 +279,7 @@ impl RemoteConfigPort for RemoteConfigCapability {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<RemoteConfigPullOutcome> {
+        crate::demo::require_network()?;
         pull_exchange_remote(
             &self.host.use_cases.import_export_service,
             &BrowserRemoteConfigStore::new(self.host.client.clone(), endpoint, remote_path),

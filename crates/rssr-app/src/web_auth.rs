@@ -63,6 +63,9 @@ impl StoredCredentials {
 
 #[cfg(target_arch = "wasm32")]
 pub fn auth_state() -> WebAuthState {
+    if crate::demo::ENABLED {
+        return WebAuthState::Authenticated;
+    }
     if browser::server_gate_present() {
         return WebAuthState::PendingServerProbe;
     }

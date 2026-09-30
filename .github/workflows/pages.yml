@@ -1,0 +1,142 @@
+name: Pages demo
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "README.md", "LICENSE"]
+  pull_request:
+    branches: [main]
+    paths-ignore: ["docs/**", "README.md", "LICENSE"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    concurrency:
+      group: pages-build-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pages: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/cleanup-github-runner
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: pages-web
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: ./.github/actions/setup-dioxus-cli
+        with:
+          version: '0.7.9'
+      - name: Read locked wasm-bindgen version
+        id: wasm
+        run: |
+          python3 - <<'PYTHON'
+          import os, tomllib
+          with open('Cargo.lock', 'rb') as source:
+              versions = {p['version'] for p in tomllib.load(source)['package'] if p['name'] == 'wasm-bindgen'}
+          assert len(versions) == 1, 'expected exactly one wasm-bindgen version'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('version=' + versions.pop() + '\n')
+          PYTHON
+      - uses: ./.github/actions/setup-wasm-bindgen
+        with:
+          version: ${{ steps.wasm.outputs.version }}
+      - name: Cache dx Web asset tools
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/rssr-tools/dx-web/0.7.9/tools
+          key: dx-web-tools-${{ runner.os }}-${{ runner.arch }}-0.7.9-${{ steps.wasm.outputs.version }}
+      - name: Register verified wasm-bindgen with dx 0.7.9
+        env:
+          WASM_BINDGEN_VERSION: ${{ steps.wasm.outputs.version }}
+        run: |
+          # Version-specific adapter: dx managed mode does not consult PATH.
+          dx_home="$HOME/.cache/rssr-tools/dx-web/0.7.9"
+          bindgen_dir="$dx_home/tools/wasm-bindgen-$WASM_BINDGEN_VERSION"
+          mkdir -p "$bindgen_dir"
+          cp "$(command -v wasm-bindgen)" "$bindgen_dir/wasm-bindgen"
+          echo "DX_HOME=$dx_home" >> "$GITHUB_ENV"
+      # Keep PR validation independent of Pages being enabled in repository settings.
+      - name: Pages metadata
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        id: pages
+        uses: actions/configure-pages@v5
+      - name: Select deployment base path
+        env:
+          CONFIGURED_BASE: ${{ steps.pages.outputs.base_path }}
+          REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          base="$CONFIGURED_BASE"
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            base="/${REPOSITORY#*/}"
+          fi
+          echo "PAGES_BASE_PATH=$base" >> "$GITHUB_ENV"
+      - name: Build the real Dioxus app
+        run: |
+          dx build --platform web --package rssr-app --release --locked \
+            --features pages-demo --base-path "$PAGES_BASE_PATH" --debug-symbols false
+          python3 scripts/prepare_pages.py target/dx/rssr-app/release/web/public
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: ./.github/actions/setup-browser-tests
+        with:
+          with-driver: 'false'
+      - name: Check subpath, direct entry, persistence and network downgrade
+        run: bash scripts/test_pages.sh
+      - name: Preserve smoke diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pages-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/pages-smoke/
+          if-no-files-found: ignore
+          retention-days: 3
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          path: target/dx/rssr-app/release/web/public
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Deployment concurrency is not FIFO; skip obsolete builds after acquiring it.
+      - name: Check this is still main HEAD
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+          if [[ "$current_sha" == "$GITHUB_SHA" ]]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+            echo 'Skipping obsolete Pages build.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Deploy
+        if: steps.current.outputs.deploy == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4

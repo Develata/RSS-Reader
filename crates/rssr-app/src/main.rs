@@ -4,6 +4,7 @@ mod app;
 mod bootstrap;
 mod components;
 mod datetime;
+mod demo;
 mod hooks;
 mod pages;
 mod router;

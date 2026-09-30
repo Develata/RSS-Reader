@@ -1,0 +1,17 @@
+name: Setup cargo-binstall
+description: Reuse or install the pinned binary installer once per runner
+runs:
+  using: composite
+  steps:
+    - name: Check existing installer
+      id: existing
+      shell: bash
+      run: |
+        if command -v cargo-binstall >/dev/null && [[ "$(cargo-binstall -V)" == 1.23.0 ]]; then
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+        fi
+    - name: Install pinned cargo-binstall
+      if: steps.existing.outputs.ready != 'true'
+      uses: cargo-bins/cargo-binstall@422f3094be6a0843857aa008b499caaf6bce0da8
+      with:
+        version: '1.23.0'
