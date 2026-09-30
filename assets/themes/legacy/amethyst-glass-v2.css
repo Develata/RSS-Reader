@@ -383,10 +383,15 @@ body:has(.theme-dark)::before {
   line-height: 1.88;
 }
 
-[data-page="reader"] [data-layout="reader-meta-block"] {
+[data-page="reader"] [data-slot="reader-meta"] {
   margin-bottom: 32px;
   padding-bottom: 18px;
   border-bottom: 1px solid var(--glass-meta-border);
+}
+
+[data-page="reader"] [data-action="mark-read"],
+[data-page="reader"] [data-action="toggle-starred"] {
+  min-width: 6rem;
 }
 
 /* ---- 动效可及性：减少动态偏好下关闭位移与过渡 ---- */

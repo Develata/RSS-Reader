@@ -23,6 +23,10 @@ const LEGACY_PRESET_CSS: &[(&str, &str)] = &[
     ("newsprint", include_str!("../../../../../../assets/themes/legacy/newsprint-v1.css")),
     (
         "amethyst-glass",
+        include_str!("../../../../../../assets/themes/legacy/amethyst-glass-v2.css"),
+    ),
+    (
+        "amethyst-glass",
         include_str!("../../../../../../assets/themes/legacy/amethyst-glass-v1.css"),
     ),
     ("amethyst-glass", include_str!("../../../../../../assets/themes/legacy/forest-desk-v1.css")),
