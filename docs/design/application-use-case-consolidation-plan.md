@@ -1,5 +1,7 @@
 # Application Use Case Consolidation Plan
 
+> Status checked against source on 2026-09-30. The initial consolidation is implemented; dated checks below remain historical evidence. Follow-up work is driven by a concrete boundary problem, not by an unfinished migration checklist.
+
 ## Purpose
 
 This plan defines the next architecture step after the UI runtime and host capability narrowing
@@ -31,6 +33,8 @@ consolidation work is already on the mainline:
 
 The next step is no longer "add the first shared workflow". The next step is to keep the
 application layer coherent while these use cases continue to split by responsibility.
+
+Current composition additionally separates index/body repositories. `SubscriptionWorkflow` now covers website discovery; `RefreshService` reports inserted-entry counts. These changes retain the same application/adapter boundary.
 
 ## Runtime Boundary Check 2026-04-13
 
@@ -264,11 +268,12 @@ semantic is stable enough to justify its own use case.
 ## Truth Sources
 
 - Feeds: `FeedRepository`
-- Entries and read/starred flags: `EntryRepository`
+- Entry index, read/starred flags, and list queries: `EntryIndexRepository`
+- Article bodies: `EntryContentRepository`
 - Durable settings: `SettingsRepository`
 - App workspace state and last-opened feed: `AppStateRepository` through `AppStateService`
 - Config exchange payload: `ImportExportService` and config package v2 schema
-- Browser persisted app state: `rssr-web-app-state-v2`
+- Browser persistence: infra `BrowserStore`, four logical shards with versioned commits published under Web Locks. Legacy keys such as `rssr-web-app-state-v2` are migration input, not a direct-write API.
 
 No UI cache, CLI state, browser helper seed, or smoke fixture may become a parallel truth source.
 
@@ -290,7 +295,8 @@ No UI cache, CLI state, browser helper seed, or smoke fixture may become a paral
 Subscription lifecycle must define:
 
 - Invalid URL: rejected by `FeedService` before persistence.
-- Duplicate or normalized URL: handled by repository upsert semantics.
+- Duplicate or normalized URL: the subscription workflow reports an already-subscribed result; it does not refresh or overwrite the existing subscription.
+- Website URL: `SubscriptionProbePort` returns a validated feed or explicit discovery candidates; UI/CLI select or report candidates without duplicating discovery rules.
 - First refresh failure: returned as a structured refresh outcome, not hidden by the add step.
 - Missing refresh target after add: reported as first refresh failure.
 - Remove subscription: clears matching last-opened feed state after feed removal.
@@ -318,11 +324,11 @@ Out of scope for the current step:
 
 Minimum validation for boundary-only follow-up steps:
 
-- `cargo fmt --check`
-- `cargo test -p rssr-application`
-- `cargo test -p rssr-app`
-- `cargo test -p rssr-cli`
-- `cargo check --workspace`
+- `cargo fmt --all --check`
+- `cargo test --locked -p rssr-application`
+- `cargo test --locked -p rssr-app`
+- `cargo test --locked -p rssr-cli`
+- `cargo check --workspace --locked`
 - `git diff --check`
 
 If a step touches browser-visible behavior, also run the relevant UI regression and browser feed

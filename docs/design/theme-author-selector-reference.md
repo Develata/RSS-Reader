@@ -34,8 +34,6 @@
   - `data-density`
 - 其次使用明确公开的通用壳类：
   - `.app-shell`
-  - `.app-header`
-  - `.page`
   - `.button`
 - `.status-banner`
 - `.text-input`
@@ -125,11 +123,10 @@
 
 ## 页面结构心智模型
 
-把当前应用理解成 4 个稳定页面和 3 层公共结构会更容易产出主题：
+把当前应用理解成 4 个稳定页面和公共壳层会更容易产出主题：
 
 - 公共结构
   - `.app-shell`
-  - `.app-header`
   - `[data-layout="app-nav-shell"]`
 - 页面
   - 订阅页：管理订阅、导入导出、统计概览
@@ -140,8 +137,6 @@
 如果用户要求“整体改版”，推荐优先修改：
 
 - `.app-shell`
-- `.app-header`
-- `.page`
 - `[data-layout="app-nav-shell"]`
 - `[data-layout="settings-grid"]`
 - `[data-layout="exchange-grid"]`
@@ -155,10 +150,10 @@
 - `.status-banner`
 - `.text-input`
 - `.select-input`
-- `.settings-card`
-- `.feed-card`
-- `.entry-card`
-- `.theme-card`
+- `[data-layout="settings-card"]`
+- `[data-layout="feed-card"]`
+- `[data-layout="entry-card"]`
+- `[data-layout="theme-card"]`
 
 ## 页面级接口
 
@@ -196,6 +191,8 @@
 ### 订阅页
 
 - `data-action="add-feed"`
+- `data-action="select-feed-candidate"`
+- `data-action="cancel-feed-discovery"`
 - `data-action="refresh-all"`
 - `data-action="refresh-feed"`
 - `data-action="remove-feed"`
@@ -209,9 +206,6 @@
 - `data-action="open-original"`：原文外部打开入口（无 URL 时不渲染）
 - `data-action="mark-read"`
 - `data-action="toggle-starred"`
-- `data-action="group-by-source"`
-- `data-action="group-by-time"`
-- `data-action="toggle-archived"`
 
 ### 设置与同步
 
@@ -228,6 +222,9 @@
 - `data-action="open-github-repo"`
 - `data-action="activate-home"`
 - `data-action="toggle-search"`
+- `data-action="toggle-nav"`
+- `data-action="show-entry-controls"` / `hide-entry-controls`
+- `data-action="preview-mark-filtered-read"` / `confirm-mark-filtered-read` / `cancel-mark-filtered-read`
 - `data-action="entry-page-previous"`
 - `data-action="entry-page-next"`
 - `data-action="open-reader-image"`
@@ -254,6 +251,7 @@
 - `data-field="opml-text"`
 - `data-field="theme-mode"`
 - `data-field="list-density"`
+- `data-field="entries-page-size"`
 - `data-field="startup-view"`
 - `data-field="refresh-interval"`
 - `data-field="archive-after-months"`
@@ -281,11 +279,10 @@
 ### 页面通用
 
 - `data-layout="page-header"`
-- `data-layout="page-section-header"`
+- `data-slot="page-section-header"`
 - `data-slot="page-header-actions"`
 - `data-slot="page-section-row"`
 - `data-slot="page-title"`
-- `data-slot="page-section-title"`
 
 ### 订阅页与设置页
 
@@ -368,6 +365,7 @@
 
 ### `data-variant`
 
+- `primary`：默认主按钮；不写 `data-variant` 的 `.button` 也使用同一主按钮样式
 - `secondary`
 - `danger`
 - `danger-outline`
@@ -382,10 +380,6 @@
 以下 class 仍然是公开可依赖的通用样式接口：
 
 - `.app-shell`
-- `.app-header`
-- `.app-eyebrow`
-- `.app-subtitle`
-- `.page`
 - `.status-banner`
 - `.button`
 - `.text-input`
@@ -397,7 +391,7 @@
 说明：
 
 - `[data-slot="reader-body-html"]` 是内容岛例外，可以继续依赖
-- `.page` / `.app-header` 是通用壳类，不是下一轮优先清理对象
+- `.page`、`.app-header`、`.app-eyebrow`、`.app-subtitle` 已不由当前页面输出，不能作为新主题的入口
 
 ## 可用 CSS 变量
 
@@ -504,6 +498,25 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
 - 改按钮和布局尺寸时优先用 `--button-*`、`--radius-*`、`--shell-max-width`、
   `--rail-width`、`--reader-measure`，而不是重写结构选择器。
 
+## 响应式职责与可访问性约束
+
+这些断点解决不同层级的问题，不要求统一为一个数值：
+
+| 范围 | 当前断点 | 职责 |
+| --- | --- | --- |
+| 基础页面布局 | 视口 ≤ 720px | 缩减页面留白，目录、表单和工具栏适应手机宽度 |
+| 极窄页面 | 视口 ≤ 480px | 进一步压缩间距和网格列数，保留动作触达 |
+| Atlas Sidebar | ≤ 960px / ≥ 961px | 手机顶栏与桌面侧栏切换；桌面展开 280px、收起 44px |
+| 导航搜索 | 容器 ≤ 328px | 搜索框换到下一行，预算包含箭头占位，与视口宽度独立 |
+
+主题需要分别验证这些边界的两侧。默认按钮与原生 checkbox 应继承主题颜色；禁用按钮不得保留可点击的 hover/按压反馈。保持原生 `disabled` 语义，不以 CSS 独立推断可操作状态。
+
+键盘用户必须能看到当前焦点，焦点环不能被圆角容器、裁剪或固定底栏遮住；浏览器原生焦点可满足要求，不强制每个链接重复一套自定义 outline。主题不得移除焦点指示而没有替代。Reader 的字符快捷键仅在阅读区焦点内生效；装饰图标的形状不能作为唯一状态表达。
+
+可访问性验收目标：普通文本与实际背景至少 **4.5:1**，大文本至少 **3:1**；识别控件和状态所必需的非文本视觉信息与相邻颜色至少 **3:1**。禁用控件有规范例外，但仍应可辨认。数值必须基于透明层、渐变和实际相邻背景合成后的颜色，不能只测 `--muted` / `--bg` 就宣布整个主题通过。检查 default 与四套内置主题的浅色、深色、跟随系统模式；原生 checkbox 和系统高对比模式保留浏览器回退。
+
+依据：[WCAG 文本对比度](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)、[非文本对比度](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)、[焦点可见](https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html)、[字符快捷键](https://www.w3.org/WAI/WCAG22/Understanding/character-key-shortcuts.html)。这是验收要求，不代表当前所有内置或用户主题已获完整符合性结论。
+
 ## 常见定制示例
 
 ### 1. 把设置导航挪到最右边
@@ -514,16 +527,11 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
 }
 ```
 
-### 2. 在订阅页隐藏 OPML 区块
+### 2. 调整订阅页 OPML 文本框高度
 
 ```css
 [data-page="feeds"] [data-field="opml-text"] {
-  display: none;
-}
-
-[data-page="feeds"] [data-action="export-opml"],
-[data-page="feeds"] [data-action="import-opml"] {
-  display: none;
+  min-height: 12rem;
 }
 ```
 
@@ -577,6 +585,7 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
 - 是否没有默认隐藏关键功能入口
 - 是否在桌面宽度和窄屏宽度下都没有明显溢出
 - 是否没有依赖仓库里不存在的外部资源
+- 是否检查键盘焦点、禁用/忙态、真实背景对比度，以及浅色/深色/跟随系统模式
 
 ## 将示例主题应用到应用中
 
@@ -593,14 +602,14 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
 ### 用 CLI 应用
 
 ```bash
-cargo run -p rssr-cli -- save-settings --custom-css-file assets/themes/newsprint.css
+cargo run --locked -p rssr-cli -- save-settings --custom-css-file assets/themes/newsprint.css
 ```
 
 也可以换成：
 
 ```bash
-cargo run -p rssr-cli -- save-settings --custom-css-file assets/themes/amethyst-glass.css
-cargo run -p rssr-cli -- save-settings --custom-css-file assets/themes/midnight-ledger.css
+cargo run --locked -p rssr-cli -- save-settings --custom-css-file assets/themes/amethyst-glass.css
+cargo run --locked -p rssr-cli -- save-settings --custom-css-file assets/themes/midnight-ledger.css
 ```
 
 ## 阅读元信息与来源未读数

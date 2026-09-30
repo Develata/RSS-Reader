@@ -54,7 +54,7 @@ bash scripts/run_rssr_web_browser_smoke.sh --feed-url https://example.com/feed.x
 5. 点击 `data-action="add-feed"`。
 6. 确认页面出现新的 feed 卡片，且卡片标题链接带有 `data-nav="feed-entries"`。
 7. 点击该卡片上的 `data-action="refresh-feed"`。
-8. 如果页面出现文章，点击 `data-nav="feed-entries"` 进入文章页；如能进入阅读页，再补看 `/reader`。
+8. 如果页面出现文章，点击 `data-nav="feed-entries"` 进入文章页；如能进入阅读页，再补看 `/entries/:entry_id` 阅读页。
 9. 打开 `/settings`，确认设置页在登录态下正常可达。
 10. 打开 `/logout`，确认会回到 `/login`。
 
@@ -73,18 +73,11 @@ bash scripts/run_rssr_web_browser_smoke.sh --feed-url https://example.com/feed.x
 - `/settings` 可达
 - `/logout` 后回到 `/login`
 
-## 为什么当前仍是手工 smoke
+## 与自动化 smoke 的分工
 
-当前这条链路没有收成固定浏览器自动化，不是因为页面接口不稳定，而是因为：
+登录后添加同源 fixture 订阅并完成首次刷新已由 `scripts/run_rssr_web_browser_feed_smoke.sh` 自动化，DOM 与截图使用同次加载的实际就绪状态。见 [浏览器 feed smoke](./rssr-web-browser-feed-smoke.md)。
 
-- 公开 selector 已稳定
-- 但当前仓库环境里的 Chrome MCP / DevTools 连接不稳定
-- 因此“真实浏览器里添加订阅并完成首次刷新”这条路径，暂时仍保留为固定手工 smoke
-
-也就是说：
-
-- 这条回归的入口、步骤、selector、推荐 feed 都已经固定
-- 还没固定下来的只是浏览器自动操作本身
+本页保留交互环境，用于真实远端 feed、登录/登出和页面观察。远端 DNS、代理与 CORS 结果不能由 fixture 代替；Chrome MCP 是可选控制工具，连接问题不代表这条链路没有自动化能力。
 
 ## 结果记录
 

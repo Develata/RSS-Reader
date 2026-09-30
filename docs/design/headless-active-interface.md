@@ -2,13 +2,12 @@
 
 ## 目的
 
-这份文档定义 RSS-Reader 前端从“语义化 UI + 稳定选择器”演进到“完全 headless active
-interface”时的目标架构、非目标、迁移约束和验收门禁。
+这份文档定义 RSS-Reader 的 headless active interface 边界及演进约束，当前实现核对于 2026-09-30。
 
 它回答的是：
 
 - 什么叫 `headless active interface`
-- 为什么现有前端还不算完全 headless
+- 当前前端与 CLI 如何共享业务语义
 - 重构后哪些东西必须稳定，哪些东西可以自由重排
 - 为什么这会支持极端 CSS 视觉重构
 - 每完成一个模块后，怎样证明视觉和体验没有漂移
@@ -70,39 +69,14 @@ view shell 指负责路由、布局、主题、动画、焦点管理和信息呈
 
 ### 当前状态
 
-当前前端已经具备：
+当前页面已经使用 facade/session、`UiCommand`、`execute_ui_command` 和 `UiIntent`；
+`ui/shell` 管理导航、全局搜索和手动刷新生命周期。页面输出稳定的语义 DOM，CSS 负责呈现。
 
-- 稳定的 `data-page` / `data-nav` / `data-action`
-- 相对清晰的页面和服务边界
-- CSS 可对现有 DOM 做较激进重排
+GUI 与 CLI 通过 `AppUseCases` 共享 application 用例。`UiCommand` 是 GUI 内部命令，
+CLI 不依赖 Dioxus，也不需要通过 UI bus；可复用的是业务语义，而不是路由或焦点状态。
+命令面板等载体只是可扩展方向，当前未实现。
 
-但仍存在：
-
-- 大量业务动作直接写在页面组件闭包里
-- 同一类动作在不同页面重复接线
-- 动作本身没有成为统一的 Rust 命令模型
-
-因此，当前状态更准确地说是：
-
-- 语义化 UI
-- 稳定选择器
-- 半公开的动作语义
-
-而不是：
-
-- 完全 headless 的命令面
-
-> 更新：上述描述是最初的迁移起点。当前主线已经进一步演进到：
->
-> - `ui/shell`
-> - `UiCommand / UiRuntime / UiIntent`
-> - `page facade`
-> - semantic page shell
->
-> 也就是说，当前实现已经不再只是“语义化 UI + 稳定选择器”，而是进入了 headless active
-> interface 的实现阶段。本文档继续定义终局目标与迁移门禁，当前实现细节见：
->
-> - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
+实现细节见 [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)。
 
 ### 目标状态
 
@@ -133,14 +107,8 @@ view shell 指负责路由、布局、主题、动画、焦点管理和信息呈
 - 命令名称与 UI 无关
 - 命令不以按钮文本、DOM 结构或页面位置命名
 
-推荐命令族：
-
-- FeedCommand
-- EntryCommand
-- SettingsCommand
-- ConfigExchangeCommand
-- NavigationCommand
-- UiShellCommand
+当前 `UiCommand` 命令族为 `Shell`、`Entries`、`Reader`、`Feeds`、`Settings`。
+配置交换归入设置命令，导航由 shell / 页面会话承接。不要为符合抽象示例重新拆分现有命令。
 
 ## 查询层
 
@@ -214,7 +182,7 @@ view shell 指负责路由、布局、主题、动画、焦点管理和信息呈
 
 1. 命令层和视图壳边界已经清楚。
 2. 自动化检查通过。
-3. Chrome MCP 对重构前后的真实页面执行同路径验证。
+3. 使用项目已有 Playwright / CDP 脚本或 Chrome MCP，对重构前后的真实页面执行同路径验证。
 4. 视觉与体验无偏离。
 
 “视觉与体验无偏离”至少包括：
@@ -225,9 +193,9 @@ view shell 指负责路由、布局、主题、动画、焦点管理和信息呈
 - 路由切换、按钮反馈、错误提示、筛选与导航行为不回退
 - 桌面与小视口下都不出现新增破坏
 
-## Chrome MCP 基线要求
+## 真实浏览器基线要求
 
-Chrome MCP 验收不是可选附加项，而是模块收口条件。
+真实浏览器验收是涉及界面重构的收口条件；工具选择随当前环境，编译和静态检查不能替代交互与截图验收。
 
 每个模块至少需要：
 
@@ -241,22 +209,11 @@ Chrome MCP 验收不是可选附加项，而是模块收口条件。
 
 - [Headless 重构视觉等价验收](../testing/headless-refactor-equivalence.md)
 
-## 推荐迁移顺序
+## 后续演进
 
-建议按以下顺序推进：
-
-1. 订阅页命令面
-2. 阅读页命令面
-3. 设置与配置交换命令面
-4. 导航壳与查询层
-5. CLI 与 GUI 的命令统一
-
-这样做的原因是：
-
-- 订阅页动作最集中
-- 阅读页动作最容易复用
-- 设置页最容易做出统一命令层
-- 最后再统一 UI 壳，风险最低
+订阅、阅读、设置和导航壳的命令迁移已经落地，后续按实际问题调整边界。
+保持页面异步结果的身份与代际检查、应用级刷新去重，以及稳定选择器；不为追求统一形状新增全局 store 或要求 CLI 经过 UI。
+用户明确批准的视觉优化按约定的新效果验收；纯边界重构仍要求前后视觉等价。
 
 ## 相关文档
 

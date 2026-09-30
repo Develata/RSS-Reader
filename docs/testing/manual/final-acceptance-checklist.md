@@ -1,5 +1,7 @@
 # 最终验收模板：极简个人 RSS 阅读器 MVP
 
+这是早期 MVP 的核心能力模板，不是当前版本完整发布清单。后续功能与多平台验收见 [发布前 UI 回归](../release-ui-regression-checklist.md) 和 [主线矩阵](../mainline-validation-matrix.md)。空白勾选不代表未实现，勾选也必须附本次运行证据。
+
 ## 验收记录
 
 - 验收日期：
@@ -9,9 +11,9 @@
 
 ## 自动化前置检查
 
-- [ ] `cargo fmt --all`
-- [ ] `cargo test --workspace`
-- [ ] `cargo check -p rssr-app --target wasm32-unknown-unknown`
+- [ ] `cargo fmt --all --check`
+- [ ] `cargo test --workspace --locked`
+- [ ] `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`
 
 ## US1 核心阅读路径
 
@@ -27,7 +29,7 @@
 - [ ] 文章可标记已读 / 未读，并在重启后保持。
 - [ ] 文章可收藏 / 取消收藏，并在重启后保持。
 - [ ] “仅未读”“仅收藏”和标题搜索可组合使用。
-- [ ] 阅读页快捷键 `M`、`F` 与按钮行为一致。
+- [ ] 阅读区获得焦点后的快捷键 `M`、`F` 与按钮行为一致。
 
 ## US3 配置交换
 

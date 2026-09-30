@@ -42,8 +42,8 @@ HTTP 端口由 `--port` 指定（默认 8091，允许 1..55535），CDP 使用�
 - 超长 feed、entry、reader 标题不越界，移动按钮不碰撞；触控目标与键盘提示规则不回归；
 - 主题入口只使用“应用”语义，不依赖按钮总数；
 - console error 与应用错误 overlay 均为零；
-- R / Reader 返回始终可见，所有顶栏图标有可访问名称、title 和 44px 点击区域；旧导航折叠偏好不再隐藏 R；
-- 搜索开关、Esc、Enter 与 S / Settings 导航；检查非 reduced-motion 下搜索展开动画的实际 computed declaration；输入法 composing 的 Esc 不收起搜索；只有首页再次点击 R 才发起刷新；
+- 展开导航时 R / Reader 返回可见，收起时仅保留展开箭头，所有顶栏图标有可访问名称、title 和 44px 点击区域；旧导航折叠偏好不再隐藏 R；
+- 搜索开关、Esc、Enter 与订阅 / 设置导航；检查非 reduced-motion 下搜索展开动画的实际 computed declaration；输入法 composing 的 Esc 不收起搜索；只有首页再次点击 R 才发起刷新；
 - CDP 暂停真实同源 RSS 请求，验证 R 与自动刷新合并，整轮完成后每个 fixture feed 恰好请求一次；连续 R / Feeds 刷新去重、页面卸载后整轮继续、Reader DOM 与滚动不受刷新影响、部分失败后可重试；
 - Reader 中刷新进行、成功和失败反馈均不覆盖标题；保留 live region、完整 title 以及 R 的结果小标记（DOM 断言不等同于辅助技术实机验收）；
 - 单份分页在页面中部仍位于视口，翻页后回到起点；真实 CDP touch 验证短拖动、非顶部不触发，以及顶部阈值和 R 共用刷新状态；
@@ -69,9 +69,8 @@ Android 实机长按选择手柄、系统返回、pinch zoom，以及 macOS Cmd+
 - Chrome、静态服务与 runner 日志；
 - `summary.md`。
 
-## 当前基线
+## 基线与扩展验收
 
-- 2026-09-22：初次实现扩展为 86 项，复审增加动画、刷新完成计数及图片生命周期断言至 93 项。实现与性能证据见 [实现 handoff](../handoffs/2026-09-22-home-reader-shared-interactions.md)，复审修复和最新验收见 [复审 handoff](../handoffs/2026-09-22-home-reader-review-fixes.md)。
-- 后续全局优化新增字号、正文排版、键盘订阅和紧凑统计验收至 100 项，默认 + 四个内置主题全部通过。同一脚本纳入 CI 五主题并发矩阵；本地验收仍串行运行，执行结果见 [全局优化交接](../handoffs/2026-09-22-global-quality-ci-ux.md)。
-- 后续 Rust 验收与失败恢复优化加入订阅首刷期间的重复提交 / 新输入保留，达到每主题 103 项，五主题全部通过；见 [本轮交接](../handoffs/2026-09-22-rust-acceptance-refresh-recovery.md)。
-- 截图仍保留作视觉复核证据，但脚本通过不再依赖人工填写结果。
+断言数量以本次 `assertions.json` 为准。2026-09-22 的初版及后续扩展保留在对应 handoff；2026-09-26 五主题复验见 [集成记录](../handoffs/2026-09-26-integration-revalidation.md)。历史通过不证明新构建通过。
+
+导航收起、操作边界位置采集、来源计数、批量已读等近期能力还应按 [手工回归](./manual-regression.md) 和相关 handoff 补验；不要从脚本名称推定所有功能已自动覆盖。截图是视觉复核证据，结构断言不能替代色彩、信息层次和真实辅助技术体验检查。

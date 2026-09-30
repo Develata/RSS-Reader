@@ -42,7 +42,7 @@
 
 ### `docs/testing` 重新分层
 
-- 重写 [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)，按“入口索引 / 浏览器 smoke / 重构约束 / 用户故事模板”分类。
+- 重写 [README.md](../testing/README.md)，按“入口索引 / 浏览器 smoke / 重构约束 / 用户故事模板”分类。
 - 明确单次执行结果应落在 `target/**/summary.md` 或 `docs/handoffs/`，不再长期堆在 `docs/testing/` 根目录。
 - 删除过时单次报告：
   - `docs/testing/global-browser-regression.md`

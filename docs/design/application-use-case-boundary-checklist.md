@@ -95,16 +95,16 @@ require a new design review:
 
 For boundary-only changes:
 
-- `cargo fmt --check`
-- `cargo test -p rssr-application`
-- `cargo test -p rssr-app`
-- `cargo test -p rssr-cli`
-- `cargo check --workspace`
+- `cargo fmt --all --check`
+- `cargo test --locked -p rssr-application`
+- `cargo test --locked -p rssr-app`
+- `cargo test --locked -p rssr-cli`
+- `cargo check --workspace --locked`
 - `git diff --check`
 
 For infra or config exchange behavior:
 
-- `cargo test -p rssr-infra`
+- `cargo test --locked -p rssr-infra`
 - targeted config package codec/schema tests when payload structure changes
 - wasm contract harness when browser storage or refresh/config contracts change
 

@@ -29,7 +29,7 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
    | Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | 安装 APK；AAB 是应用商店产物，不能直接安装 |
    | Web | `RSS-Reader-web.tar.gz` | 静态站点包；需要受保护的登录和跨域 feed 代抓时使用 [Web 部署指南](./docs/deployment/web.md) |
 
-2. 打开应用，点顶栏的订阅图标（RSS 波纹）进入订阅页，输入 RSS / Atom 地址并添加订阅。
+2. 打开应用，点顶栏的订阅图标（RSS 波纹）进入订阅页，输入 RSS / Atom 地址或网站首页并添加订阅。
 3. 点击 **R**（Read / Home）查看文章；已在首页时再次点击 **R** 可手动刷新全部订阅。
 
 上表按已发布的 `v0.1.20` 产物核对；具体变更和验收范围见[本版 Release 说明](https://github.com/Develata/RSS-Reader/releases/tag/v0.1.20)。Android 已有正式签名 APK / AAB，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。
@@ -46,13 +46,27 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
 - **收起导航：** 顶栏最右侧的窄箭头可向左收起 Read、搜索、订阅和设置，只留下展开按钮；手机与桌面均可用，同次运行中切页保持状态。
 - **自动化：** `rssr-cli` 支持订阅管理、刷新、设置和配置导入导出；运行 `cargo run --locked -p rssr-cli -- --help` 查看命令。
 
-Reader 快捷键：`M` 切换已读、`F` 切换收藏、`←` / `→` 跳转上一篇 / 下一篇未读。搜索框内、输入法组词期间与带 Ctrl / Cmd 等修饰键的原生编辑操作不会触发阅读快捷键或位置采集。
+Reader 快捷键仅在阅读区获得焦点时生效：`M` 切换已读、`F` 切换收藏、`←` / `→` 跳转上一篇 / 下一篇未读。搜索框内、输入法组词期间与带 Ctrl / Cmd 等修饰键的原生编辑操作不会触发阅读快捷键或位置采集。
+
+### 按筛选批量已读
+
+文章页可预览并确认将当前筛选下所有分页的未读文章标为已读；保留搜索、来源、收藏和归档条件。匹配集合变化时要求重新确认。CLI 使用 `mark-read --all` 或 `mark-read --feed-id <id>` 预览，添加 `--yes` 执行。
+
+### 网站首页订阅
+
+新增订阅支持网站首页与 RSS/Atom URL。首页声明单个 feed 时自动添加，多个时选择；没有声明时只探测 `/feed`、`/rss.xml`、`/atom.xml`、`/index.xml` 四个路径。CLI 同样支持发现；多个候选会列出地址并以非零退出码结束，需选定 URL 后重试。`--skip-refresh` 仍验证并解析订阅地址，但不导入文章。
+
+### 刷新新增计数
+
+手动刷新显示实际新增篇数，重复刷新或仅内容更新显示“没有新文章”。部分失败同时显示成功订阅的新增数与失败信息；全部失败显示错误。成功反馈3秒、错误6秒。阅读页仍只显示图标反馈，自动刷新保持静默，CLI显示每个订阅和合计新增数。
+
+添加订阅与刷新都限制单次响应为 8 MiB（解压后字节及转码后的 UTF-8 文本），超限会报告失败并保留既有文章。Web 重复取得完全相同的正文时跳过正文存储写入；大量正文实际变化时仍有整片存储成本。
 
 ## 本地数据与边界
 
 Linux `/usr/bin` 安装版在 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`）保存数据；Windows、macOS 和 Linux 便携版仍在可执行文件同目录的 `RSS-Reader/` 保存数据。目录中包含 `rss-reader.db`（索引）、`rss-reader-content.db`（正文），还可能有 `shell-prefs.json`。SQLite 的 `-wal`、`-shm` 是正常附属文件；备份时先退出应用，再复制整个目录。旧版如曾以管理员身份在 `/usr/bin/RSS-Reader/` 产生数据，升级后不会自动迁移；请在应用退出后备份并由管理员将完整目录复制到新位置、改为当前用户所有。Android 使用应用沙箱内的本地 SQLite；卸载应用会清除本地数据，请先导出配置。Web 将状态序列化保存到当前浏览器的 `localStorage`，它与桌面数据库互不共享；清除站点数据也会清除本地文章库。
 
-RSS-Reader 缓存 feed 提供的正文，不主动抓取原网站补全全文。桌面端和 Android 会尽量把正文图片本地化；Web 受浏览器 CORS 限制。JSON / OPML / WebDAV 交换的是订阅与设置，**不是文章库、已读状态或收藏的跨设备同步**。直接运行静态 Web 包时，某些 feed 会因 CORS 无法刷新；`rssr-web` 提供带登录的同源 `/feed-proxy`，见 [Web 部署指南](./docs/deployment/web.md)。
+RSS-Reader 缓存 feed 提供的正文，不主动抓取原网站补全全文。桌面端和 Android 会尽量把正文图片本地化；Web 通常保留远端图片地址，能否显示还取决于站点防盗链、HTTPS 和网络策略。JSON / OPML / WebDAV 交换的是订阅与设置，**不是文章库、已读状态或收藏的跨设备同步**。直接运行静态 Web 包时，某些 feed 会因 CORS 无法刷新；`rssr-web` 提供带登录的同源 `/feed-proxy`，见 [Web 部署指南](./docs/deployment/web.md)。
 
 Web 需通过 HTTPS（本机可用 localhost）在支持 Web Locks 的浏览器中运行。同一站点的多个新版标签页可安全修改已读与收藏；存储失败会报错并保留此前提交的数据。升级后请重新加载所有旧标签页。页面不会自动替换另一标签正在看的正文，返回列表或重新加载时读取最新数据；详见[用户指南](./docs/user-guide.md)。
 
@@ -69,7 +83,7 @@ cargo run --locked -p rssr-app
 # Web 开发
 rustup target add wasm32-unknown-unknown
 cargo install dioxus-cli --version 0.7.9 --locked
-dx serve --platform web --package rssr-app
+dx serve --platform web --package rssr-app --locked
 
 # CLI
 cargo run --locked -p rssr-cli -- --help
@@ -95,17 +109,3 @@ cargo check --locked -p rssr-app --target wasm32-unknown-unknown
 - [贡献说明](./CONTRIBUTING.md) · [MIT License](./LICENSE)。
 
 常见问题：Windows 运行通常需要 WebView2 Runtime；Web 直连 feed 受目标站点 CORS 策略影响；CLI 附件面向脚本和高级用户，普通阅读只需应用附件。若 Android 安装遇到签名不匹配，先确认当前包与已安装版本的签名身份；卸载前务必导出配置，避免丢失本地数据。
-
-### 按筛选批量已读
-
-文章页可预览并确认将当前筛选下所有分页的未读文章标为已读；保留搜索、来源、收藏和归档条件。匹配集合变化时要求重新确认。CLI 使用 `mark-read --all` 或 `mark-read --feed-id <id>` 预览，添加 `--yes` 执行。
-
-### 网站首页订阅
-
-新增订阅支持网站首页与 RSS/Atom URL。首页声明单个 feed 时自动添加，多个时选择；没有声明时只探测 `/feed`、`/rss.xml`、`/atom.xml`、`/index.xml` 四个路径。CLI 同样支持发现；多个候选会列出地址并以非零退出码结束，需选定 URL 后重试。`--skip-refresh` 仍验证并解析订阅地址，但不导入文章。
-
-### 刷新新增计数
-
-手动刷新显示实际新增篇数，重复刷新或仅内容更新显示“没有新文章”。部分失败同时显示成功订阅的新增数与失败信息；全部失败显示错误。成功反馈3秒、错误6秒。阅读页仍只显示图标反馈，自动刷新保持静默，CLI显示每个订阅和合计新增数。
-
-添加订阅与刷新都限制单次响应为 8 MiB（解压后字节及转码后的 UTF-8 文本），超限会报告失败并保留既有文章。Web 重复取得完全相同的正文时跳过正文存储写入；大量正文实际变化时仍有整片存储成本。

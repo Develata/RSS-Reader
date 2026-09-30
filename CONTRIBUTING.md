@@ -60,8 +60,10 @@ cargo test --locked --workspace
 如果改动影响 Web 交互，建议再补做一轮：
 
 - `dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e`
-- 使用 `rssr-web` 做浏览器回归
+- 使用项目回归服务器或 `rssr-web` 做真实浏览器回归；登录、代理和部署链路必须使用 `rssr-web`
 - 更新[发布前 UI 覆盖矩阵](./docs/testing/release-ui-coverage-matrix.md)及相关浏览器 smoke 断言
+
+涉及共享 UI 时运行 `cargo check --locked -p rssr-app --target wasm32-unknown-unknown`；平台工具链、浏览器运行和实机验收的边界见[主线验证矩阵](./docs/testing/mainline-validation-matrix.md)。交付须按 [handoff 模板](./docs/handoffs/TEMPLATE.md)记录实际命令、结果、未验收项及提交状态。
 
 ## 文档同步
 
@@ -69,11 +71,11 @@ cargo test --locked --workspace
 
 - `README.md`
 - `docs/`
-- `specs/001-minimal-rss-reader/`
+- 与变更对应的 `specs/` 功能文档（若仍在该功能范围内）
 
 特别是：
 
-- 新功能如果已经实现，`spec / plan / tasks / quickstart` 要同步
+- 活跃功能的 `spec / plan / tasks / quickstart` 随实现同步；已关闭的历史计划保留原始版本、日期和验收状态，通过当前文档或交接记录说明后续演进
 - 新的贡献约束或产品边界变化，要优先落回 [功能设计哲学](./docs/design/functional-design-philosophy.md)
 
 ## 风格建议

@@ -2,10 +2,10 @@
 
 这份说明固定 Windows 原生 Chrome 可见窗口的本地回归入口。
 
-它解决的是 WSL 开发环境下的两个限制：
+它用于需要观察 Windows Chrome 实际窗口的场景。以下限制可能随机器配置变化：
 
 - WSLg/Linux Chrome 窗口可能不可见、最小化或呈现异常。
-- 当前 `mcp__chrome` 会话通常连接 WSL 侧 `127.0.0.1:9222`，不能稳定接管 Windows 侧 localhost 上的 Chrome DevTools 端口。
+- 若 MCP 会话连接 WSL 侧端口，未必能直接接管 Windows localhost 的 DevTools；此脚本通过 Windows Node/CDP 控制。
 
 ## 固定入口
 

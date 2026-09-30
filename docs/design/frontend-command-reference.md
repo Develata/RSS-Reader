@@ -33,17 +33,13 @@
 
 ## 当前 UI 命令面
 
-> 说明：下面列的是当前已经对外暴露的 UI 语义面；后续 headless 重构会把它们逐步迁移为统
-> 一的 Rust 命令层，但不应改变这些公开语义。
-
-> 当前实现补充：这些公开语义现在已经不只是 DOM 标记，而是开始映射到 `rssr-app/src/ui` 中的
-> `UiCommand / UiRuntime / UiIntent`。页面继续负责默认语义壳，当前实现版边界见：
->
-> - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
+当前页面通过 `UiCommand` → `execute_ui_command` → `UiIntent` 连接统一用例；
+CLI 直接复用 `AppUseCases`，不依赖 UI 命令类型。实现边界见
+[UI Shell / Bus / Page Facade](./ui-shell-bus-page-facade.md)。核对日期：2026-09-30。
 
 ### Home、搜索与阅读交互
 
-顶部常态为 `[R] [搜索] [S] [设置]`，Reader 最左侧增加返回图标。R 同时是 brand / Read / Home，没有独立“文章”导航按钮。
+顶部展开态为 `[R] [搜索图标] [RSS 图标] [滑杆图标] [收起箭头]`，Reader 最左侧增加返回图标。R 同时是 brand / Read / Home，没有独立“文章”导航按钮。
 
 | 稳定接口 | Rust 语义 / 结果 |
 | --- | --- |
@@ -166,7 +162,17 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 
 ---
 
+### 批量已读与订阅发现
+
+- `rssr-cli mark-read --all [筛选参数]` 或 `--feed-id <id>`（可重复）；默认只预览，加 `--yes` 执行。
+- 筛选参数为 `--search`、`--read-filter all|unread|read`、`--starred-filter all|starred|unstarred`、`--archive-filter active|all|archived`。
+- `add-feed <url>` 同样接受网站首页；多个候选列出 URL 后非零退出。`--skip-refresh` 仍验证订阅，只跳过文章入库。
+- `save-settings` 的参数以 `--help` 为准；当前 CLI 没有设置文章每页数量的参数。
+- 当前参数定义与执行入口均在 `crates/rssr-cli/src/main.rs`，不存在独立 `args.rs`。
+
 ## 页面级接口
+
+路由为 `/`（启动路由）、`/entries`、`/feeds`、`/feeds/:feed_id/entries`、`/entries/:entry_id`（阅读）、`/settings`；不存在 `/reader/:id` 路由。
 
 页面级作用域应长期保持稳定：
 
@@ -211,6 +217,8 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 命令按钮应暴露稳定的 `data-action`：
 
 - `data-action="add-feed"`
+- `data-action="select-feed-candidate"`
+- `data-action="cancel-feed-discovery"`
 - `data-action="remove-feed"`
 - `data-action="refresh-feed"`
 - `data-action="refresh-all"`
@@ -224,9 +232,6 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 - `data-action="open-original"`：原文外部打开入口（无 URL 时不渲染）
 - `data-action="mark-read"`
 - `data-action="toggle-starred"`
-- `data-action="group-by-source"`
-- `data-action="group-by-time"`
-- `data-action="toggle-archived"`
 - `data-action="apply-custom-css"`
 - `data-action="export-custom-css-file"`
 - `data-action="import-custom-css-file"`
@@ -237,6 +242,9 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 - `data-action="open-github-repo"`
 - `data-action="activate-home"`
 - `data-action="toggle-search"`
+- `data-action="toggle-nav"`
+- `data-action="show-entry-controls"` / `hide-entry-controls`
+- `data-action="preview-mark-filtered-read"` / `confirm-mark-filtered-read` / `cancel-mark-filtered-read`
 - `data-action="entry-page-previous"`
 - `data-action="entry-page-next"`
 - `data-action="open-reader-image"`
@@ -254,7 +262,7 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 
 - 公开语义标记
 - CSS / AI / 自动化可依赖的稳定选择器
-- 与统一 Rust 命令定义的一对一映射
+- 映射到 Rust 动作语义；多个 UI 入口可派发同一命令
 
 而不是：
 
@@ -263,14 +271,7 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 - DOM 结构的替代命名
 - 容器或展示位本身的标签
 
-推荐最终形成以下命令族：
-
-- Feed commands
-- Entry commands
-- Settings commands
-- Config exchange commands
-- Navigation commands
-- UI shell commands
+当前 UI 命令族为 `Shell / Entries / Reader / Feeds / Settings`；配置交换属于设置命令。
 
 这组命令族的目标，是让同一语义能够被：
 
@@ -301,8 +302,6 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 通用 class 仍然保留为公开界面接口，但范围应收敛在真正通用的壳和组件上：
 
 - `.app-shell`
-- `.app-header`
-- `.page`
 - `.status-banner`
 - `.button`
 - `.text-input`
@@ -344,6 +343,7 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 - `data-field="opml-text"`
 - `data-field="theme-mode"`
 - `data-field="list-density"`
+- `data-field="entries-page-size"`
 - `data-field="startup-view"`
 - `data-field="refresh-interval"`
 - `data-field="archive-after-months"`
@@ -384,25 +384,6 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 - 替代 class 的视觉命名
 - 临时 DOM hack
 - 页面私有且不可复用的内部标记
-- `data-field="archive-after-months"`
-- `data-field="reader-font-scale"`
-- `data-field="custom-css"`
-- `data-field="preset-theme-select"`
-- `data-field="webdav-endpoint"`
-- `data-field="webdav-remote-path"`
-
-其它已稳定的字段接口：
-
-- `data-field="feed-url-input"`
-- `data-field="config-text"`
-- `data-field="opml-text"`
-- `data-field="search-title"`
-
-字段接口用于：
-
-- 自动化定位输入控件
-- 用户 CSS 和极端重排时保留语义锚点
-- 区分“持续输入值”和“触发一次动作”
 
 ---
 
@@ -425,7 +406,7 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 - `data-layout="app-nav-search"`
 - `data-layout="web-auth-shell"`
 - `data-layout="page-header"`
-- `data-layout="page-section-header"`
+- `data-slot="page-section-header"`
 - `data-layout="stats-grid"`
 - `data-layout="feed-workbench-single"`
 - `data-layout="exchange-grid"`

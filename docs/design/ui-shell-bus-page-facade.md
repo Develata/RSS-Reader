@@ -1,5 +1,7 @@
 # UI Shell / Bus / Page Facade 边界
 
+当前实现核对：2026-09-30。
+
 ## 目的
 
 这份文档描述 `rssr-app` 当前已经落地的前端边界：
@@ -13,7 +15,7 @@
 
 - 现在 repo 里的前端真实结构是什么
 - 哪些职责应该留在 `ui/shell`
-- 哪些职责应该留在 `UiCommand / UiRuntime / UiIntent`
+- 哪些职责应该留在 `UiCommand / runtime / UiIntent`
 - 哪些职责应该留在 `page facade`
 - 哪些东西不应再回流到页面组件
 
@@ -45,10 +47,10 @@
 - 共享 use case
 - 跨平台业务行为
 
-当前主要包括：
+当前组合入口是 `AppUseCases::compose(AppCompositionInput)`，以源码中的服务字段为准。主要包括：
 
 - feed service
-- entry service
+- entries list / workspace / reader services
 - settings service
 - refresh service
 - subscription workflow
@@ -61,8 +63,9 @@
 - SQLite / native 实现
 - browser persisted-state 实现
 - parser / fetch / WebDAV / OPML / JSON codec
+- 原生索引与正文双库，以及 browser `BrowserStore` 的分片、Web Locks 与版本化提交
 
-这层是“真实实现层”，不是 UI 的附属工具层。
+这层实现存储、网络、解析等端口；业务结果和流程规则仍由 application 定义。
 
 ### 4. `rssr-app/src/ui`
 
@@ -111,7 +114,7 @@
 - 认证壳状态
 - startup route 壳
 - 顶部导航壳
-- 全局搜索输入壳与 `NavMode::Normal / Search`
+- 全局搜索输入壳与 `NavMode::Normal / Search / Collapsed`
 - 用户手动刷新任务的 App scope 生命周期、in-flight 去重和列表失效 revision（实际刷新仍派发 `ShellCommand::ManualRefresh`）
 - 与自动刷新重叠时，由现有 host `RefreshCapability` 中共用的 `RefreshFlight` 合并请求；抓取、并发度及存储仍由原 use case / host 负责
 - Web auth gate 壳
@@ -138,7 +141,7 @@
 
 ---
 
-## `UiCommand / UiRuntime / UiIntent`
+## `UiCommand / runtime / UiIntent`
 
 ### `UiCommand`
 
@@ -159,13 +162,13 @@
 - 和按钮文本无关
 - 一个命令只表达一个清晰行为
 
-### `UiRuntime`
+### `runtime`
 
-`UiRuntime` 负责：
+`runtime` 是模块，不存在名为 `UiRuntime` 的结构体。入口 `execute_ui_command` 负责：
 
 - 接收 `UiCommand`
 - 调用 `AppServices`
-- 访问 application / infra 能力
+- 访问 application 用例及 host capability（不直接拼装仓储或平台 I/O）
 - 产出 `Vec<UiIntent>`
 
 当前实现见：
@@ -231,7 +234,7 @@ facade 是页面边界对象，不是简单 DTO。
 - `save_button_label()`
 - `config_import_button_label()`
 - `remove_feed_button_label(...)`
-- `theme_card_class(...)`
+- `theme_card_state(...)`
 - `theme_apply_button_label(...)`
 
 也就是说，页面和 section/card/control 不应再自己散落地决定：
@@ -312,7 +315,7 @@ facade 是页面边界对象，不是简单 DTO。
 
 ### 2. 页面组件里新建 page-local runtime
 
-当前已经完成从 `page-local runtime + UiRuntime` 向“薄 session + facade + UiRuntime”迁移。
+当前已经完成从 `page-local runtime + runtime` 向“薄 session + facade + runtime”迁移。
 
 除非有非常强的本地浏览器能力理由，否则不要再回到每页一套 runtime。
 
@@ -360,14 +363,14 @@ CSS 可以控制显示，不应承担业务判断。
 演进到：
 
 - `ui/shell`
-- `UiCommand / UiRuntime / UiIntent`
+- `UiCommand / runtime / UiIntent`
 - `page facade`
 - semantic page shell
 
 这已经是比较明确的：
 
 - `headless active interface`
-- `CSS 完全分离`
-- `infra` 承担真实行为
+- CSS 负责呈现，语义和状态留在 Rust
+- application 定义用例语义，infra 实现平台端口
 
 方向实现版。

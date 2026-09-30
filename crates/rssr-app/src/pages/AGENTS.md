@@ -6,7 +6,7 @@
 
 - 页面负责：
   - 组织 UI
-  - 调用 `AppServices`
+  - 通过页面 facade/session 派发 `UiCommand`，由 runtime 调用 application 用例或 host capability
   - 管理页面局部状态
   - 绑定快捷键、目录、筛选、表单交互
 - 页面不负责：
@@ -45,7 +45,7 @@
 
 - 页面层变更默认会同步影响：
   - Web
-  - Windows / macOS
+  - Windows / Linux / macOS
   - Android
 - 所以不要只按桌面端 Web 视口做判断
 - 目录跳转、返回行为、键盘快捷键这类功能，修改后要考虑：
@@ -55,8 +55,8 @@
 
 ## 变更后建议检查
 
-- `cargo check -p rssr-app`
-- `cargo check -p rssr-app --target wasm32-unknown-unknown`
+- `cargo check -p rssr-app --locked`
+- `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`
 - 涉及移动端交互时：
-  - `cargo check -p rssr-app --target aarch64-linux-android`
-
+  - `cargo check -p rssr-app --target aarch64-linux-android --locked`
+- 涉及布局、焦点、导航或快捷键时，使用真实浏览器和项目已有回归脚本验收；编译通过不等于交互可用。

@@ -10,4 +10,4 @@
 
 - 想判断 Android 的构建、签名和公开产物状态：看[Android 构建与验收状态](./android-release-roadmap.md)。
 - 想继续推进 Android：看[待完成的设备验收](./android-release-roadmap.md#待完成的设备验收)。
-- 想核对具体 `v0.1.15` 发布证据：看[发布交接记录](../handoffs/2026-09-22-v0.1.15-release.md)。
+- 想核对具体 `v0.1.20` 发布证据：看[发布交接记录](../handoffs/2026-09-26-v0.1.20-release.md)。

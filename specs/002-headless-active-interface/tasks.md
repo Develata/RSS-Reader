@@ -1,5 +1,7 @@
 # 任务列表：完全 Headless Active Interface 重构
 
+> 历史功能文档：保留原始日期、依赖版本和任务勾选，用于追溯当时设计；不作为当前实现或本次验收结论。当前技术栈、行为与验证入口见 [文档索引](../../docs/README.md)（2026-09-30 核对）。
+
 **输入**：来自 `/specs/002-headless-active-interface/` 的设计文档  
 **前置条件**：`plan.md`、`spec.md`
 

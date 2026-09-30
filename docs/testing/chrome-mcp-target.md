@@ -9,7 +9,7 @@
 
 ## 适用场景
 
-- 需要用 Chrome MCP 实际点开 `/entries`、`/feeds`、`/settings`、`/reader`
+- 需要用 Chrome MCP 实际点开 `/entries`、`/feeds`、`/settings`、阅读页 `/entries/:entry_id`
 - 需要在本地复跑静态 Web / `rssr-web` 的浏览器态 smoke
 - 当前 `127.0.0.1:9222` 没有 DevTools 目标，或者 MCP 连不上浏览器
 
@@ -76,14 +76,14 @@ bash scripts/run_chrome_mcp_target.sh --restart
 可以显式指定：
 
 ```bash
-bash scripts/run_chrome_mcp_target.sh --chrome-bin /home/develata/.local/opt/chrome-for-testing/chrome
+bash scripts/run_chrome_mcp_target.sh --chrome-bin "$HOME/.local/opt/chrome-for-testing/chrome"
 ```
 
 ## 推荐搭配
 
 - 静态 Web：
   - [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
-  - [Static Web `/reader` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
+  - [Static Web 阅读页 `/entries/:entry_id` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
   - [Static Web 小视口 Smoke](./static-web-small-viewport-smoke.md)
 - 部署壳：
   - [`rssr-web` 浏览器手工 Smoke](./rssr-web-browser-smoke.md)

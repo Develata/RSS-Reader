@@ -122,7 +122,7 @@
 
 ### Application Use Case Consolidation Plan
 
-- 新增 [application-use-case-consolidation-plan.md](/home/develata/gitclone/RSS-Reader/docs/design/application-use-case-consolidation-plan.md)。
+- 新增 [application-use-case-consolidation-plan.md](../design/application-use-case-consolidation-plan.md)。
 - 计划按宪章 `1.3.0` 的顺序组织：先定义骨架边界，再列模块边界，再落到第一步实现逻辑。
 - 收敛范围限定在当前 RSS 阅读器本体内的 subscription management / feed refresh / basic config exchange。
 - 明确真相源：feeds 走 `FeedRepository`，entries/read-starred 走 `EntryRepository`，durable settings 走 `SettingsRepository`，workspace state 走 `AppStateRepository`，browser app-state keyspace 为 `rssr-web-app-state-v2`。
@@ -131,31 +131,31 @@
 
 ### Subscription Lifecycle Workflow
 
-- [subscription_workflow.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/subscription_workflow.rs) 新增 `AddSubscriptionLifecycleInput` 与 `AddSubscriptionLifecycleOutcome`。
+- [subscription_workflow.rs](../../crates/rssr-application/src/subscription_workflow.rs) 新增 `AddSubscriptionLifecycleInput` 与 `AddSubscriptionLifecycleOutcome`。
 - `SubscriptionWorkflow::add_subscription_lifecycle(...)` 统一表达“添加订阅 + 可选首次刷新”。
 - 兼容 helper `add_subscription(...)` 与 `add_subscription_and_refresh(...)` 继续保留，但内部委托给 lifecycle 方法，避免双主干。
-- [native.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/native.rs) 与 [web.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/web.rs) 的 `RefreshCapability::add_subscription(...)` 改为调用 lifecycle 方法，host 只负责把首次刷新 outcome 翻译成现有用户可见结果。
-- [main.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-cli/src/main.rs) 的 `add_subscription(...)` 改为把 `--skip-refresh` 映射为 `refresh_after_add`，首次刷新失败仍由 CLI 现有 exit/error 逻辑处理。
+- [native.rs](../../crates/rssr-app/src/bootstrap/native.rs) 与 [web.rs](../../crates/rssr-app/src/bootstrap/web.rs) 的 `RefreshCapability::add_subscription(...)` 改为调用 lifecycle 方法，host 只负责把首次刷新 outcome 翻译成现有用户可见结果。
+- [main.rs](../../crates/rssr-cli/src/main.rs) 的 `add_subscription(...)` 改为把 `--skip-refresh` 映射为 `refresh_after_add`，首次刷新失败仍由 CLI 现有 exit/error 逻辑处理。
 - `rssr-application` 新增直接覆盖 lifecycle skip-refresh 与 refresh-after-add 两个分支的测试。
 
 ### Refresh Outcome Summary
 
-- [refresh_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/refresh_service.rs) 新增 `RefreshFeedFailureSummary` 与 `RefreshAllSummary`。
+- [refresh_service.rs](../../crates/rssr-application/src/refresh_service.rs) 新增 `RefreshFeedFailureSummary` 与 `RefreshAllSummary`。
 - `RefreshFeedOutcome` 新增 `is_success()`、`failure_summary()`、`failure_line()`，把单 feed 失败摘要稳定在 application 层。
 - `RefreshAllOutcome` 新增 `summary()`、`failure_summaries()`、`joined_failure_lines()`，统一刷新总览、失败计数与失败行拼接。
-- [native.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/native.rs) 和 [web.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/web.rs) 的 refresh handling 改为复用 `joined_failure_lines()` / `failure_line()`；native 仍保留平台专属 `ImageLocalizationWorker` 调度。
-- [main.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-cli/src/main.rs) 的 `ensure_refresh_*_succeeded` 改为复用 application summary helper，CLI 只保留退出错误的中文前缀。
+- [native.rs](../../crates/rssr-app/src/bootstrap/native.rs) 和 [web.rs](../../crates/rssr-app/src/bootstrap/web.rs) 的 refresh handling 改为复用 `joined_failure_lines()` / `failure_line()`；native 仍保留平台专属 `ImageLocalizationWorker` 调度。
+- [main.rs](../../crates/rssr-cli/src/main.rs) 的 `ensure_refresh_*_succeeded` 改为复用 application summary helper，CLI 只保留退出错误的中文前缀。
 - `rssr-application` 新增 `refresh_feed_failure_summary_keeps_feed_identity` 与 `refresh_all_summary_counts_results_and_formats_failures`，覆盖 feed identity、结果计数与失败行格式。
 
 ### Config Exchange Outcomes
 
-- [import_export_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/import_export_service.rs) 新增 `ConfigImportOutcome`、`OpmlImportOutcome`、`RemoteConfigPushOutcome`、`RemoteConfigPullOutcome`。
+- [import_export_service.rs](../../crates/rssr-application/src/import_export_service.rs) 新增 `ConfigImportOutcome`、`OpmlImportOutcome`、`RemoteConfigPushOutcome`、`RemoteConfigPullOutcome`。
 - `import_config_package(...)` / `import_config_json(...)` 现在返回导入订阅数、清理缺失订阅数、设置是否变化。
 - `import_opml(...)` 现在返回导入订阅数。
 - `push_remote_config(...)` 现在返回导出的订阅数。
 - `pull_remote_config(...)` 不再返回裸 `bool`，而是返回远端缺失或导入 outcome；remote store 构造仍在 native/web/CLI adapter 层。
-- [bootstrap.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap.rs) 的 `RemoteConfigPort`、native/web bootstrap、web exchange helper、runtime `SettingsPort`/`FeedsPort` 同步使用 outcome。
-- [feeds.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/feeds.rs)、[settings.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/settings.rs)、[main.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-cli/src/main.rs) 只负责 user-facing summary 文案，不再决定导入结果语义。
+- [bootstrap.rs](../../crates/rssr-app/src/bootstrap.rs) 的 `RemoteConfigPort`、native/web bootstrap、web exchange helper、runtime `SettingsPort`/`FeedsPort` 同步使用 outcome。
+- [feeds.rs](../../crates/rssr-app/src/ui/runtime/feeds.rs)、[settings.rs](../../crates/rssr-app/src/ui/runtime/settings.rs)、[main.rs](../../crates/rssr-cli/src/main.rs) 只负责 user-facing summary 文案，不再决定导入结果语义。
 - config exchange contract harness、wasm config exchange contract harness、WebDAV local roundtrip 均已更新为断言 `found()` 与导入 outcome。
 
 ### CSS 分离收口
@@ -173,7 +173,7 @@
 - settings appearance / preferences / sync 卡片补齐 `settings-card`、`settings-card-section`、`settings-form-grid`、`settings-card-actions/footer` 等语义 hook。
 - `assets/styles/workspaces.css`、`assets/styles/shell.css`、`assets/styles/responsive.css` 和四个内置 theme CSS 中对应视觉规则改用语义 selector。
 - 删除 `workspaces.css` 中已经没有页面 DOM 对应的 `feed-workbench__note` / intro 类死样式。
-- 更新 [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)，把 `feed-workbench__note` 从待办改为已清理。
+- 更新 [css-separation-baseline-checklist.md](../design/css-separation-baseline-checklist.md)，把 `feed-workbench__note` 从待办改为已清理。
 
 ### Page Shell / Entries Controls 收口
 
@@ -201,7 +201,7 @@
   - `entries-page__backlink`
   - `entries-page__state`
 - 清理 `assets/styles/entries.css` 中已无 DOM 对应的 `.entry-card__action` 死 selector。
-- 更新 [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)，避免后续继续机械迁移设计系统 class。
+- 更新 [css-separation-baseline-checklist.md](../design/css-separation-baseline-checklist.md)，避免后续继续机械迁移设计系统 class。
 
 ### Deep Selector Audit
 
@@ -219,108 +219,108 @@
 
 ### Entries Page Wrapper 语义化
 
-- [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)
+- [mod.rs](../../crates/rssr-app/src/pages/entries_page/mod.rs)
   - `entries-main`、`entries-page__backlink`、`entries-page__state` 根节点补齐 `data-layout`，页面 wrapper 不再只靠 class 暴露布局角色。
-- [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
+- [entries.css](../../assets/styles/entries.css)
   - 对应 `min-width`、backlink margin、empty/archived state margin 改由 `[data-layout="entries-main"]`、`entries-page-backlink`、`entries-page-state` 驱动。
-- [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)
+- [css-separation-baseline-checklist.md](../design/css-separation-baseline-checklist.md)
   - 将 `entries-main` / `entries-page__*` 从“低优先级候选”调整为“已收口”，并把 `inline-actions__item` 归并为设计系统 class 边界问题。
 
 ### Design System Class Boundary 收口
 
-- [shell.css](/home/develata/gitclone/RSS-Reader/assets/styles/shell.css)
+- [shell.css](../../assets/styles/shell.css)
   - `.inline-actions__item` 的基础宽度规则回收到全局 shell，明确它属于设计系统辅助 class，而不是 entries 页面私有样式。
   - `.inline-actions` 删除通用 `margin-top`，不再让设计系统 class 隐含页面间距语义。
-- [entries.css](/home/develata/gitclone/RSS-Reader/assets/styles/entries.css)
+- [entries.css](../../assets/styles/entries.css)
   - 删除误放在页面样式内的 `.inline-actions__item` 规则，避免 page-local CSS 污染 reader/settings/feeds 共用动作条。
-- [workspaces.css](/home/develata/gitclone/RSS-Reader/assets/styles/workspaces.css)
+- [workspaces.css](../../assets/styles/workspaces.css)
   - `exchange-card-actions` 显式补回 `margin-top: 12px`，把原先混在 `.inline-actions` 里的页面间距语义落回页面布局 hook。
-- [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)
+- [css-separation-baseline-checklist.md](../design/css-separation-baseline-checklist.md)
   - 将 `inline-actions__item` 的结论更新为“保留为设计系统 class，重点只检查是否被页面拿来承担布局锚点”。
 
 ### Dead Class Token 清理
 
-- [config_exchange.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/config_exchange.rs)
+- [config_exchange.rs](../../crates/rssr-app/src/pages/feeds_page/sections/config_exchange.rs)
   - feeds 配置交换区移除误挂的 `settings-card__header`，只保留 `data-slot="settings-card-header"`。
-- [appearance.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/appearance.rs)
+- [appearance.rs](../../crates/rssr-app/src/pages/settings_page/appearance.rs)
   - appearance 卡片头部移除 `settings-card__header`。
-- [preferences.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/preferences.rs)
+- [preferences.rs](../../crates/rssr-app/src/pages/settings_page/preferences.rs)
   - 阅读偏好区移除 `settings-card__section` / `settings-card__section-header` / `settings-card__section-title`。
-- [sync/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/mod.rs)
+- [sync/mod.rs](../../crates/rssr-app/src/pages/settings_page/sync/mod.rs)
   - WebDAV 卡片移除 `settings-card__header`、`settings-card__section*`、`settings-card__actions`。
-- [themes/lab.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/lab.rs)
+- [themes/lab.rs](../../crates/rssr-app/src/pages/settings_page/themes/lab.rs)
   - 主题实验室移除 `settings-card__section*` / `settings-card__actions` 残留，并把自定义 CSS placeholder 改成 `[data-layout="reader-body"]` 示例。
-- [themes/presets.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/presets.rs)
+- [themes/presets.rs](../../crates/rssr-app/src/pages/settings_page/themes/presets.rs)
   - 主题预设区移除 `settings-card__section*` / `settings-card__actions` 残留。
-- [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/reader_page/mod.rs)
+- [mod.rs](../../crates/rssr-app/src/pages/reader_page/mod.rs)
   - reader 页面移除 `reader-page` / `reader-header` / `reader-title` / `reader-toolbar` / `reader-meta-block` / `reader-meta` / `reader-body` / `reader-html` / `reader-pagination` / `reader-pagination--context` 等已失效 class token，只保留 `data-layout` / `data-slot` 和仍有样式消费方的 `inline-actions` / `reader-bottom-bar__button`。
-- [frontend-command-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/frontend-command-reference.md)、[theme-author-selector-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/theme-author-selector-reference.md)、[css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)
+- [frontend-command-reference.md](../design/frontend-command-reference.md)、[theme-author-selector-reference.md](../design/theme-author-selector-reference.md)、[css-separation-baseline-checklist.md](../design/css-separation-baseline-checklist.md)
   - 当前规范文档中的 reader 内容岛示例已统一从 `.reader-html` 切到 `[data-slot="reader-body-html"]`。
 
 ### Semantic Shell Class Purge
 
-- [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/mod.rs)、[compose.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/compose.rs)、[config_exchange.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/config_exchange.rs)、[saved.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/feeds_page/sections/saved.rs)
+- [mod.rs](../../crates/rssr-app/src/pages/feeds_page/mod.rs)、[compose.rs](../../crates/rssr-app/src/pages/feeds_page/sections/compose.rs)、[config_exchange.rs](../../crates/rssr-app/src/pages/feeds_page/sections/config_exchange.rs)、[saved.rs](../../crates/rssr-app/src/pages/feeds_page/sections/saved.rs)
   - feeds 页面移除 `page-*`、`stats-grid*`、`stat-card*`、`feed-workbench*`、`feed-compose-card*`、`feed-form`、`exchange-*`、`feed-card*` 等已无消费方的壳层 class token。
-- [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/mod.rs)、[appearance.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/appearance.rs)、[preferences.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/preferences.rs)、[sync/mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/sync/mod.rs)、[presets.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/settings_page/themes/presets.rs)
+- [mod.rs](../../crates/rssr-app/src/pages/settings_page/mod.rs)、[appearance.rs](../../crates/rssr-app/src/pages/settings_page/appearance.rs)、[preferences.rs](../../crates/rssr-app/src/pages/settings_page/preferences.rs)、[sync/mod.rs](../../crates/rssr-app/src/pages/settings_page/sync/mod.rs)、[presets.rs](../../crates/rssr-app/src/pages/settings_page/themes/presets.rs)
   - settings 页面移除 `page-*`、`settings-grid`、`settings-card*`、`card-title`、`theme-gallery` 等死 token，仅保留设计系统类和语义属性。
-- [mod.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/mod.rs)、[cards.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/cards.rs)、[controls.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/controls.rs)、[entry_filters.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/components/entry_filters.rs)
+- [mod.rs](../../crates/rssr-app/src/pages/entries_page/mod.rs)、[cards.rs](../../crates/rssr-app/src/pages/entries_page/cards.rs)、[controls.rs](../../crates/rssr-app/src/pages/entries_page/controls.rs)、[entry_filters.rs](../../crates/rssr-app/src/components/entry_filters.rs)
   - entries 页面移除 `page-*`、`entries-*`、`entry-group*`、`entry-overview*`、`entry-controls*`、`entry-filters__*`、`entry-card__*` 等已被 `data-layout` / `data-slot` 取代的 DOM class token。
-- [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)、[frontend-command-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/frontend-command-reference.md)、[theme-author-selector-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/theme-author-selector-reference.md)
+- [css-separation-baseline-checklist.md](../design/css-separation-baseline-checklist.md)、[frontend-command-reference.md](../design/frontend-command-reference.md)、[theme-author-selector-reference.md](../design/theme-author-selector-reference.md)
   - 当前规范文档删除 `.feed-card` / `.entry-card` / `.settings-card` / `.exchange-card` / `.theme-card` / `.card-title` / `.group-header*` 等已失效的建议入口，统一回到 `data-layout` / `data-slot`。
 
 ### App State / Workspace State Split
 
-- [app_state.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-domain/src/app_state.rs)
+- [app_state.rs](../../crates/rssr-domain/src/app_state.rs)
   - 新增 `AppStateSnapshot` 与 `EntriesWorkspaceState`，把 `last_opened_feed_id` 和 entries browsing/workspace state 收口成独立真相源。
-- [settings.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-domain/src/settings.rs)
+- [settings.rs](../../crates/rssr-domain/src/settings.rs)
   - `UserSettings` 删除 `entry_grouping_mode`、`show_archived_entries`、`entry_read_filter`、`entry_starred_filter`、`entry_filtered_feed_urls`，只保留 durable settings。
-- [repository.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-domain/src/repository.rs)、[app_state_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/app_state_service.rs)
+- [repository.rs](../../crates/rssr-domain/src/repository.rs)、[app_state_service.rs](../../crates/rssr-application/src/app_state_service.rs)
   - 新增 `AppStateRepository` 与 `AppStateService`，给 host / runtime 一个比 `SettingsRepository` 更窄、更正确的 app-state 入口。
-- [app_state_repository.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/db/app_state_repository.rs)
+- [app_state_repository.rs](../../crates/rssr-infra/src/db/app_state_repository.rs)
   - SQLite app state 由单个 `last_opened_feed_id` key 升级为 `app_state_v2` JSON blob，承载 `last_opened_feed_id + entries_workspace`。
-- [state.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/browser/state.rs)
+- [state.rs](../../crates/rssr-infra/src/application_adapters/browser/state.rs)
   - 浏览器 app-state sidecar key 升为 `rssr-web-app-state-v2`，并持久化完整 `AppStateSnapshot`。
-- [native.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/native.rs)、[web.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/web.rs)
+- [native.rs](../../crates/rssr-app/src/bootstrap/native.rs)、[web.rs](../../crates/rssr-app/src/bootstrap/web.rs)
   - `AppServices` 新增 `load_entries_workspace_state` / `save_entries_workspace_state`，并改由 `AppStateService` 读写 last-opened feed 与 entries workspace。
-- [entries.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/entries.rs)、[intent.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/intent.rs)、[reducer.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/reducer.rs)、[state.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/pages/entries_page/state.rs)
+- [entries.rs](../../crates/rssr-app/src/ui/runtime/entries.rs)、[intent.rs](../../crates/rssr-app/src/pages/entries_page/intent.rs)、[reducer.rs](../../crates/rssr-app/src/pages/entries_page/reducer.rs)、[state.rs](../../crates/rssr-app/src/pages/entries_page/state.rs)
   - entries bootstrap 现在分别加载 durable settings 与 `EntriesWorkspaceState`；`SaveBrowsingPreferences` 不再回写 `UserSettings`，而是改写 `app_state.entries_workspace`。
-- [import_export_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/import_export_service.rs)、[rules.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/import_export_service/rules.rs)
+- [import_export_service.rs](../../crates/rssr-application/src/import_export_service.rs)、[rules.rs](../../crates/rssr-application/src/import_export_service/rules.rs)
   - config package 导出版本升到 `2`；导入器不再接受旧的 `settings + browsing state` 混合结构。
-- [config-package.schema.json](/home/develata/gitclone/RSS-Reader/specs/001-minimal-rss-reader/contracts/config-package.schema.json)
+- [config-package.schema.json](../../specs/001-minimal-rss-reader/contracts/config-package.schema.json)
   - schema 删除 entries browsing/workspace 字段，并把 `version` 收紧到常量 `2`。
 - `tests/fixtures/browser_state/reader_demo_core.json` / `tests/fixtures/browser_state/reader_demo_app_state.json`
   - browser seed fixture 改成 “durable settings 在 core，entries workspace 在 app-state sidecar” 的新布局。
 
 ### UI Runtime Port Narrowing
 
-- [services.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/services.rs)
+- [services.rs](../../crates/rssr-app/src/ui/runtime/services.rs)
   - 新增 `UiServices`，把 `AppServices::shared()` 收口到 runtime 单入口。
   - 新增 `EntriesPort`、`ShellPort`、`SettingsPort`、`ReaderPort`、`FeedsPort`，按命令族暴露窄能力面。
-- [entries.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/entries.rs)
+- [entries.rs](../../crates/rssr-app/src/ui/runtime/entries.rs)
   - entries runtime 现在只依赖 `EntriesPort`，不再直接取 `AppServices::shared()`。
-- [shell.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/shell.rs)
+- [shell.rs](../../crates/rssr-app/src/ui/runtime/shell.rs)
   - shell runtime 改成走 `ShellPort` 加载 durable settings、启动自动刷新、解析 startup route。
-- [settings.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/settings.rs)
+- [settings.rs](../../crates/rssr-app/src/ui/runtime/settings.rs)
   - settings runtime 改成走 `SettingsPort`，把本页所需的保存/同步能力与全能 app host 隔开。
-- [reader.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/reader.rs)
+- [reader.rs](../../crates/rssr-app/src/ui/runtime/reader.rs)
   - reader runtime 改成走 `ReaderPort`，只保留获取 entry / navigation / read-star toggle 的窄接口。
-- [feeds.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/ui/runtime/feeds.rs)
+- [feeds.rs](../../crates/rssr-app/src/ui/runtime/feeds.rs)
   - feeds runtime 改成走 `FeedsPort`，为后续把订阅/配置交换 workflow 抽离成共享 use case 做准备。
 
 ### Shared Composition Primitive
 
-- [composition.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/composition.rs)
+- [composition.rs](../../crates/rssr-application/src/composition.rs)
   - 新增共享 `AppCompositionInput`、`AppStateServicesPort`、`AppUseCases::compose(...)`。
   - 组合入口统一负责装配 `FeedService`、`EntryService`、`SettingsService`、`AppStateService`、`RefreshService`、`SubscriptionWorkflow`、`ImportExportService`。
-- [app_state_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/app_state_service.rs)、[entry_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/entry_service.rs)、[settings_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/settings_service.rs)、[import_export_service.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-application/src/import_export_service.rs)
+- [app_state_service.rs](../../crates/rssr-application/src/app_state_service.rs)、[entry_service.rs](https://github.com/Develata/RSS-Reader/blob/91f3a5a14ba9a23b77afc69744ebde0787c25f0d/crates/rssr-application/src/entry_service.rs)、[settings_service.rs](../../crates/rssr-application/src/settings_service.rs)、[import_export_service.rs](../../crates/rssr-application/src/import_export_service.rs)
   - 补齐 `Clone`，使组合后的应用层骨架可被 host facade 直接持有。
-- [non_refresh.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/src/application_adapters/non_refresh.rs)
+- [non_refresh.rs](../../crates/rssr-infra/src/application_adapters/non_refresh.rs)
   - `SqliteAppStateAdapter` 现在同时实现 `AppStateRepository`，可作为单一 `app_state` 依赖传给组合入口。
-- [native.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/native.rs)
+- [native.rs](../../crates/rssr-app/src/bootstrap/native.rs)
   - 桌面端 bootstrap 不再直接手工拼 `FeedService` / `RefreshService` / `SubscriptionWorkflow` / `ImportExportService`，而是只负责选 SQLite / HTTP / parser / localizer 等 host adapter，然后调用 `AppUseCases::compose(...)`。
-- [web.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/src/bootstrap/web.rs)
+- [web.rs](../../crates/rssr-app/src/bootstrap/web.rs)
   - web bootstrap 同样改为只负责 browser state / reqwest client / browser refresh source / remote config store 等 host adapter 的选择，然后调用共享组合入口。
-- [main.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-cli/src/main.rs)
+- [main.rs](../../crates/rssr-cli/src/main.rs)
   - CLI 初始化流程切到 `AppUseCases::compose(...)`，不再自己平行重建完整 service/workflow 装配链。
 
 ## 验证与验收

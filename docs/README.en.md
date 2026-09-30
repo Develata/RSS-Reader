@@ -29,7 +29,7 @@ Download the appropriate asset from [Releases](https://github.com/Develata/RSS-R
 | Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | Install the APK; the AAB is for app stores |
 | Web | `RSS-Reader-web.tar.gz` | Static site bundle; use [`rssr-web`](./deployment/web.md) for login and a same-origin feed proxy |
 
-Open Subscribe (the RSS-wave icon in the top bar), add an RSS or Atom URL, then select **R** (Read / Home). From another page, R navigates home; when already home, R manually refreshes all feeds. Repeated clicks share the in-flight refresh. On mobile, pull down at the top of Home to request the same refresh.
+Open Subscribe (the RSS-wave icon in the top bar), add an RSS/Atom URL or a website homepage, then select **R** (Read / Home). From another page, R navigates home; when already home, R manually refreshes all feeds. Repeated clicks share the in-flight refresh. On mobile, pull down at the top of Home to request the same refresh.
 
 The table matches the published `v0.1.20` assets; see the [release notes](https://github.com/Develata/RSS-Reader/releases/tag/v0.1.20) for the exact changes and validation scope. Android's signed APK/AAB was built and checked, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine.
 
@@ -39,12 +39,20 @@ The table matches the published `v0.1.20` assets; see the [release notes](https:
 
 - Use the search icon to expand title search; Enter searches, Esc closes it. Filter entries by source, unread status, or favorite status. Long source names remain readable and pagination stays reachable.
 - In Reader, use the top-left back button, toggle read/favorite, move to nearby articles, or open a body image in the viewer. Native text selection and copy remain available. Refreshing does not replace the article you are reading.
-- Reader shortcuts: `M` toggles read status, `F` toggles favorite, and `←` / `→` move to the previous / next unread article. Native editing shortcuts with Ctrl or Cmd are left alone.
-- Settings provide built-in themes and custom CSS. `rssr-cli` covers feed management, refresh, settings, and configuration import/export.
+- Reader shortcuts: `M` toggles read status, `F` toggles favorite, and `←` / `→` move to the previous / next unread article. Shortcuts apply only while focus is inside the reading region. Search input, IME composition, and native editing shortcuts with Ctrl or Cmd are left alone.
+- Settings provide built-in themes and custom CSS. Basic settings and edited CSS require Save; applying a preset saves immediately. Android CSS file import is not implemented; export uses the system file picker. `rssr-cli` covers feed management, refresh, settings, and configuration import/export.
+
+- The arrow at the end of the navigation bar collapses it to one expand button. Collapse state and reading positions last for the current run; reloading the Web page clears them. Returning to the list restores the page and article position where possible.
+- Reader metadata shows the feed, author if available, local publication time, and an original-page link. Full timestamps include the UTC offset; the link opens externally without leaving Reader. Source filters show the same full unread counts as the subscription page, including zero.
+- “Mark filtered entries as read” previews all matching unread entries across pages. Confirmation is required again if the matching set changes. CLI `mark-read --all` or `mark-read --feed-id <id>` previews; `--yes` executes.
+- Website subscription discovery selects a single declared feed automatically, or lets you choose among multiple candidates. Without declarations it probes only `/feed`, `/rss.xml`, `/atom.xml`, and `/index.xml`. CLI lists multiple candidates and exits unsuccessfully so a specific feed URL can be chosen.
+- Manual refresh reports newly inserted entries; updates to existing entries do not count. Partial failures retain successful results. Success feedback lasts about three seconds, errors about six. Fetch and discovery responses are limited to 8 MiB after decompression and UTF-8 conversion.
 
 ## Local data and limits
 
 The Linux `/usr/bin` installation stores data in `$XDG_DATA_HOME/rss-reader/` (or `~/.local/share/rss-reader/` when unset). Windows, macOS, and portable Linux builds continue to use `RSS-Reader/` next to the executable. The directory contains the SQLite index and article-body databases plus `shell-prefs.json`. Exit the app before backing up the whole directory, including any SQLite WAL files. Data created by an earlier root-run package under `/usr/bin/RSS-Reader/` is not migrated automatically; after exiting, back it up and have an administrator copy the complete directory to the new location and give it to the user. Android stores its databases in the app sandbox; uninstalling removes local data. Web stores serialized state in that browser's `localStorage`; clearing site data removes the local article library.
+
+Web requires HTTPS (localhost is allowed) and Web Locks support. New-version tabs coordinate writes through versioned commits; storage errors preserve the previous commit. Reload all older tabs after an upgrade. Another tab does not replace the body currently being read; returning to the list or querying again reads the latest state.
 
 A separately extracted Linux CLI remains portable and uses its own executable-adjacent database by default. To manage the installed desktop app's database, pass the global `--database-url` option pointing to the installed data directory's `rss-reader.db`.
 
@@ -62,7 +70,7 @@ cargo run --locked -p rssr-cli -- --help
 
 rustup target add wasm32-unknown-unknown
 cargo install dioxus-cli --version 0.7.9 --locked
-dx serve --platform web --package rssr-app
+dx serve --platform web --package rssr-app --locked
 ```
 
 ```bash

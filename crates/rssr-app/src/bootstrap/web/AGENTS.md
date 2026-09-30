@@ -4,23 +4,13 @@
 
 ## 职责边界
 
-- `state.rs`
-  - 浏览器本地状态结构
-  - `localStorage` 持久化与损坏恢复
-- `query.rs`
-  - 只读查询
-  - 文章列表、订阅列表、阅读导航的 Web 内存态实现
-- `mutations.rs`
-  - 状态修改
-  - 已读、收藏、最近打开订阅、设置写回
 - `refresh.rs`
-  - feed 刷新、自动刷新调度
+  - Web host 的刷新协调、自动刷新调度及状态通知
 - `exchange.rs`
-  - JSON / OPML / 配置交换
-- `config.rs`
-  - 配置包校验与 OPML 编解码
-- `feed.rs`
-  - feed 拉取与解析辅助
+  - 浏览器文件导入导出、远程配置交换等 host capability
+- `../web.rs`
+  - 组装 infra 浏览器适配器与 application 用例，向 UI 暴露 host capability
+- 浏览器状态、仓储查询、feed 拉取解析和 OPML 编解码已位于 `rssr-infra/src/application_adapters/browser/`；不要在此重建平行实现。
 
 ## 不应在这里做的事
 
@@ -37,20 +27,21 @@
   - 导入坏数据时的降级路径
   - 保存失败时不应静默破坏现有状态
 - 查询路径优先减少重复线性扫描，避免在热点路径上反复 `find` / `filter`
-- 状态写回尽量保持“锁内修改，锁外序列化/持久化”
+- `BrowserStore` 的写入必须在同一次 Web Lock 内完成读取最新提交、修改、序列化及发布提交头；不能把持久化移到锁外，否则不同标签页会丢失更新。
+- 网络请求放在存储锁外；返回后由仓储在锁内合并并提交。保存失败必须保留上一份可读提交，并向调用方报告失败。
 
 ## 代码风格
 
-- 查询、修改、刷新、交换逻辑继续分文件，不回流到 `web.rs`
+- 业务语义放在 application；浏览器存储与协议适配放在 infra；本目录只保留 host 装配和能力协调。
 - 错误优先返回可读消息，不使用 `expect` 假设浏览器状态永远有效
 - Web 专属辅助函数命名要能一眼看出是 Web 实现，不要伪装成通用仓储
 
 ## 变更后建议检查
 
-- `cargo check -p rssr-app --target wasm32-unknown-unknown`
+- `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`
+- 存储/端口变化运行相关 wasm 浏览器契约测试，入口见 `scripts/run_wasm_contract_harness.sh`。
 - 关键改动涉及状态时：
   - 登录后的 `/entries`
   - 配置导入导出
   - 刷新 feed
   - 阅读页导航
-

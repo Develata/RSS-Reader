@@ -76,7 +76,7 @@ bash scripts/run_web_spa_regression_server.sh --release
 
 说明：
 
-- 当前 `dx build --platform web --package rssr-app` 默认产出 `debug/web/public`
+- 当前 `dx build --locked --platform web --package rssr-app` 默认产出 `debug/web/public`
 - 如果要检查 release 构建，应显式使用 `--release`
 
 ## 推荐回归路径
@@ -91,6 +91,8 @@ bash scripts/run_web_spa_regression_server.sh --release
 
 ## 备注
 
+- 服务仅监听 loopback，shell 使用 exec 交给 Python 服务，调用方持有的 PID 即服务 PID。
+- helper 会覆盖该 origin 的测试数据，只使用独立浏览器 profile，不在日常文章库上播种。
 - 这个脚本只解决本地静态构建回归的 SPA fallback 问题。
 - 它不是 `dx serve` 的替代品。
 - 如果要检查热更新或 dev server 行为，仍然应使用 `dx serve`。
@@ -107,3 +109,5 @@ bash scripts/run_web_spa_regression_server.sh --release
     - `rssr-web-state-v1`
     - `rssr-web-app-state-v2`
     - `rssr-web-entry-flags-v1`
+    - 正文分片与版本化提交头；新版活跃分片由提交头确定，上述 legacy key 不保证是最新数据
+- 播种会清理该测试 origin 的旧提交，dump 按提交头读取活跃片段；Playwright 测试可复用 `scripts/browser/storage_helpers.cjs` 修改测试数据。调试不能绕过 Web Locks 在运行中直接改 legacy key，迁移行为应通过专用 fixture 验证。

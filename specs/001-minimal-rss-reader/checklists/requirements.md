@@ -2,7 +2,7 @@
 
 **用途**：在进入计划阶段前验证规格的完整性与质量
 **创建日期**：2026-03-24
-**功能**：[spec.md](/home/develata/gitclone/RSS-Reader/specs/001-minimal-rss-reader/spec.md)
+**功能**：[spec.md](../spec.md)
 
 ## 内容质量
 

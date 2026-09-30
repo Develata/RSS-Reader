@@ -1,12 +1,14 @@
-# Static Web `/reader` 主题矩阵 Smoke
+# Static Web 阅读页 主题矩阵 Smoke
 
 这份说明服务于静态 `rssr-app` Web 入口下，真实阅读页的多主题回归。
 
 它解决的是：
 
 - 不再手工进入设置页逐个切主题
-- 让 `/reader` 的多主题检查变成固定入口
+- 让 阅读页 的多主题检查变成固定入口
 - 直接复用同源 local auth helper 与 `reader-demo` seed
+
+默认截图矩阵不穷举浅色/深色/跟随系统、全部视口或键盘状态。主题变化时另补这些模式；准确路由为 `/entries/:entry_id`。
 
 ## 脚本
 
@@ -64,11 +66,12 @@ bash scripts/run_static_web_reader_theme_matrix.sh --port 8103
 - 是否出现布局回退
 - 是否允许进入发布前总回归
 
-## 当前基线
+## 历史证据与本次验收
 
 - 2026-04-10 已完成一轮人工视觉验收：
   - 产物目录：`target/static-web-reader-theme-matrix/20260410-213206/`
   - 结论：默认主题、`Atlas Sidebar`、`Newsprint`、`Amethyst Glass`、`Midnight Ledger` 的 `/entries/2` 阅读页均可接受
-- 本轮通过条件：
+- 每次新构建都需复看当前产物；2026-04-10 结论只属于当时版本。2026-09-26 的运行记录见 [集成复验](../handoffs/2026-09-26-integration-revalidation.md)。
+- 本次验收条件：
   - 标题、元信息、正文、底部栏可读
   - 没有明显塌陷、遮挡或不可点击区域

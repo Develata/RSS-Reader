@@ -75,7 +75,7 @@
 - 当前前端为什么还不是完全 headless
 - 命令层、查询层和视图壳应该如何分离
 - 为什么这会支持极端 CSS 重排
-- 每完成一个模块后如何用 Chrome MCP 做视觉与体验等价验收
+- 每完成一个模块后如何用真实浏览器做视觉与体验等价验收
 
 适合：
 
@@ -87,7 +87,7 @@
 
 关注：
 
-- 当前 `rssr-app` 里已经形成的 `ui/shell`、`UiCommand / UiRuntime / UiIntent`、`page facade` 边界
+- 当前 `rssr-app` 里已经形成的 `ui/shell`、`UiCommand / runtime / UiIntent`、`page facade` 边界
 - 什么职责应留在 shell，什么职责应留在 bus，什么职责应留在 facade
 - 哪些反模式不应再回流到页面组件
 

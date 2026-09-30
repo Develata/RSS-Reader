@@ -63,7 +63,7 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web --
 bash scripts/run_release_ui_regression.sh --debug --port 8091 --full
 ```
 
-脚本内部会串行执行下面这组自动化检查。
+脚本内部会串行执行下面这组自动化检查。`--full` 包含五主题 Reader 截图和默认主题小视口断言，不等于 CI 的五主题全页面矩阵。与 CI 对齐时还需分别对四套内置主题运行 small viewport smoke（`--preset <key>`），以及本次变更涉及的手工/实机项。
 
 至少先通过：
 
@@ -146,7 +146,7 @@ bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
 - 确认已登录后 `/feeds` 和 `/settings` 返回 `200`
 - 确认 `/logout` 后回到 `/login`
 
-代理 feed 导入和更完整的页面行为，仍需要浏览器手工回归补齐。
+同源 fixture 的登录后添加与首刷已有自动化；真实远端代理 feed 和未覆盖的交互仍需补验。
 
 如果要先固定一条更窄的 deploy-shell 代理回归，优先用：
 
@@ -166,7 +166,7 @@ bash scripts/run_rssr_web_browser_smoke.sh
 bash scripts/run_rssr_web_browser_feed_smoke.sh
 ```
 
-这条 helper 现在会同时给出：
+交互环境 helper `run_rssr_web_browser_smoke.sh` 会给出：
 
 - 临时用户名 / 密码
 - 推荐代理 feed
@@ -184,7 +184,7 @@ bash scripts/run_rssr_web_browser_feed_smoke.sh
 - `/entries`
 - `/feeds`
 - `/settings`
-- `/reader/{entry_id}` 或等价真实阅读页路径
+- `/entries/:entry_id`（使用真实存在的文章 ID）
 
 主题至少覆盖：
 
@@ -194,7 +194,7 @@ bash scripts/run_rssr_web_browser_feed_smoke.sh
 - `Amethyst Glass`
 - `Midnight Ledger`
 
-如果要把多主题 `/reader` 回归固定化，直接用：
+如果要把多主题阅读页 回归固定化，直接用：
 
 ```bash
 bash scripts/run_static_web_reader_theme_matrix.sh
@@ -268,6 +268,9 @@ bash scripts/run_static_web_small_viewport_smoke.sh
 - 来源多选筛选
 - 进入阅读页
 
+- 来源未读数（含 0）与订阅页一致，不随当前搜索范围变化
+- 批量已读的预览、跨分页范围、集合变化后的重新确认和失败恢复
+
 ### 5. 阅读页
 
 - 正文正常显示
@@ -276,6 +279,10 @@ bash scripts/run_static_web_small_viewport_smoke.sh
 - `上一篇未读 / 下一篇未读`
 - `上一篇同订阅文章 / 下一篇同订阅文章`
 - 返回上一页后列表仍稳定
+
+- 元信息、设备本地时间和独立原文入口
+- 返回列表与再次开文的位置恢复；重载清除运行内记忆
+- Tab 焦点、阅读区内快捷键和搜索输入不误触
 
 ### 6. 设置页
 
@@ -306,7 +313,7 @@ bash scripts/run_static_web_small_viewport_smoke.sh
 
 如果有真实阅读页数据，再加：
 
-- `/reader`
+- `/entries/:entry_id`
 - 正文宽度、元信息、底部栏是否仍可用
 
 如果要把这条回归固定化，优先用：

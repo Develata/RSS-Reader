@@ -29,8 +29,8 @@
 ### 1. 新增本地 SPA fallback 回归脚本
 
 - 新增：
-  - [run_web_spa_regression_server.sh](/home/develata/gitclone/RSS-Reader/scripts/run_web_spa_regression_server.sh)
-  - [web-spa-regression-server.md](/home/develata/gitclone/RSS-Reader/docs/design/web-spa-regression-server.md)
+  - [run_web_spa_regression_server.sh](../../scripts/run_web_spa_regression_server.sh)
+  - [web-spa-regression-server.md](../design/web-spa-regression-server.md)
 - 作用：
   - 读取 `target/dx/rssr-app/<profile>/web/public`
   - 为未知路径自动回退到 `index.html`
@@ -39,8 +39,8 @@
 ### 2. CSS 完全分离基线检查继续收口
 
 - 更新：
-  - [css-separation-baseline-checklist.md](/home/develata/gitclone/RSS-Reader/docs/design/css-separation-baseline-checklist.md)
-  - [README.md](/home/develata/gitclone/RSS-Reader/docs/design/README.md)
+  - [css-separation-baseline-checklist.md](../design/css-separation-baseline-checklist.md)
+  - [README.md](../design/README.md)
 - `app-nav` 已继续迁移：
   - 导航壳、显隐按钮、品牌区、链接区、搜索区都已改成 `data-layout` / `data-slot` / `data-nav`
   - 页面结构中不再保留只为样式服务的 `app-nav*` class
@@ -67,9 +67,9 @@
 ### 3. 主题作者与前端接口文档正式对齐到语义接口
 
 - 更新：
-  - [theme-author-selector-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/theme-author-selector-reference.md)
-  - [frontend-command-reference.md](/home/develata/gitclone/RSS-Reader/docs/design/frontend-command-reference.md)
-  - [ui-shell-bus-page-facade.md](/home/develata/gitclone/RSS-Reader/docs/design/ui-shell-bus-page-facade.md)
+  - [theme-author-selector-reference.md](../design/theme-author-selector-reference.md)
+  - [frontend-command-reference.md](../design/frontend-command-reference.md)
+  - [ui-shell-bus-page-facade.md](../design/ui-shell-bus-page-facade.md)
 - 重点：
   - 删掉过时的 `app-nav*`、`reader-page*`、`entry-filters*`、`web-auth*` 契约示例
   - 把主题作者文档改成以 `data-page / data-layout / data-slot / data-nav / data-action / data-field / data-state` 为主
@@ -101,10 +101,10 @@
 ### 5. 内置主题资产已开始对齐新的公开语义契约
 
 - 更新：
-  - [atlas-sidebar.css](/home/develata/gitclone/RSS-Reader/assets/themes/atlas-sidebar.css)
-  - [newsprint.css](/home/develata/gitclone/RSS-Reader/assets/themes/newsprint.css)
-  - [forest-desk.css](/home/develata/gitclone/RSS-Reader/assets/themes/forest-desk.css)
-  - [midnight-ledger.css](/home/develata/gitclone/RSS-Reader/assets/themes/midnight-ledger.css)
+  - [atlas-sidebar.css](../../assets/themes/atlas-sidebar.css)
+  - [newsprint.css](../../assets/themes/newsprint.css)
+  - [forest-desk.css](https://github.com/Develata/RSS-Reader/blob/64b97350a61a52415c4696b1f10f37e548c671ad/assets/themes/forest-desk.css)
+  - [midnight-ledger.css](../../assets/themes/midnight-ledger.css)
 - 已完成：
   - `app-nav*` 改到 `data-layout="app-nav-*"` / `data-nav`
   - `reader-page*` 改到 `data-layout="reader-*"` / `data-slot="reader-*"`
@@ -124,7 +124,7 @@
 ### 6. 新增内置主题契约测试，防止 selector 回退
 
 - 新增：
-  - [test_builtin_theme_contracts.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-app/tests/test_builtin_theme_contracts.rs)
+  - [test_builtin_theme_contracts.rs](../../crates/rssr-app/tests/test_builtin_theme_contracts.rs)
 - 作用：
   - 拦截内置主题重新引入旧 selector 契约
   - 明确要求主题继续引用当前语义接口：
@@ -139,10 +139,10 @@
 ### 7. 新增发布前 UI 回归清单，接入 testing 文档索引
 
 - 新增：
-  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+  - [release-ui-regression-checklist.md](../testing/release-ui-regression-checklist.md)
 - 更新：
-  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
-  - [mainline-validation-matrix.md](/home/develata/gitclone/RSS-Reader/docs/testing/mainline-validation-matrix.md)
+  - [README.md](../testing/README.md)
+  - [mainline-validation-matrix.md](../testing/mainline-validation-matrix.md)
 - 作用：
   - 把发布前 UI 验收与普通手工回归、主线验证矩阵区分开
   - 固定两条 Web 入口：
@@ -157,10 +157,10 @@
 ### 8. 新增发布前 UI 预检脚本，串起自动化门禁与静态 Web 回归
 
 - 新增：
-  - [run_release_ui_regression.sh](/home/develata/gitclone/RSS-Reader/scripts/run_release_ui_regression.sh)
+  - [run_release_ui_regression.sh](../../scripts/run_release_ui_regression.sh)
 - 更新：
-  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
-  - [web-spa-regression-server.md](/home/develata/gitclone/RSS-Reader/docs/design/web-spa-regression-server.md)
+  - [release-ui-regression-checklist.md](../testing/release-ui-regression-checklist.md)
+  - [web-spa-regression-server.md](../design/web-spa-regression-server.md)
 - 作用：
   - 固定发布前 UI 预检入口
   - 先串行跑：
@@ -182,11 +182,11 @@
 ### 9. 新增 `rssr-web` 浏览器手工 smoke 启动脚本
 
 - 新增：
-  - [run_rssr_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_smoke.sh)
-  - [rssr-web-browser-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/rssr-web-browser-smoke.md)
+  - [run_rssr_web_browser_smoke.sh](../../scripts/run_rssr_web_browser_smoke.sh)
+  - [rssr-web-browser-smoke.md](../testing/rssr-web-browser-smoke.md)
 - 更新：
-  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
-  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+  - [README.md](../testing/README.md)
+  - [release-ui-regression-checklist.md](../testing/release-ui-regression-checklist.md)
 - 作用：
   - 固定一条真实浏览器态的 `rssr-web` 手工 smoke 启动路径
   - 自动给出临时用户名、密码、日志文件和结果模板
@@ -222,15 +222,15 @@
 ### 11. 静态 `/reader` 多主题回归与小视口回归已固定成独立 smoke
 
 - 新增：
-  - [run_static_web_reader_theme_matrix.sh](/home/develata/gitclone/RSS-Reader/scripts/run_static_web_reader_theme_matrix.sh)
-  - [run_static_web_small_viewport_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_static_web_small_viewport_smoke.sh)
-  - [static-web-reader-theme-matrix.md](/home/develata/gitclone/RSS-Reader/docs/testing/static-web-reader-theme-matrix.md)
-  - [static-web-small-viewport-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/static-web-small-viewport-smoke.md)
+  - [run_static_web_reader_theme_matrix.sh](../../scripts/run_static_web_reader_theme_matrix.sh)
+  - [run_static_web_small_viewport_smoke.sh](../../scripts/run_static_web_small_viewport_smoke.sh)
+  - [static-web-reader-theme-matrix.md](../testing/static-web-reader-theme-matrix.md)
+  - [static-web-small-viewport-smoke.md](../testing/static-web-small-viewport-smoke.md)
 - 更新：
-  - [run_web_spa_regression_server.sh](/home/develata/gitclone/RSS-Reader/scripts/run_web_spa_regression_server.sh)
-  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
-  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
-  - [web-spa-regression-server.md](/home/develata/gitclone/RSS-Reader/docs/design/web-spa-regression-server.md)
+  - [run_web_spa_regression_server.sh](../../scripts/run_web_spa_regression_server.sh)
+  - [release-ui-regression-checklist.md](../testing/release-ui-regression-checklist.md)
+  - [README.md](../testing/README.md)
+  - [web-spa-regression-server.md](../design/web-spa-regression-server.md)
 - 作用：
   - 同源 local auth helper 新增 `preset=atlas-sidebar|newsprint|forest-desk|midnight-ledger`
   - 可以把内置主题 CSS 和 `reader-demo` seed 一起播种进浏览器状态
@@ -251,11 +251,11 @@
 ### 12. `rssr-web` 真实代理 feed 回归已固定成 deploy-shell smoke
 
 - 新增：
-  - [run_rssr_web_proxy_feed_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_proxy_feed_smoke.sh)
-  - [rssr-web-proxy-feed-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/rssr-web-proxy-feed-smoke.md)
+  - [run_rssr_web_proxy_feed_smoke.sh](../../scripts/run_rssr_web_proxy_feed_smoke.sh)
+  - [rssr-web-proxy-feed-smoke.md](../testing/rssr-web-proxy-feed-smoke.md)
 - 更新：
-  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
-  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+  - [README.md](../testing/README.md)
+  - [release-ui-regression-checklist.md](../testing/release-ui-regression-checklist.md)
 - 目标：
   - 先把 `rssr-web` 部署壳下最关键的代理链路固定成可重复 smoke
 
@@ -265,7 +265,7 @@
   - headless 截图偶发停在 `/__codex/setup-local-auth` 的 “Preparing local web auth...” 过渡页
   - 根因不是页面回退，而是 helper 先前在浏览器端异步计算 auth config / session token，截图时机不稳定
 - 修复：
-  - [run_web_spa_regression_server.sh](/home/develata/gitclone/RSS-Reader/scripts/run_web_spa_regression_server.sh) 现改为服务端预先计算 auth config / session token，再由前端同步写入 storage 并跳转
+  - [run_web_spa_regression_server.sh](../../scripts/run_web_spa_regression_server.sh) 现改为服务端预先计算 auth config / session token，再由前端同步写入 storage 并跳转
 - 复验产物：
   - `target/static-web-reader-theme-matrix/20260410-213206/`
   - `target/static-web-small-viewport-smoke/20260410-213206/`
@@ -276,8 +276,8 @@
 ### 14. `rssr-web` 浏览器态添加订阅与首次刷新已固定成自动 smoke
 
 - 新增：
-  - [run_rssr_web_browser_feed_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_feed_smoke.sh)
-  - [rssr-web-browser-feed-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/rssr-web-browser-feed-smoke.md)
+  - [run_rssr_web_browser_feed_smoke.sh](../../scripts/run_rssr_web_browser_feed_smoke.sh)
+  - [rssr-web-browser-feed-smoke.md](../testing/rssr-web-browser-feed-smoke.md)
 - 关键实现：
   - `rssr-web` 新增 smoke-only helper：`/__codex/browser-feed-smoke`、`/__codex/feed-fixture.xml`
   - helper 会在同源 iframe 中自动完成：建立登录态、添加 feed fixture、刷新订阅、进入 `feed-entries`
@@ -302,10 +302,10 @@
 ### 13. 发布前 UI 缺口已收成正式覆盖矩阵
 
 - 新增：
-  - [release-ui-coverage-matrix.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-coverage-matrix.md)
+  - [release-ui-coverage-matrix.md](../testing/release-ui-coverage-matrix.md)
 - 更新：
-  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
-  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
+  - [README.md](../testing/README.md)
+  - [release-ui-regression-checklist.md](../testing/release-ui-regression-checklist.md)
 - 作用：
   - 把当前发布前回归分成：
     - `自动化`
@@ -330,8 +330,8 @@
 ### 14. `rssr-web` 浏览器态真实添加订阅已收成固定手工契约
 
 - 更新：
-  - [run_rssr_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_smoke.sh)
-  - [rssr-web-browser-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/rssr-web-browser-smoke.md)
+  - [run_rssr_web_browser_smoke.sh](../../scripts/run_rssr_web_browser_smoke.sh)
+  - [rssr-web-browser-smoke.md](../testing/rssr-web-browser-smoke.md)
 - 作用：
   - 保留固定推荐代理 feed、selector 和结果模板，继续作为真实远端 feed 的手工补充入口
   - 同源 fixture 下的登录、添加订阅、刷新与进入 `feed-entries`，现已由后续自动 smoke 接替
@@ -339,13 +339,13 @@
 ### 11. 新增静态 Web 浏览器手工 smoke helper
 
 - 新增：
-  - [run_static_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_static_web_browser_smoke.sh)
-  - [static-web-browser-smoke.md](/home/develata/gitclone/RSS-Reader/docs/testing/static-web-browser-smoke.md)
+  - [run_static_web_browser_smoke.sh](../../scripts/run_static_web_browser_smoke.sh)
+  - [static-web-browser-smoke.md](../testing/static-web-browser-smoke.md)
 - 更新：
-  - [run_web_spa_regression_server.sh](/home/develata/gitclone/RSS-Reader/scripts/run_web_spa_regression_server.sh)
-  - [README.md](/home/develata/gitclone/RSS-Reader/docs/testing/README.md)
-  - [release-ui-regression-checklist.md](/home/develata/gitclone/RSS-Reader/docs/testing/release-ui-regression-checklist.md)
-  - [web-spa-regression-server.md](/home/develata/gitclone/RSS-Reader/docs/design/web-spa-regression-server.md)
+  - [run_web_spa_regression_server.sh](../../scripts/run_web_spa_regression_server.sh)
+  - [README.md](../testing/README.md)
+  - [release-ui-regression-checklist.md](../testing/release-ui-regression-checklist.md)
+  - [web-spa-regression-server.md](../design/web-spa-regression-server.md)
 - 作用：
   - 固定一条“静态 Web 本地门禁已初始化后的真实浏览器态回归”入口
   - 用同源 helper URL 自动写入：
@@ -402,7 +402,7 @@
   - `tests/fixtures/browser_state/reader_demo_app_state.json`
   - `tests/fixtures/browser_state/reader_demo_entry_flags.json`
 - 新增 fixture 契约测试：
-  - [test_browser_state_seed_contracts.rs](/home/develata/gitclone/RSS-Reader/crates/rssr-infra/tests/test_browser_state_seed_contracts.rs)
+  - [test_browser_state_seed_contracts.rs](../../crates/rssr-infra/tests/test_browser_state_seed_contracts.rs)
 - `run_web_spa_regression_server.sh` 的同源 helper 现在支持：
   - `seed=reader-demo`
   - 额外暴露：
@@ -589,11 +589,11 @@
   - `rssr-web` 登录后 `/entries`、`/feeds`、`/settings` 可达
   - `rssr-web` helper 页面返回 `status=pass`，已自动完成登录、添加 feed、刷新订阅并进入 `feed-entries`
 - 发现并顺手修复：
-  - [scripts/run_rssr_web_browser_smoke.sh](/home/develata/gitclone/RSS-Reader/scripts/run_rssr_web_browser_smoke.sh) 的 summary heredoc 反引号未转义，会导致 shell 误执行；当前 `commit: pending`
+  - [scripts/run_rssr_web_browser_smoke.sh](../../scripts/run_rssr_web_browser_smoke.sh) 的 summary heredoc 反引号未转义，会导致 shell 误执行；当前 `commit: pending`
 
 ## 补充：Chrome MCP 固定启动入口
 
-- 新增：[run_chrome_mcp_target.sh](/home/develata/gitclone/RSS-Reader/scripts/run_chrome_mcp_target.sh)、[chrome-mcp-target.md](/home/develata/gitclone/RSS-Reader/docs/testing/chrome-mcp-target.md)
+- 新增：[run_chrome_mcp_target.sh](../../scripts/run_chrome_mcp_target.sh)、[chrome-mcp-target.md](../testing/chrome-mcp-target.md)
 - 作用：固定 Chrome DevTools MCP 目标浏览器的启动参数，统一 `remote-debugging-port`、profile、日志与就绪检查。
 - 实测：`bash -n scripts/run_chrome_mcp_target.sh`、`bash scripts/run_chrome_mcp_target.sh`、`bash scripts/run_chrome_mcp_target.sh --port 9223 --profile-dir target/chrome-mcp-profile-9223 --restart`
 - 当前结论：默认 `9222` 端口已可被固定入口识别；Chrome MCP 如果再次断连，优先执行 `bash scripts/run_chrome_mcp_target.sh --restart`。

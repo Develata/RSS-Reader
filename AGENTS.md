@@ -1,12 +1,11 @@
 # RSS-Reader 开发指南
 
-由所有功能计划自动生成。最后更新：2026-03-24
+当前实现说明，核对日期：2026-09-30。历史功能计划见 `specs/`；以当前源码、锁文件和下述文档为准。
 
 ## 当前技术栈
 
 - Rust 稳定版（Edition 2024）
-- Dioxus
-- dioxus-router
+- Dioxus / dioxus-router 0.7.9
 - tokio
 - sqlx
 - reqwest
@@ -20,22 +19,29 @@
 ```text
 crates/
 ├── rssr-app/
+├── rssr-cli/
+├── rssr-web/
 ├── rssr-application/
 ├── rssr-domain/
 └── rssr-infra/
 
 assets/
 migrations/
+migrations_content/
+docs/
+scripts/
 tests/
 specs/
 ```
 
 ## 常用命令
 
-- `cargo fmt`
-- `cargo clippy --workspace --all-targets`
-- `cargo test --workspace`
-- `cargo run -p rssr-app`
+- `cargo fmt --all --check`
+- `cargo clippy --workspace --all-targets --locked -- -D warnings`
+- `cargo test --workspace --locked`
+- `cargo run -p rssr-app --locked`
+- `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`
+- `dx serve --platform web --package rssr-app --locked`
 
 ## 代码风格
 
@@ -44,9 +50,14 @@ specs/
 - 保持本地优先、仅配置同步、避免过度抽象
 - 性能敏感路径优先减少无意义 clone、分配和异步复杂度
 
-## 最近变更
+## 当前架构与入口
 
-- `001-minimal-rss-reader`：新增极简个人 RSS 阅读器 MVP 的规格、计划、数据模型、契约和快速开始文档
+- 六个 crate：UI、CLI 和 Web 部署服务为入口；application 统一用例语义，domain 定义模型与端口，infra 实现平台适配。
+- 原生端使用 SQLite 索引库和正文库，迁移分别在 `migrations/`、`migrations_content/`。
+- Web 使用 infra 的 `BrowserStore`：`localStorage` 分片、版本化提交和 Web Locks 协调写入；不使用 SQLite。
+- 页面通过 facade/session 派发 `UiCommand`；runtime 调用 application 用例或 host capability，页面不直接执行 I/O。
+- 用户操作见 `docs/user-guide.md`，边界见 `docs/design/functional-design-philosophy.md`，UI 契约见 `docs/design/frontend-command-reference.md` 与 `docs/design/theme-author-selector-reference.md`。
+- 变更和验证证据见 `docs/handoffs/`，发布检查见 `docs/testing/release-ui-regression-checklist.md`；历史 spec 的完成勾选不能代替当前验证。
 
 <!-- MANUAL ADDITIONS START -->
 ## 本地提交授权
@@ -84,12 +95,3 @@ specs/
   - 哪些迁移是新增能力，哪些迁移只是为了弥补设计错误
   - 如果不做该方案，当前更小、更稳的替代路径是什么
 <!-- MANUAL ADDITIONS END -->
-
-## Active Technologies
-- Rust 稳定版（Edition 2024） + Dioxus、dioxus-router、tokio、sqlx、reqwest、feed-rs、quick-xml、serde、serde_json、thiserror、anyhow、tracing、time、url (001-minimal-rss-reader)
-- 桌面端和 Android 使用本地 SQLite；Web 使用浏览器本地持久化状态（当前实现为 `localStorage` 序列化）；配置交换使用本地配置文件与 OPML/JSON 导入导出文件 (001-minimal-rss-reader)
-- Rust 稳定版（Edition 2024） + Dioxus 0.7.3、dioxus-router 0.7.3、tokio、sqlx、reqwest、feed-rs、quick-xml、serde、serde_json、thiserror、anyhow、tracing、time、url (001-minimal-rss-reader-followup-2)
-- 桌面端使用本地 SQLite；Web 使用浏览器本地持久化状态（当前实现为 `localStorage` 序列化）；配置交换使用本地配置文件与 OPML/JSON 导入导出文件 (001-minimal-rss-reader-followup-2)
-
-## Recent Changes
-- 001-minimal-rss-reader: Added Rust 稳定版（Edition 2024） + Dioxus、dioxus-router、tokio、sqlx、reqwest、feed-rs、quick-xml、serde、serde_json、thiserror、anyhow、tracing、time、url

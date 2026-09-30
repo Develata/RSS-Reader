@@ -2,6 +2,8 @@
 
 根目录 [README.md](../README.md) 面向首次使用；这里按部署、开发和验收任务提供下一步入口。历史记录说明当时做过什么，当前行为以源码、发布说明及长期文档为准。
 
+本轮文档核对日期：2026-09-30，源码基线 `dbe68e1`。当前使用与接口说明持续维护；带日期的审查、handoff 和已关闭 spec 保留历史上下文，不代表最新版本已完成相同验收。
+
 ## 从哪里开始
 
 如果你要直接使用，先看[根 README 的 30 秒开始阅读](../README.md#30-秒开始阅读)和[最新 Release](https://github.com/Develata/RSS-Reader/releases/latest)。英文入口是 [README.en.md](./README.en.md)。
@@ -28,7 +30,7 @@
   - [前端命令与界面接口清单](./design/frontend-command-reference.md)
 - 想理解 Headless Active Interface 的长期设计方向：
   - [Headless Active Interface 设计目标](./design/headless-active-interface.md)
-- 想继续推进 application use case 收敛：
+- 想核对已完成的 application 收敛与后续边界：
   - [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)
 - 想准备 Android 发包或验收：
   - [Android 构建与验收状态](./roadmaps/android-release-roadmap.md)
@@ -98,7 +100,7 @@
 
 - Web / desktop 应该如何做手工回归
 - 回归结果怎么记录
-- 模块级 headless 重构如何做 Chrome MCP 视觉等价验收
+- 模块级 headless 重构如何做真实浏览器视觉等价验收
 - 当前哪些交互最值得重点观察
 
 ## 文档组织约定

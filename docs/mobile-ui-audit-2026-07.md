@@ -1,5 +1,7 @@
 # RSS-Reader 移动端 UI 审计（Vibe-Coding 七类「丑」框架）
 
+> 历史快照：本文结论、路径、版本和验证范围属于文中日期，不代表当前主线。当前入口见 [文档索引](./README.md)，近期实现和证据见 [交接记录](./handoffs/README.md)。
+
 - 日期：2026-07-31
 - 审计基线：commit `c397826`（工作树干净），debug web 构建（`dx build --platform web`）
 - 性质：audit-only，未修改任何代码

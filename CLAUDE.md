@@ -12,33 +12,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # 桌面端运行
-cargo run -p rssr-app
+cargo run -p rssr-app --locked
 
 # CLI
-cargo run -p rssr-cli -- --help
+cargo run -p rssr-cli --locked -- --help
 
 # Web 端开发（需 rustup target add wasm32-unknown-unknown 和 dioxus-cli 0.7.9）
-dx serve --platform web --package rssr-app
+dx serve --platform web --package rssr-app --locked
 
 # 提交前验证（与 CI 一致）
 cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo check -p rssr-app --target wasm32-unknown-unknown   # 涉及 UI/共享代码时必查
-cargo check -p rssr-app --target aarch64-linux-android    # 涉及移动端交互时
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo check -p rssr-app --target wasm32-unknown-unknown --locked   # 涉及 UI/共享代码时必查
+cargo check -p rssr-app --target aarch64-linux-android --locked    # 涉及移动端交互时
 
 # 单个集成测试（集成测试集中在 crates/rssr-infra/tests/）
-cargo test -p rssr-infra --test test_entry_state_and_search
+cargo test -p rssr-infra --test test_entry_state_and_search --locked
 # 按名称过滤单元测试
-cargo test -p rssr-application <test_name>
+cargo test -p rssr-application --locked <test_name>
 
 # wasm 浏览器契约测试（CI 三个 harness；需 wasm-bindgen-cli 0.2.126 + Chrome for Testing）
 bash scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness
 # 其余：wasm_subscription_contract_harness / wasm_config_exchange_contract_harness
 
 # Web 部署态验证（登录 + /feed-proxy，用于 CORS 受限源）
-dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e
-cargo run -p rssr-web -- --print-password-hash adminadmin
+dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e --locked
 # 然后按 docs/deployment/web.md 设置 RSS_READER_WEB_* 环境变量启动 rssr-web
 ```
 
@@ -51,7 +50,7 @@ cargo run -p rssr-web -- --print-password-hash adminadmin
 - **`rssr-infra`** — 端口适配器，按编译目标二选一（`lib.rs` 中 `#[cfg(not(target_arch = "wasm32"))]` 门控）：
   - **原生（桌面/Android）**：sqlx SQLite，**索引库与正文库是两个独立数据库**（迁移分别在 `migrations/` 与 `migrations_content/`）；reqwest 抓取 + `BodyAssetLocalizer` 正文图片本地化；feed-rs/quick-xml 解析；OPML 编解码；WebDAV 配置同步。入口 `compose_native_sqlite_use_cases(index_pool, content_pool)`。
   - **wasm32**：`application_adapters/browser/` 下的适配器共用 `BrowserStore`，通过 Web Locks 协调 `localStorage` 四片数据，以单一提交头发布；缓存按版本同步，刷新逐订阅持久化，仅正文记录变化时写正文片。`db`/`fetch`/`parser`/`config_sync` 模块在 wasm 上不编译。入口 `compose_browser_use_cases`。
-- **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 与 `bootstrap/web.rs` 按平台选择组装并暴露 host capabilities（刷新、剪贴板、图片本地化、远程配置）；`ui/` 分 shell / commands / runtime；`pages/` 只调用 `AppServices`。
+- **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 与 `bootstrap/web.rs` 按平台选择组装并暴露 host capabilities（刷新、剪贴板、图片本地化、远程配置）；`ui/` 分 shell / commands / runtime；`pages/` 通过 facade/session 派发命令，runtime 调用统一用例或 host capability。
 - **`rssr-cli`** — 复用同一 application 层的自动化入口。
 - **`rssr-web`** — 仅用于 Web 部署的薄 axum 服务：Argon2 登录、HttpOnly 会话 cookie、静态包托管 + SPA 回退、`/feed-proxy` 服务端代抓（绕过浏览器 CORS）。桌面端、CLI、本地开发都不依赖它。
 
