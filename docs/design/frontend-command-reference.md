@@ -79,6 +79,8 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 
 搜索输入框保持 shell 级状态；窄屏或持久化的旧版侧栏 CSS 把导航压窄时，导航行允许换行，输入框占满下一行。换行预算包含收起按钮预留的 48px，避免新增箭头把输入框挤窄。
 
+文章列表在筛选面板外显示 `entry-filter-summary`，其中 `entry-filter-summary-text` 概括当前搜索、已读、收藏与来源条件；单订阅页不显示未参与查询的来源偏好。`clear-entry-filters` 清空 shell 搜索和上述状态条件，重置第一页，沿既有查询、偏好保存和批量预览取消路径生效；分组、归档显示偏好与路由订阅范围保留。空结果区分没有订阅、订阅尚无文章、文章已归档及当前筛选无匹配，筛选摘要在无匹配时仍提供清除入口。
+
 来源选择继续保留 `entry-filters-source-chip` selector 兼容用户主题，但视觉为带可见 checkbox 的换行选择行；选择区有纵向滚动上限，名称本身不省略。分页只渲染一份 `entry-pagination`，位于页面 panel 的同级，固定于视口下方并预留 safe-area / 内容末尾空间。
 
 ### 订阅相关
@@ -101,6 +103,8 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 `data-layout="reader-shortcut-scope"` 是可用 Tab 进入的具名 `region`，提供 M / F / 左右方向键说明和可见焦点。快捷键仍限定在阅读区，带修饰键或输入法组合中的事件放行。收藏按钮的固定名称与 `aria-pressed` 搭配，底栏四个装饰图标均为 `aria-hidden="true"`。
 
 动态操作结果使用持续挂载的 `StatusBanner` live region：`role="status"`、`aria-live="polite"`、`aria-atomic="true"`。空消息区域保留在可访问树中但不占布局空间；加载/成功/错误更新文本时不抢焦点。静态空列表或归档说明不参与播报。颜色状态继续使用 `data-state="info|success|error"`，不把错误色自动映射成打断式通知。
+
+Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region 呈现，正文不因成功提示重排；错误仍为可见状态条。上一 / 下一未读按钮及方向快捷键只选择未读目标，无目标时按钮禁用并提供 title 说明；同订阅文章导航沿用独立按钮，不作为未读操作的回退。
 
 - 标记已读 / 未读
 - 切换收藏
@@ -252,6 +256,7 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 - `data-action="toggle-search"`
 - `data-action="toggle-nav"`
 - `data-action="show-entry-controls"` / `hide-entry-controls`
+- `data-action="clear-entry-filters"`
 - `data-action="preview-mark-filtered-read"` / `confirm-mark-filtered-read` / `cancel-mark-filtered-read`
 - `data-action="entry-page-previous"`
 - `data-action="entry-page-next"`
@@ -424,6 +429,8 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 - `data-layout="entry-directory-rail"`
 - `data-layout="entry-top-directory"`
 - `data-layout="entry-filters"`
+- `data-layout="entry-filter-summary"`
+- `data-slot="entry-filter-summary-text"`
 - `data-layout="reader-page"`
 - `data-layout="reader-header"`
 - `data-layout="reader-image-viewer"`

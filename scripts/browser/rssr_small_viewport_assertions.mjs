@@ -373,7 +373,8 @@ async function checkReader(client) {
         .filter((button) => button.getClientRects().length > 0)
         .map((button) => {
           const rect = button.getBoundingClientRect();
-          return { text: button.textContent.trim(), width: rect.width, height: rect.height };
+          return { text: button.textContent.trim(), width: rect.width, height: rect.height,
+            left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
         });
       const shortcuts = [...document.querySelectorAll('[data-slot="reader-bottom-bar-shortcut"]')]
         .map((element) => getComputedStyle(element).display);
@@ -393,6 +394,10 @@ async function checkReader(client) {
     evidence.buttons.length === 4 && evidence.buttons.every((button) => meetsTouchTarget(button.width, button.height)),
     evidence.buttons,
   );
+  assertThat('reader bottom action hit areas do not overlap',
+    evidence.buttons.every((button, index) => evidence.buttons.slice(index + 1).every(other =>
+      button.right <= other.left || other.right <= button.left || button.bottom <= other.top || other.bottom <= button.top)),
+    evidence.buttons);
   assertThat(
     'keyboard shortcuts stay hidden for touch emulation',
     evidence.shortcuts.length > 0 && evidence.shortcuts.every((display) => display === 'none'),
@@ -411,6 +416,127 @@ async function checkReader(client) {
     readerSemantics.role === 'region' && readerSemantics.name && readerSemantics.help &&
     readerSemantics.pressed === String(readerSemantics.state === 'starred') &&
     readerSemantics.icons.length === 4 && readerSemantics.icons.every(value=>value === 'true'), readerSemantics);
+}
+
+async function checkPrimaryWorkflow(client) {
+  const tap = async selector => {
+    await evaluate(client, `document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center', behavior:'instant'})`);
+    await tapSelector(client, selector);
+  };
+  // This older two-entry fixture uses example.com. Keep automatic refresh local
+  // and unchanged while checking navigation; do not depend on external CORS.
+  const refreshResponses = [];
+  const detachRefresh = client.on('Fetch.requestPaused', ({requestId}) => {
+    refreshResponses.push(client.send('Fetch.fulfillRequest', {requestId, responseCode:304,
+      responseHeaders:[{name:'Access-Control-Allow-Origin',value:'*'}]}));
+  });
+  await client.send('Fetch.enable', {patterns:[
+    {urlPattern:`${staticBase}/feed-proxy?*`,requestStage:'Request'},
+    {urlPattern:'https://example.com/feed.xml*',requestStage:'Request'},
+  ]});
+  try {
+    await seedAndNavigate(client, 'reader-demo', '/entries/1', '[data-page="reader"][data-position-ready="true"]');
+    await evaluate(client, `document.querySelector('[data-layout="reader-shortcut-scope"]').focus({preventScroll:true})`);
+    await key(client, 'ArrowLeft', 'ArrowLeft');
+    await waitFor(client, `location.pathname === '/entries/2' && document.querySelector('[data-page="reader"][data-position-ready="true"]')`);
+    assertThat('unread keyboard navigation reaches the actual unread entry',
+      await evaluate(client, `document.querySelector('[data-action="mark-read"]').dataset.state === 'unread'`));
+    await tap('[data-action="mark-read"]');
+    await waitFor(client, `document.querySelector('[data-action="mark-read"]').dataset.state === 'read'`);
+    assertThat('finishing all unread entries disables both unread directions', await evaluate(client,
+      `['previous','next'].every(direction => document.querySelector('[data-nav="' + direction + '-unread-entry"]').disabled)`));
+    await evaluate(client, `document.querySelector('[data-layout="reader-shortcut-scope"]').focus({preventScroll:true})`);
+    await key(client, 'ArrowLeft', 'ArrowLeft');
+    await key(client, 'ArrowRight', 'ArrowRight');
+    await sleep(100);
+    assertThat('unread shortcuts do not fall back to already read feed entries', await evaluate(client, `location.pathname === '/entries/2'`));
+    await tap('[data-nav="next-feed-entry"]');
+    await waitFor(client, `location.pathname === '/entries/1' && document.querySelector('[data-page="reader"][data-position-ready="true"]')`);
+    assertThat('separate feed navigation can still open a read entry',
+      await evaluate(client, `document.querySelector('[data-action="mark-read"]').dataset.state === 'read'`));
+    await Promise.all(refreshResponses);
+  } finally {
+    await client.send('Fetch.disable');
+    detachRefresh();
+  }
+
+  await seedAndNavigate(client, 'mobile-ui-short', '/entries', '[data-page="entries"][data-position-ready="true"]');
+  await ensureEntryControlsOpen(client);
+  await evaluate(client, `const select = document.querySelector('[data-field="entry-grouping-mode"]'); select.value='source'; select.dispatchEvent(new Event('change', {bubbles:true}))`);
+  await tap('[data-field="search-title"]');
+  await client.send('Input.insertText', {text:'no matching title'});
+  await tap('[data-field="read-filter-read"]');
+  await tap('[data-field="starred-filter-starred"]');
+  await tap('[data-field="entry-source-filter"]');
+  await tap('[data-action="hide-entry-controls"]');
+  await waitFor(client, `document.querySelector('[data-layout="entries-page-state"][data-state="empty"]')?.textContent.includes('当前筛选没有匹配')`);
+  const filtered = await evaluate(client, `(() => {
+    const summary = document.querySelector('[data-slot="entry-filter-summary-text"]');
+    const clear = document.querySelector('[data-action="clear-entry-filters"]').getBoundingClientRect();
+    return {summary:summary.textContent, hidden:!!document.querySelector('[data-action="show-entry-controls"]'),
+      clearWidth:clear.width,clearHeight:clear.height,overflow:document.documentElement.scrollWidth>innerWidth};
+  })()`);
+  assertThat('collapsed filters expose all active conditions and a usable reset',
+    filtered.hidden && ['no matching title','仅已读','仅收藏','来源：'].every(part=>filtered.summary.includes(part)) &&
+    meetsTouchTarget(filtered.clearWidth,filtered.clearHeight) && !filtered.overflow, filtered);
+  await captureArtifact(client, 'entries-filter-summary');
+  await tap('[data-action="clear-entry-filters"]');
+  await selectorExists(client, '[data-slot="entry-card-title"]');
+  const storedWorkspace = `JSON.parse(localStorage.getItem('rssr-web-app-state-v2' +
+    (JSON.parse(localStorage.getItem('rssr-web-commit-v1')).revisions[1] % 2 === 1 ? '-next' : ''))).entries_workspace`;
+  await waitFor(client, `(() => {const state=${storedWorkspace}; return state.read_filter==='all' && state.starred_filter==='all' && state.selected_feed_urls.length===0 && state.grouping_mode==='source';})()`);
+  await navigate(client, `${staticBase}/entries`);
+  await selectorExists(client, '[data-slot="entry-card-title"]');
+  await ensureEntryControlsOpen(client);
+  assertThat('clear filters persists the reset while preserving grouping and archive display', await evaluate(client, `
+    !document.querySelector('[data-layout="entry-filter-summary"]') &&
+    document.querySelector('[data-field="search-title"]').value === '' &&
+    !document.querySelector('[data-field="read-filter-read"]').checked &&
+    !document.querySelector('[data-field="starred-filter-starred"]').checked &&
+    !document.querySelector('[data-field="entry-source-filter"]').checked &&
+    document.querySelector('[data-field="entry-grouping-mode"]').value === 'source' &&
+    document.querySelector('[data-field="show-archived"]').checked &&
+    document.querySelector('[data-page="entries"]').dataset.positionPage === '1'`));
+
+  await seedAndNavigate(client, 'home-reader', '/entries/2', '[data-action="open-reader-image"]');
+  await beginManualScroll(client);
+  await evaluate(client, `(async () => {
+    await Promise.all([...document.querySelectorAll('[data-layout="reader-body"] img')].map(image=>image.decode()));
+    window.__actionBody = document.querySelector('[data-layout="reader-body"]');
+    window.__actionAnchor = window.__actionBody.querySelectorAll('p')[15];
+    window.__actionAnchor.scrollIntoView({block:'center',behavior:'instant'});
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    window.__actionPosition = window.__actionAnchor.getBoundingClientRect().top;
+    window.__actionScroll = scrollY;
+    window.__actionStatus = document.querySelector('[data-page="reader"] [data-layout="status-banner"][role="status"]');
+  })()`);
+  for (const action of ['toggle-starred','mark-read']) {
+    const selector = `[data-action="${action}"]`;
+    const before = await evaluate(client, `document.querySelector(${JSON.stringify(selector)}).dataset.state`);
+    await tapSelector(client, selector);
+    await waitFor(client, `document.querySelector(${JSON.stringify(selector)}).dataset.state !== ${JSON.stringify(before)}`);
+    const result = await evaluate(client, `({sameBody:document.querySelector('[data-layout="reader-body"]')===window.__actionBody,
+      before:window.__actionPosition,after:window.__actionAnchor.getBoundingClientRect().top,
+      beforeScroll:window.__actionScroll,afterScroll:scrollY,
+      sameStatus:document.querySelector('[data-page="reader"] [data-layout="status-banner"][role="status"]')===window.__actionStatus,
+      message:window.__actionStatus.textContent,hidden:window.__actionStatus.classList.contains('sr-only'),
+      polite:window.__actionStatus.getAttribute('aria-live')==='polite'})`);
+    assertThat(`${action} success preserves the visible text and announces without a layout banner`,
+      result.sameBody && result.sameStatus && Math.abs(result.after-result.before)<=1 &&
+      Math.abs(result.afterScroll-result.beforeScroll)<=1 && result.message && result.hidden && result.polite, result);
+  }
+  await evaluate(client, `window.__savedStatusSetItem=Storage.prototype.setItem;
+    Storage.prototype.setItem=function(key,value){if(key.startsWith('rssr-web-entry-flags-v1'))throw new DOMException('test write failure','QuotaExceededError');return window.__savedStatusSetItem.call(this,key,value);}`);
+  try {
+    await tapSelector(client, '[data-action="mark-read"]');
+    await selectorExists(client, '[data-page="reader"] [data-layout="status-banner"][data-state="error"]');
+    assertThat('reader write errors remain visible and leave the button state unchanged', await evaluate(client, `
+      !window.__actionStatus.classList.contains('sr-only') && window.__actionStatus.textContent.trim().length>0 &&
+      window.__actionStatus.getBoundingClientRect().height>1 &&
+      document.querySelector('[data-action="mark-read"]').dataset.state==='read'`));
+  } finally {
+    await evaluate(client, 'Storage.prototype.setItem=window.__savedStatusSetItem; delete window.__savedStatusSetItem');
+  }
 }
 
 async function checkShortDirectory(client) {
@@ -516,7 +642,7 @@ async function checkDirectoryLabels(client, label) {
 }
 
 async function key(client, key, code, modifiers = 0) {
-  const windowsVirtualKeyCode = ({Escape:27, Enter:13, Tab:9, Backspace:8})[key] ?? key.toUpperCase().charCodeAt(0);
+  const windowsVirtualKeyCode = ({Escape:27, Enter:13, Tab:9, Backspace:8, ArrowLeft:37, ArrowRight:39})[key] ?? key.toUpperCase().charCodeAt(0);
   await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, modifiers, windowsVirtualKeyCode, ...(key === 'Enter' ? {text:'\r', unmodifiedText:'\r'} : {}) });
   await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers, windowsVirtualKeyCode });
 }
@@ -1369,6 +1495,7 @@ async function run() {
       await checkSettings(client);
       await checkFeeds(client);
       await checkReader(client);
+      await checkPrimaryWorkflow(client);
       await checkHomeRefreshAndGestures(client);
       await checkReaderImagesAndSelection(client);
       await checkReadingPreferencesAndFeedInput(client);

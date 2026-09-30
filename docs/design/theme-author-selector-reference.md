@@ -16,6 +16,12 @@
 
 文章列表每篇文章的「标已读 / 收藏」（`entry-card-actions` 内的 `.button[data-slot="entry-card-action"]`）默认是描边胶囊，只取 `--ink` / `--muted` / `--line` / `--line-soft`，特异性高于 `.button[data-variant="secondary"]`；主题要改它们请直接使用这条 selector。收起的筛选开关 `entry-controls-toggle` 内含可见文字 `entry-controls-toggle-label`。
 
+生效的搜索、已读、收藏和来源条件放在面板外的 `entry-filter-summary`，文字槽位为 `entry-filter-summary-text`，`clear-entry-filters` 为清除入口。摘要允许换行，主题应在面板收起后保留它。
+
+Reader 元信息的整体留白与分隔线应施加在 `reader-meta-block`，`reader-meta` 表示其中单行，避免每行重复增加块级间距。底部四个按钮应适应等宽列，不能用超过列宽的最小宽度覆盖相邻点击区域。Amethyst Glass 已采用上述布局；旧预设保留身份，重新应用后取得新样式。
+
+Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状态提供可见反馈；错误状态仍显示。主题不得把这一隐藏状态条改为占用正文空间的面板。
+
 内置 Atlas Sidebar 保留桌面侧栏，但为共用的五图标 Reader 行预留 280px；移动端顶栏仍保持 sticky。目录名称和计数按行换行，避免极端来源名挤掉计数。
 
 导航的箭头固定在导航容器右上侧，不依赖链接数量。收起时内容由 Rust 移除，主题不得保留不可见的导航占位；新版 Atlas Sidebar 同时将侧栏列缩至 44px。旧版 CSS 仍可识别为该主题，旧自定义侧栏布局需自行适配列宽。导航无尺寸过渡动画，避免收起时逐帧重排正文。
@@ -224,6 +230,7 @@
 - `data-action="toggle-search"`
 - `data-action="toggle-nav"`
 - `data-action="show-entry-controls"` / `hide-entry-controls`
+- `data-action="clear-entry-filters"`
 - `data-action="preview-mark-filtered-read"` / `confirm-mark-filtered-read` / `cancel-mark-filtered-read`
 - `data-action="entry-page-previous"`
 - `data-action="entry-page-next"`
@@ -305,6 +312,7 @@
 - `data-layout="entry-top-directory"`
 - `data-layout="entry-top-directory-chip"`
 - `data-layout="entry-filters"`
+- `data-layout="entry-filter-summary"`
 - `data-layout="entry-filters-toggle"`
 - `data-layout="entry-filters-sources"`
 - `data-layout="entry-filters-source-grid"`
@@ -331,6 +339,7 @@
 - `data-slot="entry-directory-title"`
 - `data-slot="entry-directory-meta"`
 - `data-slot="entry-filters-sources-label"`
+- `data-slot="entry-filter-summary-text"`
 - `data-slot="feed-card-title"`
 - `data-slot="feed-card-meta"`
 - `data-slot="entry-card-title"`
