@@ -174,3 +174,116 @@ async fn localized_writeback_does_not_override_newer_refresh_content() {
     let stored = entry_repository.get_entry(1).await.expect("load entry").expect("entry exists");
     assert_eq!(stored.content_html.as_deref(), Some(newer_html));
 }
+
+
+#[tokio::test]
+async fn localized_writeback_from_old_generation_is_rejected_after_readd() {
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let pool = backend.connect().await.expect("connect sqlite memory");
+    migrate(&pool).await.expect("run migrations");
+
+    let feed_repository = SqliteFeedRepository::new(pool.clone());
+    let entry_repository = SqliteEntryRepository::new(pool.clone());
+    let feed = feed_repository
+        .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
+            url: Url::parse("https://example.com/generation.xml").expect("valid url"),
+            title: Some("Generation Feed".to_string()),
+            folder: None,
+        })
+        .await
+        .expect("create feed");
+
+    let original_html = "<p>old generation</p>";
+    entry_repository
+        .upsert_entries(
+            feed.id,
+            &[rssr_infra::parser::feed_parser::ParsedEntry {
+                external_id: "entry-generation".to_string(),
+                dedup_key: "entry-generation".to_string(),
+                url: Some(Url::parse("https://example.com/generation-entry").unwrap()),
+                title: "Generation Entry".to_string(),
+                author: None,
+                summary: Some("summary".to_string()),
+                content_html: Some(original_html.to_string()),
+                content_text: Some("summary".to_string()),
+                published_at: None,
+                updated_at_source: None,
+            }],
+        )
+        .await
+        .expect("insert original generation entry");
+
+    let (_, old_generation) = entry_repository
+        .active_entry_generation(1)
+        .await
+        .expect("read original generation")
+        .expect("active original entry");
+    assert_eq!(old_generation, 0);
+
+    feed_repository.set_deleted(feed.id, true).await.expect("delete feed");
+    feed_repository
+        .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
+            url: feed.url.clone(),
+            title: Some("Re-added Generation Feed".to_string()),
+            folder: None,
+        })
+        .await
+        .expect("reactivate feed");
+
+    let new_html = "<p>new generation</p>";
+    entry_repository
+        .upsert_entries(
+            feed.id,
+            &[rssr_infra::parser::feed_parser::ParsedEntry {
+                external_id: "entry-generation".to_string(),
+                dedup_key: "entry-generation".to_string(),
+                url: Some(Url::parse("https://example.com/generation-entry").unwrap()),
+                title: "Generation Entry".to_string(),
+                author: None,
+                summary: Some("summary".to_string()),
+                content_html: Some(new_html.to_string()),
+                content_text: Some("summary".to_string()),
+                published_at: None,
+                updated_at_source: None,
+            }],
+        )
+        .await
+        .expect("write new generation content");
+
+    let (_, new_generation) = entry_repository
+        .active_entry_generation(1)
+        .await
+        .expect("read new generation")
+        .expect("active re-added entry");
+    assert_eq!(new_generation, 1);
+
+    let old_hash =
+        compute_entry_content_hash(Some(original_html), Some("summary"), Some("Generation Entry"))
+            .unwrap();
+    let localized_old_html = "<p>old generation<img src=\"data:image/png;base64,xxx\"></p>";
+    let localized_old_hash = compute_entry_content_hash(
+        Some(localized_old_html),
+        Some("summary"),
+        Some("Generation Entry"),
+    )
+    .unwrap();
+    let updated = entry_repository
+        .update_localized_html_if_hash_matches_for_generation(
+            feed.id,
+            old_generation,
+            &LocalizedEntryUpdate {
+                dedup_key: "entry-generation",
+                expected_content_hash: &old_hash,
+                localized_html: localized_old_html,
+                localized_content_hash: &localized_old_hash,
+            },
+        )
+        .await
+        .expect("attempt stale generation localization");
+
+    assert!(!updated, "old generation localization must not write into the re-added feed");
+    let stored = entry_repository.get_entry(1).await.expect("load entry").expect("entry exists");
+    assert_eq!(stored.content_html.as_deref(), Some(new_html));
+}
