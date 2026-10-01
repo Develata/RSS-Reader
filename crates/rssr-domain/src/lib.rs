@@ -24,7 +24,7 @@ pub use settings::{
     MAX_ENTRIES_PAGE_SIZE, MAX_REFRESH_INTERVAL_MINUTES, StartupView, ThemeMode, UserSettings,
 };
 pub use validation::{
-    CONFIG_PACKAGE_VERSION, parse_and_normalize_feed_url, validate_config_package,
+    CONFIG_PACKAGE_VERSION, parse_and_normalize_feed_url, parse_feed_url, validate_config_package,
     validate_user_settings,
 };
 
