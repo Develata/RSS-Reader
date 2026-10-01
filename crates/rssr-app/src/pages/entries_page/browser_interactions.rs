@@ -46,20 +46,55 @@ pub(super) fn scroll_directory_item(anchor_id: &str) {
         r#"
         const targetId = {anchor_id_json};
         const selector = `[data-directory-anchor="${{targetId}}"]`;
+        const isVisible = (element) =>
+            !!element && !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
+
+        const alignVertical = (container, target) => {{
+            const containerRect = container.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const visibleTop = containerRect.top + container.clientTop;
+            const visibleBottom = visibleTop + container.clientHeight;
+            if (targetRect.top < visibleTop) {{
+                container.scrollTop += targetRect.top - visibleTop;
+            }} else if (targetRect.bottom > visibleBottom) {{
+                container.scrollTop += targetRect.bottom - visibleBottom;
+            }}
+        }};
+
+        const alignHorizontal = (container, target) => {{
+            const containerRect = container.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const visibleLeft = containerRect.left + container.clientLeft;
+            const visibleRight = visibleLeft + container.clientWidth;
+            if (targetRect.left < visibleLeft) {{
+                container.scrollLeft += targetRect.left - visibleLeft;
+            }} else if (targetRect.right > visibleRight) {{
+                container.scrollLeft += targetRect.right - visibleRight;
+            }}
+        }};
+
         const scrollActiveDirectory = () => {{
-            const elements = document.querySelectorAll(selector);
-            if (!elements.length) {{
-                return false;
+            let found = false;
+            const rail = document.querySelector('[data-layout="entry-directory-rail"]');
+            const topDirectory = document.querySelector('[data-layout="entry-top-directory"]');
+
+            if (isVisible(rail)) {{
+                const target = Array.from(rail.querySelectorAll(selector)).find(isVisible);
+                if (target) {{
+                    alignVertical(rail, target);
+                    found = true;
+                }}
             }}
 
-            elements.forEach((element) => {{
-                element.scrollIntoView({{
-                    behavior: "smooth",
-                    block: "nearest",
-                    inline: "nearest"
-                }});
-            }});
-            return true;
+            if (isVisible(topDirectory)) {{
+                const target = Array.from(topDirectory.querySelectorAll(selector)).find(isVisible);
+                if (target) {{
+                    alignHorizontal(topDirectory, target);
+                    found = true;
+                }}
+            }}
+
+            return found;
         }};
 
         if (!scrollActiveDirectory()) {{
