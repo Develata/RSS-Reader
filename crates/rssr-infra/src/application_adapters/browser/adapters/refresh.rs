@@ -123,7 +123,11 @@ impl RefreshStorePort for BrowserRefreshStore {
                     .feeds
                     .iter()
                     .filter(|feed| !feed.is_deleted)
-                    .map(refresh_target)
+                    .map(|feed| {
+                        let generation =
+                            state.core.feed_generations.get(&feed.id).copied().unwrap_or_default();
+                        refresh_target(feed, generation)
+                    })
                     .collect()
             })
             .await
@@ -136,25 +140,39 @@ impl RefreshStorePort for BrowserRefreshStore {
                     .feeds
                     .iter()
                     .find(|feed| feed.id == feed_id && !feed.is_deleted)
-                    .map(refresh_target)
+                    .map(|feed| {
+                        let generation =
+                            state.core.feed_generations.get(&feed.id).copied().unwrap_or_default();
+                        refresh_target(feed, generation)
+                    })
                     .transpose()
             })
             .await
     }
     async fn commit(
         &self,
-        feed_id: i64,
+        target: &RefreshTarget,
         commit: RefreshCommit,
     ) -> Result<rssr_application::RefreshCommitOutcome> {
+        let target = target.clone();
         self.store
             .update(move |state| {
                 let now = now_utc();
+                let current_generation = state
+                    .core
+                    .feed_generations
+                    .get(&target.feed_id)
+                    .copied()
+                    .unwrap_or_default();
+                if current_generation != target.generation {
+                    anyhow::bail!("订阅 generation 已变化，丢弃旧刷新结果");
+                }
                 // Do not resurrect a feed removed while HTTP was in flight.
                 let feed = state
                     .core
                     .feeds
                     .iter_mut()
-                    .find(|feed| feed.id == feed_id && !feed.is_deleted)
+                    .find(|feed| feed.id == target.feed_id && !feed.is_deleted)
                     .context("订阅不存在或已删除")?;
                 let mut inserted_count = 0;
                 let mut changes = Changes::CORE;
@@ -185,7 +203,7 @@ impl RefreshStorePort for BrowserRefreshStore {
                         feed.updated_at = now;
                         let outcome = upsert_entries(
                             state,
-                            feed_id,
+                            target.feed_id,
                             map_application_entries(update.feed.entries),
                         )?;
                         inserted_count = outcome.inserted_count;
@@ -210,9 +228,11 @@ impl RefreshStorePort for BrowserRefreshStore {
 }
 fn refresh_target(
     feed: &crate::application_adapters::browser::state::PersistedFeed,
+    generation: i64,
 ) -> Result<RefreshTarget> {
     Ok(RefreshTarget {
         feed_id: feed.id,
+        generation,
         url: rssr_domain::normalize_feed_url(
             &url::Url::parse(&feed.url).map_err(map_persistence_error)?,
         ),
