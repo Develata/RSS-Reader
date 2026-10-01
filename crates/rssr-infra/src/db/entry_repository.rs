@@ -91,6 +91,20 @@ impl SqliteEntryRepository {
         // 一次刷新常常写入几十上百条：不包事务的话每条 INSERT 都是一次隐式事务，
         // 每条都要各自 fsync。包成一个事务后整批只提交一次，同时让整批写入变成原子的。
         let mut tx = self.index_pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+        // The writer lock is already held here. Revalidate the feed inside the same transaction
+        // so a concurrent delete either waits for this refresh (and purges it afterwards), or
+        // commits first and makes this refresh a no-op instead of resurrecting articles.
+        let active: i64 = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM feeds WHERE id = ?1 AND is_deleted = 0)",
+        )
+        .bind(feed_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(map_sqlx_error)?;
+        if active == 0 {
+            return Err(DomainError::NotFound);
+        }
+
         // 同一写事务内的行数差只反映真实新增；冲突更新和同批重复键不计数。
         let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entries WHERE feed_id = ?1")
             .bind(feed_id)
