@@ -6,7 +6,7 @@ use rssr_application::{
     ParsedFeedUpdate, RefreshCommit, RefreshFailure, RefreshHttpMetadata, RefreshStorePort,
     RefreshTarget,
 };
-use rssr_domain::{EntryContentRepository, FeedRepository};
+use rssr_domain::EntryContentRepository;
 
 use crate::{
     db::{entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository},
