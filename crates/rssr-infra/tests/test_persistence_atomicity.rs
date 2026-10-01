@@ -195,12 +195,13 @@ async fn startup_cleanup_holds_index_writer_lock_until_content_delete_finishes()
     });
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let reactivation = feeds.upsert_subscription(&NewFeedSubscription {
+    let reactivation_subscription = NewFeedSubscription {
         site_url: None,
         url: feed.url.clone(),
         title: Some("Reactivated".into()),
         folder: None,
-    });
+    };
+    let reactivation = feeds.upsert_subscription(&reactivation_subscription);
     assert!(
         tokio::time::timeout(Duration::from_millis(100), reactivation).await.is_err(),
         "feed reactivation must wait while tombstone cleanup owns the index writer lock"
