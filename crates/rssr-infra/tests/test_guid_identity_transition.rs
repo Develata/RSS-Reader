@@ -54,19 +54,15 @@ async fn legacy_url_identity_is_promoted_in_place_when_hex_guid_becomes_visible(
         .upsert_entries(feed.id, &[parsed(ARTICLE_URL, ARTICLE_URL, "legacy body")])
         .await
         .unwrap();
-    let original_id: i64 =
-        sqlx::query_scalar("SELECT id FROM entries WHERE feed_id = ?1")
-            .bind(feed.id)
-            .fetch_one(&index_pool)
-            .await
-            .unwrap();
+    let original_id: i64 = sqlx::query_scalar("SELECT id FROM entries WHERE feed_id = ?1")
+        .bind(feed.id)
+        .fetch_one(&index_pool)
+        .await
+        .unwrap();
     entries.set_read(original_id, true).await.unwrap();
     entries.set_starred(original_id, true).await.unwrap();
 
-    entries
-        .upsert_entries(feed.id, &[parsed(GUID, GUID, "new body")])
-        .await
-        .unwrap();
+    entries.upsert_entries(feed.id, &[parsed(GUID, GUID, "new body")]).await.unwrap();
 
     let rows: Vec<(i64, String, String, i64, i64)> = sqlx::query_as(
         "SELECT id, external_id, dedup_key, is_read, is_starred FROM entries WHERE feed_id = ?1",
