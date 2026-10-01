@@ -54,10 +54,8 @@ pub struct AppUseCases {
 
 impl AppUseCases {
     pub fn compose(input: AppCompositionInput) -> Self {
-        let feed_service = FeedService::new_with_removal_port(
-            input.feed_repository.clone(),
-            input.subscription_removal,
-        );
+        let feed_service =
+            FeedService::new(input.feed_repository.clone(), input.subscription_removal);
         let feed_catalog_service = FeedCatalogService::new(input.feed_repository.clone());
         let refresh_service = RefreshService::new(input.refresh_source, input.refresh_store);
 
@@ -75,7 +73,6 @@ impl AppUseCases {
             subscription_workflow: SubscriptionWorkflow::new(
                 feed_service.clone(),
                 refresh_service,
-                input.app_state.clone(),
                 input.subscription_probe,
             ),
             import_export_service: ImportExportService::new_with_app_state_cleanup_and_clock(
