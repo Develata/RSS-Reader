@@ -424,10 +424,7 @@ async fn old_sqlite_refresh_generation_cannot_commit_after_delete_and_same_url_r
     assert_eq!(fresh_target.last_modified, None);
 
     let stale = store
-        .commit(
-            &stale_target,
-            RefreshCommit::Updated { update: recovery_update("stale") },
-        )
+        .commit(&stale_target, RefreshCommit::Updated { update: recovery_update("stale") })
         .await;
     assert!(stale.is_err(), "old generation must not commit after re-add");
 
@@ -436,10 +433,7 @@ async fn old_sqlite_refresh_generation_cannot_commit_after_delete_and_same_url_r
     assert!(entries.list_entries(&EntryQuery::default()).await.unwrap().is_empty());
 
     store
-        .commit(
-            &fresh_target,
-            RefreshCommit::Updated { update: recovery_update("fresh") },
-        )
+        .commit(&fresh_target, RefreshCommit::Updated { update: recovery_update("fresh") })
         .await
         .unwrap();
     assert_eq!(
