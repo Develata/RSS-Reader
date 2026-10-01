@@ -71,6 +71,22 @@ impl OpmlCodec {
 
         loop {
             let event = reader.read_event()?;
+
+            if !saw_opml && element_stack.is_empty() {
+                match &event {
+                    Event::Start(event) | Event::Empty(event)
+                        if event.name().as_ref() == b"opml" => {}
+                    Event::Text(text)
+                        if text
+                            .as_ref()
+                            .iter()
+                            .all(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n')) => {}
+                    Event::Decl(_) | Event::Comment(_) | Event::PI(_) | Event::DocType(_) => {}
+                    Event::Eof => {}
+                    _ => bail!("OPML 根元素之前存在额外内容"),
+                }
+            }
+
             if root_closed {
                 match &event {
                     Event::Eof => break,
