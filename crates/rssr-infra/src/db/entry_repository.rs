@@ -352,8 +352,7 @@ impl SqliteEntryRepository {
         generation: i64,
         update: &LocalizedEntryUpdate<'_>,
     ) -> DomainResult<bool> {
-        self.update_localized_html_if_hash_matches_inner(feed_id, Some(generation), update)
-            .await
+        self.update_localized_html_if_hash_matches_inner(feed_id, Some(generation), update).await
     }
 
     async fn update_localized_html_if_hash_matches_inner(
@@ -422,10 +421,7 @@ impl SqliteEntryRepository {
         Ok(true)
     }
 
-    pub async fn active_entry_generation(
-        &self,
-        entry_id: i64,
-    ) -> DomainResult<Option<(i64, i64)>> {
+    pub async fn active_entry_generation(&self, entry_id: i64) -> DomainResult<Option<(i64, i64)>> {
         let row = sqlx::query(
             r#"
             SELECT entries.feed_id, feeds.generation
