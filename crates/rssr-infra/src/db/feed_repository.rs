@@ -308,7 +308,17 @@ impl FeedRepository for SqliteFeedRepository {
                         WHEN excluded.folder IS NULL THEN feeds.folder
                         ELSE NULLIF(excluded.folder, '')
                     END,
-                    site_url = COALESCE(excluded.site_url, feeds.site_url),
+                    site_url = CASE
+                        WHEN feeds.is_deleted = 1 THEN excluded.site_url
+                        ELSE COALESCE(excluded.site_url, feeds.site_url)
+                    END,
+                    description = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.description END,
+                    icon_url = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.icon_url END,
+                    etag = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.etag END,
+                    last_modified = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_modified END,
+                    last_fetched_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_fetched_at END,
+                    last_success_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_success_at END,
+                    fetch_error = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.fetch_error END,
                     generation = CASE
                         WHEN feeds.is_deleted = 1 THEN feeds.generation + 1
                         ELSE feeds.generation
