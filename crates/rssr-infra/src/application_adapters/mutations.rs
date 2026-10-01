@@ -58,19 +58,12 @@ impl SqlitePersistenceMutations {
         Self { index_pool, content_pool }
     }
 
-    async fn cleanup_content_best_effort(&self, feed_ids: &[i64]) {
-        for &feed_id in feed_ids {
-            if let Err(error) = sqlx::query("DELETE FROM entry_contents WHERE feed_id = ?1")
-                .bind(feed_id)
-                .execute(&self.content_pool)
-                .await
-            {
-                tracing::warn!(
-                    feed_id,
-                    error = %error,
-                    "订阅已从索引库原子删除，但正文缓存清理失败；后续可安全重试"
-                );
-            }
+    async fn retry_deleted_content_cleanup(&self) {
+        if let Err(error) = cleanup_deleted_feed_content(&self.index_pool, &self.content_pool).await {
+            tracing::warn!(
+                error = %error,
+                "订阅已从索引库原子删除，但正文缓存清理失败；将在下次安全重试"
+            );
         }
     }
 }
@@ -103,7 +96,10 @@ impl SubscriptionRemovalPort for SqlitePersistenceMutations {
         tx.commit().await.context("提交订阅删除事务失败")?;
 
         if purge_entries {
-            self.cleanup_content_best_effort(&[feed_id]).await;
+            // Reacquire the index writer lock and revalidate the tombstone before touching the
+            // separate content DB. A concurrent re-add must win or wait; stale cleanup must never
+            // delete content belonging to a newly active generation.
+            self.retry_deleted_content_cleanup().await;
         }
         Ok(())
     }
@@ -192,7 +188,9 @@ impl ConfigReplacementPort for SqlitePersistenceMutations {
         clear_last_opened_if_matches(&mut tx, &removed_feed_ids, &now).await?;
         tx.commit().await.context("提交配置替换事务失败")?;
 
-        self.cleanup_content_best_effort(&removed_feed_ids).await;
+        if !removed_feed_ids.is_empty() {
+            self.retry_deleted_content_cleanup().await;
+        }
         Ok(ConfigReplacementOutcome {
             removed_feed_count: removed_feed_ids.len(),
             settings_updated,
