@@ -107,3 +107,58 @@ async fn bulk_read_large_dataset_measurement() {
         started.elapsed().as_millis()
     );
 }
+
+
+#[tokio::test]
+async fn sqlite_entry_query_accepts_more_feed_ids_than_sqlite_bind_limit() {
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let pool = backend.connect().await.unwrap();
+    migrate(&pool).await.unwrap();
+
+    let feeds = SqliteFeedRepository::new(pool.clone());
+    let feed = feeds
+        .upsert_subscription(&NewFeedSubscription {
+            url: Url::parse("https://example.com/selected").unwrap(),
+            title: Some("Selected".into()),
+            site_url: None,
+            folder: None,
+        })
+        .await
+        .unwrap();
+    let entries = SqliteEntryRepository::new(pool);
+    entries
+        .upsert_entries(
+            feed.id,
+            &[ParsedEntry {
+                external_id: "selected-entry".into(),
+                dedup_key: "selected-entry".into(),
+                url: None,
+                title: "Selected entry".into(),
+                author: None,
+                summary: None,
+                content_html: None,
+                content_text: None,
+                published_at: None,
+                updated_at_source: None,
+            }],
+        )
+        .await
+        .unwrap();
+
+    // Modern SQLite commonly caps bound variables at 32766. This scope deliberately exceeds that
+    // limit while containing only one real feed id; all repository read/bulk paths must still work.
+    let query = EntryQuery {
+        feed_ids: (1_i64..=40_000).collect(),
+        ..EntryQuery::default()
+    };
+
+    assert_eq!(entries.count_entries(&query).await.unwrap(), 1);
+    assert_eq!(entries.list_entries(&query).await.unwrap().len(), 1);
+
+    let preview = entries.preview_mark_read(&query).await.unwrap();
+    assert_eq!(preview.unread_entry_ids.len(), 1);
+    assert_eq!(
+        entries.mark_read_if_unchanged(&preview).await.unwrap(),
+        MarkReadOutcome::Applied { changed_count: 1 }
+    );
+}
