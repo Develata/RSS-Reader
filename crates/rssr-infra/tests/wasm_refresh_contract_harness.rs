@@ -326,9 +326,10 @@ async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
                 etag: Some("etag-1".to_string()),
                 last_modified: Some("Wed, 01 Apr 2026 10:00:00 GMT".to_string()),
             },
-        )
-        .await
-        .expect("commit not modified");
+        },
+    )
+    .await
+    .expect("commit not modified");
 
     {
         let snapshot = state.snapshot().await.expect("snapshot");
@@ -374,10 +375,17 @@ async fn browser_refresh_store_commit_updated_persists_feed_metadata_and_entries
                     etag: Some("etag-updated".to_string()),
                     last_modified: Some("Thu, 02 Apr 2026 10:00:00 GMT".to_string()),
                 },
+                feed: ParsedFeedUpdate {
+                    title: Some("Updated Feed".to_string()),
+                    site_url: Some(Url::parse("https://example.com").expect("valid site url")),
+                    description: Some("Updated description".to_string()),
+                    entries: vec![sample_entry(1), sample_entry(2)],
+                },
             },
-        )
-        .await
-        .expect("commit updated");
+        },
+    )
+    .await
+    .expect("commit updated");
 
     {
         let snapshot = state.snapshot().await.expect("snapshot");
@@ -429,9 +437,10 @@ async fn browser_refresh_store_commit_updated_clears_previous_fetch_error() {
                     entries: vec![sample_entry(1)],
                 },
             },
-        )
-        .await
-        .expect("commit updated");
+        },
+    )
+    .await
+    .expect("commit updated");
 
     let snapshot = state.snapshot().await.expect("snapshot");
     assert_eq!(snapshot.core.feeds[0].fetch_error, None);
@@ -465,9 +474,10 @@ async fn browser_refresh_store_commit_failed_persists_error_without_success_time
                     last_modified: Some("Fri, 03 Apr 2026 10:00:00 GMT".to_string()),
                 }),
             },
-        )
-        .await
-        .expect("commit failed");
+        },
+    )
+    .await
+    .expect("commit failed");
 
     {
         let snapshot = state.snapshot().await.expect("snapshot");
@@ -745,8 +755,9 @@ async fn failed_refresh_at_each_publication_stage_keeps_old_content_and_index() 
                         entries: vec![sample_entry(1)],
                     },
                 },
-            )
-            .await;
+            },
+        )
+        .await;
         js_sys::eval("Storage.prototype.setItem = __set; delete globalThis.__set;").unwrap();
         assert!(result.is_err(), "stage {fail_at} must not report inserted_count success");
         assert_eq!(serde_json::to_value(&state.snapshot().await.unwrap().core).unwrap(), before);
@@ -890,8 +901,9 @@ async fn multiple_content_commits_preserve_all_feeds_and_report_write_volume() {
                             entries,
                         },
                     },
-                )
-                .await,
+                },
+            )
+            .await,
         );
     }
     let elapsed = js_sys::Date::now() - start;
