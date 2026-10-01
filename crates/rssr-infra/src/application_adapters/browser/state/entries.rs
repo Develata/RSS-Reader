@@ -88,6 +88,8 @@ pub fn upsert_entries(
         let now = now_utc();
         let has_content = entry.content_html.is_some() || entry.content_text.is_some();
 
+        promote_legacy_hex_guid_identity(state, feed_id, &entry);
+
         let entry_id = if let Some(existing) = state
             .core
             .entries
@@ -144,6 +146,40 @@ pub fn upsert_entries(
         }
     }
     Ok(outcome)
+}
+
+fn promote_legacy_hex_guid_identity(state: &mut BrowserState, feed_id: i64, entry: &ParsedEntry) {
+    let Some(url) = entry.url.as_ref().map(Url::as_str) else {
+        return;
+    };
+    if entry.external_id != entry.dedup_key
+        || entry.dedup_key == url
+        || !matches!(entry.dedup_key.len(), 32 | 40 | 64)
+        || !entry.dedup_key.chars().all(|ch| ch.is_ascii_hexdigit())
+    {
+        return;
+    }
+    if state
+        .core
+        .entries
+        .iter()
+        .any(|current| {
+            current.feed_id == feed_id
+                && (current.external_id == entry.dedup_key || current.dedup_key == entry.dedup_key)
+        })
+    {
+        return;
+    }
+
+    if let Some(legacy) = state.core.entries.iter_mut().find(|current| {
+        current.feed_id == feed_id
+            && current.external_id == url
+            && current.dedup_key == url
+            && current.url.as_deref() == Some(url)
+    }) {
+        legacy.external_id = entry.dedup_key.clone();
+        legacy.dedup_key = entry.dedup_key.clone();
+    }
 }
 
 fn upsert_entry_content(
