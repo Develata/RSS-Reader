@@ -158,12 +158,8 @@ impl RefreshStorePort for BrowserRefreshStore {
         self.store
             .update(move |state| {
                 let now = now_utc();
-                let current_generation = state
-                    .core
-                    .feed_generations
-                    .get(&target.feed_id)
-                    .copied()
-                    .unwrap_or_default();
+                let current_generation =
+                    state.core.feed_generations.get(&target.feed_id).copied().unwrap_or_default();
                 if current_generation != target.generation {
                     anyhow::bail!("订阅 generation 已变化，丢弃旧刷新结果");
                 }
