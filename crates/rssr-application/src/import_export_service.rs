@@ -235,9 +235,7 @@ impl ImportExportService {
 
         let removed_feed_ids = current_feeds
             .iter()
-            .filter(|feed| {
-                !imported_urls.iter().any(|url| *url == normalize_feed_url(&feed.url))
-            })
+            .filter(|feed| !imported_urls.iter().any(|url| *url == normalize_feed_url(&feed.url)))
             .map(|feed| feed.id)
             .collect::<Vec<_>>();
         let removed_feed_count = removed_feed_ids.len();
