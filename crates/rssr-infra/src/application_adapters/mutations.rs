@@ -104,7 +104,10 @@ impl SubscriptionRemovalPort for SqlitePersistenceMutations {
 
 #[async_trait::async_trait]
 impl ConfigReplacementPort for SqlitePersistenceMutations {
-    async fn replace_config(&self, plan: ConfigReplacementPlan) -> Result<ConfigReplacementOutcome> {
+    async fn replace_config(
+        &self,
+        plan: ConfigReplacementPlan,
+    ) -> Result<ConfigReplacementOutcome> {
         let settings_raw = serde_json::to_string(&plan.settings).context("序列化导入设置失败")?;
         let now = now_rfc3339();
 
@@ -128,17 +131,18 @@ impl ConfigReplacementPort for SqlitePersistenceMutations {
             })
             .collect::<Vec<_>>();
 
-        let current_settings = match sqlx::query("SELECT value FROM app_settings WHERE key = 'user_settings'")
-            .fetch_optional(&mut *tx)
-            .await
-            .context("读取当前设置失败")?
-        {
-            Some(row) => {
-                let raw: String = row.try_get("value").context("读取当前设置内容失败")?;
-                serde_json::from_str::<UserSettings>(&raw).context("解析当前设置失败")?
-            }
-            None => UserSettings::default(),
-        };
+        let current_settings =
+            match sqlx::query("SELECT value FROM app_settings WHERE key = 'user_settings'")
+                .fetch_optional(&mut *tx)
+                .await
+                .context("读取当前设置失败")?
+            {
+                Some(row) => {
+                    let raw: String = row.try_get("value").context("读取当前设置内容失败")?;
+                    serde_json::from_str::<UserSettings>(&raw).context("解析当前设置失败")?
+                }
+                None => UserSettings::default(),
+            };
         let settings_updated = current_settings != plan.settings;
 
         for feed in &plan.feeds {
