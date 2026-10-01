@@ -22,7 +22,10 @@ const nestedScrollerCanConsume = (target, fingerDeltaY) => {
 };
 const emit = (kind, event) => {
     const touch = event.touches[0] ?? event.changedTouches[0];
-    if (!touch) return;
+    if (!touch) {
+        if (kind === 'end' || kind === 'cancel') lastTouchY = null;
+        return;
+    }
     const fingerDeltaY = lastTouchY === null ? 0 : touch.clientY - lastTouchY;
     const nestedScroll = nestedScrollerCanConsume(event.target, fingerDeltaY);
     if (kind === 'start' || kind === 'move') {
