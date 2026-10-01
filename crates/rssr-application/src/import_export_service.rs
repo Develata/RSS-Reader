@@ -219,9 +219,9 @@ impl ImportExportService {
         // Prepare the entire replacement before the first write. Invalid late URLs therefore
         // cannot leave an earlier prefix persisted.
         for feed in &package.feeds {
-            let url = normalize_feed_url(
-                &Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
-            );
+            let normalized = rssr_domain::parse_and_normalize_feed_url(&feed.url)?;
+            let url = Url::parse(&normalized)
+                .with_context(|| format!("归一化后的订阅 URL 无效：{normalized}"))?;
             let existed =
                 current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
             imported_urls.push(url.clone());
@@ -282,23 +282,43 @@ impl ImportExportService {
     pub async fn import_opml(&self, raw: &str) -> Result<OpmlImportOutcome> {
         let feeds = self.opml_codec.decode(raw)?;
         let current_feeds = self.feed_repository.list_feeds().await?;
+        let current_settings = self.settings_repository.load().await?;
         let imported_feed_count = feeds.len();
+        let mut seen_urls = std::collections::HashSet::with_capacity(feeds.len());
+        let mut upserts = Vec::with_capacity(feeds.len());
 
+        // Validate and normalize the entire document before the first write. This prevents a
+        // malformed late outline from leaving the valid prefix persisted.
         for feed in feeds {
-            let url = normalize_feed_url(
-                &Url::parse(&feed.url)
-                    .with_context(|| format!("OPML 中存在无效订阅 URL：{}", feed.url))?,
-            );
+            let normalized = rssr_domain::parse_and_normalize_feed_url(&feed.url)?;
+            if !seen_urls.insert(normalized.clone()) {
+                anyhow::bail!("OPML 中包含重复的 feed URL：{normalized}");
+            }
+            let url = Url::parse(&normalized)
+                .with_context(|| format!("归一化后的 OPML URL 无效：{normalized}"))?;
             let existed =
                 current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
-            self.feed_repository
-                .upsert_subscription(&NewFeedSubscription {
-                    site_url: None,
-                    url,
-                    title: import_field(feed.title, existed),
-                    folder: import_field(feed.folder, existed),
-                })
-                .await?;
+            upserts.push(NewFeedSubscription {
+                site_url: None,
+                url,
+                title: import_field(feed.title, existed),
+                folder: import_field(feed.folder, existed),
+            });
+        }
+
+        if let Some(port) = &self.config_replacement_port {
+            // Reuse the backend-native transaction boundary introduced for config replacement.
+            // With no removals and unchanged settings this is an atomic batch upsert.
+            port.replace_config(ConfigReplacementPlan {
+                upserts,
+                removed_feed_ids: Vec::new(),
+                settings: current_settings,
+            })
+            .await?;
+        } else {
+            for new_feed in &upserts {
+                self.feed_repository.upsert_subscription(new_feed).await?;
+            }
         }
 
         Ok(OpmlImportOutcome { imported_feed_count })
