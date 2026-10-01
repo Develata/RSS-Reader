@@ -612,10 +612,10 @@ mod tests {
 
         async fn commit(
             &self,
-            feed_id: i64,
+            target: &RefreshTarget,
             commit: RefreshCommit,
         ) -> Result<crate::RefreshCommitOutcome> {
-            self.commits.lock().expect("lock commits").push((feed_id, commit));
+            self.commits.lock().expect("lock commits").push((target.feed_id, commit));
             Ok(Default::default())
         }
     }
@@ -623,6 +623,7 @@ mod tests {
     fn sample_target(feed_id: i64, url: &str) -> RefreshTarget {
         RefreshTarget {
             feed_id,
+            generation: 0,
             url: Url::parse(url).expect("valid url"),
             etag: Some("etag".to_string()),
             last_modified: Some("last-modified".to_string()),
@@ -866,10 +867,10 @@ mod tests {
 
         async fn commit(
             &self,
-            feed_id: i64,
+            target: &RefreshTarget,
             _commit: RefreshCommit,
         ) -> Result<crate::RefreshCommitOutcome> {
-            if feed_id == self.failing_feed_id {
+            if target.feed_id == self.failing_feed_id {
                 anyhow::bail!("提交失败");
             }
             Ok(Default::default())
@@ -913,10 +914,10 @@ mod tests {
 
         async fn commit(
             &self,
-            feed_id: i64,
+            target: &RefreshTarget,
             _commit: RefreshCommit,
         ) -> Result<crate::RefreshCommitOutcome> {
-            self.record(&format!("commit:{feed_id}"));
+            self.record(&format!("commit:{}", target.feed_id));
             Ok(crate::RefreshCommitOutcome {
                 inserted_count: u64::from(matches!(_commit, RefreshCommit::Updated { .. })),
             })
