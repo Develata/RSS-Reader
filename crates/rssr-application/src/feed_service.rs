@@ -94,7 +94,8 @@ impl FeedService {
         input: &AddSubscriptionInput,
         site_url: Option<Url>,
     ) -> Result<Feed> {
-        let url = normalize_feed_url(&Url::parse(&input.url).context("订阅 URL 不合法")?);
+        let normalized = rssr_domain::parse_and_normalize_feed_url(&input.url)?;
+        let url = Url::parse(&normalized).context("归一化后的订阅 URL 不合法")?;
         Ok(self
             .feed_repository
             .upsert_subscription(&NewFeedSubscription {
@@ -373,6 +374,32 @@ mod tests {
             .await
             .expect_err("invalid url should fail");
 
-        assert!(error.downcast_ref::<url::ParseError>().is_some());
+        assert!(error.to_string().contains("无效的 feed URL"));
+    }
+
+    #[tokio::test]
+    async fn add_subscription_rejects_unsupported_url_schemes() {
+        let feed_repository = Arc::new(FeedRepositoryStub {
+            upserted: Mutex::new(Vec::new()),
+            deleted: Mutex::new(Vec::new()),
+        });
+        let entry_index_repository =
+            Arc::new(EntryIndexRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
+        let entry_content_repository =
+            Arc::new(EntryContentRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
+        let service =
+            FeedService::new(feed_repository, entry_index_repository, entry_content_repository);
+
+        for url in ["file:///tmp/feed.xml", "javascript:alert(1)", "ftp://example.com/feed.xml"] {
+            let error = service
+                .add_subscription(&AddSubscriptionInput {
+                    url: url.to_string(),
+                    title: None,
+                    folder: None,
+                })
+                .await
+                .expect_err("unsupported scheme should fail");
+            assert!(error.to_string().contains("HTTP 或 HTTPS"), "{error}");
+        }
     }
 }
