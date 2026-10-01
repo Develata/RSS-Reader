@@ -37,9 +37,10 @@ impl SubscriptionRemovalPort for BrowserPersistenceMutations {
                 feed.is_deleted = true;
                 feed.updated_at = now_utc();
 
-                let mut changes = Changes::CORE | Changes::APP_STATE;
+                let mut changes = Changes::CORE;
                 if state.app_state.last_opened_feed_id == Some(feed_id) {
                     state.app_state.last_opened_feed_id = None;
+                    changes = changes | Changes::APP_STATE;
                 }
 
                 if purge_entries {
@@ -51,9 +52,18 @@ impl SubscriptionRemovalPort for BrowserPersistenceMutations {
                         .map(|entry| entry.id)
                         .collect::<std::collections::HashSet<_>>();
                     state.core.entries.retain(|entry| entry.feed_id != feed_id);
+
+                    let flags_before = state.entry_flags.entries.len();
                     state.entry_flags.entries.retain(|entry| !removed_ids.contains(&entry.id));
+                    if state.entry_flags.entries.len() != flags_before {
+                        changes = changes | Changes::FLAGS;
+                    }
+
+                    let content_before = state.entry_content.entries.len();
                     state.entry_content.entries.retain(|entry| entry.feed_id != feed_id);
-                    changes = changes | Changes::FLAGS | Changes::CONTENT;
+                    if state.entry_content.entries.len() != content_before {
+                        changes = changes | Changes::CONTENT;
+                    }
                 }
 
                 Ok(((), changes))
