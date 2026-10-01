@@ -394,6 +394,18 @@ async fn old_sqlite_refresh_generation_cannot_commit_after_delete_and_same_url_r
         .unwrap();
     let stale_target = store.get_target(feed.id).await.unwrap().unwrap();
     assert_eq!(stale_target.generation, 0);
+    store
+        .commit(
+            &stale_target,
+            RefreshCommit::NotModified {
+                metadata: RefreshHttpMetadata {
+                    etag: Some("old-generation-etag".into()),
+                    last_modified: Some("old-generation-modified".into()),
+                },
+            },
+        )
+        .await
+        .unwrap();
 
     mutations.remove_subscription(feed.id, true).await.unwrap();
     feeds
@@ -408,6 +420,8 @@ async fn old_sqlite_refresh_generation_cannot_commit_after_delete_and_same_url_r
 
     let fresh_target = store.get_target(feed.id).await.unwrap().unwrap();
     assert_eq!(fresh_target.generation, 1);
+    assert_eq!(fresh_target.etag, None);
+    assert_eq!(fresh_target.last_modified, None);
 
     let stale = store
         .commit(
