@@ -159,15 +159,10 @@ fn promote_legacy_hex_guid_identity(state: &mut BrowserState, feed_id: i64, entr
     {
         return;
     }
-    if state
-        .core
-        .entries
-        .iter()
-        .any(|current| {
-            current.feed_id == feed_id
-                && (current.external_id == entry.dedup_key || current.dedup_key == entry.dedup_key)
-        })
-    {
+    if state.core.entries.iter().any(|current| {
+        current.feed_id == feed_id
+            && (current.external_id == entry.dedup_key || current.dedup_key == entry.dedup_key)
+    }) {
         return;
     }
 
@@ -218,7 +213,6 @@ fn upsert_entry_content(
     }
     true
 }
-
 
 #[cfg(test)]
 mod tests {
