@@ -14,6 +14,10 @@ use crate::db::SqlitePool;
 use crate::feed_normalization::hash_content;
 use crate::parser::feed_parser::ParsedEntry;
 
+// Stay well below both SQLite's historical 999-variable builds and the modern 32766 default.
+// Normal feeds still use one query; pathological feeds are split into bounded statements.
+const SQLITE_BIND_CHUNK: usize = 900;
+
 #[derive(Clone)]
 pub struct SqliteEntryRepository {
     index_pool: SqlitePool,
@@ -155,21 +159,22 @@ impl SqliteEntryRepository {
             .await
             .map_err(map_sqlx_error)?;
         let inserted_count = (after - before) as u64;
+
+        // Resolve content IDs before committing the index transaction. The previous code committed
+        // first and then built one unbounded IN (...) query; a 33k-entry feed therefore persisted
+        // every index row and only afterwards failed with "too many SQL variables".
+        let entry_ids_by_dedup_key = if pending_contents.is_empty() {
+            std::collections::HashMap::new()
+        } else {
+            let dedup_keys =
+                pending_contents.iter().map(|content| content.dedup_key.as_str()).collect::<Vec<_>>();
+            resolve_entry_ids_by_dedup_keys(&mut tx, feed_id, &dedup_keys).await?
+        };
         tx.commit().await.map_err(map_sqlx_error)?;
 
         if pending_contents.is_empty() {
             return Ok(EntryUpsertOutcome { contents: Vec::new(), inserted_count });
         }
-
-        let entry_ids_by_dedup_key = self
-            .resolve_entry_ids_by_dedup_keys(
-                feed_id,
-                &pending_contents
-                    .iter()
-                    .map(|content| content.dedup_key.as_str())
-                    .collect::<Vec<_>>(),
-            )
-            .await?;
 
         let contents = pending_contents
             .into_iter()
@@ -348,16 +353,19 @@ impl SqliteEntryRepository {
             return Ok(());
         }
 
-        let mut qb = QueryBuilder::<Sqlite>::new("UPDATE entries SET has_content = ");
-        qb.push_bind(if has_content { 1_i64 } else { 0_i64 });
-        qb.push(" WHERE id IN (");
-        let mut separated = qb.separated(", ");
-        for entry_id in entry_ids {
-            separated.push_bind(entry_id);
+        let mut tx = self.index_pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+        for chunk in entry_ids.chunks(SQLITE_BIND_CHUNK) {
+            let mut qb = QueryBuilder::<Sqlite>::new("UPDATE entries SET has_content = ");
+            qb.push_bind(if has_content { 1_i64 } else { 0_i64 });
+            qb.push(" WHERE id IN (");
+            let mut separated = qb.separated(", ");
+            for entry_id in chunk {
+                separated.push_bind(entry_id);
+            }
+            qb.push(")");
+            qb.build().execute(&mut *tx).await.map_err(map_sqlx_error)?;
         }
-        qb.push(")");
-
-        qb.build().execute(&self.index_pool).await.map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
 
         Ok(())
     }
@@ -416,30 +424,6 @@ impl SqliteEntryRepository {
             .map_err(map_sqlx_error)
     }
 
-    async fn resolve_entry_ids_by_dedup_keys(
-        &self,
-        feed_id: i64,
-        dedup_keys: &[&str],
-    ) -> DomainResult<std::collections::HashMap<String, i64>> {
-        if dedup_keys.is_empty() {
-            return Ok(std::collections::HashMap::new());
-        }
-
-        let mut qb =
-            QueryBuilder::<Sqlite>::new("SELECT dedup_key, id FROM entries WHERE feed_id = ");
-        qb.push_bind(feed_id).push(" AND dedup_key IN (");
-        let mut separated = qb.separated(", ");
-        for dedup_key in dedup_keys {
-            separated.push_bind(dedup_key);
-        }
-        qb.push(")");
-
-        let rows = qb.build().fetch_all(&self.index_pool).await.map_err(map_sqlx_error)?;
-        Ok(rows
-            .into_iter()
-            .map(|row| (row.get::<String, _>("dedup_key"), row.get::<i64, _>("id")))
-            .collect())
-    }
 
     async fn find_adjacent_entry_id(
         &self,
@@ -785,16 +769,44 @@ impl EntryContentRepository for SqliteEntryRepository {
             return Ok(());
         }
 
-        let mut qb = QueryBuilder::<Sqlite>::new("DELETE FROM entry_contents WHERE entry_id IN (");
-        let mut separated = qb.separated(", ");
-        for entry_id in entry_ids {
-            separated.push_bind(entry_id);
+        let mut tx = self.content_pool.begin().await.map_err(map_sqlx_error)?;
+        for chunk in entry_ids.chunks(SQLITE_BIND_CHUNK) {
+            let mut qb =
+                QueryBuilder::<Sqlite>::new("DELETE FROM entry_contents WHERE entry_id IN (");
+            let mut separated = qb.separated(", ");
+            for entry_id in chunk {
+                separated.push_bind(entry_id);
+            }
+            qb.push(")");
+            qb.build().execute(&mut *tx).await.map_err(map_sqlx_error)?;
         }
-        qb.push(")");
-        qb.build().execute(&self.content_pool).await.map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
 
         Ok(())
     }
+}
+
+async fn resolve_entry_ids_by_dedup_keys(
+    connection: &mut sqlx::SqliteConnection,
+    feed_id: i64,
+    dedup_keys: &[&str],
+) -> DomainResult<std::collections::HashMap<String, i64>> {
+    let mut resolved = std::collections::HashMap::with_capacity(dedup_keys.len());
+    for chunk in dedup_keys.chunks(SQLITE_BIND_CHUNK) {
+        let mut qb =
+            QueryBuilder::<Sqlite>::new("SELECT dedup_key, id FROM entries WHERE feed_id = ");
+        qb.push_bind(feed_id).push(" AND dedup_key IN (");
+        let mut separated = qb.separated(", ");
+        for dedup_key in chunk {
+            separated.push_bind(dedup_key);
+        }
+        qb.push(")");
+
+        for row in qb.build().fetch_all(&mut *connection).await.map_err(map_sqlx_error)? {
+            resolved.insert(row.get::<String, _>("dedup_key"), row.get::<i64, _>("id"));
+        }
+    }
+    Ok(resolved)
 }
 
 fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a EntryQuery) {
