@@ -14,6 +14,14 @@ pub async fn cleanup_deleted_feed_content(
     index_pool: &SqlitePool,
     content_pool: &SqlitePool,
 ) -> Result<u64> {
+    // Keep the index writer lock while deleting the separate content cache. Otherwise another
+    // process could re-activate the same feed between the tombstone check and content deletion.
+    // Refresh and removal already acquire locks in index -> content order, so this preserves the
+    // existing lock ordering rather than introducing an inversion.
+    let mut tx = index_pool
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .context("开始已删除正文清理事务失败")?;
     let feed_ids = sqlx::query_scalar::<_, i64>(
         r#"
         SELECT feeds.id
@@ -24,7 +32,7 @@ pub async fn cleanup_deleted_feed_content(
           )
         "#,
     )
-    .fetch_all(index_pool)
+    .fetch_all(&mut *tx)
     .await
     .context("读取待清理正文的已删除订阅失败")?;
 
@@ -37,6 +45,7 @@ pub async fn cleanup_deleted_feed_content(
             .with_context(|| format!("重试清理订阅 {feed_id} 的正文缓存失败"))?
             .rows_affected();
     }
+    tx.commit().await.context("完成已删除正文清理事务失败")?;
     Ok(removed_rows)
 }
 
