@@ -34,5 +34,8 @@ pub trait SubscriptionRemovalPort: Send + Sync {
 pub trait ConfigReplacementPort: Send + Sync {
     /// Replace the persisted configuration from desired state. Implementations must derive the
     /// removal diff only after acquiring their backend write lock/transaction.
-    async fn replace_config(&self, plan: ConfigReplacementPlan) -> Result<ConfigReplacementOutcome>;
+    async fn replace_config(
+        &self,
+        plan: ConfigReplacementPlan,
+    ) -> Result<ConfigReplacementOutcome>;
 }
