@@ -1,6 +1,8 @@
 use anyhow::{Context, Result, bail};
-use rssr_application::{ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort};
-use rssr_domain::{AppStateSnapshot, NewFeedSubscription};
+use rssr_application::{
+    ConfigReplacementOutcome, ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort,
+};
+use rssr_domain::{AppStateSnapshot, UserSettings};
 use sqlx::Row;
 use time::OffsetDateTime;
 
@@ -72,20 +74,48 @@ impl SubscriptionRemovalPort for SqlitePersistenceMutations {
 
 #[async_trait::async_trait]
 impl ConfigReplacementPort for SqlitePersistenceMutations {
-    async fn replace_config(&self, plan: ConfigReplacementPlan) -> Result<()> {
-        // Serialize before opening the write transaction so an impossible settings payload cannot
-        // hold the SQLite writer lock or leave any prior feed mutation visible.
+    async fn replace_config(&self, plan: ConfigReplacementPlan) -> Result<ConfigReplacementOutcome> {
         let settings_raw = serde_json::to_string(&plan.settings).context("序列化导入设置失败")?;
         let now = now_rfc3339();
 
         let mut tx =
             self.index_pool.begin_with("BEGIN IMMEDIATE").await.context("开始配置替换事务失败")?;
 
-        for feed in &plan.upserts {
-            upsert_subscription(&mut tx, feed, &now).await?;
+        let current_rows = sqlx::query("SELECT id, url FROM feeds WHERE is_deleted = 0")
+            .fetch_all(&mut *tx)
+            .await
+            .context("读取当前订阅失败")?;
+        let desired_urls = plan
+            .feeds
+            .iter()
+            .map(|feed| feed.url.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        let removed_feed_ids = current_rows
+            .iter()
+            .filter_map(|row| {
+                let url: String = row.get("url");
+                (!desired_urls.contains(url.as_str())).then(|| row.get::<i64, _>("id"))
+            })
+            .collect::<Vec<_>>();
+
+        let current_settings = match sqlx::query("SELECT value FROM app_settings WHERE key = 'user_settings'")
+            .fetch_optional(&mut *tx)
+            .await
+            .context("读取当前设置失败")?
+        {
+            Some(row) => {
+                let raw: String = row.try_get("value").context("读取当前设置内容失败")?;
+                serde_json::from_str::<UserSettings>(&raw).context("解析当前设置失败")?
+            }
+            None => UserSettings::default(),
+        };
+        let settings_updated = current_settings != plan.settings;
+
+        for feed in &plan.feeds {
+            upsert_config_feed(&mut tx, feed, &now).await?;
         }
 
-        for &feed_id in &plan.removed_feed_ids {
+        for &feed_id in &removed_feed_ids {
             let result =
                 sqlx::query("UPDATE feeds SET is_deleted = 1, updated_at = ?2 WHERE id = ?1")
                     .bind(feed_id)
@@ -118,45 +148,40 @@ impl ConfigReplacementPort for SqlitePersistenceMutations {
         .await
         .context("保存导入设置失败")?;
 
-        clear_last_opened_if_matches(&mut tx, &plan.removed_feed_ids, &now).await?;
+        clear_last_opened_if_matches(&mut tx, &removed_feed_ids, &now).await?;
         tx.commit().await.context("提交配置替换事务失败")?;
 
-        self.cleanup_content_best_effort(&plan.removed_feed_ids).await;
-        Ok(())
+        self.cleanup_content_best_effort(&removed_feed_ids).await;
+        Ok(ConfigReplacementOutcome {
+            removed_feed_count: removed_feed_ids.len(),
+            settings_updated,
+        })
     }
 }
 
-async fn upsert_subscription(
+async fn upsert_config_feed(
     connection: &mut sqlx::SqliteConnection,
-    new_feed: &NewFeedSubscription,
+    feed: &rssr_application::ConfigReplacementFeed,
     now: &str,
 ) -> Result<()> {
     sqlx::query(
         r#"
         INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url)
-        VALUES (?1, ?2, ?3, ?4, ?4, ?5)
+        VALUES (?1, ?2, ?3, ?4, ?4, NULL)
         ON CONFLICT(url) DO UPDATE SET
-            title = CASE
-                WHEN excluded.title IS NULL THEN feeds.title
-                ELSE NULLIF(excluded.title, '')
-            END,
-            folder = CASE
-                WHEN excluded.folder IS NULL THEN feeds.folder
-                ELSE NULLIF(excluded.folder, '')
-            END,
-            site_url = COALESCE(excluded.site_url, feeds.site_url),
+            title = excluded.title,
+            folder = excluded.folder,
             is_deleted = 0,
             updated_at = excluded.updated_at
         "#,
     )
-    .bind(new_feed.url.as_str())
-    .bind(new_feed.title.as_deref())
-    .bind(new_feed.folder.as_deref())
+    .bind(feed.url.as_str())
+    .bind(feed.title.as_deref())
+    .bind(feed.folder.as_deref())
     .bind(now)
-    .bind(new_feed.site_url.as_ref().map(url::Url::as_str))
     .execute(connection)
     .await
-    .with_context(|| format!("保存订阅 {} 失败", new_feed.url))?;
+    .with_context(|| format!("保存订阅 {} 失败", feed.url))?;
     Ok(())
 }
 
