@@ -160,6 +160,61 @@ async fn startup_cleanup_preserves_non_purge_deleted_feed_content() {
 }
 
 #[tokio::test]
+async fn immediate_purge_holds_index_writer_lock_until_content_delete_finishes() {
+    let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("rssr-immediate-purge-race-{nonce}"));
+    std::fs::create_dir_all(&base).unwrap();
+    let backend = NativeSqliteBackend::with_path(base.join("rss-reader.db"));
+    let index_pool = backend.connect().await.unwrap();
+    backend.migrate(&index_pool).await.unwrap();
+    let content_pool = backend.connect_content().await.unwrap();
+    backend.migrate_content(&content_pool).await.unwrap();
+
+    let feeds = Arc::new(SqliteFeedRepository::new(index_pool.clone()));
+    let entries =
+        SqliteEntryRepository::new_with_content_pool(index_pool.clone(), content_pool.clone());
+    let mutations =
+        SqlitePersistenceMutations::new(index_pool.clone(), content_pool.clone());
+    let feed = add_feed(&feeds, "https://example.com/immediate-race.xml").await;
+    entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
+
+    let content_blocker = content_pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+    let removal = {
+        let mutations = mutations.clone();
+        tokio::spawn(async move { mutations.remove_subscription(feed.id, true).await })
+    };
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let reactivation_subscription = NewFeedSubscription {
+        site_url: None,
+        url: Url::parse("https://example.com/immediate-race.xml").unwrap(),
+        title: Some("Reactivated".into()),
+        folder: None,
+    };
+    let reactivation = feeds.upsert_subscription(&reactivation_subscription);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), reactivation).await.is_err(),
+        "re-add must wait while immediate purge owns the index cleanup fence"
+    );
+
+    content_blocker.rollback().await.unwrap();
+    removal.await.unwrap().unwrap();
+
+    feeds.upsert_subscription(&reactivation_subscription).await.unwrap();
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
+            .bind(feed.id)
+            .fetch_one(&content_pool)
+            .await
+            .unwrap();
+    assert_eq!(remaining, 0);
+
+    index_pool.close().await;
+    content_pool.close().await;
+    std::fs::remove_dir_all(base).unwrap();
+}
+
+#[tokio::test]
 async fn startup_cleanup_holds_index_writer_lock_until_content_delete_finishes() {
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
     let base = std::env::temp_dir().join(format!("rssr-content-gc-race-{nonce}"));
