@@ -12,6 +12,16 @@ pub trait HealthRepository {
 #[async_trait::async_trait]
 pub trait FeedRepository: Send + Sync {
     async fn upsert_subscription(&self, new_feed: &NewFeedSubscription) -> crate::Result<Feed>;
+    async fn upsert_subscriptions(
+        &self,
+        new_feeds: &[NewFeedSubscription],
+    ) -> crate::Result<Vec<Feed>> {
+        let mut feeds = Vec::with_capacity(new_feeds.len());
+        for new_feed in new_feeds {
+            feeds.push(self.upsert_subscription(new_feed).await?);
+        }
+        Ok(feeds)
+    }
     async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> crate::Result<()>;
     async fn list_feeds(&self) -> crate::Result<Vec<Feed>>;
     async fn get_feed(&self, feed_id: i64) -> crate::Result<Option<Feed>>;
