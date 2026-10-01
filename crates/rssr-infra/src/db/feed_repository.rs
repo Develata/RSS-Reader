@@ -158,6 +158,58 @@ impl FeedRepository for SqliteFeedRepository {
         Self::row_to_feed(row).await
     }
 
+    async fn upsert_subscriptions(
+        &self,
+        new_feeds: &[NewFeedSubscription],
+    ) -> DomainResult<Vec<Feed>> {
+        if new_feeds.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+        let mut feeds = Vec::with_capacity(new_feeds.len());
+        for new_feed in new_feeds {
+            let now = now_rfc3339();
+            let normalized_url = normalize_feed_url(&new_feed.url);
+
+            sqlx::query(
+                r#"
+                INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url)
+                VALUES (?1, ?2, ?3, ?4, ?4, ?5)
+                ON CONFLICT(url) DO UPDATE SET
+                    title = CASE
+                        WHEN excluded.title IS NULL THEN feeds.title
+                        ELSE NULLIF(excluded.title, '')
+                    END,
+                    folder = CASE
+                        WHEN excluded.folder IS NULL THEN feeds.folder
+                        ELSE NULLIF(excluded.folder, '')
+                    END,
+                    site_url = COALESCE(excluded.site_url, feeds.site_url),
+                    is_deleted = 0,
+                    updated_at = excluded.updated_at
+                "#,
+            )
+            .bind(normalized_url.as_str())
+            .bind(new_feed.title.as_deref())
+            .bind(new_feed.folder.as_deref())
+            .bind(&now)
+            .bind(new_feed.site_url.as_ref().map(Url::as_str))
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_error)?;
+
+            let row = sqlx::query("SELECT * FROM feeds WHERE url = ?1")
+                .bind(normalized_url.as_str())
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(map_sqlx_error)?;
+            feeds.push(Self::row_to_feed(row).await?);
+        }
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(feeds)
+    }
+
     async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> DomainResult<()> {
         let now = now_rfc3339();
         let result = sqlx::query(
