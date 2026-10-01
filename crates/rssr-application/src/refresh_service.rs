@@ -10,6 +10,9 @@ use tokio::task::JoinSet;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RefreshTarget {
     pub feed_id: i64,
+    /// Monotonic subscription generation. Incremented only when a soft-deleted feed is reactivated.
+    /// A refresh may commit only to the generation from which it was started.
+    pub generation: i64,
     pub url: Url,
     pub etag: Option<String>,
     pub last_modified: Option<String>,
@@ -268,7 +271,7 @@ pub trait RefreshStorePort: Send + Sync {
     /// 返回真实新增索引数；批次内的计数需等 end_batch 成功后才可发布。
     async fn commit(
         &self,
-        feed_id: i64,
+        target: &RefreshTarget,
         commit: RefreshCommit,
     ) -> Result<crate::RefreshCommitOutcome>;
 
@@ -514,7 +517,7 @@ impl RefreshService {
             FeedRefreshSourceOutput::NotModified(metadata) => {
                 self.store
                     .commit(
-                        target.feed_id,
+                        &target,
                         RefreshCommit::NotModified { metadata: metadata.clone() },
                     )
                     .await?;
@@ -527,8 +530,7 @@ impl RefreshService {
             FeedRefreshSourceOutput::Updated(update) => {
                 let entry_count = update.feed.entries.len();
                 let localization_entries = build_localization_entries(&update.feed.entries);
-                let committed =
-                    self.store.commit(target.feed_id, RefreshCommit::Updated { update }).await?;
+                let committed = self.store.commit(&target, RefreshCommit::Updated { update }).await?;
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),
@@ -541,7 +543,7 @@ impl RefreshService {
             }
             FeedRefreshSourceOutput::Failed(failure) => {
                 self.store
-                    .commit(target.feed_id, RefreshCommit::Failed { failure: failure.clone() })
+                    .commit(&target, RefreshCommit::Failed { failure: failure.clone() })
                     .await?;
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
