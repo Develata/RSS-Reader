@@ -194,6 +194,9 @@ async fn upsert_config_feed(
     feed: &rssr_application::ConfigReplacementFeed,
     now: &str,
 ) -> Result<()> {
+    let title = feed.title.as_deref().map(str::trim).filter(|value| !value.is_empty());
+    let folder = feed.folder.as_deref().map(str::trim).filter(|value| !value.is_empty());
+
     sqlx::query(
         r#"
         INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url)
@@ -206,8 +209,8 @@ async fn upsert_config_feed(
         "#,
     )
     .bind(feed.url.as_str())
-    .bind(feed.title.as_deref())
-    .bind(feed.folder.as_deref())
+    .bind(title)
+    .bind(folder)
     .bind(now)
     .execute(connection)
     .await
