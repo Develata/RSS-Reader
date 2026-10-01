@@ -108,7 +108,6 @@ async fn bulk_read_large_dataset_measurement() {
     );
 }
 
-
 #[tokio::test]
 async fn sqlite_entry_query_accepts_more_feed_ids_than_sqlite_bind_limit() {
     let backend = NativeSqliteBackend::new("sqlite::memory:");
@@ -147,10 +146,7 @@ async fn sqlite_entry_query_accepts_more_feed_ids_than_sqlite_bind_limit() {
 
     // Modern SQLite commonly caps bound variables at 32766. This scope deliberately exceeds that
     // limit while containing only one real feed id; all repository read/bulk paths must still work.
-    let query = EntryQuery {
-        feed_ids: (1_i64..=40_000).collect(),
-        ..EntryQuery::default()
-    };
+    let query = EntryQuery { feed_ids: (1_i64..=40_000).collect(), ..EntryQuery::default() };
 
     assert_eq!(entries.count_entries(&query).await.unwrap(), 1);
     assert_eq!(entries.list_entries(&query).await.unwrap().len(), 1);
