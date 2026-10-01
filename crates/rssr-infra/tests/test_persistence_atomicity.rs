@@ -190,16 +190,19 @@ async fn immediate_purge_holds_index_writer_lock_until_content_delete_finishes()
         title: Some("Reactivated".into()),
         folder: None,
     };
-    let reactivation = feeds.upsert_subscription(&reactivation_subscription);
+    let reactivation_feeds = feeds.clone();
+    let reactivation = tokio::spawn(async move {
+        reactivation_feeds.upsert_subscription(&reactivation_subscription).await
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
     assert!(
-        tokio::time::timeout(Duration::from_millis(100), reactivation).await.is_err(),
+        !reactivation.is_finished(),
         "re-add must wait while immediate purge owns the index cleanup fence"
     );
 
     content_blocker.rollback().await.unwrap();
     removal.await.unwrap().unwrap();
-
-    feeds.upsert_subscription(&reactivation_subscription).await.unwrap();
+    reactivation.await.unwrap().unwrap();
     let remaining: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
             .bind(feed.id)
@@ -255,24 +258,19 @@ async fn startup_cleanup_holds_index_writer_lock_until_content_delete_finishes()
         title: Some("Reactivated".into()),
         folder: None,
     };
-    let reactivation = feeds.upsert_subscription(&reactivation_subscription);
+    let reactivation_feeds = feeds.clone();
+    let reactivation = tokio::spawn(async move {
+        reactivation_feeds.upsert_subscription(&reactivation_subscription).await
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
     assert!(
-        tokio::time::timeout(Duration::from_millis(100), reactivation).await.is_err(),
+        !reactivation.is_finished(),
         "feed reactivation must wait while tombstone cleanup owns the index writer lock"
     );
 
     content_blocker.rollback().await.unwrap();
     cleanup.await.unwrap().unwrap();
-
-    feeds
-        .upsert_subscription(&NewFeedSubscription {
-            site_url: None,
-            url: feed.url,
-            title: Some("Reactivated".into()),
-            folder: None,
-        })
-        .await
-        .unwrap();
+    reactivation.await.unwrap().unwrap();
 
     let remaining: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
