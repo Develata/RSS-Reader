@@ -13,7 +13,10 @@ use time::OffsetDateTime;
 use url::Url;
 
 use self::rules::{import_field, validate_config_package};
-use crate::subscription_workflow::AppStatePort;
+use crate::{
+    persistence_mutation::{ConfigReplacementPlan, ConfigReplacementPort},
+    subscription_workflow::AppStatePort,
+};
 
 #[derive(Clone)]
 pub struct ImportExportService {
@@ -24,6 +27,7 @@ pub struct ImportExportService {
     opml_codec: Arc<dyn OpmlCodecPort>,
     app_state_cleanup: Arc<dyn AppStatePort>,
     clock: Arc<dyn ClockPort>,
+    config_replacement_port: Option<Arc<dyn ConfigReplacementPort>>,
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -165,7 +169,16 @@ impl ImportExportService {
             opml_codec,
             app_state_cleanup,
             clock,
+            config_replacement_port: None,
         }
+    }
+
+    pub fn with_config_replacement_port(
+        mut self,
+        config_replacement_port: Arc<dyn ConfigReplacementPort>,
+    ) -> Self {
+        self.config_replacement_port = Some(config_replacement_port);
+        self
     }
 
     pub async fn export_config(&self) -> Result<ConfigPackage> {
@@ -201,7 +214,10 @@ impl ImportExportService {
         let current_feeds = self.feed_repository.list_feeds().await?;
         let current_settings = self.settings_repository.load().await?;
         let mut imported_urls = Vec::with_capacity(package.feeds.len());
+        let mut upserts = Vec::with_capacity(package.feeds.len());
 
+        // Prepare the entire replacement before the first write. Invalid late URLs therefore
+        // cannot leave an earlier prefix persisted.
         for feed in &package.feeds {
             let url = normalize_feed_url(
                 &Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
@@ -209,27 +225,39 @@ impl ImportExportService {
             let existed =
                 current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
             imported_urls.push(url.clone());
-
-            self.feed_repository
-                .upsert_subscription(&NewFeedSubscription {
-                    site_url: None,
-                    url,
-                    title: import_field(feed.title.clone(), existed),
-                    folder: import_field(feed.folder.clone(), existed),
-                })
-                .await?;
+            upserts.push(NewFeedSubscription {
+                site_url: None,
+                url,
+                title: import_field(feed.title.clone(), existed),
+                folder: import_field(feed.folder.clone(), existed),
+            });
         }
 
-        let mut removed_feed_count = 0;
-        for feed in current_feeds {
-            if !imported_urls.iter().any(|url| *url == normalize_feed_url(&feed.url)) {
-                self.remove_feed_with_cleanup(feed.id).await?;
-                removed_feed_count += 1;
-            }
-        }
-
+        let removed_feed_ids = current_feeds
+            .iter()
+            .filter(|feed| !imported_urls.iter().any(|url| *url == normalize_feed_url(&feed.url)))
+            .map(|feed| feed.id)
+            .collect::<Vec<_>>();
+        let removed_feed_count = removed_feed_ids.len();
         let settings_updated = current_settings != package.settings;
-        self.settings_repository.save(&package.settings).await?;
+
+        if let Some(port) = &self.config_replacement_port {
+            port.replace_config(ConfigReplacementPlan {
+                upserts,
+                removed_feed_ids,
+                settings: package.settings.clone(),
+            })
+            .await?;
+        } else {
+            // Legacy/test fallback. Production adapters inject one atomic mutation port.
+            for new_feed in &upserts {
+                self.feed_repository.upsert_subscription(new_feed).await?;
+            }
+            for feed_id in removed_feed_ids {
+                self.remove_feed_with_cleanup(feed_id).await?;
+            }
+            self.settings_repository.save(&package.settings).await?;
+        }
 
         Ok(ConfigImportOutcome {
             imported_feed_count: package.feeds.len(),
@@ -300,9 +328,11 @@ impl ImportExportService {
     }
 
     async fn remove_feed_with_cleanup(&self, feed_id: i64) -> Result<()> {
+        // Keep the fallback failure mode consistent with direct removal: once cleanup begins,
+        // the feed is hidden first, so a later cleanup error cannot expose an empty subscription.
+        self.feed_repository.set_deleted(feed_id, true).await?;
         self.entry_index_repository.delete_for_feed(feed_id).await?;
         self.entry_content_repository.delete_for_feed(feed_id).await?;
-        self.feed_repository.set_deleted(feed_id, true).await?;
         self.app_state_cleanup.clear_last_opened_feed_if_matches(feed_id).await
     }
 }

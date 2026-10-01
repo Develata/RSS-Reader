@@ -7,6 +7,8 @@ use rssr_domain::{
 };
 use url::Url;
 
+use crate::SubscriptionRemovalPort;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AddSubscriptionInput {
     pub url: String,
@@ -23,8 +25,29 @@ pub struct RemoveSubscriptionInput {
 #[derive(Clone)]
 pub struct FeedService {
     feed_repository: Arc<dyn FeedRepository>,
+    removal_port: Arc<dyn SubscriptionRemovalPort>,
+}
+
+struct RepositorySubscriptionRemoval {
+    feed_repository: Arc<dyn FeedRepository>,
     entry_index_repository: Arc<dyn EntryIndexRepository>,
     entry_content_repository: Arc<dyn EntryContentRepository>,
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl SubscriptionRemovalPort for RepositorySubscriptionRemoval {
+    async fn remove_subscription(&self, feed_id: i64, purge_entries: bool) -> Result<()> {
+        // Tombstone first so a later cleanup failure cannot leave a visible subscription
+        // whose article index has already disappeared. Production adapters replace this
+        // fallback with a backend-native atomic mutation.
+        self.feed_repository.set_deleted(feed_id, true).await?;
+        if purge_entries {
+            self.entry_index_repository.delete_for_feed(feed_id).await?;
+            self.entry_content_repository.delete_for_feed(feed_id).await?;
+        }
+        Ok(())
+    }
 }
 
 impl FeedService {
@@ -33,7 +56,19 @@ impl FeedService {
         entry_index_repository: Arc<dyn EntryIndexRepository>,
         entry_content_repository: Arc<dyn EntryContentRepository>,
     ) -> Self {
-        Self { feed_repository, entry_index_repository, entry_content_repository }
+        let removal_port = Arc::new(RepositorySubscriptionRemoval {
+            feed_repository: feed_repository.clone(),
+            entry_index_repository,
+            entry_content_repository,
+        });
+        Self { feed_repository, removal_port }
+    }
+
+    pub fn new_with_removal_port(
+        feed_repository: Arc<dyn FeedRepository>,
+        removal_port: Arc<dyn SubscriptionRemovalPort>,
+    ) -> Self {
+        Self { feed_repository, removal_port }
     }
 
     pub async fn add_subscription(&self, input: &AddSubscriptionInput) -> Result<Feed> {
@@ -72,11 +107,7 @@ impl FeedService {
     }
 
     pub async fn remove_subscription(&self, input: RemoveSubscriptionInput) -> Result<()> {
-        if input.purge_entries {
-            self.entry_index_repository.delete_for_feed(input.feed_id).await?;
-            self.entry_content_repository.delete_for_feed(input.feed_id).await?;
-        }
-        Ok(self.feed_repository.set_deleted(input.feed_id, true).await?)
+        self.removal_port.remove_subscription(input.feed_id, input.purge_entries).await
     }
 }
 
