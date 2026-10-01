@@ -280,7 +280,45 @@ async function checkEntriesOverflow(client) {
     maskStates,
   );
   assertThat('directory overflow hint disappears at the end', maskStates.end.maskImage === 'none', maskStates);
-  await evaluate(client, `document.querySelector('[data-layout="entry-top-directory"]').scrollLeft = 0`);
+
+  const verticalDirectoryTracking = await evaluate(
+    client,
+    `(async () => {
+      const visible = (element) =>
+        !!element && !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
+      const anchors = [...document.querySelectorAll('[data-entry-scroll-anchor]')].filter(visible);
+      const target = anchors[Math.min(anchors.length - 1, Math.max(3, Math.floor(anchors.length * 0.6)))];
+      target?.scrollIntoView({block:'start', inline:'nearest', behavior:'instant'});
+      const requested = scrollY;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const rail = document.querySelector('[data-layout="entry-directory-rail"]');
+      const topDirectory = document.querySelector('[data-layout="entry-top-directory"]');
+      return {
+        anchorCount: anchors.length,
+        target: target?.id ?? null,
+        requested,
+        actual: scrollY,
+        delta: scrollY - requested,
+        railDisplay: rail ? getComputedStyle(rail).display : null,
+        topDirectoryDisplay: topDirectory ? getComputedStyle(topDirectory).display : null,
+      };
+    })()`,
+  );
+  assertThat(
+    'mobile directory tracking never rewinds document scroll',
+    verticalDirectoryTracking.anchorCount >= 4 &&
+      verticalDirectoryTracking.requested > 0 &&
+      verticalDirectoryTracking.railDisplay === 'none' &&
+      verticalDirectoryTracking.topDirectoryDisplay !== 'none' &&
+      Math.abs(verticalDirectoryTracking.delta) <= 1,
+    verticalDirectoryTracking,
+  );
+
+  await evaluate(client, `(() => {
+    document.querySelector('[data-layout="entry-top-directory"]').scrollLeft = 0;
+    window.scrollTo({top:0, behavior:'instant'});
+  })()`);
   await captureArtifact(client, 'entries');
 }
 
