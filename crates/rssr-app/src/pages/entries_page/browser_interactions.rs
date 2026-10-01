@@ -181,29 +181,50 @@ fn refresh_entry_directory_tracker(align_directory_viewport: bool) {
 
         const alignDirectoryViewport = (groupAnchor, itemAnchor) => {
             const rail = document.querySelector('[data-layout="entry-directory-rail"]');
-            if (!isVisible(rail)) {
-                // Mobile renders the horizontal top directory instead of an independent
-                // vertical rail. Never call scrollIntoView on that surface: doing so can
-                // scroll the document itself and fight the user's vertical gesture.
+            if (isVisible(rail)) {
+                const target = findDirectoryViewportTarget(rail, groupAnchor, itemAnchor);
+                if (!target) {
+                    return;
+                }
+
+                const railRect = rail.getBoundingClientRect();
+                const targetRect = target.getBoundingClientRect();
+                const visibleTop = railRect.top + rail.clientTop;
+                const visibleBottom = visibleTop + rail.clientHeight;
+
+                if (targetRect.top < visibleTop) {
+                    rail.scrollTop += targetRect.top - visibleTop;
+                } else if (targetRect.bottom > visibleBottom) {
+                    rail.scrollTop += targetRect.bottom - visibleBottom;
+                }
                 return;
             }
 
-            const target = findDirectoryViewportTarget(rail, groupAnchor, itemAnchor);
+            // Mobile renders a horizontal top directory instead of the vertical rail.
+            // Keep its active month visible by changing only scrollLeft; scrollIntoView
+            // is forbidden here because it may also change window.scrollY.
+            const topDirectory = document.querySelector('[data-layout="entry-top-directory"]');
+            if (!isVisible(topDirectory) || !groupAnchor) {
+                return;
+            }
+            const target = Array.from(
+                topDirectory.querySelectorAll('[data-directory-kind="group"]')
+            ).find(
+                (element) =>
+                    isVisible(element) && element.dataset.directoryAnchor === groupAnchor
+            );
             if (!target) {
                 return;
             }
 
-            const railRect = rail.getBoundingClientRect();
+            const directoryRect = topDirectory.getBoundingClientRect();
             const targetRect = target.getBoundingClientRect();
-            const visibleTop = railRect.top + rail.clientTop;
-            const visibleBottom = visibleTop + rail.clientHeight;
-
-            // Move only the directory rail. scrollIntoView is intentionally avoided here
-            // because an ancestor fallback may change window.scrollY.
-            if (targetRect.top < visibleTop) {
-                rail.scrollTop += targetRect.top - visibleTop;
-            } else if (targetRect.bottom > visibleBottom) {
-                rail.scrollTop += targetRect.bottom - visibleBottom;
+            const visibleLeft = directoryRect.left + topDirectory.clientLeft;
+            const visibleRight = visibleLeft + topDirectory.clientWidth;
+            if (targetRect.left < visibleLeft) {
+                topDirectory.scrollLeft += targetRect.left - visibleLeft;
+            } else if (targetRect.right > visibleRight) {
+                topDirectory.scrollLeft += targetRect.right - visibleRight;
             }
         };
 
