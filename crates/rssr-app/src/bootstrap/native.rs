@@ -434,7 +434,13 @@ impl ImageLocalizationWorker {
                     localized_content_hash: &localized_content_hash,
                 };
 
-                match entry_repository.update_localized_html_if_hash_matches(feed_id, &update).await
+                match entry_repository
+                    .update_localized_html_if_hash_matches_for_generation(
+                        feed_id,
+                        entry.generation,
+                        &update,
+                    )
+                    .await
                 {
                     Ok(true) => {
                         localized_count += 1;
@@ -460,11 +466,24 @@ impl ImageLocalizationWorker {
     }
 
     async fn localize_entry_on_demand(&self, entry_id: i64) -> anyhow::Result<bool> {
+        // Capture the feed generation before starting network work. If deletion/re-add happens
+        // while images are being localized, the final write is rejected as stale.
+        let Some((feed_id, generation)) = self
+            .entry_repository
+            .active_entry_generation(entry_id)
+            .await
+            .context("读取当前文章所属订阅 generation 失败")?
+        else {
+            return Ok(false);
+        };
         let Some(entry) =
             self.entry_repository.get_entry(entry_id).await.context("读取当前文章失败")?
         else {
             return Ok(false);
         };
+        if entry.feed_id != feed_id {
+            return Ok(false);
+        }
 
         let Some(original_html) = entry.content_html.clone() else {
             return Ok(false);
@@ -522,8 +541,9 @@ impl ImageLocalizationWorker {
 
         let updated = self
             .entry_repository
-            .update_localized_html_if_hash_matches(
-                entry.feed_id,
+            .update_localized_html_if_hash_matches_for_generation(
+                feed_id,
+                generation,
                 &LocalizedEntryUpdate {
                     dedup_key: &entry.dedup_key,
                     expected_content_hash: &expected_content_hash,
