@@ -22,6 +22,10 @@ const SQLITE_BIND_CHUNK: usize = 900;
 pub struct SqliteEntryRepository {
     index_pool: SqlitePool,
     content_pool: SqlitePool,
+    /// `new(pool)` intentionally stores index and content in one SQLite database. Generation
+    /// fences may already hold that pool's only connection, so those writes must reuse the
+    /// existing index transaction instead of borrowing a second connection from the same pool.
+    content_in_index_db: bool,
     /// 正文库建表只需要保证一次。此前每次读正文都会执行一遍
     /// `CREATE TABLE IF NOT EXISTS` + 两条 `CREATE INDEX IF NOT EXISTS`，
     /// 等于每打开一篇文章多付三次 SQL 往返。
@@ -61,11 +65,21 @@ pub struct EntryUpsertOutcome {
 
 impl SqliteEntryRepository {
     pub fn new(index_pool: SqlitePool) -> Self {
-        Self::new_with_content_pool(index_pool.clone(), index_pool)
+        Self {
+            content_pool: index_pool.clone(),
+            index_pool,
+            content_in_index_db: true,
+            content_schema_ready: Arc::new(OnceCell::new()),
+        }
     }
 
     pub fn new_with_content_pool(index_pool: SqlitePool, content_pool: SqlitePool) -> Self {
-        Self { index_pool, content_pool, content_schema_ready: Arc::new(OnceCell::new()) }
+        Self {
+            index_pool,
+            content_pool,
+            content_in_index_db: false,
+            content_schema_ready: Arc::new(OnceCell::new()),
+        }
     }
 
     pub async fn upsert_entries(
@@ -281,7 +295,11 @@ impl SqliteEntryRepository {
             return Err(DomainError::NotFound);
         }
 
-        let upserted = self.write_contents(feed_id, contents).await?;
+        let upserted = if self.content_in_index_db {
+            write_contents_on_connection(&mut index_tx, feed_id, contents).await?
+        } else {
+            self.write_contents(feed_id, contents).await?
+        };
         mark_has_content_on_connection(
             &mut index_tx,
             &contents.iter().map(|content| content.entry_id).collect::<Vec<_>>(),
@@ -297,43 +315,8 @@ impl SqliteEntryRepository {
         feed_id: i64,
         contents: &[ResolvedEntryContent],
     ) -> DomainResult<usize> {
-        let mut upserted = 0;
         let mut tx = self.content_pool.begin().await.map_err(map_sqlx_error)?;
-        let now = now_rfc3339();
-
-        for content in contents {
-            let result = sqlx::query(
-                r#"
-                INSERT INTO entry_contents (
-                    entry_id, feed_id, content_html, content_text, content_hash, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-                ON CONFLICT(entry_id) DO UPDATE SET
-                    feed_id = excluded.feed_id,
-                    content_html = COALESCE(excluded.content_html, entry_contents.content_html),
-                    content_text = COALESCE(excluded.content_text, entry_contents.content_text),
-                    content_hash = excluded.content_hash,
-                    updated_at = excluded.updated_at
-                WHERE entry_contents.feed_id IS NOT excluded.feed_id
-                   OR entry_contents.content_html IS NOT COALESCE(excluded.content_html, entry_contents.content_html)
-                   OR entry_contents.content_text IS NOT COALESCE(excluded.content_text, entry_contents.content_text)
-                   OR entry_contents.content_hash IS NOT excluded.content_hash
-                "#,
-            )
-            .bind(content.entry_id)
-            .bind(feed_id)
-            .bind(content.content_html.as_deref())
-            .bind(content.content_text.as_deref())
-            .bind(content.content_hash.as_deref())
-            .bind(&now)
-            .execute(&mut *tx)
-            .await
-            .map_err(map_sqlx_error)?;
-
-            if result.rows_affected() > 0 {
-                upserted += 1;
-            }
-        }
-
+        let upserted = write_contents_on_connection(&mut tx, feed_id, contents).await?;
         tx.commit().await.map_err(map_sqlx_error)?;
         Ok(upserted)
     }
@@ -392,27 +375,14 @@ impl SqliteEntryRepository {
             return Ok(false);
         };
 
-        let now = now_rfc3339();
-        let result = sqlx::query(
-            r#"
-            UPDATE entry_contents
-            SET content_html = ?2,
-                content_hash = ?3,
-                updated_at = ?4
-            WHERE entry_id = ?1
-              AND content_hash = ?5
-            "#,
-        )
-        .bind(entry_id)
-        .bind(update.localized_html)
-        .bind(update.localized_content_hash)
-        .bind(&now)
-        .bind(update.expected_content_hash)
-        .execute(&self.content_pool)
-        .await
-        .map_err(map_sqlx_error)?;
+        let result = if self.content_in_index_db {
+            update_localized_content_on_connection(&mut index_tx, entry_id, update).await?
+        } else {
+            let mut content = self.content_pool.acquire().await.map_err(map_sqlx_error)?;
+            update_localized_content_on_connection(&mut content, entry_id, update).await?
+        };
 
-        if result.rows_affected() == 0 {
+        if result == 0 {
             return Ok(false);
         }
 
@@ -661,7 +631,7 @@ impl SqliteEntryRepository {
             .await
             .map_err(map_sqlx_error)?;
 
-        if result.rows_affected() == 0 {
+        if result == 0 {
             return Err(DomainError::NotFound);
         }
 
@@ -922,6 +892,75 @@ async fn mark_has_content_on_connection(
         qb.build().execute(&mut *connection).await.map_err(map_sqlx_error)?;
     }
     Ok(())
+}
+
+async fn write_contents_on_connection(
+    connection: &mut sqlx::SqliteConnection,
+    feed_id: i64,
+    contents: &[ResolvedEntryContent],
+) -> DomainResult<usize> {
+    let mut upserted = 0;
+    let now = now_rfc3339();
+    for content in contents {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO entry_contents (
+                entry_id, feed_id, content_html, content_text, content_hash, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(entry_id) DO UPDATE SET
+                feed_id = excluded.feed_id,
+                content_html = COALESCE(excluded.content_html, entry_contents.content_html),
+                content_text = COALESCE(excluded.content_text, entry_contents.content_text),
+                content_hash = excluded.content_hash,
+                updated_at = excluded.updated_at
+            WHERE entry_contents.feed_id IS NOT excluded.feed_id
+               OR entry_contents.content_html IS NOT COALESCE(excluded.content_html, entry_contents.content_html)
+               OR entry_contents.content_text IS NOT COALESCE(excluded.content_text, entry_contents.content_text)
+               OR entry_contents.content_hash IS NOT excluded.content_hash
+            "#,
+        )
+        .bind(content.entry_id)
+        .bind(feed_id)
+        .bind(content.content_html.as_deref())
+        .bind(content.content_text.as_deref())
+        .bind(content.content_hash.as_deref())
+        .bind(&now)
+        .execute(&mut *connection)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        if result.rows_affected() > 0 {
+            upserted += 1;
+        }
+    }
+    Ok(upserted)
+}
+
+async fn update_localized_content_on_connection(
+    connection: &mut sqlx::SqliteConnection,
+    entry_id: i64,
+    update: &LocalizedEntryUpdate<'_>,
+) -> DomainResult<u64> {
+    let now = now_rfc3339();
+    let result = sqlx::query(
+        r#"
+        UPDATE entry_contents
+        SET content_html = ?2,
+            content_hash = ?3,
+            updated_at = ?4
+        WHERE entry_id = ?1
+          AND content_hash = ?5
+        "#,
+    )
+    .bind(entry_id)
+    .bind(update.localized_html)
+    .bind(update.localized_content_hash)
+    .bind(&now)
+    .bind(update.expected_content_hash)
+    .execute(&mut *connection)
+    .await
+    .map_err(map_sqlx_error)?;
+    Ok(result.rows_affected())
 }
 
 async fn promote_legacy_hex_guid_identity(
