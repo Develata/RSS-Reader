@@ -126,26 +126,21 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use anyhow::Result;
-    use rssr_domain::{
-        EntryContent, EntryContentRepository, EntryIndexRepository, EntryNavigation, EntryQuery,
-        EntryRecord, Feed, FeedRepository, FeedSummary, NewFeedSubscription,
-    };
+    use rssr_domain::{Feed, FeedRepository, FeedSummary, NewFeedSubscription};
     use time::OffsetDateTime;
     use url::Url;
 
     use crate::{
         FeedRefreshSourceOutput, FeedRefreshUpdate, ParsedFeedUpdate, RefreshHttpMetadata,
-        RefreshStorePort, RefreshTarget,
+        RefreshStorePort, RefreshTarget, SubscriptionRemovalPort,
     };
 
     use super::{
-        AddSubscriptionAndRefreshOutcome, AddSubscriptionLifecycleInput, AppStatePort,
-        SubscriptionWorkflow,
+        AddSubscriptionAndRefreshOutcome, AddSubscriptionLifecycleInput, SubscriptionWorkflow,
     };
 
     struct FeedRepositoryStub {
         next_id: Mutex<i64>,
-        deleted_feed_ids: Mutex<Vec<i64>>,
     }
 
     #[async_trait::async_trait]
@@ -176,10 +171,7 @@ mod tests {
             })
         }
 
-        async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> rssr_domain::Result<()> {
-            if is_deleted {
-                self.deleted_feed_ids.lock().expect("lock deleted ids").push(feed_id);
-            }
+        async fn set_deleted(&self, _feed_id: i64, _is_deleted: bool) -> rssr_domain::Result<()> {
             Ok(())
         }
 
@@ -196,80 +188,22 @@ mod tests {
         }
     }
 
-    struct EntryRepositoryStub {
-        deleted_feed_ids: Mutex<Vec<i64>>,
+    #[derive(Default)]
+    struct RemovalStub {
+        calls: Mutex<Vec<(i64, bool)>>,
     }
 
-    #[async_trait::async_trait]
-    impl EntryIndexRepository for EntryRepositoryStub {
-        async fn preview_mark_read(
-            &self,
-            _query: &EntryQuery,
-        ) -> rssr_domain::Result<rssr_domain::MarkReadPreview> {
-            Err(rssr_domain::DomainError::InvalidInput("此测试替身不支持批量操作".into()))
-        }
-        async fn mark_read_if_unchanged(
-            &self,
-            _preview: &rssr_domain::MarkReadPreview,
-        ) -> rssr_domain::Result<rssr_domain::MarkReadOutcome> {
-            Err(rssr_domain::DomainError::InvalidInput("此测试替身不支持批量操作".into()))
-        }
-
-        async fn list_entries(
-            &self,
-            _query: &EntryQuery,
-        ) -> rssr_domain::Result<Vec<rssr_domain::EntrySummary>> {
-            Ok(Vec::new())
-        }
-
-        async fn count_entries(&self, _query: &EntryQuery) -> rssr_domain::Result<u64> {
-            Ok(0)
-        }
-
-        async fn get_entry_record(
-            &self,
-            _entry_id: i64,
-        ) -> rssr_domain::Result<Option<EntryRecord>> {
-            Ok(None)
-        }
-
-        async fn reader_navigation(
-            &self,
-            _current_entry_id: i64,
-        ) -> rssr_domain::Result<EntryNavigation> {
-            Ok(EntryNavigation::default())
-        }
-
-        async fn set_read(&self, _entry_id: i64, _is_read: bool) -> rssr_domain::Result<()> {
-            Ok(())
-        }
-
-        async fn set_starred(&self, _entry_id: i64, _is_starred: bool) -> rssr_domain::Result<()> {
-            Ok(())
-        }
-
-        async fn delete_for_feed(&self, feed_id: i64) -> rssr_domain::Result<()> {
-            self.deleted_feed_ids.lock().expect("lock deleted feed ids").push(feed_id);
-            Ok(())
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl EntryContentRepository for EntryRepositoryStub {
-        async fn get_content(&self, _entry_id: i64) -> rssr_domain::Result<Option<EntryContent>> {
-            Ok(None)
-        }
-
-        async fn delete_for_feed(&self, _feed_id: i64) -> rssr_domain::Result<()> {
-            Ok(())
-        }
-
-        async fn delete_for_entry_ids(&self, _entry_ids: &[i64]) -> rssr_domain::Result<()> {
+    #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+    impl SubscriptionRemovalPort for RemovalStub {
+        async fn remove_subscription(&self, feed_id: i64, purge_entries: bool) -> Result<()> {
+            self.calls.lock().expect("lock removal calls").push((feed_id, purge_entries));
             Ok(())
         }
     }
 
     struct SourceStub;
+
     #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
     #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
     impl crate::SubscriptionProbePort for SourceStub {
@@ -327,46 +261,28 @@ mod tests {
         }
     }
 
-    struct AppStateStub {
-        cleared_feed_ids: Mutex<Vec<i64>>,
-    }
-
-    #[async_trait::async_trait]
-    impl AppStatePort for AppStateStub {
-        async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
-            self.cleared_feed_ids.lock().expect("lock cleared ids").push(feed_id);
-            Ok(())
-        }
+    fn workflow(next_id: i64, targets: Vec<RefreshTarget>, removal: Arc<RemovalStub>) -> SubscriptionWorkflow {
+        SubscriptionWorkflow::new(
+            crate::FeedService::new(
+                Arc::new(FeedRepositoryStub { next_id: Mutex::new(next_id) }),
+                removal,
+            ),
+            crate::RefreshService::new(Arc::new(SourceStub), Arc::new(StoreStub { targets })),
+            Arc::new(SourceStub),
+        )
     }
 
     #[tokio::test]
     async fn add_and_refresh_combines_feed_and_refresh_use_cases() {
-        let entry_repository =
-            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
-        let feed_service = crate::FeedService::new(
-            Arc::new(FeedRepositoryStub {
-                next_id: Mutex::new(1),
-                deleted_feed_ids: Mutex::new(Vec::new()),
-            }),
-            entry_repository.clone(),
-            entry_repository,
-        );
-        let refresh_service = crate::RefreshService::new(
-            Arc::new(SourceStub),
-            Arc::new(StoreStub {
-                targets: vec![RefreshTarget {
-                    feed_id: 1,
-                    url: Url::parse("https://example.com/feed.xml").expect("valid url"),
-                    etag: None,
-                    last_modified: None,
-                }],
-            }),
-        );
-        let workflow = SubscriptionWorkflow::new(
-            feed_service,
-            refresh_service,
-            Arc::new(AppStateStub { cleared_feed_ids: Mutex::new(Vec::new()) }),
-            Arc::new(SourceStub),
+        let workflow = workflow(
+            1,
+            vec![RefreshTarget {
+                feed_id: 1,
+                url: Url::parse("https://example.com/feed.xml").expect("valid url"),
+                etag: None,
+                last_modified: None,
+            }],
+            Arc::new(RemovalStub::default()),
         );
 
         let outcome: AddSubscriptionAndRefreshOutcome = workflow
@@ -384,24 +300,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_lifecycle_can_skip_first_refresh() {
-        let entry_repository =
-            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
-        let workflow = SubscriptionWorkflow::new(
-            crate::FeedService::new(
-                Arc::new(FeedRepositoryStub {
-                    next_id: Mutex::new(7),
-                    deleted_feed_ids: Mutex::new(Vec::new()),
-                }),
-                entry_repository.clone(),
-                entry_repository,
-            ),
-            crate::RefreshService::new(
-                Arc::new(SourceStub),
-                Arc::new(StoreStub { targets: Vec::new() }),
-            ),
-            Arc::new(AppStateStub { cleared_feed_ids: Mutex::new(Vec::new()) }),
-            Arc::new(SourceStub),
-        );
+        let workflow = workflow(7, Vec::new(), Arc::new(RemovalStub::default()));
 
         let outcome = workflow
             .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
@@ -421,30 +320,15 @@ mod tests {
 
     #[tokio::test]
     async fn add_lifecycle_can_run_first_refresh() {
-        let entry_repository =
-            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
-        let workflow = SubscriptionWorkflow::new(
-            crate::FeedService::new(
-                Arc::new(FeedRepositoryStub {
-                    next_id: Mutex::new(3),
-                    deleted_feed_ids: Mutex::new(Vec::new()),
-                }),
-                entry_repository.clone(),
-                entry_repository,
-            ),
-            crate::RefreshService::new(
-                Arc::new(SourceStub),
-                Arc::new(StoreStub {
-                    targets: vec![RefreshTarget {
-                        feed_id: 3,
-                        url: Url::parse("https://example.com/feed.xml").expect("valid url"),
-                        etag: None,
-                        last_modified: None,
-                    }],
-                }),
-            ),
-            Arc::new(AppStateStub { cleared_feed_ids: Mutex::new(Vec::new()) }),
-            Arc::new(SourceStub),
+        let workflow = workflow(
+            3,
+            vec![RefreshTarget {
+                feed_id: 3,
+                url: Url::parse("https://example.com/feed.xml").expect("valid url"),
+                etag: None,
+                last_modified: None,
+            }],
+            Arc::new(RemovalStub::default()),
         );
 
         let outcome = workflow
@@ -465,37 +349,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn remove_subscription_clears_last_opened_state_after_feed_removal() {
-        let app_state = Arc::new(AppStateStub { cleared_feed_ids: Mutex::new(Vec::new()) });
-        let feed_repository = Arc::new(FeedRepositoryStub {
-            next_id: Mutex::new(1),
-            deleted_feed_ids: Mutex::new(Vec::new()),
-        });
-        let entry_repository =
-            Arc::new(EntryRepositoryStub { deleted_feed_ids: Mutex::new(Vec::new()) });
-        let workflow = SubscriptionWorkflow::new(
-            crate::FeedService::new(
-                feed_repository.clone(),
-                entry_repository.clone(),
-                entry_repository,
-            ),
-            crate::RefreshService::new(
-                Arc::new(SourceStub),
-                Arc::new(StoreStub { targets: Vec::new() }),
-            ),
-            app_state.clone(),
-            Arc::new(SourceStub),
-        );
+    async fn remove_subscription_delegates_exactly_once() {
+        let removal = Arc::new(RemovalStub::default());
+        let workflow = workflow(1, Vec::new(), removal.clone());
 
         workflow
             .remove_subscription(crate::RemoveSubscriptionInput { feed_id: 9, purge_entries: true })
             .await
             .expect("remove subscription");
 
-        assert_eq!(
-            feed_repository.deleted_feed_ids.lock().expect("lock deleted ids").as_slice(),
-            &[9]
-        );
-        assert_eq!(app_state.cleared_feed_ids.lock().expect("lock cleared ids").as_slice(), &[9]);
+        assert_eq!(removal.calls.lock().expect("lock removal calls").as_slice(), &[(9, true)]);
     }
 }
