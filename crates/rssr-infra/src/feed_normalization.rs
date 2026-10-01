@@ -58,7 +58,12 @@ impl MissingContentWarningAggregation {
 }
 
 pub fn parse_feed_xml(raw: &str, warn_on_missing_content: bool) -> anyhow::Result<ParsedFeed> {
-    let feed = feed_rs::parser::parse(raw.as_bytes()).context("解析 RSS/Atom feed 失败")?;
+    // feed-rs normally synthesizes IDs for entries that omit one. Downstream we need to
+    // distinguish a source-provided GUID from that fallback; guessing by "looks like a hash"
+    // incorrectly discards legitimate hexadecimal GUIDs. Keep missing IDs empty here and let
+    // our normalization choose the URL/title+timestamp fallback explicitly.
+    let parser = feed_rs::parser::Builder::new().id_generator(|_, _, _| String::new()).build();
+    let feed = parser.parse(raw.as_bytes()).context("解析 RSS/Atom feed 失败")?;
     normalize_feed(feed, warn_on_missing_content)
 }
 
@@ -112,7 +117,7 @@ fn normalize_entry(
 
     let published_at = entry.published.and_then(to_offset_datetime);
     let updated_at_source = entry.updated.and_then(to_offset_datetime);
-    let stable_source_id = normalize_source_entry_id(&entry.id, url.as_ref());
+    let stable_source_id = normalize_source_entry_id(&entry.id);
     let external_id = if stable_source_id.is_empty() {
         url.as_ref()
             .map(|url| url.to_string())
@@ -153,20 +158,8 @@ fn dedup_key_fallback(title: &str, published_at: Option<OffsetDateTime>) -> Stri
     format!("title-ts:{:x}", hasher.finalize())
 }
 
-fn normalize_source_entry_id(raw: &str, url: Option<&Url>) -> String {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    if url.is_some() && looks_like_synthetic_hash(trimmed) {
-        return String::new();
-    }
-
-    trimmed.to_string()
-}
-
-fn looks_like_synthetic_hash(value: &str) -> bool {
-    matches!(value.len(), 32 | 40 | 64) && value.chars().all(|ch| ch.is_ascii_hexdigit())
+fn normalize_source_entry_id(raw: &str) -> String {
+    raw.trim().to_string()
 }
 
 fn text_value(text: Option<&Text>) -> Option<String> {
