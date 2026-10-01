@@ -46,20 +46,55 @@ pub(super) fn scroll_directory_item(anchor_id: &str) {
         r#"
         const targetId = {anchor_id_json};
         const selector = `[data-directory-anchor="${{targetId}}"]`;
+        const isVisible = (element) =>
+            !!element && !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
+
+        const alignVertical = (container, target) => {{
+            const containerRect = container.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const visibleTop = containerRect.top + container.clientTop;
+            const visibleBottom = visibleTop + container.clientHeight;
+            if (targetRect.top < visibleTop) {{
+                container.scrollTop += targetRect.top - visibleTop;
+            }} else if (targetRect.bottom > visibleBottom) {{
+                container.scrollTop += targetRect.bottom - visibleBottom;
+            }}
+        }};
+
+        const alignHorizontal = (container, target) => {{
+            const containerRect = container.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const visibleLeft = containerRect.left + container.clientLeft;
+            const visibleRight = visibleLeft + container.clientWidth;
+            if (targetRect.left < visibleLeft) {{
+                container.scrollLeft += targetRect.left - visibleLeft;
+            }} else if (targetRect.right > visibleRight) {{
+                container.scrollLeft += targetRect.right - visibleRight;
+            }}
+        }};
+
         const scrollActiveDirectory = () => {{
-            const elements = document.querySelectorAll(selector);
-            if (!elements.length) {{
-                return false;
+            let found = false;
+            const rail = document.querySelector('[data-layout="entry-directory-rail"]');
+            const topDirectory = document.querySelector('[data-layout="entry-top-directory"]');
+
+            if (isVisible(rail)) {{
+                const target = Array.from(rail.querySelectorAll(selector)).find(isVisible);
+                if (target) {{
+                    alignVertical(rail, target);
+                    found = true;
+                }}
             }}
 
-            elements.forEach((element) => {{
-                element.scrollIntoView({{
-                    behavior: "smooth",
-                    block: "nearest",
-                    inline: "nearest"
-                }});
-            }});
-            return true;
+            if (isVisible(topDirectory)) {{
+                const target = Array.from(topDirectory.querySelectorAll(selector)).find(isVisible);
+                if (target) {{
+                    alignHorizontal(topDirectory, target);
+                    found = true;
+                }}
+            }}
+
+            return found;
         }};
 
         if (!scrollActiveDirectory()) {{
@@ -128,9 +163,9 @@ fn refresh_entry_directory_tracker(align_directory_viewport: bool) {
             });
         };
 
-        const findDirectoryViewportTarget = (groupAnchor, itemAnchor) => {
-            const items = Array.from(document.querySelectorAll('[data-directory-kind="item"]'));
-            const groups = Array.from(document.querySelectorAll('[data-directory-kind="group"]'));
+        const findDirectoryViewportTarget = (rail, groupAnchor, itemAnchor) => {
+            const items = Array.from(rail.querySelectorAll('[data-directory-kind="item"]'));
+            const groups = Array.from(rail.querySelectorAll('[data-directory-kind="group"]'));
             return (
                 items.find(
                     (element) =>
@@ -142,6 +177,55 @@ fn refresh_entry_directory_tracker(align_directory_viewport: bool) {
                 ) ||
                 null
             );
+        };
+
+        const alignDirectoryViewport = (groupAnchor, itemAnchor) => {
+            const rail = document.querySelector('[data-layout="entry-directory-rail"]');
+            if (isVisible(rail)) {
+                const target = findDirectoryViewportTarget(rail, groupAnchor, itemAnchor);
+                if (!target) {
+                    return;
+                }
+
+                const railRect = rail.getBoundingClientRect();
+                const targetRect = target.getBoundingClientRect();
+                const visibleTop = railRect.top + rail.clientTop;
+                const visibleBottom = visibleTop + rail.clientHeight;
+
+                if (targetRect.top < visibleTop) {
+                    rail.scrollTop += targetRect.top - visibleTop;
+                } else if (targetRect.bottom > visibleBottom) {
+                    rail.scrollTop += targetRect.bottom - visibleBottom;
+                }
+                return;
+            }
+
+            // Mobile renders a horizontal top directory instead of the vertical rail.
+            // Keep its active month visible by changing only scrollLeft; scrollIntoView
+            // is forbidden here because it may also change window.scrollY.
+            const topDirectory = document.querySelector('[data-layout="entry-top-directory"]');
+            if (!isVisible(topDirectory) || !groupAnchor) {
+                return;
+            }
+            const target = Array.from(
+                topDirectory.querySelectorAll('[data-directory-kind="group"]')
+            ).find(
+                (element) =>
+                    isVisible(element) && element.dataset.directoryAnchor === groupAnchor
+            );
+            if (!target) {
+                return;
+            }
+
+            const directoryRect = topDirectory.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const visibleLeft = directoryRect.left + topDirectory.clientLeft;
+            const visibleRight = visibleLeft + topDirectory.clientWidth;
+            if (targetRect.left < visibleLeft) {
+                topDirectory.scrollLeft += targetRect.left - visibleLeft;
+            } else if (targetRect.right > visibleRight) {
+                topDirectory.scrollLeft += targetRect.right - visibleRight;
+            }
         };
 
         const selectActiveAnchor = () => {
@@ -224,13 +308,7 @@ fn refresh_entry_directory_tracker(align_directory_viewport: bool) {
             lastItemAnchor = itemAnchor;
 
             if (shouldAlignViewport) {
-                const target = findDirectoryViewportTarget(groupAnchor, itemAnchor);
-                if (target) {
-                    target.scrollIntoView({
-                        block: "nearest",
-                        inline: "nearest",
-                    });
-                }
+                alignDirectoryViewport(groupAnchor, itemAnchor);
             }
         };
 

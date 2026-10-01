@@ -250,7 +250,15 @@
   gap: 8px;
   max-height: min(45vh, 360px);
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* Let remaining vertical scroll chain to the Entries page at the chooser edges. */
+  overscroll-behavior-y: auto;
+}
+
+/* Chromium 150+ can keep scroll chaining while suppressing the inner edge effect. */
+@supports (overscroll-behavior-y: chain) {
+  [data-layout="entry-filters-source-grid"] {
+    overscroll-behavior-y: chain;
+  }
 }
 [data-layout="entry-filters-source-chip"] {
   display: flex;
