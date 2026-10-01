@@ -1,3 +1,6 @@
+// Rust 1.99 Clippy false-positive from async_trait macro expansion:
+// https://github.com/rust-lang/rust-clippy/issues/17529
+#![allow(clippy::double_must_use)]
 pub mod application_adapters;
 pub mod composition;
 #[cfg(not(target_arch = "wasm32"))]
