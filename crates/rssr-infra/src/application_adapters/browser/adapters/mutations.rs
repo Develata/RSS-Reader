@@ -77,7 +77,10 @@ impl SubscriptionRemovalPort for BrowserPersistenceMutations {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl ConfigReplacementPort for BrowserPersistenceMutations {
-    async fn replace_config(&self, plan: ConfigReplacementPlan) -> Result<ConfigReplacementOutcome> {
+    async fn replace_config(
+        &self,
+        plan: ConfigReplacementPlan,
+    ) -> Result<ConfigReplacementOutcome> {
         self.store
             .update(move |state| {
                 let desired_urls = plan
@@ -138,10 +141,7 @@ impl ConfigReplacementPort for BrowserPersistenceMutations {
                     changes = changes | Changes::APP_STATE;
                 }
 
-                Ok((
-                    ConfigReplacementOutcome { removed_feed_count, settings_updated },
-                    changes,
-                ))
+                Ok((ConfigReplacementOutcome { removed_feed_count, settings_updated }, changes))
             })
             .await
             .map_err(map_store_error)
