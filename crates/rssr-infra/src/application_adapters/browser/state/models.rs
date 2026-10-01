@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use rssr_domain::AppStateSnapshot;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -19,6 +21,10 @@ pub struct BrowserState {
 pub struct PersistedState {
     pub next_feed_id: i64,
     pub next_entry_id: i64,
+    /// Feed generation tokens keyed by stable feed id. Missing entries are generation 0 so
+    /// existing browser state remains backward-compatible after upgrade.
+    #[serde(default)]
+    pub feed_generations: BTreeMap<i64, i64>,
     pub feeds: Vec<PersistedFeed>,
     pub entries: Vec<PersistedEntryIndex>,
     pub settings: rssr_domain::UserSettings,
