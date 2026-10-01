@@ -516,10 +516,7 @@ impl RefreshService {
         match source_output {
             FeedRefreshSourceOutput::NotModified(metadata) => {
                 self.store
-                    .commit(
-                        &target,
-                        RefreshCommit::NotModified { metadata: metadata.clone() },
-                    )
+                    .commit(&target, RefreshCommit::NotModified { metadata: metadata.clone() })
                     .await?;
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
@@ -530,7 +527,8 @@ impl RefreshService {
             FeedRefreshSourceOutput::Updated(update) => {
                 let entry_count = update.feed.entries.len();
                 let localization_entries = build_localization_entries(&update.feed.entries);
-                let committed = self.store.commit(&target, RefreshCommit::Updated { update }).await?;
+                let committed =
+                    self.store.commit(&target, RefreshCommit::Updated { update }).await?;
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),
