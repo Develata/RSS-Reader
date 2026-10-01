@@ -39,7 +39,7 @@ impl SqliteFeedRepository {
                 last_success_at = COALESCE(?5, last_success_at),
                 fetch_error = ?6,
                 updated_at = ?4
-            WHERE id = ?1
+            WHERE id = ?1 AND is_deleted = 0
             "#,
         )
         .bind(feed_id)
