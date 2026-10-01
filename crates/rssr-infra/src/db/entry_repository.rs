@@ -343,12 +343,56 @@ impl SqliteEntryRepository {
         feed_id: i64,
         update: &LocalizedEntryUpdate<'_>,
     ) -> DomainResult<bool> {
+        self.update_localized_html_if_hash_matches_inner(feed_id, None, update).await
+    }
+
+    pub async fn update_localized_html_if_hash_matches_for_generation(
+        &self,
+        feed_id: i64,
+        generation: i64,
+        update: &LocalizedEntryUpdate<'_>,
+    ) -> DomainResult<bool> {
+        self.update_localized_html_if_hash_matches_inner(feed_id, Some(generation), update)
+            .await
+    }
+
+    async fn update_localized_html_if_hash_matches_inner(
+        &self,
+        feed_id: i64,
+        expected_generation: Option<i64>,
+        update: &LocalizedEntryUpdate<'_>,
+    ) -> DomainResult<bool> {
         self.ensure_content_schema().await?;
-        let entry_id =
-            match self.find_entry_id_by_dedup_key_optional(feed_id, update.dedup_key).await? {
-                Some(entry_id) => entry_id,
-                None => return Ok(false),
-            };
+
+        // Keep the index writer fence while resolving identity and writing the separate content DB.
+        // A delete/re-add cannot cross between the generation check and the localized body write.
+        let mut index_tx =
+            self.index_pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+        if let Some(expected_generation) = expected_generation {
+            let generation = sqlx::query_scalar::<_, i64>(
+                "SELECT generation FROM feeds WHERE id = ?1 AND is_deleted = 0",
+            )
+            .bind(feed_id)
+            .fetch_optional(&mut *index_tx)
+            .await
+            .map_err(map_sqlx_error)?;
+            if generation != Some(expected_generation) {
+                return Ok(false);
+            }
+        }
+
+        let entry_id = sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM entries WHERE feed_id = ?1 AND dedup_key = ?2",
+        )
+        .bind(feed_id)
+        .bind(update.dedup_key)
+        .fetch_optional(&mut *index_tx)
+        .await
+        .map_err(map_sqlx_error)?;
+        let Some(entry_id) = entry_id else {
+            return Ok(false);
+        };
+
         let now = now_rfc3339();
         let result = sqlx::query(
             r#"
@@ -369,12 +413,34 @@ impl SqliteEntryRepository {
         .await
         .map_err(map_sqlx_error)?;
 
-        if result.rows_affected() > 0 {
-            self.mark_has_content(&[entry_id], true).await?;
-            Ok(true)
-        } else {
-            Ok(false)
+        if result.rows_affected() == 0 {
+            return Ok(false);
         }
+
+        mark_has_content_on_connection(&mut index_tx, &[entry_id], true).await?;
+        index_tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(true)
+    }
+
+    pub async fn active_entry_generation(
+        &self,
+        entry_id: i64,
+    ) -> DomainResult<Option<(i64, i64)>> {
+        let row = sqlx::query(
+            r#"
+            SELECT entries.feed_id, feeds.generation
+            FROM entries
+            JOIN feeds ON feeds.id = entries.feed_id
+            WHERE entries.id = ?1
+              AND feeds.is_deleted = 0
+            "#,
+        )
+        .bind(entry_id)
+        .fetch_optional(&self.index_pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        Ok(row.map(|row| (row.get("feed_id"), row.get("generation"))))
     }
 
     pub async fn has_entries_for_feed(&self, feed_id: i64) -> DomainResult<bool> {
