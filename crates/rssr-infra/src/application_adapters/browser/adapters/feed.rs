@@ -56,12 +56,20 @@ impl FeedRepository for BrowserFeedRepository {
     async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> rssr_domain::Result<()> {
         self.store
             .update(move |state| {
-                let feed = state
+                let index = state
                     .core
                     .feeds
-                    .iter_mut()
-                    .find(|feed| feed.id == feed_id)
+                    .iter()
+                    .position(|feed| feed.id == feed_id)
                     .ok_or(DomainError::NotFound)?;
+                let reactivating = state.core.feeds[index].is_deleted && !is_deleted;
+                if reactivating {
+                    *state.core.feed_generations.entry(feed_id).or_default() += 1;
+                }
+                let feed = &mut state.core.feeds[index];
+                if reactivating {
+                    reset_remote_feed_state(feed);
+                }
                 feed.is_deleted = is_deleted;
                 feed.updated_at = now_utc();
                 Ok(((), Changes::CORE))
@@ -118,10 +126,15 @@ fn upsert_subscription_in_state(
         state.core.feeds.iter().position(|feed| feed.url == normalized_url.as_str())
     {
         let feed_id = state.core.feeds[index].id;
-        if state.core.feeds[index].is_deleted {
+        let reactivating = state.core.feeds[index].is_deleted;
+        if reactivating {
             *state.core.feed_generations.entry(feed_id).or_default() += 1;
         }
         let feed = &mut state.core.feeds[index];
+        if reactivating {
+            reset_remote_feed_state(feed);
+            feed.site_url = new_feed.site_url.as_ref().map(ToString::to_string);
+        }
         if new_feed.title.is_some() {
             feed.title = normalized_title.clone();
         }
@@ -159,6 +172,17 @@ fn upsert_subscription_in_state(
     };
 
     persisted_feed_to_domain(&feed)
+}
+
+fn reset_remote_feed_state(feed: &mut PersistedFeed) {
+    feed.site_url = None;
+    feed.description = None;
+    feed.icon_url = None;
+    feed.etag = None;
+    feed.last_modified = None;
+    feed.last_fetched_at = None;
+    feed.last_success_at = None;
+    feed.fetch_error = None;
 }
 
 fn persisted_feed_to_domain(feed: &PersistedFeed) -> rssr_domain::Result<Feed> {
