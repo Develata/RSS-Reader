@@ -38,9 +38,10 @@ async fn sqlite_refresh_store_persists_updated_feed_metadata_entries_and_fetch_s
         .await
         .expect("create feed");
 
+    let target = store.get_target(feed.id).await.unwrap().unwrap();
     store
         .commit(
-            feed.id,
+            &target,
             RefreshCommit::Updated {
                 update: FeedRefreshUpdate {
                     metadata: RefreshHttpMetadata {
@@ -141,6 +142,7 @@ async fn sqlite_refresh_store_forces_full_fetch_when_feed_has_no_entries() {
         target,
         RefreshTarget {
             feed_id: feed.id,
+            generation: 0,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             etag: None,
             last_modified: None,
@@ -214,8 +216,9 @@ async fn check_retry_after_failed_write(fail_content: bool) {
         })
         .await
         .expect("seed feed");
+    let target = store.get_target(feed.id).await.unwrap().unwrap();
     store
-        .commit(feed.id, RefreshCommit::Updated { update: recovery_update("old") })
+        .commit(&target, RefreshCommit::Updated { update: recovery_update("old") })
         .await
         .expect("seed complete old response");
     let last_success = feeds.get_feed(feed.id).await.unwrap().unwrap().last_success_at;
