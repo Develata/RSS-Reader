@@ -70,7 +70,24 @@ impl OpmlCodec {
         let mut root_closed = false;
 
         loop {
-            match reader.read_event()? {
+            let event = reader.read_event()?;
+            if root_closed {
+                match &event {
+                    Event::Eof => break,
+                    Event::Text(text)
+                        if text
+                            .as_ref()
+                            .iter()
+                            .all(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n')) =>
+                    {
+                        continue;
+                    }
+                    Event::Comment(_) | Event::PI(_) => continue,
+                    _ => bail!("OPML 根元素之后存在额外内容"),
+                }
+            }
+
+            match event {
                 Event::Start(event) => {
                     let name = event.name().as_ref().to_vec();
                     if element_stack.is_empty() {
