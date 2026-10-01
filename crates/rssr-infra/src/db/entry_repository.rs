@@ -544,18 +544,6 @@ impl SqliteEntryRepository {
         Ok(())
     }
 
-    async fn find_entry_id_by_dedup_key_optional(
-        &self,
-        feed_id: i64,
-        dedup_key: &str,
-    ) -> DomainResult<Option<i64>> {
-        sqlx::query_scalar::<_, i64>("SELECT id FROM entries WHERE feed_id = ?1 AND dedup_key = ?2")
-            .bind(feed_id)
-            .bind(dedup_key)
-            .fetch_optional(&self.index_pool)
-            .await
-            .map_err(map_sqlx_error)
-    }
 
     async fn find_adjacent_entry_id(
         &self,
