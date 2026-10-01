@@ -6,7 +6,6 @@ use rssr_application::{
     ParsedFeedUpdate, RefreshCommit, RefreshFailure, RefreshHttpMetadata, RefreshStorePort,
     RefreshTarget,
 };
-use rssr_domain::EntryContentRepository;
 
 use crate::{
     db::{entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository},
@@ -178,7 +177,11 @@ impl RefreshStorePort for SqliteRefreshStore {
                 inserted_count = resolved_contents.inserted_count;
                 if let Err(error) = self
                     .entry_repository
-                    .upsert_contents(feed_id, &resolved_contents.contents)
+                    .upsert_contents_for_generation(
+                        feed_id,
+                        target.generation,
+                        &resolved_contents.contents,
+                    )
                     .await
                 {
                     let failure = RefreshFailure {
@@ -187,30 +190,6 @@ impl RefreshStorePort for SqliteRefreshStore {
                     };
                     let _ = self.persist_failure(target, &failure).await;
                     return Err(anyhow::Error::new(error).context("写入文章正文失败"));
-                }
-
-                // Index and content live in separate SQLite files. The generation may change
-                // after the index transaction but before the content write. If that happened,
-                // remove only the entry IDs written by this stale refresh; never delete by feed_id
-                // because a new generation may already have committed its own content.
-                let generation_is_current = self
-                    .feed_repository
-                    .get_feed_with_generation(feed_id)
-                    .await?
-                    .is_some_and(|(_, generation)| generation == target.generation);
-                if !generation_is_current {
-                    let stale_entry_ids = resolved_contents
-                        .contents
-                        .iter()
-                        .map(|content| content.entry_id)
-                        .collect::<Vec<_>>();
-                    EntryContentRepository::delete_for_entry_ids(
-                        &*self.entry_repository,
-                        &stale_entry_ids,
-                    )
-                    .await
-                    .context("清理旧 generation 的迟到正文失败")?;
-                    anyhow::bail!("订阅已在刷新期间删除或重新添加，丢弃旧 generation 刷新结果");
                 }
 
                 self.feed_repository
