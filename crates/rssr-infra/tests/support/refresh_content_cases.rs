@@ -36,24 +36,25 @@ pub async fn verify_content_changes(
     contents: &dyn EntryContentRepository,
     feed_id: i64,
 ) {
+    let target = store.get_target(feed_id).await.unwrap().unwrap();
     assert_eq!(
-        store.commit(feed_id, update("Title", Some("c"), Some("ab"))).await.unwrap().inserted_count,
+        store.commit(&target, update("Title", Some("c"), Some("ab"))).await.unwrap().inserted_count,
         1
     );
     let id = index.list_entries(&EntryQuery::default()).await.unwrap()[0].id;
     let first = contents.get_content(id).await.unwrap().unwrap();
-    store.commit(feed_id, update("Title", Some("c"), Some("ab"))).await.unwrap();
+    store.commit(&target, update("Title", Some("c"), Some("ab"))).await.unwrap();
     assert_eq!(contents.get_content(id).await.unwrap().unwrap(), first);
 
     // The old hash concatenates parts without separators. Equal hashes alone cannot justify
     // skipping a write when text/HTML boundaries changed.
-    store.commit(feed_id, update("Title", Some("bc"), Some("a"))).await.unwrap();
+    store.commit(&target, update("Title", Some("bc"), Some("a"))).await.unwrap();
     let repartitioned = contents.get_content(id).await.unwrap().unwrap();
     assert_eq!(repartitioned.content_hash, first.content_hash);
     assert_eq!(repartitioned.content_html.as_deref(), Some("bc"));
     assert_eq!(repartitioned.content_text.as_deref(), Some("a"));
 
-    store.commit(feed_id, update("New title", Some("bc"), Some("a"))).await.unwrap();
+    store.commit(&target, update("New title", Some("bc"), Some("a"))).await.unwrap();
     let retitled = contents.get_content(id).await.unwrap().unwrap();
     assert_ne!(retitled.content_hash, repartitioned.content_hash);
 
@@ -64,13 +65,13 @@ pub async fn verify_content_changes(
         (None, None, "", ""),
     ] {
         assert_eq!(
-            store.commit(feed_id, update("New title", html, text)).await.unwrap().inserted_count,
+            store.commit(&target, update("New title", html, text)).await.unwrap().inserted_count,
             0
         );
         let changed = contents.get_content(id).await.unwrap().unwrap();
         assert_eq!(changed.content_html.as_deref(), Some(expected_html));
         assert_eq!(changed.content_text.as_deref(), Some(expected_text));
-        store.commit(feed_id, update("New title", html, text)).await.unwrap();
+        store.commit(&target, update("New title", html, text)).await.unwrap();
         assert_eq!(contents.get_content(id).await.unwrap().unwrap(), changed);
     }
 }
