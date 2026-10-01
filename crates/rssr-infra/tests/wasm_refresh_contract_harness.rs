@@ -764,13 +764,58 @@ async fn refresh_after_other_tab_deletes_feed_does_not_resurrect_it() {
     use rssr_domain::FeedRepository;
     use rssr_infra::application_adapters::browser::adapters::BrowserFeedRepository;
     let (_, store) = store_with_one_feed().await;
-    assert!(store.get_target(1).await.unwrap().is_some());
+    let stale_target = store.get_target(1).await.unwrap().unwrap();
     BrowserFeedRepository::new(BrowserStore::open().await.unwrap())
         .set_deleted(1, true)
         .await
         .unwrap();
-    assert!(commit_for(&store, 1, not_modified_with_etag("late response")).await.is_err());
+    assert!(
+        store
+            .commit(&stale_target, not_modified_with_etag("late response"))
+            .await
+            .is_err()
+    );
     assert!(persisted_state().await.core.feeds[0].is_deleted);
+}
+
+#[wasm_bindgen_test]
+async fn old_refresh_generation_cannot_commit_after_delete_and_same_url_readd() {
+    use rssr_domain::{FeedRepository, NewFeedSubscription};
+    use rssr_infra::application_adapters::browser::adapters::BrowserFeedRepository;
+
+    clear_browser_state_storage();
+    let (_, store) = store_with_one_feed().await;
+    let stale_target = store.get_target(1).await.unwrap().unwrap();
+    assert_eq!(stale_target.generation, 0);
+
+    let repository = BrowserFeedRepository::new(BrowserStore::open().await.unwrap());
+    repository.set_deleted(1, true).await.unwrap();
+    repository
+        .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
+            url: Url::parse("https://example.com/feed.xml").unwrap(),
+            title: Some("Re-added".into()),
+            folder: None,
+        })
+        .await
+        .unwrap();
+
+    let fresh_target = store.get_target(1).await.unwrap().unwrap();
+    assert_eq!(fresh_target.generation, 1);
+    assert!(
+        store
+            .commit(&stale_target, not_modified_with_etag("stale-etag"))
+            .await
+            .is_err()
+    );
+    assert_eq!(persisted_state().await.core.feeds[0].etag, None);
+
+    store
+        .commit(&fresh_target, not_modified_with_etag("fresh-etag"))
+        .await
+        .unwrap();
+    assert_eq!(persisted_state().await.core.feeds[0].etag.as_deref(), Some("fresh-etag"));
+    clear_browser_state_storage();
 }
 
 #[wasm_bindgen_test]
