@@ -631,7 +631,7 @@ impl SqliteEntryRepository {
             .await
             .map_err(map_sqlx_error)?;
 
-        if result == 0 {
+        if result.rows_affected() == 0 {
             return Err(DomainError::NotFound);
         }
 
