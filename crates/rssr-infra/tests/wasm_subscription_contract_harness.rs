@@ -9,7 +9,7 @@ use rssr_application::{
 };
 use rssr_domain::{EntryIndexRepository, EntryQuery};
 use rssr_infra::application_adapters::browser::{
-    adapters::{BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRepository},
+    adapters::{BrowserEntryRepository, BrowserFeedRepository, BrowserPersistenceMutations},
     state::{
         BrowserState, BrowserStore, ENTRY_FLAGS_STORAGE_KEY, PersistedAppStateSlice,
         PersistedEntryContent, PersistedEntryContentSlice, PersistedEntryIndex, PersistedFeed,
@@ -132,21 +132,13 @@ fn sample_entry_content(id: i64, feed_id: i64, index: i64) -> PersistedEntryCont
 }
 
 fn build_workflow(state: BrowserStore) -> SubscriptionWorkflow {
-    let entry_repository = Arc::new(BrowserEntryRepository::new(state.clone()));
     let feed_service = FeedService::new(
         Arc::new(BrowserFeedRepository::new(state.clone())),
-        entry_repository.clone(),
-        entry_repository,
+        Arc::new(BrowserPersistenceMutations::new(state)),
     );
     let refresh_service =
         RefreshService::new(Arc::new(UnusedRefreshSource), Arc::new(UnusedRefreshStore));
-    let app_state = Arc::new(BrowserAppStateAdapter::new(state));
-    SubscriptionWorkflow::new(
-        feed_service,
-        refresh_service,
-        app_state,
-        Arc::new(UnusedRefreshSource),
-    )
+    SubscriptionWorkflow::new(feed_service, refresh_service, Arc::new(UnusedRefreshSource))
 }
 
 #[wasm_bindgen_test]
