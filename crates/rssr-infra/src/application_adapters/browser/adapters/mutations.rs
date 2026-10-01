@@ -157,7 +157,14 @@ fn upsert_config_feed(
     let normalized_folder = normalize_optional_text(new_feed.folder.clone());
     let now = now_utc();
 
-    if let Some(feed) = state.core.feeds.iter_mut().find(|feed| feed.url == new_feed.url.as_str()) {
+    if let Some(index) =
+        state.core.feeds.iter().position(|feed| feed.url == new_feed.url.as_str())
+    {
+        let feed_id = state.core.feeds[index].id;
+        if state.core.feeds[index].is_deleted {
+            *state.core.feed_generations.entry(feed_id).or_default() += 1;
+        }
+        let feed = &mut state.core.feeds[index];
         feed.title = normalized_title;
         feed.folder = normalized_folder;
         feed.is_deleted = false;
@@ -166,6 +173,7 @@ fn upsert_config_feed(
     }
 
     state.core.next_feed_id += 1;
+    state.core.feed_generations.entry(state.core.next_feed_id).or_insert(0);
     state.core.feeds.push(PersistedFeed {
         id: state.core.next_feed_id,
         url: new_feed.url.to_string(),
