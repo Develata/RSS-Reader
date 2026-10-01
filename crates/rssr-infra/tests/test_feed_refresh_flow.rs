@@ -175,7 +175,6 @@ async fn localized_writeback_does_not_override_newer_refresh_content() {
     assert_eq!(stored.content_html.as_deref(), Some(newer_html));
 }
 
-
 #[tokio::test]
 async fn localized_writeback_from_old_generation_is_rejected_after_readd() {
     let backend = NativeSqliteBackend::new("sqlite::memory:");
