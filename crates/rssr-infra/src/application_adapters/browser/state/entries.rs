@@ -218,3 +218,79 @@ fn upsert_entry_content(
     }
     true
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const GUID: &str = "0123456789abcdef0123456789abcdef";
+    const ARTICLE_URL: &str = "https://example.com/article";
+
+    #[test]
+    fn legacy_url_identity_is_promoted_without_losing_browser_state() {
+        let timestamp = OffsetDateTime::UNIX_EPOCH;
+        let mut state = BrowserState::default();
+        state.core.next_entry_id = 1;
+        state.core.entries.push(PersistedEntryIndex {
+            id: 1,
+            feed_id: 7,
+            external_id: ARTICLE_URL.into(),
+            dedup_key: ARTICLE_URL.into(),
+            url: Some(ARTICLE_URL.into()),
+            title: "Stable article".into(),
+            author: None,
+            summary: Some("legacy".into()),
+            published_at: Some(timestamp),
+            updated_at_source: None,
+            first_seen_at: timestamp,
+            has_content: true,
+            created_at: timestamp,
+            updated_at: timestamp,
+        });
+        state.entry_flags.entries.push(PersistedEntryFlag {
+            id: 1,
+            is_read: true,
+            is_starred: true,
+            read_at: Some(timestamp),
+            starred_at: Some(timestamp),
+        });
+        state.entry_content.entries.push(PersistedEntryContent {
+            entry_id: 1,
+            feed_id: 7,
+            content_html: Some("<p>legacy</p>".into()),
+            content_text: Some("legacy".into()),
+            content_hash: Some("legacy-hash".into()),
+            updated_at: timestamp,
+        });
+
+        let outcome = upsert_entries(
+            &mut state,
+            7,
+            vec![ParsedEntry {
+                external_id: GUID.into(),
+                dedup_key: GUID.into(),
+                url: Some(Url::parse(ARTICLE_URL).unwrap()),
+                title: "Stable article".into(),
+                author: None,
+                summary: Some("new body".into()),
+                content_html: Some("<p>new body</p>".into()),
+                content_text: Some("new body".into()),
+                published_at: Some(timestamp),
+                updated_at_source: None,
+            }],
+        )
+        .unwrap();
+
+        assert_eq!(outcome.inserted_count, 0);
+        assert_eq!(state.core.entries.len(), 1);
+        assert_eq!(state.core.entries[0].id, 1);
+        assert_eq!(state.core.entries[0].external_id, GUID);
+        assert_eq!(state.core.entries[0].dedup_key, GUID);
+        assert!(state.entry_flags.entries[0].is_read);
+        assert!(state.entry_flags.entries[0].is_starred);
+        assert_eq!(state.entry_content.entries.len(), 1);
+        assert_eq!(state.entry_content.entries[0].entry_id, 1);
+        assert_eq!(state.entry_content.entries[0].content_text.as_deref(), Some("new body"));
+    }
+}
