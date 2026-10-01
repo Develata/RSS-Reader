@@ -214,6 +214,10 @@ async fn upsert_config_feed(
         ON CONFLICT(url) DO UPDATE SET
             title = excluded.title,
             folder = excluded.folder,
+            generation = CASE
+                WHEN feeds.is_deleted = 1 THEN feeds.generation + 1
+                ELSE feeds.generation
+            END,
             is_deleted = 0,
             updated_at = excluded.updated_at
         "#,
