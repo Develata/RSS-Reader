@@ -6,7 +6,7 @@ use rssr_application::{
     ParsedFeedUpdate, RefreshCommit, RefreshFailure, RefreshHttpMetadata, RefreshStorePort,
     RefreshTarget,
 };
-use rssr_domain::FeedRepository;
+use rssr_domain::{EntryContentRepository, FeedRepository};
 
 use crate::{
     db::{entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository},
@@ -181,6 +181,17 @@ impl RefreshStorePort for SqliteRefreshStore {
                     };
                     let _ = self.persist_failure(feed_id, &failure).await;
                     return Err(anyhow::Error::new(error).context("写入文章正文失败"));
+                }
+
+                // Index and content live in separate SQLite files. If a delete won after the
+                // index transaction committed but before the content write, remove any late
+                // content now. If the delete happens after this check, its own post-commit
+                // cleanup runs later, so either ordering leaves no resurrected cache.
+                if self.feed_repository.get_feed(feed_id).await?.is_none() {
+                    EntryContentRepository::delete_for_feed(&*self.entry_repository, feed_id)
+                        .await
+                        .context("清理已删除订阅的迟到正文失败")?;
+                    anyhow::bail!("订阅已在刷新期间删除，丢弃迟到刷新结果");
                 }
 
                 self.feed_repository
