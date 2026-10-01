@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 #[cfg(target_os = "linux")]
 use std::ffi::OsStr;
+use std::fs::{File, OpenOptions, TryLockError};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::Context;
 use sqlx::sqlite::SqlitePoolOptions;
@@ -62,7 +64,53 @@ impl NativeSqliteBackend {
     }
 
     pub async fn migrate_content(&self, pool: &SqlitePool) -> anyhow::Result<()> {
+        let _migration_lock = self.acquire_migration_lock().await?;
         migrate_content(pool).await
+    }
+
+    fn migration_lock_path(&self) -> Option<PathBuf> {
+        let database_path = match &self.connection {
+            NativeConnection::Path(path) => Some(path.clone()),
+            NativeConnection::Url(url) => sqlite_file_path_from_url(url),
+        }?;
+        let parent = database_path.parent().unwrap_or_else(|| Path::new("."));
+        let file_name =
+            database_path.file_name().and_then(|name| name.to_str()).unwrap_or("rss-reader.db");
+        Some(parent.join(format!(".{file_name}.migration.lock")))
+    }
+
+    async fn acquire_migration_lock(&self) -> anyhow::Result<Option<File>> {
+        let Some(lock_path) = self.migration_lock_path() else {
+            return Ok(None);
+        };
+        if let Some(parent) = lock_path.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("创建数据库迁移锁目录失败: {}", parent.display()))?;
+        }
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .with_context(|| format!("打开数据库迁移锁失败: {}", lock_path.display()))?;
+
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+        loop {
+            match file.try_lock() {
+                Ok(()) => return Ok(Some(file)),
+                Err(TryLockError::WouldBlock) if tokio::time::Instant::now() < deadline => {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+                Err(TryLockError::WouldBlock) => {
+                    anyhow::bail!("等待数据库迁移锁超时: {}", lock_path.display());
+                }
+                Err(TryLockError::Error(error)) => {
+                    return Err(error)
+                        .with_context(|| format!("获取数据库迁移锁失败: {}", lock_path.display()));
+                }
+            }
+        }
     }
 }
 
@@ -76,6 +124,7 @@ impl StorageBackend for NativeSqliteBackend {
     }
 
     async fn migrate(&self, pool: &SqlitePool) -> anyhow::Result<()> {
+        let _migration_lock = self.acquire_migration_lock().await?;
         migrate(pool).await
     }
 
@@ -198,6 +247,17 @@ async fn connect_sqlite_path(database_path: &Path) -> anyhow::Result<SqlitePool>
         .with_context(|| format!("打开本地数据库失败: {}", database_path.display()))
 }
 
+fn sqlite_file_path_from_url(database_url: &str) -> Option<PathBuf> {
+    if is_memory_database(database_url) {
+        return None;
+    }
+    let base = database_url.split_once('?').map_or(database_url, |(base, _)| base);
+    base.strip_prefix("sqlite://")
+        .or_else(|| base.strip_prefix("sqlite:"))
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+}
+
 fn derive_content_database_url(database_url: &str) -> anyhow::Result<String> {
     if is_memory_database(database_url) {
         return Ok(database_url.to_string());
@@ -297,6 +357,37 @@ mod tests {
         std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o750)).unwrap();
         create_local_data_dir(&data_dir).unwrap();
         assert_eq!(std::fs::metadata(&data_dir).unwrap().permissions().mode() & 0o777, 0o750);
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[tokio::test]
+    async fn migration_lock_serializes_two_handles_for_the_same_database() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("rssr-migration-lock-{nonce}"));
+        std::fs::create_dir_all(&base).unwrap();
+        let backend = NativeSqliteBackend::with_path(base.join("rss-reader.db"));
+
+        let first = backend.acquire_migration_lock().await.unwrap().expect("file lock");
+        let blocked = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            backend.acquire_migration_lock(),
+        )
+        .await;
+        assert!(blocked.is_err(), "second handle must wait while first lock is held");
+
+        drop(first);
+        let second = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            backend.acquire_migration_lock(),
+        )
+        .await
+        .expect("lock should become available")
+        .unwrap()
+        .expect("file lock");
+        drop(second);
         std::fs::remove_dir_all(base).unwrap();
     }
 
