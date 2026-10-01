@@ -98,14 +98,27 @@ async function setViewport(client, viewportWidth, viewportHeight, mobile, dpr) {
   });
 }
 
-async function synthesizeTouchScroll(client, point, yDistance) {
-  await client.send('Input.synthesizeScrollGesture', {
-    x: point.x,
-    y: point.y,
-    yDistance,
-    speed: 900,
-    gestureSourceType: 'touch',
-    preventFling: true,
+async function dispatchTouchScroll(client, point, scrollDeltaY) {
+  const x = Math.round(point.x);
+  const startY = Math.round(point.y);
+  const fingerDeltaY = -scrollDeltaY;
+  const steps = 6;
+  const touch = (y) => [{ x, y: Math.round(y), radiusX: 1, radiusY: 1, force: 1, id: 1 }];
+
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: touch(startY),
+  });
+  for (let step = 1; step <= steps; step += 1) {
+    await client.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: touch(startY + (fingerDeltaY * step) / steps),
+    });
+    await sleep(16);
+  }
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
   });
   await sleep(120);
 }
@@ -293,7 +306,7 @@ async function checkEntriesOverflow(client) {
     grid.scrollTop = (grid.scrollHeight - grid.clientHeight) / 2;
     window.__sourceScrollBefore = {inner:grid.scrollTop, page:scrollY};
   })()`);
-  await synthesizeTouchScroll(client, sourceScrollSetup, -120);
+  await dispatchTouchScroll(client, sourceScrollSetup, 120);
   const sourceScrollMiddle = await evaluate(client, `(() => {
     const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
     return {before:window.__sourceScrollBefore, inner:grid.scrollTop, page:scrollY};
@@ -318,7 +331,7 @@ async function checkEntriesOverflow(client) {
       page:scrollY,
     };
   })()`);
-  await synthesizeTouchScroll(client, sourceScrollBottomSetup, -180);
+  await dispatchTouchScroll(client, sourceScrollBottomSetup, 180);
   const sourceScrollBottom = await evaluate(client, `(() => {
     const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
     return {inner:grid.scrollTop, page:scrollY};
@@ -344,7 +357,7 @@ async function checkEntriesOverflow(client) {
       page:scrollY,
     };
   })()`);
-  await synthesizeTouchScroll(client, sourceScrollTopSetup, 180);
+  await dispatchTouchScroll(client, sourceScrollTopSetup, -180);
   const sourceScrollTop = await evaluate(client, `(() => {
     const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
     return {inner:grid.scrollTop, page:scrollY};
