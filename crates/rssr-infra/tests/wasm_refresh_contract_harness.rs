@@ -787,6 +787,10 @@ async fn old_refresh_generation_cannot_commit_after_delete_and_same_url_readd() 
     let (_, store) = store_with_one_feed().await;
     let stale_target = store.get_target(1).await.unwrap().unwrap();
     assert_eq!(stale_target.generation, 0);
+    store
+        .commit(&stale_target, not_modified_with_etag("old-generation-etag"))
+        .await
+        .unwrap();
 
     let repository = BrowserFeedRepository::new(BrowserStore::open().await.unwrap());
     repository.set_deleted(1, true).await.unwrap();
@@ -802,6 +806,8 @@ async fn old_refresh_generation_cannot_commit_after_delete_and_same_url_readd() 
 
     let fresh_target = store.get_target(1).await.unwrap().unwrap();
     assert_eq!(fresh_target.generation, 1);
+    assert_eq!(fresh_target.etag, None);
+    assert_eq!(fresh_target.last_modified, None);
     assert!(
         store
             .commit(&stale_target, not_modified_with_etag("stale-etag"))
