@@ -3,7 +3,7 @@
 use reqwest::StatusCode;
 use rssr_application::{
     FeedRefreshSourceOutput, FeedRefreshUpdate, ParsedEntryData, ParsedFeedUpdate, RefreshCommit,
-    RefreshFailure, RefreshHttpMetadata, RefreshStorePort,
+    RefreshCommitOutcome, RefreshFailure, RefreshHttpMetadata, RefreshStorePort,
 };
 use rssr_infra::application_adapters::browser::{
     adapters::{
@@ -40,6 +40,7 @@ async fn browser_refresh_bounds_streams_and_preserves_decoding_and_failures() {
     let source = BrowserFeedRefreshSource::new(reqwest::Client::new());
     let target = RefreshTarget {
         feed_id: 1,
+        generation: 0,
         url: Url::parse("https://example.com/feed.xml").unwrap(),
         etag: None,
         last_modified: None,
@@ -317,8 +318,7 @@ async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
     .await;
     let store = BrowserRefreshStore::new(state.clone());
 
-    store
-        .commit(
+    commit_for(&store, 
             1,
             RefreshCommit::NotModified {
                 metadata: RefreshHttpMetadata {
@@ -365,8 +365,7 @@ async fn browser_refresh_store_commit_updated_persists_feed_metadata_and_entries
     .await;
     let store = BrowserRefreshStore::new(state.clone());
 
-    store
-        .commit(
+    commit_for(&store, 
             1,
             RefreshCommit::Updated {
                 update: FeedRefreshUpdate {
@@ -423,8 +422,7 @@ async fn browser_refresh_store_commit_updated_clears_previous_fetch_error() {
     .await;
     let store = BrowserRefreshStore::new(state.clone());
 
-    store
-        .commit(
+    commit_for(&store, 
             1,
             RefreshCommit::Updated {
                 update: FeedRefreshUpdate {
@@ -462,8 +460,7 @@ async fn browser_refresh_store_commit_failed_persists_error_without_success_time
     .await;
     let store = BrowserRefreshStore::new(state.clone());
 
-    store
-        .commit(
+    commit_for(&store, 
             1,
             RefreshCommit::Failed {
                 failure: RefreshFailure {
@@ -514,8 +511,7 @@ async fn browser_refresh_store_commit_failed_preserves_previous_success_timestam
     .await;
     let store = BrowserRefreshStore::new(state.clone());
 
-    store
-        .commit(
+    commit_for(&store, 
             1,
             RefreshCommit::Failed {
                 failure: RefreshFailure { message: "still failing".to_string(), metadata: None },
@@ -530,6 +526,18 @@ async fn browser_refresh_store_commit_failed_preserves_previous_success_timestam
     assert_eq!(snapshot.core.feeds[0].fetch_error.as_deref(), Some("still failing"));
 
     clear_browser_state_storage();
+}
+
+async fn commit_for(
+    store: &BrowserRefreshStore,
+    feed_id: i64,
+    commit: RefreshCommit,
+) -> anyhow::Result<RefreshCommitOutcome> {
+    let target = store
+        .get_target(feed_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("missing refresh target {feed_id}"))?;
+    commit_for(&store, &target, commit).await
 }
 
 async fn store_with_one_feed() -> (BrowserStore, BrowserRefreshStore) {
@@ -559,7 +567,7 @@ async fn browser_refresh_store_commits_are_durable_before_the_batch_ends() {
     let (state, store) = store_with_one_feed().await;
 
     store.begin_batch().await.expect("begin batch");
-    store.commit(1, not_modified_with_etag("etag-batched")).await.expect("commit in batch");
+    commit_for(&store, 1, not_modified_with_etag("etag-batched")).await.expect("commit in batch");
 
     assert_eq!(
         state.snapshot().await.expect("snapshot").core.feeds[0].etag.as_deref(),
@@ -604,7 +612,7 @@ async fn browser_refresh_store_reopening_a_batch_preserves_durable_results() {
     let (_state, store) = store_with_one_feed().await;
 
     store.begin_batch().await.expect("begin batch");
-    store.commit(1, not_modified_with_etag("etag-orphaned")).await.expect("commit in batch");
+    commit_for(&store, 1, not_modified_with_etag("etag-orphaned")).await.expect("commit in batch");
     // 故意不调用 end_batch，直接开下一轮。
     store.begin_batch().await.expect("reopen batch");
 
@@ -627,7 +635,7 @@ async fn browser_refresh_store_commit_outside_a_batch_still_writes_immediately()
     clear_browser_state_storage();
     let (_state, store) = store_with_one_feed().await;
 
-    store.commit(1, not_modified_with_etag("etag-unbatched")).await.expect("commit outside batch");
+    commit_for(&store, 1, not_modified_with_etag("etag-unbatched")).await.expect("commit outside batch");
 
     assert_eq!(
         persisted_state().await.core.feeds[0].etag.as_deref(),
@@ -645,7 +653,7 @@ async fn browser_refresh_store_abort_preserves_commits_and_subsequent_writes() {
     let (_state, store) = store_with_one_feed().await;
 
     store.begin_batch().await.expect("begin batch");
-    store.commit(1, not_modified_with_etag("etag-interrupted")).await.expect("commit in batch");
+    commit_for(&store, 1, not_modified_with_etag("etag-interrupted")).await.expect("commit in batch");
 
     // 等价于刷新 future 在这里被取消：守卫析构调用 abort_batch。
     store.abort_batch();
@@ -656,7 +664,7 @@ async fn browser_refresh_store_abort_preserves_commits_and_subsequent_writes() {
         "中断不丢失已成功提交的改动"
     );
 
-    store.commit(1, not_modified_with_etag("etag-after-abort")).await.expect("commit after abort");
+    commit_for(&store, 1, not_modified_with_etag("etag-after-abort")).await.expect("commit after abort");
 
     assert_eq!(
         persisted_state().await.core.feeds[0].etag.as_deref(),
@@ -672,7 +680,7 @@ async fn browser_refresh_store_abort_preserves_commits_and_subsequent_writes() {
 async fn browser_refresh_store_abort_after_end_batch_writes_nothing() {
     let (_state, store) = store_with_one_feed().await;
     store.begin_batch().await.unwrap();
-    store.commit(1, not_modified_with_etag("etag-done")).await.unwrap();
+    commit_for(&store, 1, not_modified_with_etag("etag-done")).await.unwrap();
     store.end_batch().await.unwrap();
     let before = browser_storage::storage()
         .get_item(rssr_infra::application_adapters::browser::state::COMMIT_STORAGE_KEY)
@@ -723,8 +731,7 @@ async fn failed_refresh_at_each_publication_stage_keeps_old_content_and_index() 
                 return __set.call(this,k,v);
             }};
         "#)).unwrap();
-        let result = store
-            .commit(
+        let result = commit_for(&store, 
                 1,
                 RefreshCommit::Updated {
                     update: FeedRefreshUpdate {
@@ -746,7 +753,7 @@ async fn failed_refresh_at_each_publication_stage_keeps_old_content_and_index() 
         assert_eq!(serde_json::to_value(&persisted.core).unwrap(), before);
         assert!(persisted.entry_content.entries.is_empty());
         // Orphan staged slices from the failed transaction must not affect the next commit.
-        store.commit(1, not_modified_with_etag("recovered")).await.unwrap();
+        commit_for(&store, 1, not_modified_with_etag("recovered")).await.unwrap();
         assert_eq!(persisted_state().await.core.feeds[0].etag.as_deref(), Some("recovered"));
         assert!(persisted_state().await.core.entries.is_empty());
     }
@@ -762,7 +769,7 @@ async fn refresh_after_other_tab_deletes_feed_does_not_resurrect_it() {
         .set_deleted(1, true)
         .await
         .unwrap();
-    assert!(store.commit(1, not_modified_with_etag("late response")).await.is_err());
+    assert!(commit_for(&store, 1, not_modified_with_etag("late response")).await.is_err());
     assert!(persisted_state().await.core.feeds[0].is_deleted);
 }
 
@@ -781,7 +788,7 @@ async fn metadata_only_refreshes_do_not_rewrite_flags_or_bodies() {
     let start = js_sys::Date::now();
     let mut results = Vec::new();
     for id in 1..=20 {
-        results.push(store.commit(id, not_modified_with_etag("unchanged")).await);
+        results.push(commit_for(&store, id, not_modified_with_etag("unchanged")).await);
     }
     let elapsed = js_sys::Date::now() - start;
     let writes = js_sys::eval(
@@ -831,8 +838,7 @@ async fn multiple_content_commits_preserve_all_feeds_and_report_write_volume() {
             })
             .collect();
         results.push(
-            store
-                .commit(
+            commit_for(&store, 
                     id,
                     RefreshCommit::Updated {
                         update: FeedRefreshUpdate {
@@ -903,7 +909,7 @@ async fn repeated_content_commits_report_write_volume() {
         },
     };
     for id in 1..=12 {
-        assert_eq!(store.commit(id, commit()).await.unwrap().inserted_count, 10);
+        assert_eq!(commit_for(&store, id, commit()).await.unwrap().inserted_count, 10);
     }
     for _ in 0..3 {
         js_sys::eval(r#"
@@ -914,7 +920,7 @@ async fn repeated_content_commits_report_write_volume() {
         let start = js_sys::Date::now();
         let mut results = Vec::new();
         for id in 1..=12 {
-            results.push(store.commit(id, commit()).await);
+            results.push(commit_for(&store, id, commit()).await);
         }
         let elapsed = js_sys::Date::now() - start;
         let raw = js_sys::eval(
