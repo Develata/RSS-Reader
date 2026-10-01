@@ -7,8 +7,9 @@ use rssr_domain::{
 
 use crate::{
     AppStatePort, AppStateService, ClockPort, EntriesListService, EntriesWorkspaceService,
-    FeedCatalogService, FeedRefreshSourcePort, FeedService, FeedsSnapshotService,
-    ImportExportService, OpmlCodecPort, ReaderService, RefreshService, RefreshStorePort,
+    ConfigReplacementPort, FeedCatalogService, FeedRefreshSourcePort, FeedService,
+    FeedsSnapshotService, ImportExportService, OpmlCodecPort, ReaderService, RefreshService,
+    RefreshStorePort, SubscriptionRemovalPort,
     SettingsService, SettingsSyncService, StartupService, SubscriptionWorkflow,
 };
 
@@ -30,6 +31,8 @@ pub struct AppCompositionInput {
     pub refresh_store: Arc<dyn RefreshStorePort>,
     pub opml_codec: Arc<dyn OpmlCodecPort>,
     pub clock: Arc<dyn ClockPort>,
+    pub subscription_removal: Arc<dyn SubscriptionRemovalPort>,
+    pub config_replacement: Arc<dyn ConfigReplacementPort>,
 }
 
 #[derive(Clone)]
@@ -51,10 +54,9 @@ pub struct AppUseCases {
 
 impl AppUseCases {
     pub fn compose(input: AppCompositionInput) -> Self {
-        let feed_service = FeedService::new(
+        let feed_service = FeedService::new_with_removal_port(
             input.feed_repository.clone(),
-            input.entry_index_repository.clone(),
-            input.entry_content_repository.clone(),
+            input.subscription_removal,
         );
         let feed_catalog_service = FeedCatalogService::new(input.feed_repository.clone());
         let refresh_service = RefreshService::new(input.refresh_source, input.refresh_store);
@@ -84,7 +86,8 @@ impl AppUseCases {
                 input.opml_codec,
                 input.app_state,
                 input.clock,
-            ),
+            )
+            .with_config_replacement_port(input.config_replacement),
             startup_service: StartupService::new(
                 settings_service.clone(),
                 app_state_service.clone(),
