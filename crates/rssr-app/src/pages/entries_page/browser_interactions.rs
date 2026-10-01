@@ -128,9 +128,9 @@ fn refresh_entry_directory_tracker(align_directory_viewport: bool) {
             });
         };
 
-        const findDirectoryViewportTarget = (groupAnchor, itemAnchor) => {
-            const items = Array.from(document.querySelectorAll('[data-directory-kind="item"]'));
-            const groups = Array.from(document.querySelectorAll('[data-directory-kind="group"]'));
+        const findDirectoryViewportTarget = (rail, groupAnchor, itemAnchor) => {
+            const items = Array.from(rail.querySelectorAll('[data-directory-kind="item"]'));
+            const groups = Array.from(rail.querySelectorAll('[data-directory-kind="group"]'));
             return (
                 items.find(
                     (element) =>
@@ -142,6 +142,34 @@ fn refresh_entry_directory_tracker(align_directory_viewport: bool) {
                 ) ||
                 null
             );
+        };
+
+        const alignDirectoryViewport = (groupAnchor, itemAnchor) => {
+            const rail = document.querySelector('[data-layout="entry-directory-rail"]');
+            if (!isVisible(rail)) {
+                // Mobile renders the horizontal top directory instead of an independent
+                // vertical rail. Never call scrollIntoView on that surface: doing so can
+                // scroll the document itself and fight the user's vertical gesture.
+                return;
+            }
+
+            const target = findDirectoryViewportTarget(rail, groupAnchor, itemAnchor);
+            if (!target) {
+                return;
+            }
+
+            const railRect = rail.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const visibleTop = railRect.top + rail.clientTop;
+            const visibleBottom = visibleTop + rail.clientHeight;
+
+            // Move only the directory rail. scrollIntoView is intentionally avoided here
+            // because an ancestor fallback may change window.scrollY.
+            if (targetRect.top < visibleTop) {
+                rail.scrollTop += targetRect.top - visibleTop;
+            } else if (targetRect.bottom > visibleBottom) {
+                rail.scrollTop += targetRect.bottom - visibleBottom;
+            }
         };
 
         const selectActiveAnchor = () => {
@@ -224,13 +252,7 @@ fn refresh_entry_directory_tracker(align_directory_viewport: bool) {
             lastItemAnchor = itemAnchor;
 
             if (shouldAlignViewport) {
-                const target = findDirectoryViewportTarget(groupAnchor, itemAnchor);
-                if (target) {
-                    target.scrollIntoView({
-                        block: "nearest",
-                        inline: "nearest",
-                    });
-                }
+                alignDirectoryViewport(groupAnchor, itemAnchor);
             }
         };
 
