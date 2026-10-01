@@ -537,7 +537,7 @@ async fn commit_for(
         .get_target(feed_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("missing refresh target {feed_id}"))?;
-    commit_for(&store, &target, commit).await
+    store.commit(&target, commit).await
 }
 
 async fn store_with_one_feed() -> (BrowserStore, BrowserRefreshStore) {
