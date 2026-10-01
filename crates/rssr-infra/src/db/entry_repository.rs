@@ -245,8 +245,59 @@ impl SqliteEntryRepository {
             return Ok(0);
         }
 
+        let upserted = self.write_contents(feed_id, contents).await?;
+        self.mark_has_content(
+            &contents.iter().map(|content| content.entry_id).collect::<Vec<_>>(),
+            true,
+        )
+        .await?;
+        Ok(upserted)
+    }
+
+    /// Write refresh content only while the originating feed generation still owns the index
+    /// writer fence. Holding the index writer transaction across the separate content-DB write
+    /// prevents delete/re-add from crossing between the generation check and the body write.
+    pub async fn upsert_contents_for_generation(
+        &self,
+        feed_id: i64,
+        generation: i64,
+        contents: &[ResolvedEntryContent],
+    ) -> DomainResult<usize> {
+        self.ensure_content_schema().await?;
+        if contents.is_empty() {
+            return Ok(0);
+        }
+
+        let mut index_tx =
+            self.index_pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+        let current_generation = sqlx::query_scalar::<_, i64>(
+            "SELECT generation FROM feeds WHERE id = ?1 AND is_deleted = 0",
+        )
+        .bind(feed_id)
+        .fetch_optional(&mut *index_tx)
+        .await
+        .map_err(map_sqlx_error)?;
+        if current_generation != Some(generation) {
+            return Err(DomainError::NotFound);
+        }
+
+        let upserted = self.write_contents(feed_id, contents).await?;
+        mark_has_content_on_connection(
+            &mut index_tx,
+            &contents.iter().map(|content| content.entry_id).collect::<Vec<_>>(),
+            true,
+        )
+        .await?;
+        index_tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(upserted)
+    }
+
+    async fn write_contents(
+        &self,
+        feed_id: i64,
+        contents: &[ResolvedEntryContent],
+    ) -> DomainResult<usize> {
         let mut upserted = 0;
-        // 与索引库同理：整批正文写入合并成一个事务，避免逐条隐式提交。
         let mut tx = self.content_pool.begin().await.map_err(map_sqlx_error)?;
         let now = now_rfc3339();
 
@@ -284,13 +335,6 @@ impl SqliteEntryRepository {
         }
 
         tx.commit().await.map_err(map_sqlx_error)?;
-
-        self.mark_has_content(
-            &contents.iter().map(|content| content.entry_id).collect::<Vec<_>>(),
-            true,
-        )
-        .await?;
-
         Ok(upserted)
     }
 
@@ -392,19 +436,8 @@ impl SqliteEntryRepository {
         }
 
         let mut tx = self.index_pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
-        for chunk in entry_ids.chunks(SQLITE_BIND_CHUNK) {
-            let mut qb = QueryBuilder::<Sqlite>::new("UPDATE entries SET has_content = ");
-            qb.push_bind(if has_content { 1_i64 } else { 0_i64 });
-            qb.push(" WHERE id IN (");
-            let mut separated = qb.separated(", ");
-            for entry_id in chunk {
-                separated.push_bind(entry_id);
-            }
-            qb.push(")");
-            qb.build().execute(&mut *tx).await.map_err(map_sqlx_error)?;
-        }
+        mark_has_content_on_connection(&mut tx, entry_ids, has_content).await?;
         tx.commit().await.map_err(map_sqlx_error)?;
-
         Ok(())
     }
 
@@ -821,6 +854,25 @@ impl EntryContentRepository for SqliteEntryRepository {
 
         Ok(())
     }
+}
+
+async fn mark_has_content_on_connection(
+    connection: &mut sqlx::SqliteConnection,
+    entry_ids: &[i64],
+    has_content: bool,
+) -> DomainResult<()> {
+    for chunk in entry_ids.chunks(SQLITE_BIND_CHUNK) {
+        let mut qb = QueryBuilder::<Sqlite>::new("UPDATE entries SET has_content = ");
+        qb.push_bind(if has_content { 1_i64 } else { 0_i64 });
+        qb.push(" WHERE id IN (");
+        let mut separated = qb.separated(", ");
+        for entry_id in chunk {
+            separated.push_bind(entry_id);
+        }
+        qb.push(")");
+        qb.build().execute(&mut *connection).await.map_err(map_sqlx_error)?;
+    }
+    Ok(())
 }
 
 async fn promote_legacy_hex_guid_identity(
