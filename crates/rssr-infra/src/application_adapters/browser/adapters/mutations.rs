@@ -161,10 +161,14 @@ fn upsert_config_feed(
         state.core.feeds.iter().position(|feed| feed.url == new_feed.url.as_str())
     {
         let feed_id = state.core.feeds[index].id;
-        if state.core.feeds[index].is_deleted {
+        let reactivating = state.core.feeds[index].is_deleted;
+        if reactivating {
             *state.core.feed_generations.entry(feed_id).or_default() += 1;
         }
         let feed = &mut state.core.feeds[index];
+        if reactivating {
+            reset_remote_feed_state(feed);
+        }
         feed.title = normalized_title;
         feed.folder = normalized_folder;
         feed.is_deleted = false;
@@ -191,6 +195,17 @@ fn upsert_config_feed(
         created_at: now,
         updated_at: now,
     });
+}
+
+fn reset_remote_feed_state(feed: &mut PersistedFeed) {
+    feed.site_url = None;
+    feed.description = None;
+    feed.icon_url = None;
+    feed.etag = None;
+    feed.last_modified = None;
+    feed.last_fetched_at = None;
+    feed.last_success_at = None;
+    feed.fetch_error = None;
 }
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
