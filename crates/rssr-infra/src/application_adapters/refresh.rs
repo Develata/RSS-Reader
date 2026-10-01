@@ -82,12 +82,13 @@ impl SqliteRefreshStore {
 
     async fn persist_failure(
         &self,
-        feed_id: i64,
+        target: &RefreshTarget,
         failure: &RefreshFailure,
     ) -> rssr_domain::Result<()> {
         self.feed_repository
-            .update_fetch_state(
-                feed_id,
+            .update_fetch_state_for_generation(
+                target.feed_id,
+                target.generation,
                 failure.metadata.as_ref().and_then(|metadata| metadata.etag.as_deref()),
                 failure.metadata.as_ref().and_then(|metadata| metadata.last_modified.as_deref()),
                 Some(&failure.message),
@@ -100,37 +101,40 @@ impl SqliteRefreshStore {
 #[async_trait::async_trait]
 impl RefreshStorePort for SqliteRefreshStore {
     async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
-        let feeds = self.feed_repository.list_feeds().await?;
+        let feeds = self.feed_repository.list_feeds_with_generation().await?;
         let feed_ids_with_entries = self.entry_repository.list_feed_ids_with_entries().await?;
 
         Ok(feeds
             .into_iter()
-            .map(|feed| {
+            .map(|(feed, generation)| {
                 let has_entries = feed_ids_with_entries.contains(&feed.id);
-                map_refresh_target(feed, has_entries)
+                map_refresh_target(feed, generation, has_entries)
             })
             .collect())
     }
 
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
-        let Some(feed) = self.feed_repository.get_feed(feed_id).await? else {
+        let Some((feed, generation)) = self.feed_repository.get_feed_with_generation(feed_id).await?
+        else {
             return Ok(None);
         };
         let has_entries = self.entry_repository.has_entries_for_feed(feed_id).await?;
-        Ok(Some(map_refresh_target(feed, has_entries)))
+        Ok(Some(map_refresh_target(feed, generation, has_entries)))
     }
 
     async fn commit(
         &self,
-        feed_id: i64,
+        target: &RefreshTarget,
         commit: RefreshCommit,
     ) -> Result<rssr_application::RefreshCommitOutcome> {
+        let feed_id = target.feed_id;
         let mut inserted_count = 0;
         match commit {
             RefreshCommit::NotModified { metadata } => {
                 self.feed_repository
-                    .update_fetch_state(
+                    .update_fetch_state_for_generation(
                         feed_id,
+                        target.generation,
                         metadata.etag.as_deref(),
                         metadata.last_modified.as_deref(),
                         None,
@@ -142,20 +146,22 @@ impl RefreshStorePort for SqliteRefreshStore {
             RefreshCommit::Updated { update } => {
                 let parsed_feed = map_application_feed_metadata(&update.feed);
                 if let Err(error) =
-                    self.feed_repository.update_feed_metadata(feed_id, &parsed_feed).await
+                    self.feed_repository
+                        .update_feed_metadata_for_generation(feed_id, target.generation, &parsed_feed)
+                        .await
                 {
                     let failure = RefreshFailure {
                         message: format!("更新订阅元数据失败: {error}"),
                         metadata: Some(update.metadata.clone()),
                     };
-                    let _ = self.persist_failure(feed_id, &failure).await;
+                    let _ = self.persist_failure(target, &failure).await;
                     return Err(anyhow::Error::new(error).context("更新订阅元数据失败"));
                 }
 
                 let entries = map_application_entries(update.feed.entries);
                 let resolved_contents = match self
                     .entry_repository
-                    .upsert_entries_with_outcome(feed_id, &entries)
+                    .upsert_entries_with_generation(feed_id, target.generation, &entries)
                     .await
                 {
                     Ok(resolved) => resolved,
@@ -164,7 +170,7 @@ impl RefreshStorePort for SqliteRefreshStore {
                             message: format!("写入文章索引失败: {error}"),
                             metadata: Some(update.metadata.clone()),
                         };
-                        let _ = self.persist_failure(feed_id, &failure).await;
+                        let _ = self.persist_failure(target, &failure).await;
                         return Err(anyhow::Error::new(error).context("写入文章索引失败"));
                     }
                 };
@@ -183,20 +189,34 @@ impl RefreshStorePort for SqliteRefreshStore {
                     return Err(anyhow::Error::new(error).context("写入文章正文失败"));
                 }
 
-                // Index and content live in separate SQLite files. If a delete won after the
-                // index transaction committed but before the content write, remove any late
-                // content now. If the delete happens after this check, its own post-commit
-                // cleanup runs later, so either ordering leaves no resurrected cache.
-                if self.feed_repository.get_feed(feed_id).await?.is_none() {
-                    EntryContentRepository::delete_for_feed(&*self.entry_repository, feed_id)
-                        .await
-                        .context("清理已删除订阅的迟到正文失败")?;
-                    anyhow::bail!("订阅已在刷新期间删除，丢弃迟到刷新结果");
+                // Index and content live in separate SQLite files. The generation may change
+                // after the index transaction but before the content write. If that happened,
+                // remove only the entry IDs written by this stale refresh; never delete by feed_id
+                // because a new generation may already have committed its own content.
+                let generation_is_current = self
+                    .feed_repository
+                    .get_feed_with_generation(feed_id)
+                    .await?
+                    .is_some_and(|(_, generation)| generation == target.generation);
+                if !generation_is_current {
+                    let stale_entry_ids = resolved_contents
+                        .contents
+                        .iter()
+                        .map(|content| content.entry_id)
+                        .collect::<Vec<_>>();
+                    EntryContentRepository::delete_for_entry_ids(
+                        &*self.entry_repository,
+                        &stale_entry_ids,
+                    )
+                    .await
+                    .context("清理旧 generation 的迟到正文失败")?;
+                    anyhow::bail!("订阅已在刷新期间删除或重新添加，丢弃旧 generation 刷新结果");
                 }
 
                 self.feed_repository
-                    .update_fetch_state(
+                    .update_fetch_state_for_generation(
                         feed_id,
+                        target.generation,
                         update.metadata.etag.as_deref(),
                         update.metadata.last_modified.as_deref(),
                         None,
@@ -206,7 +226,7 @@ impl RefreshStorePort for SqliteRefreshStore {
                     .context("更新订阅抓取状态失败")?;
             }
             RefreshCommit::Failed { failure } => {
-                self.persist_failure(feed_id, &failure).await.context("更新订阅抓取状态失败")?;
+                self.persist_failure(target, &failure).await.context("更新订阅抓取状态失败")?;
             }
         }
 
@@ -214,7 +234,11 @@ impl RefreshStorePort for SqliteRefreshStore {
     }
 }
 
-fn map_refresh_target(feed: rssr_domain::Feed, has_entries: bool) -> RefreshTarget {
+fn map_refresh_target(
+    feed: rssr_domain::Feed,
+    generation: i64,
+    has_entries: bool,
+) -> RefreshTarget {
     // Failure metadata describes the received response, not a successfully persisted cache.
     // Sending its validators can yield 304 forever after a partial index/content write. Keep
     // the stored metadata and last-success history, but retry a full response until success.
@@ -229,7 +253,7 @@ fn map_refresh_target(feed: rssr_domain::Feed, has_entries: bool) -> RefreshTarg
         (None, None)
     };
 
-    RefreshTarget { feed_id: feed.id, url: feed.url, etag, last_modified }
+    RefreshTarget { feed_id: feed.id, generation, url: feed.url, etag, last_modified }
 }
 
 fn map_http_metadata(metadata: crate::fetch::HttpMetadata) -> RefreshHttpMetadata {
