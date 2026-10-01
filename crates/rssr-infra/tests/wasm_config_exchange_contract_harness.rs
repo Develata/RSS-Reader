@@ -7,7 +7,7 @@ use rssr_domain::{ConfigFeed, ConfigPackage, UserSettings};
 use rssr_infra::application_adapters::browser::{
     adapters::{
         BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRepository, BrowserOpmlCodec,
-        BrowserSettingsRepository,
+        BrowserPersistenceMutations, BrowserSettingsRepository,
     },
     state::{
         BrowserState, BrowserStore, PersistedAppStateSlice, PersistedEntryContent,
@@ -109,9 +109,10 @@ fn build_service(state: BrowserStore) -> ImportExportService {
         entry_repository,
         Arc::new(BrowserSettingsRepository::new(state.clone())),
         Arc::new(BrowserOpmlCodec),
-        Arc::new(BrowserAppStateAdapter::new(state)),
+        Arc::new(BrowserAppStateAdapter::new(state.clone())),
         Arc::new(FixedClock),
     )
+    .with_config_replacement_port(Arc::new(BrowserPersistenceMutations::new(state)))
 }
 
 #[wasm_bindgen_test]

@@ -9,6 +9,7 @@ use rssr_application::{
 };
 use rssr_domain::{Feed, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
+    application_adapters::cleanup_deleted_feed_content,
     composition::compose_native_sqlite_use_cases,
     config_sync::webdav::WebDavConfigSync,
     db::{sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend},
@@ -313,6 +314,16 @@ impl CliServices {
         let content_pool =
             native_backend.connect_content().await.context("连接本地正文数据库失败")?;
         native_backend.migrate_content(&content_pool).await.context("执行正文数据库迁移失败")?;
+
+        match cleanup_deleted_feed_content(&index_pool, &content_pool).await {
+            Ok(removed_rows) if removed_rows > 0 => {
+                tracing::info!(removed_rows, "已重试清理已删除订阅的正文缓存");
+            }
+            Ok(_) => {}
+            Err(error) => {
+                tracing::warn!(%error, "已删除订阅的正文缓存清理失败，将在下次启动重试");
+            }
+        }
 
         let use_cases = compose_native_sqlite_use_cases(index_pool, content_pool).use_cases;
 

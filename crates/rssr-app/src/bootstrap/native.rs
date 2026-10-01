@@ -14,6 +14,7 @@ use rssr_application::{
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::UserSettings;
 use rssr_infra::{
+    application_adapters::cleanup_deleted_feed_content,
     composition::compose_native_sqlite_use_cases,
     config_sync::webdav::WebDavConfigSync,
     db::{
@@ -97,6 +98,16 @@ impl AppServices {
                     .migrate_content(&content_pool)
                     .await
                     .context("执行正文数据库迁移失败")?;
+
+                match cleanup_deleted_feed_content(&index_pool, &content_pool).await {
+                    Ok(removed_rows) if removed_rows > 0 => {
+                        tracing::info!(removed_rows, "已重试清理已删除订阅的正文缓存");
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(%error, "已删除订阅的正文缓存清理失败，将在下次启动重试");
+                    }
+                }
 
                 // 实测一次 journal 模式再决定并发度：WAL 没启用成功时退回串行，
                 // 否则并发写者会互相干等并把前台查询一起卡住。

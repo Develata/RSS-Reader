@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
-use rssr_application::{ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort};
-use rssr_domain::NewFeedSubscription;
+use rssr_application::{
+    ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan, ConfigReplacementPort,
+    SubscriptionRemovalPort,
+};
 
 use crate::application_adapters::browser::{
     now_utc,
@@ -35,9 +37,10 @@ impl SubscriptionRemovalPort for BrowserPersistenceMutations {
                 feed.is_deleted = true;
                 feed.updated_at = now_utc();
 
-                let mut changes = Changes::CORE | Changes::APP_STATE;
+                let mut changes = Changes::CORE;
                 if state.app_state.last_opened_feed_id == Some(feed_id) {
                     state.app_state.last_opened_feed_id = None;
+                    changes = changes | Changes::APP_STATE;
                 }
 
                 if purge_entries {
@@ -49,9 +52,18 @@ impl SubscriptionRemovalPort for BrowserPersistenceMutations {
                         .map(|entry| entry.id)
                         .collect::<std::collections::HashSet<_>>();
                     state.core.entries.retain(|entry| entry.feed_id != feed_id);
+
+                    let flags_before = state.entry_flags.entries.len();
                     state.entry_flags.entries.retain(|entry| !removed_ids.contains(&entry.id));
+                    if state.entry_flags.entries.len() != flags_before {
+                        changes = changes | Changes::FLAGS;
+                    }
+
+                    let content_before = state.entry_content.entries.len();
                     state.entry_content.entries.retain(|entry| entry.feed_id != feed_id);
-                    changes = changes | Changes::FLAGS | Changes::CONTENT;
+                    if state.entry_content.entries.len() != content_before {
+                        changes = changes | Changes::CONTENT;
+                    }
                 }
 
                 Ok(((), changes))
@@ -65,15 +77,31 @@ impl SubscriptionRemovalPort for BrowserPersistenceMutations {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl ConfigReplacementPort for BrowserPersistenceMutations {
-    async fn replace_config(&self, plan: ConfigReplacementPlan) -> Result<()> {
+    async fn replace_config(
+        &self,
+        plan: ConfigReplacementPlan,
+    ) -> Result<ConfigReplacementOutcome> {
         self.store
             .update(move |state| {
-                for new_feed in &plan.upserts {
-                    upsert_subscription(state, new_feed);
+                let desired_urls = plan
+                    .feeds
+                    .iter()
+                    .map(|feed| feed.url.as_str())
+                    .collect::<std::collections::HashSet<_>>();
+                let removed = state
+                    .core
+                    .feeds
+                    .iter()
+                    .filter(|feed| !feed.is_deleted && !desired_urls.contains(feed.url.as_str()))
+                    .map(|feed| feed.id)
+                    .collect::<std::collections::HashSet<_>>();
+                let removed_feed_count = removed.len();
+                let settings_updated = state.core.settings != plan.settings;
+
+                for feed in &plan.feeds {
+                    upsert_config_feed(state, feed);
                 }
 
-                let removed =
-                    plan.removed_feed_ids.iter().copied().collect::<std::collections::HashSet<_>>();
                 let removed_entry_ids = state
                     .core
                     .entries
@@ -89,9 +117,20 @@ impl ConfigReplacementPort for BrowserPersistenceMutations {
                     }
                 }
                 state.core.entries.retain(|entry| !removed.contains(&entry.feed_id));
-                state.entry_flags.entries.retain(|entry| !removed_entry_ids.contains(&entry.id));
-                state.entry_content.entries.retain(|entry| !removed.contains(&entry.feed_id));
                 state.core.settings = plan.settings;
+
+                let mut changes = Changes::CORE;
+                let flags_before = state.entry_flags.entries.len();
+                state.entry_flags.entries.retain(|entry| !removed_entry_ids.contains(&entry.id));
+                if state.entry_flags.entries.len() != flags_before {
+                    changes = changes | Changes::FLAGS;
+                }
+
+                let content_before = state.entry_content.entries.len();
+                state.entry_content.entries.retain(|entry| !removed.contains(&entry.feed_id));
+                if state.entry_content.entries.len() != content_before {
+                    changes = changes | Changes::CONTENT;
+                }
 
                 if state
                     .app_state
@@ -99,9 +138,10 @@ impl ConfigReplacementPort for BrowserPersistenceMutations {
                     .is_some_and(|feed_id| removed.contains(&feed_id))
                 {
                     state.app_state.last_opened_feed_id = None;
+                    changes = changes | Changes::APP_STATE;
                 }
 
-                Ok(((), Changes::CORE | Changes::APP_STATE | Changes::FLAGS | Changes::CONTENT))
+                Ok((ConfigReplacementOutcome { removed_feed_count, settings_updated }, changes))
             })
             .await
             .map_err(map_store_error)
@@ -109,24 +149,17 @@ impl ConfigReplacementPort for BrowserPersistenceMutations {
     }
 }
 
-fn upsert_subscription(
+fn upsert_config_feed(
     state: &mut crate::application_adapters::browser::state::BrowserState,
-    new_feed: &NewFeedSubscription,
+    new_feed: &ConfigReplacementFeed,
 ) {
     let normalized_title = normalize_optional_text(new_feed.title.clone());
     let normalized_folder = normalize_optional_text(new_feed.folder.clone());
     let now = now_utc();
 
     if let Some(feed) = state.core.feeds.iter_mut().find(|feed| feed.url == new_feed.url.as_str()) {
-        if new_feed.title.is_some() {
-            feed.title = normalized_title;
-        }
-        if new_feed.folder.is_some() {
-            feed.folder = normalized_folder;
-        }
-        if let Some(site_url) = &new_feed.site_url {
-            feed.site_url = Some(site_url.to_string());
-        }
+        feed.title = normalized_title;
+        feed.folder = normalized_folder;
         feed.is_deleted = false;
         feed.updated_at = now;
         return;
@@ -137,7 +170,7 @@ fn upsert_subscription(
         id: state.core.next_feed_id,
         url: new_feed.url.to_string(),
         title: normalized_title,
-        site_url: new_feed.site_url.as_ref().map(ToString::to_string),
+        site_url: None,
         description: None,
         icon_url: None,
         folder: normalized_folder,

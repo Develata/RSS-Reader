@@ -1,14 +1,20 @@
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
-use rssr_application::{ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort};
+use rssr_application::{
+    ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort,
+};
 use rssr_domain::{FeedRepository, NewFeedSubscription, SettingsRepository, UserSettings};
 use rssr_infra::{
-    application_adapters::SqlitePersistenceMutations,
+    application_adapters::{SqlitePersistenceMutations, cleanup_deleted_feed_content},
     db::{
         entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
         migrate_content, settings_repository::SqliteSettingsRepository,
+        sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
     },
-    parser::ParsedEntry,
+    parser::{ParsedEntry, ParsedFeed},
 };
 use time::OffsetDateTime;
 use url::Url;
@@ -91,7 +97,7 @@ async fn index_delete_failure_rolls_back_tombstone_and_entries() {
 
 #[tokio::test]
 async fn content_cleanup_failure_does_not_expose_half_deleted_subscription() {
-    let (_index_pool, content_pool, feeds, entries, _settings, mutations) = fixture().await;
+    let (index_pool, content_pool, feeds, entries, _settings, mutations) = fixture().await;
     let feed = add_feed(&feeds, "https://example.com/content-cleanup.xml").await;
     entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
 
@@ -119,7 +125,164 @@ async fn content_cleanup_failure_does_not_expose_half_deleted_subscription() {
             .fetch_one(&content_pool)
             .await
             .unwrap();
-    assert_eq!(remaining, 1, "failed cache cleanup is allowed to remain retryable");
+    assert_eq!(remaining, 1, "failed cache cleanup remains hidden but pending");
+
+    sqlx::query("DROP TRIGGER fail_content_delete").execute(&content_pool).await.unwrap();
+    let removed = cleanup_deleted_feed_content(&index_pool, &content_pool).await.unwrap();
+    assert_eq!(removed, 1);
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
+            .bind(feed.id)
+            .fetch_one(&content_pool)
+            .await
+            .unwrap();
+    assert_eq!(remaining, 0, "startup retry must eventually purge deleted-feed content");
+}
+
+#[tokio::test]
+async fn startup_cleanup_preserves_non_purge_deleted_feed_content() {
+    let (index_pool, content_pool, feeds, entries, _settings, mutations) = fixture().await;
+    let feed = add_feed(&feeds, "https://example.com/keep-content.xml").await;
+    entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
+
+    mutations.remove_subscription(feed.id, false).await.unwrap();
+    let removed = cleanup_deleted_feed_content(&index_pool, &content_pool).await.unwrap();
+
+    assert_eq!(removed, 0);
+    assert!(entries.has_entries_for_feed(feed.id).await.unwrap());
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
+            .bind(feed.id)
+            .fetch_one(&content_pool)
+            .await
+            .unwrap();
+    assert_eq!(remaining, 1);
+}
+
+#[tokio::test]
+async fn immediate_purge_holds_index_writer_lock_until_content_delete_finishes() {
+    let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("rssr-immediate-purge-race-{nonce}"));
+    std::fs::create_dir_all(&base).unwrap();
+    let backend = NativeSqliteBackend::with_path(base.join("rss-reader.db"));
+    let index_pool = backend.connect().await.unwrap();
+    backend.migrate(&index_pool).await.unwrap();
+    let content_pool = backend.connect_content().await.unwrap();
+    backend.migrate_content(&content_pool).await.unwrap();
+
+    let feeds = Arc::new(SqliteFeedRepository::new(index_pool.clone()));
+    let entries =
+        SqliteEntryRepository::new_with_content_pool(index_pool.clone(), content_pool.clone());
+    let mutations = SqlitePersistenceMutations::new(index_pool.clone(), content_pool.clone());
+    let feed = add_feed(&feeds, "https://example.com/immediate-race.xml").await;
+    entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
+
+    let content_blocker = content_pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+    let removal = {
+        let mutations = mutations.clone();
+        tokio::spawn(async move { mutations.remove_subscription(feed.id, true).await })
+    };
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let reactivation_subscription = NewFeedSubscription {
+        site_url: None,
+        url: Url::parse("https://example.com/immediate-race.xml").unwrap(),
+        title: Some("Reactivated".into()),
+        folder: None,
+    };
+    let reactivation_feeds = feeds.clone();
+    let reactivation = tokio::spawn(async move {
+        reactivation_feeds.upsert_subscription(&reactivation_subscription).await
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        !reactivation.is_finished(),
+        "re-add must wait while immediate purge owns the index cleanup fence"
+    );
+
+    content_blocker.rollback().await.unwrap();
+    removal.await.unwrap().unwrap();
+    reactivation.await.unwrap().unwrap();
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
+            .bind(feed.id)
+            .fetch_one(&content_pool)
+            .await
+            .unwrap();
+    assert_eq!(remaining, 0);
+
+    index_pool.close().await;
+    content_pool.close().await;
+    std::fs::remove_dir_all(base).unwrap();
+}
+
+#[tokio::test]
+async fn startup_cleanup_holds_index_writer_lock_until_content_delete_finishes() {
+    let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let base = std::env::temp_dir().join(format!("rssr-content-gc-race-{nonce}"));
+    std::fs::create_dir_all(&base).unwrap();
+    let backend = NativeSqliteBackend::with_path(base.join("rss-reader.db"));
+    let index_pool = backend.connect().await.unwrap();
+    backend.migrate(&index_pool).await.unwrap();
+    let content_pool = backend.connect_content().await.unwrap();
+    backend.migrate_content(&content_pool).await.unwrap();
+
+    let feeds = Arc::new(SqliteFeedRepository::new(index_pool.clone()));
+    let entries =
+        SqliteEntryRepository::new_with_content_pool(index_pool.clone(), content_pool.clone());
+    let feed = add_feed(&feeds, "https://example.com/gc-race.xml").await;
+    entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
+
+    sqlx::query("UPDATE feeds SET is_deleted = 1 WHERE id = ?1")
+        .bind(feed.id)
+        .execute(&index_pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM entries WHERE feed_id = ?1")
+        .bind(feed.id)
+        .execute(&index_pool)
+        .await
+        .unwrap();
+
+    let content_blocker = content_pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+    let cleanup_index = index_pool.clone();
+    let cleanup_content = content_pool.clone();
+    let cleanup = tokio::spawn(async move {
+        cleanup_deleted_feed_content(&cleanup_index, &cleanup_content).await
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let reactivation_subscription = NewFeedSubscription {
+        site_url: None,
+        url: feed.url.clone(),
+        title: Some("Reactivated".into()),
+        folder: None,
+    };
+    let reactivation_feeds = feeds.clone();
+    let reactivation = tokio::spawn(async move {
+        reactivation_feeds.upsert_subscription(&reactivation_subscription).await
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        !reactivation.is_finished(),
+        "feed reactivation must wait while tombstone cleanup owns the index writer lock"
+    );
+
+    content_blocker.rollback().await.unwrap();
+    cleanup.await.unwrap().unwrap();
+    reactivation.await.unwrap().unwrap();
+
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
+            .bind(feed.id)
+            .fetch_one(&content_pool)
+            .await
+            .unwrap();
+    assert_eq!(remaining, 0);
+
+    index_pool.close().await;
+    content_pool.close().await;
+    std::fs::remove_dir_all(base).unwrap();
 }
 
 #[tokio::test]
@@ -145,21 +308,18 @@ async fn config_replacement_failure_rolls_back_every_index_database_change() {
 
     let changed_settings = UserSettings { refresh_interval_minutes: 99, ..UserSettings::default() };
     let plan = ConfigReplacementPlan {
-        upserts: vec![
-            NewFeedSubscription {
-                site_url: None,
+        feeds: vec![
+            ConfigReplacementFeed {
                 url: Url::parse("https://example.com/new.xml").unwrap(),
                 title: Some("New".into()),
                 folder: None,
             },
-            NewFeedSubscription {
-                site_url: None,
+            ConfigReplacementFeed {
                 url: Url::parse("https://example.com/fail.xml").unwrap(),
                 title: Some("Fail".into()),
                 folder: None,
             },
         ],
-        removed_feed_ids: vec![original.id],
         settings: changed_settings,
     };
 
@@ -170,6 +330,61 @@ async fn config_replacement_failure_rolls_back_every_index_database_change() {
     assert_eq!(persisted[0].id, original.id);
     assert_eq!(persisted[0].url.as_str(), "https://example.com/original.xml");
     assert_eq!(settings.load().await.unwrap(), original_settings);
+}
+
+#[tokio::test]
+async fn config_replacement_derives_removals_from_locked_current_state() {
+    let (_index_pool, _content_pool, feeds, _entries, _settings, mutations) = fixture().await;
+    let retained = add_feed(&feeds, "https://example.com/retained.xml").await;
+    let late = add_feed(&feeds, "https://example.com/late.xml").await;
+
+    let outcome = mutations
+        .replace_config(ConfigReplacementPlan {
+            feeds: vec![ConfigReplacementFeed {
+                url: retained.url.clone(),
+                title: None,
+                folder: None,
+            }],
+            settings: UserSettings::default(),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(outcome.removed_feed_count, 1);
+    assert!(!outcome.settings_updated);
+    let active = feeds.list_feeds().await.unwrap();
+    assert_eq!(active.len(), 1);
+    assert_eq!(active[0].id, retained.id);
+    assert_eq!(active[0].title, None, "replacement metadata is exact desired state");
+    assert!(feeds.get_feed(late.id).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn deleted_feed_rejects_late_metadata_update() {
+    let (index_pool, _content_pool, feeds, _entries, _settings, mutations) = fixture().await;
+    let feed = add_feed(&feeds, "https://example.com/metadata-race.xml").await;
+    mutations.remove_subscription(feed.id, false).await.unwrap();
+
+    let error = feeds
+        .update_feed_metadata(
+            feed.id,
+            &ParsedFeed {
+                title: Some("Late title".into()),
+                site_url: Some(Url::parse("https://late.example.com/").unwrap()),
+                description: Some("late description".into()),
+                entries: Vec::new(),
+            },
+        )
+        .await
+        .expect_err("deleted feed must reject late metadata");
+    assert!(matches!(error, rssr_domain::DomainError::NotFound));
+
+    let title: Option<String> = sqlx::query_scalar("SELECT title FROM feeds WHERE id = ?1")
+        .bind(feed.id)
+        .fetch_one(&index_pool)
+        .await
+        .unwrap();
+    assert_eq!(title.as_deref(), Some("Original"));
 }
 
 #[tokio::test]

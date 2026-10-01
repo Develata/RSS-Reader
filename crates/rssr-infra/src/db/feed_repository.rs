@@ -72,7 +72,7 @@ impl SqliteFeedRepository {
                 site_url = COALESCE(?3, site_url),
                 description = COALESCE(?4, description),
                 updated_at = ?5
-            WHERE id = ?1
+            WHERE id = ?1 AND is_deleted = 0
             "#,
         )
         .bind(feed_id)

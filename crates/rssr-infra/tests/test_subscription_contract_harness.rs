@@ -9,7 +9,7 @@ use rssr_application::{
 };
 use rssr_domain::{EntryQuery, FeedRepository, NewFeedSubscription};
 use rssr_infra::{
-    application_adapters::SqliteAppStateAdapter,
+    application_adapters::SqlitePersistenceMutations,
     db::{
         app_state_repository::SqliteAppStateRepository, entry_repository::SqliteEntryRepository,
         feed_repository::SqliteFeedRepository, migrate, sqlite_native::NativeSqliteBackend,
@@ -88,20 +88,14 @@ async fn build_sqlite_fixture() -> Result<SqliteFixture> {
     let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
     let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
     let app_state_repository = Arc::new(SqliteAppStateRepository::new(pool.clone()));
-    let app_state_adapter = Arc::new(SqliteAppStateAdapter::new(app_state_repository.clone()));
     let feed_service = FeedService::new(
         feed_repository.clone(),
-        entry_repository.clone(),
-        entry_repository.clone(),
+        Arc::new(SqlitePersistenceMutations::new(pool.clone(), pool.clone())),
     );
     let refresh_service =
         RefreshService::new(Arc::new(UnusedRefreshSource), Arc::new(UnusedRefreshStore));
-    let workflow = SubscriptionWorkflow::new(
-        feed_service,
-        refresh_service,
-        app_state_adapter,
-        Arc::new(UnusedRefreshSource),
-    );
+    let workflow =
+        SubscriptionWorkflow::new(feed_service, refresh_service, Arc::new(UnusedRefreshSource));
 
     Ok(SqliteFixture { workflow, feed_repository, entry_repository, app_state_repository, pool })
 }

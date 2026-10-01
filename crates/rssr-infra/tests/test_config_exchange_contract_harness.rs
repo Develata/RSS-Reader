@@ -357,3 +357,35 @@ async fn opml_batch_database_failure_rolls_back_earlier_feed() {
 
     assert!(fixture.feed_repository.list_feeds().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn opml_import_rejects_material_before_root_without_persisting() {
+    let fixture = build_sqlite_fixture().await.expect("build fixture");
+    fixture
+        .service
+        .import_opml(
+            r#"leading-garbage<opml version="2.0"><body>
+            <outline text="One" xmlUrl="https://example.com/one.xml" />
+            </body></opml>"#,
+        )
+        .await
+        .expect_err("material before root must fail");
+
+    assert!(fixture.feed_repository.list_feeds().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn opml_import_rejects_material_after_root_without_persisting() {
+    let fixture = build_sqlite_fixture().await.expect("build fixture");
+    fixture
+        .service
+        .import_opml(
+            r#"<opml version="2.0"><body>
+            <outline text="One" xmlUrl="https://example.com/one.xml" />
+            </body></opml>trailing-garbage"#,
+        )
+        .await
+        .expect_err("material after root must fail");
+
+    assert!(fixture.feed_repository.list_feeds().await.unwrap().is_empty());
+}
