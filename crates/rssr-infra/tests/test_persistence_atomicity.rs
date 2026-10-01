@@ -173,8 +173,7 @@ async fn immediate_purge_holds_index_writer_lock_until_content_delete_finishes()
     let feeds = Arc::new(SqliteFeedRepository::new(index_pool.clone()));
     let entries =
         SqliteEntryRepository::new_with_content_pool(index_pool.clone(), content_pool.clone());
-    let mutations =
-        SqlitePersistenceMutations::new(index_pool.clone(), content_pool.clone());
+    let mutations = SqlitePersistenceMutations::new(index_pool.clone(), content_pool.clone());
     let feed = add_feed(&feeds, "https://example.com/immediate-race.xml").await;
     entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
 
