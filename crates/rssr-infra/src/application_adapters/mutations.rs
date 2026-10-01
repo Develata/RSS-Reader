@@ -18,10 +18,8 @@ pub async fn cleanup_deleted_feed_content(
     // process could re-activate the same feed between the tombstone check and content deletion.
     // Refresh and removal already acquire locks in index -> content order, so this preserves the
     // existing lock ordering rather than introducing an inversion.
-    let mut tx = index_pool
-        .begin_with("BEGIN IMMEDIATE")
-        .await
-        .context("开始已删除正文清理事务失败")?;
+    let mut tx =
+        index_pool.begin_with("BEGIN IMMEDIATE").await.context("开始已删除正文清理事务失败")?;
     let feed_ids = sqlx::query_scalar::<_, i64>(
         r#"
         SELECT feeds.id
