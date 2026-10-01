@@ -221,7 +221,7 @@ async fn config_replacement_derives_removals_from_locked_current_state() {
         .unwrap();
 
     assert_eq!(outcome.removed_feed_count, 1);
-    assert_eq!(outcome.settings_updated, false);
+    assert!(!outcome.settings_updated);
     let active = feeds.list_feeds().await.unwrap();
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].id, retained.id);
@@ -256,7 +256,6 @@ async fn deleted_feed_rejects_late_metadata_update() {
         .unwrap();
     assert_eq!(title.as_deref(), Some("Original"));
 }
-
 
 #[tokio::test]
 async fn deleted_feed_rejects_late_index_upsert() {
