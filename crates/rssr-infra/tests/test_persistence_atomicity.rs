@@ -136,6 +136,26 @@ async fn content_cleanup_failure_does_not_expose_half_deleted_subscription() {
 }
 
 #[tokio::test]
+async fn startup_cleanup_preserves_non_purge_deleted_feed_content() {
+    let (index_pool, content_pool, feeds, entries, _settings, mutations) = fixture().await;
+    let feed = add_feed(&feeds, "https://example.com/keep-content.xml").await;
+    entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
+
+    mutations.remove_subscription(feed.id, false).await.unwrap();
+    let removed = cleanup_deleted_feed_content(&index_pool, &content_pool).await.unwrap();
+
+    assert_eq!(removed, 0);
+    assert!(entries.has_entries_for_feed(feed.id).await.unwrap());
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
+            .bind(feed.id)
+            .fetch_one(&content_pool)
+            .await
+            .unwrap();
+    assert_eq!(remaining, 1);
+}
+
+#[tokio::test]
 async fn config_replacement_failure_rolls_back_every_index_database_change() {
     let (index_pool, _content_pool, feeds, _entries, settings, mutations) = fixture().await;
     let original = add_feed(&feeds, "https://example.com/original.xml").await;
