@@ -14,10 +14,19 @@ pub async fn cleanup_deleted_feed_content(
     index_pool: &SqlitePool,
     content_pool: &SqlitePool,
 ) -> Result<u64> {
-    let feed_ids = sqlx::query_scalar::<_, i64>("SELECT id FROM feeds WHERE is_deleted = 1")
-        .fetch_all(index_pool)
-        .await
-        .context("读取待清理正文的已删除订阅失败")?;
+    let feed_ids = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT feeds.id
+        FROM feeds
+        WHERE feeds.is_deleted = 1
+          AND NOT EXISTS (
+              SELECT 1 FROM entries WHERE entries.feed_id = feeds.id
+          )
+        "#,
+    )
+    .fetch_all(index_pool)
+    .await
+    .context("读取待清理正文的已删除订阅失败")?;
 
     let mut removed_rows = 0_u64;
     for feed_id in feed_ids {
