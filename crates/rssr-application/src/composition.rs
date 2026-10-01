@@ -6,11 +6,11 @@ use rssr_domain::{
 };
 
 use crate::{
-    AppStatePort, AppStateService, ClockPort, EntriesListService, EntriesWorkspaceService,
-    ConfigReplacementPort, FeedCatalogService, FeedRefreshSourcePort, FeedService,
+    AppStatePort, AppStateService, ClockPort, ConfigReplacementPort, EntriesListService,
+    EntriesWorkspaceService, FeedCatalogService, FeedRefreshSourcePort, FeedService,
     FeedsSnapshotService, ImportExportService, OpmlCodecPort, ReaderService, RefreshService,
-    RefreshStorePort, SubscriptionRemovalPort,
-    SettingsService, SettingsSyncService, StartupService, SubscriptionWorkflow,
+    RefreshStorePort, SettingsService, SettingsSyncService, StartupService,
+    SubscriptionRemovalPort, SubscriptionWorkflow,
 };
 
 // 架构护栏：如果某次设计/计划开始要求严重代码分叉、污染 infra 边界、引发前后端大规模迁移
