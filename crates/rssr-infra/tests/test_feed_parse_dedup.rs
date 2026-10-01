@@ -125,3 +125,45 @@ fn parser_skips_sparse_entries_without_failing_entire_feed() {
     assert_eq!(parsed.entries.len(), 1);
     assert_eq!(parsed.entries[0].title, "Valid entry");
 }
+
+#[test]
+fn parser_preserves_source_hex_guid_when_link_changes() {
+    const GUID: &str = "0123456789abcdef0123456789abcdef";
+    let parse = |link: &str| {
+        let raw = format!(
+            r#"<rss version="2.0"><channel><title>Hex GUID</title>
+            <item><guid>{GUID}</guid><title>Stable identity</title><link>{link}</link>
+            <description>Readable</description></item></channel></rss>"#
+        );
+        FeedParser::new().parse(&raw).expect("parse hex guid feed").entries.remove(0)
+    };
+
+    let before = parse("https://example.com/old");
+    let after = parse("https://example.com/new");
+
+    assert_eq!(before.external_id, GUID);
+    assert_eq!(before.dedup_key, GUID);
+    assert_eq!(after.external_id, GUID);
+    assert_eq!(after.dedup_key, GUID);
+}
+
+#[test]
+fn parser_still_uses_url_when_source_guid_is_missing() {
+    let raw = r#"
+    <rss version="2.0">
+      <channel>
+        <title>No GUID</title>
+        <item>
+          <title>URL identity</title>
+          <link>https://example.com/no-guid</link>
+          <description>Readable</description>
+        </item>
+      </channel>
+    </rss>
+    "#;
+
+    let entry = FeedParser::new().parse(raw).expect("parse no-guid feed").entries.remove(0);
+
+    assert_eq!(entry.external_id, "https://example.com/no-guid");
+    assert_eq!(entry.dedup_key, "https://example.com/no-guid");
+}
