@@ -185,7 +185,7 @@ impl RefreshStorePort for SqliteRefreshStore {
                         message: format!("写入文章正文失败: {error}"),
                         metadata: Some(update.metadata.clone()),
                     };
-                    let _ = self.persist_failure(feed_id, &failure).await;
+                    let _ = self.persist_failure(target, &failure).await;
                     return Err(anyhow::Error::new(error).context("写入文章正文失败"));
                 }
 
