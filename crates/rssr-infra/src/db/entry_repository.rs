@@ -118,6 +118,7 @@ impl SqliteEntryRepository {
         let now = now_rfc3339();
 
         for entry in entries {
+            promote_legacy_hex_guid_identity(&mut tx, feed_id, entry).await?;
             let published_at = format_optional_datetime(entry.published_at)?;
             let updated_at_source = format_optional_datetime(entry.updated_at_source)?;
 
@@ -799,6 +800,65 @@ impl EntryContentRepository for SqliteEntryRepository {
 
         Ok(())
     }
+}
+
+async fn promote_legacy_hex_guid_identity(
+    connection: &mut sqlx::SqliteConnection,
+    feed_id: i64,
+    entry: &ParsedEntry,
+) -> DomainResult<()> {
+    let Some(url) = entry.url.as_ref().map(Url::as_str) else {
+        return Ok(());
+    };
+    if entry.external_id != entry.dedup_key
+        || entry.dedup_key == url
+        || !matches!(entry.dedup_key.len(), 32 | 40 | 64)
+        || !entry.dedup_key.chars().all(|ch| ch.is_ascii_hexdigit())
+    {
+        return Ok(());
+    }
+
+    let current_identity_exists: i64 = sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1 FROM entries
+            WHERE feed_id = ?1 AND (external_id = ?2 OR dedup_key = ?2)
+        )",
+    )
+    .bind(feed_id)
+    .bind(&entry.dedup_key)
+    .fetch_one(&mut *connection)
+    .await
+    .map_err(map_sqlx_error)?;
+    if current_identity_exists != 0 {
+        return Ok(());
+    }
+
+    // Versions before the GUID provenance fix stored exactly this shape for legitimate
+    // 32/40/64-hex source GUIDs: both identity columns were replaced by the current URL.
+    // Promote only that exact legacy row; do not guess across older link changes.
+    sqlx::query(
+        r#"
+        UPDATE entries
+        SET external_id = ?2,
+            dedup_key = ?2
+        WHERE id = (
+            SELECT id FROM entries
+            WHERE feed_id = ?1
+              AND external_id = ?3
+              AND dedup_key = ?3
+              AND url = ?3
+            LIMIT 1
+        )
+        "#,
+    )
+    .bind(feed_id)
+    .bind(&entry.dedup_key)
+    .bind(url)
+    .execute(&mut *connection)
+    .await
+    .map_err(map_sqlx_error)?;
+
+    Ok(())
 }
 
 async fn resolve_entry_ids_by_dedup_keys(
