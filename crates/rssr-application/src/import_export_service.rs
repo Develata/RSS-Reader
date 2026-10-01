@@ -14,7 +14,7 @@ use url::Url;
 
 use self::rules::{import_field, validate_config_package};
 use crate::{
-    persistence_mutation::{ConfigReplacementPlan, ConfigReplacementPort},
+    persistence_mutation::{ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort},
     subscription_workflow::AppStatePort,
 };
 
@@ -211,26 +211,52 @@ impl ImportExportService {
     ) -> Result<ConfigImportOutcome> {
         validate_config_package(package)?;
 
+        // Parse the complete desired state before any write. Production mutation ports derive the
+        // current-vs-desired diff only after acquiring their backend transaction/Web Lock.
+        let desired_feeds = package
+            .feeds
+            .iter()
+            .map(|feed| {
+                Ok(ConfigReplacementFeed {
+                    url: parse_feed_url(&feed.url)
+                        .with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
+                    title: feed.title.clone(),
+                    folder: feed.folder.clone(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        if let Some(port) = &self.config_replacement_port {
+            let outcome = port
+                .replace_config(ConfigReplacementPlan {
+                    feeds: desired_feeds,
+                    settings: package.settings.clone(),
+                })
+                .await?;
+            return Ok(ConfigImportOutcome {
+                imported_feed_count: package.feeds.len(),
+                removed_feed_count: outcome.removed_feed_count,
+                settings_updated: outcome.settings_updated,
+            });
+        }
+
+        // Legacy/test fallback for hand-built services that do not inject a backend-native
+        // replacement port. Shipping native/Web compositions always use the atomic path above.
         let current_feeds = self.feed_repository.list_feeds().await?;
         let current_settings = self.settings_repository.load().await?;
-        let mut imported_urls = Vec::with_capacity(package.feeds.len());
-        let mut upserts = Vec::with_capacity(package.feeds.len());
+        let imported_urls = desired_feeds.iter().map(|feed| feed.url.clone()).collect::<Vec<_>>();
 
-        // Prepare the entire replacement before the first write. Invalid late URLs therefore
-        // cannot leave an earlier prefix persisted.
-        for feed in &package.feeds {
-            let url = normalize_feed_url(
-                &Url::parse(&feed.url).with_context(|| format!("无效的订阅 URL：{}", feed.url))?,
-            );
+        for feed in desired_feeds {
             let existed =
-                current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
-            imported_urls.push(url.clone());
-            upserts.push(NewFeedSubscription {
-                site_url: None,
-                url,
-                title: import_field(feed.title.clone(), existed),
-                folder: import_field(feed.folder.clone(), existed),
-            });
+                current_feeds.iter().any(|current| normalize_feed_url(&current.url) == feed.url);
+            self.feed_repository
+                .upsert_subscription(&NewFeedSubscription {
+                    site_url: None,
+                    url: feed.url,
+                    title: import_field(feed.title, existed),
+                    folder: import_field(feed.folder, existed),
+                })
+                .await?;
         }
 
         let removed_feed_ids = current_feeds
@@ -239,30 +265,15 @@ impl ImportExportService {
             .map(|feed| feed.id)
             .collect::<Vec<_>>();
         let removed_feed_count = removed_feed_ids.len();
-        let settings_updated = current_settings != package.settings;
-
-        if let Some(port) = &self.config_replacement_port {
-            port.replace_config(ConfigReplacementPlan {
-                upserts,
-                removed_feed_ids,
-                settings: package.settings.clone(),
-            })
-            .await?;
-        } else {
-            // Legacy/test fallback. Production adapters inject one atomic mutation port.
-            for new_feed in &upserts {
-                self.feed_repository.upsert_subscription(new_feed).await?;
-            }
-            for feed_id in removed_feed_ids {
-                self.remove_feed_with_cleanup(feed_id).await?;
-            }
-            self.settings_repository.save(&package.settings).await?;
+        for feed_id in removed_feed_ids {
+            self.remove_feed_with_cleanup(feed_id).await?;
         }
+        self.settings_repository.save(&package.settings).await?;
 
         Ok(ConfigImportOutcome {
             imported_feed_count: package.feeds.len(),
             removed_feed_count,
-            settings_updated,
+            settings_updated: current_settings != package.settings,
         })
     }
 
