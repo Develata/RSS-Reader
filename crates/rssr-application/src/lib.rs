@@ -7,6 +7,7 @@ pub mod feed_service;
 pub mod feeds_snapshot_service;
 pub mod import_export_service;
 pub mod reader_service;
+pub mod persistence_mutation;
 pub mod refresh_service;
 pub mod settings_service;
 pub mod settings_sync_service;
@@ -32,6 +33,7 @@ pub use import_export_service::{
     ClockPort, ConfigImportOutcome, ImportExportService, OpmlCodecPort, OpmlImportOutcome,
     RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore, SystemClock,
 };
+pub use persistence_mutation::{ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort};
 pub use reader_service::{
     ReaderEntrySnapshot, ReaderService, ToggleReadInput, ToggleReadOutcome, ToggleStarredInput,
     ToggleStarredOutcome,
