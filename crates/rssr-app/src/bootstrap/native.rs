@@ -90,6 +90,10 @@ impl AppServices {
                     "初始化桌面端本地数据库"
                 );
                 let index_pool = native_backend.connect().await.context("连接本地索引数据库失败")?;
+                let migration_lock = native_backend
+                    .acquire_migration_lock(&index_pool)
+                    .await
+                    .context("取得数据库迁移锁失败")?;
                 native_backend.migrate(&index_pool).await.context("执行索引数据库迁移失败")?;
                 let content_pool =
                     native_backend.connect_content().await.context("连接本地正文数据库失败")?;
@@ -97,6 +101,7 @@ impl AppServices {
                     .migrate_content(&content_pool)
                     .await
                     .context("执行正文数据库迁移失败")?;
+                drop(migration_lock);
 
                 // 实测一次 journal 模式再决定并发度：WAL 没启用成功时退回串行，
                 // 否则并发写者会互相干等并把前台查询一起卡住。
