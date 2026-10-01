@@ -114,9 +114,14 @@ fn upsert_subscription_in_state(
     let normalized_folder = normalize_optional_text(new_feed.folder.clone());
     let now = now_utc();
 
-    let feed = if let Some(feed) =
-        state.core.feeds.iter_mut().find(|feed| feed.url == normalized_url.as_str())
+    let feed = if let Some(index) =
+        state.core.feeds.iter().position(|feed| feed.url == normalized_url.as_str())
     {
+        let feed_id = state.core.feeds[index].id;
+        if state.core.feeds[index].is_deleted {
+            *state.core.feed_generations.entry(feed_id).or_default() += 1;
+        }
+        let feed = &mut state.core.feeds[index];
         if new_feed.title.is_some() {
             feed.title = normalized_title.clone();
         }
@@ -148,6 +153,7 @@ fn upsert_subscription_in_state(
             created_at: now,
             updated_at: now,
         };
+        state.core.feed_generations.entry(persisted.id).or_insert(0);
         state.core.feeds.push(persisted.clone());
         persisted
     };
