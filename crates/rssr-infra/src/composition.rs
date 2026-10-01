@@ -6,7 +6,8 @@ use rssr_application::{AppCompositionInput, AppUseCases};
 use {
     crate::{
         application_adapters::{
-            InfraFeedRefreshSource, InfraOpmlCodec, SqliteAppStateAdapter, SqliteRefreshStore,
+            InfraFeedRefreshSource, InfraOpmlCodec, SqliteAppStateAdapter,
+            SqlitePersistenceMutations, SqliteRefreshStore,
         },
         db::{
             SqlitePool, app_state_repository::SqliteAppStateRepository,
@@ -25,8 +26,8 @@ use {
     crate::application_adapters::browser::{
         adapters::{
             BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRefreshSource,
-            BrowserFeedRepository, BrowserOpmlCodec, BrowserRefreshStore,
-            BrowserSettingsRepository,
+            BrowserFeedRepository, BrowserOpmlCodec, BrowserPersistenceMutations,
+            BrowserRefreshStore, BrowserSettingsRepository,
         },
         state::BrowserStore,
     },
@@ -48,8 +49,10 @@ pub fn compose_native_sqlite_use_cases(
     let entry_repository =
         Arc::new(SqliteEntryRepository::new_with_content_pool(index_pool.clone(), content_pool));
     let settings_repository = Arc::new(SqliteSettingsRepository::new(index_pool.clone()));
-    let app_state_repository = Arc::new(SqliteAppStateRepository::new(index_pool));
+    let app_state_repository = Arc::new(SqliteAppStateRepository::new(index_pool.clone()));
     let app_state = Arc::new(SqliteAppStateAdapter::new(app_state_repository));
+    let persistence_mutations =
+        Arc::new(SqlitePersistenceMutations::new(index_pool, content_pool.clone()));
 
     let use_cases = AppUseCases::compose(AppCompositionInput {
         feed_repository: feed_repository.clone(),
@@ -67,6 +70,8 @@ pub fn compose_native_sqlite_use_cases(
         refresh_store: Arc::new(SqliteRefreshStore::new(feed_repository, entry_repository.clone())),
         opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
         clock: Arc::new(SystemClock),
+        subscription_removal: persistence_mutations.clone(),
+        config_replacement: persistence_mutations,
     });
 
     NativeSqliteComposition { use_cases, entry_repository }
@@ -82,6 +87,7 @@ pub fn compose_browser_use_cases(
     let entry_repository = Arc::new(BrowserEntryRepository::new(state.clone()));
     let settings_repository = Arc::new(BrowserSettingsRepository::new(state.clone()));
     let app_state = Arc::new(BrowserAppStateAdapter::new(state.clone()));
+    let persistence_mutations = Arc::new(BrowserPersistenceMutations::new(state.clone()));
 
     AppUseCases::compose(AppCompositionInput {
         feed_repository,
@@ -96,5 +102,7 @@ pub fn compose_browser_use_cases(
         refresh_store: Arc::new(BrowserRefreshStore::new(state)),
         opml_codec: Arc::new(BrowserOpmlCodec),
         clock,
+        subscription_removal: persistence_mutations.clone(),
+        config_replacement: persistence_mutations,
     })
 }
