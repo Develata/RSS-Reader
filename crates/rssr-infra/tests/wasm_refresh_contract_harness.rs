@@ -318,13 +318,13 @@ async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
     .await;
     let store = BrowserRefreshStore::new(state.clone());
 
-    commit_for(&store, 
-            1,
-            RefreshCommit::NotModified {
-                metadata: RefreshHttpMetadata {
-                    etag: Some("etag-1".to_string()),
-                    last_modified: Some("Wed, 01 Apr 2026 10:00:00 GMT".to_string()),
-                },
+    commit_for(
+        &store,
+        1,
+        RefreshCommit::NotModified {
+            metadata: RefreshHttpMetadata {
+                etag: Some("etag-1".to_string()),
+                last_modified: Some("Wed, 01 Apr 2026 10:00:00 GMT".to_string()),
             },
         )
         .await
@@ -365,20 +365,14 @@ async fn browser_refresh_store_commit_updated_persists_feed_metadata_and_entries
     .await;
     let store = BrowserRefreshStore::new(state.clone());
 
-    commit_for(&store, 
-            1,
-            RefreshCommit::Updated {
-                update: FeedRefreshUpdate {
-                    metadata: RefreshHttpMetadata {
-                        etag: Some("etag-updated".to_string()),
-                        last_modified: Some("Thu, 02 Apr 2026 10:00:00 GMT".to_string()),
-                    },
-                    feed: ParsedFeedUpdate {
-                        title: Some("Updated Feed".to_string()),
-                        site_url: Some(Url::parse("https://example.com").expect("valid site url")),
-                        description: Some("Updated description".to_string()),
-                        entries: vec![sample_entry(1), sample_entry(2)],
-                    },
+    commit_for(
+        &store,
+        1,
+        RefreshCommit::Updated {
+            update: FeedRefreshUpdate {
+                metadata: RefreshHttpMetadata {
+                    etag: Some("etag-updated".to_string()),
+                    last_modified: Some("Thu, 02 Apr 2026 10:00:00 GMT".to_string()),
                 },
             },
         )
@@ -422,17 +416,17 @@ async fn browser_refresh_store_commit_updated_clears_previous_fetch_error() {
     .await;
     let store = BrowserRefreshStore::new(state.clone());
 
-    commit_for(&store, 
-            1,
-            RefreshCommit::Updated {
-                update: FeedRefreshUpdate {
-                    metadata: RefreshHttpMetadata::default(),
-                    feed: ParsedFeedUpdate {
-                        title: Some("Recovered Feed".to_string()),
-                        site_url: None,
-                        description: None,
-                        entries: vec![sample_entry(1)],
-                    },
+    commit_for(
+        &store,
+        1,
+        RefreshCommit::Updated {
+            update: FeedRefreshUpdate {
+                metadata: RefreshHttpMetadata::default(),
+                feed: ParsedFeedUpdate {
+                    title: Some("Recovered Feed".to_string()),
+                    site_url: None,
+                    description: None,
+                    entries: vec![sample_entry(1)],
                 },
             },
         )
@@ -460,16 +454,16 @@ async fn browser_refresh_store_commit_failed_persists_error_without_success_time
     .await;
     let store = BrowserRefreshStore::new(state.clone());
 
-    commit_for(&store, 
-            1,
-            RefreshCommit::Failed {
-                failure: RefreshFailure {
-                    message: "network timeout".to_string(),
-                    metadata: Some(RefreshHttpMetadata {
-                        etag: Some("etag-failed".to_string()),
-                        last_modified: Some("Fri, 03 Apr 2026 10:00:00 GMT".to_string()),
-                    }),
-                },
+    commit_for(
+        &store,
+        1,
+        RefreshCommit::Failed {
+            failure: RefreshFailure {
+                message: "network timeout".to_string(),
+                metadata: Some(RefreshHttpMetadata {
+                    etag: Some("etag-failed".to_string()),
+                    last_modified: Some("Fri, 03 Apr 2026 10:00:00 GMT".to_string()),
+                }),
             },
         )
         .await
@@ -511,14 +505,15 @@ async fn browser_refresh_store_commit_failed_preserves_previous_success_timestam
     .await;
     let store = BrowserRefreshStore::new(state.clone());
 
-    commit_for(&store, 
-            1,
-            RefreshCommit::Failed {
-                failure: RefreshFailure { message: "still failing".to_string(), metadata: None },
-            },
-        )
-        .await
-        .expect("commit failed");
+    commit_for(
+        &store,
+        1,
+        RefreshCommit::Failed {
+            failure: RefreshFailure { message: "still failing".to_string(), metadata: None },
+        },
+    )
+    .await
+    .expect("commit failed");
 
     let snapshot = state.snapshot().await.expect("snapshot");
     assert_eq!(snapshot.core.feeds[0].last_success_at, Some(previous_success));
@@ -635,7 +630,9 @@ async fn browser_refresh_store_commit_outside_a_batch_still_writes_immediately()
     clear_browser_state_storage();
     let (_state, store) = store_with_one_feed().await;
 
-    commit_for(&store, 1, not_modified_with_etag("etag-unbatched")).await.expect("commit outside batch");
+    commit_for(&store, 1, not_modified_with_etag("etag-unbatched"))
+        .await
+        .expect("commit outside batch");
 
     assert_eq!(
         persisted_state().await.core.feeds[0].etag.as_deref(),
@@ -653,7 +650,9 @@ async fn browser_refresh_store_abort_preserves_commits_and_subsequent_writes() {
     let (_state, store) = store_with_one_feed().await;
 
     store.begin_batch().await.expect("begin batch");
-    commit_for(&store, 1, not_modified_with_etag("etag-interrupted")).await.expect("commit in batch");
+    commit_for(&store, 1, not_modified_with_etag("etag-interrupted"))
+        .await
+        .expect("commit in batch");
 
     // 等价于刷新 future 在这里被取消：守卫析构调用 abort_batch。
     store.abort_batch();
@@ -664,7 +663,9 @@ async fn browser_refresh_store_abort_preserves_commits_and_subsequent_writes() {
         "中断不丢失已成功提交的改动"
     );
 
-    commit_for(&store, 1, not_modified_with_etag("etag-after-abort")).await.expect("commit after abort");
+    commit_for(&store, 1, not_modified_with_etag("etag-after-abort"))
+        .await
+        .expect("commit after abort");
 
     assert_eq!(
         persisted_state().await.core.feeds[0].etag.as_deref(),
@@ -731,17 +732,17 @@ async fn failed_refresh_at_each_publication_stage_keeps_old_content_and_index() 
                 return __set.call(this,k,v);
             }};
         "#)).unwrap();
-        let result = commit_for(&store, 
-                1,
-                RefreshCommit::Updated {
-                    update: FeedRefreshUpdate {
-                        metadata: RefreshHttpMetadata::default(),
-                        feed: ParsedFeedUpdate {
-                            title: Some("New title".into()),
-                            site_url: None,
-                            description: None,
-                            entries: vec![sample_entry(1)],
-                        },
+        let result = commit_for(
+            &store,
+            1,
+            RefreshCommit::Updated {
+                update: FeedRefreshUpdate {
+                    metadata: RefreshHttpMetadata::default(),
+                    feed: ParsedFeedUpdate {
+                        title: Some("New title".into()),
+                        site_url: None,
+                        description: None,
+                        entries: vec![sample_entry(1)],
                     },
                 },
             )
@@ -769,12 +770,7 @@ async fn refresh_after_other_tab_deletes_feed_does_not_resurrect_it() {
         .set_deleted(1, true)
         .await
         .unwrap();
-    assert!(
-        store
-            .commit(&stale_target, not_modified_with_etag("late response"))
-            .await
-            .is_err()
-    );
+    assert!(store.commit(&stale_target, not_modified_with_etag("late response")).await.is_err());
     assert!(persisted_state().await.core.feeds[0].is_deleted);
 }
 
@@ -787,10 +783,7 @@ async fn old_refresh_generation_cannot_commit_after_delete_and_same_url_readd() 
     let (_, store) = store_with_one_feed().await;
     let stale_target = store.get_target(1).await.unwrap().unwrap();
     assert_eq!(stale_target.generation, 0);
-    store
-        .commit(&stale_target, not_modified_with_etag("old-generation-etag"))
-        .await
-        .unwrap();
+    store.commit(&stale_target, not_modified_with_etag("old-generation-etag")).await.unwrap();
 
     let repository = BrowserFeedRepository::new(BrowserStore::open().await.unwrap());
     repository.set_deleted(1, true).await.unwrap();
@@ -808,12 +801,7 @@ async fn old_refresh_generation_cannot_commit_after_delete_and_same_url_readd() 
     assert_eq!(fresh_target.generation, 1);
     assert_eq!(fresh_target.etag, None);
     assert_eq!(fresh_target.last_modified, None);
-    assert!(
-        store
-            .commit(&stale_target, not_modified_with_etag("stale-etag"))
-            .await
-            .is_err()
-    );
+    assert!(store.commit(&stale_target, not_modified_with_etag("stale-etag")).await.is_err());
     assert_eq!(persisted_state().await.core.feeds[0].etag, None);
 
     store
@@ -889,17 +877,17 @@ async fn multiple_content_commits_preserve_all_feeds_and_report_write_volume() {
             })
             .collect();
         results.push(
-            commit_for(&store, 
-                    id,
-                    RefreshCommit::Updated {
-                        update: FeedRefreshUpdate {
-                            metadata: RefreshHttpMetadata::default(),
-                            feed: ParsedFeedUpdate {
-                                title: None,
-                                site_url: None,
-                                description: None,
-                                entries,
-                            },
+            commit_for(
+                &store,
+                id,
+                RefreshCommit::Updated {
+                    update: FeedRefreshUpdate {
+                        metadata: RefreshHttpMetadata::default(),
+                        feed: ParsedFeedUpdate {
+                            title: None,
+                            site_url: None,
+                            description: None,
+                            entries,
                         },
                     },
                 )
