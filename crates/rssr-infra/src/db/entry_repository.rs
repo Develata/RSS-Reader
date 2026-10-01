@@ -91,6 +91,24 @@ impl SqliteEntryRepository {
         feed_id: i64,
         entries: &[ParsedEntry],
     ) -> DomainResult<EntryUpsertOutcome> {
+        self.upsert_entries_with_generation_inner(feed_id, None, entries).await
+    }
+
+    pub async fn upsert_entries_with_generation(
+        &self,
+        feed_id: i64,
+        generation: i64,
+        entries: &[ParsedEntry],
+    ) -> DomainResult<EntryUpsertOutcome> {
+        self.upsert_entries_with_generation_inner(feed_id, Some(generation), entries).await
+    }
+
+    async fn upsert_entries_with_generation_inner(
+        &self,
+        feed_id: i64,
+        expected_generation: Option<i64>,
+        entries: &[ParsedEntry],
+    ) -> DomainResult<EntryUpsertOutcome> {
         let mut pending_contents = Vec::new();
         // 一次刷新常常写入几十上百条：不包事务的话每条 INSERT 都是一次隐式事务，
         // 每条都要各自 fsync。包成一个事务后整批只提交一次，同时让整批写入变成原子的。
@@ -98,14 +116,17 @@ impl SqliteEntryRepository {
         // The writer lock is already held here. Revalidate the feed inside the same transaction
         // so a concurrent delete either waits for this refresh (and purges it afterwards), or
         // commits first and makes this refresh a no-op instead of resurrecting articles.
-        let active: i64 = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM feeds WHERE id = ?1 AND is_deleted = 0)",
+        let current_generation = sqlx::query_scalar::<_, i64>(
+            "SELECT generation FROM feeds WHERE id = ?1 AND is_deleted = 0",
         )
         .bind(feed_id)
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(map_sqlx_error)?;
-        if active == 0 {
+        let Some(current_generation) = current_generation else {
+            return Err(DomainError::NotFound);
+        };
+        if expected_generation.is_some_and(|generation| generation != current_generation) {
             return Err(DomainError::NotFound);
         }
 
