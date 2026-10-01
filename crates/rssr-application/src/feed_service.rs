@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use rssr_domain::{
     EntryContentRepository, EntryIndexRepository, Feed, FeedRepository, NewFeedSubscription,
-    normalize_feed_url,
+    normalize_feed_url, parse_feed_url,
 };
 use url::Url;
 
@@ -94,7 +94,7 @@ impl FeedService {
         input: &AddSubscriptionInput,
         site_url: Option<Url>,
     ) -> Result<Feed> {
-        let url = normalize_feed_url(&Url::parse(&input.url).context("订阅 URL 不合法")?);
+        let url = parse_feed_url(&input.url).context("订阅 URL 不合法")?;
         Ok(self
             .feed_repository
             .upsert_subscription(&NewFeedSubscription {
@@ -373,6 +373,8 @@ mod tests {
             .await
             .expect_err("invalid url should fail");
 
-        assert!(error.downcast_ref::<url::ParseError>().is_some());
+        let diagnostic = format!("{error:#}");
+        assert!(diagnostic.contains("订阅 URL 不合法"));
+        assert!(diagnostic.contains("无效的 feed URL"));
     }
 }
