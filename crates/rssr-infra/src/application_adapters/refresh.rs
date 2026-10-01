@@ -113,7 +113,8 @@ impl RefreshStorePort for SqliteRefreshStore {
     }
 
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
-        let Some((feed, generation)) = self.feed_repository.get_feed_with_generation(feed_id).await?
+        let Some((feed, generation)) =
+            self.feed_repository.get_feed_with_generation(feed_id).await?
         else {
             return Ok(None);
         };
@@ -144,10 +145,10 @@ impl RefreshStorePort for SqliteRefreshStore {
             }
             RefreshCommit::Updated { update } => {
                 let parsed_feed = map_application_feed_metadata(&update.feed);
-                if let Err(error) =
-                    self.feed_repository
-                        .update_feed_metadata_for_generation(feed_id, target.generation, &parsed_feed)
-                        .await
+                if let Err(error) = self
+                    .feed_repository
+                    .update_feed_metadata_for_generation(feed_id, target.generation, &parsed_feed)
+                    .await
                 {
                     let failure = RefreshFailure {
                         message: format!("更新订阅元数据失败: {error}"),
