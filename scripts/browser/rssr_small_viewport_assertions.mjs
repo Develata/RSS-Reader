@@ -98,6 +98,18 @@ async function setViewport(client, viewportWidth, viewportHeight, mobile, dpr) {
   });
 }
 
+async function synthesizeTouchScroll(client, point, yDistance) {
+  await client.send('Input.synthesizeScrollGesture', {
+    x: point.x,
+    y: point.y,
+    yDistance,
+    speed: 900,
+    gestureSourceType: 'touch',
+    preventFling: true,
+  });
+  await sleep(120);
+}
+
 function setupUrl(seed, nextPath, themePreset = preset) {
   const params = new URLSearchParams({
     username: 'smoke',
@@ -243,6 +255,115 @@ async function checkEntriesOverflow(client) {
   );
   assertThat('entry titles stay inside the viewport', geometry.titleBoundsOk, geometry);
   assertThat('entry card actions do not overlap', !geometry.actionOverlaps, geometry);
+
+  const sourceScrollSetup = await evaluate(
+    client,
+    `(async () => {
+      const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
+      const seed = grid?.querySelector('[data-layout="entry-filters-source-chip"]');
+      if (!grid || !seed) return null;
+      for (let index = 0; index < 14; index += 1) {
+        const clone = seed.cloneNode(true);
+        clone.dataset.scrollChainFixture = 'true';
+        clone.setAttribute('aria-hidden', 'true');
+        grid.appendChild(clone);
+      }
+      grid.scrollIntoView({block:'center', inline:'nearest', behavior:'instant'});
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const rect = grid.getBoundingClientRect();
+      const maximum = grid.scrollHeight - grid.clientHeight;
+      return {
+        x: (rect.left + rect.right) / 2,
+        y: (rect.top + rect.bottom) / 2,
+        maximum,
+        policy: getComputedStyle(grid).overscrollBehaviorY,
+        pageY: scrollY,
+      };
+    })()`,
+  );
+  assertThat(
+    'source filter enables native vertical scroll chaining',
+    sourceScrollSetup?.maximum > 80 &&
+      ['auto', 'chain'].includes(sourceScrollSetup.policy),
+    sourceScrollSetup,
+  );
+
+  await evaluate(client, `(() => {
+    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
+    grid.scrollTop = (grid.scrollHeight - grid.clientHeight) / 2;
+    window.__sourceScrollBefore = {inner:grid.scrollTop, page:scrollY};
+  })()`);
+  await synthesizeTouchScroll(client, sourceScrollSetup, -120);
+  const sourceScrollMiddle = await evaluate(client, `(() => {
+    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
+    return {before:window.__sourceScrollBefore, inner:grid.scrollTop, page:scrollY};
+  })()`);
+  assertThat(
+    'source filter consumes touch scroll while it has room',
+    sourceScrollMiddle.inner > sourceScrollMiddle.before.inner + 10 &&
+      Math.abs(sourceScrollMiddle.page - sourceScrollMiddle.before.page) <= 2,
+    sourceScrollMiddle,
+  );
+
+  const sourceScrollBottomSetup = await evaluate(client, `(async () => {
+    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
+    grid.scrollTop = grid.scrollHeight - grid.clientHeight;
+    grid.scrollIntoView({block:'center', inline:'nearest', behavior:'instant'});
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const rect = grid.getBoundingClientRect();
+    return {
+      x:(rect.left + rect.right) / 2,
+      y:(rect.top + rect.bottom) / 2,
+      inner:grid.scrollTop,
+      page:scrollY,
+    };
+  })()`);
+  await synthesizeTouchScroll(client, sourceScrollBottomSetup, -180);
+  const sourceScrollBottom = await evaluate(client, `(() => {
+    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
+    return {inner:grid.scrollTop, page:scrollY};
+  })()`);
+  assertThat(
+    'source filter hands downward touch scroll to the page at its bottom edge',
+    Math.abs(sourceScrollBottom.inner - sourceScrollBottomSetup.inner) <= 2 &&
+      sourceScrollBottom.page > sourceScrollBottomSetup.page + 10,
+    {before:sourceScrollBottomSetup, after:sourceScrollBottom},
+  );
+
+  const sourceScrollTopSetup = await evaluate(client, `(async () => {
+    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
+    grid.scrollTop = 0;
+    grid.scrollIntoView({block:'center', inline:'nearest', behavior:'instant'});
+    if (scrollY < 120) window.scrollBy({top:120 - scrollY, behavior:'instant'});
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const rect = grid.getBoundingClientRect();
+    return {
+      x:(rect.left + rect.right) / 2,
+      y:(rect.top + rect.bottom) / 2,
+      inner:grid.scrollTop,
+      page:scrollY,
+    };
+  })()`);
+  await synthesizeTouchScroll(client, sourceScrollTopSetup, 180);
+  const sourceScrollTop = await evaluate(client, `(() => {
+    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
+    return {inner:grid.scrollTop, page:scrollY};
+  })()`);
+  assertThat(
+    'source filter hands upward touch scroll to the page at its top edge',
+    sourceScrollTopSetup.page > 10 &&
+      sourceScrollTop.inner <= 2 &&
+      sourceScrollTop.page < sourceScrollTopSetup.page - 10,
+    {before:sourceScrollTopSetup, after:sourceScrollTop},
+  );
+
+  await evaluate(client, `(() => {
+    document.querySelectorAll('[data-scroll-chain-fixture="true"]').forEach(element => element.remove());
+    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
+    if (grid) grid.scrollTop = 0;
+    delete window.__sourceScrollBefore;
+    window.scrollTo({top:0, behavior:'instant'});
+  })()`);
 
   const maskStates = await evaluate(
     client,
