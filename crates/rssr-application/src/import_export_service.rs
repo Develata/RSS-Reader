@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use rssr_domain::{
     ConfigFeed, ConfigPackage, EntryContentRepository, EntryIndexRepository, FeedRepository,
-    NewFeedSubscription, SettingsRepository, normalize_feed_url,
+    NewFeedSubscription, SettingsRepository, normalize_feed_url, parse_feed_url,
 };
 use time::OffsetDateTime;
 use url::Url;
@@ -283,24 +283,24 @@ impl ImportExportService {
         let feeds = self.opml_codec.decode(raw)?;
         let current_feeds = self.feed_repository.list_feeds().await?;
         let imported_feed_count = feeds.len();
+        let mut subscriptions = Vec::with_capacity(imported_feed_count);
 
+        // Validate and normalize the complete document before the first write. A bad URL near the
+        // end of an OPML file must not leave the valid prefix imported.
         for feed in feeds {
-            let url = normalize_feed_url(
-                &Url::parse(&feed.url)
-                    .with_context(|| format!("OPML 中存在无效订阅 URL：{}", feed.url))?,
-            );
+            let url = parse_feed_url(&feed.url)
+                .with_context(|| format!("OPML 中存在无效订阅 URL：{}", feed.url))?;
             let existed =
                 current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
-            self.feed_repository
-                .upsert_subscription(&NewFeedSubscription {
-                    site_url: None,
-                    url,
-                    title: import_field(feed.title, existed),
-                    folder: import_field(feed.folder, existed),
-                })
-                .await?;
+            subscriptions.push(NewFeedSubscription {
+                site_url: None,
+                url,
+                title: import_field(feed.title, existed),
+                folder: import_field(feed.folder, existed),
+            });
         }
 
+        self.feed_repository.upsert_subscriptions(&subscriptions).await?;
         Ok(OpmlImportOutcome { imported_feed_count })
     }
 
