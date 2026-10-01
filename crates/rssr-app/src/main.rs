@@ -1,4 +1,7 @@
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
+// Rust 1.99 Clippy false-positive from async_trait macro expansion:
+// https://github.com/rust-lang/rust-clippy/issues/17529
+#![allow(clippy::double_must_use)]
 
 mod app;
 mod bootstrap;
