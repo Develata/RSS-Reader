@@ -67,7 +67,7 @@ pub async fn verify_counts(store: &dyn RefreshStorePort, feed_id: i64) {
     assert_eq!(
         store
             .commit(
-                feed_id,
+                &target,
                 RefreshCommit::Failed {
                     failure: RefreshFailure { message: "offline".into(), metadata: None }
                 }
