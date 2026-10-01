@@ -51,25 +51,23 @@ async fn thirty_three_thousand_entry_feed_writes_index_and_content_completely() 
 
     entries.upsert_entries(feed.id, &parsed).await.expect("write huge feed");
 
-    let index_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM entries WHERE feed_id = ?1")
-            .bind(feed.id)
-            .fetch_one(&index_pool)
-            .await
-            .unwrap();
+    let index_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entries WHERE feed_id = ?1")
+        .bind(feed.id)
+        .fetch_one(&index_pool)
+        .await
+        .unwrap();
     let content_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
             .bind(feed.id)
             .fetch_one(&content_pool)
             .await
             .unwrap();
-    let marked_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM entries WHERE feed_id = ?1 AND has_content = 1",
-    )
-    .bind(feed.id)
-    .fetch_one(&index_pool)
-    .await
-    .unwrap();
+    let marked_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM entries WHERE feed_id = ?1 AND has_content = 1")
+            .bind(feed.id)
+            .fetch_one(&index_pool)
+            .await
+            .unwrap();
 
     assert_eq!(index_count, ENTRY_COUNT as i64);
     assert_eq!(content_count, ENTRY_COUNT as i64);
