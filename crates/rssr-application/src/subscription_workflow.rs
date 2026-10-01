@@ -261,7 +261,11 @@ mod tests {
         }
     }
 
-    fn workflow(next_id: i64, targets: Vec<RefreshTarget>, removal: Arc<RemovalStub>) -> SubscriptionWorkflow {
+    fn workflow(
+        next_id: i64,
+        targets: Vec<RefreshTarget>,
+        removal: Arc<RemovalStub>,
+    ) -> SubscriptionWorkflow {
         SubscriptionWorkflow::new(
             crate::FeedService::new(
                 Arc::new(FeedRepositoryStub { next_id: Mutex::new(next_id) }),
