@@ -35,17 +35,15 @@ pub struct SubscriptionWorkflow {
     pub(crate) feed_service: FeedService,
     pub(crate) probe: Arc<dyn crate::SubscriptionProbePort>,
     refresh_service: RefreshService,
-    app_state: Arc<dyn AppStatePort>,
 }
 
 impl SubscriptionWorkflow {
     pub fn new(
         feed_service: FeedService,
         refresh_service: RefreshService,
-        app_state: Arc<dyn AppStatePort>,
         probe: Arc<dyn crate::SubscriptionProbePort>,
     ) -> Self {
-        Self { feed_service, refresh_service, app_state, probe }
+        Self { feed_service, refresh_service, probe }
     }
 
     pub async fn add_subscription(&self, input: &AddSubscriptionInput) -> Result<Feed> {
@@ -119,8 +117,7 @@ impl SubscriptionWorkflow {
     }
 
     pub async fn remove_subscription(&self, input: RemoveSubscriptionInput) -> Result<()> {
-        self.feed_service.remove_subscription(input).await?;
-        self.app_state.clear_last_opened_feed_if_matches(input.feed_id).await
+        self.feed_service.remove_subscription(input).await
     }
 }
 
