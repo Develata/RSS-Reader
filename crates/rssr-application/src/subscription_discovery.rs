@@ -1,5 +1,4 @@
 use anyhow::{Context, Result, bail};
-use rssr_domain::normalize_feed_url;
 use url::Url;
 
 use crate::{FeedRefreshUpdate, SubscriptionWorkflow};
@@ -45,10 +44,8 @@ impl PreparedSubscription {
 
 impl SubscriptionWorkflow {
     pub async fn prepare_subscription(&self, raw_url: &str) -> Result<PrepareSubscriptionOutcome> {
-        let url = normalize_feed_url(&Url::parse(raw_url.trim()).context("订阅 URL 不合法")?);
-        if !matches!(url.scheme(), "http" | "https") {
-            bail!("订阅只支持 HTTP 或 HTTPS 地址。");
-        }
+        let normalized = rssr_domain::parse_and_normalize_feed_url(raw_url.trim())?;
+        let url = Url::parse(&normalized).context("归一化后的订阅 URL 不合法")?;
         self.feed_service.ensure_not_subscribed(&url).await?;
         match self.probe.probe(&url).await? {
             SubscriptionProbeOutcome::Feed { url, update } => {
