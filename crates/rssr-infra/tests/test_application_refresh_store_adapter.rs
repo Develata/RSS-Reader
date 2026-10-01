@@ -366,7 +366,6 @@ async fn sqlite_counts_only_real_inserts_including_same_batch_duplicates() {
     assert_eq!(feeds.list_summaries().await.unwrap()[0].entry_count, 3);
 }
 
-
 #[tokio::test]
 async fn old_sqlite_refresh_generation_cannot_commit_after_delete_and_same_url_readd() {
     let backend = NativeSqliteBackend::new("sqlite::memory:");
