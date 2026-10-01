@@ -1,7 +1,5 @@
 use anyhow::{Context, Result, bail};
-use rssr_application::{
-    ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort,
-};
+use rssr_application::{ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort};
 use rssr_domain::{AppStateSnapshot, NewFeedSubscription};
 use sqlx::Row;
 use time::OffsetDateTime;
@@ -41,21 +39,16 @@ impl SqlitePersistenceMutations {
 #[async_trait::async_trait]
 impl SubscriptionRemovalPort for SqlitePersistenceMutations {
     async fn remove_subscription(&self, feed_id: i64, purge_entries: bool) -> Result<()> {
-        let mut tx = self
-            .index_pool
-            .begin_with("BEGIN IMMEDIATE")
-            .await
-            .context("开始订阅删除事务失败")?;
+        let mut tx =
+            self.index_pool.begin_with("BEGIN IMMEDIATE").await.context("开始订阅删除事务失败")?;
         let now = now_rfc3339();
 
-        let result = sqlx::query(
-            "UPDATE feeds SET is_deleted = 1, updated_at = ?2 WHERE id = ?1",
-        )
-        .bind(feed_id)
-        .bind(&now)
-        .execute(&mut *tx)
-        .await
-        .context("标记订阅删除失败")?;
+        let result = sqlx::query("UPDATE feeds SET is_deleted = 1, updated_at = ?2 WHERE id = ?1")
+            .bind(feed_id)
+            .bind(&now)
+            .execute(&mut *tx)
+            .await
+            .context("标记订阅删除失败")?;
         if result.rows_affected() == 0 {
             bail!("订阅不存在");
         }
@@ -82,29 +75,24 @@ impl ConfigReplacementPort for SqlitePersistenceMutations {
     async fn replace_config(&self, plan: ConfigReplacementPlan) -> Result<()> {
         // Serialize before opening the write transaction so an impossible settings payload cannot
         // hold the SQLite writer lock or leave any prior feed mutation visible.
-        let settings_raw =
-            serde_json::to_string(&plan.settings).context("序列化导入设置失败")?;
+        let settings_raw = serde_json::to_string(&plan.settings).context("序列化导入设置失败")?;
         let now = now_rfc3339();
 
-        let mut tx = self
-            .index_pool
-            .begin_with("BEGIN IMMEDIATE")
-            .await
-            .context("开始配置替换事务失败")?;
+        let mut tx =
+            self.index_pool.begin_with("BEGIN IMMEDIATE").await.context("开始配置替换事务失败")?;
 
         for feed in &plan.upserts {
             upsert_subscription(&mut tx, feed, &now).await?;
         }
 
         for &feed_id in &plan.removed_feed_ids {
-            let result = sqlx::query(
-                "UPDATE feeds SET is_deleted = 1, updated_at = ?2 WHERE id = ?1",
-            )
-            .bind(feed_id)
-            .bind(&now)
-            .execute(&mut *tx)
-            .await
-            .with_context(|| format!("标记缺失订阅 {feed_id} 删除失败"))?;
+            let result =
+                sqlx::query("UPDATE feeds SET is_deleted = 1, updated_at = ?2 WHERE id = ?1")
+                    .bind(feed_id)
+                    .bind(&now)
+                    .execute(&mut *tx)
+                    .await
+                    .with_context(|| format!("标记缺失订阅 {feed_id} 删除失败"))?;
             if result.rows_affected() == 0 {
                 bail!("配置替换期间订阅 {feed_id} 不存在");
             }
@@ -191,26 +179,20 @@ async fn clear_last_opened_if_matches(
     };
 
     let raw: String = row.try_get("value").context("读取应用状态内容失败")?;
-    let mut state: AppStateSnapshot =
-        serde_json::from_str(&raw).context("解析应用状态失败")?;
-    if state
-        .last_opened_feed_id
-        .is_none_or(|feed_id| !removed_feed_ids.contains(&feed_id))
-    {
+    let mut state: AppStateSnapshot = serde_json::from_str(&raw).context("解析应用状态失败")?;
+    if state.last_opened_feed_id.is_none_or(|feed_id| !removed_feed_ids.contains(&feed_id)) {
         return Ok(());
     }
 
     state.last_opened_feed_id = None;
     let raw = serde_json::to_string(&state).context("序列化应用状态失败")?;
-    sqlx::query(
-        "UPDATE app_settings SET value = ?2, updated_at = ?3 WHERE key = ?1",
-    )
-    .bind(APP_STATE_KEY)
-    .bind(raw)
-    .bind(now)
-    .execute(connection)
-    .await
-    .context("清理已删除订阅的最后打开状态失败")?;
+    sqlx::query("UPDATE app_settings SET value = ?2, updated_at = ?3 WHERE key = ?1")
+        .bind(APP_STATE_KEY)
+        .bind(raw)
+        .bind(now)
+        .execute(connection)
+        .await
+        .context("清理已删除订阅的最后打开状态失败")?;
     Ok(())
 }
 
