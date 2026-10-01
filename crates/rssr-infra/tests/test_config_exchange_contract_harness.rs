@@ -358,7 +358,6 @@ async fn opml_batch_database_failure_rolls_back_earlier_feed() {
     assert!(fixture.feed_repository.list_feeds().await.unwrap().is_empty());
 }
 
-
 #[tokio::test]
 async fn opml_import_rejects_material_after_root_without_persisting() {
     let fixture = build_sqlite_fixture().await.expect("build fixture");
