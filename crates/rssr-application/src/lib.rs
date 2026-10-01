@@ -1,3 +1,6 @@
+// Rust 1.99 Clippy false-positive from async_trait macro expansion:
+// https://github.com/rust-lang/rust-clippy/issues/17529
+#![allow(clippy::double_must_use)]
 pub mod app_state_service;
 pub mod composition;
 pub mod entries_list_service;
