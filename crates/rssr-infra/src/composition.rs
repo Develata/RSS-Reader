@@ -46,8 +46,10 @@ pub fn compose_native_sqlite_use_cases(
     content_pool: SqlitePool,
 ) -> NativeSqliteComposition {
     let feed_repository = Arc::new(SqliteFeedRepository::new(index_pool.clone()));
-    let entry_repository =
-        Arc::new(SqliteEntryRepository::new_with_content_pool(index_pool.clone(), content_pool.clone()));
+    let entry_repository = Arc::new(SqliteEntryRepository::new_with_content_pool(
+        index_pool.clone(),
+        content_pool.clone(),
+    ));
     let settings_repository = Arc::new(SqliteSettingsRepository::new(index_pool.clone()));
     let app_state_repository = Arc::new(SqliteAppStateRepository::new(index_pool.clone()));
     let app_state = Arc::new(SqliteAppStateAdapter::new(app_state_repository));
