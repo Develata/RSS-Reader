@@ -294,7 +294,6 @@ async fn config_exchange_contract_remote_push_and_pull_roundtrip() {
     assert_eq!(import_fixture.settings_repository.load().await.expect("load settings"), settings);
 }
 
-
 #[tokio::test]
 async fn opml_import_rejects_truncation_without_persisting_prefix() {
     let fixture = build_sqlite_fixture().await.expect("build fixture");
