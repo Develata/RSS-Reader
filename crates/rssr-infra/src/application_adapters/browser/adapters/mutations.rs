@@ -1,7 +1,5 @@
 use anyhow::{Context, Result};
-use rssr_application::{
-    ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort,
-};
+use rssr_application::{ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort};
 use rssr_domain::NewFeedSubscription;
 
 use crate::application_adapters::browser::{
@@ -74,7 +72,8 @@ impl ConfigReplacementPort for BrowserPersistenceMutations {
                     upsert_subscription(state, new_feed);
                 }
 
-                let removed = plan.removed_feed_ids.iter().copied().collect::<std::collections::HashSet<_>>();
+                let removed =
+                    plan.removed_feed_ids.iter().copied().collect::<std::collections::HashSet<_>>();
                 let removed_entry_ids = state
                     .core
                     .entries
@@ -102,10 +101,7 @@ impl ConfigReplacementPort for BrowserPersistenceMutations {
                     state.app_state.last_opened_feed_id = None;
                 }
 
-                Ok((
-                    (),
-                    Changes::CORE | Changes::APP_STATE | Changes::FLAGS | Changes::CONTENT,
-                ))
+                Ok(((), Changes::CORE | Changes::APP_STATE | Changes::FLAGS | Changes::CONTENT))
             })
             .await
             .map_err(map_store_error)
@@ -121,9 +117,7 @@ fn upsert_subscription(
     let normalized_folder = normalize_optional_text(new_feed.folder.clone());
     let now = now_utc();
 
-    if let Some(feed) =
-        state.core.feeds.iter_mut().find(|feed| feed.url == new_feed.url.as_str())
-    {
+    if let Some(feed) = state.core.feeds.iter_mut().find(|feed| feed.url == new_feed.url.as_str()) {
         if new_feed.title.is_some() {
             feed.title = normalized_title;
         }
