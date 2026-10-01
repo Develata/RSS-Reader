@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use rssr_domain::{
-    EntryContentRepository, EntryIndexRepository, Feed, FeedRepository, NewFeedSubscription,
-    normalize_feed_url, parse_feed_url,
-};
+use rssr_domain::{Feed, FeedRepository, NewFeedSubscription, normalize_feed_url, parse_feed_url};
 use url::Url;
 
 use crate::SubscriptionRemovalPort;
@@ -28,43 +25,8 @@ pub struct FeedService {
     removal_port: Arc<dyn SubscriptionRemovalPort>,
 }
 
-struct RepositorySubscriptionRemoval {
-    feed_repository: Arc<dyn FeedRepository>,
-    entry_index_repository: Arc<dyn EntryIndexRepository>,
-    entry_content_repository: Arc<dyn EntryContentRepository>,
-}
-
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl SubscriptionRemovalPort for RepositorySubscriptionRemoval {
-    async fn remove_subscription(&self, feed_id: i64, purge_entries: bool) -> Result<()> {
-        // Tombstone first so a later cleanup failure cannot leave a visible subscription
-        // whose article index has already disappeared. Production adapters replace this
-        // fallback with a backend-native atomic mutation.
-        self.feed_repository.set_deleted(feed_id, true).await?;
-        if purge_entries {
-            self.entry_index_repository.delete_for_feed(feed_id).await?;
-            self.entry_content_repository.delete_for_feed(feed_id).await?;
-        }
-        Ok(())
-    }
-}
-
 impl FeedService {
     pub fn new(
-        feed_repository: Arc<dyn FeedRepository>,
-        entry_index_repository: Arc<dyn EntryIndexRepository>,
-        entry_content_repository: Arc<dyn EntryContentRepository>,
-    ) -> Self {
-        let removal_port = Arc::new(RepositorySubscriptionRemoval {
-            feed_repository: feed_repository.clone(),
-            entry_index_repository,
-            entry_content_repository,
-        });
-        Self { feed_repository, removal_port }
-    }
-
-    pub fn new_with_removal_port(
         feed_repository: Arc<dyn FeedRepository>,
         removal_port: Arc<dyn SubscriptionRemovalPort>,
     ) -> Self {
