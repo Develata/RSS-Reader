@@ -110,6 +110,8 @@ pub enum RefreshFeedResult {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RefreshLocalizedEntry {
+    /// Feed generation captured by the refresh that produced this localization work.
+    pub generation: i64,
     pub dedup_key: String,
     pub url: Option<Url>,
     pub title: String,
@@ -526,7 +528,8 @@ impl RefreshService {
             }
             FeedRefreshSourceOutput::Updated(update) => {
                 let entry_count = update.feed.entries.len();
-                let localization_entries = build_localization_entries(&update.feed.entries);
+                let localization_entries =
+                    build_localization_entries(&update.feed.entries, target.generation);
                 let committed =
                     self.store.commit(&target, RefreshCommit::Updated { update }).await?;
                 Ok(RefreshFeedOutcome {
@@ -553,11 +556,15 @@ impl RefreshService {
     }
 }
 
-fn build_localization_entries(entries: &[ParsedEntryData]) -> Vec<RefreshLocalizedEntry> {
+fn build_localization_entries(
+    entries: &[ParsedEntryData],
+    generation: i64,
+) -> Vec<RefreshLocalizedEntry> {
     entries
         .iter()
         .filter_map(|entry| {
             entry.content_html.as_ref().map(|content_html| RefreshLocalizedEntry {
+                generation,
                 dedup_key: entry.dedup_key.clone(),
                 url: entry.url.clone(),
                 title: entry.title.clone(),
