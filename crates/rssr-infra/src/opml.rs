@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use quick_xml::encoding::Decoder;
 use quick_xml::{
     Reader, Writer,
@@ -63,36 +63,82 @@ impl OpmlCodec {
         let mut feeds = Vec::new();
         let mut folder_stack: Vec<Option<String>> = Vec::new();
         let mut outline_depths: Vec<bool> = Vec::new();
+        let mut element_stack: Vec<Vec<u8>> = Vec::new();
+        let mut saw_opml = false;
+        let mut saw_body = false;
+        let mut body_depth: Option<usize> = None;
+        let mut root_closed = false;
 
         loop {
             match reader.read_event()? {
-                Event::Start(event) if event.name().as_ref() == b"outline" => {
-                    let outline = OutlineAttrs::from_event(&event, reader.decoder())?;
-                    if let Some(url) = outline.xml_url {
-                        feeds.push(ConfigFeed {
-                            url,
-                            title: outline.title.or(outline.text),
-                            folder: current_folder(&folder_stack),
-                        });
-                        outline_depths.push(false);
-                    } else {
-                        folder_stack.push(outline.title.or(outline.text));
-                        outline_depths.push(true);
+                Event::Start(event) => {
+                    let name = event.name().as_ref().to_vec();
+                    if element_stack.is_empty() {
+                        ensure!(!saw_opml && name == b"opml", "OPML 必须只有一个 <opml> 根元素");
+                        validate_opml_root(&event, reader.decoder())?;
+                        saw_opml = true;
+                    } else if element_stack.len() == 1
+                        && element_stack[0].as_slice() == b"opml"
+                        && name == b"body"
+                    {
+                        ensure!(!saw_body, "OPML 只能包含一个 <body>");
+                        saw_body = true;
+                        body_depth = Some(element_stack.len() + 1);
+                    }
+
+                    if name == b"outline" && body_depth.is_some() {
+                        let outline = OutlineAttrs::from_event(&event, reader.decoder())?;
+                        if let Some(url) = outline.xml_url {
+                            feeds.push(ConfigFeed {
+                                url,
+                                title: outline.title.or(outline.text),
+                                folder: current_folder(&folder_stack),
+                            });
+                            outline_depths.push(false);
+                        } else {
+                            folder_stack.push(outline.title.or(outline.text));
+                            outline_depths.push(true);
+                        }
+                    }
+                    element_stack.push(name);
+                }
+                Event::Empty(event) => {
+                    let name = event.name().as_ref().to_vec();
+                    if element_stack.is_empty() {
+                        ensure!(!saw_opml && name == b"opml", "OPML 必须只有一个 <opml> 根元素");
+                        validate_opml_root(&event, reader.decoder())?;
+                        saw_opml = true;
+                        root_closed = true;
+                    } else if element_stack.len() == 1
+                        && element_stack[0].as_slice() == b"opml"
+                        && name == b"body"
+                    {
+                        ensure!(!saw_body, "OPML 只能包含一个 <body>");
+                        saw_body = true;
+                    } else if name == b"outline" && body_depth.is_some() {
+                        let outline = OutlineAttrs::from_event(&event, reader.decoder())?;
+                        if let Some(url) = outline.xml_url {
+                            feeds.push(ConfigFeed {
+                                url,
+                                title: outline.title.or(outline.text),
+                                folder: current_folder(&folder_stack),
+                            });
+                        }
                     }
                 }
-                Event::Empty(event) if event.name().as_ref() == b"outline" => {
-                    let outline = OutlineAttrs::from_event(&event, reader.decoder())?;
-                    if let Some(url) = outline.xml_url {
-                        feeds.push(ConfigFeed {
-                            url,
-                            title: outline.title.or(outline.text),
-                            folder: current_folder(&folder_stack),
-                        });
-                    }
-                }
-                Event::End(event) if event.name().as_ref() == b"outline" => {
-                    if outline_depths.pop().unwrap_or(false) {
-                        folder_stack.pop();
+                Event::End(event) => {
+                    let name = event.name().as_ref().to_vec();
+                    let open = element_stack.pop().context("OPML 出现了没有起始标签的结束标签")?;
+                    ensure!(open == name, "OPML 标签没有正确闭合");
+
+                    if name.as_slice() == b"outline" && body_depth.is_some() {
+                        if outline_depths.pop().unwrap_or(false) {
+                            folder_stack.pop();
+                        }
+                    } else if name.as_slice() == b"body" {
+                        body_depth = None;
+                    } else if name.as_slice() == b"opml" {
+                        root_closed = true;
                     }
                 }
                 Event::Eof => break,
@@ -100,8 +146,29 @@ impl OpmlCodec {
             }
         }
 
+        ensure!(saw_opml, "不是 OPML：缺少 <opml> 根元素");
+        ensure!(saw_body, "不是 OPML：缺少 <body>");
+        ensure!(root_closed && element_stack.is_empty(), "OPML 文档被截断或存在未闭合标签");
+        ensure!(
+            outline_depths.is_empty() && folder_stack.is_empty(),
+            "OPML outline 结构未完整闭合"
+        );
+
         Ok(feeds)
     }
+}
+
+fn validate_opml_root(event: &BytesStart<'_>, decoder: Decoder) -> Result<()> {
+    for attribute in event.attributes() {
+        let attribute = attribute?;
+        if attribute.key.as_ref() == b"version" {
+            let version = attribute.decode_and_unescape_value(decoder)?;
+            if !matches!(version.as_ref(), "1.0" | "1.1" | "2.0") {
+                bail!("不支持的 OPML 版本：{version}");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn write_feed_outline(writer: &mut Writer<Vec<u8>>, feed: &ConfigFeed) -> Result<()> {

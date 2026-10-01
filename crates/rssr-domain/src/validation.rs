@@ -148,10 +148,17 @@ pub fn validate_config_package(package: &ConfigPackage) -> crate::Result<()> {
 }
 
 /// 解析并归一化一个 feed URL，失败时给出带原始输入的错误。
-pub fn parse_and_normalize_feed_url(raw: &str) -> crate::Result<String> {
+pub fn parse_feed_url(raw: &str) -> crate::Result<Url> {
     let url =
         Url::parse(raw).map_err(|error| invalid(format!("无效的 feed URL：{raw}（{error}）")))?;
-    Ok(normalize_feed_url(&url).to_string())
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(invalid(format!("feed URL 只支持 HTTP 或 HTTPS：{raw}")));
+    }
+    Ok(normalize_feed_url(&url))
+}
+
+pub fn parse_and_normalize_feed_url(raw: &str) -> crate::Result<String> {
+    Ok(parse_feed_url(raw)?.to_string())
 }
 
 #[cfg(test)]
@@ -159,7 +166,7 @@ mod tests {
     use time::OffsetDateTime;
 
     use super::{
-        CONFIG_PACKAGE_VERSION, validate_config_package, validate_custom_css,
+        CONFIG_PACKAGE_VERSION, parse_feed_url, validate_config_package, validate_custom_css,
         validate_user_settings,
     };
     use crate::settings::{ConfigFeed, ConfigPackage, UserSettings};
@@ -286,6 +293,14 @@ mod tests {
             UserSettings { custom_css: "a { color: red;".to_string(), ..UserSettings::default() };
 
         assert!(validate_user_settings(&settings).is_ok());
+    }
+
+    #[test]
+    fn rejects_unsupported_feed_url_schemes() {
+        for raw in ["file:///tmp/feed.xml", "javascript:alert(1)", "ftp://example.com/feed.xml"] {
+            let error = parse_feed_url(raw).expect_err("unsupported scheme must fail");
+            assert!(error.to_string().contains("HTTP 或 HTTPS"), "{error}");
+        }
     }
 
     #[test]

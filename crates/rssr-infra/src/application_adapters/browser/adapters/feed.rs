@@ -28,53 +28,26 @@ impl FeedRepository for BrowserFeedRepository {
         new_feed: &NewFeedSubscription,
     ) -> rssr_domain::Result<Feed> {
         let new_feed = new_feed.clone();
-        let normalized_url = normalize_feed_url(&new_feed.url);
-        let normalized_title = normalize_optional_text(new_feed.title.clone());
-        let normalized_folder = normalize_optional_text(new_feed.folder.clone());
-
         self.store
             .update(move |state| {
-                let now = now_utc();
+                Ok((upsert_subscription_in_state(state, &new_feed)?, Changes::CORE))
+            })
+            .await
+            .map_err(map_store_error)
+    }
 
-                let feed = if let Some(feed) =
-                    state.core.feeds.iter_mut().find(|feed| feed.url == normalized_url.as_str())
-                {
-                    if new_feed.title.is_some() {
-                        feed.title = normalized_title.clone();
-                    }
-                    if new_feed.folder.is_some() {
-                        feed.folder = normalized_folder.clone();
-                    }
-                    if let Some(site_url) = &new_feed.site_url {
-                        feed.site_url = Some(site_url.to_string());
-                    }
-                    feed.is_deleted = false;
-                    feed.updated_at = now;
-                    feed.clone()
-                } else {
-                    state.core.next_feed_id += 1;
-                    let persisted = PersistedFeed {
-                        id: state.core.next_feed_id,
-                        url: normalized_url.to_string(),
-                        title: normalized_title,
-                        site_url: new_feed.site_url.as_ref().map(ToString::to_string),
-                        description: None,
-                        icon_url: None,
-                        folder: normalized_folder,
-                        etag: None,
-                        last_modified: None,
-                        last_fetched_at: None,
-                        last_success_at: None,
-                        fetch_error: None,
-                        is_deleted: false,
-                        created_at: now,
-                        updated_at: now,
-                    };
-                    state.core.feeds.push(persisted.clone());
-                    persisted
-                };
-
-                Ok((persisted_feed_to_domain(&feed)?, Changes::CORE))
+    async fn upsert_subscriptions(
+        &self,
+        new_feeds: &[NewFeedSubscription],
+    ) -> rssr_domain::Result<Vec<Feed>> {
+        let new_feeds = new_feeds.to_vec();
+        self.store
+            .update(move |state| {
+                let feeds = new_feeds
+                    .iter()
+                    .map(|new_feed| upsert_subscription_in_state(state, new_feed))
+                    .collect::<rssr_domain::Result<Vec<_>>>()?;
+                Ok((feeds, Changes::CORE))
             })
             .await
             .map_err(map_store_error)
@@ -130,6 +103,56 @@ impl FeedRepository for BrowserFeedRepository {
     async fn list_summaries(&self) -> rssr_domain::Result<Vec<FeedSummary>> {
         self.store.read(|state| Ok(query_list_feeds(state))).await.map_err(map_store_error)
     }
+}
+
+fn upsert_subscription_in_state(
+    state: &mut crate::application_adapters::browser::state::BrowserState,
+    new_feed: &NewFeedSubscription,
+) -> rssr_domain::Result<Feed> {
+    let normalized_url = normalize_feed_url(&new_feed.url);
+    let normalized_title = normalize_optional_text(new_feed.title.clone());
+    let normalized_folder = normalize_optional_text(new_feed.folder.clone());
+    let now = now_utc();
+
+    let feed = if let Some(feed) =
+        state.core.feeds.iter_mut().find(|feed| feed.url == normalized_url.as_str())
+    {
+        if new_feed.title.is_some() {
+            feed.title = normalized_title.clone();
+        }
+        if new_feed.folder.is_some() {
+            feed.folder = normalized_folder.clone();
+        }
+        if let Some(site_url) = &new_feed.site_url {
+            feed.site_url = Some(site_url.to_string());
+        }
+        feed.is_deleted = false;
+        feed.updated_at = now;
+        feed.clone()
+    } else {
+        state.core.next_feed_id += 1;
+        let persisted = PersistedFeed {
+            id: state.core.next_feed_id,
+            url: normalized_url.to_string(),
+            title: normalized_title,
+            site_url: new_feed.site_url.as_ref().map(ToString::to_string),
+            description: None,
+            icon_url: None,
+            folder: normalized_folder,
+            etag: None,
+            last_modified: None,
+            last_fetched_at: None,
+            last_success_at: None,
+            fetch_error: None,
+            is_deleted: false,
+            created_at: now,
+            updated_at: now,
+        };
+        state.core.feeds.push(persisted.clone());
+        persisted
+    };
+
+    persisted_feed_to_domain(&feed)
 }
 
 fn persisted_feed_to_domain(feed: &PersistedFeed) -> rssr_domain::Result<Feed> {

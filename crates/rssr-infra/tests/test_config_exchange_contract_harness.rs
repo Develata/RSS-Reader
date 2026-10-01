@@ -293,3 +293,67 @@ async fn config_exchange_contract_remote_push_and_pull_roundtrip() {
     assert_eq!(imported_feeds[0].url.as_str(), "https://example.com/feed.xml");
     assert_eq!(import_fixture.settings_repository.load().await.expect("load settings"), settings);
 }
+
+#[tokio::test]
+async fn opml_import_rejects_truncation_without_persisting_prefix() {
+    let fixture = build_sqlite_fixture().await.expect("build fixture");
+    fixture
+        .service
+        .import_opml(
+            r#"<opml version="2.0"><body>
+            <outline text="One" xmlUrl="https://example.com/one.xml" />"#,
+        )
+        .await
+        .expect_err("truncated OPML must fail");
+
+    assert!(fixture.feed_repository.list_feeds().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn opml_import_rejects_unsupported_scheme_before_any_write() {
+    let fixture = build_sqlite_fixture().await.expect("build fixture");
+    let error = fixture
+        .service
+        .import_opml(
+            r#"<opml version="2.0"><body>
+            <outline text="Good" xmlUrl="https://example.com/good.xml" />
+            <outline text="Bad" xmlUrl="file:///tmp/private.xml" />
+            </body></opml>"#,
+        )
+        .await
+        .expect_err("file scheme must fail");
+
+    assert!(format!("{error:#}").contains("OPML 中存在无效订阅 URL"));
+    assert!(fixture.feed_repository.list_feeds().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn opml_batch_database_failure_rolls_back_earlier_feed() {
+    let fixture = build_sqlite_fixture().await.expect("build fixture");
+    sqlx::query(
+        r#"
+        CREATE TRIGGER reject_second_opml_feed
+        BEFORE INSERT ON feeds
+        WHEN NEW.url = 'https://example.com/two.xml'
+        BEGIN
+            SELECT RAISE(ABORT, 'forced second feed failure');
+        END
+        "#,
+    )
+    .execute(&fixture.pool)
+    .await
+    .unwrap();
+
+    fixture
+        .service
+        .import_opml(
+            r#"<opml version="2.0"><body>
+            <outline text="One" xmlUrl="https://example.com/one.xml" />
+            <outline text="Two" xmlUrl="https://example.com/two.xml" />
+            </body></opml>"#,
+        )
+        .await
+        .expect_err("second database write must abort the batch");
+
+    assert!(fixture.feed_repository.list_feeds().await.unwrap().is_empty());
+}
