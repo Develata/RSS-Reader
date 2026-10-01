@@ -544,7 +544,6 @@ impl SqliteEntryRepository {
         Ok(())
     }
 
-
     async fn find_adjacent_entry_id(
         &self,
         feed_id: Option<i64>,
