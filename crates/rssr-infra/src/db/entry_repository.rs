@@ -889,10 +889,13 @@ fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a En
         qb.push(" AND entries.feed_id = ").push_bind(feed_id);
     }
     if !query.feed_ids.is_empty() {
+        // feed_ids are already typed i64 values produced by our own state mapping. Render them as
+        // integer SQL literals instead of bind parameters so selecting tens of thousands of feeds
+        // cannot hit SQLite's SQLITE_MAX_VARIABLE_NUMBER. No raw user text is interpolated here.
         qb.push(" AND entries.feed_id IN (");
         let mut separated = qb.separated(", ");
         for feed_id in &query.feed_ids {
-            separated.push_bind(feed_id);
+            separated.push_unseparated(feed_id.to_string());
         }
         qb.push(")");
     }
