@@ -895,7 +895,7 @@ fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a En
         qb.push(" AND entries.feed_id IN (");
         let mut separated = qb.separated(", ");
         for feed_id in &query.feed_ids {
-            separated.push_unseparated(feed_id.to_string());
+            separated.push(feed_id.to_string());
         }
         qb.push(")");
     }
