@@ -815,10 +815,7 @@ async fn old_refresh_generation_cannot_commit_after_delete_and_same_url_readd() 
     assert!(store.commit(&stale_target, not_modified_with_etag("stale-etag")).await.is_err());
     assert_eq!(persisted_state().await.core.feeds[0].etag, None);
 
-    store
-        .commit(&fresh_target, not_modified_with_etag("fresh-etag"))
-        .await
-        .unwrap();
+    store.commit(&fresh_target, not_modified_with_etag("fresh-etag")).await.unwrap();
     assert_eq!(persisted_state().await.core.feeds[0].etag.as_deref(), Some("fresh-etag"));
     clear_browser_state_storage();
 }
