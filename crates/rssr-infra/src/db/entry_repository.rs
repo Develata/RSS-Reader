@@ -166,8 +166,10 @@ impl SqliteEntryRepository {
         let entry_ids_by_dedup_key = if pending_contents.is_empty() {
             std::collections::HashMap::new()
         } else {
-            let dedup_keys =
-                pending_contents.iter().map(|content| content.dedup_key.as_str()).collect::<Vec<_>>();
+            let dedup_keys = pending_contents
+                .iter()
+                .map(|content| content.dedup_key.as_str())
+                .collect::<Vec<_>>();
             resolve_entry_ids_by_dedup_keys(&mut tx, feed_id, &dedup_keys).await?
         };
         tx.commit().await.map_err(map_sqlx_error)?;
@@ -423,7 +425,6 @@ impl SqliteEntryRepository {
             .await
             .map_err(map_sqlx_error)
     }
-
 
     async fn find_adjacent_entry_id(
         &self,
