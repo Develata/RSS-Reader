@@ -157,8 +157,7 @@ fn upsert_config_feed(
     let normalized_folder = normalize_optional_text(new_feed.folder.clone());
     let now = now_utc();
 
-    if let Some(index) =
-        state.core.feeds.iter().position(|feed| feed.url == new_feed.url.as_str())
+    if let Some(index) = state.core.feeds.iter().position(|feed| feed.url == new_feed.url.as_str())
     {
         let feed_id = state.core.feeds[index].id;
         let reactivating = state.core.feeds[index].is_deleted;
