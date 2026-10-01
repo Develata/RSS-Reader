@@ -59,7 +59,8 @@ impl SqlitePersistenceMutations {
     }
 
     async fn retry_deleted_content_cleanup(&self) {
-        if let Err(error) = cleanup_deleted_feed_content(&self.index_pool, &self.content_pool).await {
+        if let Err(error) = cleanup_deleted_feed_content(&self.index_pool, &self.content_pool).await
+        {
             tracing::warn!(
                 error = %error,
                 "订阅已从索引库原子删除，但正文缓存清理失败；将在下次安全重试"
