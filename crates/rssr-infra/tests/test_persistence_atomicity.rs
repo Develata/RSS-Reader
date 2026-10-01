@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use rssr_application::{
-    ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort,
-};
+use rssr_application::{ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort};
 use rssr_domain::{FeedRepository, NewFeedSubscription, SettingsRepository, UserSettings};
 use rssr_infra::{
     application_adapters::SqlitePersistenceMutations,
@@ -145,8 +143,7 @@ async fn config_replacement_failure_rolls_back_every_index_database_change() {
     .await
     .unwrap();
 
-    let changed_settings =
-        UserSettings { refresh_interval_minutes: 99, ..UserSettings::default() };
+    let changed_settings = UserSettings { refresh_interval_minutes: 99, ..UserSettings::default() };
     let plan = ConfigReplacementPlan {
         upserts: vec![
             NewFeedSubscription {
