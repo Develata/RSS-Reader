@@ -32,19 +32,20 @@ fn update(items: &[(i64, &str)]) -> RefreshCommit {
 }
 
 pub async fn verify_counts(store: &dyn RefreshStorePort, feed_id: i64) {
+    let target = store.get_target(feed_id).await.unwrap().unwrap();
     store.begin_batch().await.unwrap();
     assert_eq!(
         store
-            .commit(feed_id, update(&[(1, "one"), (1, "one again")]))
+            .commit(&target, update(&[(1, "one"), (1, "one again")]))
             .await
             .unwrap()
             .inserted_count,
         1
     );
-    assert_eq!(store.commit(feed_id, update(&[(1, "one again")])).await.unwrap().inserted_count, 0);
+    assert_eq!(store.commit(&target, update(&[(1, "one again")])).await.unwrap().inserted_count, 0);
     assert_eq!(
         store
-            .commit(feed_id, update(&[(1, "changed body"), (2, "two"), (3, "three")]))
+            .commit(&target, update(&[(1, "changed body"), (2, "two"), (3, "three")]))
             .await
             .unwrap()
             .inserted_count,
@@ -52,12 +53,12 @@ pub async fn verify_counts(store: &dyn RefreshStorePort, feed_id: i64) {
     );
     store.end_batch().await.unwrap();
     assert_eq!(
-        store.commit(feed_id, update(&[(1, "changed body again")])).await.unwrap().inserted_count,
+        store.commit(&target, update(&[(1, "changed body again")])).await.unwrap().inserted_count,
         0
     );
     assert_eq!(
         store
-            .commit(feed_id, RefreshCommit::NotModified { metadata: Default::default() })
+            .commit(&target, RefreshCommit::NotModified { metadata: Default::default() })
             .await
             .unwrap()
             .inserted_count,
