@@ -146,10 +146,7 @@ mod tests {
         }
     }
 
-    fn service(
-        feed_repository: Arc<FeedRepositoryStub>,
-        removal: Arc<RemovalStub>,
-    ) -> FeedService {
+    fn service(feed_repository: Arc<FeedRepositoryStub>, removal: Arc<RemovalStub>) -> FeedService {
         FeedService::new(feed_repository, removal)
     }
 
