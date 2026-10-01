@@ -10,7 +10,6 @@ use rssr_domain::{
     NewFeedSubscription, SettingsRepository, normalize_feed_url, parse_feed_url,
 };
 use time::OffsetDateTime;
-use url::Url;
 
 use self::rules::{import_field, validate_config_package};
 use crate::{
