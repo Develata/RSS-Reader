@@ -222,6 +222,8 @@ fn upsert_entry_content(
 
 #[cfg(test)]
 mod tests {
+    use time::OffsetDateTime;
+
     use super::*;
 
     const GUID: &str = "0123456789abcdef0123456789abcdef";
