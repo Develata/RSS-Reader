@@ -384,12 +384,7 @@ impl FeedRepository for SqliteFeedRepository {
     }
 
     async fn list_feeds(&self) -> DomainResult<Vec<Feed>> {
-        Ok(self
-            .list_feeds_with_generation()
-            .await?
-            .into_iter()
-            .map(|(feed, _)| feed)
-            .collect())
+        Ok(self.list_feeds_with_generation().await?.into_iter().map(|(feed, _)| feed).collect())
     }
 
     async fn get_feed(&self, feed_id: i64) -> DomainResult<Option<Feed>> {
