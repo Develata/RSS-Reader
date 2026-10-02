@@ -4,6 +4,7 @@ mod cases;
 use rssr_domain::{
     EntryIndexRepository, EntryQuery, FeedRepository, MarkReadOutcome, NewFeedSubscription,
 };
+use sqlx::{QueryBuilder, Row, Sqlite};
 use rssr_infra::{
     db::{
         entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
@@ -156,5 +157,77 @@ async fn sqlite_entry_query_accepts_more_feed_ids_than_sqlite_bind_limit() {
     assert_eq!(
         entries.mark_read_if_unchanged(&preview).await.unwrap(),
         MarkReadOutcome::Applied { changed_count: 1 }
+    );
+}
+
+
+#[tokio::test]
+async fn measure_large_feed_scope_literal_vs_json() {
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let pool = backend.connect().await.unwrap();
+    migrate(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO feeds(id,url,created_at,updated_at) VALUES(1,'https://example.com','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO entries(feed_id,external_id,dedup_key,title,first_seen_at,created_at,updated_at) VALUES(1,'entry','entry','Entry','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let feed_ids = (1_i64..=40_000).collect::<Vec<_>>();
+    let probe = serde_json::to_string(&feed_ids).unwrap();
+    let json_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM json_each(?1)")
+        .bind(&probe)
+        .fetch_one(&pool)
+        .await
+        .expect("bundled SQLite must provide json_each");
+    assert_eq!(json_count, 40_000);
+
+    let mut literal_total = std::time::Duration::ZERO;
+    let mut json_total = std::time::Duration::ZERO;
+    let repetitions = 12_u32;
+
+    for _ in 0..repetitions {
+        let started = std::time::Instant::now();
+        let mut literal =
+            QueryBuilder::<Sqlite>::new("SELECT COUNT(*) AS count FROM entries WHERE feed_id IN (");
+        let mut separated = literal.separated(", ");
+        for feed_id in &feed_ids {
+            separated.push(feed_id.to_string());
+        }
+        literal.push(")");
+        let row = literal
+            .build()
+            .persistent(false)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(row.get::<i64, _>("count"), 1);
+        literal_total += started.elapsed();
+
+        let started = std::time::Instant::now();
+        let encoded = serde_json::to_string(&feed_ids).unwrap();
+        let row = sqlx::query(
+            "SELECT COUNT(*) AS count FROM entries WHERE feed_id IN (SELECT value FROM json_each(?1))",
+        )
+        .bind(encoded)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row.get::<i64, _>("count"), 1);
+        json_total += started.elapsed();
+    }
+
+    panic!(
+        "MEASURE_ONLY repetitions={repetitions} literal_total_us={} json_total_us={} literal_avg_us={} json_avg_us={}",
+        literal_total.as_micros(),
+        json_total.as_micros(),
+        literal_total.as_micros() / repetitions as u128,
+        json_total.as_micros() / repetitions as u128,
     );
 }
