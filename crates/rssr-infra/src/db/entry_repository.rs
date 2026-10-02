@@ -16,7 +16,10 @@ use crate::parser::feed_parser::ParsedEntry;
 
 // Stay well below both SQLite's historical 999-variable builds and the modern 32766 default.
 // Normal feeds still use one query; pathological feeds are split into bounded statements.
-const SQLITE_BIND_CHUNK: usize = 900;
+const SQLITE_SAFE_BIND_BATCH: usize = 900;
+// This is a performance policy, not a SQLite correctness limit. Keep it separate from the safe
+// batch size so benchmarks can tune literal-vs-bound feed scopes independently.
+const ENTRY_SCOPE_LITERAL_THRESHOLD: usize = 900;
 
 #[derive(Clone)]
 pub struct SqliteEntryRepository {
@@ -676,10 +679,10 @@ impl EntryIndexRepository for SqliteEntryRepository {
             let mut qb = QueryBuilder::<Sqlite>::new("UPDATE entries SET is_read = 1, read_at = ");
             qb.push_bind(now.clone()).push(", updated_at = ").push_bind(now);
             qb.push(" WHERE id IN (SELECT entries.id FROM entries JOIN feeds ON feeds.id = entries.feed_id WHERE feeds.is_deleted = 0 AND entries.is_read = 0");
-            push_entry_query_filters(&mut qb, &query);
+            let persistent = push_entry_query_filters(&mut qb, &query);
             qb.push(")");
             qb.build()
-                .persistent(entry_scope_query_is_cacheable(&query))
+                .persistent(persistent)
                 .execute(&mut *tx)
                 .await
                 .map_err(map_sqlx_error)?
@@ -705,7 +708,7 @@ impl EntryIndexRepository for SqliteEntryRepository {
             "#,
         );
 
-        push_entry_query_filters(&mut qb, query);
+        let persistent = push_entry_query_filters(&mut qb, query);
 
         qb.push(
             " ORDER BY COALESCE(entries.published_at, entries.created_at) DESC, entries.id DESC",
@@ -716,7 +719,7 @@ impl EntryIndexRepository for SqliteEntryRepository {
 
         let rows = qb
             .build()
-            .persistent(entry_scope_query_is_cacheable(query))
+            .persistent(persistent)
             .fetch_all(&self.index_pool)
             .await
             .map_err(map_sqlx_error)?;
@@ -746,11 +749,11 @@ impl EntryIndexRepository for SqliteEntryRepository {
             "#,
         );
 
-        push_entry_query_filters(&mut qb, query);
+        let persistent = push_entry_query_filters(&mut qb, query);
 
         let row = qb
             .build()
-            .persistent(entry_scope_query_is_cacheable(query))
+            .persistent(persistent)
             .fetch_one(&self.index_pool)
             .await
             .map_err(map_sqlx_error)?;
@@ -874,7 +877,7 @@ impl EntryContentRepository for SqliteEntryRepository {
         }
 
         let mut tx = self.content_pool.begin().await.map_err(map_sqlx_error)?;
-        for chunk in entry_ids.chunks(SQLITE_BIND_CHUNK) {
+        for chunk in entry_ids.chunks(SQLITE_SAFE_BIND_BATCH) {
             let mut qb =
                 QueryBuilder::<Sqlite>::new("DELETE FROM entry_contents WHERE entry_id IN (");
             let mut separated = qb.separated(", ");
@@ -895,7 +898,7 @@ async fn mark_has_content_on_connection(
     entry_ids: &[i64],
     has_content: bool,
 ) -> DomainResult<()> {
-    for chunk in entry_ids.chunks(SQLITE_BIND_CHUNK) {
+    for chunk in entry_ids.chunks(SQLITE_SAFE_BIND_BATCH) {
         let mut qb = QueryBuilder::<Sqlite>::new("UPDATE entries SET has_content = ");
         qb.push_bind(if has_content { 1_i64 } else { 0_i64 });
         qb.push(" WHERE id IN (");
@@ -1043,7 +1046,7 @@ async fn resolve_entry_ids_by_dedup_keys(
     dedup_keys: &[&str],
 ) -> DomainResult<std::collections::HashMap<String, i64>> {
     let mut resolved = std::collections::HashMap::with_capacity(dedup_keys.len());
-    for chunk in dedup_keys.chunks(SQLITE_BIND_CHUNK) {
+    for chunk in dedup_keys.chunks(SQLITE_SAFE_BIND_BATCH) {
         let mut qb =
             QueryBuilder::<Sqlite>::new("SELECT dedup_key, id FROM entries WHERE feed_id = ");
         qb.push_bind(feed_id).push(" AND dedup_key IN (");
@@ -1060,21 +1063,18 @@ async fn resolve_entry_ids_by_dedup_keys(
     Ok(resolved)
 }
 
-fn entry_scope_query_is_cacheable(query: &EntryQuery) -> bool {
-    // Below the existing conservative bind chunk threshold, keeping IDs bound gives a stable SQL
-    // shape that benefits from SQLx's prepared-statement cache. Larger scopes switch to literals
-    // to avoid SQLite's variable limit and must not cache their per-value SQL text.
-    query.feed_ids.len() <= SQLITE_BIND_CHUNK
-}
-
-fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a EntryQuery) {
+#[must_use = "apply the returned persistence policy to Query::persistent()"]
+fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a EntryQuery) -> bool {
+    // Small scopes stay parameterized and cacheable. Oversized scopes use typed i64 literals to
+    // avoid SQLITE_MAX_VARIABLE_NUMBER; their value-specific SQL must not enter the statement cache.
+    let persistent = query.feed_ids.len() <= ENTRY_SCOPE_LITERAL_THRESHOLD;
     if let Some(feed_id) = query.feed_id {
         qb.push(" AND entries.feed_id = ").push_bind(feed_id);
     }
     if !query.feed_ids.is_empty() {
         qb.push(" AND entries.feed_id IN (");
         let mut separated = qb.separated(", ");
-        if entry_scope_query_is_cacheable(query) {
+        if persistent {
             // Normal UI scopes stay parameterized so all value combinations reuse one prepared
             // statement shape and retain the usual SQL injection boundary.
             for feed_id in &query.feed_ids {
@@ -1126,6 +1126,8 @@ fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a En
             .push_bind(format!("%{search}%"))
             .push(" COLLATE NOCASE");
     }
+
+    persistent
 }
 
 /// `published_at` 以 RFC3339 UTC 字符串存储，比较也在字符串上进行，因此分界必须用同一种
@@ -1186,11 +1188,11 @@ async fn unread_selection(
     let mut qb = QueryBuilder::<Sqlite>::new(
         "SELECT entries.id FROM entries JOIN feeds ON feeds.id = entries.feed_id WHERE feeds.is_deleted = 0 AND entries.is_read = 0",
     );
-    push_entry_query_filters(&mut qb, query);
+    let persistent = push_entry_query_filters(&mut qb, query);
     qb.push(" ORDER BY entries.id");
     Ok(qb
         .build()
-        .persistent(entry_scope_query_is_cacheable(query))
+        .persistent(persistent)
         .fetch_all(connection)
         .await
         .map_err(map_sqlx_error)?
