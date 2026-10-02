@@ -8,7 +8,7 @@ mod non_refresh;
 mod refresh;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use mutations::{SqlitePersistenceMutations, cleanup_deleted_feed_content};
+pub use mutations::{SqlitePersistenceMutations, cleanup_pending_entry_content};
 #[cfg(not(target_arch = "wasm32"))]
 pub use non_refresh::{InfraOpmlCodec, SqliteAppStateAdapter};
 #[cfg(not(target_arch = "wasm32"))]

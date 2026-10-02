@@ -1,7 +1,9 @@
+use url::Url;
+
 use crate::{
     app_state::AppStateSnapshot,
     entry::{Entry, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary},
-    feed::{Feed, FeedSummary, NewFeedSubscription},
+    feed::{Feed, FeedSummary, NewFeedSubscription, normalize_feed_url},
     settings::UserSettings,
 };
 
@@ -21,6 +23,14 @@ pub trait FeedRepository: Send + Sync {
             feeds.push(self.upsert_subscription(new_feed).await?);
         }
         Ok(feeds)
+    }
+    async fn has_active_subscription_url(&self, url: &Url) -> crate::Result<bool> {
+        let normalized_url = normalize_feed_url(url);
+        Ok(self
+            .list_feeds()
+            .await?
+            .iter()
+            .any(|feed| !feed.is_deleted && normalize_feed_url(&feed.url) == normalized_url))
     }
     async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> crate::Result<()>;
     async fn list_feeds(&self) -> crate::Result<Vec<Feed>>;

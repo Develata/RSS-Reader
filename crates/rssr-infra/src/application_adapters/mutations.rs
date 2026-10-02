@@ -4,48 +4,176 @@ use rssr_application::{
     SubscriptionActivationPort, SubscriptionRemovalPort,
 };
 use rssr_domain::{AppStateSnapshot, NewFeedSubscription, UserSettings};
-use sqlx::Row;
+use sqlx::{QueryBuilder, Row, Sqlite};
 use time::OffsetDateTime;
 
 use crate::db::{SqlitePool, feed_repository::SqliteFeedRepository};
 
 const APP_STATE_KEY: &str = "app_state_v2";
 
-pub async fn cleanup_deleted_feed_content(
+const CONTENT_GC_BATCH: usize = 900;
+
+async fn live_entry_ids(
+    index_pool: &SqlitePool,
+    entry_ids: &[i64],
+) -> Result<std::collections::HashSet<i64>> {
+    if entry_ids.is_empty() {
+        return Ok(std::collections::HashSet::new());
+    }
+    let mut query = QueryBuilder::<Sqlite>::new("SELECT id FROM entries WHERE id IN (");
+    let mut separated = query.separated(", ");
+    for entry_id in entry_ids {
+        separated.push_bind(*entry_id);
+    }
+    query.push(")");
+    Ok(query
+        .build()
+        .fetch_all(index_pool)
+        .await
+        .context("核对正文缓存索引归属失败")?
+        .into_iter()
+        .map(|row| row.get::<i64, _>("id"))
+        .collect())
+}
+
+async fn delete_content_entry_ids(content_pool: &SqlitePool, entry_ids: &[i64]) -> Result<u64> {
+    if entry_ids.is_empty() {
+        return Ok(0);
+    }
+    let mut tx = content_pool.begin().await.context("开始正文缓存清理事务失败")?;
+    let mut removed_rows = 0_u64;
+    for chunk in entry_ids.chunks(CONTENT_GC_BATCH) {
+        let mut delete =
+            QueryBuilder::<Sqlite>::new("DELETE FROM entry_contents WHERE entry_id IN (");
+        let mut separated = delete.separated(", ");
+        for entry_id in chunk {
+            separated.push_bind(*entry_id);
+        }
+        delete.push(")");
+        removed_rows += delete
+            .build()
+            .execute(&mut *tx)
+            .await
+            .context("删除待清理正文缓存失败")?
+            .rows_affected();
+    }
+    tx.commit().await.context("提交正文缓存清理事务失败")?;
+    Ok(removed_rows)
+}
+
+async fn reconcile_legacy_orphans_once(
     index_pool: &SqlitePool,
     content_pool: &SqlitePool,
 ) -> Result<u64> {
-    // Keep the index writer lock while deleting the separate content cache. Otherwise another
-    // process could re-activate the same feed between the tombstone check and content deletion.
-    // Refresh and removal already acquire locks in index -> content order, so this preserves the
-    // existing lock ordering rather than introducing an inversion.
-    let mut tx =
-        index_pool.begin_with("BEGIN IMMEDIATE").await.context("开始已删除正文清理事务失败")?;
-    let feed_ids = sqlx::query_scalar::<_, i64>(
+    let reconciled: i64 =
+        sqlx::query_scalar("SELECT legacy_reconciled FROM content_gc_state WHERE id = 1")
+            .fetch_one(index_pool)
+            .await
+            .context("读取正文缓存迁移状态失败")?;
+    if reconciled != 0 {
+        return Ok(0);
+    }
+
+    // Older builds could lose the retry target when a purge failed and the feed was reactivated.
+    // Do one bounded full reconciliation after the migration, then rely on the durable queue.
+    let high_watermark =
+        sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(entry_id) FROM entry_contents")
+            .fetch_one(content_pool)
+            .await
+            .context("读取正文缓存清理高水位失败")?;
+    let mut removed_rows = 0_u64;
+
+    if let Some(high_watermark) = high_watermark {
+        let mut last_entry_id = i64::MIN;
+        while last_entry_id < high_watermark {
+            let entry_ids = sqlx::query_scalar::<_, i64>(
+                r#"
+                SELECT entry_id
+                FROM entry_contents
+                WHERE entry_id > ?1 AND entry_id <= ?2
+                ORDER BY entry_id
+                LIMIT ?3
+                "#,
+            )
+            .bind(last_entry_id)
+            .bind(high_watermark)
+            .bind(CONTENT_GC_BATCH as i64)
+            .fetch_all(content_pool)
+            .await
+            .context("读取旧版正文缓存候选项失败")?;
+            let Some(&batch_last_entry_id) = entry_ids.last() else {
+                break;
+            };
+            last_entry_id = batch_last_entry_id;
+
+            let live = live_entry_ids(index_pool, &entry_ids).await?;
+            let orphan_ids = entry_ids
+                .into_iter()
+                .filter(|entry_id| !live.contains(entry_id))
+                .collect::<Vec<_>>();
+            removed_rows += delete_content_entry_ids(content_pool, &orphan_ids).await?;
+        }
+    }
+
+    sqlx::query("UPDATE content_gc_state SET legacy_reconciled = 1 WHERE id = 1")
+        .execute(index_pool)
+        .await
+        .context("记录正文缓存迁移完成状态失败")?;
+    Ok(removed_rows)
+}
+
+pub async fn cleanup_pending_entry_content(
+    index_pool: &SqlitePool,
+    content_pool: &SqlitePool,
+) -> Result<u64> {
+    let mut removed_rows = reconcile_legacy_orphans_once(index_pool, content_pool).await?;
+
+    loop {
+        let entry_ids = sqlx::query_scalar::<_, i64>(
+            "SELECT entry_id FROM content_gc_queue ORDER BY entry_id LIMIT ?1",
+        )
+        .bind(CONTENT_GC_BATCH as i64)
+        .fetch_all(index_pool)
+        .await
+        .context("读取待清理正文队列失败")?;
+        if entry_ids.is_empty() {
+            break;
+        }
+
+        // Delete content first. If clearing the queue fails or the process crashes afterwards,
+        // retrying is idempotent and the durable queue still preserves the cleanup obligation.
+        removed_rows += delete_content_entry_ids(content_pool, &entry_ids).await?;
+
+        let mut delete_queue =
+            QueryBuilder::<Sqlite>::new("DELETE FROM content_gc_queue WHERE entry_id IN (");
+        let mut separated = delete_queue.separated(", ");
+        for entry_id in &entry_ids {
+            separated.push_bind(*entry_id);
+        }
+        delete_queue.push(")");
+        delete_queue.build().execute(index_pool).await.context("确认正文缓存清理队列失败")?;
+    }
+
+    Ok(removed_rows)
+}
+
+async fn queue_feed_entry_content_cleanup(
+    connection: &mut sqlx::SqliteConnection,
+    feed_id: i64,
+    queued_at: &str,
+) -> Result<()> {
+    sqlx::query(
         r#"
-        SELECT feeds.id
-        FROM feeds
-        WHERE feeds.is_deleted = 1
-          AND NOT EXISTS (
-              SELECT 1 FROM entries WHERE entries.feed_id = feeds.id
-          )
+        INSERT OR IGNORE INTO content_gc_queue (entry_id, queued_at)
+        SELECT id, ?2 FROM entries WHERE feed_id = ?1
         "#,
     )
-    .fetch_all(&mut *tx)
+    .bind(feed_id)
+    .bind(queued_at)
+    .execute(connection)
     .await
-    .context("读取待清理正文的已删除订阅失败")?;
-
-    let mut removed_rows = 0_u64;
-    for feed_id in feed_ids {
-        removed_rows += sqlx::query("DELETE FROM entry_contents WHERE feed_id = ?1")
-            .bind(feed_id)
-            .execute(content_pool)
-            .await
-            .with_context(|| format!("重试清理订阅 {feed_id} 的正文缓存失败"))?
-            .rows_affected();
-    }
-    tx.commit().await.context("完成已删除正文清理事务失败")?;
-    Ok(removed_rows)
+    .with_context(|| format!("登记订阅 {feed_id} 的正文缓存清理任务失败"))?;
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -59,8 +187,9 @@ impl SqlitePersistenceMutations {
         Self { index_pool, content_pool }
     }
 
-    async fn retry_deleted_content_cleanup(&self) {
-        if let Err(error) = cleanup_deleted_feed_content(&self.index_pool, &self.content_pool).await
+    async fn retry_pending_content_cleanup(&self) {
+        if let Err(error) =
+            cleanup_pending_entry_content(&self.index_pool, &self.content_pool).await
         {
             tracing::warn!(
                 error = %error,
@@ -101,6 +230,7 @@ impl SubscriptionRemovalPort for SqlitePersistenceMutations {
         }
 
         if purge_entries {
+            queue_feed_entry_content_cleanup(&mut tx, feed_id, &now).await?;
             sqlx::query("DELETE FROM entries WHERE feed_id = ?1")
                 .bind(feed_id)
                 .execute(&mut *tx)
@@ -111,10 +241,10 @@ impl SubscriptionRemovalPort for SqlitePersistenceMutations {
         tx.commit().await.context("提交订阅删除事务失败")?;
 
         if purge_entries {
-            // Reacquire the index writer lock and revalidate the tombstone before touching the
-            // separate content DB. A concurrent re-add must win or wait; stale cleanup must never
-            // delete content belonging to a newly active generation.
-            self.retry_deleted_content_cleanup().await;
+            // The index transaction durably records immutable entry ids before deleting them.
+            // Cleanup therefore survives failure and same-URL reactivation without holding the
+            // index writer lock while the separate content database is busy.
+            self.retry_pending_content_cleanup().await;
         }
         Ok(())
     }
@@ -178,6 +308,7 @@ impl ConfigReplacementPort for SqlitePersistenceMutations {
             if result.rows_affected() == 0 {
                 bail!("配置替换期间订阅 {feed_id} 不存在");
             }
+            queue_feed_entry_content_cleanup(&mut tx, feed_id, &now).await?;
             sqlx::query("DELETE FROM entries WHERE feed_id = ?1")
                 .bind(feed_id)
                 .execute(&mut *tx)
@@ -204,7 +335,7 @@ impl ConfigReplacementPort for SqlitePersistenceMutations {
         tx.commit().await.context("提交配置替换事务失败")?;
 
         if !removed_feed_ids.is_empty() {
-            self.retry_deleted_content_cleanup().await;
+            self.retry_pending_content_cleanup().await;
         }
         Ok(ConfigReplacementOutcome {
             removed_feed_count: removed_feed_ids.len(),

@@ -8,7 +8,7 @@ use rssr_application::{
     RefreshCommit, RefreshService, RefreshStorePort, RemoveSubscriptionInput,
     SubscriptionActivationPort, SubscriptionRemovalPort, SubscriptionWorkflow,
 };
-use rssr_domain::{EntryIndexRepository, EntryQuery, NewFeedSubscription};
+use rssr_domain::{EntryIndexRepository, EntryQuery, FeedRepository, NewFeedSubscription};
 use rssr_infra::application_adapters::browser::{
     adapters::{BrowserEntryRepository, BrowserFeedRepository, BrowserPersistenceMutations},
     state::{
@@ -201,6 +201,15 @@ async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
     assert!(second.to_string().contains("已订阅"));
     assert_eq!(first.site_url.as_ref().unwrap().as_str(), "https://site.example/");
     assert_eq!(first.url.as_str(), "https://example.com/feed.xml");
+    let repository = BrowserFeedRepository::new(state.clone());
+    assert!(
+        repository
+            .has_active_subscription_url(
+                &Url::parse("https://example.com:443/feed.xml#fragment").unwrap(),
+            )
+            .await
+            .unwrap()
+    );
 
     {
         let snapshot = state.snapshot().await.expect("snapshot");

@@ -41,13 +41,7 @@ impl FeedService {
 
     pub(crate) async fn ensure_not_subscribed(&self, url: &Url) -> Result<()> {
         let url = normalize_feed_url(url);
-        if self
-            .feed_repository
-            .list_feeds()
-            .await?
-            .iter()
-            .any(|feed| !feed.is_deleted && normalize_feed_url(&feed.url) == url)
-        {
+        if self.feed_repository.has_active_subscription_url(&url).await? {
             anyhow::bail!("该地址已订阅：{url}");
         }
         Ok(())
