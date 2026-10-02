@@ -9,7 +9,7 @@ use rssr_application::{
 };
 use rssr_domain::{FeedRepository, NewFeedSubscription, SettingsRepository, UserSettings};
 use rssr_infra::{
-    application_adapters::{SqlitePersistenceMutations, cleanup_orphaned_entry_content},
+    application_adapters::{SqlitePersistenceMutations, cleanup_pending_entry_content},
     db::{
         entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
         migrate_content, settings_repository::SqliteSettingsRepository,
@@ -154,7 +154,7 @@ async fn content_cleanup_failure_does_not_expose_half_deleted_subscription() {
     assert_eq!(remaining, 1, "failed cache cleanup remains hidden but pending");
 
     sqlx::query("DROP TRIGGER fail_content_delete").execute(&content_pool).await.unwrap();
-    let removed = cleanup_orphaned_entry_content(&index_pool, &content_pool).await.unwrap();
+    let removed = cleanup_pending_entry_content(&index_pool, &content_pool).await.unwrap();
     assert_eq!(removed, 1);
     let remaining: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
@@ -200,7 +200,7 @@ async fn orphan_cleanup_removes_failed_purge_content_after_reactivation() {
     assert_eq!(reactivated.feed.id, feed.id);
     assert_eq!(reactivated.generation, 1);
 
-    let removed = cleanup_orphaned_entry_content(&index_pool, &content_pool).await.unwrap();
+    let removed = cleanup_pending_entry_content(&index_pool, &content_pool).await.unwrap();
     assert_eq!(removed, 1, "reactivation must not hide old orphaned content from GC");
     let remaining: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
@@ -219,7 +219,7 @@ async fn orphan_cleanup_preserves_non_purge_deleted_feed_content() {
     entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
 
     mutations.remove_subscription(feed.id, false).await.unwrap();
-    let removed = cleanup_orphaned_entry_content(&index_pool, &content_pool).await.unwrap();
+    let removed = cleanup_pending_entry_content(&index_pool, &content_pool).await.unwrap();
 
     assert_eq!(removed, 0);
     assert!(entries.has_entries_for_feed(feed.id).await.unwrap());
@@ -322,7 +322,7 @@ async fn orphan_cleanup_does_not_hold_index_writer_lock() {
     let cleanup_index = index_pool.clone();
     let cleanup_content = content_pool.clone();
     let cleanup = tokio::spawn(async move {
-        cleanup_orphaned_entry_content(&cleanup_index, &cleanup_content).await
+        cleanup_pending_entry_content(&cleanup_index, &cleanup_content).await
     });
     tokio::time::sleep(Duration::from_millis(50)).await;
 
