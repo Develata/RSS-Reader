@@ -72,6 +72,8 @@ pub fn compose_native_sqlite_use_cases(
         refresh_store: Arc::new(SqliteRefreshStore::new(feed_repository, entry_repository.clone())),
         opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
         clock: Arc::new(SystemClock),
+        subscription_activation: feed_repository.clone(),
+        subscription_activation: feed_repository.clone(),
         subscription_removal: persistence_mutations.clone(),
         config_replacement: persistence_mutations,
     });
