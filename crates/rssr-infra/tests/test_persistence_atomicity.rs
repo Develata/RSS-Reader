@@ -4,7 +4,8 @@ use std::{
 };
 
 use rssr_application::{
-    ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort,
+    ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort,
+    SubscriptionActivationPort, SubscriptionRemovalPort,
 };
 use rssr_domain::{FeedRepository, NewFeedSubscription, SettingsRepository, UserSettings};
 use rssr_infra::{
@@ -67,6 +68,31 @@ fn entry(id: &str) -> ParsedEntry {
         published_at: Some(OffsetDateTime::UNIX_EPOCH),
         updated_at_source: None,
     }
+}
+
+#[tokio::test]
+async fn activation_port_captures_generation_and_rejects_active_duplicate() {
+    let (_index_pool, _content_pool, _feeds, _entries, _settings, mutations) = fixture().await;
+    let subscription = NewFeedSubscription {
+        site_url: None,
+        url: Url::parse("https://example.com/activation.xml").unwrap(),
+        title: Some("Activation".into()),
+        folder: None,
+    };
+
+    let first = mutations.activate_subscription(subscription.clone()).await.unwrap();
+    assert_eq!(first.generation, 0);
+
+    let duplicate = mutations
+        .activate_subscription(subscription.clone())
+        .await
+        .expect_err("active duplicate must be rejected under the activation lock");
+    assert!(duplicate.to_string().contains("已订阅"));
+
+    mutations.remove_subscription(first.feed.id, false).await.unwrap();
+    let reactivated = mutations.activate_subscription(subscription).await.unwrap();
+    assert_eq!(reactivated.feed.id, first.feed.id);
+    assert_eq!(reactivated.generation, 1);
 }
 
 #[tokio::test]
