@@ -10,6 +10,9 @@ use tokio::task::JoinSet;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RefreshTarget {
     pub feed_id: i64,
+    /// Monotonic subscription generation. Incremented only when a soft-deleted feed is reactivated.
+    /// A refresh may commit only to the generation from which it was started.
+    pub generation: i64,
     pub url: Url,
     pub etag: Option<String>,
     pub last_modified: Option<String>,
@@ -107,6 +110,8 @@ pub enum RefreshFeedResult {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RefreshLocalizedEntry {
+    /// Feed generation captured by the refresh that produced this localization work.
+    pub generation: i64,
     pub dedup_key: String,
     pub url: Option<Url>,
     pub title: String,
@@ -268,7 +273,7 @@ pub trait RefreshStorePort: Send + Sync {
     /// 返回真实新增索引数；批次内的计数需等 end_batch 成功后才可发布。
     async fn commit(
         &self,
-        feed_id: i64,
+        target: &RefreshTarget,
         commit: RefreshCommit,
     ) -> Result<crate::RefreshCommitOutcome>;
 
@@ -513,10 +518,7 @@ impl RefreshService {
         match source_output {
             FeedRefreshSourceOutput::NotModified(metadata) => {
                 self.store
-                    .commit(
-                        target.feed_id,
-                        RefreshCommit::NotModified { metadata: metadata.clone() },
-                    )
+                    .commit(&target, RefreshCommit::NotModified { metadata: metadata.clone() })
                     .await?;
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
@@ -526,9 +528,10 @@ impl RefreshService {
             }
             FeedRefreshSourceOutput::Updated(update) => {
                 let entry_count = update.feed.entries.len();
-                let localization_entries = build_localization_entries(&update.feed.entries);
+                let localization_entries =
+                    build_localization_entries(&update.feed.entries, target.generation);
                 let committed =
-                    self.store.commit(target.feed_id, RefreshCommit::Updated { update }).await?;
+                    self.store.commit(&target, RefreshCommit::Updated { update }).await?;
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),
@@ -541,7 +544,7 @@ impl RefreshService {
             }
             FeedRefreshSourceOutput::Failed(failure) => {
                 self.store
-                    .commit(target.feed_id, RefreshCommit::Failed { failure: failure.clone() })
+                    .commit(&target, RefreshCommit::Failed { failure: failure.clone() })
                     .await?;
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
@@ -553,11 +556,15 @@ impl RefreshService {
     }
 }
 
-fn build_localization_entries(entries: &[ParsedEntryData]) -> Vec<RefreshLocalizedEntry> {
+fn build_localization_entries(
+    entries: &[ParsedEntryData],
+    generation: i64,
+) -> Vec<RefreshLocalizedEntry> {
     entries
         .iter()
         .filter_map(|entry| {
             entry.content_html.as_ref().map(|content_html| RefreshLocalizedEntry {
+                generation,
                 dedup_key: entry.dedup_key.clone(),
                 url: entry.url.clone(),
                 title: entry.title.clone(),
@@ -610,10 +617,10 @@ mod tests {
 
         async fn commit(
             &self,
-            feed_id: i64,
+            target: &RefreshTarget,
             commit: RefreshCommit,
         ) -> Result<crate::RefreshCommitOutcome> {
-            self.commits.lock().expect("lock commits").push((feed_id, commit));
+            self.commits.lock().expect("lock commits").push((target.feed_id, commit));
             Ok(Default::default())
         }
     }
@@ -621,6 +628,7 @@ mod tests {
     fn sample_target(feed_id: i64, url: &str) -> RefreshTarget {
         RefreshTarget {
             feed_id,
+            generation: 0,
             url: Url::parse(url).expect("valid url"),
             etag: Some("etag".to_string()),
             last_modified: Some("last-modified".to_string()),
@@ -864,10 +872,10 @@ mod tests {
 
         async fn commit(
             &self,
-            feed_id: i64,
+            target: &RefreshTarget,
             _commit: RefreshCommit,
         ) -> Result<crate::RefreshCommitOutcome> {
-            if feed_id == self.failing_feed_id {
+            if target.feed_id == self.failing_feed_id {
                 anyhow::bail!("提交失败");
             }
             Ok(Default::default())
@@ -911,10 +919,10 @@ mod tests {
 
         async fn commit(
             &self,
-            feed_id: i64,
+            target: &RefreshTarget,
             _commit: RefreshCommit,
         ) -> Result<crate::RefreshCommitOutcome> {
-            self.record(&format!("commit:{feed_id}"));
+            self.record(&format!("commit:{}", target.feed_id));
             Ok(crate::RefreshCommitOutcome {
                 inserted_count: u64::from(matches!(_commit, RefreshCommit::Updated { .. })),
             })

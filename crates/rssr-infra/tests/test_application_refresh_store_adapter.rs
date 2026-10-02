@@ -5,11 +5,11 @@ use std::sync::Arc;
 use rssr_application::{
     FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate, ParsedEntryData,
     ParsedFeedUpdate, RefreshAllInput, RefreshCommit, RefreshFeedResult, RefreshHttpMetadata,
-    RefreshService, RefreshStorePort, RefreshTarget,
+    RefreshService, RefreshStorePort, RefreshTarget, SubscriptionRemovalPort,
 };
 use rssr_domain::{EntryQuery, FeedRepository, NewFeedSubscription};
 use rssr_infra::{
-    application_adapters::SqliteRefreshStore,
+    application_adapters::{SqlitePersistenceMutations, SqliteRefreshStore},
     db::{
         entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
         migrate_content, sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
@@ -38,9 +38,10 @@ async fn sqlite_refresh_store_persists_updated_feed_metadata_entries_and_fetch_s
         .await
         .expect("create feed");
 
+    let target = store.get_target(feed.id).await.unwrap().unwrap();
     store
         .commit(
-            feed.id,
+            &target,
             RefreshCommit::Updated {
                 update: FeedRefreshUpdate {
                     metadata: RefreshHttpMetadata {
@@ -141,6 +142,7 @@ async fn sqlite_refresh_store_forces_full_fetch_when_feed_has_no_entries() {
         target,
         RefreshTarget {
             feed_id: feed.id,
+            generation: 0,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             etag: None,
             last_modified: None,
@@ -214,8 +216,9 @@ async fn check_retry_after_failed_write(fail_content: bool) {
         })
         .await
         .expect("seed feed");
+    let target = store.get_target(feed.id).await.unwrap().unwrap();
     store
-        .commit(feed.id, RefreshCommit::Updated { update: recovery_update("old") })
+        .commit(&target, RefreshCommit::Updated { update: recovery_update("old") })
         .await
         .expect("seed complete old response");
     let last_success = feeds.get_feed(feed.id).await.unwrap().unwrap().last_success_at;
@@ -361,4 +364,79 @@ async fn sqlite_counts_only_real_inserts_including_same_batch_duplicates() {
     let store = SqliteRefreshStore::new(feeds.clone(), entries);
     refresh_count_cases::verify_counts(&store, feed.id).await;
     assert_eq!(feeds.list_summaries().await.unwrap()[0].entry_count, 3);
+}
+
+#[tokio::test]
+async fn old_sqlite_refresh_generation_cannot_commit_after_delete_and_same_url_readd() {
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let index_pool = backend.connect().await.expect("connect index db");
+    migrate(&index_pool).await.expect("migrate index db");
+    let content_pool = backend.connect_content().await.expect("connect content db");
+    migrate_content(&content_pool).await.expect("migrate content db");
+
+    let feeds = Arc::new(SqliteFeedRepository::new(index_pool.clone()));
+    let entries = Arc::new(SqliteEntryRepository::new_with_content_pool(
+        index_pool.clone(),
+        content_pool.clone(),
+    ));
+    let store = SqliteRefreshStore::new(feeds.clone(), entries.clone());
+    let mutations = SqlitePersistenceMutations::new(index_pool.clone(), content_pool);
+
+    let feed = feeds
+        .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
+            url: Url::parse("https://example.com/aba.xml").unwrap(),
+            title: Some("Original".into()),
+            folder: None,
+        })
+        .await
+        .unwrap();
+    let stale_target = store.get_target(feed.id).await.unwrap().unwrap();
+    assert_eq!(stale_target.generation, 0);
+    store
+        .commit(
+            &stale_target,
+            RefreshCommit::NotModified {
+                metadata: RefreshHttpMetadata {
+                    etag: Some("old-generation-etag".into()),
+                    last_modified: Some("old-generation-modified".into()),
+                },
+            },
+        )
+        .await
+        .unwrap();
+
+    mutations.remove_subscription(feed.id, true).await.unwrap();
+    feeds
+        .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
+            url: Url::parse("https://example.com/aba.xml").unwrap(),
+            title: Some("Re-added".into()),
+            folder: None,
+        })
+        .await
+        .unwrap();
+
+    let fresh_target = store.get_target(feed.id).await.unwrap().unwrap();
+    assert_eq!(fresh_target.generation, 1);
+    assert_eq!(fresh_target.etag, None);
+    assert_eq!(fresh_target.last_modified, None);
+
+    let stale = store
+        .commit(&stale_target, RefreshCommit::Updated { update: recovery_update("stale") })
+        .await;
+    assert!(stale.is_err(), "old generation must not commit after re-add");
+
+    let active = feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(active.title.as_deref(), Some("Re-added"));
+    assert!(entries.list_entries(&EntryQuery::default()).await.unwrap().is_empty());
+
+    store
+        .commit(&fresh_target, RefreshCommit::Updated { update: recovery_update("fresh") })
+        .await
+        .unwrap();
+    assert_eq!(
+        feeds.get_feed(feed.id).await.unwrap().unwrap().title.as_deref(),
+        Some("Feed fresh")
+    );
 }

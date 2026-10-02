@@ -22,6 +22,10 @@ const SQLITE_BIND_CHUNK: usize = 900;
 pub struct SqliteEntryRepository {
     index_pool: SqlitePool,
     content_pool: SqlitePool,
+    /// `new(pool)` intentionally stores index and content in one SQLite database. Generation
+    /// fences may already hold that pool's only connection, so those writes must reuse the
+    /// existing index transaction instead of borrowing a second connection from the same pool.
+    content_in_index_db: bool,
     /// 正文库建表只需要保证一次。此前每次读正文都会执行一遍
     /// `CREATE TABLE IF NOT EXISTS` + 两条 `CREATE INDEX IF NOT EXISTS`，
     /// 等于每打开一篇文章多付三次 SQL 往返。
@@ -61,11 +65,21 @@ pub struct EntryUpsertOutcome {
 
 impl SqliteEntryRepository {
     pub fn new(index_pool: SqlitePool) -> Self {
-        Self::new_with_content_pool(index_pool.clone(), index_pool)
+        Self {
+            content_pool: index_pool.clone(),
+            index_pool,
+            content_in_index_db: true,
+            content_schema_ready: Arc::new(OnceCell::new()),
+        }
     }
 
     pub fn new_with_content_pool(index_pool: SqlitePool, content_pool: SqlitePool) -> Self {
-        Self { index_pool, content_pool, content_schema_ready: Arc::new(OnceCell::new()) }
+        Self {
+            index_pool,
+            content_pool,
+            content_in_index_db: false,
+            content_schema_ready: Arc::new(OnceCell::new()),
+        }
     }
 
     pub async fn upsert_entries(
@@ -91,6 +105,24 @@ impl SqliteEntryRepository {
         feed_id: i64,
         entries: &[ParsedEntry],
     ) -> DomainResult<EntryUpsertOutcome> {
+        self.upsert_entries_with_generation_inner(feed_id, None, entries).await
+    }
+
+    pub async fn upsert_entries_with_generation(
+        &self,
+        feed_id: i64,
+        generation: i64,
+        entries: &[ParsedEntry],
+    ) -> DomainResult<EntryUpsertOutcome> {
+        self.upsert_entries_with_generation_inner(feed_id, Some(generation), entries).await
+    }
+
+    async fn upsert_entries_with_generation_inner(
+        &self,
+        feed_id: i64,
+        expected_generation: Option<i64>,
+        entries: &[ParsedEntry],
+    ) -> DomainResult<EntryUpsertOutcome> {
         let mut pending_contents = Vec::new();
         // 一次刷新常常写入几十上百条：不包事务的话每条 INSERT 都是一次隐式事务，
         // 每条都要各自 fsync。包成一个事务后整批只提交一次，同时让整批写入变成原子的。
@@ -98,14 +130,17 @@ impl SqliteEntryRepository {
         // The writer lock is already held here. Revalidate the feed inside the same transaction
         // so a concurrent delete either waits for this refresh (and purges it afterwards), or
         // commits first and makes this refresh a no-op instead of resurrecting articles.
-        let active: i64 = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM feeds WHERE id = ?1 AND is_deleted = 0)",
+        let current_generation = sqlx::query_scalar::<_, i64>(
+            "SELECT generation FROM feeds WHERE id = ?1 AND is_deleted = 0",
         )
         .bind(feed_id)
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(map_sqlx_error)?;
-        if active == 0 {
+        let Some(current_generation) = current_generation else {
+            return Err(DomainError::NotFound);
+        };
+        if expected_generation.is_some_and(|generation| generation != current_generation) {
             return Err(DomainError::NotFound);
         }
 
@@ -224,52 +259,65 @@ impl SqliteEntryRepository {
             return Ok(0);
         }
 
-        let mut upserted = 0;
-        // 与索引库同理：整批正文写入合并成一个事务，避免逐条隐式提交。
-        let mut tx = self.content_pool.begin().await.map_err(map_sqlx_error)?;
-        let now = now_rfc3339();
-
-        for content in contents {
-            let result = sqlx::query(
-                r#"
-                INSERT INTO entry_contents (
-                    entry_id, feed_id, content_html, content_text, content_hash, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-                ON CONFLICT(entry_id) DO UPDATE SET
-                    feed_id = excluded.feed_id,
-                    content_html = COALESCE(excluded.content_html, entry_contents.content_html),
-                    content_text = COALESCE(excluded.content_text, entry_contents.content_text),
-                    content_hash = excluded.content_hash,
-                    updated_at = excluded.updated_at
-                WHERE entry_contents.feed_id IS NOT excluded.feed_id
-                   OR entry_contents.content_html IS NOT COALESCE(excluded.content_html, entry_contents.content_html)
-                   OR entry_contents.content_text IS NOT COALESCE(excluded.content_text, entry_contents.content_text)
-                   OR entry_contents.content_hash IS NOT excluded.content_hash
-                "#,
-            )
-            .bind(content.entry_id)
-            .bind(feed_id)
-            .bind(content.content_html.as_deref())
-            .bind(content.content_text.as_deref())
-            .bind(content.content_hash.as_deref())
-            .bind(&now)
-            .execute(&mut *tx)
-            .await
-            .map_err(map_sqlx_error)?;
-
-            if result.rows_affected() > 0 {
-                upserted += 1;
-            }
-        }
-
-        tx.commit().await.map_err(map_sqlx_error)?;
-
+        let upserted = self.write_contents(feed_id, contents).await?;
         self.mark_has_content(
             &contents.iter().map(|content| content.entry_id).collect::<Vec<_>>(),
             true,
         )
         .await?;
+        Ok(upserted)
+    }
 
+    /// Write refresh content only while the originating feed generation still owns the index
+    /// writer fence. Holding the index writer transaction across the separate content-DB write
+    /// prevents delete/re-add from crossing between the generation check and the body write.
+    pub async fn upsert_contents_for_generation(
+        &self,
+        feed_id: i64,
+        generation: i64,
+        contents: &[ResolvedEntryContent],
+    ) -> DomainResult<usize> {
+        self.ensure_content_schema().await?;
+        if contents.is_empty() {
+            return Ok(0);
+        }
+
+        let mut index_tx =
+            self.index_pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+        let current_generation = sqlx::query_scalar::<_, i64>(
+            "SELECT generation FROM feeds WHERE id = ?1 AND is_deleted = 0",
+        )
+        .bind(feed_id)
+        .fetch_optional(&mut *index_tx)
+        .await
+        .map_err(map_sqlx_error)?;
+        if current_generation != Some(generation) {
+            return Err(DomainError::NotFound);
+        }
+
+        let upserted = if self.content_in_index_db {
+            write_contents_on_connection(&mut index_tx, feed_id, contents).await?
+        } else {
+            self.write_contents(feed_id, contents).await?
+        };
+        mark_has_content_on_connection(
+            &mut index_tx,
+            &contents.iter().map(|content| content.entry_id).collect::<Vec<_>>(),
+            true,
+        )
+        .await?;
+        index_tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(upserted)
+    }
+
+    async fn write_contents(
+        &self,
+        feed_id: i64,
+        contents: &[ResolvedEntryContent],
+    ) -> DomainResult<usize> {
+        let mut tx = self.content_pool.begin().await.map_err(map_sqlx_error)?;
+        let upserted = write_contents_on_connection(&mut tx, feed_id, contents).await?;
+        tx.commit().await.map_err(map_sqlx_error)?;
         Ok(upserted)
     }
 
@@ -278,38 +326,87 @@ impl SqliteEntryRepository {
         feed_id: i64,
         update: &LocalizedEntryUpdate<'_>,
     ) -> DomainResult<bool> {
+        self.update_localized_html_if_hash_matches_inner(feed_id, None, update).await
+    }
+
+    pub async fn update_localized_html_if_hash_matches_for_generation(
+        &self,
+        feed_id: i64,
+        generation: i64,
+        update: &LocalizedEntryUpdate<'_>,
+    ) -> DomainResult<bool> {
+        self.update_localized_html_if_hash_matches_inner(feed_id, Some(generation), update).await
+    }
+
+    async fn update_localized_html_if_hash_matches_inner(
+        &self,
+        feed_id: i64,
+        expected_generation: Option<i64>,
+        update: &LocalizedEntryUpdate<'_>,
+    ) -> DomainResult<bool> {
         self.ensure_content_schema().await?;
-        let entry_id =
-            match self.find_entry_id_by_dedup_key_optional(feed_id, update.dedup_key).await? {
-                Some(entry_id) => entry_id,
-                None => return Ok(false),
-            };
-        let now = now_rfc3339();
-        let result = sqlx::query(
+
+        // Keep the index writer fence while resolving identity and writing the separate content DB.
+        // A delete/re-add cannot cross between the generation check and the localized body write.
+        let mut index_tx =
+            self.index_pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+        if let Some(expected_generation) = expected_generation {
+            let generation = sqlx::query_scalar::<_, i64>(
+                "SELECT generation FROM feeds WHERE id = ?1 AND is_deleted = 0",
+            )
+            .bind(feed_id)
+            .fetch_optional(&mut *index_tx)
+            .await
+            .map_err(map_sqlx_error)?;
+            if generation != Some(expected_generation) {
+                return Ok(false);
+            }
+        }
+
+        let entry_id = sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM entries WHERE feed_id = ?1 AND dedup_key = ?2",
+        )
+        .bind(feed_id)
+        .bind(update.dedup_key)
+        .fetch_optional(&mut *index_tx)
+        .await
+        .map_err(map_sqlx_error)?;
+        let Some(entry_id) = entry_id else {
+            return Ok(false);
+        };
+
+        let result = if self.content_in_index_db {
+            update_localized_content_on_connection(&mut index_tx, entry_id, update).await?
+        } else {
+            let mut content = self.content_pool.acquire().await.map_err(map_sqlx_error)?;
+            update_localized_content_on_connection(&mut content, entry_id, update).await?
+        };
+
+        if result == 0 {
+            return Ok(false);
+        }
+
+        mark_has_content_on_connection(&mut index_tx, &[entry_id], true).await?;
+        index_tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(true)
+    }
+
+    pub async fn active_entry_generation(&self, entry_id: i64) -> DomainResult<Option<(i64, i64)>> {
+        let row = sqlx::query(
             r#"
-            UPDATE entry_contents
-            SET content_html = ?2,
-                content_hash = ?3,
-                updated_at = ?4
-            WHERE entry_id = ?1
-              AND content_hash = ?5
+            SELECT entries.feed_id, feeds.generation
+            FROM entries
+            JOIN feeds ON feeds.id = entries.feed_id
+            WHERE entries.id = ?1
+              AND feeds.is_deleted = 0
             "#,
         )
         .bind(entry_id)
-        .bind(update.localized_html)
-        .bind(update.localized_content_hash)
-        .bind(&now)
-        .bind(update.expected_content_hash)
-        .execute(&self.content_pool)
+        .fetch_optional(&self.index_pool)
         .await
         .map_err(map_sqlx_error)?;
 
-        if result.rows_affected() > 0 {
-            self.mark_has_content(&[entry_id], true).await?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        Ok(row.map(|row| (row.get("feed_id"), row.get("generation"))))
     }
 
     pub async fn has_entries_for_feed(&self, feed_id: i64) -> DomainResult<bool> {
@@ -371,19 +468,8 @@ impl SqliteEntryRepository {
         }
 
         let mut tx = self.index_pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
-        for chunk in entry_ids.chunks(SQLITE_BIND_CHUNK) {
-            let mut qb = QueryBuilder::<Sqlite>::new("UPDATE entries SET has_content = ");
-            qb.push_bind(if has_content { 1_i64 } else { 0_i64 });
-            qb.push(" WHERE id IN (");
-            let mut separated = qb.separated(", ");
-            for entry_id in chunk {
-                separated.push_bind(entry_id);
-            }
-            qb.push(")");
-            qb.build().execute(&mut *tx).await.map_err(map_sqlx_error)?;
-        }
+        mark_has_content_on_connection(&mut tx, entry_ids, has_content).await?;
         tx.commit().await.map_err(map_sqlx_error)?;
-
         Ok(())
     }
 
@@ -426,19 +512,6 @@ impl SqliteEntryRepository {
         .await
         .map_err(map_sqlx_error)?;
         Ok(())
-    }
-
-    async fn find_entry_id_by_dedup_key_optional(
-        &self,
-        feed_id: i64,
-        dedup_key: &str,
-    ) -> DomainResult<Option<i64>> {
-        sqlx::query_scalar::<_, i64>("SELECT id FROM entries WHERE feed_id = ?1 AND dedup_key = ?2")
-            .bind(feed_id)
-            .bind(dedup_key)
-            .fetch_optional(&self.index_pool)
-            .await
-            .map_err(map_sqlx_error)
     }
 
     async fn find_adjacent_entry_id(
@@ -800,6 +873,94 @@ impl EntryContentRepository for SqliteEntryRepository {
 
         Ok(())
     }
+}
+
+async fn mark_has_content_on_connection(
+    connection: &mut sqlx::SqliteConnection,
+    entry_ids: &[i64],
+    has_content: bool,
+) -> DomainResult<()> {
+    for chunk in entry_ids.chunks(SQLITE_BIND_CHUNK) {
+        let mut qb = QueryBuilder::<Sqlite>::new("UPDATE entries SET has_content = ");
+        qb.push_bind(if has_content { 1_i64 } else { 0_i64 });
+        qb.push(" WHERE id IN (");
+        let mut separated = qb.separated(", ");
+        for entry_id in chunk {
+            separated.push_bind(entry_id);
+        }
+        qb.push(")");
+        qb.build().execute(&mut *connection).await.map_err(map_sqlx_error)?;
+    }
+    Ok(())
+}
+
+async fn write_contents_on_connection(
+    connection: &mut sqlx::SqliteConnection,
+    feed_id: i64,
+    contents: &[ResolvedEntryContent],
+) -> DomainResult<usize> {
+    let mut upserted = 0;
+    let now = now_rfc3339();
+    for content in contents {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO entry_contents (
+                entry_id, feed_id, content_html, content_text, content_hash, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(entry_id) DO UPDATE SET
+                feed_id = excluded.feed_id,
+                content_html = COALESCE(excluded.content_html, entry_contents.content_html),
+                content_text = COALESCE(excluded.content_text, entry_contents.content_text),
+                content_hash = excluded.content_hash,
+                updated_at = excluded.updated_at
+            WHERE entry_contents.feed_id IS NOT excluded.feed_id
+               OR entry_contents.content_html IS NOT COALESCE(excluded.content_html, entry_contents.content_html)
+               OR entry_contents.content_text IS NOT COALESCE(excluded.content_text, entry_contents.content_text)
+               OR entry_contents.content_hash IS NOT excluded.content_hash
+            "#,
+        )
+        .bind(content.entry_id)
+        .bind(feed_id)
+        .bind(content.content_html.as_deref())
+        .bind(content.content_text.as_deref())
+        .bind(content.content_hash.as_deref())
+        .bind(&now)
+        .execute(&mut *connection)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        if result.rows_affected() > 0 {
+            upserted += 1;
+        }
+    }
+    Ok(upserted)
+}
+
+async fn update_localized_content_on_connection(
+    connection: &mut sqlx::SqliteConnection,
+    entry_id: i64,
+    update: &LocalizedEntryUpdate<'_>,
+) -> DomainResult<u64> {
+    let now = now_rfc3339();
+    let result = sqlx::query(
+        r#"
+        UPDATE entry_contents
+        SET content_html = ?2,
+            content_hash = ?3,
+            updated_at = ?4
+        WHERE entry_id = ?1
+          AND content_hash = ?5
+        "#,
+    )
+    .bind(entry_id)
+    .bind(update.localized_html)
+    .bind(update.localized_content_hash)
+    .bind(&now)
+    .bind(update.expected_content_hash)
+    .execute(&mut *connection)
+    .await
+    .map_err(map_sqlx_error)?;
+    Ok(result.rows_affected())
 }
 
 async fn promote_legacy_hex_guid_identity(

@@ -19,6 +19,115 @@ impl SqliteFeedRepository {
         Self { pool }
     }
 
+    pub async fn update_fetch_state_for_generation(
+        &self,
+        feed_id: i64,
+        generation: i64,
+        etag: Option<&str>,
+        last_modified: Option<&str>,
+        fetch_error: Option<&str>,
+        success: bool,
+    ) -> DomainResult<()> {
+        let now = now_rfc3339();
+        let last_success = success.then_some(now.as_str());
+
+        let result = sqlx::query(
+            r#"
+            UPDATE feeds
+            SET etag = ?3,
+                last_modified = ?4,
+                last_fetched_at = ?5,
+                last_success_at = COALESCE(?6, last_success_at),
+                fetch_error = ?7,
+                updated_at = ?5
+            WHERE id = ?1 AND generation = ?2 AND is_deleted = 0
+            "#,
+        )
+        .bind(feed_id)
+        .bind(generation)
+        .bind(etag)
+        .bind(last_modified)
+        .bind(&now)
+        .bind(last_success)
+        .bind(fetch_error)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(DomainError::NotFound);
+        }
+        Ok(())
+    }
+
+    pub async fn update_feed_metadata_for_generation(
+        &self,
+        feed_id: i64,
+        generation: i64,
+        parsed_feed: &ParsedFeed,
+    ) -> DomainResult<()> {
+        let now = now_rfc3339();
+        let result = sqlx::query(
+            r#"
+            UPDATE feeds
+            SET title = COALESCE(?3, title),
+                site_url = COALESCE(?4, site_url),
+                description = COALESCE(?5, description),
+                updated_at = ?6
+            WHERE id = ?1 AND generation = ?2 AND is_deleted = 0
+            "#,
+        )
+        .bind(feed_id)
+        .bind(generation)
+        .bind(parsed_feed.title.as_deref())
+        .bind(parsed_feed.site_url.as_ref().map(Url::as_str))
+        .bind(parsed_feed.description.as_deref())
+        .bind(&now)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(DomainError::NotFound);
+        }
+        Ok(())
+    }
+
+    pub async fn list_feeds_with_generation(&self) -> DomainResult<Vec<(Feed, i64)>> {
+        let rows = sqlx::query(
+            "SELECT * FROM feeds WHERE is_deleted = 0 ORDER BY COALESCE(title, url) ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        let mut feeds = Vec::with_capacity(rows.len());
+        for row in rows {
+            let generation = row.try_get("generation").map_err(map_sqlx_error)?;
+            feeds.push((Self::row_to_feed(row).await?, generation));
+        }
+        Ok(feeds)
+    }
+
+    pub async fn get_feed_with_generation(
+        &self,
+        feed_id: i64,
+    ) -> DomainResult<Option<(Feed, i64)>> {
+        let row = sqlx::query("SELECT * FROM feeds WHERE id = ?1 AND is_deleted = 0")
+            .bind(feed_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_error)?;
+
+        match row {
+            Some(row) => {
+                let generation = row.try_get("generation").map_err(map_sqlx_error)?;
+                Ok(Some((Self::row_to_feed(row).await?, generation)))
+            }
+            None => Ok(None),
+        }
+    }
+
     pub async fn update_fetch_state(
         &self,
         feed_id: i64,
@@ -135,7 +244,21 @@ impl FeedRepository for SqliteFeedRepository {
                     WHEN excluded.folder IS NULL THEN feeds.folder
                     ELSE NULLIF(excluded.folder, '')
                 END,
-                site_url = COALESCE(excluded.site_url, feeds.site_url),
+                site_url = CASE
+                    WHEN feeds.is_deleted = 1 THEN excluded.site_url
+                    ELSE COALESCE(excluded.site_url, feeds.site_url)
+                END,
+                description = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.description END,
+                icon_url = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.icon_url END,
+                etag = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.etag END,
+                last_modified = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_modified END,
+                last_fetched_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_fetched_at END,
+                last_success_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_success_at END,
+                fetch_error = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.fetch_error END,
+                generation = CASE
+                    WHEN feeds.is_deleted = 1 THEN feeds.generation + 1
+                    ELSE feeds.generation
+                END,
                 is_deleted = 0,
                 updated_at = excluded.updated_at
             "#,
@@ -185,7 +308,21 @@ impl FeedRepository for SqliteFeedRepository {
                         WHEN excluded.folder IS NULL THEN feeds.folder
                         ELSE NULLIF(excluded.folder, '')
                     END,
-                    site_url = COALESCE(excluded.site_url, feeds.site_url),
+                    site_url = CASE
+                        WHEN feeds.is_deleted = 1 THEN excluded.site_url
+                        ELSE COALESCE(excluded.site_url, feeds.site_url)
+                    END,
+                    description = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.description END,
+                    icon_url = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.icon_url END,
+                    etag = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.etag END,
+                    last_modified = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_modified END,
+                    last_fetched_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_fetched_at END,
+                    last_success_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_success_at END,
+                    fetch_error = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.fetch_error END,
+                    generation = CASE
+                        WHEN feeds.is_deleted = 1 THEN feeds.generation + 1
+                        ELSE feeds.generation
+                    END,
                     is_deleted = 0,
                     updated_at = excluded.updated_at
                 "#,
@@ -215,7 +352,19 @@ impl FeedRepository for SqliteFeedRepository {
         let result = sqlx::query(
             r#"
             UPDATE feeds
-            SET is_deleted = ?2,
+            SET generation = CASE
+                    WHEN is_deleted = 1 AND ?2 = 0 THEN generation + 1
+                    ELSE generation
+                END,
+                site_url = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL ELSE site_url END,
+                description = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL ELSE description END,
+                icon_url = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL ELSE icon_url END,
+                etag = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL ELSE etag END,
+                last_modified = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL ELSE last_modified END,
+                last_fetched_at = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL ELSE last_fetched_at END,
+                last_success_at = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL ELSE last_success_at END,
+                fetch_error = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL ELSE fetch_error END,
+                is_deleted = ?2,
                 updated_at = ?3
             WHERE id = ?1
             "#,
@@ -235,31 +384,11 @@ impl FeedRepository for SqliteFeedRepository {
     }
 
     async fn list_feeds(&self) -> DomainResult<Vec<Feed>> {
-        let rows = sqlx::query(
-            "SELECT * FROM feeds WHERE is_deleted = 0 ORDER BY COALESCE(title, url) ASC",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(map_sqlx_error)?;
-
-        let mut feeds = Vec::with_capacity(rows.len());
-        for row in rows {
-            feeds.push(Self::row_to_feed(row).await?);
-        }
-        Ok(feeds)
+        Ok(self.list_feeds_with_generation().await?.into_iter().map(|(feed, _)| feed).collect())
     }
 
     async fn get_feed(&self, feed_id: i64) -> DomainResult<Option<Feed>> {
-        let row = sqlx::query("SELECT * FROM feeds WHERE id = ?1 AND is_deleted = 0")
-            .bind(feed_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(map_sqlx_error)?;
-
-        match row {
-            Some(row) => Ok(Some(Self::row_to_feed(row).await?)),
-            None => Ok(None),
-        }
+        Ok(self.get_feed_with_generation(feed_id).await?.map(|(feed, _)| feed))
     }
 
     async fn list_summaries(&self) -> DomainResult<Vec<FeedSummary>> {

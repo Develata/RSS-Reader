@@ -254,7 +254,7 @@ mod tests {
 
         async fn commit(
             &self,
-            _feed_id: i64,
+            _target: &RefreshTarget,
             _commit: crate::RefreshCommit,
         ) -> Result<crate::RefreshCommitOutcome> {
             Ok(Default::default())
@@ -282,6 +282,7 @@ mod tests {
             1,
             vec![RefreshTarget {
                 feed_id: 1,
+                generation: 0,
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 etag: None,
                 last_modified: None,
@@ -328,6 +329,7 @@ mod tests {
             3,
             vec![RefreshTarget {
                 feed_id: 3,
+                generation: 0,
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 etag: None,
                 last_modified: None,
