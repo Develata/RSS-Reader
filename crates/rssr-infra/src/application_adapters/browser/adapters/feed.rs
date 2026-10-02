@@ -53,10 +53,7 @@ impl FeedRepository for BrowserFeedRepository {
             .map_err(map_store_error)
     }
 
-    async fn has_active_subscription_url(
-        &self,
-        url: &url::Url,
-    ) -> rssr_domain::Result<bool> {
+    async fn has_active_subscription_url(&self, url: &url::Url) -> rssr_domain::Result<bool> {
         let normalized_url = normalize_feed_url(url).to_string();
         self.store
             .read(move |state| {
