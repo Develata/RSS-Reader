@@ -299,7 +299,9 @@ async fn immediate_orphan_cleanup_does_not_block_reactivation() {
     };
     let reactivation = {
         let mutations = mutations.clone();
-        tokio::spawn(async move { mutations.activate_subscription(reactivation_subscription).await })
+        tokio::spawn(
+            async move { mutations.activate_subscription(reactivation_subscription).await },
+        )
     };
     let reactivated = tokio::time::timeout(Duration::from_secs(2), reactivation)
         .await
