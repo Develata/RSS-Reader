@@ -4,7 +4,8 @@ use anyhow::Result;
 use rssr_domain::Feed;
 
 use crate::{
-    AddSubscriptionInput, FeedService, RefreshFeedOutcome, RefreshService, RemoveSubscriptionInput,
+    AddSubscriptionInput, FeedService, RefreshFeedOutcome, RefreshService, RefreshTarget,
+    RemoveSubscriptionInput,
 };
 
 #[async_trait::async_trait]
@@ -104,16 +105,26 @@ impl SubscriptionWorkflow {
         if input.subscription.title.is_none() {
             input.subscription.title = prepared.update.feed.title.clone();
         }
-        let feed = self
+        let activated = self
             .feed_service
-            .add_subscription_with_site(&input.subscription, prepared.update.feed.site_url.clone())
+            .activate_subscription_with_site(
+                &input.subscription,
+                prepared.update.feed.site_url.clone(),
+            )
             .await?;
+        let target = RefreshTarget {
+            feed_id: activated.feed.id,
+            generation: activated.generation,
+            url: activated.feed.url.clone(),
+            etag: activated.feed.etag.clone(),
+            last_modified: activated.feed.last_modified.clone(),
+        };
         let first_refresh = if input.refresh_after_add {
-            Some(self.refresh_service.apply_prepared_update(feed.id, prepared.update).await?)
+            Some(self.refresh_service.apply_prepared_update(target, prepared.update).await?)
         } else {
             None
         };
-        Ok(AddSubscriptionLifecycleOutcome { feed, first_refresh })
+        Ok(AddSubscriptionLifecycleOutcome { feed: activated.feed, first_refresh })
     }
 
     pub async fn remove_subscription(&self, input: RemoveSubscriptionInput) -> Result<()> {
