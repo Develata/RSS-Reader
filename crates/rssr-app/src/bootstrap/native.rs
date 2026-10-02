@@ -14,7 +14,7 @@ use rssr_application::{
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::UserSettings;
 use rssr_infra::{
-    application_adapters::cleanup_deleted_feed_content,
+    application_adapters::cleanup_orphaned_entry_content,
     composition::compose_native_sqlite_use_cases,
     config_sync::webdav::WebDavConfigSync,
     db::{
@@ -99,13 +99,13 @@ impl AppServices {
                     .await
                     .context("执行正文数据库迁移失败")?;
 
-                match cleanup_deleted_feed_content(&index_pool, &content_pool).await {
+                match cleanup_orphaned_entry_content(&index_pool, &content_pool).await {
                     Ok(removed_rows) if removed_rows > 0 => {
-                        tracing::info!(removed_rows, "已重试清理已删除订阅的正文缓存");
+                        tracing::info!(removed_rows, "已清理孤立正文缓存");
                     }
                     Ok(_) => {}
                     Err(error) => {
-                        tracing::warn!(%error, "已删除订阅的正文缓存清理失败，将在下次启动重试");
+                        tracing::warn!(%error, "孤立正文缓存清理失败，将在下次启动重试");
                     }
                 }
 
