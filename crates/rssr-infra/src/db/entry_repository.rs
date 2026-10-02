@@ -678,7 +678,12 @@ impl EntryIndexRepository for SqliteEntryRepository {
             qb.push(" WHERE id IN (SELECT entries.id FROM entries JOIN feeds ON feeds.id = entries.feed_id WHERE feeds.is_deleted = 0 AND entries.is_read = 0");
             push_entry_query_filters(&mut qb, &query);
             qb.push(")");
-            qb.build().execute(&mut *tx).await.map_err(map_sqlx_error)?.rows_affected()
+            qb.build()
+                .persistent(entry_scope_query_is_cacheable(&query))
+                .execute(&mut *tx)
+                .await
+                .map_err(map_sqlx_error)?
+                .rows_affected()
         };
         tx.commit().await.map_err(map_sqlx_error)?;
         Ok(rssr_domain::MarkReadOutcome::Applied { changed_count })
@@ -709,7 +714,12 @@ impl EntryIndexRepository for SqliteEntryRepository {
             qb.push(" LIMIT ").push_bind(limit as i64);
         }
 
-        let rows = qb.build().fetch_all(&self.index_pool).await.map_err(map_sqlx_error)?;
+        let rows = qb
+            .build()
+            .persistent(entry_scope_query_is_cacheable(query))
+            .fetch_all(&self.index_pool)
+            .await
+            .map_err(map_sqlx_error)?;
 
         rows.into_iter()
             .map(|row| {
@@ -738,7 +748,12 @@ impl EntryIndexRepository for SqliteEntryRepository {
 
         push_entry_query_filters(&mut qb, query);
 
-        let row = qb.build().fetch_one(&self.index_pool).await.map_err(map_sqlx_error)?;
+        let row = qb
+            .build()
+            .persistent(entry_scope_query_is_cacheable(query))
+            .fetch_one(&self.index_pool)
+            .await
+            .map_err(map_sqlx_error)?;
         let count: i64 = row.get("count");
         Ok(count as u64)
     }
@@ -1045,18 +1060,33 @@ async fn resolve_entry_ids_by_dedup_keys(
     Ok(resolved)
 }
 
+fn entry_scope_query_is_cacheable(query: &EntryQuery) -> bool {
+    // Below the existing conservative bind chunk threshold, keeping IDs bound gives a stable SQL
+    // shape that benefits from SQLx's prepared-statement cache. Larger scopes switch to literals
+    // to avoid SQLite's variable limit and must not cache their per-value SQL text.
+    query.feed_ids.len() <= SQLITE_BIND_CHUNK
+}
+
 fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a EntryQuery) {
     if let Some(feed_id) = query.feed_id {
         qb.push(" AND entries.feed_id = ").push_bind(feed_id);
     }
     if !query.feed_ids.is_empty() {
-        // feed_ids are already typed i64 values produced by our own state mapping. Render them as
-        // integer SQL literals instead of bind parameters so selecting tens of thousands of feeds
-        // cannot hit SQLite's SQLITE_MAX_VARIABLE_NUMBER. No raw user text is interpolated here.
         qb.push(" AND entries.feed_id IN (");
         let mut separated = qb.separated(", ");
-        for feed_id in &query.feed_ids {
-            separated.push(feed_id.to_string());
+        if entry_scope_query_is_cacheable(query) {
+            // Normal UI scopes stay parameterized so all value combinations reuse one prepared
+            // statement shape and retain the usual SQL injection boundary.
+            for feed_id in &query.feed_ids {
+                separated.push_bind(feed_id);
+            }
+        } else {
+            // Oversized scopes cannot use one bind per id without hitting
+            // SQLITE_MAX_VARIABLE_NUMBER. feed_ids are internal typed i64 values, so rendering
+            // integer literals is safe; callers mark this dynamic statement non-persistent.
+            for feed_id in &query.feed_ids {
+                separated.push(feed_id.to_string());
+            }
         }
         qb.push(")");
     }
@@ -1160,6 +1190,7 @@ async fn unread_selection(
     qb.push(" ORDER BY entries.id");
     Ok(qb
         .build()
+        .persistent(entry_scope_query_is_cacheable(query))
         .fetch_all(connection)
         .await
         .map_err(map_sqlx_error)?
