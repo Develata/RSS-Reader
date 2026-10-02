@@ -90,6 +90,7 @@ async fn build_sqlite_fixture() -> Result<SqliteFixture> {
     let app_state_repository = Arc::new(SqliteAppStateRepository::new(pool.clone()));
     let feed_service = FeedService::new(
         feed_repository.clone(),
+        feed_repository.clone(),
         Arc::new(SqlitePersistenceMutations::new(pool.clone(), pool.clone())),
     );
     let refresh_service =
