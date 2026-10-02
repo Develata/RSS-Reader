@@ -8,6 +8,19 @@ log_dir="$(mktemp -d "$log_root/run.XXXXXX")"
 profile_dir="$(mktemp -d)"
 server_pid=""
 chrome_pid=""
+
+cleanup_profile_best_effort() {
+  local attempt
+  for attempt in {1..10}; do
+    if rm -rf -- "$profile_dir" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  echo "::warning::Failed to remove temporary Chrome profile after retries: $profile_dir" >&2
+  return 0
+}
+
 cleanup() {
   result=$?
   trap - EXIT
@@ -17,7 +30,10 @@ cleanup() {
       wait "$pid" 2>/dev/null || true
     fi
   done
-  rm -rf "$profile_dir"
+  # Chrome children can briefly recreate profile files after the parent exits. Cleanup must never
+  # turn an otherwise successful smoke test into a failure; retry the race and then degrade to a
+  # warning so the runner can reclaim /tmp.
+  cleanup_profile_best_effort
   if (( result != 0 )); then
     echo "Pages smoke failed; diagnostics: $log_dir" >&2
     tail -n 60 "$log_dir/server.log" "$log_dir/chrome.log" >&2 || true
