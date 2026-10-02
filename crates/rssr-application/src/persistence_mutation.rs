@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rssr_domain::UserSettings;
+use rssr_domain::{Feed, NewFeedSubscription, UserSettings};
 use url::Url;
 
 #[derive(Debug, Clone)]
@@ -19,6 +19,24 @@ pub struct ConfigReplacementPlan {
 pub struct ConfigReplacementOutcome {
     pub removed_feed_count: usize,
     pub settings_updated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivatedSubscription {
+    pub feed: Feed,
+    pub generation: i64,
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+pub trait SubscriptionActivationPort: Send + Sync {
+    /// Persist one subscription activation/reactivation and return the generation created by that
+    /// exact mutation. Callers must carry this token into any prepared refresh response instead of
+    /// re-reading a later "current generation".
+    async fn activate_subscription(
+        &self,
+        new_feed: NewFeedSubscription,
+    ) -> Result<ActivatedSubscription>;
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
