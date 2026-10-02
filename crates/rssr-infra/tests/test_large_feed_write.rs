@@ -84,7 +84,6 @@ async fn thirty_three_thousand_entry_feed_writes_index_and_content_completely() 
     assert_eq!(remaining, 0);
 }
 
-
 #[tokio::test]
 async fn batched_content_upsert_preserves_sequential_duplicate_semantics() {
     let backend = NativeSqliteBackend::new("sqlite::memory:");
@@ -125,13 +124,12 @@ async fn batched_content_upsert_preserves_sequential_duplicate_semantics() {
 
     entries.upsert_entries(feed.id, &[first.clone(), second]).await.unwrap();
 
-    let stored: (String, String) = sqlx::query_as(
-        "SELECT content_html, content_text FROM entry_contents WHERE feed_id = ?1",
-    )
-    .bind(feed.id)
-    .fetch_one(&content_pool)
-    .await
-    .unwrap();
+    let stored: (String, String) =
+        sqlx::query_as("SELECT content_html, content_text FROM entry_contents WHERE feed_id = ?1")
+            .bind(feed.id)
+            .fetch_one(&content_pool)
+            .await
+            .unwrap();
     assert_eq!(stored.0, "<p>second</p>");
     assert_eq!(stored.1, "second");
 
