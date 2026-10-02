@@ -158,5 +158,3 @@ async fn sqlite_entry_query_accepts_more_feed_ids_than_sqlite_bind_limit() {
         MarkReadOutcome::Applied { changed_count: 1 }
     );
 }
-
-
