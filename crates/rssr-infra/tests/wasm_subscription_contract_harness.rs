@@ -132,8 +132,10 @@ fn sample_entry_content(id: i64, feed_id: i64, index: i64) -> PersistedEntryCont
 }
 
 fn build_workflow(state: BrowserStore) -> SubscriptionWorkflow {
+    let feed_repository = Arc::new(BrowserFeedRepository::new(state.clone()));
     let feed_service = FeedService::new(
-        Arc::new(BrowserFeedRepository::new(state.clone())),
+        feed_repository.clone(),
+        feed_repository,
         Arc::new(BrowserPersistenceMutations::new(state)),
     );
     let refresh_service =
