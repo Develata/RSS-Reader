@@ -100,7 +100,6 @@ impl SubscriptionWorkflow {
         mut input: AddSubscriptionLifecycleInput,
         prepared: crate::PreparedSubscription,
     ) -> Result<AddSubscriptionLifecycleOutcome> {
-        self.feed_service.ensure_not_subscribed(&prepared.url).await?;
         input.subscription.url = prepared.url.to_string();
         if input.subscription.title.is_none() {
             input.subscription.title = prepared.update.feed.title.clone();
