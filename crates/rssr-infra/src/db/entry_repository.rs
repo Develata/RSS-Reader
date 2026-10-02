@@ -938,12 +938,9 @@ async fn write_contents_on_connection(
             "#,
         );
 
-        upserted += qb
-            .build()
-            .execute(&mut *connection)
-            .await
-            .map_err(map_sqlx_error)?
-            .rows_affected() as usize;
+        upserted +=
+            qb.build().execute(&mut *connection).await.map_err(map_sqlx_error)?.rows_affected()
+                as usize;
     }
     Ok(upserted)
 }
