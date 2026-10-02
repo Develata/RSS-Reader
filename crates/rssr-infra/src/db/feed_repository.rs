@@ -1,4 +1,3 @@
-use rssr_application::{ActivatedSubscription, SubscriptionActivationPort};
 use rssr_domain::{
     DomainError, Feed, FeedRepository, FeedSummary, NewFeedSubscription, Result as DomainResult,
     normalize_feed_url,
@@ -20,7 +19,7 @@ impl SqliteFeedRepository {
         Self { pool }
     }
 
-    async fn activate_subscription_with_generation(
+    pub(crate) async fn activate_subscription_with_generation(
         &self,
         new_feed: &NewFeedSubscription,
     ) -> DomainResult<(Feed, i64)> {
@@ -283,17 +282,6 @@ impl SqliteFeedRepository {
             created_at: parse_datetime(row.try_get("created_at").map_err(map_sqlx_error)?)?,
             updated_at: parse_datetime(row.try_get("updated_at").map_err(map_sqlx_error)?)?,
         })
-    }
-}
-
-#[async_trait::async_trait]
-impl SubscriptionActivationPort for SqliteFeedRepository {
-    async fn activate_subscription(
-        &self,
-        new_feed: NewFeedSubscription,
-    ) -> anyhow::Result<ActivatedSubscription> {
-        let (feed, generation) = self.activate_subscription_with_generation(&new_feed).await?;
-        Ok(ActivatedSubscription { feed, generation })
     }
 }
 
