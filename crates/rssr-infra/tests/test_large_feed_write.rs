@@ -137,13 +137,12 @@ async fn batched_content_upsert_preserves_sequential_duplicate_semantics() {
     first.content_text = Some("third".into());
     entries.upsert_entries(feed.id, &[first]).await.unwrap();
 
-    let stored: (String, String) = sqlx::query_as(
-        "SELECT content_html, content_text FROM entry_contents WHERE feed_id = ?1",
-    )
-    .bind(feed.id)
-    .fetch_one(&content_pool)
-    .await
-    .unwrap();
+    let stored: (String, String) =
+        sqlx::query_as("SELECT content_html, content_text FROM entry_contents WHERE feed_id = ?1")
+            .bind(feed.id)
+            .fetch_one(&content_pool)
+            .await
+            .unwrap();
     assert_eq!(stored.0, "<p>third</p>");
     assert_eq!(stored.1, "third");
 }
