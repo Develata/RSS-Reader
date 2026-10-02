@@ -144,8 +144,8 @@ async fn sqlite_entry_query_accepts_more_feed_ids_than_sqlite_bind_limit() {
         .await
         .unwrap();
 
-    // Modern SQLite commonly caps bound variables at 32766. This scope deliberately exceeds that
-    // limit while containing only one real feed id; all repository read/bulk paths must still work.
+    // This deliberately exceeds SQLite's variable limit. The repository must keep one stable,
+    // cacheable statement shape for oversized scopes while preserving all read/bulk semantics.
     let query = EntryQuery { feed_ids: (1_i64..=40_000).collect(), ..EntryQuery::default() };
 
     assert_eq!(entries.count_entries(&query).await.unwrap(), 1);
