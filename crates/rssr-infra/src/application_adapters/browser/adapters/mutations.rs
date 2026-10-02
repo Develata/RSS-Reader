@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use rssr_application::{
-    ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan, ConfigReplacementPort,
-    SubscriptionRemovalPort,
+    ActivatedSubscription, ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan,
+    ConfigReplacementPort, SubscriptionActivationPort, SubscriptionRemovalPort,
 };
 
 use crate::application_adapters::browser::{
@@ -9,7 +9,7 @@ use crate::application_adapters::browser::{
     state::{BrowserStore, Changes, PersistedFeed},
 };
 
-use super::shared::map_store_error;
+use super::{feed::upsert_subscription_in_state, shared::map_store_error};
 
 #[derive(Clone)]
 pub struct BrowserPersistenceMutations {
@@ -19,6 +19,35 @@ pub struct BrowserPersistenceMutations {
 impl BrowserPersistenceMutations {
     pub fn new(store: BrowserStore) -> Self {
         Self { store }
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl SubscriptionActivationPort for BrowserPersistenceMutations {
+    async fn activate_subscription(
+        &self,
+        new_feed: rssr_domain::NewFeedSubscription,
+    ) -> Result<ActivatedSubscription> {
+        self.store
+            .update(move |state| {
+                let normalized_url = rssr_domain::normalize_feed_url(&new_feed.url);
+                if state
+                    .core
+                    .feeds
+                    .iter()
+                    .any(|feed| feed.url == normalized_url.as_str() && !feed.is_deleted)
+                {
+                    anyhow::bail!("该地址已订阅：{normalized_url}");
+                }
+                let feed = upsert_subscription_in_state(state, &new_feed)?;
+                let generation =
+                    state.core.feed_generations.get(&feed.id).copied().unwrap_or_default();
+                Ok((ActivatedSubscription { feed, generation }, Changes::CORE))
+            })
+            .await
+            .map_err(map_store_error)
+            .map_err(Into::into)
     }
 }
 

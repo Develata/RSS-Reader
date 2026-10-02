@@ -113,7 +113,7 @@ impl FeedRepository for BrowserFeedRepository {
     }
 }
 
-fn upsert_subscription_in_state(
+pub(super) fn upsert_subscription_in_state(
     state: &mut crate::application_adapters::browser::state::BrowserState,
     new_feed: &NewFeedSubscription,
 ) -> rssr_domain::Result<Feed> {

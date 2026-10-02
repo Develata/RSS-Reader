@@ -10,7 +10,7 @@ use crate::{
     EntriesWorkspaceService, FeedCatalogService, FeedRefreshSourcePort, FeedService,
     FeedsSnapshotService, ImportExportService, OpmlCodecPort, ReaderService, RefreshService,
     RefreshStorePort, SettingsService, SettingsSyncService, StartupService,
-    SubscriptionRemovalPort, SubscriptionWorkflow,
+    SubscriptionActivationPort, SubscriptionRemovalPort, SubscriptionWorkflow,
 };
 
 // 架构护栏：如果某次设计/计划开始要求严重代码分叉、污染 infra 边界、引发前后端大规模迁移
@@ -31,6 +31,7 @@ pub struct AppCompositionInput {
     pub refresh_store: Arc<dyn RefreshStorePort>,
     pub opml_codec: Arc<dyn OpmlCodecPort>,
     pub clock: Arc<dyn ClockPort>,
+    pub subscription_activation: Arc<dyn SubscriptionActivationPort>,
     pub subscription_removal: Arc<dyn SubscriptionRemovalPort>,
     pub config_replacement: Arc<dyn ConfigReplacementPort>,
 }
@@ -54,8 +55,11 @@ pub struct AppUseCases {
 
 impl AppUseCases {
     pub fn compose(input: AppCompositionInput) -> Self {
-        let feed_service =
-            FeedService::new(input.feed_repository.clone(), input.subscription_removal);
+        let feed_service = FeedService::new(
+            input.feed_repository.clone(),
+            input.subscription_activation,
+            input.subscription_removal,
+        );
         let feed_catalog_service = FeedCatalogService::new(input.feed_repository.clone());
         let refresh_service = RefreshService::new(input.refresh_source, input.refresh_store);
 

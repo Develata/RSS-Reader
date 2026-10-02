@@ -340,10 +340,9 @@ impl RefreshService {
     /// 复用添加订阅时已获取的 feed，首次入库不再发起第二次请求。
     pub async fn apply_prepared_update(
         &self,
-        feed_id: i64,
+        target: RefreshTarget,
         update: FeedRefreshUpdate,
     ) -> Result<RefreshFeedOutcome> {
-        let target = self.store.get_target(feed_id).await?.context("订阅不存在")?;
         self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await
     }
 

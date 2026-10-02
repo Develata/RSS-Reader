@@ -19,6 +19,80 @@ impl SqliteFeedRepository {
         Self { pool }
     }
 
+    pub(crate) async fn activate_subscription_with_generation(
+        &self,
+        new_feed: &NewFeedSubscription,
+        reject_if_active: bool,
+    ) -> DomainResult<(Feed, i64)> {
+        let now = now_rfc3339();
+        let normalized_url = normalize_feed_url(&new_feed.url);
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+
+        if reject_if_active {
+            let active: i64 = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM feeds WHERE url = ?1 AND is_deleted = 0)",
+            )
+            .bind(normalized_url.as_str())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_sqlx_error)?;
+            if active != 0 {
+                return Err(DomainError::InvalidInput(format!("该地址已订阅：{normalized_url}")));
+            }
+        }
+
+        sqlx::query(
+            r#"
+            INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url)
+            VALUES (?1, ?2, ?3, ?4, ?4, ?5)
+            ON CONFLICT(url) DO UPDATE SET
+                title = CASE
+                    WHEN excluded.title IS NULL THEN feeds.title
+                    ELSE NULLIF(excluded.title, '')
+                END,
+                folder = CASE
+                    WHEN excluded.folder IS NULL THEN feeds.folder
+                    ELSE NULLIF(excluded.folder, '')
+                END,
+                site_url = CASE
+                    WHEN feeds.is_deleted = 1 THEN excluded.site_url
+                    ELSE COALESCE(excluded.site_url, feeds.site_url)
+                END,
+                description = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.description END,
+                icon_url = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.icon_url END,
+                etag = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.etag END,
+                last_modified = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_modified END,
+                last_fetched_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_fetched_at END,
+                last_success_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_success_at END,
+                fetch_error = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.fetch_error END,
+                generation = CASE
+                    WHEN feeds.is_deleted = 1 THEN feeds.generation + 1
+                    ELSE feeds.generation
+                END,
+                is_deleted = 0,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(normalized_url.as_str())
+        .bind(new_feed.title.as_deref())
+        .bind(new_feed.folder.as_deref())
+        .bind(&now)
+        .bind(new_feed.site_url.as_ref().map(Url::as_str))
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        let row = sqlx::query("SELECT * FROM feeds WHERE url = ?1")
+            .bind(normalized_url.as_str())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_sqlx_error)?;
+        let generation = row.try_get("generation").map_err(map_sqlx_error)?;
+        let feed = Self::row_to_feed(row).await?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok((feed, generation))
+    }
+
     pub async fn update_fetch_state_for_generation(
         &self,
         feed_id: i64,
@@ -228,57 +302,7 @@ impl SqliteFeedRepository {
 #[async_trait::async_trait]
 impl FeedRepository for SqliteFeedRepository {
     async fn upsert_subscription(&self, new_feed: &NewFeedSubscription) -> DomainResult<Feed> {
-        let now = now_rfc3339();
-        let normalized_url = normalize_feed_url(&new_feed.url);
-
-        sqlx::query(
-            r#"
-            INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url)
-            VALUES (?1, ?2, ?3, ?4, ?4, ?5)
-            ON CONFLICT(url) DO UPDATE SET
-                title = CASE
-                    WHEN excluded.title IS NULL THEN feeds.title
-                    ELSE NULLIF(excluded.title, '')
-                END,
-                folder = CASE
-                    WHEN excluded.folder IS NULL THEN feeds.folder
-                    ELSE NULLIF(excluded.folder, '')
-                END,
-                site_url = CASE
-                    WHEN feeds.is_deleted = 1 THEN excluded.site_url
-                    ELSE COALESCE(excluded.site_url, feeds.site_url)
-                END,
-                description = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.description END,
-                icon_url = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.icon_url END,
-                etag = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.etag END,
-                last_modified = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_modified END,
-                last_fetched_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_fetched_at END,
-                last_success_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_success_at END,
-                fetch_error = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.fetch_error END,
-                generation = CASE
-                    WHEN feeds.is_deleted = 1 THEN feeds.generation + 1
-                    ELSE feeds.generation
-                END,
-                is_deleted = 0,
-                updated_at = excluded.updated_at
-            "#,
-        )
-        .bind(normalized_url.as_str())
-        .bind(new_feed.title.as_deref())
-        .bind(new_feed.folder.as_deref())
-        .bind(&now)
-        .bind(new_feed.site_url.as_ref().map(Url::as_str))
-        .execute(&self.pool)
-        .await
-        .map_err(map_sqlx_error)?;
-
-        let row = sqlx::query("SELECT * FROM feeds WHERE url = ?1")
-            .bind(normalized_url.as_str())
-            .fetch_one(&self.pool)
-            .await
-            .map_err(map_sqlx_error)?;
-
-        Self::row_to_feed(row).await
+        Ok(self.activate_subscription_with_generation(new_feed, false).await?.0)
     }
 
     async fn upsert_subscriptions(

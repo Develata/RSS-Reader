@@ -1,12 +1,13 @@
 use anyhow::{Context, Result, bail};
 use rssr_application::{
-    ConfigReplacementOutcome, ConfigReplacementPlan, ConfigReplacementPort, SubscriptionRemovalPort,
+    ActivatedSubscription, ConfigReplacementOutcome, ConfigReplacementPlan, ConfigReplacementPort,
+    SubscriptionActivationPort, SubscriptionRemovalPort,
 };
-use rssr_domain::{AppStateSnapshot, UserSettings};
+use rssr_domain::{AppStateSnapshot, NewFeedSubscription, UserSettings};
 use sqlx::Row;
 use time::OffsetDateTime;
 
-use crate::db::SqlitePool;
+use crate::db::{SqlitePool, feed_repository::SqliteFeedRepository};
 
 const APP_STATE_KEY: &str = "app_state_v2";
 
@@ -66,6 +67,19 @@ impl SqlitePersistenceMutations {
                 "订阅已从索引库原子删除，但正文缓存清理失败；将在下次安全重试"
             );
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl SubscriptionActivationPort for SqlitePersistenceMutations {
+    async fn activate_subscription(
+        &self,
+        new_feed: NewFeedSubscription,
+    ) -> Result<ActivatedSubscription> {
+        let repository = SqliteFeedRepository::new(self.index_pool.clone());
+        let (feed, generation) =
+            repository.activate_subscription_with_generation(&new_feed, true).await?;
+        Ok(ActivatedSubscription { feed, generation })
     }
 }
 

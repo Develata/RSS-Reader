@@ -69,9 +69,13 @@ pub fn compose_native_sqlite_use_cases(
             FetchClient::new(),
             FeedParser::new(),
         )),
-        refresh_store: Arc::new(SqliteRefreshStore::new(feed_repository, entry_repository.clone())),
+        refresh_store: Arc::new(SqliteRefreshStore::new(
+            feed_repository.clone(),
+            entry_repository.clone(),
+        )),
         opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
         clock: Arc::new(SystemClock),
+        subscription_activation: persistence_mutations.clone(),
         subscription_removal: persistence_mutations.clone(),
         config_replacement: persistence_mutations,
     });
@@ -92,7 +96,7 @@ pub fn compose_browser_use_cases(
     let persistence_mutations = Arc::new(BrowserPersistenceMutations::new(state.clone()));
 
     AppUseCases::compose(AppCompositionInput {
-        feed_repository,
+        feed_repository: feed_repository.clone(),
         entry_index_repository: entry_repository.clone(),
         entry_content_repository: entry_repository,
         settings_repository,
@@ -104,6 +108,7 @@ pub fn compose_browser_use_cases(
         refresh_store: Arc::new(BrowserRefreshStore::new(state)),
         opml_codec: Arc::new(BrowserOpmlCodec),
         clock,
+        subscription_activation: persistence_mutations.clone(),
         subscription_removal: persistence_mutations.clone(),
         config_replacement: persistence_mutations,
     })
