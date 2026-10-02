@@ -371,6 +371,19 @@ impl FeedRepository for SqliteFeedRepository {
         Ok(feeds)
     }
 
+    async fn has_active_subscription_url(&self, url: &Url) -> DomainResult<bool> {
+        let normalized_url = normalize_feed_url(url);
+        let exists = sqlx::query_scalar::<_, i64>(
+            "SELECT EXISTS(SELECT 1 FROM feeds WHERE url = ?1 AND is_deleted = 0)",
+        )
+        .bind(normalized_url.as_str())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+        Ok(exists != 0)
+    }
+
+
     async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> DomainResult<()> {
         let now = now_rfc3339();
         let result = sqlx::query(
