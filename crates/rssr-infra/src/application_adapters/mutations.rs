@@ -4,47 +4,105 @@ use rssr_application::{
     SubscriptionActivationPort, SubscriptionRemovalPort,
 };
 use rssr_domain::{AppStateSnapshot, NewFeedSubscription, UserSettings};
-use sqlx::Row;
+use sqlx::{QueryBuilder, Row, Sqlite};
 use time::OffsetDateTime;
 
 use crate::db::{SqlitePool, feed_repository::SqliteFeedRepository};
 
 const APP_STATE_KEY: &str = "app_state_v2";
 
-pub async fn cleanup_deleted_feed_content(
+const CONTENT_GC_BATCH: usize = 900;
+
+pub async fn cleanup_orphaned_entry_content(
     index_pool: &SqlitePool,
     content_pool: &SqlitePool,
 ) -> Result<u64> {
-    // Keep the index writer lock while deleting the separate content cache. Otherwise another
-    // process could re-activate the same feed between the tombstone check and content deletion.
-    // Refresh and removal already acquire locks in index -> content order, so this preserves the
-    // existing lock ordering rather than introducing an inversion.
-    let mut tx =
-        index_pool.begin_with("BEGIN IMMEDIATE").await.context("开始已删除正文清理事务失败")?;
-    let feed_ids = sqlx::query_scalar::<_, i64>(
-        r#"
-        SELECT feeds.id
-        FROM feeds
-        WHERE feeds.is_deleted = 1
-          AND NOT EXISTS (
-              SELECT 1 FROM entries WHERE entries.feed_id = feeds.id
-          )
-        "#,
+    // entry_contents is a derived cache keyed by entries.id. entries.id uses AUTOINCREMENT, so once
+    // an index row is gone its id cannot be reassigned to a future article. Reconcile ownership by
+    // entry id instead of feed tombstones: this also cleans a failed purge after the same feed URL
+    // has already been reactivated.
+    let high_watermark = sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT MAX(entry_id) FROM entry_contents",
     )
-    .fetch_all(&mut *tx)
+    .fetch_one(content_pool)
     .await
-    .context("读取待清理正文的已删除订阅失败")?;
+    .context("读取正文缓存清理高水位失败")?;
+    let Some(high_watermark) = high_watermark else {
+        return Ok(0);
+    };
 
+    let mut last_entry_id = i64::MIN;
     let mut removed_rows = 0_u64;
-    for feed_id in feed_ids {
-        removed_rows += sqlx::query("DELETE FROM entry_contents WHERE feed_id = ?1")
-            .bind(feed_id)
-            .execute(content_pool)
+
+    while last_entry_id < high_watermark {
+        // Fix a high-water mark for this pass so concurrent refreshes cannot make one cleanup run
+        // chase newly inserted content forever.
+        let entry_ids = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT entry_id
+            FROM entry_contents
+            WHERE entry_id > ?1 AND entry_id <= ?2
+            ORDER BY entry_id
+            LIMIT ?3
+            "#,
+        )
+        .bind(last_entry_id)
+        .bind(high_watermark)
+        .bind(CONTENT_GC_BATCH as i64)
+        .fetch_all(content_pool)
+        .await
+        .context("读取正文缓存候选项失败")?;
+
+        let Some(&batch_last_entry_id) = entry_ids.last() else {
+            break;
+        };
+        last_entry_id = batch_last_entry_id;
+
+        let mut live_query = QueryBuilder::<Sqlite>::new("SELECT id FROM entries WHERE id IN (");
+        let mut separated = live_query.separated(", ");
+        for entry_id in &entry_ids {
+            separated.push_bind(*entry_id);
+        }
+        live_query.push(")");
+        let live_entry_ids = live_query
+            .build()
+            .fetch_all(index_pool)
             .await
-            .with_context(|| format!("重试清理订阅 {feed_id} 的正文缓存失败"))?
-            .rows_affected();
+            .context("核对正文缓存索引归属失败")?
+            .into_iter()
+            .map(|row| row.get::<i64, _>("id"))
+            .collect::<std::collections::HashSet<_>>();
+
+        let orphan_ids = entry_ids
+            .into_iter()
+            .filter(|entry_id| !live_entry_ids.contains(entry_id))
+            .collect::<Vec<_>>();
+        if orphan_ids.is_empty() {
+            continue;
+        }
+
+        // Delete only immutable orphan entry ids. No index writer lock is needed: an AUTOINCREMENT
+        // id that is absent from entries cannot later become a different live article. If a live
+        // row disappears after the snapshot we simply leave its content for the next GC pass.
+        let mut content_tx = content_pool.begin().await.context("开始孤立正文清理事务失败")?;
+        for chunk in orphan_ids.chunks(CONTENT_GC_BATCH) {
+            let mut delete =
+                QueryBuilder::<Sqlite>::new("DELETE FROM entry_contents WHERE entry_id IN (");
+            let mut separated = delete.separated(", ");
+            for entry_id in chunk {
+                separated.push_bind(*entry_id);
+            }
+            delete.push(")");
+            removed_rows += delete
+                .build()
+                .execute(&mut *content_tx)
+                .await
+                .context("删除孤立正文缓存失败")?
+                .rows_affected();
+        }
+        content_tx.commit().await.context("提交孤立正文清理事务失败")?;
     }
-    tx.commit().await.context("完成已删除正文清理事务失败")?;
+
     Ok(removed_rows)
 }
 
@@ -59,12 +117,12 @@ impl SqlitePersistenceMutations {
         Self { index_pool, content_pool }
     }
 
-    async fn retry_deleted_content_cleanup(&self) {
-        if let Err(error) = cleanup_deleted_feed_content(&self.index_pool, &self.content_pool).await
+    async fn retry_orphaned_content_cleanup(&self) {
+        if let Err(error) = cleanup_orphaned_entry_content(&self.index_pool, &self.content_pool).await
         {
             tracing::warn!(
                 error = %error,
-                "订阅已从索引库原子删除，但正文缓存清理失败；将在下次安全重试"
+                "订阅已从索引库原子删除，但孤立正文缓存清理失败；将在下次安全重试"
             );
         }
     }
@@ -111,10 +169,9 @@ impl SubscriptionRemovalPort for SqlitePersistenceMutations {
         tx.commit().await.context("提交订阅删除事务失败")?;
 
         if purge_entries {
-            // Reacquire the index writer lock and revalidate the tombstone before touching the
-            // separate content DB. A concurrent re-add must win or wait; stale cleanup must never
-            // delete content belonging to a newly active generation.
-            self.retry_deleted_content_cleanup().await;
+            // Reconcile by immutable entry id after the index transaction commits. This does not
+            // block same-URL reactivation and still removes content left behind by a failed purge.
+            self.retry_orphaned_content_cleanup().await;
         }
         Ok(())
     }
@@ -204,7 +261,7 @@ impl ConfigReplacementPort for SqlitePersistenceMutations {
         tx.commit().await.context("提交配置替换事务失败")?;
 
         if !removed_feed_ids.is_empty() {
-            self.retry_deleted_content_cleanup().await;
+            self.retry_orphaned_content_cleanup().await;
         }
         Ok(ConfigReplacementOutcome {
             removed_feed_count: removed_feed_ids.len(),
