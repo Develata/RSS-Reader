@@ -37,8 +37,8 @@ pub use import_export_service::{
     RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore, SystemClock,
 };
 pub use persistence_mutation::{
-    ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan, ConfigReplacementPort,
-    SubscriptionRemovalPort,
+    ActivatedSubscription, ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan,
+    ConfigReplacementPort, SubscriptionActivationPort, SubscriptionRemovalPort,
 };
 pub use reader_service::{
     ReaderEntrySnapshot, ReaderService, ToggleReadInput, ToggleReadOutcome, ToggleStarredInput,
