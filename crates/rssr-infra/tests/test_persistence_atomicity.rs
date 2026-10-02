@@ -96,6 +96,17 @@ async fn activation_port_captures_generation_and_rejects_active_duplicate() {
 }
 
 #[tokio::test]
+async fn active_subscription_lookup_normalizes_url_and_ignores_tombstones() {
+    let (_index_pool, _content_pool, feeds, _entries, _settings, mutations) = fixture().await;
+    let feed = add_feed(&feeds, "https://example.com/feed.xml").await;
+    let equivalent = Url::parse("https://example.com:443/feed.xml#fragment").unwrap();
+
+    assert!(feeds.has_active_subscription_url(&equivalent).await.unwrap());
+    mutations.remove_subscription(feed.id, false).await.unwrap();
+    assert!(!feeds.has_active_subscription_url(&equivalent).await.unwrap());
+}
+
+#[tokio::test]
 async fn index_delete_failure_rolls_back_tombstone_and_entries() {
     let (index_pool, _content_pool, feeds, entries, _settings, mutations) = fixture().await;
     let feed = add_feed(&feeds, "https://example.com/original.xml").await;
