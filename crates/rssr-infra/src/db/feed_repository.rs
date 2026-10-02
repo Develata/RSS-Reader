@@ -383,7 +383,6 @@ impl FeedRepository for SqliteFeedRepository {
         Ok(exists != 0)
     }
 
-
     async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> DomainResult<()> {
         let now = now_rfc3339();
         let result = sqlx::query(
