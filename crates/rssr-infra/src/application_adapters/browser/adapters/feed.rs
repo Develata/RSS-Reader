@@ -1,4 +1,3 @@
-use rssr_application::{ActivatedSubscription, SubscriptionActivationPort};
 use rssr_domain::{
     DomainError, Feed, FeedRepository, FeedSummary, NewFeedSubscription, normalize_feed_url,
 };
@@ -19,26 +18,6 @@ pub struct BrowserFeedRepository {
 impl BrowserFeedRepository {
     pub fn new(store: BrowserStore) -> Self {
         Self { store }
-    }
-}
-
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl SubscriptionActivationPort for BrowserFeedRepository {
-    async fn activate_subscription(
-        &self,
-        new_feed: NewFeedSubscription,
-    ) -> anyhow::Result<ActivatedSubscription> {
-        self.store
-            .update(move |state| {
-                let feed = upsert_subscription_in_state(state, &new_feed)?;
-                let generation =
-                    state.core.feed_generations.get(&feed.id).copied().unwrap_or_default();
-                Ok((ActivatedSubscription { feed, generation }, Changes::CORE))
-            })
-            .await
-            .map_err(map_store_error)
-            .map_err(Into::into)
     }
 }
 
@@ -134,7 +113,7 @@ impl FeedRepository for BrowserFeedRepository {
     }
 }
 
-fn upsert_subscription_in_state(
+pub(super) fn upsert_subscription_in_state(
     state: &mut crate::application_adapters::browser::state::BrowserState,
     new_feed: &NewFeedSubscription,
 ) -> rssr_domain::Result<Feed> {
