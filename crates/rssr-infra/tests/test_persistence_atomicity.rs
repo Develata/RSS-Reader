@@ -9,7 +9,7 @@ use rssr_application::{
 };
 use rssr_domain::{FeedRepository, NewFeedSubscription, SettingsRepository, UserSettings};
 use rssr_infra::{
-    application_adapters::{SqlitePersistenceMutations, cleanup_deleted_feed_content},
+    application_adapters::{SqlitePersistenceMutations, cleanup_orphaned_entry_content},
     db::{
         entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
         migrate_content, settings_repository::SqliteSettingsRepository,
@@ -154,7 +154,7 @@ async fn content_cleanup_failure_does_not_expose_half_deleted_subscription() {
     assert_eq!(remaining, 1, "failed cache cleanup remains hidden but pending");
 
     sqlx::query("DROP TRIGGER fail_content_delete").execute(&content_pool).await.unwrap();
-    let removed = cleanup_deleted_feed_content(&index_pool, &content_pool).await.unwrap();
+    let removed = cleanup_orphaned_entry_content(&index_pool, &content_pool).await.unwrap();
     assert_eq!(removed, 1);
     let remaining: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
@@ -166,13 +166,60 @@ async fn content_cleanup_failure_does_not_expose_half_deleted_subscription() {
 }
 
 #[tokio::test]
-async fn startup_cleanup_preserves_non_purge_deleted_feed_content() {
+async fn orphan_cleanup_removes_failed_purge_content_after_reactivation() {
+    let (index_pool, content_pool, feeds, entries, _settings, mutations) = fixture().await;
+    let feed = add_feed(&feeds, "https://example.com/reactivated-orphan.xml").await;
+    entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
+
+    sqlx::query(
+        r#"
+        CREATE TRIGGER fail_content_delete
+        BEFORE DELETE ON entry_contents
+        WHEN OLD.feed_id = 1
+        BEGIN
+            SELECT RAISE(ABORT, 'forced content cleanup failure');
+        END
+        "#,
+    )
+    .execute(&content_pool)
+    .await
+    .unwrap();
+
+    mutations.remove_subscription(feed.id, true).await.unwrap();
+    sqlx::query("DROP TRIGGER fail_content_delete").execute(&content_pool).await.unwrap();
+
+    let reactivated = mutations
+        .activate_subscription(NewFeedSubscription {
+            site_url: None,
+            url: feed.url.clone(),
+            title: Some("Reactivated".into()),
+            folder: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(reactivated.feed.id, feed.id);
+    assert_eq!(reactivated.generation, 1);
+
+    let removed = cleanup_orphaned_entry_content(&index_pool, &content_pool).await.unwrap();
+    assert_eq!(removed, 1, "reactivation must not hide old orphaned content from GC");
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
+            .bind(feed.id)
+            .fetch_one(&content_pool)
+            .await
+            .unwrap();
+    assert_eq!(remaining, 0);
+    assert!(feeds.get_feed(feed.id).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn orphan_cleanup_preserves_non_purge_deleted_feed_content() {
     let (index_pool, content_pool, feeds, entries, _settings, mutations) = fixture().await;
     let feed = add_feed(&feeds, "https://example.com/keep-content.xml").await;
     entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
 
     mutations.remove_subscription(feed.id, false).await.unwrap();
-    let removed = cleanup_deleted_feed_content(&index_pool, &content_pool).await.unwrap();
+    let removed = cleanup_orphaned_entry_content(&index_pool, &content_pool).await.unwrap();
 
     assert_eq!(removed, 0);
     assert!(entries.has_entries_for_feed(feed.id).await.unwrap());
@@ -186,7 +233,7 @@ async fn startup_cleanup_preserves_non_purge_deleted_feed_content() {
 }
 
 #[tokio::test]
-async fn immediate_purge_holds_index_writer_lock_until_content_delete_finishes() {
+async fn immediate_orphan_cleanup_does_not_block_reactivation() {
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
     let base = std::env::temp_dir().join(format!("rssr-immediate-purge-race-{nonce}"));
     std::fs::create_dir_all(&base).unwrap();
@@ -216,19 +263,20 @@ async fn immediate_purge_holds_index_writer_lock_until_content_delete_finishes()
         title: Some("Reactivated".into()),
         folder: None,
     };
-    let reactivation_feeds = feeds.clone();
-    let reactivation = tokio::spawn(async move {
-        reactivation_feeds.upsert_subscription(&reactivation_subscription).await
-    });
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    assert!(
-        !reactivation.is_finished(),
-        "re-add must wait while immediate purge owns the index cleanup fence"
-    );
+    let reactivation = {
+        let mutations = mutations.clone();
+        tokio::spawn(async move { mutations.activate_subscription(reactivation_subscription).await })
+    };
+    let reactivated = tokio::time::timeout(Duration::from_secs(2), reactivation)
+        .await
+        .expect("reactivation must not wait for orphan-content deletion")
+        .unwrap()
+        .unwrap();
+    assert_eq!(reactivated.generation, 1);
+    assert!(!removal.is_finished(), "removal is still waiting on the blocked content database");
 
     content_blocker.rollback().await.unwrap();
     removal.await.unwrap().unwrap();
-    reactivation.await.unwrap().unwrap();
     let remaining: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
             .bind(feed.id)
@@ -243,7 +291,7 @@ async fn immediate_purge_holds_index_writer_lock_until_content_delete_finishes()
 }
 
 #[tokio::test]
-async fn startup_cleanup_holds_index_writer_lock_until_content_delete_finishes() {
+async fn orphan_cleanup_does_not_hold_index_writer_lock() {
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
     let base = std::env::temp_dir().join(format!("rssr-content-gc-race-{nonce}"));
     std::fs::create_dir_all(&base).unwrap();
@@ -274,7 +322,7 @@ async fn startup_cleanup_holds_index_writer_lock_until_content_delete_finishes()
     let cleanup_index = index_pool.clone();
     let cleanup_content = content_pool.clone();
     let cleanup = tokio::spawn(async move {
-        cleanup_deleted_feed_content(&cleanup_index, &cleanup_content).await
+        cleanup_orphaned_entry_content(&cleanup_index, &cleanup_content).await
     });
     tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -288,15 +336,16 @@ async fn startup_cleanup_holds_index_writer_lock_until_content_delete_finishes()
     let reactivation = tokio::spawn(async move {
         reactivation_feeds.upsert_subscription(&reactivation_subscription).await
     });
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    assert!(
-        !reactivation.is_finished(),
-        "feed reactivation must wait while tombstone cleanup owns the index writer lock"
-    );
+    let reactivated = tokio::time::timeout(Duration::from_secs(2), reactivation)
+        .await
+        .expect("feed reactivation must not wait for content GC")
+        .unwrap()
+        .unwrap();
+    assert_eq!(reactivated.id, feed.id);
+    assert!(!cleanup.is_finished(), "cleanup should still be waiting on the content writer");
 
     content_blocker.rollback().await.unwrap();
     cleanup.await.unwrap().unwrap();
-    reactivation.await.unwrap().unwrap();
 
     let remaining: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM entry_contents WHERE feed_id = ?1")
