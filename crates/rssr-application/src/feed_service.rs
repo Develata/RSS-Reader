@@ -195,11 +195,8 @@ mod tests {
     async fn add_subscription_normalizes_url_before_persisting() {
         let feed_repository = Arc::new(FeedRepositoryStub { upserted: Mutex::new(Vec::new()) });
         let activation = Arc::new(ActivationStub::default());
-        let service = service(
-            feed_repository.clone(),
-            activation.clone(),
-            Arc::new(RemovalStub::default()),
-        );
+        let service =
+            service(feed_repository.clone(), activation.clone(), Arc::new(RemovalStub::default()));
 
         let feed = service
             .add_subscription(&AddSubscriptionInput {
@@ -220,11 +217,8 @@ mod tests {
     async fn remove_subscription_delegates_once_to_removal_port() {
         let feed_repository = Arc::new(FeedRepositoryStub { upserted: Mutex::new(Vec::new()) });
         let removal = Arc::new(RemovalStub::default());
-        let service = service(
-            feed_repository,
-            Arc::new(ActivationStub::default()),
-            removal.clone(),
-        );
+        let service =
+            service(feed_repository, Arc::new(ActivationStub::default()), removal.clone());
 
         service
             .remove_subscription(RemoveSubscriptionInput { feed_id: 7, purge_entries: true })
