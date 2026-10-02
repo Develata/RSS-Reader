@@ -142,8 +142,9 @@ mod tests {
     use url::Url;
 
     use crate::{
-        FeedRefreshSourceOutput, FeedRefreshUpdate, ParsedFeedUpdate, RefreshHttpMetadata,
-        RefreshStorePort, RefreshTarget, SubscriptionRemovalPort,
+        ActivatedSubscription, FeedRefreshSourceOutput, FeedRefreshUpdate, ParsedFeedUpdate,
+        RefreshHttpMetadata, RefreshStorePort, RefreshTarget, SubscriptionActivationPort,
+        SubscriptionRemovalPort,
     };
 
     use super::{
@@ -196,6 +197,44 @@ mod tests {
 
         async fn list_summaries(&self) -> rssr_domain::Result<Vec<FeedSummary>> {
             Ok(Vec::new())
+        }
+    }
+
+    struct ActivationStub {
+        next_id: Mutex<i64>,
+        generation: i64,
+    }
+
+    #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+    impl SubscriptionActivationPort for ActivationStub {
+        async fn activate_subscription(
+            &self,
+            new_feed: NewFeedSubscription,
+        ) -> Result<ActivatedSubscription> {
+            let mut next_id = self.next_id.lock().expect("lock activation id");
+            let id = *next_id;
+            *next_id += 1;
+            Ok(ActivatedSubscription {
+                feed: Feed {
+                    id,
+                    url: new_feed.url,
+                    title: new_feed.title,
+                    site_url: new_feed.site_url,
+                    description: None,
+                    icon_url: None,
+                    folder: new_feed.folder,
+                    etag: None,
+                    last_modified: None,
+                    last_fetched_at: None,
+                    last_success_at: None,
+                    fetch_error: None,
+                    is_deleted: false,
+                    created_at: OffsetDateTime::UNIX_EPOCH,
+                    updated_at: OffsetDateTime::UNIX_EPOCH,
+                },
+                generation: self.generation,
+            })
         }
     }
 
@@ -280,6 +319,7 @@ mod tests {
         SubscriptionWorkflow::new(
             crate::FeedService::new(
                 Arc::new(FeedRepositoryStub { next_id: Mutex::new(next_id) }),
+                Arc::new(ActivationStub { next_id: Mutex::new(next_id), generation: 0 }),
                 removal,
             ),
             crate::RefreshService::new(Arc::new(SourceStub), Arc::new(StoreStub { targets })),
@@ -363,6 +403,94 @@ mod tests {
         assert_eq!(outcome.feed.id, 3);
         let refresh = outcome.first_refresh.expect("first refresh outcome");
         assert!(matches!(refresh.result, crate::RefreshFeedResult::Updated { .. }));
+    }
+
+    struct RecordingStore {
+        misleading_current_target: RefreshTarget,
+        committed_generations: Arc<Mutex<Vec<i64>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl RefreshStorePort for RecordingStore {
+        async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
+            Ok(vec![self.misleading_current_target.clone()])
+        }
+
+        async fn get_target(&self, _feed_id: i64) -> Result<Option<RefreshTarget>> {
+            Ok(Some(self.misleading_current_target.clone()))
+        }
+
+        async fn commit(
+            &self,
+            target: &RefreshTarget,
+            _commit: crate::RefreshCommit,
+        ) -> Result<crate::RefreshCommitOutcome> {
+            self.committed_generations
+                .lock()
+                .expect("lock committed generations")
+                .push(target.generation);
+            Ok(Default::default())
+        }
+    }
+
+    #[tokio::test]
+    async fn prepared_refresh_uses_generation_returned_by_activation() {
+        let committed_generations = Arc::new(Mutex::new(Vec::new()));
+        let misleading_current_target = RefreshTarget {
+            feed_id: 5,
+            generation: 99,
+            url: Url::parse("https://example.com/prepared.xml").unwrap(),
+            etag: None,
+            last_modified: None,
+        };
+        let workflow = SubscriptionWorkflow::new(
+            crate::FeedService::new(
+                Arc::new(FeedRepositoryStub { next_id: Mutex::new(5) }),
+                Arc::new(ActivationStub { next_id: Mutex::new(5), generation: 7 }),
+                Arc::new(RemovalStub::default()),
+            ),
+            crate::RefreshService::new(
+                Arc::new(SourceStub),
+                Arc::new(RecordingStore {
+                    misleading_current_target,
+                    committed_generations: committed_generations.clone(),
+                }),
+            ),
+            Arc::new(SourceStub),
+        );
+
+        let outcome = workflow
+            .add_prepared_subscription(
+                AddSubscriptionLifecycleInput {
+                    subscription: crate::AddSubscriptionInput {
+                        url: "https://example.com/prepared.xml".into(),
+                        title: None,
+                        folder: None,
+                    },
+                    refresh_after_add: true,
+                },
+                crate::PreparedSubscription {
+                    url: Url::parse("https://example.com/prepared.xml").unwrap(),
+                    update: FeedRefreshUpdate {
+                        metadata: RefreshHttpMetadata::default(),
+                        feed: ParsedFeedUpdate {
+                            title: Some("Prepared".into()),
+                            site_url: None,
+                            description: None,
+                            entries: Vec::new(),
+                        },
+                    },
+                },
+            )
+            .await
+            .expect("prepared refresh");
+
+        assert_eq!(outcome.feed.id, 5);
+        assert_eq!(
+            committed_generations.lock().expect("lock committed generations").as_slice(),
+            &[7],
+            "prepared response must stay bound to the generation returned by activation"
+        );
     }
 
     #[tokio::test]
