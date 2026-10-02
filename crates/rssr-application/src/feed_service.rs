@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use rssr_domain::{Feed, FeedRepository, NewFeedSubscription, normalize_feed_url, parse_feed_url};
 use url::Url;
 
-use crate::SubscriptionRemovalPort;
+use crate::{ActivatedSubscription, SubscriptionActivationPort, SubscriptionRemovalPort};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AddSubscriptionInput {
@@ -22,19 +22,21 @@ pub struct RemoveSubscriptionInput {
 #[derive(Clone)]
 pub struct FeedService {
     feed_repository: Arc<dyn FeedRepository>,
+    activation_port: Arc<dyn SubscriptionActivationPort>,
     removal_port: Arc<dyn SubscriptionRemovalPort>,
 }
 
 impl FeedService {
     pub fn new(
         feed_repository: Arc<dyn FeedRepository>,
+        activation_port: Arc<dyn SubscriptionActivationPort>,
         removal_port: Arc<dyn SubscriptionRemovalPort>,
     ) -> Self {
-        Self { feed_repository, removal_port }
+        Self { feed_repository, activation_port, removal_port }
     }
 
     pub async fn add_subscription(&self, input: &AddSubscriptionInput) -> Result<Feed> {
-        self.add_subscription_with_site(input, None).await
+        Ok(self.activate_subscription_with_site(input, None).await?.feed)
     }
 
     pub(crate) async fn ensure_not_subscribed(&self, url: &Url) -> Result<()> {
@@ -51,21 +53,20 @@ impl FeedService {
         Ok(())
     }
 
-    pub(crate) async fn add_subscription_with_site(
+    pub(crate) async fn activate_subscription_with_site(
         &self,
         input: &AddSubscriptionInput,
         site_url: Option<Url>,
-    ) -> Result<Feed> {
+    ) -> Result<ActivatedSubscription> {
         let url = parse_feed_url(&input.url).context("订阅 URL 不合法")?;
-        Ok(self
-            .feed_repository
-            .upsert_subscription(&NewFeedSubscription {
+        self.activation_port
+            .activate_subscription(NewFeedSubscription {
                 site_url,
                 url,
                 title: input.title.clone(),
                 folder: input.folder.clone(),
             })
-            .await?)
+            .await
     }
 
     pub async fn remove_subscription(&self, input: RemoveSubscriptionInput) -> Result<()> {
@@ -81,7 +82,7 @@ mod tests {
     use rssr_domain::{Feed, FeedRepository, NewFeedSubscription};
     use time::OffsetDateTime;
 
-    use crate::SubscriptionRemovalPort;
+    use crate::{ActivatedSubscription, SubscriptionActivationPort, SubscriptionRemovalPort};
 
     use super::{AddSubscriptionInput, FeedService, RemoveSubscriptionInput};
 
@@ -146,14 +147,59 @@ mod tests {
         }
     }
 
-    fn service(feed_repository: Arc<FeedRepositoryStub>, removal: Arc<RemovalStub>) -> FeedService {
-        FeedService::new(feed_repository, removal)
+    #[derive(Default)]
+    struct ActivationStub {
+        upserted: Mutex<Vec<NewFeedSubscription>>,
+    }
+
+    #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+    impl SubscriptionActivationPort for ActivationStub {
+        async fn activate_subscription(
+            &self,
+            new_feed: NewFeedSubscription,
+        ) -> Result<ActivatedSubscription> {
+            self.upserted.lock().expect("lock activation upserts").push(new_feed.clone());
+            Ok(ActivatedSubscription {
+                feed: Feed {
+                    id: 1,
+                    url: new_feed.url,
+                    title: new_feed.title,
+                    site_url: new_feed.site_url,
+                    description: None,
+                    icon_url: None,
+                    folder: new_feed.folder,
+                    etag: None,
+                    last_modified: None,
+                    last_fetched_at: None,
+                    last_success_at: None,
+                    fetch_error: None,
+                    is_deleted: false,
+                    created_at: OffsetDateTime::UNIX_EPOCH,
+                    updated_at: OffsetDateTime::UNIX_EPOCH,
+                },
+                generation: 0,
+            })
+        }
+    }
+
+    fn service(
+        feed_repository: Arc<FeedRepositoryStub>,
+        activation: Arc<ActivationStub>,
+        removal: Arc<RemovalStub>,
+    ) -> FeedService {
+        FeedService::new(feed_repository, activation, removal)
     }
 
     #[tokio::test]
     async fn add_subscription_normalizes_url_before_persisting() {
         let feed_repository = Arc::new(FeedRepositoryStub { upserted: Mutex::new(Vec::new()) });
-        let service = service(feed_repository.clone(), Arc::new(RemovalStub::default()));
+        let activation = Arc::new(ActivationStub::default());
+        let service = service(
+            feed_repository.clone(),
+            activation.clone(),
+            Arc::new(RemovalStub::default()),
+        );
 
         let feed = service
             .add_subscription(&AddSubscriptionInput {
@@ -165,7 +211,7 @@ mod tests {
             .expect("add subscription");
 
         assert_eq!(feed.url.as_str(), "https://example.com/feed.xml");
-        let persisted = feed_repository.upserted.lock().expect("lock upserted");
+        let persisted = activation.upserted.lock().expect("lock activation upserts");
         assert_eq!(persisted.len(), 1);
         assert_eq!(persisted[0].url.as_str(), "https://example.com/feed.xml");
     }
@@ -174,7 +220,11 @@ mod tests {
     async fn remove_subscription_delegates_once_to_removal_port() {
         let feed_repository = Arc::new(FeedRepositoryStub { upserted: Mutex::new(Vec::new()) });
         let removal = Arc::new(RemovalStub::default());
-        let service = service(feed_repository, removal.clone());
+        let service = service(
+            feed_repository,
+            Arc::new(ActivationStub::default()),
+            removal.clone(),
+        );
 
         service
             .remove_subscription(RemoveSubscriptionInput { feed_id: 7, purge_entries: true })
@@ -187,7 +237,11 @@ mod tests {
     #[tokio::test]
     async fn add_subscription_rejects_invalid_urls() {
         let feed_repository = Arc::new(FeedRepositoryStub { upserted: Mutex::new(Vec::new()) });
-        let service = service(feed_repository, Arc::new(RemovalStub::default()));
+        let service = service(
+            feed_repository,
+            Arc::new(ActivationStub::default()),
+            Arc::new(RemovalStub::default()),
+        );
 
         let error = service
             .add_subscription(&AddSubscriptionInput {
