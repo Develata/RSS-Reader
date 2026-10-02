@@ -119,11 +119,17 @@ async fn index_delete_failure_rolls_back_tombstone_and_entries() {
 
     assert!(feeds.get_feed(feed.id).await.unwrap().is_some());
     assert!(entries.has_entries_for_feed(feed.id).await.unwrap());
+    let queued: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM content_gc_queue")
+        .fetch_one(&index_pool)
+        .await
+        .unwrap();
+    assert_eq!(queued, 0, "cleanup queue must roll back with the failed purge");
 }
 
 #[tokio::test]
 async fn content_cleanup_failure_does_not_expose_half_deleted_subscription() {
     let (index_pool, content_pool, feeds, entries, _settings, mutations) = fixture().await;
+    cleanup_pending_entry_content(&index_pool, &content_pool).await.unwrap();
     let feed = add_feed(&feeds, "https://example.com/content-cleanup.xml").await;
     entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
 
@@ -152,6 +158,11 @@ async fn content_cleanup_failure_does_not_expose_half_deleted_subscription() {
             .await
             .unwrap();
     assert_eq!(remaining, 1, "failed cache cleanup remains hidden but pending");
+    let queued: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM content_gc_queue")
+        .fetch_one(&index_pool)
+        .await
+        .unwrap();
+    assert_eq!(queued, 1, "failed content cleanup must remain durably queued");
 
     sqlx::query("DROP TRIGGER fail_content_delete").execute(&content_pool).await.unwrap();
     let removed = cleanup_pending_entry_content(&index_pool, &content_pool).await.unwrap();
@@ -163,11 +174,17 @@ async fn content_cleanup_failure_does_not_expose_half_deleted_subscription() {
             .await
             .unwrap();
     assert_eq!(remaining, 0, "startup retry must eventually purge deleted-feed content");
+    let queued: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM content_gc_queue")
+        .fetch_one(&index_pool)
+        .await
+        .unwrap();
+    assert_eq!(queued, 0);
 }
 
 #[tokio::test]
 async fn orphan_cleanup_removes_failed_purge_content_after_reactivation() {
     let (index_pool, content_pool, feeds, entries, _settings, mutations) = fixture().await;
+    cleanup_pending_entry_content(&index_pool, &content_pool).await.unwrap();
     let feed = add_feed(&feeds, "https://example.com/reactivated-orphan.xml").await;
     entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
 
@@ -199,6 +216,11 @@ async fn orphan_cleanup_removes_failed_purge_content_after_reactivation() {
         .unwrap();
     assert_eq!(reactivated.feed.id, feed.id);
     assert_eq!(reactivated.generation, 1);
+    let queued: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM content_gc_queue")
+        .fetch_one(&index_pool)
+        .await
+        .unwrap();
+    assert_eq!(queued, 1, "reactivation must not discard the old cleanup obligation");
 
     let removed = cleanup_pending_entry_content(&index_pool, &content_pool).await.unwrap();
     assert_eq!(removed, 1, "reactivation must not hide old orphaned content from GC");
@@ -242,6 +264,7 @@ async fn immediate_orphan_cleanup_does_not_block_reactivation() {
     backend.migrate(&index_pool).await.unwrap();
     let content_pool = backend.connect_content().await.unwrap();
     backend.migrate_content(&content_pool).await.unwrap();
+    cleanup_pending_entry_content(&index_pool, &content_pool).await.unwrap();
 
     let feeds = Arc::new(SqliteFeedRepository::new(index_pool.clone()));
     let entries =
@@ -405,6 +428,53 @@ async fn config_replacement_failure_rolls_back_every_index_database_change() {
     assert_eq!(persisted[0].id, original.id);
     assert_eq!(persisted[0].url.as_str(), "https://example.com/original.xml");
     assert_eq!(settings.load().await.unwrap(), original_settings);
+}
+
+#[tokio::test]
+async fn config_replacement_durably_queues_content_cleanup() {
+    let (index_pool, content_pool, feeds, entries, _settings, mutations) = fixture().await;
+    cleanup_pending_entry_content(&index_pool, &content_pool).await.unwrap();
+    let feed = add_feed(&feeds, "https://example.com/config-purge.xml").await;
+    entries.upsert_entries(feed.id, &[entry("one")]).await.unwrap();
+
+    sqlx::query(
+        r#"
+        CREATE TRIGGER fail_content_delete
+        BEFORE DELETE ON entry_contents
+        BEGIN
+            SELECT RAISE(ABORT, 'forced config content cleanup failure');
+        END
+        "#,
+    )
+    .execute(&content_pool)
+    .await
+    .unwrap();
+
+    let outcome = mutations
+        .replace_config(ConfigReplacementPlan {
+            feeds: Vec::new(),
+            settings: UserSettings::default(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(outcome.removed_feed_count, 1);
+    assert!(feeds.get_feed(feed.id).await.unwrap().is_none());
+    assert!(!entries.has_entries_for_feed(feed.id).await.unwrap());
+
+    let queued: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM content_gc_queue")
+        .fetch_one(&index_pool)
+        .await
+        .unwrap();
+    assert_eq!(queued, 1);
+
+    sqlx::query("DROP TRIGGER fail_content_delete").execute(&content_pool).await.unwrap();
+    let removed = cleanup_pending_entry_content(&index_pool, &content_pool).await.unwrap();
+    assert_eq!(removed, 1);
+    let queued: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM content_gc_queue")
+        .fetch_one(&index_pool)
+        .await
+        .unwrap();
+    assert_eq!(queued, 0);
 }
 
 #[tokio::test]
