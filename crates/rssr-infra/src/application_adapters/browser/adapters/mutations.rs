@@ -31,6 +31,15 @@ impl SubscriptionActivationPort for BrowserPersistenceMutations {
     ) -> Result<ActivatedSubscription> {
         self.store
             .update(move |state| {
+                let normalized_url = rssr_domain::normalize_feed_url(&new_feed.url);
+                if state
+                    .core
+                    .feeds
+                    .iter()
+                    .any(|feed| feed.url == normalized_url.as_str() && !feed.is_deleted)
+                {
+                    anyhow::bail!("该地址已订阅：{normalized_url}");
+                }
                 let feed = upsert_subscription_in_state(state, &new_feed)?;
                 let generation =
                     state.core.feed_generations.get(&feed.id).copied().unwrap_or_default();
