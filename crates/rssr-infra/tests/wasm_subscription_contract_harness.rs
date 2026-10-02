@@ -5,9 +5,10 @@ use std::sync::Arc;
 use anyhow::{Result, bail};
 use rssr_application::{
     AddSubscriptionInput, FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedService,
-    RefreshCommit, RefreshService, RefreshStorePort, RemoveSubscriptionInput, SubscriptionWorkflow,
+    RefreshCommit, RefreshService, RefreshStorePort, RemoveSubscriptionInput,
+    SubscriptionActivationPort, SubscriptionRemovalPort, SubscriptionWorkflow,
 };
-use rssr_domain::{EntryIndexRepository, EntryQuery};
+use rssr_domain::{EntryIndexRepository, EntryQuery, NewFeedSubscription};
 use rssr_infra::application_adapters::browser::{
     adapters::{BrowserEntryRepository, BrowserFeedRepository, BrowserPersistenceMutations},
     state::{
@@ -142,6 +143,38 @@ fn build_workflow(state: BrowserStore) -> SubscriptionWorkflow {
     let refresh_service =
         RefreshService::new(Arc::new(UnusedRefreshSource), Arc::new(UnusedRefreshStore));
     SubscriptionWorkflow::new(feed_service, refresh_service, Arc::new(UnusedRefreshSource))
+}
+
+#[wasm_bindgen_test]
+async fn browser_activation_port_captures_generation_and_rejects_active_duplicate() {
+    clear_browser_state_storage();
+
+    let state = seed_state(BrowserState::default()).await;
+    let mutations = BrowserPersistenceMutations::new(state.clone());
+    let subscription = NewFeedSubscription {
+        site_url: None,
+        url: Url::parse("https://example.com/activation.xml").unwrap(),
+        title: Some("Activation".into()),
+        folder: None,
+    };
+
+    let first = mutations.activate_subscription(subscription.clone()).await.unwrap();
+    assert_eq!(first.generation, 0);
+
+    let duplicate = mutations
+        .activate_subscription(subscription.clone())
+        .await
+        .expect_err("active duplicate must be rejected under the Web Lock");
+    assert!(duplicate.to_string().contains("已订阅"));
+
+    mutations.remove_subscription(first.feed.id, false).await.unwrap();
+    let reactivated = mutations.activate_subscription(subscription).await.unwrap();
+    assert_eq!(reactivated.feed.id, first.feed.id);
+    assert_eq!(reactivated.generation, 1);
+
+    let snapshot = state.snapshot().await.unwrap();
+    assert_eq!(snapshot.core.feed_generations.get(&first.feed.id), Some(&1));
+    clear_browser_state_storage();
 }
 
 #[wasm_bindgen_test]
