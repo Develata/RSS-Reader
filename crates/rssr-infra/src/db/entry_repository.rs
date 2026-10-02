@@ -17,6 +17,8 @@ use crate::parser::feed_parser::ParsedEntry;
 // Stay well below both SQLite's historical 999-variable builds and the modern 32766 default.
 // Larger integer scopes switch to one JSON bind rather than generating value-specific SQL.
 const SQLITE_SAFE_BIND_BATCH: usize = 900;
+const CONTENT_UPSERT_BINDS_PER_ROW: usize = 6;
+const CONTENT_UPSERT_BATCH: usize = SQLITE_SAFE_BIND_BATCH / CONTENT_UPSERT_BINDS_PER_ROW;
 
 #[derive(Clone)]
 pub struct SqliteEntryRepository {
@@ -901,12 +903,28 @@ async fn write_contents_on_connection(
 ) -> DomainResult<usize> {
     let mut upserted = 0;
     let now = now_rfc3339();
-    for content in contents {
-        let result = sqlx::query(
+
+    // One refresh can contain tens of thousands of bodies. Keep the same transaction semantics,
+    // but amortize SQLite prepare/execute overhead across bounded multi-row UPSERT statements.
+    // Six binds per row means 150 rows stay within the conservative 900-variable budget.
+    for chunk in contents.chunks(CONTENT_UPSERT_BATCH) {
+        let mut qb = QueryBuilder::<Sqlite>::new(
             r#"
             INSERT INTO entry_contents (
                 entry_id, feed_id, content_html, content_text, content_hash, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            )
+            "#,
+        );
+        qb.push_values(chunk, |mut row, content| {
+            row.push_bind(content.entry_id)
+                .push_bind(feed_id)
+                .push_bind(content.content_html.as_deref())
+                .push_bind(content.content_text.as_deref())
+                .push_bind(content.content_hash.as_deref())
+                .push_bind(&now);
+        });
+        qb.push(
+            r#"
             ON CONFLICT(entry_id) DO UPDATE SET
                 feed_id = excluded.feed_id,
                 content_html = COALESCE(excluded.content_html, entry_contents.content_html),
@@ -918,20 +936,14 @@ async fn write_contents_on_connection(
                OR entry_contents.content_text IS NOT COALESCE(excluded.content_text, entry_contents.content_text)
                OR entry_contents.content_hash IS NOT excluded.content_hash
             "#,
-        )
-        .bind(content.entry_id)
-        .bind(feed_id)
-        .bind(content.content_html.as_deref())
-        .bind(content.content_text.as_deref())
-        .bind(content.content_hash.as_deref())
-        .bind(&now)
-        .execute(&mut *connection)
-        .await
-        .map_err(map_sqlx_error)?;
+        );
 
-        if result.rows_affected() > 0 {
-            upserted += 1;
-        }
+        upserted += qb
+            .build()
+            .execute(&mut *connection)
+            .await
+            .map_err(map_sqlx_error)?
+            .rows_affected() as usize;
     }
     Ok(upserted)
 }
