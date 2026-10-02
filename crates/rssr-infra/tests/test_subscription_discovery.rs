@@ -7,7 +7,10 @@ use rssr_application::{
 use rssr_domain::EntryQuery;
 use rssr_infra::{
     composition::compose_native_sqlite_use_cases,
-    db::{migrate, sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend},
+    db::{
+        migrate, migrate_content, sqlite_native::NativeSqliteBackend,
+        storage_backend::StorageBackend,
+    },
 };
 use std::{
     collections::HashMap,
@@ -57,9 +60,11 @@ async fn discovery_http_lifecycle_redirect_duplicates_guesses_and_limits() {
         }
     });
     let backend = NativeSqliteBackend::new("sqlite::memory:");
-    let pool = backend.connect().await.unwrap();
-    migrate(&pool).await.unwrap();
-    let app = compose_native_sqlite_use_cases(pool.clone(), pool).use_cases;
+    let index_pool = backend.connect().await.unwrap();
+    migrate(&index_pool).await.unwrap();
+    let content_pool = backend.connect_content().await.unwrap();
+    migrate_content(&content_pool).await.unwrap();
+    let app = compose_native_sqlite_use_cases(index_pool, content_pool).use_cases;
     let input = |url: String, refresh| AddSubscriptionLifecycleInput {
         subscription: AddSubscriptionInput { url, title: None, folder: None },
         refresh_after_add: refresh,
