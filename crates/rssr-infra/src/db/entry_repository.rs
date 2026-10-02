@@ -678,11 +678,7 @@ impl EntryIndexRepository for SqliteEntryRepository {
             qb.push(" WHERE id IN (SELECT entries.id FROM entries JOIN feeds ON feeds.id = entries.feed_id WHERE feeds.is_deleted = 0 AND entries.is_read = 0");
             push_entry_query_filters(&mut qb, &query);
             qb.push(")");
-            qb.build()
-                .execute(&mut *tx)
-                .await
-                .map_err(map_sqlx_error)?
-                .rows_affected()
+            qb.build().execute(&mut *tx).await.map_err(map_sqlx_error)?.rows_affected()
         };
         tx.commit().await.map_err(map_sqlx_error)?;
         Ok(rssr_domain::MarkReadOutcome::Applied { changed_count })
@@ -713,9 +709,7 @@ impl EntryIndexRepository for SqliteEntryRepository {
             qb.push(" LIMIT ").push_bind(limit as i64);
         }
 
-        let rows = qb.build().fetch_all(&self.index_pool)
-            .await
-            .map_err(map_sqlx_error)?;
+        let rows = qb.build().fetch_all(&self.index_pool).await.map_err(map_sqlx_error)?;
 
         rows.into_iter()
             .map(|row| {
@@ -744,9 +738,7 @@ impl EntryIndexRepository for SqliteEntryRepository {
 
         push_entry_query_filters(&mut qb, query);
 
-        let row = qb.build().fetch_one(&self.index_pool)
-            .await
-            .map_err(map_sqlx_error)?;
+        let row = qb.build().fetch_one(&self.index_pool).await.map_err(map_sqlx_error)?;
         let count: i64 = row.get("count");
         Ok(count as u64)
     }
@@ -1070,8 +1062,8 @@ fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a En
             // SQLx's bundled SQLite includes the JSON table-valued functions. One JSON bind avoids
             // SQLITE_MAX_VARIABLE_NUMBER without constructing a value-specific 40k-literal SQL
             // string, so the prepared statement remains small and cacheable.
-            let encoded =
-                serde_json::to_string(&query.feed_ids).expect("serializing i64 feed ids cannot fail");
+            let encoded = serde_json::to_string(&query.feed_ids)
+                .expect("serializing i64 feed ids cannot fail");
             qb.push(" AND entries.feed_id IN (SELECT value FROM json_each(")
                 .push_bind(encoded)
                 .push("))");
