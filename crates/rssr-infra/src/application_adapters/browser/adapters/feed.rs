@@ -53,6 +53,23 @@ impl FeedRepository for BrowserFeedRepository {
             .map_err(map_store_error)
     }
 
+    async fn has_active_subscription_url(
+        &self,
+        url: &url::Url,
+    ) -> rssr_domain::Result<bool> {
+        let normalized_url = normalize_feed_url(url).to_string();
+        self.store
+            .read(move |state| {
+                Ok(state
+                    .core
+                    .feeds
+                    .iter()
+                    .any(|feed| !feed.is_deleted && feed.url == normalized_url))
+            })
+            .await
+            .map_err(map_store_error)
+    }
+
     async fn set_deleted(&self, feed_id: i64, is_deleted: bool) -> rssr_domain::Result<()> {
         self.store
             .update(move |state| {
