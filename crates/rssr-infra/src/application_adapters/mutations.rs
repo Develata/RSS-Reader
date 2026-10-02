@@ -36,10 +36,7 @@ async fn live_entry_ids(
         .collect())
 }
 
-async fn delete_content_entry_ids(
-    content_pool: &SqlitePool,
-    entry_ids: &[i64],
-) -> Result<u64> {
+async fn delete_content_entry_ids(content_pool: &SqlitePool, entry_ids: &[i64]) -> Result<u64> {
     if entry_ids.is_empty() {
         return Ok(0);
     }
@@ -79,12 +76,11 @@ async fn reconcile_legacy_orphans_once(
 
     // Older builds could lose the retry target when a purge failed and the feed was reactivated.
     // Do one bounded full reconciliation after the migration, then rely on the durable queue.
-    let high_watermark = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT MAX(entry_id) FROM entry_contents",
-    )
-    .fetch_one(content_pool)
-    .await
-    .context("读取正文缓存清理高水位失败")?;
+    let high_watermark =
+        sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(entry_id) FROM entry_contents")
+            .fetch_one(content_pool)
+            .await
+            .context("读取正文缓存清理高水位失败")?;
     let mut removed_rows = 0_u64;
 
     if let Some(high_watermark) = high_watermark {
@@ -155,11 +151,7 @@ pub async fn cleanup_pending_entry_content(
             separated.push_bind(*entry_id);
         }
         delete_queue.push(")");
-        delete_queue
-            .build()
-            .execute(index_pool)
-            .await
-            .context("确认正文缓存清理队列失败")?;
+        delete_queue.build().execute(index_pool).await.context("确认正文缓存清理队列失败")?;
     }
 
     Ok(removed_rows)
@@ -196,7 +188,8 @@ impl SqlitePersistenceMutations {
     }
 
     async fn retry_pending_content_cleanup(&self) {
-        if let Err(error) = cleanup_pending_entry_content(&self.index_pool, &self.content_pool).await
+        if let Err(error) =
+            cleanup_pending_entry_content(&self.index_pool, &self.content_pool).await
         {
             tracing::warn!(
                 error = %error,
