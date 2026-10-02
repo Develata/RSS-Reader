@@ -238,7 +238,6 @@ impl SubscriptionRemovalPort for SqlitePersistenceMutations {
 
         if purge_entries {
             queue_feed_entry_content_cleanup(&mut tx, feed_id, &now).await?;
-            queue_feed_entry_content_cleanup(&mut tx, feed_id, &now).await?;
             sqlx::query("DELETE FROM entries WHERE feed_id = ?1")
                 .bind(feed_id)
                 .execute(&mut *tx)
@@ -316,6 +315,7 @@ impl ConfigReplacementPort for SqlitePersistenceMutations {
             if result.rows_affected() == 0 {
                 bail!("配置替换期间订阅 {feed_id} 不存在");
             }
+            queue_feed_entry_content_cleanup(&mut tx, feed_id, &now).await?;
             sqlx::query("DELETE FROM entries WHERE feed_id = ?1")
                 .bind(feed_id)
                 .execute(&mut *tx)
