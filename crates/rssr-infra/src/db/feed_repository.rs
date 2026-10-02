@@ -22,10 +22,24 @@ impl SqliteFeedRepository {
     pub(crate) async fn activate_subscription_with_generation(
         &self,
         new_feed: &NewFeedSubscription,
+        reject_if_active: bool,
     ) -> DomainResult<(Feed, i64)> {
         let now = now_rfc3339();
         let normalized_url = normalize_feed_url(&new_feed.url);
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+
+        if reject_if_active {
+            let active: i64 = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM feeds WHERE url = ?1 AND is_deleted = 0)",
+            )
+            .bind(normalized_url.as_str())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_sqlx_error)?;
+            if active != 0 {
+                return Err(DomainError::InvalidInput(format!("该地址已订阅：{normalized_url}")));
+            }
+        }
 
         sqlx::query(
             r#"
@@ -288,7 +302,7 @@ impl SqliteFeedRepository {
 #[async_trait::async_trait]
 impl FeedRepository for SqliteFeedRepository {
     async fn upsert_subscription(&self, new_feed: &NewFeedSubscription) -> DomainResult<Feed> {
-        Ok(self.activate_subscription_with_generation(new_feed).await?.0)
+        Ok(self.activate_subscription_with_generation(new_feed, false).await?.0)
     }
 
     async fn upsert_subscriptions(
