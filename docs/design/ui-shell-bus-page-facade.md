@@ -21,6 +21,8 @@
 
 这份文档是 [Headless Active Interface 设计目标](./headless-active-interface.md) 的当前实现版，不是愿景版。
 
+文章列表目录的交互规则与实现边界见[文章列表目录：手动浏览与自动跟随](./entries-directory-follow.md)。页面内 Rust 状态统一管理实时活动位置、手动展开与自动跟随；手机顶部目录和桌面右侧目录分别订阅，复用 presenter 的 `Arc`。目录状态不进入文章 presenter 输入。DOM adapter 负责输入来源、测量、滚动和提交版本确认；验证与平台限制见[本次交接](../handoffs/2026-10-03-directory-follow-rust.md)。
+
 ---
 
 ## 当前分层

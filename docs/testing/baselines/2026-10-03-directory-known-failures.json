@@ -1,0 +1,326 @@
+{
+  "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+  "productionFixIncluded": false,
+  "platforms": {
+    "windows-chrome": {
+      "source": "target/directory-baseline/ci-entry-final/assertions.json",
+      "sourceSha256": "4161b317144e3ccc751b8f6826d729ff7c6996f20f2341502bb0453778800a0c",
+      "passingAssertions": 203,
+      "consoleErrors": [],
+      "failures": [
+        {
+          "name": "time: active Enter cannot mutate latent manual preference",
+          "before": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "true",
+            "base": "true",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterOneKey": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "true",
+            "base": "false",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterSamePageDeparture": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "false",
+            "base": "false",
+            "open": "false",
+            "canToggle": "true",
+            "disabled": "false",
+            "expanded": "false",
+            "body": "false"
+          },
+          "activeGroupAfterDeparture": [
+            "entry-group-2026-年-08-月"
+          ],
+          "pageBefore": "1 / 2",
+          "pageAfter": "1 / 2"
+        },
+        {
+          "name": "time: active Space cannot mutate latent manual preference",
+          "before": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "true",
+            "base": "true",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterOneKey": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "true",
+            "base": "false",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterSamePageDeparture": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "false",
+            "base": "false",
+            "open": "false",
+            "canToggle": "true",
+            "disabled": "false",
+            "expanded": "false",
+            "body": "false"
+          },
+          "activeGroupAfterDeparture": [
+            "entry-group-2026-年-08-月"
+          ],
+          "pageBefore": "1 / 2",
+          "pageAfter": "1 / 2"
+        },
+        {
+          "name": "source: active Enter cannot mutate latent manual preference",
+          "before": {
+            "id": "entry-group-alpha",
+            "active": "true",
+            "base": "true",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterOneKey": {
+            "id": "entry-group-alpha",
+            "active": "true",
+            "base": "false",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterSamePageDeparture": {
+            "id": "entry-group-alpha",
+            "active": "false",
+            "base": "false",
+            "open": "false",
+            "canToggle": "true",
+            "disabled": "false",
+            "expanded": "false",
+            "body": "false"
+          },
+          "activeGroupAfterDeparture": [
+            "entry-group-bravo"
+          ],
+          "pageBefore": "1 / 2",
+          "pageAfter": "1 / 2"
+        },
+        {
+          "name": "source: active Space cannot mutate latent manual preference",
+          "before": {
+            "id": "entry-group-alpha",
+            "active": "true",
+            "base": "true",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterOneKey": {
+            "id": "entry-group-alpha",
+            "active": "true",
+            "base": "false",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterSamePageDeparture": {
+            "id": "entry-group-alpha",
+            "active": "false",
+            "base": "false",
+            "open": "false",
+            "canToggle": "true",
+            "disabled": "false",
+            "expanded": "false",
+            "body": "false"
+          },
+          "activeGroupAfterDeparture": [
+            "entry-group-bravo"
+          ],
+          "pageBefore": "1 / 2",
+          "pageAfter": "1 / 2"
+        }
+      ]
+    },
+    "windows-webview2": {
+      "source": "target/directory-baseline/native-contracts-final/assertions.json",
+      "sourceSha256": "87593a8e52ca0350a167013de4deda73ee8d2da6c95287d358ddc2a21a74d237",
+      "passingAssertions": 40,
+      "consoleErrors": [],
+      "failures": [
+        {
+          "name": "time: active Enter cannot mutate latent manual preference",
+          "before": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "true",
+            "base": "true",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterOneKey": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "true",
+            "base": "false",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterSamePageDeparture": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "false",
+            "base": "false",
+            "open": "false",
+            "canToggle": "true",
+            "disabled": "false",
+            "expanded": "false",
+            "body": "false"
+          },
+          "activeGroupAfterDeparture": [
+            "entry-group-2026-年-08-月"
+          ],
+          "pageBefore": "1 / 2",
+          "pageAfter": "1 / 2"
+        },
+        {
+          "name": "time: active Space cannot mutate latent manual preference",
+          "before": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "true",
+            "base": "true",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterOneKey": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "true",
+            "base": "false",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterSamePageDeparture": {
+            "id": "entry-group-2026-年-09-月",
+            "active": "false",
+            "base": "false",
+            "open": "false",
+            "canToggle": "true",
+            "disabled": "false",
+            "expanded": "false",
+            "body": "false"
+          },
+          "activeGroupAfterDeparture": [
+            "entry-group-2026-年-08-月"
+          ],
+          "pageBefore": "1 / 2",
+          "pageAfter": "1 / 2"
+        },
+        {
+          "name": "source: active Enter cannot mutate latent manual preference",
+          "before": {
+            "id": "entry-group-alpha",
+            "active": "true",
+            "base": "true",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterOneKey": {
+            "id": "entry-group-alpha",
+            "active": "true",
+            "base": "false",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterSamePageDeparture": {
+            "id": "entry-group-alpha",
+            "active": "false",
+            "base": "false",
+            "open": "false",
+            "canToggle": "true",
+            "disabled": "false",
+            "expanded": "false",
+            "body": "false"
+          },
+          "activeGroupAfterDeparture": [
+            "entry-group-bravo"
+          ],
+          "pageBefore": "1 / 2",
+          "pageAfter": "1 / 2"
+        },
+        {
+          "name": "source: active Space cannot mutate latent manual preference",
+          "before": {
+            "id": "entry-group-alpha",
+            "active": "true",
+            "base": "true",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterOneKey": {
+            "id": "entry-group-alpha",
+            "active": "true",
+            "base": "false",
+            "open": "true",
+            "canToggle": "false",
+            "disabled": "true",
+            "expanded": "true",
+            "body": "true"
+          },
+          "afterSamePageDeparture": {
+            "id": "entry-group-alpha",
+            "active": "false",
+            "base": "false",
+            "open": "false",
+            "canToggle": "true",
+            "disabled": "false",
+            "expanded": "false",
+            "body": "false"
+          },
+          "activeGroupAfterDeparture": [
+            "entry-group-bravo"
+          ],
+          "pageBefore": "1 / 2",
+          "pageAfter": "1 / 2"
+        }
+      ]
+    }
+  }
+}

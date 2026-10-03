@@ -1,0 +1,2304 @@
+{
+  "date": "2026-10-03",
+  "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+  "baselinePrHead": "9815d4e8c04e124279cdabbc55de78c07a064371",
+  "candidateCommit": "dbe51a38d9d88dba7ad5b3769dba238b2b03e19e",
+  "methodology": "Within each host: A1,A2 (A/A), A3,B1 (A/B), B2,A4 (B/A). Each launch has 3 warmup trials then 20 samples per path. Pooled comparison uses A3+A4 against B1+B2 (40 samples per path per variant). Delta is B minus A. No concurrent compilation/test/GUI automation; ordinary OS background activity uncontrolled.",
+  "limits": [
+    "DOM condition plus two rAF callbacks is a proxy, not physical display or dropped frames.",
+    "Scroll-highlight measures programmatically positioned browser scroll events, not manual-to-follow transition latency.",
+    "First samples are first measured warmup trials after fixture setup, not cold launch or lazy-mount latency.",
+    "A Web artifact is prior CI dx 0.7.9; B Web artifact is local Windows dx 0.7.10, both release without debug symbols. Same-host result is not an isolated compiler-independent causal attribution.",
+    "Memory snapshots have no forced GC. JS heap/DOM counters and Wasm capacity are not live Rust heap; native app private bytes excludes its WebView2 child processes.",
+    "No physical display, dropped-frame, layout-cost, Android native, assistive technology, or true touch/inertia performance result."
+  ],
+  "candidateWorkingTreeSha256": {
+    "crates/rssr-app/src/pages/entries_page/directory.rs": "c5f0f3f2e1b4f02b9be457b0df5b85118bc94c5781301fe405bb2db4086c166c",
+    "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
+    "crates/rssr-app/src/pages/entries_page/directory/adapter.js": "9b2675de56ff8eabef24a0ff582166e1880b7d333ab4b81b4ebff8a2d52761d7",
+    "crates/rssr-app/src/pages/entries_page/controls.rs": "5a0b0ff6bebbcfd042e0613ad9a6902365b5ce9569e555e33df0519b96b219cb",
+    "crates/rssr-app/src/pages/entries_page/mod.rs": "1591ae33eb318aa3ce53112b7f5e774a2793f419a4951bd679e4c0266de12b17",
+    "crates/rssr-app/src/pages/entries_page/facade.rs": "ed31ef397117765a8392e36b90b5487577abed137d52d45652a62e4fa316f82f",
+    "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "663f4cf5ea0b83be0bc126e3f74ebf0bc68940162d73b1694832618e166c66d2"
+  },
+  "candidateNormalizedLfSha256": {
+    "crates/rssr-app/src/pages/entries_page/directory.rs": "c5f0f3f2e1b4f02b9be457b0df5b85118bc94c5781301fe405bb2db4086c166c",
+    "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
+    "crates/rssr-app/src/pages/entries_page/directory/adapter.js": "9b2675de56ff8eabef24a0ff582166e1880b7d333ab4b81b4ebff8a2d52761d7",
+    "crates/rssr-app/src/pages/entries_page/controls.rs": "5a0b0ff6bebbcfd042e0613ad9a6902365b5ce9569e555e33df0519b96b219cb",
+    "crates/rssr-app/src/pages/entries_page/mod.rs": "1591ae33eb318aa3ce53112b7f5e774a2793f419a4951bd679e4c0266de12b17",
+    "crates/rssr-app/src/pages/entries_page/facade.rs": "ed31ef397117765a8392e36b90b5487577abed137d52d45652a62e4fa316f82f",
+    "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "146b13ad2ce2e438a4260a670e2fc12ff4f063419d3a7cb5e4485ea247df89ae"
+  },
+  "hosts": {
+    "web": {
+      "order": [
+        "A1",
+        "A2",
+        "A3",
+        "B1",
+        "B2",
+        "A4"
+      ],
+      "runs": {
+        "A1": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:53:30.995Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Chrome headless Web; not WebView2",
+            "artifactSha256": "4c4cf1e694d6ed62347b99b611eab490fbe114ad75366704591f1114c9e6b4d0",
+            "artifact": "ci-web-public wasm; GitHub Actions CI run 37071851764, exact main SHA, dx bundle --release --locked --debug-symbols false",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Physical NVIDIA display reports 2560x1600 at 165Hz; headless rAF cadence is separate, not a displayed frame rate",
+            "browserLaunch": "Chrome headless=new, disable-gpu; isolated profile, no proxy",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "A"
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1280,
+              "height": 800
+            }
+          },
+          "phase": "AA",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 2609652,
+              "totalSize": 3932160,
+              "embedderHeapUsedSize": 6948712,
+              "backingStorageSize": 519206
+            },
+            "dom": {
+              "documents": 6,
+              "nodes": 2428,
+              "jsEventListeners": 21
+            },
+            "wasmLinearBytes": 3342336
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2418324,
+              "totalSize": 2883584,
+              "embedderHeapUsedSize": 5779336,
+              "backingStorageSize": 197311
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 1677,
+              "jsEventListeners": 47
+            },
+            "wasmLinearBytes": 3538944
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 26,
+                "proxyMs": 58.099999994039536,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 50.25,
+                "minMs": 49.400000005960464,
+                "maxMs": 55.599999994039536
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 29.200000017881393,
+                "proxyMs": 62,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 62.79999999701977,
+                "minMs": 60.400000005960464,
+                "maxMs": 64.5
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 30.5,
+                "proxyMs": 63.19999998807907,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 64.5,
+                "minMs": 63.29999998211861,
+                "maxMs": 66.40000000596046
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 30,
+                "proxyMs": 62.79999998211861,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 63.6499999910593,
+                "minMs": 61.80000001192093,
+                "maxMs": 65.30000001192093
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 9.400000005960464,
+                "proxyMs": 41.900000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 580.3499999940395,
+                "minMs": 575.4000000059605,
+                "maxMs": 586.4000000059605
+              }
+            }
+          }
+        },
+        "A2": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:54:06.885Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Chrome headless Web; not WebView2",
+            "artifactSha256": "4c4cf1e694d6ed62347b99b611eab490fbe114ad75366704591f1114c9e6b4d0",
+            "artifact": "ci-web-public wasm; GitHub Actions CI run 37071851764, exact main SHA, dx bundle --release --locked --debug-symbols false",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Physical NVIDIA display reports 2560x1600 at 165Hz; headless rAF cadence is separate, not a displayed frame rate",
+            "browserLaunch": "Chrome headless=new, disable-gpu; isolated profile, no proxy",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "A"
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1280,
+              "height": 800
+            }
+          },
+          "phase": "AA",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 2636580,
+              "totalSize": 3932160,
+              "embedderHeapUsedSize": 6949064,
+              "backingStorageSize": 519209
+            },
+            "dom": {
+              "documents": 6,
+              "nodes": 2428,
+              "jsEventListeners": 21
+            },
+            "wasmLinearBytes": 3342336
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2417944,
+              "totalSize": 3670016,
+              "embedderHeapUsedSize": 5794840,
+              "backingStorageSize": 197311
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 1677,
+              "jsEventListeners": 47
+            },
+            "wasmLinearBytes": 3538944
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 25.400000005960464,
+                "proxyMs": 54.599999994039536,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 50.25,
+                "minMs": 49.30000001192093,
+                "maxMs": 66.5
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 25.19999998807907,
+                "proxyMs": 58.099999994039536,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 61.599999994039536,
+                "minMs": 58.900000005960464,
+                "maxMs": 64.59999999403954
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 34.30000001192093,
+                "proxyMs": 62.30000001192093,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 64.45000000298023,
+                "minMs": 62.10000002384186,
+                "maxMs": 66
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 30.799999982118607,
+                "proxyMs": 63.900000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 64.04999999701977,
+                "minMs": 61.79999998211861,
+                "maxMs": 65.40000000596046
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 13.5,
+                "proxyMs": 46.5,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 579.75,
+                "minMs": 573.4000000059605,
+                "maxMs": 582.5
+              }
+            }
+          }
+        },
+        "A3": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:54:42.641Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Chrome headless Web; not WebView2",
+            "artifactSha256": "4c4cf1e694d6ed62347b99b611eab490fbe114ad75366704591f1114c9e6b4d0",
+            "artifact": "ci-web-public wasm; GitHub Actions CI run 37071851764, exact main SHA, dx bundle --release --locked --debug-symbols false",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Physical NVIDIA display reports 2560x1600 at 165Hz; headless rAF cadence is separate, not a displayed frame rate",
+            "browserLaunch": "Chrome headless=new, disable-gpu; isolated profile, no proxy",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "A"
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1280,
+              "height": 800
+            }
+          },
+          "phase": "AB",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 2629260,
+              "totalSize": 3932160,
+              "embedderHeapUsedSize": 6948160,
+              "backingStorageSize": 519191
+            },
+            "dom": {
+              "documents": 6,
+              "nodes": 2428,
+              "jsEventListeners": 21
+            },
+            "wasmLinearBytes": 3342336
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2419732,
+              "totalSize": 3145728,
+              "embedderHeapUsedSize": 5895072,
+              "backingStorageSize": 197311
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 1677,
+              "jsEventListeners": 47
+            },
+            "wasmLinearBytes": 3538944
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 12.599999994039536,
+                "proxyMs": 46,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 49.849999994039536,
+                "minMs": 48.900000005960464,
+                "maxMs": 60.80000001192093
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 27,
+                "proxyMs": 61.099999994039536,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 62,
+                "minMs": 58.29999998211861,
+                "maxMs": 64
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 31,
+                "proxyMs": 64.69999998807907,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 64.30000001192093,
+                "minMs": 63.70000001788139,
+                "maxMs": 66.30000001192093
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 29.30000001192093,
+                "proxyMs": 63.30000001192093,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 64.04999999701977,
+                "minMs": 59.5,
+                "maxMs": 65.09999999403954
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 10.800000011920929,
+                "proxyMs": 44.900000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 580.0999999940395,
+                "minMs": 569.2999999821186,
+                "maxMs": 588.0999999940395
+              }
+            }
+          }
+        },
+        "B1": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:55:18.422Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Chrome headless Web; not WebView2",
+            "artifactSha256": "d6ed464954778cb89b9d7881435b547e1ff2f161ffd17bf43ae6ec13ba145aa9",
+            "artifact": "target\\dx\\rssr-app\\release\\web\\public\\assets\\rssr-app_bg-dxh543f4a7346b9e2c.wasm",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Physical NVIDIA display reports 2560x1600 at 165Hz; headless rAF cadence is separate, not a displayed frame rate",
+            "browserLaunch": "Chrome headless=new, disable-gpu; isolated profile, no proxy",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "B",
+            "candidateSourceHashes": {
+              "crates/rssr-app/src/pages/entries_page/directory.rs": "c5f0f3f2e1b4f02b9be457b0df5b85118bc94c5781301fe405bb2db4086c166c",
+              "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
+              "crates/rssr-app/src/pages/entries_page/directory/adapter.js": "9b2675de56ff8eabef24a0ff582166e1880b7d333ab4b81b4ebff8a2d52761d7",
+              "crates/rssr-app/src/pages/entries_page/controls.rs": "5a0b0ff6bebbcfd042e0613ad9a6902365b5ce9569e555e33df0519b96b219cb",
+              "crates/rssr-app/src/pages/entries_page/mod.rs": "1591ae33eb318aa3ce53112b7f5e774a2793f419a4951bd679e4c0266de12b17",
+              "crates/rssr-app/src/pages/entries_page/facade.rs": "ed31ef397117765a8392e36b90b5487577abed137d52d45652a62e4fa316f82f",
+              "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "663f4cf5ea0b83be0bc126e3f74ebf0bc68940162d73b1694832618e166c66d2"
+            },
+            "bootstrapJs": "assets/rssr-app-dxh178811c8bb8d4bbf.js",
+            "candidateCommit": "dbe51a38d9d88dba7ad5b3769dba238b2b03e19e"
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1280,
+              "height": 800
+            }
+          },
+          "phase": "AB",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 2425284,
+              "totalSize": 4194304,
+              "embedderHeapUsedSize": 6452104,
+              "backingStorageSize": 512779
+            },
+            "dom": {
+              "documents": 6,
+              "nodes": 2437,
+              "jsEventListeners": 27
+            },
+            "wasmLinearBytes": 3342336
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2139684,
+              "totalSize": 3407872,
+              "embedderHeapUsedSize": 4520040,
+              "backingStorageSize": 199697
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 1680,
+              "jsEventListeners": 41
+            },
+            "wasmLinearBytes": 3473408
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 1.699999988079071,
+                "proxyMs": 35.5,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 33.6499999910593,
+                "minMs": 29.5,
+                "maxMs": 37.60000002384186
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 9.400000005960464,
+                "proxyMs": 42.10000002384186,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 45.45000000298023,
+                "minMs": 42.900000005960464,
+                "maxMs": 47
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 12.900000005960464,
+                "proxyMs": 45.900000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 47.5,
+                "minMs": 45.69999998807907,
+                "maxMs": 48.599999994039536
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 11.700000017881393,
+                "proxyMs": 44.70000001788139,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 46.8500000089407,
+                "minMs": 42.89999997615814,
+                "maxMs": 49
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 7.5,
+                "proxyMs": 39.79999998211861,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 579.9500000029802,
+                "minMs": 568.5999999940395,
+                "maxMs": 595.5
+              }
+            }
+          }
+        },
+        "B2": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:55:52.087Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Chrome headless Web; not WebView2",
+            "artifactSha256": "d6ed464954778cb89b9d7881435b547e1ff2f161ffd17bf43ae6ec13ba145aa9",
+            "artifact": "target\\dx\\rssr-app\\release\\web\\public\\assets\\rssr-app_bg-dxh543f4a7346b9e2c.wasm",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Physical NVIDIA display reports 2560x1600 at 165Hz; headless rAF cadence is separate, not a displayed frame rate",
+            "browserLaunch": "Chrome headless=new, disable-gpu; isolated profile, no proxy",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "B",
+            "candidateSourceHashes": {
+              "crates/rssr-app/src/pages/entries_page/directory.rs": "c5f0f3f2e1b4f02b9be457b0df5b85118bc94c5781301fe405bb2db4086c166c",
+              "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
+              "crates/rssr-app/src/pages/entries_page/directory/adapter.js": "9b2675de56ff8eabef24a0ff582166e1880b7d333ab4b81b4ebff8a2d52761d7",
+              "crates/rssr-app/src/pages/entries_page/controls.rs": "5a0b0ff6bebbcfd042e0613ad9a6902365b5ce9569e555e33df0519b96b219cb",
+              "crates/rssr-app/src/pages/entries_page/mod.rs": "1591ae33eb318aa3ce53112b7f5e774a2793f419a4951bd679e4c0266de12b17",
+              "crates/rssr-app/src/pages/entries_page/facade.rs": "ed31ef397117765a8392e36b90b5487577abed137d52d45652a62e4fa316f82f",
+              "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "663f4cf5ea0b83be0bc126e3f74ebf0bc68940162d73b1694832618e166c66d2"
+            },
+            "bootstrapJs": "assets/rssr-app-dxh178811c8bb8d4bbf.js",
+            "candidateCommit": "dbe51a38d9d88dba7ad5b3769dba238b2b03e19e"
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1280,
+              "height": 800
+            }
+          },
+          "phase": "BA",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 2403648,
+              "totalSize": 4194304,
+              "embedderHeapUsedSize": 6452448,
+              "backingStorageSize": 512823
+            },
+            "dom": {
+              "documents": 6,
+              "nodes": 2437,
+              "jsEventListeners": 27
+            },
+            "wasmLinearBytes": 3342336
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2142412,
+              "totalSize": 3145728,
+              "embedderHeapUsedSize": 4620152,
+              "backingStorageSize": 199697
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 1680,
+              "jsEventListeners": 41
+            },
+            "wasmLinearBytes": 3473408
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 1.2000000178813934,
+                "proxyMs": 42.900000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 33.04999999701977,
+                "minMs": 27.5,
+                "maxMs": 36.400000005960464
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 14.300000011920929,
+                "proxyMs": 43.70000001788139,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 45.54999999701977,
+                "minMs": 42.400000005960464,
+                "maxMs": 47.099999994039536
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 13.299999982118607,
+                "proxyMs": 47.400000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 47.45000000298023,
+                "minMs": 45.5,
+                "maxMs": 49.29999998211861
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 14.199999988079071,
+                "proxyMs": 47.900000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 47.44999998807907,
+                "minMs": 44.29999998211861,
+                "maxMs": 48.69999998807907
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 8.699999988079071,
+                "proxyMs": 41.19999998807907,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 578.9000000059605,
+                "minMs": 576.5,
+                "maxMs": 591.5
+              }
+            }
+          }
+        },
+        "A4": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:56:25.773Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Chrome headless Web; not WebView2",
+            "artifactSha256": "4c4cf1e694d6ed62347b99b611eab490fbe114ad75366704591f1114c9e6b4d0",
+            "artifact": "ci-web-public wasm; GitHub Actions CI run 37071851764, exact main SHA, dx bundle --release --locked --debug-symbols false",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Physical NVIDIA display reports 2560x1600 at 165Hz; headless rAF cadence is separate, not a displayed frame rate",
+            "browserLaunch": "Chrome headless=new, disable-gpu; isolated profile, no proxy",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "A"
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1280,
+              "height": 800
+            }
+          },
+          "phase": "BA",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 2606180,
+              "totalSize": 3407872,
+              "embedderHeapUsedSize": 6845160,
+              "backingStorageSize": 519206
+            },
+            "dom": {
+              "documents": 6,
+              "nodes": 2428,
+              "jsEventListeners": 21
+            },
+            "wasmLinearBytes": 3342336
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2398892,
+              "totalSize": 3407872,
+              "embedderHeapUsedSize": 5673552,
+              "backingStorageSize": 197311
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 1677,
+              "jsEventListeners": 47
+            },
+            "wasmLinearBytes": 3538944
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 24.599999994039536,
+                "proxyMs": 50.099999994039536,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 50.44999998807907,
+                "minMs": 48.19999998807907,
+                "maxMs": 60.70000001788139
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 31.900000005960464,
+                "proxyMs": 61.400000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 62.650000005960464,
+                "minMs": 61.29999998211861,
+                "maxMs": 63.79999998211861
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 33.69999998807907,
+                "proxyMs": 63,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 64.5,
+                "minMs": 62.70000001788139,
+                "maxMs": 65.5
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 32.10000002384186,
+                "proxyMs": 64.60000002384186,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 63.70000001788139,
+                "minMs": 62.599999994039536,
+                "maxMs": 65.90000000596046
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 17.400000005960464,
+                "proxyMs": 50.900000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 579.7000000029802,
+                "minMs": 572.1999999880791,
+                "maxMs": 589.9000000059605
+              }
+            }
+          }
+        }
+      },
+      "comparison": {
+        "scroll-highlight": {
+          "aaMedianAbsoluteDifferenceMs": 0.0,
+          "abDeltaMs": -16.200000002980232,
+          "baDeltaMs": -17.399999991059303,
+          "aPooledMedianMs": 50.099999994039536,
+          "bPooledMedianMs": 33.20000001788139,
+          "deltaMs": -16.899999976158142,
+          "deltaPercent": -33.73253488656439,
+          "runMediansMs": {
+            "A1": 50.25,
+            "A2": 50.25,
+            "A3": 49.849999994039536,
+            "B1": 33.6499999910593,
+            "B2": 33.04999999701977,
+            "A4": 50.44999998807907
+          }
+        },
+        "expand-mouse": {
+          "aaMedianAbsoluteDifferenceMs": 1.2000000029802322,
+          "abDeltaMs": -16.549999997019768,
+          "baDeltaMs": -17.100000008940697,
+          "aPooledMedianMs": 62.55000001192093,
+          "bPooledMedianMs": 45.5,
+          "deltaMs": -17.05000001192093,
+          "deltaPercent": -27.258193459107112,
+          "runMediansMs": {
+            "A1": 62.79999999701977,
+            "A2": 61.599999994039536,
+            "A3": 62.0,
+            "B1": 45.45000000298023,
+            "B2": 45.54999999701977,
+            "A4": 62.650000005960464
+          }
+        },
+        "expand-Enter": {
+          "aaMedianAbsoluteDifferenceMs": 0.04999999701976776,
+          "abDeltaMs": -16.80000001192093,
+          "baDeltaMs": -17.049999997019768,
+          "aPooledMedianMs": 64.3500000089407,
+          "bPooledMedianMs": 47.45000000298023,
+          "deltaMs": -16.900000005960464,
+          "deltaPercent": -26.26262626823994,
+          "runMediansMs": {
+            "A1": 64.5,
+            "A2": 64.45000000298023,
+            "A3": 64.30000001192093,
+            "B1": 47.5,
+            "B2": 47.45000000298023,
+            "A4": 64.5
+          }
+        },
+        "expand-Space": {
+          "aaMedianAbsoluteDifferenceMs": 0.4000000059604645,
+          "abDeltaMs": -17.19999998807907,
+          "baDeltaMs": -16.250000029802322,
+          "aPooledMedianMs": 63.900000005960464,
+          "bPooledMedianMs": 47.349999994039536,
+          "deltaMs": -16.55000001192093,
+          "deltaPercent": -25.899843521717024,
+          "runMediansMs": {
+            "A1": 63.6499999910593,
+            "A2": 64.04999999701977,
+            "A3": 64.04999999701977,
+            "B1": 46.8500000089407,
+            "B2": 47.44999998807907,
+            "A4": 63.70000001788139
+          }
+        },
+        "navigate-align": {
+          "aaMedianAbsoluteDifferenceMs": 0.5999999940395355,
+          "abDeltaMs": -0.14999999105930328,
+          "baDeltaMs": -0.7999999970197678,
+          "aPooledMedianMs": 579.9500000029802,
+          "bPooledMedianMs": 579.0000000149012,
+          "deltaMs": -0.949999988079071,
+          "deltaPercent": -0.1638072227044037,
+          "runMediansMs": {
+            "A1": 580.3499999940395,
+            "A2": 579.75,
+            "A3": 580.0999999940395,
+            "B1": 579.9500000029802,
+            "B2": 578.9000000059605,
+            "A4": 579.7000000029802
+          }
+        }
+      },
+      "rawSamples": "2026-10-03-directory-follow-web.csv"
+    },
+    "native": {
+      "order": [
+        "A1",
+        "A2",
+        "A3",
+        "B1",
+        "B2",
+        "A4"
+      ],
+      "runs": {
+        "A1": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:57:27.710Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Dioxus Windows WebView2 native window",
+            "artifactSha256": "e16c55bcb2c5bc1383828da8d907af064766f8eea7261744f952707a8c193265",
+            "artifact": "cargo build --release --locked -p rssr-app -p rssr-cli -j 1; stable x86_64-pc-windows-msvc, baseline production sources unchanged",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Win32_VideoController: NVIDIA RTX 3060 laptop, 2560x1600 at 165Hz",
+            "browserLaunch": "Owned visible focused native window, isolated exe/SQLite and WEBVIEW2_USER_DATA_FOLDER; loopback CDP 18125; disable background timer throttling, renderer backgrounding and backgrounding occluded windows; no viewport emulation",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "A"
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1707,
+              "height": 1067
+            }
+          },
+          "phase": "AA",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 2227880,
+              "totalSize": 5505024,
+              "embedderHeapUsedSize": 11761208,
+              "backingStorageSize": 221719
+            },
+            "dom": {
+              "documents": 2,
+              "nodes": 5283,
+              "jsEventListeners": 29
+            },
+            "wasmLinearBytes": null
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2274284,
+              "totalSize": 3932160,
+              "embedderHeapUsedSize": 8448040,
+              "backingStorageSize": 125304
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 2809,
+              "jsEventListeners": 63
+            },
+            "wasmLinearBytes": null
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 6.199999988079071,
+                "proxyMs": 18.19999998807907,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 18.19999998807907,
+                "minMs": 18,
+                "maxMs": 18.30000001192093
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 14.600000023841858,
+                "proxyMs": 26.700000017881393,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 26.99999998509884,
+                "minMs": 24.700000017881393,
+                "maxMs": 29.400000005960464
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 15.599999994039536,
+                "proxyMs": 27.599999994039536,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 28.5,
+                "minMs": 27,
+                "maxMs": 29.599999994039536
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 15.199999988079071,
+                "proxyMs": 27.19999998807907,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 27.900000005960464,
+                "minMs": 24.700000017881393,
+                "maxMs": 28.900000005960464
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 31,
+                "proxyMs": 42.80000001192093,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 652.1000000089407,
+                "minMs": 651.4000000059605,
+                "maxMs": 657.1999999880791
+              }
+            }
+          },
+          "appBefore": {
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows",
+            "pid": 54368,
+            "exe": "E16C55BCB2C5BC1383828DA8D907AF064766F8EEA7261744F952707A8C193265",
+            "workingSetBefore": 35803136,
+            "target": "BAEBAF649EC8AE3AC412C406837FAE7E",
+            "privateBefore": 9596928
+          },
+          "appAfter": {
+            "exit": 0,
+            "privateAfter": 10477568,
+            "workingSetAfter": 36802560
+          }
+        },
+        "A2": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:57:53.156Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Dioxus Windows WebView2 native window",
+            "artifactSha256": "e16c55bcb2c5bc1383828da8d907af064766f8eea7261744f952707a8c193265",
+            "artifact": "cargo build --release --locked -p rssr-app -p rssr-cli -j 1; stable x86_64-pc-windows-msvc, baseline production sources unchanged",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Win32_VideoController: NVIDIA RTX 3060 laptop, 2560x1600 at 165Hz",
+            "browserLaunch": "Owned visible focused native window, isolated exe/SQLite and WEBVIEW2_USER_DATA_FOLDER; loopback CDP 18125; disable background timer throttling, renderer backgrounding and backgrounding occluded windows; no viewport emulation",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "A"
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1707,
+              "height": 1067
+            }
+          },
+          "phase": "AA",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 1417052,
+              "totalSize": 4718592,
+              "embedderHeapUsedSize": 3947624,
+              "backingStorageSize": 196050
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 2804,
+              "jsEventListeners": 29
+            },
+            "wasmLinearBytes": null
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2217064,
+              "totalSize": 3407872,
+              "embedderHeapUsedSize": 8526088,
+              "backingStorageSize": 125908
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 2804,
+              "jsEventListeners": 63
+            },
+            "wasmLinearBytes": null
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 6.5,
+                "proxyMs": 18.099999994039536,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 18.150000005960464,
+                "minMs": 18,
+                "maxMs": 18.400000005960464
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 14.799999982118607,
+                "proxyMs": 26.799999982118607,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 27.100000008940697,
+                "minMs": 25.5,
+                "maxMs": 28
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 15.900000005960464,
+                "proxyMs": 28,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 28.350000008940697,
+                "minMs": 27.099999994039536,
+                "maxMs": 28.80000001192093
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 16.100000023841858,
+                "proxyMs": 28.100000023841858,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 28.25,
+                "minMs": 25.600000023841858,
+                "maxMs": 29.900000005960464
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 15.100000023841858,
+                "proxyMs": 40,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 652.0999999940395,
+                "minMs": 651.2999999821186,
+                "maxMs": 657.1999999880791
+              }
+            }
+          },
+          "appBefore": {
+            "pid": 22588,
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows",
+            "privateBefore": 8503296,
+            "exe": "E16C55BCB2C5BC1383828DA8D907AF064766F8EEA7261744F952707A8C193265",
+            "target": "AF8FDFE1BD32FE9CB89DB9B2B130C506",
+            "workingSetBefore": 33902592
+          },
+          "appAfter": {
+            "workingSetAfter": 36163584,
+            "exit": 0,
+            "privateAfter": 10412032
+          }
+        },
+        "A3": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:58:18.181Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Dioxus Windows WebView2 native window",
+            "artifactSha256": "e16c55bcb2c5bc1383828da8d907af064766f8eea7261744f952707a8c193265",
+            "artifact": "cargo build --release --locked -p rssr-app -p rssr-cli -j 1; stable x86_64-pc-windows-msvc, baseline production sources unchanged",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Win32_VideoController: NVIDIA RTX 3060 laptop, 2560x1600 at 165Hz",
+            "browserLaunch": "Owned visible focused native window, isolated exe/SQLite and WEBVIEW2_USER_DATA_FOLDER; loopback CDP 18125; disable background timer throttling, renderer backgrounding and backgrounding occluded windows; no viewport emulation",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "A"
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1707,
+              "height": 1067
+            }
+          },
+          "phase": "AB",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 1403436,
+              "totalSize": 4718592,
+              "embedderHeapUsedSize": 4119800,
+              "backingStorageSize": 196050
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 2804,
+              "jsEventListeners": 29
+            },
+            "wasmLinearBytes": null
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2244184,
+              "totalSize": 3932160,
+              "embedderHeapUsedSize": 8812984,
+              "backingStorageSize": 125822
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 2804,
+              "jsEventListeners": 65
+            },
+            "wasmLinearBytes": null
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 6.0999999940395355,
+                "proxyMs": 18.299999982118607,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 18.19999998807907,
+                "minMs": 17.899999976158142,
+                "maxMs": 18.30000001192093
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 14.5,
+                "proxyMs": 26.400000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 27.350000008940697,
+                "minMs": 25.899999976158142,
+                "maxMs": 28.299999982118607
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 15.900000005960464,
+                "proxyMs": 27.900000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 28.599999994039536,
+                "minMs": 26.69999998807907,
+                "maxMs": 30.399999976158142
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 16,
+                "proxyMs": 28.099999994039536,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 28.100000023841858,
+                "minMs": 26.900000005960464,
+                "maxMs": 29.099999994039536
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 8.5,
+                "proxyMs": 20,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 652.1000000089407,
+                "minMs": 651.0999999940395,
+                "maxMs": 657.1000000238419
+              }
+            }
+          },
+          "appBefore": {
+            "workingSetBefore": 34942976,
+            "exe": "E16C55BCB2C5BC1383828DA8D907AF064766F8EEA7261744F952707A8C193265",
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows",
+            "target": "1AA49D4BB0B5A2DABDE24325A9D2C361",
+            "privateBefore": 9359360,
+            "pid": 51648
+          },
+          "appAfter": {
+            "workingSetAfter": 35971072,
+            "exit": 0,
+            "privateAfter": 10231808
+          }
+        },
+        "B1": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:58:43.209Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Dioxus Windows WebView2 native window",
+            "artifactSha256": "749dd3510827d1bedd7adf5a0d0319afa8703c53c777a7b26ef72d71ef12aa11",
+            "artifact": "target\\directory-follow\\native-B\\rssr-app.exe",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Win32_VideoController: NVIDIA RTX 3060 laptop, 2560x1600 at 165Hz",
+            "browserLaunch": "Owned visible focused native window, isolated exe/SQLite and WEBVIEW2_USER_DATA_FOLDER; loopback CDP 18125; disable background timer throttling, renderer backgrounding and backgrounding occluded windows; no viewport emulation",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "B",
+            "candidateCommit": "dbe51a38d9d88dba7ad5b3769dba238b2b03e19e",
+            "candidateSourceHashes": {
+              "crates/rssr-app/src/pages/entries_page/directory.rs": "c5f0f3f2e1b4f02b9be457b0df5b85118bc94c5781301fe405bb2db4086c166c",
+              "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
+              "crates/rssr-app/src/pages/entries_page/directory/adapter.js": "9b2675de56ff8eabef24a0ff582166e1880b7d333ab4b81b4ebff8a2d52761d7",
+              "crates/rssr-app/src/pages/entries_page/controls.rs": "5a0b0ff6bebbcfd042e0613ad9a6902365b5ce9569e555e33df0519b96b219cb",
+              "crates/rssr-app/src/pages/entries_page/mod.rs": "1591ae33eb318aa3ce53112b7f5e774a2793f419a4951bd679e4c0266de12b17",
+              "crates/rssr-app/src/pages/entries_page/facade.rs": "ed31ef397117765a8392e36b90b5487577abed137d52d45652a62e4fa316f82f",
+              "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "663f4cf5ea0b83be0bc126e3f74ebf0bc68940162d73b1694832618e166c66d2"
+            }
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1707,
+              "height": 1067
+            }
+          },
+          "phase": "AB",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 1320304,
+              "totalSize": 5242880,
+              "embedderHeapUsedSize": 4085104,
+              "backingStorageSize": 121376
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 2798,
+              "jsEventListeners": 35
+            },
+            "wasmLinearBytes": null
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2223620,
+              "totalSize": 3407872,
+              "embedderHeapUsedSize": 6006000,
+              "backingStorageSize": 125445
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 2798,
+              "jsEventListeners": 55
+            },
+            "wasmLinearBytes": null
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 6,
+                "proxyMs": 18.099999994039536,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 18.100000023841858,
+                "minMs": 18,
+                "maxMs": 18.30000001192093
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 6.199999988079071,
+                "proxyMs": 18.30000001192093,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 20.5,
+                "minMs": 18.5,
+                "maxMs": 22.400000005960464
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 9.199999988079071,
+                "proxyMs": 21.400000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 22.200000002980232,
+                "minMs": 21.099999994039536,
+                "maxMs": 27.30000001192093
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 8.899999976158142,
+                "proxyMs": 21,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 21.850000008940697,
+                "minMs": 21,
+                "maxMs": 22.600000023841858
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 10.300000011920929,
+                "proxyMs": 62.20000001788139,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 651.7000000029802,
+                "minMs": 651,
+                "maxMs": 657.5
+              }
+            }
+          },
+          "appBefore": {
+            "exe": "749DD3510827D1BEDD7ADF5A0D0319AFA8703C53C777A7B26EF72D71EF12AA11",
+            "pid": 25316,
+            "target": "59E7AB8A5C7C72DEF1155467CCCF63A1",
+            "workingSetBefore": 34803712,
+            "privateBefore": 9150464,
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          },
+          "appAfter": {
+            "privateAfter": 10182656,
+            "exit": 0,
+            "workingSetAfter": 36028416
+          }
+        },
+        "B2": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:59:07.824Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Dioxus Windows WebView2 native window",
+            "artifactSha256": "749dd3510827d1bedd7adf5a0d0319afa8703c53c777a7b26ef72d71ef12aa11",
+            "artifact": "target\\directory-follow\\native-B\\rssr-app.exe",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Win32_VideoController: NVIDIA RTX 3060 laptop, 2560x1600 at 165Hz",
+            "browserLaunch": "Owned visible focused native window, isolated exe/SQLite and WEBVIEW2_USER_DATA_FOLDER; loopback CDP 18125; disable background timer throttling, renderer backgrounding and backgrounding occluded windows; no viewport emulation",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "B",
+            "candidateCommit": "dbe51a38d9d88dba7ad5b3769dba238b2b03e19e",
+            "candidateSourceHashes": {
+              "crates/rssr-app/src/pages/entries_page/directory.rs": "c5f0f3f2e1b4f02b9be457b0df5b85118bc94c5781301fe405bb2db4086c166c",
+              "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
+              "crates/rssr-app/src/pages/entries_page/directory/adapter.js": "9b2675de56ff8eabef24a0ff582166e1880b7d333ab4b81b4ebff8a2d52761d7",
+              "crates/rssr-app/src/pages/entries_page/controls.rs": "5a0b0ff6bebbcfd042e0613ad9a6902365b5ce9569e555e33df0519b96b219cb",
+              "crates/rssr-app/src/pages/entries_page/mod.rs": "1591ae33eb318aa3ce53112b7f5e774a2793f419a4951bd679e4c0266de12b17",
+              "crates/rssr-app/src/pages/entries_page/facade.rs": "ed31ef397117765a8392e36b90b5487577abed137d52d45652a62e4fa316f82f",
+              "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "663f4cf5ea0b83be0bc126e3f74ebf0bc68940162d73b1694832618e166c66d2"
+            }
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1707,
+              "height": 1067
+            }
+          },
+          "phase": "BA",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 1317196,
+              "totalSize": 4456448,
+              "embedderHeapUsedSize": 4037760,
+              "backingStorageSize": 192975
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 2798,
+              "jsEventListeners": 35
+            },
+            "wasmLinearBytes": null
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2249404,
+              "totalSize": 3407872,
+              "embedderHeapUsedSize": 6163336,
+              "backingStorageSize": 125543
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 2798,
+              "jsEventListeners": 57
+            },
+            "wasmLinearBytes": null
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 6.200000017881393,
+                "proxyMs": 18.400000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 18.100000023841858,
+                "minMs": 18,
+                "maxMs": 18.400000005960464
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 7,
+                "proxyMs": 19.099999994039536,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 21,
+                "minMs": 19.100000023841858,
+                "maxMs": 23.30000001192093
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 9,
+                "proxyMs": 21.299999982118607,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 22.399999991059303,
+                "minMs": 20.200000017881393,
+                "maxMs": 22.799999982118607
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 9.900000005960464,
+                "proxyMs": 22.30000001192093,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 21.700000017881393,
+                "minMs": 20.799999982118607,
+                "maxMs": 22.799999982118607
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 6.4000000059604645,
+                "proxyMs": 38.80000001192093,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 651.8499999940395,
+                "minMs": 650.6999999880791,
+                "maxMs": 652.5
+              }
+            }
+          },
+          "appBefore": {
+            "pid": 25492,
+            "target": "E12F232B1DBDF6A8B0C87A51C686FB89",
+            "exe": "749DD3510827D1BEDD7ADF5A0D0319AFA8703C53C777A7B26EF72D71EF12AA11",
+            "workingSetBefore": 34840576,
+            "privateBefore": 9023488,
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          },
+          "appAfter": {
+            "workingSetAfter": 35700736,
+            "privateAfter": 9756672,
+            "exit": 0
+          }
+        },
+        "A4": {
+          "status": "pass",
+          "recordedAt": "2026-10-03T04:59:32.367Z",
+          "metadata": {
+            "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+            "build": "release",
+            "platform": "Windows 11 10.0.26200 / Dioxus Windows WebView2 native window",
+            "artifactSha256": "e16c55bcb2c5bc1383828da8d907af064766f8eea7261744f952707a8c193265",
+            "artifact": "cargo build --release --locked -p rssr-app -p rssr-cli -j 1; stable x86_64-pc-windows-msvc, baseline production sources unchanged",
+            "refreshRateHz": 165,
+            "refreshRateNote": "Win32_VideoController: NVIDIA RTX 3060 laptop, 2560x1600 at 165Hz",
+            "browserLaunch": "Owned visible focused native window, isolated exe/SQLite and WEBVIEW2_USER_DATA_FOLDER; loopback CDP 18125; disable background timer throttling, renderer backgrounding and backgrounding occluded windows; no viewport emulation",
+            "node": "Node v24.21.0; existing repository CDP module",
+            "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+            "batchCount": 1,
+            "variant": "A"
+          },
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+          "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+          "unmeasured": [
+            "physical display latency",
+            "dropped frames",
+            "layout cost",
+            "p95",
+            "Android WebView",
+            "migration candidate comparison"
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true,
+            "screen": {
+              "width": 1707,
+              "height": 1067
+            }
+          },
+          "phase": "BA",
+          "memoryBefore": {
+            "heap": {
+              "usedSize": 1418524,
+              "totalSize": 4718592,
+              "embedderHeapUsedSize": 4078016,
+              "backingStorageSize": 196050
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 2804,
+              "jsEventListeners": 29
+            },
+            "wasmLinearBytes": null
+          },
+          "memoryAfter": {
+            "heap": {
+              "usedSize": 2216720,
+              "totalSize": 3670016,
+              "embedderHeapUsedSize": 8523152,
+              "backingStorageSize": 125328
+            },
+            "dom": {
+              "documents": 1,
+              "nodes": 2804,
+              "jsEventListeners": 63
+            },
+            "wasmLinearBytes": null
+          },
+          "paths": {
+            "scroll-highlight": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 5.9000000059604645,
+                "proxyMs": 18.200000017881393,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 18.19999998807907,
+                "minMs": 18.099999994039536,
+                "maxMs": 18.400000005960464
+              }
+            },
+            "expand-mouse": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 14.699999988079071,
+                "proxyMs": 26.80000001192093,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 27.549999997019768,
+                "minMs": 25.400000005960464,
+                "maxMs": 28.900000005960464
+              }
+            },
+            "expand-Enter": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 16,
+                "proxyMs": 28.100000023841858,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 28.5,
+                "minMs": 27.5,
+                "maxMs": 29.299999982118607
+              }
+            },
+            "expand-Space": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 16.099999994039536,
+                "proxyMs": 28.400000005960464,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 28.149999991059303,
+                "minMs": 27.099999994039536,
+                "maxMs": 29.200000017881393
+              }
+            },
+            "navigate-align": {
+              "warmup": 3,
+              "firstSample": {
+                "domMs": 8.299999982118607,
+                "proxyMs": 20.299999982118607,
+                "trusted": true
+              },
+              "summary": {
+                "count": 20,
+                "medianMs": 651.8999999761581,
+                "minMs": 651,
+                "maxMs": 657.5
+              }
+            }
+          },
+          "appBefore": {
+            "privateBefore": 9093120,
+            "target": "D18106D95003AE2D560EC5B2B2DDF703",
+            "pid": 55412,
+            "workingSetBefore": 34824192,
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows",
+            "exe": "E16C55BCB2C5BC1383828DA8D907AF064766F8EEA7261744F952707A8C193265"
+          },
+          "appAfter": {
+            "workingSetAfter": 36048896,
+            "exit": 0,
+            "privateAfter": 10203136
+          }
+        }
+      },
+      "comparison": {
+        "scroll-highlight": {
+          "aaMedianAbsoluteDifferenceMs": 0.04999998211860657,
+          "abDeltaMs": -0.09999996423721313,
+          "baDeltaMs": -0.09999996423721313,
+          "aPooledMedianMs": 18.19999998807907,
+          "bPooledMedianMs": 18.100000023841858,
+          "deltaMs": -0.09999996423721313,
+          "deltaPercent": -0.5494503533116084,
+          "runMediansMs": {
+            "A1": 18.19999998807907,
+            "A2": 18.150000005960464,
+            "A3": 18.19999998807907,
+            "B1": 18.100000023841858,
+            "B2": 18.100000023841858,
+            "A4": 18.19999998807907
+          }
+        },
+        "expand-mouse": {
+          "aaMedianAbsoluteDifferenceMs": 0.10000002384185791,
+          "abDeltaMs": -6.850000008940697,
+          "baDeltaMs": -6.549999997019768,
+          "aPooledMedianMs": 27.5,
+          "bPooledMedianMs": 20.799999997019768,
+          "deltaMs": -6.700000002980232,
+          "deltaPercent": -24.363636374473572,
+          "runMediansMs": {
+            "A1": 26.99999998509884,
+            "A2": 27.100000008940697,
+            "A3": 27.350000008940697,
+            "B1": 20.5,
+            "B2": 21.0,
+            "A4": 27.549999997019768
+          }
+        },
+        "expand-Enter": {
+          "aaMedianAbsoluteDifferenceMs": 0.14999999105930328,
+          "abDeltaMs": -6.399999991059303,
+          "baDeltaMs": -6.100000008940697,
+          "aPooledMedianMs": 28.549999997019768,
+          "bPooledMedianMs": 22.299999997019768,
+          "deltaMs": -6.25,
+          "deltaPercent": -21.89141856620811,
+          "runMediansMs": {
+            "A1": 28.5,
+            "A2": 28.350000008940697,
+            "A3": 28.599999994039536,
+            "B1": 22.200000002980232,
+            "B2": 22.399999991059303,
+            "A4": 28.5
+          }
+        },
+        "expand-Space": {
+          "aaMedianAbsoluteDifferenceMs": 0.3499999940395355,
+          "abDeltaMs": -6.250000014901161,
+          "baDeltaMs": -6.44999997317791,
+          "aPooledMedianMs": 28.100000023841858,
+          "bPooledMedianMs": 21.80000001192093,
+          "deltaMs": -6.300000011920929,
+          "deltaPercent": -22.419928849023492,
+          "runMediansMs": {
+            "A1": 27.900000005960464,
+            "A2": 28.25,
+            "A3": 28.100000023841858,
+            "B1": 21.850000008940697,
+            "B2": 21.700000017881393,
+            "A4": 28.149999991059303
+          }
+        },
+        "navigate-align": {
+          "aaMedianAbsoluteDifferenceMs": 1.4901161193847656e-08,
+          "abDeltaMs": -0.4000000059604645,
+          "baDeltaMs": -0.04999998211860657,
+          "aPooledMedianMs": 651.9500000029802,
+          "bPooledMedianMs": 651.75,
+          "deltaMs": -0.20000000298023224,
+          "deltaPercent": -0.030677199628701277,
+          "runMediansMs": {
+            "A1": 652.1000000089407,
+            "A2": 652.0999999940395,
+            "A3": 652.1000000089407,
+            "B1": 651.7000000029802,
+            "B2": 651.8499999940395,
+            "A4": 651.8999999761581
+          }
+        }
+      },
+      "rawSamples": "2026-10-03-directory-follow-native.csv"
+    }
+  },
+  "checks": {
+    "web-final-verified": {
+      "status": "pass",
+      "pass": 242,
+      "fail": 0,
+      "consoleErrors": [],
+      "artifactDir": "target/directory-follow/web-final-verified"
+    },
+    "native-contract-final-2": {
+      "status": "pass",
+      "pass": 79,
+      "fail": 0,
+      "consoleErrors": [],
+      "artifactDir": "target/directory-follow/native-contract-final-2"
+    },
+    "old-artifact-new-contract": {
+      "status": "fail",
+      "pass": 48,
+      "fail": 3,
+      "consoleErrors": [],
+      "artifactDir": "target/directory-follow/old-artifact-new-contract",
+      "scenarioFailures": [
+        {
+          "name": "time-boundary",
+          "error": "Error: time: 95px selects anchor and opens active group: {\"url\":\"http://127.0.0.1:8126/entries\",\"y\":2224,\"width\":1280,\"height\":800,\"rail\":{\"visible\":true,\"scrollTop\":0,\"scrollLeft\":0,\"maxScrollTop\":275,\"groups\":[\"entry-group-2026-年-09-月\"],\"items\":[\"entry-group-2026-09-01-66\"]},\"top\":{\"visible\":false,\"scrollTop\":0,\"scrollLeft\":0,\"maxScrollTop\":0,\"groups\":[\"entry-group-2026-年-09-月\"],\"items\":[]},\"groups\":[{\"id\":\"entry-group-2026-年-09-月\",\"active\":\"true\",\"base\":\"true\",\"open\":\"true\",\"canToggle\":\"false\",\"disabled\":\"true\",\"expanded\":\"true\",\"body\":\"true\"},{\"id\":\"entry-group-2026-年-08-月\",\"active\":\"false\",\"base\":\"true\",\"open\":\"true\",\"canToggle\":\"true\",\"disabled\":\"false\",\"expanded\":\"true\",\"body\":\"true\"},{\"id\":\"entry-group-2026-年-07-月\",\"active\":\"false\",\"base\":\"true\",\"open\":\"true\",\"canToggle\":\"true\",\"disabled\":\"false\",\"expanded\":\"true\",\"body\":\"true\"},{\"id\":\"entry-group-2026-年-06-月\",\"active\":\"false\",\"base\":\"true\",\"open\":\"true\",\"canToggle\":\"true\",\"disabled\":\"false\",\"expanded\":\"true\",\"body\":\"true\"},{\"id\":\"entry-group-2026-年-05-月\",\"active\":\"false\",\"base\":\"true\",\"open\":\"true\",\"canToggle\":\"true\",\"disabled\":\"false\",\"expanded\":\"true\",\"body\":\"true\"},{\"id\":\"entry-group-2026-年-04-月\",\"active\":\"false\",\"base\":\"false\",\"open\":\"false\",\"canToggle\":\"true\",\"disabled\":\"false\",\"expanded\":\"false\",\"body\":\"false\"}],\"anchors\":[{\"id\":\"entry-group-2026-09-02-72\",\"top\":-958.609375},{\"id\":\"entry-group-2026-09-01-66\",\"top\":95.265625},{\"id\":\"entry-group-2026-08-02-60\",\"top\":1208.140625},{\"id\":\"entry-group-2026-08-01-54\",\"top\":2262.015625},{\"id\":\"entry-group-2026-07-02-48\",\"top\":3374.890625},{\"id\":\"entry-group-2026-07-01-42\",\"top\":4428.765625},{\"id\":\"entry-group-2026-06-02-36\",\"top\":5541.640625},{\"id\":\"entry-group-2026-06-01-30\",\"top\":6595.515625},{\"id\":\"entry-group-2026-05-02-24\",\"top\":7708.390625}],\"page\":\"1 / 2\"}"
+        },
+        {
+          "name": "time-active-mouse",
+          "error": "Error: Error: Click target not visible/hittable: [data-layout=\"entry-directory-rail\"] [data-layout=\"entry-directory-toggle\"][data-directory-anchor=\"entry-group-2026-年-09-月\"]\n    at <anonymous>:13:13\n    at <anonymous>:15:5"
+        },
+        {
+          "name": "time-inactive-mouse",
+          "error": "Error: Error: non-current input must change displayed state\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "time-active-Enter",
+          "error": "Error: Error: current group must actually collapse\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "time-inactive-Enter",
+          "error": "Error: Error: non-current input must change displayed state\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "time-active-Space",
+          "error": "Error: Error: current group must actually collapse\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "time-inactive-Space",
+          "error": "Error: Error: non-current input must change displayed state\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "time-internal-scroll-and-keyboard",
+          "error": "Error: Error: directory wheel must remain manual\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "time-rapid-interleave",
+          "error": "Error: Error: two pre-commit close intents must not invert each other\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "source-boundary",
+          "error": "Error: source: 95px selects anchor and opens active group: {\"url\":\"http://127.0.0.1:8126/entries\",\"y\":1492,\"width\":1280,\"height\":800,\"rail\":{\"visible\":true,\"scrollTop\":0,\"scrollLeft\":0,\"maxScrollTop\":1959,\"groups\":[\"entry-group-alpha\"],\"items\":[\"entry-group-2026-年-08-月-60\"]},\"top\":{\"visible\":false,\"scrollTop\":0,\"scrollLeft\":0,\"maxScrollTop\":0,\"groups\":[\"entry-group-alpha\"],\"items\":[]},\"groups\":[{\"id\":\"entry-group-alpha\",\"active\":\"true\",\"base\":\"true\",\"open\":\"true\",\"canToggle\":\"false\",\"disabled\":\"true\",\"expanded\":\"true\",\"body\":\"true\"},{\"id\":\"entry-group-bravo\",\"active\":\"false\",\"base\":\"true\",\"open\":\"true\",\"canToggle\":\"true\",\"disabled\":\"false\",\"expanded\":\"true\",\"body\":\"true\"},{\"id\":\"entry-group-charlie\",\"active\":\"false\",\"base\":\"true\",\"open\":\"true\",\"canToggle\":\"true\",\"disabled\":\"false\",\"expanded\":\"true\",\"body\":\"true\"},{\"id\":\"entry-group-delta\",\"active\":\"false\",\"base\":\"true\",\"open\":\"true\",\"canToggle\":\"true\",\"disabled\":\"false\",\"expanded\":\"true\",\"body\":\"true\"},{\"id\":\"entry-group-echo\",\"active\":\"false\",\"base\":\"true\",\"open\":\"true\",\"canToggle\":\"true\",\"disabled\":\"false\",\"expanded\":\"true\",\"body\":\"true\"},{\"id\":\"entry-group-foxtrot\",\"active\":\"false\",\"base\":\"true\",\"open\":\"true\",\"canToggle\":\"true\",\"disabled\":\"false\",\"expanded\":\"true\",\"body\":\"true\"}],\"anchors\":[{\"id\":\"entry-group-2026-年-09-月-72\",\"top\":-226.609375},{\"id\":\"entry-group-2026-年-08-月-60\",\"top\":95.015625},{\"id\":\"entry-group-2026-年-07-月-48\",\"top\":416.640625},{\"id\":\"entry-group-2026-年-06-月-36\",\"top\":738.265625},{\"id\":\"entry-group-2026-年-05-月-24\",\"top\":1059.890625},{\"id\":\"entry-group-2026-年-09-月-71\",\"top\":1273.703125},{\"id\":\"entry-group-2026-年-08-月-59\",\"top\":1595.328125},{\"id\":\"entry-group-2026-年-07-月-47\",\"top\":1916.953125},{\"id\":\"entry-group-2026-年-06-月-35\",\"top\":2238.578125},{\"id\":\"entry-group-2026-年-05-月-23\",\"top\":2560.203125},{\"id\":\"entry-group-2026-年-09-月-70\",\"top\":2774.015625},{\"id\":\"entry-group-2026-年-08-月-58\",\"top\":3095.640625},{\"id\":\"entry-group-2026-年-07-月-46\",\"top\":3417.265625},{\"id\":\"entry-group-2026-年-06-月-34\",\"top\":3738.890625},{\"id\":\"entry-group-2026-年-09-月-69\",\"top\":4119.515625},{\"id\":\"entry-group-2026-年-08-月-57\",\"top\":4441.140625},{\"id\":\"entry-group-2026-年-07-月-45\",\"top\":4762.765625},{\"id\":\"entry-group-2026-年-06-月-33\",\"top\":5084.390625},{\"id\":\"entry-group-2026-年-09-月-68\",\"top\":5465.015625},{\"id\":\"entry-group-2026-年-08-月-56\",\"top\":5786.640625},{\"id\":\"entry-group-2026-年-07-月-44\",\"top\":6108.265625},{\"id\":\"entry-group-2026-年-06-月-32\",\"top\":6429.890625},{\"id\":\"entry-group-2026-年-09-月-67\",\"top\":6810.515625},{\"id\":\"entry-group-2026-年-08-月-55\",\"top\":7132.140625},{\"id\":\"entry-group-2026-年-07-月-43\",\"top\":7453.765625},{\"id\":\"entry-group-2026-年-06-月-31\",\"top\":7775.390625}],\"page\":\"1 / 2\"}"
+        },
+        {
+          "name": "source-active-mouse",
+          "error": "Error: Error: Click target not visible/hittable: [data-layout=\"entry-directory-rail\"] [data-layout=\"entry-directory-toggle\"][data-directory-anchor=\"entry-group-alpha\"]\n    at <anonymous>:13:13\n    at <anonymous>:15:5"
+        },
+        {
+          "name": "source-inactive-mouse",
+          "error": "Error: Error: non-current input must change displayed state\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "source-active-Enter",
+          "error": "Error: Error: current group must actually collapse\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "source-inactive-Enter",
+          "error": "Error: Error: non-current input must change displayed state\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "source-active-Space",
+          "error": "Error: Error: current group must actually collapse\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "source-inactive-Space",
+          "error": "Error: Error: non-current input must change displayed state\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "source-internal-scroll-and-keyboard",
+          "error": "Error: Error: manual distant group\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "source-rapid-interleave",
+          "error": "Error: Error: two pre-commit close intents must not invert each other\n    at <anonymous>:3:76"
+        },
+        {
+          "name": "lifecycle",
+          "error": "Error: Error: tracker must clean up on unmount without another scroll/resize\n    at <anonymous>:3:76"
+        }
+      ]
+    }
+  }
+}

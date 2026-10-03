@@ -74,6 +74,8 @@ Android 实机长按选择手柄、系统返回、pinch zoom，以及 macOS Cmd+
 
 ## 基线与扩展验收
 
+目录行为回归现由默认主题 CI 入口实际执行，包含独立的时间/来源分组 fixture、96px 边界、Enter/Space 潜在偏好、导航及生命周期；详见[目录契约与性能基线](./directory-regression-baseline.md)。`--directory-only` 可单独复现。基线活动组键盘 bug 的失败预期保持开启，因此相关 draft 的 default UI job 会失败，不能由其它主题通过推定整体通过。可选性能采样必须显式传 `--directory-perf`，不属于每次 CI 自动运行内容。
+
 断言数量以本次 `assertions.json` 为准。2026-09-22 的初版及后续扩展保留在对应 handoff；2026-09-26 五主题复验见 [集成记录](../handoffs/2026-09-26-integration-revalidation.md)。历史通过不证明新构建通过。
 
 导航收起、操作边界位置采集、来源计数、批量已读等近期能力还应按 [手工回归](./manual-regression.md) 和相关 handoff 补验；不要从脚本名称推定所有功能已自动覆盖。截图是视觉复核证据，结构断言不能替代色彩、信息层次和真实辅助技术体验检查。

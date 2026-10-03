@@ -86,6 +86,7 @@ BROWSER_STATE_SEEDS = {
     "mobile-ui-overflow": "mobile_ui_overflow",
     "mobile-ui-short": "mobile_ui_short",
     "home-reader": "mobile_ui_overflow",
+    "directory-contract": "directory_contract",
 }
 
 
@@ -178,7 +179,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(400, f"Unknown browser state seed: {seed}")
                 return
             core_state, app_state, entry_flags, entry_content = loaded_seed
-            if seed.startswith("mobile-ui-") or seed == "home-reader":
+            if seed.startswith("mobile-ui-") or seed in ("home-reader", "directory-contract"):
                 feed_url = f"http://127.0.0.1:{port}{MOBILE_UI_FEED_PATH}?seed={seed}"
                 for feed in core_state.get("feeds", []):
                     feed["url"] = feed_url + f"&feed={feed['id']}"
@@ -248,6 +249,13 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
     def _mobile_ui_feed(self):
         seed = parse_qs(urlparse(self.path).query).get("seed", ["mobile-ui-overflow"])[0]
         feed_id = parse_qs(urlparse(self.path).query).get("feed", ["1"])[0]
+        if seed == "directory-contract":
+            # Startup refresh is unconditional, regardless of fixture timestamps.
+            # Keep it local and unchanged; do not inject extra entries or titles.
+            self.send_response(304)
+            self.send_header("ETag", '"directory-contract"')
+            self.end_headers()
+            return
         if seed == "home-reader":
             title = "完整来源名称 " + "LongUnbrokenSourceName" * 8 if feed_id == "1" else "第二个来源 Second Feed"
             HOME_FEED_REQUESTS[feed_id] = HOME_FEED_REQUESTS.get(feed_id, 0) + 1
