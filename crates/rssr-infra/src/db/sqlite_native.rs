@@ -299,8 +299,10 @@ fn append_content_suffix(path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use super::create_local_data_dir;
     use super::{
-        NativeSqliteBackend, append_content_suffix, content_database_path, create_local_data_dir,
+        NativeSqliteBackend, append_content_suffix, content_database_path,
         local_data_dir_in_base_dir,
     };
     use crate::db::storage_backend::StorageBackend;

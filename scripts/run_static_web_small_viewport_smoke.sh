@@ -13,6 +13,7 @@ chrome_bin="${CHROME_BIN:-google-chrome}"
 node_bin="${NODE_BIN:-node}"
 viewport="360,800"
 preset=""
+directory_only="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -52,8 +53,12 @@ while [[ $# -gt 0 ]]; do
       preset="${2:?missing preset value}"
       shift 2
       ;;
+    --directory-only)
+      directory_only="true"
+      shift
+      ;;
     *)
-      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--chrome-bin BIN] [--viewport WIDTH,HEIGHT] [--preset PRESET]" >&2
+      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--chrome-bin BIN] [--viewport WIDTH,HEIGHT] [--preset PRESET] [--directory-only]" >&2
       exit 1
       ;;
   esac
@@ -284,14 +289,15 @@ if ! "$node_bin" "$node_script_arg" \
   --width "$viewport_width" \
   --height "$viewport_height" \
   --dpr "3" \
-  --preset "$preset"; then
+  --preset "$preset" \
+  --directory-only "$directory_only"; then
   cat >"$summary_file" <<EOF
 # Static Web 小视口 Smoke
 
 - commit：$(git rev-parse --short HEAD)
 - profile：${profile}
 - viewport：${viewport_width}×${viewport_height} @ DPR 3
-- fixtures：mobile-ui-overflow、mobile-ui-short、home-reader
+- directory-only：${directory_only}；默认主题额外运行 directory-contract（详见 assertions.json）
 - chrome：${chrome_bin}
 - 结果：失败
 - 断言：${log_dir}/assertions.json
@@ -310,7 +316,7 @@ cat >"$summary_file" <<EOF
 - commit：$(git rev-parse --short HEAD)
 - profile：${profile}
 - viewport：${viewport_width}×${viewport_height} @ DPR 3
-- fixtures：mobile-ui-overflow、mobile-ui-short、home-reader
+- directory-only：${directory_only}；默认主题额外运行 directory-contract（详见 assertions.json）
 - preset：${preset:-default}
 - chrome：${chrome_bin}
 - 结果：通过

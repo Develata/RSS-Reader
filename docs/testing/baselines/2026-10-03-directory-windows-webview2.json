@@ -1,0 +1,267 @@
+{
+  "status": "pass",
+  "recordedAt": "2026-10-03T00:11:31.823Z",
+  "metadata": {
+    "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+    "build": "release",
+    "platform": "Windows 11 10.0.26200 / Dioxus Windows WebView2 native window",
+    "artifactSha256": "e16c55bcb2c5bc1383828da8d907af064766f8eea7261744f952707a8c193265",
+    "artifact": "cargo build --release --locked -p rssr-app -p rssr-cli -j 1; stable x86_64-pc-windows-msvc, baseline production sources unchanged",
+    "refreshRateHz": 165,
+    "refreshRateNote": "Win32_VideoController: NVIDIA RTX 3060 laptop, 2560x1600 at 165Hz",
+    "browserLaunch": "Owned native PID, isolated exe/SQLite and WEBVIEW2_USER_DATA_FOLDER; remote debugging on loopback 18115; no emulated viewport",
+    "node": "Bun 1.4.2; existing repository CDP module",
+    "conditions": "No concurrent test or compilation intentionally started. Ordinary host background processes are not controlled."
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "arch": "x64",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "memoryBytes": 16962281472
+  },
+  "browser": {
+    "protocolVersion": "1.3",
+    "product": "Edg/154.0.4258.53",
+    "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "jsVersion": "15.4.11.7"
+  },
+  "dataset": "directory-contract: 6 feeds, 72 entries, page size 50; default theme; time grouping",
+  "methodology": "trusted scroll/click/key activation event -> expected DOM condition -> two rAF callbacks; excludes CDP transport, input dispatch before event, physical display, and pre-action positioning. DOM polling is frame-quantized. Scroll is programmatically positioned and measured from its browser-generated scroll event.",
+  "unmeasured": [
+    "physical display latency",
+    "dropped frames",
+    "layout cost",
+    "p95",
+    "Android WebView",
+    "migration candidate comparison"
+  ],
+  "batches": [
+    {
+      "batch": 1,
+      "paths": {
+        "scroll-highlight": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 18.099999994039536,
+            "minMs": 17.899999976158142,
+            "maxMs": 18.200000017881393
+          }
+        },
+        "expand-mouse": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 27.80000001192093,
+            "minMs": 26.19999998807907,
+            "maxMs": 29
+          }
+        },
+        "expand-Enter": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 29,
+            "minMs": 27.30000001192093,
+            "maxMs": 34.900000005960464
+          }
+        },
+        "expand-Space": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 28.100000008940697,
+            "minMs": 26.299999982118607,
+            "maxMs": 29.299999982118607
+          }
+        },
+        "navigate-align": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 652.2999999821186,
+            "minMs": 651.5,
+            "maxMs": 657.5
+          }
+        }
+      }
+    },
+    {
+      "batch": 2,
+      "paths": {
+        "scroll-highlight": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 18.100000008940697,
+            "minMs": 18,
+            "maxMs": 18.400000005960464
+          }
+        },
+        "expand-mouse": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 28.149999991059303,
+            "minMs": 26.80000001192093,
+            "maxMs": 29
+          }
+        },
+        "expand-Enter": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 28.700000002980232,
+            "minMs": 27.299999982118607,
+            "maxMs": 29.299999982118607
+          }
+        },
+        "expand-Space": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 28.5,
+            "minMs": 26.299999982118607,
+            "maxMs": 29.30000001192093
+          }
+        },
+        "navigate-align": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 652.3499999791384,
+            "minMs": 651.7000000178814,
+            "maxMs": 657.6999999880791
+          }
+        }
+      }
+    },
+    {
+      "batch": 3,
+      "paths": {
+        "scroll-highlight": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 18.099999994039536,
+            "minMs": 17.599999994039536,
+            "maxMs": 18.30000001192093
+          }
+        },
+        "expand-mouse": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 27.700000002980232,
+            "minMs": 26,
+            "maxMs": 28.599999994039536
+          }
+        },
+        "expand-Enter": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 28.80000001192093,
+            "minMs": 27,
+            "maxMs": 29.299999982118607
+          }
+        },
+        "expand-Space": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 27.900000005960464,
+            "minMs": 26.69999998807907,
+            "maxMs": 28.900000005960464
+          }
+        },
+        "navigate-align": {
+          "warmup": 3,
+          "summary": {
+            "count": 20,
+            "medianMs": 652.1499999910593,
+            "minMs": 651.5,
+            "maxMs": 657.3000000119209
+          }
+        }
+      }
+    }
+  ],
+  "viewport": {
+    "width": 1280,
+    "height": 900,
+    "dpr": 1.5,
+    "visibility": "visible",
+    "screen": {
+      "width": 1707,
+      "height": 1067
+    }
+  },
+  "repeatNoise": {
+    "scroll-highlight": {
+      "batchMediansMs": [
+        18.099999994039536,
+        18.100000008940697,
+        18.099999994039536
+      ],
+      "medianRangeMs": 1.4901161193847656e-08,
+      "pooledIqrMs": 0.19999998807907104,
+      "pilotResolutionBudgetMs": 0.19999998807907104
+    },
+    "expand-mouse": {
+      "batchMediansMs": [
+        27.80000001192093,
+        28.149999991059303,
+        27.700000002980232
+      ],
+      "medianRangeMs": 0.44999998807907104,
+      "pooledIqrMs": 0.699999988079071,
+      "pilotResolutionBudgetMs": 0.699999988079071
+    },
+    "expand-Enter": {
+      "batchMediansMs": [
+        29,
+        28.700000002980232,
+        28.80000001192093
+      ],
+      "medianRangeMs": 0.29999999701976776,
+      "pooledIqrMs": 0.5999999940395355,
+      "pilotResolutionBudgetMs": 0.5999999940395355
+    },
+    "expand-Space": {
+      "batchMediansMs": [
+        28.100000008940697,
+        28.5,
+        27.900000005960464
+      ],
+      "medianRangeMs": 0.5999999940395355,
+      "pooledIqrMs": 0.6500000134110451,
+      "pilotResolutionBudgetMs": 0.6500000134110451
+    },
+    "navigate-align": {
+      "batchMediansMs": [
+        652.2999999821186,
+        652.3499999791384,
+        652.1499999910593
+      ],
+      "medianRangeMs": 0.19999998807907104,
+      "pooledIqrMs": 0.5,
+      "pilotResolutionBudgetMs": 0.5
+    }
+  },
+  "rawSamples": {
+    "file": "2026-10-03-directory-windows-webview2.csv",
+    "sha256": "0cb36b615a6a4700457996f7b676d8a3cfa74425d84971bf859c4292d3b9a63b",
+    "count": 300
+  },
+  "notes": {
+    "preMeasurement80pxToleranceCssPx": 2.0,
+    "rustToolchain": "rustc 1.98.1 (48a229cea 2026-09-01), x86_64-pc-windows-msvc",
+    "budget": "max(range of three batch medians, pooled sample IQR); descriptive resolution budget only, not permitted product regression; IQR uses inclusive linear interpolation",
+    "consoleErrors": 0,
+    "knownBehaviorFailure": "Active directory Enter/Space changes latent preference; not repaired in this test-only PR",
+    "sourceReport": "target/directory-baseline/native-performance-confirmed/directory-performance.json"
+  }
+}

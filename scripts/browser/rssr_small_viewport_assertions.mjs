@@ -1,5 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { checkDirectoryContracts } from './directory_contract.mjs';
+import { measureDirectory } from './directory_performance.mjs';
 
 import {
   clickSelector,
@@ -45,6 +47,7 @@ const preset = cli.get('--preset') ?? process.env.THEME_PRESET ?? '';
 // Native mode attaches only to an explicitly selected, already running Dioxus
 // WebView with an isolated, pre-seeded SQLite fixture supplied by the caller.
 const nativeTarget = cli.get('--native-target');
+const directoryOnly = cli.get('--directory-only') === 'true';
 if (cli.has('--native-target') && !nativeTarget.trim()) {
   throw new Error('--native-target must identify an existing Dioxus WebView');
 }
@@ -1714,7 +1717,22 @@ async function run() {
     await client.send('Page.enable');
     await client.send('Runtime.enable');
     await client.send('Log.enable');
-    if (nativeTarget) {
+    const directoryEnvironment = {
+      native: Boolean(nativeTarget), assertThat, consoleErrors,
+      setViewport: (w, h, mobile, dpr) => setViewport(client, w, h, mobile, dpr),
+      seed: (seed, route) => seedAndNavigate(client, seed, route, '[data-layout="entry-groups"][data-state="populated"]'),
+      capture: name => captureArtifact(client, name),
+      manualScroll: () => beginManualScroll(client, 'entries'),
+    };
+    if (nativeTarget && (directoryOnly || cli.has('--directory-perf'))) {
+      nativeEvidence = {targetId:page.id, browser:await client.send('Browser.getVersion'),
+        window:await evaluate(client, '({url:location.href,userAgent:navigator.userAgent,width:innerWidth,height:innerHeight,dpr:devicePixelRatio})')};
+    }
+    if (cli.has('--directory-perf')) {
+      await measureDirectory(client, directoryEnvironment, cli.get('--directory-perf'), artifactDir);
+    } else if (directoryOnly) {
+      await checkDirectoryContracts(client, directoryEnvironment);
+    } else if (nativeTarget) {
       await checkNativeWindow(client, page);
     } else {
       await setViewport(client, width, height, true, deviceScaleFactor);
@@ -1737,6 +1755,9 @@ async function run() {
       await checkShortDirectory(client);
       await checkDesktop(client);
       await checkNarrowSidebarSearch(client);
+      // The default CI theme runs the deeper behavioral contracts once; the
+      // existing five-theme layout coverage remains in the shared smoke above.
+      if (!preset) await checkDirectoryContracts(client, directoryEnvironment);
     }
 
     assertThat('browser console has no errors', consoleErrors.length === 0, consoleErrors);

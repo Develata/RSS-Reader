@@ -457,6 +457,28 @@ mod tests {
     use super::directory_section_view_state;
 
     #[test]
+    fn directory_state_truth_table_keeps_base_preference_separate_from_active_override() {
+        // Explicit cases, independent of the implementation's boolean expression.
+        for (default, toggled, active, base, open, can_toggle) in [
+            (false, false, false, false, false, true),
+            (false, false, true, false, true, false),
+            (false, true, false, true, true, true),
+            (false, true, true, true, true, false),
+            (true, false, false, true, true, true),
+            (true, false, true, true, true, false),
+            (true, true, false, false, false, true),
+            (true, true, true, false, true, false),
+        ] {
+            let state = directory_section_view_state(default, toggled, active);
+            assert_eq!(
+                (state.is_open_base, state.is_open, state.can_toggle),
+                (base, open, can_toggle),
+                "default={default}, toggled={toggled}, active={active}",
+            );
+        }
+    }
+
+    #[test]
     fn active_directory_section_stays_open_and_cannot_toggle() {
         let state = directory_section_view_state(true, true, true);
         assert!(!state.is_open_base);
