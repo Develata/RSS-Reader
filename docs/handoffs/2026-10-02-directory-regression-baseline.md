@@ -3,8 +3,9 @@
 - 日期：2026-10-02（跨 UTC 日完成）
 - 作者 / Agent：Codex delegated task
 - 分支：`test/directory-regression-baseline`
-- 当前 HEAD / 生产基线：`e8c6ee165761f2e89baa6612b96324310def187a`
-- 相关 commit：pending
+- 当前 HEAD（实现提交）：`fa373ad606b5767247f7ac65500e1beffa116325`
+- 生产基线：`e8c6ee165761f2e89baa6612b96324310def187a`
+- 相关 commit：`fa373ad6`；后续交接记录提交仅补充此元数据，精确 PR head 以远端分支为准。
 - 相关 tag / release：N/A；禁止 merge，未发布
 - 状态：`draft`
 
@@ -65,7 +66,7 @@
 
 - 真实屏幕延迟、掉帧、layout cost、Android WebView 和迁移 candidate 未测。
 - 重复三批只能提供噪声试测；后续先同条件 A/A，再交替 A/B，预算依实测毫秒范围与不确定性确定，不凭空设 5%/10%。
-- CI 默认主题预期被四个生产回归阻断；必须与测试 harness / 基建失败区分。最终 head 的其它 CI 状态 pending。
+- CI 默认主题预期被四个生产回归阻断；必须与测试 harness / 基建失败区分。本记录截点为推送前本机验收，远端最终 head 的结果将在 draft PR 描述及 checks 中核对。
 
 ## 给下一位 Agent 的备注
 
