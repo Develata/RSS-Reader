@@ -3,10 +3,10 @@
 - 日期：2026-10-03
 - 作者 / Agent：Codex
 - 分支：`refactor/release-ui-runner-rust`
-- 当前 HEAD：`f1984c04f2a2875faaa9e175d746417ae80ebcf6`
-- 相关 commit：**commit: pending**（本机验证完成，待定向提交）
+- 实现 HEAD：`28fc189cc41f320a941180419ec54d10fac389b0`（本文收尾记录另作文档提交）
+- 相关 commit：`28fc189cc41f320a941180419ec54d10fac389b0`，已 push；本文随收尾文档提交归档，最终完整 SHA 见 PR
 - 相关 tag / release：N/A
-- 状态：`draft`；本地 fixture 聚合通过，外部 feed 另列限制；远端交付待完成
+- 状态：`draft`；[独立 Draft PR #20](https://github.com/Develata/RSS-Reader/pull/20)，本地 fixture 聚合通过，外部 feed 另列限制
 
 ## 工作摘要
 
@@ -23,8 +23,8 @@ Shell 总入口收敛为构建/exec，不建立双向事件协议或第二套阶
 
 - 模块：`scripts/release-ui/`、`scripts/run_release_ui_regression.sh`、新增
   `scripts/run_rssr_web_auth_smoke.sh`；现有 `scripts/wasm_contract_runner.rs` 增加显式工具路径。
-- 平台：本机 Windows MSVC + Git Bash 已验证；Unix 信号路径已实现，尚无运行证据。
-- 额外影响：`docs/testing/release-ui-runner.md`、发布清单链接、拟新增的 CI CLI 测试矩阵。
+- 平台：本机 Windows MSVC + Git Bash 已验证；Unix 信号由新增 CI 矩阵验证，结论以最终 SHA 的运行结果为准。
+- 额外影响：`docs/testing/release-ui-runner.md`、发布清单链接、CI CLI 测试矩阵。
 - 没有修改 PR #19 目录行为、产品 Rust、存储、JS/CDP 断言或产品 workspace/锁文件。
 
 ## 关键变更
@@ -50,7 +50,7 @@ Shell 总入口收敛为构建/exec，不建立双向事件协议或第二套阶
 - 实测修复 Windows append-only 日志句柄导致 Bash 静默退出 1 的问题。
 - Windows 仅排除 MSYS 对 `curl --data-urlencode next=/feeds` 中 `next=` 的路径转换，
   保留其他转换与已有排除设置（包括 `*`）。
-- CI 工作区新增 `release-ui-runner` Linux/Windows 矩阵并纳入总门禁；尚未推送/执行。
+- CI 工作区新增 `release-ui-runner` Linux/Windows 矩阵并纳入总门禁，随 Draft PR 触发。
 - 新增显式 `--skip-external-feed`，默认 full 行为不变；仅排除外部 proxy-feed。
   固定组为 partial，总结果为 completed-with-skips；原有本地 browser feed fixture 仍须真实通过。
 - wasm 适配器仅增加 `RSSR_WASM_BINDGEN_TEST_RUNNER` 绝对路径选择，不改变契约或产品锁文件。
@@ -136,7 +136,8 @@ bash scripts/run_release_ui_regression.sh --release --full --skip-external-feed 
 ## 结果
 
 - Rust CLI 实现及本机直接测试可审阅；本地 fixture 聚合通过，完整外部发布 aggregate 尚未通过。
-- 按用户续做授权推进独立 Draft PR；本记录写入时 commit/远端状态仍待更新。没有 merge / tag。
+- 实现已提交、推送并创建独立 Draft PR #20；没有 merge / tag。最终完整 HEAD 与 CI 结果
+  记录于该 PR 正文及 Checks，须匹配 headRefOid；本文件记录提交前的本机验收证据。
 - 自审：产品边界和既有断言未改；唯一编排状态位于 Rust；子进程生命周期验证在本轮完成；
   现有用户改动与本任务内容保持分离。
 
@@ -146,7 +147,8 @@ bash scripts/run_release_ui_regression.sh --release --full --skip-external-feed 
   不通过改产品 SSRF 规则、网络设置或替换既有检查绕过此限制。
 - wasm 匹配工具已在 target 下完成验证；全局工具与产品锁文件未改。
   WSL 枚举 E_ACCESSDENIED，未转用 WSL/另一台机器。
-- Linux SIGINT/SIGTERM、Linux/Windows CI、最终远端完整 SHA 均待执行；当前没有 PR 编号。
+- Linux SIGINT/SIGTERM 和 Linux/Windows CI 的最终结论见 PR #20 对应完整 SHA 的 Checks；
+  不将本机 Windows 结果充当 Unix 信号验证。
 - Unix SIGKILL、主动逃逸进程组的自守护进程、断电和日志磁盘故障的完整报告不可保证。
 - `--skip-build` 保持旧含义，调用者需确认产物来源；Git HEAD 不证明 dirty 工作区或缓存来源。
 
@@ -160,5 +162,5 @@ bash scripts/run_release_ui_regression.sh --release --full --skip-external-feed 
 - 切换前快照为 `C:/Users/QQ/AppData/Local/Temp/rssr-release-runner-preserved.json`，记录各原有
   dirty/untracked 文件 SHA256 与 MISSING 项；切换后逐项一致，收尾再次核对 25 项全部一致。
   暂存区仍为空，产品目录、根 Cargo.toml/Cargo.lock 与 scripts/browser 没有本任务 diff。
-- 继续时不要重建 C 盘 worktree、stash/reset/clean，不要混入上述用户内容。若完成后提交，
-  只显式 stage 本任务路径，再按授权 push 新分支、建独立 Draft PR、核对远端 SHA 与 CI，不 merge。
+- 继续时不要重建 C 盘 worktree、stash/reset/clean，不要混入上述用户内容。后续修改仍仅显式
+  stage 本任务路径；远端分支为 `refactor/release-ui-runner-rust`，PR 保持 Draft，不 merge。
