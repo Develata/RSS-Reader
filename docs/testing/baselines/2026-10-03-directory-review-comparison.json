@@ -1,0 +1,3243 @@
+{
+  "status": "validated measurement; interpretation and limits in directory-review-validation.md",
+  "candidateCommit": "282592f816c87746c8354ee7981b98be3db16dea",
+  "baselineProductionCommit": "e8c6ee165761f2e89baa6612b96324310def187a",
+  "baselineSnapshotCommit": "9815d4e8c04e124279cdabbc55de78c07a064371",
+  "order": [
+    "A1",
+    "A2",
+    "A3",
+    "B1",
+    "B2",
+    "A4"
+  ],
+  "samplesPerPathPerBatch": 100,
+  "warmupsPerPathPerBatch": 3,
+  "summaryPolicy": "Independent batches only, no pooled medians or pooled p95. p95 is descriptive nearest-rank, not a confidence bound. Noise includes observed A1/A2 difference and the span of all four A batches, not an acceptance budget. Paired differences are B1-A3 and B2-A4.",
+  "methodology": "Trusted event.timeStamp on common window capture; first matching DOM observed by mutation/scroll/event microtasks; two rAF proxy separately. Old listener-phase/rAF-polling comparison withdrawn. Common paths normalize geometry/open groups/hash; candidate-only manual resume has no equivalent old contract.",
+  "unmeasured": [
+    "photon latency",
+    "hardware/OS input latency",
+    "dropped frames",
+    "isolated layout cost",
+    "cold or lazy mounts",
+    "total/live Rust memory",
+    "Android native performance"
+  ],
+  "hosts": {
+    "web": {
+      "batches": {
+        "A1": {
+          "reportSha256": "a0d81871a00c1e28638943bd8dc11239201a1ae3b2a20b0a1834bdfd1a0e87d1",
+          "artifactDirectory": "target\\directory-review-20261003\\web-A1",
+          "recordedAt": "2026-10-03T10:15:06.576Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 33.70000001788139,
+                  "p95Ms": 38.900000005960464,
+                  "minMs": 21.30000001192093,
+                  "maxMs": 44.5
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 66.6000000089407,
+                  "p95Ms": 78.40000000596046,
+                  "minMs": 54,
+                  "maxMs": 81.59999999403954
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 33.0,
+                  "p95Ms": 37.80000001192093,
+                  "minMs": 20.30000001192093,
+                  "maxMs": 43.20000001788139
+                }
+              },
+              "firstWarmup": {
+                "domMs": 49.099999994039536,
+                "proxyMs": 81.89999997615814,
+                "listenerLagMs": 48.5,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.699999988079071,
+                  "p95Ms": 0.9000000059604645,
+                  "minMs": 0.5,
+                  "maxMs": 1.199999988079071
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.69999998807907,
+                  "p95Ms": 31.19999998807907,
+                  "minMs": 25.69999998807907,
+                  "maxMs": 32.69999998807907
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 1.199999988079071,
+                "proxyMs": 27.19999998807907,
+                "listenerLagMs": 0.19999998807907104,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.699999988079071,
+                  "p95Ms": 1,
+                  "minMs": 0.5,
+                  "maxMs": 1.199999988079071
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 30.900000005960464,
+                  "p95Ms": 32.900000005960464,
+                  "minMs": 28.900000005960464,
+                  "maxMs": 34.30000001192093
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 1,
+                "proxyMs": 31.099999994039536,
+                "listenerLagMs": 0.19999998807907104,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.5999999940395355,
+                  "p95Ms": 0.9000000059604645,
+                  "minMs": 0.3999999761581421,
+                  "maxMs": 1.0999999940395355
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 30.899999991059303,
+                  "p95Ms": 36,
+                  "minMs": 26.099999994039536,
+                  "maxMs": 41.900000005960464
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.3999999761581421
+                }
+              },
+              "firstWarmup": {
+                "domMs": 0.7999999821186066,
+                "proxyMs": 30.299999982118607,
+                "listenerLagMs": 0.29999998211860657,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 547.3500000089407,
+                  "p95Ms": 554.0999999940395,
+                  "minMs": 535.9000000059605,
+                  "maxMs": 563.2999999821186
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 563.5999999940395,
+                  "p95Ms": 570.3999999761581,
+                  "minMs": 553.3000000119209,
+                  "maxMs": 578.5999999940395
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.4000000059604645,
+                  "minMs": 0,
+                  "maxMs": 0.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 544.1999999880791,
+                "proxyMs": 565.8999999761581,
+                "listenerLagMs": 0.29999998211860657,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            }
+          }
+        },
+        "A2": {
+          "reportSha256": "b61292196cc944066784687816f0cd59669713ef2ac1e1eb98e0e0490e80303f",
+          "artifactDirectory": "target\\directory-review-20261003\\web-A2",
+          "recordedAt": "2026-10-03T10:17:33.499Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 33.849999994039536,
+                  "p95Ms": 42.400000005960464,
+                  "minMs": 22.69999998807907,
+                  "maxMs": 47.89999997615814
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 66.2000000178814,
+                  "p95Ms": 77.69999998807907,
+                  "minMs": 54.80000001192093,
+                  "maxMs": 85.59999999403954
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 33.1499999910593,
+                  "p95Ms": 41.69999998807907,
+                  "minMs": 22.099999994039536,
+                  "maxMs": 46.69999998807907
+                }
+              },
+              "firstWarmup": {
+                "domMs": 49.599999994039536,
+                "proxyMs": 82.30000001192093,
+                "listenerLagMs": 49,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.699999988079071,
+                  "p95Ms": 1.2000000178813934,
+                  "minMs": 0.4000000059604645,
+                  "maxMs": 1.9000000059604645
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.799999997019768,
+                  "p95Ms": 39.5,
+                  "minMs": 23.700000017881393,
+                  "maxMs": 44.10000002384186
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 1.100000023841858
+                }
+              },
+              "firstWarmup": {
+                "domMs": 1.300000011920929,
+                "proxyMs": 30.900000005960464,
+                "listenerLagMs": 0.30000001192092896,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.6500000059604645,
+                  "p95Ms": 1.199999988079071,
+                  "minMs": 0.5,
+                  "maxMs": 1.4000000059604645
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 31.0,
+                  "p95Ms": 36,
+                  "minMs": 26.80000001192093,
+                  "maxMs": 40.400000005960464
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.4000000059604645,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 0.9000000059604645,
+                "proxyMs": 39,
+                "listenerLagMs": 0.19999998807907104,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.5999999940395355,
+                  "p95Ms": 1.199999988079071,
+                  "minMs": 0.3999999761581421,
+                  "maxMs": 1.7000000178813934
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 30.899999991059303,
+                  "p95Ms": 40.099999994039536,
+                  "minMs": 27.900000005960464,
+                  "maxMs": 51.69999998807907
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.7000000178813934
+                }
+              },
+              "firstWarmup": {
+                "domMs": 1.5999999940395355,
+                "proxyMs": 34.29999998211861,
+                "listenerLagMs": 0.5999999940395355,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 550.0000000149012,
+                  "p95Ms": 650,
+                  "minMs": 539.1999999880791,
+                  "maxMs": 730.8000000119209
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 568.9500000029802,
+                  "p95Ms": 660.2999999821186,
+                  "minMs": 556.1999999880791,
+                  "maxMs": 753.8000000119209
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.20000001788139343,
+                  "p95Ms": 0.5,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 4.699999988079071
+                }
+              },
+              "firstWarmup": {
+                "domMs": 537.3000000119209,
+                "proxyMs": 566.9000000059605,
+                "listenerLagMs": 0.5999999940395355,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            }
+          }
+        },
+        "A3": {
+          "reportSha256": "856ff399a13ab66d2f3cbd47dea6d0626ffec0bded98388565bcc69da640454d",
+          "artifactDirectory": "target\\directory-review-20261003\\web-A3",
+          "recordedAt": "2026-10-03T10:20:12.401Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 33.45000000298023,
+                  "p95Ms": 38.29999998211861,
+                  "minMs": 25.799999982118607,
+                  "maxMs": 42.5
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 66.0,
+                  "p95Ms": 69.60000002384186,
+                  "minMs": 56.900000005960464,
+                  "maxMs": 77
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 32.79999999701977,
+                  "p95Ms": 37.69999998807907,
+                  "minMs": 24.69999998807907,
+                  "maxMs": 41.400000005960464
+                }
+              },
+              "firstWarmup": {
+                "domMs": 48.89999997615814,
+                "proxyMs": 82,
+                "listenerLagMs": 48.19999998807907,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.699999988079071,
+                  "p95Ms": 1.300000011920929,
+                  "minMs": 0.5,
+                  "maxMs": 1.800000011920929
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.69999998807907,
+                  "p95Ms": 33,
+                  "minMs": 25,
+                  "maxMs": 44
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 1.300000011920929,
+                "proxyMs": 25.700000017881393,
+                "listenerLagMs": 0.30000001192092896,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.6000000238418579,
+                  "p95Ms": 1.0999999940395355,
+                  "minMs": 0.5,
+                  "maxMs": 1.7999999821186066
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 31.299999982118607,
+                  "p95Ms": 35.599999994039536,
+                  "minMs": 27.599999994039536,
+                  "maxMs": 40
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 1.5,
+                "proxyMs": 30.200000017881393,
+                "listenerLagMs": 0.7000000178813934,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.5999999940395355,
+                  "p95Ms": 0.9000000059604645,
+                  "minMs": 0.4000000059604645,
+                  "maxMs": 1
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 30.69999998807907,
+                  "p95Ms": 34.400000005960464,
+                  "minMs": 27.400000005960464,
+                  "maxMs": 36.599999994039536
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.30000001192092896
+                }
+              },
+              "firstWarmup": {
+                "domMs": 0.800000011920929,
+                "proxyMs": 30.30000001192093,
+                "listenerLagMs": 0.30000001192092896,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 546.9000000059605,
+                  "p95Ms": 554.1000000238419,
+                  "minMs": 535.6999999880791,
+                  "maxMs": 574.3000000119209
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 563.5999999940395,
+                  "p95Ms": 573.2999999821186,
+                  "minMs": 551.5,
+                  "maxMs": 590.3000000119209
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 543.5,
+                "proxyMs": 561.8000000119209,
+                "listenerLagMs": 0.20000001788139343,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            }
+          }
+        },
+        "B1": {
+          "reportSha256": "472fdf38b2165a839e4056c44cefba7e05fdf3b7b53d5eb11aa92fa5d3350ddc",
+          "artifactDirectory": "target\\directory-review-20261003\\web-B1",
+          "recordedAt": "2026-10-03T10:22:39.043Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 34.599999994039536,
+                  "p95Ms": 39.29999998211861,
+                  "minMs": 31.69999998807907,
+                  "maxMs": 41.19999998807907
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 66.69999998807907,
+                  "p95Ms": 75.5,
+                  "minMs": 64.40000000596046,
+                  "maxMs": 82.19999998807907
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 34.0,
+                  "p95Ms": 38.79999998211861,
+                  "minMs": 31.299999982118607,
+                  "maxMs": 40.79999998211861
+                }
+              },
+              "firstWarmup": {
+                "domMs": 33.599999994039536,
+                "proxyMs": 65,
+                "listenerLagMs": 33,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.5999999940395355,
+                  "p95Ms": 1,
+                  "minMs": 0.30000001192092896,
+                  "maxMs": 1.300000011920929
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 30.0,
+                  "p95Ms": 33.099999994039536,
+                  "minMs": 26.200000017881393,
+                  "maxMs": 38.400000005960464
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 2,
+                "proxyMs": 27.80000001192093,
+                "listenerLagMs": 0.5999999940395355,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.6000000238418579,
+                  "p95Ms": 0.9000000059604645,
+                  "minMs": 0.5,
+                  "maxMs": 1.399999976158142
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 31.600000008940697,
+                  "p95Ms": 35.29999998211861,
+                  "minMs": 29.19999998807907,
+                  "maxMs": 39.5
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 1.7000000178813934,
+                "proxyMs": 30.30000001192093,
+                "listenerLagMs": 0.4000000059604645,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.6000000089406967,
+                  "p95Ms": 1.300000011920929,
+                  "minMs": 0.4000000059604645,
+                  "maxMs": 1.5
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 30.849999979138374,
+                  "p95Ms": 34,
+                  "minMs": 26.5,
+                  "maxMs": 40.400000005960464
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.4000000059604645,
+                  "minMs": 0,
+                  "maxMs": 0.699999988079071
+                }
+              },
+              "firstWarmup": {
+                "domMs": 0.699999988079071,
+                "proxyMs": 31.599999994039536,
+                "listenerLagMs": 0.09999999403953552,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 547.4000000059605,
+                  "p95Ms": 553.0999999940395,
+                  "minMs": 541.2999999821186,
+                  "maxMs": 556.9000000059605
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 564.0,
+                  "p95Ms": 570.1999999880791,
+                  "minMs": 556,
+                  "maxMs": 572.8999999761581
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 542.5999999940395,
+                "proxyMs": 558.8999999761581,
+                "listenerLagMs": 0.3999999761581421,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            },
+            "resume-same-group": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 50.20000000298023,
+                  "p95Ms": 55.20000001788139,
+                  "minMs": 43.099999994039536,
+                  "maxMs": 59.099999994039536
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 82.2000000178814,
+                  "p95Ms": 88.19999998807907,
+                  "minMs": 75.80000001192093,
+                  "maxMs": 96.40000000596046
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 49.29999998211861,
+                  "p95Ms": 54,
+                  "minMs": 42.20000001788139,
+                  "maxMs": 57.69999998807907
+                }
+              },
+              "firstWarmup": {
+                "domMs": 51,
+                "proxyMs": 82.80000001192093,
+                "listenerLagMs": 49.900000005960464,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "resume-cross-group": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 50.39999997615814,
+                  "p95Ms": 53.20000001788139,
+                  "minMs": 42.900000005960464,
+                  "maxMs": 58.400000005960464
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 82.5,
+                  "p95Ms": 83.89999997615814,
+                  "minMs": 75.7000000178814,
+                  "maxMs": 95.09999999403954
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 49.39999997615814,
+                  "p95Ms": 52.10000002384186,
+                  "minMs": 41.900000005960464,
+                  "maxMs": 57.099999994039536
+                }
+              },
+              "firstWarmup": {
+                "domMs": 50.30000001192093,
+                "proxyMs": 81.5,
+                "listenerLagMs": 48.900000005960464,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            }
+          }
+        },
+        "B2": {
+          "reportSha256": "7e3876e70de43cbd28da4a9d938068422dc13de10015d02f7a18555c5053cdbc",
+          "artifactDirectory": "target\\directory-review-20261003\\web-B2",
+          "recordedAt": "2026-10-03T10:27:10.907Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 34.3500000089407,
+                  "p95Ms": 40.30000001192093,
+                  "minMs": 30.399999976158142,
+                  "maxMs": 44.5
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 67.40000000596046,
+                  "p95Ms": 79.19999998807907,
+                  "minMs": 64.2999999821186,
+                  "maxMs": 85.5
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 33.70000001788139,
+                  "p95Ms": 39.70000001788139,
+                  "minMs": 30,
+                  "maxMs": 43.79999998211861
+                }
+              },
+              "firstWarmup": {
+                "domMs": 36.80000001192093,
+                "proxyMs": 73.80000001192093,
+                "listenerLagMs": 35.69999998807907,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.5999999940395355,
+                  "p95Ms": 1.300000011920929,
+                  "minMs": 0.3999999761581421,
+                  "maxMs": 1.5999999940395355
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 30.24999998509884,
+                  "p95Ms": 34.599999994039536,
+                  "minMs": 23.799999982118607,
+                  "maxMs": 37.69999998807907
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.4000000059604645,
+                  "minMs": 0,
+                  "maxMs": 0.7000000178813934
+                }
+              },
+              "firstWarmup": {
+                "domMs": 4.0999999940395355,
+                "proxyMs": 22.19999998807907,
+                "listenerLagMs": 1.899999976158142,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.6000000238418579,
+                  "p95Ms": 0.9000000059604645,
+                  "minMs": 0.5,
+                  "maxMs": 1.2000000178813934
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 31.549999997019768,
+                  "p95Ms": 34.900000005960464,
+                  "minMs": 29.5,
+                  "maxMs": 37
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 3.300000011920929,
+                "proxyMs": 30.30000001192093,
+                "listenerLagMs": 1.100000023841858,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.5999999940395355,
+                  "p95Ms": 1,
+                  "minMs": 0.4000000059604645,
+                  "maxMs": 1.399999976158142
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 31.19999998807907,
+                  "p95Ms": 39.69999998807907,
+                  "minMs": 28.200000017881393,
+                  "maxMs": 45
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 0.5999999940395355,
+                "proxyMs": 40.5,
+                "listenerLagMs": 0.19999998807907104,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 547.1999999880791,
+                  "p95Ms": 556.7999999821186,
+                  "minMs": 534.5,
+                  "maxMs": 566.6999999880791
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 563.7999999821186,
+                  "p95Ms": 576.3999999761581,
+                  "minMs": 553.0999999940395,
+                  "maxMs": 594.5
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.3999999761581421,
+                  "minMs": 0,
+                  "maxMs": 0.6000000238418579
+                }
+              },
+              "firstWarmup": {
+                "domMs": 540.4000000059605,
+                "proxyMs": 557.7999999821186,
+                "listenerLagMs": 0.29999998211860657,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            },
+            "resume-same-group": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 50.45000000298023,
+                  "p95Ms": 52.79999998211861,
+                  "minMs": 46.80000001192093,
+                  "maxMs": 57.30000001192093
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 82.8999999910593,
+                  "p95Ms": 87.2999999821186,
+                  "minMs": 80.40000000596046,
+                  "maxMs": 95.40000000596046
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 49.5,
+                  "p95Ms": 51.599999994039536,
+                  "minMs": 45.900000005960464,
+                  "maxMs": 55.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 52.5,
+                "proxyMs": 82.90000000596046,
+                "listenerLagMs": 50,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "resume-cross-group": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 50.5,
+                  "p95Ms": 54,
+                  "minMs": 41.19999998807907,
+                  "maxMs": 58.400000005960464
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 82.40000000596046,
+                  "p95Ms": 87.19999998807907,
+                  "minMs": 72.90000000596046,
+                  "maxMs": 90.59999999403954
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 49.30000001192093,
+                  "p95Ms": 52.599999994039536,
+                  "minMs": 40.19999998807907,
+                  "maxMs": 57.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 50.400000005960464,
+                "proxyMs": 84.19999998807907,
+                "listenerLagMs": 49,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            }
+          }
+        },
+        "A4": {
+          "reportSha256": "ea88a2914d7022a6bf9e715a60e3418e3f8c1d72efb9152a582293c1b2a65d86",
+          "artifactDirectory": "target\\directory-review-20261003\\web-A4",
+          "recordedAt": "2026-10-03T10:31:43.154Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/154.0.8037.93",
+            "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+            "jsVersion": "15.4.80.19"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "dpr": 1,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 33.39999997615814,
+                  "p95Ms": 37.29999998211861,
+                  "minMs": 17.600000023841858,
+                  "maxMs": 43.20000001788139
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 65.89999997615814,
+                  "p95Ms": 69.10000002384186,
+                  "minMs": 50.70000001788139,
+                  "maxMs": 80.5
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 32.5,
+                  "p95Ms": 36.30000001192093,
+                  "minMs": 16.900000005960464,
+                  "maxMs": 42
+                }
+              },
+              "firstWarmup": {
+                "domMs": 51,
+                "proxyMs": 83.2999999821186,
+                "listenerLagMs": 50.29999998211861,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.6000000238418579,
+                  "p95Ms": 1.0999999940395355,
+                  "minMs": 0.5,
+                  "maxMs": 1.199999988079071
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 30.0,
+                  "p95Ms": 32,
+                  "minMs": 26.30000001192093,
+                  "maxMs": 36.60000002384186
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 1.399999976158142,
+                "proxyMs": 17.5,
+                "listenerLagMs": 0.09999999403953552,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.5999999940395355,
+                  "p95Ms": 1,
+                  "minMs": 0.4000000059604645,
+                  "maxMs": 1.2000000178813934
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 31.19999998807907,
+                  "p95Ms": 33.400000005960464,
+                  "minMs": 27.5,
+                  "maxMs": 38.20000001788139
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 1.4000000059604645,
+                "proxyMs": 31.80000001192093,
+                "listenerLagMs": 0.5,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 0.5999999940395355,
+                  "p95Ms": 0.800000011920929,
+                  "minMs": 0.3999999761581421,
+                  "maxMs": 1
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 31.0,
+                  "p95Ms": 36.099999994039536,
+                  "minMs": 27.599999994039536,
+                  "maxMs": 38.5
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.10000002384185791,
+                  "p95Ms": 0.20000001788139343,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 0.7000000178813934,
+                "proxyMs": 33.20000001788139,
+                "listenerLagMs": 0.20000001788139343,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 546.7999999821186,
+                  "p95Ms": 552.0999999940395,
+                  "minMs": 537.5,
+                  "maxMs": 561.7999999821186
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 563.5,
+                  "p95Ms": 570.5,
+                  "minMs": 554,
+                  "maxMs": 579.1999999880791
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.29999998211860657,
+                  "minMs": 0,
+                  "maxMs": 0.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 546.6999999880791,
+                "proxyMs": 562.8000000119209,
+                "listenerLagMs": 0.19999998807907104,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            }
+          }
+        }
+      },
+      "pairedDifferences": {
+        "scroll-item": {
+          "dom": {
+            "B1-A3": {
+              "medianMs": 1.1499999910593033,
+              "p95Ms": 1.0
+            },
+            "B2-A4": {
+              "medianMs": 0.9500000327825546,
+              "p95Ms": 3.0000000298023224
+            }
+          },
+          "proxy": {
+            "B1-A3": {
+              "medianMs": 0.699999988079071,
+              "p95Ms": 5.899999976158142
+            },
+            "B2-A4": {
+              "medianMs": 1.5000000298023224,
+              "p95Ms": 10.099999964237213
+            }
+          }
+        },
+        "expand-mouse": {
+          "dom": {
+            "B1-A3": {
+              "medianMs": -0.09999999403953552,
+              "p95Ms": -0.30000001192092896
+            },
+            "B2-A4": {
+              "medianMs": -2.9802322387695312e-08,
+              "p95Ms": 0.20000001788139343
+            }
+          },
+          "proxy": {
+            "B1-A3": {
+              "medianMs": 0.30000001192092896,
+              "p95Ms": 0.09999999403953552
+            },
+            "B2-A4": {
+              "medianMs": 0.2499999850988388,
+              "p95Ms": 2.5999999940395355
+            }
+          }
+        },
+        "expand-Enter": {
+          "dom": {
+            "B1-A3": {
+              "medianMs": 0.0,
+              "p95Ms": -0.19999998807907104
+            },
+            "B2-A4": {
+              "medianMs": 2.9802322387695312e-08,
+              "p95Ms": -0.09999999403953552
+            }
+          },
+          "proxy": {
+            "B1-A3": {
+              "medianMs": 0.30000002682209015,
+              "p95Ms": -0.30000001192092896
+            },
+            "B2-A4": {
+              "medianMs": 0.3500000089406967,
+              "p95Ms": 1.5
+            }
+          }
+        },
+        "expand-Space": {
+          "dom": {
+            "B1-A3": {
+              "medianMs": 1.4901161193847656e-08,
+              "p95Ms": 0.4000000059604645
+            },
+            "B2-A4": {
+              "medianMs": 0.0,
+              "p95Ms": 0.19999998807907104
+            }
+          },
+          "proxy": {
+            "B1-A3": {
+              "medianMs": 0.14999999105930328,
+              "p95Ms": -0.4000000059604645
+            },
+            "B2-A4": {
+              "medianMs": 0.19999998807907104,
+              "p95Ms": 3.5999999940395355
+            }
+          }
+        },
+        "navigate-align": {
+          "dom": {
+            "B1-A3": {
+              "medianMs": 0.5,
+              "p95Ms": -1.0000000298023224
+            },
+            "B2-A4": {
+              "medianMs": 0.4000000059604645,
+              "p95Ms": 4.699999988079071
+            }
+          },
+          "proxy": {
+            "B1-A3": {
+              "medianMs": 0.4000000059604645,
+              "p95Ms": -3.0999999940395355
+            },
+            "B2-A4": {
+              "medianMs": 0.29999998211860657,
+              "p95Ms": 5.899999976158142
+            }
+          }
+        }
+      },
+      "noise": {
+        "scroll-item": {
+          "dom": {
+            "aaDifference": {
+              "medianMs": 0.1499999761581421,
+              "p95Ms": 3.5
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.45000001788139343,
+              "p95Ms": 5.100000023841858
+            }
+          },
+          "proxy": {
+            "aaDifference": {
+              "medianMs": 0.3999999910593033,
+              "p95Ms": 0.7000000178813934
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.7000000327825546,
+              "p95Ms": 9.299999982118607
+            }
+          }
+        },
+        "expand-mouse": {
+          "dom": {
+            "aaDifference": {
+              "medianMs": 0.0,
+              "p95Ms": 0.30000001192092896
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.09999996423721313,
+              "p95Ms": 0.4000000059604645
+            }
+          },
+          "proxy": {
+            "aaDifference": {
+              "medianMs": 0.10000000894069672,
+              "p95Ms": 8.300000011920929
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.30000001192092896,
+              "p95Ms": 8.300000011920929
+            }
+          }
+        },
+        "expand-Enter": {
+          "dom": {
+            "aaDifference": {
+              "medianMs": 0.04999998211860657,
+              "p95Ms": 0.19999998807907104
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.09999999403953552,
+              "p95Ms": 0.19999998807907104
+            }
+          },
+          "proxy": {
+            "aaDifference": {
+              "medianMs": 0.09999999403953552,
+              "p95Ms": 3.0999999940395355
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.3999999761581421,
+              "p95Ms": 3.0999999940395355
+            }
+          }
+        },
+        "expand-Space": {
+          "dom": {
+            "aaDifference": {
+              "medianMs": 0.0,
+              "p95Ms": 0.29999998211860657
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.0,
+              "p95Ms": 0.3999999761581421
+            }
+          },
+          "proxy": {
+            "aaDifference": {
+              "medianMs": 0.0,
+              "p95Ms": 4.0999999940395355
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.30000001192092896,
+              "p95Ms": 5.699999988079071
+            }
+          }
+        },
+        "navigate-align": {
+          "dom": {
+            "aaDifference": {
+              "medianMs": 2.6500000059604645,
+              "p95Ms": 95.90000000596046
+            },
+            "allBaselineSpan": {
+              "medianMs": 3.2000000327825546,
+              "p95Ms": 97.90000000596046
+            }
+          },
+          "proxy": {
+            "aaDifference": {
+              "medianMs": 5.350000008940697,
+              "p95Ms": 89.90000000596046
+            },
+            "allBaselineSpan": {
+              "medianMs": 5.450000002980232,
+              "p95Ms": 89.90000000596046
+            }
+          }
+        }
+      },
+      "metadata": {
+        "A": {
+          "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+          "build": "release",
+          "platform": "Windows 11 10.0.26200 / Chrome headless Web; not WebView2",
+          "artifactSha256": "976365428eafe6f5e44b851656e90d7737cae0704584d8cfc691a1f6222deac9",
+          "artifact": "target\\directory-review-20261003\\web-A\\assets\\rssr-app_bg-dxhc6563ed5bf8e2fc6.wasm",
+          "refreshRateHz": 165,
+          "refreshRateNote": "Physical NVIDIA display reports 2560x1600 at 165Hz; headless rAF cadence is separate, not a displayed frame rate",
+          "browserLaunch": "Chrome headless=new, disable-gpu; isolated profile, no proxy",
+          "node": "Node v24.21.0; existing repository CDP module",
+          "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+          "batchCount": 1,
+          "phase": "independent serial batch; A/A then A/B and B/A",
+          "variant": "A",
+          "bootstrapJs": "assets/rssr-app-dxh6b4c803bcebbecf3.js",
+          "toolchain": {
+            "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-pc-windows-msvc\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+            "dx": "dioxus 0.7.10 (57d6794)",
+            "dioxus": "0.7.9 (Cargo.lock)",
+            "webCommand": "dx build --platform web --package rssr-app --release --locked --debug-symbols false",
+            "nativeCommand": "cargo build --release --locked -p rssr-app -p rssr-cli -j 1"
+          },
+          "sampleCount": 100,
+          "measureFollow": false,
+          "methodologyVersion": 2,
+          "sourceCommit": "9815d4e8c04e124279cdabbc55de78c07a064371",
+          "sourceNote": "Git archive of 9815d4e8: difference from e8c6ee1 in crates is limited to cfg(test) additions/imports; release production behavior unchanged.",
+          "measurementSourceHashesLf": {
+            "scripts/browser/directory_contract.mjs": "2a0053760f05a26c013b687a5111b1aaaa19267587e01762332314a22ee0debf",
+            "scripts/browser/directory_performance.mjs": "456067012f61a7fbf02958eb8d0f2491ffc86a09a341581d1e462c8f34980481",
+            "scripts/browser/rssr_small_viewport_assertions.mjs": "d2bf68c60617d0a1a510b215ccec0b10c13c695317d9468bbf5e18123a0d5f25",
+            "scripts/browser/cdp_session.mjs": "69517ea5604e4a7d69360105c8b7d4a66b4a236170cf234bd35eeb05eaaa3f30"
+          },
+          "runOrder": [
+            "A1",
+            "A2",
+            "A3",
+            "B1",
+            "B2",
+            "A4"
+          ]
+        },
+        "B": {
+          "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+          "build": "release",
+          "platform": "Windows 11 10.0.26200 / Chrome headless Web; not WebView2",
+          "artifactSha256": "9c70408925716d6a79c22f3747fcfcb9524bcc5cccff77e49502cdb26faa427a",
+          "artifact": "target\\directory-review-20261003\\web-B\\assets\\rssr-app_bg-dxh12e14c7e3e5c257c.wasm",
+          "refreshRateHz": 165,
+          "refreshRateNote": "Physical NVIDIA display reports 2560x1600 at 165Hz; headless rAF cadence is separate, not a displayed frame rate",
+          "browserLaunch": "Chrome headless=new, disable-gpu; isolated profile, no proxy",
+          "node": "Node v24.21.0; existing repository CDP module",
+          "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+          "batchCount": 1,
+          "phase": "independent serial batch; A/A then A/B and B/A",
+          "variant": "B",
+          "candidateSourceHashes": {
+            "crates/rssr-app/src/pages/entries_page/directory.rs": "d2995337b0d65e721bfeb99b834c0a467e2eb70824f13358b9141ada62f985a6",
+            "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
+            "crates/rssr-app/src/pages/entries_page/directory/adapter.js": "13cf8dab7f41590463b399ae943326e51d0d37022ade2277ace80850ec00587f",
+            "crates/rssr-app/src/pages/entries_page/controls.rs": "5a0b0ff6bebbcfd042e0613ad9a6902365b5ce9569e555e33df0519b96b219cb",
+            "crates/rssr-app/src/pages/entries_page/mod.rs": "1591ae33eb318aa3ce53112b7f5e774a2793f419a4951bd679e4c0266de12b17",
+            "crates/rssr-app/src/pages/entries_page/facade.rs": "ed31ef397117765a8392e36b90b5487577abed137d52d45652a62e4fa316f82f",
+            "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "663f4cf5ea0b83be0bc126e3f74ebf0bc68940162d73b1694832618e166c66d2"
+          },
+          "bootstrapJs": "assets/rssr-app-dxha4394d3c61e24e.js",
+          "candidateCommit": "282592f816c87746c8354ee7981b98be3db16dea",
+          "toolchain": {
+            "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-pc-windows-msvc\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+            "dx": "dioxus 0.7.10 (57d6794)",
+            "dioxus": "0.7.9 (Cargo.lock)",
+            "webCommand": "dx build --platform web --package rssr-app --release --locked --debug-symbols false",
+            "nativeCommand": "cargo build --release --locked -p rssr-app -p rssr-cli -j 1"
+          },
+          "sampleCount": 100,
+          "measureFollow": true,
+          "methodologyVersion": 2,
+          "candidateParentCommit": "9d1a4bf4ef56b426dc5f9ca48261f639e62b7af7",
+          "candidateSourceHashesLf": {
+            "crates/rssr-app/src/pages/entries_page/directory.rs": "d2995337b0d65e721bfeb99b834c0a467e2eb70824f13358b9141ada62f985a6",
+            "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
+            "crates/rssr-app/src/pages/entries_page/directory/adapter.js": "13cf8dab7f41590463b399ae943326e51d0d37022ade2277ace80850ec00587f",
+            "crates/rssr-app/src/pages/entries_page/controls.rs": "5a0b0ff6bebbcfd042e0613ad9a6902365b5ce9569e555e33df0519b96b219cb",
+            "crates/rssr-app/src/pages/entries_page/mod.rs": "1591ae33eb318aa3ce53112b7f5e774a2793f419a4951bd679e4c0266de12b17",
+            "crates/rssr-app/src/pages/entries_page/facade.rs": "ed31ef397117765a8392e36b90b5487577abed137d52d45652a62e4fa316f82f",
+            "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "146b13ad2ce2e438a4260a670e2fc12ff4f063419d3a7cb5e4485ea247df89ae"
+          },
+          "measurementSourceHashesLf": {
+            "scripts/browser/directory_contract.mjs": "2a0053760f05a26c013b687a5111b1aaaa19267587e01762332314a22ee0debf",
+            "scripts/browser/directory_performance.mjs": "456067012f61a7fbf02958eb8d0f2491ffc86a09a341581d1e462c8f34980481",
+            "scripts/browser/rssr_small_viewport_assertions.mjs": "d2bf68c60617d0a1a510b215ccec0b10c13c695317d9468bbf5e18123a0d5f25",
+            "scripts/browser/cdp_session.mjs": "69517ea5604e4a7d69360105c8b7d4a66b4a236170cf234bd35eeb05eaaa3f30"
+          },
+          "runOrder": [
+            "A1",
+            "A2",
+            "A3",
+            "B1",
+            "B2",
+            "A4"
+          ]
+        }
+      },
+      "rawCsv": "docs\\testing\\baselines\\2026-10-03-directory-review-web.csv",
+      "rawCsvSha256Lf": "9d47f8da9d74d06e995e7e6b6ef11c75713ab60f04027ac78d0a738354d7024b"
+    },
+    "native": {
+      "batches": {
+        "A1": {
+          "reportSha256": "d5b11102f338fd6319d79d475c1dc55d626c877ece2b172b7f1810af109031aa",
+          "artifactDirectory": "target\\directory-review-20261003\\native-A1",
+          "recordedAt": "2026-10-03T10:34:11.649Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 18.400000005960464,
+                  "p95Ms": 18.80000001192093,
+                  "minMs": 17.19999998807907,
+                  "maxMs": 19
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.69999998807907,
+                  "p95Ms": 30,
+                  "minMs": 28.599999994039536,
+                  "maxMs": 30.099999994039536
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 17.700000017881393,
+                  "p95Ms": 18,
+                  "minMs": 16.599999994039536,
+                  "maxMs": 18.30000001192093
+                }
+              },
+              "firstWarmup": {
+                "domMs": 17,
+                "proxyMs": 28.19999998807907,
+                "listenerLagMs": 16.399999976158142,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 3.2000000178813934,
+                  "p95Ms": 4.300000011920929,
+                  "minMs": 2.5,
+                  "maxMs": 6.300000011920929
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 14.699999988079071,
+                  "p95Ms": 15.400000005960464,
+                  "minMs": 12.599999994039536,
+                  "maxMs": 17.900000005960464
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.29999998211860657,
+                  "p95Ms": 0.5,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 1
+                }
+              },
+              "firstWarmup": {
+                "domMs": 3.800000011920929,
+                "proxyMs": 12.5,
+                "listenerLagMs": 0.20000001788139343,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 3.0,
+                  "p95Ms": 3.800000011920929,
+                  "minMs": 2.5,
+                  "maxMs": 4
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 10.0,
+                  "p95Ms": 10.599999994039536,
+                  "minMs": 7.700000017881393,
+                  "maxMs": 16.5
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.5,
+                  "p95Ms": 0.7000000178813934,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 1.100000023841858
+                }
+              },
+              "firstWarmup": {
+                "domMs": 5,
+                "proxyMs": 16,
+                "listenerLagMs": 0.5,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 3.9000000059604645,
+                  "p95Ms": 4.800000011920929,
+                  "minMs": 2.5999999940395355,
+                  "maxMs": 5
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 15.450000002980232,
+                  "p95Ms": 16.19999998807907,
+                  "minMs": 13.300000011920929,
+                  "maxMs": 16.69999998807907
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.10000002384185791,
+                  "p95Ms": 0.20000001788139343,
+                  "minMs": 0,
+                  "maxMs": 0.29999998211860657
+                }
+              },
+              "firstWarmup": {
+                "domMs": 2.9000000059604645,
+                "proxyMs": 13.5,
+                "listenerLagMs": 0.30000001192092896,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 644.5,
+                  "p95Ms": 645.4000000059605,
+                  "minMs": 639.0999999940395,
+                  "maxMs": 645.5
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 650.5,
+                  "p95Ms": 651.4000000059605,
+                  "minMs": 645.1999999880791,
+                  "maxMs": 651.6999999880791
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 644.3000000119209,
+                "proxyMs": 650.4000000059605,
+                "listenerLagMs": 0.30000001192092896,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            }
+          },
+          "nativeLaunch": {
+            "pid": 54336,
+            "target": "2EABBC67F480CFCF174BBA0CA6C9E696",
+            "exe": "9C8B490D03C30B9CD061CA5E0663391B92D7CC1FC84C4809B22478E3DF0EE307",
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          }
+        },
+        "A2": {
+          "reportSha256": "aaa2d252f1e263e85bdd9281d45f649c468233dc492ccfca4986015751a18b49",
+          "artifactDirectory": "target\\directory-review-20261003\\native-A2",
+          "recordedAt": "2026-10-03T10:36:01.251Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 18.400000005960464,
+                  "p95Ms": 18.80000001192093,
+                  "minMs": 17.599999994039536,
+                  "maxMs": 19.099999994039536
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.700000017881393,
+                  "p95Ms": 30.099999994039536,
+                  "minMs": 28.80000001192093,
+                  "maxMs": 30.299999982118607
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 17.700000017881393,
+                  "p95Ms": 18,
+                  "minMs": 16.900000005960464,
+                  "maxMs": 18.100000023841858
+                }
+              },
+              "firstWarmup": {
+                "domMs": 18,
+                "proxyMs": 29.399999976158142,
+                "listenerLagMs": 17.299999982118607,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 3.5,
+                  "p95Ms": 4.699999988079071,
+                  "minMs": 2.4000000059604645,
+                  "maxMs": 6.0999999940395355
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 15.0,
+                  "p95Ms": 15.699999988079071,
+                  "minMs": 12.699999988079071,
+                  "maxMs": 17.799999982118607
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.20000000298023224,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 4.0999999940395355,
+                "proxyMs": 12.5,
+                "listenerLagMs": 0.30000001192092896,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 2.7000000178813934,
+                  "p95Ms": 3.2999999821186066,
+                  "minMs": 2.300000011920929,
+                  "maxMs": 4
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 9.900000005960464,
+                  "p95Ms": 10.399999976158142,
+                  "minMs": 7.5,
+                  "maxMs": 12.599999994039536
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.30000001192092896,
+                  "p95Ms": 0.5,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 6.100000023841858,
+                "proxyMs": 16.200000017881393,
+                "listenerLagMs": 0.30000001192092896,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 3.7000000029802322,
+                  "p95Ms": 5.299999982118607,
+                  "minMs": 2.300000011920929,
+                  "maxMs": 5.800000011920929
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 15.200000017881393,
+                  "p95Ms": 15.900000005960464,
+                  "minMs": 12.900000005960464,
+                  "maxMs": 16.400000005960464
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.10000002384185791,
+                  "p95Ms": 0.20000001788139343,
+                  "minMs": 0,
+                  "maxMs": 0.29999998211860657
+                }
+              },
+              "firstWarmup": {
+                "domMs": 3.9000000059604645,
+                "proxyMs": 15.700000017881393,
+                "listenerLagMs": 0.20000001788139343,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 644.6999999880791,
+                  "p95Ms": 645.5,
+                  "minMs": 639.1999999880791,
+                  "maxMs": 645.9000000059605
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 650.6999999880791,
+                  "p95Ms": 651.5999999940395,
+                  "minMs": 645.1999999880791,
+                  "maxMs": 651.8000000119209
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 643.2999999821186,
+                "proxyMs": 649.2999999821186,
+                "listenerLagMs": 0.29999998211860657,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            }
+          },
+          "nativeLaunch": {
+            "pid": 33036,
+            "target": "8DC15FE91BC650C9480271AB9F329567",
+            "exe": "9C8B490D03C30B9CD061CA5E0663391B92D7CC1FC84C4809B22478E3DF0EE307",
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          }
+        },
+        "A3": {
+          "reportSha256": "f5f9c32ddaeeaaf5b6e7ca12365a5f2e387ca6227530e32afd60f0c37400eff6",
+          "artifactDirectory": "target\\directory-review-20261003\\native-A3",
+          "recordedAt": "2026-10-03T10:37:50.921Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 18.400000005960464,
+                  "p95Ms": 18.799999982118607,
+                  "minMs": 17.80000001192093,
+                  "maxMs": 19
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.700000002980232,
+                  "p95Ms": 30,
+                  "minMs": 29,
+                  "maxMs": 30.19999998807907
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 17.700000002980232,
+                  "p95Ms": 18,
+                  "minMs": 17,
+                  "maxMs": 18.200000017881393
+                }
+              },
+              "firstWarmup": {
+                "domMs": 18.600000023841858,
+                "proxyMs": 29.900000005960464,
+                "listenerLagMs": 17.900000005960464,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 3.4000000059604645,
+                  "p95Ms": 4,
+                  "minMs": 2.5,
+                  "maxMs": 5
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 15.0,
+                  "p95Ms": 15.5,
+                  "minMs": 12.899999976158142,
+                  "maxMs": 15.700000017881393
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.20000001788139343,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 3.7999999821186066,
+                "proxyMs": 13.799999982118607,
+                "listenerLagMs": 0.19999998807907104,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 2.9000000059604645,
+                  "p95Ms": 3.600000023841858,
+                  "minMs": 2.4000000059604645,
+                  "maxMs": 4.199999988079071
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 9.900000005960464,
+                  "p95Ms": 10.400000005960464,
+                  "minMs": 8.5,
+                  "maxMs": 10.5
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.4000000059604645,
+                  "p95Ms": 0.5999999940395355,
+                  "minMs": 0.19999998807907104,
+                  "maxMs": 0.699999988079071
+                }
+              },
+              "firstWarmup": {
+                "domMs": 4.300000011920929,
+                "proxyMs": 15.400000005960464,
+                "listenerLagMs": 0.30000001192092896,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 3.5999999940395355,
+                  "p95Ms": 4.399999976158142,
+                  "minMs": 2.5999999940395355,
+                  "maxMs": 5.0999999940395355
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 15.199999988079071,
+                  "p95Ms": 15.900000005960464,
+                  "minMs": 13.400000005960464,
+                  "maxMs": 16.299999982118607
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.09999999403953552,
+                  "p95Ms": 0.20000001788139343,
+                  "minMs": 0,
+                  "maxMs": 0.30000001192092896
+                }
+              },
+              "firstWarmup": {
+                "domMs": 3.899999976158142,
+                "proxyMs": 15.599999994039536,
+                "listenerLagMs": 0.19999998807907104,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 644.9500000029802,
+                  "p95Ms": 645.5999999940395,
+                  "minMs": 639.3000000119209,
+                  "maxMs": 646.8000000119209
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 651.0,
+                  "p95Ms": 651.6000000238419,
+                  "minMs": 645.3000000119209,
+                  "maxMs": 651.9000000059605
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 643.2000000178814,
+                "proxyMs": 649.4000000059605,
+                "listenerLagMs": 0.4000000059604645,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            }
+          },
+          "nativeLaunch": {
+            "pid": 44196,
+            "target": "CB7AC9D4BAB709C39EFE3AB206125B9D",
+            "exe": "9C8B490D03C30B9CD061CA5E0663391B92D7CC1FC84C4809B22478E3DF0EE307",
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          }
+        },
+        "B1": {
+          "reportSha256": "75ec65724fd083dd2381757074aae37f650040aa5b462b317f8a08c594cf5fa9",
+          "artifactDirectory": "target\\directory-review-20261003\\native-B1",
+          "recordedAt": "2026-10-03T10:39:40.872Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 19.900000005960464,
+                  "p95Ms": 20.400000005960464,
+                  "minMs": 19.099999994039536,
+                  "maxMs": 21
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.599999994039536,
+                  "p95Ms": 29.900000005960464,
+                  "minMs": 28.900000005960464,
+                  "maxMs": 30.19999998807907
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 17.69999998807907,
+                  "p95Ms": 17.900000005960464,
+                  "minMs": 16.80000001192093,
+                  "maxMs": 18
+                }
+              },
+              "firstWarmup": {
+                "domMs": 14.099999994039536,
+                "proxyMs": 24.599999994039536,
+                "listenerLagMs": 11.699999988079071,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 3.4500000029802322,
+                  "p95Ms": 4.800000011920929,
+                  "minMs": 2.5999999940395355,
+                  "maxMs": 5.200000017881393
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 14.599999994039536,
+                  "p95Ms": 15.300000011920929,
+                  "minMs": 12.400000005960464,
+                  "maxMs": 15.800000011920929
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.30000001192092896,
+                  "p95Ms": 0.5,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.699999988079071
+                }
+              },
+              "firstWarmup": {
+                "domMs": 6,
+                "proxyMs": 14,
+                "listenerLagMs": 0.19999998807907104,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 3.1500000059604645,
+                  "p95Ms": 3.800000011920929,
+                  "minMs": 2.5999999940395355,
+                  "maxMs": 4.200000017881393
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 10.100000023841858,
+                  "p95Ms": 10.700000017881393,
+                  "minMs": 8.599999994039536,
+                  "maxMs": 10.800000011920929
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.5,
+                  "p95Ms": 0.7000000178813934,
+                  "minMs": 0.30000001192092896,
+                  "maxMs": 0.8999999761581421
+                }
+              },
+              "firstWarmup": {
+                "domMs": 4.4000000059604645,
+                "proxyMs": 15.699999988079071,
+                "listenerLagMs": 0.5999999940395355,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 4.4000000059604645,
+                  "p95Ms": 5.700000017881393,
+                  "minMs": 2.600000023841858,
+                  "maxMs": 6.300000011920929
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 15.700000017881393,
+                  "p95Ms": 16.399999976158142,
+                  "minMs": 14,
+                  "maxMs": 16.400000005960464
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.10000002384185791,
+                  "p95Ms": 0.20000001788139343,
+                  "minMs": 0,
+                  "maxMs": 0.30000001192092896
+                }
+              },
+              "firstWarmup": {
+                "domMs": 3.699999988079071,
+                "proxyMs": 15.5,
+                "listenerLagMs": 0.19999998807907104,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 639.8000000119209,
+                  "p95Ms": 640.4000000059605,
+                  "minMs": 638.7000000178814,
+                  "maxMs": 645.5
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 645.7999999821186,
+                  "p95Ms": 646.4000000059605,
+                  "minMs": 644.6999999880791,
+                  "maxMs": 651.5
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 643.9000000059605,
+                "proxyMs": 649.9000000059605,
+                "listenerLagMs": 0.19999998807907104,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            },
+            "resume-same-group": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 19.69999998807907,
+                  "p95Ms": 20.30000001192093,
+                  "minMs": 18.799999982118607,
+                  "maxMs": 20.900000005960464
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.599999994039536,
+                  "p95Ms": 29.900000005960464,
+                  "minMs": 28.599999994039536,
+                  "maxMs": 30.099999994039536
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 17.599999994039536,
+                  "p95Ms": 18,
+                  "minMs": 16.69999998807907,
+                  "maxMs": 18.100000023841858
+                }
+              },
+              "firstWarmup": {
+                "domMs": 19.80000001192093,
+                "proxyMs": 29.600000023841858,
+                "listenerLagMs": 17.600000023841858,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "resume-cross-group": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 20.099999994039536,
+                  "p95Ms": 20.599999994039536,
+                  "minMs": 19.30000001192093,
+                  "maxMs": 20.799999982118607
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.599999994039536,
+                  "p95Ms": 29.80000001192093,
+                  "minMs": 28.80000001192093,
+                  "maxMs": 29.900000005960464
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 17.5,
+                  "p95Ms": 17.80000001192093,
+                  "minMs": 16.900000005960464,
+                  "maxMs": 18.099999994039536
+                }
+              },
+              "firstWarmup": {
+                "domMs": 20.900000005960464,
+                "proxyMs": 29.80000001192093,
+                "listenerLagMs": 17.700000017881393,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            }
+          },
+          "nativeLaunch": {
+            "pid": 3812,
+            "target": "8A05002B16C63611982A82D9D0A3D90D",
+            "exe": "FA5EB6D6FA2FFEEA560ADC055BE7D16FDCAFBD2DA1BA74EA0DBBD5F05B6284C4",
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          }
+        },
+        "B2": {
+          "reportSha256": "6e85ab62c84e8c3b57b046919e53ffffe58f2b3f1ffdb73dcc581a17374c50db",
+          "artifactDirectory": "target\\directory-review-20261003\\native-B2",
+          "recordedAt": "2026-10-03T10:42:19.060Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 19.69999998807907,
+                  "p95Ms": 20.30000001192093,
+                  "minMs": 18.900000005960464,
+                  "maxMs": 21.099999994039536
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.599999994039536,
+                  "p95Ms": 29.900000005960464,
+                  "minMs": 28.700000017881393,
+                  "maxMs": 30.099999994039536
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 17.599999994039536,
+                  "p95Ms": 17.900000005960464,
+                  "minMs": 11.800000011920929,
+                  "maxMs": 18.299999982118607
+                }
+              },
+              "firstWarmup": {
+                "domMs": 13.800000011920929,
+                "proxyMs": 23.80000001192093,
+                "listenerLagMs": 11.900000005960464,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 3.7999999821186066,
+                  "p95Ms": 4.9000000059604645,
+                  "minMs": 2.5,
+                  "maxMs": 5.699999988079071
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 15.0,
+                  "p95Ms": 15.899999976158142,
+                  "minMs": 12.900000005960464,
+                  "maxMs": 16.100000023841858
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.29999998211860657,
+                  "p95Ms": 0.5,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 5,
+                "proxyMs": 13.799999982118607,
+                "listenerLagMs": 0.29999998211860657,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 2.699999988079071,
+                  "p95Ms": 3.4000000059604645,
+                  "minMs": 2.2000000178813934,
+                  "maxMs": 3.7000000178813934
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 10.300000011920929,
+                  "p95Ms": 11,
+                  "minMs": 7.600000023841858,
+                  "maxMs": 11.599999994039536
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.29999998211860657,
+                  "p95Ms": 0.4000000059604645,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.7999999821186066
+                }
+              },
+              "firstWarmup": {
+                "domMs": 5,
+                "proxyMs": 15.800000011920929,
+                "listenerLagMs": 0.5,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 4.4000000059604645,
+                  "p95Ms": 5.699999988079071,
+                  "minMs": 2.9000000059604645,
+                  "maxMs": 6.800000011920929
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 15.900000005960464,
+                  "p95Ms": 16.599999994039536,
+                  "minMs": 14.099999994039536,
+                  "maxMs": 16.80000001192093
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.09999999403953552,
+                  "p95Ms": 0.20000001788139343,
+                  "minMs": 0,
+                  "maxMs": 0.30000001192092896
+                }
+              },
+              "firstWarmup": {
+                "domMs": 4.5,
+                "proxyMs": 16.30000001192093,
+                "listenerLagMs": 0.09999999403953552,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 639.9000000059605,
+                  "p95Ms": 644.3000000119209,
+                  "minMs": 638.5,
+                  "maxMs": 645.5
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 645.9000000059605,
+                  "p95Ms": 650.0999999940395,
+                  "minMs": 644.5999999940395,
+                  "maxMs": 651.5999999940395
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 643.5999999940395,
+                "proxyMs": 649.5999999940395,
+                "listenerLagMs": 0.20000001788139343,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            },
+            "resume-same-group": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 19.80000001192093,
+                  "p95Ms": 20.5,
+                  "minMs": 19,
+                  "maxMs": 22.30000001192093
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.5,
+                  "p95Ms": 29.900000005960464,
+                  "minMs": 28.900000005960464,
+                  "maxMs": 30
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 17.599999994039536,
+                  "p95Ms": 18.099999994039536,
+                  "minMs": 17.099999994039536,
+                  "maxMs": 18.600000023841858
+                }
+              },
+              "firstWarmup": {
+                "domMs": 20.099999994039536,
+                "proxyMs": 29.599999994039536,
+                "listenerLagMs": 17.69999998807907,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "resume-cross-group": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 20.099999994039536,
+                  "p95Ms": 20.80000001192093,
+                  "minMs": 19.399999976158142,
+                  "maxMs": 21.099999994039536
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.549999997019768,
+                  "p95Ms": 29.900000005960464,
+                  "minMs": 28.69999998807907,
+                  "maxMs": 30
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 17.599999994039536,
+                  "p95Ms": 18,
+                  "minMs": 16.69999998807907,
+                  "maxMs": 18.19999998807907
+                }
+              },
+              "firstWarmup": {
+                "domMs": 20.200000017881393,
+                "proxyMs": 29.30000001192093,
+                "listenerLagMs": 17.30000001192093,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            }
+          },
+          "nativeLaunch": {
+            "pid": 34212,
+            "target": "03B7D2504EB7888E29A5B672C5578B31",
+            "exe": "FA5EB6D6FA2FFEEA560ADC055BE7D16FDCAFBD2DA1BA74EA0DBBD5F05B6284C4",
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          }
+        },
+        "A4": {
+          "reportSha256": "646671ce6ec383c9db54130d4540065c078f2930ac58c623b988c46b1ce00527",
+          "artifactDirectory": "target\\directory-review-20261003\\native-A4",
+          "recordedAt": "2026-10-03T10:44:57.450Z",
+          "host": {
+            "platform": "win32",
+            "release": "10.0.26200",
+            "arch": "x64",
+            "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+            "memoryBytes": 16962281472
+          },
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Edg/154.0.4258.53",
+            "revision": "@5af6e80f702cffe10645c6d6433668f011b739be",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+            "jsVersion": "15.4.11.7"
+          },
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1.5,
+            "visibility": "visible",
+            "focused": true
+          },
+          "paths": {
+            "scroll-item": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 18.400000005960464,
+                  "p95Ms": 18.80000001192093,
+                  "minMs": 17.600000023841858,
+                  "maxMs": 19.299999982118607
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 29.700000002980232,
+                  "p95Ms": 30,
+                  "minMs": 28.80000001192093,
+                  "maxMs": 30.100000023841858
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 17.700000017881393,
+                  "p95Ms": 18,
+                  "minMs": 16.80000001192093,
+                  "maxMs": 18.69999998807907
+                }
+              },
+              "firstWarmup": {
+                "domMs": 18.599999994039536,
+                "proxyMs": 29.5,
+                "listenerLagMs": 17.700000017881393,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-mouse": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 3.699999988079071,
+                  "p95Ms": 5.199999988079071,
+                  "minMs": 2.300000011920929,
+                  "maxMs": 5.5999999940395355
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 15.099999994039536,
+                  "p95Ms": 15.700000017881393,
+                  "minMs": 13,
+                  "maxMs": 15.900000005960464
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.25,
+                  "p95Ms": 0.4000000059604645,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.5
+                }
+              },
+              "firstWarmup": {
+                "domMs": 3.5,
+                "proxyMs": 13.300000011920929,
+                "listenerLagMs": 0.09999999403953552,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Enter": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 2.5999999940395355,
+                  "p95Ms": 3.0999999940395355,
+                  "minMs": 2.2000000178813934,
+                  "maxMs": 3.9000000059604645
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 10.300000011920929,
+                  "p95Ms": 10.800000011920929,
+                  "minMs": 7.700000017881393,
+                  "maxMs": 13.400000005960464
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.29999998211860657,
+                  "p95Ms": 0.5,
+                  "minMs": 0.09999999403953552,
+                  "maxMs": 0.9000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 4.5999999940395355,
+                "proxyMs": 16,
+                "listenerLagMs": 0.5,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "expand-Space": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 4.199999988079071,
+                  "p95Ms": 5.199999988079071,
+                  "minMs": 2.4000000059604645,
+                  "maxMs": 6.100000023841858
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 15.799999982118607,
+                  "p95Ms": 16.30000001192093,
+                  "minMs": 13,
+                  "maxMs": 19.299999982118607
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.09999999403953552,
+                  "p95Ms": 0.20000001788139343,
+                  "minMs": 0,
+                  "maxMs": 0.4000000059604645
+                }
+              },
+              "firstWarmup": {
+                "domMs": 3,
+                "proxyMs": 14.599999994039536,
+                "listenerLagMs": 0.19999998807907104,
+                "completionPhase": "mutation",
+                "trusted": true
+              }
+            },
+            "navigate-align": {
+              "summary": {
+                "dom": {
+                  "count": 100,
+                  "medianMs": 644.4000000059605,
+                  "p95Ms": 645.5999999940395,
+                  "minMs": 639.1999999880791,
+                  "maxMs": 646
+                },
+                "proxy": {
+                  "count": 100,
+                  "medianMs": 650.4500000029802,
+                  "p95Ms": 651.5999999940395,
+                  "minMs": 645.1999999880791,
+                  "maxMs": 651.7999999821186
+                },
+                "listenerLag": {
+                  "count": 100,
+                  "medianMs": 0.19999998807907104,
+                  "p95Ms": 0.30000001192092896,
+                  "minMs": 0,
+                  "maxMs": 0.30000001192092896
+                }
+              },
+              "firstWarmup": {
+                "domMs": 643.6999999880791,
+                "proxyMs": 649.7999999821186,
+                "listenerLagMs": 0.4000000059604645,
+                "completionPhase": "scroll-or-hash-microtask",
+                "trusted": true
+              }
+            }
+          },
+          "nativeLaunch": {
+            "pid": 40472,
+            "target": "5FB7CF4A3EC9CEE8AC277A4933BF41C6",
+            "exe": "9C8B490D03C30B9CD061CA5E0663391B92D7CC1FC84C4809B22478E3DF0EE307",
+            "arguments": "--remote-debugging-port=18125 --remote-debugging-address=127.0.0.1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+          }
+        }
+      },
+      "pairedDifferences": {
+        "scroll-item": {
+          "dom": {
+            "B1-A3": {
+              "medianMs": 1.5,
+              "p95Ms": 1.600000023841858
+            },
+            "B2-A4": {
+              "medianMs": 1.2999999821186066,
+              "p95Ms": 1.5
+            }
+          },
+          "proxy": {
+            "B1-A3": {
+              "medianMs": -0.10000000894069672,
+              "p95Ms": -0.09999999403953552
+            },
+            "B2-A4": {
+              "medianMs": -0.10000000894069672,
+              "p95Ms": -0.09999999403953552
+            }
+          }
+        },
+        "expand-mouse": {
+          "dom": {
+            "B1-A3": {
+              "medianMs": 0.04999999701976776,
+              "p95Ms": 0.800000011920929
+            },
+            "B2-A4": {
+              "medianMs": 0.09999999403953552,
+              "p95Ms": -0.29999998211860657
+            }
+          },
+          "proxy": {
+            "B1-A3": {
+              "medianMs": -0.4000000059604645,
+              "p95Ms": -0.19999998807907104
+            },
+            "B2-A4": {
+              "medianMs": -0.09999999403953552,
+              "p95Ms": 0.19999995827674866
+            }
+          }
+        },
+        "expand-Enter": {
+          "dom": {
+            "B1-A3": {
+              "medianMs": 0.25,
+              "p95Ms": 0.19999998807907104
+            },
+            "B2-A4": {
+              "medianMs": 0.09999999403953552,
+              "p95Ms": 0.30000001192092896
+            }
+          },
+          "proxy": {
+            "B1-A3": {
+              "medianMs": 0.20000001788139343,
+              "p95Ms": 0.30000001192092896
+            },
+            "B2-A4": {
+              "medianMs": 0.0,
+              "p95Ms": 0.19999998807907104
+            }
+          }
+        },
+        "expand-Space": {
+          "dom": {
+            "B1-A3": {
+              "medianMs": 0.800000011920929,
+              "p95Ms": 1.3000000417232513
+            },
+            "B2-A4": {
+              "medianMs": 0.20000001788139343,
+              "p95Ms": 0.5
+            }
+          },
+          "proxy": {
+            "B1-A3": {
+              "medianMs": 0.5000000298023224,
+              "p95Ms": 0.4999999701976776
+            },
+            "B2-A4": {
+              "medianMs": 0.10000002384185791,
+              "p95Ms": 0.29999998211860657
+            }
+          }
+        },
+        "navigate-align": {
+          "dom": {
+            "B1-A3": {
+              "medianMs": -5.149999991059303,
+              "p95Ms": -5.199999988079071
+            },
+            "B2-A4": {
+              "medianMs": -4.5,
+              "p95Ms": -1.2999999821186066
+            }
+          },
+          "proxy": {
+            "B1-A3": {
+              "medianMs": -5.200000017881393,
+              "p95Ms": -5.200000017881393
+            },
+            "B2-A4": {
+              "medianMs": -4.549999997019768,
+              "p95Ms": -1.5
+            }
+          }
+        }
+      },
+      "noise": {
+        "scroll-item": {
+          "dom": {
+            "aaDifference": {
+              "medianMs": 0.0,
+              "p95Ms": 0.0
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.0,
+              "p95Ms": 2.9802322387695312e-08
+            }
+          },
+          "proxy": {
+            "aaDifference": {
+              "medianMs": 2.9802322387695312e-08,
+              "p95Ms": 0.09999999403953552
+            },
+            "allBaselineSpan": {
+              "medianMs": 2.9802322387695312e-08,
+              "p95Ms": 0.09999999403953552
+            }
+          }
+        },
+        "expand-mouse": {
+          "dom": {
+            "aaDifference": {
+              "medianMs": 0.29999998211860657,
+              "p95Ms": 0.3999999761581421
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.4999999701976776,
+              "p95Ms": 1.199999988079071
+            }
+          },
+          "proxy": {
+            "aaDifference": {
+              "medianMs": 0.30000001192092896,
+              "p95Ms": 0.29999998211860657
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.4000000059604645,
+              "p95Ms": 0.30000001192092896
+            }
+          }
+        },
+        "expand-Enter": {
+          "dom": {
+            "aaDifference": {
+              "medianMs": 0.29999998211860657,
+              "p95Ms": 0.5000000298023224
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.4000000059604645,
+              "p95Ms": 0.7000000178813934
+            }
+          },
+          "proxy": {
+            "aaDifference": {
+              "medianMs": 0.09999999403953552,
+              "p95Ms": 0.20000001788139343
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.4000000059604645,
+              "p95Ms": 0.40000003576278687
+            }
+          }
+        },
+        "expand-Space": {
+          "dom": {
+            "aaDifference": {
+              "medianMs": 0.20000000298023224,
+              "p95Ms": 0.4999999701976776
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.5999999940395355,
+              "p95Ms": 0.9000000059604645
+            }
+          },
+          "proxy": {
+            "aaDifference": {
+              "medianMs": 0.2499999850988388,
+              "p95Ms": 0.29999998211860657
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.5999999940395355,
+              "p95Ms": 0.4000000059604645
+            }
+          }
+        },
+        "navigate-align": {
+          "dom": {
+            "aaDifference": {
+              "medianMs": 0.19999998807907104,
+              "p95Ms": 0.09999999403953552
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.5499999970197678,
+              "p95Ms": 0.19999998807907104
+            }
+          },
+          "proxy": {
+            "aaDifference": {
+              "medianMs": 0.19999998807907104,
+              "p95Ms": 0.19999998807907104
+            },
+            "allBaselineSpan": {
+              "medianMs": 0.5499999970197678,
+              "p95Ms": 0.20000001788139343
+            }
+          }
+        }
+      },
+      "metadata": {
+        "A": {
+          "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+          "build": "release",
+          "platform": "Windows 11 10.0.26200 / Dioxus Windows WebView2 native window",
+          "artifactSha256": "9c8b490d03c30b9cd061ca5e0663391b92d7cc1fc84c4809b22478e3df0ee307",
+          "artifact": "target\\directory-review-20261003\\native-perf-A\\rssr-app.exe",
+          "refreshRateHz": 165,
+          "refreshRateNote": "Win32_VideoController: NVIDIA RTX 3060 laptop, 2560x1600 at 165Hz",
+          "browserLaunch": "Owned visible focused native window, isolated exe/SQLite and WEBVIEW2_USER_DATA_FOLDER; loopback CDP 18125; disable background timer throttling, renderer backgrounding and backgrounding occluded windows; no viewport emulation",
+          "node": "Node v24.21.0; existing repository CDP module",
+          "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+          "batchCount": 1,
+          "phase": "independent serial batch; A/A then A/B and B/A",
+          "variant": "A",
+          "toolchain": {
+            "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-pc-windows-msvc\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+            "dx": "dioxus 0.7.10 (57d6794)",
+            "dioxus": "0.7.9 (Cargo.lock)",
+            "webCommand": "dx build --platform web --package rssr-app --release --locked --debug-symbols false",
+            "nativeCommand": "cargo build --release --locked -p rssr-app -p rssr-cli -j 1"
+          },
+          "sampleCount": 100,
+          "measureFollow": false,
+          "methodologyVersion": 2,
+          "sourceCommit": "9815d4e8c04e124279cdabbc55de78c07a064371",
+          "sourceNote": "Git archive of 9815d4e8: difference from e8c6ee1 in crates is limited to cfg(test) additions/imports; release production behavior unchanged.",
+          "measurementSourceHashesLf": {
+            "scripts/browser/directory_contract.mjs": "2a0053760f05a26c013b687a5111b1aaaa19267587e01762332314a22ee0debf",
+            "scripts/browser/directory_performance.mjs": "456067012f61a7fbf02958eb8d0f2491ffc86a09a341581d1e462c8f34980481",
+            "scripts/browser/rssr_small_viewport_assertions.mjs": "d2bf68c60617d0a1a510b215ccec0b10c13c695317d9468bbf5e18123a0d5f25",
+            "scripts/browser/cdp_session.mjs": "69517ea5604e4a7d69360105c8b7d4a66b4a236170cf234bd35eeb05eaaa3f30"
+          },
+          "runOrder": [
+            "A1",
+            "A2",
+            "A3",
+            "B1",
+            "B2",
+            "A4"
+          ]
+        },
+        "B": {
+          "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
+          "build": "release",
+          "platform": "Windows 11 10.0.26200 / Dioxus Windows WebView2 native window",
+          "artifactSha256": "fa5eb6d6fa2ffeea560adc055be7d16fdcafbd2da1ba74ea0dbbd5f05b6284c4",
+          "artifact": "target\\directory-review-20261003\\native-perf-B\\rssr-app.exe",
+          "refreshRateHz": 165,
+          "refreshRateNote": "Win32_VideoController: NVIDIA RTX 3060 laptop, 2560x1600 at 165Hz",
+          "browserLaunch": "Owned visible focused native window, isolated exe/SQLite and WEBVIEW2_USER_DATA_FOLDER; loopback CDP 18125; disable background timer throttling, renderer backgrounding and backgrounding occluded windows; no viewport emulation",
+          "node": "Node v24.21.0; existing repository CDP module",
+          "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
+          "batchCount": 1,
+          "phase": "independent serial batch; A/A then A/B and B/A",
+          "variant": "B",
+          "candidateCommit": "282592f816c87746c8354ee7981b98be3db16dea",
+          "candidateSourceHashes": {
+            "crates/rssr-app/src/pages/entries_page/directory.rs": "d2995337b0d65e721bfeb99b834c0a467e2eb70824f13358b9141ada62f985a6",
+            "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
+            "crates/rssr-app/src/pages/entries_page/directory/adapter.js": "13cf8dab7f41590463b399ae943326e51d0d37022ade2277ace80850ec00587f",
+            "crates/rssr-app/src/pages/entries_page/controls.rs": "5a0b0ff6bebbcfd042e0613ad9a6902365b5ce9569e555e33df0519b96b219cb",
+            "crates/rssr-app/src/pages/entries_page/mod.rs": "1591ae33eb318aa3ce53112b7f5e774a2793f419a4951bd679e4c0266de12b17",
+            "crates/rssr-app/src/pages/entries_page/facade.rs": "ed31ef397117765a8392e36b90b5487577abed137d52d45652a62e4fa316f82f",
+            "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "663f4cf5ea0b83be0bc126e3f74ebf0bc68940162d73b1694832618e166c66d2"
+          },
+          "toolchain": {
+            "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-pc-windows-msvc\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+            "dx": "dioxus 0.7.10 (57d6794)",
+            "dioxus": "0.7.9 (Cargo.lock)",
+            "webCommand": "dx build --platform web --package rssr-app --release --locked --debug-symbols false",
+            "nativeCommand": "cargo build --release --locked -p rssr-app -p rssr-cli -j 1"
+          },
+          "sampleCount": 100,
+          "measureFollow": true,
+          "methodologyVersion": 2,
+          "candidateParentCommit": "9d1a4bf4ef56b426dc5f9ca48261f639e62b7af7",
+          "candidateSourceHashesLf": {
+            "crates/rssr-app/src/pages/entries_page/directory.rs": "d2995337b0d65e721bfeb99b834c0a467e2eb70824f13358b9141ada62f985a6",
+            "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
+            "crates/rssr-app/src/pages/entries_page/directory/adapter.js": "13cf8dab7f41590463b399ae943326e51d0d37022ade2277ace80850ec00587f",
+            "crates/rssr-app/src/pages/entries_page/controls.rs": "5a0b0ff6bebbcfd042e0613ad9a6902365b5ce9569e555e33df0519b96b219cb",
+            "crates/rssr-app/src/pages/entries_page/mod.rs": "1591ae33eb318aa3ce53112b7f5e774a2793f419a4951bd679e4c0266de12b17",
+            "crates/rssr-app/src/pages/entries_page/facade.rs": "ed31ef397117765a8392e36b90b5487577abed137d52d45652a62e4fa316f82f",
+            "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "146b13ad2ce2e438a4260a670e2fc12ff4f063419d3a7cb5e4485ea247df89ae"
+          },
+          "measurementSourceHashesLf": {
+            "scripts/browser/directory_contract.mjs": "2a0053760f05a26c013b687a5111b1aaaa19267587e01762332314a22ee0debf",
+            "scripts/browser/directory_performance.mjs": "456067012f61a7fbf02958eb8d0f2491ffc86a09a341581d1e462c8f34980481",
+            "scripts/browser/rssr_small_viewport_assertions.mjs": "d2bf68c60617d0a1a510b215ccec0b10c13c695317d9468bbf5e18123a0d5f25",
+            "scripts/browser/cdp_session.mjs": "69517ea5604e4a7d69360105c8b7d4a66b4a236170cf234bd35eeb05eaaa3f30"
+          },
+          "runOrder": [
+            "A1",
+            "A2",
+            "A3",
+            "B1",
+            "B2",
+            "A4"
+          ]
+        }
+      },
+      "rawCsv": "docs\\testing\\baselines\\2026-10-03-directory-review-native.csv",
+      "rawCsvSha256Lf": "b9cc8702f12d1166e915913c00e95d389be604e394096b2e26fbb2fd96f2fc91"
+    }
+  }
+}
