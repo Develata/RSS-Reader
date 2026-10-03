@@ -149,8 +149,19 @@ class Acceptance(unittest.TestCase):
     def no_tree(self):
         pids = [int((self.root / name).read_text()) for name in ["branch.pid", "leaf.pid"]]
         self.until(lambda: all(not alive(pid) for pid in pids))
+        self.assert_port_free(int(self.env["FIXTURE_PORT"]))
+
+    def assert_port_free(self, port):
         with socket.socket() as probe:
-            probe.bind(("127.0.0.1", int(self.env["FIXTURE_PORT"])))
+            probe.settimeout(.2)
+            self.assertNotEqual(probe.connect_ex(("127.0.0.1", port)), 0, "listener still reachable")
+        with socket.socket() as probe:
+            # A completed HTTP probe can leave TIME_WAIT after every PID exited.
+            # On Unix reuse that state, never a live listener (no SO_REUSEPORT).
+            # Windows SO_REUSEADDR has different semantics; keep its strict bind.
+            if not WINDOWS:
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind(("127.0.0.1", port))
 
     def test_parameters_and_plan_have_no_side_effects(self):
         for args in [["--port"], ["--web-port"], ["--log-dir"], ["--what"], ["--port", "0"], ["--port", "65536"], ["--full", "--port", "55525"]]:
@@ -277,6 +288,8 @@ class Acceptance(unittest.TestCase):
             listener.bind(("127.0.0.1", 0))
             listener.listen()
             port = listener.getsockname()[1]
+            with self.assertRaises(AssertionError):
+                self.assert_port_free(port)
             self.run_cli("--skip-automated", "--skip-build", "--port", str(port), code=1)
             self.assertIn("unavailable", self.stage("spa")["detail"])
             self.assertEqual(listener.getsockname()[1], port)
@@ -328,8 +341,7 @@ class Acceptance(unittest.TestCase):
         self.assertEqual(proc.wait(timeout=8), 130)
         self.assertEqual(self.stage("spa")["status"], "interrupted")
         self.until(lambda: not alive(stage_pid))
-        with socket.socket() as probe:
-            probe.bind(("127.0.0.1", port))
+        self.assert_port_free(port)
 
 
 if __name__ == "__main__":

@@ -83,6 +83,18 @@ Shell 总入口收敛为构建/exec，不建立双向事件协议或第二套阶
 - 三个真实 wasm harness 共 51 项通过（config 3、refresh 28、subscription 20），独立轮次 29.82 秒。
   `wasm-matched/`、`wasm-pinned/` 保留 PATH 仍选错版本的失败，`wasm-explicit/` 保留通过证据。
 
+### 远端 CI 校正
+
+- 初版 `28fc189` 的 Windows CLI job 通过；[Linux job](https://github.com/Develata/RSS-Reader/actions/runs/37137256705/job/111244193548)
+  的编译、clippy、单测和 11 个黑盒测试通过，仅 SPA HTTP 探测后的端口重绑检查失败。
+  该用例此前的 PID 消失、SIGTERM 143 / interrupted 断言均已通过；失败与连接 TIME_WAIT 一致。
+- 直接测试改为先证明端口无法连接，再在 Unix 使用 SO_REUSEADDR 重绑；保留所有进程断言，
+  并在真实占用端口用例中证明此检查会拒绝活跃 listener。Windows 仍使用严格 bind。
+  [Python socket 文档](https://docs.python.org/3/library/socket.html#socket.create_server)
+  说明了 POSIX 对 TIME_WAIT 的复用语义；没有启用 SO_REUSEPORT 或修改生产监听/清理逻辑。
+- 修正后 Windows 本机 12 项黑盒全部通过，26.86 秒；证据
+  `target/release-ui-acceptance/1791045521536942500/`。最终 Linux/Windows 结论以 PR 对应 SHA 的 Checks 为准。
+
 ### 实际 aggregate 与旧/新差异
 
 - 旧 Bash `--release --skip-build --no-serve` 自动门禁通过，约 10.50 秒，四组可选检查 skipped。
