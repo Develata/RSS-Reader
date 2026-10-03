@@ -1,14 +1,10 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::sync::Arc;
 
 use crate::ui::AppShellState;
 use rssr_domain::{EntrySummary, ReadFilter, StarredFilter};
 
 use super::{
-    browser_interactions::scroll_to_entry_group,
-    groups::{
-        EntryCardRef, EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem,
-        EntryMonthGroup, EntrySourceGroup,
-    },
+    groups::{EntryCardRef, EntryGroupNavItem, EntryMonthGroup, EntrySourceGroup},
     intent::EntriesPageIntent,
     presenter::EntriesPagePresenter,
     session::EntriesPageSession,
@@ -236,11 +232,8 @@ impl EntriesPageFacade {
         self.current_page() < self.total_pages()
     }
 
-    pub(crate) fn active_directory_anchor(&self) -> Option<&str> {
-        self.presenter
-            .active_directory_anchor
-            .as_deref()
-            .or(self.presenter.active_group_anchor.as_deref())
+    pub(super) fn directory_model(&self) -> super::directory::DirectoryModel {
+        super::directory::DirectoryModel(Arc::clone(&self.presenter))
     }
 
     pub(crate) fn archived_entries_message(&self) -> String {
@@ -264,18 +257,6 @@ impl EntriesPageFacade {
 
     pub(crate) fn source_grouped_entries(&self) -> &[EntrySourceGroup] {
         &self.presenter.source_grouped_entries
-    }
-
-    pub(crate) fn directory_months(&self) -> &[EntryDirectoryMonth] {
-        &self.presenter.directory_months
-    }
-
-    pub(crate) fn directory_sources(&self) -> &[EntryDirectorySource] {
-        &self.presenter.directory_sources
-    }
-
-    pub(crate) fn default_expanded_directory_sections(&self) -> &BTreeSet<String> {
-        &self.presenter.default_expanded_directory_sections
     }
 
     pub(crate) fn empty_entries_message(&self) -> String {
@@ -330,10 +311,5 @@ impl EntriesPageFacade {
     pub(crate) fn go_to_next_page(&self) {
         self.session.dispatch(EntriesPageIntent::GoToNextPage);
         super::browser_interactions::scroll_to_page_start();
-    }
-
-    pub(crate) fn navigate_to_directory_target(&self, target_page: u32, anchor_id: String) {
-        self.session.dispatch(EntriesPageIntent::SetCurrentPage(target_page));
-        scroll_to_entry_group(&anchor_id);
     }
 }

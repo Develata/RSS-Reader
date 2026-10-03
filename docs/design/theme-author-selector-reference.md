@@ -24,6 +24,8 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 
 内置 Atlas Sidebar 保留桌面侧栏，但为共用的五图标 Reader 行预留 280px；移动端顶栏仍保持 sticky。目录名称和计数按行换行，避免极端来源名挤掉计数。
 
+文章列表目录的行为约束见[目录跟随设计](./entries-directory-follow.md)。目录内所有组按钮（含活动组）均可展开/收起，`data-active` 仅表示主列表当前位置，不能据此用 CSS 禁止点击或强制展开。`data-open` / `aria-expanded` 由 Rust 的当前交互状态决定；保留的 `data-open-base` 与实际展开值一致，不再表示旧的“活动覆盖前偏好”。`data-directory-epoch` / `data-directory-revision` 是内部提交同步标记，不是主题 API。
+
 导航的箭头固定在导航容器右上侧，不依赖链接数量。收起时内容由 Rust 移除，主题不得保留不可见的导航占位；新版 Atlas Sidebar 同时将侧栏列缩至 44px。旧版 CSS 仍可识别为该主题，旧自定义侧栏布局需自行适配列宽。导航无尺寸过渡动画，避免收起时逐帧重排正文。
 
 ## 使用原则

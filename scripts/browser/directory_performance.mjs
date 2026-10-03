@@ -57,6 +57,8 @@ export async function measureDirectory(client, env, metadataFile, artifactDir) {
     if (!(key in metadata)) throw new Error(`Performance metadata must explicitly supply ${key} (null if unmeasured)`);
   }
   if (!/^[a-f0-9]{40}$/.test(metadata.baselineSha) || metadata.build !== 'release') throw new Error('Performance baseline requires an exact SHA and release build');
+  const batches = metadata.batchCount ?? 3;
+  if (!Number.isInteger(batches) || batches < 1 || batches > 10) throw new Error('batchCount must be 1..10');
   const {prepare} = directoryHarness(client,env);
   const report = {
     status:'running', recordedAt:new Date().toISOString(), metadata,
@@ -70,12 +72,16 @@ export async function measureDirectory(client, env, metadataFile, artifactDir) {
   const output = path.join(artifactDir,'directory-performance.json');
   const flush = () => writeFile(output,JSON.stringify(report,null,2)+'\n');
   try {
-    for (let batch=0; batch<3; batch++) {
+    for (let batch=0; batch<batches; batch++) {
       const c = await prepare('time');
-      const viewport = await evaluate(client, '({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,visibility:document.visibilityState,screen:{width:screen.width,height:screen.height}})');
+      const viewport = await evaluate(client, '({width:innerWidth,height:innerHeight,dpr:devicePixelRatio,visibility:document.visibilityState,focused:document.hasFocus(),screen:{width:screen.width,height:screen.height}})');
       if (viewport.visibility!=='visible') throw new Error('Benchmark page must be visible to the browser');
+      if (env.native && !viewport.focused) throw new Error('Native benchmark window must have focus');
       report.viewport = viewport;
-      const result = {batch:batch+1,paths:{}};
+      const result = {batch:batch+1,paths:{}, memoryBefore: {
+        heap: await client.send('Runtime.getHeapUsage'), dom: await client.send('Memory.getDOMCounters'),
+        wasmLinearBytes: await evaluate(client, 'globalThis.__dx_mainWasm?.memory?.buffer?.byteLength ?? null'),
+      }};
       report.batches.push(result);
       for (const name of ['scroll-highlight','expand-mouse','expand-Enter','expand-Space','navigate-align']) {
         const samples=[];
@@ -108,12 +114,15 @@ export async function measureDirectory(client, env, metadataFile, artifactDir) {
               `location.hash === ${q('#'+c.next)} && Math.abs(document.getElementById(${q(c.next)}).getBoundingClientRect().top - parseFloat(getComputedStyle(document.getElementById(${q(c.next)})).scrollMarginTop || 0))<=2`,
               () => click(client,item(c.next)));
           }
+          if (i===-3) result.paths[name].firstSample = value;
           if (i>=0) samples.push(value);
         }
         const times=samples.map(s=>s.proxyMs);
         result.paths[name].summary={count:times.length,medianMs:median(times),minMs:Math.min(...times),maxMs:Math.max(...times)};
         await flush();
       }
+      result.memoryAfter = {heap: await client.send('Runtime.getHeapUsage'), dom: await client.send('Memory.getDOMCounters'),
+        wasmLinearBytes: await evaluate(client, 'globalThis.__dx_mainWasm?.memory?.buffer?.byteLength ?? null')};
     }
     report.repeatNoise = Object.fromEntries(Object.keys(report.batches[0].paths).map(name => {
       const medians=report.batches.map(b=>b.paths[name].summary.medianMs);

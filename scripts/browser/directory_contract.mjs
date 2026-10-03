@@ -81,6 +81,21 @@ export async function scrollAnchor(client, id, topPx = 80, tolerance = 0.75) {
   await settle(client, `Math.abs(document.getElementById(${q(id)}).getBoundingClientRect().top - ${topPx}) <= ${tolerance}`, `anchor ${id} did not reach ${topPx}px (tolerance ${tolerance})`);
 }
 
+export async function userWheel(client, deltaY) {
+  await client.send('Input.dispatchMouseEvent', {type:'mouseMoved',x:100,y:400});
+  await client.send('Input.dispatchMouseEvent', {type:'mouseWheel',x:100,y:400,deltaX:0,deltaY});
+}
+async function userScrollAnchor(client, id) {
+  const delta = await evaluate(client, `document.getElementById(${q(id)}).getBoundingClientRect().top - 80`);
+  await userWheel(client,delta);
+  await settle(client, `Math.abs(document.getElementById(${q(id)}).getBoundingClientRect().top - 80) <= 2`, 'user wheel anchor positioning');
+}
+async function expectOnlyOpen(client, id) {
+  await settle(client, `(() => { const groups=[...document.querySelectorAll(${q(rail+' [data-layout="entry-directory-toggle"]')})];
+    return groups.length===6 && groups.every(e=>e.dataset.open === (e.dataset.directoryAnchor===${q(id)}?'true':'false'));
+  })()`, 'only the literal current path may be open');
+}
+
 export async function snapshot(client) {
   return evaluate(client, `(() => {
     const visible = e => !!e && !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length);
@@ -92,6 +107,7 @@ export async function snapshot(client) {
         items:[...(root?.querySelectorAll('[data-directory-kind="item"][data-active="true"]') || [])].map(e=>e.dataset.directoryAnchor)};
     };
     return {url:location.href, y:scrollY, width:innerWidth, height:innerHeight,
+      mode:document.querySelector(${q(rail)})?.dataset.directoryMode,
       rail:state(${q(rail)}), top:state(${q(top)}),
       groups:[...document.querySelectorAll(${q(rail + ' [data-layout="entry-directory-toggle"]')})].map(e=>({
         id:e.dataset.directoryAnchor, active:e.dataset.active, base:e.dataset.openBase,
@@ -180,44 +196,103 @@ export async function checkDirectoryContracts(client, env) {
         await scrollAnchor(client, anchor, 95);
         await expectActive(client, afterGroup, anchor);
         const s = await snapshot(client), active = s.groups.find(g=>g.id===afterGroup);
-        check(`${mode}: 95px selects anchor and opens active group`, active.open==='true' && active.body==='true' && active.canToggle==='false' && active.disabled==='true' && active.expanded==='true', s);
+        check(`${mode}: 95px selects anchor and opens active group`, active.open==='true' && active.body==='true' && active.canToggle==='true' && active.disabled==='false' && active.expanded==='true', s);
       }
       await env.capture(`directory-${mode}-boundary`);
     });
-    for (const key of ['Enter','Space']) {
+    // These replace PR19's four OLD 'active cannot toggle' expectations.
+    // A literal product oracle now requires actual collapse, then same-group
+    // USER scrolling to reset it. Baseline evidence remains in baselines/.
+    for (const key of ['mouse','Enter','Space']) {
       await scenario(`${mode}-active-${key}`, async () => {
         const c = await prepare(mode);
         await scrollAnchor(client,c.first);
-        const before = (await snapshot(client)).groups.find(g=>g.id===c.group);
-        await evaluate(client, `document.querySelector(${q(group(c.group))}).focus({preventScroll:true})`);
-        await keyPress(client,key); // Exactly ONE activation per isolated scenario.
-        await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'true'`, 'active group must remain open');
-        const afterKey = await snapshot(client);
-        // Crucial: scroll away in the SAME mounted page; a route reset would hide
-        // a keyboard-induced mutation of the latent manual preference.
-        await scrollAnchor(client,c.other);
+        if (key==='mouse') await click(client,group(c.group));
+        else {
+          await evaluate(client, `document.querySelector(${q(group(c.group))}).focus({preventScroll:true})`);
+          await keyPress(client,key);
+        }
+        await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'current group must actually collapse');
+        const closed = await snapshot(client);
+        check(`${mode}: current group ${key} collapses immediately`, closed.groups.find(g=>g.id===c.group).body==='false', closed);
+        await click(client,group(c.otherGroup));
+        await settle(client, `document.querySelector(${q(group(c.otherGroup))}).dataset.open === 'true'`, 'other group explicitly opens');
+        // A programmatic main scroll observes the position but must not reset
+        // manual choices. This also detects feedback from directory alignment.
+        await evaluate(client, 'window.scrollBy({top:2,behavior:"instant"})');
+        await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false' && document.querySelector(${q(group(c.otherGroup))}).dataset.open === 'true'`, 'programmatic scroll interrupted manual state');
+        const beforeY = (await snapshot(client)).y;
+        await userWheel(client, 24);
+        await settle(client, `scrollY > ${beforeY + 1}`, 'same-group wheel must really scroll');
+        await expectOnlyOpen(client,c.group);
+        await expectActive(client,c.group,c.first);
+        check(`${mode}: same-group user wheel restores following and clears other groups after ${key}`, true, await snapshot(client));
+        await click(client,group(c.group));
+        await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'manual collapse after follow');
+        await userScrollAnchor(client,c.other);
+        await expectOnlyOpen(client,c.otherGroup);
         await expectActive(client,c.otherGroup,c.other);
-        const after = await snapshot(client), departed = after.groups.find(g=>g.id===c.group);
-        check(`${mode}: active ${key} cannot mutate latent manual preference`,
-          afterKey.groups.find(g=>g.id===c.group).base===before.base && departed.base===before.base && departed.open===before.base,
-          {before,afterKey,after});
+        check(`${mode}: cross-group user scroll resets the previously collapsed path`, true, await snapshot(client));
       });
       await scenario(`${mode}-inactive-${key}`, async () => {
         const c = await prepare(mode);
-        await scrollAnchor(client,c.other);
-        await expectActive(client,c.otherGroup,c.other);
-        await evaluate(client, `document.querySelector(${q(group(c.group))}).focus({preventScroll:true})`);
-        await keyPress(client,key);
-        await settle(client, `document.querySelector(${q(group(c.group))}).dataset.openBase === 'false'`, 'inactive key did not collapse base');
-        await scrollAnchor(client,c.first);
-        await expectActive(client,c.group,c.first);
-        const active = (await snapshot(client)).groups.find(g=>g.id===c.group);
-        await scrollAnchor(client,c.other);
-        await expectActive(client,c.otherGroup,c.other);
-        const departed = (await snapshot(client)).groups.find(g=>g.id===c.group);
-        check(`${mode}: inactive ${key} preference survives temporary active expansion`, active.base==='false' && active.open==='true' && departed.open==='false' && departed.canToggle==='true', {active,departed});
+        for (const wanted of ['true','false']) {
+          if (key==='mouse') await click(client,group(c.otherGroup));
+          else {
+            await evaluate(client, `document.querySelector(${q(group(c.otherGroup))}).focus({preventScroll:true})`);
+            await keyPress(client,key);
+          }
+          await settle(client, `document.querySelector(${q(group(c.otherGroup))}).dataset.open === ${q(wanted)}`, 'non-current input must change displayed state');
+        }
+        check(`${mode}: non-current ${key} opens and closes`, true, await snapshot(client));
       });
     }
+    await scenario(`${mode}-internal-scroll-and-keyboard`, async () => {
+      const c = await prepare(mode);
+      await scrollAnchor(client,c.first);
+      const distant = mode==='time'?c.remoteGroup:'entry-group-foxtrot';
+      await click(client,group(distant));
+      await settle(client, `document.querySelector(${q(group(distant))}).dataset.open === 'true'`, 'manual distant group');
+      for (const entry of (await snapshot(client)).groups.filter(g=>g.open!=='true')) {
+        await click(client,group(entry.id));
+        await settle(client, `document.querySelector(${q(group(entry.id))}).dataset.open === 'true'`, 'expand fixture for a scrollable rail');
+      }
+      await evaluate(client, `document.querySelector(${q(rail)}).scrollTop=0`);
+      const before = await snapshot(client);
+      check(`${mode}: internal scroll fixture has real overflow`, before.rail.maxScrollTop > 50, before);
+      const point = await evaluate(client, `(() => { const r=document.querySelector(${q(rail)}).getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+30}; })()`);
+      await client.send('Input.dispatchMouseEvent',{type:'mouseWheel',...point,deltaX:0,deltaY:50});
+      await settle(client, `document.querySelector(${q(group(distant))}).dataset.open === 'true' && document.querySelector(${q(rail)}).dataset.directoryMode === 'manual'`, 'directory wheel must remain manual');
+      await settle(client, `document.querySelector(${q(rail)}).scrollTop > 1`, 'directory must actually scroll');
+      const afterInternal = await snapshot(client);
+      check(`${mode}: internal wheel preserves manual groups and main position`, Math.abs(afterInternal.y-before.y)<=1, {before,afterInternal});
+      // A nested scroll event whose target does not contain the article groups
+      // must not be interpreted as the main list, even if it bubbles.
+      await evaluate(client, `document.querySelector('[data-position-entry]').dispatchEvent(new Event('scroll',{bubbles:true}))`);
+      await settle(client, `document.querySelector(${q(group(distant))}).dataset.open === 'true'`, 'nested event reset manual state');
+      const nestedPoint = await evaluate(client, `(() => {
+        const main=document.querySelector('[data-layout="entries-main"]');
+        const nested=document.createElement('div'); nested.id='directory-test-nested';
+        nested.style.cssText='position:fixed;left:80px;top:360px;width:160px;height:100px;overflow:auto;z-index:999;background:white';
+        const body=document.createElement('div');body.style.height='800px';nested.append(body);main.append(nested);
+        // The app shell establishes a containing block. Verify the actual hit
+        // target instead of assuming fixed coordinates are viewport-relative.
+        const r=nested.getBoundingClientRect(); nested.style.left=(160-r.left)+'px';nested.style.top=(720-r.top)+'px';
+        const placed=nested.getBoundingClientRect(),x=placed.left+30,y=placed.top+30;
+        if (!nested.contains(document.elementFromPoint(x,y))) throw new Error('Nested test scroll target is not hittable');
+        return {x,y};
+      })()`);
+      await client.send('Input.dispatchMouseEvent',{type:'mouseMoved',...nestedPoint});
+      await client.send('Input.dispatchMouseEvent',{type:'mouseWheel',...nestedPoint,deltaX:0,deltaY:40});
+      await settle(client, `document.getElementById('directory-test-nested').scrollTop > 1`, 'nested fixture must actually scroll');
+      check(`${mode}: real nested scroll retains manual state`, (await snapshot(client)).mode==='manual', await snapshot(client));
+      await evaluate(client, `(() => { document.getElementById('directory-test-nested').remove(); const main=document.querySelector('[data-layout="entries-main"]');main.tabIndex=-1; main.focus({preventScroll:true}); })()`);
+      const y = (await snapshot(client)).y;
+      for (const type of ['keyDown','keyUp']) await client.send('Input.dispatchKeyEvent',{type,key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40,nativeVirtualKeyCode:40});
+      await settle(client, `scrollY > ${y+1}`, 'main keyboard scroll must move content');
+      await expectOnlyOpen(client,c.group);
+      check(`${mode}: main keyboard scroll resumes within the current group`, true, await snapshot(client));
+    });
     await scenario(`${mode}-local-toggle-render`, async () => {
       const c = await prepare(mode);
       await scrollAnchor(client,c.first);
@@ -226,6 +301,12 @@ export async function checkDirectoryContracts(client, env) {
       if ((await snapshot(client)).groups.find(g=>g.id===distantGroup).open!=='true') {
         await click(client,group(distantGroup));
         await settle(client, `document.querySelector(${q(group(distantGroup))}).dataset.open === 'true'`, 'distant group expansion');
+      }
+      // Following now opens one group, so explicitly expand the fixture before
+      // asserting a meaningful rail displacement (the old defaults overflowed).
+      for (const entry of (await snapshot(client)).groups.filter(g=>g.open!=='true')) {
+        await click(client,group(entry.id));
+        await settle(client, `document.querySelector(${q(group(entry.id))}).dataset.open === 'true'`, 'make local-collapse fixture scrollable');
       }
       // Put the active article's directory entry outside the rail viewport.
       // Otherwise an accidental align call can be a no-op and falsely pass.
@@ -240,7 +321,7 @@ export async function checkDirectoryContracts(client, env) {
       // Collapsing content may legitimately clamp scrollTop to the new maximum.
       const expectedRailTop=Math.min(before.rail.scrollTop,after.rail.maxScrollTop);
       check(`${mode}: local collapse does not rewind body or rail`, Math.abs(after.y-before.y)<=1 && Math.abs(after.rail.scrollTop-expectedRailTop)<=1, {before,after,expectedRailTop});
-      // A real VDOM flag update must reconcile the JS-selected state in place.
+      // A real VDOM flag update must preserve the observed position in place.
       await scrollAnchor(client,c.other);
       await expectActive(client,c.otherGroup,c.other);
       const priorLabel = await evaluate(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').textContent.trim()`);
@@ -250,15 +331,32 @@ export async function checkDirectoryContracts(client, env) {
       await expectActive(client,c.otherGroup,c.other);
       check(`${mode}: VDOM flag update preserves viewport highlight`, true, await snapshot(client));
     });
+    await scenario(`${mode}-rapid-interleave`, async () => {
+      const c = await prepare(mode);
+      await scrollAnchor(client,c.first);
+      // Queue actual activations without waiting for a render between them.
+      // Both explicit collapse intents came from the same displayed open state.
+      await evaluate(client, `(() => { const e=document.querySelector(${q(group(c.group))}); e.click(); e.click(); })()`);
+      await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'two pre-commit close intents must not invert each other');
+      await userWheel(client,30);
+      await expectOnlyOpen(client,c.group);
+      await click(client,group(c.group));
+      await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'manual intent after a user scroll must win');
+      // Old main-scroll inertia (without a new main input) must not steal it.
+      await evaluate(client, 'window.scrollBy({top:3,behavior:"instant"})');
+      await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'late main observation stole a new manual intent');
+      check(`${mode}: quick explicit intents and late scroll preserve latest manual intent`, true, await snapshot(client));
+    });
     await scenario(`${mode}-navigation`, async () => {
       const c = await prepare(mode);
+      await evaluate(client, "history.replaceState(null, '', '#%')");
       await click(client,item(c.next));
-      await settle(client, `decodeURIComponent(location.hash) === ${q('#'+c.next)} && Math.abs(document.getElementById(${q(c.next)}).getBoundingClientRect().top - parseFloat(getComputedStyle(document.getElementById(${q(c.next)})).scrollMarginTop || 0)) <= 2`, 'same-page navigation/hash alignment');
+      await settle(client, `location.hash === ${q('#'+encodeURIComponent(c.next))} && Math.abs(document.getElementById(${q(c.next)}).getBoundingClientRect().top - parseFloat(getComputedStyle(document.getElementById(${q(c.next)})).scrollMarginTop || 0)) <= 2`, 'same-page navigation/hash alignment');
       check(`${mode}: same-page directory navigation reaches target/hash`, true, await snapshot(client));
       if ((await snapshot(client)).groups.find(g=>g.id===c.remoteGroup).open!=='true') await click(client,group(c.remoteGroup));
       await settle(client, `document.querySelector(${q(group(c.remoteGroup))}).dataset.open === 'true' && document.querySelector(${q(item(c.remote))}).getClientRects().length > 0`, 'remote directory item must finish expanding before navigation');
       await click(client,item(c.remote));
-      await settle(client, `document.querySelector('[data-slot="entry-pagination-status"]').textContent.trim() === '2 / 2' && decodeURIComponent(location.hash) === ${q('#'+c.remote)} && !!document.getElementById(${q(c.remote)})`, 'cross-page target/hash');
+      await settle(client, `document.querySelector('[data-slot="entry-pagination-status"]').textContent.trim() === '2 / 2' && location.hash === ${q('#'+encodeURIComponent(c.remote))} && !!document.getElementById(${q(c.remote)})`, 'cross-page target/hash');
       await settle(client, `Math.abs(document.getElementById(${q(c.remote)}).getBoundingClientRect().top - parseFloat(getComputedStyle(document.getElementById(${q(c.remote)})).scrollMarginTop || 0)) <= 2`, 'cross-page alignment');
       check(`${mode}: cross-page directory navigation reaches target/hash`, true, await snapshot(client));
     });
@@ -298,8 +396,8 @@ export async function checkDirectoryContracts(client, env) {
     const installed = await listenerCount(client);
     await evaluate(client, `window.__directoryTestTracker = window.__rssrEntryDirectoryTracker; document.querySelector('[data-nav="settings"]').click()`);
     await settle(client, `!!document.querySelector('[data-page="settings"]')`, 'leave entries');
-    await evaluate(client, `window.dispatchEvent(new Event('resize'))`);
-    await settle(client, `!window.__rssrEntryDirectoryTracker`, 'tracker must clean up after leaving entries');
+    await settle(client, `!window.__rssrEntryDirectoryTracker`, 'tracker must clean up on unmount without another scroll/resize');
+    await evaluate(client, 'window.__directoryTestTracker.scheduleUpdate(true)');
     const removed = await listenerCount(client);
     check('directory lifecycle removes its scroll/resize listeners', removed.scroll===installed.scroll-1 && removed.resize===installed.resize-1, {installed,removed});
     await evaluate(client, `document.querySelector('[data-action="activate-home"]').click()`);

@@ -1,35 +1,8 @@
-use std::collections::BTreeSet;
-
-use crate::ui::use_reactive_side_effect;
-
-use super::browser_interactions::{scroll_to_entry_group, sync_entry_directory_state_in_place};
+use super::directory::DirectoryTop;
 use super::facade::EntriesPageFacade;
-use super::groups::{EntryDirectoryMonth, EntryDirectorySource, EntryGroupNavItem};
-use super::intent::EntriesPageIntent;
-use super::session::EntriesPageSession;
 use super::state::EntryGroupingMode;
 use crate::components::{entry_filters::EntryFilters, status_banner::StatusBanner};
 use dioxus::prelude::*;
-
-#[derive(Clone, Copy)]
-struct DirectorySectionViewState {
-    is_open_base: bool,
-    is_open: bool,
-    can_toggle: bool,
-}
-
-fn directory_section_view_state(
-    default_open: bool,
-    toggled: bool,
-    is_active: bool,
-) -> DirectorySectionViewState {
-    let is_open_base = if default_open { !toggled } else { toggled };
-    DirectorySectionViewState {
-        is_open_base,
-        is_open: is_active || is_open_base,
-        can_toggle: !is_active,
-    }
-}
 
 pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
     let show_controls_facade = facade.clone();
@@ -44,7 +17,7 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
     let visible_entries_len = facade.visible_entries_len();
     let archived_count = facade.archived_entry_count();
     let source_filter_options = facade.source_filter_options();
-    let group_nav_items: &[EntryGroupNavItem] = facade.group_nav_items();
+    let model = facade.directory_model();
 
     rsx! {
         if let Some(summary) = facade.active_filter_summary() {
@@ -134,28 +107,8 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                         }
                     }
                 }
-                if !group_nav_items.is_empty() {
-                    nav { "data-layout": "entry-top-directory", "aria-label": "文章目录",
-                        for item in group_nav_items {
-                            button {
-                                "data-layout": "entry-top-directory-chip",
-                                r#type: "button",
-                                "data-directory-kind": "group",
-                                "data-active": if item.is_active { "true" } else { "false" },
-                                "data-directory-anchor": "{item.anchor_id}",
-                                onclick: {
-                                    let anchor_id = item.anchor_id.clone();
-                                    let target_page = item.target_page;
-                                    let facade = facade.clone();
-                                    move |_| {
-                                        facade.navigate_to_directory_target(target_page, anchor_id.clone())
-                                    }
-                                },
-                                span { "data-slot": "entry-directory-title", "{item.title}" }
-                                span { "data-slot": "entry-directory-meta", "{item.subtitle}" }
-                            }
-                        }
-                    }
+                if !model.group_nav_items.is_empty() {
+                    DirectoryTop { model: model.clone() }
                 }
                 EntryFilters {
                     search: facade.entry_search(),
@@ -187,224 +140,6 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                             aria_hidden: "true"
                         }
                         span { "data-slot": "entry-controls-toggle-label", "收起筛选" }
-                    }
-                }
-            }
-        }
-    }
-}
-
-pub(super) fn render_entry_directory(
-    facade: &EntriesPageFacade,
-    grouping_mode: EntryGroupingMode,
-    directory_months: &[EntryDirectoryMonth],
-    directory_sources: &[EntryDirectorySource],
-) -> Element {
-    rsx! {
-        EntryDirectoryRail {
-            session: facade.session(),
-            current_page: facade.current_page(),
-            page_start: facade.page_start(),
-            page_end: facade.page_end(),
-            visible_entries_len: facade.visible_entries_len(),
-            default_expanded_directory_sections: facade.default_expanded_directory_sections().clone(),
-            active_directory_anchor: facade.active_directory_anchor().map(ToString::to_string),
-            grouping_mode,
-            directory_months: directory_months.to_vec(),
-            directory_sources: directory_sources.to_vec(),
-        }
-    }
-}
-
-#[component]
-fn EntryDirectoryRail(
-    session: EntriesPageSession,
-    current_page: u32,
-    page_start: usize,
-    page_end: usize,
-    visible_entries_len: usize,
-    default_expanded_directory_sections: BTreeSet<String>,
-    active_directory_anchor: Option<String>,
-    grouping_mode: EntryGroupingMode,
-    directory_months: Vec<EntryDirectoryMonth>,
-    directory_sources: Vec<EntryDirectorySource>,
-) -> Element {
-    let mut expanded_directory_sections = use_signal(BTreeSet::<String>::new);
-    let toggled_directory_sections = expanded_directory_sections();
-
-    use_reactive_side_effect(
-        (
-            current_page,
-            grouping_mode,
-            page_start,
-            page_end,
-            visible_entries_len,
-            active_directory_anchor.clone(),
-        ),
-        move |_| {
-            expanded_directory_sections.with_mut(|sections| {
-                if !sections.is_empty() {
-                    sections.clear();
-                }
-            });
-        },
-    );
-
-    use_reactive_side_effect(
-        (
-            current_page,
-            grouping_mode,
-            page_start,
-            page_end,
-            active_directory_anchor.clone(),
-            toggled_directory_sections.clone(),
-        ),
-        move |_| {
-            sync_entry_directory_state_in_place();
-        },
-    );
-
-    rsx! {
-        aside { "data-layout": "entry-directory-rail",
-            h2 { "data-slot": "entry-directory-heading", "目录" }
-            if grouping_mode == EntryGroupingMode::Time {
-                nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
-                    for month in &directory_months {
-                        {
-                            let anchor_id = month.anchor_id.clone();
-                            let view_state = directory_section_view_state(
-                                default_expanded_directory_sections.contains(&anchor_id),
-                                toggled_directory_sections.contains(&anchor_id),
-                                month.is_active,
-                            );
-                            let toggle_anchor = anchor_id.clone();
-                            let mut toggle_sections = expanded_directory_sections;
-                            rsx! {
-                                div { "data-layout": "entry-directory-section", key: "{month.anchor_id}",
-                                    button {
-                                        "data-layout": "entry-directory-toggle",
-                                        "data-directory-kind": "group",
-                                        "data-directory-level": "month",
-                                        "data-nav": "entry-directory-month",
-                                        "data-active": if month.is_active { "true" } else { "false" },
-                                        "data-can-toggle": if view_state.can_toggle { "true" } else { "false" },
-                                        "data-open-base": if view_state.is_open_base { "true" } else { "false" },
-                                        "data-open": if view_state.is_open { "true" } else { "false" },
-                                        "data-directory-anchor": "{month.anchor_id}",
-                                        aria_disabled: if view_state.can_toggle { "false" } else { "true" },
-                                        aria_expanded: if view_state.is_open { "true" } else { "false" },
-                                        r#type: "button",
-                                        onclick: move |_| {
-                                            toggle_sections.with_mut(|sections| {
-                                                if !sections.insert(toggle_anchor.clone()) {
-                                                    sections.remove(&toggle_anchor);
-                                                }
-                                            });
-                                        },
-                                        span { "data-slot": "entry-directory-title", "{month.title}" }
-                                        span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
-                                    }
-                                    div {
-                                        "data-layout": "entry-directory-children",
-                                        "data-directory-section-body": "true",
-                                        "data-open-base": if view_state.is_open_base { "true" } else { "false" },
-                                        "data-open": if view_state.is_open { "true" } else { "false" },
-                                        for date in &month.dates {
-                                            button {
-                                                "data-layout": "entry-directory-link",
-                                                "data-directory-kind": "item",
-                                                "data-directory-group-anchor": "{month.anchor_id}",
-                                                "data-directory-level": "date",
-                                                "data-nav": "entry-directory-date",
-                                                "data-active": if date.is_active { "true" } else { "false" },
-                                                "data-directory-anchor": "{date.anchor_id}",
-                                                r#type: "button",
-                                                onclick: {
-                                                    let anchor_id = date.anchor_id.clone();
-                                                    let target_page = date.target_page;
-                                                    let session = session;
-                                                    move |_| {
-                                                        session.dispatch(EntriesPageIntent::SetCurrentPage(target_page));
-                                                        scroll_to_entry_group(&anchor_id);
-                                                    }
-                                                },
-                                                span { "data-slot": "entry-directory-title", "{date.title}" }
-                                                span { "data-slot": "entry-directory-meta", "{date.subtitle}" }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
-                    for source in &directory_sources {
-                        {
-                            let anchor_id = source.anchor_id.clone();
-                            let view_state = directory_section_view_state(
-                                default_expanded_directory_sections.contains(&anchor_id),
-                                toggled_directory_sections.contains(&anchor_id),
-                                source.is_active,
-                            );
-                            let toggle_anchor = anchor_id.clone();
-                            let mut toggle_sections = expanded_directory_sections;
-                            rsx! {
-                                div { "data-layout": "entry-directory-section", key: "{anchor_id}",
-                                    button {
-                                        "data-layout": "entry-directory-toggle",
-                                        "data-directory-kind": "group",
-                                        "data-active": if source.is_active { "true" } else { "false" },
-                                        "data-can-toggle": if view_state.can_toggle { "true" } else { "false" },
-                                        "data-open-base": if view_state.is_open_base { "true" } else { "false" },
-                                        "data-open": if view_state.is_open { "true" } else { "false" },
-                                        "data-directory-anchor": "{source.anchor_id}",
-                                        aria_disabled: if view_state.can_toggle { "false" } else { "true" },
-                                        aria_expanded: if view_state.is_open { "true" } else { "false" },
-                                        "data-action": if view_state.is_open { "collapse-directory-source" } else { "expand-directory-source" },
-                                        onclick: move |_| {
-                                            toggle_sections.with_mut(|sections| {
-                                                if !sections.insert(toggle_anchor.clone()) {
-                                                    sections.remove(&toggle_anchor);
-                                                }
-                                            });
-                                        },
-                                        span { "data-slot": "entry-directory-title", "{source.title}" }
-                                        span { "data-slot": "entry-directory-meta", "{source.subtitle}" }
-                                    }
-                                    div {
-                                        "data-layout": "entry-directory-grandchildren",
-                                        "data-directory-section-body": "true",
-                                        "data-open-base": if view_state.is_open_base { "true" } else { "false" },
-                                        "data-open": if view_state.is_open { "true" } else { "false" },
-                                        for month in &source.months {
-                                            button {
-                                                "data-layout": "entry-directory-link",
-                                                "data-directory-kind": "item",
-                                                "data-directory-group-anchor": "{source.anchor_id}",
-                                                "data-directory-level": "month",
-                                                "data-nav": "entry-directory-month",
-                                                "data-active": if month.is_active { "true" } else { "false" },
-                                                "data-directory-anchor": "{month.anchor_id}",
-                                                r#type: "button",
-                                                onclick: {
-                                                    let anchor_id = month.anchor_id.clone();
-                                                    let target_page = month.target_page;
-                                                    let session = session;
-                                                    move |_| {
-                                                        session.dispatch(EntriesPageIntent::SetCurrentPage(target_page));
-                                                        scroll_to_entry_group(&anchor_id);
-                                                    }
-                                                },
-                                                span { "data-slot": "entry-directory-title", "{month.title}" }
-                                                span { "data-slot": "entry-directory-meta", "{month.subtitle}" }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -449,56 +184,5 @@ pub(super) fn render_entry_pagination_controls(facade: &EntriesPageFacade) -> El
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::directory_section_view_state;
-
-    #[test]
-    fn directory_state_truth_table_keeps_base_preference_separate_from_active_override() {
-        // Explicit cases, independent of the implementation's boolean expression.
-        for (default, toggled, active, base, open, can_toggle) in [
-            (false, false, false, false, false, true),
-            (false, false, true, false, true, false),
-            (false, true, false, true, true, true),
-            (false, true, true, true, true, false),
-            (true, false, false, true, true, true),
-            (true, false, true, true, true, false),
-            (true, true, false, false, false, true),
-            (true, true, true, false, true, false),
-        ] {
-            let state = directory_section_view_state(default, toggled, active);
-            assert_eq!(
-                (state.is_open_base, state.is_open, state.can_toggle),
-                (base, open, can_toggle),
-                "default={default}, toggled={toggled}, active={active}",
-            );
-        }
-    }
-
-    #[test]
-    fn active_directory_section_stays_open_and_cannot_toggle() {
-        let state = directory_section_view_state(true, true, true);
-        assert!(!state.is_open_base);
-        assert!(state.is_open);
-        assert!(!state.can_toggle);
-    }
-
-    #[test]
-    fn inactive_current_page_section_can_be_collapsed() {
-        let state = directory_section_view_state(true, true, false);
-        assert!(!state.is_open_base);
-        assert!(!state.is_open);
-        assert!(state.can_toggle);
-    }
-
-    #[test]
-    fn off_page_section_can_be_manually_opened() {
-        let state = directory_section_view_state(false, true, false);
-        assert!(state.is_open_base);
-        assert!(state.is_open);
-        assert!(state.can_toggle);
     }
 }

@@ -5,6 +5,7 @@ mod bulk;
 mod cards;
 mod clock;
 mod controls;
+mod directory;
 mod facade;
 mod groups;
 pub(crate) mod intent;
@@ -16,14 +17,9 @@ mod state;
 
 use dioxus::prelude::*;
 
-use self::browser_interactions::{
-    scroll_directory_item, sync_entry_directory_with_viewport_alignment,
-};
 use self::cards::render_entry_card_at;
 use self::clock::current_time_utc;
-use self::controls::{
-    render_entry_controls, render_entry_directory, render_entry_pagination_controls,
-};
+use self::controls::{render_entry_controls, render_entry_pagination_controls};
 use self::{
     facade::EntriesPageFacade,
     presenter::{EntriesPagePresenter, EntriesPresenterInput},
@@ -71,6 +67,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
 
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
+    let directory_state = use_signal(directory::DirectoryState::default);
+    use_context_provider(|| directory::DirectoryStore(directory_state));
     let controls = render_entry_controls(&facade);
     let pagination = render_entry_pagination_controls(&facade);
 
@@ -81,6 +79,11 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             "data-position-key": facade.position_key(),
             "data-position-page": "{facade.current_page()}",
             "data-position-ready": if facade.positions_ready() { "true" } else { "false" },
+            directory::DirectoryBridge {
+                model: facade.directory_model(),
+                context_key: facade.position_key(),
+                session: facade.session(),
+            }
             AppNav {}
             if feed_id.is_none() { pull_refresh::PullRefresh {} }
             div { "data-layout": "entries-layout",
@@ -190,12 +193,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     }
                 }
                 if !facade.group_nav_items().is_empty() {
-                    { render_entry_directory(
-                        &facade,
-                        facade.grouping_mode(),
-                        facade.directory_months(),
-                        facade.directory_sources(),
-                    ) }
+                    directory::DirectoryRail { model: facade.directory_model(), grouping_mode: facade.grouping_mode() }
                 }
             }
         }
@@ -236,8 +234,6 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let read_filter = state_snapshot.read_filter;
     let starred_filter = state_snapshot.starred_filter;
     let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
-    let current_page = state_snapshot.current_page;
-    let active_directory_anchor = facade.active_directory_anchor().map(ToString::to_string);
 
     use_reactive_side_effect(
         (
@@ -297,28 +293,6 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
                 starred_filter,
                 selected_feed_urls,
             );
-        },
-    );
-
-    use_reactive_side_effect(
-        (current_page, active_directory_anchor.clone()),
-        move |(_, active_anchor)| {
-            if let Some(active_anchor) = active_anchor {
-                scroll_directory_item(&active_anchor);
-            }
-        },
-    );
-
-    use_reactive_side_effect(
-        (
-            current_page,
-            grouping_mode,
-            facade.page_start(),
-            facade.page_end(),
-            active_directory_anchor.clone(),
-        ),
-        move |_| {
-            sync_entry_directory_with_viewport_alignment();
         },
     );
 
