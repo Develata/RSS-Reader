@@ -32,7 +32,7 @@ PR19 原始四个键盘失败 JSON、历史 CSV、交接保持原样；没有跳
 - B Web Wasm SHA-256：`d6ed464954778cb89b9d7881435b547e1ff2f161ffd17bf43ae6ec13ba145aa9`，本机 Windows release，dx 0.7.10 / Dioxus 0.7.9，`--debug-symbols false`。工具报告版本差异，构建成功。
 - A Windows exe SHA-256：`e16c55bcb2c5bc1383828da8d907af064766f8eea7261744f952707a8c193265`。
 - B Windows exe SHA-256：`749dd3510827d1bedd7adf5a0d0319afa8703c53c777a7b26ef72d71ef12aa11`。
-- [完整元数据、源码指纹、逐轮统计、首个测量试次与内存快照](./baselines/2026-10-03-directory-follow-comparison.json)。`candidateCommit` 在证据提交中绑定实现提交；保留工作区字节与规范化 LF 指纹以复核采样源码。
+- [完整元数据、源码指纹、逐轮统计、首个测量试次与内存快照](./baselines/2026-10-03-directory-follow-comparison.json)。`candidateCommit` 已绑定实现提交 `dbe51a38d9d88dba7ad5b3769dba238b2b03e19e`；工作区字节与规范化 LF 指纹均保留，后者已逐文件核对 Git 源码。后续证据提交只改 docs。
 - [Web 600 个原始样本](./baselines/2026-10-03-directory-follow-web.csv)、[Windows 600 个原始样本](./baselines/2026-10-03-directory-follow-native.csv)。原始 DOM 与 proxy 时间均保留，未删异常值。
 
 同一 Windows 11 10.0.26200 / i7-12700H / 约 16GiB 主机，Node 24.21.0。Web 使用隔离 Chrome 154.0.8037.93，headless、1280×800、DPR 1；Windows 使用可见 WebView2 154.0.4258.53，1280×900、DPR 1.5，采样开始确认 visible/focused。物理显示器报告 165Hz；headless 的 rAF 节拍独立，不能当作物理刷新率。

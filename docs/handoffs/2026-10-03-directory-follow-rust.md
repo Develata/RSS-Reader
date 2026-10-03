@@ -4,9 +4,9 @@
 - 作者 / Agent：Codex
 - 分支：`test/directory-regression-baseline`
 - 当前 HEAD（启动基线）：`9815d4e8c04e124279cdabbc55de78c07a064371`
-- 相关 commit：pending（commit: pending）
+- 相关 commit：实现 `dbe51a38d9d88dba7ad5b3769dba238b2b03e19e`；本次后续文档提交只绑定证据与交接，不改变受测生产源码
 - 相关 tag / release：N/A；PR19 保持 draft，不 merge
-- 状态：`draft`
+- 状态：`validated`（本地）；PR 保持 draft，远端 CI 单列
 
 ## 工作摘要
 
@@ -53,7 +53,8 @@
 
 ### 远端状态
 
-- 实现和本地证据完成；commit: pending，尚未 push。最终 SHA 的 CI 尚未启动，不记为通过；PR19 保持 draft、不 merge。
+- 实现和本地证据完成，测量源码的规范化 LF SHA-256 已逐文件核对实现 commit `dbe51a38d9d88dba7ad5b3769dba238b2b03e19e`。证据提交只改 docs，无需重新构建相同生产源码。
+- 本记录提交时最终 CI 尚未启动，不记为通过；推送及最终 SHA 的 run/result 维护在 [PR19](https://github.com/Develata/RSS-Reader/pull/19) 说明，避免为回填结果再改变受检 SHA。保持 draft、不 merge，不创建新 PR。
 
 ## 工作区与同步
 

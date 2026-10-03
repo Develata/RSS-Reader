@@ -2,7 +2,7 @@
   "date": "2026-10-03",
   "baselineSha": "e8c6ee165761f2e89baa6612b96324310def187a",
   "baselinePrHead": "9815d4e8c04e124279cdabbc55de78c07a064371",
-  "candidateCommit": "pending",
+  "candidateCommit": "dbe51a38d9d88dba7ad5b3769dba238b2b03e19e",
   "methodology": "Within each host: A1,A2 (A/A), A3,B1 (A/B), B2,A4 (B/A). Each launch has 3 warmup trials then 20 samples per path. Pooled comparison uses A3+A4 against B1+B2 (40 samples per path per variant). Delta is B minus A. No concurrent compilation/test/GUI automation; ordinary OS background activity uncontrolled.",
   "limits": [
     "DOM condition plus two rAF callbacks is a proxy, not physical display or dropped frames.",
@@ -529,7 +529,7 @@
               "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "663f4cf5ea0b83be0bc126e3f74ebf0bc68940162d73b1694832618e166c66d2"
             },
             "bootstrapJs": "assets/rssr-app-dxh178811c8bb8d4bbf.js",
-            "candidateCommit": "pending"
+            "candidateCommit": "dbe51a38d9d88dba7ad5b3769dba238b2b03e19e"
           },
           "host": {
             "platform": "win32",
@@ -694,7 +694,7 @@
               "crates/rssr-app/src/pages/entries_page/browser_interactions.rs": "663f4cf5ea0b83be0bc126e3f74ebf0bc68940162d73b1694832618e166c66d2"
             },
             "bootstrapJs": "assets/rssr-app-dxh178811c8bb8d4bbf.js",
-            "candidateCommit": "pending"
+            "candidateCommit": "dbe51a38d9d88dba7ad5b3769dba238b2b03e19e"
           },
           "host": {
             "platform": "win32",
@@ -1604,7 +1604,7 @@
             "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
             "batchCount": 1,
             "variant": "B",
-            "candidateCommit": "pending",
+            "candidateCommit": "dbe51a38d9d88dba7ad5b3769dba238b2b03e19e",
             "candidateSourceHashes": {
               "crates/rssr-app/src/pages/entries_page/directory.rs": "c5f0f3f2e1b4f02b9be457b0df5b85118bc94c5781301fe405bb2db4086c166c",
               "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
@@ -1781,7 +1781,7 @@
             "conditions": "Serial release runs on same host. No concurrent test, GUI automation or compilation intentionally started. Ordinary host background processes are not controlled.",
             "batchCount": 1,
             "variant": "B",
-            "candidateCommit": "pending",
+            "candidateCommit": "dbe51a38d9d88dba7ad5b3769dba238b2b03e19e",
             "candidateSourceHashes": {
               "crates/rssr-app/src/pages/entries_page/directory.rs": "c5f0f3f2e1b4f02b9be457b0df5b85118bc94c5781301fe405bb2db4086c166c",
               "crates/rssr-app/src/pages/entries_page/directory/view.rs": "38f32d96c8c9b88c5a15e729fc2cda293fef431b9478fc58abe604bf78c22b9a",
