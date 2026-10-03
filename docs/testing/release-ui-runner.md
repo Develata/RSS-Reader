@@ -74,6 +74,14 @@ rg、Node/Chrome、dx，以及与产品锁文件匹配的 wasm-bindgen-test-runn
 Windows 不会默认选中 system32/bash.exe（那是 WSL）；用 `--bash` 或 `RSSR_BASH`
 明确选择 Git Bash。`CHROME_BIN`、`NODE_BIN` 等现有子脚本接口继续传递。
 Shell launcher 在解析任何参数前先确保 CLI 编译成功，所以首次 `--help` 也有编译成本。
+launcher 从调用者选择的 `rustc -vV` 取得 host triple，显式构建该 host 工具并 exec
+`target/release-ui-runner/<host>/debug/release-ui`；不会误用未带 triple 的旧二进制。
+`CARGO_BUILD_TARGET` / `build.target` 仍传给后续产品命令，不决定验收工具本身的运行平台。
+上面的手工 Cargo 构建命令未指定 target，故其直接二进制示例仍位于未带 triple 的目录。
+
+Unix launcher 和阶段调用不改 PATH 优先级，阶段直接使用所选 Bash。
+Windows 只把 Git Bash 基础工具目录追加到 PATH，启动阶段及其裸 `bash` 子调用继续使用该
+Git Bash，避免选中 system32 的 WSL 入口。已有 `RSSR_BASH` 不被 launcher 覆盖。
 
 若全局 wasm 工具与产品锁文件不同，可将匹配的预编译工具放在仓库 `target/` 下，
 显式设置 `RSSR_WASM_BINDGEN_TEST_RUNNER` 为该可执行文件的绝对路径。适配器默认仍用 PATH；
@@ -118,6 +126,13 @@ proxy-feed smoke。原有本地同源 feed fixture 的添加、刷新、阅读�
   仅排除 MSYS 对 curl `next=` 表单字段的路径转换，并保留调用者既有排除设置。
 - `commit` 是运行时可读的 Git HEAD，不证明工作区 clean；`--skip-build` 不校验缓存产物来源。
   本轮真实发现旧 bundle 早于 PR #19 最后修复，重新构建后对应 278 项小视口断言通过。
+- 版本由 `git rev-parse --verify HEAD` 读取，支持 `.git` 文件、linked worktree、分离 gitdir、
+  packed refs 和 detached HEAD。该探测也受进程树清理、取消和 5 秒超时约束；失败记 unknown，
+  原始输出保存在 `git-revision.log`，不退回读取猜测的 ref 路径。
+- 阶段完整 stdout/stderr 保存在日志文件。控制台转发是有界的尽力输出：单个后台线程、
+  最多 16 个 8 KiB 块，队列满时丢弃控制台副本；监督线程每次最多读取 128 KiB 后继续轮询。
+  收尾最多等 100 ms，不 join 可能卡住的输出线程。状态通知同样经过该队列，报告不依赖管道读者。
+  高频输出下应以日志文件和 summary 为验收依据，不依赖控制台内容完整。
 
 ## 2026-10-03 本机证据与阻塞
 
@@ -156,3 +171,5 @@ Chrome 154.0.8037.93，Python 3.14.7。仓库根目录保持 `E:/gitclone/RSS-Re
 Linux/Windows CI 及最终提交状态以交接记录和 PR 为准；不能把本机 Windows 结果写作
 Unix 信号验证。完整交接见
 [2026-10-03-release-ui-runner-rust.md](../handoffs/2026-10-03-release-ui-runner-rust.md)。
+后续审阅修复及对应复现证据见
+[2026-10-03-release-ui-runner-review-fixes.md](../handoffs/2026-10-03-release-ui-runner-review-fixes.md)。

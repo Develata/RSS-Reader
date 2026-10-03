@@ -3,7 +3,7 @@ mod process;
 
 use clap::Parser;
 use plan::{Options, Step};
-use process::{Cancellation, LogTail, OwnedProcess};
+use process::{Cancellation, Console, LogTail, OwnedProcess};
 use serde::Serialize;
 use std::{
     collections::HashSet,
@@ -147,22 +147,43 @@ fn unix_ms() -> u128 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis()
 }
 
-fn revision(root: &Path) -> String {
-    let git = root.join(".git");
-    let read = || -> Option<String> {
-        let head = fs::read_to_string(git.join("HEAD")).ok()?;
-        if let Some(reference) = head.trim().strip_prefix("ref: ") {
-            if let Ok(hash) = fs::read_to_string(git.join(reference)) {
-                return Some(hash.trim().into());
-            }
-            return fs::read_to_string(git.join("packed-refs")).ok()?.lines().find_map(|line| {
-                let (hash, name) = line.split_once(' ')?;
-                (name == reference).then(|| hash.into())
-            });
+fn revision(root: &Path, log_dir: &Path, cancelled: &Cancellation) -> String {
+    let read = || -> io::Result<String> {
+        // Git handles gitfiles, common refs, packed refs, and detached HEAD.
+        // Do not accidentally discover a parent repository for a source snapshot.
+        if !root.join(".git").exists() {
+            return Err(io::Error::other("no .git entry"));
         }
-        Some(head.trim().into())
+        let log = log_dir.join("git-revision.log");
+        File::create(&log)?;
+        let mut command = Command::new("git");
+        command.current_dir(root).args(["rev-parse", "--verify", "HEAD"]);
+        for name in ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"] {
+            command.env_remove(name);
+        }
+        let mut child = OwnedProcess::spawn(command, &log)?;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let signal = cancelled.load(Ordering::SeqCst);
+            if signal != 0 || Instant::now() >= deadline {
+                child.stop(signal)?;
+                return Err(io::Error::other("Git revision probe cancelled or timed out"));
+            }
+            if let Some(status) = child.try_wait()? {
+                child.stop(0)?;
+                let hash = fs::read_to_string(&log)?.trim().to_string();
+                if status.success()
+                    && [40, 64].contains(&hash.len())
+                    && hash.bytes().all(|b| b.is_ascii_hexdigit())
+                {
+                    return Ok(hash);
+                }
+                return Err(io::Error::other("git rev-parse failed"));
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
     };
-    read().unwrap_or_else(|| "unknown (no readable Git ref)".into())
+    read().unwrap_or_else(|error| format!("unknown ({error})"))
 }
 
 fn available_port(port: u16) -> io::Result<()> {
@@ -202,13 +223,17 @@ fn bash_path(options: &Options) -> io::Result<PathBuf> {
 fn command(step: &Step, options: &Options, root: &Path, log_dir: &Path) -> io::Result<Command> {
     let mut command = if step.program == "bash" {
         let mut command = Command::new(bash_path(options)?);
-        // Positional argv only: no path is interpreted as shell source. Give all
-        // nested scripts the same Bash and Unix tools instead of Windows WSL/find.
+        #[cfg(unix)]
+        command.args(["--noprofile", "--norc"]);
+        // Only Windows needs fallback Git Bash utilities when started from
+        // PowerShell. Preserve caller PATH priority and the chosen interpreter,
+        // including nested bare `bash` calls in the existing stage scripts.
+        #[cfg(windows)]
         command.args([
             "--noprofile",
             "--norc",
             "-c",
-            "export PATH=\"/usr/bin:/bin:$PATH\"; exec bash \"$@\"",
+            "export PATH=\"$PATH:/usr/bin:/bin\"; bash() { \"$BASH\" \"$@\"; }; export -f bash; exec \"$BASH\" \"$@\"",
             "release-ui",
         ]);
         command
@@ -260,6 +285,7 @@ fn execute(
     options: &Options,
     root: &Path,
     cancelled: &Cancellation,
+    console: &Console,
 ) -> io::Result<i32> {
     let step = report.steps[index].step.clone();
     let public = root.join(format!("target/dx/rssr-app/{}/web/public", options.profile()));
@@ -280,7 +306,7 @@ fn execute(
         available_port(step.port.unwrap() + 10000)?;
     }
     let log = report.log_dir.join(step.log);
-    let mut tail = LogTail::open(&log)?;
+    let mut tail = LogTail::open(&log, console)?;
     writeln!(OpenOptions::new().append(true).open(&log)?, "\n=== {} ===", step.name)?;
     let mut child = OwnedProcess::spawn(command(&step, options, root, &report.log_dir)?, &log)?;
     report.steps[index].pid = Some(child.id());
@@ -308,10 +334,10 @@ fn execute(
         }
         report.steps[index].status = State::Serving;
         report.write()?;
-        println!(
-            "SPA ready at http://127.0.0.1:{}/entries; manually check /feeds, /settings and /__codex/setup-local-auth?username=smoke&password=smoke-pass-123&seed=reader-demo&next=/entries/2. Ctrl+C stops it.",
+        console.send(false, format!(
+            "SPA ready at http://127.0.0.1:{}/entries; manually check /feeds, /settings and /__codex/setup-local-auth?username=smoke&password=smoke-pass-123&seed=reader-demo&next=/entries/2. Ctrl+C stops it.\n",
             options.port
-        );
+        ).as_bytes());
     }
     let code = process::wait(&mut child, &mut tail, cancelled)?;
     if step.name == "web-bundle" && code == 0 && !public.is_dir() {
@@ -323,12 +349,8 @@ fn execute(
     Ok(code)
 }
 
-fn run(options: Options) -> io::Result<i32> {
+fn run(options: Options, console: &Console) -> io::Result<i32> {
     let steps = plan::build(&options);
-    if options.plan {
-        println!("{}", serde_json::to_string_pretty(&steps)?);
-        return Ok(0);
-    }
     let root = options
         .repo_root
         .clone()
@@ -344,7 +366,7 @@ fn run(options: Options) -> io::Result<i32> {
     let mut report = Report {
         schema_version: 1,
         started_unix_ms: unix_ms(),
-        commit: revision(&root),
+        commit: "unknown (revision probe pending)".into(),
         profile: options.profile(),
         port: options.port,
         web_port: options.web_port,
@@ -382,6 +404,7 @@ fn run(options: Options) -> io::Result<i32> {
             return Err(error);
         }
     };
+    report.commit = revision(&root, &report.log_dir, &cancelled);
     let mut initialized_logs = HashSet::new();
     let mut code = 0;
     for index in 0..report.steps.len() {
@@ -400,8 +423,9 @@ fn run(options: Options) -> io::Result<i32> {
             if initialized_logs.insert(log) {
                 File::create(report.log_dir.join(log))?;
             }
-            println!("Running {}...", report.steps[index].step.name);
-            execute(index, &mut report, &options, &root, &cancelled)
+            console
+                .send(false, format!("Running {}...\n", report.steps[index].step.name).as_bytes());
+            execute(index, &mut report, &options, &root, &cancelled, console)
         })();
         let interrupted = cancelled.load(Ordering::SeqCst) != 0;
         let stage = &mut report.steps[index];
@@ -410,7 +434,7 @@ fn run(options: Options) -> io::Result<i32> {
             Ok(code) => code,
             Err(error) => {
                 stage.detail = error.to_string();
-                eprintln!("{}: {error}", stage.step.name);
+                console.send(true, format!("{}: {error}\n", stage.step.name).as_bytes());
                 1
             }
         };
@@ -437,12 +461,21 @@ fn run(options: Options) -> io::Result<i32> {
         report.write()?;
     }
     if code == 0 {
-        report.outcome =
-            if options.skip_external_feed { "completed-with-skips" } else { "completed" };
+        code = cancelled.load(Ordering::SeqCst) as i32;
+        report.outcome = if code != 0 {
+            "interrupted"
+        } else if options.skip_external_feed {
+            "completed-with-skips"
+        } else {
+            "completed"
+        };
     }
     report.exit_code = Some(code);
     report.write()?;
-    println!("Summary written to {}", report.log_dir.join("summary.md").display());
+    console.send(
+        false,
+        format!("Summary written to {}\n", report.log_dir.join("summary.md").display()).as_bytes(),
+    );
     Ok(code)
 }
 
@@ -459,12 +492,27 @@ fn main() {
         eprintln!("{error}");
         std::process::exit(1);
     }
-    let code = match run(options) {
-        Ok(code) => code,
+    if options.plan {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&plan::build(&options)).expect("serializable plan")
+        );
+        return;
+    }
+    let console = match Console::new() {
+        Ok(console) => console,
         Err(error) => {
             eprintln!("release-ui: {error}");
+            std::process::exit(1);
+        }
+    };
+    let code = match run(options, &console) {
+        Ok(code) => code,
+        Err(error) => {
+            console.send(true, format!("release-ui: {error}\n").as_bytes());
             1
         }
     };
+    console.finish();
     std::process::exit(code);
 }

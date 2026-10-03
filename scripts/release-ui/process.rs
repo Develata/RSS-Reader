@@ -7,12 +7,55 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
+        mpsc::{self, Receiver, SyncSender},
     },
     thread,
     time::Duration,
 };
 
 pub type Cancellation = Arc<AtomicUsize>;
+
+type Output = (bool, Vec<u8>);
+
+// One bounded, best-effort console worker for the whole invocation. A stalled
+// collector can block this worker, never lifecycle polling or durable reports.
+pub struct Console {
+    sender: SyncSender<Output>,
+    finished: Receiver<()>,
+}
+
+impl Console {
+    pub fn new() -> io::Result<Self> {
+        let (sender, receiver) = mpsc::sync_channel::<Output>(16);
+        let (finished_tx, finished) = mpsc::sync_channel(1);
+        thread::Builder::new().name("console-forwarder".into()).spawn(move || {
+            // Keep the stdout lock until this thread exits, including while
+            // blocked. Rust's shutdown try_lock then cannot flush it on the
+            // supervisor thread. No runtime status writes bypass this worker.
+            let mut stdout = io::stdout().lock();
+            for (error, bytes) in receiver {
+                let sink: &mut dyn Write = if error { &mut io::stderr() } else { &mut stdout };
+                let _ = sink.write_all(&bytes).and_then(|()| sink.flush());
+            }
+            let _ = finished_tx.send(());
+        })?;
+        Ok(Self { sender, finished })
+    }
+
+    pub fn send(&self, error: bool, bytes: &[u8]) {
+        for chunk in bytes.chunks(8192) {
+            if self.sender.try_send((error, chunk.to_vec())).is_err() {
+                break; // The full stage output remains in its file.
+            }
+        }
+    }
+
+    pub fn finish(self) {
+        drop(self.sender);
+        // Never join a worker that might be blocked in an OS console/pipe write.
+        let _ = self.finished.recv_timeout(Duration::from_millis(100));
+    }
+}
 
 pub fn install_handlers() -> io::Result<Cancellation> {
     let cancelled = Arc::new(AtomicUsize::new(0));
@@ -174,23 +217,25 @@ impl Drop for OwnedProcess {
     }
 }
 
-pub struct LogTail(File);
-impl LogTail {
-    pub fn open(path: &Path) -> io::Result<Self> {
+pub struct LogTail<'a>(File, &'a Console);
+impl<'a> LogTail<'a> {
+    pub fn open(path: &Path, console: &'a Console) -> io::Result<Self> {
         let mut file = File::open(path)?;
         file.seek(SeekFrom::End(0))?;
-        Ok(Self(file))
+        Ok(Self(file, console))
     }
     pub fn drain(&mut self) -> io::Result<()> {
         let mut bytes = [0; 8192];
-        loop {
+        // Also bound file reads: a continuously noisy stage must not starve polling.
+        for _ in 0..16 {
             let count = self.0.read(&mut bytes)?;
             if count == 0 {
                 return Ok(());
             }
             // Losing the console must not lose the durable stage log or its status.
-            let _ = io::stdout().write_all(&bytes[..count]);
+            self.1.send(false, &bytes[..count]);
         }
+        Ok(())
     }
 }
 
@@ -200,13 +245,13 @@ pub fn wait(
     cancelled: &Cancellation,
 ) -> io::Result<i32> {
     loop {
-        tail.drain()?;
         let code = cancelled.load(Ordering::SeqCst);
         if code != 0 {
             child.stop(code)?;
             tail.drain()?;
             return Ok(code as i32);
         }
+        tail.drain()?;
         if let Some(status) = child.try_wait()? {
             child.stop(0)?;
             tail.drain()?;

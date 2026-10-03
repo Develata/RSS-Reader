@@ -120,7 +120,11 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-ui-runner-${{ matrix.os }}
-          path: target/release-ui-acceptance/
+          path: |
+            target/release-ui-acceptance/
+            !target/release-ui-acceptance/**/target/**
+            !target/release-ui-acceptance/**/tools/**
+            !target/release-ui-acceptance/*/fixture*
           if-no-files-found: ignore
           retention-days: 3
 

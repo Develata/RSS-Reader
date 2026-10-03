@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import signal
 import socket
 import subprocess
@@ -120,7 +121,7 @@ class Acceptance(unittest.TestCase):
     def bundle(self):
         (self.root / "target/dx/rssr-app/debug/web/public").mkdir(parents=True)
 
-    def start(self, *args):
+    def start(self, *args, unread=False):
         kwargs = {}
         if WINDOWS:
             info = subprocess.STARTUPINFO()
@@ -128,9 +129,11 @@ class Acceptance(unittest.TestCase):
             info.wShowWindow = 0
             kwargs.update(creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=info)
         output = open(self.root / "console.log", "wb")
-        proc = subprocess.Popen(self.command(*args), env=self.env, cwd=RUN, stdout=output, stderr=subprocess.STDOUT, **kwargs)
+        proc = subprocess.Popen(self.command(*args), env=self.env, cwd=RUN, stdout=subprocess.PIPE if unread else output, stderr=subprocess.STDOUT, **kwargs)
         output.close()
         self.processes.append(proc)
+        if unread:
+            self.addCleanup(proc.stdout.close)
         return proc
 
     def until(self, predicate, proc=None):
@@ -171,6 +174,121 @@ class Acceptance(unittest.TestCase):
         self.assertEqual(sum(s["name"] == "web-bundle" and s["enabled"] for s in plan), 1)
         self.assertFalse(self.log.exists())
         self.assertFalse((self.root / "trace.txt").exists())
+
+    def test_bash_stage_preserves_caller_tools(self):
+        self.env["RSSR_BASH"] = ARGS.bash
+        shutil.copy2(FIXTURE, self.root / "tools" / ("uname" + SUFFIX))
+        if WINDOWS:
+            # Seed PATH in Bash itself: MSYS may import a cached native PATH.
+            # Unset the hook so a nested interpreter cannot undo a bad prepend.
+            startup = self.root / "caller-bash-env"
+            startup.write_text('unset BASH_ENV\nexport PATH="$(/usr/bin/cygpath -u "$FIXTURE_TOOLS"):$PATH"\n', encoding="utf-8")
+            self.env.update(BASH_ENV=startup.as_posix(), FIXTURE_TOOLS=str(self.root / "tools"))
+        (self.root / "scripts/run_wasm_contract_harness.sh").write_text(
+            'set -eu\nuname > selected-tool.txt\n', encoding="utf-8")
+        self.run_cli("--skip-automated", "--with-browser-contracts", "--no-serve")
+        self.assertEqual((self.root / "selected-tool.txt").read_text().strip(), "caller-selected-uname")
+
+    @unittest.skipIf(WINDOWS, "alternate Bash executable identity is checked on Unix")
+    def test_explicit_bash_is_not_replaced(self):
+        chosen = self.root / "selected-bash"
+        chosen.symlink_to(Path(shutil.which(ARGS.bash) or ARGS.bash).resolve())
+        self.env["RSSR_BASH"] = str(chosen)
+        (self.root / "scripts/run_wasm_contract_harness.sh").write_text(
+            'printf "%s" "$BASH" > selected-shell.txt\n', encoding="utf-8")
+        self.run_cli("--skip-automated", "--with-browser-contracts", "--no-serve")
+        self.assertEqual((self.root / "selected-shell.txt").read_text(), str(chosen))
+
+    def test_unread_stdout_does_not_block_cancellation(self):
+        self.env.update(HOLD_STAGE="wasm-check", FIXTURE_PORT=str(free_port()), NOISY="1")
+        proc = self.start("--full", "--no-serve", unread=True)
+        self.until(lambda: (self.root / "noise-ready").exists(), proc)
+        time.sleep(.2)  # Give the supervisor time to fill the unread stdout pipe.
+        started = time.monotonic()
+        if WINDOWS:
+            console_event(proc.pid, 1)
+        else:
+            proc.send_signal(signal.SIGTERM)
+        self.assertEqual(proc.wait(timeout=5), 130 if WINDOWS else 143)
+        self.assertLess(time.monotonic() - started, 5)
+        self.assertEqual(self.stage("wasm-check")["status"], "interrupted")
+        self.assertEqual(self.stage("app-tests")["status"], "blocked")
+        self.assertGreater((self.log / "automated-gates.log").stat().st_size, 4 * 1024 * 1024)
+        self.no_tree()
+
+    def test_git_revision_in_linked_worktree_and_separate_gitdir(self):
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(self.root), *args], stderr=subprocess.STDOUT).decode().strip()
+        git("init", "-q")
+        git("add", "scripts")
+        git("-c", "user.name=CLI fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
+        expected = git("rev-parse", "HEAD")
+        git("pack-refs", "--all")
+        self.run_cli("--skip-automated", "--no-serve")
+        self.assertEqual(self.report()["commit"], expected)
+        linked = self.root / "linked 中文 worktree"
+        git("worktree", "add", "--detach", str(linked), "HEAD")
+        self.assertTrue((linked / ".git").is_file())
+        self.run_cli("--repo-root", str(linked), "--skip-automated", "--no-serve")
+        self.assertEqual(self.report()["commit"], expected)
+        git("worktree", "remove", str(linked))
+        git("init", "--separate-git-dir", str(self.root / "git storage"))
+        self.assertTrue((self.root / ".git").is_file())
+        self.run_cli("--skip-automated", "--no-serve")
+        self.assertEqual(self.report()["commit"], expected)
+
+    def test_git_probe_cancellation_owns_descendants(self):
+        (self.root / ".git").touch()
+        shutil.copy2(FIXTURE, self.root / "tools" / ("git" + SUFFIX))
+        self.env.update(HOLD_STAGE="git-revision", FIXTURE_PORT=str(free_port()))
+        proc = self.start("--no-serve")
+        self.until(lambda: (self.root / "tree-ready").exists(), proc)
+        if WINDOWS:
+            console_event(proc.pid, 0)
+        else:
+            proc.send_signal(signal.SIGTERM)
+        self.assertEqual(proc.wait(timeout=5), 130 if WINDOWS else 143)
+        self.assertEqual(self.report()["outcome"], "interrupted")
+        self.no_tree()
+
+    def test_real_launcher_target_config_and_stale_binary(self):
+        # Real cargo builds the real CLI through the real shell entry point.
+        # The fixture repository lives under this checkout's ignored target, not C:.
+        shutil.copy2(ROOT / "scripts/run_release_ui_regression.sh", self.root / "scripts/run_release_ui_regression.sh")
+        shutil.copytree(ROOT / "scripts/release-ui", self.root / "scripts/release-ui", ignore=shutil.ignore_patterns("target", "__pycache__"))
+        env = dict(os.environ, CARGO_NET_OFFLINE="true")
+        host = next(line.split(": ", 1)[1] for line in subprocess.check_output(["rustc", "-vV"]).decode().splitlines() if line.startswith("host: "))
+        target = self.root / "target/release-ui-runner"
+        stale = target / "debug" / ("release-ui" + SUFFIX)
+        stale.parent.mkdir(parents=True)
+        shutil.copy2(FIXTURE, stale)  # Any accidental execution cannot print a JSON plan.
+        config = self.root / ".cargo/config.toml"
+        config.parent.mkdir()
+        cargo_wrapper = self.root / "caller tools"
+        cargo_wrapper.mkdir()
+        marker = self.root / "caller-cargo.txt"
+        real_cargo = Path(shutil.which("cargo")).as_posix()
+        wrapper = cargo_wrapper / "cargo"
+        wrapper.write_text(f'#!/bin/bash\nprintf "selected\\n" >> {shlex.quote(marker.as_posix())}\nexec {shlex.quote(real_cargo)} "$@"\n', encoding="utf-8")
+        wrapper.chmod(0o755)
+        env["FIXTURE_TOOLS"] = str(cargo_wrapper)
+        # Establish caller preference immediately before invoking the actual
+        # launcher. Positional argv preserves spaces and avoids shell injection.
+        invoke = 'tools="$1"; shift; if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then tools="$(/usr/bin/cygpath -u "$tools")"; fi; export PATH="$tools:$PATH"; exec "$BASH" "$@"'
+        for mode in ["environment", "config", "missing-unqualified"]:
+            with self.subTest(mode=mode):
+                if mode == "environment":
+                    env["CARGO_BUILD_TARGET"] = host
+                else:
+                    env.pop("CARGO_BUILD_TARGET", None)
+                    config.write_text(f'[build]\ntarget = "{host}"\n', encoding="utf-8")
+                    if mode == "missing-unqualified":
+                        stale.unlink(missing_ok=True)
+                result = subprocess.run([ARGS.bash, "--noprofile", "--norc", "-c", invoke, "test-launcher", str(cargo_wrapper), str(self.root / "scripts/run_release_ui_regression.sh"), "--full", "--plan"], env=env, cwd=RUN, capture_output=True, timeout=180)
+                (self.root / f"launcher-{mode}.log").write_bytes(result.stdout + result.stderr)
+                self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+                self.assertTrue(any(s["name"] == "web-bundle" for s in json.loads(result.stdout)))
+        self.assertEqual(marker.read_text().splitlines(), ["selected"] * 3)
 
     def test_full_order_and_build_once_unicode_paths(self):
         self.run_cli("--full", "--no-serve", "--release")

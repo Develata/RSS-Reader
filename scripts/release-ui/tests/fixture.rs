@@ -43,12 +43,17 @@ fn main() {
     }
     let executable = env::current_exe().unwrap();
     let name = executable.file_stem().unwrap().to_str().unwrap();
+    if name == "uname" {
+        println!("caller-selected-uname");
+        return;
+    }
     let step = match name {
         "cargo" if args.first().is_some_and(|s| s == "check") => "wasm-check",
         "cargo" if args.iter().any(|s| s == "rssr-app") => "app-tests",
         "cargo" if args.iter().any(|s| s == "rssr-infra") => "host-contracts",
         "cargo" if args.first().is_some_and(|s| s == "run") => "cargo-run",
         "cargo" => "web-tests",
+        "git" => "git-revision",
         "dx" => "web-bundle",
         _ => match args
             .iter()
@@ -84,6 +89,14 @@ fn main() {
         }
         assert!(Path::new("leaf.pid").is_file());
         fs::write("tree-ready", "ready").unwrap();
+        if env::var_os("NOISY").is_some() {
+            let mut stdout = std::io::stdout().lock();
+            for _ in 0..512 {
+                stdout.write_all(&[b'x'; 8192]).unwrap();
+            }
+            stdout.flush().unwrap();
+            fs::write("noise-ready", "ready").unwrap();
+        }
         if env::var_os("ORPHAN").is_none() {
             pause();
         }
