@@ -12,8 +12,8 @@ use crate::ui::use_reactive_side_effect;
 mod view;
 pub(super) use view::{DirectoryRail, DirectoryTop};
 
-// Memo output identity changes only when the grouping projection changes.
-// Directory renders must not compare or clone the complete grouping trees.
+// Cheap view-prop identity. Presenter metadata can change without changing the
+// directory; resetting interaction state requires the narrower identity below.
 #[derive(Clone)]
 pub(crate) struct DirectoryModel(pub(super) Arc<EntriesPagePresenter>);
 
@@ -27,6 +27,26 @@ impl std::ops::Deref for DirectoryModel {
     type Target = EntriesPagePresenter;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+#[derive(Clone)]
+struct DirectoryResetIdentity(DirectoryModel);
+
+impl PartialEq for DirectoryResetIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        let left = &self.0;
+        let right = &other.0;
+        left == right
+            || (left.current_page == right.current_page
+                && left.page_size == right.page_size
+                && left.page_start == right.page_start
+                && left.page_end == right.page_end
+                && left.active_group_anchor == right.active_group_anchor
+                && left.active_directory_anchor == right.active_directory_anchor
+                && left.group_nav_items == right.group_nav_items
+                && left.directory_months == right.directory_months
+                && left.directory_sources == right.directory_sources)
     }
 }
 
@@ -163,7 +183,8 @@ pub(super) fn DirectoryBridge(
     session: EntriesPageSession,
 ) -> Element {
     let DirectoryStore(mut state) = use_context();
-    use_reactive_side_effect((context_key, model), move |(_, model)| {
+    use_reactive_side_effect((context_key, DirectoryResetIdentity(model)), move |(_, identity)| {
+        let model = identity.0;
         let previous = state.peek();
         let next = DirectoryState {
             epoch: previous.epoch + 1,
@@ -233,6 +254,32 @@ pub(super) fn DirectoryBridge(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reset_identity_ignores_feed_summary_but_tracks_page_and_directory_structure() {
+        use crate::pages::entries_page::{
+            groups::EntryGroupNavItem, presenter::EntriesPresenterInput, state::EntriesPageState,
+        };
+        let presenter = EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(
+            &EntriesPageState::new(false),
+            None,
+        ));
+        let before = DirectoryResetIdentity(DirectoryModel(Arc::new(presenter.clone())));
+        let mut after = presenter.clone();
+        after.source_filter_options.push((1, "Feed".into(), "https://feed.test".into(), 11));
+        assert!(before == DirectoryResetIdentity(DirectoryModel(Arc::new(after.clone()))));
+        after.current_page += 1;
+        assert!(before != DirectoryResetIdentity(DirectoryModel(Arc::new(after))));
+        let mut after = presenter;
+        after.group_nav_items.push(EntryGroupNavItem {
+            anchor_id: "new-group".into(),
+            title: "New group".into(),
+            subtitle: "1".into(),
+            target_page: 1,
+            is_active: false,
+        });
+        assert!(before != DirectoryResetIdentity(DirectoryModel(Arc::new(after))));
+    }
 
     fn state() -> DirectoryState {
         DirectoryState {

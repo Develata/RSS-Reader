@@ -196,6 +196,27 @@ function cleanup() {
     if (raf) cancelAnimationFrame(raf);
     if (window[trackerKey]?.cleanup === cleanup) delete window[trackerKey];
 }
+// A non-mutating bridge/DOM fence for host diagnostics and acceptance tools.
+// It drains work already observed here; it does not promise future I/O or smooth
+// scrolling has finished. Those callers must wait for their own completion facts.
+function whenSettled() {
+    return new Promise((resolve, reject) => {
+        let stable = 0, frame = 0;
+        const timer = setTimeout(() => { cancelAnimationFrame(frame); reject(new Error('Directory bridge did not settle')); }, 6000);
+        const inspect = () => {
+            if (disposed || !root.isConnected) { clearTimeout(timer); reject(new Error('Directory disposed')); return; }
+            refreshContext();
+            const consumers = [...root.querySelectorAll(directorySelector)];
+            const idle = epoch && !raf && !inFlight && !ack && !pending.size && !navigation &&
+                consumers.every(e => Number(e.dataset.directoryEpoch) === epoch);
+            stable = idle ? stable + 1 : 0;
+            if (stable >= 2) { clearTimeout(timer); resolve({epoch, sequence}); }
+            else frame = requestAnimationFrame(inspect);
+        };
+        scheduleUpdate();
+        frame = requestAnimationFrame(inspect);
+    });
+}
 const observer = new MutationObserver(records => {
     if (!root.isConnected) { cleanup(); return; }
     refreshContext();
@@ -210,7 +231,7 @@ listen(window, 'scroll', onScroll, {capture: true, passive: true});
 listen(window, 'resize', () => scheduleUpdate(true), {passive: true});
 for (const name of ['wheel','touchstart','touchmove','pointerdown','keydown']) listen(document, name, noteInput, {capture: true, passive: true});
 listen(root, 'click', onClick, {capture: true});
-window[trackerKey] = {cleanup, scheduleUpdate};
+window[trackerKey] = {cleanup, scheduleUpdate, whenSettled};
 scheduleUpdate(true);
 try {
     while (!disposed) {

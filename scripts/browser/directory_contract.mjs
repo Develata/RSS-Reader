@@ -1,4 +1,4 @@
-import { evaluate } from './cdp_session.mjs';
+import { evaluate, sleep } from './cdp_session.mjs';
 
 // Literal facts from directory_contract_*.json. Do not derive expected selection
 // from the tracker, DOM order, or the production grouping/selection algorithm.
@@ -70,6 +70,44 @@ export async function click(client, selector) {
   })()`);
   await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...point, button: 'left', clickCount: 1 });
   await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', clickCount: 1 });
+}
+
+// Trusted CDP input, with both hit targets resolved before any render. Record
+// what was actually clicked and the presented epoch; do not infer intent from
+// the eventual location or call HTMLElement.click() as a rapid-input proxy.
+export async function clickBurst(client, selectors, gapMs = 0, keyboard = false) {
+  const points = await evaluate(client, `(() => {
+    const elements=${q(selectors)}.map(s=>document.querySelector(s));
+    const parent=elements.at(-1).closest(${q(rail)}), last=elements.at(-1).getBoundingClientRect(), bounds=parent.getBoundingClientRect();
+    if(last.bottom>bounds.bottom) parent.scrollTop+=last.bottom-bounds.bottom;
+    window.__directoryClicks=[];
+    window.__directoryClickProbe=e=>{const b=e.target.closest?.('[data-directory-anchor]');if(b)window.__directoryClicks.push({anchor:b.dataset.directoryAnchor,open:b.dataset.open,trusted:e.isTrusted,at:e.timeStamp,epoch:b.closest('[data-directory-consumer]').dataset.directoryEpoch,page:document.querySelector('[data-page="entries"]').dataset.positionPage});};
+    window.addEventListener('click',window.__directoryClickProbe,true);
+    return elements.map(e=>{const r=e.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;if(!e.contains(document.elementFromPoint(x,y)))throw new Error('Rapid input target is not hittable');return {x,y};});
+  })()`);
+  try {
+    for (const [index,point] of points.entries()) {
+      if (index && gapMs) await sleep(gapMs);
+      if (keyboard) {
+        // Focus setup is independent of the first jump's geometry; both
+        // activations are still trusted browser input, never element.click().
+        // A page switch can briefly hide the second control. Wait for a real
+        // focusable target; gapMs is a minimum, actual event times are recorded.
+        await settle(client,`!!document.querySelector(${q(selectors[index])})?.getClientRects().length`,'rapid navigation target must be displayed');
+        await evaluate(client,`document.querySelector(${q(selectors[index])}).focus({preventScroll:true})`);
+        await keyPress(client,'Enter');
+      } else {
+        for (const type of ['mousePressed','mouseReleased']) await client.send('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
+      }
+    }
+    return await evaluate(client,'window.__directoryClicks');
+  } finally {
+    await evaluate(client,"window.removeEventListener('click',window.__directoryClickProbe,true);delete window.__directoryClickProbe;delete window.__directoryClicks");
+  }
+}
+
+export async function directoryIdle(client) {
+  await evaluate(client, 'window.__rssrEntryDirectoryTracker.whenSettled()');
 }
 
 export async function scrollAnchor(client, id, topPx = 80, tolerance = 0.75) {
@@ -173,7 +211,7 @@ async function listenerCount(client) {
 }
 
 export async function checkDirectoryContracts(client, env) {
-  const {prepare} = directoryHarness(client, env);
+  const {prepare, setMode} = directoryHarness(client, env);
   const failures = [];
   const check = env.assertThat;
   async function scenario(name, run) {
@@ -184,7 +222,52 @@ export async function checkDirectoryContracts(client, env) {
       await env.capture(`directory-failure-${name}`).catch(e => { failures.at(-1).captureError = String(e); });
     }
   }
+  for (const gap of [0,4,12,32]) await scenario(`rapid-cross-page-${gap}ms`, async () => {
+    const c = await prepare('time'), last='entry-group-2026-04-01-6';
+    await click(client,group(c.remoteGroup));
+    await settle(client,`document.querySelector(${q(group(c.remoteGroup))}).dataset.open === 'true'`,'expand cross-page targets');
+    const hits=await clickBurst(client,[item(c.remote),item(last)],gap,true);
+    check(`rapid navigation ${gap}ms: both distinct targets receive trusted clicks`,
+      hits.length===2 && hits[0].anchor===c.remote && hits[1].anchor===last && hits.every(h=>h.trusted),hits);
+    await settle(client,`location.hash === ${q('#'+last)} && document.querySelector('[data-slot="entry-pagination-status"]').textContent.trim()==='2 / 2' && !!document.getElementById(${q(last)})`,'latest real cross-page click must win');
+    await settle(client,`Math.abs(document.getElementById(${q(last)}).getBoundingClientRect().top)<=2`,'latest cross-page target must align');
+    check(`rapid navigation ${gap}ms: latest user target wins`,true,{hits,after:await snapshot(client)});
+  });
   for (const mode of ['time', 'source']) {
+    await scenario(`${mode}-read-summary-preserves-manual`, async () => {
+      const c = await prepare(mode);
+      check(`${mode}: read regression uses All feeds and ReadFilter::All`,
+        await evaluate(client, `!!document.querySelector('#source-unread-1') && !document.querySelector('[data-field="read-filter-unread"]').checked && !document.querySelector('[data-field="read-filter-read"]').checked`));
+      await scrollAnchor(client,c.first);
+      await click(client,group(c.group));
+      await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'close current group before read update');
+      await click(client,group(c.otherGroup));
+      await settle(client, `document.querySelector(${q(group(c.otherGroup))}).dataset.open === 'true'`, 'open other group before read update');
+      for (const action of ['toggle-starred','mark-read','mark-read']) {
+        const selector = `[data-position-entry="72"] [data-action="${action}"]`;
+        const before = await snapshot(client);
+        const label = await evaluate(client, `document.querySelector(${q(selector)}).textContent.trim()`);
+        const count = await evaluate(client, `Number(document.querySelector('#source-unread-1').textContent.split(' ')[1])`);
+        await click(client,selector);
+        await settle(client, `document.querySelector(${q(selector)}).textContent.trim() !== ${q(label)}`, 'entry flag write must complete');
+        if (action==='mark-read') {
+          const wanted = count + (label==='标已读'?-1:1);
+          await settle(client, `document.querySelector('#source-unread-1').textContent === ${q(`未读 ${wanted} 篇`)}`, 'feed summary bootstrap must finish');
+          check(`${mode}: read update finishes source unread summary refresh`, true, {before:count,after:wanted});
+        }
+        await directoryIdle(client);
+        const after = await snapshot(client);
+        check(`${mode}: ${action} preserves manual/open state and both scroll positions`,
+          after.mode==='manual' && JSON.stringify(after.groups.map(g=>[g.id,g.open]))===JSON.stringify(before.groups.map(g=>[g.id,g.open])) &&
+          Math.abs(after.y-before.y)<=1 && Math.abs(after.rail.scrollTop-before.rail.scrollTop)<=1 && Math.abs(after.top.scrollLeft-before.top.scrollLeft)<=1,
+          {before,after});
+      }
+      const epoch=await evaluate(client,`document.querySelector(${q(rail)}).dataset.directoryEpoch`);
+      await setMode(mode==='time'?'source':'time');
+      await directoryIdle(client);
+      check(`${mode}: a real grouping change still resets directory context`,await evaluate(client,`document.querySelector(${q(rail)}).dataset.directoryEpoch !== ${q(epoch)} && document.querySelector(${q(rail)}).dataset.directoryMode === 'follow'`));
+      await expectOnlyOpen(client,directoryCases[mode==='time'?'source':'time'].group);
+    });
     await scenario(`${mode}-boundary`, async () => {
       const c = await prepare(mode);
       for (const [anchor, beforeGroup, beforeItem, afterGroup] of [
@@ -219,8 +302,14 @@ export async function checkDirectoryContracts(client, env) {
         await settle(client, `document.querySelector(${q(group(c.otherGroup))}).dataset.open === 'true'`, 'other group explicitly opens');
         // A programmatic main scroll observes the position but must not reset
         // manual choices. This also detects feedback from directory alignment.
-        await evaluate(client, 'window.scrollBy({top:2,behavior:"instant"})');
+        await scrollAnchor(client,c.other);
+        await expectActive(client,c.otherGroup,c.other);
+        await directoryIdle(client);
         await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false' && document.querySelector(${q(group(c.otherGroup))}).dataset.open === 'true'`, 'programmatic scroll interrupted manual state');
+        check(`${mode}: cross-group programmatic observation preserves manual state after ${key}`,(await snapshot(client)).mode==='manual');
+        await scrollAnchor(client,c.first);
+        await expectActive(client,c.group,c.first);
+        await directoryIdle(client);
         const beforeY = (await snapshot(client)).y;
         await userWheel(client, 24);
         await settle(client, `scrollY > ${beforeY + 1}`, 'same-group wheel must really scroll');
@@ -269,6 +358,7 @@ export async function checkDirectoryContracts(client, env) {
       // A nested scroll event whose target does not contain the article groups
       // must not be interpreted as the main list, even if it bubbles.
       await evaluate(client, `document.querySelector('[data-position-entry]').dispatchEvent(new Event('scroll',{bubbles:true}))`);
+      await directoryIdle(client);
       await settle(client, `document.querySelector(${q(group(distant))}).dataset.open === 'true'`, 'nested event reset manual state');
       const nestedPoint = await evaluate(client, `(() => {
         const main=document.querySelector('[data-layout="entries-main"]');
@@ -324,26 +414,37 @@ export async function checkDirectoryContracts(client, env) {
       // A real VDOM flag update must preserve the observed position in place.
       await scrollAnchor(client,c.other);
       await expectActive(client,c.otherGroup,c.other);
+      const beforeFlag = await snapshot(client);
       const priorLabel = await evaluate(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').textContent.trim()`);
       const nextLabel = priorLabel === '收藏' ? '取消收藏' : '收藏';
       await evaluate(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').click()`);
       await settle(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').textContent.trim() === ${q(nextLabel)}`, 'flag rerender not completed');
+      await directoryIdle(client);
       await expectActive(client,c.otherGroup,c.other);
-      check(`${mode}: VDOM flag update preserves viewport highlight`, true, await snapshot(client));
+      const afterFlag = await snapshot(client);
+      check(`${mode}: VDOM flag update preserves highlight, manual/open state and positions`, afterFlag.mode===beforeFlag.mode &&
+        JSON.stringify(afterFlag.groups.map(g=>[g.id,g.open]))===JSON.stringify(beforeFlag.groups.map(g=>[g.id,g.open])) &&
+        Math.abs(afterFlag.y-beforeFlag.y)<=1 && Math.abs(afterFlag.rail.scrollTop-beforeFlag.rail.scrollTop)<=1 && Math.abs(afterFlag.top.scrollLeft-beforeFlag.top.scrollLeft)<=1,
+        {before:beforeFlag,after:afterFlag});
     });
     await scenario(`${mode}-rapid-interleave`, async () => {
       const c = await prepare(mode);
       await scrollAnchor(client,c.first);
-      // Queue actual activations without waiting for a render between them.
-      // Both explicit collapse intents came from the same displayed open state.
-      await evaluate(client, `(() => { const e=document.querySelector(${q(group(c.group))}); e.click(); e.click(); })()`);
-      await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'two pre-commit close intents must not invert each other');
+      const hits=await clickBurst(client,[group(c.group),group(c.group)]);
+      check(`${mode}: rapid toggles receive two trusted inputs`,hits.length===2 && hits.every(h=>h.trusted && h.anchor===c.group),hits);
+      // The second click may arrive before OR after the first DOM commit. Its
+      // explicit intent is the inverse of what the user actually saw then.
+      const desired=hits[1].open==='true'?'false':'true';
+      await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === ${q(desired)}`, 'latest trusted toggle must honor its presented state');
+      await directoryIdle(client);
       await userWheel(client,30);
       await expectOnlyOpen(client,c.group);
       await click(client,group(c.group));
       await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'manual intent after a user scroll must win');
       // Old main-scroll inertia (without a new main input) must not steal it.
-      await evaluate(client, 'window.scrollBy({top:3,behavior:"instant"})');
+      await scrollAnchor(client,c.other);
+      await expectActive(client,c.otherGroup,c.other);
+      await directoryIdle(client);
       await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'late main observation stole a new manual intent');
       check(`${mode}: quick explicit intents and late scroll preserve latest manual intent`, true, await snapshot(client));
     });
