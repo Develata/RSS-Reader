@@ -96,6 +96,34 @@ jobs:
       - name: Check Linux Debian metadata adapter
         run: bash scripts/test_prepare_linux_deb.sh
 
+  release-ui-runner:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Check isolated release UI CLI
+        run: |
+          cargo fmt --manifest-path scripts/release-ui/Cargo.toml --check
+          cargo clippy --manifest-path scripts/release-ui/Cargo.toml --all-targets --locked --target-dir target/release-ui-runner -- -D warnings
+          cargo test --manifest-path scripts/release-ui/Cargo.toml --locked --target-dir target/release-ui-runner
+          cargo build --manifest-path scripts/release-ui/Cargo.toml --locked --target-dir target/release-ui-runner
+          python -X utf8 scripts/release-ui/tests/acceptance.py --bash "$BASH"
+      - name: Preserve CLI acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-ui-runner-${{ matrix.os }}
+          path: target/release-ui-acceptance/
+          if-no-files-found: ignore
+          retention-days: 3
+
   native-module:
     needs: workspace
     runs-on: ubuntu-latest
@@ -418,7 +446,7 @@ jobs:
   # Keep the former required-check name stable, now aggregating every module.
   lint-and-test:
     if: always()
-    needs: [workspace, format, test-tools, native-module, web-smoke, web-ui, wasm-contract-build, wasm-browser-contract, android-smoke]
+    needs: [workspace, format, test-tools, release-ui-runner, native-module, web-smoke, web-ui, wasm-contract-build, wasm-browser-contract, android-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

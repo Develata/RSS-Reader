@@ -35,6 +35,13 @@ bash scripts/run_chrome_mcp_target.sh --restart
 
 建议优先走统一脚本：
 
+该入口现在只构建并启动 `scripts/release-ui/` 的独立 Rust CLI；参数、阶段状态、
+build-once、summary 和退出码由 Rust 持有。执行 `--plan` 可只查看 JSON 计划。
+Windows 仍依赖 Git Bash 和既有阶段工具，不代表所有 smoke 已原生移植。
+行为基线、直接调用方式、信号边界与实测限制见 [release UI runner](release-ui-runner.md)。
+受外部 RSS 网络限制时可显式加 `--skip-external-feed`（需 full 或 fixed-smokes）；
+这只完成本地 fixture 部分验收，报告中的外部检查仍为 skipped，不能据此认定整套发布检查通过。
+
 ```bash
 bash scripts/run_release_ui_regression.sh --debug --port 8091
 ```
