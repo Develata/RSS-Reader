@@ -20,6 +20,7 @@
 - [发布前 UI 回归清单](./release-ui-regression-checklist.md)
 - [发布前 UI 覆盖矩阵](./release-ui-coverage-matrix.md)
 - [手工回归测试清单](./manual-regression.md)
+- [原生旧库升级验收](./native-upgrade-verification.md)
 
 ### Web / 浏览器 smoke
 

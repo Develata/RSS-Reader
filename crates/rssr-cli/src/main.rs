@@ -16,13 +16,18 @@ use rssr_infra::{
 };
 
 #[derive(Parser, Debug)]
-#[command(name = "rssr", about = "RSS-Reader command-line interface")]
+#[command(name = "rssr", version = cli_version(), about = "RSS-Reader command-line interface")]
 struct Cli {
     #[arg(long)]
     database_url: Option<String>,
 
     #[command(subcommand)]
     command: Command,
+}
+
+fn cli_version() -> &'static str {
+    let version = option_env!("RELEASE_TAG").unwrap_or(env!("CARGO_PKG_VERSION")).trim();
+    version.strip_prefix('v').unwrap_or(version)
 }
 
 #[derive(Subcommand, Debug)]

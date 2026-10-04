@@ -331,6 +331,22 @@ jobs:
           Expand-Archive -Path release-assets/rssr-cli-windows-x86_64.zip -DestinationPath verify/cli -Force
           if (-not (Test-Path verify/app/RSS-Reader.exe)) { throw "missing RSS-Reader.exe in Windows app archive" }
           if (-not (Test-Path verify/cli/rssr-cli.exe)) { throw "missing rssr-cli.exe in Windows CLI archive" }
+          $expectedVersion = $env:RELEASE_TAG -replace '^v', ''
+          $appVersion = (Get-Item verify/app/RSS-Reader.exe).VersionInfo
+          if ($appVersion.FileVersion -ne $expectedVersion -or $appVersion.ProductVersion -ne $expectedVersion) {
+            throw "Windows app version does not match release tag: $appVersion"
+          }
+          $expectedParts = [version]"$expectedVersion.0"
+          if ($appVersion.FileMajorPart -ne $expectedParts.Major -or
+              $appVersion.FileMinorPart -ne $expectedParts.Minor -or
+              $appVersion.FileBuildPart -ne $expectedParts.Build -or
+              $appVersion.FilePrivatePart -ne $expectedParts.Revision) {
+            throw "Windows app fixed file version does not match release tag"
+          }
+          $cliVersion = & ./verify/cli/rssr-cli.exe --version
+          if ($LASTEXITCODE -ne 0 -or $cliVersion -ne "rssr $expectedVersion") {
+            throw "Windows CLI version does not match release tag: $cliVersion"
+          }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v7

@@ -8,6 +8,16 @@
 - 相关 tag / release：N/A
 - 状态：`draft`
 
+## 当前状态补注（2026-10-04）
+
+以下正文保留 2026-10-01 当时的审查、CI 和待办事实；其中“等待合并 / 仍未修复”不是当前 main 状态。PR #10 已以 `699edfd` 合并，2026-10-04 核实的 main 为 `8b9264e34ea502d0fbc7d664c8646fe247d9c353`。
+
+- 大 feed scope 的 SQLite bind limit 已由 [PR #11](https://github.com/Develata/RSS-Reader/pull/11) 修复，后续 [PR #16](https://github.com/Develata/RSS-Reader/pull/16) / [PR #17](https://github.com/Develata/RSS-Reader/pull/17) 补性能收口。
+- delete → 同 URL re-add 的 generation fence 已由 [PR #12](https://github.com/Develata/RSS-Reader/pull/12) / [PR #13](https://github.com/Develata/RSS-Reader/pull/13) 实现；对应 migration 0006。
+- 旧 tombstone 在重新激活后的 cleanup 缺口已由 [PR #15](https://github.com/Develata/RSS-Reader/pull/15) 的持久化正文清理队列接管；对应 migration 0007。
+- GUID 历史歧义不做模糊合并，以及 trait 默认 batch 实现不强制原子性的边界仍保留；本补注不将它们写成已解决。
+- v0.1.21 真实旧库升级、Windows GUI、候选包与未满足门禁见[本次发布前验收](./2026-10-04-v0.1.22-pre-release-acceptance.md)。原有 CI 记录或此次 main CI 成功都不等于最终发布批准。
+
 ## 工作摘要
 
 对已合并的 #2–#6 进行多轮反向 review，不再只确认原 bug 是否消失，而是专门检查修复本身引入的事务边界、失败语义、历史数据升级、Web 存储放大和跨平台语义分叉；在问题集合收敛后集中形成 PR #10。
