@@ -1,408 +1,57 @@
 #!/usr/bin/env bash
+# Compatibility launcher only. Rust owns options, plan, state and exit codes.
 set -euo pipefail
-
-profile="debug"
-port="8091"
-web_port="18081"
-skip_automated="false"
-skip_build="false"
-serve_spa="true"
-with_rssr_web="false"
-with_browser_contracts="false"
-with_fixed_smokes="false"
-log_dir=""
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --port)
-      port="${2:?missing port value}"
-      shift 2
-      ;;
-    --web-port)
-      web_port="${2:?missing web port value}"
-      shift 2
-      ;;
-    --debug)
-      profile="debug"
-      shift
-      ;;
-    --release)
-      profile="release"
-      shift
-      ;;
-    --skip-automated)
-      skip_automated="true"
-      shift
-      ;;
-    --skip-build)
-      skip_build="true"
-      shift
-      ;;
-    --with-rssr-web)
-      with_rssr_web="true"
-      shift
-      ;;
-    --with-browser-contracts)
-      with_browser_contracts="true"
-      shift
-      ;;
-    --with-fixed-smokes)
-      with_fixed_smokes="true"
-      shift
-      ;;
-    --full)
-      with_rssr_web="true"
-      with_browser_contracts="true"
-      with_fixed_smokes="true"
-      shift
-      ;;
-    --log-dir)
-      log_dir="${2:?missing log dir value}"
-      shift 2
-      ;;
-    --no-serve)
-      serve_spa="false"
-      shift
-      ;;
-    *)
-      echo "Usage: $0 [--port PORT] [--web-port PORT] [--debug|--release] [--skip-automated] [--skip-build] [--with-rssr-web] [--with-browser-contracts] [--with-fixed-smokes] [--full] [--log-dir DIR] [--no-serve]" >&2
-      exit 1
-      ;;
-  esac
+script_path="${BASH_SOURCE[0]}"
+case "$OSTYPE" in
+  msys*|cygwin*)
+    # PowerShell may omit Git Bash tools; never move them ahead of caller tools.
+    export PATH="$PATH:/usr/bin:/bin"
+    export RSSR_BASH="${RSSR_BASH:-$(/usr/bin/cygpath -w "$BASH")}"
+    script_path="${script_path//\\//}"
+    ;;
+  *) export RSSR_BASH="${RSSR_BASH:-$BASH}" ;;
+esac
+script_dir="${script_path%/*}"
+if [[ "$script_dir" == "$script_path" ]]; then script_dir=.; fi
+repo_root="$(cd "$script_dir/.." && pwd)"
+cd "$repo_root"
+# This is a host tool even when the caller configures a product cross target.
+# Cargo resolves its configured compiler; bare rustc on PATH may be unrelated.
+python=""
+for candidate in python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1 &&
+     "$candidate" -c 'import sys; sys.exit(sys.version_info.major != 3)' >/dev/null 2>&1; then
+    python="$candidate"
+    break
+  fi
 done
-
-web_profile_args=("--${profile}")
-
-if [[ -z "$log_dir" ]]; then
-  log_dir="target/release-ui-regression/$(date +%Y%m%d-%H%M%S)"
+if [[ -z "$python" ]]; then
+  echo 'Python 3 is required to read the Cargo launcher artifact (python3 or python on PATH)' >&2
+  exit 1
 fi
+binary="$(cargo build --quiet --locked --manifest-path scripts/release-ui/Cargo.toml \
+  --bin release-ui --target host-tuple --target-dir target/release-ui-runner \
+  --message-format=json-render-diagnostics | "$python" -X utf8 -c '
+import json
+from pathlib import Path
+import sys
 
-mkdir -p "$log_dir"
-
-summary_file="$log_dir/summary.md"
-automated_log="$log_dir/automated-gates.log"
-browser_contract_log="$log_dir/browser-contracts.log"
-web_log="$log_dir/rssr-web.log"
-web_browser_feed_log="$log_dir/rssr-web-browser-feed-smoke.log"
-fixed_smoke_log="$log_dir/fixed-smokes.log"
-
-write_summary() {
-  local automated_status="$1"
-  local browser_contract_status="$2"
-  local web_status="$3"
-  local fixed_smoke_status="$4"
-  local spa_status="$5"
-  if [[ "$skip_automated" == "true" ]]; then
-    automated_status="skipped"
-  fi
-
-  cat >"$summary_file" <<EOF
-# 发布前 UI 预检结果
-
-- 日期：$(date '+%Y-%m-%d %H:%M:%S %z')
-- commit：$(git rev-parse --short HEAD)
-- profile：${profile}
-- 静态 Web 端口：${port}
-- rssr-web 端口：${web_port}
-- 日志目录：${log_dir}
-
-## 状态
-
-- 自动化门禁：${automated_status}
-- browser / wasm contract harness：${browser_contract_status}
-- rssr-web smoke：${web_status}
-- 固定 smoke 套件：${fixed_smoke_status}
-- 静态 Web + SPA fallback：${spa_status}
-
-## 日志与产物
-
-- 自动化门禁日志：${automated_log}
-- browser contract 日志：${browser_contract_log}
-- rssr-web 日志：${web_log}
-- rssr-web browser feed smoke 日志：${web_browser_feed_log}
-- 固定 smoke 汇总日志：${fixed_smoke_log}
-- 固定 smoke 产物目录：
-  - static web /reader 主题矩阵：${log_dir}/static-web-reader-theme-matrix
-  - static web 小视口：${log_dir}/static-web-small-viewport-smoke
-  - rssr-web 代理 feed：${log_dir}/rssr-web-proxy-feed-smoke
-  - rssr-web 浏览器 feed：${log_dir}/rssr-web-browser-feed-smoke
-
-## 结果记录补充
-
-- 执行环境：
-- env-limited 项：
-- host / sqlite contract harness：
-- wasm / browser contract harness：
-- /entries：
-- /feeds：
-- /settings：
-- /reader/{entry_id}：
-- 静态 reader seed smoke：
-- 默认主题：
-- Atlas Sidebar：
-- Newsprint：
-- Amethyst Glass：
-- Midnight Ledger：
-- 是否允许发布：
-EOF
-}
-
-public_dir="target/dx/rssr-app/${profile}/web/public"
-bundle_ready="false"
-
-ensure_web_bundle() {
-  if [[ "$bundle_ready" == "true" ]]; then
-    return
-  fi
-  if [[ "$skip_build" != "true" ]]; then
-    echo "Building rssr-app web bundle (${profile})..."
-    if [[ "$profile" == "release" ]]; then
-      dx build --platform web --package rssr-app --release --locked >/dev/null
-    else
-      dx build --platform web --package rssr-app --locked >/dev/null
-    fi
-  fi
-
-  if [[ ! -d "$public_dir" ]]; then
-    echo "Web build output not found: $public_dir" >&2
-    exit 1
-  fi
-  bundle_ready="true"
-}
-
-run_browser_contracts() {
-  {
-    bash scripts/run_wasm_contract_harness.sh \
-      wasm_refresh_contract_harness \
-      wasm_subscription_contract_harness \
-      wasm_config_exchange_contract_harness
-  } 2>&1 | tee "$browser_contract_log"
-}
-
-run_fixed_smokes() {
-  {
-    echo "Running static web reader theme matrix..."
-    bash scripts/run_static_web_reader_theme_matrix.sh \
-      --skip-build \
-      "${web_profile_args[@]}" \
-      --port "$((port + 10))" \
-      --log-dir "$log_dir/static-web-reader-theme-matrix"
-
-    echo "Running static web small viewport smoke..."
-    bash scripts/run_static_web_small_viewport_smoke.sh \
-      --skip-build \
-      "${web_profile_args[@]}" \
-      --port "$((port + 11))" \
-      --log-dir "$log_dir/static-web-small-viewport-smoke"
-
-    echo "Running rssr-web proxy feed smoke..."
-    bash scripts/run_rssr_web_proxy_feed_smoke.sh \
-      --skip-build \
-      "${web_profile_args[@]}" \
-      --port "$((web_port + 10))" \
-      --log-dir "$log_dir/rssr-web-proxy-feed-smoke"
-
-    echo "Running rssr-web browser feed smoke..."
-    bash scripts/run_rssr_web_browser_feed_smoke.sh \
-      --skip-build \
-      "${web_profile_args[@]}" \
-      --port "$((web_port + 11))" \
-      --log-dir "$log_dir/rssr-web-browser-feed-smoke"
-  } 2>&1 | tee "$fixed_smoke_log"
-}
-
-# A subshell owns the server: EXIT also runs if a probe/assertion aborts under -e.
-run_rssr_web_smoke() (
-  local auth_state_file="$log_dir/rssr-web-auth.json"
-  local entries_headers="$log_dir/rssr-web-entries.headers"
-  local login_headers="$log_dir/rssr-web-login.headers"
-  local login_post_headers="$log_dir/rssr-web-login-post.headers"
-  local probe_headers="$log_dir/rssr-web-session-probe.headers"
-  local feeds_headers="$log_dir/rssr-web-feeds.headers"
-  local settings_headers="$log_dir/rssr-web-settings.headers"
-  local logout_headers="$log_dir/rssr-web-logout.headers"
-  local cookie_jar="$log_dir/rssr-web.cookies"
-  local pid=""
-
-  # Refuse an existing listener rather than accepting its health/login responses.
-  python3 - "$web_port" <<'PY'
-import socket, sys
-with socket.socket() as probe:
-    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+executables = set()
+for line in sys.stdin:
     try:
-        probe.bind(('127.0.0.1', int(sys.argv[1])))
-    except OSError as error:
-        sys.exit(f'rssr-web smoke port is unavailable: {error}')
-PY
-
-  RSS_READER_WEB_BIND="127.0.0.1:${web_port}" \
-  RSS_READER_WEB_STATIC_DIR="$public_dir" \
-  RSS_READER_WEB_USERNAME="smoke" \
-  RSS_READER_WEB_PASSWORD="smoke-pass-123" \
-  RSS_READER_WEB_SESSION_SECRET="release-ui-regression-session-secret-0123456789" \
-  RSS_READER_WEB_AUTH_STATE_FILE="$auth_state_file" \
-  cargo run --locked -p rssr-web >"$web_log" 2>&1 &
-  pid=$!
-
-  trap '
-    if [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1; then
-      kill "$pid" >/dev/null 2>&1 || true
-      wait "$pid" >/dev/null 2>&1 || true
-    fi
-  ' EXIT
-
-  curl() { command curl --connect-timeout 2 --max-time 10 "$@"; }
-
-  local ready="false"
-  for _ in {1..30}; do
-    if ! kill -0 "$pid" 2>/dev/null; then
-      echo "rssr-web exited before readiness; see $web_log" >&2
-      exit 1
-    fi
-    if curl -fsS "http://127.0.0.1:${web_port}/healthz" >/dev/null 2>&1; then
-      ready="true"
-      break
-    fi
-    sleep 1
-  done
-  if [[ "$ready" != true ]]; then
-    echo "rssr-web did not become ready; see $web_log" >&2
-    exit 1
-  fi
-
-  curl -fsS -D "$login_headers" -o /dev/null "http://127.0.0.1:${web_port}/login"
-  curl -sS -D "$entries_headers" -o /dev/null "http://127.0.0.1:${web_port}/entries"
-
-  grep -q "200 OK" "$login_headers"
-  grep -Eq "^HTTP/.* 30[237]" "$entries_headers"
-  grep -Eq "location: /login|Location: /login" "$entries_headers"
-
-  curl -sS \
-    -c "$cookie_jar" \
-    -b "$cookie_jar" \
-    -D "$login_post_headers" \
-    -o /dev/null \
-    -X POST \
-    --data-urlencode "username=smoke" \
-    --data-urlencode "password=smoke-pass-123" \
-    --data-urlencode "next=/feeds" \
-    "http://127.0.0.1:${web_port}/login"
-
-  grep -Eq "^HTTP/.* 30[237]" "$login_post_headers"
-  grep -Eq "location: /feeds|Location: /feeds" "$login_post_headers"
-
-  curl -sS -b "$cookie_jar" -D "$probe_headers" -o /dev/null "http://127.0.0.1:${web_port}/session-probe"
-  curl -sS -b "$cookie_jar" -D "$feeds_headers" -o /dev/null "http://127.0.0.1:${web_port}/feeds"
-  curl -sS -b "$cookie_jar" -D "$settings_headers" -o /dev/null "http://127.0.0.1:${web_port}/settings"
-
-  grep -Eq "^HTTP/.* 204" "$probe_headers"
-  grep -Eq "^HTTP/.* 200" "$feeds_headers"
-  grep -Eq "^HTTP/.* 200" "$settings_headers"
-
-  curl -sS -b "$cookie_jar" -D "$logout_headers" -o /dev/null "http://127.0.0.1:${web_port}/logout"
-  grep -Eq "^HTTP/.* 30[237]" "$logout_headers"
-  grep -Eq "location: /login|Location: /login" "$logout_headers"
-  kill -0 "$pid"
-)
-
-write_summary \
-  "pending" \
-  "$(if [[ "$with_browser_contracts" == "true" ]]; then echo pending; else echo skipped; fi)" \
-  "$(if [[ "$with_rssr_web" == "true" ]]; then echo pending; else echo skipped; fi)" \
-  "$(if [[ "$with_fixed_smokes" == "true" ]]; then echo pending; else echo skipped; fi)" \
-  "$(if [[ "$serve_spa" == "true" ]]; then echo pending; else echo skipped; fi)"
-
-if [[ "$skip_automated" != "true" ]]; then
-  echo "Running release UI automated gates..."
-  {
-    cargo check --locked -p rssr-app --target wasm32-unknown-unknown
-    cargo test --locked -p rssr-app
-    cargo test --locked -p rssr-infra \
-      --test test_refresh_contract_harness \
-      --test test_subscription_contract_harness \
-      --test test_config_exchange_contract_harness
-    cargo test --locked -p rssr-web
-  } 2>&1 | tee "$automated_log"
-fi
-
-write_summary \
-  "passed" \
-  "$(if [[ "$with_browser_contracts" == "true" ]]; then echo pending; else echo skipped; fi)" \
-  "$(if [[ "$with_rssr_web" == "true" ]]; then echo pending; else echo skipped; fi)" \
-  "$(if [[ "$with_fixed_smokes" == "true" ]]; then echo pending; else echo skipped; fi)" \
-  "$(if [[ "$serve_spa" == "true" ]]; then echo pending; else echo skipped; fi)"
-
-if [[ "$with_browser_contracts" == "true" ]]; then
-  echo "Running browser / wasm contract harnesses..."
-  run_browser_contracts
-  write_summary \
-    "passed" \
-    "passed" \
-    "$(if [[ "$with_rssr_web" == "true" ]]; then echo pending; else echo skipped; fi)" \
-    "$(if [[ "$with_fixed_smokes" == "true" ]]; then echo pending; else echo skipped; fi)" \
-    "$(if [[ "$serve_spa" == "true" ]]; then echo pending; else echo skipped; fi)"
-fi
-
-if [[ "$with_rssr_web" == "true" ]]; then
-  ensure_web_bundle
-  echo "Running rssr-web smoke..."
-  run_rssr_web_smoke
-  if [[ "$with_fixed_smokes" != "true" ]]; then
-    echo "Running rssr-web browser feed smoke..."
-    bash scripts/run_rssr_web_browser_feed_smoke.sh \
-      --skip-build \
-      "${web_profile_args[@]}" \
-      --port "$((web_port + 1))" \
-      --log-dir "$log_dir/rssr-web-browser-feed-smoke" \
-      >"$web_browser_feed_log" 2>&1
-  fi
-  write_summary \
-    "passed" \
-    "$(if [[ "$with_browser_contracts" == "true" ]]; then echo passed; else echo skipped; fi)" \
-    "passed" \
-    "$(if [[ "$with_fixed_smokes" == "true" ]]; then echo pending; else echo skipped; fi)" \
-    "$(if [[ "$serve_spa" == "true" ]]; then echo pending; else echo skipped; fi)"
-fi
-
-if [[ "$with_fixed_smokes" == "true" ]]; then
-  ensure_web_bundle
-  echo "Running fixed smoke suite..."
-  run_fixed_smokes
-  write_summary \
-    "passed" \
-    "$(if [[ "$with_browser_contracts" == "true" ]]; then echo passed; else echo skipped; fi)" \
-    "$(if [[ "$with_rssr_web" == "true" ]]; then echo passed; else echo skipped; fi)" \
-    "passed" \
-    "$(if [[ "$serve_spa" == "true" ]]; then echo pending; else echo skipped; fi)"
-fi
-
-if [[ "$serve_spa" != "true" ]]; then
-  echo "Release UI automated gates completed."
-  echo "Summary written to $summary_file"
-  exit 0
-fi
-
-ensure_web_bundle
-
-echo
-echo "Automated gates passed. Starting static web regression server..."
-echo "After the server comes up, manually verify:"
-echo "  - http://127.0.0.1:${port}/entries"
-echo "  - http://127.0.0.1:${port}/feeds"
-echo "  - http://127.0.0.1:${port}/settings"
-echo "  - http://127.0.0.1:${port}/__codex/setup-local-auth?username=smoke&password=smoke-pass-123&seed=reader-demo&next=/entries/2"
-if [[ "$with_rssr_web" == "true" ]]; then
-  echo "  - rssr-web smoke logs: $web_log"
-fi
-echo "Summary template: $summary_file"
-echo
-
-server_args=(--port "$port")
-if [[ "$profile" == "release" ]]; then
-  server_args+=(--release)
-else
-  server_args+=(--debug)
-fi
-server_args+=(--skip-build)
-
-exec bash scripts/run_web_spa_regression_server.sh "${server_args[@]}"
+        message = json.loads(line)
+    except json.JSONDecodeError:
+        print(line, end="", file=sys.stderr)
+        continue
+    if (message.get("reason") == "compiler-artifact"
+            and message.get("target", {}).get("name") == "release-ui"
+            and "bin" in message.get("target", {}).get("kind", [])
+            and not message.get("profile", {}).get("test")
+            and message.get("executable")):
+        executables.add(message["executable"])
+if len(executables) != 1:
+    sys.exit("Could not resolve a unique release-ui executable from Cargo")
+# Do not append a newline: native Windows Python may translate it to CRLF.
+sys.stdout.write(Path(executables.pop()).as_posix())
+')"
+exec "$binary" "$@"

@@ -28,9 +28,12 @@ fn exit_code(status: ExitStatus) -> ExitCode {
 }
 
 fn dispatch(arguments: &[OsString]) -> io::Result<ExitCode> {
-    let browser_runner = Path::new("wasm-bindgen-test-runner");
+    // An explicit path keeps the lockfile-matched tool selected across Cargo/MSYS PATH changes.
+    let browser_runner = env::var_os("RSSR_WASM_BINDGEN_TEST_RUNNER")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("wasm-bindgen-test-runner"));
     match arguments.first().and_then(|argument| argument.to_str()) {
-        Some("--artifact") => run_artifact(&arguments[1..], browser_runner).map(exit_code),
+        Some("--artifact") => run_artifact(&arguments[1..], &browser_runner).map(exit_code),
         Some("--prepare") if arguments.len() >= 3 => {
             let executable = env::current_exe()?;
             prepare_bundle(Path::new(&arguments[1]), &arguments[2..], |directory| {
@@ -48,7 +51,7 @@ fn dispatch(arguments: &[OsString]) -> io::Result<ExitCode> {
         }
         Some("--prebuilt") if arguments.len() == 3 => {
             let artifact = prebuilt_artifact(Path::new(&arguments[1]), &arguments[2])?;
-            run_artifact(&[artifact.into()], browser_runner).map(exit_code)
+            run_artifact(&[artifact.into()], &browser_runner).map(exit_code)
         }
         Some(argument) if argument.starts_with("--") => Err(invalid_input(
             "expected --prepare DIR HARNESS..., --prebuilt DIR HARNESS, or HARNESS...",
