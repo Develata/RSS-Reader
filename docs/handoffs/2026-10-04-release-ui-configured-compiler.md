@@ -71,3 +71,17 @@
 - 入口与新增测试：`run_release_ui_regression.sh` /
   `Acceptance.test_real_launcher_respects_configured_compiler`
 - 精确提交与 CI 结果应从 PR #20 当前 head 及 Actions 检查核对，不引用旧提交的结论。
+
+## 同轮审阅补强与已取得证据
+
+- 首个提交 `d1ee22a845af2c616eaf7c8454d0245bb067b0d4` 的
+  [Linux CLI](https://github.com/Develata/RSS-Reader/actions/runs/37173353183/job/111350728838)
+  与 [Windows CLI](https://github.com/Develata/RSS-Reader/actions/runs/37173353183/job/111350728893)
+  已成功；Windows 日志明确运行 19 项测试，18 passed / 1 Unix-only skipped，
+  包含本次新增的 configured-compiler A/B 测试。
+- 审阅指出原生 Windows Python 可能将 artifact 路径末尾换行转为 CRLF；
+  初轮 CI 未复现该故障，不能称为已观察到的 CI 失败。
+- 将路径输出改为不附加换行的 `sys.stdout.write`，保留 UTF-8 与正斜杠转换。
+  新增直接运行 launcher 内嵌 reader 的字节级测试，明确要求 stdout 与路径字节完全一致，
+  不受 launcher 首选 Python 是否为 MSYS 版本影响。
+- 以上补强后的提交仍须重新取得其精确 head 的远端 CI；前述首轮成功不覆盖后续修改。

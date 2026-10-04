@@ -290,6 +290,22 @@ class Acceptance(unittest.TestCase):
                 self.assertTrue(any(s["name"] == "web-bundle" for s in json.loads(result.stdout)))
         self.assertEqual(marker.read_text().splitlines(), ["selected"] * 3)
 
+    def test_launcher_artifact_path_has_no_line_ending(self):
+        # Exercise the actual embedded reader with native Python too; the
+        # launcher's preferred python3 may be an MSYS build on Windows.
+        launcher = (ROOT / "scripts/run_release_ui_regression.sh").read_text(encoding="utf-8")
+        reader = launcher.split('| "$python" -X utf8 -c \'\n', 1)[1].split("\n')\"", 1)[0]
+        executable = self.root / ("release-ui" + SUFFIX)
+        artifact = {
+            "reason": "compiler-artifact",
+            "target": {"name": "release-ui", "kind": ["bin"]},
+            "profile": {"test": False},
+            "executable": str(executable),
+        }
+        result = subprocess.run([sys.executable, "-X", "utf8", "-c", reader], input=(json.dumps(artifact) + "\n").encode(), capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+        self.assertEqual(result.stdout, executable.as_posix().encode("utf-8"))
+
     def test_real_launcher_respects_configured_compiler(self):
         # A real compiler remains available by absolute path while a native
         # poison executable shadows bare rustc, including under Git Bash.

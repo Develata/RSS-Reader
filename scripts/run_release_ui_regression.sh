@@ -51,6 +51,7 @@ for line in sys.stdin:
         executables.add(message["executable"])
 if len(executables) != 1:
     sys.exit("Could not resolve a unique release-ui executable from Cargo")
-print(Path(executables.pop()).as_posix())
+# Do not append a newline: native Windows Python may translate it to CRLF.
+sys.stdout.write(Path(executables.pop()).as_posix())
 ')"
 exec "$binary" "$@"
