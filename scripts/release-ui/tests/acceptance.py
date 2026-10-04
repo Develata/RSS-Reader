@@ -290,6 +290,63 @@ class Acceptance(unittest.TestCase):
                 self.assertTrue(any(s["name"] == "web-bundle" for s in json.loads(result.stdout)))
         self.assertEqual(marker.read_text().splitlines(), ["selected"] * 3)
 
+    def test_real_launcher_respects_configured_compiler(self):
+        # A real compiler remains available by absolute path while a native
+        # poison executable shadows bare rustc, including under Git Bash.
+        launcher = self.root / "scripts/run_release_ui_regression.sh"
+        shutil.copy2(ROOT / "scripts/run_release_ui_regression.sh", launcher)
+        shutil.copytree(ROOT / "scripts/release-ui", self.root / "scripts/release-ui", ignore=shutil.ignore_patterns("target", "__pycache__"))
+        sysroot = Path(subprocess.check_output(["rustc", "--print", "sysroot"]).decode().strip())
+        compiler = sysroot / "bin" / ("rustc" + SUFFIX)
+        self.assertTrue(compiler.is_file())
+        poison = self.root / "poison tools"
+        poison.mkdir()
+        poison_rustc = poison / ("rustc" + SUFFIX)
+        shutil.copy2(FIXTURE, poison_rustc)
+        config = self.root / ".cargo/config.toml"
+        config.parent.mkdir()
+        stale = self.root / "target/release-ui-runner/debug" / ("release-ui" + SUFFIX)
+        stale.parent.mkdir(parents=True)
+        shutil.copy2(FIXTURE, stale)
+        # This is the pre-fix launcher probe, retained only as an A/B fixture.
+        old_probe = self.root / "scripts/old-rustc-probe.sh"
+        old_probe.write_text(
+            'set -euo pipefail\nhost=""\n'
+            'while IFS=" " read -r key value; do\n'
+            '  if [[ "$key" == host: ]]; then host="$value"; fi\n'
+            'done <<< "$(rustc -vV)"\n'
+            'if [[ -z "$host" ]]; then echo "Could not resolve rustc host target" >&2; exit 1; fi\n',
+            encoding="utf-8")
+        invoke = 'tools="$1"; shift; if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]]; then tools="$(/usr/bin/cygpath -u "$tools")"; fi; export PATH="$tools:$PATH"; exec "$BASH" "$@"'
+        for mode in ["RUSTC", "CARGO_BUILD_RUSTC", "config"]:
+            with self.subTest(mode=mode):
+                env = dict(os.environ, CARGO_NET_OFFLINE="true", CARGO_BUILD_TARGET="wasm32-unknown-unknown")
+                env.pop("RUSTC", None)
+                env.pop("CARGO_BUILD_RUSTC", None)
+                configured = compiler if mode == "config" else poison_rustc
+                config.write_text(
+                    '[build]\ntarget = "wasm32-unknown-unknown"\n'
+                    f'rustc = {json.dumps(configured.as_posix())}\n', encoding="utf-8")
+                if mode != "config":
+                    env[mode] = str(compiler)
+                if mode == "RUSTC":
+                    env["CARGO_BUILD_RUSTC"] = str(poison_rustc)
+                command = [ARGS.bash, "--noprofile", "--norc", "-c", invoke, "test-launcher", str(poison)]
+                before = subprocess.run([*command, str(old_probe)], env=env, cwd=self.root, capture_output=True, timeout=15)
+                (self.root / f"compiler-{mode}-before.log").write_bytes(before.stdout + before.stderr)
+                self.assertNotEqual(before.returncode, 0, "old bare-rustc probe unexpectedly succeeded")
+                self.assertIn(b"Could not resolve rustc host target", before.stderr)
+                after = subprocess.run([*command, str(launcher), "--full", "--plan"], env=env, cwd=RUN, capture_output=True, timeout=180)
+                (self.root / f"compiler-{mode}-after.log").write_bytes(after.stdout + after.stderr)
+                self.assertEqual(after.returncode, 0, after.stderr.decode(errors="replace"))
+                self.assertTrue(any(s["name"] == "web-bundle" for s in json.loads(after.stdout)))
+        # Missing compiler must fail even with a previously built host artifact.
+        env["RUSTC"] = str(self.root / "missing-rustc")
+        failed = subprocess.run([*command, str(launcher), "--plan"], env=env, cwd=RUN, capture_output=True, timeout=15)
+        (self.root / "compiler-missing.log").write_bytes(failed.stdout + failed.stderr)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual(failed.stdout, b"", "failed Cargo build must not execute a cached plan")
+
     def test_full_order_and_build_once_unicode_paths(self):
         self.run_cli("--full", "--no-serve", "--release")
         trace = (self.root / "trace.txt").read_text(encoding="utf-8")

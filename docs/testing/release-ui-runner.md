@@ -74,8 +74,16 @@ rg、Node/Chrome、dx，以及与产品锁文件匹配的 wasm-bindgen-test-runn
 Windows 不会默认选中 system32/bash.exe（那是 WSL）；用 `--bash` 或 `RSSR_BASH`
 明确选择 Git Bash。`CHROME_BIN`、`NODE_BIN` 等现有子脚本接口继续传递。
 Shell launcher 在解析任何参数前先确保 CLI 编译成功，所以首次 `--help` 也有编译成本。
-launcher 从调用者选择的 `rustc -vV` 取得 host triple，显式构建该 host 工具并 exec
-`target/release-ui-runner/<host>/debug/release-ui`；不会误用未带 triple 的旧二进制。
+launcher 需要 Cargo 1.91+（当前 stable）以及 PATH 中的 Python 3（`python3` 或 `python`）。
+Python 仅解析 Cargo 的 JSON artifact 输出；选项、阶段和状态仍由 Rust 管理。
+通过 Cargo 的 `--target host-tuple` 选择所配置编译器的 host，遵循
+`RUSTC`、`CARGO_BUILD_RUSTC`、`build.rustc` 的 Cargo 优先级，不另行调用 PATH 中的
+`rustc`。构建成功后只 exec 本次 `compiler-artifact.executable` 指定的 CLI；
+不猜测 host 目录、不扫描旧产物，构建或 artifact 解析失败时不会执行缓存二进制。
+Python 缺失会在构建前给出明确错误。Cargo 编译诊断仍显示在 stderr，`--plan` 的 stdout
+保留为纯 JSON。Windows artifact 路径转换为正斜杠以兼容 Git Bash，支持中文和空格。
+参见 [Cargo 1.91 changelog](https://doc.rust-lang.org/cargo/CHANGELOG.html#cargo-191-2025-10-30)
+与 [Cargo JSON artifact 格式](https://doc.rust-lang.org/cargo/reference/external-tools.html#compiler-artifact-messages)。
 `CARGO_BUILD_TARGET` / `build.target` 仍传给后续产品命令，不决定验收工具本身的运行平台。
 上面的手工 Cargo 构建命令未指定 target，故其直接二进制示例仍位于未带 triple 的目录。
 
