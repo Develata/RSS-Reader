@@ -16,8 +16,8 @@ permissions:
 
 env:
   RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
-  # Android 的 versionCode / versionName 只能来自这里：workspace Cargo.toml 长期停在 0.1.0，
-  # 而 dx 脚手架固定生成 versionCode = 1。
+  # 各平台发布版本以 tag 为准：workspace Cargo.toml 长期停在 0.1.0，
+  # Android 的 dx 脚手架还固定生成 versionCode = 1。
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
   DIOXUS_CLI_VERSION: 0.7.9
 
@@ -529,17 +529,37 @@ jobs:
       - name: Archive macOS artifacts
         run: |
           mkdir -p release-assets
-          APP_BUNDLE_PATH="$(find target/macos-bundle/${{ matrix.suffix }} -type d -name '*.app' | head -n1)"
-          test -n "$APP_BUNDLE_PATH"
+          APP_BUNDLE_PATH="$(find target/macos-bundle/${{ matrix.suffix }} -type d -name '*.app' -prune)"
+          if [[ ! -d "$APP_BUNDLE_PATH" ]]; then
+            echo "::error::Expected exactly one macOS app bundle"
+            exit 1
+          fi
           mkdir -p target/macos-archive/${{ matrix.suffix }}
           rm -rf target/macos-archive/${{ matrix.suffix }}/RSS-Reader.app
           cp -R "$APP_BUNDLE_PATH" target/macos-archive/${{ matrix.suffix }}/RSS-Reader.app
+          # dx currently emits an unsigned bundle. Set both versions before any future
+          # signing/notarization; the adapter refuses bundles with an existing seal.
+          python3 scripts/prepare_macos_bundle.py \
+            target/macos-archive/${{ matrix.suffix }}/RSS-Reader.app \
+            --release-tag "$RELEASE_TAG"
           tar -C target/macos-archive/${{ matrix.suffix }} -czf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz RSS-Reader.app
           tar -C target/${{ matrix.target }}/release -czf release-assets/rssr-cli-${{ matrix.suffix }}.tar.gz rssr-cli
 
       - name: Smoke-check macOS artifacts
         run: |
-          tar -tzf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz | grep '^RSS-Reader.app/Contents/Info.plist$'
+          temp_dir="$(mktemp -d)"
+          trap 'rm -rf -- "$temp_dir"' EXIT
+          tar -xzf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz -C "$temp_dir"
+          PLIST_PATH="$temp_dir/RSS-Reader.app/Contents/Info.plist"
+          plutil -lint "$PLIST_PATH"
+          for key in CFBundleShortVersionString CFBundleVersion; do
+            actual="$(/usr/libexec/PlistBuddy -c "Print :$key" "$PLIST_PATH")"
+            if [[ "$actual" != "${RELEASE_TAG#v}" ]]; then
+              echo "::error::$key is $actual; expected ${RELEASE_TAG#v}"
+              exit 1
+            fi
+            echo "$key=$actual"
+          done
           tar -tzf release-assets/rssr-cli-${{ matrix.suffix }}.tar.gz | grep '^rssr-cli$'
 
       - name: Upload macOS artifacts
