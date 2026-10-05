@@ -79,6 +79,28 @@
   追加，并保存在本机 `target/tool-migration-20261005/evidence/ci-final.json`。
   任何 CI 通过均不解除下面的性能阻塞。
 
+### 精确 head 的首次 CI 终态与失败诊断
+
+- PR：[#23](https://github.com/Develata/RSS-Reader/pull/23)，保持 Draft。
+- 源码提交 `f0bf997`，测量/交接提交 `0648a0de`。
+- `0648a0de0fd666edc87ae41fe3d0ea464c2782e8`：
+  [CI run 37294657342](https://github.com/Develata/RSS-Reader/actions/runs/37294657342)
+  已终态 failure；[Pages run 37294657351](https://github.com/Develata/RSS-Reader/actions/runs/37294657351)
+  success，deploy skipped。没有发布。
+- 22 checks success、2 failure（Windows runner 和依赖它的 lint-and-test）、1 deploy skipped。
+  Linux runner 整套 26 项通过；产品六模块、Android、五主题、三个 wasm/browser contracts
+  与 Pages build 通过。本机未测的浏览器路径仍不冒充本机验收；这是该 head 的 CI 证据。
+- [Windows 失败 job](https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111712928620)
+  中 4 个真实认证用例失败：readiness >30s、正常认证、服务中断、慢 readiness/错误 redirect。
+  均在 curl 打开中文日志目录下 headers 文件时返回 23，日志中文显示为 `??`。
+  其余用例通过，Unix-only 用例 skip；测试未被删除或弱化。
+- 这支持“该 runner 的 curl 文件路径 Unicode 处理失败”的诊断；尚未在相同 CI 环境
+  对旧脚本做配对复现，不能认定是迁移新引入，或宣称已完整定位到某个 curl build/系统代码页。
+- 原始 head/checks 回执和失败片段已入本目录下 evidence；完整日志留在 ignored target。
+  本次后续提交只补此诊断，最终 head 的终态仍继续跟踪并写入 PR 描述和本机 ci-final.json。
+- 按用户明确停止条件：已有显著性能退化，且 Windows Unicode 合同尚未通过，
+  本轮不继续修改运行时代码；保留红色 CI 与真实阻塞供下一步决策。
+
 ### 手工验收
 
 - 未运行浏览器 UI/Pages/macOS 验收；本步仅改变认证 smoke 的宿主生命周期。
@@ -121,7 +143,7 @@ B IQR 15 / MAD 3.5 / min 3117 / max 3199 ms；
 
 ## 结果
 
-- **BLOCKED：显著性能退化，停止后续迁移。** 真实 auth 阶段 median
+- **BLOCKED：显著性能退化及 Windows CI Unicode 文件路径失败，停止后续迁移。** 真实 auth 阶段 median
   约增加 98%，每对至少多 1.464 秒，远超 A 的 40.25 ms IQR；
   不需要放宽预算才能判定这是实质退化。
 - 差值与直接拥有仍在运行的服务后，既有 Unix `OwnedProcess::stop`

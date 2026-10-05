@@ -1,0 +1,283 @@
+{
+  "checked_at": "2026-10-05T10:12:39.727048+00:00",
+  "head": "0648a0de0fd666edc87ae41fe3d0ea464c2782e8",
+  "pr": {
+    "headRefOid": "0648a0de0fd666edc87ae41fe3d0ea464c2782e8",
+    "isDraft": true,
+    "number": 23,
+    "state": "OPEN",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:08:59Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111712928276",
+        "name": "workspace",
+        "startedAt": "2026-10-05T10:08:45Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:09:47Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657351/job/111712926916",
+        "name": "build",
+        "startedAt": "2026-10-05T10:08:45Z",
+        "status": "COMPLETED",
+        "workflowName": "Pages demo"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:09:48Z",
+        "conclusion": "SKIPPED",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657351/job/111713322278",
+        "name": "deploy",
+        "startedAt": "2026-10-05T10:09:48Z",
+        "status": "COMPLETED",
+        "workflowName": "Pages demo"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:09:02Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111712928470",
+        "name": "format",
+        "startedAt": "2026-10-05T10:08:45Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:09:02Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111712928425",
+        "name": "test-tools",
+        "startedAt": "2026-10-05T10:08:45Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:10:49Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111712928478",
+        "name": "release-ui-runner (ubuntu-latest)",
+        "startedAt": "2026-10-05T10:08:45Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:11:44Z",
+        "conclusion": "FAILURE",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111712928620",
+        "name": "release-ui-runner (windows-latest)",
+        "startedAt": "2026-10-05T10:08:45Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:09:52Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111712928663",
+        "name": "web-smoke",
+        "startedAt": "2026-10-05T10:08:45Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:12:11Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111712928136",
+        "name": "android-smoke",
+        "startedAt": "2026-10-05T10:08:45Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:10:22Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713034754",
+        "name": "native-module (rssr-app)",
+        "startedAt": "2026-10-05T10:09:03Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:09:30Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713034748",
+        "name": "native-module (rssr-application)",
+        "startedAt": "2026-10-05T10:09:03Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:09:50Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713034669",
+        "name": "native-module (rssr-cli)",
+        "startedAt": "2026-10-05T10:09:03Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:09:25Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713034889",
+        "name": "native-module (rssr-domain)",
+        "startedAt": "2026-10-05T10:09:03Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:10:53Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713034687",
+        "name": "native-module (rssr-infra)",
+        "startedAt": "2026-10-05T10:09:28Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:09:59Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713034670",
+        "name": "native-module (rssr-web)",
+        "startedAt": "2026-10-05T10:09:32Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:09:38Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713034596",
+        "name": "wasm-contract-build",
+        "startedAt": "2026-10-05T10:09:03Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:11:29Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713351072",
+        "name": "web-ui (default)",
+        "startedAt": "2026-10-05T10:09:56Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:10:48Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713350941",
+        "name": "web-ui (atlas-sidebar)",
+        "startedAt": "2026-10-05T10:09:56Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:10:50Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713351102",
+        "name": "web-ui (newsprint)",
+        "startedAt": "2026-10-05T10:09:56Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:11:51Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713350923",
+        "name": "web-ui (amethyst-glass)",
+        "startedAt": "2026-10-05T10:10:52Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:11:53Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713350920",
+        "name": "web-ui (midnight-ledger)",
+        "startedAt": "2026-10-05T10:10:53Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:10:05Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713263338",
+        "name": "wasm-browser-contract (wasm_config_exchange_contract_harness)",
+        "startedAt": "2026-10-05T10:09:41Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:10:21Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713263442",
+        "name": "wasm-browser-contract (wasm_refresh_contract_harness)",
+        "startedAt": "2026-10-05T10:09:41Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:10:11Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111713263444",
+        "name": "wasm-browser-contract (wasm_subscription_contract_harness)",
+        "startedAt": "2026-10-05T10:09:41Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-05T10:12:17Z",
+        "conclusion": "FAILURE",
+        "detailsUrl": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342/job/111714176068",
+        "name": "lint-and-test",
+        "startedAt": "2026-10-05T10:12:14Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      }
+    ],
+    "url": "https://github.com/Develata/RSS-Reader/pull/23"
+  },
+  "runs": [
+    {
+      "conclusion": "success",
+      "databaseId": 37294657351,
+      "event": "pull_request",
+      "headSha": "0648a0de0fd666edc87ae41fe3d0ea464c2782e8",
+      "name": "Pages demo",
+      "status": "completed",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/37294657351"
+    },
+    {
+      "conclusion": "failure",
+      "databaseId": 37294657342,
+      "event": "pull_request",
+      "headSha": "0648a0de0fd666edc87ae41fe3d0ea464c2782e8",
+      "name": "CI",
+      "status": "completed",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/37294657342"
+    }
+  ]
+}
