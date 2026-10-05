@@ -95,6 +95,8 @@ jobs:
           target/test-tools/wasm-runner-tests
       - name: Check Linux Debian metadata adapter
         run: bash scripts/test_prepare_linux_deb.sh
+      - name: Check macOS bundle metadata adapter
+        run: python3 scripts/test_prepare_macos_bundle.py
 
   release-ui-runner:
     runs-on: ${{ matrix.os }}
