@@ -1,0 +1,29 @@
+[
+  {
+    "label": "final-clean-build",
+    "ns": 8749817923,
+    "exit_code": 0,
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-final-build"
+    ]
+  },
+  {
+    "label": "compatibility-entry",
+    "ns": 15435891786,
+    "exit_code": 0,
+    "command": [
+      "/bin/bash",
+      "scripts/run_rssr_web_auth_smoke.sh",
+      "debug",
+      "44578",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/evidence/compatibility-entry"
+    ]
+  }
+]

@@ -1,0 +1,173 @@
+{
+  "direct-plan": {
+    "A": {
+      "n": 20,
+      "median_ms": 4.258388999999999,
+      "q1_ms": 4.09505725,
+      "q3_ms": 4.5367625,
+      "iqr_ms": 0.44170525000000005,
+      "mad_ms": 0.2008634999999992,
+      "min_ms": 3.916529,
+      "max_ms": 33.02791
+    },
+    "B": {
+      "n": 20,
+      "median_ms": 4.2209815,
+      "q1_ms": 4.07865175,
+      "q3_ms": 4.33568025,
+      "iqr_ms": 0.25702850000000055,
+      "mad_ms": 0.1485289999999999,
+      "min_ms": 3.904989,
+      "max_ms": 9.373131
+    },
+    "paired_B_minus_A": {
+      "n": 20,
+      "median_ms": -0.014867499999999811,
+      "q1_ms": -0.11452849999999981,
+      "q3_ms": 0.2064364999999998,
+      "iqr_ms": 0.3209649999999996,
+      "mad_ms": 0.17472449999999973,
+      "min_ms": -28.788117999999997,
+      "max_ms": 4.702027000000001
+    },
+    "failures": 0
+  },
+  "noop-build": {
+    "A": {
+      "n": 20,
+      "median_ms": 115.11156,
+      "q1_ms": 114.8528,
+      "q3_ms": 115.44167875,
+      "iqr_ms": 0.5888787499999921,
+      "mad_ms": 0.29754699999999445,
+      "min_ms": 64.376038,
+      "max_ms": 165.822552
+    },
+    "B": {
+      "n": 20,
+      "median_ms": 115.20024649999999,
+      "q1_ms": 114.77071700000002,
+      "q3_ms": 115.54456625,
+      "iqr_ms": 0.7738492499999836,
+      "mad_ms": 0.3877274999999969,
+      "min_ms": 65.082303,
+      "max_ms": 115.997731
+    },
+    "paired_B_minus_A": {
+      "n": 20,
+      "median_ms": 0.04903550000000223,
+      "q1_ms": -0.46860200000000063,
+      "q3_ms": 0.2993254999999948,
+      "iqr_ms": 0.7679274999999954,
+      "mad_ms": 0.32256399999999985,
+      "min_ms": -50.421082999999996,
+      "max_ms": 50.76573400000001
+    },
+    "failures": 0
+  },
+  "wrapper-plan": {
+    "A": {
+      "n": 20,
+      "median_ms": 114.6041985,
+      "q1_ms": 114.41952549999999,
+      "q3_ms": 114.7165065,
+      "iqr_ms": 0.2969810000000024,
+      "mad_ms": 0.18019850000000304,
+      "min_ms": 114.133887,
+      "max_ms": 165.485136
+    },
+    "B": {
+      "n": 20,
+      "median_ms": 114.67417,
+      "q1_ms": 114.55858175,
+      "q3_ms": 114.916641,
+      "iqr_ms": 0.3580592499999966,
+      "mad_ms": 0.1755290000000045,
+      "min_ms": 114.416594,
+      "max_ms": 165.16959
+    },
+    "paired_B_minus_A": {
+      "n": 20,
+      "median_ms": 0.08220200000000233,
+      "q1_ms": -0.10819400000000456,
+      "q3_ms": 0.27339624999999756,
+      "iqr_ms": 0.38159025000000213,
+      "mad_ms": 0.20336900000000213,
+      "min_ms": -50.210207,
+      "max_ms": 2.8974549999999937
+    },
+    "failures": 0
+  },
+  "web-auth": {
+    "A": {
+      "n": 20,
+      "median_ms": 1670.0681614999999,
+      "q1_ms": 1621.195034,
+      "q3_ms": 1670.61220825,
+      "iqr_ms": 49.417174250000016,
+      "mad_ms": 0.8838040000001683,
+      "min_ms": 1620.223582,
+      "max_ms": 1720.658363
+    },
+    "B": {
+      "n": 20,
+      "median_ms": 3226.4644749999998,
+      "q1_ms": 3177.1645257499995,
+      "q3_ms": 3227.86366275,
+      "iqr_ms": 50.69913700000052,
+      "mad_ms": 2.359365500000422,
+      "min_ms": 3175.289221,
+      "max_ms": 3277.482005
+    },
+    "paired_B_minus_A": {
+      "n": 20,
+      "median_ms": 1556.0915274999998,
+      "q1_ms": 1506.9588439999998,
+      "q3_ms": 1606.892395,
+      "iqr_ms": 99.9335510000003,
+      "mad_ms": 49.83195499999988,
+      "min_ms": 1456.5197039999998,
+      "max_ms": 1607.329241
+    },
+    "failures": 0
+  },
+  "web-auth-stage": {
+    "A": {
+      "n": 20,
+      "median_ms": 1576.5,
+      "q1_ms": 1570.0,
+      "q3_ms": 1610.25,
+      "iqr_ms": 40.25,
+      "mad_ms": 6.5,
+      "min_ms": 1536,
+      "max_ms": 1656
+    },
+    "B": {
+      "n": 20,
+      "median_ms": 3121.5,
+      "q1_ms": 3118.75,
+      "q3_ms": 3133.75,
+      "iqr_ms": 15.0,
+      "mad_ms": 3.5,
+      "min_ms": 3117,
+      "max_ms": 3199
+    },
+    "paired_B_minus_A": {
+      "n": 20,
+      "median_ms": 1546.5,
+      "q1_ms": 1540.75,
+      "q3_ms": 1555.0,
+      "iqr_ms": 14.25,
+      "mad_ms": 8.0,
+      "min_ms": 1464,
+      "max_ms": 1595
+    },
+    "failures": 0
+  },
+  "methodology": {
+    "subprocess_wall": "Includes Python bounded wait polling (up to approximately 50ms granularity); no precise small speed claims.",
+    "web_auth_stage": "Also report duration_ms recorded inside each Rust runner, excluding its later stub browser stage and Python observation latency.",
+    "clean_build": "Single independent measurements, not statistical speedup evidence.",
+    "gate": "BLOCKED: substantial auth-stage latency regression; next migration stages stopped."
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "command": [
+    "cargo",
+    "build",
+    "--locked",
+    "--offline",
+    "-p",
+    "rssr-web",
+    "--target-dir",
+    "target/tool-migration-20261005/product-build"
+  ],
+  "exit_code": 0,
+  "ns": 35538000790,
+  "purpose": "unchanged real rssr-web used by both auth smoke variants"
+}

@@ -1,0 +1,90 @@
+[
+  {
+    "label": "fmt",
+    "ns": 716701532,
+    "exit_code": 0,
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml"
+    ]
+  },
+  {
+    "label": "clean-build",
+    "ns": 11570625282,
+    "exit_code": 0,
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "target/tool-migration-20261005/candidate-build"
+    ]
+  },
+  {
+    "label": "noop-build",
+    "ns": 84006351,
+    "exit_code": 0,
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "target/tool-migration-20261005/candidate-build"
+    ]
+  },
+  {
+    "label": "clippy",
+    "ns": 3234993059,
+    "exit_code": 0,
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--all-targets",
+      "--locked",
+      "--offline",
+      "--target-dir",
+      "target/tool-migration-20261005/candidate-build",
+      "--",
+      "-D",
+      "warnings"
+    ]
+  },
+  {
+    "label": "unit-tests",
+    "ns": 2341229080,
+    "exit_code": 0,
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--target-dir",
+      "target/tool-migration-20261005/candidate-build"
+    ]
+  },
+  {
+    "label": "acceptance",
+    "ns": 116503084277,
+    "exit_code": 0,
+    "command": [
+      "python3",
+      "scripts/release-ui/tests/acceptance.py",
+      "--binary",
+      "target/tool-migration-20261005/candidate-build/debug/release-ui",
+      "--bash",
+      "/bin/bash"
+    ]
+  }
+]

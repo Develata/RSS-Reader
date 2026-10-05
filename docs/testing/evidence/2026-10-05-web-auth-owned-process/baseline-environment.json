@@ -1,0 +1,86 @@
+{
+  "baseline_commit": "f69087a61a4627cbd3ba88fa082d7722df811dc5",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "root": "/home/deve/gitclone/RSS-Reader",
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)\nbinary: rustc\ncommit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3\ncommit-date: 2026-07-07\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0\nLLVM version: 22.1.6\n",
+  "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)\n",
+  "disk": {
+    "total": 833397317632,
+    "used": 214723579904,
+    "free": 576264294400
+  },
+  "build_cache": "fresh isolated target, existing registry cache; no cache deletion",
+  "measurements": [
+    {
+      "label": "clean-build",
+      "ns": 128992236,
+      "exit_code": 101,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "label": "dependency-fetch",
+      "ns": 14943238556,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "fetch",
+        "--locked",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml"
+      ]
+    },
+    {
+      "label": "clean-build",
+      "ns": 9320974617,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "label": "noop-build",
+      "ns": 135840370,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "label": "acceptance",
+      "ns": 57168227662,
+      "exit_code": 0,
+      "command": [
+        "python3",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/tests/acceptance.py",
+        "--binary",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--bash",
+        "/bin/bash"
+      ]
+    }
+  ],
+  "binary_bytes": 21311880
+}

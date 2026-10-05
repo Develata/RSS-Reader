@@ -3,8 +3,8 @@
 - 日期：2026-10-05
 - 作者 / Agent：Codex（WSL 主实现，Windows 原生补验）
 - 分支：`refactor/web-auth-owned-process`
-- 当前 HEAD：基线 `f69087a61a4627cbd3ba88fa082d7722df811dc5`
-- 相关 commit：pending
+- 当前实现 HEAD：`f0bf99742ede5bbbf9476874cec27e597959b695`；后续提交仅补测量/交接证据
+- 相关 commit：`f0bf99742ede5bbbf9476874cec27e597959b695`（实现）；本次证据提交见本文件 Git 历史
 - 相关 tag / release：N/A；不合并、不发布、不替换 v0.1.22 附件
 - 状态：`draft`
 
@@ -12,7 +12,8 @@
 
 按已批准的四阶段工具迁移，先交付 web-auth 的最小生命周期迁移。
 后续 HTTP、测试服务器、metadata 和浏览器 host 尚未实施；
-本记录会补充本次 A/B、Windows 和精确 PR head 的 CI 结果后确定下一步。
+本次 20 对实测已触发性能停止门禁。候选只作为 Draft PR 审查，后续阶段停止；
+最终 PR 精确 head 的 CI 终态会记入 PR 描述及本机 evidence/ci-final.json。
 
 ## 影响范围
 
@@ -71,22 +72,69 @@
 - 断流夹具需显式为 localhost 设置 NO_PROXY；否则 WSL 的调用者代理会把断流改写为
   502。生产请求仍继承调用者环境，不偷偷覆盖代理配置。Windows curl 断流可返回 56，
   Unix 可返回 52；测试验证实际 curl 诊断与 runner/summary 的代码一致。
-- 真实 rssr-web A/B 认证 smoke、兼容入口验证和 CI：继续补充。
+- 真实 rssr-web：旧 Bash 和新 Rust 两条路径认证都通过，结束后端口关闭。
+  兼容三参数脚本也通过；日志 `evidence/real-product-A`、`real-product-B`、
+  `compatibility-entry`。同一服务 binary、同一已有静态 bundle，没有浏览器/UI 验收结论。
+- 远端 CI：本证据提交在首次 push 前写入；最终 PR head 的 checks/结论在 PR 描述
+  追加，并保存在本机 `target/tool-migration-20261005/evidence/ci-final.json`。
+  任何 CI 通过均不解除下面的性能阻塞。
 
 ### 手工验收
 
 - 未运行浏览器 UI/Pages/macOS 验收；本步仅改变认证 smoke 的宿主生命周期。
 - 重用已有 bundle 的 HTTP 返回不代表新鲜 Dioxus/UI 浏览器验收。
 
+## 性能比较与原始证据
+
+- 固定 A：`f69087a61a4627cbd3ba88fa082d7722df811dc5`；
+  固定 B：`f0bf99742ede5bbbf9476874cec27e597959b695`。
+- [原始数据/复跑脚本](../testing/evidence/2026-10-05-web-auth-owned-process/)：
+  `paired-raw.json`、`paired-summary.json`、`measure.py`；每类 20 对，
+  AB/BA 平衡交错，各有独立暖机。所有运行失败数为 0，40 次真实 auth 采样
+  均检查服务 binary 无活进程、监听端口已关闭。
+- 服务使用相同隔离构建产物、debug bundle 与 loopback NO_PROXY；
+  一个公共 Cargo cwd shim 让 A/B 都从本 WSL checkout 启动同一产品。
+  只测 web-auth；后续 browser stage 用 exit-0 stub，不计作浏览器验收。
+- clean build：A 9.320 秒、最终 B 8.750 秒，各 n=1。中间开发态 B 11.571 秒
+  也保留在原始记录中；这些单次编译数据不能证明提速。
+  wrapper 首次独立构建 A 9.154 秒、B 9.451 秒；真实兼容入口首次执行含构建
+  15.436 秒，不与暖机 runtime 混算。
+- debug binary：A 21,311,880 字节、B 21,446,360 字节（+134,480，约 +0.63%）。
+  新增依赖为 0；未测内存，不宣称内存下降。
+
+| 测量（WSL，n=20/方） | A median ms | B median ms | 配对 B-A median ms |
+| --- | ---: | ---: | ---: |
+| 直接 binary --plan | 4.258 | 4.221 | -0.015 |
+| Cargo no-op build | 115.112 | 115.200 | +0.049 |
+| 已暖机 wrapper --plan | 114.604 | 114.674 | +0.082 |
+| auth 调用总体（含 stub 后续阶段） | 1670.068 | 3226.464 | +1556.092 |
+| **runner 内部 web-auth 阶段** | **1576.5** | **3121.5** | **+1546.5** |
+
+内部阶段 A IQR 40.25 / MAD 6.5 / min 1536 / max 1656 ms；
+B IQR 15 / MAD 3.5 / min 3117 / max 3199 ms；
+配对差 IQR 14.25 / MAD 8 / min +1464 / max +1595 ms。
+其他各组完整 n/median/IQR/MAD/min/max/失败数见 JSON。
+
+外部墙钟包含 Python 有界 wait 轮询（可达约 50 ms 粒度），不能用很小差值宣称
+收益；内部阶段 duration_ms 不含这一观察误差。readiness 包含在阶段中，
+未单独测量；没有把约 330 秒预算改写成统计 readiness 值。不报告 p99。
+
 ## 结果
 
-- 代码候选完成；平台与性能门禁完成前保持 Draft。
-- 目前没有速度或内存改善结论；HTTP 断言仍为单份 Bash/curl/grep adapter。
+- **BLOCKED：显著性能退化，停止后续迁移。** 真实 auth 阶段 median
+  约增加 98%，每对至少多 1.464 秒，远超 A 的 40.25 ms IQR；
+  不需要放宽预算才能判定这是实质退化。
+- 差值与直接拥有仍在运行的服务后，既有 Unix `OwnedProcess::stop`
+  固定完整等待 1.5 秒的源码路径吻合。这是源码与测量支持的归因，
+  本次未再改 process.rs 去规避门禁。
+- 功能候选供 Draft PR 审查；不能标作性能验收通过、可合并或可发布。
+  HTTP 断言仍为单份 Bash/curl/grep adapter。
 
 ## 风险与后续事项
 
-- 既有 Unix `OwnedProcess::stop` 最长 1.5 秒 grace 可能增加本步服务关闭成本；
-  必须以固定 A/B 样本判断，明显退化则停止后续迁移并报告。
+- 下一步建议先单独审查服务退出后的 grace 等待：保留 1.5 秒作为处理顽固后代的
+  上限，并证明整个所属进程组已经退出时能提前返回；不能仅缩短常量牺牲清理保障。
+  需重新获得对停止点之后工作的方向确认，再改共享进程清理或进入 HTTP 迁移。
 - 尚未引入 HTTP/WS/plist 库。无需把验收工具并入产品 rssr-cli。
 - 阶段 2 的 HEAD/symlink 修复、三个平台 metadata、Chrome ownership 均未推进。
 
@@ -96,4 +144,7 @@
 - 入口：`scripts/release-ui/web_auth.rs`；单份 HTTP 合同：
   `scripts/run_rssr_web_auth_assertions.sh`；黑盒：
   `scripts/release-ui/tests/acceptance.py` 和 `auth_server.py`。
-- 原始测量及失败证据保留在上述 ignored target；提交前只 stage 本任务明确路径。
+- WSL 本次基线/构建/测量目录约 2.6 GiB；结束时 WSL 可用约 532 GiB，
+  E 盘物理可用约 129 GiB。另有两端验收产物；未清理用户缓存。
+- 原始测量的精简 JSON/复跑脚本已入库，完整服务和失败日志保留 ignored target；
+  Windows 两份补验快照仅用于测试，原 checkout dirty 状态未变。
