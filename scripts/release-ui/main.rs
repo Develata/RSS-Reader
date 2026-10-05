@@ -1,5 +1,6 @@
 mod plan;
 mod process;
+mod web_auth;
 
 use clap::Parser;
 use plan::{Options, Step};
@@ -308,6 +309,31 @@ fn execute(
     let log = report.log_dir.join(step.log);
     let mut tail = LogTail::open(&log, console)?;
     writeln!(OpenOptions::new().append(true).open(&log)?, "\n=== {} ===", step.name)?;
+    if step.name == "web-auth" {
+        let assertions = Step {
+            program: "bash",
+            args: vec![
+                "scripts/run_rssr_web_auth_assertions.sh".into(),
+                options.web_port.to_string(),
+                "{log-dir}".into(),
+            ],
+            ..step
+        };
+        let assertions = command(&assertions, options, root, &report.log_dir)?;
+        let mut service =
+            web_auth::spawn(root, options.profile(), options.web_port, &report.log_dir)?;
+        report.steps[index].pid = Some(service.id());
+        report.write()?;
+        return web_auth::run(
+            root,
+            &mut service,
+            assertions,
+            options.web_port,
+            &report.log_dir,
+            &mut tail,
+            cancelled,
+        );
+    }
     let mut child = OwnedProcess::spawn(command(&step, options, root, &report.log_dir)?, &log)?;
     report.steps[index].pid = Some(child.id());
     report.write()?;

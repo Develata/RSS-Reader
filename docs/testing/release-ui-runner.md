@@ -181,3 +181,43 @@ Unix 信号验证。完整交接见
 [2026-10-03-release-ui-runner-rust.md](../handoffs/2026-10-03-release-ui-runner-rust.md)。
 后续审阅修复及对应复现证据见
 [2026-10-03-release-ui-runner-review-fixes.md](../handoffs/2026-10-03-release-ui-runner-review-fixes.md)。
+
+## web-auth 生命周期迁移（第一小步，2026-10-05）
+
+基线为 `f69087a61a4627cbd3ba88fa082d7722df811dc5`。Rust 现在在
+`web-auth` 阶段预检端口，直接拥有 `cargo run --locked -p rssr-web`，
+调度 readiness、取消和清理。继续复用 `OwnedProcess`、`Cancellation`、
+`LogTail` 和既有报告；未新增状态机或依赖。服务的 Unix 清理仍使用既有
+1.5 秒 grace；这不改变尚未迁移的 Chrome 5 秒 grace。
+
+`--plan` 的该阶段现在显示 `release-ui --web-auth-only ...`；
+阶段名称、原有聚合顺序、schema_version=1 及字段保持。该阶段 PID 现在是
+受监管的 cargo/service leader，而不是旧 Bash leader。新增单阶段入口：
+
+```bash
+target/release-ui-runner/debug/release-ui --web-auth-only --debug --web-port 18081
+# 原来的三参数入口也会调用上述 Rust 路径
+bash scripts/run_rssr_web_auth_smoke.sh debug 18081 target/auth-smoke
+```
+
+`--web-auth-only` 使用已有静态 bundle，单独执行认证；常规聚合路径中的
+`--skip-build` 仍仅跳过 dx bundle，服务仍然执行 Cargo。
+`--release` 只选择 `target/dx/rssr-app/release/web/public`，不会为服务添加
+`--release`。
+
+readiness 保留 **30 次** curl，每次 connect timeout 2 秒、总 timeout 10 秒，
+每次失败后等待 1 秒（含最后一次）；最坏可接近 330 秒加进程/调度成本。
+取消会同时回收正在运行的请求及服务。Windows readiness 显式优先查找调用者
+PATH 中的 `curl.exe`，防止系统目录搜索抢先选中另一份 curl。
+
+HTTP 断言目前仅在 `scripts/run_rssr_web_auth_assertions.sh` 中保留一份。
+它保持原有 curl/grep 合同且不自动跟随重定向；断言原始非零码继续向上传递
+（例如服务在响应中退出时 curl 的 52/56）。服务日志 `rssr-web.log`、
+readiness 日志 `rssr-web-readiness.log` 和断言日志
+`rssr-web-auth-smoke.log` 分开，避免共享游标的并发写入。
+
+这只是阶段 1a：仍依赖 Bash/curl/grep，兼容构建入口仍依赖 Python 读取
+Cargo JSON。后续 HTTP 迁移应在成本与语义验证后移除这一单份 adapter，
+不得长期维护两套断言。新增测试使用 Python 标准库本地 HTTP peer，
+它属于验收夹具，不进入产品运行时。迁移测量、平台边界和 CI 结果见
+[交接记录](../handoffs/2026-10-05-web-auth-owned-process.md)。

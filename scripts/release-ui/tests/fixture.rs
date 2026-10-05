@@ -43,6 +43,12 @@ fn main() {
     }
     let executable = env::current_exe().unwrap();
     let name = executable.file_stem().unwrap().to_str().unwrap();
+    if name == "curl" {
+        // Scheduling-only tests avoid network and leave the real HTTP contract
+        // to auth_server.py + the actual curl/assertion adapter.
+        println!("fixture readiness");
+        return;
+    }
     if name == "uname" {
         println!("caller-selected-uname");
         return;
@@ -62,7 +68,7 @@ fn main() {
             .unwrap_or("")
         {
             "run_wasm_contract_harness.sh" => "browser-contracts",
-            "run_rssr_web_auth_smoke.sh" => "web-auth",
+            "run_rssr_web_auth_smoke.sh" | "run_rssr_web_auth_assertions.sh" => "web-auth",
             "run_static_web_reader_theme_matrix.sh" => "reader-theme-matrix",
             "run_static_web_small_viewport_smoke.sh" => "small-viewport",
             "run_rssr_web_proxy_feed_smoke.sh" => "proxy-feed",
@@ -103,6 +109,19 @@ fn main() {
     }
     if env::var("FAIL_STAGE").ok().as_deref() == Some(step) {
         std::process::exit(23);
+    }
+    if step == "cargo-run" {
+        fs::write("service-args.txt", args.join("\n")).unwrap();
+        fs::write("service-static-dir.txt", env::var("RSS_READER_WEB_STATIC_DIR").unwrap())
+            .unwrap();
+        if let Ok(script) = env::var("AUTH_FIXTURE_SERVER") {
+            let status = Command::new(env::var("AUTH_FIXTURE_PYTHON").unwrap())
+                .arg(script)
+                .status()
+                .unwrap();
+            std::process::exit(status.code().unwrap_or(1));
+        }
+        pause();
     }
     if step == "web-bundle" && env::var_os("MISSING_BUNDLE").is_none() {
         let profile = if args.iter().any(|s| s == "--release") { "release" } else { "debug" };
