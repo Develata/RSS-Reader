@@ -48,6 +48,10 @@ fn wait(
     cancelled: &Cancellation,
     phase: &str,
 ) -> io::Result<i32> {
+    // Readiness curl usually exits within a few milliseconds. A few early
+    // sleeping polls avoid charging it a full 40ms; slow requests return to
+    // the existing cadence without busy waiting or changing their timeout.
+    let mut early_delays = [5, 10, 20].into_iter();
     loop {
         let code = cancelled.load(Ordering::SeqCst);
         if code != 0 {
@@ -62,7 +66,7 @@ fn wait(
             tail.drain()?;
             return Ok(process::exit_code(status));
         }
-        thread::sleep(Duration::from_millis(40));
+        thread::sleep(Duration::from_millis(early_delays.next().unwrap_or(40)));
     }
 }
 

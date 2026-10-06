@@ -179,6 +179,10 @@ impl OwnedProcess {
             if self.0.signal(signal).is_ok() {
                 // Give existing script traps and browser cleanup a bounded grace.
                 let deadline = std::time::Instant::now() + Duration::from_millis(1500);
+                // Cooperative groups often disappear almost immediately. Keep
+                // early probes bounded, then retain the 25ms cadence and full
+                // grace for surviving groups or inconclusive probes.
+                let mut early_delays = [5, 10].into_iter();
                 loop {
                     // Reap the leader before probing: a zombie still keeps its
                     // process group alive. The leader exiting alone is NOT proof
@@ -199,7 +203,7 @@ impl OwnedProcess {
                     if std::time::Instant::now() >= deadline {
                         break;
                     }
-                    thread::sleep(Duration::from_millis(25));
+                    thread::sleep(Duration::from_millis(early_delays.next().unwrap_or(25)));
                 }
             }
         }
