@@ -1,0 +1,16 @@
+{
+  "hostname": "LAPTOP-H6JEOCF0",
+  "wsl_root": "/home/deve/gitclone/RSS-Reader",
+  "wsl_disk_usage_bytes": {
+    "total": 833397317632,
+    "used": 222942613504,
+    "free": 568045260800
+  },
+  "e_disk_usage_bytes": {
+    "total": 1024207089664,
+    "used": 890332315648,
+    "free": 133874774016
+  },
+  "windows_snapshot": "E:/gitclone/RSS-Reader/target/w2",
+  "windows_primary_checkout_untouched": true
+}

@@ -188,7 +188,10 @@ Unix 信号验证。完整交接见
 `web-auth` 阶段预检端口，直接拥有 `cargo run --locked -p rssr-web`，
 调度 readiness、取消和清理。继续复用 `OwnedProcess`、`Cancellation`、
 `LogTail` 和既有报告；未新增状态机或依赖。服务的 Unix 清理仍使用既有
-1.5 秒 grace；这不改变尚未迁移的 Chrome 5 秒 grace。
+1.5 秒 grace 上限；2026-10-06 起，仅在回收 leader 并确认整个组已不存在时
+提前结束等待，仍存活或无法确认的组继续获得原有宽限及强制清理。
+探测使用已锁定的 libc（新增为 Unix 直接依赖，无新增依赖包）。
+这不改变尚未迁移的 Chrome 5 秒 grace。
 
 `--plan` 的该阶段现在显示 `release-ui --web-auth-only ...`；
 阶段名称、原有聚合顺序、schema_version=1 及字段保持。该阶段 PID 现在是
@@ -215,9 +218,15 @@ HTTP 断言目前仅在 `scripts/run_rssr_web_auth_assertions.sh` 中保留一�
 （例如服务在响应中退出时 curl 的 52/56）。服务日志 `rssr-web.log`、
 readiness 日志 `rssr-web-readiness.log` 和断言日志
 `rssr-web-auth-smoke.log` 分开，避免共享游标的并发写入。
+为兼容不支持 Unicode 文件名参数的 Windows curl，断言先解析调用者 PATH
+中的 curl，再在日志目录内传入 ASCII 相对 headers/cookie 文件名；日志仍保存
+在用户指定的中文/空格路径，MSYS 的 next= 排除保持。
 
 这只是阶段 1a：仍依赖 Bash/curl/grep，兼容构建入口仍依赖 Python 读取
 Cargo JSON。后续 HTTP 迁移应在成本与语义验证后移除这一单份 adapter，
 不得长期维护两套断言。新增测试使用 Python 标准库本地 HTTP peer，
 它属于验收夹具，不进入产品运行时。迁移测量、平台边界和 CI 结果见
 [交接记录](../handoffs/2026-10-05-web-auth-owned-process.md)。
+
+2026-10-06 的清理等待及 Windows 文件路径阻塞修复、固定输入复测与最终 CI
+状态见 [后续交接](../handoffs/2026-10-06-web-auth-blocker-fixes.md)。

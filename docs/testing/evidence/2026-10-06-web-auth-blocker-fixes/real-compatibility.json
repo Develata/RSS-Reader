@@ -1,0 +1,48 @@
+{
+  "command": [
+    "/bin/bash",
+    "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/benchmarks/B \u4e2d\u6587 space/scripts/run_rssr_web_auth_smoke.sh",
+    "debug",
+    "44554",
+    "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/benchmarks/B \u4e2d\u6587 space/\u517c\u5bb9\u5165\u53e3 logs"
+  ],
+  "seconds": 3.6790425140025036,
+  "exit_code": 0,
+  "port_closed": true,
+  "remaining_live_service_pids": [],
+  "report": {
+    "schema_version": 1,
+    "started_unix_ms": 1791254801709,
+    "commit": "e6915a65335701fc8cbedec2dcfdda123c6c598f",
+    "profile": "debug",
+    "port": 8091,
+    "web_port": 44554,
+    "log_dir": "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/benchmarks/B \u4e2d\u6587 space/\u517c\u5bb9\u5165\u53e3 logs",
+    "outcome": "completed",
+    "exit_code": 0,
+    "external_feed_skipped": false,
+    "steps": [
+      {
+        "name": "web-auth",
+        "group": "web",
+        "enabled": true,
+        "program": "release-ui",
+        "args": [
+          "--web-auth-only",
+          "--debug",
+          "--web-port",
+          "44554",
+          "--log-dir",
+          "{log-dir}"
+        ],
+        "log": "rssr-web-auth-smoke.log",
+        "port": 44554,
+        "status": "passed",
+        "exit_code": 0,
+        "duration_ms": 1673,
+        "pid": 31408,
+        "detail": ""
+      }
+    ]
+  }
+}

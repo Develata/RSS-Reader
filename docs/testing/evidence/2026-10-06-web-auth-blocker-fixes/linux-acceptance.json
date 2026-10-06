@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "scripts/release-ui/tests/acceptance.py",
+    "--bash",
+    "/bin/bash",
+    "--binary",
+    "target/tool-migration-20261006/dev-build/debug/release-ui",
+    "-v"
+  ],
+  "exit_code": 0,
+  "seconds": 78.18400232100248
+}

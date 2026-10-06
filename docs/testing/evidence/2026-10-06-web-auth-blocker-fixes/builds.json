@@ -1,0 +1,81 @@
+[
+  {
+    "kind": "clean-build",
+    "label": "A",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/baseline-source/scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/baseline-build"
+    ],
+    "ns": 10438425134,
+    "exit_code": 0
+  },
+  {
+    "kind": "clean-build",
+    "label": "B",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/candidate-source/scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/candidate-build"
+    ],
+    "ns": 12010585439,
+    "exit_code": 0
+  },
+  {
+    "kind": "common-product-clean-build",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "-p",
+      "rssr-web",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/product-build"
+    ],
+    "ns": 33152098173,
+    "exit_code": 0
+  },
+  {
+    "kind": "measurement-probe-build",
+    "label": "A",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/cleanup-probes/A/Cargo.toml",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/baseline-build"
+    ],
+    "ns": 1032987803,
+    "exit_code": 0
+  },
+  {
+    "kind": "measurement-probe-build",
+    "label": "B",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/cleanup-probes/B/Cargo.toml",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/candidate-build"
+    ],
+    "ns": 1242760727,
+    "exit_code": 0
+  }
+]

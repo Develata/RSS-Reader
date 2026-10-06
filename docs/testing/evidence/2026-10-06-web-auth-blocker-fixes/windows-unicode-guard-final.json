@@ -1,0 +1,12 @@
+[
+  {
+    "adapter": "old",
+    "returncode": 1,
+    "seconds": 3.1993735999858472
+  },
+  {
+    "adapter": "new",
+    "returncode": 0,
+    "seconds": 4.427791299996898
+  }
+]

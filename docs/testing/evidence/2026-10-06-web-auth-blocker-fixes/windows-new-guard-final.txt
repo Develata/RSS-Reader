@@ -1,0 +1,7 @@
+Acceptance artifacts: E:\gitclone\RSS-Reader\target\w2\target\release-ui-acceptance\1791254233006967300
+test_web_auth_ascii_curl_files_and_caller_path (__main__.Acceptance.test_web_auth_ascii_curl_files_and_caller_path) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 3.750s
+
+OK

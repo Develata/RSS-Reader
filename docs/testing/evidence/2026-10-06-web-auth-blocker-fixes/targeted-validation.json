@@ -1,0 +1,94 @@
+[
+  {
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml"
+    ],
+    "seconds": 0.4753966930002207,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "rustfmt",
+      "--edition",
+      "2024",
+      "scripts/release-ui/tests/fixture.rs"
+    ],
+    "seconds": 0.04974173099981272,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "cargo",
+      "check",
+      "--offline",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "target/tool-migration-20261006/dev-build"
+    ],
+    "seconds": 10.34601615399879,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "cargo",
+      "clippy",
+      "--offline",
+      "--locked",
+      "--all-targets",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "target/tool-migration-20261006/dev-build",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "seconds": 0.672702889998618,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "target/tool-migration-20261006/dev-build"
+    ],
+    "seconds": 6.269814996001514,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "cargo",
+      "build",
+      "--offline",
+      "--locked",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "target/tool-migration-20261006/dev-build"
+    ],
+    "seconds": 0.08677318599802675,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/release-ui/tests/acceptance.py",
+      "--binary",
+      "target/tool-migration-20261006/dev-build/debug/release-ui",
+      "Acceptance.test_web_auth_ascii_curl_files_and_relative_caller_path",
+      "Acceptance.test_web_auth_grace_survives_leader_exit_with_stubborn_leaf",
+      "-v"
+    ],
+    "seconds": 5.200951402999635,
+    "exit_code": 1
+  }
+]
