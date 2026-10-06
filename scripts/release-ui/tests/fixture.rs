@@ -46,6 +46,28 @@ fn main() {
     if name == "curl" {
         // Scheduling-only tests avoid network and leave the real HTTP contract
         // to auth_server.py + the actual curl/assertion adapter.
+        if let Ok(real) = env::var("FIXTURE_REAL_CURL") {
+            // Model a native curl build that cannot open Unicode filename
+            // arguments; still delegate the entire HTTP exchange to real curl.
+            writeln!(
+                OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(env::var("FIXTURE_CURL_TRACE").unwrap())
+                    .unwrap(),
+                "{:?}\t{args:?}",
+                env::current_dir().unwrap()
+            )
+            .unwrap();
+            for pair in args.windows(2) {
+                if ["-D", "-b", "-c"].contains(&pair[0].as_str()) && !pair[1].is_ascii() {
+                    eprintln!("fixture curl: (23) non-ASCII filename argument");
+                    std::process::exit(23);
+                }
+            }
+            let status = Command::new(real).args(&args).status().unwrap();
+            std::process::exit(status.code().unwrap_or(1));
+        }
         println!("fixture readiness");
         return;
     }

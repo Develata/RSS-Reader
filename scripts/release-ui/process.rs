@@ -179,7 +179,26 @@ impl OwnedProcess {
             if self.0.signal(signal).is_ok() {
                 // Give existing script traps and browser cleanup a bounded grace.
                 let deadline = std::time::Instant::now() + Duration::from_millis(1500);
-                while std::time::Instant::now() < deadline {
+                loop {
+                    // Reap the leader before probing: a zombie still keeps its
+                    // process group alive. The leader exiting alone is NOT proof
+                    // that its children (possibly ignoring TERM) have exited.
+                    self.try_wait()?;
+                    // SAFETY: spawn created a dedicated group led by this PID.
+                    // Signal zero probes every member without sending a signal.
+                    let exists = unsafe { libc::kill(-(self.id() as libc::pid_t), 0) };
+                    if exists == -1
+                        && io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+                    {
+                        self.0.wait()?;
+                        self.1 = true;
+                        return Ok(());
+                    }
+                    // Any other probe result is inconclusive: retain the grace
+                    // and forced group cleanup, including when the leader exited.
+                    if std::time::Instant::now() >= deadline {
+                        break;
+                    }
                     thread::sleep(Duration::from_millis(25));
                 }
             }
@@ -192,7 +211,7 @@ impl OwnedProcess {
         // ESRCH means the Unix group already exited. Other cleanup failures matter.
         #[cfg(unix)]
         if let Err(error) = killed {
-            if error.raw_os_error() == Some(3) {
+            if error.raw_os_error() == Some(libc::ESRCH) {
                 self.0.wait()?;
                 self.1 = true;
                 return Ok(());
@@ -258,5 +277,26 @@ pub fn wait(
             return Ok(exit_code(status));
         }
         thread::sleep(Duration::from_millis(40));
+    }
+}
+
+#[cfg(all(test, unix))]
+mod cleanup_tests {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn completed_group_does_not_consume_grace() {
+        let log =
+            std::env::temp_dir().join(format!("release-ui-cleanup-{}.log", std::process::id()));
+        let mut command = Command::new("sleep");
+        command.arg("30");
+        let mut child = OwnedProcess::spawn(command, &log).unwrap();
+        let started = Instant::now();
+        child.stop(0).unwrap();
+        assert!(started.elapsed() < Duration::from_millis(1200), "empty group consumed grace");
+        assert!(child.try_wait().unwrap().is_some(), "leader was not reaped");
+        child.stop(0).unwrap(); // Already stopped: safe and idempotent.
+        std::fs::remove_file(log).unwrap();
     }
 }

@@ -579,6 +579,50 @@ class Acceptance(unittest.TestCase):
         self.assertIn("auth fixture listening", (self.log / "rssr-web.log").read_text())
         self.assertNotIn("auth fixture listening", (self.log / "rssr-web-auth-smoke.log").read_text())
 
+    def test_web_auth_ascii_curl_files_and_caller_path(self):
+        port = self.auth_fixture()
+        real_curl = shutil.which("curl")
+        self.assertIsNotNone(real_curl)
+        shutil.copy2(FIXTURE, self.root / "tools" / ("curl" + SUFFIX))
+        trace = self.root / "curl-calls.txt"
+        caller_tools = str(self.root / "tools") if WINDOWS else "tools"
+        self.env.update(FIXTURE_REAL_CURL=real_curl, FIXTURE_CURL_TRACE=str(trace),
+                        PATH=caller_tools + os.pathsep + os.environ["PATH"])
+        if WINDOWS:
+            # As in the existing caller-tools test, seed Bash's own PATH after
+            # MSYS imports/prepends native paths. The nested Bash must preserve it.
+            startup = self.root / "caller-bash-env"
+            startup.write_text('unset BASH_ENV\nexport PATH="tools:$PATH"\n', encoding="utf-8")
+            self.env["BASH_ENV"] = startup.as_posix()
+        self.run_cli("--web-auth-only", "--web-port", str(port))
+        calls = trace.read_text(encoding="utf-8").splitlines()
+        # Readiness and all 7 assertions must honor the selected caller curl.
+        self.assertGreaterEqual(len(calls), 8)
+        self.assertEqual(sum('"-D"' in line for line in calls), 7)
+        self.assertIn("rssr-session", (self.log / "rssr-web.cookies").read_text())
+        for name in ["login", "entries", "login-post", "session-probe", "feeds", "settings", "logout"]:
+            self.assertTrue((self.log / f"rssr-web-{name}.headers").is_file())
+        self.no_auth_tree(port)
+
+    @unittest.skipIf(WINDOWS, "Unix process-group grace")
+    def test_web_auth_grace_survives_leader_exit_with_stubborn_leaf(self):
+        port = self.auth_fixture()
+        self.env.update(AUTH_STUBBORN_LEAF="1", AUTH_SLOW_ATTEMPTS="30", AUTH_DELAY="60")
+        proc = self.start("--web-auth-only", "--web-port", str(port))
+        self.until(lambda: any(r["path"] == "/healthz" for r in self.auth_requests()), proc)
+        service_pid = self.stage("web-auth")["pid"]
+        leaf_pid = json.loads((self.root / "auth-pids.json").read_text())[1]
+        started = time.monotonic()
+        proc.send_signal(signal.SIGTERM)
+        # Cargo/root may exit immediately. Its stubborn grandchild must still
+        # receive the full grace; early leader exit must not skip group cleanup.
+        self.until(lambda: not alive(service_pid))
+        self.assertTrue(alive(leaf_pid))
+        self.assertEqual(proc.wait(timeout=8), 143)
+        self.assertGreaterEqual(time.monotonic() - started, 1.5)
+        self.assertEqual(self.stage("web-auth")["status"], "interrupted")
+        self.no_auth_tree(port)
+
     def test_web_auth_slow_readiness_and_bad_redirect(self):
         port = self.auth_fixture()
         self.env.update(AUTH_SLOW_ATTEMPTS="1", AUTH_DELAY="1.2")

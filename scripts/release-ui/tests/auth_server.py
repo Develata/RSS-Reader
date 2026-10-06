@@ -2,6 +2,7 @@
 import http.server
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -10,12 +11,22 @@ import time
 import urllib.parse
 
 if "--leaf" in sys.argv:
+    if os.environ.get("AUTH_STUBBORN_LEAF"):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+    Path("auth-leaf-ready").touch()
     time.sleep(300)
     raise SystemExit()
 
 lock = threading.Lock()
 health_count = 0
+Path("auth-leaf-ready").unlink(missing_ok=True)
 leaf = subprocess.Popen([sys.executable, __file__, "--leaf"])
+deadline = time.monotonic() + 5
+while not Path("auth-leaf-ready").exists():
+    if time.monotonic() > deadline or leaf.poll() is not None:
+        raise RuntimeError("auth leaf failed to start")
+    time.sleep(.01)
 Path("auth-pids.json").write_text(json.dumps([os.getpid(), leaf.pid]), encoding="utf-8")
 
 
