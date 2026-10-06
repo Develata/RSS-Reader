@@ -1,0 +1,75 @@
+[
+  {
+    "adapter": "old",
+    "returncode": 1,
+    "seconds": 3.1993735999858472
+  },
+  {
+    "adapter": "new",
+    "returncode": 0,
+    "seconds": 4.427791299996898
+  },
+  {
+    "name": "clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--all-targets",
+      "--locked",
+      "--offline",
+      "--target-dir",
+      "target/release-ui-runner",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "returncode": 0,
+    "seconds": 11.163628699985566
+  },
+  {
+    "name": "unit",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--target-dir",
+      "target/release-ui-runner"
+    ],
+    "returncode": 0,
+    "seconds": 9.49747179998667
+  },
+  {
+    "name": "build",
+    "command": [
+      "cargo",
+      "build",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--target-dir",
+      "target/release-ui-runner"
+    ],
+    "returncode": 0,
+    "seconds": 0.3925214000046253
+  },
+  {
+    "name": "acceptance",
+    "command": [
+      "C:\\Users\\QQ\\scoop\\apps\\python\\current\\python.exe",
+      "-X",
+      "utf8",
+      "scripts/release-ui/tests/acceptance.py",
+      "--bash",
+      "C:/Users/QQ/scoop/apps/git/current/bin/bash.exe",
+      "-v"
+    ],
+    "returncode": 0,
+    "seconds": 140.50132020001183
+  }
+]

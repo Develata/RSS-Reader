@@ -1,0 +1,72 @@
+[
+  {
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--check"
+    ],
+    "seconds": 0.12635415399927297,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--all-targets",
+      "--locked",
+      "--offline",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/validation-build",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "seconds": 6.83310800199979,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/validation-build"
+    ],
+    "seconds": 4.5836631980018865,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "cargo",
+      "build",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/validation-build"
+    ],
+    "seconds": 0.06530453300001682,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/release-ui/tests/acceptance.py",
+      "--bash",
+      "/bin/bash",
+      "--binary",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/validation-build/debug/release-ui",
+      "-v"
+    ],
+    "seconds": 73.99778147399775,
+    "exit_code": 0
+  }
+]

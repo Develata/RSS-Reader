@@ -22,6 +22,9 @@ pub struct Options {
     pub skip_build: bool,
     #[arg(long)]
     pub with_rssr_web: bool,
+    /// Run only deployment authentication against an existing static bundle.
+    #[arg(long, conflicts_with_all = ["full", "with_rssr_web", "with_fixed_smokes", "with_browser_contracts"])]
+    pub web_auth_only: bool,
     #[arg(long)]
     pub with_browser_contracts: bool,
     #[arg(long)]
@@ -94,7 +97,29 @@ pub struct Step {
     pub port: Option<u16>,
 }
 
+fn web_auth(options: &Options) -> Step {
+    Step {
+        name: "web-auth",
+        group: "web",
+        enabled: options.web_auth_only || options.full || options.with_rssr_web,
+        program: "release-ui",
+        args: vec![
+            "--web-auth-only".into(),
+            format!("--{}", options.profile()),
+            "--web-port".into(),
+            options.web_port.to_string(),
+            "--log-dir".into(),
+            "{log-dir}".into(),
+        ],
+        log: "rssr-web-auth-smoke.log",
+        port: Some(options.web_port),
+    }
+}
+
 pub fn build(options: &Options) -> Vec<Step> {
+    if options.web_auth_only {
+        return vec![web_auth(options)];
+    }
     let web = options.full || options.with_rssr_web;
     let fixed = options.full || options.with_fixed_smokes;
     let browser = options.full || options.with_browser_contracts;
@@ -165,20 +190,8 @@ pub fn build(options: &Options) -> Vec<Step> {
         "web-build.log",
         None,
     );
-    add(
-        "web-auth",
-        "web",
-        web,
-        "bash",
-        vec![
-            "scripts/run_rssr_web_auth_smoke.sh".into(),
-            options.profile().into(),
-            options.web_port.to_string(),
-            "{log-dir}".into(),
-        ],
-        "rssr-web-auth-smoke.log",
-        Some(options.web_port),
-    );
+    let auth = web_auth(options);
+    add(auth.name, auth.group, auth.enabled, auth.program, auth.args, auth.log, auth.port);
     let smoke = |script: &str, port: u16, directory: &str| {
         vec![
             format!("scripts/{script}.sh"),

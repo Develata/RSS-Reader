@@ -278,6 +278,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "ctrlc",
+ "libc",
  "process-wrap",
  "serde",
  "serde_json",

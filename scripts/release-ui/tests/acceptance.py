@@ -84,7 +84,7 @@ class Acceptance(unittest.TestCase):
         (self.root / "scripts/run_web_spa_regression_server.sh").touch()
         tools = self.root / "tools"
         tools.mkdir()
-        for name in ["cargo", "dx", "bash"]:
+        for name in ["cargo", "dx", "bash", "curl"]:
             shutil.copy2(FIXTURE, tools / (name + SUFFIX))
         self.env = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ["PATH"], RSSR_BASH=str(tools / ("bash" + SUFFIX)))
         self.log = self.root / "结果 logs"
@@ -97,6 +97,11 @@ class Acceptance(unittest.TestCase):
                 proc.wait(timeout=8)
         # Also clean known fixture descendants when testing a regressed runner.
         # Assertions run before this safety net and must prove runner-owned cleanup.
+        auth_pids = self.root / "auth-pids.json"
+        if auth_pids.exists():
+            for pid in json.loads(auth_pids.read_text()):
+                if alive(pid):
+                    os.kill(pid, signal.SIGTERM if WINDOWS else signal.SIGKILL)
         for name in ["branch.pid", "leaf.pid"]:
             path = self.root / name
             if path.exists():
@@ -367,7 +372,7 @@ class Acceptance(unittest.TestCase):
         self.run_cli("--full", "--no-serve", "--release")
         trace = (self.root / "trace.txt").read_text(encoding="utf-8")
         names = [line.split("\t")[0] for line in trace.splitlines()]
-        self.assertEqual(names, ["wasm-check", "app-tests", "host-contracts", "web-tests", "browser-contracts", "web-bundle", "web-auth", "reader-theme-matrix", "small-viewport", "proxy-feed", "browser-feed"])
+        self.assertEqual(names, ["wasm-check", "app-tests", "host-contracts", "web-tests", "browser-contracts", "web-bundle", "cargo-run", "web-auth", "reader-theme-matrix", "small-viewport", "proxy-feed", "browser-feed"])
         self.assertEqual(names.count("web-bundle"), 1)
         self.assertIn("中文 space", trace)
         self.assertIn("结果 logs", trace)
@@ -502,8 +507,9 @@ class Acceptance(unittest.TestCase):
 
     def real_scripts(self):
         self.env["RSSR_BASH"] = ARGS.bash
-        for name in ["run_web_spa_regression_server.sh", "run_rssr_web_auth_smoke.sh"]:
+        for name in ["run_web_spa_regression_server.sh", "run_rssr_web_auth_smoke.sh", "run_rssr_web_auth_assertions.sh"]:
             shutil.copy2(ROOT / "scripts" / name, self.root / "scripts" / name)
+        (self.root / "tools" / ("curl" + SUFFIX)).unlink()
         self.bundle()
         (self.root / "target/dx/rssr-app/debug/web/public/index.html").write_text("real SPA fixture", encoding="utf-8")
 
@@ -533,6 +539,154 @@ class Acceptance(unittest.TestCase):
         self.assertEqual(self.stage("spa")["status"], "interrupted")
         self.until(lambda: not alive(stage_pid))
         self.assert_port_free(port)
+
+    def auth_fixture(self):
+        self.real_scripts()
+        self.env.update(AUTH_FIXTURE_SERVER=str(Path(__file__).with_name("auth_server.py")),
+                        AUTH_FIXTURE_PYTHON=sys.executable,
+                        NO_PROXY="127.0.0.1,localhost", no_proxy="127.0.0.1,localhost")
+        return free_port()
+
+    def auth_requests(self):
+        return [json.loads(line) for line in
+                (self.root / "auth-requests.jsonl").read_text(encoding="utf-8").splitlines()]
+
+    def no_auth_tree(self, port):
+        pids = json.loads((self.root / "auth-pids.json").read_text())
+        self.until(lambda: all(not alive(pid) for pid in pids))
+        self.assert_port_free(port)
+
+    def test_web_auth_real_contract_profile_and_plan(self):
+        port = self.auth_fixture()
+        plan = json.loads(self.run_cli("--web-auth-only", "--release", "--plan").stdout)
+        self.assertEqual([s["name"] for s in plan], ["web-auth"])
+        self.assertEqual(plan[0]["program"], "release-ui")
+        self.assertIn("--web-auth-only", plan[0]["args"])
+        self.run_cli("--web-auth-only", "--release", "--web-port", str(port))
+        self.assertEqual(self.stage("web-auth")["status"], "passed")
+        self.assertEqual((self.root / "service-args.txt").read_text().splitlines(),
+                         ["run", "--locked", "-p", "rssr-web"])
+        self.assertEqual((self.root / "service-static-dir.txt").read_text(),
+                         "target/dx/rssr-app/release/web/public")
+        requests = self.auth_requests()
+        self.assertEqual([(r["method"], r["path"]) for r in requests], [
+            ("GET", "/healthz"), ("GET", "/login"), ("GET", "/entries"),
+            ("POST", "/login"), ("GET", "/session-probe"), ("GET", "/feeds"),
+            ("GET", "/settings"), ("GET", "/logout")])
+        self.assertEqual(requests[3]["form"]["next"], ["/feeds"])
+        self.assertEqual(self.report()["schema_version"], 1)
+        self.no_auth_tree(port)
+        self.assertIn("auth fixture listening", (self.log / "rssr-web.log").read_text())
+        self.assertNotIn("auth fixture listening", (self.log / "rssr-web-auth-smoke.log").read_text())
+
+    def test_web_auth_ascii_curl_files_and_caller_path(self):
+        port = self.auth_fixture()
+        real_curl = shutil.which("curl")
+        self.assertIsNotNone(real_curl)
+        shutil.copy2(FIXTURE, self.root / "tools" / ("curl" + SUFFIX))
+        trace = self.root / "curl-calls.txt"
+        caller_tools = str(self.root / "tools") if WINDOWS else "tools"
+        self.env.update(FIXTURE_REAL_CURL=real_curl, FIXTURE_CURL_TRACE=str(trace),
+                        PATH=caller_tools + os.pathsep + os.environ["PATH"])
+        if WINDOWS:
+            # As in the existing caller-tools test, seed Bash's own PATH after
+            # MSYS imports/prepends native paths. The nested Bash must preserve it.
+            startup = self.root / "caller-bash-env"
+            startup.write_text('unset BASH_ENV\nexport PATH="tools:$PATH"\n', encoding="utf-8")
+            self.env["BASH_ENV"] = startup.as_posix()
+        self.run_cli("--web-auth-only", "--web-port", str(port))
+        calls = trace.read_text(encoding="utf-8").splitlines()
+        # Readiness and all 7 assertions must honor the selected caller curl.
+        self.assertGreaterEqual(len(calls), 8)
+        self.assertEqual(sum('"-D"' in line for line in calls), 7)
+        self.assertIn("rssr-session", (self.log / "rssr-web.cookies").read_text())
+        for name in ["login", "entries", "login-post", "session-probe", "feeds", "settings", "logout"]:
+            self.assertTrue((self.log / f"rssr-web-{name}.headers").is_file())
+        self.no_auth_tree(port)
+
+    @unittest.skipIf(WINDOWS, "Unix process-group grace")
+    def test_web_auth_grace_survives_leader_exit_with_stubborn_leaf(self):
+        port = self.auth_fixture()
+        self.env.update(AUTH_STUBBORN_LEAF="1", AUTH_SLOW_ATTEMPTS="30", AUTH_DELAY="60")
+        proc = self.start("--web-auth-only", "--web-port", str(port))
+        self.until(lambda: any(r["path"] == "/healthz" for r in self.auth_requests()), proc)
+        service_pid = self.stage("web-auth")["pid"]
+        leaf_pid = json.loads((self.root / "auth-pids.json").read_text())[1]
+        started = time.monotonic()
+        proc.send_signal(signal.SIGTERM)
+        # Cargo/root may exit immediately. Its stubborn grandchild must still
+        # receive the full grace; early leader exit must not skip group cleanup.
+        self.until(lambda: not alive(service_pid))
+        self.assertTrue(alive(leaf_pid))
+        self.assertEqual(proc.wait(timeout=8), 143)
+        self.assertGreaterEqual(time.monotonic() - started, 1.5)
+        self.assertEqual(self.stage("web-auth")["status"], "interrupted")
+        self.no_auth_tree(port)
+
+    def test_web_auth_slow_readiness_and_bad_redirect(self):
+        port = self.auth_fixture()
+        self.env.update(AUTH_SLOW_ATTEMPTS="1", AUTH_DELAY="1.2")
+        self.run_cli("--web-auth-only", "--web-port", str(port))
+        self.no_auth_tree(port)
+        self.env["AUTH_BAD_REDIRECT"] = "1"
+        port = free_port()
+        self.run_cli("--web-auth-only", "--web-port", str(port), code=1)
+        self.assertEqual(self.stage("web-auth")["status"], "failed")
+        self.no_auth_tree(port)
+
+    def test_web_auth_readiness_can_exceed_30_seconds(self):
+        port = self.auth_fixture()
+        self.env.update(AUTH_SLOW_ATTEMPTS="3", AUTH_DELAY="11")
+        started = time.monotonic()
+        result = subprocess.run(self.command("--web-auth-only", "--web-port", str(port)),
+                                env=self.env, capture_output=True, timeout=55)
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+        self.assertGreater(time.monotonic() - started, 30)
+        self.assertLess(time.monotonic() - started, 50)
+        requests = self.auth_requests()
+        self.assertEqual(sum(r["path"] == "/healthz" for r in requests), 4)
+        self.no_auth_tree(port)
+
+    def test_web_auth_cancel_hung_request_and_tree(self):
+        port = self.auth_fixture()
+        self.env.update(AUTH_SLOW_ATTEMPTS="30", AUTH_DELAY="60")
+        proc = self.start("--web-auth-only", "--web-port", str(port), unread=True)
+        self.until(lambda: any(r["path"] == "/healthz" for r in self.auth_requests()), proc)
+        if WINDOWS:
+            console_event(proc.pid, 0)
+        else:
+            proc.send_signal(signal.SIGTERM)
+        self.assertEqual(proc.wait(timeout=8), 130 if WINDOWS else 143)
+        self.assertEqual(self.stage("web-auth")["status"], "interrupted")
+        self.no_auth_tree(port)
+
+    def test_web_auth_unread_assertion_output_and_descendants(self):
+        self.env.update(HOLD_STAGE="web-auth", FIXTURE_PORT=str(free_port()), NOISY="1")
+        proc = self.start("--web-auth-only", "--web-port", str(free_port()), unread=True)
+        self.until(lambda: (self.root / "noise-ready").exists(), proc)
+        service_pid = self.stage("web-auth")["pid"]
+        if WINDOWS:
+            console_event(proc.pid, 1)
+        else:
+            proc.send_signal(signal.SIGTERM)
+        self.assertEqual(proc.wait(timeout=8), 130 if WINDOWS else 143)
+        self.no_tree()
+        self.until(lambda: not alive(service_pid))
+        self.assertGreater((self.log / "rssr-web-auth-smoke.log").stat().st_size, 4 * 1024 * 1024)
+
+    def test_web_auth_service_exits_during_assertions(self):
+        port = self.auth_fixture()
+        self.env["AUTH_EXIT_DURING_ASSERTIONS"] = "1"
+        result = subprocess.run(self.command("--web-auth-only", "--web-port", str(port)),
+                                env=self.env, capture_output=True, timeout=25)
+        # A closed TCP response is empty-reply (52) on Unix or reset (56) on
+        # Windows. Preserve whichever error curl actually emitted.
+        self.assertIn(result.returncode, [52, 56])
+        output = (self.log / "rssr-web-auth-smoke.log").read_text()
+        self.assertIn(f"curl: ({result.returncode})", output)
+        self.assertEqual(self.stage("web-auth")["exit_code"], result.returncode)
+        self.assertEqual(self.stage("web-auth")["status"], "failed")
+        self.no_auth_tree(port)
 
 
 if __name__ == "__main__":

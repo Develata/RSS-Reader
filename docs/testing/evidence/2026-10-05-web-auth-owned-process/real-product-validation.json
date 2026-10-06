@@ -1,0 +1,30 @@
+[
+  {
+    "label": "A",
+    "command": [
+      "/bin/bash",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/run_rssr_web_auth_smoke.sh",
+      "debug",
+      "44328",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/evidence/real-product-A"
+    ],
+    "exit_code": 0,
+    "port_closed": true,
+    "scope": "real product auth contract smoke only; not an A/B timing measurement"
+  },
+  {
+    "label": "B",
+    "command": [
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+      "--web-auth-only",
+      "--debug",
+      "--web-port",
+      "43632",
+      "--log-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/evidence/real-product-B"
+    ],
+    "exit_code": 0,
+    "port_closed": true,
+    "scope": "real product auth contract smoke only; not an A/B timing measurement"
+  }
+]

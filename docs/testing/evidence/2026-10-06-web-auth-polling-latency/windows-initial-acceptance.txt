@@ -1,0 +1,395 @@
+Acceptance artifacts: E:\gitclone\RSS-Reader\target\w3\target\release-ui-acceptance\1791261889991781700
+test_bash_stage_preserves_caller_tools (__main__.Acceptance.test_bash_stage_preserves_caller_tools) ... ok
+test_cancellation_and_forced_termination (__main__.Acceptance.test_cancellation_and_forced_termination) ... ok
+test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) ...
+  test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) (stage='web-auth') ... FAIL
+  test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) (stage='reader-theme-matrix') ... FAIL
+  test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) (stage='small-viewport') ... FAIL
+  test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) (stage='proxy-feed') ... FAIL
+  test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) (stage='browser-feed') ... FAIL
+test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) ... FAIL
+test_explicit_bash_is_not_replaced (__main__.Acceptance.test_explicit_bash_is_not_replaced) ... skipped 'alternate Bash executable identity is checked on Unix'
+test_full_order_and_build_once_unicode_paths (__main__.Acceptance.test_full_order_and_build_once_unicode_paths) ... FAIL
+test_git_probe_cancellation_owns_descendants (__main__.Acceptance.test_git_probe_cancellation_owns_descendants) ... ok
+test_git_revision_in_linked_worktree_and_separate_gitdir (__main__.Acceptance.test_git_revision_in_linked_worktree_and_separate_gitdir) ... ok
+test_launcher_artifact_path_has_no_line_ending (__main__.Acceptance.test_launcher_artifact_path_has_no_line_ending) ... ok
+test_local_fixture_selection_does_not_pass_external_probe (__main__.Acceptance.test_local_fixture_selection_does_not_pass_external_probe) ... FAIL
+test_missing_build_output_and_spawn_error (__main__.Acceptance.test_missing_build_output_and_spawn_error) ... ok
+test_owned_descendants_after_success_and_failure (__main__.Acceptance.test_owned_descendants_after_success_and_failure) ... ok
+test_parameters_and_plan_have_no_side_effects (__main__.Acceptance.test_parameters_and_plan_have_no_side_effects) ... ok
+test_real_auth_service_early_exit_and_conflict (__main__.Acceptance.test_real_auth_service_early_exit_and_conflict) ... ok
+test_real_launcher_respects_configured_compiler (__main__.Acceptance.test_real_launcher_respects_configured_compiler) ... ok
+test_real_launcher_target_config_and_stale_binary (__main__.Acceptance.test_real_launcher_target_config_and_stale_binary) ... ok
+test_real_spa_with_bash_python_and_cancel (__main__.Acceptance.test_real_spa_with_bash_python_and_cancel) ... ok
+test_skip_semantics_and_missing_bundle (__main__.Acceptance.test_skip_semantics_and_missing_bundle) ... ok
+test_spa_early_exit_and_port_conflict (__main__.Acceptance.test_spa_early_exit_and_port_conflict) ... ok
+test_spa_readiness_and_cancel (__main__.Acceptance.test_spa_readiness_and_cancel) ... ok
+test_unread_stdout_does_not_block_cancellation (__main__.Acceptance.test_unread_stdout_does_not_block_cancellation) ... ok
+test_web_auth_ascii_curl_files_and_caller_path (__main__.Acceptance.test_web_auth_ascii_curl_files_and_caller_path) ... ok
+test_web_auth_cancel_hung_request_and_tree (__main__.Acceptance.test_web_auth_cancel_hung_request_and_tree) ... ok
+test_web_auth_grace_survives_leader_exit_with_stubborn_leaf (__main__.Acceptance.test_web_auth_grace_survives_leader_exit_with_stubborn_leaf) ... skipped 'Unix process-group grace'
+test_web_auth_readiness_can_exceed_30_seconds (__main__.Acceptance.test_web_auth_readiness_can_exceed_30_seconds) ... ok
+test_web_auth_real_contract_profile_and_plan (__main__.Acceptance.test_web_auth_real_contract_profile_and_plan) ... ok
+test_web_auth_service_exits_during_assertions (__main__.Acceptance.test_web_auth_service_exits_during_assertions) ... ok
+test_web_auth_slow_readiness_and_bad_redirect (__main__.Acceptance.test_web_auth_slow_readiness_and_bad_redirect) ... ok
+test_web_auth_unread_assertion_output_and_descendants (__main__.Acceptance.test_web_auth_unread_assertion_output_and_descendants) ... ok
+
+======================================================================
+FAIL: test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) (stage='web-auth')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 392, in test_every_stage_failure_is_terminal_and_keeps_exit
+    self.run_cli("--full", "--no-serve", code=23)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+    self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 23 : Running wasm-check...
+
+=== wasm-check ===
+fixture stdout: wasm-check
+fixture stderr: wasm-check
+Running app-tests...
+
+=== app-tests ===
+fixture stdout: app-tests
+fixture stderr: app-tests
+Running host-contracts...
+
+=== host-contracts ===
+fixture stdout: host-contracts
+fixture stderr: host-contracts
+Running web-tests...
+
+=== web-tests ===
+fixture stdout: web-tests
+fixture stderr: web-tests
+Running browser-contracts...
+
+=== browser-contracts ===
+fixture stdout: browser-contracts
+fixture stderr: browser-contracts
+Running web-bundle...
+
+=== web-bundle ===
+fixture stdout: web-bundle
+fixture stderr: web-bundle
+Running web-auth...
+Summary written to E:\gitclone\RSS-Reader\target\w3\target\release-ui-acceptance\1791261889991781700\test_every_stage_failure_is_terminal_and_keeps_exit 中文 space\结果 logs\summary.md
+web-auth: port 18081 is unavailable: 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。 (os error 10048)
+
+
+======================================================================
+FAIL: test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) (stage='reader-theme-matrix')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 392, in test_every_stage_failure_is_terminal_and_keeps_exit
+    self.run_cli("--full", "--no-serve", code=23)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+    self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 23 : Running wasm-check...
+
+=== wasm-check ===
+fixture stdout: wasm-check
+fixture stderr: wasm-check
+Running app-tests...
+
+=== app-tests ===
+fixture stdout: app-tests
+fixture stderr: app-tests
+Running host-contracts...
+
+=== host-contracts ===
+fixture stdout: host-contracts
+fixture stderr: host-contracts
+Running web-tests...
+
+=== web-tests ===
+fixture stdout: web-tests
+fixture stderr: web-tests
+Running browser-contracts...
+
+=== browser-contracts ===
+fixture stdout: browser-contracts
+fixture stderr: browser-contracts
+Running web-bundle...
+
+=== web-bundle ===
+fixture stdout: web-bundle
+fixture stderr: web-bundle
+Running web-auth...
+Summary written to E:\gitclone\RSS-Reader\target\w3\target\release-ui-acceptance\1791261889991781700\test_every_stage_failure_is_terminal_and_keeps_exit 中文 space\结果 logs\summary.md
+web-auth: port 18081 is unavailable: 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。 (os error 10048)
+
+
+======================================================================
+FAIL: test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) (stage='small-viewport')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 392, in test_every_stage_failure_is_terminal_and_keeps_exit
+    self.run_cli("--full", "--no-serve", code=23)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+    self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 23 : Running wasm-check...
+
+=== wasm-check ===
+fixture stdout: wasm-check
+fixture stderr: wasm-check
+Running app-tests...
+
+=== app-tests ===
+fixture stdout: app-tests
+fixture stderr: app-tests
+Running host-contracts...
+
+=== host-contracts ===
+fixture stdout: host-contracts
+fixture stderr: host-contracts
+Running web-tests...
+
+=== web-tests ===
+fixture stdout: web-tests
+fixture stderr: web-tests
+Running browser-contracts...
+
+=== browser-contracts ===
+fixture stdout: browser-contracts
+fixture stderr: browser-contracts
+Running web-bundle...
+
+=== web-bundle ===
+fixture stdout: web-bundle
+fixture stderr: web-bundle
+Running web-auth...
+Summary written to E:\gitclone\RSS-Reader\target\w3\target\release-ui-acceptance\1791261889991781700\test_every_stage_failure_is_terminal_and_keeps_exit 中文 space\结果 logs\summary.md
+web-auth: port 18081 is unavailable: 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。 (os error 10048)
+
+
+======================================================================
+FAIL: test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) (stage='proxy-feed')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 392, in test_every_stage_failure_is_terminal_and_keeps_exit
+    self.run_cli("--full", "--no-serve", code=23)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+    self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 23 : Running wasm-check...
+
+=== wasm-check ===
+fixture stdout: wasm-check
+fixture stderr: wasm-check
+Running app-tests...
+
+=== app-tests ===
+fixture stdout: app-tests
+fixture stderr: app-tests
+Running host-contracts...
+
+=== host-contracts ===
+fixture stdout: host-contracts
+fixture stderr: host-contracts
+Running web-tests...
+
+=== web-tests ===
+fixture stdout: web-tests
+fixture stderr: web-tests
+Running browser-contracts...
+
+=== browser-contracts ===
+fixture stdout: browser-contracts
+fixture stderr: browser-contracts
+Running web-bundle...
+
+=== web-bundle ===
+fixture stdout: web-bundle
+fixture stderr: web-bundle
+Running web-auth...
+Summary written to E:\gitclone\RSS-Reader\target\w3\target\release-ui-acceptance\1791261889991781700\test_every_stage_failure_is_terminal_and_keeps_exit 中文 space\结果 logs\summary.md
+web-auth: port 18081 is unavailable: 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。 (os error 10048)
+
+
+======================================================================
+FAIL: test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) (stage='browser-feed')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 392, in test_every_stage_failure_is_terminal_and_keeps_exit
+    self.run_cli("--full", "--no-serve", code=23)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+    self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 23 : Running wasm-check...
+
+=== wasm-check ===
+fixture stdout: wasm-check
+fixture stderr: wasm-check
+Running app-tests...
+
+=== app-tests ===
+fixture stdout: app-tests
+fixture stderr: app-tests
+Running host-contracts...
+
+=== host-contracts ===
+fixture stdout: host-contracts
+fixture stderr: host-contracts
+Running web-tests...
+
+=== web-tests ===
+fixture stdout: web-tests
+fixture stderr: web-tests
+Running browser-contracts...
+
+=== browser-contracts ===
+fixture stdout: browser-contracts
+fixture stderr: browser-contracts
+Running web-bundle...
+
+=== web-bundle ===
+fixture stdout: web-bundle
+fixture stderr: web-bundle
+Running web-auth...
+Summary written to E:\gitclone\RSS-Reader\target\w3\target\release-ui-acceptance\1791261889991781700\test_every_stage_failure_is_terminal_and_keeps_exit 中文 space\结果 logs\summary.md
+web-auth: port 18081 is unavailable: 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。 (os error 10048)
+
+
+======================================================================
+FAIL: test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 402, in test_every_stage_failure_is_terminal_and_keeps_exit
+    self.run_cli("--with-rssr-web", "--no-serve", code=23)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+    self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 23 : Running wasm-check...
+
+=== wasm-check ===
+fixture stdout: wasm-check
+fixture stderr: wasm-check
+Running app-tests...
+
+=== app-tests ===
+fixture stdout: app-tests
+fixture stderr: app-tests
+Running host-contracts...
+
+=== host-contracts ===
+fixture stdout: host-contracts
+fixture stderr: host-contracts
+Running web-tests...
+
+=== web-tests ===
+fixture stdout: web-tests
+fixture stderr: web-tests
+Running web-bundle...
+
+=== web-bundle ===
+fixture stdout: web-bundle
+fixture stderr: web-bundle
+Running web-auth...
+Summary written to E:\gitclone\RSS-Reader\target\w3\target\release-ui-acceptance\1791261889991781700\test_every_stage_failure_is_terminal_and_keeps_exit 中文 space\结果 logs\summary.md
+web-auth: port 18081 is unavailable: 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。 (os error 10048)
+
+
+======================================================================
+FAIL: test_full_order_and_build_once_unicode_paths (__main__.Acceptance.test_full_order_and_build_once_unicode_paths)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 372, in test_full_order_and_build_once_unicode_paths
+    self.run_cli("--full", "--no-serve", "--release")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+    self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Running wasm-check...
+
+=== wasm-check ===
+fixture stdout: wasm-check
+fixture stderr: wasm-check
+Running app-tests...
+
+=== app-tests ===
+fixture stdout: app-tests
+fixture stderr: app-tests
+Running host-contracts...
+
+=== host-contracts ===
+fixture stdout: host-contracts
+fixture stderr: host-contracts
+Running web-tests...
+
+=== web-tests ===
+fixture stdout: web-tests
+fixture stderr: web-tests
+Running browser-contracts...
+
+=== browser-contracts ===
+fixture stdout: browser-contracts
+fixture stderr: browser-contracts
+Running web-bundle...
+
+=== web-bundle ===
+fixture stdout: web-bundle
+fixture stderr: web-bundle
+Running web-auth...
+Summary written to E:\gitclone\RSS-Reader\target\w3\target\release-ui-acceptance\1791261889991781700\test_full_order_and_build_once_unicode_paths 中文 space\结果 logs\summary.md
+web-auth: port 18081 is unavailable: 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。 (os error 10048)
+
+
+======================================================================
+FAIL: test_local_fixture_selection_does_not_pass_external_probe (__main__.Acceptance.test_local_fixture_selection_does_not_pass_external_probe)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 419, in test_local_fixture_selection_does_not_pass_external_probe
+    self.run_cli("--full", "--no-serve", "--skip-external-feed")
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\gitclone\RSS-Reader\target\w3\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+    self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Running wasm-check...
+
+=== wasm-check ===
+fixture stdout: wasm-check
+fixture stderr: wasm-check
+Running app-tests...
+
+=== app-tests ===
+fixture stdout: app-tests
+fixture stderr: app-tests
+Running host-contracts...
+
+=== host-contracts ===
+fixture stdout: host-contracts
+fixture stderr: host-contracts
+Running web-tests...
+
+=== web-tests ===
+fixture stdout: web-tests
+fixture stderr: web-tests
+Running browser-contracts...
+
+=== browser-contracts ===
+fixture stdout: browser-contracts
+fixture stderr: browser-contracts
+Running web-bundle...
+
+=== web-bundle ===
+fixture stdout: web-bundle
+fixture stderr: web-bundle
+Running web-auth...
+Summary written to E:\gitclone\RSS-Reader\target\w3\target\release-ui-acceptance\1791261889991781700\test_local_fixture_selection_does_not_pass_external_probe 中文 space\结果 logs\summary.md
+web-auth: port 18081 is unavailable: 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。 (os error 10048)
+
+
+----------------------------------------------------------------------
+Ran 28 tests in 117.613s
+
+FAILED (failures=8, skipped=2)

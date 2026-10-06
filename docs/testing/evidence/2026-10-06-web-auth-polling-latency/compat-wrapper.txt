@@ -1,0 +1,5 @@
+Running web-auth...
+
+=== web-auth ===
+rssr-web ready; running authentication assertions
+Summary written to /home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/C 中文 space/compat 中文 logs/summary.md

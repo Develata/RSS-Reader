@@ -1,0 +1,66 @@
+[
+  {
+    "label": "B",
+    "kind": "clean",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/B \u4e2d\u6587 space/scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/clean-build-B"
+    ],
+    "ns": 7479992236,
+    "exit_code": 0
+  },
+  {
+    "label": "B",
+    "kind": "noop",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/B \u4e2d\u6587 space/scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/clean-build-B"
+    ],
+    "ns": 66841730,
+    "exit_code": 0
+  },
+  {
+    "label": "C",
+    "kind": "clean",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/C \u4e2d\u6587 space/scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/clean-build-C"
+    ],
+    "ns": 7370379971,
+    "exit_code": 0
+  },
+  {
+    "label": "C",
+    "kind": "noop",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "--manifest-path",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/C \u4e2d\u6587 space/scripts/release-ui/Cargo.toml",
+      "--target-dir",
+      "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/clean-build-C"
+    ],
+    "ns": 78492044,
+    "exit_code": 0
+  }
+]

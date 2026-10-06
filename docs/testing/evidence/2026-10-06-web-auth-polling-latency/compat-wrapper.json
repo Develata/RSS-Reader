@@ -1,0 +1,15 @@
+{
+  "command": [
+    "/bin/bash",
+    "scripts/run_rssr_web_auth_smoke.sh",
+    "debug",
+    "43944",
+    "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/C \u4e2d\u6587 space/compat \u4e2d\u6587 logs"
+  ],
+  "cwd": "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006-polling/C \u4e2d\u6587 space",
+  "elapsed_ns": 9774636257,
+  "exit_code": 0,
+  "note": "One-shot wrapper check with fresh snapshot-local tool target; wall includes compilation, not a paired runtime sample.",
+  "port_closed": true,
+  "remaining_service_pids": []
+}

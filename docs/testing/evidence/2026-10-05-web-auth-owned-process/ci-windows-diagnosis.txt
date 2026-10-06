@@ -1,0 +1,71 @@
+CI log excerpt; trailing whitespace removed. Full log retained in target/tool-migration-20261005/evidence/ci-windows-failed.log.
+
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5052289Z ======================================================================
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5054094Z FAIL: test_web_auth_readiness_can_exceed_30_seconds (__main__.Acceptance.test_web_auth_readiness_can_exceed_30_seconds)
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5055946Z ----------------------------------------------------------------------
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5056692Z Traceback (most recent call last):
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5058565Z   File "D:\a\RSS-Reader\RSS-Reader\scripts\release-ui\tests\acceptance.py", line 599, in test_web_auth_readiness_can_exceed_30_seconds
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5060018Z     self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5060909Z AssertionError: 23 != 0 :
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5061252Z
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5061467Z ======================================================================
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5062237Z FAIL: test_web_auth_real_contract_profile_and_plan (__main__.Acceptance.test_web_auth_real_contract_profile_and_plan)
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5062925Z ----------------------------------------------------------------------
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5063336Z Traceback (most recent call last):
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5063953Z   File "D:\a\RSS-Reader\RSS-Reader\scripts\release-ui\tests\acceptance.py", line 565, in test_web_auth_real_contract_profile_and_plan
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5064670Z     self.run_cli("--web-auth-only", "--release", "--web-port", str(port))
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5065269Z   File "D:\a\RSS-Reader\RSS-Reader\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5066050Z     self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5061467Z ======================================================================
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5062237Z FAIL: test_web_auth_real_contract_profile_and_plan (__main__.Acceptance.test_web_auth_real_contract_profile_and_plan)
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5062925Z ----------------------------------------------------------------------
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5063336Z Traceback (most recent call last):
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5063953Z   File "D:\a\RSS-Reader\RSS-Reader\scripts\release-ui\tests\acceptance.py", line 565, in test_web_auth_real_contract_profile_and_plan
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5064670Z     self.run_cli("--web-auth-only", "--release", "--web-port", str(port))
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5065269Z   File "D:\a\RSS-Reader\RSS-Reader\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5066050Z     self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5066692Z AssertionError: 23 != 0 : Running web-auth...
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5066965Z
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5067087Z === web-auth ===
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5067380Z rssr-web ready; running authentication assertions
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5067735Z curl: Failed to open
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5067890Z
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5068144Z curl: D:/a/RSS-Reader/RSS-Reader/target/release-ui-acceptance/17911949991106059
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5068498Z
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5073236Z ======================================================================
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5074203Z FAIL: test_web_auth_service_exits_during_assertions (__main__.Acceptance.test_web_auth_service_exits_during_assertions)
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5075256Z ----------------------------------------------------------------------
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5075848Z Traceback (most recent call last):
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5076825Z   File "D:\a\RSS-Reader\RSS-Reader\scripts\release-ui\tests\acceptance.py", line 640, in test_web_auth_service_exits_during_assertions
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5077863Z     self.assertIn(result.returncode, [52, 56])
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5078435Z AssertionError: 23 not found in [52, 56]
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5078747Z
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5078957Z ======================================================================
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5079900Z FAIL: test_web_auth_slow_readiness_and_bad_redirect (__main__.Acceptance.test_web_auth_slow_readiness_and_bad_redirect)
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5080895Z ----------------------------------------------------------------------
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5081480Z Traceback (most recent call last):
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5082429Z   File "D:\a\RSS-Reader\RSS-Reader\scripts\release-ui\tests\acceptance.py", line 585, in test_web_auth_slow_readiness_and_bad_redirect
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5083515Z     self.run_cli("--web-auth-only", "--web-port", str(port))
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5085778Z   File "D:\a\RSS-Reader\RSS-Reader\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5086965Z     self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5078957Z ======================================================================
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5079900Z FAIL: test_web_auth_slow_readiness_and_bad_redirect (__main__.Acceptance.test_web_auth_slow_readiness_and_bad_redirect)
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5080895Z ----------------------------------------------------------------------
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5081480Z Traceback (most recent call last):
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5082429Z   File "D:\a\RSS-Reader\RSS-Reader\scripts\release-ui\tests\acceptance.py", line 585, in test_web_auth_slow_readiness_and_bad_redirect
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5083515Z     self.run_cli("--web-auth-only", "--web-port", str(port))
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5085778Z   File "D:\a\RSS-Reader\RSS-Reader\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5086965Z     self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5087976Z AssertionError: 23 != 0 : Running web-auth...
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5088330Z
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5088506Z === web-auth ===
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5088945Z rssr-web ready; running authentication assertions
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5089532Z curl: Failed to open
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5089807Z
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5090161Z curl: D:/a/RSS-Reader/RSS-Reader/target/release-ui-acceptance/17911949991106059
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5090766Z
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5067735Z curl: Failed to open
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5069461Z curl: (23) Failed writing received data to disk/application
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5089532Z curl: Failed to open
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5092375Z curl: (23) Failed writing received data to disk/application
+release-ui-runner (windows-latest)	Check isolated release UI CLI	2026-10-05T10:11:38.5097156Z FAILED (failures=4, skipped=1)

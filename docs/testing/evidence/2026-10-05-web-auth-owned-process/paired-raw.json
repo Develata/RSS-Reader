@@ -1,0 +1,2798 @@
+{
+  "A": "f69087a61a4627cbd3ba88fa082d7722df811dc5",
+  "B": "f0bf99742ede5bbbf9476874cec27e597959b695",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "root": "/home/deve/gitclone/RSS-Reader",
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)\nbinary: rustc\ncommit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3\ncommit-date: 2026-07-07\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0\nLLVM version: 22.1.6\n",
+  "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)\n",
+  "binary_sha256": {
+    "A": "afc804a3e3026c45cf09bf04dfc8ac84bdd35aaaf23118384c7776f5bc01c542",
+    "B": "9c50fb6d0e4c55e3e02933bdb0a1f4dbf03e328af0ffcb8c260a4a11238b3b5d"
+  },
+  "binary_bytes": {
+    "A": 21311880,
+    "B": 21446360
+  },
+  "product_sha256": "1384de7e49f3cf8cdb80d149ecee4985ca95caab62c70ee13646380f740ed32b",
+  "bundle_index_sha256": "9644eb68eda85e394af50419f33c6949ef3e1a550ccd91710c4a94ae383ea8e1",
+  "auth_scope": "real web-auth + stub later browser; common Cargo cwd shim; reused bundle",
+  "readiness": "included in auth stage; not independently measured",
+  "no_p99_or_memory_claim": true,
+  "pairs": 20,
+  "warmups": [
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": -1,
+      "ns": 4559916,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": -1,
+      "ns": 4126554,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": -1,
+      "ns": 216285365,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": -1,
+      "ns": 216706529,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": -1,
+      "ns": 9154059394,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": -1,
+      "ns": 9450937385,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": -1,
+      "ns": 1671004241,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "41720",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth--1-A"
+      ],
+      "web_auth_stage_ms": 1574,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": -1,
+      "ns": 3177475805,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "41720",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth--1-B"
+      ],
+      "web_auth_stage_ms": 3116,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    }
+  ],
+  "samples": [
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 0,
+      "ns": 4056070,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 0,
+      "ns": 4060054,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 1,
+      "ns": 4168171,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 1,
+      "ns": 4118539,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 2,
+      "ns": 4100115,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 2,
+      "ns": 3945943,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 3,
+      "ns": 4156444,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 3,
+      "ns": 3916529,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 4,
+      "ns": 4079884,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 4,
+      "ns": 4275161,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 5,
+      "ns": 4992343,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 5,
+      "ns": 4290774,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 6,
+      "ns": 4058981,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 6,
+      "ns": 4008537,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 7,
+      "ns": 4084851,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 7,
+      "ns": 4163003,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 8,
+      "ns": 4006303,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 8,
+      "ns": 3904989,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 9,
+      "ns": 4275150,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 9,
+      "ns": 4175710,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 10,
+      "ns": 4963562,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 10,
+      "ns": 4133417,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 11,
+      "ns": 4301077,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 11,
+      "ns": 4226004,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 12,
+      "ns": 4302961,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 12,
+      "ns": 4058411,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 13,
+      "ns": 4239792,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 13,
+      "ns": 33027910,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 14,
+      "ns": 4473209,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 14,
+      "ns": 4439490,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 15,
+      "ns": 4202171,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 15,
+      "ns": 4491982,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 16,
+      "ns": 4331240,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 16,
+      "ns": 4284609,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 17,
+      "ns": 5152533,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 17,
+      "ns": 4881027,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 18,
+      "ns": 4671104,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 18,
+      "ns": 9373131,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "B",
+      "pair": 19,
+      "ns": 5478156,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "direct-plan",
+      "label": "A",
+      "pair": 19,
+      "ns": 4966035,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 0,
+      "ns": 165822552,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 0,
+      "ns": 115401469,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 1,
+      "ns": 115997731,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 1,
+      "ns": 115711755,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 2,
+      "ns": 115424418,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 2,
+      "ns": 115312713,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 3,
+      "ns": 115754790,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 3,
+      "ns": 115417132,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 4,
+      "ns": 115260062,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 4,
+      "ns": 115551761,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 5,
+      "ns": 115694996,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 5,
+      "ns": 115138782,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 6,
+      "ns": 115959888,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 6,
+      "ns": 115009576,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 7,
+      "ns": 115065026,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 7,
+      "ns": 114822038,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 8,
+      "ns": 115349030,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 8,
+      "ns": 115964778,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 9,
+      "ns": 115542168,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 9,
+      "ns": 115493461,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 10,
+      "ns": 116436107,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 10,
+      "ns": 115266754,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 11,
+      "ns": 114903830,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 11,
+      "ns": 114854466,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 12,
+      "ns": 115084338,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 12,
+      "ns": 114776306,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 13,
+      "ns": 115258721,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 13,
+      "ns": 114936516,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 14,
+      "ns": 114985169,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 14,
+      "ns": 114677699,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 15,
+      "ns": 65082303,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 15,
+      "ns": 114847802,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 16,
+      "ns": 114652371,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 16,
+      "ns": 114753950,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 17,
+      "ns": 114547635,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 17,
+      "ns": 114625670,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 18,
+      "ns": 64376038,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 18,
+      "ns": 115141772,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "B",
+      "pair": 19,
+      "ns": 65325530,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build"
+      ]
+    },
+    {
+      "kind": "noop-build",
+      "label": "A",
+      "pair": 19,
+      "ns": 115031498,
+      "exit_code": 0,
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-source/scripts/release-ui/Cargo.toml",
+        "--target-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 0,
+      "ns": 114693928,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 0,
+      "ns": 114438010,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 1,
+      "ns": 114434018,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 1,
+      "ns": 114379379,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 2,
+      "ns": 114293874,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 2,
+      "ns": 114416594,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 3,
+      "ns": 114486482,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 3,
+      "ns": 114581703,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 4,
+      "ns": 114423845,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 4,
+      "ns": 114510800,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 5,
+      "ns": 114578869,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 5,
+      "ns": 114133887,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 6,
+      "ns": 114379984,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 6,
+      "ns": 114735743,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 7,
+      "ns": 165135842,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 7,
+      "ns": 165485136,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 8,
+      "ns": 165316703,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 8,
+      "ns": 165169590,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 9,
+      "ns": 114697971,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 9,
+      "ns": 164908178,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 10,
+      "ns": 114672022,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 10,
+      "ns": 114658106,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 11,
+      "ns": 114765280,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 11,
+      "ns": 114658120,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 12,
+      "ns": 114595612,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 12,
+      "ns": 114616025,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 13,
+      "ns": 114690234,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 13,
+      "ns": 114612785,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 14,
+      "ns": 114475199,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 14,
+      "ns": 117372654,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 15,
+      "ns": 114648927,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 15,
+      "ns": 114943271,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 16,
+      "ns": 114406567,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 16,
+      "ns": 114574509,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 17,
+      "ns": 114889336,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 17,
+      "ns": 114454806,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 18,
+      "ns": 114784242,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 18,
+      "ns": 115030809,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "B",
+      "pair": 19,
+      "ns": 114998556,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "wrapper-plan",
+      "label": "A",
+      "pair": 19,
+      "ns": 114644672,
+      "exit_code": 0,
+      "command": [
+        "/bin/bash",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/scripts/run_release_ui_regression.sh",
+        "--full",
+        "--plan"
+      ]
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 0,
+      "ns": 1669803687,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "42628",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-0-A"
+      ],
+      "web_auth_stage_ms": 1615,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 0,
+      "ns": 3226025299,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "42628",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-0-B"
+      ],
+      "web_auth_stage_ms": 3157,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 1,
+      "ns": 3226757251,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "43508",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-1-B"
+      ],
+      "web_auth_stage_ms": 3160,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 1,
+      "ns": 1669903670,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "43508",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-1-A"
+      ],
+      "web_auth_stage_ms": 1609,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 2,
+      "ns": 1670439494,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "44402",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-2-A"
+      ],
+      "web_auth_stage_ms": 1616,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 2,
+      "ns": 3277482005,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "44402",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-2-B"
+      ],
+      "web_auth_stage_ms": 3199,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 3,
+      "ns": 3227889549,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "44096",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-3-B"
+      ],
+      "web_auth_stage_ms": 3126,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 3,
+      "ns": 1620560308,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "44096",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-3-A"
+      ],
+      "web_auth_stage_ms": 1571,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 4,
+      "ns": 1620552757,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "41682",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-4-A"
+      ],
+      "web_auth_stage_ms": 1536,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 4,
+      "ns": 3176386883,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "41682",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-4-B"
+      ],
+      "web_auth_stage_ms": 3118,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 5,
+      "ns": 3226882138,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "44130",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-5-B"
+      ],
+      "web_auth_stage_ms": 3163,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 5,
+      "ns": 1671039044,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "44130",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-5-A"
+      ],
+      "web_auth_stage_ms": 1611,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 6,
+      "ns": 1670556850,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "44214",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-6-A"
+      ],
+      "web_auth_stage_ms": 1577,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 6,
+      "ns": 3176191943,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "44214",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-6-B"
+      ],
+      "web_auth_stage_ms": 3117,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 7,
+      "ns": 3227114019,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "41682",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-7-B"
+      ],
+      "web_auth_stage_ms": 3124,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 7,
+      "ns": 1620223582,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "41682",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-7-A"
+      ],
+      "web_auth_stage_ms": 1570,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 8,
+      "ns": 1670210256,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "42988",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-8-A"
+      ],
+      "web_auth_stage_ms": 1575,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 8,
+      "ns": 3226171699,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "42988",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-8-B"
+      ],
+      "web_auth_stage_ms": 3118,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 9,
+      "ns": 3227224155,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "40750",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-9-B"
+      ],
+      "web_auth_stage_ms": 3165,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 9,
+      "ns": 1620251180,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "40750",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-9-A"
+      ],
+      "web_auth_stage_ms": 1570,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 10,
+      "ns": 1670075441,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "41392",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-10-A"
+      ],
+      "web_auth_stage_ms": 1577,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 10,
+      "ns": 3176959493,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "41392",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-10-B"
+      ],
+      "web_auth_stage_ms": 3118,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 11,
+      "ns": 3175289221,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "44000",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-11-B"
+      ],
+      "web_auth_stage_ms": 3120,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 11,
+      "ns": 1670060882,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "44000",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-11-A"
+      ],
+      "web_auth_stage_ms": 1610,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 12,
+      "ns": 1720658363,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "40612",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-12-A"
+      ],
+      "web_auth_stage_ms": 1656,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 12,
+      "ns": 3177178067,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "40612",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-12-B"
+      ],
+      "web_auth_stage_ms": 3120,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 13,
+      "ns": 3228048139,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "42030",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-13-B"
+      ],
+      "web_auth_stage_ms": 3125,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 13,
+      "ns": 1621274457,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "42030",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-13-A"
+      ],
+      "web_auth_stage_ms": 1570,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 14,
+      "ns": 1670908774,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "41422",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-14-A"
+      ],
+      "web_auth_stage_ms": 1576,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 14,
+      "ns": 3177877655,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "41422",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-14-B"
+      ],
+      "web_auth_stage_ms": 3120,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 15,
+      "ns": 3227855034,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "40852",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-15-B"
+      ],
+      "web_auth_stage_ms": 3125,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 15,
+      "ns": 1620956765,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "40852",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-15-A"
+      ],
+      "web_auth_stage_ms": 1570,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 16,
+      "ns": 1670995157,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "43900",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-16-A"
+      ],
+      "web_auth_stage_ms": 1576,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 16,
+      "ns": 3229002127,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "43900",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-16-B"
+      ],
+      "web_auth_stage_ms": 3120,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 17,
+      "ns": 3177123902,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "42714",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-17-B"
+      ],
+      "web_auth_stage_ms": 3123,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 17,
+      "ns": 1670195169,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "42714",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-17-A"
+      ],
+      "web_auth_stage_ms": 1609,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 18,
+      "ns": 1670778283,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "42208",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-18-A"
+      ],
+      "web_auth_stage_ms": 1617,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 18,
+      "ns": 3177890292,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "42208",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-18-B"
+      ],
+      "web_auth_stage_ms": 3118,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "B",
+      "pair": 19,
+      "ns": 3228645554,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/candidate-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "43716",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/B \u4e2d\u6587 space/web-auth-19-B"
+      ],
+      "web_auth_stage_ms": 3119,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    },
+    {
+      "kind": "web-auth",
+      "label": "A",
+      "pair": 19,
+      "ns": 1621636796,
+      "exit_code": 0,
+      "command": [
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/baseline-build/debug/release-ui",
+        "--repo-root",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space",
+        "--skip-automated",
+        "--skip-build",
+        "--no-serve",
+        "--with-rssr-web",
+        "--web-port",
+        "43716",
+        "--log-dir",
+        "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261005/benchmarks/A \u4e2d\u6587 space/web-auth-19-A"
+      ],
+      "web_auth_stage_ms": 1570,
+      "stage_status": "passed",
+      "remaining_service_pids": [],
+      "port_closed": true
+    }
+  ]
+}

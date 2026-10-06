@@ -1,0 +1,25 @@
+Acceptance artifacts: E:\gitclone\RSS-Reader\target\w2\target\release-ui-acceptance\1791254229833602100
+test_web_auth_ascii_curl_files_and_caller_path (__main__.Acceptance.test_web_auth_ascii_curl_files_and_caller_path) ... FAIL
+
+======================================================================
+FAIL: test_web_auth_ascii_curl_files_and_caller_path (__main__.Acceptance.test_web_auth_ascii_curl_files_and_caller_path)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "E:\gitclone\RSS-Reader\target\w2\scripts\release-ui\tests\acceptance.py", line 597, in test_web_auth_ascii_curl_files_and_caller_path
+    self.run_cli("--web-auth-only", "--web-port", str(port))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\gitclone\RSS-Reader\target\w2\scripts\release-ui\tests\acceptance.py", line 117, in run_cli
+    self.assertEqual(result.returncode, code, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 23 != 0 : Running web-auth...
+
+=== web-auth ===
+rssr-web ready; running authentication assertions
+fixture curl: (23) non-ASCII filename argument
+Summary written to E:\gitclone\RSS-Reader\target\w2\target\release-ui-acceptance\1791254229833602100\test_web_auth_ascii_curl_files_and_caller_path 中文 space\结果 logs\summary.md
+
+
+----------------------------------------------------------------------
+Ran 1 test in 2.450s
+
+FAILED (failures=1)
