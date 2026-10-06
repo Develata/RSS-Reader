@@ -1,0 +1,14 @@
+{
+  "command": [
+    "C:\\Users\\QQ\\scoop\\apps\\python\\current\\python.exe",
+    "-X",
+    "utf8",
+    "E:\\gitclone\\RSS-Reader\\target\\w3\\scripts\\release-ui\\tests\\acceptance.py",
+    "--bash",
+    "C:/Users/QQ/scoop/apps/git/current/bin/bash.exe",
+    "-v"
+  ],
+  "seconds": 120.36950870000874,
+  "exit_code": 0,
+  "note": "full rerun after Linux suite completed; tests unchanged; port 18081 bound successfully before run"
+}

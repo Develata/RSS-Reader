@@ -1,0 +1,77 @@
+[
+  {
+    "name": "fmt",
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--check"
+    ],
+    "exit_code": 0,
+    "seconds": 1.22936060000211
+  },
+  {
+    "name": "clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--all-targets",
+      "--locked",
+      "--offline",
+      "--target-dir",
+      "target/release-ui-runner",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit_code": 0,
+    "seconds": 13.029513000015868
+  },
+  {
+    "name": "unit",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--target-dir",
+      "target/release-ui-runner"
+    ],
+    "exit_code": 0,
+    "seconds": 8.933950899983756
+  },
+  {
+    "name": "build",
+    "command": [
+      "cargo",
+      "build",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--locked",
+      "--offline",
+      "--target-dir",
+      "target/release-ui-runner"
+    ],
+    "exit_code": 0,
+    "seconds": 0.34143369999947026
+  },
+  {
+    "name": "acceptance",
+    "command": [
+      "C:\\Users\\QQ\\scoop\\apps\\python\\current\\python.exe",
+      "-X",
+      "utf8",
+      "scripts/release-ui/tests/acceptance.py",
+      "--bash",
+      "C:/Users/QQ/scoop/apps/git/current/bin/bash.exe",
+      "-v"
+    ],
+    "exit_code": 1,
+    "seconds": 118.31833710000501
+  }
+]

@@ -1,0 +1,3162 @@
+[
+  {
+    "label": "B",
+    "pair": 0,
+    "stage_ms": 1644,
+    "root_pid": 46181,
+    "service": {
+      "pid": 46183,
+      "parent": 46181,
+      "spawn_at": 1791262676.243934,
+      "spawn_syscall_ms": 0.828,
+      "exit_at": 1791262677.8622,
+      "observed_at": 1791262677.886301,
+      "exit_observation_ms": 24.10101890563965,
+      "spawn_to_observed_ms": 1642.3671245574951,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.828,
+    "cargo_until_product_exec_ms": 263.2009983062744,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46184,
+        "parent": 46181,
+        "spawn_at": 1791262676.245313,
+        "spawn_syscall_ms": 1.4,
+        "exit_at": 1791262676.252569,
+        "observed_at": 1791262676.287476,
+        "exit_observation_ms": 34.90710258483887,
+        "spawn_to_observed_ms": 42.16313362121582,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46207,
+        "parent": 46181,
+        "spawn_at": 1791262677.288681,
+        "spawn_syscall_ms": 1.395,
+        "exit_at": 1791262677.297341,
+        "observed_at": 1791262677.330827,
+        "exit_observation_ms": 33.48588943481445,
+        "spawn_to_observed_ms": 42.14596748352051,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262676.287476,
+        "to": 1791262677.288681,
+        "gap_ms": 1001.2049674987793,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 68.39299201965332,
+    "readiness_spawn_to_observed_ms": 1085.5140686035156,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 496.8130588531494,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46208,
+      "parent": 46181,
+      "spawn_at": 1791262677.3313,
+      "spawn_syscall_ms": 1.333,
+      "exit_at": 1791262677.837038,
+      "observed_at": 1791262677.859108,
+      "exit_observation_ms": 22.069931030273438,
+      "spawn_to_observed_ms": 527.8079509735107,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.649951934814453,
+    "service_stop_signal_at": 1791262677.859745,
+    "service_stop_end_at": 1791262677.886395,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 0,
+    "stage_ms": 1578,
+    "root_pid": 46234,
+    "service": {
+      "pid": 46236,
+      "parent": 46234,
+      "spawn_at": 1791262677.96429,
+      "spawn_syscall_ms": 0.828,
+      "exit_at": 1791262679.53434,
+      "observed_at": 1791262679.538272,
+      "exit_observation_ms": 3.9319992065429688,
+      "spawn_to_observed_ms": 1573.9820003509521,
+      "nonblocking_wait_calls": 37,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.828,
+    "cargo_until_product_exec_ms": 231.673002243042,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46237,
+        "parent": 46234,
+        "spawn_at": 1791262677.965571,
+        "spawn_syscall_ms": 2.274,
+        "exit_at": 1791262677.974992,
+        "observed_at": 1791262677.984746,
+        "exit_observation_ms": 9.753942489624023,
+        "spawn_to_observed_ms": 19.175052642822266,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46260,
+        "parent": 46234,
+        "spawn_at": 1791262678.986141,
+        "spawn_syscall_ms": 1.237,
+        "exit_at": 1791262678.99412,
+        "observed_at": 1791262679.0033479,
+        "exit_observation_ms": 9.227991104125977,
+        "spawn_to_observed_ms": 17.206907272338867,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262677.984746,
+        "to": 1791262678.986141,
+        "gap_ms": 1001.3949871063232,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 18.98193359375,
+    "readiness_spawn_to_observed_ms": 1037.7769470214844,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 486.8340492248535,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46261,
+      "parent": 46234,
+      "spawn_at": 1791262679.003768,
+      "spawn_syscall_ms": 1.2899999999999998,
+      "exit_at": 1791262679.500042,
+      "observed_at": 1791262679.5314581,
+      "exit_observation_ms": 31.41617774963379,
+      "spawn_to_observed_ms": 527.6901721954346,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.487846374511719,
+    "service_stop_signal_at": 1791262679.531869,
+    "service_stop_end_at": 1791262679.5383568,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 57,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 1,
+    "stage_ms": 1604,
+    "root_pid": 46287,
+    "service": {
+      "pid": 46289,
+      "parent": 46287,
+      "spawn_at": 1791262679.62458,
+      "spawn_syscall_ms": 0.821,
+      "exit_at": 1791262681.221545,
+      "observed_at": 1791262681.2252712,
+      "exit_observation_ms": 3.7262439727783203,
+      "spawn_to_observed_ms": 1600.691318511963,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.821,
+    "cargo_until_product_exec_ms": 251.9550323486328,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46290,
+        "parent": 46287,
+        "spawn_at": 1791262679.625862,
+        "spawn_syscall_ms": 1.224,
+        "exit_at": 1791262679.632688,
+        "observed_at": 1791262679.6327028,
+        "exit_observation_ms": 0.014781951904296875,
+        "spawn_to_observed_ms": 6.840944290161133,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46313,
+        "parent": 46287,
+        "spawn_at": 1791262680.633515,
+        "spawn_syscall_ms": 1.2409999999999999,
+        "exit_at": 1791262680.641416,
+        "observed_at": 1791262680.650677,
+        "exit_observation_ms": 9.260892868041992,
+        "spawn_to_observed_ms": 17.162084579467773,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262679.6327028,
+        "to": 1791262680.633515,
+        "gap_ms": 1000.8120536804199,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.275674819946289,
+    "readiness_spawn_to_observed_ms": 1024.8150825500488,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 533.6871147155762,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46314,
+      "parent": 46287,
+      "spawn_at": 1791262680.651123,
+      "spawn_syscall_ms": 1.16,
+      "exit_at": 1791262681.193207,
+      "observed_at": 1791262681.2187169,
+      "exit_observation_ms": 25.50983428955078,
+      "spawn_to_observed_ms": 567.5938129425049,
+      "nonblocking_wait_calls": 15,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.303071975708008,
+    "service_stop_signal_at": 1791262681.219049,
+    "service_stop_end_at": 1791262681.225352,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 56,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 1,
+    "stage_ms": 1647,
+    "root_pid": 46340,
+    "service": {
+      "pid": 46342,
+      "parent": 46340,
+      "spawn_at": 1791262681.310976,
+      "spawn_syscall_ms": 0.789,
+      "exit_at": 1791262682.9296,
+      "observed_at": 1791262682.953455,
+      "exit_observation_ms": 23.854970932006836,
+      "spawn_to_observed_ms": 1642.4789428710938,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.789,
+    "cargo_until_product_exec_ms": 243.35503578186035,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46343,
+        "parent": 46340,
+        "spawn_at": 1791262681.312258,
+        "spawn_syscall_ms": 1.118,
+        "exit_at": 1791262681.319782,
+        "observed_at": 1791262681.3540602,
+        "exit_observation_ms": 34.278154373168945,
+        "spawn_to_observed_ms": 41.802167892456055,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46366,
+        "parent": 46340,
+        "spawn_at": 1791262682.355366,
+        "spawn_syscall_ms": 1.8719999999999999,
+        "exit_at": 1791262682.364356,
+        "observed_at": 1791262682.39811,
+        "exit_observation_ms": 33.75387191772461,
+        "spawn_to_observed_ms": 42.74392127990723,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262681.3540602,
+        "to": 1791262682.355366,
+        "gap_ms": 1001.3058185577393,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 68.03202629089355,
+    "readiness_spawn_to_observed_ms": 1085.8519077301025,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 503.2949447631836,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46367,
+      "parent": 46340,
+      "spawn_at": 1791262682.3986,
+      "spawn_syscall_ms": 1.903,
+      "exit_at": 1791262682.912901,
+      "observed_at": 1791262682.9270551,
+      "exit_observation_ms": 14.154195785522461,
+      "spawn_to_observed_ms": 528.4550189971924,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.16119384765625,
+    "service_stop_signal_at": 1791262682.927399,
+    "service_stop_end_at": 1791262682.95356,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 2,
+    "stage_ms": 1698,
+    "root_pid": 46393,
+    "service": {
+      "pid": 46395,
+      "parent": 46393,
+      "spawn_at": 1791262683.031228,
+      "spawn_syscall_ms": 0.815,
+      "exit_at": 1791262684.700245,
+      "observed_at": 1791262684.724154,
+      "exit_observation_ms": 23.90909194946289,
+      "spawn_to_observed_ms": 1692.9259300231934,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.815,
+    "cargo_until_product_exec_ms": 248.9919662475586,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46396,
+        "parent": 46393,
+        "spawn_at": 1791262683.032567,
+        "spawn_syscall_ms": 10.562,
+        "exit_at": 1791262683.049025,
+        "observed_at": 1791262683.083869,
+        "exit_observation_ms": 34.84392166137695,
+        "spawn_to_observed_ms": 51.30195617675781,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46419,
+        "parent": 46393,
+        "spawn_at": 1791262684.084799,
+        "spawn_syscall_ms": 1.756,
+        "exit_at": 1791262684.093259,
+        "observed_at": 1791262684.1274738,
+        "exit_observation_ms": 34.21473503112793,
+        "spawn_to_observed_ms": 42.67477989196777,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262683.083869,
+        "to": 1791262684.084799,
+        "gap_ms": 1000.9300708770752,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 69.05865669250488,
+    "readiness_spawn_to_observed_ms": 1094.9068069458008,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 528.2440185546875,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46420,
+      "parent": 46393,
+      "spawn_at": 1791262684.128066,
+      "spawn_syscall_ms": 1.552,
+      "exit_at": 1791262684.66672,
+      "observed_at": 1791262684.697538,
+      "exit_observation_ms": 30.81798553466797,
+      "spawn_to_observed_ms": 569.4718360900879,
+      "nonblocking_wait_calls": 15,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.342153549194336,
+    "service_stop_signal_at": 1791262684.697994,
+    "service_stop_end_at": 1791262684.7243361,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 54,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 2,
+    "stage_ms": 1576,
+    "root_pid": 46446,
+    "service": {
+      "pid": 46448,
+      "parent": 46446,
+      "spawn_at": 1791262684.801834,
+      "spawn_syscall_ms": 0.919,
+      "exit_at": 1791262686.370638,
+      "observed_at": 1791262686.374162,
+      "exit_observation_ms": 3.5240650177001953,
+      "spawn_to_observed_ms": 1572.3278522491455,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.919,
+    "cargo_until_product_exec_ms": 245.91398239135742,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46449,
+        "parent": 46446,
+        "spawn_at": 1791262684.803235,
+        "spawn_syscall_ms": 1.251,
+        "exit_at": 1791262684.809872,
+        "observed_at": 1791262684.81017,
+        "exit_observation_ms": 0.2980232238769531,
+        "spawn_to_observed_ms": 6.934881210327148,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46472,
+        "parent": 46446,
+        "spawn_at": 1791262685.811153,
+        "spawn_syscall_ms": 10.786999999999999,
+        "exit_at": 1791262685.828733,
+        "observed_at": 1791262685.838368,
+        "exit_observation_ms": 9.634971618652344,
+        "spawn_to_observed_ms": 27.215003967285156,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262684.81017,
+        "to": 1791262685.811153,
+        "gap_ms": 1000.9829998016357,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.932994842529297,
+    "readiness_spawn_to_observed_ms": 1035.132884979248,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 505.68199157714844,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46473,
+      "parent": 46446,
+      "spawn_at": 1791262685.838872,
+      "spawn_syscall_ms": 1.553,
+      "exit_at": 1791262686.354106,
+      "observed_at": 1791262686.3677502,
+      "exit_observation_ms": 13.644218444824219,
+      "spawn_to_observed_ms": 528.8782119750977,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.208896636962891,
+    "service_stop_signal_at": 1791262686.368078,
+    "service_stop_end_at": 1791262686.374287,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 3,
+    "stage_ms": 1574,
+    "root_pid": 46499,
+    "service": {
+      "pid": 46501,
+      "parent": 46499,
+      "spawn_at": 1791262686.459273,
+      "spawn_syscall_ms": 0.7699999999999999,
+      "exit_at": 1791262688.024301,
+      "observed_at": 1791262688.0288,
+      "exit_observation_ms": 4.498958587646484,
+      "spawn_to_observed_ms": 1569.5269107818604,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.7699999999999999,
+    "cargo_until_product_exec_ms": 228.28388214111328,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46502,
+        "parent": 46499,
+        "spawn_at": 1791262686.461007,
+        "spawn_syscall_ms": 1.454,
+        "exit_at": 1791262686.46776,
+        "observed_at": 1791262686.468142,
+        "exit_observation_ms": 0.3819465637207031,
+        "spawn_to_observed_ms": 7.134914398193359,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46525,
+        "parent": 46499,
+        "spawn_at": 1791262687.468988,
+        "spawn_syscall_ms": 1.703,
+        "exit_at": 1791262687.478537,
+        "observed_at": 1791262687.487592,
+        "exit_observation_ms": 9.054899215698242,
+        "spawn_to_observed_ms": 18.604040145874023,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262686.468142,
+        "to": 1791262687.468988,
+        "gap_ms": 1000.8459091186523,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.436845779418945,
+    "readiness_spawn_to_observed_ms": 1026.5848636627197,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 517.3690319061279,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46526,
+      "parent": 46499,
+      "spawn_at": 1791262687.487985,
+      "spawn_syscall_ms": 1.1039999999999999,
+      "exit_at": 1791262688.013325,
+      "observed_at": 1791262688.022212,
+      "exit_observation_ms": 8.887052536010742,
+      "spawn_to_observed_ms": 534.2271327972412,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.317138671875,
+    "service_stop_signal_at": 1791262688.022556,
+    "service_stop_end_at": 1791262688.0288732,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 3,
+    "stage_ms": 1731,
+    "root_pid": 46552,
+    "service": {
+      "pid": 46554,
+      "parent": 46552,
+      "spawn_at": 1791262688.116827,
+      "spawn_syscall_ms": 0.988,
+      "exit_at": 1791262689.818208,
+      "observed_at": 1791262689.841905,
+      "exit_observation_ms": 23.6971378326416,
+      "spawn_to_observed_ms": 1725.0781059265137,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.988,
+    "cargo_until_product_exec_ms": 223.16408157348633,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46555,
+        "parent": 46552,
+        "spawn_at": 1791262688.118511,
+        "spawn_syscall_ms": 1.3719999999999999,
+        "exit_at": 1791262688.12625,
+        "observed_at": 1791262688.160897,
+        "exit_observation_ms": 34.64698791503906,
+        "spawn_to_observed_ms": 42.38605499267578,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46578,
+        "parent": 46552,
+        "spawn_at": 1791262689.16196,
+        "spawn_syscall_ms": 1.643,
+        "exit_at": 1791262689.172217,
+        "observed_at": 1791262689.204415,
+        "exit_observation_ms": 32.198190689086914,
+        "spawn_to_observed_ms": 42.455196380615234,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262688.160897,
+        "to": 1791262689.16196,
+        "gap_ms": 1001.0628700256348,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 66.84517860412598,
+    "readiness_spawn_to_observed_ms": 1085.9041213989258,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 562.8509521484375,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46579,
+      "parent": 46552,
+      "spawn_at": 1791262689.204887,
+      "spawn_syscall_ms": 1.4549999999999998,
+      "exit_at": 1791262689.777012,
+      "observed_at": 1791262689.81519,
+      "exit_observation_ms": 38.1779670715332,
+      "spawn_to_observed_ms": 610.3031635284424,
+      "nonblocking_wait_calls": 16,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.28612518310547,
+    "service_stop_signal_at": 1791262689.815765,
+    "service_stop_end_at": 1791262689.842051,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 4,
+    "stage_ms": 1659,
+    "root_pid": 46605,
+    "service": {
+      "pid": 46607,
+      "parent": 46605,
+      "spawn_at": 1791262689.92834,
+      "spawn_syscall_ms": 0.976,
+      "exit_at": 1791262691.559208,
+      "observed_at": 1791262691.5831382,
+      "exit_observation_ms": 23.93031120300293,
+      "spawn_to_observed_ms": 1654.7982692718506,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.976,
+    "cargo_until_product_exec_ms": 225.9979248046875,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46608,
+        "parent": 46605,
+        "spawn_at": 1791262689.929846,
+        "spawn_syscall_ms": 1.536,
+        "exit_at": 1791262689.936776,
+        "observed_at": 1791262689.9720778,
+        "exit_observation_ms": 35.301923751831055,
+        "spawn_to_observed_ms": 42.23179817199707,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46631,
+        "parent": 46605,
+        "spawn_at": 1791262690.973347,
+        "spawn_syscall_ms": 2.2560000000000002,
+        "exit_at": 1791262690.983329,
+        "observed_at": 1791262691.0163188,
+        "exit_observation_ms": 32.9897403717041,
+        "spawn_to_observed_ms": 42.97184944152832,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262689.9720778,
+        "to": 1791262690.973347,
+        "gap_ms": 1001.2691020965576,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 68.29166412353516,
+    "readiness_spawn_to_observed_ms": 1086.472749710083,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 503.7820339202881,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46632,
+      "parent": 46605,
+      "spawn_at": 1791262691.01669,
+      "spawn_syscall_ms": 12.925,
+      "exit_at": 1791262691.540867,
+      "observed_at": 1791262691.5566611,
+      "exit_observation_ms": 15.794038772583008,
+      "spawn_to_observed_ms": 539.971113204956,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.283740997314453,
+    "service_stop_signal_at": 1791262691.556996,
+    "service_stop_end_at": 1791262691.5832798,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 4,
+    "stage_ms": 1568,
+    "root_pid": 46658,
+    "service": {
+      "pid": 46660,
+      "parent": 46658,
+      "spawn_at": 1791262691.66064,
+      "spawn_syscall_ms": 0.834,
+      "exit_at": 1791262693.220563,
+      "observed_at": 1791262693.2241662,
+      "exit_observation_ms": 3.603219985961914,
+      "spawn_to_observed_ms": 1563.5261535644531,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.834,
+    "cargo_until_product_exec_ms": 244.52900886535645,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46661,
+        "parent": 46658,
+        "spawn_at": 1791262691.661944,
+        "spawn_syscall_ms": 1.2149999999999999,
+        "exit_at": 1791262691.668357,
+        "observed_at": 1791262691.668819,
+        "exit_observation_ms": 0.4620552062988281,
+        "spawn_to_observed_ms": 6.875038146972656,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46684,
+        "parent": 46658,
+        "spawn_at": 1791262692.669705,
+        "spawn_syscall_ms": 1.842,
+        "exit_at": 1791262692.679001,
+        "observed_at": 1791262692.687886,
+        "exit_observation_ms": 8.884906768798828,
+        "spawn_to_observed_ms": 18.18108558654785,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262691.668819,
+        "to": 1791262692.669705,
+        "gap_ms": 1000.8859634399414,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.346961975097656,
+    "readiness_spawn_to_observed_ms": 1025.942087173462,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 513.6489868164062,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46685,
+      "parent": 46658,
+      "spawn_at": 1791262692.688706,
+      "spawn_syscall_ms": 1.934,
+      "exit_at": 1791262693.212499,
+      "observed_at": 1791262693.217719,
+      "exit_observation_ms": 5.220174789428711,
+      "spawn_to_observed_ms": 529.0131568908691,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.054162979125977,
+    "service_stop_signal_at": 1791262693.218195,
+    "service_stop_end_at": 1791262693.2242491,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 5,
+    "stage_ms": 1608,
+    "root_pid": 46711,
+    "service": {
+      "pid": 46713,
+      "parent": 46711,
+      "spawn_at": 1791262693.309653,
+      "spawn_syscall_ms": 0.9079999999999999,
+      "exit_at": 1791262694.909921,
+      "observed_at": 1791262694.913595,
+      "exit_observation_ms": 3.674030303955078,
+      "spawn_to_observed_ms": 1603.9419174194336,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.9079999999999999,
+    "cargo_until_product_exec_ms": 219.56300735473633,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46714,
+        "parent": 46711,
+        "spawn_at": 1791262693.31108,
+        "spawn_syscall_ms": 1.1640000000000001,
+        "exit_at": 1791262693.31743,
+        "observed_at": 1791262693.317744,
+        "exit_observation_ms": 0.3139972686767578,
+        "spawn_to_observed_ms": 6.664037704467773,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46737,
+        "parent": 46711,
+        "spawn_at": 1791262694.318413,
+        "spawn_syscall_ms": 1.794,
+        "exit_at": 1791262694.328215,
+        "observed_at": 1791262694.337394,
+        "exit_observation_ms": 9.179115295410156,
+        "spawn_to_observed_ms": 18.980979919433594,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262693.317744,
+        "to": 1791262694.318413,
+        "gap_ms": 1000.669002532959,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.493112564086914,
+    "readiness_spawn_to_observed_ms": 1026.3140201568604,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 538.8069152832031,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46738,
+      "parent": 46711,
+      "spawn_at": 1791262694.338034,
+      "spawn_syscall_ms": 1.597,
+      "exit_at": 1791262694.884988,
+      "observed_at": 1791262694.907058,
+      "exit_observation_ms": 22.069931030273438,
+      "spawn_to_observed_ms": 569.0240859985352,
+      "nonblocking_wait_calls": 15,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.339788436889648,
+    "service_stop_signal_at": 1791262694.907365,
+    "service_stop_end_at": 1791262694.9137049,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 56,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 5,
+    "stage_ms": 1687,
+    "root_pid": 46764,
+    "service": {
+      "pid": 46766,
+      "parent": 46764,
+      "spawn_at": 1791262694.999957,
+      "spawn_syscall_ms": 0.777,
+      "exit_at": 1791262696.661106,
+      "observed_at": 1791262696.684449,
+      "exit_observation_ms": 23.34284782409668,
+      "spawn_to_observed_ms": 1684.4918727874756,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.777,
+    "cargo_until_product_exec_ms": 213.0739688873291,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46767,
+        "parent": 46764,
+        "spawn_at": 1791262695.001366,
+        "spawn_syscall_ms": 1.6039999999999999,
+        "exit_at": 1791262695.009153,
+        "observed_at": 1791262695.044292,
+        "exit_observation_ms": 35.13908386230469,
+        "spawn_to_observed_ms": 42.92607307434082,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46790,
+        "parent": 46764,
+        "spawn_at": 1791262696.045301,
+        "spawn_syscall_ms": 1.392,
+        "exit_at": 1791262696.053652,
+        "observed_at": 1791262696.087616,
+        "exit_observation_ms": 33.963918685913086,
+        "spawn_to_observed_ms": 42.315006256103516,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262695.044292,
+        "to": 1791262696.045301,
+        "gap_ms": 1001.0089874267578,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 69.10300254821777,
+    "readiness_spawn_to_observed_ms": 1086.2500667572021,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 551.2228012084961,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46791,
+      "parent": 46764,
+      "spawn_at": 1791262696.088017,
+      "spawn_syscall_ms": 1.382,
+      "exit_at": 1791262696.647215,
+      "observed_at": 1791262696.65767,
+      "exit_observation_ms": 10.455131530761719,
+      "spawn_to_observed_ms": 569.6530342102051,
+      "nonblocking_wait_calls": 15,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.332855224609375,
+    "service_stop_signal_at": 1791262696.658247,
+    "service_stop_end_at": 1791262696.6845798,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 54,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 6,
+    "stage_ms": 1729,
+    "root_pid": 46817,
+    "service": {
+      "pid": 46819,
+      "parent": 46817,
+      "spawn_at": 1791262696.772309,
+      "spawn_syscall_ms": 0.879,
+      "exit_at": 1791262698.473043,
+      "observed_at": 1791262698.49685,
+      "exit_observation_ms": 23.807048797607422,
+      "spawn_to_observed_ms": 1724.5409488677979,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.879,
+    "cargo_until_product_exec_ms": 277.1918773651123,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46820,
+        "parent": 46817,
+        "spawn_at": 1791262696.773871,
+        "spawn_syscall_ms": 1.395,
+        "exit_at": 1791262696.781438,
+        "observed_at": 1791262696.816036,
+        "exit_observation_ms": 34.59787368774414,
+        "spawn_to_observed_ms": 42.16504096984863,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46843,
+        "parent": 46817,
+        "spawn_at": 1791262697.817363,
+        "spawn_syscall_ms": 1.7260000000000002,
+        "exit_at": 1791262697.827531,
+        "observed_at": 1791262697.859843,
+        "exit_observation_ms": 32.31191635131836,
+        "spawn_to_observed_ms": 42.4799919128418,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262696.816036,
+        "to": 1791262697.817363,
+        "gap_ms": 1001.3270378112793,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 66.9097900390625,
+    "readiness_spawn_to_observed_ms": 1085.9720706939697,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 575.2801895141602,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46844,
+      "parent": 46817,
+      "spawn_at": 1791262697.860242,
+      "spawn_syscall_ms": 1.3259999999999998,
+      "exit_at": 1791262698.445396,
+      "observed_at": 1791262698.4703538,
+      "exit_observation_ms": 24.957895278930664,
+      "spawn_to_observed_ms": 610.1119518280029,
+      "nonblocking_wait_calls": 16,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.08203887939453,
+    "service_stop_signal_at": 1791262698.470933,
+    "service_stop_end_at": 1791262698.497015,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 6,
+    "stage_ms": 1578,
+    "root_pid": 46870,
+    "service": {
+      "pid": 46872,
+      "parent": 46870,
+      "spawn_at": 1791262698.579742,
+      "spawn_syscall_ms": 0.752,
+      "exit_at": 1791262700.148876,
+      "observed_at": 1791262700.152544,
+      "exit_observation_ms": 3.668069839477539,
+      "spawn_to_observed_ms": 1572.8020668029785,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.752,
+    "cargo_until_product_exec_ms": 245.72515487670898,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46873,
+        "parent": 46870,
+        "spawn_at": 1791262698.580927,
+        "spawn_syscall_ms": 1.506,
+        "exit_at": 1791262698.587852,
+        "observed_at": 1791262698.588044,
+        "exit_observation_ms": 0.1919269561767578,
+        "spawn_to_observed_ms": 7.117033004760742,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46896,
+        "parent": 46870,
+        "spawn_at": 1791262699.58907,
+        "spawn_syscall_ms": 2.2590000000000003,
+        "exit_at": 1791262699.598625,
+        "observed_at": 1791262699.607497,
+        "exit_observation_ms": 8.872032165527344,
+        "spawn_to_observed_ms": 18.426895141601562,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262698.588044,
+        "to": 1791262699.58907,
+        "gap_ms": 1001.0261535644531,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.063959121704102,
+    "readiness_spawn_to_observed_ms": 1026.5700817108154,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 505.85103034973145,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46897,
+      "parent": 46870,
+      "spawn_at": 1791262699.60788,
+      "spawn_syscall_ms": 11.443999999999999,
+      "exit_at": 1791262700.132854,
+      "observed_at": 1791262700.145889,
+      "exit_observation_ms": 13.035058975219727,
+      "spawn_to_observed_ms": 538.0089282989502,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.240129470825195,
+    "service_stop_signal_at": 1791262700.14638,
+    "service_stop_end_at": 1791262700.15262,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 7,
+    "stage_ms": 1567,
+    "root_pid": 46923,
+    "service": {
+      "pid": 46925,
+      "parent": 46923,
+      "spawn_at": 1791262700.239504,
+      "spawn_syscall_ms": 0.733,
+      "exit_at": 1791262701.798687,
+      "observed_at": 1791262701.802697,
+      "exit_observation_ms": 4.00996208190918,
+      "spawn_to_observed_ms": 1563.1928443908691,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.733,
+    "cargo_until_product_exec_ms": 215.58690071105957,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46926,
+        "parent": 46923,
+        "spawn_at": 1791262700.240704,
+        "spawn_syscall_ms": 1.296,
+        "exit_at": 1791262700.247706,
+        "observed_at": 1791262700.248256,
+        "exit_observation_ms": 0.5500316619873047,
+        "spawn_to_observed_ms": 7.551908493041992,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 46949,
+        "parent": 46923,
+        "spawn_at": 1791262701.249546,
+        "spawn_syscall_ms": 1.63,
+        "exit_at": 1791262701.258173,
+        "observed_at": 1791262701.2673419,
+        "exit_observation_ms": 9.168863296508789,
+        "spawn_to_observed_ms": 17.795801162719727,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262700.248256,
+        "to": 1791262701.249546,
+        "gap_ms": 1001.2900829315186,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.718894958496094,
+    "readiness_spawn_to_observed_ms": 1026.6377925872803,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 505.2790641784668,
+    "owned_adapter_or_outer_shell": {
+      "pid": 46950,
+      "parent": 46923,
+      "spawn_at": 1791262701.267716,
+      "spawn_syscall_ms": 1.1540000000000001,
+      "exit_at": 1791262701.782256,
+      "observed_at": 1791262701.795751,
+      "exit_observation_ms": 13.495206832885742,
+      "spawn_to_observed_ms": 528.0351638793945,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.853818893432617,
+    "service_stop_signal_at": 1791262701.796082,
+    "service_stop_end_at": 1791262701.8029358,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 7,
+    "stage_ms": 1650,
+    "root_pid": 46976,
+    "service": {
+      "pid": 46978,
+      "parent": 46976,
+      "spawn_at": 1791262701.890683,
+      "spawn_syscall_ms": 0.719,
+      "exit_at": 1791262703.511327,
+      "observed_at": 1791262703.535365,
+      "exit_observation_ms": 24.038076400756836,
+      "spawn_to_observed_ms": 1644.6821689605713,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.719,
+    "cargo_until_product_exec_ms": 208.40001106262207,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 46979,
+        "parent": 46976,
+        "spawn_at": 1791262701.891859,
+        "spawn_syscall_ms": 1.0959999999999999,
+        "exit_at": 1791262701.8987,
+        "observed_at": 1791262701.933825,
+        "exit_observation_ms": 35.125017166137695,
+        "spawn_to_observed_ms": 41.96596145629883,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47002,
+        "parent": 46976,
+        "spawn_at": 1791262702.935101,
+        "spawn_syscall_ms": 1.754,
+        "exit_at": 1791262702.944035,
+        "observed_at": 1791262702.9785979,
+        "exit_observation_ms": 34.56282615661621,
+        "spawn_to_observed_ms": 43.49684715270996,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262701.933825,
+        "to": 1791262702.935101,
+        "gap_ms": 1001.2760162353516,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 69.6878433227539,
+    "readiness_spawn_to_observed_ms": 1086.7388248443604,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 499.77588653564453,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47003,
+      "parent": 46976,
+      "spawn_at": 1791262702.980023,
+      "spawn_syscall_ms": 1.851,
+      "exit_at": 1791262703.489405,
+      "observed_at": 1791262703.509009,
+      "exit_observation_ms": 19.603967666625977,
+      "spawn_to_observed_ms": 528.9859771728516,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.088953018188477,
+    "service_stop_signal_at": 1791262703.509389,
+    "service_stop_end_at": 1791262703.5354779,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 8,
+    "stage_ms": 1645,
+    "root_pid": 47029,
+    "service": {
+      "pid": 47031,
+      "parent": 47029,
+      "spawn_at": 1791262703.628181,
+      "spawn_syscall_ms": 0.708,
+      "exit_at": 1791262705.24577,
+      "observed_at": 1791262705.269787,
+      "exit_observation_ms": 24.0170955657959,
+      "spawn_to_observed_ms": 1641.606092453003,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.708,
+    "cargo_until_product_exec_ms": 235.54110527038574,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47032,
+        "parent": 47029,
+        "spawn_at": 1791262703.629349,
+        "spawn_syscall_ms": 1.282,
+        "exit_at": 1791262703.63657,
+        "observed_at": 1791262703.671671,
+        "exit_observation_ms": 35.10093688964844,
+        "spawn_to_observed_ms": 42.32192039489746,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47055,
+        "parent": 47029,
+        "spawn_at": 1791262704.670582,
+        "spawn_syscall_ms": 2.4459999999999997,
+        "exit_at": 1791262704.681577,
+        "observed_at": 1791262704.714005,
+        "exit_observation_ms": 32.42802619934082,
+        "spawn_to_observed_ms": 43.42293739318848,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262703.671671,
+        "to": 1791262704.670582,
+        "gap_ms": 998.9111423492432,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 67.52896308898926,
+    "readiness_spawn_to_observed_ms": 1084.656000137329,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 503.6430358886719,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47056,
+      "parent": 47029,
+      "spawn_at": 1791262704.714714,
+      "spawn_syscall_ms": 1.285,
+      "exit_at": 1791262705.228304,
+      "observed_at": 1791262705.242919,
+      "exit_observation_ms": 14.615058898925781,
+      "spawn_to_observed_ms": 528.2049179077148,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.6571044921875,
+    "service_stop_signal_at": 1791262705.243266,
+    "service_stop_end_at": 1791262705.2699232,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 8,
+    "stage_ms": 1569,
+    "root_pid": 47082,
+    "service": {
+      "pid": 47084,
+      "parent": 47082,
+      "spawn_at": 1791262705.345609,
+      "spawn_syscall_ms": 0.757,
+      "exit_at": 1791262706.905225,
+      "observed_at": 1791262706.909379,
+      "exit_observation_ms": 4.153966903686523,
+      "spawn_to_observed_ms": 1563.770055770874,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.757,
+    "cargo_until_product_exec_ms": 227.7059555053711,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47085,
+        "parent": 47082,
+        "spawn_at": 1791262705.346909,
+        "spawn_syscall_ms": 1.203,
+        "exit_at": 1791262705.354824,
+        "observed_at": 1791262705.354867,
+        "exit_observation_ms": 0.04291534423828125,
+        "spawn_to_observed_ms": 7.957935333251953,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47108,
+        "parent": 47082,
+        "spawn_at": 1791262706.35593,
+        "spawn_syscall_ms": 1.722,
+        "exit_at": 1791262706.364995,
+        "observed_at": 1791262706.374473,
+        "exit_observation_ms": 9.478092193603516,
+        "spawn_to_observed_ms": 18.543004989624023,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262705.354867,
+        "to": 1791262706.35593,
+        "gap_ms": 1001.0631084442139,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.521007537841797,
+    "readiness_spawn_to_observed_ms": 1027.5640487670898,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 513.5369300842285,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47109,
+      "parent": 47082,
+      "spawn_at": 1791262706.375105,
+      "spawn_syscall_ms": 1.416,
+      "exit_at": 1791262706.897533,
+      "observed_at": 1791262706.902916,
+      "exit_observation_ms": 5.383014678955078,
+      "spawn_to_observed_ms": 527.8110504150391,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.206989288330078,
+    "service_stop_signal_at": 1791262706.903255,
+    "service_stop_end_at": 1791262706.909462,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 9,
+    "stage_ms": 1580,
+    "root_pid": 47135,
+    "service": {
+      "pid": 47137,
+      "parent": 47135,
+      "spawn_at": 1791262706.996406,
+      "spawn_syscall_ms": 1.5859999999999999,
+      "exit_at": 1791262708.567964,
+      "observed_at": 1791262708.571814,
+      "exit_observation_ms": 3.8499832153320312,
+      "spawn_to_observed_ms": 1575.4079818725586,
+      "nonblocking_wait_calls": 37,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 1.5859999999999999,
+    "cargo_until_product_exec_ms": 243.79897117614746,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47138,
+        "parent": 47135,
+        "spawn_at": 1791262706.998978,
+        "spawn_syscall_ms": 1.9929999999999999,
+        "exit_at": 1791262707.008911,
+        "observed_at": 1791262707.0172062,
+        "exit_observation_ms": 8.295297622680664,
+        "spawn_to_observed_ms": 18.22829246520996,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47161,
+        "parent": 47135,
+        "spawn_at": 1791262708.018083,
+        "spawn_syscall_ms": 2.041,
+        "exit_at": 1791262708.026748,
+        "observed_at": 1791262708.035885,
+        "exit_observation_ms": 9.137153625488281,
+        "spawn_to_observed_ms": 17.802000045776367,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262707.0172062,
+        "to": 1791262708.018083,
+        "gap_ms": 1000.8769035339355,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 17.432451248168945,
+    "readiness_spawn_to_observed_ms": 1036.9071960449219,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 491.4438724517822,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47162,
+      "parent": 47135,
+      "spawn_at": 1791262708.036293,
+      "spawn_syscall_ms": 0.9650000000000001,
+      "exit_at": 1791262708.536905,
+      "observed_at": 1791262708.565269,
+      "exit_observation_ms": 28.363943099975586,
+      "spawn_to_observed_ms": 528.9759635925293,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.209850311279297,
+    "service_stop_signal_at": 1791262708.565681,
+    "service_stop_end_at": 1791262708.5718908,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 57,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 9,
+    "stage_ms": 1648,
+    "root_pid": 47188,
+    "service": {
+      "pid": 47190,
+      "parent": 47188,
+      "spawn_at": 1791262708.659996,
+      "spawn_syscall_ms": 1.2830000000000001,
+      "exit_at": 1791262710.281445,
+      "observed_at": 1791262710.3049488,
+      "exit_observation_ms": 23.503780364990234,
+      "spawn_to_observed_ms": 1644.9527740478516,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 1.2830000000000001,
+    "cargo_until_product_exec_ms": 240.64207077026367,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47191,
+        "parent": 47188,
+        "spawn_at": 1791262708.661871,
+        "spawn_syscall_ms": 2.4859999999999998,
+        "exit_at": 1791262708.671094,
+        "observed_at": 1791262708.7055612,
+        "exit_observation_ms": 34.467220306396484,
+        "spawn_to_observed_ms": 43.69020462036133,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47214,
+        "parent": 47188,
+        "spawn_at": 1791262709.706951,
+        "spawn_syscall_ms": 2.816,
+        "exit_at": 1791262709.717619,
+        "observed_at": 1791262709.75051,
+        "exit_observation_ms": 32.891035079956055,
+        "spawn_to_observed_ms": 43.55907440185547,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262708.7055612,
+        "to": 1791262709.706951,
+        "gap_ms": 1001.389741897583,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 67.35825538635254,
+    "readiness_spawn_to_observed_ms": 1088.6390209197998,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 511.85107231140137,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47215,
+      "parent": 47188,
+      "spawn_at": 1791262709.751046,
+      "spawn_syscall_ms": 1.324,
+      "exit_at": 1791262710.272944,
+      "observed_at": 1791262710.278784,
+      "exit_observation_ms": 5.840063095092773,
+      "spawn_to_observed_ms": 527.738094329834,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 25.94280242919922,
+    "service_stop_signal_at": 1791262710.279117,
+    "service_stop_end_at": 1791262710.30506,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 10,
+    "stage_ms": 1647,
+    "root_pid": 47241,
+    "service": {
+      "pid": 47243,
+      "parent": 47241,
+      "spawn_at": 1791262710.413213,
+      "spawn_syscall_ms": 0.735,
+      "exit_at": 1791262712.033441,
+      "observed_at": 1791262712.057337,
+      "exit_observation_ms": 23.895978927612305,
+      "spawn_to_observed_ms": 1644.1240310668945,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.735,
+    "cargo_until_product_exec_ms": 207.73887634277344,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47244,
+        "parent": 47241,
+        "spawn_at": 1791262710.414517,
+        "spawn_syscall_ms": 1.137,
+        "exit_at": 1791262710.421166,
+        "observed_at": 1791262710.4564521,
+        "exit_observation_ms": 35.28618812561035,
+        "spawn_to_observed_ms": 41.93520545959473,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47267,
+        "parent": 47241,
+        "spawn_at": 1791262711.457764,
+        "spawn_syscall_ms": 1.7440000000000002,
+        "exit_at": 1791262711.466109,
+        "observed_at": 1791262711.500592,
+        "exit_observation_ms": 34.48295593261719,
+        "spawn_to_observed_ms": 42.82808303833008,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262710.4564521,
+        "to": 1791262711.457764,
+        "gap_ms": 1001.3117790222168,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 69.76914405822754,
+    "readiness_spawn_to_observed_ms": 1086.0750675201416,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 494.6470260620117,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47268,
+      "parent": 47241,
+      "spawn_at": 1791262711.501606,
+      "spawn_syscall_ms": 1.729,
+      "exit_at": 1791262712.006093,
+      "observed_at": 1791262712.03084,
+      "exit_observation_ms": 24.74689483642578,
+      "spawn_to_observed_ms": 529.2339324951172,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.281118392944336,
+    "service_stop_signal_at": 1791262712.031179,
+    "service_stop_end_at": 1791262712.05746,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 10,
+    "stage_ms": 1568,
+    "root_pid": 47294,
+    "service": {
+      "pid": 47296,
+      "parent": 47294,
+      "spawn_at": 1791262712.163314,
+      "spawn_syscall_ms": 0.805,
+      "exit_at": 1791262713.722747,
+      "observed_at": 1791262713.7267678,
+      "exit_observation_ms": 4.02069091796875,
+      "spawn_to_observed_ms": 1563.4536743164062,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.805,
+    "cargo_until_product_exec_ms": 254.38880920410156,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47297,
+        "parent": 47294,
+        "spawn_at": 1791262712.164604,
+        "spawn_syscall_ms": 1.168,
+        "exit_at": 1791262712.171416,
+        "observed_at": 1791262712.1715488,
+        "exit_observation_ms": 0.1327991485595703,
+        "spawn_to_observed_ms": 6.944894790649414,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47320,
+        "parent": 47294,
+        "spawn_at": 1791262713.17251,
+        "spawn_syscall_ms": 1.486,
+        "exit_at": 1791262713.181343,
+        "observed_at": 1791262713.190366,
+        "exit_observation_ms": 9.022951126098633,
+        "spawn_to_observed_ms": 17.856121063232422,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262712.1715488,
+        "to": 1791262713.17251,
+        "gap_ms": 1000.9610652923584,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.155750274658203,
+    "readiness_spawn_to_observed_ms": 1025.7620811462402,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 516.240119934082,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47321,
+      "parent": 47294,
+      "spawn_at": 1791262713.190935,
+      "spawn_syscall_ms": 1.174,
+      "exit_at": 1791262713.717077,
+      "observed_at": 1791262713.720187,
+      "exit_observation_ms": 3.1099319458007812,
+      "spawn_to_observed_ms": 529.2520523071289,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.355047225952148,
+    "service_stop_signal_at": 1791262713.720524,
+    "service_stop_end_at": 1791262713.7268791,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 11,
+    "stage_ms": 1578,
+    "root_pid": 47347,
+    "service": {
+      "pid": 47349,
+      "parent": 47347,
+      "spawn_at": 1791262713.813452,
+      "spawn_syscall_ms": 1.411,
+      "exit_at": 1791262715.384597,
+      "observed_at": 1791262715.3878238,
+      "exit_observation_ms": 3.226757049560547,
+      "spawn_to_observed_ms": 1574.3718147277832,
+      "nonblocking_wait_calls": 37,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 1.411,
+    "cargo_until_product_exec_ms": 232.2840690612793,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47350,
+        "parent": 47347,
+        "spawn_at": 1791262713.815493,
+        "spawn_syscall_ms": 1.373,
+        "exit_at": 1791262713.823535,
+        "observed_at": 1791262713.833354,
+        "exit_observation_ms": 9.81903076171875,
+        "spawn_to_observed_ms": 17.860889434814453,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47373,
+        "parent": 47347,
+        "spawn_at": 1791262714.834113,
+        "spawn_syscall_ms": 1.191,
+        "exit_at": 1791262714.843074,
+        "observed_at": 1791262714.851757,
+        "exit_observation_ms": 8.682966232299805,
+        "spawn_to_observed_ms": 17.644166946411133,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262713.833354,
+        "to": 1791262714.834113,
+        "gap_ms": 1000.7588863372803,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 18.501996994018555,
+    "readiness_spawn_to_observed_ms": 1036.2639427185059,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 510.06603240966797,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47374,
+      "parent": 47347,
+      "spawn_at": 1791262714.852214,
+      "spawn_syscall_ms": 1.6260000000000001,
+      "exit_at": 1791262715.373223,
+      "observed_at": 1791262715.381409,
+      "exit_observation_ms": 8.185863494873047,
+      "spawn_to_observed_ms": 529.1948318481445,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.176948547363281,
+    "service_stop_signal_at": 1791262715.381736,
+    "service_stop_end_at": 1791262715.387913,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 57,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 11,
+    "stage_ms": 1689,
+    "root_pid": 47400,
+    "service": {
+      "pid": 47402,
+      "parent": 47400,
+      "spawn_at": 1791262715.475311,
+      "spawn_syscall_ms": 0.9179999999999999,
+      "exit_at": 1791262717.135377,
+      "observed_at": 1791262717.159503,
+      "exit_observation_ms": 24.126052856445312,
+      "spawn_to_observed_ms": 1684.1919422149658,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.9179999999999999,
+    "cargo_until_product_exec_ms": 236.2060546875,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47403,
+        "parent": 47400,
+        "spawn_at": 1791262715.476722,
+        "spawn_syscall_ms": 1.86,
+        "exit_at": 1791262715.484032,
+        "observed_at": 1791262715.5193648,
+        "exit_observation_ms": 35.33291816711426,
+        "spawn_to_observed_ms": 42.642831802368164,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47426,
+        "parent": 47400,
+        "spawn_at": 1791262716.520375,
+        "spawn_syscall_ms": 1.359,
+        "exit_at": 1791262716.528556,
+        "observed_at": 1791262716.562536,
+        "exit_observation_ms": 33.97989273071289,
+        "spawn_to_observed_ms": 42.160987854003906,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262715.5193648,
+        "to": 1791262716.520375,
+        "gap_ms": 1001.0101795196533,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 69.31281089782715,
+    "readiness_spawn_to_observed_ms": 1085.8139991760254,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 535.4700088500977,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47427,
+      "parent": 47400,
+      "spawn_at": 1791262716.563076,
+      "spawn_syscall_ms": 1.042,
+      "exit_at": 1791262717.107515,
+      "observed_at": 1791262717.13276,
+      "exit_observation_ms": 25.244951248168945,
+      "spawn_to_observed_ms": 569.6840286254883,
+      "nonblocking_wait_calls": 15,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.592016220092773,
+    "service_stop_signal_at": 1791262717.133137,
+    "service_stop_end_at": 1791262717.159729,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 54,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 12,
+    "stage_ms": 1648,
+    "root_pid": 47453,
+    "service": {
+      "pid": 47455,
+      "parent": 47453,
+      "spawn_at": 1791262717.246251,
+      "spawn_syscall_ms": 0.8220000000000001,
+      "exit_at": 1791262718.866825,
+      "observed_at": 1791262718.8905778,
+      "exit_observation_ms": 23.752689361572266,
+      "spawn_to_observed_ms": 1644.3266868591309,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.8220000000000001,
+    "cargo_until_product_exec_ms": 225.1288890838623,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47456,
+        "parent": 47453,
+        "spawn_at": 1791262717.247606,
+        "spawn_syscall_ms": 2.719,
+        "exit_at": 1791262717.255806,
+        "observed_at": 1791262717.291447,
+        "exit_observation_ms": 35.64095497131348,
+        "spawn_to_observed_ms": 43.840885162353516,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47479,
+        "parent": 47453,
+        "spawn_at": 1791262718.292339,
+        "spawn_syscall_ms": 1.805,
+        "exit_at": 1791262718.301213,
+        "observed_at": 1791262718.334978,
+        "exit_observation_ms": 33.76507759094238,
+        "spawn_to_observed_ms": 42.63901710510254,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262717.291447,
+        "to": 1791262718.292339,
+        "gap_ms": 1000.892162322998,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 69.40603256225586,
+    "readiness_spawn_to_observed_ms": 1087.372064590454,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 492.0949935913086,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47480,
+      "parent": 47453,
+      "spawn_at": 1791262718.335484,
+      "spawn_syscall_ms": 1.6260000000000001,
+      "exit_at": 1791262718.838369,
+      "observed_at": 1791262718.863439,
+      "exit_observation_ms": 25.0701904296875,
+      "spawn_to_observed_ms": 527.9550552368164,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.70598030090332,
+    "service_stop_signal_at": 1791262718.863984,
+    "service_stop_end_at": 1791262718.89069,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 12,
+    "stage_ms": 1622,
+    "root_pid": 47506,
+    "service": {
+      "pid": 47508,
+      "parent": 47506,
+      "spawn_at": 1791262718.978587,
+      "spawn_syscall_ms": 1.868,
+      "exit_at": 1791262720.592752,
+      "observed_at": 1791262720.596633,
+      "exit_observation_ms": 3.8809776306152344,
+      "spawn_to_observed_ms": 1618.0460453033447,
+      "nonblocking_wait_calls": 37,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 1.868,
+    "cargo_until_product_exec_ms": 225.65317153930664,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47509,
+        "parent": 47506,
+        "spawn_at": 1791262718.981432,
+        "spawn_syscall_ms": 2.0100000000000002,
+        "exit_at": 1791262718.990296,
+        "observed_at": 1791262719.000793,
+        "exit_observation_ms": 10.497093200683594,
+        "spawn_to_observed_ms": 19.361019134521484,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47532,
+        "parent": 47506,
+        "spawn_at": 1791262720.00216,
+        "spawn_syscall_ms": 2.0509999999999997,
+        "exit_at": 1791262720.012287,
+        "observed_at": 1791262720.020878,
+        "exit_observation_ms": 8.591175079345703,
+        "spawn_to_observed_ms": 18.71800422668457,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262719.000793,
+        "to": 1791262720.00216,
+        "gap_ms": 1001.3670921325684,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 19.088268280029297,
+    "readiness_spawn_to_observed_ms": 1039.4461154937744,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 528.479814529419,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47533,
+      "parent": 47506,
+      "spawn_at": 1791262720.021581,
+      "spawn_syscall_ms": 1.573,
+      "exit_at": 1791262720.56062,
+      "observed_at": 1791262720.590062,
+      "exit_observation_ms": 29.44183349609375,
+      "spawn_to_observed_ms": 568.4809684753418,
+      "nonblocking_wait_calls": 15,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.196737289428711,
+    "service_stop_signal_at": 1791262720.590567,
+    "service_stop_end_at": 1791262720.5967638,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 58,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 13,
+    "stage_ms": 1567,
+    "root_pid": 47559,
+    "service": {
+      "pid": 47561,
+      "parent": 47559,
+      "spawn_at": 1791262720.673676,
+      "spawn_syscall_ms": 0.7829999999999999,
+      "exit_at": 1791262722.232594,
+      "observed_at": 1791262722.236248,
+      "exit_observation_ms": 3.654003143310547,
+      "spawn_to_observed_ms": 1562.5720024108887,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.7829999999999999,
+    "cargo_until_product_exec_ms": 221.37904167175293,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47562,
+        "parent": 47559,
+        "spawn_at": 1791262720.674974,
+        "spawn_syscall_ms": 1.244,
+        "exit_at": 1791262720.68149,
+        "observed_at": 1791262720.681721,
+        "exit_observation_ms": 0.23102760314941406,
+        "spawn_to_observed_ms": 6.747007369995117,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47585,
+        "parent": 47559,
+        "spawn_at": 1791262721.682713,
+        "spawn_syscall_ms": 2.0660000000000003,
+        "exit_at": 1791262721.691671,
+        "observed_at": 1791262721.700971,
+        "exit_observation_ms": 9.299993515014648,
+        "spawn_to_observed_ms": 18.257856369018555,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262720.681721,
+        "to": 1791262721.682713,
+        "gap_ms": 1000.9920597076416,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.531021118164062,
+    "readiness_spawn_to_observed_ms": 1025.9969234466553,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 479.42399978637695,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47586,
+      "parent": 47559,
+      "spawn_at": 1791262721.701368,
+      "spawn_syscall_ms": 0.988,
+      "exit_at": 1791262722.189395,
+      "observed_at": 1791262722.229017,
+      "exit_observation_ms": 39.62206840515137,
+      "spawn_to_observed_ms": 527.64892578125,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.906032562255859,
+    "service_stop_signal_at": 1791262722.229429,
+    "service_stop_end_at": 1791262722.236335,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 13,
+    "stage_ms": 1606,
+    "root_pid": 47612,
+    "service": {
+      "pid": 47614,
+      "parent": 47612,
+      "spawn_at": 1791262722.32219,
+      "spawn_syscall_ms": 0.841,
+      "exit_at": 1791262723.900092,
+      "observed_at": 1791262723.924049,
+      "exit_observation_ms": 23.957014083862305,
+      "spawn_to_observed_ms": 1601.8588542938232,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.841,
+    "cargo_until_product_exec_ms": 230.40199279785156,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47615,
+        "parent": 47612,
+        "spawn_at": 1791262722.323499,
+        "spawn_syscall_ms": 1.321,
+        "exit_at": 1791262722.330664,
+        "observed_at": 1791262722.3658369,
+        "exit_observation_ms": 35.17293930053711,
+        "spawn_to_observed_ms": 42.337894439697266,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47638,
+        "parent": 47612,
+        "spawn_at": 1791262723.367037,
+        "spawn_syscall_ms": 1.545,
+        "exit_at": 1791262723.375796,
+        "observed_at": 1791262723.409321,
+        "exit_observation_ms": 33.52499008178711,
+        "spawn_to_observed_ms": 42.28401184082031,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262722.3658369,
+        "to": 1791262723.367037,
+        "gap_ms": 1001.2001991271973,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 68.69792938232422,
+    "readiness_spawn_to_observed_ms": 1085.8221054077148,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 474.8039245605469,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47639,
+      "parent": 47612,
+      "spawn_at": 1791262723.409722,
+      "spawn_syscall_ms": 1.474,
+      "exit_at": 1791262723.893592,
+      "observed_at": 1791262723.897385,
+      "exit_observation_ms": 3.793001174926758,
+      "spawn_to_observed_ms": 487.66279220581055,
+      "nonblocking_wait_calls": 13,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.418209075927734,
+    "service_stop_signal_at": 1791262723.89774,
+    "service_stop_end_at": 1791262723.924158,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 52,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 14,
+    "stage_ms": 1647,
+    "root_pid": 47665,
+    "service": {
+      "pid": 47667,
+      "parent": 47665,
+      "spawn_at": 1791262724.003146,
+      "spawn_syscall_ms": 0.871,
+      "exit_at": 1791262725.620816,
+      "observed_at": 1791262725.6450138,
+      "exit_observation_ms": 24.197816848754883,
+      "spawn_to_observed_ms": 1641.8678760528564,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.871,
+    "cargo_until_product_exec_ms": 215.4979705810547,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47668,
+        "parent": 47665,
+        "spawn_at": 1791262724.004519,
+        "spawn_syscall_ms": 1.1869999999999998,
+        "exit_at": 1791262724.011061,
+        "observed_at": 1791262724.046772,
+        "exit_observation_ms": 35.711050033569336,
+        "spawn_to_observed_ms": 42.25301742553711,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47691,
+        "parent": 47665,
+        "spawn_at": 1791262725.0479,
+        "spawn_syscall_ms": 1.368,
+        "exit_at": 1791262725.059032,
+        "observed_at": 1791262725.089987,
+        "exit_observation_ms": 30.955076217651367,
+        "spawn_to_observed_ms": 42.08707809448242,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262724.046772,
+        "to": 1791262725.0479,
+        "gap_ms": 1001.1279582977295,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 66.6661262512207,
+    "readiness_spawn_to_observed_ms": 1085.468053817749,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 484.8439693450928,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47692,
+      "parent": 47665,
+      "spawn_at": 1791262725.090477,
+      "spawn_syscall_ms": 0.9650000000000001,
+      "exit_at": 1791262725.583496,
+      "observed_at": 1791262725.617977,
+      "exit_observation_ms": 34.48081016540527,
+      "spawn_to_observed_ms": 527.4999141693115,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.692867279052734,
+    "service_stop_signal_at": 1791262725.618437,
+    "service_stop_end_at": 1791262725.64513,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 14,
+    "stage_ms": 1608,
+    "root_pid": 47718,
+    "service": {
+      "pid": 47720,
+      "parent": 47718,
+      "spawn_at": 1791262725.72148,
+      "spawn_syscall_ms": 0.732,
+      "exit_at": 1791262727.323415,
+      "observed_at": 1791262727.326636,
+      "exit_observation_ms": 3.2210350036621094,
+      "spawn_to_observed_ms": 1605.1561832427979,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.732,
+    "cargo_until_product_exec_ms": 243.34716796875,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47721,
+        "parent": 47718,
+        "spawn_at": 1791262725.722679,
+        "spawn_syscall_ms": 1.907,
+        "exit_at": 1791262725.729991,
+        "observed_at": 1791262725.730286,
+        "exit_observation_ms": 0.2949237823486328,
+        "spawn_to_observed_ms": 7.606983184814453,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47744,
+        "parent": 47718,
+        "spawn_at": 1791262726.731228,
+        "spawn_syscall_ms": 1.568,
+        "exit_at": 1791262726.740106,
+        "observed_at": 1791262726.7490811,
+        "exit_observation_ms": 8.975028991699219,
+        "spawn_to_observed_ms": 17.8530216217041,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262725.730286,
+        "to": 1791262726.731228,
+        "gap_ms": 1000.9422302246094,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.269952774047852,
+    "readiness_spawn_to_observed_ms": 1026.402235031128,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 535.3128910064697,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47745,
+      "parent": 47718,
+      "spawn_at": 1791262726.749569,
+      "spawn_syscall_ms": 1.641,
+      "exit_at": 1791262727.294423,
+      "observed_at": 1791262727.319371,
+      "exit_observation_ms": 24.9478816986084,
+      "spawn_to_observed_ms": 569.8020458221436,
+      "nonblocking_wait_calls": 15,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.245851516723633,
+    "service_stop_signal_at": 1791262727.320553,
+    "service_stop_end_at": 1791262727.326799,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 56,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 15,
+    "stage_ms": 1566,
+    "root_pid": 47771,
+    "service": {
+      "pid": 47773,
+      "parent": 47771,
+      "spawn_at": 1791262727.448703,
+      "spawn_syscall_ms": 0.9179999999999999,
+      "exit_at": 1791262729.009253,
+      "observed_at": 1791262729.013274,
+      "exit_observation_ms": 4.020929336547852,
+      "spawn_to_observed_ms": 1564.5709037780762,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.9179999999999999,
+    "cargo_until_product_exec_ms": 267.67587661743164,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47774,
+        "parent": 47771,
+        "spawn_at": 1791262727.450744,
+        "spawn_syscall_ms": 1.746,
+        "exit_at": 1791262727.458508,
+        "observed_at": 1791262727.4589782,
+        "exit_observation_ms": 0.47016143798828125,
+        "spawn_to_observed_ms": 8.234262466430664,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47797,
+        "parent": 47771,
+        "spawn_at": 1791262728.459941,
+        "spawn_syscall_ms": 1.511,
+        "exit_at": 1791262728.468984,
+        "observed_at": 1791262728.477611,
+        "exit_observation_ms": 8.627176284790039,
+        "spawn_to_observed_ms": 17.670154571533203,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262727.4589782,
+        "to": 1791262728.459941,
+        "gap_ms": 1000.9627342224121,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.09733772277832,
+    "readiness_spawn_to_observed_ms": 1026.867151260376,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 505.95903396606445,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47798,
+      "parent": 47771,
+      "spawn_at": 1791262728.478012,
+      "spawn_syscall_ms": 1.39,
+      "exit_at": 1791262728.994635,
+      "observed_at": 1791262729.006599,
+      "exit_observation_ms": 11.963844299316406,
+      "spawn_to_observed_ms": 528.5868644714355,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.452083587646484,
+    "service_stop_signal_at": 1791262729.006928,
+    "service_stop_end_at": 1791262729.01338,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 15,
+    "stage_ms": 1607,
+    "root_pid": 47824,
+    "service": {
+      "pid": 47826,
+      "parent": 47824,
+      "spawn_at": 1791262729.100765,
+      "spawn_syscall_ms": 0.985,
+      "exit_at": 1791262730.680051,
+      "observed_at": 1791262730.703724,
+      "exit_observation_ms": 23.672819137573242,
+      "spawn_to_observed_ms": 1602.9589176177979,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.985,
+    "cargo_until_product_exec_ms": 215.35992622375488,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47827,
+        "parent": 47824,
+        "spawn_at": 1791262729.102274,
+        "spawn_syscall_ms": 1.14,
+        "exit_at": 1791262729.109155,
+        "observed_at": 1791262729.1442802,
+        "exit_observation_ms": 35.1252555847168,
+        "spawn_to_observed_ms": 42.00625419616699,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47850,
+        "parent": 47824,
+        "spawn_at": 1791262730.145799,
+        "spawn_syscall_ms": 1.059,
+        "exit_at": 1791262730.153493,
+        "observed_at": 1791262730.187846,
+        "exit_observation_ms": 34.353017807006836,
+        "spawn_to_observed_ms": 42.04702377319336,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262729.1442802,
+        "to": 1791262730.145799,
+        "gap_ms": 1001.518726348877,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 69.47827339172363,
+    "readiness_spawn_to_observed_ms": 1085.5720043182373,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 476.22013092041016,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47851,
+      "parent": 47824,
+      "spawn_at": 1791262730.188524,
+      "spawn_syscall_ms": 2.2729999999999997,
+      "exit_at": 1791262730.675226,
+      "observed_at": 1791262730.677308,
+      "exit_observation_ms": 2.0821094512939453,
+      "spawn_to_observed_ms": 488.7840747833252,
+      "nonblocking_wait_calls": 13,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.16286277770996,
+    "service_stop_signal_at": 1791262730.677678,
+    "service_stop_end_at": 1791262730.703841,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 52,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 16,
+    "stage_ms": 1646,
+    "root_pid": 47877,
+    "service": {
+      "pid": 47879,
+      "parent": 47877,
+      "spawn_at": 1791262730.78362,
+      "spawn_syscall_ms": 0.824,
+      "exit_at": 1791262732.402346,
+      "observed_at": 1791262732.425311,
+      "exit_observation_ms": 22.965192794799805,
+      "spawn_to_observed_ms": 1641.690969467163,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.824,
+    "cargo_until_product_exec_ms": 215.53277969360352,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47880,
+        "parent": 47877,
+        "spawn_at": 1791262730.784934,
+        "spawn_syscall_ms": 1.268,
+        "exit_at": 1791262730.792427,
+        "observed_at": 1791262730.827006,
+        "exit_observation_ms": 34.57903861999512,
+        "spawn_to_observed_ms": 42.07205772399902,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47903,
+        "parent": 47877,
+        "spawn_at": 1791262731.827858,
+        "spawn_syscall_ms": 1.135,
+        "exit_at": 1791262731.836014,
+        "observed_at": 1791262731.869666,
+        "exit_observation_ms": 33.65206718444824,
+        "spawn_to_observed_ms": 41.808128356933594,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262730.827006,
+        "to": 1791262731.827858,
+        "gap_ms": 1000.8518695831299,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 68.23110580444336,
+    "readiness_spawn_to_observed_ms": 1084.7320556640625,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 494.5840835571289,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47904,
+      "parent": 47877,
+      "spawn_at": 1791262731.870115,
+      "spawn_syscall_ms": 1.7260000000000002,
+      "exit_at": 1791262732.373708,
+      "observed_at": 1791262732.398653,
+      "exit_observation_ms": 24.94502067565918,
+      "spawn_to_observed_ms": 528.5379886627197,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.407957077026367,
+    "service_stop_signal_at": 1791262732.399041,
+    "service_stop_end_at": 1791262732.425449,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 16,
+    "stage_ms": 1546,
+    "root_pid": 47930,
+    "service": {
+      "pid": 47932,
+      "parent": 47930,
+      "spawn_at": 1791262732.510545,
+      "spawn_syscall_ms": 1.1520000000000001,
+      "exit_at": 1791262734.037399,
+      "observed_at": 1791262734.040957,
+      "exit_observation_ms": 3.557920455932617,
+      "spawn_to_observed_ms": 1530.411958694458,
+      "nonblocking_wait_calls": 37,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 1.1520000000000001,
+    "cargo_until_product_exec_ms": 227.8909683227539,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47933,
+        "parent": 47930,
+        "spawn_at": 1791262732.512222,
+        "spawn_syscall_ms": 1.268,
+        "exit_at": 1791262732.519365,
+        "observed_at": 1791262732.529528,
+        "exit_observation_ms": 10.162830352783203,
+        "spawn_to_observed_ms": 17.305850982666016,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 47956,
+        "parent": 47930,
+        "spawn_at": 1791262733.530393,
+        "spawn_syscall_ms": 1.711,
+        "exit_at": 1791262733.539293,
+        "observed_at": 1791262733.548351,
+        "exit_observation_ms": 9.057998657226562,
+        "spawn_to_observed_ms": 17.95816421508789,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262732.529528,
+        "to": 1791262733.530393,
+        "gap_ms": 1000.8649826049805,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 19.220829010009766,
+    "readiness_spawn_to_observed_ms": 1036.1289978027344,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 474.7300148010254,
+    "owned_adapter_or_outer_shell": {
+      "pid": 47957,
+      "parent": 47930,
+      "spawn_at": 1791262733.548699,
+      "spawn_syscall_ms": 1.5759999999999998,
+      "exit_at": 1791262734.032601,
+      "observed_at": 1791262734.034818,
+      "exit_observation_ms": 2.216815948486328,
+      "spawn_to_observed_ms": 486.11903190612793,
+      "nonblocking_wait_calls": 13,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 5.830049514770508,
+    "service_stop_signal_at": 1791262734.035208,
+    "service_stop_end_at": 1791262734.041038,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 56,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 17,
+    "stage_ms": 1544,
+    "root_pid": 47983,
+    "service": {
+      "pid": 47985,
+      "parent": 47983,
+      "spawn_at": 1791262734.126489,
+      "spawn_syscall_ms": 9.889,
+      "exit_at": 1791262735.66233,
+      "observed_at": 1791262735.666492,
+      "exit_observation_ms": 4.162073135375977,
+      "spawn_to_observed_ms": 1540.0030612945557,
+      "nonblocking_wait_calls": 37,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 9.889,
+    "cargo_until_product_exec_ms": 225.13318061828613,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 47986,
+        "parent": 47983,
+        "spawn_at": 1791262734.136907,
+        "spawn_syscall_ms": 1.509,
+        "exit_at": 1791262734.14406,
+        "observed_at": 1791262734.154359,
+        "exit_observation_ms": 10.299205780029297,
+        "spawn_to_observed_ms": 17.452001571655273,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 48009,
+        "parent": 47983,
+        "spawn_at": 1791262735.15521,
+        "spawn_syscall_ms": 1.363,
+        "exit_at": 1791262735.163352,
+        "observed_at": 1791262735.17244,
+        "exit_observation_ms": 9.08803939819336,
+        "spawn_to_observed_ms": 17.23003387451172,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262734.154359,
+        "to": 1791262735.15521,
+        "gap_ms": 1000.8509159088135,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 19.387245178222656,
+    "readiness_spawn_to_observed_ms": 1035.5329513549805,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 468.9369201660156,
+    "owned_adapter_or_outer_shell": {
+      "pid": 48010,
+      "parent": 47983,
+      "spawn_at": 1791262735.172873,
+      "spawn_syscall_ms": 1.013,
+      "exit_at": 1791262735.650732,
+      "observed_at": 1791262735.6598039,
+      "exit_observation_ms": 9.071826934814453,
+      "spawn_to_observed_ms": 486.93084716796875,
+      "nonblocking_wait_calls": 13,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.417989730834961,
+    "service_stop_signal_at": 1791262735.660187,
+    "service_stop_end_at": 1791262735.666605,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 56,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 17,
+    "stage_ms": 1647,
+    "root_pid": 48036,
+    "service": {
+      "pid": 48038,
+      "parent": 48036,
+      "spawn_at": 1791262735.751307,
+      "spawn_syscall_ms": 1.046,
+      "exit_at": 1791262737.369301,
+      "observed_at": 1791262737.3932521,
+      "exit_observation_ms": 23.951053619384766,
+      "spawn_to_observed_ms": 1641.9451236724854,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 1.046,
+    "cargo_until_product_exec_ms": 216.6290283203125,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 48039,
+        "parent": 48036,
+        "spawn_at": 1791262735.752938,
+        "spawn_syscall_ms": 1.677,
+        "exit_at": 1791262735.760298,
+        "observed_at": 1791262735.7957091,
+        "exit_observation_ms": 35.41111946105957,
+        "spawn_to_observed_ms": 42.771100997924805,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 48062,
+        "parent": 48036,
+        "spawn_at": 1791262736.797086,
+        "spawn_syscall_ms": 1.3339999999999999,
+        "exit_at": 1791262736.805015,
+        "observed_at": 1791262736.839103,
+        "exit_observation_ms": 34.0878963470459,
+        "spawn_to_observed_ms": 42.01698303222656,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262735.7957091,
+        "to": 1791262736.797086,
+        "gap_ms": 1001.3768672943115,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 69.49901580810547,
+    "readiness_spawn_to_observed_ms": 1086.164951324463,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 497.12395668029785,
+    "owned_adapter_or_outer_shell": {
+      "pid": 48063,
+      "parent": 48036,
+      "spawn_at": 1791262736.839506,
+      "spawn_syscall_ms": 1.647,
+      "exit_at": 1791262737.345465,
+      "observed_at": 1791262737.366957,
+      "exit_observation_ms": 21.49200439453125,
+      "spawn_to_observed_ms": 527.4510383605957,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.089906692504883,
+    "service_stop_signal_at": 1791262737.367285,
+    "service_stop_end_at": 1791262737.393375,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 18,
+    "stage_ms": 1649,
+    "root_pid": 48089,
+    "service": {
+      "pid": 48091,
+      "parent": 48089,
+      "spawn_at": 1791262737.468446,
+      "spawn_syscall_ms": 0.752,
+      "exit_at": 1791262739.088142,
+      "observed_at": 1791262739.112264,
+      "exit_observation_ms": 24.121999740600586,
+      "spawn_to_observed_ms": 1643.8179016113281,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.752,
+    "cargo_until_product_exec_ms": 214.68496322631836,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 48092,
+        "parent": 48089,
+        "spawn_at": 1791262737.469676,
+        "spawn_syscall_ms": 1.399,
+        "exit_at": 1791262737.476231,
+        "observed_at": 1791262737.512019,
+        "exit_observation_ms": 35.78782081604004,
+        "spawn_to_observed_ms": 42.3429012298584,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 48115,
+        "parent": 48089,
+        "spawn_at": 1791262738.513331,
+        "spawn_syscall_ms": 2.584,
+        "exit_at": 1791262738.522832,
+        "observed_at": 1791262738.556664,
+        "exit_observation_ms": 33.83207321166992,
+        "spawn_to_observed_ms": 43.33305358886719,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262737.512019,
+        "to": 1791262738.513331,
+        "gap_ms": 1001.3120174407959,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 69.61989402770996,
+    "readiness_spawn_to_observed_ms": 1086.9879722595215,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 513.0360126495361,
+    "owned_adapter_or_outer_shell": {
+      "pid": 48116,
+      "parent": 48089,
+      "spawn_at": 1791262738.557085,
+      "spawn_syscall_ms": 1.367,
+      "exit_at": 1791262739.082374,
+      "observed_at": 1791262739.085602,
+      "exit_observation_ms": 3.2279491424560547,
+      "spawn_to_observed_ms": 528.5170078277588,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.4129638671875,
+    "service_stop_signal_at": 1791262739.085975,
+    "service_stop_end_at": 1791262739.112388,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 53,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 18,
+    "stage_ms": 1566,
+    "root_pid": 48142,
+    "service": {
+      "pid": 48144,
+      "parent": 48142,
+      "spawn_at": 1791262739.198914,
+      "spawn_syscall_ms": 1.17,
+      "exit_at": 1791262740.757081,
+      "observed_at": 1791262740.760839,
+      "exit_observation_ms": 3.757953643798828,
+      "spawn_to_observed_ms": 1561.924934387207,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 1.17,
+    "cargo_until_product_exec_ms": 224.32303428649902,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 48145,
+        "parent": 48142,
+        "spawn_at": 1791262739.200559,
+        "spawn_syscall_ms": 1.252,
+        "exit_at": 1791262739.207216,
+        "observed_at": 1791262739.207624,
+        "exit_observation_ms": 0.40793418884277344,
+        "spawn_to_observed_ms": 7.065057754516602,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 48168,
+        "parent": 48142,
+        "spawn_at": 1791262740.208366,
+        "spawn_syscall_ms": 1.345,
+        "exit_at": 1791262740.216743,
+        "observed_at": 1791262740.225781,
+        "exit_observation_ms": 9.037971496582031,
+        "spawn_to_observed_ms": 17.41504669189453,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262739.207624,
+        "to": 1791262740.208366,
+        "gap_ms": 1000.7419586181641,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.445905685424805,
+    "readiness_spawn_to_observed_ms": 1025.2220630645752,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 483.9510917663574,
+    "owned_adapter_or_outer_shell": {
+      "pid": 48169,
+      "parent": 48142,
+      "spawn_at": 1791262740.226139,
+      "spawn_syscall_ms": 1.0579999999999998,
+      "exit_at": 1791262740.719407,
+      "observed_at": 1791262740.7541811,
+      "exit_observation_ms": 34.774065017700195,
+      "spawn_to_observed_ms": 528.0420780181885,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.25300407409668,
+    "service_stop_signal_at": 1791262740.754674,
+    "service_stop_end_at": 1791262740.760927,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "C",
+    "pair": 19,
+    "stage_ms": 1570,
+    "root_pid": 48195,
+    "service": {
+      "pid": 48197,
+      "parent": 48195,
+      "spawn_at": 1791262740.849097,
+      "spawn_syscall_ms": 1.028,
+      "exit_at": 1791262742.409424,
+      "observed_at": 1791262742.4134262,
+      "exit_observation_ms": 4.002094268798828,
+      "spawn_to_observed_ms": 1564.3291473388672,
+      "nonblocking_wait_calls": 36,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 1.028,
+    "cargo_until_product_exec_ms": 210.70599555969238,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 48198,
+        "parent": 48195,
+        "spawn_at": 1791262740.850739,
+        "spawn_syscall_ms": 1.198,
+        "exit_at": 1791262740.857003,
+        "observed_at": 1791262740.8576581,
+        "exit_observation_ms": 0.6551742553710938,
+        "spawn_to_observed_ms": 6.919145584106445,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 48221,
+        "parent": 48195,
+        "spawn_at": 1791262741.858684,
+        "spawn_syscall_ms": 2.695,
+        "exit_at": 1791262741.868587,
+        "observed_at": 1791262741.877379,
+        "exit_observation_ms": 8.791923522949219,
+        "spawn_to_observed_ms": 18.69487762451172,
+        "nonblocking_wait_calls": 3,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262740.8576581,
+        "to": 1791262741.858684,
+        "gap_ms": 1001.025915145874,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 9.447097778320312,
+    "readiness_spawn_to_observed_ms": 1026.6399383544922,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 483.1199645996094,
+    "owned_adapter_or_outer_shell": {
+      "pid": 48222,
+      "parent": 48195,
+      "spawn_at": 1791262741.877975,
+      "spawn_syscall_ms": 1.35,
+      "exit_at": 1791262742.370289,
+      "observed_at": 1791262742.4063811,
+      "exit_observation_ms": 36.09204292297363,
+      "spawn_to_observed_ms": 528.4061431884766,
+      "nonblocking_wait_calls": 14,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 6.305932998657227,
+    "service_stop_signal_at": 1791262742.407204,
+    "service_stop_end_at": 1791262742.4135098,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 55,
+    "trace_files": 48
+  },
+  {
+    "label": "B",
+    "pair": 19,
+    "stage_ms": 1688,
+    "root_pid": 48248,
+    "service": {
+      "pid": 48250,
+      "parent": 48248,
+      "spawn_at": 1791262742.498939,
+      "spawn_syscall_ms": 0.725,
+      "exit_at": 1791262744.158531,
+      "observed_at": 1791262744.182394,
+      "exit_observation_ms": 23.86307716369629,
+      "spawn_to_observed_ms": 1683.454990386963,
+      "nonblocking_wait_calls": 35,
+      "exit_record": "+++ killed by SIGTERM +++"
+    },
+    "service_spawn_syscall_ms": 0.725,
+    "cargo_until_product_exec_ms": 209.42401885986328,
+    "readiness_count": 2,
+    "readiness": [
+      {
+        "pid": 48251,
+        "parent": 48248,
+        "spawn_at": 1791262742.500341,
+        "spawn_syscall_ms": 1.176,
+        "exit_at": 1791262742.50658,
+        "observed_at": 1791262742.5424771,
+        "exit_observation_ms": 35.897016525268555,
+        "spawn_to_observed_ms": 42.136192321777344,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 7 +++"
+      },
+      {
+        "pid": 48274,
+        "parent": 48248,
+        "spawn_at": 1791262743.543689,
+        "spawn_syscall_ms": 2.5260000000000002,
+        "exit_at": 1791262743.554151,
+        "observed_at": 1791262743.587403,
+        "exit_observation_ms": 33.25200080871582,
+        "spawn_to_observed_ms": 43.714046478271484,
+        "nonblocking_wait_calls": 2,
+        "exit_record": "+++ exited with 0 +++"
+      }
+    ],
+    "retry": [
+      {
+        "from": 1791262742.5424771,
+        "to": 1791262743.543689,
+        "gap_ms": 1001.2118816375732,
+        "root_sleep_calls": 25
+      }
+    ],
+    "readiness_exit_observation_ms": 69.14901733398438,
+    "readiness_spawn_to_observed_ms": 1087.062120437622,
+    "authentication_curl_count": 7,
+    "grep_count": 10,
+    "assertion_core_ms": 524.4090557098389,
+    "owned_adapter_or_outer_shell": {
+      "pid": 48275,
+      "parent": 48248,
+      "spawn_at": 1791262743.587837,
+      "spawn_syscall_ms": 1.149,
+      "exit_at": 1791262744.121065,
+      "observed_at": 1791262744.1557581,
+      "exit_observation_ms": 34.693241119384766,
+      "spawn_to_observed_ms": 567.9211616516113,
+      "nonblocking_wait_calls": 15,
+      "exit_record": "+++ exited with 0 +++"
+    },
+    "service_stop_ms": 26.401042938232422,
+    "service_stop_signal_at": 1791262744.156181,
+    "service_stop_end_at": 1791262744.1825821,
+    "service_group_probe_count": 2,
+    "service_stop_wait_calls": 2,
+    "root_nonblocking_wait_calls_in_stage": 54,
+    "trace_files": 48
+  }
+]

@@ -1,0 +1,34 @@
+Acceptance artifacts: E:\gitclone\RSS-Reader\target\w3\target\release-ui-acceptance\1791262187725288300
+test_bash_stage_preserves_caller_tools (__main__.Acceptance.test_bash_stage_preserves_caller_tools) ... ok
+test_cancellation_and_forced_termination (__main__.Acceptance.test_cancellation_and_forced_termination) ... ok
+test_every_stage_failure_is_terminal_and_keeps_exit (__main__.Acceptance.test_every_stage_failure_is_terminal_and_keeps_exit) ... ok
+test_explicit_bash_is_not_replaced (__main__.Acceptance.test_explicit_bash_is_not_replaced) ... skipped 'alternate Bash executable identity is checked on Unix'
+test_full_order_and_build_once_unicode_paths (__main__.Acceptance.test_full_order_and_build_once_unicode_paths) ... ok
+test_git_probe_cancellation_owns_descendants (__main__.Acceptance.test_git_probe_cancellation_owns_descendants) ... ok
+test_git_revision_in_linked_worktree_and_separate_gitdir (__main__.Acceptance.test_git_revision_in_linked_worktree_and_separate_gitdir) ... ok
+test_launcher_artifact_path_has_no_line_ending (__main__.Acceptance.test_launcher_artifact_path_has_no_line_ending) ... ok
+test_local_fixture_selection_does_not_pass_external_probe (__main__.Acceptance.test_local_fixture_selection_does_not_pass_external_probe) ... ok
+test_missing_build_output_and_spawn_error (__main__.Acceptance.test_missing_build_output_and_spawn_error) ... ok
+test_owned_descendants_after_success_and_failure (__main__.Acceptance.test_owned_descendants_after_success_and_failure) ... ok
+test_parameters_and_plan_have_no_side_effects (__main__.Acceptance.test_parameters_and_plan_have_no_side_effects) ... ok
+test_real_auth_service_early_exit_and_conflict (__main__.Acceptance.test_real_auth_service_early_exit_and_conflict) ... ok
+test_real_launcher_respects_configured_compiler (__main__.Acceptance.test_real_launcher_respects_configured_compiler) ... ok
+test_real_launcher_target_config_and_stale_binary (__main__.Acceptance.test_real_launcher_target_config_and_stale_binary) ... ok
+test_real_spa_with_bash_python_and_cancel (__main__.Acceptance.test_real_spa_with_bash_python_and_cancel) ... ok
+test_skip_semantics_and_missing_bundle (__main__.Acceptance.test_skip_semantics_and_missing_bundle) ... ok
+test_spa_early_exit_and_port_conflict (__main__.Acceptance.test_spa_early_exit_and_port_conflict) ... ok
+test_spa_readiness_and_cancel (__main__.Acceptance.test_spa_readiness_and_cancel) ... ok
+test_unread_stdout_does_not_block_cancellation (__main__.Acceptance.test_unread_stdout_does_not_block_cancellation) ... ok
+test_web_auth_ascii_curl_files_and_caller_path (__main__.Acceptance.test_web_auth_ascii_curl_files_and_caller_path) ... ok
+test_web_auth_cancel_hung_request_and_tree (__main__.Acceptance.test_web_auth_cancel_hung_request_and_tree) ... ok
+test_web_auth_grace_survives_leader_exit_with_stubborn_leaf (__main__.Acceptance.test_web_auth_grace_survives_leader_exit_with_stubborn_leaf) ... skipped 'Unix process-group grace'
+test_web_auth_readiness_can_exceed_30_seconds (__main__.Acceptance.test_web_auth_readiness_can_exceed_30_seconds) ... ok
+test_web_auth_real_contract_profile_and_plan (__main__.Acceptance.test_web_auth_real_contract_profile_and_plan) ... ok
+test_web_auth_service_exits_during_assertions (__main__.Acceptance.test_web_auth_service_exits_during_assertions) ... ok
+test_web_auth_slow_readiness_and_bad_redirect (__main__.Acceptance.test_web_auth_slow_readiness_and_bad_redirect) ... ok
+test_web_auth_unread_assertion_output_and_descendants (__main__.Acceptance.test_web_auth_unread_assertion_output_and_descendants) ... ok
+
+----------------------------------------------------------------------
+Ran 28 tests in 119.707s
+
+OK (skipped=2)

@@ -1,0 +1,35 @@
+{
+  "refs": {
+    "A": "f69087a61a4627cbd3ba88fa082d7722df811dc5",
+    "B": "1b710aed0276f5b07558ea94ae2698b385353a2b",
+    "C": "4cc564201503b0e1e03413f45cb257f548e55037"
+  },
+  "root": "/home/deve/gitclone/RSS-Reader",
+  "platform": "Linux LAPTOP-H6JEOCF0 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 GNU/Linux\n",
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)\nbinary: rustc\ncommit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3\ncommit-date: 2026-07-07\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0\nLLVM version: 22.1.6\n",
+  "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)\n",
+  "strace": "strace -- version 6.13\nCopyright (c) 1991-2025 The strace developers <https://strace.io>.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\nOptional features enabled: stack-trace=libunwind stack-demangle m32-mpers mx32-mpers\n",
+  "binaries": {
+    "A": {
+      "sha256": "ae4ce888f32d0098c2af4cc1e5ccef4637f86cafd0e566c9cf0a6ba18a6f7718",
+      "bytes": 21311880
+    },
+    "B": {
+      "sha256": "aab7029b518e1e6cf342a752697a87cbdd188efaeda9ef52ae00871a4562e618",
+      "bytes": 21450240,
+      "note": "Keep the same previously hashed B binary for attribution and final runs; independent fresh B build is compilation-cost evidence only."
+    },
+    "C": {
+      "sha256": "99ef2338c2152b53fa7507a6d34838b9577f5edac2adee7f43dc34abd65750ea",
+      "bytes": 21466208
+    }
+  },
+  "product": "/home/deve/gitclone/RSS-Reader/target/tool-migration-20261006/product-build/debug/rssr-web",
+  "product_sha256": "1384de7e49f3cf8cdb80d149ecee4985ca95caab62c70ee13646380f740ed32b",
+  "bundle_index_sha256": "9644eb68eda85e394af50419f33c6949ef3e1a550ccd91710c4a94ae383ea8e1",
+  "existing_worktrees_preserved": [
+    "task3",
+    "task4",
+    "task5"
+  ]
+}

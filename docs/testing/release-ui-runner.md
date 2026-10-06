@@ -230,3 +230,8 @@ Cargo JSON。后续 HTTP 迁移应在成本与语义验证后移除这一单份 
 
 2026-10-06 的清理等待及 Windows 文件路径阻塞修复、固定输入复测与最终 CI
 状态见 [后续交接](../handoffs/2026-10-06-web-auth-blocker-fixes.md)。
+2026-10-06 的退出观察延迟复测后，readiness 使用有限的 5/10/20 ms
+早期 sleep，随后恢复 40 ms；Unix stop 使用 5/10 ms 后恢复 25 ms。
+完整 1.5 秒进程组宽限与 ESRCH 提前结束条件保持。固定版本的分段归因、
+30 组 A/B/C 耗时/CPU 结果和 Windows 补验见
+[轮询优化交接](../handoffs/2026-10-06-web-auth-polling-latency.md)。

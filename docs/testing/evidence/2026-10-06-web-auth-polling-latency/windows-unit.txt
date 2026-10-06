@@ -1,0 +1,50 @@
+   Compiling windows-link v0.2.1
+   Compiling utf8parse v0.2.2
+   Compiling once_cell_polyfill v1.70.2
+   Compiling anstyle v1.0.14
+   Compiling colorchoice v1.0.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling clap_lex v1.1.1
+   Compiling equivalent v1.0.2
+   Compiling strsim v0.11.1
+   Compiling hashbrown v0.17.1
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling windows-sys v0.61.2
+   Compiling windows-strings v0.5.1
+   Compiling windows-result v0.4.1
+   Compiling windows-threading v0.2.1
+   Compiling anstyle-parse v1.0.0
+   Compiling windows-core v0.62.2
+   Compiling indexmap v2.14.2
+   Compiling windows-numerics v0.3.1
+   Compiling windows-future v0.3.2
+   Compiling windows-collections v0.3.2
+   Compiling anstyle-wincon v3.0.11
+   Compiling anstyle-query v1.1.5
+   Compiling ctrlc v3.5.2
+   Compiling anstream v1.0.0
+   Compiling windows v0.62.2
+   Compiling clap_builder v4.6.7
+   Compiling serde v1.0.229
+   Compiling serde_json v1.0.151
+   Compiling process-wrap v10.0.1
+   Compiling clap v4.6.7
+   Compiling release-ui v0.1.0 (E:\gitclone\RSS-Reader\target\w3\scripts\release-ui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.99s
+     Running unittests main.rs (target/release-ui-runner\debug\deps\release_ui-dc3cd710f57152ee.exe)
+
+running 3 tests
+test plan::tests::external_probe_is_only_excluded_by_explicit_selection ... ok
+test plan::tests::argument_contract ... ok
+test plan::tests::combinations_preserve_order_build_once_and_browser_deduplication ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests\fixture.rs (target/release-ui-runner\debug\deps\fixture-7ddf75f17e3920cc.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

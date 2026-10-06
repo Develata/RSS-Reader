@@ -1,0 +1,6 @@
+verified final-runtime-summary.json
+verified attribution-summary.json
+verified post-trace-summary.json
+verified 40 raw traces attribution-segments.json
+verified 40 raw traces post-trace-segments.json
+all 210 planned measurements: successful, no recorded service/port residue
