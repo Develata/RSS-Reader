@@ -59,7 +59,7 @@ Windows PowerShell 使用 `$env:RSSR_PROXY_TEST_PUBLIC_DIR` 和 `$env:CHROME_BIN
 - Rust `cfg(test)` 夹具只监听 `127.0.0.1:0`，注入固定 `reqwest::Response` 到生产的有界正文读取与响应构造函数；使用真实登录、`require_auth` 和 `session-probe`。生产 binary 没有这些路由、夹具或 SSRF 例外。
 - 每次使用新 profile、新认证文件和专用 localStorage 键。只请求本地服务；CDP 阻止外部地址，客户端不能靠 direct fallback 掩盖代理失败。不使用个人 RSS 数据。
 - 无隔离的 HTML/SVG/XHTML 正向对照必须执行同一无害脚本。修复后的 HTML、SVG、XHTML、XML、缺 MIME 和 404 HTML 顶层文档必须不执行脚本，且 localStorage 读写抛出 `SecurityError`；iframe 也必须隔离。
-- fetch 保留 MIME/charset、正文、最终 URL、ETag、Last-Modified、404/304；8 MiB 超限仍返回 502，真实私网校验仍返回 400。真实 WASM UI 验证 RSS、Atom、Latin-1 和重定向后相对链接 HTML 发现的添加、实际代理刷新及文章读取。
+- 对注入响应的 fetch 保留 MIME/charset、正文、最终 URL、ETag、Last-Modified、404/304；8 MiB 超限仍返回 502，真实私网校验仍返回 400。这里的 304 仅覆盖 production response builder 和测试服务 HTTP 输出，不覆盖 resolve/fetch 全链：现有 `fetch_proxied_feed` 将所有 3xx 当作重定向，真实上游 304 缺少 `Location` 时会报错并返回 502。此既有行为未在本批修改。真实 WASM UI 验证 RSS、Atom、Latin-1 和注入最终 URL 后相对链接 HTML 发现的添加、实际代理刷新及文章列表展示。
 - `--expect-vulnerable` 仅用于修复前对照：要求同一生产构造路径执行脚本并读改测试存储。不要在 CI 中使用此开关。
 - 结果写入输出目录的 `run-*/result.json`、日志和截图。CI 下载同次构建的 `ci-web-public` 并执行固定后的模式；不上传 profile 或测试认证文件。
 

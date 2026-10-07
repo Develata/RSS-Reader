@@ -5,7 +5,8 @@
 - 分支：`fix/feed-proxy-content-isolation`
 - 基线 / 开始 HEAD：`88b6abb32b992c7b19bb81ff5718ebb4cd8a6be1`（fetch 后远端 main 一致）
 - 产品修复 commit：`936bce15e5f01e7d5ec3834f005f061f790d8f4f`
-- CI 清理修正 commit：本记录所在提交；提交前状态为 `commit: pending`
+- CI 清理修正 commit：`e2df98bd8dd7d93df5d8ce9c6f5339accd5ed6f9`
+- 304 证据边界澄清 commit：本记录所在提交；提交前状态为 `commit: pending`
 - Draft PR：[#25](https://github.com/Develata/RSS-Reader/pull/25)
 - tag / release：N/A；只提交、推送、创建 Draft PR，不 merge/tag/release
 - 状态：`validated`（本地确定性验收）；远端最终 head 的 CI 另见 PR checks
@@ -23,7 +24,7 @@
 
 ## 关键变更
 
-- 所有已取得的上游响应（含错误状态与 304）强制设置：
+- 所有进入响应构造函数的上游响应强制设置以下响应头（合成 304 用例只验证此函数，真实抓取路径的边界见下文）：
   - `Content-Security-Policy: sandbox; default-src 'none'; base-uri 'none'; form-action 'none'`
   - `X-Content-Type-Options: nosniff`
 - sandbox 没有 `allow-scripts` 或 `allow-same-origin`：文档禁止脚本，并获得 opaque origin。上游 CSP 不转发，不能削弱策略；不依赖反向代理额外设置 CSP。
@@ -41,7 +42,8 @@
 - [修复前浏览器](../testing/evidence/2026-10-07-feed-proxy-isolation/before.json)：`--expect-vulnerable` 成功。6 类顶层文档（HTML/SVG/XHTML/XML/缺 MIME/404 HTML）全部执行无害脚本，读出固定测试值并改写专用 localStorage 键。HTML/SVG/XHTML 的无隔离对照亦成功。
 - [修复后浏览器](../testing/evidence/2026-10-07-feed-proxy-isolation/after.json)：同组文档均不执行脚本，读取/写入 localStorage 抛出 `SecurityError`，返回测试页检查存储未被改变。iframe 也隔离；无隔离对照仍能执行，排除夹具失效。
 - 夹具用 `reqwest::ResponseBuilderExt::url` 注入固定上游响应，然后调用真实生产的 bounded reader/response builder。测试服务使用真实登录、`require_auth`、`session-probe`；没有为了 loopback 放宽生产网络策略。重定向最终 URL 是注入数据，未把它说成实际外部 HTTP 重定向复现。
-- 同一真实 WASM 客户端完成 RSS、Atom、Latin-1（Café）、HTML 发现相对候选 URL 的添加、手动刷新、文章读取。最终驱动还确认每次手动刷新收到新的代理响应；外部请求被 CDP 拒绝，无法靠 direct fallback 掩盖失败。fetch 验证 404/304、元数据、charset，超限仍为 502，实际私网目标仍为 400。
+- 同一真实 WASM 客户端完成 RSS、Atom、Latin-1（Café）、HTML 发现相对候选 URL 的添加、手动刷新、文章列表展示。最终驱动还确认每次手动刷新收到新的代理响应；外部请求被 CDP 拒绝，无法靠 direct fallback 掩盖失败。对注入响应的浏览器 fetch 验证 404/304、元数据、charset，超限仍为 502，实际私网目标仍为 400。
+- **304 证据边界**：夹具直接把合成的 `reqwest::Response` 注入 production response builder，证明该函数及测试服务的 HTTP 输出保留 304；没有覆盖 `resolve_validated_target` / `fetch_proxied_feed` 抓取全链。现有 `fetch_proxied_feed` 将所有 3xx 视为重定向，真实上游 304 缺少 `Location` 时会报错并最终返回 502。因此本次不声称真实上游 304 端到端通过，也不顺带修复这条既有路径。
 - 本地复用审计基线的既有 CI Web artifact（run `37418907663`），随后复制到本任务 target；前端源码无变化。`index.html` SHA256 `06d16f771e7b5646ed7fca11a1675e41b079a3a4f76a79ec3ef5a0b995f9d20e`，WASM SHA256 `5b5932a9b7d26424ec4b63396e958c8789ca213bc9dc04f88fcc5f7d0656829c`。不是本机新鲜 dx 构建；本 PR 的 CI 将重新构建相同源码并复验。
 
 ### 命令与结果
@@ -68,6 +70,8 @@
 ## 结果
 
 本地确定性安全修复与兼容性门禁通过，生产修改为局部响应边界加强。无业务迁移、无数据库变更。交付保持 Draft PR；远端 checks 的实际状态以最终 head 为准，不用本地通过替代远端结果。
+
+产品/驱动最终代码 head `e2df98b` 的 [完整 CI](https://github.com/Develata/RSS-Reader/actions/runs/37594029027) 已通过（含 Linux 隔离、六 crate、五主题、三 wasm 契约、Android、双平台 runner 和汇总门禁）；[Pages build](https://github.com/Develata/RSS-Reader/actions/runs/37594029037) 通过、部署 skipped。Linux Chrome 154.0.8037.57 的隔离结果 JSON 为 `pass: true`（10 个控制/文档/iframe 记录，11 个 HTTP/UI 兼容性记录）。随后仅澄清上述文档证据边界，不改生产或测试代码；文档提交的最终 checks 在 PR 记录。
 
 ## 风险与后续事项
 
