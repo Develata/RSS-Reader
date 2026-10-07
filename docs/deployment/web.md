@@ -6,6 +6,8 @@
 
 `/feed-proxy` 只代理公开的 HTTP(S) feed：本地和内网地址（包括 IPv4 映射的 IPv6 地址）会被拒绝；DNS 解析限时，重定向每跳重新校验目标。部署在内网的私有 feed 不能通过这个入口抓取。
 
+代理内容仍属于不可信数据。`rssr-web` 自身在上游响应上设置无例外的 CSP `sandbox`、`default-src 'none'`、`base-uri 'none'`、`form-action 'none'` 和 `X-Content-Type-Options: nosniff`。直接打开 HTML/SVG 等代理文档时，脚本和应用同源存储访问被隔离；这不依赖反向代理另加 CSP。原始 MIME/字符集、正文和最终 URL 继续供客户端读取，以保留 RSS/Atom 解码与 HTML 订阅发现。反向代理应保留这些响应头。
+
 此入口直接连接校验后固定的目标 IP，不继承 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 等环境代理，以免代理端再次解析主机名而绕过目标校验。部署环境需允许服务器直接访问公开 feed，并让 DNS 返回真实公网地址。若 DNS 返回 `198.18.0.0/15` 等 fake-IP 地址，请为该服务调整 DNS/网络配置；这些地址会被目标校验拒绝。
 
 ## 使用已发布镜像

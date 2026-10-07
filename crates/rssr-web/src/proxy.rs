@@ -11,6 +11,9 @@ use reqwest::Url;
 use serde::Deserialize;
 use url::Host;
 
+#[cfg(test)]
+mod isolation_tests;
+
 /// 代理是登录后才可达的，但仍然不能无上限地把上游响应整个读进内存：
 /// 一个 feed URL 指向超大文件就足以把服务打爆。
 const MAX_PROXIED_FEED_BYTES: usize = 8 * 1024 * 1024;
@@ -33,6 +36,10 @@ pub(crate) async fn feed_proxy(Query(query): Query<FeedProxyQuery>) -> impl Into
         Err(err) => return (StatusCode::BAD_GATEWAY, err).into_response(),
     };
 
+    build_proxy_response(response).await
+}
+
+async fn build_proxy_response(response: reqwest::Response) -> Response {
     let final_url = response.url().to_string();
     let status = response.status();
     let content_type = response.headers().get(header::CONTENT_TYPE).cloned();
@@ -43,7 +50,17 @@ pub(crate) async fn feed_proxy(Query(query): Query<FeedProxyQuery>) -> impl Into
         Err(err) => return (StatusCode::BAD_GATEWAY, err).into_response(),
     };
 
-    let mut proxied = Response::builder().status(status).header("x-rssr-final-url", final_url);
+    // Upstream bytes are data, even when a logged-in user navigates here as a document.
+    // Keep MIME/charset for feed decoding and HTML discovery, but give documents an opaque
+    // origin with no scripts, subresources, or forms. Never accept upstream CSP exceptions.
+    let mut proxied = Response::builder()
+        .status(status)
+        .header("x-rssr-final-url", final_url)
+        .header(
+            header::CONTENT_SECURITY_POLICY,
+            "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
+        )
+        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff");
     if let Some(value) = content_type {
         proxied = proxied.header(header::CONTENT_TYPE, value);
     }
