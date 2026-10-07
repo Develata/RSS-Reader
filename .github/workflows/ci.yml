@@ -268,6 +268,45 @@ jobs:
             target/ci-ui/${{ matrix.preset }}/*.html
           retention-days: 7
 
+  feed-proxy-isolation:
+    needs: web-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: feed-proxy-isolation
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: ci-web-public
+          path: target/dx/rssr-app/release/web/public/
+      - uses: ./.github/actions/setup-browser-tests
+        with:
+          with-driver: 'false'
+      - name: Build the test-only proxy harness
+        run: cargo test --locked -p rssr-web --no-run
+      - name: Untrusted documents and real Web feed compatibility
+        env:
+          RSSR_PROXY_TEST_PUBLIC_DIR: target/dx/rssr-app/release/web/public
+        run: node scripts/browser/feed_proxy_isolation.mjs target/ci-feed-proxy-isolation
+      - name: Preserve isolation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-feed-proxy-isolation
+          path: |
+            target/ci-feed-proxy-isolation/run-*/*.json
+            !target/ci-feed-proxy-isolation/run-*/auth.json
+            target/ci-feed-proxy-isolation/run-*/*.log
+            target/ci-feed-proxy-isolation/run-*/*.png
+          retention-days: 7
+
   wasm-contract-build:
     needs: workspace
     runs-on: ubuntu-latest
@@ -452,7 +491,7 @@ jobs:
   # Keep the former required-check name stable, now aggregating every module.
   lint-and-test:
     if: always()
-    needs: [workspace, format, test-tools, release-ui-runner, native-module, web-smoke, web-ui, wasm-contract-build, wasm-browser-contract, android-smoke]
+    needs: [workspace, format, test-tools, release-ui-runner, native-module, web-smoke, web-ui, feed-proxy-isolation, wasm-contract-build, wasm-browser-contract, android-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
