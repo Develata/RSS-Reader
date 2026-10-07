@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkDirectoryContracts } from './directory_contract.mjs';
+import { checkDirectoryScroll } from './directory_scroll_contract.mjs';
 import { measureDirectory } from './directory_performance.mjs';
 
 import {
@@ -48,6 +49,7 @@ const preset = cli.get('--preset') ?? process.env.THEME_PRESET ?? '';
 // WebView with an isolated, pre-seeded SQLite fixture supplied by the caller.
 const nativeTarget = cli.get('--native-target');
 const directoryOnly = cli.get('--directory-only') === 'true';
+const directoryScrollOnly = cli.get('--directory-scroll-only') === 'true';
 if (cli.has('--native-target') && !nativeTarget.trim()) {
   throw new Error('--native-target must identify an existing Dioxus WebView');
 }
@@ -1724,14 +1726,17 @@ async function run() {
       capture: name => captureArtifact(client, name),
       manualScroll: () => beginManualScroll(client, 'entries'),
     };
-    if (nativeTarget && (directoryOnly || cli.has('--directory-perf'))) {
+    if (nativeTarget && (directoryOnly || directoryScrollOnly || cli.has('--directory-perf'))) {
       nativeEvidence = {targetId:page.id, browser:await client.send('Browser.getVersion'),
         window:await evaluate(client, '({url:location.href,userAgent:navigator.userAgent,width:innerWidth,height:innerHeight,dpr:devicePixelRatio})')};
     }
     if (cli.has('--directory-perf')) {
       await measureDirectory(client, directoryEnvironment, cli.get('--directory-perf'), artifactDir);
+    } else if (directoryScrollOnly) {
+      await checkDirectoryScroll(client, directoryEnvironment);
     } else if (directoryOnly) {
       await checkDirectoryContracts(client, directoryEnvironment);
+      if (!nativeTarget) await checkDirectoryScroll(client, directoryEnvironment);
     } else if (nativeTarget) {
       await checkNativeWindow(client, page);
     } else {
@@ -1757,7 +1762,10 @@ async function run() {
       await checkNarrowSidebarSearch(client);
       // The default CI theme runs the deeper behavioral contracts once; the
       // existing five-theme layout coverage remains in the shared smoke above.
-      if (!preset) await checkDirectoryContracts(client, directoryEnvironment);
+      if (!preset) {
+        await checkDirectoryContracts(client, directoryEnvironment);
+        await checkDirectoryScroll(client, directoryEnvironment);
+      }
     }
 
     assertThat('browser console has no errors', consoleErrors.length === 0, consoleErrors);
