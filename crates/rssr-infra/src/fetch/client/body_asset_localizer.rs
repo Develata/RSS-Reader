@@ -1,6 +1,6 @@
 use anyhow::Context;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use reqwest::header;
+use reqwest::{header, redirect};
 use std::time::Duration;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::Semaphore;
@@ -75,8 +75,21 @@ impl BodyAssetLocalizer {
         Self {
             inner: reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(3))
+                // reqwest otherwise replaces our Referer with the previous image URL,
+                // including its query, on every redirect.
+                .referer(false)
+                .redirect(redirect::Policy::custom(|attempt| {
+                    if !attempt
+                        .previous()
+                        .last()
+                        .is_some_and(|previous| image_redirect_allowed(previous, attempt.url()))
+                    {
+                        return attempt.error("unsafe image redirect");
+                    }
+                    redirect::Policy::limited(10).redirect(attempt)
+                }))
                 .build()
-                .unwrap_or_else(|_| reqwest::Client::new()),
+                .expect("build image client with safe redirect policy"),
             image_request_slots: Arc::new(Semaphore::new(budget.max_concurrent_image_requests)),
             budget,
         }
@@ -123,8 +136,8 @@ impl BodyAssetLocalizer {
                 "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
             )
             .timeout(self.budget.image_request_timeout);
-        if let Some(referer) = referer {
-            request = request.header(header::REFERER, referer.as_str());
+        if let Some(referer) = referer.and_then(|article| image_referer(article, url)) {
+            request = request.header(header::REFERER, referer);
         }
 
         let _permit = self
@@ -139,7 +152,7 @@ impl BodyAssetLocalizer {
             if error.is_timeout() {
                 FetchImageError::Timeout
             } else {
-                FetchImageError::Request(error.to_string())
+                FetchImageError::Request(error.without_url().to_string())
             }
         })?;
 
@@ -298,6 +311,23 @@ impl Default for BodyAssetLocalizer {
     }
 }
 
+fn image_referer(article: &Url, image: &Url) -> Option<String> {
+    if !matches!(article.scheme(), "http" | "https")
+        || !matches!(image.scheme(), "http" | "https")
+        || (article.scheme() == "https" && image.scheme() == "http")
+    {
+        return None;
+    }
+    Some(format!("{}/", article.origin().ascii_serialization()))
+}
+
+fn image_redirect_allowed(previous: &Url, target: &Url) -> bool {
+    matches!(target.scheme(), "http" | "https")
+        && target.username().is_empty()
+        && target.password().is_none()
+        && !(previous.scheme() == "https" && target.scheme() == "http")
+}
+
 /// 边下边累计并在超限时立刻放弃。此前是先 `response.bytes()` 把整张图读完再比大小，
 /// 一个恶意或损坏的图片地址（正文 HTML 完全由远端控制）就能让进程按响应体大小吃内存。
 /// `Content-Length` 只是快速路径，真正的上限由累计检查保证。
@@ -317,7 +347,7 @@ async fn read_image_bytes_with_limit(
             if error.is_timeout() {
                 FetchImageError::Timeout
             } else {
-                FetchImageError::Read(error.to_string())
+                FetchImageError::Read(error.without_url().to_string())
             }
         })?;
         let Some(chunk) = chunk else {
@@ -339,8 +369,59 @@ async fn read_image_bytes_with_limit(
 mod tests {
     use crate::html::{self, LocalizableImageDocument};
 
-    use super::BodyAssetLocalizer;
+    use super::{BodyAssetLocalizer, image_redirect_allowed, image_referer};
     use url::Url;
+
+    #[test]
+    fn image_referer_serializes_only_http_origins() {
+        for (article, image, expected) in [
+            (
+                "https://user:p%40ss@EXAMPLE.test:443/private%2Fpath?secret=value#fragment",
+                "https://cdn.test/i",
+                Some("https://example.test/"),
+            ),
+            (
+                "http://[2001:db8::1]:80/a?q=secret",
+                "https://cdn.test/i",
+                Some("http://[2001:db8::1]/"),
+            ),
+            (
+                "https://[2001:db8::1]:8443/a",
+                "https://cdn.test/i",
+                Some("https://[2001:db8::1]:8443/"),
+            ),
+            ("https://example.test/a", "http://cdn.test/i", None),
+            ("data:text/plain,secret", "https://cdn.test/i", None),
+            ("file:///secret", "https://cdn.test/i", None),
+        ] {
+            assert_eq!(
+                image_referer(&Url::parse(article).unwrap(), &Url::parse(image).unwrap())
+                    .as_deref(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn image_redirect_rejects_downgrade_and_userinfo_at_any_hop() {
+        for (previous, target, allowed) in [
+            ("http://example.test/i", "https://cdn.test/i?signature=secret", true),
+            ("https://example.test/i", "https://cdn.test/i", true),
+            ("https://cdn.test/second", "http://example.test/final", false),
+            ("http://example.test/i", "http://[::1]:8080/i", true),
+            ("https://example.test/i", "https://user:fake@cdn.test/i", false),
+            ("https://example.test/i", "https://:fake@cdn.test/i", false),
+            ("https://example.test/i", "file:///image.png", false),
+        ] {
+            assert_eq!(
+                image_redirect_allowed(
+                    &Url::parse(previous).unwrap(),
+                    &Url::parse(target).unwrap()
+                ),
+                allowed
+            );
+        }
+    }
 
     #[test]
     fn body_asset_localizer_default_matches_new() {
