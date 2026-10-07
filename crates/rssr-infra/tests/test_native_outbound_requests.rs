@@ -91,8 +91,12 @@ async fn image_rejects_redirect_userinfo_before_contacting_target() {
 #[tokio::test]
 async fn image_redirect_loop_is_bounded() {
     let source = Server::start(|_| redirect(302, "/loop?signature=loop-secret")).await;
-    assert!(!localize(&source.url, None).await.contains("data:image/"));
-    assert!(source.requests().len() <= 11);
+    let html = localize(&source.url, None).await;
+    assert!(!html.contains("data:image/"));
+    assert!(html.contains(&format!(r#"src="{}""#, source.url)));
+    // reqwest 0.12.28 allows ten redirects after the initial request. The public
+    // localizer absorbs the error; exact count rules out an unrelated early failure.
+    assert_eq!(source.requests().len(), 11);
 }
 
 #[tokio::test]
@@ -180,6 +184,7 @@ async fn webdav_rejected_paths_contact_neither_server() {
 
 #[tokio::test]
 async fn webdav_same_origin_redirects_preserve_put_and_get() {
+    let expected_auth = format!("Basic {}", BASE64.encode("fixture%40user:fake%3Apassword"));
     // Locked reqwest/tower-http preserve PUT for 301/302 as well as 307/308.
     for status in [301, 302, 307, 308] {
         let server = Server::start(move |request| {
@@ -205,7 +210,7 @@ async fn webdav_same_origin_redirects_preserve_put_and_get() {
             assert_eq!(request.method, "GET");
         }
         for request in &requests {
-            assert_eq!(request.header("authorization"), requests[0].header("authorization"));
+            assert_eq!(request.header("authorization"), Some(expected_auth.as_str()));
             assert_eq!(request.header("referer"), None);
         }
     }
@@ -278,7 +283,11 @@ async fn webdav_redirect_loop_is_bounded_and_errors_omit_url_secrets() {
         WebDavConfigSync::new(authenticated_endpoint(&server.url), "start?token=request-secret")
             .unwrap();
     let error = sync.download_text().await.unwrap_err();
-    assert!(server.requests().len() <= 11);
+    // The initial request plus ten followed redirects; reject the next attempt.
+    assert_eq!(server.requests().len(), 11);
+    let request_error = error.downcast_ref::<reqwest::Error>().expect("reqwest request error");
+    assert!(request_error.is_redirect(), "expected redirect exhaustion: {error:#}");
+    assert_eq!(error.root_cause().to_string(), "too many redirects");
     let text = format!("{error:?} {error:#}");
     assert!(!text.contains("request-secret") && !text.contains("loop-secret"), "{text}");
 }

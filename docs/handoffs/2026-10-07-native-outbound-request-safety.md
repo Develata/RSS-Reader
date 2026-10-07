@@ -81,3 +81,24 @@
 - 原有 25 项工作区状态（技能与 `.specify` 删除、两份 10-03 handoff 修改、`.workbuddy/`）已记录 SHA-256 并复核；不纳入本批提交。初始清单位于 `target/outbound-security/initial-worktree.json`。
 - 本机相关 `.agents/skills` 文件在任务开始时已删除，未恢复或改写。根 AGENTS 和 handoff 模板已读取；未需要读取 Codex memory。没有启动子 agent 或改动模型 / fast 设置。
 - 后续升级 reqwest/tower-http 时，必须保留跨跳 Referer 和 PUT 方法 / 正文回归。
+
+
+## 同日复核补充：循环跳转与认证断言
+
+- 基线 HEAD：`3b7fda50f204dbb16e62382edf94825bdc9be225`；PR #26，原分支继续。
+- 本次测试提交：commit: pending（此处为预提交验证快照，提交后以包含本节的提交为准）。生产代码仍为 `0bad743876b1e150680b4aa43f1d34c49623c378`。
+- 影响范围仅 `test_native_outbound_requests.rs` 和验收记录；未修改生产功能、依赖、共享测试夹具或 Browser WebDAV。
+- 已读取实际锁定 reqwest 0.12.28 的 `redirect.rs`：每次响应先将当前 URL 加入 previous，仅在 `previous.len() > max` 时返回 `TooManyRedirects`。上限 10 对应首次请求加 10 次已跟随跳转，故两个循环测试都精确断言 **11 次请求**。
+- WebDAV 同时 downcast 到 `reqwest::Error` 并检查 `is_redirect()`，根因必须是锁定版本的 `too many redirects`；保留错误无 URL 秘密断言。图片公开 API 吸收抓取错误，因此检查精确请求数及原始远端 src 回退，不为测试暴露或改写生产错误接口。
+- 同源 301/302/307/308 的 GET/PUT 每一跳均直接断言 `Some(Basic(base64("fixture%40user:fake%3Apassword")))`，不再与可能为空的首跳头比较。跨站目标零请求断言原样保留。
+
+### 本次实际验证
+
+- 三个仅改测试夹具的负向对照：图片首跳 503、WebDAV 首跳 303、重定向场景移除全部 Basic 认证，均以 exit 101 在预期断言处失败（前两项实际 1 请求 / 预期 11，后一项实际 None / 预期 Basic）。这些场景此前的宽松断言可能通过。对照结束后测试文件逐字节恢复；未临时修改生产代码。
+- `cargo test --locked -p rssr-infra --test test_native_outbound_requests --test test_webdav_local_roundtrip`：passed，14 + 1；负向对照恢复后再次通过。
+- `cargo fmt --all --check`：passed。
+- `cargo clippy --locked -p rssr-infra --all-targets -- -D warnings`：passed。
+- 本地全 workspace / WASM / Android / UI 聚合：本轮 not-run；只变更原生集成测试，前批本地结果保留为历史，不冒充本轮重跑。新 head 的完整 CI 会跟踪至终态并将精确 SHA / 回执写入 PR。
+- [实际断言失败与最终检查证据](../testing/evidence/2026-10-07-native-outbound-request-safety/test-strengthening.txt)；完整本地日志在 `target/outbound-security/test-strengthening/`。
+- 状态：本地 validated；未发现生产问题，不需扩大范围。既有兼容边界保持不变，不 merge、不发布、不打 tag。
+- 工作区：开始时重新快照 25 项任务外改动；本地 `.agents/` 已不存在，未恢复其已删除内容。继续在 Windows `LAPTOP-H6JEOCF0` 的原 E 盘目录操作。
