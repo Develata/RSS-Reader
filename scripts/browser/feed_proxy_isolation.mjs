@@ -22,8 +22,8 @@ let serverLog = '';
 let browserLog = '';
 let deadline;
 
-function launch(command, args, env = process.env) {
-  const child = spawn(command, args, { env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+function launch(command, args, env = process.env, stdin = 'ignore') {
+  const child = spawn(command, args, { env, windowsHide: true, stdio: [stdin, 'pipe', 'pipe'] });
   child.done = new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal })));
   child.on('error', error => { child.launchError = error; });
   children.push(child);
@@ -51,7 +51,7 @@ async function main() {
     TEMP: run, TMP: run, TMPDIR: run,
   });
   const server = launch(process.env.CARGO ?? 'cargo', ['test', '--locked', '-p', 'rssr-web',
-    'proxy::isolation_tests::browser_fixture_server', '--', '--exact', '--ignored', '--nocapture'], env);
+    'proxy::isolation_tests::browser_fixture_server', '--', '--exact', '--ignored', '--nocapture'], env, 'pipe');
   server.stdout.on('data', data => { serverLog += data; });
   server.stderr.on('data', data => { serverLog += data; });
   const base = await poll(() => {
@@ -184,7 +184,7 @@ async function main() {
   const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
   await writeFile(path.join(run, 'feeds.png'), Buffer.from(screenshot.data, 'base64'));
   report.pass = true;
-  server.stdin.end('\n');
+  server.stdin.end();
   assert.deepEqual(await server.done, { code: 0, signal: null });
 }
 
@@ -202,7 +202,9 @@ try {
   }
   for (const child of children) {
     if (child.launchError || child.exitCode !== null || child.signalCode !== null) continue;
-    child.stdin.end('\n');
+    // Only the Rust fixture server uses stdin (EOF) for shutdown. Chrome closes its
+    // stdin on Linux; writing to it during Browser.close races with exit and raises EPIPE.
+    if (child.stdin && !child.stdin.writableEnded) child.stdin.end();
     const timer = setTimeout(() => child.kill(), 5000);
     await child.done;
     clearTimeout(timer);

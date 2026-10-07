@@ -4,7 +4,9 @@
 - 作者 / Agent：Codex，Windows LAPTOP-H6JEOCF0
 - 分支：`fix/feed-proxy-content-isolation`
 - 基线 / 开始 HEAD：`88b6abb32b992c7b19bb81ff5718ebb4cd8a6be1`（fetch 后远端 main 一致）
-- 相关 commit：本记录所在提交；提交前状态为 `commit: pending`
+- 产品修复 commit：`936bce15e5f01e7d5ec3834f005f061f790d8f4f`
+- CI 清理修正 commit：本记录所在提交；提交前状态为 `commit: pending`
+- Draft PR：[#25](https://github.com/Develata/RSS-Reader/pull/25)
 - tag / release：N/A；只提交、推送、创建 Draft PR，不 merge/tag/release
 - 状态：`validated`（本地确定性验收）；远端最终 head 的 CI 另见 PR checks
 
@@ -59,6 +61,7 @@
 
 - Windows 执行沙箱中的 Chrome GPU 子进程以 `-1073741790` 退出，未到页面验收；正常宿主权限下、全新 E 盘 profile 复跑通过，未添加 `--no-sandbox` 或修改浏览器安全策略。
 - 初版测试服务漏接 `/session-probe`，使真实前端返回登录页；补接现有 handler 后完整修复前/后通过。未修改产品认证代码。
+- 首次 Linux CI [run 37593110460](https://github.com/Develata/RSS-Reader/actions/runs/37593110460) 中，6 类隔离断言及 UI 流程已经走到截图，随后驱动清理阶段向正在退出的 Chrome stdin 写入换行，触发未处理 `EPIPE`，未保存最终 JSON。因此该次 job 判失败，不能当作完整通过。修正只给 Rust fixture server 建立 stdin pipe，以 EOF 停止服务，Chrome stdin 使用 `ignore`；不改产品代码、断言、浏览器 sandbox 或安全策略。Windows 同一驱动补验通过；Linux 以修正提交的最终 CI 为准。
 - 外部 feed smoke 被本机 DNS/网络返回的受限地址拦截；精确 HTTP/DNS 证据留在任务 target。确定性安全与兼容性验收不依赖这个外部站点。
 - 现有全套发布 UI、三项 wasm contract、五主题矩阵、Android APK/实机验收未在本机重跑；没有相应产品变更。远端 CI 保留既有全量矩阵，新隔离测试单独报告，不把未跑项目算作本地通过。
 

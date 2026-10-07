@@ -1,11 +1,11 @@
 {
   "expectVulnerable": false,
-  "run": "E:\\gitclone\\RSS-Reader\\target\\feed-proxy-isolation-20261007\\worktree\\target\\evidence\\after-final\\run-LaDCoL",
+  "run": "E:\\gitclone\\RSS-Reader\\target\\feed-proxy-isolation-20261007\\worktree\\target\\evidence\\after-cleanup-fix\\run-n2xuSb",
   "cases": [
     {
       "name": "html",
       "context": "control",
-      "url": "http://127.0.0.1:49954/control?url=https%3A%2F%2Ffixture.example.invalid%2Fhtml",
+      "url": "http://127.0.0.1:59235/control?url=https%3A%2F%2Ffixture.example.invalid%2Fhtml",
       "executed": true,
       "read": "isolated-value-never-private",
       "storage": "changed-by-fixture",
@@ -14,7 +14,7 @@
     {
       "name": "svg",
       "context": "control",
-      "url": "http://127.0.0.1:49954/control?url=https%3A%2F%2Ffixture.example.invalid%2Fsvg",
+      "url": "http://127.0.0.1:59235/control?url=https%3A%2F%2Ffixture.example.invalid%2Fsvg",
       "executed": true,
       "read": "isolated-value-never-private",
       "storage": "changed-by-fixture",
@@ -23,7 +23,7 @@
     {
       "name": "xhtml",
       "context": "control",
-      "url": "http://127.0.0.1:49954/control?url=https%3A%2F%2Ffixture.example.invalid%2Fxhtml",
+      "url": "http://127.0.0.1:59235/control?url=https%3A%2F%2Ffixture.example.invalid%2Fxhtml",
       "executed": true,
       "read": "isolated-value-never-private",
       "storage": "changed-by-fixture",
@@ -32,7 +32,7 @@
     {
       "name": "html",
       "context": "top-level",
-      "url": "http://127.0.0.1:49954/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fhtml",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fhtml",
       "executed": false,
       "read": null,
       "storageError": "SecurityError",
@@ -45,7 +45,7 @@
     {
       "name": "svg",
       "context": "top-level",
-      "url": "http://127.0.0.1:49954/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fsvg",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fsvg",
       "executed": false,
       "read": null,
       "storageError": "SecurityError",
@@ -58,7 +58,7 @@
     {
       "name": "xhtml",
       "context": "top-level",
-      "url": "http://127.0.0.1:49954/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fxhtml",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fxhtml",
       "executed": false,
       "read": null,
       "storageError": "SecurityError",
@@ -71,7 +71,7 @@
     {
       "name": "xml",
       "context": "top-level",
-      "url": "http://127.0.0.1:49954/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fxml",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fxml",
       "executed": false,
       "read": null,
       "storageError": "SecurityError",
@@ -84,7 +84,7 @@
     {
       "name": "sniff",
       "context": "top-level",
-      "url": "http://127.0.0.1:49954/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fsniff",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fsniff",
       "executed": false,
       "read": null,
       "storageError": "SecurityError",
@@ -97,7 +97,7 @@
     {
       "name": "error",
       "context": "top-level",
-      "url": "http://127.0.0.1:49954/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Ferror",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Ferror",
       "executed": false,
       "read": null,
       "storageError": "SecurityError",
@@ -121,7 +121,7 @@
         "content-length": "266",
         "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
         "content-type": "application/rss+xml; charset=utf-8",
-        "date": "Wed, 07 Oct 2026 08:09:43 GMT",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
         "etag": "\"fixture-v1\"",
         "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
         "x-content-type-options": "nosniff",
@@ -136,7 +136,7 @@
         "content-length": "293",
         "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
         "content-type": "application/atom+xml; charset=utf-8",
-        "date": "Wed, 07 Oct 2026 08:09:43 GMT",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
         "etag": "\"fixture-v1\"",
         "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
         "x-content-type-options": "nosniff",
@@ -151,7 +151,7 @@
         "content-length": "260",
         "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
         "content-type": "application/rss+xml; charset=iso-8859-1",
-        "date": "Wed, 07 Oct 2026 08:09:43 GMT",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
         "etag": "\"fixture-v1\"",
         "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
         "x-content-type-options": "nosniff",
@@ -166,7 +166,7 @@
         "content-length": "671",
         "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
         "content-type": "text/html; charset=utf-8",
-        "date": "Wed, 07 Oct 2026 08:09:43 GMT",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
         "etag": "\"fixture-v1\"",
         "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
         "x-content-type-options": "nosniff",
@@ -181,7 +181,7 @@
         "content-length": "284",
         "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
         "content-type": "text/html; charset=utf-8",
-        "date": "Wed, 07 Oct 2026 08:09:43 GMT",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
         "etag": "\"fixture-v1\"",
         "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
         "x-content-type-options": "nosniff",
@@ -195,7 +195,7 @@
       "headers": {
         "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
         "content-type": "application/rss+xml",
-        "date": "Wed, 07 Oct 2026 08:09:43 GMT",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
         "etag": "\"fixture-v1\"",
         "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
         "x-content-type-options": "nosniff",
@@ -209,7 +209,7 @@
       "headers": {
         "content-length": "47",
         "content-type": "text/plain; charset=utf-8",
-        "date": "Wed, 07 Oct 2026 08:09:43 GMT"
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT"
       },
       "byteLength": 47
     },
@@ -246,7 +246,7 @@
       "refreshResponseObserved": true
     }
   ],
-  "base": "http://127.0.0.1:49954",
+  "base": "http://127.0.0.1:59235",
   "browser": {
     "protocolVersion": "1.3",
     "product": "Chrome/154.0.8037.93",
