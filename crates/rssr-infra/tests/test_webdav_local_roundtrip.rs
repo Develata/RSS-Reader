@@ -1,6 +1,10 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use std::sync::Arc;
+#[path = "support/request_capture.rs"]
+mod request_capture;
+
+use request_capture::{Response, Server};
+use std::sync::{Arc, Mutex};
 
 use rssr_application::import_export_service::{ImportExportService, RemoteConfigStore};
 use rssr_domain::{
@@ -16,11 +20,7 @@ use rssr_infra::{
     },
     opml::OpmlCodec,
 };
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
-    sync::{Mutex, oneshot},
-};
+
 use url::Url;
 
 struct WebDavRemote(WebDavConfigSync);
@@ -70,111 +70,22 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
         .expect("save source settings");
 
     let stored_body = Arc::new(Mutex::new(None::<String>));
-    let request_paths = Arc::new(Mutex::new(Vec::<String>::new()));
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind local server");
-    let addr = listener.local_addr().expect("listener addr");
-    let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
-
     let server_body = stored_body.clone();
-    let server_paths = request_paths.clone();
-    let server = tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                _ = &mut shutdown_rx => break,
-                accept = listener.accept() => {
-                    let Ok((mut stream, _)) = accept else { break };
-                    let mut raw = Vec::new();
-                    let mut buf = [0_u8; 4096];
-                    let header_end;
-                    let content_length;
-
-                    loop {
-                        let read = stream.read(&mut buf).await.expect("read request chunk");
-                        if read == 0 {
-                            break;
-                        }
-                        raw.extend_from_slice(&buf[..read]);
-                        if let Some(idx) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
-                            header_end = idx + 4;
-                            let head = String::from_utf8_lossy(&raw[..idx]).to_string();
-                            content_length = head
-                                .lines()
-                                .find_map(|line| {
-                                    let (name, value) = line.split_once(':')?;
-                                    if name.eq_ignore_ascii_case("content-length") {
-                                        value.trim().parse::<usize>().ok()
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .unwrap_or(0);
-                            while raw.len() < header_end + content_length {
-                                let read = stream.read(&mut buf).await.expect("read request body");
-                                if read == 0 {
-                                    break;
-                                }
-                                raw.extend_from_slice(&buf[..read]);
-                            }
-                            break;
-                        }
-                    }
-
-                    let request = String::from_utf8_lossy(&raw).to_string();
-                    let (head, body) = request.split_once("\r\n\r\n").unwrap_or((&request, ""));
-                    let mut lines = head.lines();
-                    let request_line = lines.next().unwrap_or_default();
-                    let mut parts = request_line.split_whitespace();
-                    let method = parts.next().unwrap_or_default();
-                    let path = parts.next().unwrap_or_default().to_string();
-                    server_paths.lock().await.push(path.clone());
-
-                    match method {
-                        "PUT" => {
-                            *server_body.lock().await = Some(body.to_string());
-                            stream
-                                .write_all(
-                                    b"HTTP/1.1 201 Created\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
-                                )
-                                .await
-                                .expect("write put response");
-                            let _ = stream.shutdown().await;
-                        }
-                        "GET" => {
-                            if let Some(payload) = server_body.lock().await.clone() {
-                                let response = format!(
-                                    "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                                    payload.len(),
-                                    payload
-                                );
-                                stream.write_all(response.as_bytes()).await.expect("write get response");
-                                let _ = stream.shutdown().await;
-                            } else {
-                                stream
-                                    .write_all(
-                                        b"HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
-                                    )
-                                    .await
-                                    .expect("write 404 response");
-                                let _ = stream.shutdown().await;
-                            }
-                        }
-                        _ => {
-                            stream
-                                .write_all(
-                                    b"HTTP/1.1 405 Method Not Allowed\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
-                                )
-                                .await
-                                .expect("write 405 response");
-                            let _ = stream.shutdown().await;
-                        }
-                    }
-                }
-            }
+    let server = Server::start(move |request| match request.method.as_str() {
+        "PUT" => {
+            *server_body.lock().unwrap() = Some(String::from_utf8(request.body.clone()).unwrap());
+            Response::new(201, "", [])
         }
-    });
+        "GET" => match server_body.lock().unwrap().as_ref() {
+            Some(body) => Response::new(200, "Content-Type: application/json\r\n", body.as_bytes()),
+            None => Response::new(404, "", []),
+        },
+        _ => Response::new(405, "", []),
+    })
+    .await;
 
     let remote = WebDavRemote(
-        WebDavConfigSync::new(format!("http://{}/base", addr), "config/rss-reader.json")
+        WebDavConfigSync::new(server.url.join("base").unwrap().as_str(), "config/rss-reader.json")
             .expect("create webdav sync"),
     );
 
@@ -206,13 +117,10 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
     let settings = settings_repository.load().await.expect("load settings");
     assert_eq!(settings.theme, ThemeMode::Dark);
 
-    let body = stored_body.lock().await.clone().expect("uploaded body");
+    let body = stored_body.lock().unwrap().clone().expect("uploaded body");
     assert!(body.contains("\"feeds\""));
     assert!(body.contains("\"settings\""));
 
-    let paths = request_paths.lock().await.clone();
+    let paths: Vec<_> = server.requests().into_iter().map(|request| request.path).collect();
     assert_eq!(paths, vec!["/base/config/rss-reader.json", "/base/config/rss-reader.json"]);
-
-    let _ = shutdown_tx.send(());
-    server.await.expect("join server");
 }
