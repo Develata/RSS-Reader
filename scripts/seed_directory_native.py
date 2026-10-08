@@ -13,10 +13,11 @@ from pathlib import Path
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("database_dir", type=Path)
+    parser.add_argument("--fixture", choices=["directory_contract", "directory_scroll"], default="directory_contract")
     parser.add_argument("--fixture-base", required=True, help="Running loopback SPA fixture server, e.g. http://127.0.0.1:8114")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1] / "tests/fixtures/browser_state"
-    fixture = {name: json.loads((root / f"directory_contract_{name}.json").read_text(encoding="utf-8"))
+    fixture = {name: json.loads((root / f"{args.fixture}_{name}.json").read_text(encoding="utf-8"))
                for name in ["core", "app_state", "entry_flags", "entry_content"]}
     from urllib.parse import urlparse
     parsed = urlparse(args.fixture_base)
@@ -51,7 +52,8 @@ def main():
         for key, value in [("user_settings", fixture["core"]["settings"]), ("app_state_v2", fixture["app_state"])]:
             index.execute("INSERT OR REPLACE INTO app_settings (key,value,updated_at) VALUES (?,?,?)",
                           (key, json.dumps(value), "2026-10-02T00:00:00Z"))
-    print(json.dumps({"index": str(index_path), "content": str(content_path), "feeds": 6, "entries": 72}))
+    print(json.dumps({"index": str(index_path), "content": str(content_path),
+                      "feeds": len(fixture["core"]["feeds"]), "entries": len(fixture["core"]["entries"])}))
 
 
 if __name__ == "__main__":
