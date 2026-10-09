@@ -132,13 +132,11 @@ impl RefreshStorePort for SqliteRefreshStore {
         match commit {
             RefreshCommit::NotModified { metadata } => {
                 self.feed_repository
-                    .update_fetch_state_for_generation(
+                    .record_not_modified_for_generation(
                         feed_id,
                         target.generation,
                         metadata.etag.as_deref(),
                         metadata.last_modified.as_deref(),
-                        None,
-                        true,
                     )
                     .await
                     .context("更新订阅抓取状态失败")?;

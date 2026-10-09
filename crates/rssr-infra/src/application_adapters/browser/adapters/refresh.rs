@@ -174,8 +174,13 @@ impl RefreshStorePort for BrowserRefreshStore {
                 let mut changes = Changes::CORE;
                 match commit {
                     RefreshCommit::NotModified { metadata } => {
-                        feed.etag = metadata.etag;
-                        feed.last_modified = metadata.last_modified;
+                        // 与原生端同一语义：304 省略的校验器保留原值。
+                        if metadata.etag.is_some() {
+                            feed.etag = metadata.etag;
+                        }
+                        if metadata.last_modified.is_some() {
+                            feed.last_modified = metadata.last_modified;
+                        }
                         feed.last_fetched_at = Some(now);
                         feed.last_success_at = Some(now);
                         feed.fetch_error = None;

@@ -134,6 +134,43 @@ impl SqliteFeedRepository {
         Ok(())
     }
 
+    /// 304 只是“缓存仍然有效”的确认：RFC 9110 不要求 304 重发 `Last-Modified`，
+    /// 服务器省略的校验器必须保留，否则下一次请求退化成无条件全量抓取。
+    pub async fn record_not_modified_for_generation(
+        &self,
+        feed_id: i64,
+        generation: i64,
+        etag: Option<&str>,
+        last_modified: Option<&str>,
+    ) -> DomainResult<()> {
+        let now = now_rfc3339();
+        let result = sqlx::query(
+            r#"
+            UPDATE feeds
+            SET etag = COALESCE(?3, etag),
+                last_modified = COALESCE(?4, last_modified),
+                last_fetched_at = ?5,
+                last_success_at = ?5,
+                fetch_error = NULL,
+                updated_at = ?5
+            WHERE id = ?1 AND generation = ?2 AND is_deleted = 0
+            "#,
+        )
+        .bind(feed_id)
+        .bind(generation)
+        .bind(etag)
+        .bind(last_modified)
+        .bind(&now)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        if result.rows_affected() == 0 {
+            return Err(DomainError::NotFound);
+        }
+        Ok(())
+    }
+
     pub async fn update_feed_metadata_for_generation(
         &self,
         feed_id: i64,

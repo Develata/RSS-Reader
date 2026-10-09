@@ -254,3 +254,38 @@ async fn refresh_contract_refresh_all_aggregates_outcomes_in_target_order() {
         .expect("list second feed entries");
     assert!(second_entries.is_empty());
 }
+
+/// RFC 9110 §15.4.5：304 不要求重发 `Last-Modified`（ETag 也可能被省略）。
+/// 省略的校验器必须保留，否则下一轮刷新退化成无条件全量抓取。
+#[tokio::test]
+async fn refresh_contract_not_modified_keeps_validators_the_server_did_not_resend() {
+    let fixture = build_sqlite_fixture(
+        &["https://example.com/feed.xml"],
+        vec![
+            updated_output("Example Feed", vec![sample_entry(1)]),
+            FeedRefreshSourceOutput::NotModified(RefreshHttpMetadata {
+                etag: Some("etag-1".to_string()),
+                last_modified: None,
+            }),
+            FeedRefreshSourceOutput::NotModified(RefreshHttpMetadata::default()),
+        ],
+    )
+    .await
+    .expect("build fixture");
+    let feed_id = fixture.feed_ids[0];
+    fixture.service.refresh_feed(feed_id).await.expect("initial refresh");
+
+    for _ in 0..2 {
+        let outcome = fixture.service.refresh_feed(feed_id).await.expect("conditional refresh");
+        assert!(matches!(outcome.result, rssr_application::RefreshFeedResult::NotModified));
+        let stored = fixture
+            .feed_repository
+            .get_feed(feed_id)
+            .await
+            .expect("read feed")
+            .expect("feed exists");
+        assert_eq!(stored.etag.as_deref(), Some("etag-1"));
+        assert_eq!(stored.last_modified.as_deref(), Some("Wed, 01 Apr 2026 10:00:00 GMT"));
+        assert_eq!(stored.fetch_error, None);
+    }
+}
