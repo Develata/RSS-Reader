@@ -255,8 +255,9 @@ async fn refresh_contract_refresh_all_aggregates_outcomes_in_target_order() {
     assert!(second_entries.is_empty());
 }
 
-/// RFC 9110 §15.4.5：304 不要求重发 `Last-Modified`（ETag 也可能被省略）。
-/// 省略的校验器必须保留，否则下一轮刷新退化成无条件全量抓取。
+/// RFC 9110 §15.4.5：304 不要求重发 `Last-Modified`；200 会带 ETag 时 304 必须带 ETag，
+/// 但仍有服务器省略，保留它属于兼容处理。丢掉某个校验器就失去相应的条件请求能力，
+/// 全部丢失时下一轮刷新退化为无条件全量抓取。
 #[tokio::test]
 async fn refresh_contract_not_modified_keeps_validators_the_server_did_not_resend() {
     let fixture = build_sqlite_fixture(

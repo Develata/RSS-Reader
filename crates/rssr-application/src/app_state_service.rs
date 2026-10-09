@@ -111,6 +111,7 @@ mod tests {
 
     /// 两个窄字段更新并发时，各自的“读整份→改一个字段→写整份”会互相覆盖。
     /// 仓储在 `load` 后等待另一方也完成读取，确定性地构造这一交错（不依赖时序）。
+    /// 这个夹具对应当前的 load/save 端口；窄字段更新改成原子端口操作后，应换成新端口的夹具。
     struct InterleavingRepository {
         state: Mutex<AppStateSnapshot>,
         both_loaded: tokio::sync::Barrier,
@@ -120,12 +121,10 @@ mod tests {
     impl AppStateRepository for InterleavingRepository {
         async fn load(&self) -> rssr_domain::Result<AppStateSnapshot> {
             let snapshot = self.state.lock().expect("lock app state").clone();
-            // 修复后若只剩一次读取，超时放行而不是永久挂起。
-            let _ = tokio::time::timeout(
-                std::time::Duration::from_millis(500),
-                self.both_loaded.wait(),
-            )
-            .await;
+            // 超时即失败：交错没有建立时，测试不能静默放行。
+            tokio::time::timeout(std::time::Duration::from_secs(5), self.both_loaded.wait())
+                .await
+                .expect("both read-modify-write cycles must read before either saves");
             Ok(snapshot)
         }
 

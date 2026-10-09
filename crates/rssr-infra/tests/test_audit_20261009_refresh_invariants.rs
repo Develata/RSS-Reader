@@ -7,9 +7,12 @@
 #[path = "support/request_capture.rs"]
 mod request_capture;
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
 };
 
 use anyhow::Result;
@@ -135,7 +138,11 @@ async fn unchanged_source_refresh_keeps_localized_body() {
 }
 
 /// Two refreshes of the same feed (single-feed refresh vs refresh-all) are not coordinated.
-/// The response fetched *later* must not be superseded by an older in-flight response.
+///
+/// Strategy-neutral invariant: the stored result belongs to the fetch that *started last*.
+/// A single-flight fix (the second request joins the in-flight one, so the source runs once)
+/// and a commit-sequence guard (the stale commit is rejected) both satisfy it. Today the newer
+/// refresh commits first and the older response, released afterwards, overwrites it.
 struct OrderedSource {
     calls: AtomicUsize,
     first_started: Notify,
@@ -155,9 +162,21 @@ impl FeedRefreshSourcePort for OrderedSource {
     }
 }
 
+/// Every wait is bounded: no coordination strategy may hang the test.
+const WATCHDOG: Duration = Duration::from_secs(10);
+/// Grace for a newer request that joined the in-flight refresh instead of fetching. Uncoordinated
+/// code finishes the newer refresh well within it, so the release order below stays fixed.
+const JOIN_GRACE: Duration = Duration::from_secs(2);
+
+async fn within<T>(what: &str, future: impl Future<Output = T>) -> T {
+    tokio::time::timeout(WATCHDOG, future)
+        .await
+        .unwrap_or_else(|_| panic!("watchdog: {what} did not finish"))
+}
+
 #[tokio::test]
-#[ignore = "audit-2026-10-09: refresh_feed and refresh_all of the same feed run concurrently; an older response that commits last supersedes the newer one"]
-async fn older_inflight_refresh_cannot_supersede_a_newer_commit_of_the_same_feed() {
+#[ignore = "audit-2026-10-09: refresh_feed and refresh_all of the same feed run concurrently; the older response, committed last, overwrites the newer one"]
+async fn the_fetch_that_started_last_owns_the_stored_result() {
     let pool = memory_pool().await;
     let feeds = Arc::new(SqliteFeedRepository::new(pool.clone()));
     let entries = Arc::new(SqliteEntryRepository::new(pool));
@@ -176,20 +195,40 @@ async fn older_inflight_refresh_cannot_supersede_a_newer_commit_of_the_same_feed
         let service = service.clone();
         async move { service.refresh_feed(feed_id).await }
     });
-    source.first_started.notified().await;
-    service.refresh_all(RefreshAllInput { max_concurrency: 1 }).await.expect("newer refresh");
+    within("first fetch to start", source.first_started.notified()).await;
+    let mut newer = tokio::spawn({
+        let service = service.clone();
+        async move { service.refresh_all(RefreshAllInput { max_concurrency: 1 }).await }
+    });
+    // Release the older fetch once the newer request has finished, or after the grace period if
+    // it is waiting on the in-flight refresh (single-flight).
+    let newer_finished_first = tokio::select! {
+        result = &mut newer => Some(result),
+        _ = tokio::time::sleep(JOIN_GRACE) => None,
+    };
     source.release_first.notify_one();
-    older.await.expect("join older refresh").expect("older refresh");
+    let newer_result = match newer_finished_first {
+        Some(result) => result,
+        None => within("newer refresh", newer).await,
+    };
+    newer_result.expect("join newer refresh task").expect("newer refresh");
+    // A sequence guard may legitimately reject the stale commit, so only completion is required.
+    let _ = within("older refresh", older).await.expect("join older refresh task");
 
+    let (expected_etag, expected_body) = match source.calls.load(Ordering::SeqCst) {
+        1 => ("v1-older", "<p>older body</p>"),
+        2 => ("v2-newer", "<p>newer body</p>"),
+        calls => panic!("unexpected source call count {calls}"),
+    };
     let stored = feeds.get_feed(feed_id).await.expect("feed").expect("active");
     let entry_id = entries.list_entries(&EntryQuery::default()).await.expect("list")[0].id;
     let body = entries.get_content(entry_id).await.expect("content").expect("row").content_html;
-    assert_eq!(stored.etag.as_deref(), Some("v2-newer"), "older validators won");
-    assert_eq!(body.as_deref(), Some("<p>newer body</p>"), "older body won");
+    assert_eq!(stored.etag.as_deref(), Some(expected_etag), "stale validators won");
+    assert_eq!(body.as_deref(), Some(expected_body), "stale body won");
 }
 
-/// RFC 9110 §10.1.5: user agents SHOULD send User-Agent; several feed hosts reject requests
-/// without it. Image localization already sends one; feed fetches do not.
+/// RFC 9110 §10.1.5: a user agent SHOULD send User-Agent unless configured not to. Image
+/// localization already sends one; feed fetches do not.
 #[tokio::test]
 #[ignore = "audit-2026-10-09: native feed fetches send no User-Agent header"]
 async fn feed_fetch_identifies_the_client() {
@@ -214,18 +253,16 @@ async fn feed_fetch_identifies_the_client() {
     assert!(requests[0].header("user-agent").is_some_and(|value| !value.is_empty()));
 }
 
-/// XML may declare its encoding only in the prolog (no charset parameter in Content-Type).
-/// Decoding the bytes as UTF-8 before the XML parser sees them destroys GBK/Big5/Shift_JIS text.
-#[tokio::test]
-#[ignore = "audit-2026-10-09: transport decodes prolog-declared non-UTF-8 feeds as UTF-8 (mojibake)"]
-async fn prolog_declared_gbk_feed_keeps_its_text() {
+/// Serves a GBK-encoded feed whose XML prolog declares `encoding="GBK"`, then fetches and parses
+/// it through the production transport and parser.
+async fn fetch_and_parse_gbk_feed(
+    content_type_header: &'static str,
+) -> rssr_infra::parser::ParsedFeed {
     let xml = r#"<?xml version="1.0" encoding="GBK"?><rss version="2.0"><channel><title>中文标题</title><item><title>条目一</title><description>正文</description><guid>g1</guid></item></channel></rss>"#;
     let (bytes, _, _) = encoding_rs::GBK.encode(xml);
     let body = bytes.into_owned();
-    let server = Server::start(move |_| {
-        Response::new(200, "Content-Type: application/rss+xml\r\n", body.clone())
-    })
-    .await;
+    let server =
+        Server::start(move |_| Response::new(200, content_type_header, body.clone())).await;
     let FetchResult::Fetched { body, .. } = FetchClient::new()
         .fetch(&FetchRequest {
             url: server.url.join("gbk.xml").unwrap().to_string(),
@@ -237,7 +274,26 @@ async fn prolog_declared_gbk_feed_keeps_its_text() {
     else {
         panic!("expected a body");
     };
-    let parsed = FeedParser::new().parse(&body).expect("parse feed");
+    FeedParser::new().parse(&body).expect("parse feed")
+}
+
+/// XML may declare its encoding only in the prolog (no charset parameter in Content-Type).
+/// Decoding the bytes as UTF-8 before the XML parser sees them destroys GBK/Big5/Shift_JIS text.
+#[tokio::test]
+#[ignore = "audit-2026-10-09: transport decodes prolog-declared non-UTF-8 feeds as UTF-8 (mojibake)"]
+async fn prolog_declared_gbk_feed_keeps_its_text() {
+    let parsed = fetch_and_parse_gbk_feed("Content-Type: application/rss+xml\r\n").await;
+    assert_eq!(parsed.title.as_deref(), Some("中文标题"));
+    assert_eq!(parsed.entries[0].title, "条目一");
+}
+
+/// With both an HTTP charset and a matching prolog declaration, the transport transcodes to UTF-8
+/// but the parser still honours the stale `encoding="GBK"` declaration and decodes a second time.
+#[tokio::test]
+#[ignore = "audit-2026-10-09: HTTP-charset transcoding plus the original XML declaration decodes twice (mojibake)"]
+async fn http_and_prolog_both_gbk_feed_keeps_its_text() {
+    let parsed =
+        fetch_and_parse_gbk_feed("Content-Type: application/rss+xml; charset=GBK\r\n").await;
     assert_eq!(parsed.title.as_deref(), Some("中文标题"));
     assert_eq!(parsed.entries[0].title, "条目一");
 }

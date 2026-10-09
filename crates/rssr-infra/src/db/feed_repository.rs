@@ -135,7 +135,8 @@ impl SqliteFeedRepository {
     }
 
     /// 304 只是“缓存仍然有效”的确认：RFC 9110 不要求 304 重发 `Last-Modified`，
-    /// 服务器省略的校验器必须保留，否则下一次请求退化成无条件全量抓取。
+    /// 服务器省略的校验器必须保留。丢掉某个校验器就失去相应的条件请求能力，
+    /// 全部丢失时下一次请求退化为无条件全量抓取。
     pub async fn record_not_modified_for_generation(
         &self,
         feed_id: i64,

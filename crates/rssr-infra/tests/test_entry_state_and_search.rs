@@ -360,5 +360,21 @@ async fn search_title_treats_like_wildcards_as_literals() {
         assert_eq!(entry_repository.count_entries(&query).await.expect("count"), 1);
         let preview = entry_repository.preview_mark_read(&query).await.expect("preview");
         assert_eq!(preview.unread_entry_ids.len(), 1, "bulk preview for {search:?}");
+        // 实际批量写入与预览集合一致，不得多标。
+        assert_eq!(
+            entry_repository.mark_read_if_unchanged(&preview).await.expect("bulk mark read"),
+            rssr_domain::MarkReadOutcome::Applied { changed_count: 1 },
+            "bulk write for {search:?}"
+        );
     }
+
+    let mut still_unread = entry_repository
+        .list_entries(&EntryQuery { read_filter: ReadFilter::UnreadOnly, ..EntryQuery::default() })
+        .await
+        .expect("list unread")
+        .into_iter()
+        .map(|entry| entry.title)
+        .collect::<Vec<_>>();
+    still_unread.sort_unstable();
+    assert_eq!(still_unread, vec!["1000 done", "C:path", "axb"]);
 }
