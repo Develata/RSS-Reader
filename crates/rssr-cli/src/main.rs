@@ -97,8 +97,19 @@ struct AddFeedArgs {
 #[derive(Args, Debug)]
 struct RemoveFeedArgs {
     feed_id: i64,
-    #[arg(long, default_value_t = true)]
+    /// 保留该订阅已抓取的文章（默认连同文章一起删除）。
+    #[arg(long)]
+    keep_entries: bool,
+    /// 旧开关：删除文章本来就是默认行为，隐藏保留只为兼容已有脚本。
+    #[arg(long, hide = true, conflicts_with = "keep_entries")]
     purge_entries: bool,
+}
+
+impl RemoveFeedArgs {
+    /// `--purge-entries` 与 `--keep-entries` 互斥，所以这就是 `!keep_entries`。
+    fn purge_entries(&self) -> bool {
+        self.purge_entries || !self.keep_entries
+    }
 }
 
 #[derive(Args, Debug)]
@@ -239,7 +250,7 @@ async fn main() -> anyhow::Result<()> {
             println!("订阅已添加。");
         }
         Command::RemoveFeed(args) => {
-            services.remove_feed(args.feed_id, args.purge_entries).await?;
+            services.remove_feed(args.feed_id, args.purge_entries()).await?;
             println!("订阅已删除。");
         }
         Command::Refresh(args) => {
@@ -524,4 +535,33 @@ fn ensure_refresh_all_succeeded(outcome: &RefreshAllOutcome) -> anyhow::Result<(
 
 fn new_entries_message(count: u64) -> String {
     if count == 0 { "没有新文章".into() } else { format!("新增 {count} 篇文章") }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::{CommandFactory, Parser};
+
+    use super::{Cli, Command};
+
+    #[test]
+    fn cli_definition_is_consistent() {
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn remove_feed_purges_by_default_and_keep_entries_opts_out() {
+        let purge = |arguments: &[&str]| {
+            let cli = Cli::try_parse_from(["rssr", "remove-feed", "1"].iter().chain(arguments))
+                .map_err(|error| error.kind())?;
+            let Command::RemoveFeed(args) = cli.command else { panic!("remove-feed") };
+            Ok(args.purge_entries())
+        };
+        assert_eq!(purge(&[]), Ok(true));
+        assert_eq!(purge(&["--purge-entries"]), Ok(true));
+        assert_eq!(purge(&["--keep-entries"]), Ok(false));
+        assert_eq!(
+            purge(&["--keep-entries", "--purge-entries"]),
+            Err(clap::error::ErrorKind::ArgumentConflict)
+        );
+    }
 }

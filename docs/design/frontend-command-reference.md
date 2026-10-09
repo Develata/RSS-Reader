@@ -150,11 +150,13 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 
 - `rssr-cli list-feeds`
 - `rssr-cli add-feed <url>`
-- `rssr-cli remove-feed <feed-id>`
+- `rssr-cli remove-feed <feed-id> [--keep-entries]`
 - `rssr-cli refresh --all`
 - `rssr-cli refresh --feed-id <id>`
 
 `refresh` 必须且只能指定其中一个目标；参数无效时在打开本地数据库前退出。
+
+`remove-feed` 默认连同该订阅的文章一起删除；`--keep-entries` 只删订阅、保留已抓取的文章。
 
 ### 配置交换相关
 
