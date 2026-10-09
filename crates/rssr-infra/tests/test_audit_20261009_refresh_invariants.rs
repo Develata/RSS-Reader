@@ -271,8 +271,17 @@ async fn feed_fetch_identifies_the_client() {
 async fn fetch_and_parse_gbk_feed(
     content_type_header: &'static str,
 ) -> rssr_infra::parser::ParsedFeed {
-    let xml = r#"<?xml version="1.0" encoding="GBK"?><rss version="2.0"><channel><title>中文标题</title><item><title>条目一</title><description>正文</description><guid>g1</guid></item></channel></rss>"#;
-    let (bytes, _, _) = encoding_rs::GBK.encode(xml);
+    fetch_and_parse_gbk_xml(r#"<?xml version="1.0" encoding="GBK"?>"#, content_type_header).await
+}
+
+async fn fetch_and_parse_gbk_xml(
+    prolog: &str,
+    content_type_header: &'static str,
+) -> rssr_infra::parser::ParsedFeed {
+    let xml = format!(
+        r#"{prolog}<rss version="2.0"><channel><title>中文标题</title><item><title>条目一</title><description>正文</description><guid>g1</guid></item></channel></rss>"#
+    );
+    let (bytes, _, _) = encoding_rs::GBK.encode(&xml);
     let body = bytes.into_owned();
     let server =
         Server::start(move |_| Response::new(200, content_type_header, body.clone())).await;
@@ -307,6 +316,21 @@ async fn http_and_prolog_both_gbk_feed_keeps_its_text() {
         fetch_and_parse_gbk_feed("Content-Type: application/rss+xml; charset=GBK\r\n").await;
     assert_eq!(parsed.title.as_deref(), Some("中文标题"));
     assert_eq!(parsed.entries[0].title, "条目一");
+}
+
+/// XML 1.0 §2.8 puts no bound on the whitespace inside the declaration, so neither the encoding
+/// sniff nor pinning the parser to UTF-8 may rely on a fixed lookahead (independent review).
+#[tokio::test]
+async fn padded_gbk_declaration_is_decoded_once_with_or_without_http_charset() {
+    let prolog = format!(r#"<?xml version="1.0" encoding="GBK"{}?>"#, " ".repeat(1100));
+    for header in [
+        "Content-Type: application/rss+xml; charset=GBK\r\n",
+        "Content-Type: application/rss+xml\r\n",
+    ] {
+        let parsed = fetch_and_parse_gbk_xml(&prolog, header).await;
+        assert_eq!(parsed.title.as_deref(), Some("中文标题"), "{header}");
+        assert_eq!(parsed.entries[0].title, "条目一", "{header}");
+    }
 }
 
 /// Atom lists links by relation. The feed's site is `rel="alternate"` (not `rel="self"`), and an

@@ -45,16 +45,29 @@ async fn browser_refresh_bounds_streams_and_preserves_decoding_and_failures() {
         etag: None,
         last_modified: None,
     };
-    for mode in ["exact", "header", "stream", "charset", "error", "not-modified"] {
+    for mode in [
+        "exact",
+        "header",
+        "stream",
+        "charset",
+        "declared",
+        "declared-charset",
+        "error",
+        "not-modified",
+    ] {
         js_sys::eval(&format!(r#"globalThis.__bodyMode = '{mode}';"#)).unwrap();
         js_sys::eval(r#"
             globalThis.__fetch = globalThis.fetch;
             globalThis.fetch = async function(request) {
                 const limit = 8 * 1024 * 1024;
                 const mode = globalThis.__bodyMode;
-                const xml = '<rss version="2.0"><channel><title>Caf\u00e9</title><description>Feed</description></channel></rss>';
-                const prefix = mode === 'charset' ? Uint8Array.from(xml, ch => ch.charCodeAt(0)) : new TextEncoder().encode(xml);
-                let remaining = mode === 'exact' ? limit : mode === 'charset' ? prefix.length : limit + 1;
+                // declared*: windows-1252 bytes whose XML declaration names the encoding; the
+                // browser path must decode them once (audit B2), with or without an HTTP charset.
+                const declared = mode === 'declared' || mode === 'declared-charset';
+                const latin1 = declared || mode === 'charset';
+                const xml = (declared ? '<?xml version="1.0" encoding="windows-1252"?>' : '') + '<rss version="2.0"><channel><title>Caf\u00e9</title><description>Feed</description></channel></rss>';
+                const prefix = latin1 ? Uint8Array.from(xml, ch => ch.charCodeAt(0)) : new TextEncoder().encode(xml);
+                let remaining = mode === 'exact' ? limit : latin1 ? prefix.length : limit + 1;
                 let first = true;
                 const stream = new ReadableStream({ pull(controller) {
                     if (mode === 'error') { controller.error(new Error('body disconnected')); return; }
@@ -64,7 +77,8 @@ async fn browser_refresh_bounds_streams_and_preserves_decoding_and_failures() {
                     remaining -= chunk.length;
                     controller.enqueue(chunk);
                 }});
-                const headers = { 'Content-Type': mode === 'charset' ? 'application/rss+xml; charset=windows-1252' : 'application/rss+xml', 'ETag': 'test-body' };
+                const withCharset = mode === 'charset' || mode === 'declared-charset';
+                const headers = { 'Content-Type': withCharset ? 'application/rss+xml; charset=windows-1252' : 'application/rss+xml', 'ETag': 'test-body' };
                 if (mode === 'header') headers['Content-Length'] = String(limit + 1);
                 const response = new Response(mode === 'not-modified' ? null : stream, {status: mode === 'not-modified' ? 304 : 200, headers});
                 Object.defineProperty(response, 'url', {value: request.url});
@@ -75,7 +89,10 @@ async fn browser_refresh_bounds_streams_and_preserves_decoding_and_failures() {
         js_sys::eval("globalThis.fetch = __fetch; delete globalThis.__fetch;").unwrap();
         let result = result.unwrap();
         match (mode, result) {
-            ("exact" | "charset", FeedRefreshSourceOutput::Updated(update)) => {
+            (
+                "exact" | "charset" | "declared" | "declared-charset",
+                FeedRefreshSourceOutput::Updated(update),
+            ) => {
                 assert_eq!(update.feed.title.as_deref(), Some("Café"));
             }
             ("not-modified", FeedRefreshSourceOutput::NotModified(_)) => {}

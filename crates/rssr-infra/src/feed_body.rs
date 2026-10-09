@@ -1,15 +1,13 @@
 //! Shared transport boundary for subscription discovery and feed refresh.
 
-use std::ops::Range;
-
 use anyhow::{Context, Result, ensure};
 use encoding_rs::{Encoding, UTF_8, UTF_16BE, UTF_16LE};
 use futures_util::StreamExt;
 use reqwest::header;
 
+use crate::xml_declaration::{DeclaredEncoding, leading_declaration};
+
 pub(crate) const MAX_FEED_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
-/// The XML declaration is a few dozen bytes; bounding the lookahead keeps the sniff O(1).
-const XML_DECLARATION_LOOKAHEAD: usize = 1024;
 
 /// Bound the decoded HTTP stream, including chunked and compressed responses. The header is
 /// only an early rejection; neither a missing nor a compressed Content-Length bypasses the cap.
@@ -40,72 +38,29 @@ pub(crate) async fn read_feed_text(response: reqwest::Response) -> Result<String
     decode_feed_bytes(&bytes, charset)
 }
 
-/// Decodes a feed body exactly once, here, using the RFC 7303 §3.2 priority: a BOM is
-/// authoritative, then the HTTP `charset` parameter, then the XML encoding declaration
-/// (XML 1.0 §4.3.3), then UTF-8.
+/// Decodes a feed body once, using the RFC 7303 §3.2 priority: a BOM is authoritative, then the
+/// HTTP `charset` parameter, then the XML encoding declaration (XML 1.0 §4.3.3), then UTF-8.
 ///
-/// Postcondition: the text declares no encoding other than UTF-8. The XML parser honours the
-/// declaration, so a stale `encoding="GBK"` would make it decode the decoded text a second time.
+/// The declaration is left in the text. The feed parser re-reads the text as bytes and would
+/// honour it, so `parse_feed_xml` pins the parser to UTF-8 at that boundary (audit B2).
 fn decode_feed_bytes(bytes: &[u8], charset: Option<&'static Encoding>) -> Result<String> {
     let encoding = charset.or_else(|| declared_encoding(bytes)).unwrap_or(UTF_8);
     // `decode` lets a BOM override `encoding` and strips it.
     let (body, _, _) = encoding.decode(bytes);
-    let mut body = body.into_owned();
-    if let Some(range) = declared_encoding_range(body.as_bytes())
-        && !body[range.clone()].eq_ignore_ascii_case("UTF-8")
-    {
-        body.replace_range(range, "UTF-8");
-    }
     // Character conversion can expand the body even when the transport bytes fit.
     ensure!(body.len() <= MAX_FEED_RESPONSE_BYTES, "订阅响应超过 8 MiB 上限。");
-    Ok(body)
+    Ok(body.into_owned())
 }
 
 /// A declaration found by ASCII matching implies an ASCII-compatible stream without a BOM, so a
 /// UTF-16 label there contradicts the bytes; like HTML's `<meta charset>`, read it as UTF-8.
 /// Labels encoding_rs does not know fall back to UTF-8 as well.
 fn declared_encoding(bytes: &[u8]) -> Option<&'static Encoding> {
-    let encoding = Encoding::for_label(&bytes[declared_encoding_range(bytes)?])?;
+    let DeclaredEncoding::Value(label) = leading_declaration(bytes)? else {
+        return None;
+    };
+    let encoding = Encoding::for_label(&bytes[label])?;
     Some(if encoding == UTF_16LE || encoding == UTF_16BE { UTF_8 } else { encoding })
-}
-
-/// Byte range of the `EncName` in a leading XML declaration (XML 1.0 §2.8 `XMLDecl`, §4.3.3).
-/// Leading XML whitespace is tolerated because the parser tolerates it too, so the declaration
-/// sniffed here is the one the parser would honour. The range only ever covers ASCII bytes, so
-/// it also slices decoded text on character boundaries.
-fn declared_encoding_range(text: &[u8]) -> Option<Range<usize>> {
-    let head = &text[..text.len().min(XML_DECLARATION_LOOKAHEAD)];
-    let skip_space = |at: usize| at + head[at..].iter().take_while(|&&b| is_xml_space(b)).count();
-    let start = skip_space(0);
-    if !head[start..].starts_with(b"<?xml") {
-        return None;
-    }
-    let attributes = start + b"<?xml".len();
-    // `<?xml-stylesheet …?>` is a processing instruction, not the declaration.
-    if !head.get(attributes).is_some_and(|&b| is_xml_space(b)) {
-        return None;
-    }
-    let end = attributes + head[attributes..].windows(2).position(|pair| pair == b"?>")?;
-    let key = (attributes..end)
-        .find(|&at| head[at..end].starts_with(b"encoding") && is_xml_space(head[at - 1]))?;
-    let equals = skip_space(key + b"encoding".len());
-    if head.get(equals) != Some(&b'=') {
-        return None;
-    }
-    let open = skip_space(equals + 1);
-    let quote = *head.get(open).filter(|&&b| b == b'"' || b == b'\'')?;
-    let value = open + 1;
-    let close = value + head[value..end].iter().position(|&b| b == quote)?;
-    // EncName ::= [A-Za-z] ([A-Za-z0-9._] | '-')*
-    let name = &head[value..close];
-    let is_enc_name = name.first().is_some_and(u8::is_ascii_alphabetic)
-        && name.iter().all(|&b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'));
-    is_enc_name.then_some(value..close)
-}
-
-/// XML 1.0 §2.3 `S`; unlike `u8::is_ascii_whitespace`, form feed is not XML whitespace.
-fn is_xml_space(byte: u8) -> bool {
-    matches!(byte, b' ' | b'\t' | b'\r' | b'\n')
 }
 
 #[cfg(test)]
@@ -114,77 +69,50 @@ mod tests {
 
     use super::*;
 
-    const GBK_FEED: &str =
-        r#"<?xml version="1.0" encoding="GBK" standalone="yes"?><rss><title>中文</title></rss>"#;
-
     fn decode(bytes: &[u8], charset: Option<&'static Encoding>) -> String {
         decode_feed_bytes(bytes, charset).expect("decode")
     }
 
     #[test]
-    fn declaration_decides_without_bom_or_charset_and_is_rewritten() {
-        let (bytes, _, _) = GBK.encode(GBK_FEED);
-        assert_eq!(
-            decode(&bytes, None),
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><rss><title>中文</title></rss>"#
-        );
+    fn declaration_decides_without_bom_or_charset() {
+        let xml = r#"<?xml version="1.0" encoding="GBK" standalone="yes"?><rss><title>中文</title></rss>"#;
+        let (bytes, _, _) = GBK.encode(xml);
+        assert_eq!(decode(&bytes, None), xml);
+        // The declaration may be padded beyond any fixed lookahead (XML 1.0 §2.8 `S?`).
+        let padded =
+            format!(r#"<?xml version="1.0" encoding="GBK"{}?><t>中文</t>"#, " ".repeat(1100));
+        let (bytes, _, _) = GBK.encode(&padded);
+        assert_eq!(decode(&bytes, None), padded);
     }
 
     #[test]
     fn charset_outranks_the_declaration_and_bom_outranks_both() {
         let xml = r#"<?xml version="1.0" encoding='GBK'?><t>café</t>"#;
         let (latin1, _, _) = WINDOWS_1252.encode(xml);
-        assert_eq!(
-            decode(&latin1, Some(WINDOWS_1252)),
-            r#"<?xml version="1.0" encoding='UTF-8'?><t>café</t>"#
-        );
+        assert_eq!(decode(&latin1, Some(WINDOWS_1252)), xml);
         let with_bom = [b"\xef\xbb\xbf".as_slice(), xml.as_bytes()].concat();
-        assert_eq!(
-            decode(&with_bom, Some(WINDOWS_1252)),
-            r#"<?xml version="1.0" encoding='UTF-8'?><t>café</t>"#
-        );
+        assert_eq!(decode(&with_bom, Some(WINDOWS_1252)), xml);
     }
 
     #[test]
-    fn utf16_bom_text_is_decoded_and_its_declaration_rewritten() {
+    fn utf16_bom_text_is_decoded() {
         let xml = r#"<?xml version="1.0" encoding="UTF-16"?><t>中文</t>"#;
         let bytes =
             [&[0xff, 0xfe][..], &xml.encode_utf16().flat_map(u16::to_le_bytes).collect::<Vec<_>>()]
                 .concat();
-        assert_eq!(decode(&bytes, None), r#"<?xml version="1.0" encoding="UTF-8"?><t>中文</t>"#);
+        assert_eq!(decode(&bytes, None), xml);
     }
 
     #[test]
     fn contradictory_or_unknown_declarations_fall_back_to_utf8() {
-        for label in ["UTF-16", "x-no-such-encoding"] {
+        for label in ["UTF-16", "x-no-such-encoding", "1bad"] {
             let xml = format!(r#"<?xml version="1.0" encoding="{label}"?><t>中文</t>"#);
-            assert_eq!(
-                decode(xml.as_bytes(), None),
-                r#"<?xml version="1.0" encoding="UTF-8"?><t>中文</t>"#,
-                "{label}"
-            );
+            assert_eq!(decode(xml.as_bytes(), None), xml, "{label}");
         }
     }
 
     #[test]
-    fn declaration_sniff_matches_only_the_xml_declaration() {
-        let cases: [(&[u8], Option<&str>); 7] = [
-            (b"<?xml version='1.0' encoding = 'Big5'?>", Some("Big5")),
-            (b"\r\n <?xml version=\"1.0\" encoding=\"gbk\"?>", Some("gbk")),
-            (b"<?xml-stylesheet href=\"a.xsl\" encoding=\"GBK\"?>", None),
-            (b"<?xml version=\"1.0\"?><t encoding=\"GBK\"/>", None),
-            (b"<?xml version=\"1.0\" myencoding=\"GBK\"?>", None),
-            (b"<?xml version=\"1.0\" encoding=\"1bad\"?>", None),
-            (b"<rss encoding=\"GBK\"/>", None),
-        ];
-        for (text, expected) in cases {
-            let found = declared_encoding_range(text).map(|range| &text[range]);
-            assert_eq!(found, expected.map(str::as_bytes), "{}", String::from_utf8_lossy(text));
-        }
-    }
-
-    #[test]
-    fn unchanged_utf8_feed_is_returned_verbatim() {
+    fn plain_utf8_feed_is_returned_verbatim() {
         let xml = r#"<?xml version="1.0" encoding="utf-8"?><t>中文</t>"#;
         assert_eq!(decode(xml.as_bytes(), None), xml);
         assert_eq!(decode(b"<rss/>", None), "<rss/>");

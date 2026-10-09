@@ -33,8 +33,44 @@ pub fn parse_feed_xml(raw: &str) -> anyhow::Result<ParsedFeed> {
     // incorrectly discards legitimate hexadecimal GUIDs. Keep missing IDs empty here and let
     // our normalization choose the URL/title+timestamp fallback explicitly.
     let parser = feed_rs::parser::Builder::new().id_generator(|_, _, _| String::new()).build();
-    let feed = parser.parse(raw.as_bytes()).context("解析 RSS/Atom feed 失败")?;
+    let feed =
+        parser.parse(utf8_parser_input(raw.as_bytes())).context("解析 RSS/Atom feed 失败")?;
     Ok(normalize_feed(feed))
+}
+
+const UTF8_DECLARATION: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>"#;
+
+/// `raw` 已经解码成 UTF-8，但 feed-rs 会把它当字节重新交给 quick-xml，而 quick-xml 按遇到的
+/// 第一个 XML 声明切换解码器：留下的 `encoding="GBK"` 会让文本被再解码一次（审计 B2）。
+///
+/// 后置条件：解析器读到的第一个声明一定声明 UTF-8，之后再出现的声明不能再切换编码。
+/// 已有声明就改写或补上 `encoding`；没有可用声明的 XML 文本在前面补一个；JSON 原样交出。
+/// 只拼接切片，不复制正文。
+fn utf8_parser_input(raw: &[u8]) -> impl std::io::Read + '_ {
+    use std::io::Read;
+
+    use crate::xml_declaration::{DeclaredEncoding, is_xml_space, leading_declaration};
+
+    let none: &[u8] = &[];
+    let (head, middle, tail) = match leading_declaration(raw) {
+        Some(DeclaredEncoding::Value(label))
+            if raw[label.clone()].eq_ignore_ascii_case(b"UTF-8") =>
+        {
+            (raw, none, none)
+        }
+        Some(DeclaredEncoding::Value(label)) => {
+            (&raw[..label.start], b"UTF-8".as_slice(), &raw[label.end..])
+        }
+        Some(DeclaredEncoding::Missing { insert_at }) => {
+            (&raw[..insert_at], br#" encoding="UTF-8""#.as_slice(), &raw[insert_at..])
+        }
+        Some(DeclaredEncoding::Unreadable) => (UTF8_DECLARATION, none, raw),
+        None if raw.iter().find(|&&b| !is_xml_space(b)) == Some(&b'<') => {
+            (UTF8_DECLARATION, none, raw)
+        }
+        None => (raw, none, none),
+    };
+    head.chain(middle).chain(tail)
 }
 
 pub fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>) -> Option<String> {
@@ -191,6 +227,39 @@ mod tests {
             assert_eq!(entry.content_text, None);
             assert_eq!(entry.summary, None);
         }
+    }
+
+    /// 文本已解码；无论残留的声明写成什么样，解析器都不能再按它解码一次（审计 B2）。
+    #[test]
+    fn decoded_text_is_never_decoded_again_by_a_leftover_declaration() {
+        let body = "<rss version=\"2.0\"><channel><title>中文标题</title></channel></rss>";
+        let padding = " ".repeat(1100);
+        for prolog in [
+            r#"<?xml version="1.0" encoding="GBK"?>"#.to_string(),
+            format!(r#"<?xml version="1.0" encoding="GBK"{padding}?>"#),
+            format!("{padding}\n<?xml version='1.0' encoding='GBK'?>"),
+            r#"<?xml version="1.0" encoding=" gbk "?>"#.to_string(),
+            r#"<?xml version="1.0" encodingx="a" encoding="GBK"?>"#.to_string(),
+            r#"<?xml version="1.0" standalone="yes"?><?xml version="1.0" encoding="GBK"?>"#
+                .to_string(),
+            r#"<?xml version=1.0 encoding="GBK"?>"#.to_string(),
+            r#"<!-- c --><?xml version="1.0" encoding="GBK"?>"#.to_string(),
+            r#"<?xml version="1.0" encoding="utf-8"?>"#.to_string(),
+            String::new(),
+        ] {
+            let feed = parse_feed_xml(&format!("{prolog}{body}")).expect(&prolog);
+            assert_eq!(feed.title.as_deref(), Some("中文标题"), "{prolog}");
+        }
+    }
+
+    #[test]
+    fn json_feeds_are_not_given_an_xml_declaration() {
+        let feed = parse_feed_xml(
+            r#"{"version":"https://jsonfeed.org/version/1.1","title":"中文","items":[{"id":"1","title":"条目","content_text":"正文"}]}"#,
+        )
+        .expect("parse json feed");
+        assert_eq!(feed.title.as_deref(), Some("中文"));
+        assert_eq!(feed.entries.len(), 1);
     }
 
     /// WordPress 等 RSS 2.0 在 `<link>` 之前输出 `atom:link rel="self"` 与 WebSub 的 `rel="hub"`。
