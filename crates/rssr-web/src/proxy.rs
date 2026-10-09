@@ -356,6 +356,33 @@ mod tests {
         assert!(user_agent.starts_with("RSS-Reader/"), "{user_agent:?}");
     }
 
+    /// 代理只搬运字节：不转码正文，原样保留 charset，浏览器端的解码才能按 RFC 7303 的
+    /// 优先级只做一次（审计 B2 的独立评审要求的补证）。
+    #[tokio::test]
+    async fn proxy_forwards_body_bytes_and_charset_unchanged() {
+        const CONTENT_TYPE: &str = "application/rss+xml; charset=GBK";
+        // GBK 编码的“中文”，声明与 HTTP charset 一致。
+        const BODY: &[u8] =
+            b"<?xml version=\"1.0\" encoding=\"GBK\"?><rss><title>\xd6\xd0\xce\xc4</title></rss>";
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let feed = || async { ([(header::CONTENT_TYPE, CONTENT_TYPE)], BODY) };
+            axum::serve(listener, axum::Router::new().route("/feed", axum::routing::get(feed)))
+                .await
+                .unwrap();
+        });
+        let url = Url::parse(&format!("http://feed.example.invalid:{}/feed", addr.port())).unwrap();
+        let upstream = pinned_client(&url, addr).unwrap().get(url).send().await.unwrap();
+        let proxied = build_proxy_response(upstream).await;
+        server.abort();
+
+        assert_eq!(proxied.status(), StatusCode::OK);
+        assert_eq!(proxied.headers()[header::CONTENT_TYPE], CONTENT_TYPE);
+        let body = axum::body::to_bytes(proxied.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(body.as_ref(), BODY);
+    }
+
     #[test]
     fn parse_proxy_feed_url_only_allows_http_and_https() {
         assert!(parse_proxy_feed_url("https://example.com/feed.xml").is_ok());
