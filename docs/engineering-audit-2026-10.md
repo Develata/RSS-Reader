@@ -127,12 +127,6 @@
 - 已验证：红测试 `feed_fetch_identifies_the_client`，请求头中没有 `user-agent`。RFC 9110 §10.1.5 规定客户端 SHOULD 发送 UA（允许显式配置关闭）。“部分站点或 CDN 拒绝无 UA 请求”是常见经验，本轮未对具体站点验证（U）。
 - 建议：统一的 HTTP 客户端构造（UA、超时、重定向策略）供刷新、探测、WebDAV、图片共享（见 5.4）。
 
-**B3 原生抓取不发送 User-Agent（P2，V）**
-
-- 位置：`fetch/client/feed_http.rs:48` 的客户端未设置 UA；订阅探测用的是 `reqwest::Client::new()`（`composition.rs:66`）。图片本地化已单独设置 UA。
-- 已验证：红测试 `feed_fetch_identifies_the_client`，请求头中没有 `user-agent`。RFC 9110 §10.1.5 建议客户端发送 UA，部分站点与 CDN 会拒绝无 UA 请求。
-- 建议：统一的 HTTP 客户端构造（UA、超时、重定向策略）供刷新、探测、WebDAV、图片共享（见 5.4）。
-
 **B4 Atom 链接按位置而非 `rel` 选择（P2，V）**
 
 - 位置：`feed_normalization.rs:82`（站点地址）与 `:106`（条目地址）均取 `links.first()`。
@@ -395,6 +389,23 @@
 | 12 | 304 注释把丢失 Last-Modified 等同于无条件请求 | 属实（ETag 仍会发送 `If-None-Match`） | 修正代码与测试注释；`28c0441` 的提交说明保留原文，未改写历史 |
 
 评审对外部事实的核对结论：RFC 9110/9111 引用成立（并指出 200 带 ETag 时 304 必须带 ETag，保留缺省 ETag 属兼容处理）；RFC 9110 §10.1.5 只能支持“SHOULD 发送 UA”，不能证明特定站点拒绝无 UA 请求（B3 已改为 U）；WHATWG Fetch 对含凭据 URL 抛 `TypeError` 成立；sqlx 0.8.6 按字节 SHA-384 且不归一化换行成立（本报告另在本地 cargo 注册表中核对了锁定版本源码，并与本地 CRLF 样本一致）；`windows-latest` 沿用 Git for Windows 的 CRLF 默认（本报告另行核对了安装器默认值 `CRLFAlways`）；`localStorage` 5 MiB 为标准建议值；clap、ammonia、feed-rs 三项判断成立。
+
+## 10. 修复进度
+
+审计之后在同一分支上逐项修复，每项单独提交、配红→绿测试；验证命令与结果见 [交接记录](handoffs/2026-10-09-audit-fixes.md)。“与建议的差异”只列实现偏离第 3 节建议之处。
+
+| 发现 | 状态 | 提交 | 与建议的差异 / 备注 |
+| --- | --- | --- | --- |
+| B1 | 已修复 | `28c0441` | — |
+| B2 | 已修复 | `2e382ea` | 采用单一解码边界：BOM → HTTP charset → XML 声明 → UTF-8，解码后把声明改写为 UTF-8，而不是“无 charset 时把原始字节交给解析器” |
+| B3 | 已修复 | `5cf52f5` | 同时覆盖 WebDAV 与 `rssr-web` 代抓；图片本地化保留自身 UA |
+| B4 | 已修复 | `2a4857b` | 站点地址没有 alternate 时留空而不是回退到第一条（避免取到 `self`/`hub`）；无稳定 ID 的条目可能出现一次重复（见交接记录） |
+| B5 | 已修复 | `6f00aaa` | 产品决策：保留为仅索引条目 |
+| E1 | 已修复 | `bbf09b3` | 由订阅页会话写入全局主题，未新增全局 intent |
+| F3 | 已修复 | `28f880d`、`861585a` | 修复时发现 srcset 按逗号切分会截断本地化 data URL，另修 `dc8ec81` |
+| H1 | 已修复 | `5a0c402` | 采用 `--keep-entries`，旧开关隐藏保留 |
+| 标题搜索通配符 | 已修复 | `1456b2b` | 审计期间修复（第 2 节） |
+| 其余 | 待修复 | — | A1–A4、C1、C2、D1、D3、D5、D6、F1 下一批；B6 单独一轮；G1 与“内网背景图”待确认 |
 
 ## 附录 A：确定性红测试
 
