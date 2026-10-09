@@ -20,7 +20,7 @@
   - `crates/rssr-infra/src/application_adapters/browser/query.rs`、`tests/test_persistence_atomicity.rs`（wasm lib 测试可编译）
   - 测试：`rssr-infra/tests/test_entry_state_and_search.rs`、`test_refresh_contract_harness.rs`、`test_audit_20261009_refresh_invariants.rs`、`wasm_refresh_contract_harness.rs`；`rssr-application/src/app_state_service.rs`、`rssr-app/src/pages/entries_page/session.rs` 的测试模块
 - 平台：
-  - Windows / macOS / Linux / Android（原生搜索与 304）；Web（浏览器 304 语义、wasm 测试目标）
+  - Windows / macOS / Linux / Android（原生搜索与 304）；Web（浏览器 304 语义、wasm 测试目标、`wasm_refresh_contract_harness` 新用例）
 - 额外影响：
   - 文档：新增审计报告；`docs/README.md` 索引；`docs/user-guide.md` 补充“标题搜索按字面匹配”
 

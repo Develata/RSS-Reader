@@ -264,7 +264,7 @@
 
 **G1 迁移校验和绑定换行符（P1，已验证 + 推断，需决策）**
 
-- 事实：`.gitattributes` 只约束 `*.sh`；Windows 工作区中 `migrations/*.sql` 与 `migrations_content/*.sql` 均为 CRLF（`git ls-files --eol` 显示 `i/lf w/crlf`）；索引库 `MIGRATOR` 与正文库 `CONTENT_MIGRATOR` 都由 `sqlx::migrate!`（`db.rs:18-19`）在编译期嵌入字节，sqlx 0.8 对 SQL 字符串字节计算 SHA-384、不归一化换行，已应用版本校验和不等时返回 `VersionMismatch`；启动流程要求两库迁移都成功（`bootstrap/native.rs:94-100`）。
+- 事实：`.gitattributes` 只约束 `*.sh`；Windows 工作区中 `migrations/*.sql` 与 `migrations_content/*.sql` 均为 CRLF（`git ls-files --eol` 显示 `i/lf w/crlf`）；索引库 `MIGRATOR` 与正文库 `CONTENT_MIGRATOR` 都由 `sqlx::migrate!`（`db.rs:18-19`）在编译期嵌入字节，锁定版本 sqlx-core 0.8.6 以 `Sha384::digest(sql.as_bytes())` 计算校验和、不归一化换行（`migrate/migration.rs:25`），已应用版本校验和不等时返回 `VersionMismatch`（`migrate/migrator.rs:173-176`）；启动流程要求两库迁移都成功（`bootstrap/native.rs:94-100`）。
 - 已验证：仓库根目录本地 Windows 构建生成的 `rss-reader.db`（2026-03-29，`_sqlx_migrations` 中仅含 version 1），其 version 1 的校验和等于 CRLF 字节的哈希（只读副本比对）；全部 8 个迁移（7 个索引库 + 1 个正文库）的 LF 与 CRLF 哈希两两不同。
 - 推断：Windows 发布在 `windows-latest` 上构建（`release.yml:297`）。runner 镜像的 `Install-Git.ps1` 未显式设置 `core.autocrlf`，沿用 Git for Windows 安装器默认的 `CRLFAlways`（`core.autocrlf=true`），因此发布构建为 CRLF 检出的可能性很高；其余平台为 LF。发布产物实际嵌入的字节本轮未验证。
 - 后果（双向）：① 同一个数据库在 Windows 与 Linux/macOS 版本之间迁移（便携目录、同步盘、WSL）会因校验和不一致拒绝启动；② 若直接加 `*.sql text eol=lf`，下一个 Windows 版本会让记录了 CRLF 校验和的库启动失败（本地样本只证明了 version 1 的来源，不能代表所有发布库）。
@@ -394,7 +394,7 @@
 | 11 | “`--title` 实际无效”过于绝对 | 属实 | B6 改为条件性表述 |
 | 12 | 304 注释把丢失 Last-Modified 等同于无条件请求 | 属实（ETag 仍会发送 `If-None-Match`） | 修正代码与测试注释；`28c0441` 的提交说明保留原文，未改写历史 |
 
-评审对外部事实的核对结论：RFC 9110/9111 引用成立（并指出 200 带 ETag 时 304 必须带 ETag，保留缺省 ETag 属兼容处理）；RFC 9110 §10.1.5 只能支持“SHOULD 发送 UA”，不能证明特定站点拒绝无 UA 请求（B3 已改为 U）；WHATWG Fetch 对含凭据 URL 抛 `TypeError` 成立；sqlx 0.8.6 按字节 SHA-384 且不归一化换行成立；`windows-latest` 沿用 Git for Windows 的 CRLF 默认（本报告另行核对了安装器默认值 `CRLFAlways`）；`localStorage` 5 MiB 为标准建议值；clap、ammonia、feed-rs 三项判断成立。
+评审对外部事实的核对结论：RFC 9110/9111 引用成立（并指出 200 带 ETag 时 304 必须带 ETag，保留缺省 ETag 属兼容处理）；RFC 9110 §10.1.5 只能支持“SHOULD 发送 UA”，不能证明特定站点拒绝无 UA 请求（B3 已改为 U）；WHATWG Fetch 对含凭据 URL 抛 `TypeError` 成立；sqlx 0.8.6 按字节 SHA-384 且不归一化换行成立（本报告另在本地 cargo 注册表中核对了锁定版本源码，并与本地 CRLF 样本一致）；`windows-latest` 沿用 Git for Windows 的 CRLF 默认（本报告另行核对了安装器默认值 `CRLFAlways`）；`localStorage` 5 MiB 为标准建议值；clap、ammonia、feed-rs 三项判断成立。
 
 ## 附录 A：确定性红测试
 
