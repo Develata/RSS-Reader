@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, PoisonError, Weak},
+};
 
 use anyhow::{Context, Result};
 use time::OffsetDateTime;
@@ -326,15 +329,42 @@ impl Drop for RefreshBatchGuard<'_> {
     }
 }
 
+/// 同一订阅的刷新逐个进行（审计 A1）。
+///
+/// 单源刷新、全量刷新、添加订阅的首刷与自动刷新都经过 [`RefreshService`]；抓取与提交
+/// 都在该订阅的锁内完成，于是后开始的抓取一定后提交，先发出却后返回的旧响应不会再覆盖
+/// 新响应，两次提交的多个写入步骤也不会交错。不同订阅之间互不等待。
+///
+/// 只协调同一进程内的刷新：CLI 与图形界面同时刷新同一个数据库、或 Web 端多个标签页，
+/// 仍可能交错。表里只留弱引用，没有在飞刷新的订阅不会占内存。
+#[derive(Default)]
+struct FeedRefreshLocks {
+    locks: std::sync::Mutex<HashMap<i64, Weak<tokio::sync::Mutex<()>>>>,
+}
+
+impl FeedRefreshLocks {
+    fn lock_for(&self, feed_id: i64) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = self.locks.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(lock) = locks.get(&feed_id).and_then(Weak::upgrade) {
+            return lock;
+        }
+        locks.retain(|_, lock| lock.strong_count() > 0);
+        let lock = Arc::new(tokio::sync::Mutex::new(()));
+        locks.insert(feed_id, Arc::downgrade(&lock));
+        lock
+    }
+}
+
 #[derive(Clone)]
 pub struct RefreshService {
     source: Arc<dyn FeedRefreshSourcePort>,
     store: Arc<dyn RefreshStorePort>,
+    feed_locks: Arc<FeedRefreshLocks>,
 }
 
 impl RefreshService {
     pub fn new(source: Arc<dyn FeedRefreshSourcePort>, store: Arc<dyn RefreshStorePort>) -> Self {
-        Self { source, store }
+        Self { source, store, feed_locks: Arc::default() }
     }
 
     /// 复用添加订阅时已获取的 feed，首次入库不再发起第二次请求。
@@ -343,12 +373,17 @@ impl RefreshService {
         target: RefreshTarget,
         update: FeedRefreshUpdate,
     ) -> Result<RefreshFeedOutcome> {
+        let lock = self.feed_locks.lock_for(target.feed_id);
+        let _serialized = lock.lock().await;
         self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await
     }
 
     pub async fn refresh_feed(&self, feed_id: i64) -> Result<RefreshFeedOutcome> {
+        let lock = self.feed_locks.lock_for(feed_id);
+        let _serialized = lock.lock().await;
+        // 在锁内读取目标：排在前一次刷新之后的请求要带上它刚写入的校验器。
         let target = self.store.get_target(feed_id).await?.context("订阅不存在")?;
-        self.refresh_target(target).await
+        self.fetch_and_apply(target).await
     }
 
     /// 刷新全部订阅。
@@ -498,6 +533,13 @@ impl RefreshService {
     }
 
     async fn refresh_target(&self, target: RefreshTarget) -> Result<RefreshFeedOutcome> {
+        let lock = self.feed_locks.lock_for(target.feed_id);
+        let _serialized = lock.lock().await;
+        self.fetch_and_apply(target).await
+    }
+
+    /// 调用方必须持有该订阅的刷新锁。
+    async fn fetch_and_apply(&self, target: RefreshTarget) -> Result<RefreshFeedOutcome> {
         let source_output = match self.source.refresh(&target).await {
             Ok(output) => output,
             Err(error) => FeedRefreshSourceOutput::Failed(RefreshFailure {
@@ -1093,5 +1135,73 @@ mod tests {
 
         assert_eq!(outcome.not_modified_count(), 1);
         assert_eq!(outcome.failures().len(), 1);
+    }
+
+    /// 同一订阅的第二次刷新要等第一次提交后才开始抓取；其他订阅不受影响（审计 A1）。
+    #[tokio::test]
+    async fn refreshes_of_one_feed_run_one_at_a_time_without_blocking_other_feeds() {
+        struct GatedSource {
+            calls: Mutex<Vec<i64>>,
+            first_started: tokio::sync::Notify,
+            release_first: tokio::sync::Notify,
+        }
+
+        #[async_trait::async_trait]
+        impl FeedRefreshSourcePort for GatedSource {
+            async fn refresh(&self, target: &RefreshTarget) -> Result<FeedRefreshSourceOutput> {
+                let first = {
+                    let mut calls = self.calls.lock().expect("lock calls");
+                    calls.push(target.feed_id);
+                    calls.len() == 1
+                };
+                if first {
+                    self.first_started.notify_one();
+                    self.release_first.notified().await;
+                }
+                Ok(FeedRefreshSourceOutput::NotModified(RefreshHttpMetadata::default()))
+            }
+        }
+
+        let source = Arc::new(GatedSource {
+            calls: Mutex::new(Vec::new()),
+            first_started: tokio::sync::Notify::new(),
+            release_first: tokio::sync::Notify::new(),
+        });
+        let store = Arc::new(StoreStub {
+            targets: vec![
+                sample_target(1, "https://example.com/1.xml"),
+                sample_target(2, "https://example.com/2.xml"),
+            ],
+            commits: Mutex::new(Vec::new()),
+        });
+        let service = RefreshService::new(source.clone(), store.clone());
+        let first = tokio::spawn({
+            let service = service.clone();
+            async move { service.refresh_feed(1).await }
+        });
+        source.first_started.notified().await;
+        let second = tokio::spawn({
+            let service = service.clone();
+            async move { service.refresh_feed(1).await }
+        });
+        service.refresh_feed(2).await.expect("another feed is not blocked");
+        // 当前线程运行时：让出若干次，第二次请求一定已被轮询并停在该订阅的锁上。
+        for _ in 0..16 {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(*source.calls.lock().expect("lock calls"), [1, 2]);
+
+        source.release_first.notify_one();
+        first.await.expect("join first").expect("first refresh");
+        second.await.expect("join second").expect("second refresh");
+        assert_eq!(*source.calls.lock().expect("lock calls"), [1, 2, 1]);
+        let committed = store
+            .commits
+            .lock()
+            .expect("lock commits")
+            .iter()
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+        assert_eq!(committed, [2, 1, 1]);
     }
 }

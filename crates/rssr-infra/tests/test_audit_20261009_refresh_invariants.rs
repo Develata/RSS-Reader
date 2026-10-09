@@ -175,7 +175,6 @@ async fn within<T>(what: &str, future: impl Future<Output = T>) -> T {
 }
 
 #[tokio::test]
-#[ignore = "audit-2026-10-09: refresh_feed and refresh_all of the same feed run concurrently; the older response, committed last, overwrites the newer one"]
 async fn the_fetch_that_started_last_owns_the_stored_result() {
     let pool = memory_pool().await;
     let feeds = Arc::new(SqliteFeedRepository::new(pool.clone()));
