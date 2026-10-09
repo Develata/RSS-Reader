@@ -404,7 +404,16 @@ async fn clear_last_opened_if_matches(
     };
 
     let raw: String = row.try_get("value").context("读取应用状态内容失败")?;
-    let mut state: AppStateSnapshot = serde_json::from_str(&raw).context("解析应用状态失败")?;
+    // 应用状态只是界面便利信息；读不懂它（降级后多出的字段、损坏）时跳过这一步清理，
+    // 不能让删除订阅、导入配置这类核心写入整体失败（审计 A5）。启动时会校验最后打开的
+    // 订阅是否仍然存在，留下的旧值不会被用到。
+    let mut state: AppStateSnapshot = match serde_json::from_str(&raw) {
+        Ok(state) => state,
+        Err(error) => {
+            tracing::warn!(%error, "应用状态无法解析，跳过最后打开订阅的清理");
+            return Ok(());
+        }
+    };
     if state.last_opened_feed_id.is_none_or(|feed_id| !removed_feed_ids.contains(&feed_id)) {
         return Ok(());
     }

@@ -561,3 +561,35 @@ async fn deleted_feed_rejects_late_index_upsert() {
     assert!(matches!(error, rssr_domain::DomainError::NotFound));
     assert!(!entries.has_entries_for_feed(feed.id).await.unwrap());
 }
+
+/// 读不懂的应用状态（例如新版本写入的字段）不能让删除订阅整体失败（审计 A5）。
+#[tokio::test]
+async fn unreadable_app_state_does_not_block_subscription_removal() {
+    let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.expect("connect");
+    migrate(&pool).await.expect("migrate");
+    let feeds = SqliteFeedRepository::new(pool.clone());
+    let feed = feeds
+        .upsert_subscription(&NewFeedSubscription {
+            url: "https://example.com/feed.xml".parse().expect("url"),
+            title: None,
+            site_url: None,
+            folder: None,
+        })
+        .await
+        .expect("subscribe");
+    let newer_version_state =
+        format!(r#"{{"last_opened_feed_id":{},"written_by_a_newer_version":true}}"#, feed.id);
+    sqlx::query(
+        "INSERT INTO app_settings (key, value, updated_at) VALUES ('app_state_v2', ?1, '2026-10-09T00:00:00Z')",
+    )
+    .bind(newer_version_state)
+    .execute(&pool)
+    .await
+    .expect("seed app state");
+
+    SqlitePersistenceMutations::new(pool.clone(), pool.clone())
+        .remove_subscription(feed.id, true)
+        .await
+        .expect("removing a subscription must not depend on parsing the app state");
+    assert!(feeds.get_feed(feed.id).await.expect("get feed").is_none());
+}
