@@ -5,7 +5,7 @@ use encoding_rs::{Encoding, UTF_8, UTF_16BE, UTF_16LE};
 use futures_util::StreamExt;
 use reqwest::header;
 
-use crate::xml_declaration::{DeclaredEncoding, leading_declaration};
+use crate::xml_declaration::leading_declared_encoding;
 
 pub(crate) const MAX_FEED_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 
@@ -56,10 +56,7 @@ fn decode_feed_bytes(bytes: &[u8], charset: Option<&'static Encoding>) -> Result
 /// UTF-16 label there contradicts the bytes; like HTML's `<meta charset>`, read it as UTF-8.
 /// Labels encoding_rs does not know fall back to UTF-8 as well.
 fn declared_encoding(bytes: &[u8]) -> Option<&'static Encoding> {
-    let DeclaredEncoding::Value(label) = leading_declaration(bytes)? else {
-        return None;
-    };
-    let encoding = Encoding::for_label(&bytes[label])?;
+    let encoding = Encoding::for_label(&bytes[leading_declared_encoding(bytes)?])?;
     Some(if encoding == UTF_16LE || encoding == UTF_16BE { UTF_8 } else { encoding })
 }
 

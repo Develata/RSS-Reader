@@ -43,37 +43,20 @@ const UTF8_DECLARATION: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>"#;
 /// `raw` 已经解码成 UTF-8，但 feed-rs 会把它当字节重新交给 quick-xml，而 quick-xml 按遇到的
 /// 第一个 XML 声明切换解码器：留下的 `encoding="GBK"` 会让文本被再解码一次（审计 B2）。
 ///
-/// 后置条件：解析器读到的第一个声明一定声明 UTF-8，之后再出现的声明不能再切换编码。
-/// 已有声明就改写或补上 `encoding`；没有可用声明的 XML 文本在前面补一个；JSON 原样交出。
+/// 后置条件：XML 文本交给解析器时，第一个声明总是这里补上的 UTF-8 声明。quick-xml 读到它就把
+/// 编码定为 `XmlDetected(UTF-8)`，不再接受后续声明的切换；原有声明成了第二个声明，feed-rs
+/// 跳过所有声明事件。不改写原声明，因此不依赖 quick-xml 怎样解析它的属性。JSON 原样交出；
 /// 只拼接切片，不复制正文。
 fn utf8_parser_input(raw: &[u8]) -> impl std::io::Read + '_ {
     use std::io::Read;
 
-    use crate::xml_declaration::{DeclaredEncoding, is_xml_space, leading_declaration};
+    use crate::xml_declaration::is_xml_space;
 
-    // 已解码文本开头的 U+FEFF 没有意义；留着它，quick-xml 会认作 BOM，而 BOM 之后的声明
-    // 仍能切换编码，后面的判断也会因开头不是空白或 `<` 而跳过。
+    // 已解码文本开头的 U+FEFF 没有意义；留着它，下面就看不出这是 XML 文本。
     let raw = raw.strip_prefix("\u{feff}".as_bytes()).unwrap_or(raw);
-    let none: &[u8] = &[];
-    let (head, middle, tail) = match leading_declaration(raw) {
-        Some(DeclaredEncoding::Value(label))
-            if raw[label.clone()].eq_ignore_ascii_case(b"UTF-8") =>
-        {
-            (raw, none, none)
-        }
-        Some(DeclaredEncoding::Value(label)) => {
-            (&raw[..label.start], b"UTF-8".as_slice(), &raw[label.end..])
-        }
-        Some(DeclaredEncoding::Missing { insert_at }) => {
-            (&raw[..insert_at], br#" encoding="UTF-8""#.as_slice(), &raw[insert_at..])
-        }
-        Some(DeclaredEncoding::Unreadable) => (UTF8_DECLARATION, none, raw),
-        None if raw.iter().find(|&&b| !is_xml_space(b)) == Some(&b'<') => {
-            (UTF8_DECLARATION, none, raw)
-        }
-        None => (raw, none, none),
-    };
-    head.chain(middle).chain(tail)
+    let xml = raw.iter().find(|&&b| !is_xml_space(b)) == Some(&b'<');
+    let declaration: &[u8] = if xml { UTF8_DECLARATION } else { &[] };
+    declaration.chain(raw)
 }
 
 pub fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>) -> Option<String> {
