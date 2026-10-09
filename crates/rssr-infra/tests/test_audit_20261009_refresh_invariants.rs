@@ -294,7 +294,6 @@ async fn fetch_and_parse_gbk_feed(
 /// XML may declare its encoding only in the prolog (no charset parameter in Content-Type).
 /// Decoding the bytes as UTF-8 before the XML parser sees them destroys GBK/Big5/Shift_JIS text.
 #[tokio::test]
-#[ignore = "audit-2026-10-09: transport decodes prolog-declared non-UTF-8 feeds as UTF-8 (mojibake)"]
 async fn prolog_declared_gbk_feed_keeps_its_text() {
     let parsed = fetch_and_parse_gbk_feed("Content-Type: application/rss+xml\r\n").await;
     assert_eq!(parsed.title.as_deref(), Some("中文标题"));
@@ -304,7 +303,6 @@ async fn prolog_declared_gbk_feed_keeps_its_text() {
 /// With both an HTTP charset and a matching prolog declaration, the transport transcodes to UTF-8
 /// but the parser still honours the stale `encoding="GBK"` declaration and decodes a second time.
 #[tokio::test]
-#[ignore = "audit-2026-10-09: HTTP-charset transcoding plus the original XML declaration decodes twice (mojibake)"]
 async fn http_and_prolog_both_gbk_feed_keeps_its_text() {
     let parsed =
         fetch_and_parse_gbk_feed("Content-Type: application/rss+xml; charset=GBK\r\n").await;
