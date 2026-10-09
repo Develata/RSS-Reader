@@ -66,6 +66,20 @@ pub(crate) struct EntriesPageState {
     pub(crate) flag_writes_since_query: Vec<FlagPatch>,
 }
 
+/// 见 [`EntriesPageState::query_clock_trigger`]。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct QueryClockTrigger {
+    refresh_revision: u64,
+    bulk_revision: u64,
+    feed_id: Option<i64>,
+    search_title: Option<String>,
+    show_archived: bool,
+    read_filter: ReadFilter,
+    starred_filter: StarredFilter,
+    selected_feed_urls: Vec<String>,
+    archive_after_months: u32,
+}
+
 /// 一次成功写入的已读/收藏变更；`None` 表示该标志没有改动。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct FlagPatch {
@@ -134,6 +148,27 @@ impl EntriesPageState {
         }
     }
 
+    /// 归档时钟的采样触发条件（审计 A4）：查询条件变化、批量已读或手动刷新完成时重新采样；
+    /// 状态提示、查询结果这类不改变查询条件的状态变化不触发。
+    pub(crate) fn query_clock_trigger(
+        &self,
+        feed_id: Option<i64>,
+        search_title: Option<String>,
+        refresh_revision: u64,
+    ) -> QueryClockTrigger {
+        QueryClockTrigger {
+            refresh_revision,
+            bulk_revision: self.bulk_revision,
+            feed_id,
+            search_title,
+            show_archived: self.show_archived,
+            read_filter: self.read_filter,
+            starred_filter: self.starred_filter,
+            selected_feed_urls: self.selected_feed_urls.clone(),
+            archive_after_months: self.archive_after_months,
+        }
+    }
+
     pub(crate) fn page_size(&self) -> usize {
         self.entries_page_size.max(1) as usize
     }
@@ -183,4 +218,44 @@ pub(crate) fn map_selected_feed_urls_to_ids(
         .filter(|feed| selected.contains(feed.url.as_str()))
         .map(|feed| feed.id)
         .collect::<Vec<_>>()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EntriesPageState, ReadFilter, StarredFilter};
+
+    /// 查询条件变化时重新采样归档时钟；状态提示、查询结果等普通变化不采样（审计 A4）。
+    #[test]
+    fn archive_clock_resamples_on_query_changes_only() {
+        let state = EntriesPageState::new(true);
+        let base = state.query_clock_trigger(None, None, 0);
+
+        let mut unrelated = state.clone();
+        unrelated.status = "共 3 篇文章。".into();
+        unrelated.entries_loaded = true;
+        unrelated.current_page = 2;
+        unrelated.controls_hidden = !unrelated.controls_hidden;
+        assert_eq!(unrelated.query_clock_trigger(None, None, 0), base);
+
+        let mut changed = Vec::new();
+        for edit in [
+            (|s: &mut EntriesPageState| s.read_filter = ReadFilter::UnreadOnly)
+                as fn(&mut EntriesPageState),
+            |s| s.starred_filter = StarredFilter::StarredOnly,
+            |s| s.show_archived = !s.show_archived,
+            |s| s.selected_feed_urls = vec!["https://example.com/feed.xml".into()],
+            |s| s.archive_after_months += 1,
+            |s| s.bulk_revision += 1,
+        ] {
+            let mut edited = state.clone();
+            edit(&mut edited);
+            changed.push(edited.query_clock_trigger(None, None, 0));
+        }
+        changed.push(state.query_clock_trigger(Some(1), None, 0));
+        changed.push(state.query_clock_trigger(None, Some("中文".into()), 0));
+        changed.push(state.query_clock_trigger(None, None, 1));
+        for trigger in changed {
+            assert_ne!(trigger, base);
+        }
+    }
 }

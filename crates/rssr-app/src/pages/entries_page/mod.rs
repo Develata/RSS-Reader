@@ -221,18 +221,8 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         presenter_input.with(|input| Arc::new(EntriesPagePresenter::from_input(input)))
     });
     let refresh_revision = ui.refresh_revision();
-    // 归档分界的“现在”只在挂载与手动刷新完成时采样，渲染本身不读时钟（审计 A4）。
-    let query_now = use_sampled_clock(refresh_revision, current_time_utc);
-    let facade = EntriesPageFacade::new(
-        ui,
-        session,
-        Arc::clone(&state_snapshot),
-        presenter.cloned(),
-        query_now,
-    );
     let entry_search = ui.entry_search();
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
-    let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), query_now);
     let preferences_loaded = state_snapshot.preferences_load.is_loaded();
     let entries_ready = state_snapshot.preferences_load.can_load_entries();
     let bulk_revision = state_snapshot.bulk_revision;
@@ -241,6 +231,20 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let read_filter = state_snapshot.read_filter;
     let starred_filter = state_snapshot.starred_filter;
     let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
+    // 归档分界的“现在”只在挂载、手动刷新完成与查询条件变化时采样；状态提示、查询结果这类
+    // 普通重渲染不读时钟，否则 `EntryQuery` 每跨一秒就变化并重发查询（审计 A4）。
+    let query_now = use_sampled_clock(
+        state_snapshot.query_clock_trigger(feed_id, query_search.clone(), refresh_revision),
+        current_time_utc,
+    );
+    let facade = EntriesPageFacade::new(
+        ui,
+        session,
+        Arc::clone(&state_snapshot),
+        presenter.cloned(),
+        query_now,
+    );
+    let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), query_now);
 
     use_reactive_side_effect(
         (
