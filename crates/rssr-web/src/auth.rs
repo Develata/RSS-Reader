@@ -5,18 +5,18 @@ mod persisted_state;
 mod rate_limit;
 mod session;
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use axum::{
-    Form,
-    extract::{Query, Request, State},
+    Extension, Form,
+    extract::{ConnectInfo, Query, Request, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     middleware::Next,
     response::{Html, IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
 use time::OffsetDateTime;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 
 use self::config::verify_credentials;
 pub(crate) use self::config::{AuthConfig, generate_password_hash, load_config};
@@ -27,14 +27,41 @@ use self::rate_limit::{
     record_login_failure,
 };
 use self::session::{
-    SESSION_COOKIE, build_session_token, extract_cookie, gate_cookie_header, logout_cookie_header,
+    DEVICE_COOKIE, SESSION_COOKIE, build_device_token, build_session_token, device_cookie_header,
+    device_nonce, extract_cookie, gate_cookie_header, logout_cookie_header,
     logout_gate_cookie_header, session_cookie_header, session_is_valid,
 };
+
+/// 同时进行的密码校验上限。Argon2 每次都要占用一个阻塞线程和可观的内存，登录请求再多
+/// 也只排队，不会把服务拖垮（审计 F2）。
+const MAX_CONCURRENT_CREDENTIAL_CHECKS: usize = 2;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) config: Arc<AuthConfig>,
     pub(crate) login_throttle: Arc<Mutex<HashMap<String, LoginThrottleState>>>,
+    credential_checks: Arc<Semaphore>,
+}
+
+impl AppState {
+    pub(crate) fn new(config: Arc<AuthConfig>) -> Self {
+        Self {
+            config,
+            login_throttle: Arc::default(),
+            credential_checks: Arc::new(Semaphore::new(MAX_CONCURRENT_CREDENTIAL_CHECKS)),
+        }
+    }
+
+    /// 在阻塞线程池里做 Argon2 校验，不占用异步 worker。
+    async fn check_credentials(&self, username: String, password: String) -> bool {
+        let Ok(_permit) = self.credential_checks.acquire().await else {
+            return false;
+        };
+        let config = Arc::clone(&self.config);
+        tokio::task::spawn_blocking(move || verify_credentials(&config, &username, &password))
+            .await
+            .unwrap_or(false)
+    }
 }
 
 /// 环境变量是进程级的，而 `cargo test` 默认多线程并行跑同一个测试二进制。
@@ -79,25 +106,34 @@ pub(crate) async fn show_login(
 
 pub(crate) async fn handle_login(
     State(state): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> impl IntoResponse {
     let next = sanitize_next(form.next.as_deref());
-    let rate_limit_key = rate_limit_key(&state.config, &headers, &form.username);
+    let peer = peer.map(|Extension(ConnectInfo(address))| address.ip());
+    let rate_limit_key = rate_limit_key(&state.config, &headers, peer, &form.username);
 
-    if login_attempt_is_blocked(&state, &rate_limit_key).await {
+    if let Some(key) = &rate_limit_key
+        && login_attempt_is_blocked(&state, key).await
+    {
         return login_redirect(next, Some("rate_limited"));
     }
 
-    if !verify_credentials(&state.config, &form.username, &form.password) {
-        let blocked = record_login_failure(&state, &rate_limit_key).await;
+    if !state.check_credentials(form.username, form.password).await {
+        let blocked = match &rate_limit_key {
+            Some(key) => record_login_failure(&state, key).await,
+            None => false,
+        };
         return login_redirect(
             next,
             Some(if blocked { "rate_limited" } else { "invalid_credentials" }),
         );
     }
 
-    clear_login_failures(&state, &rate_limit_key).await;
+    if let Some(key) = &rate_limit_key {
+        clear_login_failures(&state, key).await;
+    }
 
     let expires_at = OffsetDateTime::now_utc() + state.config.session_ttl;
     let token = match build_session_token(&state.config, expires_at.unix_timestamp()) {
@@ -110,8 +146,19 @@ pub(crate) async fn handle_login(
                 .into_response();
         }
     };
+    // 已经是已知设备就沿用原标记，失败计数仍落在同一个键上；否则签发一个。
+    let known_device = extract_cookie(&headers, DEVICE_COOKIE)
+        .and_then(|value| device_nonce(&state.config, value))
+        .is_some();
+    let device_cookie = if known_device {
+        None
+    } else {
+        build_device_token(&state.config)
+            .map(|device| device_cookie_header(&device, &state.config))
+            .ok()
+    };
 
-    successful_login_response(&state.config, next, &token)
+    successful_login_response(&state.config, next, &token, device_cookie)
 }
 
 pub(crate) async fn handle_logout(State(state): State<AppState>) -> impl IntoResponse {
@@ -352,29 +399,129 @@ mod tests {
         let _ = fs::remove_file(auth_file);
     }
 
+    const PEER: Option<std::net::IpAddr> =
+        Some(std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 0, 2, 7)));
+
     #[test]
-    fn rate_limit_key_ignores_proxy_headers_by_default() {
+    fn rate_limit_key_uses_the_peer_address_unless_proxies_are_trusted() {
         let config = sample_config();
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", HeaderValue::from_static("203.0.113.10"));
         headers.insert("x-real-ip", HeaderValue::from_static("198.51.100.2"));
 
-        let key = rate_limit_key(&config, &headers, "admin");
+        let key = rate_limit_key(&config, &headers, PEER, "demo");
 
-        assert_eq!(key, "direct|admin");
+        assert_eq!(key.as_deref(), Some("client|192.0.2.7"));
+        assert_eq!(
+            rate_limit_key(&config, &headers, None, "demo").as_deref(),
+            Some("client|unknown")
+        );
+    }
+
+    /// 可信代理把对端地址追加在最右边；左边的项由客户端填写，可以随意伪造（审计 F1）。
+    #[test]
+    fn trusted_forwarded_for_uses_the_address_the_proxy_appended() {
+        let mut config = sample_config();
+        config.trust_proxy_headers = true;
+        let mut headers = HeaderMap::new();
+        headers.append("x-forwarded-for", HeaderValue::from_static("1.1.1.1, 203.0.113.10"));
+        headers.append("x-forwarded-for", HeaderValue::from_static("6.6.6.6, 198.51.100.2"));
+
+        let key = rate_limit_key(&config, &headers, PEER, "demo");
+
+        assert_eq!(key.as_deref(), Some("client|198.51.100.2"));
     }
 
     #[test]
-    fn rate_limit_key_uses_forwarded_headers_when_trusted() {
-        let mut config = sample_config();
-        config.trust_proxy_headers = true;
+    fn unknown_usernames_never_allocate_rate_limit_keys() {
+        let config = sample_config();
+        assert_eq!(rate_limit_key(&config, &HeaderMap::new(), PEER, "admin"), None);
+    }
 
+    #[test]
+    fn device_tokens_verify_only_with_the_issuing_secret_and_username() {
+        let config = sample_config();
+        let token = build_device_token(&config).expect("device token");
+        let nonce = device_nonce(&config, &token).expect("valid device token");
+        assert!(!nonce.is_empty() && !nonce.contains('.'));
+
+        let mut other_secret = sample_config();
+        other_secret.session_secret = b"abcdefghijabcdefghijabcdefghijab".to_vec();
+        let mut other_user = sample_config();
+        other_user.username = "someone".into();
+        assert_eq!(device_nonce(&other_secret, &token), None);
+        assert_eq!(device_nonce(&other_user, &token), None);
+        assert_eq!(device_nonce(&config, &format!("{nonce}.AAAA")), None);
+        // A session token must not pass as a device token.
+        let session = build_session_token(&config, i64::MAX).expect("session token");
+        assert_eq!(device_nonce(&config, &session), None);
+    }
+
+    fn login_form(password: &str) -> Form<LoginForm> {
+        Form(LoginForm {
+            username: "demo".into(),
+            password: password.into(),
+            next: Some("/entries".into()),
+        })
+    }
+
+    async fn attempt(
+        state: &AppState,
+        cookie: Option<&str>,
+        password: &str,
+    ) -> (Option<String>, Vec<String>) {
         let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-for", HeaderValue::from_static("203.0.113.10, 198.51.100.2"));
+        if let Some(cookie) = cookie {
+            headers.insert(header::COOKIE, HeaderValue::from_str(cookie).unwrap());
+        }
+        let peer = PEER.map(|ip| Extension(ConnectInfo(SocketAddr::new(ip, 40_000))));
+        let response = handle_login(State(state.clone()), peer, headers, login_form(password))
+            .await
+            .into_response();
+        let location = response
+            .headers()
+            .get(header::LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+        let cookies = response
+            .headers()
+            .get_all(header::SET_COOKIE)
+            .iter()
+            .filter_map(|v| v.to_str().ok().map(String::from))
+            .collect();
+        (location, cookies)
+    }
 
-        let key = rate_limit_key(&config, &headers, "admin");
+    /// 攻击者与所有者共用同一个客户端地址（例如都在同一个反向代理后面）时，把地址锁住也
+    /// 锁不住所有者已登录过的浏览器；没有设备标记的新客户端仍受限速（审计 F1）。
+    #[tokio::test]
+    async fn exhausting_the_client_bucket_does_not_lock_out_a_known_device() {
+        let mut config = sample_config();
+        config.login_rate_limit.max_failures = 2;
+        let state = AppState::new(Arc::new(config));
 
-        assert_eq!(key, "203.0.113.10|admin");
+        let (location, cookies) = attempt(&state, None, "secret123").await;
+        assert_eq!(location.as_deref(), Some("/entries"));
+        let device = cookies
+            .iter()
+            .find_map(|cookie| cookie.strip_prefix(&format!("{DEVICE_COOKIE}=")))
+            .and_then(|rest| rest.split(';').next())
+            .expect("a first login issues a device cookie");
+        let device_cookie = format!("{DEVICE_COOKIE}={device}");
+        assert!(cookies.iter().any(|cookie| cookie.contains("Path=/login")));
+
+        for _ in 0..2 {
+            attempt(&state, None, "wrong-password").await;
+        }
+        let (location, _) = attempt(&state, None, "secret123").await;
+        assert!(location.unwrap().contains("error=rate_limited"), "new clients stay throttled");
+
+        let (location, cookies) = attempt(&state, Some(&device_cookie), "secret123").await;
+        assert_eq!(location.as_deref(), Some("/entries"), "the known device still logs in");
+        assert!(
+            !cookies.iter().any(|cookie| cookie.starts_with(DEVICE_COOKIE)),
+            "a known device keeps its marker"
+        );
     }
 
     #[cfg(unix)]

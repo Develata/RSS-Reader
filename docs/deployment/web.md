@@ -45,7 +45,15 @@ RSS_READER_WEB_AUTH_STATE_FILE=/app/auth/auth.json
 RSS_READER_WEB_TRUST_PROXY_HEADERS=false
 ```
 
-`production` 要求 `Secure` cookie。`RSS_READER_WEB_TRUST_PROXY_HEADERS` 仅在可信反向代理正确覆盖转发头时启用；默认保持 `false`。密码哈希可在源码工作区生成：
+`production` 要求 `Secure` cookie。`RSS_READER_WEB_TRUST_PROXY_HEADERS` 仅在可信反向代理正确覆盖转发头时启用；默认保持 `false`。
+
+登录失败按客户端分别计数，连续失败达到上限（默认 15 分钟内 5 次）后，该客户端在一段时间内（默认 15 分钟）不能再尝试：
+
+- 默认按 TCP 对端地址区分客户端。放在反向代理后面且没有开启上面的选项时，所有访问者都显示为代理的地址，共用同一个计数。
+- 开启 `RSS_READER_WEB_TRUST_PROXY_HEADERS` 后，取 `X-Forwarded-For` 的最右一项，也就是可信代理追加的对端地址；左侧各项由客户端自己填写，不会被采用。因此只在恰好一层可信代理、且它会追加该头时开启。
+- 成功登录过的浏览器会收到一个只发给 `/login` 的已知设备标记（`rssr_web_device`，HttpOnly，约 400 天有效），它的失败次数单独计数。即使攻击者与你共用同一个地址并耗尽了那份计数，已经登录过的浏览器仍能用正确密码登录；没有这个标记的新浏览器则要等计数恢复。更换 session secret 会让已有标记失效。
+
+密码哈希可在源码工作区生成：
 
 ```bash
 cargo run --locked -p rssr-web -- --print-password-hash '请换成自己的强密码'

@@ -17,8 +17,17 @@ pub(super) fn login_redirect(next: &str, error: Option<&str>) -> Response {
     Redirect::to(&location).into_response()
 }
 
-pub(super) fn successful_login_response(config: &AuthConfig, next: &str, token: &str) -> Response {
+pub(super) fn successful_login_response(
+    config: &AuthConfig,
+    next: &str,
+    token: &str,
+    device_cookie: Option<String>,
+) -> Response {
     let mut response = Redirect::to(next).into_response();
+    if let Some(device_cookie) = device_cookie.and_then(|value| HeaderValue::from_str(&value).ok())
+    {
+        response.headers_mut().append(header::SET_COOKIE, device_cookie);
+    }
     response.headers_mut().append(
         header::SET_COOKIE,
         HeaderValue::from_str(&session_cookie_header(token, config)).expect("valid session cookie"),

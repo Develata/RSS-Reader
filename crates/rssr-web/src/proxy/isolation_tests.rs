@@ -1,10 +1,9 @@
 //! Test-only upstream injection: the real bounded reader and response builder are used.
 //! No fixture route or network-policy override is compiled into rssr-web.
-use std::{collections::HashMap, io::Write, sync::Arc};
+use std::{io::Write, sync::Arc};
 
 use axum::{Router, extract::Query, http::StatusCode, middleware, routing::get};
 use reqwest::{ResponseBuilderExt, Url};
-use tokio::sync::Mutex;
 use tower_http::services::{ServeDir, ServeFile};
 
 use super::{FeedProxyQuery, MAX_PROXIED_FEED_BYTES, build_proxy_response, feed_proxy};
@@ -131,8 +130,7 @@ async fn browser_fixture_server() {
     assert!(std::env::var_os("RSSR_PROXY_ISOLATION_TEST").is_some());
     assert!(std::env::var_os("RSS_READER_WEB_AUTH_STATE_FILE").is_some());
     let config = Arc::new(load_config().unwrap());
-    let state =
-        AppState { config: config.clone(), login_throttle: Arc::new(Mutex::new(HashMap::new())) };
+    let state = AppState::new(config.clone());
     let protected = Router::new()
         .route("/session-probe", get(session_probe))
         .route(
@@ -177,7 +175,7 @@ async fn browser_fixture_server() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     println!("RSSR_PROXY_TEST_URL=http://{}", listener.local_addr().unwrap());
     std::io::stdout().flush().unwrap();
-    axum::serve(listener, app)
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
         .with_graceful_shutdown(async {
             tokio::task::spawn_blocking(|| {
                 let _ = std::io::stdin().read_line(&mut String::new());

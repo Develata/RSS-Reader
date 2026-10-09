@@ -122,14 +122,13 @@ pub(crate) fn generate_password_hash(password: &str) -> Result<String> {
     Ok(hash.to_string())
 }
 
+/// 用户名不对也照样做一次 Argon2 校验：否则错误用户名立即返回、正确用户名才耗时，
+/// 响应时间就泄露了哪个用户名是真的（审计 F2）。
 pub(crate) fn verify_credentials(config: &AuthConfig, username: &str, password: &str) -> bool {
-    if username.trim() != config.username {
-        return false;
-    }
-
-    match &config.password_policy {
+    let password_matches = match &config.password_policy {
         PasswordPolicy::Argon2Hash(hash) => verify_password_hash(hash, password),
-    }
+    };
+    password_matches && username.trim() == config.username
 }
 
 pub(crate) fn verify_password_hash(hash: &str, password: &str) -> bool {

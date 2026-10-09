@@ -2,7 +2,7 @@ mod auth;
 mod proxy;
 mod smoke;
 
-use std::{collections::HashMap, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::{Context, Result, ensure};
 use axum::{
@@ -14,7 +14,6 @@ use axum::{
 };
 use clap::Parser;
 use tokio::fs;
-use tokio::sync::Mutex;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -47,8 +46,7 @@ async fn main() -> Result<()> {
     }
 
     let config = Arc::new(load_config()?);
-    let app_state =
-        AppState { config: config.clone(), login_throttle: Arc::new(Mutex::new(HashMap::new())) };
+    let app_state = AppState::new(config.clone());
     ensure!(
         config.static_dir.join("index.html").exists(),
         "静态资源目录缺少 index.html：{}",
@@ -93,7 +91,10 @@ async fn main() -> Result<()> {
         .await
         .with_context(|| format!("绑定监听地址失败：{}", config.bind_addr))?;
 
-    axum::serve(listener, app).await.context("启动 Web 服务失败")?;
+    // 登录限速在不信任代理头时按 TCP 对端地址区分客户端，需要连接信息（审计 F1）。
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .await
+        .context("启动 Web 服务失败")?;
 
     Ok(())
 }
