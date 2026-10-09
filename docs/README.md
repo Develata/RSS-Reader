@@ -69,12 +69,14 @@
 ### 架构审查与收敛
 
 - [架构审查报告（2026-04）](./architecture-review-2026-04.md)
+- [工程审计报告（2026-10）](./engineering-audit-2026-10.md)
 - [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)
 - [Agent 交接记录](./handoffs/README.md)
 
 这组文档主要回答：
 
 - 2026-04 这轮架构审查最初指出了哪些边界失真
+- 2026-10 审计在 v0.1.23 基线上发现了哪些一致性、抓取稳健性、Web 存储与构建可复现性问题，哪些已有确定性红测试
 - 哪些 application façade 已经删除，哪些 use case 明确保留
 - 当前 application naming baseline 和后续收敛顺序是什么
 - 最近一轮 agent 工作已经做到哪里，还有哪些边界仍在收敛中
