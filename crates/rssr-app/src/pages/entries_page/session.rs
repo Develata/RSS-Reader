@@ -294,6 +294,48 @@ mod tests {
         assert_eq!(state.status_tone, "info");
     }
 
+    /// 列表查询在已读写入提交前读取了存储；写入成功并已修补列表后，这个仍是“最新一代”的
+    /// 旧快照不能把条目恢复成未读。查询代际只防“旧查询覆盖新查询”，不防“旧查询覆盖写入”。
+    #[test]
+    #[ignore = "audit-2026-10-09: an in-flight list query started before a successful flag write overwrites the patched list (docs/engineering-audit-2026-10.md)"]
+    fn in_flight_query_cannot_resurrect_flags_overwritten_by_a_successful_write() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let (stale_sender, stale_receiver) = oneshot::channel();
+        let session = dom.in_scope(ScopeId::APP, || {
+            let mut state = EntriesPageState::new(true);
+            state.read_filter = ReadFilter::UnreadOnly;
+            let session =
+                EntriesPageSession::new(None, Signal::new(state), Signal::new(0), Signal::new(0));
+            session.dispatch(EntriesPageIntent::PreferencesLoaded);
+            session.spawn_entries_query(async { loaded(1) });
+            session
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.snapshot().entries.len(), 1);
+            // 例如：跨秒重渲染或刷新完成触发了新查询，它先于下面的写入读到“未读”。
+            session
+                .spawn_entries_query(async { stale_receiver.await.expect("stale query result") });
+            // ToggleRead 成功后 runtime 投递的修补。
+            session.dispatch(EntriesPageIntent::PatchEntryFlags {
+                entry_id: 1,
+                is_read: Some(true),
+                is_starred: None,
+            });
+            assert!(session.snapshot().entries.is_empty(), "read entry leaves UnreadOnly");
+        });
+
+        stale_sender.send(loaded(1)).expect("deliver stale unread snapshot");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert!(
+                session.snapshot().entries.iter().all(|entry| entry.id != 1 || entry.is_read),
+                "a stale snapshot resurrected an entry the user just marked as read"
+            );
+        });
+    }
+
     #[test]
     fn returning_page_is_applied_after_entries_arrive_and_clamped() {
         let mut dom = VirtualDom::new(|| rsx! {});

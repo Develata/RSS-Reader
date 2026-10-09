@@ -109,6 +109,55 @@ mod tests {
         );
     }
 
+    /// 两个窄字段更新并发时，各自的“读整份→改一个字段→写整份”会互相覆盖。
+    /// 仓储在 `load` 后等待另一方也完成读取，确定性地构造这一交错（不依赖时序）。
+    struct InterleavingRepository {
+        state: Mutex<AppStateSnapshot>,
+        both_loaded: tokio::sync::Barrier,
+    }
+
+    #[async_trait::async_trait]
+    impl AppStateRepository for InterleavingRepository {
+        async fn load(&self) -> rssr_domain::Result<AppStateSnapshot> {
+            let snapshot = self.state.lock().expect("lock app state").clone();
+            // 修复后若只剩一次读取，超时放行而不是永久挂起。
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_millis(500),
+                self.both_loaded.wait(),
+            )
+            .await;
+            Ok(snapshot)
+        }
+
+        async fn save(&self, state: &AppStateSnapshot) -> rssr_domain::Result<()> {
+            *self.state.lock().expect("lock app state") = state.clone();
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "audit-2026-10-09: AppState narrow-field updates are whole-snapshot read-modify-write; concurrent updates lose one field (docs/engineering-audit-2026-10.md)"]
+    async fn concurrent_narrow_field_updates_do_not_lose_each_other() {
+        let repository = Arc::new(InterleavingRepository {
+            state: Mutex::new(AppStateSnapshot::default()),
+            both_loaded: tokio::sync::Barrier::new(2),
+        });
+        let service = AppStateService::new(repository.clone());
+        let workspace =
+            EntriesWorkspaceState { show_archived: true, ..EntriesWorkspaceState::default() };
+
+        let (feed_saved, workspace_saved) = tokio::join!(
+            service.save_last_opened_feed_id(Some(7)),
+            service.save_entries_workspace(workspace.clone()),
+        );
+        feed_saved.expect("save last opened feed");
+        workspace_saved.expect("save workspace");
+
+        let persisted = repository.state.lock().expect("lock app state").clone();
+        assert_eq!(persisted.last_opened_feed_id, Some(7), "last opened feed was lost");
+        assert_eq!(persisted.entries_workspace, workspace, "workspace update was lost");
+    }
+
     #[tokio::test]
     async fn save_last_opened_feed_id_updates_only_last_opened_field() {
         let workspace =
