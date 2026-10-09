@@ -23,24 +23,28 @@ pub(crate) use self::config::{AuthConfig, generate_password_hash, load_config};
 use self::login_flow::{login_redirect, successful_login_response};
 use self::login_page::{render_login_failure, render_login_page};
 use self::rate_limit::{
-    LoginThrottleState, clear_login_failures, login_attempt_is_blocked, rate_limit_key,
-    record_login_failure,
+    LoginThrottleState, clear_login_failures, is_device_key, login_attempt_is_blocked,
+    rate_limit_key, record_login_failure,
 };
 use self::session::{
-    DEVICE_COOKIE, SESSION_COOKIE, build_device_token, build_session_token, device_cookie_header,
-    device_nonce, extract_cookie, gate_cookie_header, logout_cookie_header,
-    logout_gate_cookie_header, session_cookie_header, session_is_valid,
+    SESSION_COOKIE, build_device_token, build_session_token, device_cookie_header, extract_cookie,
+    gate_cookie_header, logout_cookie_header, logout_gate_cookie_header, session_cookie_header,
+    session_is_valid,
 };
 
 /// 同时进行的密码校验上限。Argon2 每次都要占用一个阻塞线程和可观的内存，登录请求再多
-/// 也只排队，不会把服务拖垮（审计 F2）。
+/// 也不会把服务拖垮（审计 F2）。
 const MAX_CONCURRENT_CREDENTIAL_CHECKS: usize = 2;
+/// 带有效已知设备标记的请求另用的校验名额：其他来源占满上面的名额时，所有者登录过的浏览器
+/// 仍能校验密码。设备标记由服务端签发，攻击者无法批量制造（审计 F1）。
+const MAX_CONCURRENT_DEVICE_CREDENTIAL_CHECKS: usize = 1;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) config: Arc<AuthConfig>,
     pub(crate) login_throttle: Arc<Mutex<HashMap<String, LoginThrottleState>>>,
     credential_checks: Arc<Semaphore>,
+    device_credential_checks: Arc<Semaphore>,
 }
 
 impl AppState {
@@ -49,19 +53,48 @@ impl AppState {
             config,
             login_throttle: Arc::default(),
             credential_checks: Arc::new(Semaphore::new(MAX_CONCURRENT_CREDENTIAL_CHECKS)),
+            device_credential_checks: Arc::new(Semaphore::new(
+                MAX_CONCURRENT_DEVICE_CREDENTIAL_CHECKS,
+            )),
         }
     }
 
     /// 在阻塞线程池里做 Argon2 校验，不占用异步 worker。并发校验已满时返回 `None`：
     /// 直接拒绝而不排队，登录请求洪泛时待处理的请求不会无界堆积。
-    async fn check_credentials(&self, username: String, password: String) -> Option<bool> {
-        let _permit = self.credential_checks.try_acquire().ok()?;
+    async fn check_credentials(
+        &self,
+        known_device: bool,
+        username: String,
+        password: String,
+    ) -> Option<bool> {
+        let slots =
+            if known_device { &self.device_credential_checks } else { &self.credential_checks };
         let config = Arc::clone(&self.config);
-        let verified =
-            tokio::task::spawn_blocking(move || verify_credentials(&config, &username, &password))
-                .await;
+        let verified = run_blocking_with_permit(slots, move || {
+            verify_credentials(&config, &username, &password)
+        })
+        .await?;
         Some(verified.unwrap_or(false))
     }
+}
+
+/// 取得一个名额后在阻塞线程池里运行 `work`；没有空闲名额时返回 `None`。
+///
+/// 名额随闭包移入阻塞线程，直到 `work` 结束才释放。已经开始的阻塞任务无法取消，若名额留在
+/// 调用方的 future 里，客户端断开导致请求被丢弃时名额会提前归还，反复提交再断开就能让同时
+/// 运行的 Argon2 超过上限（审计 F2）。
+async fn run_blocking_with_permit<T: Send + 'static>(
+    slots: &Arc<Semaphore>,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Option<Result<T, tokio::task::JoinError>> {
+    let permit = Arc::clone(slots).try_acquire_owned().ok()?;
+    Some(
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            work()
+        })
+        .await,
+    )
 }
 
 /// 环境变量是进程级的，而 `cargo test` 默认多线程并行跑同一个测试二进制。
@@ -112,31 +145,26 @@ pub(crate) async fn handle_login(
 ) -> impl IntoResponse {
     let next = sanitize_next(form.next.as_deref());
     let peer = peer.map(|Extension(ConnectInfo(address))| address.ip());
-    let rate_limit_key = rate_limit_key(&state.config, &headers, peer, &form.username);
+    let rate_limit_key = rate_limit_key(&state.config, &headers, peer);
 
-    if let Some(key) = &rate_limit_key
-        && login_attempt_is_blocked(&state, key).await
-    {
+    if login_attempt_is_blocked(&state, &rate_limit_key).await {
         return login_redirect(next, Some("rate_limited"));
     }
 
-    let Some(valid) = state.check_credentials(form.username, form.password).await else {
+    let known_device = is_device_key(&rate_limit_key);
+    let Some(valid) = state.check_credentials(known_device, form.username, form.password).await
+    else {
         return login_redirect(next, Some("rate_limited"));
     };
     if !valid {
-        let blocked = match &rate_limit_key {
-            Some(key) => record_login_failure(&state, key).await,
-            None => false,
-        };
+        let blocked = record_login_failure(&state, &rate_limit_key).await;
         return login_redirect(
             next,
             Some(if blocked { "rate_limited" } else { "invalid_credentials" }),
         );
     }
 
-    if let Some(key) = &rate_limit_key {
-        clear_login_failures(&state, key).await;
-    }
+    clear_login_failures(&state, &rate_limit_key).await;
 
     let expires_at = OffsetDateTime::now_utc() + state.config.session_ttl;
     let token = match build_session_token(&state.config, expires_at.unix_timestamp()) {
@@ -150,9 +178,6 @@ pub(crate) async fn handle_login(
         }
     };
     // 已经是已知设备就沿用原标记，失败计数仍落在同一个键上；否则签发一个。
-    let known_device = extract_cookie(&headers, DEVICE_COOKIE)
-        .and_then(|value| device_nonce(&state.config, value))
-        .is_some();
     let device_cookie = if known_device {
         None
     } else {
@@ -232,7 +257,8 @@ mod tests {
 
     use super::*;
     use crate::auth::config::{LoginRateLimit, PasswordPolicy, verify_password_hash};
-    use crate::auth::rate_limit::cleanup_rate_limit_entries;
+    use crate::auth::rate_limit::{MAX_TRACKED_LOGIN_KEYS, cleanup_rate_limit_entries};
+    use crate::auth::session::{DEVICE_COOKIE, device_nonce};
     use time::Duration;
 
     unsafe fn set_test_var(name: &str, value: impl AsRef<std::ffi::OsStr>) {
@@ -412,13 +438,10 @@ mod tests {
         headers.insert("x-forwarded-for", HeaderValue::from_static("203.0.113.10"));
         headers.insert("x-real-ip", HeaderValue::from_static("198.51.100.2"));
 
-        let key = rate_limit_key(&config, &headers, PEER, "demo");
+        let key = rate_limit_key(&config, &headers, PEER);
 
-        assert_eq!(key.as_deref(), Some("client|192.0.2.7"));
-        assert_eq!(
-            rate_limit_key(&config, &headers, None, "demo").as_deref(),
-            Some("client|unknown")
-        );
+        assert_eq!(key, "client|192.0.2.7");
+        assert_eq!(rate_limit_key(&config, &headers, None), "client|unknown");
     }
 
     /// 可信代理把对端地址追加在最右边；左边的项由客户端填写，可以随意伪造（审计 F1）。
@@ -430,15 +453,9 @@ mod tests {
         headers.append("x-forwarded-for", HeaderValue::from_static("1.1.1.1, 203.0.113.10"));
         headers.append("x-forwarded-for", HeaderValue::from_static("6.6.6.6, 198.51.100.2"));
 
-        let key = rate_limit_key(&config, &headers, PEER, "demo");
+        let key = rate_limit_key(&config, &headers, PEER);
 
-        assert_eq!(key.as_deref(), Some("client|198.51.100.2"));
-    }
-
-    #[test]
-    fn unknown_usernames_never_allocate_rate_limit_keys() {
-        let config = sample_config();
-        assert_eq!(rate_limit_key(&config, &HeaderMap::new(), PEER, "admin"), None);
+        assert_eq!(key, "client|198.51.100.2");
     }
 
     #[test]
@@ -460,27 +477,33 @@ mod tests {
         assert_eq!(device_nonce(&config, &session), None);
     }
 
-    fn login_form(password: &str) -> Form<LoginForm> {
-        Form(LoginForm {
-            username: "demo".into(),
-            password: password.into(),
-            next: Some("/entries".into()),
-        })
-    }
-
     async fn attempt(
         state: &AppState,
         cookie: Option<&str>,
+        password: &str,
+    ) -> (Option<String>, Vec<String>) {
+        attempt_as(state, PEER.unwrap(), cookie, "demo", password).await
+    }
+
+    async fn attempt_as(
+        state: &AppState,
+        peer: std::net::IpAddr,
+        cookie: Option<&str>,
+        username: &str,
         password: &str,
     ) -> (Option<String>, Vec<String>) {
         let mut headers = HeaderMap::new();
         if let Some(cookie) = cookie {
             headers.insert(header::COOKIE, HeaderValue::from_str(cookie).unwrap());
         }
-        let peer = PEER.map(|ip| Extension(ConnectInfo(SocketAddr::new(ip, 40_000))));
-        let response = handle_login(State(state.clone()), peer, headers, login_form(password))
-            .await
-            .into_response();
+        let peer = Some(Extension(ConnectInfo(SocketAddr::new(peer, 40_000))));
+        let form = Form(LoginForm {
+            username: username.into(),
+            password: password.into(),
+            next: Some("/entries".into()),
+        });
+        let response =
+            handle_login(State(state.clone()), peer, headers, form).await.into_response();
         let location = response
             .headers()
             .get(header::LOCATION)
@@ -503,15 +526,7 @@ mod tests {
         config.login_rate_limit.max_failures = 2;
         let state = AppState::new(Arc::new(config));
 
-        let (location, cookies) = attempt(&state, None, "secret123").await;
-        assert_eq!(location.as_deref(), Some("/entries"));
-        let device = cookies
-            .iter()
-            .find_map(|cookie| cookie.strip_prefix(&format!("{DEVICE_COOKIE}=")))
-            .and_then(|rest| rest.split(';').next())
-            .expect("a first login issues a device cookie");
-        let device_cookie = format!("{DEVICE_COOKIE}={device}");
-        assert!(cookies.iter().any(|cookie| cookie.contains("Path=/login")));
+        let device_cookie = first_login_device_cookie(&state).await;
 
         for _ in 0..2 {
             attempt(&state, None, "wrong-password").await;
@@ -525,6 +540,127 @@ mod tests {
             !cookies.iter().any(|cookie| cookie.starts_with(DEVICE_COOKIE)),
             "a known device keeps its marker"
         );
+    }
+
+    /// 成功登录一次，返回签发的已知设备标记（作为请求 `Cookie` 头的值）。
+    async fn first_login_device_cookie(state: &AppState) -> String {
+        let (location, cookies) = attempt(state, None, "secret123").await;
+        assert_eq!(location.as_deref(), Some("/entries"));
+        assert!(cookies.iter().any(|cookie| cookie.contains("Path=/login")));
+        let device = cookies
+            .iter()
+            .find_map(|cookie| cookie.strip_prefix(&format!("{DEVICE_COOKIE}=")))
+            .and_then(|rest| rest.split(';').next())
+            .expect("a first login issues a device cookie");
+        format!("{DEVICE_COOKIE}={device}")
+    }
+
+    /// 用户名不存在时同样计数：否则只有真实用户名会被限速，攻击者据此就能判断用户名是否
+    /// 存在，也能用错误用户名无限次占用密码校验（审计 F1）。
+    #[tokio::test]
+    async fn unknown_usernames_are_throttled_like_the_real_one() {
+        let mut config = sample_config();
+        config.login_rate_limit.max_failures = 2;
+        let real = AppState::new(Arc::new(config.clone()));
+        let unknown = AppState::new(Arc::new(config));
+        let peer = PEER.unwrap();
+
+        for _ in 0..2 {
+            let (real_location, _) = attempt_as(&real, peer, None, "demo", "wrong").await;
+            let (unknown_location, _) = attempt_as(&unknown, peer, None, "admin", "wrong").await;
+            assert_eq!(real_location, unknown_location);
+        }
+        let (location, _) = attempt_as(&unknown, peer, None, "demo", "secret123").await;
+        assert!(location.unwrap().contains("error=rate_limited"));
+    }
+
+    /// 计数表满后，新的客户端地址共用溢出计数，照样会被限速；已知设备不受影响（审计 F1）。
+    #[tokio::test]
+    async fn a_full_failure_table_still_throttles_new_clients() {
+        let mut config = sample_config();
+        config.login_rate_limit.max_failures = 2;
+        let state = AppState::new(Arc::new(config));
+        let device_cookie = first_login_device_cookie(&state).await;
+        {
+            let now = OffsetDateTime::now_utc();
+            let mut throttle = state.login_throttle.lock().await;
+            for index in 0..MAX_TRACKED_LOGIN_KEYS {
+                throttle.insert(
+                    format!("client|10.0.{}.{}", index / 256, index % 256),
+                    LoginThrottleState { failures: 1, window_started_at: now, blocked_until: None },
+                );
+            }
+        }
+        let first: std::net::IpAddr = "198.51.100.1".parse().unwrap();
+        let second: std::net::IpAddr = "198.51.100.2".parse().unwrap();
+
+        let (location, _) = attempt_as(&state, first, None, "demo", "wrong").await;
+        assert!(location.unwrap().contains("error=invalid_credentials"));
+        let (location, _) = attempt_as(&state, second, None, "demo", "wrong").await;
+        assert!(location.unwrap().contains("error=rate_limited"));
+        let (location, _) = attempt_as(&state, first, None, "demo", "secret123").await;
+        assert!(location.unwrap().contains("error=rate_limited"));
+
+        let (location, _) = attempt(&state, Some(&device_cookie), "secret123").await;
+        assert_eq!(location.as_deref(), Some("/entries"));
+    }
+
+    /// 其他来源占满密码校验名额时，已知设备仍有自己的名额（审计 F1）。
+    #[tokio::test]
+    async fn a_known_device_has_its_own_credential_check_slot() {
+        let state = AppState::new(Arc::new(sample_config()));
+        let device_cookie = first_login_device_cookie(&state).await;
+        let _busy = Arc::clone(&state.credential_checks)
+            .try_acquire_many_owned(MAX_CONCURRENT_CREDENTIAL_CHECKS as u32)
+            .expect("all general slots");
+
+        let (location, _) = attempt(&state, None, "secret123").await;
+        assert!(location.unwrap().contains("error=rate_limited"));
+        let (location, _) = attempt(&state, Some(&device_cookie), "secret123").await;
+        assert_eq!(location.as_deref(), Some("/entries"));
+    }
+
+    /// 调用方被取消（客户端断开）后，仍在运行的阻塞校验继续占着名额，并发上限不能这样绕过
+    /// （审计 F2）。
+    #[tokio::test]
+    async fn cancelled_callers_keep_their_slot_until_the_blocking_work_ends() {
+        let slots = Arc::new(Semaphore::new(2));
+        let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut releases = Vec::new();
+        let mut callers = Vec::new();
+        for _ in 0..2 {
+            let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+            releases.push(release_tx);
+            let slots = Arc::clone(&slots);
+            let started_tx = started_tx.clone();
+            callers.push(tokio::spawn(async move {
+                run_blocking_with_permit(&slots, move || {
+                    started_tx.send(()).expect("the test waits for this");
+                    release_rx.recv().expect("the test releases the work");
+                })
+                .await
+            }));
+        }
+        for _ in 0..2 {
+            started_rx.recv().await.expect("blocking work started");
+        }
+        for caller in &callers {
+            caller.abort();
+        }
+        for caller in callers {
+            assert!(caller.await.expect_err("the caller was cancelled").is_cancelled());
+        }
+
+        assert!(run_blocking_with_permit(&slots, || ()).await.is_none());
+
+        for release in releases {
+            release.send(()).expect("the blocking work is waiting");
+        }
+        let _slots =
+            tokio::time::timeout(std::time::Duration::from_secs(10), slots.acquire_many(2))
+                .await
+                .expect("the slots come back once the work ends")
+                .expect("the semaphore stays open");
     }
 
     #[cfg(unix)]
