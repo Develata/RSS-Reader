@@ -43,6 +43,7 @@ impl WebDavConfigSync {
 
         Ok(Self {
             client: Client::builder()
+                .user_agent(crate::fetch::client::user_agent())
                 .timeout(WEBDAV_REQUEST_TIMEOUT)
                 .connect_timeout(WEBDAV_CONNECT_TIMEOUT)
                 .referer(false)

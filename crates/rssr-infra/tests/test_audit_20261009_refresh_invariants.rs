@@ -227,30 +227,44 @@ async fn the_fetch_that_started_last_owns_the_stored_result() {
     assert_eq!(body.as_deref(), Some(expected_body), "stale body won");
 }
 
-/// RFC 9110 §10.1.5: a user agent SHOULD send User-Agent unless configured not to. Image
-/// localization already sends one; feed fetches do not.
+/// RFC 9110 §10.1.5: a user agent SHOULD send User-Agent unless configured not to. Feed refresh,
+/// subscription discovery and WebDAV identify the client the same way (image localization keeps
+/// its own browser-compatible User-Agent).
 #[tokio::test]
-#[ignore = "audit-2026-10-09: native feed fetches send no User-Agent header"]
 async fn feed_fetch_identifies_the_client() {
-    let server = Server::start(|_| {
-        Response::new(
+    use rssr_application::SubscriptionProbePort;
+    use rssr_infra::{
+        config_sync::webdav::WebDavConfigSync, subscription_probe::HttpSubscriptionProbe,
+    };
+
+    let server = Server::start(|request| match request.path.as_str() {
+        "/feed.xml" => Response::new(
             200,
             "Content-Type: application/rss+xml\r\n",
             r#"<rss version="2.0"><channel><title>T</title></channel></rss>"#,
-        )
+        ),
+        _ => Response::new(404, "", []),
     })
     .await;
+    let feed_url = server.url.join("feed.xml").unwrap();
     FetchClient::new()
-        .fetch(&FetchRequest {
-            url: server.url.join("feed.xml").unwrap().to_string(),
-            etag: None,
-            last_modified: None,
-        })
+        .fetch(&FetchRequest { url: feed_url.to_string(), etag: None, last_modified: None })
         .await
         .expect("fetch feed");
+    HttpSubscriptionProbe::with_feed_client().probe(&feed_url).await.expect("probe feed");
+    let remote = WebDavConfigSync::new(server.url.as_str(), "dav/state.json").expect("webdav");
+    assert_eq!(remote.download_text().await.expect("webdav download"), None);
+
     let requests = server.requests();
-    assert_eq!((requests[0].method.as_str(), requests[0].path.as_str()), ("GET", "/feed.xml"));
-    assert!(requests[0].header("user-agent").is_some_and(|value| !value.is_empty()));
+    let seen = requests
+        .iter()
+        .map(|request| (request.method.as_str(), request.path.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(seen, [("GET", "/feed.xml"), ("GET", "/feed.xml"), ("GET", "/dav/state.json")]);
+    for request in &requests {
+        let user_agent = request.header("user-agent").unwrap_or_default();
+        assert!(user_agent.starts_with("RSS-Reader/"), "{} {user_agent:?}", request.path);
+    }
 }
 
 /// Serves a GBK-encoded feed whose XML prolog declares `encoding="GBK"`, then fetches and parses

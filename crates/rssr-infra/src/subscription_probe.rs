@@ -21,6 +21,16 @@ impl HttpSubscriptionProbe {
     pub fn new(client: reqwest::Client) -> Self {
         Self { client }
     }
+
+    /// 原生端探测与订阅刷新共用同一套客户端配置（User-Agent、连接与总时限）。
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_feed_client() -> Self {
+        Self::new(
+            crate::fetch::client::feed_client_builder()
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
+        )
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]

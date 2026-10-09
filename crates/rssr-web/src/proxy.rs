@@ -217,12 +217,21 @@ async fn read_body_with_limit(
     Ok(buffered)
 }
 
+/// 代抓上游时如实标识客户端（RFC 9110 §10.1.5）。格式与原生端 `rssr-infra` 的订阅抓取一致；
+/// 这里只有三行，不值得为它让部署服务依赖整个 infra crate。
+fn proxy_user_agent() -> String {
+    let version = option_env!("RELEASE_TAG").unwrap_or(env!("CARGO_PKG_VERSION")).trim();
+    let version = version.strip_prefix('v').unwrap_or(version);
+    format!("RSS-Reader/{version} (+https://github.com/Develata/RSS-Reader)")
+}
+
 /// 每一跳都用「校验时得到的地址」新建一个客户端并把域名钉到该地址上。
 ///
 /// 仍然按域名发请求（而不是直接拿 IP 拼 URL），这样 Host 头与 TLS SNI 保持正确；
 /// `resolve` 只是替换掉这一次的 DNS 解析结果。重定向同理：每跳都要重新校验并重新钉。
 fn pinned_client(url: &Url, addr: SocketAddr) -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
+        .user_agent(proxy_user_agent())
         // An environment proxy can resolve the host elsewhere, bypassing our pinned IP.
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
@@ -323,6 +332,28 @@ mod tests {
             result.expect("must reach the pinned address directly").status(),
             StatusCode::OK
         );
+    }
+
+    #[tokio::test]
+    async fn pinned_client_identifies_the_reader() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let echo_user_agent = |headers: axum::http::HeaderMap| async move {
+            headers.get(header::USER_AGENT).and_then(|v| v.to_str().ok()).unwrap_or("").to_owned()
+        };
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                axum::Router::new().route("/feed", axum::routing::get(echo_user_agent)),
+            )
+            .await
+            .unwrap();
+        });
+        let url = Url::parse(&format!("http://feed.example.invalid:{}/feed", addr.port())).unwrap();
+        let user_agent =
+            pinned_client(&url, addr).unwrap().get(url).send().await.unwrap().text().await.unwrap();
+        server.abort();
+        assert!(user_agent.starts_with("RSS-Reader/"), "{user_agent:?}");
     }
 
     #[test]
