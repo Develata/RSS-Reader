@@ -94,7 +94,6 @@ impl FeedRefreshSourcePort for RepeatSource {
 /// A derived cache (localized images) must survive a refresh whose *source* body is unchanged;
 /// only a changed source may invalidate it.
 #[tokio::test]
-#[ignore = "audit-2026-10-09: an unchanged-source refresh overwrites the localized body because content_hash identifies the derived HTML, not the source"]
 async fn unchanged_source_refresh_keeps_localized_body() {
     let pool = memory_pool().await;
     let feeds = Arc::new(SqliteFeedRepository::new(pool.clone()));
@@ -113,8 +112,8 @@ async fn unchanged_source_refresh_keeps_localized_body() {
     let localized_html = r#"<p><img src="data:image/png;base64,AAAA"></p>"#;
     let source_hash =
         compute_entry_content_hash(Some(source_html), Some("summary"), Some("Entry")).unwrap();
-    let localized_hash =
-        compute_entry_content_hash(Some(localized_html), Some("summary"), Some("Entry")).unwrap();
+    let derived = || entries.has_derived_body(feed_id, "entry-1", &source_hash, source_html);
+    assert!(!derived().await.expect("derived check"), "the stored body is still the source");
     assert!(
         entries
             .update_localized_html_if_hash_matches_for_generation(
@@ -124,17 +123,30 @@ async fn unchanged_source_refresh_keeps_localized_body() {
                     dedup_key: "entry-1",
                     expected_content_hash: &source_hash,
                     localized_html,
-                    localized_content_hash: &localized_hash,
                 },
             )
             .await
             .expect("write localized body")
     );
 
+    assert!(derived().await.expect("derived check"), "background localization must skip it");
+
     service.refresh_feed(feed_id).await.expect("unchanged-source refresh");
 
     let body = entries.get_content(entry_id).await.expect("content").expect("row").content_html;
     assert_eq!(body.as_deref(), Some(localized_html), "localized cache was discarded");
+
+    // A changed source still replaces the derived body.
+    let changed_html = r#"<p>changed <img src="https://cdn.example.com/b.png"></p>"#;
+    RefreshService::new(
+        Arc::new(RepeatSource(update("v2", changed_html))),
+        Arc::new(SqliteRefreshStore::new(feeds.clone(), entries.clone())),
+    )
+    .refresh_feed(feed_id)
+    .await
+    .expect("changed-source refresh");
+    let body = entries.get_content(entry_id).await.expect("content").expect("row").content_html;
+    assert_eq!(body.as_deref(), Some(changed_html), "a changed source must replace the cache");
 }
 
 /// Two refreshes of the same feed (single-feed refresh vs refresh-all) are not coordinated.

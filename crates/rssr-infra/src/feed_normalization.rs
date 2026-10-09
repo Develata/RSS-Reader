@@ -60,14 +60,30 @@ fn utf8_parser_input(raw: &[u8]) -> impl std::io::Read + '_ {
     declaration.chain(raw)
 }
 
+/// 源正文的标识：标题、纯文本、HTML 三段各自带“是否存在”与长度前缀再求 SHA-256。
+///
+/// 它标识的是 feed 给出的**源**内容，而不是存储里可能已被派生（图片本地化）的正文：刷新只在
+/// 它变化时才覆盖正文（审计 C1）。旧算法把三段直接拼接，`("c", "ab")` 与 `("bc", "a")`
+/// 会得到同一个哈希，不能单独据此判断源是否变化；加版本前缀后，旧库里的哈希在下一次刷新时
+/// 一次性更新。三段都缺失时返回 `None`。
 pub fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>) -> Option<String> {
-    let mut hasher = Sha256::new();
-    let mut used = false;
-    for part in [title, text, html].into_iter().flatten() {
-        hasher.update(part.as_bytes());
-        used = true;
+    let parts = [title, text, html];
+    if parts.iter().all(Option::is_none) {
+        return None;
     }
-    used.then(|| format!("{:x}", hasher.finalize()))
+    let mut hasher = Sha256::new();
+    hasher.update(b"rssr-content-v2");
+    for part in parts {
+        match part {
+            Some(part) => {
+                hasher.update([1]);
+                hasher.update((part.len() as u64).to_le_bytes());
+                hasher.update(part.as_bytes());
+            }
+            None => hasher.update([0]),
+        }
+    }
+    Some(format!("{:x}", hasher.finalize()))
 }
 
 fn normalize_feed(feed: FeedRsFeed) -> ParsedFeed {

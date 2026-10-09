@@ -46,11 +46,11 @@ pub async fn verify_content_changes(
     store.commit(&target, update("Title", Some("c"), Some("ab"))).await.unwrap();
     assert_eq!(contents.get_content(id).await.unwrap().unwrap(), first);
 
-    // The old hash concatenates parts without separators. Equal hashes alone cannot justify
-    // skipping a write when text/HTML boundaries changed.
+    // Moving a boundary between text and HTML is a different source: the length-prefixed hash
+    // tells the two apart (the old concatenating hash did not), so the body is rewritten.
     store.commit(&target, update("Title", Some("bc"), Some("a"))).await.unwrap();
     let repartitioned = contents.get_content(id).await.unwrap().unwrap();
-    assert_eq!(repartitioned.content_hash, first.content_hash);
+    assert_ne!(repartitioned.content_hash, first.content_hash);
     assert_eq!(repartitioned.content_html.as_deref(), Some("bc"));
     assert_eq!(repartitioned.content_text.as_deref(), Some("a"));
 

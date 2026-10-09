@@ -389,6 +389,28 @@ impl ImageLocalizationWorker {
                 ) else {
                     continue;
                 };
+                // 源未变的刷新会保留已本地化的正文，这里不再为它重新下载图片（审计 C1）。
+                match entry_repository
+                    .has_derived_body(
+                        feed_id,
+                        &entry.dedup_key,
+                        &expected_content_hash,
+                        &original_html,
+                    )
+                    .await
+                {
+                    Ok(true) => continue,
+                    Ok(false) => {}
+                    Err(error) => {
+                        tracing::warn!(
+                            feed_id,
+                            dedup_key = %entry.dedup_key,
+                            error = %error,
+                            "读取已存正文失败，跳过后台图片本地化"
+                        );
+                        continue;
+                    }
+                }
 
                 let localized_html = match tokio::time::timeout(
                     localization_timeout(&localizer),
@@ -419,19 +441,10 @@ impl ImageLocalizationWorker {
                     }
                 };
 
-                let Some(localized_content_hash) = compute_entry_content_hash(
-                    Some(&localized_html),
-                    entry.content_text.as_deref(),
-                    Some(&entry.title),
-                ) else {
-                    continue;
-                };
-
                 let update = LocalizedEntryUpdate {
                     dedup_key: &entry.dedup_key,
                     expected_content_hash: &expected_content_hash,
                     localized_html: &localized_html,
-                    localized_content_hash: &localized_content_hash,
                 };
 
                 match entry_repository
@@ -531,14 +544,6 @@ impl ImageLocalizationWorker {
             }
         };
 
-        let Some(localized_content_hash) = compute_entry_content_hash(
-            Some(&localized_html),
-            entry.content_text.as_deref(),
-            Some(&entry.title),
-        ) else {
-            return Ok(false);
-        };
-
         let updated = self
             .entry_repository
             .update_localized_html_if_hash_matches_for_generation(
@@ -548,7 +553,6 @@ impl ImageLocalizationWorker {
                     dedup_key: &entry.dedup_key,
                     expected_content_hash: &expected_content_hash,
                     localized_html: &localized_html,
-                    localized_content_hash: &localized_content_hash,
                 },
             )
             .await

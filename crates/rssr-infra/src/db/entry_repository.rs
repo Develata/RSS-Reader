@@ -34,12 +34,16 @@ pub struct SqliteEntryRepository {
     content_schema_ready: Arc<OnceCell<()>>,
 }
 
+/// 把派生正文（图片本地化后的 HTML）写回存储。
+///
+/// `entry_contents.content_hash` 始终标识**源**正文（见 `hash_content`）：写回只替换
+/// `content_html`，保留源哈希，所以源未变的刷新不会冲掉派生正文，源一变才会被覆盖（审计 C1）。
+/// `expected_content_hash` 是派生所依据的源哈希；存储里的源已经变化时不写。
 #[derive(Debug, Clone)]
 pub struct LocalizedEntryUpdate<'a> {
     pub dedup_key: &'a str,
     pub expected_content_hash: &'a str,
     pub localized_html: &'a str,
-    pub localized_content_hash: &'a str,
 }
 
 #[derive(Debug, Clone)]
@@ -338,6 +342,38 @@ impl SqliteEntryRepository {
         update: &LocalizedEntryUpdate<'_>,
     ) -> DomainResult<bool> {
         self.update_localized_html_if_hash_matches_inner(feed_id, Some(generation), update).await
+    }
+
+    /// 存储里的正文是否已是这份源正文的派生版本：源哈希相同、正文不同（例如图片已本地化）。
+    /// 后台本地化据此跳过，不再为同一份源反复下载图片（审计 C1）。
+    pub async fn has_derived_body(
+        &self,
+        feed_id: i64,
+        dedup_key: &str,
+        source_hash: &str,
+        source_html: &str,
+    ) -> DomainResult<bool> {
+        self.ensure_content_schema().await?;
+        let entry_id = sqlx::query_scalar::<_, i64>(
+            "SELECT id FROM entries WHERE feed_id = ?1 AND dedup_key = ?2",
+        )
+        .bind(feed_id)
+        .bind(dedup_key)
+        .fetch_optional(&self.index_pool)
+        .await
+        .map_err(map_sqlx_error)?;
+        let Some(entry_id) = entry_id else {
+            return Ok(false);
+        };
+        let stored = sqlx::query_scalar::<_, Option<String>>(
+            "SELECT content_html FROM entry_contents WHERE entry_id = ?1 AND content_hash = ?2",
+        )
+        .bind(entry_id)
+        .bind(source_hash)
+        .fetch_optional(&self.content_pool)
+        .await
+        .map_err(map_sqlx_error)?;
+        Ok(matches!(stored, Some(Some(html)) if html != source_html))
     }
 
     async fn update_localized_html_if_hash_matches_inner(
@@ -927,13 +963,21 @@ async fn write_contents_on_connection(
             r#"
             ON CONFLICT(entry_id) DO UPDATE SET
                 feed_id = excluded.feed_id,
-                content_html = COALESCE(excluded.content_html, entry_contents.content_html),
-                content_text = COALESCE(excluded.content_text, entry_contents.content_text),
+                content_html = CASE
+                    WHEN entry_contents.content_hash IS excluded.content_hash
+                        THEN entry_contents.content_html
+                    ELSE COALESCE(excluded.content_html, entry_contents.content_html)
+                END,
+                content_text = CASE
+                    WHEN entry_contents.content_hash IS excluded.content_hash
+                        THEN entry_contents.content_text
+                    ELSE COALESCE(excluded.content_text, entry_contents.content_text)
+                END,
                 content_hash = excluded.content_hash,
                 updated_at = excluded.updated_at
+            -- 源哈希相同说明 feed 给的内容没变：保留存储里的正文（可能已是本地化后的派生
+            -- 版本），只同步所属订阅。源变化时才写入新正文（审计 C1）。
             WHERE entry_contents.feed_id IS NOT excluded.feed_id
-               OR entry_contents.content_html IS NOT COALESCE(excluded.content_html, entry_contents.content_html)
-               OR entry_contents.content_text IS NOT COALESCE(excluded.content_text, entry_contents.content_text)
                OR entry_contents.content_hash IS NOT excluded.content_hash
             "#,
         );
@@ -955,15 +999,13 @@ async fn update_localized_content_on_connection(
         r#"
         UPDATE entry_contents
         SET content_html = ?2,
-            content_hash = ?3,
-            updated_at = ?4
+            updated_at = ?3
         WHERE entry_id = ?1
-          AND content_hash = ?5
+          AND content_hash = ?4
         "#,
     )
     .bind(entry_id)
     .bind(update.localized_html)
-    .bind(update.localized_content_hash)
     .bind(&now)
     .bind(update.expected_content_hash)
     .execute(&mut *connection)

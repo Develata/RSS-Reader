@@ -153,9 +153,6 @@ async fn localized_writeback_does_not_override_newer_refresh_content() {
         .expect("insert newer revision");
 
     let localized_old_html = "<p>old<img src=\"data:image/png;base64,xxx\"></p>";
-    let localized_old_hash =
-        compute_entry_content_hash(Some(localized_old_html), Some("summary"), Some("Entry"))
-            .unwrap();
     let updated = entry_repository
         .update_localized_html_if_hash_matches(
             feed.id,
@@ -163,7 +160,6 @@ async fn localized_writeback_does_not_override_newer_refresh_content() {
                 dedup_key: "entry-1",
                 expected_content_hash: &first_hash,
                 localized_html: localized_old_html,
-                localized_content_hash: &localized_old_hash,
             },
         )
         .await
@@ -262,12 +258,6 @@ async fn localized_writeback_from_old_generation_is_rejected_after_readd() {
         compute_entry_content_hash(Some(original_html), Some("summary"), Some("Generation Entry"))
             .unwrap();
     let localized_old_html = "<p>old generation<img src=\"data:image/png;base64,xxx\"></p>";
-    let localized_old_hash = compute_entry_content_hash(
-        Some(localized_old_html),
-        Some("summary"),
-        Some("Generation Entry"),
-    )
-    .unwrap();
     let updated = entry_repository
         .update_localized_html_if_hash_matches_for_generation(
             feed.id,
@@ -276,7 +266,6 @@ async fn localized_writeback_from_old_generation_is_rejected_after_readd() {
                 dedup_key: "entry-generation",
                 expected_content_hash: &old_hash,
                 localized_html: localized_old_html,
-                localized_content_hash: &localized_old_hash,
             },
         )
         .await
