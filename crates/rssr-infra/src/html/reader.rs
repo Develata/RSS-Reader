@@ -122,16 +122,23 @@ fn filter_data_urls<'u>(element: &str, attribute: &str, value: &'u str) -> Optio
     (!kept.is_empty()).then(|| Cow::Owned(kept.join(", ")))
 }
 
-/// `data:` URL 的媒体类型必须是完整的 `image/<subtype>`。Fetch 的 data: URL 处理在解析不出
-/// type/subtype 时按 `text/plain` 处理，所以 `data:image/;base64,…` 不是图片。
+/// `data:` URL 的媒体类型必须是完整的 `image/<subtype>`，按 Fetch 的 “data: URL processor”
+/// 取：序列化整个 URL（含 query、去掉 fragment），去掉 `data:`，第一个逗号之前就是媒体类型，
+/// 没有逗号即无效。`Url::path()` 不含 query：`data:image/png?x,…` 的媒体类型其实是
+/// `image/png?x`，解析失败后按 `text/plain` 处理（独立评审）。`data:image/;base64,…` 同样不是图片。
 fn is_image_data_url(url: &Url) -> bool {
-    let media_type = url
-        .path()
-        .split([',', ';'])
+    let Some(body) = url[..url::Position::AfterQuery].strip_prefix("data:") else {
+        return false;
+    };
+    let Some((media_type, _data)) = body.split_once(',') else {
+        return false;
+    };
+    let essence = media_type
+        .split(';')
         .next()
         .unwrap_or_default()
         .trim_matches(|c: char| c.is_ascii_whitespace());
-    let Some((kind, subtype)) = media_type.split_once('/') else {
+    let Some((kind, subtype)) = essence.split_once('/') else {
         return false;
     };
     kind.eq_ignore_ascii_case("image") && !subtype.is_empty() && subtype.bytes().all(is_token_byte)
@@ -283,6 +290,9 @@ mod tests {
             r#"<p><picture><source srcset="https://e.test/a.png 1x, data:text/html,evil 2x"><img src="https://e.test/a.png" alt="a"></picture>
                <picture><source srcset="data:image/png;base64,AAAA 1x, data:text/html,x 2x"><img src="https://e.test/b.png" alt="b"></picture>
                <img src="data:image/;base64,WA==" alt="empty subtype">
+               <img src="data:image/png?x,evil" alt="query in media type">
+               <img src="data:image/png" alt="no data comma">
+               <picture><source srcset="https://e.test/d.png 1x, data:image/png?x,evil 2x"><img src="https://e.test/d.png" alt="d"></picture>
                <picture><source srcset="data:text/plain,x 1x"><img src="https://e.test/c.png" alt="c"></picture></p>"#,
             None,
         )
@@ -294,7 +304,10 @@ mod tests {
         assert!(sanitized.contains(r#"srcset="https://e.test/a.png 1x""#), "{sanitized}");
         assert!(sanitized.contains(r#"srcset="data:image/png;base64,AAAA 1x""#), "{sanitized}");
         assert!(sanitized.contains(r#"alt="empty subtype""#), "{sanitized}");
-        assert_eq!(sanitized.matches("srcset=").count(), 2, "{sanitized}");
+        assert!(!sanitized.contains("evil"), "{sanitized}");
+        assert!(!sanitized.contains(r#"src="data:image/png""#), "{sanitized}");
+        assert!(sanitized.contains(r#"srcset="https://e.test/d.png 1x""#), "{sanitized}");
+        assert_eq!(sanitized.matches("srcset=").count(), 3, "{sanitized}");
     }
 
     #[test]
