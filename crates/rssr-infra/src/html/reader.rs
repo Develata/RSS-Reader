@@ -4,11 +4,13 @@
 //! [`super::live_display`] 重复的标签解析器和 HTML 实体解码。页面层只应该负责显示，
 //! 解析和消毒是基础设施职责，因此收敛到这里并复用同一个解析器。
 
+use std::borrow::Cow;
+
 use url::Url;
 
 use super::live_display::{
     attribute_value, looks_like_wordpress_emoji_asset, normalize_html_for_live_display,
-    parse_html_tags,
+    parse_html_tags, srcset_candidates,
 };
 
 /// 判断一段纯文本字段里是否其实塞的是 HTML 片段。
@@ -80,9 +82,7 @@ pub fn sanitize_reader_html(raw: &str, base_url: Option<&Url>) -> Option<String>
             ],
         )
         .add_tag_attributes("source", &["src", "srcset", "data-srcset", "sizes", "media", "type"])
-        .attribute_filter(|element, attribute, value| {
-            keeps_data_url_only_for_images(element, attribute, value).then(|| value.into())
-        })
+        .attribute_filter(filter_data_urls)
         .clean(&normalized)
         .to_string();
 
@@ -92,25 +92,54 @@ pub fn sanitize_reader_html(raw: &str, base_url: Option<&Url>) -> Option<String>
 
 /// 白名单加 `data` 只为放行本地化后的图片（`img src="data:image/…"`）。ammonia 的 scheme
 /// 白名单是全局的，`<a href="data:text/html,…">` 之类也会被一起放过，这里把它们去掉。
+///
 /// 只看承载 URL 的属性：`alt="data: …"` 这类文本与 URL 无关。scheme 用 `Url::parse` 判定，
-/// 与 ammonia 和浏览器一致（WHATWG 会剔除 URL 中的制表与换行，只比字符串前缀会被 `da\nta:` 绕过）。
-fn keeps_data_url_only_for_images(element: &str, attribute: &str, value: &str) -> bool {
+/// 与 ammonia 和浏览器一致（WHATWG 会剔除 URL 中的制表与换行，只比字符串前缀会被 `da\nta:`
+/// 绕过）。`srcset` 是候选列表，ammonia 不检查它的 scheme，这里逐个候选检查，只删掉不合规的。
+fn filter_data_urls<'u>(element: &str, attribute: &str, value: &'u str) -> Option<Cow<'u, str>> {
     const URL_ATTRIBUTES: &[&str] =
         &["href", "src", "srcset", "action", "formaction", "ping", "poster", "cite", "data"];
     if !URL_ATTRIBUTES.contains(&attribute) {
-        return true;
+        return Some(Cow::Borrowed(value));
     }
-    match Url::parse(value) {
-        Ok(url) if url.scheme() == "data" => {
-            matches!((element, attribute), ("img" | "source", "src" | "srcset"))
-                && url
-                    .path()
-                    .trim_start_matches(|c: char| c.is_ascii_whitespace())
-                    .get(..6)
-                    .is_some_and(|media_type| media_type.eq_ignore_ascii_case("image/"))
-        }
+    let image_slot = matches!(element, "img" | "source") && matches!(attribute, "src" | "srcset");
+    let allowed = |url: &str| match Url::parse(url) {
+        Ok(url) if url.scheme() == "data" => image_slot && is_image_data_url(&url),
         _ => true,
+    };
+    if attribute != "srcset" {
+        return allowed(value).then_some(Cow::Borrowed(value));
     }
+    let candidates = srcset_candidates(value).collect::<Vec<_>>();
+    if candidates.iter().all(|candidate| allowed(candidate.url)) {
+        return Some(Cow::Borrowed(value));
+    }
+    let kept = candidates
+        .iter()
+        .filter(|candidate| allowed(candidate.url))
+        .map(|candidate| candidate.with_url(candidate.url))
+        .collect::<Vec<_>>();
+    (!kept.is_empty()).then(|| Cow::Owned(kept.join(", ")))
+}
+
+/// `data:` URL 的媒体类型必须是完整的 `image/<subtype>`。Fetch 的 data: URL 处理在解析不出
+/// type/subtype 时按 `text/plain` 处理，所以 `data:image/;base64,…` 不是图片。
+fn is_image_data_url(url: &Url) -> bool {
+    let media_type = url
+        .path()
+        .split([',', ';'])
+        .next()
+        .unwrap_or_default()
+        .trim_matches(|c: char| c.is_ascii_whitespace());
+    let Some((kind, subtype)) = media_type.split_once('/') else {
+        return false;
+    };
+    kind.eq_ignore_ascii_case("image") && !subtype.is_empty() && subtype.bytes().all(is_token_byte)
+}
+
+/// RFC 9110 §5.6.2 的 `tchar`。
+fn is_token_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte)
 }
 
 /// 把 WordPress 的 emoji 图片换回它的 `alt` 文本。
@@ -244,6 +273,28 @@ mod tests {
         assert!(sanitized.contains(r#"alt="data: caption""#), "{sanitized}");
         assert!(sanitized.contains(r#"href="https://example.com/""#), "{sanitized}");
         assert_eq!(sanitized.matches("<a").count(), 4, "{sanitized}");
+    }
+
+    /// srcset 逐个候选检查：非图片的 data 候选被删掉，其余候选保留（独立评审的反例）；
+    /// 媒体类型必须是完整的 `image/<subtype>`。
+    #[test]
+    fn srcset_candidates_and_media_types_are_checked_one_by_one() {
+        let sanitized = sanitize_reader_html(
+            r#"<p><picture><source srcset="https://e.test/a.png 1x, data:text/html,evil 2x"><img src="https://e.test/a.png" alt="a"></picture>
+               <picture><source srcset="data:image/png;base64,AAAA 1x, data:text/html,x 2x"><img src="https://e.test/b.png" alt="b"></picture>
+               <img src="data:image/;base64,WA==" alt="empty subtype">
+               <picture><source srcset="data:text/plain,x 1x"><img src="https://e.test/c.png" alt="c"></picture></p>"#,
+            None,
+        )
+        .expect("sanitized html");
+
+        assert!(!sanitized.contains("text/html"), "{sanitized}");
+        assert!(!sanitized.contains("text/plain"), "{sanitized}");
+        assert!(!sanitized.contains("data:image/;"), "{sanitized}");
+        assert!(sanitized.contains(r#"srcset="https://e.test/a.png 1x""#), "{sanitized}");
+        assert!(sanitized.contains(r#"srcset="data:image/png;base64,AAAA 1x""#), "{sanitized}");
+        assert!(sanitized.contains(r#"alt="empty subtype""#), "{sanitized}");
+        assert_eq!(sanitized.matches("srcset=").count(), 2, "{sanitized}");
     }
 
     #[test]
