@@ -46,10 +46,11 @@ pub use reader_service::{
 };
 pub use refresh_service::{
     DEFAULT_REFRESH_CONCURRENCY, FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate,
-    ParsedEntryData, ParsedFeedUpdate, RefreshAllInput, RefreshAllOutcome, RefreshAllSummary,
-    RefreshCommit, RefreshCommitOutcome, RefreshFailure, RefreshFeedFailureSummary,
-    RefreshFeedOutcome, RefreshFeedResult, RefreshHttpMetadata, RefreshLocalizedEntry,
-    RefreshService, RefreshStorePort, RefreshTarget, SERIAL_REFRESH_CONCURRENCY,
+    ParsedEntryData, ParsedFeedUpdate, PreparedUpdateTicket, RefreshAllInput, RefreshAllOutcome,
+    RefreshAllSummary, RefreshCommit, RefreshCommitOutcome, RefreshFailure,
+    RefreshFeedFailureSummary, RefreshFeedOutcome, RefreshFeedResult, RefreshHttpMetadata,
+    RefreshLocalizedEntry, RefreshService, RefreshStorePort, RefreshTarget,
+    SERIAL_REFRESH_CONCURRENCY,
 };
 pub use settings_service::SettingsService;
 pub use settings_sync_service::{AppliedRemoteConfigOutcome, SettingsSyncService};

@@ -1,6 +1,9 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, PoisonError, Weak},
+    sync::{
+        Arc, PoisonError, Weak,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use anyhow::{Context, Result};
@@ -335,11 +338,17 @@ impl Drop for RefreshBatchGuard<'_> {
 /// 都在该订阅的锁内完成，于是后开始的抓取一定后提交，先发出却后返回的旧响应不会再覆盖
 /// 新响应，两次提交的多个写入步骤也不会交错。不同订阅之间互不等待。
 ///
+/// 添加订阅的首刷用的是激活之前就抓好的结果，锁管不到它的“开始时间”：每次抓取开始时
+/// 领取一个单调序号，记下每个订阅最后落库内容的序号，预抓取结果只在没有更新的刷新落库时
+/// 才写入。
+///
 /// 只协调同一进程内的刷新：CLI 与图形界面同时刷新同一个数据库、或 Web 端多个标签页，
-/// 仍可能交错。表里只留弱引用，没有在飞刷新的订阅不会占内存。
+/// 仍可能交错。锁表只留弱引用；序号表每个订阅一个整数。
 #[derive(Default)]
 struct FeedRefreshLocks {
     locks: std::sync::Mutex<HashMap<i64, Weak<tokio::sync::Mutex<()>>>>,
+    next_fetch: AtomicU64,
+    committed_fetch: std::sync::Mutex<HashMap<i64, u64>>,
 }
 
 impl FeedRefreshLocks {
@@ -353,7 +362,28 @@ impl FeedRefreshLocks {
         locks.insert(feed_id, Arc::downgrade(&lock));
         lock
     }
+
+    fn begin_fetch(&self) -> u64 {
+        self.next_fetch.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// 调用方持有该订阅的锁。
+    fn superseded(&self, feed_id: i64, fetch: u64) -> bool {
+        let committed = self.committed_fetch.lock().unwrap_or_else(PoisonError::into_inner);
+        committed.get(&feed_id).is_some_and(|&latest| latest > fetch)
+    }
+
+    /// 调用方持有该订阅的锁。
+    fn record_commit(&self, feed_id: i64, fetch: u64) {
+        let mut committed = self.committed_fetch.lock().unwrap_or_else(PoisonError::into_inner);
+        let latest = committed.entry(feed_id).or_default();
+        *latest = (*latest).max(fetch);
+    }
 }
+
+/// 预抓取结果的序号，必须在订阅对刷新可见（激活）之前领取。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PreparedUpdateTicket(u64);
 
 #[derive(Clone)]
 pub struct RefreshService {
@@ -367,15 +397,35 @@ impl RefreshService {
         Self { source, store, feed_locks: Arc::default() }
     }
 
+    /// 在激活订阅之前调用：此后开始的刷新都比预抓取结果新。
+    pub fn prepared_update_ticket(&self) -> PreparedUpdateTicket {
+        PreparedUpdateTicket(self.feed_locks.begin_fetch())
+    }
+
     /// 复用添加订阅时已获取的 feed，首次入库不再发起第二次请求。
+    ///
+    /// 订阅激活后、首刷拿到锁之前，后台刷新可能已经把更新的内容落库；那时预抓取的结果
+    /// 已经过时，不再写入，按“未变化”返回（审计 A1）。
     pub async fn apply_prepared_update(
         &self,
         target: RefreshTarget,
         update: FeedRefreshUpdate,
+        ticket: PreparedUpdateTicket,
     ) -> Result<RefreshFeedOutcome> {
         let lock = self.feed_locks.lock_for(target.feed_id);
         let _serialized = lock.lock().await;
-        self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await
+        if self.feed_locks.superseded(target.feed_id, ticket.0) {
+            return Ok(RefreshFeedOutcome {
+                feed_id: target.feed_id,
+                url: target.url.to_string(),
+                result: RefreshFeedResult::NotModified,
+            });
+        }
+        let feed_id = target.feed_id;
+        let outcome =
+            self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await?;
+        self.feed_locks.record_commit(feed_id, ticket.0);
+        Ok(outcome)
     }
 
     pub async fn refresh_feed(&self, feed_id: i64) -> Result<RefreshFeedOutcome> {
@@ -532,14 +582,22 @@ impl RefreshService {
         }
     }
 
-    async fn refresh_target(&self, target: RefreshTarget) -> Result<RefreshFeedOutcome> {
-        let lock = self.feed_locks.lock_for(target.feed_id);
+    async fn refresh_target(&self, listed: RefreshTarget) -> Result<RefreshFeedOutcome> {
+        let lock = self.feed_locks.lock_for(listed.feed_id);
         let _serialized = lock.lock().await;
+        // 订阅列表是锁外取的快照。排在别的刷新之后时，要带上它刚写入的校验器：拿旧校验器
+        // 换来的 304 只确认旧表示，会把旧 ETag 与新正文配在一起（RFC 9110 §13.1.2）。
+        // 期间被删除或重新订阅的不在这一轮刷新。
+        let target = match self.store.get_target(listed.feed_id).await? {
+            Some(current) if current.generation == listed.generation => current,
+            _ => anyhow::bail!("订阅已删除或已重新订阅"),
+        };
         self.fetch_and_apply(target).await
     }
 
     /// 调用方必须持有该订阅的刷新锁。
     async fn fetch_and_apply(&self, target: RefreshTarget) -> Result<RefreshFeedOutcome> {
+        let fetch = self.feed_locks.begin_fetch();
         let source_output = match self.source.refresh(&target).await {
             Ok(output) => output,
             Err(error) => FeedRefreshSourceOutput::Failed(RefreshFailure {
@@ -547,8 +605,14 @@ impl RefreshService {
                 metadata: None,
             }),
         };
-
-        self.apply_source_output(target, source_output).await
+        // 失败的抓取没有带来内容，不能让预抓取的结果因此作废。
+        let delivers_content = !matches!(source_output, FeedRefreshSourceOutput::Failed(_));
+        let feed_id = target.feed_id;
+        let outcome = self.apply_source_output(target, source_output).await?;
+        if delivers_content {
+            self.feed_locks.record_commit(feed_id, fetch);
+        }
+        Ok(outcome)
     }
 
     async fn apply_source_output(
@@ -1137,7 +1201,16 @@ mod tests {
         assert_eq!(outcome.failures().len(), 1);
     }
 
+    const WATCHDOG: std::time::Duration = std::time::Duration::from_secs(10);
+
+    async fn within<T>(what: &str, future: impl std::future::Future<Output = T>) -> T {
+        tokio::time::timeout(WATCHDOG, future)
+            .await
+            .unwrap_or_else(|_| panic!("watchdog: {what} did not finish"))
+    }
+
     /// 同一订阅的第二次刷新要等第一次提交后才开始抓取；其他订阅不受影响（审计 A1）。
+    /// 第二次请求直接轮询一次，确认它停在锁上；所有等待都有看门狗，回归成全局锁也不会挂起。
     #[tokio::test]
     async fn refreshes_of_one_feed_run_one_at_a_time_without_blocking_other_feeds() {
         struct GatedSource {
@@ -1179,21 +1252,20 @@ mod tests {
             let service = service.clone();
             async move { service.refresh_feed(1).await }
         });
-        source.first_started.notified().await;
-        let second = tokio::spawn({
-            let service = service.clone();
-            async move { service.refresh_feed(1).await }
-        });
-        service.refresh_feed(2).await.expect("another feed is not blocked");
-        // 当前线程运行时：让出若干次，第二次请求一定已被轮询并停在该订阅的锁上。
-        for _ in 0..16 {
-            tokio::task::yield_now().await;
-        }
+        within("first fetch to start", source.first_started.notified()).await;
+
+        let mut second = std::pin::pin!(service.refresh_feed(1));
+        let polled =
+            std::future::poll_fn(|cx| std::task::Poll::Ready(second.as_mut().poll(cx))).await;
+        assert!(polled.is_pending(), "the second refresh of feed 1 must wait for the first");
+        within("refresh of another feed", service.refresh_feed(2))
+            .await
+            .expect("another feed is not blocked");
         assert_eq!(*source.calls.lock().expect("lock calls"), [1, 2]);
 
         source.release_first.notify_one();
-        first.await.expect("join first").expect("first refresh");
-        second.await.expect("join second").expect("second refresh");
+        within("first refresh", first).await.expect("join first").expect("first refresh");
+        within("second refresh", second).await.expect("second refresh");
         assert_eq!(*source.calls.lock().expect("lock calls"), [1, 2, 1]);
         let committed = store
             .commits
@@ -1203,5 +1275,130 @@ mod tests {
             .map(|(id, _)| *id)
             .collect::<Vec<_>>();
         assert_eq!(committed, [2, 1, 1]);
+    }
+
+    fn update_titled(title: &str) -> FeedRefreshUpdate {
+        FeedRefreshUpdate {
+            metadata: RefreshHttpMetadata::default(),
+            feed: ParsedFeedUpdate {
+                title: Some(title.to_string()),
+                site_url: None,
+                description: None,
+                entries: Vec::new(),
+            },
+        }
+    }
+
+    fn committed_titles(store: &StoreStub) -> Vec<String> {
+        store
+            .commits
+            .lock()
+            .expect("lock commits")
+            .iter()
+            .filter_map(|(_, commit)| match commit {
+                RefreshCommit::Updated { update } => update.feed.title.clone(),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// 订阅激活后，后台刷新抢先落库了更新的内容：预抓取的旧结果不能再覆盖它（独立评审）。
+    /// 失败的刷新没有带来内容，不会让预抓取结果作废。
+    #[tokio::test]
+    async fn a_prepared_update_never_overwrites_a_later_refresh() {
+        for (later_refresh, expected) in [
+            (FeedRefreshSourceOutput::Updated(update_titled("V2 newer")), vec!["V2 newer"]),
+            (
+                FeedRefreshSourceOutput::Failed(RefreshFailure {
+                    message: "offline".into(),
+                    metadata: None,
+                }),
+                vec!["V1 prepared"],
+            ),
+        ] {
+            let store = Arc::new(StoreStub {
+                targets: vec![sample_target(1, "https://example.com/1.xml")],
+                commits: Mutex::new(Vec::new()),
+            });
+            let service = RefreshService::new(
+                Arc::new(SourceStub { outputs: Mutex::new(vec![later_refresh]) }),
+                store.clone(),
+            );
+            let ticket = service.prepared_update_ticket();
+            // 激活之后、首刷之前，后台刷新先完成。
+            service.refresh_feed(1).await.expect("background refresh");
+            let first = service
+                .apply_prepared_update(
+                    sample_target(1, "https://example.com/1.xml"),
+                    update_titled("V1 prepared"),
+                    ticket,
+                )
+                .await
+                .expect("first refresh");
+
+            assert_eq!(committed_titles(&store), expected);
+            assert!(first.is_success());
+        }
+    }
+
+    /// `refresh_all` 的目标列表是锁外快照：等锁之后要用存储里最新的校验器发请求；期间被
+    /// 删除或重新订阅的订阅不在这一轮刷新（独立评审）。
+    #[tokio::test]
+    async fn refresh_all_requests_with_the_validators_stored_when_it_gets_the_lock() {
+        struct MovingStore {
+            listed: Vec<RefreshTarget>,
+            current: Vec<RefreshTarget>,
+        }
+
+        #[async_trait::async_trait]
+        impl RefreshStorePort for MovingStore {
+            async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
+                Ok(self.listed.clone())
+            }
+
+            async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
+                Ok(self.current.iter().find(|target| target.feed_id == feed_id).cloned())
+            }
+
+            async fn commit(
+                &self,
+                _target: &RefreshTarget,
+                _commit: RefreshCommit,
+            ) -> Result<crate::RefreshCommitOutcome> {
+                Ok(Default::default())
+            }
+        }
+
+        struct RecordingSource(Mutex<Vec<(i64, Option<String>)>>);
+
+        #[async_trait::async_trait]
+        impl FeedRefreshSourcePort for RecordingSource {
+            async fn refresh(&self, target: &RefreshTarget) -> Result<FeedRefreshSourceOutput> {
+                self.0.lock().expect("lock").push((target.feed_id, target.etag.clone()));
+                Ok(FeedRefreshSourceOutput::NotModified(RefreshHttpMetadata::default()))
+            }
+        }
+
+        let listed = vec![
+            sample_target(1, "https://example.com/1.xml"),
+            sample_target(2, "https://example.com/2.xml"),
+            sample_target(3, "https://example.com/3.xml"),
+        ];
+        let mut current = listed.clone();
+        current[0].etag = Some("stored-after-listing".into());
+        current[1].generation += 1;
+        current.remove(2);
+        let source = Arc::new(RecordingSource(Mutex::new(Vec::new())));
+        let outcome =
+            RefreshService::new(source.clone(), Arc::new(MovingStore { listed, current }))
+                .refresh_all(RefreshAllInput { max_concurrency: 1 })
+                .await
+                .expect("refresh all");
+
+        assert_eq!(
+            *source.0.lock().expect("lock"),
+            [(1, Some("stored-after-listing".to_string()))]
+        );
+        assert_eq!(outcome.failures().len(), 2);
     }
 }

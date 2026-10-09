@@ -104,6 +104,8 @@ impl SubscriptionWorkflow {
         if input.subscription.title.is_none() {
             input.subscription.title = prepared.update.feed.title.clone();
         }
+        // 激活之后订阅就对后台刷新可见；序号必须在此之前领取，之后开始的刷新才算更新。
+        let ticket = self.refresh_service.prepared_update_ticket();
         let activated = self
             .feed_service
             .activate_subscription_with_site(
@@ -119,7 +121,7 @@ impl SubscriptionWorkflow {
             last_modified: activated.feed.last_modified.clone(),
         };
         let first_refresh = if input.refresh_after_add {
-            Some(self.refresh_service.apply_prepared_update(target, prepared.update).await?)
+            Some(self.refresh_service.apply_prepared_update(target, prepared.update, ticket).await?)
         } else {
             None
         };
