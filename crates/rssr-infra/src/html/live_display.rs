@@ -563,51 +563,110 @@ fn normalize_srcset(
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
 ) -> Option<String> {
+    // 浏览器会丢弃描述符无效的候选，归一化后的 srcset 同样不再保留它们。
     let normalized = srcset_candidates(raw)
-        .map(|(url, descriptor)| {
-            let url = resolve_asset_url(url, document_base_url, fallback_base_url)
-                .map_or_else(|| url.to_string(), |resolved| resolved.to_string());
-            if descriptor.is_empty() { url } else { format!("{url} {descriptor}") }
+        .filter(|candidate| srcset_descriptor_score(&candidate.descriptors).is_some())
+        .map(|candidate| {
+            let url = resolve_asset_url(candidate.url, document_base_url, fallback_base_url)
+                .map_or_else(|| candidate.url.to_string(), |resolved| resolved.to_string());
+            candidate.with_url(&url)
         })
         .collect::<Vec<_>>();
 
     (!normalized.is_empty()).then(|| normalized.join(", "))
 }
 
-/// 按 HTML 标准“parse a srcset attribute”切分 `(URL, 描述符)`：URL 是一段连续的非空白字符，
-/// 因此 `data:image/png;base64,…` 里的逗号属于 URL。URL 以逗号结尾时候选到此为止，
-/// 否则描述符延续到括号之外的下一个逗号。按逗号直接切分会把本地化后的 data URL 截断。
-fn srcset_candidates(raw: &str) -> impl Iterator<Item = (&str, &str)> {
-    let mut rest = raw;
+/// srcset 里的一个图像候选：URL 与它的描述符（均为原文切片）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct SrcsetCandidate<'a> {
+    pub(super) url: &'a str,
+    pub(super) descriptors: Vec<&'a str>,
+}
+
+impl SrcsetCandidate<'_> {
+    /// 以 `url` 替换原 URL，按“URL 描述符…”的形式写回。
+    pub(super) fn with_url(&self, url: &str) -> String {
+        std::iter::once(url).chain(self.descriptors.iter().copied()).collect::<Vec<_>>().join(" ")
+    }
+}
+
+#[derive(Clone, Copy)]
+enum DescriptorState {
+    InDescriptor,
+    InParens,
+    AfterDescriptor,
+}
+
+/// 按 HTML 标准的“parse a srcset attribute”切分候选：URL 是一段连续的非空白字符（所以
+/// `data:image/png;base64,…` 里的逗号属于 URL），URL 以逗号结尾时候选到此为止；否则用标准的
+/// 描述符状态机读到括号之外的下一个逗号。`in parens` 状态遇到第一个 `)` 就退出，不计嵌套深度。
+/// 描述符是否有效由 [`srcset_descriptor_score`] 判断。
+pub(super) fn srcset_candidates(raw: &str) -> impl Iterator<Item = SrcsetCandidate<'_>> {
+    let bytes = raw.as_bytes();
+    let mut position = 0;
     std::iter::from_fn(move || {
-        rest = rest.trim_start_matches(|c: char| c.is_ascii_whitespace() || c == ',');
-        if rest.is_empty() {
+        while position < bytes.len()
+            && (bytes[position].is_ascii_whitespace() || bytes[position] == b',')
+        {
+            position += 1;
+        }
+        if position == bytes.len() {
             return None;
         }
-        let url_end = rest.find(|c: char| c.is_ascii_whitespace()).unwrap_or(rest.len());
-        let (url, after) = rest.split_at(url_end);
-        if url.ends_with(',') {
-            rest = after;
-            return Some((url.trim_end_matches(','), ""));
+        let url_start = position;
+        while position < bytes.len() && !bytes[position].is_ascii_whitespace() {
+            position += 1;
         }
-        let mut depth = 0_usize;
-        let descriptor_end = after
-            .char_indices()
-            .find_map(|(index, c)| match c {
-                '(' => {
-                    depth += 1;
-                    None
+        let url = &raw[url_start..position];
+        let mut descriptors = Vec::new();
+        if url.ends_with(',') {
+            return Some(SrcsetCandidate { url: url.trim_end_matches(','), descriptors });
+        }
+
+        while position < bytes.len() && bytes[position].is_ascii_whitespace() {
+            position += 1;
+        }
+        let mut state = DescriptorState::InDescriptor;
+        let mut start = position;
+        loop {
+            match (state, bytes.get(position).copied()) {
+                (DescriptorState::InDescriptor, Some(b',')) => {
+                    if start < position {
+                        descriptors.push(&raw[start..position]);
+                    }
+                    position += 1;
+                    break;
                 }
-                ')' => {
-                    depth = depth.saturating_sub(1);
-                    None
+                (DescriptorState::InDescriptor, Some(b'(')) => state = DescriptorState::InParens,
+                (DescriptorState::InDescriptor, Some(byte)) if byte.is_ascii_whitespace() => {
+                    if start < position {
+                        descriptors.push(&raw[start..position]);
+                    }
+                    state = DescriptorState::AfterDescriptor;
                 }
-                ',' if depth == 0 => Some(index),
-                _ => None,
-            })
-            .unwrap_or(after.len());
-        rest = &after[descriptor_end..];
-        Some((url, after[..descriptor_end].trim()))
+                (DescriptorState::InDescriptor, None) => {
+                    if start < position {
+                        descriptors.push(&raw[start..position]);
+                    }
+                    break;
+                }
+                (DescriptorState::InParens, Some(b')')) => state = DescriptorState::InDescriptor,
+                (DescriptorState::InParens, None) => {
+                    descriptors.push(&raw[start..position]);
+                    break;
+                }
+                (DescriptorState::AfterDescriptor, Some(byte)) if !byte.is_ascii_whitespace() => {
+                    // 以“描述符中”状态重新读取这个字符。
+                    state = DescriptorState::InDescriptor;
+                    start = position;
+                    continue;
+                }
+                (DescriptorState::AfterDescriptor, None) => break,
+                _ => {}
+            }
+            position += 1;
+        }
+        Some(SrcsetCandidate { url, descriptors })
     })
 }
 
@@ -626,19 +685,84 @@ fn srcset_candidate(tag: &HtmlTag, srcset_attrs: &[&str]) -> Option<String> {
 
 fn select_best_srcset_candidate(raw: &str) -> Option<String> {
     srcset_candidates(raw)
-        .map(|(url, descriptor)| (url, srcset_descriptor_score(descriptor)))
+        .filter_map(|candidate| {
+            Some((candidate.url, srcset_descriptor_score(&candidate.descriptors)?))
+        })
         .max_by_key(|(_, score)| *score)
         .map(|(url, _)| url.to_string())
 }
 
-fn srcset_descriptor_score(descriptor: &str) -> u32 {
-    let descriptor = descriptor.split_whitespace().next().unwrap_or_default();
-    if let Some(value) = descriptor.strip_suffix('w') {
-        value.parse::<u32>().unwrap_or(0)
-    } else if let Some(value) = descriptor.strip_suffix('x') {
-        value.parse::<f32>().map(|value| (value * 1000.0) as u32).unwrap_or(0)
-    } else {
-        0
+/// HTML 标准的描述符解析：至多一个 `w`（正整数）或一个 `x`（非负浮点数），`h` 只能与 `w`
+/// 同时出现；其余任何描述符都让整个候选无效（浏览器丢弃它），此时返回 `None`。
+/// 有效时返回挑选最佳候选的分值：宽度，或密度乘以 1000；没有描述符为 0。
+fn srcset_descriptor_score(descriptors: &[&str]) -> Option<u32> {
+    let (mut width, mut density, mut height) = (None::<u64>, None::<f64>, None::<u64>);
+    for descriptor in descriptors {
+        if let Some(value) =
+            descriptor.strip_suffix('w').filter(|value| is_non_negative_integer(value))
+        {
+            if width.is_some() || density.is_some() {
+                return None;
+            }
+            width = Some(value.parse::<u64>().ok().filter(|&width| width > 0)?);
+            continue;
+        }
+        if let Some(value) =
+            descriptor.strip_suffix('x').filter(|value| is_floating_point_number(value))
+        {
+            if width.is_some() || density.is_some() || height.is_some() {
+                return None;
+            }
+            density = Some(value.parse::<f64>().ok().filter(|density| *density >= 0.0)?);
+            continue;
+        }
+        // 其余形式都不是合法描述符，整个候选无效。
+        let value = descriptor.strip_suffix('h').filter(|value| is_non_negative_integer(value))?;
+        if height.is_some() || density.is_some() {
+            return None;
+        }
+        height = Some(value.parse::<u64>().ok().filter(|&height| height > 0)?);
+    }
+    if height.is_some() && width.is_none() {
+        return None;
+    }
+    Some(match (width, density) {
+        (Some(width), _) => u32::try_from(width).unwrap_or(u32::MAX),
+        (None, Some(density)) => (density * 1000.0) as u32,
+        (None, None) => 0,
+    })
+}
+
+/// HTML “valid non-negative integer”：一个或多个 ASCII 数字。
+fn is_non_negative_integer(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// HTML “valid floating-point number”：可选 `-`，整数部分与“`.` 小数”至少有一个，可选指数。
+fn is_floating_point_number(value: &str) -> bool {
+    let digits = |text: &str| text.bytes().take_while(u8::is_ascii_digit).count();
+    let rest = value.strip_prefix('-').unwrap_or(value);
+    let integer = digits(rest);
+    let rest = &rest[integer..];
+    let (fraction, rest) = match rest.strip_prefix('.') {
+        Some(after_dot) => {
+            let fraction = digits(after_dot);
+            if fraction == 0 {
+                return false;
+            }
+            (fraction, &after_dot[fraction..])
+        }
+        None => (0, rest),
+    };
+    if integer == 0 && fraction == 0 {
+        return false;
+    }
+    match rest.strip_prefix(['e', 'E']) {
+        Some(exponent) => {
+            let exponent = exponent.strip_prefix(['-', '+']).unwrap_or(exponent);
+            !exponent.is_empty() && digits(exponent) == exponent.len()
+        }
+        None => rest.is_empty(),
     }
 }
 
@@ -851,21 +975,69 @@ mod tests {
     };
     use url::Url;
 
+    /// `(srcset, [(URL, 描述符)])`
+    type SrcsetCase<'a> = (&'a str, &'a [(&'a str, &'a [&'a str])]);
+
     #[test]
     fn srcset_candidates_follow_the_html_parsing_rules() {
-        let cases: [(&str, &[(&str, &str)]); 5] = [
-            ("a.jpg 1x, b.jpg 2x", &[("a.jpg", "1x"), ("b.jpg", "2x")]),
-            ("a.jpg 1x,b.jpg 480w", &[("a.jpg", "1x"), ("b.jpg", "480w")]),
-            ("a.jpg, b.jpg 2x", &[("a.jpg", ""), ("b.jpg", "2x")]),
+        let cases: [SrcsetCase; 7] = [
+            ("a.jpg 1x, b.jpg 2x", &[("a.jpg", &["1x"]), ("b.jpg", &["2x"])]),
+            ("a.jpg 1x,b.jpg 480w", &[("a.jpg", &["1x"]), ("b.jpg", &["480w"])]),
+            ("a.jpg, b.jpg 2x", &[("a.jpg", &[]), ("b.jpg", &["2x"])]),
+            ("a.jpg,b.jpg 2x", &[("a.jpg,b.jpg", &["2x"])]),
             (
                 "data:image/png;base64,AAAA 1x, b.jpg 2x",
-                &[("data:image/png;base64,AAAA", "1x"), ("b.jpg", "2x")],
+                &[("data:image/png;base64,AAAA", &["1x"]), ("b.jpg", &["2x"])],
             ),
-            (" , a.jpg 1x (x, y), b.jpg", &[("a.jpg", "1x (x, y)"), ("b.jpg", "")]),
+            (" , a.jpg 1x (x, y), b.jpg", &[("a.jpg", &["1x", "(x, y)"]), ("b.jpg", &[])]),
+            // `in parens` 在第一个 `)` 处结束，不计嵌套（独立评审的反例）。
+            (
+                "bad.png 1x ((x), good.png 2x",
+                &[("bad.png", &["1x", "((x)"]), ("good.png", &["2x"])],
+            ),
         ];
         for (raw, expected) in cases {
-            assert_eq!(srcset_candidates(raw).collect::<Vec<_>>(), expected, "{raw}");
+            let candidates = srcset_candidates(raw)
+                .map(|candidate| (candidate.url, candidate.descriptors))
+                .collect::<Vec<_>>();
+            let expected = expected
+                .iter()
+                .map(|(url, descriptors)| (*url, descriptors.to_vec()))
+                .collect::<Vec<_>>();
+            assert_eq!(candidates, expected, "{raw}");
         }
+    }
+
+    #[test]
+    fn srcset_descriptors_are_validated_like_browsers_do() {
+        for (descriptors, expected) in [
+            (&[][..], Some(0)),
+            (&["2x"][..], Some(2000)),
+            (&["1.5x"][..], Some(1500)),
+            (&[".5x"][..], Some(500)),
+            (&["480w"][..], Some(480)),
+            (&["480w", "300h"][..], Some(480)),
+            (&["0w"][..], None),
+            (&["-1x"][..], None),
+            (&["1.x"][..], None),
+            (&["2X"][..], None),
+            (&["1x", "2x"][..], None),
+            (&["480w", "2x"][..], None),
+            (&["300h"][..], None),
+            (&["1x", "((x)"][..], None),
+        ] {
+            assert_eq!(super::srcset_descriptor_score(descriptors), expected, "{descriptors:?}");
+        }
+    }
+
+    /// 无效候选之后的有效候选仍然参与挑选，显示地址取它而不是无效的那个。
+    #[test]
+    fn invalid_srcset_candidates_are_never_chosen_for_display() {
+        let normalized = normalize_html_for_live_display(
+            r#"<img srcset="https://e.test/bad.png 3x ((x), https://e.test/good.png 2x">"#,
+            None,
+        );
+        assert!(normalized.contains(r#"src="https://e.test/good.png""#), "{normalized}");
     }
 
     /// 本地化把 `<source>` 的 srcset 改成 data URL；显示前的归一化不能在 data URL 的逗号处切断它。
