@@ -1,5 +1,5 @@
 use anyhow::Context;
-use feed_rs::model::{Entry as FeedRsEntry, Feed as FeedRsFeed, Text};
+use feed_rs::model::{Entry as FeedRsEntry, Feed as FeedRsFeed, Link, Text};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
@@ -49,7 +49,9 @@ pub fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>)
 
 fn normalize_feed(feed: FeedRsFeed) -> ParsedFeed {
     let title = text_value(feed.title.as_ref());
-    let site_url = feed.links.first().and_then(|link| Url::parse(link.href.as_str()).ok());
+    // 只认 alternate：`self` 是 feed 自身、`hub` 是 WebSub 服务。没有时留空，
+    // 添加订阅会回落到发现页地址，刷新则保留已存的值（`COALESCE`）。
+    let site_url = alternate_url(&feed.links);
     let description = feed.description.as_ref().map(text_content);
     let entries = feed.entries.into_iter().map(normalize_entry).collect();
 
@@ -61,7 +63,9 @@ fn normalize_feed(feed: FeedRsFeed) -> ParsedFeed {
 /// 正文缓存边界不变——feed 没给的正文不去原网页补抓。
 fn normalize_entry(entry: FeedRsEntry) -> ParsedEntry {
     let title = text_value(entry.title.as_ref()).unwrap_or_else(|| "Untitled entry".to_string());
-    let url = entry.links.first().and_then(|link| Url::parse(link.href.as_str()).ok());
+    // 文章页是 alternate，不是 `replies`/`enclosure`；全无 alternate 时沿用第一条可解析链接。
+    let url = alternate_url(&entry.links)
+        .or_else(|| entry.links.iter().find_map(|link| Url::parse(&link.href).ok()));
     let author = entry.authors.first().map(|author| author.name.clone());
     let summary = entry.summary.as_ref().map(text_content);
     let content_html = entry.content.as_ref().and_then(|content| content.body.clone());
@@ -97,6 +101,20 @@ fn normalize_entry(entry: FeedRsEntry) -> ParsedEntry {
         published_at,
         updated_at_source,
     }
+}
+
+/// RFC 4287 §4.2.7.2：没有 rel 即 alternate（feed-rs 已为 Atom 补齐，RSS 的 `<link>` 则没有 rel），
+/// IANA 注册名的绝对 IRI 形式与短名等价。
+fn alternate_url(links: &[Link]) -> Option<Url> {
+    const IANA_RELATIONS: &str = "http://www.iana.org/assignments/relation/";
+    links
+        .iter()
+        .filter(|link| {
+            link.rel.as_deref().map(str::trim).is_none_or(|rel| {
+                rel.strip_prefix(IANA_RELATIONS).unwrap_or(rel).eq_ignore_ascii_case("alternate")
+            })
+        })
+        .find_map(|link| Url::parse(&link.href).ok())
 }
 
 fn dedup_key_fallback(title: &str, published_at: Option<OffsetDateTime>) -> String {
@@ -173,5 +191,44 @@ mod tests {
             assert_eq!(entry.content_text, None);
             assert_eq!(entry.summary, None);
         }
+    }
+
+    /// WordPress 等 RSS 2.0 在 `<link>` 之前输出 `atom:link rel="self"` 与 WebSub 的 `rel="hub"`。
+    #[test]
+    fn rss_site_url_skips_self_and_hub_links() {
+        let feed = parse_feed_xml(
+            r#"<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Blog</title>
+ <atom:link href="https://example.com/feed/" rel="self" type="application/rss+xml"/>
+ <atom:link href="https://hub.example.net/" rel="hub"/>
+ <link>https://example.com/</link>
+ <item><title>Post</title><link>https://example.com/post</link><guid>p</guid></item>
+</channel></rss>"#,
+        )
+        .expect("parse rss");
+        assert_eq!(feed.site_url.as_ref().map(url::Url::as_str), Some("https://example.com/"));
+        assert_eq!(
+            feed.entries[0].url.as_ref().map(url::Url::as_str),
+            Some("https://example.com/post")
+        );
+    }
+
+    /// 只有 `self` 时不把 feed 地址当作站点；条目没有 alternate 时沿用第一条链接（如播客的 enclosure）。
+    #[test]
+    fn missing_alternate_leaves_site_empty_and_entry_on_its_first_link() {
+        let feed = parse_feed_xml(
+            r#"<feed xmlns="http://www.w3.org/2005/Atom"><title>F</title><id>f</id>
+ <link rel="self" href="https://example.com/feed.atom"/>
+ <entry><id>e1</id><title>E</title>
+  <link rel="enclosure" href="https://cdn.example.com/e1.mp3"/>
+  <link rel="http://www.iana.org/assignments/relation/alternate" href="https://example.com/e1"/>
+ </entry>
+ <entry><id>e2</id><title>E2</title><link rel="enclosure" href="https://cdn.example.com/e2.mp3"/></entry>
+</feed>"#,
+        )
+        .expect("parse atom");
+        assert_eq!(feed.site_url, None);
+        let urls =
+            feed.entries.iter().map(|e| e.url.as_ref().map(url::Url::as_str)).collect::<Vec<_>>();
+        assert_eq!(urls, [Some("https://example.com/e1"), Some("https://cdn.example.com/e2.mp3")]);
     }
 }

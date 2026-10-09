@@ -313,7 +313,6 @@ async fn http_and_prolog_both_gbk_feed_keeps_its_text() {
 /// Atom lists links by relation. The feed's site is `rel="alternate"` (not `rel="self"`), and an
 /// entry's article is `rel="alternate"` (not `replies`/`enclosure`), regardless of order.
 #[test]
-#[ignore = "audit-2026-10-09: normalization takes the first <link> regardless of rel"]
 fn atom_links_are_selected_by_relation_not_position() {
     let parsed = FeedParser::new()
         .parse(
