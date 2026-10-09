@@ -89,6 +89,14 @@ impl AppShellState {
     pub(crate) fn submit_search(self, navigator: Navigator) {
         navigator.push(AppRoute::EntriesPage {});
     }
+
+    /// 在 App 作用域里运行任务，页面卸载不会取消它。只给完成后还要改全局状态的命令用
+    /// （例如配置导入替换了设置，审计 E1）；页面自己的回执要先确认页面仍然挂载。
+    pub(crate) fn spawn_in_shell(self, task: impl std::future::Future<Output = ()> + 'static) {
+        Runtime::current().in_scope(self.owner, || {
+            spawn(task);
+        });
+    }
 }
 
 pub(crate) fn use_app_shell_state() -> AppShellState {

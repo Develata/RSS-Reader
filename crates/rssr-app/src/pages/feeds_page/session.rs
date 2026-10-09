@@ -89,14 +89,24 @@ impl FeedsPageSession {
                 });
             let single_refresh =
                 matches!(command, UiCommand::Feeds(FeedsCommand::RefreshFeed { .. }));
+            // 配置导入可能替换全局设置：任务交给 App 作用域，离开订阅页不会把它取消在
+            // “已提交、未回执”的中途，新外观照样生效（审计 E1）。
+            let shell_owned =
+                matches!(command, UiCommand::Feeds(FeedsCommand::ImportConfig { .. }));
             let task = execute(command);
-            spawn(async move {
+            let completion = async move {
                 let intents = task.await;
                 if generation.is_some_and(|generation| *self.query_generation.peek() != generation)
                 {
                     return;
                 }
                 for intent in intents.into_iter().filter_map(UiIntent::into_feeds_page_intent) {
+                    // 页面已卸载时只保留全局效果，页面自己的回执不再投递。
+                    if self.state.try_peek().is_err()
+                        && !matches!(intent, FeedsPageIntent::SettingsReplaced(_))
+                    {
+                        continue;
+                    }
                     self.dispatch_intent(intent);
                 }
                 if single_refresh {
@@ -109,7 +119,12 @@ impl FeedsPageSession {
                     .await;
                     self.dispatch_intent(FeedsPageIntent::ClearRefreshStatus { revision, message });
                 }
-            });
+            };
+            if shell_owned {
+                self.shell.spawn_in_shell(completion);
+            } else {
+                spawn(completion);
+            }
         }
     }
 
@@ -172,6 +187,88 @@ mod tests {
         dom.rebuild_in_place();
         let session = dom.in_scope(ScopeId::APP, consume_context);
         (dom, session)
+    }
+
+    #[derive(Clone, Copy)]
+    struct UnmountProbe {
+        show_page: Signal<bool>,
+        page: Signal<Option<(FeedsPageSession, ScopeId)>>,
+    }
+
+    fn app_with_unmountable_page() -> Element {
+        let shell = use_app_shell_state();
+        let theme = ThemeController { settings: use_signal(UserSettings::default) };
+        let show_page = use_signal(|| true);
+        let page = use_signal(|| None);
+        use_context_provider(|| shell);
+        use_context_provider(|| theme);
+        use_context_provider(|| UnmountProbe { show_page, page });
+        rsx! {
+            if show_page() {
+                FeedsPageProbe {}
+            }
+        }
+    }
+
+    #[component]
+    fn FeedsPageProbe() -> Element {
+        let shell = use_context::<AppShellState>();
+        let theme = use_context::<ThemeController>();
+        let mut probe = use_context::<UnmountProbe>();
+        let state = use_signal(FeedsPageState::new);
+        let generation = use_signal(|| 0);
+        use_hook(|| {
+            let session = FeedsPageSession::new(state, shell, theme, generation);
+            probe.page.set(Some((session, dioxus::core::current_scope_id())));
+        });
+        rsx! {}
+    }
+
+    /// 导入已提交、结果还没返回时离开订阅页：任务不被取消，新外观照样生效，
+    /// 已卸载页面的回执被丢弃而不是写进已释放的状态（独立评审的反例）。
+    #[test]
+    fn config_import_still_applies_settings_after_leaving_the_page() {
+        let mut dom = VirtualDom::new(app_with_unmountable_page);
+        dom.rebuild_in_place();
+        let probe = dom.in_scope(ScopeId::APP, consume_context::<UnmountProbe>);
+        let (session, page_scope) = probe.page.peek().expect("feeds page mounted");
+        let (sender, receiver) = oneshot::channel();
+        let mut receiver = Some(receiver);
+        dom.in_scope(page_scope, || {
+            session.dispatch_intent(FeedsPageIntent::PendingConfigImportSet(true));
+            session.dispatch_intent_with(FeedsPageIntent::ImportConfigRequested, |command| {
+                assert!(matches!(command, UiCommand::Feeds(FeedsCommand::ImportConfig { .. })));
+                let receiver = receiver.take().expect("one import command");
+                async move { receiver.await.expect("import result") }
+            });
+        });
+        dom.render_immediate_to_vec();
+
+        let mut show_page = probe.show_page;
+        dom.in_scope(ScopeId::APP, || show_page.set(false));
+        dom.render_immediate_to_vec();
+        assert!(session.state.try_peek().is_err(), "the feeds page must be unmounted");
+
+        let replaced = UserSettings {
+            theme: rssr_domain::ThemeMode::Dark,
+            custom_css: "body { color: red; }".into(),
+            ..UserSettings::default()
+        };
+        sender
+            .send(vec![
+                UiIntent::FeedsPage(FeedsPageIntent::PendingConfigImportSet(false)),
+                UiIntent::FeedsPage(FeedsPageIntent::BumpReload),
+                UiIntent::FeedsPage(FeedsPageIntent::SettingsReplaced(replaced.clone())),
+                UiIntent::FeedsPage(FeedsPageIntent::SetStatus {
+                    message: "配置包已导入".into(),
+                    tone: "info".into(),
+                }),
+            ])
+            .expect("deliver import result");
+        dom.render_immediate_to_vec();
+
+        let theme = dom.in_scope(ScopeId::APP, consume_context::<ThemeController>);
+        assert_eq!(*theme.settings.peek(), replaced);
     }
 
     /// 导入配置包后外观立即生效，不依赖设置页是否挂载（审计 E1）。

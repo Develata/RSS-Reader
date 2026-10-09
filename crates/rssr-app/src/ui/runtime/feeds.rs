@@ -164,7 +164,7 @@ fn import_config_result(
             intents.push(FeedsPageIntent::BumpReload);
             match settings {
                 Some(Err(err)) => (
-                    format!("配置包已导入：{summary}；但读取新设置失败，外观需重启后生效：{err}"),
+                    format!("配置包已导入：{summary}；但新外观尚未应用，请打开设置页重试：{err}"),
                     "error",
                 ),
                 Some(Ok(settings)) => {
