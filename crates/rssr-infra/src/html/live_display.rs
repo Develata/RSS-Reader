@@ -563,38 +563,52 @@ fn normalize_srcset(
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
 ) -> Option<String> {
-    let normalized = raw
-        .split(',')
-        .filter_map(|candidate| {
-            let candidate = candidate.trim();
-            if candidate.is_empty() {
-                return None;
-            }
-
-            let Some((url, descriptor)) = split_srcset_candidate(candidate) else {
-                return Some(candidate.to_string());
-            };
-
-            let Some(resolved) = resolve_asset_url(url, document_base_url, fallback_base_url)
-            else {
-                return Some(candidate.to_string());
-            };
-
-            Some(if descriptor.is_empty() {
-                resolved.to_string()
-            } else {
-                format!("{} {}", resolved, descriptor)
-            })
+    let normalized = srcset_candidates(raw)
+        .map(|(url, descriptor)| {
+            let url = resolve_asset_url(url, document_base_url, fallback_base_url)
+                .map_or_else(|| url.to_string(), |resolved| resolved.to_string());
+            if descriptor.is_empty() { url } else { format!("{url} {descriptor}") }
         })
         .collect::<Vec<_>>();
 
     (!normalized.is_empty()).then(|| normalized.join(", "))
 }
 
-fn split_srcset_candidate(raw: &str) -> Option<(&str, &str)> {
-    let url_end = raw.find(char::is_whitespace).unwrap_or(raw.len());
-    let url = raw[..url_end].trim();
-    (!url.is_empty()).then_some((url, raw[url_end..].trim()))
+/// 按 HTML 标准“parse a srcset attribute”切分 `(URL, 描述符)`：URL 是一段连续的非空白字符，
+/// 因此 `data:image/png;base64,…` 里的逗号属于 URL。URL 以逗号结尾时候选到此为止，
+/// 否则描述符延续到括号之外的下一个逗号。按逗号直接切分会把本地化后的 data URL 截断。
+fn srcset_candidates(raw: &str) -> impl Iterator<Item = (&str, &str)> {
+    let mut rest = raw;
+    std::iter::from_fn(move || {
+        rest = rest.trim_start_matches(|c: char| c.is_ascii_whitespace() || c == ',');
+        if rest.is_empty() {
+            return None;
+        }
+        let url_end = rest.find(|c: char| c.is_ascii_whitespace()).unwrap_or(rest.len());
+        let (url, after) = rest.split_at(url_end);
+        if url.ends_with(',') {
+            rest = after;
+            return Some((url.trim_end_matches(','), ""));
+        }
+        let mut depth = 0_usize;
+        let descriptor_end = after
+            .char_indices()
+            .find_map(|(index, c)| match c {
+                '(' => {
+                    depth += 1;
+                    None
+                }
+                ')' => {
+                    depth = depth.saturating_sub(1);
+                    None
+                }
+                ',' if depth == 0 => Some(index),
+                _ => None,
+            })
+            .unwrap_or(after.len());
+        rest = &after[descriptor_end..];
+        Some((url, after[..descriptor_end].trim()))
+    })
 }
 
 fn srcset_candidate(tag: &HtmlTag, srcset_attrs: &[&str]) -> Option<String> {
@@ -611,33 +625,21 @@ fn srcset_candidate(tag: &HtmlTag, srcset_attrs: &[&str]) -> Option<String> {
 }
 
 fn select_best_srcset_candidate(raw: &str) -> Option<String> {
-    raw.split(',')
-        .filter_map(|candidate| parse_srcset_candidate(candidate.trim()))
+    srcset_candidates(raw)
+        .map(|(url, descriptor)| (url, srcset_descriptor_score(descriptor)))
         .max_by_key(|(_, score)| *score)
-        .map(|(url, _)| url)
+        .map(|(url, _)| url.to_string())
 }
 
-fn parse_srcset_candidate(raw: &str) -> Option<(String, u32)> {
-    if raw.is_empty() {
-        return None;
-    }
-
-    let mut parts = raw.split_whitespace().collect::<Vec<_>>();
-    if parts.is_empty() {
-        return None;
-    }
-
-    let url = parts.remove(0).to_string();
-    let descriptor = parts.first().copied().unwrap_or_default();
-    let score = if let Some(value) = descriptor.strip_suffix('w') {
+fn srcset_descriptor_score(descriptor: &str) -> u32 {
+    let descriptor = descriptor.split_whitespace().next().unwrap_or_default();
+    if let Some(value) = descriptor.strip_suffix('w') {
         value.parse::<u32>().unwrap_or(0)
     } else if let Some(value) = descriptor.strip_suffix('x') {
         value.parse::<f32>().map(|value| (value * 1000.0) as u32).unwrap_or(0)
     } else {
         0
-    };
-
-    Some((url, score))
+    }
 }
 
 pub(crate) fn resolve_asset_url(
@@ -845,9 +847,34 @@ mod tests {
 
     use super::{
         LocalizableImageDocument, normalize_html_for_live_display, normalize_image_content_type,
-        resolve_asset_url,
+        resolve_asset_url, srcset_candidates,
     };
     use url::Url;
+
+    #[test]
+    fn srcset_candidates_follow_the_html_parsing_rules() {
+        let cases: [(&str, &[(&str, &str)]); 5] = [
+            ("a.jpg 1x, b.jpg 2x", &[("a.jpg", "1x"), ("b.jpg", "2x")]),
+            ("a.jpg 1x,b.jpg 480w", &[("a.jpg", "1x"), ("b.jpg", "480w")]),
+            ("a.jpg, b.jpg 2x", &[("a.jpg", ""), ("b.jpg", "2x")]),
+            (
+                "data:image/png;base64,AAAA 1x, b.jpg 2x",
+                &[("data:image/png;base64,AAAA", "1x"), ("b.jpg", "2x")],
+            ),
+            (" , a.jpg 1x (x, y), b.jpg", &[("a.jpg", "1x (x, y)"), ("b.jpg", "")]),
+        ];
+        for (raw, expected) in cases {
+            assert_eq!(srcset_candidates(raw).collect::<Vec<_>>(), expected, "{raw}");
+        }
+    }
+
+    /// 本地化把 `<source>` 的 srcset 改成 data URL；显示前的归一化不能在 data URL 的逗号处切断它。
+    #[test]
+    fn display_normalization_keeps_localized_data_url_srcset_whole() {
+        let localized = r#"<picture><source srcset="data:image/avif;base64,abcd" src="data:image/avif;base64,abcd"><img src="data:image/avif;base64,abcd"></picture>"#;
+        let normalized = normalize_html_for_live_display(localized, None);
+        assert!(normalized.contains(r#"srcset="data:image/avif;base64,abcd""#), "{normalized}");
+    }
 
     #[test]
     fn resolve_asset_url_uses_document_base_for_relative_paths() {
