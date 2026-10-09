@@ -2,7 +2,7 @@ mod body_asset_localizer;
 mod feed_http;
 mod feed_response;
 
-pub use body_asset_localizer::BodyAssetLocalizer;
+pub use body_asset_localizer::{BodyAssetLocalizer, LocalizedHtml};
 pub use feed_http::{FetchClient, FetchRequest, FetchResult, HttpMetadata};
 pub(crate) use feed_http::{feed_client_builder, user_agent};
 

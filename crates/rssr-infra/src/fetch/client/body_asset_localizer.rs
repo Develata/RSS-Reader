@@ -26,6 +26,14 @@ struct LocalizationBudget {
     max_concurrent_image_requests: usize,
 }
 
+/// [`BodyAssetLocalizer::localize_html_images_reporting`] 的结果。
+#[derive(Debug)]
+pub struct LocalizedHtml {
+    pub html: String,
+    /// 是否至少发起过一次图片请求（不论成败）。
+    pub requested_images: bool,
+}
+
 #[derive(Debug)]
 struct LocalizationPlan {
     document: LocalizableImageDocument,
@@ -108,17 +116,29 @@ impl BodyAssetLocalizer {
         html: &str,
         base_url: Option<&Url>,
     ) -> anyhow::Result<String> {
+        Ok(self.localize_html_images_reporting(html, base_url).await.html)
+    }
+
+    /// 同 [`Self::localize_html_images`]，另外报告是否为这篇正文发起过图片请求：无图、正文超出
+    /// 预算或图片地址都无法解析时不发请求，结果却与“图片全部失败”一样是原文，调用方据此区分
+    /// （后台本地化只为发过请求的文章计尝试次数，审计 C2）。
+    pub async fn localize_html_images_reporting(
+        &self,
+        html: &str,
+        base_url: Option<&Url>,
+    ) -> LocalizedHtml {
         let normalized_html = normalize_html_for_live_display(html, base_url);
         let Some(plan) = self.build_localization_plan(&normalized_html, base_url) else {
-            return Ok(normalized_html);
+            return LocalizedHtml { html: normalized_html, requested_images: false };
         };
         let localized = self.localize_sources(&plan.document, base_url).await;
 
-        if localized.is_empty() {
-            return Ok(normalized_html);
-        }
-
-        Ok(plan.document.rewrite_html(&normalized_html, &localized))
+        let html = if localized.is_empty() {
+            normalized_html
+        } else {
+            plan.document.rewrite_html(&normalized_html, &localized)
+        };
+        LocalizedHtml { html, requested_images: true }
     }
 
     async fn fetch_image_as_data_url(

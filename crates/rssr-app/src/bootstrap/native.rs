@@ -1,5 +1,5 @@
 use std::sync::{
-    Arc,
+    Arc, PoisonError,
     atomic::{AtomicBool, Ordering},
 };
 use std::time::Duration;
@@ -74,6 +74,33 @@ struct ImageLocalizationWorker {
     entry_repository: Arc<SqliteEntryRepository>,
     background_asset_localizer: BodyAssetLocalizer,
     reader_asset_localizer: BodyAssetLocalizer,
+    background: Arc<BackgroundLocalizationQueue>,
+}
+
+/// 后台图片本地化的并发与排队约束（审计 C2）。
+struct BackgroundLocalizationQueue {
+    slots: tokio::sync::Semaphore,
+    pending_feeds: std::sync::Mutex<std::collections::HashSet<i64>>,
+}
+
+/// 某个订阅已有排队或进行中的后台本地化；任务结束（包括被取消）时释放。
+struct PendingFeed {
+    queue: Arc<BackgroundLocalizationQueue>,
+    feed_id: i64,
+}
+
+impl PendingFeed {
+    fn claim(queue: &Arc<BackgroundLocalizationQueue>, feed_id: i64) -> Option<Self> {
+        let mut pending = queue.pending_feeds.lock().unwrap_or_else(PoisonError::into_inner);
+        pending.insert(feed_id).then(|| Self { queue: Arc::clone(queue), feed_id })
+    }
+}
+
+impl Drop for PendingFeed {
+    fn drop(&mut self) {
+        let mut pending = self.queue.pending_feeds.lock().unwrap_or_else(PoisonError::into_inner);
+        pending.remove(&self.feed_id);
+    }
 }
 
 impl AppServices {
@@ -129,11 +156,9 @@ impl AppServices {
 
                 Ok(Arc::new(Self {
                     use_cases: composition.use_cases,
-                    image_localization_worker: ImageLocalizationWorker {
-                        entry_repository: composition.entry_repository,
-                        background_asset_localizer: BodyAssetLocalizer::new(),
-                        reader_asset_localizer: BodyAssetLocalizer::for_reader_entry(),
-                    },
+                    image_localization_worker: ImageLocalizationWorker::new(
+                        composition.entry_repository,
+                    ),
                     auto_refresh_started: AtomicBool::new(false),
                     refresh_flight: super::refresh_flight::RefreshFlight::default(),
                     refresh_concurrency,
@@ -366,114 +391,54 @@ impl RemoteConfigPort for RemoteConfigCapability {
 }
 
 impl ImageLocalizationWorker {
-    const MAX_BACKGROUND_LOCALIZED_ENTRIES: usize = 5;
+    /// 每次刷新为一个订阅最多尝试本地化的条目数，计数规则见 [`localize_feed_entries`]（审计 C2）。
+    const MAX_BACKGROUND_ATTEMPTS: usize = 5;
+    /// 一个订阅一轮后台本地化的总时长上限。
+    const BACKGROUND_BUDGET: Duration = Duration::from_secs(180);
+    /// 同时进行后台本地化的订阅数。
+    const MAX_CONCURRENT_FEEDS: usize = 2;
+
+    fn new(entry_repository: Arc<SqliteEntryRepository>) -> Self {
+        Self {
+            entry_repository,
+            background_asset_localizer: BodyAssetLocalizer::new(),
+            reader_asset_localizer: BodyAssetLocalizer::for_reader_entry(),
+            background: Arc::new(BackgroundLocalizationQueue {
+                slots: tokio::sync::Semaphore::new(Self::MAX_CONCURRENT_FEEDS),
+                pending_feeds: Default::default(),
+            }),
+        }
+    }
 
     fn spawn(&self, feed_id: i64, entries: Vec<RefreshLocalizedEntry>) {
+        // 同一订阅已有排队或进行中的后台本地化时不再追加：多轮自动刷新不会叠加任务与正文副本，
+        // 这次没轮到的条目下次刷新再处理。先到的列表即使过时也只会少做、不会写错：写回按源正文
+        // 哈希与 generation 校验。
+        let Some(pending) = PendingFeed::claim(&self.background, feed_id) else {
+            return;
+        };
         let entry_repository = self.entry_repository.clone();
         let localizer = self.background_asset_localizer.clone();
+        let background = self.background.clone();
 
         tokio::spawn(async move {
-            let mut localized_count = 0_usize;
-
-            for entry in entries.into_iter() {
-                if localized_count >= Self::MAX_BACKGROUND_LOCALIZED_ENTRIES {
-                    break;
-                }
-
-                let original_html = entry.content_html.clone();
-
-                let Some(expected_content_hash) = compute_entry_content_hash(
-                    Some(&original_html),
-                    entry.content_text.as_deref(),
-                    Some(&entry.title),
-                ) else {
-                    continue;
-                };
-                // 源未变的刷新会保留已本地化的正文，这里不再为它重新下载图片（审计 C1）。
-                match entry_repository
-                    .has_derived_body(
-                        feed_id,
-                        &entry.dedup_key,
-                        &expected_content_hash,
-                        &original_html,
-                    )
-                    .await
-                {
-                    Ok(true) => continue,
-                    Ok(false) => {}
-                    Err(error) => {
-                        tracing::warn!(
-                            feed_id,
-                            dedup_key = %entry.dedup_key,
-                            error = %error,
-                            "读取已存正文失败，跳过后台图片本地化"
-                        );
-                        continue;
-                    }
-                }
-
-                let localized_html = match tokio::time::timeout(
-                    localization_timeout(&localizer),
-                    localizer.localize_html_images(&original_html, entry.url.as_ref()),
-                )
-                .await
-                {
-                    Ok(Ok(localized_html)) if localized_html != original_html => localized_html,
-                    Ok(Ok(_)) => continue,
-                    Ok(Err(error)) => {
-                        tracing::warn!(
-                            feed_id,
-                            entry_url = ?entry.url,
-                            error = %error,
-                            "后台正文图片本地化失败，保留原始 HTML"
-                        );
-                        continue;
-                    }
-                    Err(_) => {
-                        tracing::warn!(
-                            feed_id,
-                            entry_url = ?entry.url,
-                            reason = "timeout",
-                            timeout_secs = localization_timeout(&localizer).as_secs(),
-                            "后台正文图片本地化超时，跳过当前文章"
-                        );
-                        continue;
-                    }
-                };
-
-                let update = LocalizedEntryUpdate {
-                    dedup_key: &entry.dedup_key,
-                    expected_content_hash: &expected_content_hash,
-                    localized_html: &localized_html,
-                };
-
-                match entry_repository
-                    .update_localized_html_if_hash_matches_for_generation(
-                        feed_id,
-                        entry.generation,
-                        &update,
-                    )
-                    .await
-                {
-                    Ok(true) => {
-                        localized_count += 1;
-                    }
-                    Ok(false) => {
-                        tracing::debug!(
-                            feed_id,
-                            dedup_key = %entry.dedup_key,
-                            "跳过后台正文图片本地化写回：文章内容已被更新"
-                        );
-                    }
-                    Err(error) => {
-                        tracing::warn!(
-                            feed_id,
-                            dedup_key = %entry.dedup_key,
-                            error = %error,
-                            "写回后台本地化后的正文失败"
-                        );
-                    }
-                }
+            let _pending = pending;
+            let Ok(_slot) = background.slots.acquire().await else {
+                return;
+            };
+            let round = localize_feed_entries(
+                &entry_repository,
+                &localizer,
+                feed_id,
+                entries,
+                Self::MAX_BACKGROUND_ATTEMPTS,
+            );
+            if tokio::time::timeout(Self::BACKGROUND_BUDGET, round).await.is_err() {
+                tracing::warn!(
+                    feed_id,
+                    budget_secs = Self::BACKGROUND_BUDGET.as_secs(),
+                    "后台正文图片本地化达到本轮时长上限，剩余文章留到下次刷新"
+                );
             }
         });
     }
@@ -562,6 +527,111 @@ impl ImageLocalizationWorker {
     }
 }
 
+/// 依次尝试本地化一个订阅的文章，返回计入预算的尝试篇数（审计 C2）。
+///
+/// 为一篇文章发起过图片请求就计一次尝试，不论成败或超时，达到 `max_attempts` 即停。不计数的：
+/// 正文已是这份源正文的派生版本（源未变的刷新会保留它，见审计 C1）而跳过的，以及无图、正文超出
+/// 预算等根本没有发请求的。图片持续失败的文章每轮仍会占用尝试次数，直到源正文变化。
+async fn localize_feed_entries(
+    entry_repository: &SqliteEntryRepository,
+    localizer: &BodyAssetLocalizer,
+    feed_id: i64,
+    entries: Vec<RefreshLocalizedEntry>,
+    max_attempts: usize,
+) -> usize {
+    let mut attempts = 0_usize;
+    for entry in entries {
+        if attempts >= max_attempts {
+            break;
+        }
+        let original_html = entry.content_html;
+        let Some(expected_content_hash) = compute_entry_content_hash(
+            Some(&original_html),
+            entry.content_text.as_deref(),
+            Some(&entry.title),
+        ) else {
+            continue;
+        };
+        match entry_repository
+            .has_derived_body(feed_id, &entry.dedup_key, &expected_content_hash, &original_html)
+            .await
+        {
+            Ok(true) => continue,
+            Ok(false) => {}
+            Err(error) => {
+                tracing::warn!(
+                    feed_id,
+                    dedup_key = %entry.dedup_key,
+                    error = %error,
+                    "读取已存正文失败，跳过后台图片本地化"
+                );
+                continue;
+            }
+        }
+
+        let localized_html = match tokio::time::timeout(
+            localization_timeout(localizer),
+            localizer.localize_html_images_reporting(&original_html, entry.url.as_ref()),
+        )
+        .await
+        {
+            Ok(outcome) => {
+                if outcome.requested_images {
+                    attempts += 1;
+                }
+                if outcome.html == original_html {
+                    continue;
+                }
+                outcome.html
+            }
+            Err(_) => {
+                // 超时只可能发生在发出图片请求之后。
+                attempts += 1;
+                tracing::warn!(
+                    feed_id,
+                    entry_url = ?entry.url,
+                    reason = "timeout",
+                    timeout_secs = localization_timeout(localizer).as_secs(),
+                    "后台正文图片本地化超时，跳过当前文章"
+                );
+                continue;
+            }
+        };
+
+        let update = LocalizedEntryUpdate {
+            dedup_key: &entry.dedup_key,
+            expected_content_hash: &expected_content_hash,
+            localized_html: &localized_html,
+        };
+        match entry_repository
+            .update_localized_html_if_hash_matches_for_generation(
+                feed_id,
+                entry.generation,
+                &update,
+            )
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => {
+                tracing::debug!(
+                    feed_id,
+                    dedup_key = %entry.dedup_key,
+                    "跳过后台正文图片本地化写回：文章内容已被更新"
+                );
+            }
+            Err(error) => {
+                tracing::warn!(
+                    feed_id,
+                    dedup_key = %entry.dedup_key,
+                    error = %error,
+                    "写回后台本地化后的正文失败"
+                );
+            }
+        }
+    }
+    attempts
+}
+
 fn localization_timeout(localizer: &BodyAssetLocalizer) -> Duration {
     Duration::from_secs(
         localizer.image_request_timeout().as_secs() * localizer.max_images_per_entry() as u64 + 5,
@@ -587,7 +657,7 @@ mod tests {
     };
     use url::Url;
 
-    use super::{BodyAssetLocalizer, ImageLocalizationWorker};
+    use super::{BodyAssetLocalizer, ImageLocalizationWorker, localize_feed_entries};
 
     #[tokio::test]
     async fn localize_entry_on_demand_rewrites_current_entry_html() {
@@ -644,11 +714,7 @@ mod tests {
             .await
             .expect("insert entry");
 
-        let worker = ImageLocalizationWorker {
-            entry_repository: entry_repository.clone(),
-            background_asset_localizer: BodyAssetLocalizer::new(),
-            reader_asset_localizer: BodyAssetLocalizer::for_reader_entry(),
-        };
+        let worker = ImageLocalizationWorker::new(entry_repository.clone());
 
         let updated = worker.localize_entry_on_demand(1).await.expect("localize current entry");
         assert!(updated, "expected current reader entry to be rewritten");
@@ -663,5 +729,58 @@ mod tests {
         assert!(!html.contains("/hero.png"));
 
         server.join().expect("join local image server");
+    }
+
+    /// 后台本地化按尝试计数（审计 C2）：图片全部失败（例如防盗链 403）时，一轮最多为
+    /// `max_attempts` 篇发请求，而不是把订阅里的每一篇都试一遍；排在前面的无图文章不发请求，
+    /// 也不占用尝试次数。
+    #[tokio::test]
+    async fn background_localization_stops_after_its_attempt_budget() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("listener addr");
+        let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let server = tokio::spawn({
+            let requests = Arc::clone(&requests);
+            async move {
+                loop {
+                    let Ok((mut stream, _)) = listener.accept().await else { return };
+                    requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let mut buf = [0_u8; 4096];
+                    let _ = tokio::io::AsyncReadExt::read(&mut stream, &mut buf).await;
+                    let _ = tokio::io::AsyncWriteExt::write_all(
+                        &mut stream,
+                        b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+                    )
+                    .await;
+                }
+            }
+        });
+
+        let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.expect("connect");
+        migrate(&pool).await.expect("migrate sqlite");
+        let entry_repository = SqliteEntryRepository::new(pool);
+        let article = Url::parse(&format!("http://{addr}/article")).expect("article url");
+        let entries = (0..13)
+            .map(|index| rssr_application::RefreshLocalizedEntry {
+                generation: 0,
+                dedup_key: format!("entry-{index}"),
+                url: Some(article.clone()),
+                title: format!("Entry {index}"),
+                content_html: if index < 5 {
+                    format!("<p>Text only {index}</p>")
+                } else {
+                    format!(r#"<p><img src="http://{addr}/image-{index}.png"></p>"#)
+                },
+                content_text: None,
+            })
+            .collect();
+
+        let attempts =
+            localize_feed_entries(&entry_repository, &BodyAssetLocalizer::new(), 1, entries, 3)
+                .await;
+        server.abort();
+
+        assert_eq!(attempts, 3);
+        assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 3);
     }
 }
