@@ -299,3 +299,66 @@ async fn unread_summaries_are_global_idempotent_and_unchanged_on_failure() {
     entries.set_read(all[0].id, false).await.unwrap();
     assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
 }
+
+/// 标题搜索是字面量匹配：`%`、`_`、`\` 不能作为 LIKE 通配符扩大命中集合。
+/// 列表、计数与批量已读预览共用同一筛选，三者必须一致（浏览器端为字面 contains）。
+#[tokio::test]
+async fn search_title_treats_like_wildcards_as_literals() {
+    use rssr_domain::EntryIndexRepository;
+
+    let backend = NativeSqliteBackend::new("sqlite::memory:");
+    let pool = backend.connect().await.expect("connect sqlite memory");
+    migrate(&pool).await.expect("run migrations");
+    let feed_repository = SqliteFeedRepository::new(pool.clone());
+    let entry_repository = SqliteEntryRepository::new(pool);
+    let feed = feed_repository
+        .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
+            url: Url::parse("https://example.com/wildcards.xml").expect("valid url"),
+            title: None,
+            folder: None,
+        })
+        .await
+        .expect("create feed");
+    let entry = |id: &str, title: &str| ParsedEntry {
+        external_id: id.to_string(),
+        dedup_key: id.to_string(),
+        url: None,
+        title: title.to_string(),
+        author: None,
+        summary: Some("summary".to_string()),
+        content_html: None,
+        content_text: Some("summary".to_string()),
+        published_at: None,
+        updated_at_source: None,
+    };
+    entry_repository
+        .upsert_entries(
+            feed.id,
+            &[
+                entry("percent", "100% done"),
+                entry("digits", "1000 done"),
+                entry("underscore", "a_b"),
+                entry("letter", "axb"),
+                entry("backslash", r"C:\path"),
+                entry("plain", "C:path"),
+            ],
+        )
+        .await
+        .expect("insert entries");
+
+    for (search, expected) in [("100%", "100% done"), ("a_b", "a_b"), (r"C:\", r"C:\path")] {
+        let query = EntryQuery { search_title: Some(search.to_string()), ..EntryQuery::default() };
+        let titles = entry_repository
+            .list_entries(&query)
+            .await
+            .expect("search entries")
+            .into_iter()
+            .map(|entry| entry.title)
+            .collect::<Vec<_>>();
+        assert_eq!(titles, vec![expected.to_string()], "search {search:?}");
+        assert_eq!(entry_repository.count_entries(&query).await.expect("count"), 1);
+        let preview = entry_repository.preview_mark_read(&query).await.expect("preview");
+        assert_eq!(preview.unread_entry_ids.len(), 1, "bulk preview for {search:?}");
+    }
+}

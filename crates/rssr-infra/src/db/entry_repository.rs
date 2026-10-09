@@ -1110,10 +1110,24 @@ fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a En
         }
     }
     if let Some(search) = &query.search_title {
+        // 搜索词是字面量：`%` / `_` 必须转义，否则会被当成通配符，列表、计数、批量已读
+        // 预览与写入都会多匹配，并与浏览器端的字面 contains 语义不一致。
         qb.push(" AND entries.title LIKE ")
-            .push_bind(format!("%{search}%"))
-            .push(" COLLATE NOCASE");
+            .push_bind(format!("%{}%", escape_like_literal(search)))
+            .push(" COLLATE NOCASE ESCAPE '\\'");
     }
+}
+
+/// 把用户输入转成 LIKE 字面量片段，配合 `ESCAPE '\'` 使用。
+fn escape_like_literal(raw: &str) -> String {
+    let mut escaped = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        if matches!(ch, '\\' | '%' | '_') {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+    escaped
 }
 
 /// `published_at` 以 RFC3339 UTC 字符串存储，比较也在字符串上进行，因此分界必须用同一种
