@@ -28,7 +28,7 @@
 | --- | --- | --- | --- | --- |
 | 1 | 迁移校验和绑定换行符：跨平台打开同一数据库失败；若直接改 `.gitattributes`，下一个 Windows 版本会让既有库启动失败 | P1 | 已验证（本地库为 CRLF 校验和）+ 推断（发布构建） | `crates/rssr-infra/src/db.rs:18`、`.gitattributes` |
 | 2 | Web 正文全部存于一片 `localStorage`，无淘汰；配额耗尽后含正文变化的刷新永久失败 | P1 | 推断 | `browser/state/storage.rs:160` |
-| 3 | 同一订阅的单源刷新 / 全量刷新 / 首刷互不协调，旧响应可覆盖新响应 | P2 | 已验证（红测试） | `bootstrap/native.rs:269`、`application_adapters/refresh.rs:125` |
+| 3 | 同一订阅的单源刷新 / 全量刷新 / 首刷互不协调，旧响应可覆盖新响应 | P2 | 已验证（进程内红测试）+ 推断（跨进程、提交步骤交错） | `bootstrap/native.rs:269`、`application_adapters/refresh.rs:125` |
 | 4 | 在途列表查询覆盖成功的已读写入；渲染时采样时钟使查询每秒重发，放大该竞态 | P2 | 已验证（红测试）+ 推断 | `entries_page/session.rs:131`、`entries_page/mod.rs:227` |
 | 5 | 源未变的刷新冲掉已本地化正文；后台本地化按成功数而非尝试数限额、任务无界 | P2 | 已验证（红测试）+ 推断 | `db/entry_repository.rs:937`、`bootstrap/native.rs:369` |
 | 6 | 抓取稳健性：无 User-Agent、GBK 等仅在 XML 声明里给编码的源乱码、Atom 链接选错、无正文条目被丢弃（YouTube 频道 0 篇） | P2 | 已验证（红测试 / 探针） | `feed_body.rs:11`、`feed_normalization.rs:82,106,111` |
@@ -63,7 +63,7 @@
 | `0ac5ec7` | 7 个确定性红测试（`#[ignore = "audit-2026-10-09: …"]`），见附录 A | 每个均以 `--ignored` 运行并确认因所述原因失败 |
 | （文档提交） | 本报告、交接记录、使用指南补充“标题搜索按字面匹配” | — |
 
-这三项之所以直接修：改动局部、平台中立、不改 trait/schema；搜索修复是恢复 Web 已有语义，304 修复是落实 RFC 9110 §15.4.5 / RFC 9111 §4.3.4 的“合并而非替换”；第三项只涉及测试。其余发现涉及端口契约、内容库 schema、存储架构或产品语义，按仓库护栏只给分析与建议。
+这三项之所以直接修：改动局部、平台中立、不改 trait/schema；搜索修复是恢复 Web 已有语义；304 修复依据 RFC 9110 §15.4.5（304 不要求重发 `Last-Modified`）与 RFC 9111 §4.3.4 的更新语义（只用 304 中出现的字段更新已存元数据）；第三项只涉及测试。其余发现涉及端口契约、内容库 schema、存储架构或产品语义，按仓库护栏只给分析与建议。
 
 ## 3. 发现详述
 
@@ -71,9 +71,9 @@
 
 **A1 同一订阅的刷新互不协调（P2，V/I）**
 
-- 位置：`crates/rssr-app/src/bootstrap/refresh_flight.rs` 只合并 `refresh_all`；`bootstrap/native.rs:269` 的 `refresh_feed` 与添加订阅的首刷直接调用 `RefreshService`；`RefreshService` 没有按 feed 的互斥；`application_adapters/refresh.rs:125-214` 的 `commit` 由 4 个独立提交组成（元数据 UPDATE、索引事务、正文写入〔另一个数据库〕、抓取状态 UPDATE）。generation 栅栏只拒绝“删除后重新订阅”，不拒绝同一 generation 的并发刷新。CLI 与 GUI 同库运行时同样存在。
-- 已验证：红测试 `older_inflight_refresh_cannot_supersede_a_newer_commit_of_the_same_feed`——先发起的刷新在源上挂起，后发起的全量刷新提交新版本，旧刷新随后提交，最终 ETag 与正文都回到旧版本。
-- 推断：两次提交的 4 个步骤交错时，可出现“正文为旧版、ETag 为新版”，此后条件请求得到 304，旧正文持续到下次源变化。
+- 位置：`crates/rssr-app/src/bootstrap/refresh_flight.rs` 只合并 `refresh_all`；`bootstrap/native.rs:269` 的 `refresh_feed` 与添加订阅的首刷直接调用 `RefreshService`；`RefreshService` 没有按 feed 的互斥；`application_adapters/refresh.rs:125-214` 的 `commit` 由 4 个独立提交组成（元数据 UPDATE、索引事务、正文写入〔另一个数据库〕、抓取状态 UPDATE）。generation 栅栏只拒绝“删除后重新订阅”，不拒绝同一 generation 的并发刷新。
+- 已验证（进程内）：红测试 `older_inflight_refresh_cannot_supersede_a_newer_commit_of_the_same_feed`——先发起的刷新在源上挂起，后发起的全量刷新提交新版本，旧刷新随后提交，最终 ETag 与正文都回到旧版本。
+- 推断：① 两次提交的 4 个步骤交错时，可出现“正文为旧版、ETag 为新版”，此后条件请求得到 304，旧正文持续到下次源变化；② CLI 与 GUI 两个进程共用同一数据库时没有任何跨进程协调，问题同样存在。
 - 建议：① 在 `RefreshService`（或 host 能力层）按 `feed_id` 做 single-flight：同一 feed 已在刷新时，新请求加入在途结果；② 跨进程的兜底：每个 feed 记录单调的 `refresh_seq`（开始抓取时分配），提交时 `WHERE refresh_seq_committed < ?` 拒绝过期结果；③ 把索引侧三步并入一个 IMMEDIATE 事务，正文写入继续沿用现有 generation 栅栏。
 
 **A2 AppState 窄字段更新是整份读改写（P2，V）**
@@ -91,7 +91,7 @@
 
 **A4 渲染时采样时钟使 `EntryQuery` 每秒变化（P2，I）**
 
-- 位置：`entries_page/mod.rs:227` 每次渲染调用 `current_time_utc()` 构造查询；归档分界截断到整秒（`crates/rssr-domain/src/entry.rs:208`）；`use_reactive_task` 以查询值为依赖（`mod.rs:262-269`）。
+- 位置：`entries_page/mod.rs:227` 每次渲染调用 `current_time_utc()` 构造查询；归档分界截断到整秒（`crates/rssr-domain/src/entry.rs:208`）；`use_reactive_task` 的依赖元组直接包含 `entry_query.clone()`（`mod.rs:263`），中间没有 memo；`EntryQuery` 派生的 `PartialEq` 覆盖 `ArchiveFilter::ExcludeArchived { cutoff }`，因此分界每跨一秒，依赖比较就判定为变化。
 - 机制：任何一次跨秒的重渲染都会产生新的 `EntryQuery` 并重发列表与计数查询；`SetEntries` 本身又触发重渲染。若查询耗时 ≥ 1 秒（Web 大数据量），会形成持续自触发的重查循环；即便查询很快，也会显著扩大 A3 的竞态窗口。
 - 建议：在显式触发点（挂载、刷新完成、筛选变化，以及可选的分钟级定时器）采样一次时钟并存入页面状态，渲染不再读时钟；不改变归档分界的精确语义。
 
@@ -245,7 +245,7 @@
 **G1 迁移校验和绑定换行符（P1，已验证 + 推断，需决策）**
 
 - 事实：`.gitattributes` 只约束 `*.sh`；Windows 工作区中 `migrations/*.sql` 为 CRLF（`git ls-files --eol` 显示 `i/lf w/crlf`）；`sqlx::migrate!`（`db.rs:18`）在编译期嵌入字节并以 SHA-384 校验。
-- 已验证：仓库根目录本地 Windows 构建生成的 `rss-reader.db`，其 `_sqlx_migrations` 中 version 1 的校验和等于 CRLF 字节的哈希（只读副本比对）。
+- 已验证：仓库根目录本地 Windows 构建生成的 `rss-reader.db`（2026-03-29，`_sqlx_migrations` 中仅含 version 1），其 version 1 的校验和等于 CRLF 字节的哈希（只读副本比对）；7 个迁移的 LF 与 CRLF 哈希两两不同。
 - 推断：Windows 发布在 `windows-latest` 上构建（`release.yml:297`），通常为 CRLF 检出，其余平台为 LF。
 - 后果（双向）：① 同一个数据库在 Windows 与 Linux/macOS 版本之间迁移（便携目录、同步盘、WSL）会因校验和不一致拒绝启动；② 若直接加 `*.sql text eol=lf`，下一个 Windows 版本会让所有既有 Windows 用户库启动失败。
 - 兼容方案（需确认后实施）：(a) 增加 `*.sql text eol=lf`；(b) 在 `MIGRATOR.run` 之前，对已应用迁移逐条比较：若库中校验和等于“内嵌 LF 源的 CRLF 变体”哈希，在事务内改写为内嵌校验和并记录日志；(c) 其他任何不一致仍然失败，真正被改写的迁移依旧被拒绝；(d) 测试覆盖 LF 库、CRLF 库与被篡改库三种情况。
@@ -271,7 +271,7 @@
 | GPT 条目 | 本轮结论 | 证据 |
 | --- | --- | --- |
 | §一 PR #19/#23/#25/#26 已完成 | 确认已合并；#25/#26 随 v0.1.23 发布，当前 `main` 即发布快照 | `git log origin/main` |
-| §二.1 同 feed 单源/全量刷新重叠 | 仍存在（A1） | V：红测试（旧响应胜出）；跨版本混合为 I |
+| §二.1 同 feed 单源/全量刷新重叠 | 仍存在（A1） | V：进程内红测试（旧响应胜出）；跨版本混合与跨进程为 I |
 | §二.1 AppState 读改写覆盖 | 仍存在（A2） | V：服务层红测试 |
 | §二.1 在途旧查询覆盖已读/收藏 | 仍存在（A3） | V：会话层红测试（UnreadOnly）；其余筛选同机制 I |
 | §二.2 Web WebDAV userinfo→Basic | 仍存在（D4） | I（读码 + Fetch 规范）；真实浏览器未验证 |
@@ -335,7 +335,7 @@
 | `cargo test --workspace --locked -j 3`（审计分支） | 通过：358 passed / 0 failed / 10 ignored |
 | `cargo clippy --workspace --all-targets --locked -j 3 -- -D warnings`（审计分支） | 通过 |
 | 红测试 `-- --ignored`（rssr-infra 5、rssr-application 1、rssr-app 1） | 全部按预期失败，失败原因见附录 A |
-| 迁移校验和比对（`rss-reader.db` 只读副本） | version 1 = CRLF 变体哈希 |
+| 迁移校验和比对（`rss-reader.db` 只读副本，仅含 version 1） | version 1 = CRLF 变体哈希 |
 | `rssr-cli remove-feed 1 --purge-entries=false` | clap 报错：`unexpected value 'false'` |
 
 ## 8. 未覆盖范围与已知局限
