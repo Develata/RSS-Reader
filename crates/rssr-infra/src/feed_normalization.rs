@@ -50,11 +50,12 @@ const UTF8_DECLARATION: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>"#;
 fn utf8_parser_input(raw: &[u8]) -> impl std::io::Read + '_ {
     use std::io::Read;
 
-    use crate::xml_declaration::is_xml_space;
-
-    // 已解码文本开头的 U+FEFF 没有意义；留着它，下面就看不出这是 XML 文本。
+    // 已解码文本开头的 U+FEFF 没有意义，去掉后再交给解析器。
     let raw = raw.strip_prefix("\u{feff}".as_bytes()).unwrap_or(raw);
-    let xml = raw.iter().find(|&&b| !is_xml_space(b)) == Some(&b'<');
+    // 与 feed-rs 的分派一致：它按第一个 `<` 或 `{` 决定按 XML 还是 JSON 解析，前面的杂质文本
+    // （例如服务端把警告输出在 feed 之前）会被跳过。只看第一个非空白字节的话，`x<?xml …
+    // encoding="windows-1252"?>` 就绕过了这里的固定（独立评审）。
+    let xml = raw.iter().find(|&&b| b == b'<' || b == b'{') == Some(&b'<');
     let declaration: &[u8] = if xml { UTF8_DECLARATION } else { &[] };
     declaration.chain(raw)
 }
@@ -232,6 +233,8 @@ mod tests {
             r#"<!-- c --><?xml version="1.0" encoding="GBK"?>"#.to_string(),
             r#"<?xml version="1.0" encoding="utf-8"?>"#.to_string(),
             "\u{feff}<?xml version=\"1.0\" encoding=\"GBK\"?>".to_string(),
+            "x<?xml version=\"1.0\" encoding=\"windows-1252\"?>".to_string(),
+            "Warning: something happened\n<?xml version=\"1.0\" encoding=\"GBK\"?>".to_string(),
             String::new(),
         ] {
             let feed = parse_feed_xml(&format!("{prolog}{body}")).expect(&prolog);
