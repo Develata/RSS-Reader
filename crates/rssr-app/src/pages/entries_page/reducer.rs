@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use rssr_domain::{ReadFilter, StarredFilter};
 
 use super::{
-    intent::EntriesPageIntent, state::EntriesPageState, state::FIRST_PAGE_NUMBER, state::FlagPatch,
+    intent::EntriesPageIntent, state::EntriesPageState, state::FIRST_PAGE_NUMBER,
     state::PreferencesLoadState, state::entry_grouping_mode_from_preference,
 };
 
@@ -85,16 +85,12 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.preferences_load = PreferencesLoadState::Unavailable(message);
         }
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = Arc::new(feeds),
-        EntriesPageIntent::EntriesQueryStarted => state.flag_writes_since_query.clear(),
+        EntriesPageIntent::EntriesQueryStarted => state.query_in_flight = true,
+        EntriesPageIntent::EntriesQueryFinished => state.query_in_flight = false,
         EntriesPageIntent::SetEntries { entries, archived_count } => {
             state.entries_loaded = true;
             state.entries = Arc::new(entries.into_iter().map(Arc::new).collect());
             state.archived_count = archived_count;
-            // 查询可能在写入提交前就读了存储：把它发出之后成功的修补按序重放，
-            // 否则旧快照会把刚标为已读/收藏的条目改回去（审计 A3）。
-            for patch in std::mem::take(&mut state.flag_writes_since_query) {
-                apply_flag_patch(state, patch);
-            }
             let count = state.entries.len();
             if let PreferencesLoadState::Unavailable(message) = &state.preferences_load {
                 state.status = format!("{message}；文章偏好暂不保存，共 {count} 篇文章。");
@@ -110,9 +106,12 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             clamp_current_page(state);
         }
         EntriesPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
-            let patch = FlagPatch { entry_id, is_read, is_starred };
-            state.flag_writes_since_query.push(patch);
-            apply_flag_patch(state, patch);
+            apply_flag_patch(state, entry_id, is_read, is_starred);
+            // 在途查询可能早于这次写入读了存储，它的结果会把条目改回旧状态，也补不回
+            // 因此新满足筛选的条目：session 丢弃它，这里要求重新查询（审计 A3）。
+            if state.query_in_flight {
+                state.requery_revision = state.requery_revision.wrapping_add(1);
+            }
         }
         EntriesPageIntent::SetStatus { message, tone } => {
             state.status = message;
@@ -159,15 +158,20 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
     }
 }
 
-fn apply_flag_patch(state: &mut EntriesPageState, patch: FlagPatch) {
+fn apply_flag_patch(
+    state: &mut EntriesPageState,
+    entry_id: i64,
+    is_read: Option<bool>,
+    is_starred: Option<bool>,
+) {
     let entries = Arc::make_mut(&mut state.entries);
-    if let Some(entry) = entries.iter_mut().find(|entry| entry.id == patch.entry_id) {
+    if let Some(entry) = entries.iter_mut().find(|entry| entry.id == entry_id) {
         // 只有被点的那一条需要真正写入，其余条目继续共享原有 Arc。
         let entry = Arc::make_mut(entry);
-        if let Some(is_read) = patch.is_read {
+        if let Some(is_read) = is_read {
             entry.is_read = is_read;
         }
-        if let Some(is_starred) = patch.is_starred {
+        if let Some(is_starred) = is_starred {
             entry.is_starred = is_starred;
         }
     }
@@ -328,46 +332,26 @@ mod tests {
         EntriesPageIntent::PatchEntryFlags { entry_id, is_read, is_starred }
     }
 
-    /// 查询发出后才成功的写入在结果落地时重放：旧快照不能把已读/收藏改回去（审计 A3）。
+    /// 查询在途时的成功写入要求重查；没有在途查询时只修补列表，不排队（审计 A3）。
     #[test]
-    fn query_result_replays_flag_writes_made_after_it_started() {
+    fn writes_during_an_in_flight_query_request_a_requery() {
         let mut state = EntriesPageState::new(true);
         state.entries = vec![Arc::new(entry(1, false)), Arc::new(entry(2, false))].into();
+
+        for _ in 0..3 {
+            reduce_entries_page_intent(&mut state, patch(1, None, Some(true)));
+            reduce_entries_page_intent(&mut state, patch(1, None, Some(false)));
+        }
+        assert_eq!(state.requery_revision, 0, "no query in flight, nothing to redo");
+
         reduce_entries_page_intent(&mut state, EntriesPageIntent::EntriesQueryStarted);
+        reduce_entries_page_intent(&mut state, patch(2, Some(true), None));
+        assert_eq!(state.requery_revision, 1);
+        assert!(state.entries.iter().any(|e| e.id == 2 && e.is_read), "the list is patched now");
+
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::EntriesQueryFinished);
         reduce_entries_page_intent(&mut state, patch(1, Some(true), None));
-        reduce_entries_page_intent(&mut state, patch(2, None, Some(true)));
-        reduce_entries_page_intent(&mut state, patch(1, None, Some(true)));
-
-        let stale = vec![entry(1, false), entry(2, false)];
-        reduce_entries_page_intent(
-            &mut state,
-            EntriesPageIntent::SetEntries { entries: stale, archived_count: 0 },
-        );
-
-        let flags =
-            state.entries.iter().map(|e| (e.id, e.is_read, e.is_starred)).collect::<Vec<_>>();
-        assert_eq!(flags, [(1, true, true), (2, false, true)]);
-        assert!(state.flag_writes_since_query.is_empty());
-        assert_eq!(state.status, "共 2 篇文章。");
-    }
-
-    /// 查询发出前的写入已经在存储里：查询结果是更新的事实，旧修补不能覆盖它
-    /// （例如条目随后在别处被标回未读）。
-    #[test]
-    fn writes_before_the_query_started_are_not_replayed() {
-        let mut state = EntriesPageState::new(true);
-        state.read_filter = ReadFilter::UnreadOnly;
-        state.entries = vec![Arc::new(entry(1, false))].into();
-        reduce_entries_page_intent(&mut state, patch(1, Some(true), None));
-        reduce_entries_page_intent(&mut state, EntriesPageIntent::EntriesQueryStarted);
-
-        reduce_entries_page_intent(
-            &mut state,
-            EntriesPageIntent::SetEntries { entries: vec![entry(1, false)], archived_count: 0 },
-        );
-
-        assert_eq!(state.entries.len(), 1);
-        assert!(!state.entries[0].is_read);
-        assert_eq!(state.status, "共 1 篇文章。");
+        assert_eq!(state.requery_revision, 1);
+        assert!(!state.query_in_flight);
     }
 }

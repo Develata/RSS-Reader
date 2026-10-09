@@ -19,8 +19,9 @@ pub(crate) enum EntriesPageIntent {
     PreferencesLoaded,
     PreferencesUnavailable(String),
     SetFeeds(Vec<FeedSummary>),
-    /// 列表查询已发出：此前成功的写入都已在存储里，不必再重放。
+    /// 列表查询已发出 / 最新一代查询的结果已落地（成功或失败）。
     EntriesQueryStarted,
+    EntriesQueryFinished,
     SetEntries {
         entries: Vec<EntrySummary>,
         archived_count: usize,

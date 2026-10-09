@@ -226,6 +226,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let preferences_loaded = state_snapshot.preferences_load.is_loaded();
     let entries_ready = state_snapshot.preferences_load.can_load_entries();
     let bulk_revision = state_snapshot.bulk_revision;
+    let requery_revision = state_snapshot.requery_revision;
     let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
     let show_archived = state_snapshot.show_archived;
     let read_filter = state_snapshot.read_filter;
@@ -271,8 +272,15 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     use_reactive_task((feed_id, refresh_revision), move |_| session.bootstrap());
 
     use_reactive_task(
-        (feed_id, entries_ready, entry_query.clone(), refresh_revision, bulk_revision),
-        move |(_, entries_ready, entry_query, _, _)| {
+        (
+            feed_id,
+            entries_ready,
+            entry_query.clone(),
+            refresh_revision,
+            bulk_revision,
+            requery_revision,
+        ),
+        move |(_, entries_ready, entry_query, _, _, _)| {
             if entries_ready {
                 session.load_entries_query(entry_query);
             }

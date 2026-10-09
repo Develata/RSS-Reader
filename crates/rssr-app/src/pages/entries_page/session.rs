@@ -143,10 +143,7 @@ impl EntriesPageSession {
             *generation = generation.wrapping_add(1);
             *generation
         });
-        // 只在有待重放的修补时写状态，避免每次查询都触发一次无谓的重渲染。
-        if !self.state.peek().flag_writes_since_query.is_empty() {
-            self.dispatch(EntriesPageIntent::EntriesQueryStarted);
-        }
+        self.dispatch(EntriesPageIntent::EntriesQueryStarted);
         spawn(async move {
             let intents = query.await;
             if *self.query_generation.peek() != generation {
@@ -159,6 +156,7 @@ impl EntriesPageSession {
                     self.dispatch(EntriesPageIntent::SetCurrentPage(page));
                 }
             }
+            self.dispatch(EntriesPageIntent::EntriesQueryFinished);
         });
     }
 
@@ -211,11 +209,18 @@ impl EntriesPageSession {
         }));
     }
 
-    pub(crate) fn dispatch(self, intent: EntriesPageIntent) {
+    pub(crate) fn dispatch(mut self, intent: EntriesPageIntent) {
         if let EntriesPageIntent::SetControlsHidden(hidden) = &intent {
             remember_entry_controls_hidden(*hidden);
         }
+        let supersedes_query = matches!(intent, EntriesPageIntent::PatchEntryFlags { .. })
+            && self.state.peek().query_in_flight;
         dispatch_entries_page_intent(self.state, intent);
+        if supersedes_query {
+            // 写入成功时还在途的查询可能读的是写入前的存储：丢弃它的结果，由 reducer 递增的
+            // requery_revision 触发的新查询接替（审计 A3）。
+            self.query_generation.with_mut(|generation| *generation = generation.wrapping_add(1));
+        }
     }
 
     fn spawn_ui_command(self, command: UiCommand) {
@@ -233,7 +238,9 @@ impl EntriesPageSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rssr_domain::{EntriesWorkspaceState, EntrySummary, FeedSummary, ReadFilter, UserSettings};
+    use rssr_domain::{
+        EntriesWorkspaceState, EntrySummary, FeedSummary, ReadFilter, StarredFilter, UserSettings,
+    };
     use std::{cell::Cell, rc::Rc};
     use time::OffsetDateTime;
     use tokio::sync::oneshot;
@@ -336,6 +343,67 @@ mod tests {
                 session.snapshot().entries.iter().all(|entry| entry.id != 1 || entry.is_read),
                 "a stale snapshot resurrected an entry the user just marked as read"
             );
+        });
+    }
+
+    /// 切到 StarredOnly 的查询还在途时收藏了仍显示的条目：那次查询读的是写入前的存储，
+    /// 它的空结果不能抹掉这个条目；被作废的查询由新查询接替，带回它（独立评审的反例）。
+    #[test]
+    fn a_write_during_a_query_supersedes_it_even_when_the_entry_newly_matches() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let (stale_sender, stale_receiver) = oneshot::channel();
+        let (fresh_sender, fresh_receiver) = oneshot::channel();
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = EntriesPageSession::new(
+                None,
+                Signal::new(EntriesPageState::new(true)),
+                Signal::new(0),
+                Signal::new(0),
+            );
+            session.dispatch(EntriesPageIntent::PreferencesLoaded);
+            session.spawn_entries_query(async { loaded(1) });
+            session
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            session.dispatch(EntriesPageIntent::SetStarredFilter(StarredFilter::StarredOnly));
+            session.spawn_entries_query(async { stale_receiver.await.expect("stale result") });
+            session.dispatch(EntriesPageIntent::PatchEntryFlags {
+                entry_id: 1,
+                is_read: None,
+                is_starred: Some(true),
+            });
+            assert_eq!(session.snapshot().requery_revision, 1, "the write asks for a new query");
+        });
+
+        stale_sender
+            .send(vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries {
+                entries: Vec::new(),
+                archived_count: 0,
+            })])
+            .expect("deliver the stale empty result");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert!(
+                session.snapshot().entries.iter().any(|entry| entry.id == 1 && entry.is_starred),
+                "the superseded empty result must not wipe the newly starred entry"
+            );
+            // 页面对 requery_revision 的反应：重新发出查询。
+            session.spawn_entries_query(async { fresh_receiver.await.expect("fresh result") });
+        });
+        let mut fresh = loaded(1);
+        if let UiIntent::EntriesPage(EntriesPageIntent::SetEntries { entries, .. }) = &mut fresh[0]
+        {
+            entries[0].is_starred = true;
+        }
+        fresh_sender.send(fresh).expect("deliver the fresh result");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            let snapshot = session.snapshot();
+            let flags = snapshot.entries.iter().map(|e| (e.id, e.is_starred)).collect::<Vec<_>>();
+            assert_eq!(flags, [(1, true)]);
+            assert!(!snapshot.query_in_flight);
         });
     }
 
