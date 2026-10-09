@@ -52,15 +52,15 @@ impl AppState {
         }
     }
 
-    /// 在阻塞线程池里做 Argon2 校验，不占用异步 worker。
-    async fn check_credentials(&self, username: String, password: String) -> bool {
-        let Ok(_permit) = self.credential_checks.acquire().await else {
-            return false;
-        };
+    /// 在阻塞线程池里做 Argon2 校验，不占用异步 worker。并发校验已满时返回 `None`：
+    /// 直接拒绝而不排队，登录请求洪泛时待处理的请求不会无界堆积。
+    async fn check_credentials(&self, username: String, password: String) -> Option<bool> {
+        let _permit = self.credential_checks.try_acquire().ok()?;
         let config = Arc::clone(&self.config);
-        tokio::task::spawn_blocking(move || verify_credentials(&config, &username, &password))
-            .await
-            .unwrap_or(false)
+        let verified =
+            tokio::task::spawn_blocking(move || verify_credentials(&config, &username, &password))
+                .await;
+        Some(verified.unwrap_or(false))
     }
 }
 
@@ -120,7 +120,10 @@ pub(crate) async fn handle_login(
         return login_redirect(next, Some("rate_limited"));
     }
 
-    if !state.check_credentials(form.username, form.password).await {
+    let Some(valid) = state.check_credentials(form.username, form.password).await else {
+        return login_redirect(next, Some("rate_limited"));
+    };
+    if !valid {
         let blocked = match &rate_limit_key {
             Some(key) => record_login_failure(&state, key).await,
             None => false,
