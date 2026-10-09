@@ -27,44 +27,14 @@ pub struct ParsedEntry {
     pub updated_at_source: Option<OffsetDateTime>,
 }
 
-#[derive(Debug, Default)]
-struct MissingContentWarningAggregation {
-    total_skipped: usize,
-    sample_titles: Vec<String>,
-}
-
-impl MissingContentWarningAggregation {
-    const MAX_SAMPLE_TITLES: usize = 3;
-
-    fn record(&mut self, title: &str) {
-        self.total_skipped += 1;
-        if self.sample_titles.len() < Self::MAX_SAMPLE_TITLES {
-            self.sample_titles.push(title.to_string());
-        }
-    }
-
-    fn emit(&self, feed_title: Option<&str>) {
-        if self.total_skipped == 0 {
-            return;
-        }
-
-        tracing::warn!(
-            feed_title = feed_title.unwrap_or("Untitled feed"),
-            skipped_entry_count = self.total_skipped,
-            sample_entry_titles = %self.sample_titles.join(" | "),
-            "本次 feed 规范化跳过了缺少 summary 和 content 的条目"
-        );
-    }
-}
-
-pub fn parse_feed_xml(raw: &str, warn_on_missing_content: bool) -> anyhow::Result<ParsedFeed> {
+pub fn parse_feed_xml(raw: &str) -> anyhow::Result<ParsedFeed> {
     // feed-rs normally synthesizes IDs for entries that omit one. Downstream we need to
     // distinguish a source-provided GUID from that fallback; guessing by "looks like a hash"
     // incorrectly discards legitimate hexadecimal GUIDs. Keep missing IDs empty here and let
     // our normalization choose the URL/title+timestamp fallback explicitly.
     let parser = feed_rs::parser::Builder::new().id_generator(|_, _, _| String::new()).build();
     let feed = parser.parse(raw.as_bytes()).context("解析 RSS/Atom feed 失败")?;
-    normalize_feed(feed, warn_on_missing_content)
+    Ok(normalize_feed(feed))
 }
 
 pub fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>) -> Option<String> {
@@ -77,43 +47,25 @@ pub fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>)
     used.then(|| format!("{:x}", hasher.finalize()))
 }
 
-fn normalize_feed(feed: FeedRsFeed, warn_on_missing_content: bool) -> anyhow::Result<ParsedFeed> {
+fn normalize_feed(feed: FeedRsFeed) -> ParsedFeed {
     let title = text_value(feed.title.as_ref());
     let site_url = feed.links.first().and_then(|link| Url::parse(link.href.as_str()).ok());
     let description = feed.description.as_ref().map(text_content);
-    let mut entries = Vec::with_capacity(feed.entries.len());
-    let mut warnings = MissingContentWarningAggregation::default();
+    let entries = feed.entries.into_iter().map(normalize_entry).collect();
 
-    for entry in feed.entries {
-        if let Some(entry) = normalize_entry(entry, warn_on_missing_content, &mut warnings)? {
-            entries.push(entry);
-        }
-    }
-
-    if warn_on_missing_content {
-        warnings.emit(title.as_deref());
-    }
-
-    Ok(ParsedFeed { title, site_url, description, entries })
+    ParsedFeed { title, site_url, description, entries }
 }
 
-fn normalize_entry(
-    entry: FeedRsEntry,
-    warn_on_missing_content: bool,
-    warnings: &mut MissingContentWarningAggregation,
-) -> anyhow::Result<Option<ParsedEntry>> {
+/// 没有摘要也没有正文的条目同样保留：只建索引（`has_content = false`），阅读页给出原文链接。
+/// YouTube 频道（正文在 `media:group`）和只有标题与链接的条目都属于这一类；
+/// 正文缓存边界不变——feed 没给的正文不去原网页补抓。
+fn normalize_entry(entry: FeedRsEntry) -> ParsedEntry {
     let title = text_value(entry.title.as_ref()).unwrap_or_else(|| "Untitled entry".to_string());
     let url = entry.links.first().and_then(|link| Url::parse(link.href.as_str()).ok());
     let author = entry.authors.first().map(|author| author.name.clone());
     let summary = entry.summary.as_ref().map(text_content);
     let content_html = entry.content.as_ref().and_then(|content| content.body.clone());
     let content_text = summary.clone();
-    if content_html.is_none() && content_text.is_none() {
-        if warn_on_missing_content {
-            warnings.record(&title);
-        }
-        return Ok(None);
-    }
 
     let published_at = entry.published.and_then(to_offset_datetime);
     let updated_at_source = entry.updated.and_then(to_offset_datetime);
@@ -133,7 +85,7 @@ fn normalize_entry(
         dedup_key_fallback(&title, published_at)
     };
 
-    Ok(Some(ParsedEntry {
+    ParsedEntry {
         external_id,
         dedup_key,
         url,
@@ -144,7 +96,7 @@ fn normalize_entry(
         content_text,
         published_at,
         updated_at_source,
-    }))
+    }
 }
 
 fn dedup_key_fallback(title: &str, published_at: Option<OffsetDateTime>) -> String {
@@ -185,21 +137,41 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::MissingContentWarningAggregation;
+    use super::parse_feed_xml;
 
+    /// 产品决策（2026-10-09）：无摘要、无正文的条目保留为仅索引条目，而不是整条丢弃。
     #[test]
-    fn missing_content_warning_aggregation_keeps_total_count_and_samples() {
-        let mut aggregation = MissingContentWarningAggregation::default();
+    fn keeps_entries_without_summary_or_content_as_index_only() {
+        let youtube_like = parse_feed_xml(
+            r#"<feed xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <title>Channel</title><id>yt:channel:UC123</id>
+ <entry>
+  <id>yt:video:abc</id><title>Video One</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=abc"/>
+  <published>2026-10-01T00:00:00+00:00</published>
+  <media:group><media:title>Video One</media:title><media:description>Desc</media:description></media:group>
+ </entry>
+</feed>"#,
+        )
+        .expect("parse youtube-like feed");
+        let title_only = parse_feed_xml(
+            r#"<rss version="2.0"><channel><title>Links</title>
+ <item><title>Only a title</title><link>https://example.com/a</link><guid>a</guid></item>
+</channel></rss>"#,
+        )
+        .expect("parse title-only feed");
 
-        aggregation.record("Entry One");
-        aggregation.record("Entry Two");
-        aggregation.record("Entry Three");
-        aggregation.record("Entry Four");
-
-        assert_eq!(aggregation.total_skipped, 4);
-        assert_eq!(
-            aggregation.sample_titles,
-            vec!["Entry One".to_string(), "Entry Two".to_string(), "Entry Three".to_string()]
-        );
+        for (feed, title, url) in [
+            (&youtube_like, "Video One", "https://www.youtube.com/watch?v=abc"),
+            (&title_only, "Only a title", "https://example.com/a"),
+        ] {
+            assert_eq!(feed.entries.len(), 1);
+            let entry = &feed.entries[0];
+            assert_eq!(entry.title, title);
+            assert_eq!(entry.url.as_ref().map(url::Url::as_str), Some(url));
+            assert_eq!(entry.content_html, None);
+            assert_eq!(entry.content_text, None);
+            assert_eq!(entry.summary, None);
+        }
     }
 }

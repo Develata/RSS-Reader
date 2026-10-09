@@ -100,5 +100,5 @@ pub fn parse_feed(raw: &str) -> anyhow::Result<ParsedFeed> {
         );
     }
 
-    parse_feed_xml(raw, false)
+    parse_feed_xml(raw)
 }

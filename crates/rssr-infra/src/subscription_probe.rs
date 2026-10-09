@@ -78,7 +78,7 @@ pub fn classify_subscription_response(
     if body.len() > MAX_SUBSCRIPTION_BYTES {
         bail!("订阅响应超过 8 MiB 上限。");
     }
-    if let Ok(parsed) = crate::feed_normalization::parse_feed_xml(body, false) {
+    if let Ok(parsed) = crate::feed_normalization::parse_feed_xml(body) {
         return Ok(SubscriptionProbeOutcome::Feed {
             url: rssr_domain::normalize_feed_url(&url),
             update: FeedRefreshUpdate { metadata, feed: map_parsed_feed(parsed) },

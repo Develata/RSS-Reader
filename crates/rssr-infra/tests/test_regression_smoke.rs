@@ -36,7 +36,8 @@ const MIXED_FEED: &str = r#"
 #[test]
 fn smoke_regressions_cover_parser_config_and_webdav_edges() {
     let parsed = FeedParser::new().parse(MIXED_FEED).expect("parse mixed feed");
-    assert_eq!(parsed.entries.len(), 1);
+    // 无摘要、无正文的条目保留为仅索引条目（2026-10-09 产品决策）。
+    assert_eq!(parsed.entries.len(), 2);
     assert!(
         parsed.entries[0]
             .content_html
@@ -44,6 +45,8 @@ fn smoke_regressions_cover_parser_config_and_webdav_edges() {
             .expect("html body preserved")
             .contains("Full body")
     );
+    assert_eq!(parsed.entries[1].title, "Sparse entry");
+    assert!(parsed.entries[1].content_html.is_none() && parsed.entries[1].content_text.is_none());
 
     let opml = OpmlCodec::new()
         .encode(&[ConfigFeed {
