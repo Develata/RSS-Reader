@@ -54,7 +54,28 @@ fn get(storage: &Storage, key: &str) -> Result<Option<String>> {
     storage.get_item(key).map_err(|e| anyhow::anyhow!("读取浏览器本地存储失败 ({key}): {e:?}"))
 }
 fn put(storage: &Storage, key: &str, raw: &str) -> Result<()> {
-    storage.set_item(key, raw).map_err(|e| anyhow::anyhow!("写入浏览器本地存储失败 ({key}): {e:?}"))
+    storage.set_item(key, raw).map_err(|error| {
+        if is_quota_exceeded(&error) {
+            // 发布时新旧两份数据片要同时放得下（见 `publish`），所以接近上限时每次写正文都会失败。
+            anyhow::anyhow!(
+                "浏览器本地存储空间已满，本次更改未保存（{key}，约 {} KiB）。删除不再需要的订阅可以释放空间。",
+                raw.len() / 1024
+            )
+        } else {
+            anyhow::anyhow!("写入浏览器本地存储失败 ({key}): {error:?}")
+        }
+    })
+}
+
+/// WHATWG Storage：超出配额时 `setItem` 抛 `QuotaExceededError`（旧版 Firefox 用
+/// `NS_ERROR_DOM_QUOTA_REACHED`）。审计 D1：此前只显示 `JsValue` 的调试串。
+fn is_quota_exceeded(error: &wasm_bindgen::JsValue) -> bool {
+    js_sys::Reflect::get(error, &wasm_bindgen::JsValue::from_str("name"))
+        .ok()
+        .and_then(|name| name.as_string())
+        .is_some_and(|name| {
+            matches!(name.as_str(), "QuotaExceededError" | "NS_ERROR_DOM_QUOTA_REACHED")
+        })
 }
 fn slot(index: usize, revision: u64) -> String {
     if revision.is_multiple_of(2) {

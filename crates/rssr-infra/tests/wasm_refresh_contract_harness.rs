@@ -1046,3 +1046,36 @@ async fn repeated_content_commits_report_write_volume() {
     assert_eq!(persisted.core.entries.len(), 120);
     assert_eq!(persisted.entry_content.entries.len(), 120);
 }
+
+/// 超出 `localStorage` 配额时给出明确提示，已提交的数据保持不变（审计 D1）。
+#[wasm_bindgen_test]
+async fn browser_quota_errors_are_reported_clearly() {
+    clear_browser_state_storage();
+    let (state, store) = store_with_one_feed().await;
+    let mut huge = sample_entry(1);
+    // 远超常见的 5 MiB 配额（Chrome 按 UTF-16 计量）。
+    huge.content_html = Some("x".repeat(12 * 1024 * 1024));
+
+    let error = commit_for(
+        &store,
+        1,
+        RefreshCommit::Updated {
+            update: FeedRefreshUpdate {
+                metadata: RefreshHttpMetadata::default(),
+                feed: ParsedFeedUpdate {
+                    title: None,
+                    site_url: None,
+                    description: None,
+                    entries: vec![huge],
+                },
+            },
+        },
+    )
+    .await
+    .expect_err("a body over the storage quota cannot be saved");
+
+    assert!(format!("{error:#}").contains("浏览器本地存储空间已满"), "{error:#}");
+    let snapshot = state.snapshot().await.expect("the committed state is still readable");
+    assert!(snapshot.core.entries.is_empty(), "nothing from the failed write was kept");
+    clear_browser_state_storage();
+}
