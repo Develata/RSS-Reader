@@ -397,6 +397,7 @@ mod tests {
             core: PersistedState {
                 next_feed_id: 2,
                 next_entry_id: entry_count + 1,
+                feed_generations: Default::default(),
                 feeds,
                 entries,
                 settings: rssr_domain::UserSettings::default(),
