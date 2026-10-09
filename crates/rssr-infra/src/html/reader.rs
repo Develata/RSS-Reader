@@ -92,12 +92,17 @@ pub fn sanitize_reader_html(raw: &str, base_url: Option<&Url>) -> Option<String>
 
 /// 白名单加 `data` 只为放行本地化后的图片（`img src="data:image/…"`）。ammonia 的 scheme
 /// 白名单是全局的，`<a href="data:text/html,…">` 之类也会被一起放过，这里把它们去掉。
-/// scheme 用 `Url::parse` 判定，与 ammonia 和浏览器一致（WHATWG 会剔除 URL 中的制表与换行，
-/// 只比字符串前缀会被 `da\nta:` 绕过）。
+/// 只看承载 URL 的属性：`alt="data: …"` 这类文本与 URL 无关。scheme 用 `Url::parse` 判定，
+/// 与 ammonia 和浏览器一致（WHATWG 会剔除 URL 中的制表与换行，只比字符串前缀会被 `da\nta:` 绕过）。
 fn keeps_data_url_only_for_images(element: &str, attribute: &str, value: &str) -> bool {
+    const URL_ATTRIBUTES: &[&str] =
+        &["href", "src", "srcset", "action", "formaction", "ping", "poster", "cite", "data"];
+    if !URL_ATTRIBUTES.contains(&attribute) {
+        return true;
+    }
     match Url::parse(value) {
         Ok(url) if url.scheme() == "data" => {
-            matches!((element, attribute), ("img" | "source", "src"))
+            matches!((element, attribute), ("img" | "source", "src" | "srcset"))
                 && url
                     .path()
                     .trim_start_matches(|c: char| c.is_ascii_whitespace())
@@ -223,6 +228,7 @@ mod tests {
              <a href=\"data:image/png;base64,iVBORw0KGgo=\">c</a>\
              <img src=\"data:text/html,x\" alt=\"html\">\
              <img src=\"data:image/svg+xml;base64,PHN2Zy8+\" alt=\"svg\">\
+             <img srcset=\"data:image/png;base64,iVBORw0KGgo= 1x\" alt=\"data: caption\">\
              <a href=\"https://example.com/\">d</a></p>",
             None,
         )
@@ -231,6 +237,11 @@ mod tests {
         assert!(!sanitized.contains("text/html"), "{sanitized}");
         assert!(!sanitized.contains(r#"href="data:image"#), "{sanitized}");
         assert!(sanitized.contains(r#"src="data:image/svg+xml;base64,PHN2Zy8+""#), "{sanitized}");
+        assert!(
+            sanitized.contains(r#"srcset="data:image/png;base64,iVBORw0KGgo= 1x""#),
+            "{sanitized}"
+        );
+        assert!(sanitized.contains(r#"alt="data: caption""#), "{sanitized}");
         assert!(sanitized.contains(r#"href="https://example.com/""#), "{sanitized}");
         assert_eq!(sanitized.matches("<a").count(), 4, "{sanitized}");
     }
