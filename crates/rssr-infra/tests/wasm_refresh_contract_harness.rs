@@ -351,6 +351,40 @@ async fn browser_refresh_store_commit_not_modified_updates_state_and_storage() {
     clear_browser_state_storage();
 }
 
+/// RFC 9110 不要求 304 重发 `Last-Modified`；与原生端同一语义：304 省略的校验器保留原值，
+/// 内存快照与重新打开后的持久化状态都要成立。
+#[wasm_bindgen_test]
+async fn browser_refresh_store_not_modified_keeps_validators_it_did_not_receive() {
+    clear_browser_state_storage();
+    let (state, store) = store_with_one_feed().await;
+
+    commit_for(
+        &store,
+        1,
+        RefreshCommit::NotModified {
+            metadata: RefreshHttpMetadata {
+                etag: Some("etag-1".to_string()),
+                last_modified: Some("Wed, 01 Apr 2026 10:00:00 GMT".to_string()),
+            },
+        },
+    )
+    .await
+    .expect("commit not modified with validators");
+    commit_for(&store, 1, RefreshCommit::NotModified { metadata: RefreshHttpMetadata::default() })
+        .await
+        .expect("commit not modified without validators");
+
+    let snapshot = state.snapshot().await.expect("snapshot");
+    let persisted = persisted_state().await;
+    for feed in [&snapshot.core.feeds[0], &persisted.core.feeds[0]] {
+        assert_eq!(feed.etag.as_deref(), Some("etag-1"));
+        assert_eq!(feed.last_modified.as_deref(), Some("Wed, 01 Apr 2026 10:00:00 GMT"));
+        assert_eq!(feed.fetch_error, None);
+    }
+
+    clear_browser_state_storage();
+}
+
 #[wasm_bindgen_test]
 async fn browser_refresh_store_commit_updated_persists_feed_metadata_and_entries() {
     clear_browser_state_storage();
