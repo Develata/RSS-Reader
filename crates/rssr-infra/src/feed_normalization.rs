@@ -51,6 +51,9 @@ fn utf8_parser_input(raw: &[u8]) -> impl std::io::Read + '_ {
 
     use crate::xml_declaration::{DeclaredEncoding, is_xml_space, leading_declaration};
 
+    // 已解码文本开头的 U+FEFF 没有意义；留着它，quick-xml 会认作 BOM，而 BOM 之后的声明
+    // 仍能切换编码，后面的判断也会因开头不是空白或 `<` 而跳过。
+    let raw = raw.strip_prefix("\u{feff}".as_bytes()).unwrap_or(raw);
     let none: &[u8] = &[];
     let (head, middle, tail) = match leading_declaration(raw) {
         Some(DeclaredEncoding::Value(label))
@@ -245,6 +248,7 @@ mod tests {
             r#"<?xml version=1.0 encoding="GBK"?>"#.to_string(),
             r#"<!-- c --><?xml version="1.0" encoding="GBK"?>"#.to_string(),
             r#"<?xml version="1.0" encoding="utf-8"?>"#.to_string(),
+            "\u{feff}<?xml version=\"1.0\" encoding=\"GBK\"?>".to_string(),
             String::new(),
         ] {
             let feed = parse_feed_xml(&format!("{prolog}{body}")).expect(&prolog);
