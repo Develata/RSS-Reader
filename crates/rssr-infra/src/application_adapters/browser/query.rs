@@ -408,7 +408,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn list_entries_handles_large_browser_state_with_flag_sidecar() {
         let state = build_state(10_000);
 
@@ -423,7 +423,7 @@ mod tests {
         assert_eq!(all_entries[0].title, "Performance Article 0");
     }
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn reader_navigation_handles_large_browser_state() {
         let state = build_state(10_000);
 
@@ -433,7 +433,7 @@ mod tests {
         assert!(navigation.next_feed_entry_id.is_some());
     }
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn count_entries_ignores_limit() {
         let state = build_state(100);
 

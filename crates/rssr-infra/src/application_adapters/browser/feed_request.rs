@@ -105,7 +105,7 @@ mod tests {
         status_requires_web_feed_fallback, web_refresh_request_urls_with_origin_and_now,
     };
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn request_urls_include_proxy_then_direct_for_http_feeds() {
         let request_urls = web_refresh_request_urls_with_origin_and_now(
             "https://feeds.example.com/rss.xml",
@@ -124,7 +124,7 @@ mod tests {
         assert_eq!(request_urls[1].url, "https://feeds.example.com/rss.xml?_rssr_fetch=1234");
     }
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn request_urls_skip_proxy_when_browser_origin_is_unavailable() {
         let request_urls = web_refresh_request_urls_with_origin_and_now(
             "https://feeds.example.com/rss.xml",
@@ -137,7 +137,7 @@ mod tests {
         assert_eq!(request_urls[0].kind, WebFeedRequestKind::Direct);
     }
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn request_urls_do_not_append_fetch_marker_for_non_http_schemes() {
         let request_urls = web_refresh_request_urls_with_origin_and_now(
             "ftp://feeds.example.com/rss.xml",
@@ -150,7 +150,7 @@ mod tests {
         assert_eq!(request_urls[1].url, "ftp://feeds.example.com/rss.xml");
     }
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn fallback_statuses_match_browser_retry_policy() {
         assert!(status_requires_web_feed_fallback(StatusCode::NOT_FOUND));
         assert!(status_requires_web_feed_fallback(StatusCode::UNAUTHORIZED));
@@ -161,7 +161,7 @@ mod tests {
         assert!(!status_requires_web_feed_fallback(StatusCode::TOO_MANY_REQUESTS));
     }
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn fallback_policy_retries_proxy_shell_when_direct_request_remains() {
         assert!(should_fallback_web_feed_request_parts(
             0,
@@ -172,7 +172,7 @@ mod tests {
         ));
     }
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn fallback_policy_does_not_retry_direct_or_final_requests() {
         assert!(!should_fallback_web_feed_request_parts(
             0,
@@ -190,7 +190,7 @@ mod tests {
         ));
     }
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn fallback_policy_retries_selected_error_statuses_only_when_next_request_exists() {
         assert!(should_fallback_web_feed_request_parts(
             0,

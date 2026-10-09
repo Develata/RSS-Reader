@@ -32,7 +32,7 @@ fn looks_like_proxy_login_or_spa_shell_parts(content_type: &str, path: &str) -> 
 mod tests {
     use super::{looks_like_html_response_body, looks_like_proxy_login_or_spa_shell_parts};
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn proxy_shell_detection_flags_html_and_login_routes() {
         assert!(looks_like_proxy_login_or_spa_shell_parts("text/html; charset=utf-8", "/"));
         assert!(looks_like_proxy_login_or_spa_shell_parts("application/xhtml+xml", "/"));
@@ -40,7 +40,7 @@ mod tests {
         assert!(!looks_like_proxy_login_or_spa_shell_parts("application/xml", "/feed-proxy"));
     }
 
-    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn html_body_detection_handles_doctype_tags_and_bom() {
         assert!(looks_like_html_response_body("<!DOCTYPE html><html></html>"));
         assert!(looks_like_html_response_body("<html><body>login</body></html>"));
