@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use rssr_domain::{ReadFilter, StarredFilter};
 
 use super::{
-    intent::EntriesPageIntent, state::EntriesPageState, state::FIRST_PAGE_NUMBER,
+    intent::EntriesPageIntent, state::EntriesPageState, state::FIRST_PAGE_NUMBER, state::FlagPatch,
     state::PreferencesLoadState, state::entry_grouping_mode_from_preference,
 };
 
@@ -85,40 +85,34 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.preferences_load = PreferencesLoadState::Unavailable(message);
         }
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = Arc::new(feeds),
+        EntriesPageIntent::EntriesQueryStarted => state.flag_writes_since_query.clear(),
         EntriesPageIntent::SetEntries { entries, archived_count } => {
             state.entries_loaded = true;
+            state.entries = Arc::new(entries.into_iter().map(Arc::new).collect());
+            state.archived_count = archived_count;
+            // 查询可能在写入提交前就读了存储：把它发出之后成功的修补按序重放，
+            // 否则旧快照会把刚标为已读/收藏的条目改回去（审计 A3）。
+            for patch in std::mem::take(&mut state.flag_writes_since_query) {
+                apply_flag_patch(state, patch);
+            }
+            let count = state.entries.len();
             if let PreferencesLoadState::Unavailable(message) = &state.preferences_load {
-                state.status =
-                    format!("{message}；文章偏好暂不保存，共 {} 篇文章。", entries.len());
+                state.status = format!("{message}；文章偏好暂不保存，共 {count} 篇文章。");
                 state.status_tone = "error".to_string();
             } else {
-                state.status = format!("共 {} 篇文章。", entries.len());
+                state.status = format!("共 {count} 篇文章。");
                 state.status_tone = "info".to_string();
             }
             if let Some(message) = state.bulk_notice.take() {
                 state.status = message;
                 state.status_tone = "success".into();
             }
-            state.entries = Arc::new(entries.into_iter().map(Arc::new).collect());
-            state.archived_count = archived_count;
             clamp_current_page(state);
         }
         EntriesPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
-            let entries = Arc::make_mut(&mut state.entries);
-            if let Some(entry) = entries.iter_mut().find(|entry| entry.id == entry_id) {
-                // 只有被点的那一条需要真正写入，其余条目继续共享原有 Arc。
-                let entry = Arc::make_mut(entry);
-                if let Some(is_read) = is_read {
-                    entry.is_read = is_read;
-                }
-                if let Some(is_starred) = is_starred {
-                    entry.is_starred = is_starred;
-                }
-            }
-            let read_filter = state.read_filter;
-            let starred_filter = state.starred_filter;
-            entries.retain(|entry| matches_current_filters(read_filter, starred_filter, entry));
-            clamp_current_page(state);
+            let patch = FlagPatch { entry_id, is_read, is_starred };
+            state.flag_writes_since_query.push(patch);
+            apply_flag_patch(state, patch);
         }
         EntriesPageIntent::SetStatus { message, tone } => {
             state.status = message;
@@ -163,6 +157,24 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         }
         EntriesPageIntent::SetControlsHidden(hidden) => state.controls_hidden = hidden,
     }
+}
+
+fn apply_flag_patch(state: &mut EntriesPageState, patch: FlagPatch) {
+    let entries = Arc::make_mut(&mut state.entries);
+    if let Some(entry) = entries.iter_mut().find(|entry| entry.id == patch.entry_id) {
+        // 只有被点的那一条需要真正写入，其余条目继续共享原有 Arc。
+        let entry = Arc::make_mut(entry);
+        if let Some(is_read) = patch.is_read {
+            entry.is_read = is_read;
+        }
+        if let Some(is_starred) = patch.is_starred {
+            entry.is_starred = is_starred;
+        }
+    }
+    let read_filter = state.read_filter;
+    let starred_filter = state.starred_filter;
+    entries.retain(|entry| matches_current_filters(read_filter, starred_filter, entry));
+    clamp_current_page(state);
 }
 
 fn matches_current_filters(
@@ -310,5 +322,52 @@ mod tests {
         assert!(!snapshot.entries[0].is_read);
         assert!(state.entries[0].is_read);
         assert!(Arc::ptr_eq(&state.entries[1], &snapshot.entries[1]));
+    }
+
+    fn patch(entry_id: i64, is_read: Option<bool>, is_starred: Option<bool>) -> EntriesPageIntent {
+        EntriesPageIntent::PatchEntryFlags { entry_id, is_read, is_starred }
+    }
+
+    /// 查询发出后才成功的写入在结果落地时重放：旧快照不能把已读/收藏改回去（审计 A3）。
+    #[test]
+    fn query_result_replays_flag_writes_made_after_it_started() {
+        let mut state = EntriesPageState::new(true);
+        state.entries = vec![Arc::new(entry(1, false)), Arc::new(entry(2, false))].into();
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::EntriesQueryStarted);
+        reduce_entries_page_intent(&mut state, patch(1, Some(true), None));
+        reduce_entries_page_intent(&mut state, patch(2, None, Some(true)));
+        reduce_entries_page_intent(&mut state, patch(1, None, Some(true)));
+
+        let stale = vec![entry(1, false), entry(2, false)];
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::SetEntries { entries: stale, archived_count: 0 },
+        );
+
+        let flags =
+            state.entries.iter().map(|e| (e.id, e.is_read, e.is_starred)).collect::<Vec<_>>();
+        assert_eq!(flags, [(1, true, true), (2, false, true)]);
+        assert!(state.flag_writes_since_query.is_empty());
+        assert_eq!(state.status, "共 2 篇文章。");
+    }
+
+    /// 查询发出前的写入已经在存储里：查询结果是更新的事实，旧修补不能覆盖它
+    /// （例如条目随后在别处被标回未读）。
+    #[test]
+    fn writes_before_the_query_started_are_not_replayed() {
+        let mut state = EntriesPageState::new(true);
+        state.read_filter = ReadFilter::UnreadOnly;
+        state.entries = vec![Arc::new(entry(1, false))].into();
+        reduce_entries_page_intent(&mut state, patch(1, Some(true), None));
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::EntriesQueryStarted);
+
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::SetEntries { entries: vec![entry(1, false)], archived_count: 0 },
+        );
+
+        assert_eq!(state.entries.len(), 1);
+        assert!(!state.entries[0].is_read);
+        assert_eq!(state.status, "共 1 篇文章。");
     }
 }

@@ -62,6 +62,16 @@ pub(crate) struct EntriesPageState {
     pub(crate) status: String,
     pub(crate) status_tone: String,
     pub(crate) preferences_load: PreferencesLoadState,
+    /// 当前列表查询发出之后成功写入的已读/收藏修补，结果落地时按序重放（审计 A3）。
+    pub(crate) flag_writes_since_query: Vec<FlagPatch>,
+}
+
+/// 一次成功写入的已读/收藏变更；`None` 表示该标志没有改动。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FlagPatch {
+    pub(crate) entry_id: i64,
+    pub(crate) is_read: Option<bool>,
+    pub(crate) is_starred: Option<bool>,
 }
 
 impl EntriesPageState {
@@ -91,6 +101,7 @@ impl EntriesPageState {
             status: "正在加载文章列表…".to_string(),
             status_tone: "info".to_string(),
             preferences_load: PreferencesLoadState::Pending,
+            flag_writes_since_query: Vec::new(),
         }
     }
 

@@ -143,6 +143,10 @@ impl EntriesPageSession {
             *generation = generation.wrapping_add(1);
             *generation
         });
+        // 只在有待重放的修补时写状态，避免每次查询都触发一次无谓的重渲染。
+        if !self.state.peek().flag_writes_since_query.is_empty() {
+            self.dispatch(EntriesPageIntent::EntriesQueryStarted);
+        }
         spawn(async move {
             let intents = query.await;
             if *self.query_generation.peek() != generation {
@@ -297,7 +301,6 @@ mod tests {
     /// 列表查询在已读写入提交前读取了存储；写入成功并已修补列表后，这个仍是“最新一代”的
     /// 旧快照不能把条目恢复成未读。查询代际只防“旧查询覆盖新查询”，不防“旧查询覆盖写入”。
     #[test]
-    #[ignore = "audit-2026-10-09: an in-flight list query started before a successful flag write overwrites the patched list (docs/engineering-audit-2026-10.md)"]
     fn in_flight_query_cannot_resurrect_flags_overwritten_by_a_successful_write() {
         let mut dom = VirtualDom::new(|| rsx! {});
         dom.rebuild_in_place();
