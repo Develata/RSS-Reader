@@ -3,14 +3,16 @@ use std::future::Future;
 use dioxus::prelude::*;
 
 use super::{intent::FeedsPageIntent, reducer::dispatch_feeds_page_intent, state::FeedsPageState};
-use crate::ui::{
-    AppShellState, FeedsCommand, ShellCommand, UiCommand, UiIntent, execute_ui_command,
+use crate::{
+    theme::ThemeController,
+    ui::{AppShellState, FeedsCommand, ShellCommand, UiCommand, UiIntent, execute_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct FeedsPageSession {
     state: Signal<FeedsPageState>,
     shell: AppShellState,
+    theme: ThemeController,
     query_generation: Signal<u64>,
 }
 
@@ -18,9 +20,10 @@ impl FeedsPageSession {
     pub(crate) fn new(
         state: Signal<FeedsPageState>,
         shell: AppShellState,
+        theme: ThemeController,
         query_generation: Signal<u64>,
     ) -> Self {
-        Self { state, shell, query_generation }
+        Self { state, shell, theme, query_generation }
     }
 
     pub(crate) fn snapshot(self) -> FeedsPageState {
@@ -64,6 +67,11 @@ impl FeedsPageSession {
         intent: FeedsPageIntent,
         mut execute: impl FnMut(UiCommand) -> F,
     ) {
+        if let FeedsPageIntent::SettingsReplaced(settings) = intent {
+            // 主题、自定义 CSS、密度与字号由全局设置驱动，导入后立即生效，不必等设置页或重启。
+            self.theme.settings.set(settings);
+            return;
+        }
         let commands = dispatch_feeds_page_intent(self.state, intent);
         for command in commands {
             if matches!(command, UiCommand::Shell(ShellCommand::ManualRefresh)) {
@@ -146,13 +154,16 @@ impl FeedsPageSession {
 mod tests {
     use super::*;
     use crate::{pages::feeds_page::intent::FeedsPageSnapshot, ui::use_app_shell_state};
+    use rssr_domain::UserSettings;
     use tokio::sync::oneshot;
 
     fn harness() -> Element {
         let shell = use_app_shell_state();
         let state = use_signal(FeedsPageState::new);
+        let theme = ThemeController { settings: use_signal(UserSettings::default) };
         let generation = use_signal(|| 0);
-        use_context_provider(|| FeedsPageSession::new(state, shell, generation));
+        use_context_provider(|| theme);
+        use_context_provider(|| FeedsPageSession::new(state, shell, theme, generation));
         rsx! {}
     }
 
@@ -161,6 +172,39 @@ mod tests {
         dom.rebuild_in_place();
         let session = dom.in_scope(ScopeId::APP, consume_context);
         (dom, session)
+    }
+
+    /// 导入配置包后外观立即生效，不依赖设置页是否挂载（审计 E1）。
+    #[test]
+    fn config_import_applies_replaced_settings_to_the_global_theme() {
+        let (mut dom, session) = setup();
+        let replaced = UserSettings {
+            theme: rssr_domain::ThemeMode::Dark,
+            custom_css: "body { color: red; }".into(),
+            ..UserSettings::default()
+        };
+        let reply = replaced.clone();
+        dom.in_scope(ScopeId::APP, || {
+            session.dispatch_intent(FeedsPageIntent::PendingConfigImportSet(true));
+            let mut reply = Some(reply);
+            session.dispatch_intent_with(FeedsPageIntent::ImportConfigRequested, |command| {
+                assert!(matches!(command, UiCommand::Feeds(FeedsCommand::ImportConfig { .. })));
+                let settings = reply.take().expect("one import command");
+                async move {
+                    vec![
+                        UiIntent::FeedsPage(FeedsPageIntent::PendingConfigImportSet(false)),
+                        UiIntent::FeedsPage(FeedsPageIntent::BumpReload),
+                        UiIntent::FeedsPage(FeedsPageIntent::SettingsReplaced(settings)),
+                    ]
+                }
+            });
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            let theme = consume_context::<ThemeController>();
+            assert_eq!(*theme.settings.peek(), replaced);
+            assert!(!session.snapshot().pending_config_import);
+        });
     }
 
     fn start_add(session: FeedsPageSession, expected_url: &str) -> oneshot::Sender<bool> {

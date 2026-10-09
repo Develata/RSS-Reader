@@ -178,6 +178,8 @@ pub(crate) fn reduce_feeds_page_intent(
             state.reload_tick += 1;
             Vec::new()
         }
+        // 外观属于 shell 而不是订阅页状态，`FeedsPageSession` 在进入 reducer 之前处理。
+        FeedsPageIntent::SettingsReplaced(_) => Vec::new(),
     }
 }
 

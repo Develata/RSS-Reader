@@ -3,7 +3,8 @@ use crate::{
     pages::feeds_page::intent::{FeedsPageIntent, FeedsPageSnapshot},
     ui::{commands::FeedsCommand, runtime::services::UiServices, snapshot::UiIntent},
 };
-use rssr_application::OpmlImportOutcome;
+use rssr_application::{ConfigImportOutcome, OpmlImportOutcome};
+use rssr_domain::UserSettings;
 
 pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
     match command {
@@ -97,32 +98,21 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
-        FeedsCommand::ImportConfig { raw } => match UiServices::shared().await {
-            Ok(services) => match services.feeds().import_config_json(&raw).await {
-                Ok(outcome) => feeds_intents(vec![
-                    FeedsPageIntent::PendingConfigImportSet(false),
-                    FeedsPageIntent::SetStatus {
-                        message: format!("配置包已导入：{}。", outcome.summary_line()),
-                        tone: "info".to_string(),
-                    },
-                    FeedsPageIntent::BumpReload,
-                ]),
-                Err(err) => feeds_intents(vec![
-                    FeedsPageIntent::PendingConfigImportSet(false),
-                    FeedsPageIntent::SetStatus {
-                        message: format!("导入配置包失败：{err}"),
-                        tone: "error".to_string(),
-                    },
-                ]),
-            },
-            Err(err) => feeds_intents(vec![
-                FeedsPageIntent::PendingConfigImportSet(false),
-                FeedsPageIntent::SetStatus {
-                    message: format!("初始化应用失败：{err}"),
-                    tone: "error".to_string(),
+        FeedsCommand::ImportConfig { raw } => {
+            let result = match UiServices::shared().await {
+                Ok(services) => match services.feeds().import_config_json(&raw).await {
+                    // 配置包可以替换外观设置：读回持久化后的设置，交给全局主题立即生效。
+                    Ok(outcome) if outcome.settings_updated => {
+                        let settings = services.settings().load_settings().await;
+                        Ok((outcome, Some(settings.map_err(|err| err.to_string()))))
+                    }
+                    Ok(outcome) => Ok((outcome, None)),
+                    Err(err) => Err(format!("导入配置包失败：{err}")),
                 },
-            ]),
-        },
+                Err(err) => Err(format!("初始化应用失败：{err}")),
+            };
+            import_config_result(result)
+        }
         FeedsCommand::ExportOpml => match UiServices::shared().await {
             Ok(services) => match services.feeds().export_opml().await {
                 Ok(raw) => feeds_intents(vec![
@@ -161,6 +151,33 @@ fn feeds_status_error(message: impl Into<String>) -> Vec<UiIntent> {
         message: message.into(),
         tone: "error".to_string(),
     }])
+}
+
+/// `settings` 只在配置包更新了设置时存在。读回失败不影响导入本身已经提交的结果。
+fn import_config_result(
+    result: Result<(ConfigImportOutcome, Option<Result<UserSettings, String>>), String>,
+) -> Vec<UiIntent> {
+    let mut intents = vec![FeedsPageIntent::PendingConfigImportSet(false)];
+    let (message, tone) = match result {
+        Ok((outcome, settings)) => {
+            let summary = outcome.summary_line();
+            intents.push(FeedsPageIntent::BumpReload);
+            match settings {
+                Some(Err(err)) => (
+                    format!("配置包已导入：{summary}；但读取新设置失败，外观需重启后生效：{err}"),
+                    "error",
+                ),
+                Some(Ok(settings)) => {
+                    intents.push(FeedsPageIntent::SettingsReplaced(settings));
+                    (format!("配置包已导入：{summary}。"), "info")
+                }
+                None => (format!("配置包已导入：{summary}。"), "info"),
+            }
+        }
+        Err(message) => (message, "error"),
+    };
+    intents.push(FeedsPageIntent::SetStatus { message, tone: tone.to_string() });
+    feeds_intents(intents)
 }
 
 fn opml_import_summary(outcome: &OpmlImportOutcome) -> String {
@@ -225,6 +242,42 @@ mod tests {
             assert_eq!(
                 intents.iter().any(|intent| matches!(intent, FeedsPageIntent::BumpReload)),
                 expected_saved
+            );
+        }
+    }
+
+    #[test]
+    fn config_import_hands_replaced_settings_to_the_shell() {
+        let outcome = |settings_updated| ConfigImportOutcome {
+            imported_feed_count: 1,
+            removed_feed_count: 0,
+            settings_updated,
+        };
+        let replaced =
+            UserSettings { custom_css: "body { color: red; }".into(), ..UserSettings::default() };
+        for (result, expected_settings, expected_tone, reloads) in [
+            (Ok((outcome(true), Some(Ok(replaced.clone())))), Some(&replaced), "info", true),
+            (Ok((outcome(false), None)), None, "info", true),
+            (Ok((outcome(true), Some(Err("locked".to_string())))), None, "error", true),
+            (Err("导入配置包失败：bad json".to_string()), None, "error", false),
+        ] {
+            let intents = import_config_result(result)
+                .into_iter()
+                .filter_map(UiIntent::into_feeds_page_intent)
+                .collect::<Vec<_>>();
+            assert!(matches!(intents[0], FeedsPageIntent::PendingConfigImportSet(false)));
+            let settings = intents.iter().find_map(|intent| match intent {
+                FeedsPageIntent::SettingsReplaced(settings) => Some(settings),
+                _ => None,
+            });
+            assert_eq!(settings, expected_settings);
+            assert!(matches!(
+                intents.last(),
+                Some(FeedsPageIntent::SetStatus { tone, .. }) if tone == expected_tone
+            ));
+            assert_eq!(
+                intents.iter().any(|intent| matches!(intent, FeedsPageIntent::BumpReload)),
+                reloads
             );
         }
     }

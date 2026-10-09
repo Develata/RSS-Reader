@@ -49,8 +49,9 @@ pub fn FeedsPage() -> Element {
 fn use_feeds_page_workspace() -> FeedsPageFacade {
     let state = use_signal(state::FeedsPageState::new);
     let shell = use_context::<crate::ui::AppShellState>();
+    let theme = use_context::<crate::theme::ThemeController>();
     let query_generation = use_signal(|| 0);
-    let session = FeedsPageSession::new(state, shell, query_generation);
+    let session = FeedsPageSession::new(state, shell, theme, query_generation);
     let refresh_revision = shell.refresh_revision();
     let reload_tick = session.reload_tick();
 
