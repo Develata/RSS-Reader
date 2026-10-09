@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use rssr_application::{AppStatePort, OpmlCodecPort, RemoteConfigStore};
-use rssr_domain::{AppStateRepository, AppStateSnapshot};
+use rssr_domain::{AppStateMutation, AppStateRepository, AppStateSnapshot};
 
 use crate::{
     config_sync::webdav::WebDavConfigSync, db::app_state_repository::SqliteAppStateRepository,
@@ -20,20 +20,18 @@ impl SqliteAppStateAdapter {
     }
 
     async fn clear_last_opened_feed_if_matches_impl(&self, feed_id: i64) -> Result<()> {
-        let mut state = self.repository.load_snapshot().await?;
-        if state.last_opened_feed_id == Some(feed_id) {
-            state.last_opened_feed_id = None;
-            self.repository.save_snapshot(&state).await?;
-        }
-        Ok(())
+        self.repository
+            .update_snapshot(|state| {
+                if state.last_opened_feed_id == Some(feed_id) {
+                    state.last_opened_feed_id = None;
+                }
+            })
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn load_snapshot(&self) -> Result<AppStateSnapshot> {
         self.repository.load_snapshot().await.map_err(Into::into)
-    }
-
-    pub async fn save_snapshot(&self, state: &AppStateSnapshot) -> Result<()> {
-        self.repository.save_snapshot(state).await.map_err(Into::into)
     }
 }
 
@@ -43,8 +41,8 @@ impl AppStateRepository for SqliteAppStateAdapter {
         self.repository.load_snapshot().await
     }
 
-    async fn save(&self, state: &AppStateSnapshot) -> rssr_domain::Result<()> {
-        self.repository.save_snapshot(state).await
+    async fn update(&self, mutate: AppStateMutation) -> rssr_domain::Result<()> {
+        self.repository.update_snapshot(mutate).await
     }
 }
 

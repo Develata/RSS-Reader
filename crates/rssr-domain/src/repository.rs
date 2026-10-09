@@ -84,8 +84,17 @@ pub trait SettingsRepository: Send + Sync {
     async fn save(&self, settings: &UserSettings) -> crate::Result<()>;
 }
 
+/// 对整份 [`AppStateSnapshot`] 的一次修改，由 [`AppStateRepository::update`] 原子地应用。
+pub type AppStateMutation = Box<dyn FnOnce(&mut AppStateSnapshot) + Send>;
+
 #[async_trait::async_trait]
 pub trait AppStateRepository: Send + Sync {
     async fn load(&self) -> crate::Result<AppStateSnapshot>;
-    async fn save(&self, state: &AppStateSnapshot) -> crate::Result<()>;
+
+    /// 在一次原子操作里读出整份状态、应用 `mutate` 并写回。
+    ///
+    /// 并发调用必须串行化：任何一方都不能用自己读到的旧快照覆盖另一方的改动。状态里的
+    /// 各字段由不同页面分别更新（文章页偏好、最后打开的订阅），整份读改写若不原子就会
+    /// 互相吞掉修改。故意不提供整份写入的 `save`，避免调用方重新拼出“先读后写”。
+    async fn update(&self, mutate: AppStateMutation) -> crate::Result<()>;
 }

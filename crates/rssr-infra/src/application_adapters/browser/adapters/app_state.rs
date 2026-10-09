@@ -2,7 +2,7 @@ use super::shared::map_store_error;
 use crate::application_adapters::browser::state::{BrowserStore, Changes};
 use anyhow::Result;
 use rssr_application::AppStatePort;
-use rssr_domain::{AppStateRepository, AppStateSnapshot};
+use rssr_domain::{AppStateMutation, AppStateRepository, AppStateSnapshot};
 
 #[derive(Clone)]
 pub struct BrowserAppStateAdapter {
@@ -30,8 +30,18 @@ impl AppStateRepository for BrowserAppStateAdapter {
     async fn load(&self) -> rssr_domain::Result<AppStateSnapshot> {
         self.load_snapshot().await.map_err(map_store_error)
     }
-    async fn save(&self, state: &AppStateSnapshot) -> rssr_domain::Result<()> {
-        self.save_snapshot(state).await.map_err(map_store_error)
+    /// 读改写在同一次 `store.update` 里完成，Web Lock 让并发更新逐个进行（审计 A2）。
+    async fn update(&self, mutate: AppStateMutation) -> rssr_domain::Result<()> {
+        self.store
+            .update(move |state| {
+                let before = state.app_state.clone();
+                mutate(&mut state.app_state);
+                let changes =
+                    if state.app_state == before { Changes::NONE } else { Changes::APP_STATE };
+                Ok(((), changes))
+            })
+            .await
+            .map_err(map_store_error)
     }
 }
 #[async_trait::async_trait]

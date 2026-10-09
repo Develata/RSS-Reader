@@ -16,8 +16,8 @@ pub use entry::{
 };
 pub use feed::{Feed, FeedSummary, NewFeedSubscription, normalize_feed_url};
 pub use repository::{
-    AppStateRepository, EntryContentRepository, EntryIndexRepository, EntryRepository,
-    FeedRepository, HealthRepository, SettingsRepository,
+    AppStateMutation, AppStateRepository, EntryContentRepository, EntryIndexRepository,
+    EntryRepository, FeedRepository, HealthRepository, SettingsRepository,
 };
 pub use settings::{
     ConfigFeed, ConfigPackage, DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ARCHIVE_AFTER_MONTHS,

@@ -126,11 +126,11 @@ mod tests {
             Ok(self.state.lock().expect("lock app state").clone())
         }
 
-        async fn save(&self, state: &AppStateSnapshot) -> rssr_domain::Result<()> {
+        async fn update(&self, mutate: rssr_domain::AppStateMutation) -> rssr_domain::Result<()> {
             if self.fail_save {
                 return Err(rssr_domain::DomainError::Persistence("save failed".to_string()));
             }
-            *self.state.lock().expect("lock app state") = state.clone();
+            mutate(&mut self.state.lock().expect("lock app state"));
             Ok(())
         }
     }

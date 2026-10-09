@@ -539,3 +539,28 @@ mod discovery_cases;
 fn browser_discovery_parser_matches_native() {
     discovery_cases::assert_discovery_cases();
 }
+
+/// 两个窄字段更新并发时都必须留下（审计 A2）：浏览器端的读改写在同一次 Web Lock 内完成。
+#[wasm_bindgen_test]
+async fn browser_app_state_narrow_updates_do_not_lose_each_other() {
+    use rssr_application::AppStateService;
+    use rssr_domain::EntriesWorkspaceState;
+    use rssr_infra::application_adapters::browser::adapters::BrowserAppStateAdapter;
+
+    let state = seed_state(BrowserState::default()).await;
+    let service = AppStateService::new(Arc::new(BrowserAppStateAdapter::new(state.clone())));
+    let workspace =
+        EntriesWorkspaceState { show_archived: true, ..EntriesWorkspaceState::default() };
+
+    let (feed_saved, workspace_saved) = futures_util::join!(
+        service.save_last_opened_feed_id(Some(7)),
+        service.save_entries_workspace(workspace.clone()),
+    );
+    feed_saved.expect("save last opened feed");
+    workspace_saved.expect("save workspace");
+
+    let snapshot = state.snapshot().await.expect("browser snapshot");
+    assert_eq!(snapshot.app_state.last_opened_feed_id, Some(7), "last opened feed was lost");
+    assert_eq!(snapshot.app_state.entries_workspace, workspace, "workspace update was lost");
+    clear_browser_state_storage();
+}

@@ -90,8 +90,8 @@ mod tests {
             Ok(self.state.lock().expect("lock app state").clone())
         }
 
-        async fn save(&self, state: &AppStateSnapshot) -> rssr_domain::Result<()> {
-            *self.state.lock().expect("lock app state") = state.clone();
+        async fn update(&self, mutate: rssr_domain::AppStateMutation) -> rssr_domain::Result<()> {
+            mutate(&mut self.state.lock().expect("lock app state"));
             Ok(())
         }
     }
