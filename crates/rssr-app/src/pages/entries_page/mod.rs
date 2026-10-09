@@ -18,7 +18,7 @@ mod state;
 use dioxus::prelude::*;
 
 use self::cards::render_entry_card_at;
-use self::clock::current_time_utc;
+use self::clock::{current_time_utc, use_sampled_clock};
 use self::controls::{render_entry_controls, render_entry_pagination_controls};
 use self::{
     facade::EntriesPageFacade,
@@ -220,14 +220,21 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         // `presenter_input()` 会克隆整份投影；`with` 直接借用（`from_input` 是纯函数）。
         presenter_input.with(|input| Arc::new(EntriesPagePresenter::from_input(input)))
     });
-    let facade =
-        EntriesPageFacade::new(ui, session, Arc::clone(&state_snapshot), presenter.cloned());
+    let refresh_revision = ui.refresh_revision();
+    // 归档分界的“现在”只在挂载与手动刷新完成时采样，渲染本身不读时钟（审计 A4）。
+    let query_now = use_sampled_clock(refresh_revision, current_time_utc);
+    let facade = EntriesPageFacade::new(
+        ui,
+        session,
+        Arc::clone(&state_snapshot),
+        presenter.cloned(),
+        query_now,
+    );
     let entry_search = ui.entry_search();
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
-    let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), current_time_utc());
+    let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), query_now);
     let preferences_loaded = state_snapshot.preferences_load.is_loaded();
     let entries_ready = state_snapshot.preferences_load.can_load_entries();
-    let refresh_revision = ui.refresh_revision();
     let bulk_revision = state_snapshot.bulk_revision;
     let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
     let show_archived = state_snapshot.show_archived;

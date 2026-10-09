@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::ui::AppShellState;
 use rssr_domain::{EntrySummary, ReadFilter, StarredFilter};
+use time::OffsetDateTime;
 
 use super::{
     groups::{EntryCardRef, EntryGroupNavItem, EntryMonthGroup, EntrySourceGroup},
@@ -19,6 +20,8 @@ pub(crate) struct EntriesPageFacade {
     session: EntriesPageSession,
     snapshot: Arc<EntriesPageState>,
     presenter: Arc<EntriesPagePresenter>,
+    /// 列表查询所用的“现在”；批量已读预览必须与屏幕上的列表用同一个归档分界。
+    query_now: OffsetDateTime,
 }
 
 impl EntriesPageFacade {
@@ -42,7 +45,7 @@ impl EntriesPageFacade {
         self.session.preview_mark_read(self.snapshot.entry_query(
             self.session.feed_id(),
             search,
-            super::clock::current_time_utc(),
+            self.query_now,
         ));
     }
 
@@ -53,8 +56,9 @@ impl EntriesPageFacade {
         session: EntriesPageSession,
         snapshot: Arc<EntriesPageState>,
         presenter: Arc<EntriesPagePresenter>,
+        query_now: OffsetDateTime,
     ) -> Self {
-        Self { ui, session, snapshot, presenter }
+        Self { ui, session, snapshot, presenter, query_now }
     }
 
     pub(crate) fn entry_search(&self) -> String {
