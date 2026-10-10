@@ -26,6 +26,9 @@ from pathlib import Path
 
 DB_NAMES = ("rss-reader.db", "rss-reader-content.db")
 CSS = ":root { --release-upgrade-sentinel: v0121; }"
+# Index-database migrations the candidate must end up with (0006 generation, 0007 content GC
+# queue, 0008 folded search title).
+CANDIDATE_MIGRATIONS = 8
 
 
 def fixture_image():
@@ -57,10 +60,14 @@ def snapshot(directory):
             conn.row_factory = sqlite3.Row
             for table in tables:
                 rows = [dict(row) for row in conn.execute(f'SELECT * FROM "{table}" ORDER BY 1')]
-                # 0006 adds a fence; compare all pre-existing columns byte-for-byte.
+                # 0006 adds a fence and 0008 a derived search column; compare all pre-existing
+                # columns byte-for-byte and check the new ones separately.
                 if table == "feeds":
                     for row in rows:
                         row.pop("generation", None)
+                if table == "entries":
+                    for row in rows:
+                        row.pop("title_search", None)
                 result[table] = rows
     return result
 
@@ -189,24 +196,28 @@ def main():
         record("legacy binary created migrations 1-5, 3 subscriptions, 144 bodies, 48 read, 20 starred, settings and CSS")
 
         def verify_upgraded(directory):
-            assert versions(directory) == [(i, 1) for i in range(1, 8)]
+            assert versions(directory) == [(i, 1) for i in range(1, CANDIDATE_MIGRATIONS + 1)]
             assert snapshot(directory) == expected
             with sqlite3.connect(directory / DB_NAMES[0]) as conn:
                 assert conn.execute("SELECT DISTINCT generation FROM feeds").fetchall() == [(0,)]
+                # 0008 backfills the folded title (Unicode lowercase); the fixture titles are ASCII,
+                # where Python's str.lower() agrees with Rust's to_lowercase().
+                folded = conn.execute("SELECT title, title_search FROM entries").fetchall()
+                assert folded and all(search == title.lower() for title, search in folded)
                 assert conn.execute("SELECT COUNT(*) FROM content_gc_queue").fetchone() == (0,)
                 assert conn.execute("SELECT legacy_reconciled FROM content_gc_state WHERE id=1").fetchone() == (1,)
 
         upgraded = copy_databases(original, root / "upgrade-success")
         run(candidate, upgraded, "list-feeds")
         verify_upgraded(upgraded)
-        record("0006 and 0007 upgrade preserve every pre-existing data column and body")
+        record("0006-0008 upgrade preserves every pre-existing data column and body; 0008 backfills folded titles")
         for _ in range(3):
             result = run(candidate, upgraded, "show-settings")
             assert CSS in result.stdout.decode()
             verify_upgraded(upgraded)
         record("three independent candidate restarts preserve data and custom CSS")
 
-        for failed_version in (6, 7):
+        for failed_version in (6, 7, 8):
             directory = copy_databases(original, root / f"fail-migration-{failed_version}")
             with sqlite3.connect(directory / DB_NAMES[0]) as conn:
                 conn.execute(
@@ -220,8 +231,14 @@ def main():
             with sqlite3.connect(directory / DB_NAMES[0]) as conn:
                 if failed_version == 6:
                     assert "generation" not in [row[1] for row in conn.execute("PRAGMA table_info(feeds)")]
-                else:
+                elif failed_version == 7:
                     assert conn.execute("SELECT name FROM sqlite_master WHERE name LIKE 'content_gc_%'").fetchall() == []
+                else:
+                    assert "title_search" not in [row[1] for row in conn.execute("PRAGMA table_info(entries)")]
+                    assert conn.execute(
+                        "SELECT name FROM sqlite_master WHERE name IN "
+                        "('idx_entries_title_search_missing', 'entries_title_search_stale')"
+                    ).fetchall() == []
                 conn.execute("DROP TRIGGER qa_fail_migration")
             run(candidate, directory, "list-feeds")
             verify_upgraded(directory)

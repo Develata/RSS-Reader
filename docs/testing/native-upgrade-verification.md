@@ -1,6 +1,6 @@
 # 原生旧库升级验收
 
-从空库运行最新 migrations 只能证明建库，不能证明旧版本升级。`scripts/verify_release_upgrade.py` 使用两个明确指定的真实 CLI，在新建目录中验证 v0.1.21 的 migrations 1–5 升到 1–7。它不接受已有数据库目录，也不读取日常安装的数据。
+从空库运行最新 migrations 只能证明建库，不能证明旧版本升级。`scripts/verify_release_upgrade.py` 使用两个明确指定的真实 CLI，在新建目录中验证 v0.1.21 的 migrations 1–5 升到 1–8。它不接受已有数据库目录，也不读取日常安装的数据。
 
 ## 准备与执行
 
@@ -20,9 +20,9 @@ python -X utf8 scripts/verify_release_upgrade.py `
 ## 断言与证据
 
 - 旧库确实只有 migrations 1–5，包含 3 个订阅、144 篇正文、48 个已读、20 个收藏，以及非默认设置和自定义 CSS。
-- 0006/0007 升级后比较所有旧有字段与正文，检查 integrity / foreign keys、generation 默认值和清理队列状态。
+- 0006–0008 升级后比较所有旧有字段与正文（`generation` 与 `title_search` 这两个新列单独检查），检查 integrity / foreign keys、generation 默认值、清理队列状态，以及 0008 回填的折叠标题。
 - 三次独立启动候选 CLI 后数据与 CSS 不变。
-- 分别在 SQLx 写入迁移历史时用 SQLite trigger 注入失败，验证该次 migration 的 DDL 和历史记录一起回滚；移除故障后重试成功。0007 失败时保留已提交的 0006。
+- 分别在 SQLx 写入迁移历史时用 SQLite trigger 注入失败，验证该次 migration 的 DDL 和历史记录一起回滚；移除故障后重试成功。0007 失败时保留已提交的 0006；0008 失败时不留下搜索列、部分索引与触发器。
 - 旧库持有写锁时强制终止候选进程，再启动可完成升级。此项不等于验证断电、磁盘损坏或正在刷盘时的崩溃恢复。
 - 旧 CLI 拒绝已升级的迁移历史；恢复升级前的两个原始库后旧 CLI 可正常打开。
 - 原始库全程保留，最终哈希与创建时一致；失败/重试目录、命令参数与 stdout/stderr 都不清理。
