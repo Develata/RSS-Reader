@@ -80,7 +80,7 @@
 
 ### 搜索
 
-- D6：标题搜索两端都按 Unicode 小写比较（规则在 `rssr_domain::search`，两端共用）。原生端新增迁移 0008 的 `entries.title_search` 列，写入条目时一起写折叠后的标题，启动迁移后把旧条目分批回填（折叠在 Rust 里算，SQLite 的 `lower()` 只处理 ASCII）；搜索比较 `COALESCE(title_search, title)`，尚未回填的行退回原标题，ASCII 仍能匹配。不做完整大小写折叠（`ß` 不等于 `ss`）。
+- D6：标题搜索两端都按 Unicode 小写比较（规则在 `rssr_domain::search`，两端共用）。原生端新增迁移 0008 的 `entries.title_search` 列，写入条目时一起写折叠后的标题，启动迁移后把旧条目分批回填（折叠在 Rust 里算，SQLite 的 `lower()` 只处理 ASCII）；搜索用 `instr` 在 `title_search` 里做字面查找，尚未回填的行退回 `instr(lower(title), …)`（只按 ASCII 不区分大小写）；回填查询显式走部分索引；旧版本改标题由触发器清空过期值，当前版本写入后当场补回。迁移 0008 在发布前原地改过：已应用旧 0008 的本地测试库需要重建。不做完整大小写折叠（`ß` 不等于 `ss`）。
 
 ### CLI 与界面
 
