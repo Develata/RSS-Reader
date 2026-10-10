@@ -116,4 +116,8 @@
 ## 给下一位 Agent 的备注
 
 - 入口：报告第 10 节进度表；每项修复的提交信息写明了机制、取舍与测试。
+- 在本机复跑浏览器验证：CI 用的 wasm-bindgen 是 0.2.126，全局装的是 0.2.128；Scoop 的 `chromedriver` 默认是 155，而本机 Chrome 是 154（版本不配时 harness 报 `http status: 404`）。复跑时不要改全局安装，按本次的方式临时指定：
+  - `RSSR_WASM_BINDGEN_TEST_RUNNER=<0.2.126 的 wasm-bindgen-test-runner.exe 绝对路径>`（本次用 `cargo binstall --root <临时目录> --version 0.2.126 wasm-bindgen-cli` 装在会话临时目录，会话结束后不保留，需要重装）；
+  - `PATH` 前置 `~/scoop/apps/chromedriver/154.0.8037.92`；`CARGO_TARGET_DIR` 指向独立的 wasm 目标目录；然后 `bash scripts/run_wasm_contract_harness.sh <harness>`；
+  - `rssr-infra` 的 wasm lib 测试：`CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=<同一个 runner> cargo test -p rssr-infra --lib --target wasm32-unknown-unknown --locked`。
 - 独立评审原文在会话 scratchpad 的 `review/batch1-review.md`、`review/round2-review.md`、`review/round3-review.md`、`review/round4-review.md`、`review/round5-review.md`、`review/round6-review.md`（不入库）；处理结论记在本记录与报告第 10 节。
