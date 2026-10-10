@@ -65,26 +65,7 @@ pub(crate) fn build_session_token(config: &AuthConfig, expires_at: i64) -> Resul
 }
 
 pub(crate) fn session_is_valid(config: &AuthConfig, cookie_value: &str) -> bool {
-    let Some((payload_part, signature_part)) = cookie_value.split_once('.') else {
-        return false;
-    };
-    let Ok(payload_bytes) = URL_SAFE_NO_PAD.decode(payload_part) else {
-        return false;
-    };
-    let Ok(signature_bytes) = URL_SAFE_NO_PAD.decode(signature_part) else {
-        return false;
-    };
-    // 先验签名再解读内容：伪造的 cookie 不论写了什么用户名都走同样的路径，校验耗时不随
-    // 用户名猜得对不对而变（独立评审）。
-    let Ok(mut mac) = HmacSha256::new_from_slice(&config.session_secret) else {
-        return false;
-    };
-    mac.update(&payload_bytes);
-    if mac.verify_slice(&signature_bytes).is_err() {
-        return false;
-    }
-
-    let Ok(payload) = String::from_utf8(payload_bytes) else {
+    let Some(VerifiedPayload(payload)) = verified_session_payload(config, cookie_value) else {
         return false;
     };
     let Some((username, expires_raw)) = payload.rsplit_once(':') else {
@@ -97,6 +78,21 @@ pub(crate) fn session_is_valid(config: &AuthConfig, cookie_value: &str) -> bool 
         return false;
     };
     OffsetDateTime::now_utc().unix_timestamp() <= expires_at
+}
+
+/// 签名校验通过的会话载荷。只能由 [`verified_session_payload`] 构造，用户名与有效期只能从它
+/// 读取：伪造的 cookie 不论写了什么用户名都在验签这一步被拒，校验耗时不随用户名猜得对不对
+/// 而变（独立评审）。
+struct VerifiedPayload(String);
+
+fn verified_session_payload(config: &AuthConfig, cookie_value: &str) -> Option<VerifiedPayload> {
+    let (payload_part, signature_part) = cookie_value.split_once('.')?;
+    let payload_bytes = URL_SAFE_NO_PAD.decode(payload_part).ok()?;
+    let signature_bytes = URL_SAFE_NO_PAD.decode(signature_part).ok()?;
+    let mut mac = HmacSha256::new_from_slice(&config.session_secret).ok()?;
+    mac.update(&payload_bytes);
+    mac.verify_slice(&signature_bytes).ok()?;
+    String::from_utf8(payload_bytes).ok().map(VerifiedPayload)
 }
 
 pub(crate) fn session_cookie_header(token: &str, config: &AuthConfig) -> String {

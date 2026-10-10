@@ -59,40 +59,45 @@ impl AppState {
         }
     }
 
-    /// 在阻塞线程池里做 Argon2 校验，不占用异步 worker。并发校验已满时返回 `None`：
-    /// 直接拒绝而不排队，登录请求洪泛时待处理的请求不会无界堆积。
-    async fn check_credentials(
-        &self,
-        known_device: bool,
-        username: String,
-        password: String,
-    ) -> Option<bool> {
-        let slots =
-            if known_device { &self.device_credential_checks } else { &self.credential_checks };
-        let config = Arc::clone(&self.config);
-        let verified = run_blocking_with_permit(slots, move || {
-            verify_credentials(&config, &username, &password)
-        })
-        .await?;
-        Some(verified.unwrap_or(false))
-    }
-
-    /// 校验密码，失败时记到 `key` 上。两步在同一个独立任务里完成：客户端断开导致请求被丢弃
-    /// 时，已经开始的校验仍会记下失败，断开再重试不能绕过限速（独立评审）。
+    /// 校验密码，失败时记到 `key` 上。
     async fn check_and_record(
         &self,
         key: String,
         username: String,
         password: String,
     ) -> CredentialCheck {
+        let config = Arc::clone(&self.config);
+        self.check_and_record_with(key, move || verify_credentials(&config, &username, &password))
+            .await
+    }
+
+    /// 在阻塞线程池里运行 `verify`（Argon2 不占用异步 worker），失败时记到 `key` 上。
+    ///
+    /// 名额在派生任务之前以不等待的方式取得，没有空闲名额就直接返回 `Busy`，不排队，也不派生
+    /// 任务；取得的名额由任务持有到记账结束，所以同时存在的校验任务不超过名额数（审计 F2）。
+    /// 校验与记账在这个独立任务里完成：客户端断开导致请求被丢弃时，任务照常跑完并记下失败，
+    /// 已经开始的 Argon2 也照常占着名额，断开再重试既不能绕过限速，也不能突破并发上限（独立
+    /// 评审）。
+    async fn check_and_record_with(
+        &self,
+        key: String,
+        verify: impl FnOnce() -> bool + Send + 'static,
+    ) -> CredentialCheck {
+        let slots = if is_device_key(&key) {
+            &self.device_credential_checks
+        } else {
+            &self.credential_checks
+        };
+        let Ok(slot) = Arc::clone(slots).try_acquire_owned() else {
+            return CredentialCheck::Busy;
+        };
         let state = self.clone();
         tokio::spawn(async move {
-            match state.check_credentials(is_device_key(&key), username, password).await {
-                None => CredentialCheck::Busy,
-                Some(true) => CredentialCheck::Valid,
-                Some(false) => {
-                    CredentialCheck::Invalid { blocked: record_login_failure(&state, &key).await }
-                }
+            let _slot = slot;
+            if tokio::task::spawn_blocking(verify).await.unwrap_or(false) {
+                CredentialCheck::Valid
+            } else {
+                CredentialCheck::Invalid { blocked: record_login_failure(&state, &key).await }
             }
         })
         .await
@@ -101,6 +106,7 @@ impl AppState {
 }
 
 /// 一次密码校验的结果。
+#[derive(Debug)]
 enum CredentialCheck {
     /// 校验名额已满，没有校验。
     Busy,
@@ -109,25 +115,6 @@ enum CredentialCheck {
     Invalid {
         blocked: bool,
     },
-}
-
-/// 取得一个名额后在阻塞线程池里运行 `work`；没有空闲名额时返回 `None`。
-///
-/// 名额随闭包移入阻塞线程，直到 `work` 结束才释放。已经开始的阻塞任务无法取消，若名额留在
-/// 调用方的 future 里，客户端断开导致请求被丢弃时名额会提前归还，反复提交再断开就能让同时
-/// 运行的 Argon2 超过上限（审计 F2）。
-async fn run_blocking_with_permit<T: Send + 'static>(
-    slots: &Arc<Semaphore>,
-    work: impl FnOnce() -> T + Send + 'static,
-) -> Option<Result<T, tokio::task::JoinError>> {
-    let permit = Arc::clone(slots).try_acquire_owned().ok()?;
-    Some(
-        tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            work()
-        })
-        .await,
-    )
 }
 
 /// 环境变量是进程级的，而 `cargo test` 默认多线程并行跑同一个测试二进制。
@@ -653,94 +640,73 @@ mod tests {
         assert_eq!(location.as_deref(), Some("/entries"));
     }
 
-    /// 调用方被取消（客户端断开）后，仍在运行的阻塞校验继续占着名额，并发上限不能这样绕过
-    /// （审计 F2）。
-    #[tokio::test]
-    async fn cancelled_callers_keep_their_slot_until_the_blocking_work_ends() {
-        let slots = Arc::new(Semaphore::new(2));
-        let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
-        let mut releases = Vec::new();
-        let mut callers = Vec::new();
-        for _ in 0..2 {
-            let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
-            releases.push(release_tx);
-            let slots = Arc::clone(&slots);
-            let started_tx = started_tx.clone();
-            callers.push(tokio::spawn(async move {
-                run_blocking_with_permit(&slots, move || {
-                    started_tx.send(()).expect("the test waits for this");
-                    release_rx.recv().expect("the test releases the work");
-                })
-                .await
-            }));
-        }
-        for _ in 0..2 {
-            started_rx.recv().await.expect("blocking work started");
-        }
-        for caller in &callers {
-            caller.abort();
-        }
-        for caller in callers {
-            assert!(caller.await.expect_err("the caller was cancelled").is_cancelled());
-        }
+    /// 客户端在密码校验期间断开、请求被丢弃：已经开始的校验继续占着名额，结束后照样记下失败；
+    /// 否则断开再重试既能突破并发上限，也能一直校验而不被限速（审计 F2、独立评审）。
+    /// 校验函数停在闸门上，取消一定发生在校验期间。
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_check_abandoned_by_its_request_keeps_its_slot_and_records_the_failure() {
+        let state = AppState::new(Arc::new(sample_config()));
+        let (started, started_rx) = tokio::sync::oneshot::channel();
+        let (release, release_rx) = std::sync::mpsc::channel::<()>();
+        let request = tokio::spawn({
+            let state = state.clone();
+            async move {
+                state
+                    .check_and_record_with("client|192.0.2.7".into(), move || {
+                        started.send(()).expect("the test waits for the check");
+                        release_rx.recv().expect("the test releases the check");
+                        false
+                    })
+                    .await
+            }
+        });
+        within(started_rx).await.expect("the check started");
+        request.abort();
+        assert!(within(request).await.expect_err("the request was dropped").is_cancelled());
+        assert_eq!(
+            state.credential_checks.available_permits(),
+            MAX_CONCURRENT_CREDENTIAL_CHECKS - 1,
+            "the running check keeps its slot"
+        );
 
-        assert!(run_blocking_with_permit(&slots, || ()).await.is_none());
-
-        for release in releases {
-            release.send(()).expect("the blocking work is waiting");
-        }
-        let _slots =
-            tokio::time::timeout(std::time::Duration::from_secs(10), slots.acquire_many(2))
-                .await
-                .expect("the slots come back once the work ends")
-                .expect("the semaphore stays open");
+        release.send(()).expect("the check is waiting");
+        within(async {
+            while state.credential_checks.available_permits() < MAX_CONCURRENT_CREDENTIAL_CHECKS {
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            }
+        })
+        .await;
+        let failures =
+            state.login_throttle.lock().await.get("client|192.0.2.7").map(|e| e.failures);
+        assert_eq!(failures, Some(1), "the abandoned check recorded its failure");
     }
 
-    /// 客户端在密码校验期间断开、请求被丢弃，已经开始的校验仍要记下失败，否则断开再重试就能
-    /// 一直校验而不被限速（独立评审）。Argon2 要几十毫秒以上，取消几乎总落在校验期间；
-    /// 万一校验先完成（请求没有被取消），换一个状态重来。
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn a_login_abandoned_during_the_check_still_counts_as_a_failure() {
-        const WATCHDOG: std::time::Duration = std::time::Duration::from_secs(20);
-        for _ in 0..5 {
-            let state = AppState::new(Arc::new(sample_config()));
-            let login = tokio::spawn({
-                let state = state.clone();
-                async move { attempt(&state, None, "wrong-password").await }
-            });
-            tokio::time::timeout(WATCHDOG, async {
-                while state.credential_checks.available_permits()
-                    == MAX_CONCURRENT_CREDENTIAL_CHECKS
-                {
-                    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+    /// 名额已满时直接返回，不运行校验，也不派生任务（审计 F2）。
+    #[tokio::test]
+    async fn a_busy_check_runs_nothing() {
+        let state = AppState::new(Arc::new(sample_config()));
+        let _busy = Arc::clone(&state.credential_checks)
+            .try_acquire_many_owned(MAX_CONCURRENT_CREDENTIAL_CHECKS as u32)
+            .expect("all general slots");
+        let ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let check = state
+            .check_and_record_with("client|192.0.2.7".into(), {
+                let ran = Arc::clone(&ran);
+                move || {
+                    ran.store(true, std::sync::atomic::Ordering::SeqCst);
+                    false
                 }
             })
-            .await
-            .expect("the check takes a slot");
-            login.abort();
-            if login.await.is_ok() {
-                continue;
-            }
+            .await;
+        assert!(matches!(check, CredentialCheck::Busy));
+        assert!(!ran.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(state.login_throttle.lock().await.is_empty(), "nothing is recorded");
+    }
 
-            tokio::time::timeout(WATCHDOG, async {
-                loop {
-                    let failures = state
-                        .login_throttle
-                        .lock()
-                        .await
-                        .get("client|192.0.2.7")
-                        .map(|entry| entry.failures);
-                    if failures == Some(1) {
-                        break;
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-                }
-            })
-            .await
-            .expect("the abandoned check records its failure");
-            return;
-        }
-        panic!("the login never got cancelled while its check was running");
+    const WATCHDOG: std::time::Duration = std::time::Duration::from_secs(10);
+
+    async fn within<T>(future: impl std::future::Future<Output = T>) -> T {
+        tokio::time::timeout(WATCHDOG, future).await.expect("watchdog")
     }
 
     #[test]
