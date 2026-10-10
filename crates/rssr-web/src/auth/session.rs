@@ -74,6 +74,16 @@ pub(crate) fn session_is_valid(config: &AuthConfig, cookie_value: &str) -> bool 
     let Ok(signature_bytes) = URL_SAFE_NO_PAD.decode(signature_part) else {
         return false;
     };
+    // 先验签名再解读内容：伪造的 cookie 不论写了什么用户名都走同样的路径，校验耗时不随
+    // 用户名猜得对不对而变（独立评审）。
+    let Ok(mut mac) = HmacSha256::new_from_slice(&config.session_secret) else {
+        return false;
+    };
+    mac.update(&payload_bytes);
+    if mac.verify_slice(&signature_bytes).is_err() {
+        return false;
+    }
+
     let Ok(payload) = String::from_utf8(payload_bytes) else {
         return false;
     };
@@ -86,15 +96,7 @@ pub(crate) fn session_is_valid(config: &AuthConfig, cookie_value: &str) -> bool 
     let Ok(expires_at) = expires_raw.parse::<i64>() else {
         return false;
     };
-    if OffsetDateTime::now_utc().unix_timestamp() > expires_at {
-        return false;
-    }
-
-    let Ok(mut mac) = HmacSha256::new_from_slice(&config.session_secret) else {
-        return false;
-    };
-    mac.update(payload.as_bytes());
-    mac.verify_slice(&signature_bytes).is_ok()
+    OffsetDateTime::now_utc().unix_timestamp() <= expires_at
 }
 
 pub(crate) fn session_cookie_header(token: &str, config: &AuthConfig) -> String {

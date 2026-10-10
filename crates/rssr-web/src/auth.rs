@@ -76,6 +76,39 @@ impl AppState {
         .await?;
         Some(verified.unwrap_or(false))
     }
+
+    /// 校验密码，失败时记到 `key` 上。两步在同一个独立任务里完成：客户端断开导致请求被丢弃
+    /// 时，已经开始的校验仍会记下失败，断开再重试不能绕过限速（独立评审）。
+    async fn check_and_record(
+        &self,
+        key: String,
+        username: String,
+        password: String,
+    ) -> CredentialCheck {
+        let state = self.clone();
+        tokio::spawn(async move {
+            match state.check_credentials(is_device_key(&key), username, password).await {
+                None => CredentialCheck::Busy,
+                Some(true) => CredentialCheck::Valid,
+                Some(false) => {
+                    CredentialCheck::Invalid { blocked: record_login_failure(&state, &key).await }
+                }
+            }
+        })
+        .await
+        .unwrap_or(CredentialCheck::Busy)
+    }
+}
+
+/// 一次密码校验的结果。
+enum CredentialCheck {
+    /// 校验名额已满，没有校验。
+    Busy,
+    Valid,
+    /// 密码不对；`blocked` 表示这次失败让来源进入了限速。
+    Invalid {
+        blocked: bool,
+    },
 }
 
 /// 取得一个名额后在阻塞线程池里运行 `work`；没有空闲名额时返回 `None`。
@@ -152,16 +185,15 @@ pub(crate) async fn handle_login(
     }
 
     let known_device = is_device_key(&rate_limit_key);
-    let Some(valid) = state.check_credentials(known_device, form.username, form.password).await
-    else {
-        return login_redirect(next, Some("rate_limited"));
-    };
-    if !valid {
-        let blocked = record_login_failure(&state, &rate_limit_key).await;
-        return login_redirect(
-            next,
-            Some(if blocked { "rate_limited" } else { "invalid_credentials" }),
-        );
+    match state.check_and_record(rate_limit_key.clone(), form.username, form.password).await {
+        CredentialCheck::Busy => return login_redirect(next, Some("rate_limited")),
+        CredentialCheck::Invalid { blocked } => {
+            return login_redirect(
+                next,
+                Some(if blocked { "rate_limited" } else { "invalid_credentials" }),
+            );
+        }
+        CredentialCheck::Valid => {}
     }
 
     clear_login_failures(&state, &rate_limit_key).await;
@@ -259,6 +291,7 @@ mod tests {
     use crate::auth::config::{LoginRateLimit, PasswordPolicy, verify_password_hash};
     use crate::auth::rate_limit::{MAX_TRACKED_LOGIN_KEYS, cleanup_rate_limit_entries};
     use crate::auth::session::{DEVICE_COOKIE, device_nonce};
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     use time::Duration;
 
     unsafe fn set_test_var(name: &str, value: impl AsRef<std::ffi::OsStr>) {
@@ -661,6 +694,68 @@ mod tests {
                 .await
                 .expect("the slots come back once the work ends")
                 .expect("the semaphore stays open");
+    }
+
+    /// 客户端在密码校验期间断开、请求被丢弃，已经开始的校验仍要记下失败，否则断开再重试就能
+    /// 一直校验而不被限速（独立评审）。Argon2 要几十毫秒以上，取消几乎总落在校验期间；
+    /// 万一校验先完成（请求没有被取消），换一个状态重来。
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_login_abandoned_during_the_check_still_counts_as_a_failure() {
+        const WATCHDOG: std::time::Duration = std::time::Duration::from_secs(20);
+        for _ in 0..5 {
+            let state = AppState::new(Arc::new(sample_config()));
+            let login = tokio::spawn({
+                let state = state.clone();
+                async move { attempt(&state, None, "wrong-password").await }
+            });
+            tokio::time::timeout(WATCHDOG, async {
+                while state.credential_checks.available_permits()
+                    == MAX_CONCURRENT_CREDENTIAL_CHECKS
+                {
+                    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+                }
+            })
+            .await
+            .expect("the check takes a slot");
+            login.abort();
+            if login.await.is_ok() {
+                continue;
+            }
+
+            tokio::time::timeout(WATCHDOG, async {
+                loop {
+                    let failures = state
+                        .login_throttle
+                        .lock()
+                        .await
+                        .get("client|192.0.2.7")
+                        .map(|entry| entry.failures);
+                    if failures == Some(1) {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .expect("the abandoned check records its failure");
+            return;
+        }
+        panic!("the login never got cancelled while its check was running");
+    }
+
+    #[test]
+    fn session_tokens_must_be_signed_current_and_for_this_user() {
+        let config = sample_config();
+        let future = OffsetDateTime::now_utc().unix_timestamp() + 60;
+        assert!(session_is_valid(&config, &build_session_token(&config, future).unwrap()));
+
+        let expired = build_session_token(&config, 1).unwrap();
+        assert!(!session_is_valid(&config, &expired));
+        let mut other_user = sample_config();
+        other_user.username = "someone".into();
+        assert!(!session_is_valid(&config, &build_session_token(&other_user, future).unwrap()));
+        let payload = URL_SAFE_NO_PAD.encode(format!("demo:{future}"));
+        assert!(!session_is_valid(&config, &format!("{payload}.AAAA")));
     }
 
     #[cfg(unix)]
