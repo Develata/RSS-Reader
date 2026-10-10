@@ -5,15 +5,21 @@
 
 use std::collections::BTreeSet;
 
+use futures_util::future::BoxFuture;
 use rssr_domain::{
     EntryQuery, FeedRepository, NewFeedSubscription, fold_for_search, title_contains,
 };
 use rssr_infra::{
     db::{
-        SqlitePool, entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository,
-        migrate, sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
+        MIGRATOR, SqlitePool, entry_repository::SqliteEntryRepository,
+        feed_repository::SqliteFeedRepository, migrate, sqlite_native::NativeSqliteBackend,
+        storage_backend::StorageBackend,
     },
     parser::feed_parser::ParsedEntry,
+};
+use sqlx::{
+    error::BoxDynError,
+    migrate::{Migration, MigrationSource, Migrator},
 };
 use url::Url;
 
@@ -176,4 +182,85 @@ async fn an_older_writer_changing_a_title_does_not_leave_a_stale_folded_title() 
     migrate(&pool).await.expect("migrate again");
     assert_eq!(folded_column(&pool, "entry-0").await.as_deref(), Some("python ünïcode"));
     assert_eq!(native_matches(&entries, "ÜNÏCODE").await.len(), 1);
+}
+
+#[derive(Debug)]
+struct Migrations(Vec<Migration>);
+
+impl MigrationSource<'static> for Migrations {
+    fn resolve(self) -> BoxFuture<'static, Result<Vec<Migration>, BoxDynError>> {
+        Box::pin(async move { Ok(self.0) })
+    }
+}
+
+/// 真实的旧库：只跑到迁移 0007，按当时的表结构写入 1201 篇；升级时应用 0008 并分批回填。
+#[tokio::test]
+async fn a_database_from_before_0008_is_upgraded_and_backfilled() {
+    let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.expect("connect");
+    let before_0008: Vec<Migration> =
+        MIGRATOR.iter().filter(|migration| migration.version <= 7).cloned().collect();
+    Migrator::new(Migrations(before_0008)).await.unwrap().run(&pool).await.expect("migrate to 7");
+    sqlx::query(
+        "INSERT INTO feeds (url, title, created_at, updated_at)          VALUES ('https://example.com/feed.xml', 'Feed', '2026-01-01', '2026-01-01')",
+    )
+    .execute(&pool)
+    .await
+    .expect("feed");
+    let titles: Vec<String> = (0..1_201).map(|index| format!("ÜBER Nummer {index}")).collect();
+    for (index, title) in titles.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO entries (feed_id, external_id, dedup_key, title, first_seen_at,              created_at, updated_at) VALUES (1, ?1, ?1, ?2, '2026-01-01', '2026-01-01', '2026-01-01')",
+        )
+        .bind(format!("entry-{index}"))
+        .bind(title)
+        .execute(&pool)
+        .await
+        .expect("legacy entry");
+    }
+
+    migrate(&pool).await.expect("upgrade to 0008");
+
+    let unfolded: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM entries WHERE title_search IS NULL")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(unfolded, 0);
+    let entries = SqliteEntryRepository::new(pool.clone());
+    assert_eq!(
+        native_matches(&entries, "über nummer 77").await,
+        shared_matches(&titles, "über nummer 77")
+    );
+}
+
+/// 回填中途失败：已提交的批次保留，下次迁移接着补完（独立评审）。
+#[tokio::test]
+async fn a_failed_backfill_batch_keeps_earlier_batches_and_resumes() {
+    let titles: Vec<String> = (0..1_201).map(|index| format!("Ärger {index}")).collect();
+    let (pool, _entries, _) = seeded(&titles).await;
+    sqlx::query("UPDATE entries SET title_search = NULL").execute(&pool).await.expect("legacy");
+    sqlx::query(
+        "CREATE TRIGGER qa_fail_second_batch BEFORE UPDATE OF title_search ON entries          WHEN NEW.title_search IS NOT NULL           AND (SELECT COUNT(*) FROM entries WHERE title_search IS NOT NULL) >= 500          BEGIN SELECT RAISE(ABORT, 'qa injected failure'); END",
+    )
+    .execute(&pool)
+    .await
+    .expect("inject failure");
+
+    let error = migrate(&pool).await.expect_err("the second batch fails");
+    assert!(format!("{error:#}").contains("qa injected failure"), "{error:#}");
+    let folded: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM entries WHERE title_search IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(folded, 500, "the first batch stays committed");
+
+    sqlx::query("DROP TRIGGER qa_fail_second_batch").execute(&pool).await.expect("remove failure");
+    migrate(&pool).await.expect("retry");
+    let unfolded: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM entries WHERE title_search IS NULL")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(unfolded, 0);
 }

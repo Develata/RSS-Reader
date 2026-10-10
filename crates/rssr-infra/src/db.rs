@@ -72,6 +72,11 @@ pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
     backfill_title_search(pool).await
 }
 
+/// 回填的两条查询都显式走部分索引：大量行还没回填时若收集过统计信息（`ANALYZE`），规划器可能
+/// 改选全表扫描，回填又退回每批从头扫（独立评审）。
+const PENDING_TITLE_SEARCH: &str = "SELECT EXISTS(SELECT 1 FROM entries      INDEXED BY idx_entries_title_search_missing WHERE title_search IS NULL)";
+const NEXT_TITLE_SEARCH_BATCH: &str = "SELECT id, title FROM entries      INDEXED BY idx_entries_title_search_missing WHERE title_search IS NULL LIMIT ?1";
+
 /// 给还没有搜索用标题的条目补上（审计 D6）：迁移 0008 之前写入的，以及旧版本程序改过标题、
 /// 被触发器清空的。
 ///
@@ -83,20 +88,14 @@ pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
 /// `NOT NULL`。
 async fn backfill_title_search(pool: &SqlitePool) -> anyhow::Result<()> {
     const BATCH: i64 = 500;
-    let pending: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entries WHERE title_search IS NULL)")
-            .fetch_one(pool)
-            .await?;
+    let pending: bool = sqlx::query_scalar(PENDING_TITLE_SEARCH).fetch_one(pool).await?;
     if !pending {
         return Ok(());
     }
     loop {
         let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
         let rows: Vec<(i64, String)> =
-            sqlx::query_as("SELECT id, title FROM entries WHERE title_search IS NULL LIMIT ?1")
-                .bind(BATCH)
-                .fetch_all(&mut *tx)
-                .await?;
+            sqlx::query_as(NEXT_TITLE_SEARCH_BATCH).bind(BATCH).fetch_all(&mut *tx).await?;
         if rows.is_empty() {
             return Ok(());
         }
@@ -120,8 +119,8 @@ pub async fn migrate_content(pool: &SqlitePool) -> anyhow::Result<()> {
 /// sqlx 在编译期嵌入迁移文件的原始字节，按字节算校验和、不统一换行。Windows 检出通常是
 /// CRLF，其余平台是 LF，于是 Windows 版建的库拿到 Linux/macOS 版上（同步盘、便携目录、WSL），
 /// 或者反过来，都会被判成“迁移被改过”而拒绝启动。这里把内嵌的 SQL 换成另一种换行再算一次：
-/// 库里记录的是另一种换行的校验和，就按库里的记录核对；内容真正不同的照旧拒绝。库里的记录
-/// 不改写，旧版本照样能打开。
+/// 库里记录的是另一种换行的校验和，就按库里的记录核对；内容真正不同的照旧拒绝。已有记录不
+/// 改写（旧版本能否打开另看它认不认识全部已应用的迁移）。
 async fn run_line_ending_tolerant(migrator: &Migrator, pool: &SqlitePool) -> anyhow::Result<()> {
     let recorded = recorded_checksums(pool).await?;
     let migrations = migrator
@@ -223,6 +222,42 @@ mod tests {
         ] {
             assert!(!is_memory_database(url), "{url}");
             assert!(default_sqlite_max_connections(url) > 1);
+        }
+    }
+
+    /// 大量行还没回填时收集统计信息，回填查询仍走部分索引（独立评审）。
+    #[tokio::test]
+    async fn backfill_queries_use_the_partial_index_after_analyze() {
+        let pool = create_sqlite_pool("sqlite::memory:").await.expect("connect");
+        migrate(&pool).await.expect("migrate");
+        sqlx::query(
+            "INSERT INTO feeds (url, title, created_at, updated_at)              VALUES ('https://example.com/feed.xml', 'Feed', '2026-01-01', '2026-01-01')",
+        )
+        .execute(&pool)
+        .await
+        .expect("feed");
+        for index in 0..2_000 {
+            sqlx::query(
+                "INSERT INTO entries (feed_id, external_id, dedup_key, title, first_seen_at,                  created_at, updated_at) VALUES (1, ?1, ?1, ?1, '2026-01-01', '2026-01-01',                  '2026-01-01')",
+            )
+            .bind(format!("entry-{index}"))
+            .execute(&pool)
+            .await
+            .expect("entry");
+        }
+        sqlx::query("ANALYZE").execute(&pool).await.expect("analyze");
+
+        for query in [PENDING_TITLE_SEARCH, NEXT_TITLE_SEARCH_BATCH] {
+            let plan: Vec<(i64, i64, i64, String)> =
+                sqlx::query_as(&format!("EXPLAIN QUERY PLAN {query}"))
+                    .bind(500_i64)
+                    .fetch_all(&pool)
+                    .await
+                    .expect("plan");
+            assert!(
+                plan.iter().any(|row| row.3.contains("idx_entries_title_search_missing")),
+                "{query}: {plan:?}"
+            );
         }
     }
 }
