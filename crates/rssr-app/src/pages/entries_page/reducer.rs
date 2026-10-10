@@ -111,11 +111,10 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             // 在途查询可能早于这次写入读了存储，它的结果会把条目改回旧状态，也补不回
             // 因此新满足筛选的条目：session 丢弃它，这里要求重新查询（审计 A3）。
             // 查询也可能在写入完成之前就读完并返回了：例如点了收藏、随即切到“只看收藏”，
-            // 列表里没有这一条，写入完成时也没有在途查询。条目不在列表里、写入后又可能符合
-            // 筛选时同样重新查询（独立评审）。
-            if state.query_in_flight
-                || (!listed && patch_may_match_filters(state, is_read, is_starred))
-            {
+            // 列表里没有这一条，写入完成时也没有在途查询。被点的条目一定在当时的列表里，
+            // 写入完成时它不在了，说明列表（及附带的归档计数）是写入前读的，同样重新查询
+            // （独立评审）。
+            if state.query_in_flight || !listed {
                 state.requery_revision = state.requery_revision.wrapping_add(1);
             }
         }
@@ -185,25 +184,6 @@ fn apply_flag_patch(
     let starred_filter = state.starred_filter;
     entries.retain(|entry| matches_current_filters(read_filter, starred_filter, entry));
     clamp_current_page(state);
-}
-
-/// 只知道这次改动的标记时，条目是否可能符合当前筛选；没改动的标记按“可能符合”算。
-fn patch_may_match_filters(
-    state: &EntriesPageState,
-    is_read: Option<bool>,
-    is_starred: Option<bool>,
-) -> bool {
-    let read_may_match = match (state.read_filter, is_read) {
-        (ReadFilter::UnreadOnly, Some(is_read)) => !is_read,
-        (ReadFilter::ReadOnly, Some(is_read)) => is_read,
-        _ => true,
-    };
-    let starred_may_match = match (state.starred_filter, is_starred) {
-        (StarredFilter::StarredOnly, Some(is_starred)) => is_starred,
-        (StarredFilter::UnstarredOnly, Some(is_starred)) => !is_starred,
-        _ => true,
-    };
-    read_may_match && starred_may_match
 }
 
 fn matches_current_filters(
@@ -381,8 +361,8 @@ mod tests {
     }
 
     /// 另一种完成顺序：点了收藏、随即切到“只看收藏”，查询先读到旧存储、返回不含这一条的
-    /// 列表并结束，收藏写入随后才成功。写入后可能符合筛选的缺席条目要求重查；写入后不可能
-    /// 符合的（取消收藏）不用（独立评审）。
+    /// 列表并结束，收藏写入随后才成功。取消收藏同理会让附带的归档计数过时。写入的条目不在
+    /// 列表里就重查；在列表里的照常就地修补（独立评审）。
     #[test]
     fn a_write_that_lands_after_the_query_returned_requests_a_requery() {
         let mut state = EntriesPageState::new(true);
@@ -390,14 +370,17 @@ mod tests {
         reduce_entries_page_intent(&mut state, EntriesPageIntent::EntriesQueryStarted);
         reduce_entries_page_intent(
             &mut state,
-            EntriesPageIntent::SetEntries { entries: Vec::new(), archived_count: 0 },
+            EntriesPageIntent::SetEntries { entries: Vec::new(), archived_count: 1 },
         );
         reduce_entries_page_intent(&mut state, EntriesPageIntent::EntriesQueryFinished);
 
-        reduce_entries_page_intent(&mut state, patch(1, None, Some(false)));
-        assert_eq!(state.requery_revision, 0, "an unstarred entry cannot join the list");
-
         reduce_entries_page_intent(&mut state, patch(1, None, Some(true)));
         assert_eq!(state.requery_revision, 1, "the starred entry must be queried back in");
+        reduce_entries_page_intent(&mut state, patch(2, None, Some(false)));
+        assert_eq!(state.requery_revision, 2, "the archived count may have changed");
+
+        state.entries = vec![Arc::new(entry(3, false))].into();
+        reduce_entries_page_intent(&mut state, patch(3, Some(true), None));
+        assert_eq!(state.requery_revision, 2, "a listed entry is patched in place");
     }
 }
