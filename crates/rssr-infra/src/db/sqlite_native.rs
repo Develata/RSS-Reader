@@ -3,11 +3,10 @@ use async_trait::async_trait;
 use std::ffi::OsStr;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::Context;
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use sqlx::sqlite::SqlitePoolOptions;
 
 use crate::db::{
     FILE_SQLITE_MAX_CONNECTIONS, SqlitePool, connect_options_for_path, create_sqlite_pool,
@@ -65,51 +64,59 @@ impl NativeSqliteBackend {
     }
 
     pub async fn migrate_content(&self, pool: &SqlitePool) -> anyhow::Result<()> {
-        let _migration_lock = self.acquire_migration_lock().await?;
+        let _migration_lock = acquire_migration_lock(pool).await?;
         migrate_content(pool).await
     }
+}
 
-    fn migration_lock_path(&self) -> Option<PathBuf> {
-        let database_path = match &self.connection {
-            NativeConnection::Path(path) => Some(path.clone()),
-            NativeConnection::Url(url) => sqlite_file_path_from_url(url),
-        }?;
-        let parent = database_path.parent().unwrap_or_else(|| Path::new("."));
-        let file_name =
-            database_path.file_name().and_then(|name| name.to_str()).unwrap_or("rss-reader.db");
-        Some(parent.join(format!(".{file_name}.migration.lock")))
+/// 迁移锁放在 SQLite 实际打开的数据库文件旁边（`PRAGMA database_list` 给出的路径）：同一个库
+/// 无论 URL 怎么写（百分号转义、`file:` URI、相对路径），都落到同一个锁上（独立评审）。
+/// 内存库没有文件，也就不需要跨进程的锁。
+async fn migration_lock_path(pool: &SqlitePool) -> anyhow::Result<Option<PathBuf>> {
+    let file: String =
+        sqlx::query_scalar("SELECT file FROM pragma_database_list WHERE name = 'main'")
+            .fetch_one(pool)
+            .await
+            .context("读取数据库文件路径失败")?;
+    if file.is_empty() {
+        return Ok(None);
     }
+    let database_path = PathBuf::from(file);
+    let parent = database_path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name =
+        database_path.file_name().and_then(|name| name.to_str()).unwrap_or("rss-reader.db");
+    Ok(Some(parent.join(format!(".{file_name}.migration.lock"))))
+}
 
-    async fn acquire_migration_lock(&self) -> anyhow::Result<Option<File>> {
-        let Some(lock_path) = self.migration_lock_path() else {
-            return Ok(None);
-        };
-        if let Some(parent) = lock_path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("创建数据库迁移锁目录失败: {}", parent.display()))?;
-        }
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&lock_path)
-            .with_context(|| format!("打开数据库迁移锁失败: {}", lock_path.display()))?;
+async fn acquire_migration_lock(pool: &SqlitePool) -> anyhow::Result<Option<File>> {
+    let Some(lock_path) = migration_lock_path(pool).await? else {
+        return Ok(None);
+    };
+    if let Some(parent) = lock_path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("创建数据库迁移锁目录失败: {}", parent.display()))?;
+    }
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+        .with_context(|| format!("打开数据库迁移锁失败: {}", lock_path.display()))?;
 
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-        loop {
-            match file.try_lock() {
-                Ok(()) => return Ok(Some(file)),
-                Err(TryLockError::WouldBlock) if tokio::time::Instant::now() < deadline => {
-                    tokio::time::sleep(Duration::from_millis(50)).await;
-                }
-                Err(TryLockError::WouldBlock) => {
-                    anyhow::bail!("等待数据库迁移锁超时: {}", lock_path.display());
-                }
-                Err(TryLockError::Error(error)) => {
-                    return Err(error)
-                        .with_context(|| format!("获取数据库迁移锁失败: {}", lock_path.display()));
-                }
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(Some(file)),
+            Err(TryLockError::WouldBlock) if tokio::time::Instant::now() < deadline => {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            Err(TryLockError::WouldBlock) => {
+                anyhow::bail!("等待数据库迁移锁超时: {}", lock_path.display());
+            }
+            Err(TryLockError::Error(error)) => {
+                return Err(error)
+                    .with_context(|| format!("获取数据库迁移锁失败: {}", lock_path.display()));
             }
         }
     }
@@ -125,7 +132,7 @@ impl StorageBackend for NativeSqliteBackend {
     }
 
     async fn migrate(&self, pool: &SqlitePool) -> anyhow::Result<()> {
-        let _migration_lock = self.acquire_migration_lock().await?;
+        let _migration_lock = acquire_migration_lock(pool).await?;
         migrate(pool).await
     }
 
@@ -248,17 +255,6 @@ async fn connect_sqlite_path(database_path: &Path) -> anyhow::Result<SqlitePool>
         .with_context(|| format!("打开本地数据库失败: {}", database_path.display()))
 }
 
-/// URL 指向的数据库文件。用 sqlx 自己的解析（含百分号解码），同一个库的不同写法（例如
-/// `%72ss-reader.db` 与 `rss-reader.db`）得到同一个迁移锁（独立评审）。内存库没有文件。
-fn sqlite_file_path_from_url(database_url: &str) -> Option<PathBuf> {
-    if is_memory_database(database_url) {
-        return None;
-    }
-    let options = SqliteConnectOptions::from_str(database_url).ok()?;
-    let path = options.get_filename();
-    (!path.as_os_str().is_empty()).then(|| path.to_path_buf())
-}
-
 fn derive_content_database_url(database_url: &str) -> anyhow::Result<String> {
     if is_memory_database(database_url) {
         return Ok(database_url.to_string());
@@ -303,8 +299,8 @@ mod tests {
     #[cfg(unix)]
     use super::create_local_data_dir;
     use super::{
-        NativeSqliteBackend, append_content_suffix, content_database_path,
-        local_data_dir_in_base_dir, sqlite_file_path_from_url,
+        NativeSqliteBackend, acquire_migration_lock, append_content_suffix, content_database_path,
+        local_data_dir_in_base_dir, migration_lock_path,
     };
     use crate::db::storage_backend::StorageBackend;
     use std::{
@@ -372,11 +368,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("rssr-migration-lock-{nonce}"));
         std::fs::create_dir_all(&base).unwrap();
         let backend = NativeSqliteBackend::with_path(base.join("rss-reader.db"));
+        let first_pool = backend.connect().await.unwrap();
+        let second_pool = backend.connect().await.unwrap();
 
-        let first = backend.acquire_migration_lock().await.unwrap().expect("file lock");
+        let first = acquire_migration_lock(&first_pool).await.unwrap().expect("file lock");
         let blocked = tokio::time::timeout(
             std::time::Duration::from_millis(100),
-            backend.acquire_migration_lock(),
+            acquire_migration_lock(&second_pool),
         )
         .await;
         assert!(blocked.is_err(), "second handle must wait while first lock is held");
@@ -384,13 +382,15 @@ mod tests {
         drop(first);
         let second = tokio::time::timeout(
             std::time::Duration::from_secs(2),
-            backend.acquire_migration_lock(),
+            acquire_migration_lock(&second_pool),
         )
         .await
         .expect("lock should become available")
         .unwrap()
         .expect("file lock");
         drop(second);
+        first_pool.close().await;
+        second_pool.close().await;
         std::fs::remove_dir_all(base).unwrap();
     }
 
@@ -536,13 +536,41 @@ mod tests {
         std::fs::remove_dir_all(base).unwrap();
     }
 
-    /// 同一个库的不同 URL 写法必须落到同一个迁移锁上，否则两个进程可以同时迁移（独立评审）。
-    #[test]
-    fn url_aliases_of_one_database_share_a_file_path() {
-        let plain = sqlite_file_path_from_url("sqlite:///tmp/rss-reader.db?mode=rwc");
-        assert_eq!(plain.as_deref(), Some(Path::new("/tmp/rss-reader.db")));
-        assert_eq!(sqlite_file_path_from_url("sqlite:///tmp/%72ss-reader.db"), plain);
-        assert_eq!(sqlite_file_path_from_url("sqlite:/tmp/rss-reader.db"), plain);
-        assert_eq!(sqlite_file_path_from_url("sqlite::memory:"), None);
+    /// 同一个库的不同 URL 写法（百分号转义、`file:` URI）必须落到同一个迁移锁上，否则两个进程
+    /// 可以同时迁移（独立评审）。
+    #[tokio::test]
+    async fn url_aliases_of_one_database_share_a_migration_lock() {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
+        let dir = std::env::temp_dir().join(format!("rssr-lock-alias-{nonce}"));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let base = dir.to_string_lossy().replace('\\', "/");
+        let plain =
+            crate::db::create_sqlite_pool(&format!("sqlite://{base}/rss-reader.db?mode=rwc"))
+                .await
+                .expect("create database");
+        let expected =
+            migration_lock_path(&plain).await.expect("lock path").expect("file database");
+        assert_eq!(
+            expected.file_name().and_then(|name| name.to_str()),
+            Some(".rss-reader.db.migration.lock")
+        );
+
+        for alias in [
+            format!("sqlite://{base}/%72ss-reader.db"),
+            format!("sqlite://file:{base}/rss-reader.db"),
+        ] {
+            let pool = crate::db::create_sqlite_pool(&alias).await.expect("open alias");
+            assert_eq!(
+                migration_lock_path(&pool).await.expect("lock path"),
+                Some(expected.clone()),
+                "{alias}"
+            );
+            pool.close().await;
+        }
+        let memory = crate::db::create_sqlite_pool("sqlite::memory:").await.expect("memory");
+        assert_eq!(migration_lock_path(&memory).await.expect("lock path"), None);
+
+        plain.close().await;
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
