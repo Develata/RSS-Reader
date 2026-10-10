@@ -32,6 +32,9 @@ pub struct LocalizedHtml {
     pub html: String,
     /// 是否至少发起过一次图片请求（不论成败）。
     pub requested_images: bool,
+    /// 换成本地副本的图片数；为 0 时 `html` 只是规范化后的原文，阅读页显示时本来就会做同样
+    /// 的规范化，不值得写回。
+    pub localized_images: usize,
 }
 
 #[derive(Debug)]
@@ -129,16 +132,21 @@ impl BodyAssetLocalizer {
     ) -> LocalizedHtml {
         let normalized_html = normalize_html_for_live_display(html, base_url);
         let Some(plan) = self.build_localization_plan(&normalized_html, base_url) else {
-            return LocalizedHtml { html: normalized_html, requested_images: false };
+            return LocalizedHtml {
+                html: normalized_html,
+                requested_images: false,
+                localized_images: 0,
+            };
         };
         let localized = self.localize_sources(&plan.document, base_url).await;
 
+        let localized_images = localized.len();
         let html = if localized.is_empty() {
             normalized_html
         } else {
             plan.document.rewrite_html(&normalized_html, &localized)
         };
-        LocalizedHtml { html, requested_images: true }
+        LocalizedHtml { html, requested_images: true, localized_images }
     }
 
     async fn fetch_image_as_data_url(

@@ -472,6 +472,7 @@ impl ImageLocalizationWorker {
                 Some(&original_html),
                 entry.content_text.as_deref(),
                 Some(&entry.title),
+                entry.url.as_ref(),
             )
         }) else {
             return Ok(false);
@@ -480,22 +481,14 @@ impl ImageLocalizationWorker {
         let localizer = self.reader_asset_localizer.clone();
         let localized_html = match tokio::time::timeout(
             localization_timeout(&localizer),
-            localizer.localize_html_images(&original_html, entry.url.as_ref()),
+            localizer.localize_html_images_reporting(&original_html, entry.url.as_ref()),
         )
         .await
         {
-            Ok(Ok(localized_html)) if localized_html != original_html => localized_html,
-            Ok(Ok(_)) => return Ok(false),
-            Ok(Err(error)) => {
-                tracing::warn!(
-                    entry_id,
-                    feed_id = entry.feed_id,
-                    entry_url = ?entry.url,
-                    error = %error,
-                    "当前阅读文章正文图片按需本地化失败，保留原始 HTML"
-                );
-                return Ok(false);
-            }
+            // 一张图都没换成本地副本时不写回：规范化阅读页显示时会做，写回只会让这篇文章被
+            // 当成“已本地化”而不再重试（审计 C1 复审）。
+            Ok(outcome) if outcome.localized_images > 0 => outcome.html,
+            Ok(_) => return Ok(false),
             Err(_) => {
                 tracing::warn!(
                     entry_id,
@@ -517,6 +510,7 @@ impl ImageLocalizationWorker {
                 &LocalizedEntryUpdate {
                     dedup_key: &entry.dedup_key,
                     expected_content_hash: &expected_content_hash,
+                    base_html: &original_html,
                     localized_html: &localized_html,
                 },
             )
@@ -549,6 +543,7 @@ async fn localize_feed_entries(
             Some(&original_html),
             entry.content_text.as_deref(),
             Some(&entry.title),
+            entry.url.as_ref(),
         ) else {
             continue;
         };
@@ -579,7 +574,8 @@ async fn localize_feed_entries(
                 if outcome.requested_images {
                     attempts += 1;
                 }
-                if outcome.html == original_html {
+                // 没有图片换成本地副本就不写回，见 `localize_entry_on_demand`。
+                if outcome.localized_images == 0 {
                     continue;
                 }
                 outcome.html
@@ -601,6 +597,7 @@ async fn localize_feed_entries(
         let update = LocalizedEntryUpdate {
             dedup_key: &entry.dedup_key,
             expected_content_hash: &expected_content_hash,
+            base_html: &original_html,
             localized_html: &localized_html,
         };
         match entry_repository
@@ -736,25 +733,7 @@ mod tests {
     /// 也不占用尝试次数。
     #[tokio::test]
     async fn background_localization_stops_after_its_attempt_budget() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
-        let addr = listener.local_addr().expect("listener addr");
-        let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let server = tokio::spawn({
-            let requests = Arc::clone(&requests);
-            async move {
-                loop {
-                    let Ok((mut stream, _)) = listener.accept().await else { return };
-                    requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    let mut buf = [0_u8; 4096];
-                    let _ = tokio::io::AsyncReadExt::read(&mut stream, &mut buf).await;
-                    let _ = tokio::io::AsyncWriteExt::write_all(
-                        &mut stream,
-                        b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
-                    )
-                    .await;
-                }
-            }
-        });
+        let (addr, requests, server) = forbidden_image_server().await;
 
         let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.expect("connect");
         migrate(&pool).await.expect("migrate sqlite");
@@ -782,5 +761,95 @@ mod tests {
 
         assert_eq!(attempts, 3);
         assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 3);
+    }
+
+    /// 图片全部失败时，正文只是被规范化（相对地址补全等），不写回：否则这篇文章会被当成已经
+    /// 本地化，之后的刷新不再重试（独立评审）。
+    #[tokio::test]
+    async fn failed_background_localization_leaves_the_source_body_for_a_retry() {
+        let (addr, requests, server) = forbidden_image_server().await;
+        let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.expect("connect");
+        migrate(&pool).await.expect("migrate sqlite");
+        let feed_repository = SqliteFeedRepository::new(pool.clone());
+        let entry_repository = SqliteEntryRepository::new(pool);
+        let feed = feed_repository
+            .upsert_subscription(&NewFeedSubscription {
+                site_url: None,
+                url: Url::parse("https://example.com/feed.xml").expect("feed url"),
+                title: None,
+                folder: None,
+            })
+            .await
+            .expect("create feed");
+        let article = Url::parse(&format!("http://{addr}/posts/1")).expect("article url");
+        let source_html = r#"<p><img src="/image.png"></p>"#;
+        entry_repository
+            .upsert_entries(
+                feed.id,
+                &[ParsedEntry {
+                    external_id: "entry-1".to_string(),
+                    dedup_key: "entry-1".to_string(),
+                    url: Some(article.clone()),
+                    title: "Entry".to_string(),
+                    author: None,
+                    summary: None,
+                    content_html: Some(source_html.to_string()),
+                    content_text: None,
+                    published_at: None,
+                    updated_at_source: None,
+                }],
+            )
+            .await
+            .expect("insert entry");
+        let (_, generation) =
+            entry_repository.active_entry_generation(1).await.expect("generation").expect("active");
+        let entry = rssr_application::RefreshLocalizedEntry {
+            generation,
+            dedup_key: "entry-1".to_string(),
+            url: Some(article.clone()),
+            title: "Entry".to_string(),
+            content_html: source_html.to_string(),
+            content_text: None,
+        };
+
+        let attempts = localize_feed_entries(
+            &entry_repository,
+            &BodyAssetLocalizer::new(),
+            feed.id,
+            vec![entry],
+            5,
+        )
+        .await;
+        server.abort();
+
+        assert_eq!((attempts, requests.load(std::sync::atomic::Ordering::SeqCst)), (1, 1));
+        let stored = entry_repository.get_entry(1).await.expect("load").expect("entry");
+        assert_eq!(stored.content_html.as_deref(), Some(source_html));
+    }
+
+    /// 本地图片服务器：对每个请求都回 403，并记下请求数。
+    async fn forbidden_image_server()
+    -> (std::net::SocketAddr, Arc<std::sync::atomic::AtomicUsize>, tokio::task::JoinHandle<()>)
+    {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("listener addr");
+        let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let server = tokio::spawn({
+            let requests = Arc::clone(&requests);
+            async move {
+                loop {
+                    let Ok((mut stream, _)) = listener.accept().await else { return };
+                    requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let mut buf = [0_u8; 4096];
+                    let _ = tokio::io::AsyncReadExt::read(&mut stream, &mut buf).await;
+                    let _ = tokio::io::AsyncWriteExt::write_all(
+                        &mut stream,
+                        b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+                    )
+                    .await;
+                }
+            }
+        });
+        (addr, requests, server)
     }
 }

@@ -111,8 +111,14 @@ async fn localized_writeback_does_not_override_newer_refresh_content() {
         .expect("create feed");
 
     let first_html = "<p>old</p>";
-    let first_hash =
-        compute_entry_content_hash(Some(first_html), Some("summary"), Some("Entry")).unwrap();
+    let entry_url = Url::parse("https://example.com/entry-1").unwrap();
+    let first_hash = compute_entry_content_hash(
+        Some(first_html),
+        Some("summary"),
+        Some("Entry"),
+        Some(&entry_url),
+    )
+    .unwrap();
     entry_repository
         .upsert_entries(
             feed.id,
@@ -159,6 +165,7 @@ async fn localized_writeback_does_not_override_newer_refresh_content() {
             &LocalizedEntryUpdate {
                 dedup_key: "entry-1",
                 expected_content_hash: &first_hash,
+                base_html: first_html,
                 localized_html: localized_old_html,
             },
         )
@@ -254,9 +261,13 @@ async fn localized_writeback_from_old_generation_is_rejected_after_readd() {
         .expect("active re-added entry");
     assert_eq!(new_generation, 1);
 
-    let old_hash =
-        compute_entry_content_hash(Some(original_html), Some("summary"), Some("Generation Entry"))
-            .unwrap();
+    let old_hash = compute_entry_content_hash(
+        Some(original_html),
+        Some("summary"),
+        Some("Generation Entry"),
+        Some(&Url::parse("https://example.com/generation-entry").unwrap()),
+    )
+    .unwrap();
     let localized_old_html = "<p>old generation<img src=\"data:image/png;base64,xxx\"></p>";
     let updated = entry_repository
         .update_localized_html_if_hash_matches_for_generation(
@@ -265,6 +276,7 @@ async fn localized_writeback_from_old_generation_is_rejected_after_readd() {
             &LocalizedEntryUpdate {
                 dedup_key: "entry-generation",
                 expected_content_hash: &old_hash,
+                base_html: original_html,
                 localized_html: localized_old_html,
             },
         )

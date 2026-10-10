@@ -89,6 +89,7 @@ pub fn upsert_entries(
             entry.content_html.as_deref(),
             entry.content_text.as_deref(),
             Some(&entry.title),
+            entry.url.as_ref().map(Url::as_str),
         );
         let now = now_utc();
         let has_content = entry.content_html.is_some() || entry.content_text.is_some();
@@ -391,6 +392,7 @@ mod tests {
                     entry.content_html.as_deref(),
                     entry.content_text.as_deref(),
                     Some(&entry.title),
+                    entry.url.as_ref().map(Url::as_str),
                 );
                 let now = now_utc();
                 let has_content = entry.content_html.is_some() || entry.content_text.is_some();

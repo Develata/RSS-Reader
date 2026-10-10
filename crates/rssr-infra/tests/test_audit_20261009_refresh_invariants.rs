@@ -59,7 +59,19 @@ async fn seed_feed(feeds: &SqliteFeedRepository) -> i64 {
         .id
 }
 
+const ENTRY_URL: &str = "https://example.com/entry-1";
+
+fn entry_source_hash(body_html: &str, entry_url: &str) -> String {
+    let entry_url = Url::parse(entry_url).expect("entry url");
+    compute_entry_content_hash(Some(body_html), Some("summary"), Some("Entry"), Some(&entry_url))
+        .expect("source hash")
+}
+
 fn update(etag: &str, body_html: &str) -> FeedRefreshUpdate {
+    update_at(etag, body_html, ENTRY_URL)
+}
+
+fn update_at(etag: &str, body_html: &str, entry_url: &str) -> FeedRefreshUpdate {
     FeedRefreshUpdate {
         metadata: RefreshHttpMetadata { etag: Some(etag.to_string()), last_modified: None },
         feed: ParsedFeedUpdate {
@@ -69,7 +81,7 @@ fn update(etag: &str, body_html: &str) -> FeedRefreshUpdate {
             entries: vec![ParsedEntryData {
                 external_id: "entry-1".to_string(),
                 dedup_key: "entry-1".to_string(),
-                url: Some(Url::parse("https://example.com/entry-1").expect("entry url")),
+                url: Some(Url::parse(entry_url).expect("entry url")),
                 title: "Entry".to_string(),
                 author: None,
                 summary: Some("summary".to_string()),
@@ -110,8 +122,7 @@ async fn unchanged_source_refresh_keeps_localized_body() {
     let (_, generation) =
         entries.active_entry_generation(entry_id).await.expect("generation").expect("active");
     let localized_html = r#"<p><img src="data:image/png;base64,AAAA"></p>"#;
-    let source_hash =
-        compute_entry_content_hash(Some(source_html), Some("summary"), Some("Entry")).unwrap();
+    let source_hash = entry_source_hash(source_html, ENTRY_URL);
     let derived = || entries.has_derived_body(feed_id, "entry-1", &source_hash, source_html);
     assert!(!derived().await.expect("derived check"), "the stored body is still the source");
     assert!(
@@ -122,6 +133,7 @@ async fn unchanged_source_refresh_keeps_localized_body() {
                 &LocalizedEntryUpdate {
                     dedup_key: "entry-1",
                     expected_content_hash: &source_hash,
+                    base_html: source_html,
                     localized_html,
                 },
             )
@@ -147,6 +159,93 @@ async fn unchanged_source_refresh_keeps_localized_body() {
     .expect("changed-source refresh");
     let body = entries.get_content(entry_id).await.expect("content").expect("row").content_html;
     assert_eq!(body.as_deref(), Some(changed_html), "a changed source must replace the cache");
+}
+
+async fn write_localized(
+    entries: &SqliteEntryRepository,
+    feed_id: i64,
+    source_hash: &str,
+    base_html: &str,
+    localized_html: &str,
+) -> bool {
+    let entry_id = entries.list_entries(&EntryQuery::default()).await.expect("list")[0].id;
+    let (_, generation) =
+        entries.active_entry_generation(entry_id).await.expect("generation").expect("active");
+    entries
+        .update_localized_html_if_hash_matches_for_generation(
+            feed_id,
+            generation,
+            &LocalizedEntryUpdate {
+                dedup_key: "entry-1",
+                expected_content_hash: source_hash,
+                base_html,
+                localized_html,
+            },
+        )
+        .await
+        .expect("write localized body")
+}
+
+/// The background worker and the reader can localize the same source at the same time; the
+/// source hash is the same for both. The slower task started from the source body and must not
+/// replace the result the faster one already stored (independent review).
+#[tokio::test]
+async fn a_slower_localization_of_the_same_source_does_not_replace_a_finished_one() {
+    let pool = memory_pool().await;
+    let feeds = Arc::new(SqliteFeedRepository::new(pool.clone()));
+    let entries = Arc::new(SqliteEntryRepository::new(pool));
+    let feed_id = seed_feed(&feeds).await;
+    let source_html = r#"<p><img src="https://cdn.example.com/a.png"><img src="https://cdn.example.com/b.png"></p>"#;
+    RefreshService::new(
+        Arc::new(RepeatSource(update("v1", source_html))),
+        Arc::new(SqliteRefreshStore::new(feeds.clone(), entries.clone())),
+    )
+    .refresh_feed(feed_id)
+    .await
+    .expect("refresh");
+    let source_hash = entry_source_hash(source_html, ENTRY_URL);
+    let complete =
+        r#"<p><img src="data:image/png;base64,AAAA"><img src="data:image/png;base64,BBBB"></p>"#;
+    let partial =
+        r#"<p><img src="data:image/png;base64,AAAA"><img src="https://cdn.example.com/b.png"></p>"#;
+
+    assert!(write_localized(&entries, feed_id, &source_hash, source_html, complete).await);
+    assert!(
+        !write_localized(&entries, feed_id, &source_hash, source_html, partial).await,
+        "a task that read the source body must not overwrite a stored derivation"
+    );
+
+    let entry_id = entries.list_entries(&EntryQuery::default()).await.expect("list")[0].id;
+    let body = entries.get_content(entry_id).await.expect("content").expect("row").content_html;
+    assert_eq!(body.as_deref(), Some(complete));
+}
+
+/// Relative image addresses resolve against the article URL, so a body localized against the
+/// old URL no longer belongs to the entry once only its URL changes (independent review).
+#[tokio::test]
+async fn an_article_url_change_invalidates_the_localized_body() {
+    let pool = memory_pool().await;
+    let feeds = Arc::new(SqliteFeedRepository::new(pool.clone()));
+    let entries = Arc::new(SqliteEntryRepository::new(pool));
+    let feed_id = seed_feed(&feeds).await;
+    let source_html = r#"<p><img src="cover.png"></p>"#;
+    let refresh = |etag: &'static str, entry_url: &'static str| {
+        RefreshService::new(
+            Arc::new(RepeatSource(update_at(etag, source_html, entry_url))),
+            Arc::new(SqliteRefreshStore::new(feeds.clone(), entries.clone())),
+        )
+    };
+
+    refresh("v1", "https://example.com/a/post").refresh_feed(feed_id).await.expect("refresh");
+    let source_hash = entry_source_hash(source_html, "https://example.com/a/post");
+    let localized = r#"<p><img src="data:image/png;base64,AAAA"></p>"#;
+    assert!(write_localized(&entries, feed_id, &source_hash, source_html, localized).await);
+
+    refresh("v2", "https://example.com/b/post").refresh_feed(feed_id).await.expect("refresh");
+
+    let entry_id = entries.list_entries(&EntryQuery::default()).await.expect("list")[0].id;
+    let body = entries.get_content(entry_id).await.expect("content").expect("row").content_html;
+    assert_eq!(body.as_deref(), Some(source_html), "the body localized for the old URL was kept");
 }
 
 /// Two refreshes of the same feed (single-feed refresh vs refresh-all) are not coordinated.

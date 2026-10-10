@@ -39,10 +39,14 @@ pub struct SqliteEntryRepository {
 /// `entry_contents.content_hash` 始终标识**源**正文（见 `hash_content`）：写回只替换
 /// `content_html`，保留源哈希，所以源未变的刷新不会冲掉派生正文，源一变才会被覆盖（审计 C1）。
 /// `expected_content_hash` 是派生所依据的源哈希；存储里的源已经变化时不写。
+/// `base_html` 是这次派生读到的存储正文：写回时存储正文必须仍是它。同一份源可能同时有后台
+/// 与阅读页两个本地化任务，源哈希不变，只靠它才能防止较慢的任务用自己的结果覆盖已经写入的
+/// 结果。
 #[derive(Debug, Clone)]
 pub struct LocalizedEntryUpdate<'a> {
     pub dedup_key: &'a str,
     pub expected_content_hash: &'a str,
+    pub base_html: &'a str,
     pub localized_html: &'a str,
 }
 
@@ -204,6 +208,7 @@ impl SqliteEntryRepository {
                         entry.content_html.as_deref(),
                         entry.content_text.as_deref(),
                         Some(&entry.title),
+                        entry.url.as_ref().map(Url::as_str),
                     ),
                 });
             }
@@ -344,8 +349,9 @@ impl SqliteEntryRepository {
         self.update_localized_html_if_hash_matches_inner(feed_id, Some(generation), update).await
     }
 
-    /// 存储里的正文是否已是这份源正文的派生版本：源哈希相同、正文不同（例如图片已本地化）。
-    /// 后台本地化据此跳过，不再为同一份源反复下载图片（审计 C1）。
+    /// 存储里的正文是否已是这份源正文的派生版本：源哈希相同、正文不同。只有至少一张图片
+    /// 本地化成功才会写回派生正文，所以“不同”意味着已有本地图片。后台本地化据此跳过，不再为
+    /// 同一份源反复下载图片（审计 C1）。
     pub async fn has_derived_body(
         &self,
         feed_id: i64,
@@ -1002,12 +1008,14 @@ async fn update_localized_content_on_connection(
             updated_at = ?3
         WHERE entry_id = ?1
           AND content_hash = ?4
+          AND content_html = ?5
         "#,
     )
     .bind(entry_id)
     .bind(update.localized_html)
     .bind(&now)
     .bind(update.expected_content_hash)
+    .bind(update.base_html)
     .execute(&mut *connection)
     .await
     .map_err(map_sqlx_error)?;
@@ -1189,8 +1197,9 @@ pub fn compute_entry_content_hash(
     html: Option<&str>,
     text: Option<&str>,
     title: Option<&str>,
+    url: Option<&Url>,
 ) -> Option<String> {
-    hash_content(html, text, title)
+    hash_content(html, text, title, url.map(Url::as_str))
 }
 
 fn format_optional_datetime(value: Option<OffsetDateTime>) -> DomainResult<Option<String>> {
