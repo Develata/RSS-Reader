@@ -286,9 +286,9 @@ pub trait RefreshStorePort: Send + Sync {
     /// 打开一个写入批次：批次期间的 [`RefreshStorePort::commit`] 只需保证改动对后续读取可见，
     /// 真正的落盘可以推迟到 [`RefreshStorePort::end_batch`]。
     ///
-    /// 默认空实现。事务型存储（SQLite）每次 `commit` 就已经落盘，没有可推迟的东西；
-    /// 需要整片重写的存储（浏览器 `localStorage`）才靠它把「每个订阅重写一次全库」压成
-    /// 「整轮重写一次」。
+    /// 默认空实现。目前两端都用默认实现：SQLite 每次 `commit` 就已经落盘；浏览器端
+    /// （`BrowserRefreshStore`）也逐订阅持久化，代价是每个订阅重写一次整片索引（审计 D2）。
+    /// 想把整轮写入合并成一次的存储才需要实现它。
     ///
     /// **不变量**：批次一旦打开，必须以 `end_batch` 或 `abort_batch` 收尾。
     /// 这一条由 `refresh_all` 里的 [`RefreshBatchGuard`] 强制，不靠调用方自觉。
@@ -317,8 +317,8 @@ pub trait RefreshStorePort: Send + Sync {
 /// 光靠「`begin_batch` 与 `end_batch` 之间不写 `?`」是不够的：Web 端刷新任务是
 /// Dioxus 作用域绑定的 `spawn`（`rssr-app` 的 `spawn_projected_ui_command`），
 /// 用户在刷新途中离开订阅页，组件一卸载整个 future 就被 drop，`end_batch` 永远等不到。
-/// 那样批次会永久停在打开状态，此后**批次外**的提交（单订阅刷新、添加订阅的首刷）
-/// 全都只改内存不落盘，而且不报错——正是最难被发现的那种丢数据。
+/// 对推迟落盘的实现，批次会永久停在打开状态，此后**批次外**的提交（单订阅刷新、添加
+/// 订阅的首刷）全都只改内存不落盘，而且不报错——正是最难被发现的那种丢数据。
 ///
 /// 守卫不设「解除」开关：`abort_batch` 要求幂等，正常收尾后再调一次是空操作，
 /// 这样就不存在「已解除但还没 `end_batch`」的窗口。
@@ -422,10 +422,8 @@ impl RefreshService {
             });
         }
         let feed_id = target.feed_id;
-        let outcome =
-            self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await?;
-        self.feed_locks.record_commit(feed_id, ticket.0);
-        Ok(outcome)
+        let commit = self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update));
+        self.commit_recorded(feed_id, ticket.0, commit).await
     }
 
     pub async fn refresh_feed(&self, feed_id: i64) -> Result<RefreshFeedOutcome> {
@@ -608,11 +606,44 @@ impl RefreshService {
         // 失败的抓取没有带来内容，不能让预抓取的结果因此作废。
         let delivers_content = !matches!(source_output, FeedRefreshSourceOutput::Failed(_));
         let feed_id = target.feed_id;
-        let outcome = self.apply_source_output(target, source_output).await?;
+        let commit = self.apply_source_output(target, source_output);
         if delivers_content {
-            self.feed_locks.record_commit(feed_id, fetch);
+            self.commit_recorded(feed_id, fetch, commit).await
+        } else {
+            commit.await
         }
-        Ok(outcome)
+    }
+
+    /// 执行一次带来内容的落库，并登记它的抓取序号（审计 A1）。
+    ///
+    /// 成功就登记；显式失败没有落库，不登记。future 在落库途中被丢弃（例如发起刷新的界面
+    /// 关闭）时无法知道是否已经提交，按已提交登记：宁可让更早的预抓取结果作废（下次刷新会
+    /// 补上），也不让它覆盖可能已经落库的更新内容（独立评审）。
+    async fn commit_recorded<T>(
+        &self,
+        feed_id: i64,
+        fetch: u64,
+        commit: impl Future<Output = Result<T>>,
+    ) -> Result<T> {
+        struct RecordUnlessFailed<'a> {
+            locks: &'a FeedRefreshLocks,
+            feed_id: i64,
+            fetch: u64,
+            failed: bool,
+        }
+        impl Drop for RecordUnlessFailed<'_> {
+            fn drop(&mut self) {
+                if !self.failed {
+                    self.locks.record_commit(self.feed_id, self.fetch);
+                }
+            }
+        }
+
+        let mut record =
+            RecordUnlessFailed { locks: &self.feed_locks, feed_id, fetch, failed: false };
+        let result = commit.await;
+        record.failed = result.is_err();
+        result
     }
 
     async fn apply_source_output(
@@ -1338,6 +1369,108 @@ mod tests {
 
             assert_eq!(committed_titles(&store), expected);
             assert!(first.is_success());
+        }
+    }
+
+    /// 第一次写入 `Updated` 时的意外：`Stall` 写入后不再返回（调用方此时被取消，内容已经
+    /// 落库），`Fail` 不写入并返回错误。
+    #[derive(Clone, Copy)]
+    enum Interruption {
+        Stall,
+        Fail,
+    }
+
+    struct InterruptingStore {
+        inner: StoreStub,
+        next_update: Mutex<Option<Interruption>>,
+        stalled: tokio::sync::Notify,
+    }
+
+    #[async_trait::async_trait]
+    impl RefreshStorePort for InterruptingStore {
+        async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
+            self.inner.list_targets().await
+        }
+
+        async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
+            self.inner.get_target(feed_id).await
+        }
+
+        async fn commit(
+            &self,
+            target: &RefreshTarget,
+            commit: RefreshCommit,
+        ) -> Result<crate::RefreshCommitOutcome> {
+            let interruption = match commit {
+                RefreshCommit::Updated { .. } => self.next_update.lock().expect("lock").take(),
+                _ => None,
+            };
+            match interruption {
+                Some(Interruption::Fail) => anyhow::bail!("disk full"),
+                Some(Interruption::Stall) => {
+                    self.inner.commit(target, commit).await?;
+                    self.stalled.notify_one();
+                    std::future::pending().await
+                }
+                None => self.inner.commit(target, commit).await,
+            }
+        }
+    }
+
+    /// 刷新在落库途中被取消（例如发起它的界面关闭）时无法确定是否已经提交，按已提交处理：
+    /// 更早领取序号的预抓取结果不能再覆盖它。落库显式失败则没有带来内容，预抓取结果照常
+    /// 写入（独立评审）。
+    #[tokio::test]
+    async fn a_refresh_interrupted_while_committing_still_supersedes_an_older_prepared_update() {
+        for (interruption, expected) in
+            [(Interruption::Stall, vec!["V2 newer"]), (Interruption::Fail, vec!["V1 prepared"])]
+        {
+            let store = Arc::new(InterruptingStore {
+                inner: StoreStub {
+                    targets: vec![sample_target(1, "https://example.com/1.xml")],
+                    commits: Mutex::new(Vec::new()),
+                },
+                next_update: Mutex::new(Some(interruption)),
+                stalled: tokio::sync::Notify::new(),
+            });
+            let service = RefreshService::new(
+                Arc::new(SourceStub {
+                    outputs: Mutex::new(vec![FeedRefreshSourceOutput::Updated(update_titled(
+                        "V2 newer",
+                    ))]),
+                }),
+                store.clone(),
+            );
+            let ticket = service.prepared_update_ticket();
+            let refresh = tokio::spawn({
+                let service = service.clone();
+                async move { service.refresh_feed(1).await }
+            });
+            match interruption {
+                Interruption::Stall => {
+                    within("the commit to be written", store.stalled.notified()).await;
+                    refresh.abort();
+                    let cancelled = within("the refresh to stop", refresh).await;
+                    assert!(cancelled.expect_err("the refresh was cancelled").is_cancelled());
+                }
+                Interruption::Fail => {
+                    let finished = within("the refresh to fail", refresh).await;
+                    assert!(finished.expect("join refresh").is_err());
+                }
+            }
+
+            within(
+                "the prepared update",
+                service.apply_prepared_update(
+                    sample_target(1, "https://example.com/1.xml"),
+                    update_titled("V1 prepared"),
+                    ticket,
+                ),
+            )
+            .await
+            .expect("prepared update");
+
+            assert_eq!(committed_titles(&store.inner), expected);
         }
     }
 
