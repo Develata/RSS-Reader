@@ -1074,7 +1074,7 @@ async fn browser_quota_errors_are_reported_clearly() {
     .await
     .expect_err("a body over the storage quota cannot be saved");
 
-    assert!(format!("{error:#}").contains("浏览器本地存储空间已满"), "{error:#}");
+    assert!(format!("{error:#}").contains("浏览器本地存储配额不足或存储受限"), "{error:#}");
     let snapshot = state.snapshot().await.expect("the committed state is still readable");
     assert!(snapshot.core.entries.is_empty(), "nothing from the failed write was kept");
     clear_browser_state_storage();

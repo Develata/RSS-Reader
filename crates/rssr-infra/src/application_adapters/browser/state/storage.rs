@@ -56,9 +56,10 @@ fn get(storage: &Storage, key: &str) -> Result<Option<String>> {
 fn put(storage: &Storage, key: &str, raw: &str) -> Result<()> {
     storage.set_item(key, raw).map_err(|error| {
         if is_quota_exceeded(&error) {
-            // 发布时新旧两份数据片要同时放得下（见 `publish`），所以接近上限时每次写正文都会失败。
+            // 发布时新旧两份数据片要同时放得下（见 `publish`），所以接近上限时每次写正文都会失败，
+            // 删除订阅也一样要先写剩余数据的新副本。存储被禁用时浏览器也抛这个错误（WHATWG）。
             anyhow::anyhow!(
-                "浏览器本地存储空间已满，本次更改未保存（{key}，约 {} KiB）。删除不再需要的订阅可以释放空间。",
+                "浏览器本地存储配额不足或存储受限，本次更改未保存（{key}，约 {} KiB）。",
                 raw.len() / 1024
             )
         } else {
