@@ -5,11 +5,17 @@ pub mod settings_repository;
 pub mod sqlite_native;
 pub mod storage_backend;
 
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::Duration;
 
+use futures_util::future::BoxFuture;
+use sha2::{Digest, Sha384};
 use sqlx::{
     Pool, Sqlite,
+    error::BoxDynError,
+    migrate::{Migration, MigrationSource, Migrator},
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
 };
 
@@ -62,13 +68,69 @@ pub(crate) fn is_memory_database(database_url: &str) -> bool {
 }
 
 pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
-    MIGRATOR.run(pool).await?;
-    Ok(())
+    run_line_ending_tolerant(&MIGRATOR, pool).await
 }
 
 pub async fn migrate_content(pool: &SqlitePool) -> anyhow::Result<()> {
-    CONTENT_MIGRATOR.run(pool).await?;
+    run_line_ending_tolerant(&CONTENT_MIGRATOR, pool).await
+}
+
+/// 运行迁移；核对已应用迁移的校验和时不计换行差异（审计 G1）。
+///
+/// sqlx 在编译期嵌入迁移文件的原始字节，按字节算校验和、不统一换行。Windows 检出通常是
+/// CRLF，其余平台是 LF，于是 Windows 版建的库拿到 Linux/macOS 版上（同步盘、便携目录、WSL），
+/// 或者反过来，都会被判成“迁移被改过”而拒绝启动。这里把内嵌的 SQL 换成另一种换行再算一次：
+/// 库里记录的是另一种换行的校验和，就按库里的记录核对；内容真正不同的照旧拒绝。库里的记录
+/// 不改写，旧版本照样能打开。
+async fn run_line_ending_tolerant(migrator: &Migrator, pool: &SqlitePool) -> anyhow::Result<()> {
+    let recorded = recorded_checksums(pool).await?;
+    let migrations = migrator
+        .iter()
+        .map(|migration| {
+            let mut migration = migration.clone();
+            if let Some(recorded) = recorded.get(&migration.version)
+                && *recorded != *migration.checksum
+                && differs_only_in_line_endings(&migration.sql, recorded)
+            {
+                migration.checksum = Cow::Owned(recorded.clone());
+            }
+            migration
+        })
+        .collect();
+    Migrator::new(ResolvedMigrations(migrations)).await?.run(pool).await?;
     Ok(())
+}
+
+/// 已应用迁移在库里记录的校验和；还没有迁移表（新库）时为空。
+async fn recorded_checksums(pool: &SqlitePool) -> anyhow::Result<HashMap<i64, Vec<u8>>> {
+    let has_table: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if !has_table {
+        return Ok(HashMap::new());
+    }
+    let rows: Vec<(i64, Vec<u8>)> =
+        sqlx::query_as("SELECT version, checksum FROM _sqlx_migrations").fetch_all(pool).await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// `recorded` 是不是 `sql` 换成 LF 或 CRLF 之后的校验和（sqlx 用的是 SHA-384）。
+fn differs_only_in_line_endings(sql: &str, recorded: &[u8]) -> bool {
+    let lf = sql.replace("\r\n", "\n");
+    let crlf = lf.replace('\n', "\r\n");
+    [lf, crlf].iter().any(|variant| Sha384::digest(variant.as_bytes()).as_slice() == recorded)
+}
+
+/// 已经解析好的迁移列表，交给 [`Migrator::new`]（sqlx 的公开构造方式）。
+#[derive(Debug)]
+struct ResolvedMigrations(Vec<Migration>);
+
+impl MigrationSource<'static> for ResolvedMigrations {
+    fn resolve(self) -> BoxFuture<'static, Result<Vec<Migration>, BoxDynError>> {
+        Box::pin(async move { Ok(self.0) })
+    }
 }
 
 /// 读取连接实际生效的 journal 模式。
