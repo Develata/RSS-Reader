@@ -17,7 +17,7 @@ use rssr_infra::{
 };
 use url::Url;
 
-const TITLES: [&str; 7] = [
+const TITLES: [&str; 8] = [
     "ÉCOLE de Paris",
     "Привет, МИР",
     "ΣΟΦΙΑ και φιλοσοφία",
@@ -25,12 +25,37 @@ const TITLES: [&str; 7] = [
     "Plain ASCII Title",
     "中文标题",
     "100% Pure_Data",
+    "abc\u{0}ÉCOLE",
 ];
 
-const SEARCHES: [&str; 9] =
-    ["école", "мир", "σοφια", "STRASSE", "straße", "title", "标题", "0% p", "e_d"];
+fn searches() -> Vec<String> {
+    let mut searches: Vec<String> =
+        ["école", "мир", "σοφια", "STRASSE", "straße", "title", "标题", "0% p", "e_d"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+    // NUL 结束 LIKE 的匹配；`İ` 折叠后变长，超过 LIKE 的模式长度上限（独立评审）。
+    searches.push("\u{0}missing".into());
+    searches.push("İ".repeat(16_667));
+    searches
+}
 
-async fn seeded() -> (SqlitePool, SqliteEntryRepository, i64) {
+fn entry(index: usize, title: &str) -> ParsedEntry {
+    ParsedEntry {
+        external_id: format!("entry-{index}"),
+        dedup_key: format!("entry-{index}"),
+        url: None,
+        title: title.to_string(),
+        author: None,
+        summary: None,
+        content_html: None,
+        content_text: None,
+        published_at: None,
+        updated_at_source: None,
+    }
+}
+
+async fn seeded(titles: &[String]) -> (SqlitePool, SqliteEntryRepository, i64) {
     let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.expect("connect");
     migrate(&pool).await.expect("migrate");
     let feeds = SqliteFeedRepository::new(pool.clone());
@@ -45,24 +70,14 @@ async fn seeded() -> (SqlitePool, SqliteEntryRepository, i64) {
         .await
         .expect("create feed")
         .id;
-    let parsed: Vec<ParsedEntry> = TITLES
-        .iter()
-        .enumerate()
-        .map(|(index, title)| ParsedEntry {
-            external_id: format!("entry-{index}"),
-            dedup_key: format!("entry-{index}"),
-            url: None,
-            title: (*title).to_string(),
-            author: None,
-            summary: None,
-            content_html: None,
-            content_text: None,
-            published_at: None,
-            updated_at_source: None,
-        })
-        .collect();
+    let parsed: Vec<ParsedEntry> =
+        titles.iter().enumerate().map(|(index, title)| entry(index, title)).collect();
     entries.upsert_entries(feed_id, &parsed).await.expect("insert entries");
     (pool, entries, feed_id)
+}
+
+fn sample_titles() -> Vec<String> {
+    TITLES.iter().map(|title| title.to_string()).collect()
 }
 
 async fn native_matches(entries: &SqliteEntryRepository, search: &str) -> BTreeSet<String> {
@@ -76,33 +91,89 @@ async fn native_matches(entries: &SqliteEntryRepository, search: &str) -> BTreeS
         .collect()
 }
 
-fn shared_matches(search: &str) -> BTreeSet<String> {
+fn shared_matches(titles: &[String], search: &str) -> BTreeSet<String> {
     let folded = fold_for_search(search);
-    TITLES.iter().filter(|title| title_contains(title, &folded)).map(|t| t.to_string()).collect()
+    titles.iter().filter(|title| title_contains(title, &folded)).cloned().collect()
+}
+
+async fn folded_column(pool: &SqlitePool, dedup_key: &str) -> Option<String> {
+    sqlx::query_scalar("SELECT title_search FROM entries WHERE dedup_key = ?1")
+        .bind(dedup_key)
+        .fetch_one(pool)
+        .await
+        .expect("read title_search")
 }
 
 #[tokio::test]
 async fn native_title_search_matches_the_shared_unicode_rule() {
-    let (_pool, entries, _) = seeded().await;
-    assert!(shared_matches("école").contains("ÉCOLE de Paris"), "the rule folds non-ASCII case");
-    for search in SEARCHES {
-        assert_eq!(native_matches(&entries, search).await, shared_matches(search), "{search}");
+    let titles = sample_titles();
+    let (_pool, entries, _) = seeded(&titles).await;
+    assert!(shared_matches(&titles, "école").contains("ÉCOLE de Paris"), "the rule folds case");
+    for search in searches() {
+        let label: String = search.chars().take(20).collect();
+        assert_eq!(
+            native_matches(&entries, &search).await,
+            shared_matches(&titles, &search),
+            "{label:?}"
+        );
     }
 }
 
-/// 迁移 0008 之前写入的条目没有搜索用标题；再次迁移时补上，搜索随即按 Unicode 匹配。
+/// 迁移 0008 之前写入的条目没有搜索用标题；再次迁移时分批补上（跨越多批），搜索随即按
+/// Unicode 匹配。
 #[tokio::test]
 async fn titles_written_before_the_migration_are_backfilled() {
-    let (pool, entries, _) = seeded().await;
+    let titles: Vec<String> = (0..1_201).map(|index| format!("ÜBER Nummer {index}")).collect();
+    let (pool, entries, _) = seeded(&titles).await;
     sqlx::query("UPDATE entries SET title_search = NULL").execute(&pool).await.expect("legacy");
-    assert!(native_matches(&entries, "école").await.is_empty(), "unfolded rows match ASCII only");
+    assert!(
+        native_matches(&entries, "über nummer 7").await.is_empty(),
+        "unfolded rows: ASCII only"
+    );
 
     migrate(&pool).await.expect("migrate again");
 
     let rows: Vec<(String, Option<String>)> =
         sqlx::query_as("SELECT title, title_search FROM entries").fetch_all(&pool).await.unwrap();
+    assert_eq!(rows.len(), 1_201);
     for (title, folded) in rows {
         assert_eq!(folded.as_deref(), Some(fold_for_search(&title).as_str()), "{title}");
     }
-    assert_eq!(native_matches(&entries, "école").await, shared_matches("école"));
+    assert_eq!(
+        native_matches(&entries, "über nummer 1200").await,
+        shared_matches(&titles, "über nummer 1200")
+    );
+}
+
+/// 同一条目的标题更新后，搜索用标题跟着更新；只改大小写时也一样（独立评审）。
+#[tokio::test]
+async fn title_updates_keep_the_folded_column_current() {
+    let (pool, entries, feed_id) = seeded(&["École de Paris".to_string()]).await;
+
+    for title in ["Straße und Weg", "STRASSE UND WEG", "Strasse und Weg"] {
+        entries.upsert_entries(feed_id, &[entry(0, title)]).await.expect("update title");
+        assert_eq!(
+            folded_column(&pool, "entry-0").await.as_deref(),
+            Some(fold_for_search(title).as_str())
+        );
+    }
+}
+
+/// 升级时还在运行的旧版本程序只改 `title`，不认识搜索列：触发器把过期值清空，搜索退回原标题
+/// （ASCII 不区分大小写），下次迁移重新折叠（独立评审）。
+#[tokio::test]
+async fn an_older_writer_changing_a_title_does_not_leave_a_stale_folded_title() {
+    let (pool, entries, _) = seeded(&["Rust Weekly".to_string()]).await;
+    sqlx::query("UPDATE entries SET title = 'Python Ünïcode' WHERE dedup_key = 'entry-0'")
+        .execute(&pool)
+        .await
+        .expect("an older writer updates the title");
+
+    assert_eq!(folded_column(&pool, "entry-0").await, None, "the stale value is cleared");
+    assert!(native_matches(&entries, "rust").await.is_empty());
+    assert_eq!(native_matches(&entries, "PYTHON").await.len(), 1);
+
+    migrate(&pool).await.expect("migrate again");
+    assert_eq!(folded_column(&pool, "entry-0").await.as_deref(), Some("python ünïcode"));
+    assert_eq!(native_matches(&entries, "ÜNÏCODE").await.len(), 1);
 }

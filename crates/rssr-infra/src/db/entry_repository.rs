@@ -167,6 +167,7 @@ impl SqliteEntryRepository {
             promote_legacy_hex_guid_identity(&mut tx, feed_id, entry).await?;
             let published_at = format_optional_datetime(entry.published_at)?;
             let updated_at_source = format_optional_datetime(entry.updated_at_source)?;
+            let folded_title = rssr_domain::fold_for_search(&entry.title);
 
             sqlx::query(
                 r#"
@@ -197,7 +198,20 @@ impl SqliteEntryRepository {
             .bind(published_at)
             .bind(updated_at_source)
             .bind(&now)
-            .bind(rssr_domain::fold_for_search(&entry.title))
+            .bind(&folded_title)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_error)?;
+            // 标题变了而折叠结果没变（只改了大小写）时，触发器 `entries_title_search_stale`
+            // 会把刚写入的搜索列清空（它分不清这次更新有没有带上新的折叠值）；当场补回，当前
+            // 版本写入后搜索列总是有效（审计 D6）。
+            sqlx::query(
+                "UPDATE entries SET title_search = ?3 \
+                 WHERE feed_id = ?1 AND dedup_key = ?2 AND title_search IS NULL",
+            )
+            .bind(feed_id)
+            .bind(&entry.dedup_key)
+            .bind(&folded_title)
             .execute(&mut *tx)
             .await
             .map_err(map_sqlx_error)?;
@@ -1163,27 +1177,19 @@ fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a En
         }
     }
     if let Some(search) = &query.search_title {
-        // 搜索词是字面量：`%` / `_` 必须转义，否则会被当成通配符，列表、计数、批量已读
-        // 预览与写入都会多匹配，并与浏览器端的字面 contains 语义不一致。大小写按
-        // `fold_for_search`（Unicode 小写）比较，与浏览器端相同；SQLite 的 LIKE 只折叠 ASCII，
-        // 所以比较的是写入时折叠好的 `title_search`（审计 D6）。它为 NULL 的行（测试夹具、
-        // 旧版本程序写入、尚未回填）退回原标题，ASCII 仍能匹配，下次启动回填后一致。
-        qb.push(" AND COALESCE(entries.title_search, entries.title) LIKE ")
-            .push_bind(format!("%{}%", escape_like_literal(&rssr_domain::fold_for_search(search))))
-            .push(" ESCAPE '\\'");
+        // 搜索词按字面子串匹配，`%`、`_` 不是通配符，与浏览器端的 `contains` 一致；列表、计数、
+        // 批量已读预览与写入共用这里。大小写按 `fold_for_search`（Unicode 小写）比较：比较写入
+        // 时折叠好的 `title_search`，用 `instr` 查找（LIKE 只折叠 ASCII、遇到 NUL 提前结束、
+        // 模式长度还有上限）。它为 NULL 的行（测试夹具、旧版本写入后尚未回填）退回原标题，只按
+        // ASCII 不区分大小写（与 SQLite 的 `lower()` 一致），下次启动回填后一致（审计 D6）。
+        qb.push(
+            " AND CASE WHEN entries.title_search IS NOT NULL THEN instr(entries.title_search, ",
+        )
+        .push_bind(rssr_domain::fold_for_search(search))
+        .push(") > 0 ELSE instr(lower(entries.title), ")
+        .push_bind(search.to_ascii_lowercase())
+        .push(") > 0 END");
     }
-}
-
-/// 把用户输入转成 LIKE 字面量片段，配合 `ESCAPE '\'` 使用。
-fn escape_like_literal(raw: &str) -> String {
-    let mut escaped = String::with_capacity(raw.len());
-    for ch in raw.chars() {
-        if matches!(ch, '\\' | '%' | '_') {
-            escaped.push('\\');
-        }
-        escaped.push(ch);
-    }
-    escaped
 }
 
 /// `published_at` 以 RFC3339 UTC 字符串存储，比较也在字符串上进行，因此分界必须用同一种

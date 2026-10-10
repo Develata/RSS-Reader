@@ -72,14 +72,24 @@ pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
     backfill_title_search(pool).await
 }
 
-/// 给迁移 0008 之前写入的条目补上搜索用标题（审计 D6）。
+/// 给还没有搜索用标题的条目补上（审计 D6）：迁移 0008 之前写入的，以及旧版本程序改过标题、
+/// 被触发器清空的。
 ///
 /// 折叠必须在应用里算（[`rssr_domain::fold_for_search`]），SQLite 的 `lower()` 只处理 ASCII。
-/// 每批在一个 `BEGIN IMMEDIATE` 事务里读后写，不会和并发刷新产生读快照冲突。终止性：选出的
-/// 每一行都被写成非 NULL，期间被删掉的行下一批自然选不到，所以每一批都严格减少 NULL 行；
-/// 重复执行（GUI 与 CLI 都会迁移）只是找不到要补的行。`entries.title` 是 `NOT NULL`。
+/// 先用部分索引 `idx_entries_title_search_missing` 判断有没有要补的行，没有就不拿写锁（每次
+/// 启动都会走到这里）。每批在一个 `BEGIN IMMEDIATE` 事务里重新读、再写，不会和并发刷新产生读
+/// 快照冲突。终止性：选出的每一行都被写成非 NULL，期间被删掉的行下一批自然选不到，所以每一批
+/// 都严格减少 NULL 行；重复执行（GUI 与 CLI 都会迁移）只是找不到要补的行。`entries.title` 是
+/// `NOT NULL`。
 async fn backfill_title_search(pool: &SqlitePool) -> anyhow::Result<()> {
     const BATCH: i64 = 500;
+    let pending: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entries WHERE title_search IS NULL)")
+            .fetch_one(pool)
+            .await?;
+    if !pending {
+        return Ok(());
+    }
     loop {
         let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
         let rows: Vec<(i64, String)> =
