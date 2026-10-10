@@ -218,14 +218,25 @@ async fn a_database_from_before_0008_is_upgraded_and_backfilled() {
         .expect("legacy entry");
     }
 
-    migrate(&pool).await.expect("upgrade to 0008");
-
-    let unfolded: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM entries WHERE title_search IS NULL")
-            .fetch_one(&pool)
+    let before: Vec<(i64, String, String)> =
+        sqlx::query_as("SELECT id, dedup_key, title FROM entries ORDER BY id")
+            .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(unfolded, 0);
+
+    migrate(&pool).await.expect("upgrade to 0008");
+
+    let after: Vec<(i64, String, String, Option<String>)> =
+        sqlx::query_as("SELECT id, dedup_key, title, title_search FROM entries ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(after.len(), before.len());
+    for ((id, key, title), (id_after, key_after, title_after, folded)) in before.iter().zip(&after)
+    {
+        assert_eq!((id, key, title), (id_after, key_after, title_after), "existing columns kept");
+        assert_eq!(folded.as_deref(), Some(fold_for_search(title).as_str()));
+    }
     let entries = SqliteEntryRepository::new(pool.clone());
     assert_eq!(
         native_matches(&entries, "über nummer 77").await,
@@ -240,7 +251,7 @@ async fn a_failed_backfill_batch_keeps_earlier_batches_and_resumes() {
     let (pool, _entries, _) = seeded(&titles).await;
     sqlx::query("UPDATE entries SET title_search = NULL").execute(&pool).await.expect("legacy");
     sqlx::query(
-        "CREATE TRIGGER qa_fail_second_batch BEFORE UPDATE OF title_search ON entries          WHEN NEW.title_search IS NOT NULL           AND (SELECT COUNT(*) FROM entries WHERE title_search IS NOT NULL) >= 500          BEGIN SELECT RAISE(ABORT, 'qa injected failure'); END",
+        "CREATE TRIGGER qa_fail_second_batch BEFORE UPDATE OF title_search ON entries          WHEN NEW.title_search IS NOT NULL           AND (SELECT COUNT(*) FROM entries WHERE title_search IS NOT NULL) >= 750          BEGIN SELECT RAISE(ABORT, 'qa injected failure'); END",
     )
     .execute(&pool)
     .await
@@ -253,14 +264,15 @@ async fn a_failed_backfill_batch_keeps_earlier_batches_and_resumes() {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(folded, 500, "the first batch stays committed");
+    // 失败发生在第二批中途（第 751 行）：第二批已写的 250 行随事务回滚，只留下第一批。
+    assert_eq!(folded, 500, "only the committed first batch stays");
 
     sqlx::query("DROP TRIGGER qa_fail_second_batch").execute(&pool).await.expect("remove failure");
     migrate(&pool).await.expect("retry");
-    let unfolded: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM entries WHERE title_search IS NULL")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(unfolded, 0);
+    let rows: Vec<(String, Option<String>)> =
+        sqlx::query_as("SELECT title, title_search FROM entries").fetch_all(&pool).await.unwrap();
+    assert_eq!(rows.len(), 1_201);
+    for (title, folded) in rows {
+        assert_eq!(folded.as_deref(), Some(fold_for_search(&title).as_str()), "{title}");
+    }
 }

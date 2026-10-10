@@ -69,8 +69,9 @@ impl NativeSqliteBackend {
     }
 }
 
-/// 迁移锁放在 SQLite 实际打开的数据库文件旁边（`PRAGMA database_list` 给出的路径）：同一个库
-/// 无论 URL 怎么写（百分号转义、`file:` URI、相对路径），都落到同一个锁上（独立评审）。
+/// 迁移锁放在 SQLite 实际打开的数据库文件旁边（`PRAGMA database_list` 给出的绝对路径）：同一个
+/// 库的百分号转义、`file:` URI、相对路径等写法都落到同一个锁上（独立评审）。不覆盖同一文件的
+/// 其它名字（Windows 8.3 短文件名、文件级符号链接）：SQLite 本身也不支持用多个名字打开同一个库。
 /// 内存库没有文件，也就不需要跨进程的锁。
 async fn migration_lock_path(pool: &SqlitePool) -> anyhow::Result<Option<PathBuf>> {
     let file: String =
