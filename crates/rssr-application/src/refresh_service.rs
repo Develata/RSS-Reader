@@ -421,9 +421,8 @@ impl RefreshService {
                 result: RefreshFeedResult::NotModified,
             });
         }
-        let feed_id = target.feed_id;
-        let commit = self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update));
-        self.commit_recorded(feed_id, ticket.0, commit).await
+        self.feed_locks.record_commit(target.feed_id, ticket.0);
+        self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await
     }
 
     pub async fn refresh_feed(&self, feed_id: i64) -> Result<RefreshFeedOutcome> {
@@ -603,47 +602,15 @@ impl RefreshService {
                 metadata: None,
             }),
         };
-        // 失败的抓取没有带来内容，不能让预抓取的结果因此作废。
-        let delivers_content = !matches!(source_output, FeedRefreshSourceOutput::Failed(_));
-        let feed_id = target.feed_id;
-        let commit = self.apply_source_output(target, source_output);
-        if delivers_content {
-            self.commit_recorded(feed_id, fetch, commit).await
-        } else {
-            commit.await
+        // 失败的抓取没有带来内容，不能让预抓取的结果因此作废。带来内容的落库在开始前就登记
+        // 序号，不论成功、失败还是被取消：SQLite 适配器分几步提交（索引、正文、抓取状态），
+        // 中途出错或被丢弃时前面的步骤可能已经落库。宁可让更早的预抓取结果作废（下次刷新会
+        // 补上），也不让它覆盖可能已经写入的更新内容（独立评审）。调用方持有该订阅的锁，
+        // 预抓取结果的检查与这里的登记不会交错。
+        if !matches!(source_output, FeedRefreshSourceOutput::Failed(_)) {
+            self.feed_locks.record_commit(target.feed_id, fetch);
         }
-    }
-
-    /// 执行一次带来内容的落库，并登记它的抓取序号（审计 A1）。
-    ///
-    /// 成功就登记；显式失败没有落库，不登记。future 在落库途中被丢弃（例如发起刷新的界面
-    /// 关闭）时无法知道是否已经提交，按已提交登记：宁可让更早的预抓取结果作废（下次刷新会
-    /// 补上），也不让它覆盖可能已经落库的更新内容（独立评审）。
-    async fn commit_recorded<T>(
-        &self,
-        feed_id: i64,
-        fetch: u64,
-        commit: impl Future<Output = Result<T>>,
-    ) -> Result<T> {
-        struct RecordUnlessFailed<'a> {
-            locks: &'a FeedRefreshLocks,
-            feed_id: i64,
-            fetch: u64,
-            failed: bool,
-        }
-        impl Drop for RecordUnlessFailed<'_> {
-            fn drop(&mut self) {
-                if !self.failed {
-                    self.locks.record_commit(self.feed_id, self.fetch);
-                }
-            }
-        }
-
-        let mut record =
-            RecordUnlessFailed { locks: &self.feed_locks, feed_id, fetch, failed: false };
-        let result = commit.await;
-        record.failed = result.is_err();
-        result
+        self.apply_source_output(target, source_output).await
     }
 
     async fn apply_source_output(
@@ -1373,11 +1340,13 @@ mod tests {
     }
 
     /// 第一次写入 `Updated` 时的意外：`Stall` 写入后不再返回（调用方此时被取消，内容已经
-    /// 落库），`Fail` 不写入并返回错误。
+    /// 落库）；`FailAfterWrite` 写入后报错（像 SQLite 适配器分步提交时后面一步失败）；
+    /// `FailBeforeWrite` 什么也没写就报错。
     #[derive(Clone, Copy)]
     enum Interruption {
         Stall,
-        Fail,
+        FailAfterWrite,
+        FailBeforeWrite,
     }
 
     struct InterruptingStore {
@@ -1406,7 +1375,11 @@ mod tests {
                 _ => None,
             };
             match interruption {
-                Some(Interruption::Fail) => anyhow::bail!("disk full"),
+                Some(Interruption::FailBeforeWrite) => anyhow::bail!("database is locked"),
+                Some(Interruption::FailAfterWrite) => {
+                    self.inner.commit(target, commit).await?;
+                    anyhow::bail!("failed to store the fetch state")
+                }
                 Some(Interruption::Stall) => {
                     self.inner.commit(target, commit).await?;
                     self.stalled.notify_one();
@@ -1417,14 +1390,16 @@ mod tests {
         }
     }
 
-    /// 刷新在落库途中被取消（例如发起它的界面关闭）时无法确定是否已经提交，按已提交处理：
-    /// 更早领取序号的预抓取结果不能再覆盖它。落库显式失败则没有带来内容，预抓取结果照常
-    /// 写入（独立评审）。
+    /// 刷新的落库被取消（例如发起它的界面关闭）或中途报错时，无法确定写进去了多少，按已
+    /// 写入处理：更早领取序号的预抓取结果不再写入。代价是落库其实什么也没写时，预抓取的
+    /// 首刷结果也被放弃，要等下一次刷新（独立评审）。
     #[tokio::test]
     async fn a_refresh_interrupted_while_committing_still_supersedes_an_older_prepared_update() {
-        for (interruption, expected) in
-            [(Interruption::Stall, vec!["V2 newer"]), (Interruption::Fail, vec!["V1 prepared"])]
-        {
+        for (interruption, expected) in [
+            (Interruption::Stall, vec!["V2 newer"]),
+            (Interruption::FailAfterWrite, vec!["V2 newer"]),
+            (Interruption::FailBeforeWrite, vec![]),
+        ] {
             let store = Arc::new(InterruptingStore {
                 inner: StoreStub {
                     targets: vec![sample_target(1, "https://example.com/1.xml")],
@@ -1453,7 +1428,7 @@ mod tests {
                     let cancelled = within("the refresh to stop", refresh).await;
                     assert!(cancelled.expect_err("the refresh was cancelled").is_cancelled());
                 }
-                Interruption::Fail => {
+                Interruption::FailAfterWrite | Interruption::FailBeforeWrite => {
                     let finished = within("the refresh to fail", refresh).await;
                     assert!(finished.expect("join refresh").is_err());
                 }
