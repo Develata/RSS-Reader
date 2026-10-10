@@ -467,16 +467,9 @@ impl ImageLocalizationWorker {
             return Ok(false);
         };
 
-        let Some(expected_content_hash) = entry.content_hash.clone().or_else(|| {
-            compute_entry_content_hash(
-                Some(&original_html),
-                entry.content_text.as_deref(),
-                Some(&entry.title),
-                entry.url.as_ref(),
-            )
-        }) else {
-            return Ok(false);
-        };
+        // 写回比较的是读到的存储哈希本身（可能是旧版本留下的 NULL），不能用重新计算的值代替，
+        // 否则 NULL 行永远写不回（独立评审）。
+        let expected_content_hash = entry.content_hash.clone();
 
         let localizer = self.reader_asset_localizer.clone();
         let localized_html = match tokio::time::timeout(
@@ -509,7 +502,7 @@ impl ImageLocalizationWorker {
                 generation,
                 &LocalizedEntryUpdate {
                     dedup_key: &entry.dedup_key,
-                    expected_content_hash: &expected_content_hash,
+                    expected_content_hash: expected_content_hash.as_deref(),
                     base_html: &original_html,
                     localized_html: &localized_html,
                 },
@@ -596,7 +589,7 @@ async fn localize_feed_entries(
 
         let update = LocalizedEntryUpdate {
             dedup_key: &entry.dedup_key,
-            expected_content_hash: &expected_content_hash,
+            expected_content_hash: Some(&expected_content_hash),
             base_html: &original_html,
             localized_html: &localized_html,
         };

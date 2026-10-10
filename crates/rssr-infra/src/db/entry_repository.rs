@@ -38,14 +38,15 @@ pub struct SqliteEntryRepository {
 ///
 /// `entry_contents.content_hash` 始终标识**源**正文（见 `hash_content`）：写回只替换
 /// `content_html`，保留源哈希，所以源未变的刷新不会冲掉派生正文，源一变才会被覆盖（审计 C1）。
-/// `expected_content_hash` 是派生所依据的源哈希；存储里的源已经变化时不写。
+/// `expected_content_hash` 是派生所依据的源哈希，按 `IS` 比较（旧版本留下的行可能是 NULL）；
+/// 存储里的源已经变化时不写。
 /// `base_html` 是这次派生读到的存储正文：写回时存储正文必须仍是它。同一份源可能同时有后台
 /// 与阅读页两个本地化任务，源哈希不变，只靠它才能防止较慢的任务用自己的结果覆盖已经写入的
 /// 结果。
 #[derive(Debug, Clone)]
 pub struct LocalizedEntryUpdate<'a> {
     pub dedup_key: &'a str,
-    pub expected_content_hash: &'a str,
+    pub expected_content_hash: Option<&'a str>,
     pub base_html: &'a str,
     pub localized_html: &'a str,
 }
@@ -1007,7 +1008,7 @@ async fn update_localized_content_on_connection(
         SET content_html = ?2,
             updated_at = ?3
         WHERE entry_id = ?1
-          AND content_hash = ?4
+          AND content_hash IS ?4
           AND content_html = ?5
         "#,
     )

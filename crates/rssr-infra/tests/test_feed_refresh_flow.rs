@@ -164,7 +164,7 @@ async fn localized_writeback_does_not_override_newer_refresh_content() {
             feed.id,
             &LocalizedEntryUpdate {
                 dedup_key: "entry-1",
-                expected_content_hash: &first_hash,
+                expected_content_hash: Some(&first_hash),
                 base_html: first_html,
                 localized_html: localized_old_html,
             },
@@ -275,7 +275,7 @@ async fn localized_writeback_from_old_generation_is_rejected_after_readd() {
             old_generation,
             &LocalizedEntryUpdate {
                 dedup_key: "entry-generation",
-                expected_content_hash: &old_hash,
+                expected_content_hash: Some(&old_hash),
                 base_html: original_html,
                 localized_html: localized_old_html,
             },
