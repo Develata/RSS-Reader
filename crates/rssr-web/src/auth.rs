@@ -681,24 +681,27 @@ mod tests {
         assert_eq!(failures, Some(1), "the abandoned check recorded its failure");
     }
 
-    /// 名额已满时直接返回，不运行校验，也不派生任务（审计 F2）。
+    /// 名额已满时第一次 poll 就返回 `Busy`：不运行校验，也不派生任务。`tokio::spawn` 不会同步
+    /// poll 新任务，先派生、在任务里取名额的写法第一次 poll 只能得到 `Pending`（审计 F2、独立
+    /// 评审）。
     #[tokio::test]
-    async fn a_busy_check_runs_nothing() {
+    async fn a_busy_check_returns_at_once_without_running_anything() {
         let state = AppState::new(Arc::new(sample_config()));
         let _busy = Arc::clone(&state.credential_checks)
             .try_acquire_many_owned(MAX_CONCURRENT_CREDENTIAL_CHECKS as u32)
             .expect("all general slots");
         let ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let check = state
-            .check_and_record_with("client|192.0.2.7".into(), {
-                let ran = Arc::clone(&ran);
-                move || {
-                    ran.store(true, std::sync::atomic::Ordering::SeqCst);
-                    false
-                }
-            })
-            .await;
-        assert!(matches!(check, CredentialCheck::Busy));
+        let mut check = std::pin::pin!(state.check_and_record_with("client|192.0.2.7".into(), {
+            let ran = Arc::clone(&ran);
+            move || {
+                ran.store(true, std::sync::atomic::Ordering::SeqCst);
+                false
+            }
+        }));
+
+        let first =
+            std::future::poll_fn(|cx| std::task::Poll::Ready(check.as_mut().poll(cx))).await;
+        assert!(matches!(first, std::task::Poll::Ready(CredentialCheck::Busy)));
         assert!(!ran.load(std::sync::atomic::Ordering::SeqCst));
         assert!(state.login_throttle.lock().await.is_empty(), "nothing is recorded");
     }
