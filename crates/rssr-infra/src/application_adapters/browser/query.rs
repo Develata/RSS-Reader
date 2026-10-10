@@ -50,7 +50,7 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
     let entry_flags = build_entry_flag_index(state);
     let allowed_feed_ids = (!query.feed_ids.is_empty())
         .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
-    let search_lower = query.search_title.as_ref().map(|search| search.to_lowercase());
+    let search_lower = query.search_title.as_deref().map(rssr_domain::fold_for_search);
     let active_feed_ids = state
         .core
         .feeds
@@ -109,7 +109,7 @@ pub fn count_entries(state: &BrowserState, query: &EntryQuery) -> u64 {
     let entry_flags = build_entry_flag_index(state);
     let allowed_feed_ids = (!query.feed_ids.is_empty())
         .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
-    let search_lower = query.search_title.as_ref().map(|search| search.to_lowercase());
+    let search_lower = query.search_title.as_deref().map(rssr_domain::fold_for_search);
     let active_feed_ids = state
         .core
         .feeds
@@ -222,10 +222,6 @@ pub fn reader_navigation(state: &BrowserState, current_entry_id: i64) -> EntryNa
     }
 }
 
-pub fn title_matches_search(title: &str, search_lower: &str) -> bool {
-    title.to_lowercase().contains(search_lower)
-}
-
 fn entry_matches_query<T>(
     entry: &PersistedEntryIndex,
     flags: Option<&PersistedEntryFlag>,
@@ -279,7 +275,7 @@ where
         }
     }
     if let Some(search) = search_lower
-        && !title_matches_search(&entry.title, search)
+        && !rssr_domain::title_contains(&entry.title, search)
     {
         return false;
     }
@@ -306,7 +302,7 @@ pub fn unread_selection(state: &BrowserState, query: &EntryQuery) -> Vec<i64> {
     let flags = build_entry_flag_index(state);
     let allowed = (!query.feed_ids.is_empty())
         .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
-    let search = query.search_title.as_ref().map(|s| s.to_lowercase());
+    let search = query.search_title.as_deref().map(rssr_domain::fold_for_search);
     let active =
         state.core.feeds.iter().filter(|f| !f.is_deleted).map(|f| f.id).collect::<HashSet<_>>();
     let mut ids = state

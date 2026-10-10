@@ -68,7 +68,37 @@ pub(crate) fn is_memory_database(database_url: &str) -> bool {
 }
 
 pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
-    run_line_ending_tolerant(&MIGRATOR, pool).await
+    run_line_ending_tolerant(&MIGRATOR, pool).await?;
+    backfill_title_search(pool).await
+}
+
+/// 给迁移 0008 之前写入的条目补上搜索用标题（审计 D6）。
+///
+/// 折叠必须在应用里算（[`rssr_domain::fold_for_search`]），SQLite 的 `lower()` 只处理 ASCII。
+/// 每批在一个 `BEGIN IMMEDIATE` 事务里读后写，不会和并发刷新产生读快照冲突。终止性：选出的
+/// 每一行都被写成非 NULL，期间被删掉的行下一批自然选不到，所以每一批都严格减少 NULL 行；
+/// 重复执行（GUI 与 CLI 都会迁移）只是找不到要补的行。`entries.title` 是 `NOT NULL`。
+async fn backfill_title_search(pool: &SqlitePool) -> anyhow::Result<()> {
+    const BATCH: i64 = 500;
+    loop {
+        let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+        let rows: Vec<(i64, String)> =
+            sqlx::query_as("SELECT id, title FROM entries WHERE title_search IS NULL LIMIT ?1")
+                .bind(BATCH)
+                .fetch_all(&mut *tx)
+                .await?;
+        if rows.is_empty() {
+            return Ok(());
+        }
+        for (id, title) in rows {
+            sqlx::query("UPDATE entries SET title_search = ?1 WHERE id = ?2")
+                .bind(rssr_domain::fold_for_search(&title))
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+    }
 }
 
 pub async fn migrate_content(pool: &SqlitePool) -> anyhow::Result<()> {

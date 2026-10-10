@@ -173,12 +173,13 @@ impl SqliteEntryRepository {
                 INSERT INTO entries (
                     feed_id, external_id, dedup_key, url, title, author, summary,
                     published_at, updated_at_source, first_seen_at, has_content, is_read,
-                    is_starred, read_at, starred_at, created_at, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, 0, 0, NULL, NULL, ?10, ?10)
+                    is_starred, read_at, starred_at, created_at, updated_at, title_search
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, 0, 0, NULL, NULL, ?10, ?10, ?11)
                 ON CONFLICT(feed_id, dedup_key) DO UPDATE SET
                     external_id = excluded.external_id,
                     url = COALESCE(excluded.url, entries.url),
                     title = excluded.title,
+                    title_search = excluded.title_search,
                     author = excluded.author,
                     summary = excluded.summary,
                     published_at = COALESCE(excluded.published_at, entries.published_at),
@@ -196,6 +197,7 @@ impl SqliteEntryRepository {
             .bind(published_at)
             .bind(updated_at_source)
             .bind(&now)
+            .bind(rssr_domain::fold_for_search(&entry.title))
             .execute(&mut *tx)
             .await
             .map_err(map_sqlx_error)?;
@@ -1162,10 +1164,13 @@ fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a En
     }
     if let Some(search) = &query.search_title {
         // 搜索词是字面量：`%` / `_` 必须转义，否则会被当成通配符，列表、计数、批量已读
-        // 预览与写入都会多匹配，并与浏览器端的字面 contains 语义不一致。
-        qb.push(" AND entries.title LIKE ")
-            .push_bind(format!("%{}%", escape_like_literal(search)))
-            .push(" COLLATE NOCASE ESCAPE '\\'");
+        // 预览与写入都会多匹配，并与浏览器端的字面 contains 语义不一致。大小写按
+        // `fold_for_search`（Unicode 小写）比较，与浏览器端相同；SQLite 的 LIKE 只折叠 ASCII，
+        // 所以比较的是写入时折叠好的 `title_search`（审计 D6）。它为 NULL 的行（测试夹具、
+        // 旧版本程序写入、尚未回填）退回原标题，ASCII 仍能匹配，下次启动回填后一致。
+        qb.push(" AND COALESCE(entries.title_search, entries.title) LIKE ")
+            .push_bind(format!("%{}%", escape_like_literal(&rssr_domain::fold_for_search(search))))
+            .push(" ESCAPE '\\'");
     }
 }
 

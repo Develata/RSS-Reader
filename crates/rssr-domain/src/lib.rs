@@ -5,6 +5,7 @@ pub mod app_state;
 pub mod entry;
 pub mod feed;
 pub mod repository;
+pub mod search;
 pub mod settings;
 pub mod validation;
 
@@ -19,6 +20,7 @@ pub use repository::{
     AppStateMutation, AppStateRepository, EntryContentRepository, EntryIndexRepository,
     EntryRepository, FeedRepository, HealthRepository, SettingsRepository,
 };
+pub use search::{fold_for_search, title_contains};
 pub use settings::{
     ConfigFeed, ConfigPackage, DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ARCHIVE_AFTER_MONTHS,
     MAX_ENTRIES_PAGE_SIZE, MAX_REFRESH_INTERVAL_MINUTES, StartupView, ThemeMode, UserSettings,

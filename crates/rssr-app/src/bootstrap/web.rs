@@ -287,15 +287,3 @@ impl RemoteConfigPort for RemoteConfigCapability {
         .await
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use rssr_infra::application_adapters::browser::query::title_matches_search;
-
-    #[test]
-    fn web_title_search_is_case_insensitive() {
-        assert!(title_matches_search("Roche Scales NVIDIA AI Factories", "sca"));
-        assert!(title_matches_search("Roche Scales NVIDIA AI Factories", "SCA"));
-        assert!(!title_matches_search("Roche Scales NVIDIA AI Factories", "xyz"));
-    }
-}
