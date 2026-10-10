@@ -3,10 +3,11 @@ use async_trait::async_trait;
 use std::ffi::OsStr;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::Context;
-use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 use crate::db::{
     FILE_SQLITE_MAX_CONNECTIONS, SqlitePool, connect_options_for_path, create_sqlite_pool,
@@ -247,15 +248,15 @@ async fn connect_sqlite_path(database_path: &Path) -> anyhow::Result<SqlitePool>
         .with_context(|| format!("打开本地数据库失败: {}", database_path.display()))
 }
 
+/// URL 指向的数据库文件。用 sqlx 自己的解析（含百分号解码），同一个库的不同写法（例如
+/// `%72ss-reader.db` 与 `rss-reader.db`）得到同一个迁移锁（独立评审）。内存库没有文件。
 fn sqlite_file_path_from_url(database_url: &str) -> Option<PathBuf> {
     if is_memory_database(database_url) {
         return None;
     }
-    let base = database_url.split_once('?').map_or(database_url, |(base, _)| base);
-    base.strip_prefix("sqlite://")
-        .or_else(|| base.strip_prefix("sqlite:"))
-        .filter(|path| !path.is_empty())
-        .map(PathBuf::from)
+    let options = SqliteConnectOptions::from_str(database_url).ok()?;
+    let path = options.get_filename();
+    (!path.as_os_str().is_empty()).then(|| path.to_path_buf())
 }
 
 fn derive_content_database_url(database_url: &str) -> anyhow::Result<String> {
@@ -303,7 +304,7 @@ mod tests {
     use super::create_local_data_dir;
     use super::{
         NativeSqliteBackend, append_content_suffix, content_database_path,
-        local_data_dir_in_base_dir,
+        local_data_dir_in_base_dir, sqlite_file_path_from_url,
     };
     use crate::db::storage_backend::StorageBackend;
     use std::{
@@ -533,5 +534,15 @@ mod tests {
         assert!(crate::db::effective_journal_mode(&reopened).await.is_ok());
         reopened.close().await;
         std::fs::remove_dir_all(base).unwrap();
+    }
+
+    /// 同一个库的不同 URL 写法必须落到同一个迁移锁上，否则两个进程可以同时迁移（独立评审）。
+    #[test]
+    fn url_aliases_of_one_database_share_a_file_path() {
+        let plain = sqlite_file_path_from_url("sqlite:///tmp/rss-reader.db?mode=rwc");
+        assert_eq!(plain.as_deref(), Some(Path::new("/tmp/rss-reader.db")));
+        assert_eq!(sqlite_file_path_from_url("sqlite:///tmp/%72ss-reader.db"), plain);
+        assert_eq!(sqlite_file_path_from_url("sqlite:/tmp/rss-reader.db"), plain);
+        assert_eq!(sqlite_file_path_from_url("sqlite::memory:"), None);
     }
 }
