@@ -346,3 +346,54 @@ async fn a_newer_head_version_is_rejected_without_touching_storage() {
     assert!(error.to_string().contains("无法读取此版本"), "{error:#}");
     assert_eq!(all_storage_items(), before);
 }
+
+fn downgrade_head_to_version_one() -> serde_json::Value {
+    let mut old_head = head();
+    old_head["version"] = 1.into();
+    storage().set_item(COMMIT_STORAGE_KEY, &old_head.to_string()).unwrap();
+    old_head
+}
+
+/// 升级只写提交头这一个键：写失败时提交头仍是版本 1、其余键不变；同一个句柄（缓存里已有这一
+/// 纪元的全部数据片）下次访问时重试升级（独立评审）。
+#[wasm_bindgen_test]
+async fn a_failed_head_upgrade_keeps_version_one_and_the_same_handle_retries() {
+    let store = seed_state(fixture()).await;
+    let old_head = downgrade_head_to_version_one();
+    let before = all_storage_items();
+    js_sys::eval(
+        r#"globalThis.__set = Storage.prototype.setItem;
+        Storage.prototype.setItem = function(key, value) {
+            if (key === 'rssr-web-commit-v1') throw new DOMException('quota', 'QuotaExceededError');
+            return __set.call(this, key, value);
+        };"#,
+    )
+    .unwrap();
+    let failed = store.snapshot().await;
+    js_sys::eval("Storage.prototype.setItem = __set; delete globalThis.__set;").unwrap();
+
+    assert!(failed.is_err(), "the head write failed");
+    assert_eq!(all_storage_items(), before, "a failed upgrade changes nothing");
+    assert_eq!(store.snapshot().await.unwrap().core.entries.len(), 2);
+    let upgraded = head();
+    assert_eq!(upgraded["version"], 2);
+    assert_eq!(upgraded["epoch"], old_head["epoch"]);
+    assert_eq!(upgraded["revisions"], old_head["revisions"]);
+}
+
+/// 版本 1 的数据片读不出来时不升级：提交头保持版本 1，任何键都不动（独立评审）。
+#[wasm_bindgen_test]
+async fn a_version_one_head_with_a_corrupt_slice_is_not_upgraded() {
+    seed_state(fixture()).await;
+    let old_head = downgrade_head_to_version_one();
+    let revision = old_head["revisions"][3].as_u64().unwrap();
+    let content_key =
+        if revision.is_multiple_of(2) { KEYS[3].to_string() } else { format!("{}-next", KEYS[3]) };
+    storage().set_item(&content_key, "broken content").unwrap();
+    let before = all_storage_items();
+
+    assert!(BrowserStore::open().await.is_err());
+
+    assert_eq!(all_storage_items(), before);
+    assert_eq!(head()["version"], 1);
+}

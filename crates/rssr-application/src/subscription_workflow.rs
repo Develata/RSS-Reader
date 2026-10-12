@@ -204,6 +204,13 @@ mod tests {
     struct ActivationStub {
         next_id: Mutex<i64>,
         generation: i64,
+        received: Mutex<Vec<NewFeedSubscription>>,
+    }
+
+    impl ActivationStub {
+        fn new(next_id: i64) -> Self {
+            Self { next_id: Mutex::new(next_id), generation: 0, received: Mutex::new(Vec::new()) }
+        }
     }
 
     #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -213,6 +220,7 @@ mod tests {
             &self,
             new_feed: NewFeedSubscription,
         ) -> Result<ActivatedSubscription> {
+            self.received.lock().expect("lock received").push(new_feed.clone());
             let mut next_id = self.next_id.lock().expect("lock activation id");
             let id = *next_id;
             *next_id += 1;
@@ -220,7 +228,8 @@ mod tests {
                 feed: Feed {
                     id,
                     url: new_feed.url,
-                    title: new_feed.title,
+                    // 与真实适配器一样返回显示名称：指定名称优先，否则源标题。
+                    title: new_feed.title.or_else(|| new_feed.source_title.clone()),
                     source_title: new_feed.source_title.clone(),
                     site_url: new_feed.site_url,
                     description: None,
@@ -318,10 +327,19 @@ mod tests {
         targets: Vec<RefreshTarget>,
         removal: Arc<RemovalStub>,
     ) -> SubscriptionWorkflow {
+        workflow_with_activation(Arc::new(ActivationStub::new(next_id)), targets, removal)
+    }
+
+    fn workflow_with_activation(
+        activation: Arc<ActivationStub>,
+        targets: Vec<RefreshTarget>,
+        removal: Arc<RemovalStub>,
+    ) -> SubscriptionWorkflow {
+        let next_id = *activation.next_id.lock().expect("lock activation id");
         SubscriptionWorkflow::new(
             crate::FeedService::new(
                 Arc::new(FeedRepositoryStub { next_id: Mutex::new(next_id) }),
-                Arc::new(ActivationStub { next_id: Mutex::new(next_id), generation: 0 }),
+                activation,
                 removal,
             ),
             crate::RefreshService::new(Arc::new(SourceStub), Arc::new(StoreStub { targets })),
@@ -380,8 +398,13 @@ mod tests {
     #[tokio::test]
     async fn add_keeps_the_probed_title_apart_from_the_chosen_name() {
         for chosen in [None, Some("我的名称")] {
-            let workflow = workflow(7, Vec::new(), Arc::new(RemovalStub::default()));
-            let outcome = workflow
+            let activation = Arc::new(ActivationStub::new(7));
+            let workflow = workflow_with_activation(
+                activation.clone(),
+                Vec::new(),
+                Arc::new(RemovalStub::default()),
+            );
+            workflow
                 .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
                     subscription: crate::AddSubscriptionInput {
                         url: "https://example.com/feed.xml".to_string(),
@@ -393,8 +416,10 @@ mod tests {
                 .await
                 .expect("add without refresh");
 
-            assert_eq!(outcome.feed.title.as_deref(), chosen, "only the chosen name");
-            assert_eq!(outcome.feed.source_title.as_deref(), Some("Example"), "probed title");
+            let received = activation.received.lock().expect("lock received");
+            assert_eq!(received.len(), 1);
+            assert_eq!(received[0].title.as_deref(), chosen, "only the chosen name");
+            assert_eq!(received[0].source_title.as_deref(), Some("Example"), "probed title");
         }
     }
 
@@ -470,7 +495,7 @@ mod tests {
         let workflow = SubscriptionWorkflow::new(
             crate::FeedService::new(
                 Arc::new(FeedRepositoryStub { next_id: Mutex::new(5) }),
-                Arc::new(ActivationStub { next_id: Mutex::new(5), generation: 7 }),
+                Arc::new(ActivationStub { generation: 7, ..ActivationStub::new(5) }),
                 Arc::new(RemovalStub::default()),
             ),
             crate::RefreshService::new(

@@ -438,6 +438,8 @@ async fn old_sqlite_refresh_generation_cannot_commit_after_delete_and_same_url_r
 
     let active = feeds.get_feed(feed.id).await.unwrap().unwrap();
     assert_eq!(active.title.as_deref(), Some("Re-added"));
+    // 指定名称会遮住源标题：单独核对迟到的刷新没有写入源标题（独立评审）。
+    assert_eq!(active.source_title, None, "the late refresh wrote no metadata");
     assert!(entries.list_entries(&EntryQuery::default()).await.unwrap().is_empty());
 
     store
