@@ -247,7 +247,8 @@ fn push_attribute(element: &mut BytesStart<'_>, key: &str, raw: &str) {
 }
 
 /// quick-xml 产生起始标签事件时不检查属性语法，只有读取属性才会报错；每个元素都读一遍，
-/// 属性写坏的文档整体拒绝。
+/// 缺等号、缺引号或重复属性的文档整体拒绝。这不是完整的 XML 良构性校验（属性值里的裸 `<`
+/// 等仍会通过）。
 fn check_attributes(event: &BytesStart<'_>) -> Result<()> {
     for attribute in event.attributes() {
         attribute?;
