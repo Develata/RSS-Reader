@@ -88,23 +88,20 @@ fn opml_import_prefers_text_and_falls_back_to_title() {
     );
 }
 
-/// 没有名称时本应用和其他阅读器都把订阅地址写进 `text`；与 `xmlUrl` 相同的名称不算名称，
-/// 否则再导入会把地址固定成指定名称。
+/// 名称就是名称，不与订阅地址比较：用户把名称设成地址也照样保留（独立评审）。
 #[test]
-fn opml_import_ignores_a_name_that_is_just_the_feed_url() {
+fn opml_import_keeps_a_name_even_when_it_equals_the_feed_url() {
     let decoded = OpmlCodec::new()
         .decode(&outlines(
-            r#"<outline text="https://a.example/feed" title="https://a.example/feed" xmlUrl="https://a.example/feed"/>
-               <outline text=" https://b.example/feed " title="Example B" xmlUrl="https://b.example/feed"/>"#,
+            r#"<outline text="https://a.example/feed" title="Source" xmlUrl="https://a.example/feed"/>"#,
         ))
         .expect("decode opml");
 
-    assert_eq!(decoded[0].title, None);
-    assert_eq!(decoded[1].title, None, "text equal to the URL is not a name; no fallback to title");
+    assert_eq!(decoded[0].title.as_deref(), Some("https://a.example/feed"));
 }
 
 /// 导出：`text` 写显示名称，`title` 只在知道源标题时写，不拿显示名称冒充；两个名称都没有时
-/// `text` 写订阅地址（OPML 2.0 要求 `text`），再导入时不会变成名称。
+/// `text` 是空串（OPML 2.0 要求有 `text`），再导入时没有名称。文档带 `<head>`。
 #[test]
 fn opml_export_writes_the_display_name_and_only_a_known_source_title() {
     let codec = OpmlCodec::new();
@@ -131,21 +128,60 @@ fn opml_export_writes_the_display_name_and_only_a_known_source_title() {
         ])
         .expect("encode opml");
 
-    assert!(
-        encoded.contains(r#"<outline text="工作资讯" title="Example News" type="rss" xmlUrl="https://a.example/feed"/>"#),
-        "{encoded}"
-    );
-    assert!(
-        encoded.contains(r#"<outline text="Chosen" type="rss" xmlUrl="https://b.example/feed"/>"#),
-        "{encoded}"
-    );
-    assert!(
-        encoded.contains(
-            r#"<outline text="https://c.example/feed" type="rss" xmlUrl="https://c.example/feed"/>"#
-        ),
-        "{encoded}"
-    );
+    assert!(encoded.contains("<head/>"), "{encoded}");
+    for outline in [
+        r#"<outline text="工作资讯" title="Example News" type="rss" xmlUrl="https://a.example/feed"/>"#,
+        r#"<outline text="Chosen" type="rss" xmlUrl="https://b.example/feed"/>"#,
+        r#"<outline text="" type="rss" xmlUrl="https://c.example/feed"/>"#,
+    ] {
+        assert!(encoded.contains(outline), "{outline} in {encoded}");
+    }
     let decoded = codec.decode(&encoded).expect("decode opml");
     let names: Vec<_> = decoded.iter().map(|feed| feed.title.as_deref()).collect();
     assert_eq!(names, [Some("工作资讯"), Some("Chosen"), None]);
+}
+
+/// 属性里的制表、换行、回车写成字符引用（否则其他 XML 解析器会把它们变成空格），XML 1.0 不
+/// 允许的字符去掉，导出的文件始终是合法 XML。只看输出的原文：本 codec 自己读回时不做属性值
+/// 规范化，往返测不出这个问题（独立评审）。
+#[test]
+fn opml_export_escapes_whitespace_and_drops_characters_xml_forbids() {
+    let encoded = OpmlCodec::new()
+        .encode(&[OpmlFeed {
+            url: "https://a.example/feed?a=1&b=2".to_string(),
+            name: Some("Line\none\ttab\r\u{1}\"q\" <x> 'y'".to_string()),
+            source_title: Some("Source\u{FFFE}\u{0}".to_string()),
+            folder: Some("Folder\nTwo".to_string()),
+        }])
+        .expect("encode opml");
+
+    assert!(
+        encoded.contains(
+            r#"text="Line&#10;one&#9;tab&#13;&quot;q&quot; &lt;x&gt; &apos;y&apos;" title="Source""#
+        ),
+        "{encoded}"
+    );
+    assert!(encoded.contains(r#"xmlUrl="https://a.example/feed?a=1&amp;b=2""#), "{encoded}");
+    assert!(
+        encoded.contains(r#"<outline text="Folder&#10;Two" title="Folder&#10;Two">"#),
+        "{encoded}"
+    );
+    assert!(!encoded.contains(['\u{0}', '\u{1}', '\u{FFFE}', '\t', '\r']), "{encoded:?}");
+    let decoded = OpmlCodec::new().decode(&encoded).expect("decode opml");
+    assert_eq!(decoded[0].title.as_deref(), Some("Line\none\ttab\r\"q\" <x> 'y'"));
+    assert_eq!(decoded[0].folder.as_deref(), Some("Folder\nTwo"));
+}
+
+/// 订阅出现在 <body> 外、或任何元素的属性写坏时整体拒绝，不导入其中一部分（独立评审：原先
+/// <body> 外的订阅被静默忽略，却报告导入成功）。
+#[test]
+fn opml_import_rejects_outlines_outside_the_body_and_broken_attributes() {
+    let codec = OpmlCodec::new();
+    for raw in [
+        r#"<opml version="2.0"><head/><body><outline text="A" xmlUrl="https://a.example/feed"/></body><outline text="B" xmlUrl="https://b.example/feed"/></opml>"#,
+        r#"<opml version="2.0"><head><outline text="B" xmlUrl="https://b.example/feed"/></head><body><outline text="A" xmlUrl="https://a.example/feed"/></body></opml>"#,
+        r#"<opml version="2.0"><body bad=bare><outline text="A" xmlUrl="https://a.example/feed"/></body></opml>"#,
+    ] {
+        assert!(codec.decode(raw).is_err(), "{raw}");
+    }
 }

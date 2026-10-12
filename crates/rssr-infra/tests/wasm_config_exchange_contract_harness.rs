@@ -306,6 +306,12 @@ async fn browser_opml_uses_the_shared_codec_and_its_name_rules() {
         )
         .await;
     assert!(truncated.is_err(), "a truncated document is rejected");
+    let outside_body = service
+        .import_opml(
+            r#"<opml version="2.0"><head/><body></body><outline text="New" type="rss" xmlUrl="https://new.example/feed"/></opml>"#,
+        )
+        .await;
+    assert!(outside_body.is_err(), "a feed outside <body> is not silently skipped");
     assert_eq!(persisted_state().await.core.feeds.len(), 1, "nothing was written");
     clear_browser_state_storage();
 }
