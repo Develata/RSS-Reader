@@ -101,9 +101,6 @@ impl SubscriptionWorkflow {
         prepared: crate::PreparedSubscription,
     ) -> Result<AddSubscriptionLifecycleOutcome> {
         input.subscription.url = prepared.url.to_string();
-        if input.subscription.title.is_none() {
-            input.subscription.title = prepared.update.feed.title.clone();
-        }
         // 激活之后订阅就对后台刷新可见；序号必须在此之前领取，之后开始的刷新才算更新。
         let ticket = self.refresh_service.prepared_update_ticket();
         let activated = self
@@ -111,6 +108,8 @@ impl SubscriptionWorkflow {
             .activate_subscription_with_site(
                 &input.subscription,
                 prepared.update.feed.site_url.clone(),
+                // 探测到的标题是源标题，不能当作用户指定的名称，否则以后刷新就跟不上源改名。
+                prepared.update.feed.title.clone(),
             )
             .await?;
         let target = RefreshTarget {
@@ -169,6 +168,7 @@ mod tests {
                 id,
                 url: new_feed.url.clone(),
                 title: new_feed.title.clone(),
+                source_title: new_feed.source_title.clone(),
                 site_url: None,
                 description: None,
                 icon_url: None,
@@ -221,6 +221,7 @@ mod tests {
                     id,
                     url: new_feed.url,
                     title: new_feed.title,
+                    source_title: new_feed.source_title.clone(),
                     site_url: new_feed.site_url,
                     description: None,
                     icon_url: None,
@@ -373,6 +374,28 @@ mod tests {
 
         assert_eq!(outcome.feed.id, 7);
         assert_eq!(outcome.first_refresh, None);
+    }
+
+    /// 探测到的标题是源标题，不能填进用户指定的名称，否则以后刷新就跟不上源改名（审计 B6）。
+    #[tokio::test]
+    async fn add_keeps_the_probed_title_apart_from_the_chosen_name() {
+        for chosen in [None, Some("我的名称")] {
+            let workflow = workflow(7, Vec::new(), Arc::new(RemovalStub::default()));
+            let outcome = workflow
+                .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
+                    subscription: crate::AddSubscriptionInput {
+                        url: "https://example.com/feed.xml".to_string(),
+                        title: chosen.map(str::to_string),
+                        folder: None,
+                    },
+                    refresh_after_add: false,
+                })
+                .await
+                .expect("add without refresh");
+
+            assert_eq!(outcome.feed.title.as_deref(), chosen, "only the chosen name");
+            assert_eq!(outcome.feed.source_title.as_deref(), Some("Example"), "probed title");
+        }
     }
 
     #[tokio::test]

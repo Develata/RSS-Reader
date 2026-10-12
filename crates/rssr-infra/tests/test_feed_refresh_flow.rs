@@ -54,6 +54,7 @@ async fn refresh_flow_stores_feed_and_deduplicated_entries() {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -105,6 +106,7 @@ async fn localized_writeback_does_not_override_newer_refresh_content() {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -191,6 +193,7 @@ async fn localized_writeback_from_old_generation_is_rejected_after_readd() {
             site_url: None,
             url: Url::parse("https://example.com/generation.xml").expect("valid url"),
             title: Some("Generation Feed".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -229,6 +232,7 @@ async fn localized_writeback_from_old_generation_is_rejected_after_readd() {
             site_url: None,
             url: feed.url.clone(),
             title: Some("Re-added Generation Feed".to_string()),
+            source_title: None,
             folder: None,
         })
         .await

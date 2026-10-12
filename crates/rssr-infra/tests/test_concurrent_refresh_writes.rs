@@ -84,6 +84,7 @@ async fn concurrent_feed_writes_do_not_hit_sqlite_busy() {
                 url: Url::parse(&format!("https://example.com/feed-{feed_index}.xml"))
                     .expect("valid url"),
                 title: Some(format!("Feed {feed_index}")),
+                source_title: None,
                 folder: None,
             })
             .await

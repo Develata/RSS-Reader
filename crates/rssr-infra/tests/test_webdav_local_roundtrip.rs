@@ -59,6 +59,7 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
+            source_title: None,
             folder: Some("Inbox".to_string()),
         })
         .await
@@ -96,6 +97,7 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
             site_url: None,
             url: Url::parse("https://stale.example.com/rss").expect("valid url"),
             title: Some("Stale".to_string()),
+            source_title: None,
             folder: None,
         })
         .await

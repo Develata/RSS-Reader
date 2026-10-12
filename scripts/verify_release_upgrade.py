@@ -27,8 +27,8 @@ from pathlib import Path
 DB_NAMES = ("rss-reader.db", "rss-reader-content.db")
 CSS = ":root { --release-upgrade-sentinel: v0121; }"
 # Index-database migrations the candidate must end up with (0006 generation, 0007 content GC
-# queue, 0008 folded search title).
-CANDIDATE_MIGRATIONS = 8
+# queue, 0008 folded search title, 0009 custom feed name).
+CANDIDATE_MIGRATIONS = 9
 
 
 def fixture_image():
@@ -60,11 +60,12 @@ def snapshot(directory):
             conn.row_factory = sqlite3.Row
             for table in tables:
                 rows = [dict(row) for row in conn.execute(f'SELECT * FROM "{table}" ORDER BY 1')]
-                # 0006 adds a fence and 0008 a derived search column; compare all pre-existing
-                # columns byte-for-byte and check the new ones separately.
+                # 0006 adds a fence, 0008 a derived search column and 0009 the custom feed name;
+                # compare all pre-existing columns byte-for-byte and check the new ones separately.
                 if table == "feeds":
                     for row in rows:
                         row.pop("generation", None)
+                        row.pop("custom_title", None)
                 if table == "entries":
                     for row in rows:
                         row.pop("title_search", None)
@@ -200,6 +201,8 @@ def main():
             assert snapshot(directory) == expected
             with sqlite3.connect(directory / DB_NAMES[0]) as conn:
                 assert conn.execute("SELECT DISTINCT generation FROM feeds").fetchall() == [(0,)]
+                # 0009 does not copy existing titles into custom names: they stay source titles.
+                assert conn.execute("SELECT COUNT(*) FROM feeds WHERE custom_title IS NOT NULL").fetchone() == (0,)
                 # 0008 backfills the folded title (Unicode lowercase); the fixture titles are ASCII,
                 # where Python's str.lower() agrees with Rust's to_lowercase().
                 folded = conn.execute("SELECT title, title_search FROM entries").fetchall()
@@ -210,14 +213,14 @@ def main():
         upgraded = copy_databases(original, root / "upgrade-success")
         run(candidate, upgraded, "list-feeds")
         verify_upgraded(upgraded)
-        record("0006-0008 upgrade preserves every pre-existing data column and body; 0008 backfills folded titles")
+        record("0006-0009 upgrade preserves every pre-existing data column and body; 0008 backfills folded titles; 0009 leaves custom names empty")
         for _ in range(3):
             result = run(candidate, upgraded, "show-settings")
             assert CSS in result.stdout.decode()
             verify_upgraded(upgraded)
         record("three independent candidate restarts preserve data and custom CSS")
 
-        for failed_version in (6, 7, 8):
+        for failed_version in (6, 7, 8, 9):
             directory = copy_databases(original, root / f"fail-migration-{failed_version}")
             with sqlite3.connect(directory / DB_NAMES[0]) as conn:
                 conn.execute(
@@ -233,12 +236,14 @@ def main():
                     assert "generation" not in [row[1] for row in conn.execute("PRAGMA table_info(feeds)")]
                 elif failed_version == 7:
                     assert conn.execute("SELECT name FROM sqlite_master WHERE name LIKE 'content_gc_%'").fetchall() == []
-                else:
+                elif failed_version == 8:
                     assert "title_search" not in [row[1] for row in conn.execute("PRAGMA table_info(entries)")]
                     assert conn.execute(
                         "SELECT name FROM sqlite_master WHERE name IN "
                         "('idx_entries_title_search_missing', 'entries_title_search_stale')"
                     ).fetchall() == []
+                else:
+                    assert "custom_title" not in [row[1] for row in conn.execute("PRAGMA table_info(feeds)")]
                 conn.execute("DROP TRIGGER qa_fail_migration")
             run(candidate, directory, "list-feeds")
             verify_upgraded(directory)

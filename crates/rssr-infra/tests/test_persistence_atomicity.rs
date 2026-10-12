@@ -51,6 +51,7 @@ async fn add_feed(feeds: &SqliteFeedRepository, url: &str) -> rssr_domain::Feed 
             site_url: None,
             url: Url::parse(url).unwrap(),
             title: Some("Original".into()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -79,6 +80,7 @@ async fn activation_port_captures_generation_and_rejects_active_duplicate() {
         site_url: None,
         url: Url::parse("https://example.com/activation.xml").unwrap(),
         title: Some("Activation".into()),
+        source_title: None,
         folder: None,
     };
 
@@ -223,6 +225,7 @@ async fn orphan_cleanup_removes_failed_purge_content_after_reactivation() {
             site_url: None,
             url: feed.url.clone(),
             title: Some("Reactivated".into()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -297,6 +300,7 @@ async fn immediate_orphan_cleanup_does_not_block_reactivation() {
         site_url: None,
         url: Url::parse("https://example.com/immediate-race.xml").unwrap(),
         title: Some("Reactivated".into()),
+        source_title: None,
         folder: None,
     };
     let reactivation = {
@@ -368,6 +372,7 @@ async fn orphan_cleanup_does_not_hold_index_writer_lock() {
         site_url: None,
         url: feed.url.clone(),
         title: Some("Reactivated".into()),
+        source_title: None,
         folder: None,
     };
     let reactivation_feeds = feeds.clone();
@@ -539,12 +544,15 @@ async fn deleted_feed_rejects_late_metadata_update() {
         .expect_err("deleted feed must reject late metadata");
     assert!(matches!(error, rssr_domain::DomainError::NotFound));
 
-    let title: Option<String> = sqlx::query_scalar("SELECT title FROM feeds WHERE id = ?1")
-        .bind(feed.id)
-        .fetch_one(&index_pool)
-        .await
-        .unwrap();
-    assert_eq!(title.as_deref(), Some("Original"));
+    // 添加时的名称在 `custom_title`；源标题列没有被迟到的元数据写入（审计 B6）。
+    let (custom_title, source_title): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT custom_title, title FROM feeds WHERE id = ?1")
+            .bind(feed.id)
+            .fetch_one(&index_pool)
+            .await
+            .unwrap();
+    assert_eq!(custom_title.as_deref(), Some("Original"));
+    assert_eq!(source_title, None);
 }
 
 #[tokio::test]
@@ -572,6 +580,7 @@ async fn unreadable_app_state_does_not_block_subscription_removal() {
         .upsert_subscription(&NewFeedSubscription {
             url: "https://example.com/feed.xml".parse().expect("url"),
             title: None,
+            source_title: None,
             site_url: None,
             folder: None,
         })

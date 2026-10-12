@@ -71,6 +71,7 @@ async fn seeded(titles: &[String]) -> (SqlitePool, SqliteEntryRepository, i64) {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("feed url"),
             title: None,
+            source_title: None,
             folder: None,
         })
         .await

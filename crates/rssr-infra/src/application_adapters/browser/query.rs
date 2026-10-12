@@ -33,7 +33,7 @@ pub fn list_feeds(state: &BrowserState) -> Vec<FeedSummary> {
         .filter(|feed| !feed.is_deleted)
         .map(|feed| FeedSummary {
             id: feed.id,
-            title: feed.title.clone().unwrap_or_else(|| feed.url.clone()),
+            title: feed.display_title(),
             url: feed.url.clone(),
             unread_count: counts_by_feed.get(&feed.id).map(|(_, unread)| *unread).unwrap_or(0),
             entry_count: counts_by_feed.get(&feed.id).map(|(all, _)| *all).unwrap_or(0),
@@ -63,7 +63,7 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
         .feeds
         .iter()
         .filter(|feed| !feed.is_deleted)
-        .map(|feed| (feed.id, feed.title.clone().unwrap_or_else(|| feed.url.clone())))
+        .map(|feed| (feed.id, feed.display_title()))
         .collect::<HashMap<_, _>>();
 
     // 先在仍带 `created_at` 的持久化条目上排序，再投影成 `EntrySummary`：`EntrySummary` 没有
@@ -348,6 +348,7 @@ mod tests {
             id: 1,
             url: "https://example.com/feed.xml".to_string(),
             title: Some("Example Feed".to_string()),
+            custom_title: None,
             site_url: None,
             description: None,
             icon_url: None,

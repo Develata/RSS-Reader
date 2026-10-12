@@ -153,6 +153,7 @@ async fn oversized_refresh_keeps_old_articles_counts_and_success_history() {
         .upsert_subscription(&NewFeedSubscription {
             url: url.parse().unwrap(),
             title: None,
+            source_title: None,
             site_url: None,
             folder: None,
         })

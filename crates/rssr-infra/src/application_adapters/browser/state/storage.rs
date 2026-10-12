@@ -9,6 +9,11 @@ use super::{
 };
 
 pub const COMMIT_STORAGE_KEY: &str = "rssr-web-commit-v1";
+/// 提交头里的数据格式版本（键名和锁名不随它改）。2：订阅增加 `custom_title`（审计 B6）。
+/// 版本 1 的数据片按新模型原样可读（新字段有默认值），所以升级不重写数据片：第一次在锁内
+/// 成功读出全部数据片后，经唯一发布点把提交头换成 2。只认版本 1 的旧标签页此后在任何读写
+/// 之前就被版本检查挡住，不会把它不认识的字段写丢。
+const COMMIT_VERSION: u32 = 2;
 const KEYS: [&str; 4] =
     [STORAGE_KEY, APP_STATE_STORAGE_KEY, ENTRY_FLAGS_STORAGE_KEY, ENTRY_CONTENT_STORAGE_KEY];
 
@@ -107,7 +112,10 @@ fn serialized(state: &BrowserState, index: usize) -> Result<String> {
 fn current(storage: &Storage) -> Result<Commit> {
     if let Some(raw) = get(storage, COMMIT_STORAGE_KEY)? {
         let commit: Commit = decode(&raw, COMMIT_STORAGE_KEY)?;
-        ensure!(commit.version == 1, "无法读取此版本的浏览器数据；未修改原数据");
+        ensure!(
+            (1..=COMMIT_VERSION).contains(&commit.version),
+            "无法读取此版本的浏览器数据；未修改原数据"
+        );
         return Ok(commit);
     }
     // First open adopts legacy keys in place. Validate all existing slices first; a corrupt
@@ -140,7 +148,11 @@ fn current(storage: &Storage) -> Result<Commit> {
             put(storage, KEYS[index], &serialized(&empty, index)?)?;
         }
     }
-    let commit = Commit { version: 1, epoch: uuid::Uuid::new_v4().to_string(), revisions: [0; 4] };
+    let commit = Commit {
+        version: COMMIT_VERSION,
+        epoch: uuid::Uuid::new_v4().to_string(),
+        revisions: [0; 4],
+    };
     put(storage, COMMIT_STORAGE_KEY, &serde_json::to_string(&commit)?)?;
     Ok(commit)
 }
@@ -185,7 +197,8 @@ fn publish(
     changes: Changes,
     mut commit: Commit,
 ) -> Result<()> {
-    if changes.0 == 0 {
+    // 没有改动也要发布一次旧版本的提交头：只读打开同样完成升级。
+    if changes.0 == 0 && commit.version == COMMIT_VERSION {
         return Ok(());
     }
     cleanup(storage, &commit);
@@ -196,6 +209,7 @@ fn publish(
             put(storage, &slot(index, commit.revisions[index]), &serialized(&cache.state, index)?)?;
         }
     }
+    commit.version = COMMIT_VERSION;
     // setItem is the only publication point: until it succeeds, all readers use old slices.
     put(storage, COMMIT_STORAGE_KEY, &serde_json::to_string(&commit)?)?;
     cache.commit = Some(commit.clone());

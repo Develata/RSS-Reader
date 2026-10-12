@@ -162,6 +162,7 @@ async fn subscription_contract_remove_purges_entries_soft_deletes_feed_and_clear
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -217,6 +218,7 @@ async fn subscription_contract_remove_preserves_other_last_opened_feed() {
             site_url: None,
             url: Url::parse("https://example.com/retained.xml").expect("valid url"),
             title: Some("Retained".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -227,6 +229,7 @@ async fn subscription_contract_remove_preserves_other_last_opened_feed() {
             site_url: None,
             url: Url::parse("https://example.com/removed.xml").expect("valid url"),
             title: Some("Removed".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -250,4 +253,27 @@ async fn subscription_contract_remove_preserves_other_last_opened_feed() {
         fixture.app_state_repository.load_last_opened_feed_id().await.expect("load app state"),
         Some(retained_feed.id)
     );
+}
+
+#[path = "support/feed_title_cases.rs"]
+mod feed_title_cases;
+
+#[tokio::test]
+async fn subscription_contract_keeps_chosen_names_apart_from_source_titles() {
+    let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.expect("connect");
+    migrate(&pool).await.expect("migrate");
+    let feeds = Arc::new(SqliteFeedRepository::new(pool.clone()));
+    let entries = Arc::new(SqliteEntryRepository::new(pool.clone()));
+    let mutations = SqlitePersistenceMutations::new(pool.clone(), pool.clone());
+    let refresh =
+        rssr_infra::application_adapters::SqliteRefreshStore::new(feeds.clone(), entries.clone());
+    feed_title_cases::verify_custom_titles(&feed_title_cases::Ports {
+        feeds: feeds.as_ref(),
+        entries: entries.as_ref(),
+        activation: &mutations,
+        removal: &mutations,
+        refresh: &refresh,
+        config: &mutations,
+    })
+    .await;
 }

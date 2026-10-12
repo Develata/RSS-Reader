@@ -112,6 +112,7 @@ fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
         id,
         url: url.to_string(),
         title: Some(format!("Feed {id}")),
+        custom_title: None,
         site_url: None,
         description: None,
         icon_url: None,
@@ -854,6 +855,7 @@ async fn old_refresh_generation_cannot_commit_after_delete_and_same_url_readd() 
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").unwrap(),
             title: Some("Re-added".into()),
+            source_title: None,
             folder: None,
         })
         .await

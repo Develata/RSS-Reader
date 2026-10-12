@@ -37,6 +37,7 @@ async fn config_package_roundtrip_restores_feeds_and_settings() {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
+            source_title: None,
             folder: Some("Tech".to_string()),
         })
         .await
@@ -46,6 +47,7 @@ async fn config_package_roundtrip_restores_feeds_and_settings() {
             site_url: None,
             url: Url::parse("https://news.example.com/rss").expect("valid url"),
             title: Some("News".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -122,6 +124,7 @@ async fn config_import_overwrites_local_feed_membership() {
             site_url: None,
             url: Url::parse("https://stale.example.com/rss").expect("valid url"),
             title: Some("Stale".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -168,6 +171,7 @@ async fn config_import_removes_dropped_feed_entries_and_clears_metadata() {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Legacy".to_string()),
+            source_title: None,
             folder: Some("Archive".to_string()),
         })
         .await
@@ -177,6 +181,7 @@ async fn config_import_removes_dropped_feed_entries_and_clears_metadata() {
             site_url: None,
             url: Url::parse("https://stale.example.com/rss").expect("valid url"),
             title: Some("Stale".to_string()),
+            source_title: None,
             folder: None,
         })
         .await

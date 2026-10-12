@@ -25,6 +25,7 @@ async fn sqlite_bulk_scope_confirmation_atomic_failure_and_zero() {
             .upsert_subscription(&NewFeedSubscription {
                 url: Url::parse(&format!("https://example.com/{feed_id}")).unwrap(),
                 title: None,
+                source_title: None,
                 site_url: None,
                 folder: None,
             })
@@ -119,6 +120,7 @@ async fn sqlite_entry_query_accepts_more_feed_ids_than_sqlite_bind_limit() {
         .upsert_subscription(&NewFeedSubscription {
             url: Url::parse("https://example.com/selected").unwrap(),
             title: Some("Selected".into()),
+            source_title: None,
             site_url: None,
             folder: None,
         })

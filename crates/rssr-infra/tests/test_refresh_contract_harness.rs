@@ -64,6 +64,7 @@ async fn build_sqlite_fixture(
                 site_url: None,
                 url: Url::parse(raw).with_context(|| format!("parse seeded feed url: {raw}"))?,
                 title: None,
+                source_title: None,
                 folder: None,
             })
             .await

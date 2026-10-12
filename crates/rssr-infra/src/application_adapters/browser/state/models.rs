@@ -34,7 +34,12 @@ pub struct PersistedState {
 pub struct PersistedFeed {
     pub id: i64,
     pub url: String,
+    /// 订阅源自己声明的标题，只由探测和刷新更新。
     pub title: Option<String>,
+    /// 用户或导入指定的名称，显示时优先于源标题（审计 B6）。旧数据没有这个字段，读作 `None`；
+    /// 提交头版本 2 起写入，旧版本标签页会被版本检查挡住，不会把它丢掉。
+    #[serde(default)]
+    pub custom_title: Option<String>,
     pub site_url: Option<String>,
     pub description: Option<String>,
     pub icon_url: Option<String>,
@@ -47,6 +52,14 @@ pub struct PersistedFeed {
     pub is_deleted: bool,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
+}
+
+impl PersistedFeed {
+    /// 列表里显示的名称：指定名称、源标题、URL 依次兜底，与原生端
+    /// `COALESCE(custom_title, title, url)` 相同。
+    pub fn display_title(&self) -> String {
+        self.custom_title.as_ref().or(self.title.as_ref()).unwrap_or(&self.url).clone()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -36,7 +36,7 @@ impl FeedService {
     }
 
     pub async fn add_subscription(&self, input: &AddSubscriptionInput) -> Result<Feed> {
-        Ok(self.activate_subscription_with_site(input, None).await?.feed)
+        Ok(self.activate_subscription_with_site(input, None, None).await?.feed)
     }
 
     pub(crate) async fn ensure_not_subscribed(&self, url: &Url) -> Result<()> {
@@ -47,10 +47,12 @@ impl FeedService {
         Ok(())
     }
 
+    /// `input.title` 是用户指定的名称；`source_title` 是探测到的源标题，两者分开保存（审计 B6）。
     pub(crate) async fn activate_subscription_with_site(
         &self,
         input: &AddSubscriptionInput,
         site_url: Option<Url>,
+        source_title: Option<String>,
     ) -> Result<ActivatedSubscription> {
         let url = parse_feed_url(&input.url).context("订阅 URL 不合法")?;
         self.activation_port
@@ -58,6 +60,7 @@ impl FeedService {
                 site_url,
                 url,
                 title: input.title.clone(),
+                source_title,
                 folder: input.folder.clone(),
             })
             .await
@@ -95,6 +98,7 @@ mod tests {
                 id: 1,
                 url: new_feed.url.clone(),
                 title: new_feed.title.clone(),
+                source_title: new_feed.source_title.clone(),
                 site_url: None,
                 description: None,
                 icon_url: None,
@@ -159,6 +163,7 @@ mod tests {
                     id: 1,
                     url: new_feed.url,
                     title: new_feed.title,
+                    source_title: new_feed.source_title.clone(),
                     site_url: new_feed.site_url,
                     description: None,
                     icon_url: None,

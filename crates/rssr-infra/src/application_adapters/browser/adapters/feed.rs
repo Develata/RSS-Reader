@@ -150,7 +150,10 @@ pub(super) fn upsert_subscription_in_state(
             feed.site_url = new_feed.site_url.as_ref().map(ToString::to_string);
         }
         if new_feed.title.is_some() {
-            feed.title = normalized_title.clone();
+            feed.custom_title = normalized_title.clone();
+        }
+        if new_feed.source_title.is_some() {
+            feed.title = new_feed.source_title.clone();
         }
         if new_feed.folder.is_some() {
             feed.folder = normalized_folder.clone();
@@ -166,7 +169,8 @@ pub(super) fn upsert_subscription_in_state(
         let persisted = PersistedFeed {
             id: state.core.next_feed_id,
             url: normalized_url.to_string(),
-            title: normalized_title,
+            title: new_feed.source_title.clone(),
+            custom_title: normalized_title,
             site_url: new_feed.site_url.as_ref().map(ToString::to_string),
             description: None,
             icon_url: None,
@@ -203,7 +207,8 @@ fn persisted_feed_to_domain(feed: &PersistedFeed) -> rssr_domain::Result<Feed> {
     Ok(Feed {
         id: feed.id,
         url: url::Url::parse(&feed.url).map_err(map_persistence_error)?,
-        title: feed.title.clone(),
+        title: feed.custom_title.clone().or_else(|| feed.title.clone()),
+        source_title: feed.title.clone(),
         site_url: feed
             .site_url
             .as_ref()

@@ -751,7 +751,7 @@ impl EntryIndexRepository for SqliteEntryRepository {
             SELECT entries.id,
                    entries.feed_id,
                    entries.title,
-                   COALESCE(feeds.title, feeds.url) AS feed_title,
+                   COALESCE(feeds.custom_title, feeds.title, feeds.url) AS feed_title,
                    entries.published_at,
                    entries.is_read,
                    entries.is_starred

@@ -86,6 +86,7 @@ enum BulkArchiveFilter {
 #[derive(Args, Debug)]
 struct AddFeedArgs {
     url: String,
+    /// 自定义订阅名称，刷新不会覆盖；省略时显示订阅源自己的标题并跟随它改名
     #[arg(long)]
     title: Option<String>,
     #[arg(long)]

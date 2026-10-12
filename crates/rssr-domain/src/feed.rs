@@ -5,7 +5,11 @@ use url::Url;
 pub struct Feed {
     pub id: i64,
     pub url: Url,
+    /// 显示名称：用户或导入指定的名称优先，否则是源标题；两者都没有时为 `None`
+    /// （URL 只在显示边界兜底，不写回这里，否则导出后再导入会变成指定名称）。
     pub title: Option<String>,
+    /// 订阅源自己声明的标题，只由添加时的探测和刷新更新（审计 B6）。
+    pub source_title: Option<String>,
     pub site_url: Option<Url>,
     pub description: Option<String>,
     pub icon_url: Option<Url>,
@@ -37,7 +41,11 @@ pub struct FeedSummary {
 pub struct NewFeedSubscription {
     pub site_url: Option<Url>,
     pub url: Url,
+    /// 用户或导入指定的名称，刷新不会覆盖：`None` 保留已有名称，`Some("")`（或只有空白）清除，
+    /// 其余设置为该名称。
     pub title: Option<String>,
+    /// 探测到的源标题；`None` 保留已有值，从不清除。
+    pub source_title: Option<String>,
     // `folder` 仅用于导入导出保真，不应扩展为产品主线里的文件夹系统。
     pub folder: Option<String>,
 }

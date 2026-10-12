@@ -29,6 +29,7 @@ async fn thirty_three_thousand_entry_feed_writes_index_and_content_completely() 
             site_url: None,
             url: Url::parse("https://example.com/huge.xml").unwrap(),
             title: Some("Huge feed".into()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -100,6 +101,7 @@ async fn batched_content_upsert_preserves_sequential_duplicate_semantics() {
             site_url: None,
             url: Url::parse("https://example.com/duplicates.xml").unwrap(),
             title: Some("Duplicates".into()),
+            source_title: None,
             folder: None,
         })
         .await

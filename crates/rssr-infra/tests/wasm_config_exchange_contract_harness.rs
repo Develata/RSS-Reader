@@ -56,6 +56,7 @@ fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
         id,
         url: url.to_string(),
         title: Some(format!("Feed {id}")),
+        custom_title: None,
         site_url: None,
         description: None,
         icon_url: None,

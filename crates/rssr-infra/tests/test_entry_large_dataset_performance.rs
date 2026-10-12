@@ -28,6 +28,7 @@ async fn entry_repository_handles_large_dataset_queries() {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Perf Feed".to_string()),
+            source_title: None,
             folder: Some("Perf".to_string()),
         })
         .await

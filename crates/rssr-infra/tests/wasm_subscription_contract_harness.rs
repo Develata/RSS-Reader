@@ -87,6 +87,7 @@ fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
         id,
         url: url.to_string(),
         title: Some(format!("Feed {id}")),
+        custom_title: None,
         site_url: None,
         description: None,
         icon_url: None,
@@ -152,6 +153,7 @@ async fn browser_activation_port_captures_generation_and_rejects_active_duplicat
         site_url: None,
         url: Url::parse("https://example.com/activation.xml").unwrap(),
         title: Some("Activation".into()),
+        source_title: None,
         folder: None,
     };
 
@@ -215,7 +217,8 @@ async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
         let snapshot = state.snapshot().await.expect("snapshot");
         assert_eq!(snapshot.core.feeds.len(), 1);
         assert_eq!(snapshot.core.feeds[0].url, "https://example.com/feed.xml");
-        assert_eq!(snapshot.core.feeds[0].title.as_deref(), Some("Example"));
+        // 添加时指定的名称存在 `custom_title`，`title` 只放源标题（审计 B6）。
+        assert_eq!(snapshot.core.feeds[0].custom_title.as_deref(), Some("Example"));
         assert_eq!(snapshot.core.feeds[0].folder.as_deref(), Some("Inbox"));
         assert!(!snapshot.core.feeds[0].is_deleted);
     }
@@ -223,7 +226,7 @@ async fn browser_subscription_add_normalizes_and_deduplicates_urls() {
     let persisted = persisted_state().await;
     assert_eq!(persisted.core.feeds.len(), 1);
     assert_eq!(persisted.core.feeds[0].url, "https://example.com/feed.xml");
-    assert_eq!(persisted.core.feeds[0].title.as_deref(), Some("Example"));
+    assert_eq!(persisted.core.feeds[0].custom_title.as_deref(), Some("Example"));
 
     clear_browser_state_storage();
 }
@@ -562,5 +565,29 @@ async fn browser_app_state_narrow_updates_do_not_lose_each_other() {
     let snapshot = state.snapshot().await.expect("browser snapshot");
     assert_eq!(snapshot.app_state.last_opened_feed_id, Some(7), "last opened feed was lost");
     assert_eq!(snapshot.app_state.entries_workspace, workspace, "workspace update was lost");
+    clear_browser_state_storage();
+}
+
+#[path = "support/feed_title_cases.rs"]
+mod feed_title_cases;
+
+#[wasm_bindgen_test]
+async fn browser_keeps_chosen_names_apart_from_source_titles() {
+    clear_browser_state_storage();
+    let state = seed_state(BrowserState::default()).await;
+    let feeds = BrowserFeedRepository::new(state.clone());
+    let entries = BrowserEntryRepository::new(state.clone());
+    let mutations = BrowserPersistenceMutations::new(state.clone());
+    let refresh =
+        rssr_infra::application_adapters::browser::adapters::BrowserRefreshStore::new(state);
+    feed_title_cases::verify_custom_titles(&feed_title_cases::Ports {
+        feeds: &feeds,
+        entries: &entries,
+        activation: &mutations,
+        removal: &mutations,
+        refresh: &refresh,
+        config: &mutations,
+    })
+    .await;
     clear_browser_state_storage();
 }

@@ -679,6 +679,7 @@ mod tests {
                 site_url: None,
                 url: Url::parse("https://example.com/feed.xml").expect("feed url"),
                 title: Some("Example".to_string()),
+                source_title: None,
                 folder: None,
             })
             .await
@@ -770,6 +771,7 @@ mod tests {
                 site_url: None,
                 url: Url::parse("https://example.com/feed.xml").expect("feed url"),
                 title: None,
+                source_title: None,
                 folder: None,
             })
             .await

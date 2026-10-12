@@ -247,6 +247,7 @@ mod tests {
             id: 7,
             url: Url::parse("https://example.com/feed").unwrap(),
             title: title.map(str::to_string),
+            source_title: None,
             site_url: None,
             description: None,
             icon_url: None,

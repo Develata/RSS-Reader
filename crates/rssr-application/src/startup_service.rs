@@ -128,6 +128,7 @@ mod tests {
                         id: summary.id,
                         url: Url::parse(&summary.url).expect("test feed url"),
                         title: Some(summary.title.clone()),
+                        source_title: None,
                         site_url: None,
                         description: None,
                         icon_url: None,

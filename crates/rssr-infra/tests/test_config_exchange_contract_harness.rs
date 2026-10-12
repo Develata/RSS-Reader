@@ -117,6 +117,7 @@ async fn config_exchange_contract_json_roundtrip_restores_feeds_and_settings() {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
+            source_title: None,
             folder: Some("Tech".to_string()),
         })
         .await
@@ -127,6 +128,7 @@ async fn config_exchange_contract_json_roundtrip_restores_feeds_and_settings() {
             site_url: None,
             url: Url::parse("https://news.example.com/rss").expect("valid url"),
             title: Some("News".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -166,6 +168,7 @@ async fn config_exchange_contract_import_cleans_removed_feed_entries_and_last_op
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Retained".to_string()),
+            source_title: None,
             folder: Some("Inbox".to_string()),
         })
         .await
@@ -176,6 +179,7 @@ async fn config_exchange_contract_import_cleans_removed_feed_entries_and_last_op
             site_url: None,
             url: Url::parse("https://stale.example.com/rss").expect("valid url"),
             title: Some("Dropped".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -266,6 +270,7 @@ async fn config_exchange_contract_remote_push_and_pull_roundtrip() {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
+            source_title: None,
             folder: Some("Inbox".to_string()),
         })
         .await

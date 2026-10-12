@@ -246,14 +246,13 @@ impl ImportExportService {
         let imported_urls = desired_feeds.iter().map(|feed| feed.url.clone()).collect::<Vec<_>>();
 
         for feed in desired_feeds {
-            let existed =
-                current_feeds.iter().any(|current| normalize_feed_url(&current.url) == feed.url);
             self.feed_repository
                 .upsert_subscription(&NewFeedSubscription {
                     site_url: None,
                     url: feed.url,
-                    title: import_field(feed.title, existed),
-                    folder: import_field(feed.folder, existed),
+                    title: Some(import_field(feed.title)),
+                    source_title: None,
+                    folder: Some(import_field(feed.folder)),
                 })
                 .await?;
         }
@@ -291,7 +290,6 @@ impl ImportExportService {
 
     pub async fn import_opml(&self, raw: &str) -> Result<OpmlImportOutcome> {
         let feeds = self.opml_codec.decode(raw)?;
-        let current_feeds = self.feed_repository.list_feeds().await?;
         let imported_feed_count = feeds.len();
         let mut subscriptions = Vec::with_capacity(imported_feed_count);
 
@@ -300,13 +298,12 @@ impl ImportExportService {
         for feed in feeds {
             let url = parse_feed_url(&feed.url)
                 .with_context(|| format!("OPML 中存在无效订阅 URL：{}", feed.url))?;
-            let existed =
-                current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
             subscriptions.push(NewFeedSubscription {
                 site_url: None,
                 url,
-                title: import_field(feed.title, existed),
-                folder: import_field(feed.folder, existed),
+                title: Some(import_field(feed.title)),
+                source_title: None,
+                folder: Some(import_field(feed.folder)),
             });
         }
 

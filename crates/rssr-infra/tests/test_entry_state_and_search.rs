@@ -50,6 +50,7 @@ async fn entry_repository_updates_state_and_supports_search() {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example Feed".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -133,6 +134,7 @@ async fn entry_repository_applies_archive_filter_in_query() {
             site_url: None,
             url: Url::parse("https://example.com/archive-feed.xml").expect("valid url"),
             title: Some("Archive Feed".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -205,6 +207,7 @@ async fn entry_repository_resolves_content_after_batch_upsert() {
             site_url: None,
             url: Url::parse("https://example.com/content-feed.xml").expect("valid url"),
             title: Some("Content Feed".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -267,6 +270,7 @@ async fn unread_summaries_are_global_idempotent_and_unchanged_on_failure() {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").unwrap(),
             title: Some("Example Feed".into()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -316,6 +320,7 @@ async fn search_title_treats_like_wildcards_as_literals() {
             site_url: None,
             url: Url::parse("https://example.com/wildcards.xml").expect("valid url"),
             title: None,
+            source_title: None,
             folder: None,
         })
         .await

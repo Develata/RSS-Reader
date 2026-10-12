@@ -41,52 +41,7 @@ impl SqliteFeedRepository {
             }
         }
 
-        sqlx::query(
-            r#"
-            INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url)
-            VALUES (?1, ?2, ?3, ?4, ?4, ?5)
-            ON CONFLICT(url) DO UPDATE SET
-                title = CASE
-                    WHEN excluded.title IS NULL THEN feeds.title
-                    ELSE NULLIF(excluded.title, '')
-                END,
-                folder = CASE
-                    WHEN excluded.folder IS NULL THEN feeds.folder
-                    ELSE NULLIF(excluded.folder, '')
-                END,
-                site_url = CASE
-                    WHEN feeds.is_deleted = 1 THEN excluded.site_url
-                    ELSE COALESCE(excluded.site_url, feeds.site_url)
-                END,
-                description = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.description END,
-                icon_url = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.icon_url END,
-                etag = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.etag END,
-                last_modified = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_modified END,
-                last_fetched_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_fetched_at END,
-                last_success_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_success_at END,
-                fetch_error = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.fetch_error END,
-                generation = CASE
-                    WHEN feeds.is_deleted = 1 THEN feeds.generation + 1
-                    ELSE feeds.generation
-                END,
-                is_deleted = 0,
-                updated_at = excluded.updated_at
-            "#,
-        )
-        .bind(normalized_url.as_str())
-        .bind(new_feed.title.as_deref())
-        .bind(new_feed.folder.as_deref())
-        .bind(&now)
-        .bind(new_feed.site_url.as_ref().map(Url::as_str))
-        .execute(&mut *tx)
-        .await
-        .map_err(map_sqlx_error)?;
-
-        let row = sqlx::query("SELECT * FROM feeds WHERE url = ?1")
-            .bind(normalized_url.as_str())
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(map_sqlx_error)?;
+        let row = upsert_subscription_row(&mut tx, new_feed, &normalized_url, &now).await?;
         let generation = row.try_get("generation").map_err(map_sqlx_error)?;
         let feed = Self::row_to_feed(row).await?;
         tx.commit().await.map_err(map_sqlx_error)?;
@@ -207,7 +162,7 @@ impl SqliteFeedRepository {
 
     pub async fn list_feeds_with_generation(&self) -> DomainResult<Vec<(Feed, i64)>> {
         let rows = sqlx::query(
-            "SELECT * FROM feeds WHERE is_deleted = 0 ORDER BY COALESCE(title, url) ASC",
+            "SELECT * FROM feeds WHERE is_deleted = 0 ORDER BY COALESCE(custom_title, title, url) ASC",
         )
         .fetch_all(&self.pool)
         .await
@@ -313,10 +268,15 @@ impl SqliteFeedRepository {
     }
 
     async fn row_to_feed(row: sqlx::sqlite::SqliteRow) -> DomainResult<Feed> {
+        let source_title: Option<String> = row.try_get("title").map_err(map_sqlx_error)?;
         Ok(Feed {
             id: row.try_get("id").map_err(map_sqlx_error)?,
             url: parse_url(row.try_get::<String, _>("url").map_err(map_sqlx_error)?)?,
-            title: row.try_get("title").map_err(map_sqlx_error)?,
+            title: row
+                .try_get::<Option<String>, _>("custom_title")
+                .map_err(map_sqlx_error)?
+                .or_else(|| source_title.clone()),
+            source_title,
             site_url: parse_optional_url(row.try_get("site_url").map_err(map_sqlx_error)?)?,
             description: row.try_get("description").map_err(map_sqlx_error)?,
             icon_url: parse_optional_url(row.try_get("icon_url").map_err(map_sqlx_error)?)?,
@@ -357,52 +317,7 @@ impl FeedRepository for SqliteFeedRepository {
             let now = now_rfc3339();
             let normalized_url = normalize_feed_url(&new_feed.url);
 
-            sqlx::query(
-                r#"
-                INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url)
-                VALUES (?1, ?2, ?3, ?4, ?4, ?5)
-                ON CONFLICT(url) DO UPDATE SET
-                    title = CASE
-                        WHEN excluded.title IS NULL THEN feeds.title
-                        ELSE NULLIF(excluded.title, '')
-                    END,
-                    folder = CASE
-                        WHEN excluded.folder IS NULL THEN feeds.folder
-                        ELSE NULLIF(excluded.folder, '')
-                    END,
-                    site_url = CASE
-                        WHEN feeds.is_deleted = 1 THEN excluded.site_url
-                        ELSE COALESCE(excluded.site_url, feeds.site_url)
-                    END,
-                    description = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.description END,
-                    icon_url = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.icon_url END,
-                    etag = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.etag END,
-                    last_modified = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_modified END,
-                    last_fetched_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_fetched_at END,
-                    last_success_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_success_at END,
-                    fetch_error = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.fetch_error END,
-                    generation = CASE
-                        WHEN feeds.is_deleted = 1 THEN feeds.generation + 1
-                        ELSE feeds.generation
-                    END,
-                    is_deleted = 0,
-                    updated_at = excluded.updated_at
-                "#,
-            )
-            .bind(normalized_url.as_str())
-            .bind(new_feed.title.as_deref())
-            .bind(new_feed.folder.as_deref())
-            .bind(&now)
-            .bind(new_feed.site_url.as_ref().map(Url::as_str))
-            .execute(&mut *tx)
-            .await
-            .map_err(map_sqlx_error)?;
-
-            let row = sqlx::query("SELECT * FROM feeds WHERE url = ?1")
-                .bind(normalized_url.as_str())
-                .fetch_one(&mut *tx)
-                .await
-                .map_err(map_sqlx_error)?;
+            let row = upsert_subscription_row(&mut tx, new_feed, &normalized_url, &now).await?;
             feeds.push(Self::row_to_feed(row).await?);
         }
         tx.commit().await.map_err(map_sqlx_error)?;
@@ -469,7 +384,7 @@ impl FeedRepository for SqliteFeedRepository {
         let rows = sqlx::query(
             r#"
             SELECT feeds.id,
-                   COALESCE(feeds.title, feeds.url) AS title,
+                   COALESCE(feeds.custom_title, feeds.title, feeds.url) AS title,
                    feeds.url AS url,
                    COALESCE(SUM(CASE WHEN entries.is_read = 0 THEN 1 ELSE 0 END), 0) AS unread_count,
                    COUNT(entries.id) AS entry_count,
@@ -479,7 +394,7 @@ impl FeedRepository for SqliteFeedRepository {
             FROM feeds
             LEFT JOIN entries ON entries.feed_id = feeds.id
             WHERE feeds.is_deleted = 0
-            GROUP BY feeds.id, feeds.title, feeds.url, feeds.last_fetched_at, feeds.last_success_at, feeds.fetch_error
+            GROUP BY feeds.id, feeds.custom_title, feeds.title, feeds.url, feeds.last_fetched_at, feeds.last_success_at, feeds.fetch_error
             ORDER BY title ASC
             "#,
         )
@@ -501,6 +416,61 @@ impl FeedRepository for SqliteFeedRepository {
             })
             .collect())
     }
+}
+
+/// 激活或更新一条订阅并读回该行；事务由调用方持有。
+///
+/// 两个名称分开写（审计 B6）：指定名称进 `custom_title`，`None` 保留、空白清除、其余设置；
+/// 探测到的源标题进 `title`，只补不清，刷新也只写这一列。分组同样“`None` 保留、空白清除”。
+/// 首尾空白先去掉，与浏览器端和配置导入一致。
+async fn upsert_subscription_row(
+    connection: &mut sqlx::SqliteConnection,
+    new_feed: &NewFeedSubscription,
+    normalized_url: &Url,
+    now: &str,
+) -> DomainResult<sqlx::sqlite::SqliteRow> {
+    sqlx::query(
+        r#"
+        INSERT INTO feeds (url, custom_title, title, folder, created_at, updated_at, site_url)
+        VALUES (?1, NULLIF(?2, ''), ?3, NULLIF(?4, ''), ?5, ?5, ?6)
+        ON CONFLICT(url) DO UPDATE SET
+            custom_title = CASE WHEN ?2 IS NULL THEN feeds.custom_title ELSE NULLIF(?2, '') END,
+            title = COALESCE(?3, feeds.title),
+            folder = CASE WHEN ?4 IS NULL THEN feeds.folder ELSE NULLIF(?4, '') END,
+            site_url = CASE
+                WHEN feeds.is_deleted = 1 THEN excluded.site_url
+                ELSE COALESCE(excluded.site_url, feeds.site_url)
+            END,
+            description = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.description END,
+            icon_url = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.icon_url END,
+            etag = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.etag END,
+            last_modified = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_modified END,
+            last_fetched_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_fetched_at END,
+            last_success_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_success_at END,
+            fetch_error = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.fetch_error END,
+            generation = CASE
+                WHEN feeds.is_deleted = 1 THEN feeds.generation + 1
+                ELSE feeds.generation
+            END,
+            is_deleted = 0,
+            updated_at = excluded.updated_at
+        "#,
+    )
+    .bind(normalized_url.as_str())
+    .bind(new_feed.title.as_deref().map(str::trim))
+    .bind(new_feed.source_title.as_deref())
+    .bind(new_feed.folder.as_deref().map(str::trim))
+    .bind(now)
+    .bind(new_feed.site_url.as_ref().map(Url::as_str))
+    .execute(&mut *connection)
+    .await
+    .map_err(map_sqlx_error)?;
+
+    sqlx::query("SELECT * FROM feeds WHERE url = ?1")
+        .bind(normalized_url.as_str())
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(map_sqlx_error)
 }
 
 fn map_sqlx_error(error: sqlx::Error) -> DomainError {

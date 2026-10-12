@@ -33,6 +33,7 @@ async fn sqlite_refresh_store_persists_updated_feed_metadata_entries_and_fetch_s
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example".to_string()),
+            source_title: None,
             folder: Some("Tech".to_string()),
         })
         .await
@@ -76,7 +77,9 @@ async fn sqlite_refresh_store_persists_updated_feed_metadata_entries_and_fetch_s
 
     let stored_feed =
         feed_repository.get_feed(feed.id).await.expect("read feed").expect("feed exists");
-    assert_eq!(stored_feed.title.as_deref(), Some("Example Feed"));
+    // 添加时指定的名称不被刷新覆盖，源标题单独保存（审计 B6）。
+    assert_eq!(stored_feed.title.as_deref(), Some("Example"));
+    assert_eq!(stored_feed.source_title.as_deref(), Some("Example Feed"));
     assert_eq!(stored_feed.description.as_deref(), Some("Example description"));
     assert_eq!(stored_feed.etag.as_deref(), Some("etag-1"));
     assert!(stored_feed.last_fetched_at.is_some());
@@ -120,6 +123,7 @@ async fn sqlite_refresh_store_forces_full_fetch_when_feed_has_no_entries() {
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             title: Some("Example".to_string()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -212,6 +216,7 @@ async fn check_retry_after_failed_write(fail_content: bool) {
             site_url: None,
             url: Url::parse("https://example.com/recovery.xml").expect("fixture URL"),
             title: None,
+            source_title: None,
             folder: None,
         })
         .await
@@ -309,6 +314,7 @@ async fn sqlite_refresh_only_updates_changed_content_records() {
         .upsert_subscription(&NewFeedSubscription {
             url: Url::parse("https://example.com/content.xml").unwrap(),
             title: None,
+            source_title: None,
             site_url: None,
             folder: None,
         })
@@ -357,6 +363,7 @@ async fn sqlite_counts_only_real_inserts_including_same_batch_duplicates() {
             url: Url::parse("https://example.com/count").unwrap(),
             site_url: None,
             title: None,
+            source_title: None,
             folder: None,
         })
         .await
@@ -387,6 +394,7 @@ async fn old_sqlite_refresh_generation_cannot_commit_after_delete_and_same_url_r
             site_url: None,
             url: Url::parse("https://example.com/aba.xml").unwrap(),
             title: Some("Original".into()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -412,6 +420,7 @@ async fn old_sqlite_refresh_generation_cannot_commit_after_delete_and_same_url_r
             site_url: None,
             url: Url::parse("https://example.com/aba.xml").unwrap(),
             title: Some("Re-added".into()),
+            source_title: None,
             folder: None,
         })
         .await
@@ -435,8 +444,7 @@ async fn old_sqlite_refresh_generation_cannot_commit_after_delete_and_same_url_r
         .commit(&fresh_target, RefreshCommit::Updated { update: recovery_update("fresh") })
         .await
         .unwrap();
-    assert_eq!(
-        feeds.get_feed(feed.id).await.unwrap().unwrap().title.as_deref(),
-        Some("Feed fresh")
-    );
+    let refreshed = feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(refreshed.source_title.as_deref(), Some("Feed fresh"));
+    assert_eq!(refreshed.title.as_deref(), Some("Re-added"), "the chosen name stays (B6)");
 }

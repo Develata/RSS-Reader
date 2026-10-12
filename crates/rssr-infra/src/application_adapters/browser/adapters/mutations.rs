@@ -197,7 +197,8 @@ fn upsert_config_feed(
         if reactivating {
             reset_remote_feed_state(feed);
         }
-        feed.title = normalized_title;
+        // 配置包里的名称是指定名称；源标题留给刷新维护（审计 B6）。
+        feed.custom_title = normalized_title;
         feed.folder = normalized_folder;
         feed.is_deleted = false;
         feed.updated_at = now;
@@ -209,7 +210,8 @@ fn upsert_config_feed(
     state.core.feeds.push(PersistedFeed {
         id: state.core.next_feed_id,
         url: new_feed.url.to_string(),
-        title: normalized_title,
+        title: None,
+        custom_title: normalized_title,
         site_url: None,
         description: None,
         icon_url: None,

@@ -236,6 +236,7 @@ impl FeedRepository for MemoryFeedRepository {
             id: feeds.len() as i64 + 1,
             url: new_feed.url.clone(),
             title: new_feed.title.clone(),
+            source_title: new_feed.source_title.clone(),
             site_url: None,
             description: None,
             icon_url: None,
@@ -369,6 +370,7 @@ async fn export_config_contains_active_feeds_and_settings() {
                     id: 1,
                     url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                     title: Some("Example".to_string()),
+                    source_title: None,
                     site_url: None,
                     description: None,
                     icon_url: None,
@@ -386,6 +388,7 @@ async fn export_config_contains_active_feeds_and_settings() {
                     id: 2,
                     url: Url::parse("https://example.com/deleted.xml").expect("valid url"),
                     title: Some("Deleted".to_string()),
+                    source_title: None,
                     site_url: None,
                     description: None,
                     icon_url: None,
@@ -430,6 +433,7 @@ async fn remote_config_roundtrip_uses_json_payload() {
                 id: 1,
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 title: Some("Example".to_string()),
+                source_title: None,
                 site_url: None,
                 description: None,
                 icon_url: None,
@@ -495,6 +499,7 @@ async fn import_config_clears_removed_feed_entries_and_metadata() {
                 id: 1,
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 title: Some("Legacy".to_string()),
+                source_title: None,
                 site_url: None,
                 description: None,
                 icon_url: None,
@@ -512,6 +517,7 @@ async fn import_config_clears_removed_feed_entries_and_metadata() {
                 id: 2,
                 url: Url::parse("https://stale.example.com/rss").expect("valid url"),
                 title: Some("Stale".to_string()),
+                source_title: None,
                 site_url: None,
                 description: None,
                 icon_url: None,
@@ -581,6 +587,7 @@ async fn pull_remote_config_cleans_up_removed_feed_app_state() {
                 id: 1,
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 title: Some("Example".to_string()),
+                source_title: None,
                 site_url: None,
                 description: None,
                 icon_url: None,
@@ -598,6 +605,7 @@ async fn pull_remote_config_cleans_up_removed_feed_app_state() {
                 id: 2,
                 url: Url::parse("https://stale.example.com/rss").expect("valid url"),
                 title: Some("Stale".to_string()),
+                source_title: None,
                 site_url: None,
                 description: None,
                 icon_url: None,
@@ -661,6 +669,7 @@ async fn export_opml_uses_config_export_as_source_of_truth() {
                 id: 1,
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 title: Some("Example".to_string()),
+                source_title: None,
                 site_url: None,
                 description: None,
                 icon_url: None,
@@ -715,4 +724,90 @@ async fn import_opml_upserts_normalized_feeds() {
     assert_eq!(feeds.len(), 1);
     assert_eq!(feeds[0].url.as_str(), "https://example.com/feed.xml");
     assert_eq!(feeds[0].folder.as_deref(), Some("Tech"));
+}
+
+/// 只记录收到的订阅；`list_feeds` 像真实仓储一样不列出已删除的订阅。
+#[derive(Default)]
+struct RecordingFeedRepository {
+    upserted: Mutex<Vec<NewFeedSubscription>>,
+}
+
+#[async_trait::async_trait]
+impl FeedRepository for RecordingFeedRepository {
+    async fn upsert_subscription(
+        &self,
+        new_feed: &NewFeedSubscription,
+    ) -> rssr_domain::Result<Feed> {
+        self.upserted.lock().expect("lock upserted").push(new_feed.clone());
+        Ok(Feed {
+            id: 1,
+            url: new_feed.url.clone(),
+            title: None,
+            source_title: None,
+            site_url: None,
+            description: None,
+            icon_url: None,
+            folder: None,
+            etag: None,
+            last_modified: None,
+            last_fetched_at: None,
+            last_success_at: None,
+            fetch_error: None,
+            is_deleted: false,
+            created_at: OffsetDateTime::UNIX_EPOCH,
+            updated_at: OffsetDateTime::UNIX_EPOCH,
+        })
+    }
+
+    async fn set_deleted(&self, _feed_id: i64, _is_deleted: bool) -> rssr_domain::Result<()> {
+        Ok(())
+    }
+
+    async fn list_feeds(&self) -> rssr_domain::Result<Vec<Feed>> {
+        Ok(Vec::new())
+    }
+
+    async fn get_feed(&self, _feed_id: i64) -> rssr_domain::Result<Option<Feed>> {
+        Ok(None)
+    }
+
+    async fn list_summaries(&self) -> rssr_domain::Result<Vec<FeedSummary>> {
+        Ok(Vec::new())
+    }
+}
+
+/// OPML 里没有名称和分组就清除，不看导入前的订阅快照：已删除的订阅不在快照里，以前会被当成
+/// 新订阅而保留删除前的名称和分组（审计 B6）。
+#[tokio::test]
+async fn import_opml_clears_missing_names_and_folders_without_consulting_a_snapshot() {
+    let feed_repository = Arc::new(RecordingFeedRepository::default());
+    let entry_repository =
+        Arc::new(MemoryEntryRepository { deleted_feed_ids: Mutex::new(Vec::new()) });
+    let service = ImportExportService::new(
+        feed_repository.clone(),
+        entry_repository.clone(),
+        entry_repository,
+        Arc::new(MemorySettingsRepository { settings: Mutex::new(UserSettings::default()) }),
+        Arc::new(RecordingOpmlCodec::with_decoded(vec![
+            ConfigFeed {
+                url: "https://example.com/unnamed.xml".to_string(),
+                title: None,
+                folder: None,
+            },
+            ConfigFeed {
+                url: "https://example.com/named.xml".to_string(),
+                title: Some("工作资讯".to_string()),
+                folder: Some("Tech".to_string()),
+            },
+        ])),
+    );
+
+    service.import_opml("<opml />").await.expect("import opml");
+
+    let upserted = feed_repository.upserted.lock().expect("lock upserted").clone();
+    let fields: Vec<_> = upserted
+        .iter()
+        .map(|feed| (feed.title.as_deref(), feed.source_title.as_deref(), feed.folder.as_deref()))
+        .collect();
+    assert_eq!(fields, [(Some(""), None, Some("")), (Some("工作资讯"), None, Some("Tech"))]);
 }

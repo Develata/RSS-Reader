@@ -45,6 +45,7 @@ async fn legacy_url_identity_is_promoted_in_place_when_hex_guid_becomes_visible(
             site_url: None,
             url: Url::parse("https://example.com/feed.xml").unwrap(),
             title: Some("Example".into()),
+            source_title: None,
             folder: None,
         })
         .await

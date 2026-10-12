@@ -41,6 +41,7 @@ async fn sql_archive_filter_agrees_with_is_entry_archived_at_the_second_boundary
             site_url: None,
             url: Url::parse("https://example.com/parity.xml").expect("valid url"),
             title: None,
+            source_title: None,
             folder: None,
         })
         .await

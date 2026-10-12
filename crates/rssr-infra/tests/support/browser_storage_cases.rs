@@ -73,6 +73,7 @@ async fn concurrent_subscription_inserts_allocate_distinct_ids_and_bulk_preview_
     let subscription = |url| NewFeedSubscription {
         url: url::Url::parse(url).unwrap(),
         title: None,
+        source_title: None,
         folder: None,
         site_url: None,
     };
@@ -280,4 +281,68 @@ async fn initial_state_is_atomic_and_never_replaces_existing_data() {
     assert!(BrowserStore::open_with_initial_state(fixture()).await.is_err());
     assert_eq!(storage().get_item(STORAGE_KEY).unwrap().as_deref(), Some("broken"));
     clear_browser_state_storage();
+}
+
+fn head() -> serde_json::Value {
+    serde_json::from_str(&storage().get_item(COMMIT_STORAGE_KEY).unwrap().unwrap()).unwrap()
+}
+
+fn all_storage_items() -> Vec<(String, Option<String>)> {
+    KEYS.iter()
+        .flat_map(|key| [key.to_string(), format!("{key}-next")])
+        .chain([COMMIT_STORAGE_KEY.to_string()])
+        .map(|key| {
+            let value = storage().get_item(&key).unwrap();
+            (key, value)
+        })
+        .collect()
+}
+
+/// 审计 B6 之前的数据：提交头版本 1，订阅没有 `custom_title`。第一次在锁内读取就把提交头换成
+/// 版本 2，纪元和各数据片版本不变、数据片一字不改；只认版本 1 的旧标签页此后读写都被挡住。
+#[wasm_bindgen_test]
+async fn a_version_one_head_is_upgraded_in_place_without_rewriting_slices() {
+    seed_state(fixture()).await;
+    let mut old_head = head();
+    assert_eq!(old_head["version"], 2, "new databases start at the current version");
+    old_head["version"] = 1.into();
+    storage().set_item(COMMIT_STORAGE_KEY, &old_head.to_string()).unwrap();
+    let revision = old_head["revisions"][0].as_u64().unwrap();
+    let core_key = if revision.is_multiple_of(2) {
+        STORAGE_KEY.to_string()
+    } else {
+        format!("{STORAGE_KEY}-next")
+    };
+    let mut core: serde_json::Value =
+        serde_json::from_str(&committed_slice(STORAGE_KEY).unwrap()).unwrap();
+    for feed in core["feeds"].as_array_mut().unwrap() {
+        feed.as_object_mut().unwrap().remove("custom_title").expect("current field present");
+    }
+    storage().set_item(&core_key, &core.to_string()).unwrap();
+    let slices: Vec<_> = KEYS.iter().map(|key| committed_slice(key)).collect();
+
+    let state = BrowserStore::open().await.unwrap().snapshot().await.unwrap();
+
+    assert_eq!(state.core.feeds.len(), 1);
+    assert_eq!(state.core.feeds[0].custom_title, None);
+    let new_head = head();
+    assert_eq!(new_head["version"], 2);
+    assert_eq!(new_head["epoch"], old_head["epoch"]);
+    assert_eq!(new_head["revisions"], old_head["revisions"]);
+    assert_eq!(KEYS.iter().map(|key| committed_slice(key)).collect::<Vec<_>>(), slices);
+}
+
+/// 更新的版本写的数据：拒绝读写，存储里的任何键都不动。
+#[wasm_bindgen_test]
+async fn a_newer_head_version_is_rejected_without_touching_storage() {
+    seed_state(fixture()).await;
+    let mut newer = head();
+    newer["version"] = 3.into();
+    storage().set_item(COMMIT_STORAGE_KEY, &newer.to_string()).unwrap();
+    let before = all_storage_items();
+
+    let error = BrowserStore::open().await.err().expect("a newer version is rejected");
+
+    assert!(error.to_string().contains("无法读取此版本"), "{error:#}");
+    assert_eq!(all_storage_items(), before);
 }

@@ -352,12 +352,13 @@ async fn upsert_config_feed(
     let title = feed.title.as_deref().map(str::trim).filter(|value| !value.is_empty());
     let folder = feed.folder.as_deref().map(str::trim).filter(|value| !value.is_empty());
 
+    // 配置包里的名称是指定名称：有就设置、没有就清除；源标题（`title`）留给刷新维护（审计 B6）。
     sqlx::query(
         r#"
-        INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url)
+        INSERT INTO feeds (url, custom_title, folder, created_at, updated_at, site_url)
         VALUES (?1, ?2, ?3, ?4, ?4, NULL)
         ON CONFLICT(url) DO UPDATE SET
-            title = excluded.title,
+            custom_title = excluded.custom_title,
             folder = excluded.folder,
             site_url = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.site_url END,
             description = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.description END,

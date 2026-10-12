@@ -66,6 +66,7 @@ mod tests {
                 id: 7,
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 title: Some("Example".to_string()),
+                source_title: None,
                 site_url: None,
                 description: None,
                 icon_url: None,
