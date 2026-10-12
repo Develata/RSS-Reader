@@ -6,8 +6,12 @@ use quick_xml::{
     Reader, Writer,
     events::{BytesDecl, BytesEnd, BytesStart, Event},
 };
-use rssr_domain::ConfigFeed;
+use rssr_domain::{ConfigFeed, OpmlFeed};
 
+/// OPML 编解码，原生与 Web 共用（Web 端原先有一份更宽松的副本，审计 D5）。
+///
+/// 订阅名称按 OPML 2.0：`text` 是显示的名称，`title` 来自订阅源。导出时 `text` 写显示名称、
+/// `title` 写已知的源标题；导入时名称取 `text`，空白时退回 `title`（审计 B6）。
 #[derive(Debug, Clone, Default)]
 pub struct OpmlCodec;
 
@@ -16,7 +20,7 @@ impl OpmlCodec {
         Self
     }
 
-    pub fn encode(&self, feeds: &[ConfigFeed]) -> Result<String> {
+    pub fn encode(&self, feeds: &[OpmlFeed]) -> Result<String> {
         let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
         writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
 
@@ -26,7 +30,7 @@ impl OpmlCodec {
 
         writer.write_event(Event::Start(BytesStart::new("body")))?;
 
-        let mut grouped: BTreeMap<Option<String>, Vec<&ConfigFeed>> = BTreeMap::new();
+        let mut grouped: BTreeMap<Option<String>, Vec<&OpmlFeed>> = BTreeMap::new();
         for feed in feeds {
             grouped.entry(feed.folder.clone()).or_default().push(feed);
         }
@@ -121,15 +125,11 @@ impl OpmlCodec {
 
                     if name == b"outline" && body_depth.is_some() {
                         let outline = OutlineAttrs::from_event(&event, reader.decoder())?;
-                        if let Some(url) = outline.xml_url {
-                            feeds.push(ConfigFeed {
-                                url,
-                                title: outline.title.or(outline.text),
-                                folder: current_folder(&folder_stack),
-                            });
+                        if let Some(feed) = outline.feed(&folder_stack) {
+                            feeds.push(feed);
                             outline_depths.push(false);
                         } else {
-                            folder_stack.push(outline.title.or(outline.text));
+                            folder_stack.push(outline.name());
                             outline_depths.push(true);
                         }
                     }
@@ -150,12 +150,8 @@ impl OpmlCodec {
                         saw_body = true;
                     } else if name == b"outline" && body_depth.is_some() {
                         let outline = OutlineAttrs::from_event(&event, reader.decoder())?;
-                        if let Some(url) = outline.xml_url {
-                            feeds.push(ConfigFeed {
-                                url,
-                                title: outline.title.or(outline.text),
-                                folder: current_folder(&folder_stack),
-                            });
+                        if let Some(feed) = outline.feed(&folder_stack) {
+                            feeds.push(feed);
                         }
                     }
                 }
@@ -204,11 +200,15 @@ fn validate_opml_root(event: &BytesStart<'_>, decoder: Decoder) -> Result<()> {
     Ok(())
 }
 
-fn write_feed_outline(writer: &mut Writer<Vec<u8>>, feed: &ConfigFeed) -> Result<()> {
-    let title = feed.title.as_deref().unwrap_or(&feed.url);
+fn write_feed_outline(writer: &mut Writer<Vec<u8>>, feed: &OpmlFeed) -> Result<()> {
+    // OPML 2.0 要求每个 outline 都有 `text`；两个名称都没有时写订阅地址，导入时与 `xmlUrl`
+    // 相同的名称不算名称，再导入本应用不会把地址变成指定名称。源标题未知时不写 `title`，
+    // 不拿显示名称冒充源标题。
     let mut outline = BytesStart::new("outline");
-    outline.push_attribute(("text", title));
-    outline.push_attribute(("title", title));
+    outline.push_attribute(("text", feed.name.as_deref().unwrap_or(&feed.url)));
+    if let Some(source_title) = feed.source_title.as_deref() {
+        outline.push_attribute(("title", source_title));
+    }
     outline.push_attribute(("type", "rss"));
     outline.push_attribute(("xmlUrl", feed.url.as_str()));
     writer.write_event(Event::Empty(outline))?;
@@ -243,5 +243,23 @@ impl OutlineAttrs {
         }
 
         Ok(Self { text, title, xml_url })
+    }
+
+    /// 显示的名称：`text` 优先，空白时退回 `title`（OPML 2.0：`text` 是显示文本，`title`
+    /// 来自订阅源；其他阅读器里改过的名称在 `text`）。
+    fn name(&self) -> Option<String> {
+        [&self.text, &self.title]
+            .into_iter()
+            .flatten()
+            .find(|value| !value.trim().is_empty())
+            .cloned()
+    }
+
+    /// 带 `xmlUrl` 的 outline 是一条订阅。名称与订阅地址相同时不算名称：本应用和其他阅读器
+    /// 在没有名称时都会把地址写进 `text`，不能因此把地址当成指定名称固定下来。
+    fn feed(&self, folder_stack: &[Option<String>]) -> Option<ConfigFeed> {
+        let url = self.xml_url.clone()?;
+        let title = self.name().filter(|name| name.trim() != url.trim());
+        Some(ConfigFeed { url, title, folder: current_folder(folder_stack) })
     }
 }

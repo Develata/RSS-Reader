@@ -82,6 +82,18 @@ pub struct ConfigFeed {
     pub folder: Option<String>,
 }
 
+/// OPML 导出的一条订阅（审计 B6）。OPML 2.0 里 `text` 是显示的名称、`title` 来自订阅源，
+/// 所以导出要分开带两个名称：`name` 是显示名称（指定名称优先，否则源标题），`source_title` 是
+/// 订阅源自己的标题。配置包格式（v2）固定只有一个名称，仍用 [`ConfigFeed`]；导入只取一个
+/// 名称，也用 [`ConfigFeed`]。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpmlFeed {
+    pub url: String,
+    pub name: Option<String>,
+    pub source_title: Option<String>,
+    pub folder: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigPackage {

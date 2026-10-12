@@ -1,6 +1,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use rssr_domain::{ConfigFeed, ConfigPackage, UserSettings};
+use rssr_domain::{ConfigFeed, ConfigPackage, OpmlFeed, UserSettings};
 use rssr_infra::{
     config_sync::{
         file_format::{decode_config_package, encode_config_package},
@@ -49,9 +49,10 @@ fn smoke_regressions_cover_parser_config_and_webdav_edges() {
     assert!(parsed.entries[1].content_html.is_none() && parsed.entries[1].content_text.is_none());
 
     let opml = OpmlCodec::new()
-        .encode(&[ConfigFeed {
+        .encode(&[OpmlFeed {
             url: "https://example.com/feed.xml".to_string(),
-            title: Some("Example".to_string()),
+            name: Some("Example".to_string()),
+            source_title: None,
             folder: Some("Tech".to_string()),
         }])
         .expect("encode opml");

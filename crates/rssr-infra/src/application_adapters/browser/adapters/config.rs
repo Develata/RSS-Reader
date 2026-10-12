@@ -2,18 +2,19 @@ use anyhow::{Context, Result};
 use reqwest::StatusCode;
 use rssr_application::{OpmlCodecPort, RemoteConfigStore};
 
-use crate::application_adapters::browser::config::{decode_opml, encode_opml, remote_url};
+use crate::{application_adapters::browser::config::remote_url, opml::OpmlCodec};
 
+/// 委托给原生端同一个 [`OpmlCodec`]（审计 D5）：两端的名称规则与 XML 校验一致。
 #[derive(Clone, Default)]
 pub struct BrowserOpmlCodec;
 
 impl OpmlCodecPort for BrowserOpmlCodec {
-    fn encode(&self, feeds: &[rssr_domain::ConfigFeed]) -> Result<String> {
-        encode_opml(feeds)
+    fn encode(&self, feeds: &[rssr_domain::OpmlFeed]) -> Result<String> {
+        OpmlCodec::new().encode(feeds)
     }
 
     fn decode(&self, raw: &str) -> Result<Vec<rssr_domain::ConfigFeed>> {
-        decode_opml(raw)
+        OpmlCodec::new().decode(raw)
     }
 }
 

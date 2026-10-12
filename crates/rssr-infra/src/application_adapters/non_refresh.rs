@@ -66,7 +66,7 @@ impl InfraOpmlCodec {
 }
 
 impl OpmlCodecPort for InfraOpmlCodec {
-    fn encode(&self, feeds: &[rssr_domain::ConfigFeed]) -> Result<String> {
+    fn encode(&self, feeds: &[rssr_domain::OpmlFeed]) -> Result<String> {
         self.codec.encode(feeds)
     }
 

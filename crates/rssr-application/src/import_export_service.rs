@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use rssr_domain::{
     ConfigFeed, ConfigPackage, EntryContentRepository, EntryIndexRepository, FeedRepository,
-    NewFeedSubscription, SettingsRepository, normalize_feed_url, parse_feed_url,
+    NewFeedSubscription, OpmlFeed, SettingsRepository, normalize_feed_url, parse_feed_url,
 };
 use time::OffsetDateTime;
 
@@ -37,7 +37,9 @@ pub trait RemoteConfigStore: Send + Sync {
 }
 
 pub trait OpmlCodecPort: Send + Sync {
-    fn encode(&self, feeds: &[ConfigFeed]) -> Result<String>;
+    /// 导出：每条订阅带显示名称与源标题，分别写进 OPML 的 `text` 与 `title`（审计 B6）。
+    fn encode(&self, feeds: &[OpmlFeed]) -> Result<String>;
+    /// 导入：每条订阅只有一个名称（`text` 优先），按指定名称导入。
     fn decode(&self, raw: &str) -> Result<Vec<ConfigFeed>>;
 }
 
@@ -284,8 +286,22 @@ impl ImportExportService {
         self.import_config_package(&package).await
     }
 
+    /// 与配置包导出同一份订阅列表，另外带上源标题：配置包格式只有一个名称，带不了它。
     pub async fn export_opml(&self) -> Result<String> {
-        self.opml_codec.encode(&self.export_config().await?.feeds)
+        let feeds = self
+            .feed_repository
+            .list_feeds()
+            .await?
+            .into_iter()
+            .filter(|feed| !feed.is_deleted)
+            .map(|feed| OpmlFeed {
+                url: feed.url.to_string(),
+                name: feed.title,
+                source_title: feed.source_title,
+                folder: feed.folder,
+            })
+            .collect::<Vec<_>>();
+        self.opml_codec.encode(&feeds)
     }
 
     pub async fn import_opml(&self, raw: &str) -> Result<OpmlImportOutcome> {

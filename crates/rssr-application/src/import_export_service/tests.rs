@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use rssr_domain::{
     ConfigFeed, ConfigPackage, EntryContent, EntryContentRepository, EntryIndexRepository,
     EntryNavigation, EntryQuery, EntryRecord, Feed, FeedRepository, FeedSummary,
-    NewFeedSubscription, SettingsRepository, UserSettings,
+    NewFeedSubscription, OpmlFeed, SettingsRepository, UserSettings,
 };
 use time::OffsetDateTime;
 use url::Url;
@@ -32,7 +32,7 @@ impl RemoteConfigStore for StubRemoteConfigStore {
 #[derive(Default)]
 struct RecordingOpmlCodec {
     decoded: Mutex<Vec<ConfigFeed>>,
-    encoded_feeds: Mutex<Vec<ConfigFeed>>,
+    encoded_feeds: Mutex<Vec<OpmlFeed>>,
 }
 
 impl RecordingOpmlCodec {
@@ -42,7 +42,7 @@ impl RecordingOpmlCodec {
 }
 
 impl OpmlCodecPort for RecordingOpmlCodec {
-    fn encode(&self, feeds: &[ConfigFeed]) -> anyhow::Result<String> {
+    fn encode(&self, feeds: &[OpmlFeed]) -> anyhow::Result<String> {
         *self.encoded_feeds.lock().expect("lock encoded feeds") = feeds.to_vec();
         Ok("<opml />".to_string())
     }
@@ -659,8 +659,9 @@ async fn pull_remote_config_cleans_up_removed_feed_app_state() {
     assert_eq!(cleanup.removed_feed_ids.lock().expect("lock removed ids").as_slice(), &[2]);
 }
 
+/// OPML 导出与配置包导出同一份订阅列表，另外带上源标题，分别写进 `text` 与 `title`（审计 B6）。
 #[tokio::test]
-async fn export_opml_uses_config_export_as_source_of_truth() {
+async fn export_opml_passes_the_display_name_and_the_source_title() {
     let codec = Arc::new(RecordingOpmlCodec::default());
     let now = OffsetDateTime::UNIX_EPOCH;
     let service = ImportExportService::new(
@@ -668,8 +669,8 @@ async fn export_opml_uses_config_export_as_source_of_truth() {
             feeds: vec![Feed {
                 id: 1,
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
-                title: Some("Example".to_string()),
-                source_title: None,
+                title: Some("工作资讯".to_string()),
+                source_title: Some("Example News".to_string()),
                 site_url: None,
                 description: None,
                 icon_url: None,
@@ -693,10 +694,14 @@ async fn export_opml_uses_config_export_as_source_of_truth() {
     let raw = service.export_opml().await.expect("export opml");
 
     assert_eq!(raw, "<opml />");
-    assert_eq!(codec.encoded_feeds.lock().expect("lock encoded feeds").len(), 1);
     assert_eq!(
-        codec.encoded_feeds.lock().expect("lock encoded feeds")[0].url,
-        "https://example.com/feed.xml"
+        codec.encoded_feeds.lock().expect("lock encoded feeds").as_slice(),
+        [OpmlFeed {
+            url: "https://example.com/feed.xml".to_string(),
+            name: Some("工作资讯".to_string()),
+            source_title: Some("Example News".to_string()),
+            folder: Some("Tech".to_string()),
+        }]
     );
 }
 

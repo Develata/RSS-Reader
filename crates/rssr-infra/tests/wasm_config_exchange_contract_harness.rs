@@ -262,3 +262,50 @@ async fn browser_config_exchange_remote_pull_roundtrip_restores_feed_and_setting
 
     clear_browser_state_storage();
 }
+
+/// Web 端 OPML 委托给共用的 `OpmlCodec`（审计 D5）：导入取 `text` 作为指定名称、源标题不动，
+/// 导出 `text` 写显示名称、`title` 写源标题（审计 B6）；残缺的文档在写入前整体拒绝（原先
+/// Web 端的副本会接受）。
+#[wasm_bindgen_test]
+async fn browser_opml_uses_the_shared_codec_and_its_name_rules() {
+    clear_browser_state_storage();
+    let state = seed_state(BrowserState {
+        core: PersistedState {
+            next_feed_id: 1,
+            feeds: vec![sample_feed(1, "https://example.com/feed.xml", false)],
+            ..PersistedState::default()
+        },
+        ..BrowserState::default()
+    })
+    .await;
+    let service = build_service(state);
+
+    service
+        .import_opml(
+            r#"<opml version="2.0"><body>
+                <outline text="工作资讯" title="Example News" type="rss" xmlUrl="https://example.com/feed.xml"/>
+            </body></opml>"#,
+        )
+        .await
+        .expect("import opml");
+    let persisted = persisted_state().await;
+    assert_eq!(persisted.core.feeds[0].custom_title.as_deref(), Some("工作资讯"));
+    assert_eq!(persisted.core.feeds[0].title.as_deref(), Some("Feed 1"), "source title untouched");
+
+    let exported = service.export_opml().await.expect("export opml");
+    assert!(
+        exported.contains(
+            r#"text="工作资讯" title="Feed 1" type="rss" xmlUrl="https://example.com/feed.xml""#
+        ),
+        "{exported}"
+    );
+
+    let truncated = service
+        .import_opml(
+            r#"<opml version="2.0"><body><outline text="New" type="rss" xmlUrl="https://new.example/feed"/>"#,
+        )
+        .await;
+    assert!(truncated.is_err(), "a truncated document is rejected");
+    assert_eq!(persisted_state().await.core.feeds.len(), 1, "nothing was written");
+    clear_browser_state_storage();
+}
