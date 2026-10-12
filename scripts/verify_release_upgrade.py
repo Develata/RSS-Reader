@@ -184,7 +184,13 @@ def main():
             conn.execute("UPDATE entries SET is_starred=1, starred_at=created_at WHERE id % 7 = 0")
         run(legacy, original, "show-settings")
         expected = snapshot(original)
-        assert versions(original) == [(i, 1) for i in range(1, 6)]
+        # The legacy release decides where the upgrade starts: v0.1.21 stops at 0005, v0.1.22 and
+        # v0.1.23 at 0007. Only the migrations it lacks are exercised below.
+        legacy_versions = versions(original)
+        legacy_last = len(legacy_versions)
+        assert legacy_versions == [(i, 1) for i in range(1, legacy_last + 1)], legacy_versions
+        assert 5 <= legacy_last < CANDIDATE_MIGRATIONS, legacy_versions
+        report["legacy_migrations"] = legacy_last
         assert len(expected["feeds"]) == 3
         assert len(expected["entries"]) == len(expected["entry_contents"]) == 144
         assert sum(row["is_read"] for row in expected["entries"]) == 48
@@ -194,7 +200,7 @@ def main():
         original_hashes = {name: digest(original / name) for name in DB_NAMES}
         report["original_sha256"] = original_hashes
         (root / "legacy-snapshot.json").write_text(json.dumps(expected, ensure_ascii=False, indent=2), encoding="utf-8")
-        record("legacy binary created migrations 1-5, 3 subscriptions, 144 bodies, 48 read, 20 starred, settings and CSS")
+        record(f"legacy binary created migrations 1-{legacy_last}, 3 subscriptions, 144 bodies, 48 read, 20 starred, settings and CSS")
 
         def verify_upgraded(directory):
             assert versions(directory) == [(i, 1) for i in range(1, CANDIDATE_MIGRATIONS + 1)]
@@ -213,14 +219,14 @@ def main():
         upgraded = copy_databases(original, root / "upgrade-success")
         run(candidate, upgraded, "list-feeds")
         verify_upgraded(upgraded)
-        record("0006-0009 upgrade preserves every pre-existing data column and body; 0008 backfills folded titles; 0009 leaves custom names empty")
+        record(f"{legacy_last + 1:04d}-{CANDIDATE_MIGRATIONS:04d} upgrade preserves every pre-existing data column and body; 0008 backfills folded titles; 0009 leaves custom names empty")
         for _ in range(3):
             result = run(candidate, upgraded, "show-settings")
             assert CSS in result.stdout.decode()
             verify_upgraded(upgraded)
         record("three independent candidate restarts preserve data and custom CSS")
 
-        for failed_version in (6, 7, 8, 9):
+        for failed_version in range(legacy_last + 1, CANDIDATE_MIGRATIONS + 1):
             directory = copy_databases(original, root / f"fail-migration-{failed_version}")
             with sqlite3.connect(directory / DB_NAMES[0]) as conn:
                 conn.execute(
@@ -265,7 +271,7 @@ def main():
                         process.kill()
                         process.wait(timeout=10)
             blocker.rollback()
-        assert versions(interrupted) == [(i, 1) for i in range(1, 6)]
+        assert versions(interrupted) == legacy_versions
         assert snapshot(interrupted) == expected
         run(candidate, interrupted, "list-feeds")
         verify_upgraded(interrupted)

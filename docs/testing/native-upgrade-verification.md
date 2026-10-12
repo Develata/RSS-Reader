@@ -1,10 +1,10 @@
 # 原生旧库升级验收
 
-从空库运行最新 migrations 只能证明建库，不能证明旧版本升级。`scripts/verify_release_upgrade.py` 使用两个明确指定的真实 CLI，在新建目录中验证 v0.1.21 的 migrations 1–5 升到 1–9。它不接受已有数据库目录，也不读取日常安装的数据。
+从空库运行最新 migrations 只能证明建库，不能证明旧版本升级。`scripts/verify_release_upgrade.py` 使用两个明确指定的真实 CLI，在新建目录中验证旧版建的库升到 1–9。旧版应取最新的正式发布（v0.1.22 起的库已有 1–7，v0.1.21 只有 1–5）；脚本从旧库读出它已应用的迁移，只对旧版没有的迁移做升级与失败注入。它不接受已有数据库目录，也不读取日常安装的数据。
 
 ## 准备与执行
 
-1. 从 v0.1.21 正式 Release 下载当前平台的 CLI 包，核对 ZIP/tar 的 SHA-256 与 Release API 的 `digest`；保留下载包和核对结果。
+1. 从最新正式 Release（写本节时为 v0.1.23）下载当前平台的 CLI 包，核对 ZIP/tar 的 SHA-256 与 Release API 的 `digest`；保留下载包和核对结果。
 2. 从待验固定提交执行 `cargo build --locked --release -p rssr-cli`，按发布流程打包后解压。记录源码 SHA、Cargo.lock 哈希、编译器、包和可执行文件哈希。
 3. 用解压后的两个 CLI 执行下列命令。`--output-dir` 必须尚不存在；Windows 优先使用 E 盘任务目录。不要用 `python -O`，验收断言必须启用。
 
@@ -19,10 +19,10 @@ python -X utf8 scripts/verify_release_upgrade.py `
 
 ## 断言与证据
 
-- 旧库确实只有 migrations 1–5，包含 3 个订阅、144 篇正文、48 个已读、20 个收藏，以及非默认设置和自定义 CSS。
-- 0006–0009 升级后比较所有旧有字段与正文（`generation`、`title_search`、`custom_title` 三个新列单独检查），检查 integrity / foreign keys、generation 默认值、清理队列状态、0008 回填的折叠标题，以及 0009 没有把已有标题复制成自定义名称。
+- 旧库的迁移历史是连续的 1–k（k 为旧版带的迁移数，记入 `summary.json` 的 `legacy_migrations`），包含 3 个订阅、144 篇正文、48 个已读、20 个收藏，以及非默认设置和自定义 CSS。
+- 升到 1–9 后比较所有旧有字段与正文（`generation`、`title_search`、`custom_title` 三个新列单独检查），检查 integrity / foreign keys、generation 默认值、清理队列状态、0008 回填的折叠标题，以及 0009 没有把已有标题复制成自定义名称。
 - 三次独立启动候选 CLI 后数据与 CSS 不变。
-- 分别在 SQLx 写入迁移历史时用 SQLite trigger 注入失败，验证该次 migration 的 DDL 和历史记录一起回滚；移除故障后重试成功。0007 失败时保留已提交的 0006；0008 失败时不留下搜索列、部分索引与触发器；0009 失败时不留下 `custom_title` 列。
+- 对旧版没有的每个迁移，分别在 SQLx 写入迁移历史时用 SQLite trigger 注入失败，验证该次 migration 的 DDL 和历史记录一起回滚、之前已提交的迁移保留；移除故障后重试成功。0006 失败时不留下 `generation` 列；0007 失败时不留下清理队列表；0008 失败时不留下搜索列、部分索引与触发器；0009 失败时不留下 `custom_title` 列。
 - 旧库持有写锁时强制终止候选进程，再启动可完成升级。此项不等于验证断电、磁盘损坏或正在刷盘时的崩溃恢复。
 - 旧 CLI 拒绝已升级的迁移历史；恢复升级前的两个原始库后旧 CLI 可正常打开。
 - 原始库全程保留，最终哈希与创建时一致；失败/重试目录、命令参数与 stdout/stderr 都不清理。
