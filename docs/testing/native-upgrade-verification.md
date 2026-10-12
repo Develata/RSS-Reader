@@ -1,6 +1,6 @@
 # 原生旧库升级验收
 
-从空库运行最新 migrations 只能证明建库，不能证明旧版本升级。`scripts/verify_release_upgrade.py` 使用两个明确指定的真实 CLI，在新建目录中验证 v0.1.21 的 migrations 1–5 升到 1–8。它不接受已有数据库目录，也不读取日常安装的数据。
+从空库运行最新 migrations 只能证明建库，不能证明旧版本升级。`scripts/verify_release_upgrade.py` 使用两个明确指定的真实 CLI，在新建目录中验证 v0.1.21 的 migrations 1–5 升到 1–9。它不接受已有数据库目录，也不读取日常安装的数据。
 
 ## 准备与执行
 
