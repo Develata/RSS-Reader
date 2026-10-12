@@ -16,7 +16,7 @@
   - 第六轮独立评审的处理：`57f94f0`（名额已满时第一次 poll 即返回 `Busy` 的测试）
   - 你确认后的处理：`38198b1`（G1 迁移校验和不计换行差异）、`0f2b2cf`（D6 两端按 Unicode 小写搜索）
   - 第七轮独立评审的处理：`be5a102`（折叠列的部分索引、过期值触发器与当场补回、`instr` 字面查找）、`ba69e79`（迁移锁路径按 sqlx 解析 URL）、`fbd54e8`（升级验收脚本预期 0008，未运行：需要官方 v0.1.21 包）
-  - B6 第一单元（自定义订阅名不被刷新覆盖，你已批准）：`f7f28b4`，见下方“订阅名称”一节。
+  - B6（自定义订阅名不被刷新覆盖，你已批准）：第一单元 `f7f28b4`（`50776c7` 文档）；第十轮独立评审（第一单元，PASS / no blocker）的处理 `d872fdc`；第二单元与 D5 `8a64904`。见下方“订阅名称”一节；第三单元（发布说明要点）在“风险与后续事项”。
   - 第八、九轮独立评审的处理：`420459f`（回填查询固定走部分索引；真实 0007 旧库升级与回填失败续跑测试）、`589d13c`（迁移锁按 SQLite 实际打开的文件路径）、`568e01f`（文档）、`fc520b7`（失败续跑测试改在第二批中途注入；升级测试核对原有字段不变）。第九轮结论：PASS / no blocker，余项见下方残余风险。
 - 相关 tag / release：N/A
 - 状态：`validated`（本地验证；未推送、未开 PR）
@@ -28,9 +28,10 @@
 ## 影响范围
 
 - 模块：
-  - `rssr-domain`：`AppStateRepository` 端口（`save` 换成原子 `update`）
+  - `rssr-domain`：`AppStateRepository` 端口（`save` 换成原子 `update`）；`Feed.source_title`、`NewFeedSubscription.source_title`、`OpmlFeed`（B6）
+  - 迁移：`migrations/0008_entry_title_search.sql`（D6）、`migrations/0009_feed_custom_title.sql`（B6）
   - `rssr-application`：`refresh_service.rs`（按订阅串行、抓取序号）、`subscription_workflow.rs`、`app_state_service.rs`
-  - `rssr-infra`：`feed_body.rs`、`feed_normalization.rs`、`xml_declaration.rs`、`fetch/client/feed_http.rs`、`subscription_probe.rs`、`composition.rs`、`config_sync/webdav.rs`、`html/reader.rs`、`html/live_display.rs`、`db/app_state_repository.rs`、`db/entry_repository.rs`、`fetch/client/body_asset_localizer.rs`、`application_adapters/{mutations.rs,non_refresh.rs,browser/adapters/app_state.rs,browser/state/entries.rs,browser/state/storage.rs}`
+  - `rssr-infra`：`feed_body.rs`、`feed_normalization.rs`、`xml_declaration.rs`、`fetch/client/feed_http.rs`、`subscription_probe.rs`、`composition.rs`、`config_sync/webdav.rs`、`html/reader.rs`、`html/live_display.rs`、`db/app_state_repository.rs`、`db/entry_repository.rs`、`fetch/client/body_asset_localizer.rs`、`opml.rs`、`db/feed_repository.rs`、`application_adapters/{mutations.rs,non_refresh.rs,browser/adapters/app_state.rs,browser/adapters/{config,feed,mutations}.rs,browser/config.rs,browser/query.rs,browser/state/{entries,models,storage}.rs}`
   - `rssr-app`：`pages/entries_page/*`、`pages/feeds_page/*`、`ui/runtime/feeds.rs`、`ui/shell.rs`、`bootstrap/native.rs`
   - `rssr-web`：`auth/*`、`main.rs`、`proxy.rs`
   - `rssr-cli/src/main.rs`
@@ -84,7 +85,7 @@
 
 - D6：标题搜索两端都按 Unicode 小写比较（规则在 `rssr_domain::search`，两端共用）。原生端新增迁移 0008 的 `entries.title_search` 列，写入条目时一起写折叠后的标题，启动迁移后把旧条目分批回填（折叠在 Rust 里算，SQLite 的 `lower()` 只处理 ASCII）；搜索用 `instr` 在 `title_search` 里做字面查找，尚未回填的行退回 `instr(lower(title), …)`（只按 ASCII 不区分大小写）；回填查询显式走部分索引；旧版本改标题由触发器清空过期值，当前版本写入后当场补回。迁移 0008 在发布前原地改过：已应用旧 0008 的本地测试库需要重建。不做完整大小写折叠（`ß` 不等于 `ss`）。
 
-### 订阅名称（B6 第一单元）
+### 订阅名称（B6）
 
 - 两个名称分开保存：用户或导入指定的名称（原生新列 `feeds.custom_title`，迁移 0009；浏览器 `PersistedFeed.custom_title`）与订阅源自己声明的标题（沿用原来的 `title` 列 / 字段）。刷新、添加时的探测只写源标题；CLI `--title`、OPML 与配置包导入只写指定名称。
 - 领域：`Feed.title` 是显示名称（指定名称优先，否则源标题，两者都没有时为 `None`；URL 只在订阅列表、文章列表、阅读页等显示边界兜底）；新增 `Feed.source_title`。`NewFeedSubscription.title` 是指定名称（`None` 保留、空白清除、其余设置，原生端也先去首尾空白，与浏览器一致）；新增 `NewFeedSubscription.source_title`（只补不清）。两条原生 upsert SQL 合并为一个函数。
@@ -94,6 +95,8 @@
 - 迁移 0009 只加列，不把已有标题复制进 `custom_title`（你的决定：升级前的标题一律当作源标题，继续跟随订阅源改名）。
 - Web 存储：提交头 `version` 升到 2，键名 `rssr-web-commit-v1` 与锁名不变。读到版本 1 时，在同一把锁内成功读出全部数据片后，只经唯一发布点把提交头换成 2（纪元、各数据片版本不变，数据片不重写；只读打开也会升级）；新建的存储直接是版本 2；未知版本拒绝读写且不改动任何键。只认版本 1 的旧标签页此后在任何读写之前被拒绝，不会把 `custom_title` 写丢。
 - CLI `add-feed --title` 帮助、`docs/user-guide.md`、`specs/001-minimal-rss-reader/data-model.md` 说明了两种名称、导入的“设置或清除”、本应用导出再导入会把显示名称变成指定名称、升级前的名称不受保护。
+- 第二单元（OPML，`8a64904`）：按 OPML 2.0，`text` 是显示的名称、`title` 来自订阅源。导入取 `text`，空白时退回 `title`（分组同样）；名称与该 outline 的 `xmlUrl` 相同（去首尾空白后）不算名称，也不再退回 `title`。导出 `text` 写显示名称，`title` 只在知道源标题时写；两个名称都没有时 `text` 写订阅地址（OPML 要求 `text`），再导入时按上一条规则不会变成指定名称。`OpmlCodecPort::encode` 改收新的 `OpmlFeed`（地址、显示名称、源标题、分组）；配置包格式不变，所以 OPML 导出直接从订阅仓储取列表，不再经配置包导出。
+- D5（随第二单元完成）：Web 端 OPML 委托共用的 `OpmlCodec`，删除了 Web 端那份更宽松的副本。Web 端从此和桌面一样，在写入前整体拒绝格式残缺的 OPML（被截断、根元素前后有多余内容等）。
 
 ### CLI 与界面
 
@@ -115,6 +118,7 @@
 - 第七轮处理后（`fbd54e8`，实测）：`cargo test --workspace --locked -j 2` 423 passed / 0 failed / 3 ignored；全工作区与 wasm32 clippy、fmt 通过；四项变异（去掉当场补回、去掉触发器、换回 LIKE、换回手写 URL 解析）各自让对应测试失败。浏览器端代码这一轮未改。
 - G1 与 D6 之后的边界（`0f2b2cf` 的内容，提交前在工作区实测）：`cargo test --workspace --locked -j 2` 420 passed / 0 failed / 3 ignored；三个浏览器 harness 30/30、21/21、3/3；`rssr-infra` wasm lib 测试 14/14；全工作区与 wasm32 clippy、`cargo fmt --all --check` 通过。G1 的测试把索引库与正文库的每条记录改成另一种换行的校验和，去掉这层核对就以原始错误失败；D6 的测试把原生搜索结果与共用规则逐条对照，改回比较原标题就失败。
 - B6 第一单元（提交前在工作区实测）：`cargo test --workspace --locked -j 2` 430 passed / 0 failed / 3 ignored；三个浏览器 harness 30/30、24/24（新增 3 个）、3/3；`rssr-infra` wasm lib 测试 14/14；全工作区与 wasm32 clippy、`cargo fmt --all --check` 通过。新增测试：两端共用的名称契约（`support/feed_title_cases.rs`，原生与浏览器各跑一遍：指定名称与源标题分开、刷新不覆盖、`None` 保留、空白清除、无名称时 URL 只在列表兜底、重新激活时清除旧名称、配置包设置或清除）、0008→0009 真实旧库升级（已有标题留作源标题并继续跟随刷新）、添加时探测标题只进源标题、OPML 导入不看快照、浏览器提交头 v1 原地升级与未知版本拒绝。预期改变的旧测试 4 个：`test_application_refresh_store_adapter` 两处（添加时带名称、刷新后原断言为源标题，改为名称保留、源标题单独核对）、`test_persistence_atomicity::deleted_feed_rejects_late_metadata_update`（名称改存 `custom_title`，源标题列保持为空）、`wasm_subscription_contract_harness` 的去重测试（持久化字段改为 `custom_title`）。变异（实测，均恢复）：原生显示名偏向源标题、探测标题填回指定名称、OPML 缺名称传 `None`、配置导入不写 `custom_title`、0009 复制旧标题，浏览器显示名偏向源标题、只读打开不升级提交头、接受未知版本，各自让对应测试失败。
+- 第十轮独立评审（第一单元）的处理与第二单元（`d872fdc`、`8a64904` 的内容，提交前在工作区实测）：`cargo test --workspace --locked -j 2` 433 passed / 0 failed / 3 ignored；三个浏览器 harness 30/30、26/26、4/4；`rssr-infra` wasm lib 测试 14/14；全工作区与 wasm32 clippy、`cargo fmt --all --check` 通过。评审处理：迟到刷新的测试补查源标题（去掉元数据更新的 generation 条件后，迟到刷新确实写入了 "Feed stale"，现在被抓到）；浏览器提交头升级补两条失败路径（提交头写失败时一切不变、同一句柄下次访问重试升级；数据片损坏时不升级）；workflow 测试的桩按真实契约返回显示名称、改为核对激活端口收到的参数；CLI 帮助说明省略 `--title` 时保留已有名称。旧版本标签页的拒绝只能读旧版代码确认（它在读数据片之前就拒绝版本 1 以外的提交头），当前构建无法实际运行旧版。第二单元新增测试：`text` 优先与空白退回、与地址相同的名称、导出属性与往返、Web 端 OPML（此前没有任何 harness 覆盖：按 `text` 导入、导出两个名称、残缺文档在写入前拒绝）。现有 OPML 夹具的 `text` 与 `title` 都相同，改优先级没有翻转旧断言；预期改变的只有“OPML 导出取自配置包导出”这一个应用层测试（改为核对两个名称都传给编码器）。变异（实测，均恢复）：去掉 generation 条件、升级时重写数据片、读数据片之前先发布新提交头、探测标题填回指定名称、`title` 优先于 `text`、保留与地址相同的名称、导出 `title` 写显示名称、服务层丢掉源标题，各自让对应测试失败。
 - 变异验证（实测，每次恢复后复跑通过）：C2 计数（把无图文章也计数 → 0 次请求）；F1/F2 三个测试（名额留在调用方、表满不记录、设备共用名额）；C1 三个测试（去掉正文条件、哈希忽略地址、仅规范化也写回）；A1（只在成功后登记）、A2（普通 `BEGIN`）、A3（忽略缺席条目）；第四轮的断开记账（在处理函数里校验与记账）、A1 部分写入（只在成功后登记）、NULL 哈希（`=` 比较）、A3 归档计数。第五轮的闸门测试（在请求里记账、提前释放名额，各自失败）；第六轮的满名额测试（在任务里取名额 → 第一次 poll 为 `Pending`，失败）。每个测试都在对应修复撤掉后失败。会话先验签名的顺序无法用行为测试观察，改由类型保证（`VerifiedPayload`），未做时序测量。
 - 红→绿（实测）：8 个审计红测试解除忽略后通过；A2 在 SQLite（改成延迟事务即失败）与浏览器（改成先读后写即丢更新）两端各有一个红测试；E1 卸载测试在任务归页面作用域时失败；srcset、`data:` 媒体类型、声明固定等用例在修复前的实现上失败。
 
@@ -143,11 +147,15 @@
 - 迁移：`sqlx::migrate!` 在编译期读取迁移目录，只新增 `.sql` 而不改任何 Rust 文件时，增量编译可能不会重新嵌入；加迁移时顺手改动 `rssr-infra` 或清理其构建缓存。
 - D6：混用新旧版本写同一个库时，旧版本新增的条目没有搜索用标题；旧版本改了标题的，由迁移 0008 的触发器清空过期值。这两种行在下次新版本启动回填前只按 ASCII 不区分大小写匹配原标题。折叠结果按写入时的 Rust Unicode 版本保存，Rust 升级改变大小写表时旧值不会自动重算（浏览器每次现算）；目前没有版本标记。阅读页的上一篇/下一篇导航不按搜索词限定范围，两端一致，属既有行为。
 - G1：只有新版程序带这层核对；旧版程序遇到另一种换行建的库仍会拒绝（旧版本身无法修复）。迁移到 0008 之后，旧版程序一律拒绝打开（sqlx 在核对校验和之前先检查未知迁移），降级需要恢复升级前的完整备份。混合换行的文件只在一个方向上被接受（内嵌为混合、记录为整体 LF 时接受，反之拒绝）；跨行字符串字面量的换行变化也会被当成同一份迁移接受（现有迁移里没有这种写法）。
-- B6（自定义订阅名不被刷新覆盖）：第一单元已完成（上文“订阅名称”）。剩余两个单元：
-  2. OPML 换专用 DTO：导入优先 `text`、退回 `title`（目前两端仍是 `title` 优先，带两个属性的文件导入的是源标题）；导出 `text` 写显示名、`title` 写已知的源标题；Web 端 OPML 改为委托共用的 `OpmlCodec`（顺带完成 D5），跑 `wasm_config_exchange_contract_harness`。
-  3. 发布说明：不回填政策、升级后刷新旧标签页、0009 之后的降级边界。
-  第一单元已接受的后果：升级前保存的名称一律当作源标题，下一次带标题的刷新可能覆盖（发布说明要提示升级后重新导入原文件）；本应用导出的配置包 / OPML 写的是显示名称，再导入（包括 WebDAV 下载）后全部成为指定名称，之后不再跟随订阅源改名——配置包 v2 格式固定（版本精确匹配、`deny_unknown_fields`），无法区分名称来源；同名订阅在文章页“按来源”分组时合并，指定名称会影响分组与目录定位（既有语义）；旧版本浏览器标签页升级后报错，需要重新加载；原生迁移到 0009 之后旧版本拒绝打开，不支持不同版本同时写同一个库（已运行的旧进程仍可能按旧语义写 `title`）。
-- 待办：D2、D4、D5、D7、E2、E3、G2–G6、H2、H3、B7、F2 其余部分（`/logout` 用 GET、CSP）未处理；D1 是否允许缩短 Web 正文保留期限、Scoop 分发时 GUI 与 CLI 是否共用数据库，两项产品决定仍待你确认。
+- B6（自定义订阅名不被刷新覆盖）：第一、二单元已完成（上文“订阅名称”）。第三单元是发布说明，发布不在本分支的授权范围内，要点留在这里，发布时直接采用：
+  - 订阅名称不再被刷新覆盖：添加时指定的名称（CLI `--title`）、OPML 或配置包导入的名称会一直保留；没有指定名称的订阅显示订阅源自己的标题，并跟随它改名。
+  - 升级前保存的名称无法区分是谁起的，一律按订阅源的标题处理，下一次带标题的刷新可能把它换掉。需要保留的名称，升级后重新导入原来的 OPML 或配置包即可。
+  - 本应用导出的配置包写的是当前显示的名称；再导入（包括 WebDAV 下载）后这些名称都成为指定名称，之后不再跟随订阅源改名。
+  - OPML 导入按规范取 `text`（其他阅读器里改过的名称），导出时 `text` 写显示名称、`title` 写订阅源的标题；Web 端改用与桌面相同的 OPML 解析，格式残缺的文件会整体拒绝。
+  - Web：升级后请重新加载所有旧版标签页；旧版标签页会提示“无法读取此版本的浏览器数据”，不会改动数据。
+  - 桌面 / Android：数据库升级到迁移 0009 之后，旧版本程序无法打开，降级需要恢复升级前的完整备份；更新时请先退出所有使用同一数据库的 GUI 与 CLI 进程。
+  已接受的后果（第一单元起）：同名订阅在文章页“按来源”分组时合并，指定名称会影响分组与目录定位（既有语义）；已在运行的旧版本原生进程仍可能按旧语义写 `title`；配置包 v2 格式固定（版本精确匹配、`deny_unknown_fields`），无法区分名称来源。
+- 待办：D2、D4、D7、E2、E3、G2–G6、H2、H3、B7、F2 其余部分（`/logout` 用 GET、CSP）未处理；D1 是否允许缩短 Web 正文保留期限、Scoop 分发时 GUI 与 CLI 是否共用数据库，两项产品决定仍待你确认。
 
 ## 给下一位 Agent 的备注
 
