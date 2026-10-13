@@ -4,10 +4,21 @@
 //! `connection`, `migrate` and `error` are target-neutral so the Pages demo can reuse them on
 //! wasm32; `executor` owns native connections. Native-only until phase D.
 
+mod codec;
 mod connection;
+mod documents;
+mod entries;
 mod error;
 mod executor;
+mod feeds;
 pub mod migrate;
+mod mutations;
+mod refresh;
 
+pub use documents::{LibraryAppState, LibrarySettings};
+pub use entries::{LibraryEntries, LocalizedBody};
 pub use error::{StoreError, StoreResult};
 pub use executor::{LibraryStore, StoreOptions};
+pub use feeds::LibraryFeeds;
+pub use mutations::LibraryMutations;
+pub use refresh::LibraryRefreshStore;

@@ -83,6 +83,45 @@ pub fn compose_native_sqlite_use_cases(
     NativeSqliteComposition { use_cases, entry_repository }
 }
 
+/// Use cases over one v0.2 library file, plus the entry store the GUI's body localization uses.
+#[cfg(not(target_arch = "wasm32"))]
+pub struct LibraryComposition {
+    pub use_cases: AppUseCases,
+    pub entries: Arc<crate::store::LibraryEntries>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn compose_library_use_cases(store: crate::store::LibraryStore) -> LibraryComposition {
+    use crate::store::{
+        LibraryAppState, LibraryEntries, LibraryFeeds, LibraryMutations, LibraryRefreshStore,
+        LibrarySettings,
+    };
+
+    let entries = Arc::new(LibraryEntries::new(store.clone()));
+    let mutations = Arc::new(LibraryMutations::new(store.clone()));
+    let use_cases = AppUseCases::compose(AppCompositionInput {
+        feed_repository: Arc::new(LibraryFeeds::new(store.clone())),
+        entry_index_repository: entries.clone(),
+        entry_content_repository: entries.clone(),
+        settings_repository: Arc::new(LibrarySettings::new(store.clone())),
+        app_state: Arc::new(LibraryAppState::new(store.clone())),
+        subscription_probe: Arc::new(
+            crate::subscription_probe::HttpSubscriptionProbe::with_feed_client(),
+        ),
+        refresh_source: Arc::new(InfraFeedRefreshSource::new(
+            FetchClient::new(),
+            FeedParser::new(),
+        )),
+        refresh_store: Arc::new(LibraryRefreshStore::new(store)),
+        opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
+        clock: Arc::new(SystemClock),
+        subscription_activation: mutations.clone(),
+        subscription_removal: mutations.clone(),
+        config_replacement: mutations,
+    });
+    LibraryComposition { use_cases, entries }
+}
+
 #[cfg(target_arch = "wasm32")]
 pub fn compose_browser_use_cases(
     state: BrowserStore,
