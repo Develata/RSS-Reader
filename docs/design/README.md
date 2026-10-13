@@ -5,6 +5,7 @@
 ## 当前文档
 
 - [功能设计哲学](./functional-design-philosophy.md)
+- [v0.2 架构：服务器端 Web、统一 SQLite 存储与 Pages 演示（已确认设计，实施中）](./v0.2-architecture.md)
 - [GUI 与 CLI 的分发形式（已确认设计，Scoop 包待实施）](./cli-gui-distribution.md)
 - [文章列表目录：手动浏览与自动跟随（已确认设计，待实施）](./entries-directory-follow.md)
 - [Headless Active Interface 设计目标](./headless-active-interface.md)
