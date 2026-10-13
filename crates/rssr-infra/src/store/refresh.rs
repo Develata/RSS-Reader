@@ -34,7 +34,14 @@ fn target_from(row: FeedRow, has_entries: bool) -> RefreshTarget {
         );
         (None, None)
     };
-    RefreshTarget { feed_id: feed.id, generation, url: feed.url, etag, last_modified }
+    RefreshTarget {
+        feed_id: feed.id,
+        generation,
+        url: feed.url,
+        etag,
+        last_modified,
+        ticket: Default::default(),
+    }
 }
 
 fn has_entries(conn: &Connection, feed_id: i64) -> StoreResult<bool> {
@@ -338,7 +345,9 @@ impl RefreshStorePort for LibraryRefreshStore {
                     .write(move |tx| commit_update(tx, &owned_target, &update, &now()))
                     .await;
                 match written {
-                    Ok(inserted_count) => Ok(RefreshCommitOutcome { inserted_count }),
+                    Ok(inserted_count) => {
+                        Ok(RefreshCommitOutcome { inserted_count, superseded: false })
+                    }
                     Err(error) => {
                         let failure = RefreshFailure {
                             message: format!("写入订阅内容失败: {error}"),

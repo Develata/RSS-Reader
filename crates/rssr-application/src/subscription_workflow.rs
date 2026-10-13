@@ -118,6 +118,7 @@ impl SubscriptionWorkflow {
             url: activated.feed.url.clone(),
             etag: activated.feed.etag.clone(),
             last_modified: activated.feed.last_modified.clone(),
+            ticket: activated.ticket,
         };
         let first_refresh = if input.refresh_after_add {
             Some(self.refresh_service.apply_prepared_update(target, prepared.update, ticket).await?)
@@ -245,6 +246,7 @@ mod tests {
                     updated_at: OffsetDateTime::UNIX_EPOCH,
                 },
                 generation: self.generation,
+                ticket: Default::default(),
             })
         }
     }
@@ -357,6 +359,7 @@ mod tests {
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 etag: None,
                 last_modified: None,
+                ticket: Default::default(),
             }],
             Arc::new(RemovalStub::default()),
         );
@@ -433,6 +436,7 @@ mod tests {
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 etag: None,
                 last_modified: None,
+                ticket: Default::default(),
             }],
             Arc::new(RemovalStub::default()),
         );
@@ -491,6 +495,7 @@ mod tests {
             url: Url::parse("https://example.com/prepared.xml").unwrap(),
             etag: None,
             last_modified: None,
+            ticket: Default::default(),
         };
         let workflow = SubscriptionWorkflow::new(
             crate::FeedService::new(

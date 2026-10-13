@@ -44,6 +44,7 @@ async fn browser_refresh_bounds_streams_and_preserves_decoding_and_failures() {
         url: Url::parse("https://example.com/feed.xml").unwrap(),
         etag: None,
         last_modified: None,
+        ticket: Default::default(),
     };
     for mode in [
         "exact",

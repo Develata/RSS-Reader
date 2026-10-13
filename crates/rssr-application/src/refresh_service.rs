@@ -22,6 +22,31 @@ pub struct RefreshTarget {
     pub url: Url,
     pub etag: Option<String>,
     pub last_modified: Option<String>,
+    /// Persistent refresh ticket; [`RefreshTicket::UNTRACKED`] for stores without tickets.
+    pub ticket: RefreshTicket,
+}
+
+/// A refresh's place in the persistent order of one subscription's refreshes, so that refreshes
+/// from different processes sharing a library (GUI, CLI, server) cannot overwrite a newer result
+/// with an older one.
+///
+/// The store keeps per subscription the highest ticket issued (I), published (P) and diagnosed
+/// (D), with `0 <= P <= D <= I`. A ticket is issued when the fetch starts, together with the
+/// validators sent and the P they belong to (`baseline`). At commit:
+/// - a fetched feed is published only if `issued > P`;
+/// - a 304 is recorded only if `baseline == P` (it confirms exactly the published version);
+/// - a failure is recorded only if `issued > D`.
+///
+/// Otherwise the commit is superseded and writes nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RefreshTicket {
+    pub issued: i64,
+    pub baseline: i64,
+}
+
+impl RefreshTicket {
+    /// No ticket: a store that tracks tickets treats the commit as issued at commit time.
+    pub const UNTRACKED: Self = Self { issued: 0, baseline: 0 };
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -270,12 +295,30 @@ pub trait FeedRefreshSourcePort: Send + Sync {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct RefreshCommitOutcome {
     pub inserted_count: u64,
+    /// A newer refresh (possibly in another process) already published or diagnosed this
+    /// subscription; nothing was written.
+    pub superseded: bool,
 }
 
 #[async_trait::async_trait]
 pub trait RefreshStorePort: Send + Sync {
     async fn list_targets(&self) -> Result<Vec<RefreshTarget>>;
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>>;
+
+    /// Starts a refresh: the current target with a newly issued [`RefreshTicket`], or `None`
+    /// when the subscription is gone or no longer in `expected_generation`. Called right before
+    /// the fetch, so ticket order is fetch-start order.
+    ///
+    /// The default issues no ticket (stores that do not share their data across processes).
+    async fn begin_refresh(
+        &self,
+        feed_id: i64,
+        expected_generation: Option<i64>,
+    ) -> Result<Option<RefreshTarget>> {
+        Ok(self.get_target(feed_id).await?.filter(|target| {
+            expected_generation.is_none_or(|generation| generation == target.generation)
+        }))
+    }
     /// 返回真实新增索引数；批次内的计数需等 end_batch 成功后才可发布。
     async fn commit(
         &self,
@@ -429,7 +472,7 @@ impl RefreshService {
         let lock = self.feed_locks.lock_for(feed_id);
         let _serialized = lock.lock().await;
         // 在锁内读取目标：排在前一次刷新之后的请求要带上它刚写入的校验器。
-        let target = self.store.get_target(feed_id).await?.context("订阅不存在")?;
+        let target = self.store.begin_refresh(feed_id, None).await?.context("订阅不存在")?;
         self.fetch_and_apply(target).await
     }
 
@@ -585,9 +628,10 @@ impl RefreshService {
         // 订阅列表是锁外取的快照。排在别的刷新之后时，要带上它刚写入的校验器：拿旧校验器
         // 换来的 304 只确认旧表示，会把旧 ETag 与新正文配在一起（RFC 9110 §13.1.2）。
         // 期间被删除或重新订阅的不在这一轮刷新。
-        let target = match self.store.get_target(listed.feed_id).await? {
-            Some(current) if current.generation == listed.generation => current,
-            _ => anyhow::bail!("订阅已删除或已重新订阅"),
+        let target = match self.store.begin_refresh(listed.feed_id, Some(listed.generation)).await?
+        {
+            Some(current) => current,
+            None => anyhow::bail!("订阅已删除或已重新订阅"),
         };
         self.fetch_and_apply(target).await
     }
@@ -623,6 +667,7 @@ impl RefreshService {
                 self.store
                     .commit(&target, RefreshCommit::NotModified { metadata: metadata.clone() })
                     .await?;
+                // A superseded 304 changed nothing either; both read as "not modified".
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),
@@ -635,6 +680,14 @@ impl RefreshService {
                     build_localization_entries(&update.feed.entries, target.generation);
                 let committed =
                     self.store.commit(&target, RefreshCommit::Updated { update }).await?;
+                if committed.superseded {
+                    // A newer refresh already published; this response is not the stored one.
+                    return Ok(RefreshFeedOutcome {
+                        feed_id: target.feed_id,
+                        url: target.url.to_string(),
+                        result: RefreshFeedResult::NotModified,
+                    });
+                }
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),
@@ -735,6 +788,7 @@ mod tests {
             url: Url::parse(url).expect("valid url"),
             etag: Some("etag".to_string()),
             last_modified: Some("last-modified".to_string()),
+            ticket: Default::default(),
         }
     }
 
@@ -1028,6 +1082,7 @@ mod tests {
             self.record(&format!("commit:{}", target.feed_id));
             Ok(crate::RefreshCommitOutcome {
                 inserted_count: u64::from(matches!(_commit, RefreshCommit::Updated { .. })),
+                superseded: false,
             })
         }
 

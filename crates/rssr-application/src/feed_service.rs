@@ -178,6 +178,7 @@ mod tests {
                     updated_at: OffsetDateTime::UNIX_EPOCH,
                 },
                 generation: 0,
+                ticket: Default::default(),
             })
         }
     }

@@ -208,7 +208,7 @@ impl RefreshStorePort for SqliteRefreshStore {
             }
         }
 
-        Ok(rssr_application::RefreshCommitOutcome { inserted_count })
+        Ok(rssr_application::RefreshCommitOutcome { inserted_count, superseded: false })
     }
 }
 
@@ -231,7 +231,14 @@ fn map_refresh_target(
         (None, None)
     };
 
-    RefreshTarget { feed_id: feed.id, generation, url: feed.url, etag, last_modified }
+    RefreshTarget {
+        feed_id: feed.id,
+        generation,
+        url: feed.url,
+        etag,
+        last_modified,
+        ticket: Default::default(),
+    }
 }
 
 fn map_http_metadata(metadata: crate::fetch::HttpMetadata) -> RefreshHttpMetadata {

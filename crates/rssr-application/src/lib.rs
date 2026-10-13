@@ -49,7 +49,7 @@ pub use refresh_service::{
     ParsedEntryData, ParsedFeedUpdate, PreparedUpdateTicket, RefreshAllInput, RefreshAllOutcome,
     RefreshAllSummary, RefreshCommit, RefreshCommitOutcome, RefreshFailure,
     RefreshFeedFailureSummary, RefreshFeedOutcome, RefreshFeedResult, RefreshHttpMetadata,
-    RefreshLocalizedEntry, RefreshService, RefreshStorePort, RefreshTarget,
+    RefreshLocalizedEntry, RefreshService, RefreshStorePort, RefreshTarget, RefreshTicket,
     SERIAL_REFRESH_CONCURRENCY,
 };
 pub use settings_service::SettingsService;

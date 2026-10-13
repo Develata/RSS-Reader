@@ -154,6 +154,7 @@ async fn library_refresh_store_forces_full_fetch_when_feed_has_no_entries() {
             url: Url::parse("https://example.com/feed.xml").expect("valid url"),
             etag: None,
             last_modified: None,
+            ticket: Default::default(),
         }
     );
 }

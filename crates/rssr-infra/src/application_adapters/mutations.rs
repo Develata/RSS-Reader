@@ -208,7 +208,7 @@ impl SubscriptionActivationPort for SqlitePersistenceMutations {
         let repository = SqliteFeedRepository::new(self.index_pool.clone());
         let (feed, generation) =
             repository.activate_subscription_with_generation(&new_feed, true).await?;
-        Ok(ActivatedSubscription { feed, generation })
+        Ok(ActivatedSubscription { feed, generation, ticket: Default::default() })
     }
 }
 

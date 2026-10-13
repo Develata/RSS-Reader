@@ -43,7 +43,10 @@ impl SubscriptionActivationPort for BrowserPersistenceMutations {
                 let feed = upsert_subscription_in_state(state, &new_feed)?;
                 let generation =
                     state.core.feed_generations.get(&feed.id).copied().unwrap_or_default();
-                Ok((ActivatedSubscription { feed, generation }, Changes::CORE))
+                Ok((
+                    ActivatedSubscription { feed, generation, ticket: Default::default() },
+                    Changes::CORE,
+                ))
             })
             .await
             .map_err(map_store_error)

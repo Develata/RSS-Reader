@@ -25,6 +25,10 @@ pub struct ConfigReplacementOutcome {
 pub struct ActivatedSubscription {
     pub feed: Feed,
     pub generation: i64,
+    /// Ticket for the response fetched before activation (the add flow's prepared fetch),
+    /// issued in the activation transaction; [`crate::RefreshTicket::UNTRACKED`] for stores
+    /// without tickets.
+    pub ticket: crate::RefreshTicket,
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]

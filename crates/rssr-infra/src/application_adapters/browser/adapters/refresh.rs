@@ -222,7 +222,10 @@ impl RefreshStorePort for BrowserRefreshStore {
                         feed.updated_at = now;
                     }
                 }
-                Ok((rssr_application::RefreshCommitOutcome { inserted_count }, changes))
+                Ok((
+                    rssr_application::RefreshCommitOutcome { inserted_count, superseded: false },
+                    changes,
+                ))
             })
             .await
     }
@@ -239,6 +242,7 @@ fn refresh_target(
         ),
         etag: feed.etag.clone(),
         last_modified: feed.last_modified.clone(),
+        ticket: Default::default(),
     })
 }
 

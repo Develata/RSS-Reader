@@ -133,7 +133,11 @@ impl SubscriptionActivationPort for LibraryMutations {
             .write(move |tx| feeds::activate_new_subscription(tx, &new_feed, &now()))
             .await
             .map_err(rssr_domain::DomainError::from)?;
-        Ok(ActivatedSubscription { feed: row.feed, generation: row.generation })
+        Ok(ActivatedSubscription {
+            feed: row.feed,
+            generation: row.generation,
+            ticket: Default::default(),
+        })
     }
 }
 
