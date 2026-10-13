@@ -191,9 +191,10 @@ pub(crate) fn default_sqlite_max_connections(database_url: &str) -> u32 {
 mod tests {
     use super::*;
 
-    /// SQLite 3.51.2 及更早版本有 WAL-reset 缺陷：同一库文件的两个连接恰好同时写入或做
-    /// checkpoint 时可能损坏数据库（https://sqlite.org/wal.html#walreset，3.51.3 修复）。
-    /// 连接池、并发刷新以及共用数据目录的 GUI 与 CLI 都会对同一文件开多个连接。
+    /// 项目要求的 SQLite 基线是 3.51.3：更早的版本（官方回移修复的 3.44.6、3.50.7 除外）有
+    /// WAL-reset 缺陷，同一库文件的两个连接恰好同时写入或做 checkpoint 时可能损坏数据库
+    /// （https://sqlite.org/wal.html#walreset）。连接池、并发刷新以及共用数据目录的 GUI 与 CLI
+    /// 都会对同一文件开多个连接。
     #[tokio::test]
     async fn bundled_sqlite_has_the_wal_reset_fix() {
         let pool = create_sqlite_pool("sqlite::memory:").await.expect("connect");
@@ -201,7 +202,7 @@ mod tests {
             sqlx::query_scalar("SELECT sqlite_version()").fetch_one(&pool).await.expect("version");
         let parts: Vec<u32> =
             version.split('.').map(|part| part.parse().expect("numeric version")).collect();
-        assert!(parts >= vec![3, 51, 3], "bundled SQLite {version} lacks the WAL-reset fix");
+        assert!(parts >= vec![3, 51, 3], "SQLite {version} is below the project baseline 3.51.3");
     }
 
     #[test]
