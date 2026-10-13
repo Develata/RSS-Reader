@@ -5,6 +5,7 @@
 ## 当前文档
 
 - [功能设计哲学](./functional-design-philosophy.md)
+- [GUI 与 CLI 的分发形式（已确认设计，Scoop 包待实施）](./cli-gui-distribution.md)
 - [文章列表目录：手动浏览与自动跟随（已确认设计，待实施）](./entries-directory-follow.md)
 - [Headless Active Interface 设计目标](./headless-active-interface.md)
 - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
