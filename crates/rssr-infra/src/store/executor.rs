@@ -1,37 +1,44 @@
 //! Native connection ownership for the library.
 //!
-//! Invariants:
-//! - one writer connection per store, so writes from this process queue here instead of
-//!   busy-waiting on SQLite's lock; readers are `query_only` and see WAL snapshots;
-//! - a task gets a connection only after the previous task on it has returned: the connection
-//!   and the admission permit move into the blocking task and come back when it ends, even when
-//!   the caller's future is dropped (`spawn_blocking` cannot be cancelled);
-//! - every task runs in one transaction (`BEGIN IMMEDIATE` for writes, deferred for reads);
-//! - a connection goes back to its pool only outside any transaction with its settings
-//!   restored; a connection whose cleanup fails is replaced (or, for an in-memory library,
-//!   retired together with its permit), also after a panic.
+//! Every connection belongs to one worker thread for its whole life; tasks reach it through a
+//! queue. One writer worker per store, so writes from this process queue here instead of
+//! busy-waiting on SQLite's lock; reader workers are `query_only` and see WAL snapshots. An
+//! in-memory library has a single worker for both.
 //!
-//! Time budget (`StoreOptions::*_deadline`), counted from admission, so waiting for a blocking
-//! thread counts too:
-//! - waiting for SQLite's write lock (other processes) is bounded by the remaining budget;
-//! - a statement still running at the deadline is interrupted by the progress handler, which
-//!   also interrupts it once the caller has gone away;
-//! - a task whose caller has gone away is rolled back instead of committed.
+//! Each task moves through `Queued -> Running -> Committing`, or to `Cancelled`:
+//! - a task still queued when its caller gives up waiting (`admission_wait`) or goes away is
+//!   cancelled and never runs;
+//! - a running task whose caller goes away is cancelled: the progress handler interrupts its
+//!   current statement and it is rolled back;
+//! - `Running -> Committing` is the commit point: a task that reaches it commits even if its
+//!   caller has gone away meanwhile, so a dropped caller may or may not see its write applied
+//!   (as with any interrupted request).
 //!
-//! The progress handler counts per statement, so it cannot stop a loop of short statements:
-//! tasks must be bounded by their input (every repository task is). An expired budget is not
-//! checked before commit on purpose: a refresh that finishes its work a little late should be
-//! stored, not retried forever.
+//! A running task has a deadline (`*_deadline`, from the moment it starts): waits for another
+//! connection's lock end at the deadline (busy handler), and a statement still running at the
+//! deadline is interrupted (progress handler). Both read the task's context from the worker
+//! thread. The handlers cannot stop Rust code inside a task; repository tasks are bounded by
+//! their input and the library snapshot. An expired deadline is not checked before commit on
+//! purpose: a refresh that finishes a little late is stored rather than retried.
+//!
+//! After every task the connection is brought back to its idle state (no open transaction, the
+//! role's `query_only`); a connection that cannot be is discarded, and the worker opens a new one
+//! for the next task (an in-memory library cannot, and reports itself unusable).
 
+use std::cell::RefCell;
+use std::fs::File;
+use std::io::Read;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior};
+use rusqlite::{Connection, Transaction, TransactionBehavior};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::sync::oneshot;
 
 use super::connection::{self, Role};
 use super::error::{StoreError, StoreResult};
@@ -42,9 +49,9 @@ const PROGRESS_OPS: i32 = 1_000;
 
 #[derive(Debug, Clone)]
 pub struct StoreOptions {
-    /// Reader connections for a file library; an in-memory library uses its one connection.
+    /// Reader workers for a file library; an in-memory library uses its one worker.
     pub readers: usize,
-    /// How long a task waits for a free connection.
+    /// How long a task may wait in the queue before it starts.
     pub admission_wait: Duration,
     pub read_deadline: Duration,
     pub write_deadline: Duration,
@@ -61,160 +68,215 @@ impl Default for StoreOptions {
     }
 }
 
-/// Handle to one library database. Cheap to clone.
+const QUEUED: u8 = 0;
+const RUNNING: u8 = 1;
+const COMMITTING: u8 = 2;
+const CANCELLED: u8 = 3;
+
+fn transition(state: &AtomicU8, from: u8, to: u8) -> bool {
+    state.compare_exchange(from, to, Ordering::SeqCst, Ordering::SeqCst).is_ok()
+}
+
+/// What the busy and progress handlers of the worker's connection consult.
+struct TaskContext {
+    state: Arc<AtomicU8>,
+    until: Instant,
+}
+
+impl TaskContext {
+    fn should_stop(&self) -> bool {
+        self.state.load(Ordering::SeqCst) == CANCELLED || Instant::now() >= self.until
+    }
+}
+
+thread_local! {
+    static CURRENT: RefCell<Option<TaskContext>> = const { RefCell::new(None) };
+}
+
+/// Runs `body` with `context` visible to the handlers of this thread's connection.
+fn with_context<R>(context: TaskContext, body: impl FnOnce() -> R) -> R {
+    struct Clear;
+    impl Drop for Clear {
+        fn drop(&mut self) {
+            CURRENT.with(|current| current.borrow_mut().take());
+        }
+    }
+    CURRENT.with(|current| *current.borrow_mut() = Some(context));
+    let _clear = Clear;
+    body()
+}
+
+fn current_should_stop() -> bool {
+    CURRENT.with(|current| current.borrow().as_ref().is_none_or(TaskContext::should_stop))
+}
+
+/// Busy handler: keeps waiting for another connection's lock until the task must stop.
+fn busy_wait(attempt: i32) -> bool {
+    if current_should_stop() {
+        return false;
+    }
+    let pause = match attempt {
+        0..=4 => 1_u64 << attempt,
+        _ => 25,
+    };
+    std::thread::sleep(Duration::from_millis(pause));
+    !current_should_stop()
+}
+
+/// Opens a connection with the library settings and the context-driven handlers.
+fn open_connection(path: Option<&Path>, role: Role) -> StoreResult<Connection> {
+    let connection = match path {
+        Some(path) => Connection::open(path)?,
+        None => Connection::open_in_memory()?,
+    };
+    connection::configure(&connection, role)?;
+    connection.busy_handler(Some(busy_wait))?;
+    connection.progress_handler(PROGRESS_OPS, Some(current_should_stop))?;
+    Ok(connection)
+}
+
+/// Brings a connection back to its idle state; `false` when that did not fully succeed.
+fn reset(connection: &Connection, role: Role) -> bool {
+    // A transaction dropped during unwinding already rolled back; this covers raw SQL that left
+    // one open.
+    if !connection.is_autocommit() {
+        let _ = connection.execute_batch("ROLLBACK");
+    }
+    connection.is_autocommit()
+        && connection.pragma_update(None, "query_only", role == Role::Reader).is_ok()
+}
+
+/// The connection a worker owns, reopened on demand after it was discarded.
+struct Slot {
+    connection: Option<Connection>,
+    path: Option<PathBuf>,
+    role: Role,
+}
+
+impl Slot {
+    fn connection(&mut self) -> StoreResult<&mut Connection> {
+        if self.connection.is_none() {
+            let path = self.path.as_deref().ok_or(StoreError::TaskFailed)?;
+            self.connection = Some(open_connection(Some(path), self.role)?);
+        }
+        self.connection.as_mut().ok_or(StoreError::TaskFailed)
+    }
+
+    fn reset_after_task(&mut self) {
+        let healthy =
+            self.connection.as_ref().is_some_and(|connection| reset(connection, self.role));
+        if !healthy && self.connection.take().is_some() {
+            tracing::warn!("资料库连接无法恢复空闲状态，已丢弃，下一个任务会重新打开");
+        }
+    }
+}
+
+type Job = Box<dyn FnOnce(&mut Slot) + Send>;
+
+/// A queue served by one or more workers, each owning one connection.
+struct Queue {
+    sender: mpsc::Sender<Job>,
+}
+
+impl Queue {
+    fn start(slots: Vec<Slot>) -> StoreResult<Self> {
+        let (sender, receiver) = mpsc::channel::<Job>();
+        let receiver = Arc::new(Mutex::new(receiver));
+        for slot in slots {
+            let receiver = Arc::clone(&receiver);
+            std::thread::Builder::new()
+                .name("rssr-library".to_owned())
+                .spawn(move || serve(&receiver, slot))?;
+        }
+        Ok(Self { sender })
+    }
+
+    fn submit(&self, job: Job) -> StoreResult<()> {
+        self.sender.send(job).map_err(|_| StoreError::TaskFailed)
+    }
+}
+
+/// Worker loop: runs tasks one at a time until the store is dropped. A panicking task is
+/// contained here; its caller sees `TaskFailed`.
+fn serve(receiver: &Mutex<mpsc::Receiver<Job>>, mut slot: Slot) {
+    loop {
+        let job = match receiver.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).recv() {
+            Ok(job) => job,
+            Err(_) => return,
+        };
+        let _ = catch_unwind(AssertUnwindSafe(|| job(&mut slot)));
+        slot.reset_after_task();
+    }
+}
+
+/// Handle to one library database. Cheap to clone; the workers stop when the last handle is
+/// dropped, after the queued tasks.
 #[derive(Clone)]
 pub struct LibraryStore {
     inner: Arc<Inner>,
 }
 
 struct Inner {
-    writer: Pool,
-    readers: Option<Pool>,
+    writer: Queue,
+    readers: Option<Queue>,
     journal_mode: String,
     options: StoreOptions,
 }
 
-#[derive(Clone, Copy)]
-enum PoolKind {
-    Writer,
-    Reader,
-}
-
-impl Inner {
-    fn pool(&self, kind: PoolKind) -> &Pool {
-        match kind {
-            PoolKind::Reader => self.readers.as_ref().unwrap_or(&self.writer),
-            PoolKind::Writer => &self.writer,
-        }
-    }
-}
-
-/// Idle connections plus one permit per connection: holding a permit guarantees an idle one.
-struct Pool {
-    idle: Mutex<Vec<Connection>>,
-    permits: Arc<Semaphore>,
-    /// Opens a replacement for a connection that could not be cleaned up; `None` for an
-    /// in-memory library, whose data lives in its only connection.
-    reopen: Option<(PathBuf, Role)>,
-}
-
-impl Pool {
-    fn new(connections: Vec<Connection>, reopen: Option<(PathBuf, Role)>) -> Self {
-        let permits = Arc::new(Semaphore::new(connections.len()));
-        Self { idle: Mutex::new(connections), permits, reopen }
-    }
-
-    fn take(&self) -> StoreResult<Connection> {
-        let mut idle = self.idle.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        idle.pop().ok_or(StoreError::TaskFailed)
-    }
-
-    fn put(&self, connection: Connection) {
-        self.idle.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).push(connection);
-    }
-
-    fn replacement(&self) -> Option<Connection> {
-        let (path, role) = self.reopen.as_ref()?;
-        match open_connection(path, *role) {
-            Ok(connection) => Some(connection),
-            Err(error) => {
-                tracing::error!(%error, "无法重新打开资料库连接，连接池缩小");
-                None
-            }
-        }
-    }
-}
-
-/// Returns the connection to its pool when the task ends, including by panic, and releases the
-/// permit only after that.
-struct Lease<'a> {
-    pool: &'a Pool,
-    connection: Option<Connection>,
-    permit: Option<OwnedSemaphorePermit>,
-    /// A read borrowed the writer (in-memory library) and made it `query_only` meanwhile.
-    restore_writable: bool,
-}
-
-impl Lease<'_> {
-    fn connection(&mut self) -> StoreResult<&mut Connection> {
-        self.connection.as_mut().ok_or(StoreError::TaskFailed)
-    }
-}
-
-/// Brings a connection back to its idle state; `false` when that did not fully succeed.
-fn reset(connection: &Connection, restore_writable: bool) -> bool {
-    // A transaction dropped during unwinding already rolled back; this covers raw SQL that left
-    // one open.
-    if !connection.is_autocommit() {
-        let _ = connection.execute_batch("ROLLBACK");
-    }
-    let mut clean = connection.is_autocommit();
-    clean &= connection.progress_handler(0, None::<fn() -> bool>).is_ok();
-    clean &= connection.busy_timeout(connection::BUSY_TIMEOUT).is_ok();
-    if restore_writable {
-        clean &= connection.pragma_update(None, "query_only", false).is_ok();
-    }
-    clean
-}
-
-impl Drop for Lease<'_> {
-    fn drop(&mut self) {
-        let returned = match self.connection.take() {
-            Some(connection) if reset(&connection, self.restore_writable) => Some(connection),
-            Some(broken) => {
-                tracing::warn!("资料库连接清理失败，丢弃该连接");
-                drop(broken);
-                self.pool.replacement()
-            }
-            None => None,
-        };
-        match returned {
-            Some(connection) => self.pool.put(connection),
-            // Keep "a permit guarantees an idle connection": the pool shrinks by one.
-            None => {
-                if let Some(permit) = self.permit.take() {
-                    permit.forget();
-                }
-            }
-        }
-        // Any remaining permit is released after the connection is back.
-        drop(self.permit.take());
-    }
-}
-
-/// Sets the task's cancellation flag when the caller's future is dropped before the task ends.
+/// Cancels the task when the caller's future is dropped before the task ended.
 struct CancelOnDrop {
-    cancelled: Arc<AtomicBool>,
+    state: Arc<AtomicU8>,
     armed: bool,
 }
 
 impl Drop for CancelOnDrop {
     fn drop(&mut self) {
-        if self.armed {
-            self.cancelled.store(true, Ordering::Relaxed);
+        if self.armed && !transition(&self.state, QUEUED, CANCELLED) {
+            transition(&self.state, RUNNING, CANCELLED);
         }
     }
 }
 
-fn open_connection(path: &Path, role: Role) -> StoreResult<Connection> {
-    let connection = Connection::open(path)?;
-    connection::configure(&connection, role)?;
-    Ok(connection)
-}
-
-/// Refuses a file that is not a library before anything could write to it: the identity is read
-/// on a read-only connection, which can neither change the journal mode nor roll back a hot
-/// journal. A missing or empty file is a new library.
+/// Refuses a file that is not a library without opening it with SQLite: the identity comes from
+/// the 100-byte database header, so nothing (not even a `-shm` or `-wal` file) is created or
+/// changed. A missing or empty file, or a header with neither an application id nor a schema
+/// change yet, is left to the migration, which decides inside its write transaction (the header
+/// may lag behind changes still in the WAL).
 fn check_identity(path: &Path) -> StoreResult<()> {
-    if std::fs::metadata(path).map(|metadata| metadata.len() == 0).unwrap_or(true) {
+    let mut file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    let mut header = [0_u8; 100];
+    let mut read = 0;
+    while read < header.len() {
+        match file.read(&mut header[read..])? {
+            0 => break,
+            count => read += count,
+        }
+    }
+    if read == 0 {
         return Ok(());
     }
-    let probe = Connection::open_with_flags(
-        path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
-    probe.busy_timeout(connection::BUSY_TIMEOUT)?;
-    migrate::identity(&probe).map(drop)
+    if read < header.len() || &header[..16] != b"SQLite format 3\0" {
+        return Err(StoreError::NotALibrary);
+    }
+    let field = |offset: usize| {
+        u32::from_be_bytes([
+            header[offset],
+            header[offset + 1],
+            header[offset + 2],
+            header[offset + 3],
+        ])
+    };
+    let application_id = field(68) as i32;
+    let schema_cookie = field(40);
+    if application_id == migrate::APPLICATION_ID || (application_id == 0 && schema_cookie == 0) {
+        Ok(())
+    } else {
+        Err(StoreError::NotALibrary)
+    }
 }
 
 impl LibraryStore {
@@ -234,10 +296,17 @@ impl LibraryStore {
     pub async fn open_in_memory() -> StoreResult<Self> {
         let options = StoreOptions { readers: 0, ..StoreOptions::default() };
         tokio::task::spawn_blocking(move || {
-            let mut writer = Connection::open_in_memory()?;
-            connection::configure(&writer, Role::Writer)?;
-            migrate::migrate(&mut writer, &now())?;
-            let writer = Pool::new(vec![writer], None);
+            let mut writer = open_connection(None, Role::Writer)?;
+            let context = TaskContext {
+                state: Arc::new(AtomicU8::new(RUNNING)),
+                until: Instant::now() + connection::BUSY_TIMEOUT,
+            };
+            with_context(context, || migrate::migrate(&mut writer, &now()))?;
+            let writer = Queue::start(vec![Slot {
+                connection: Some(writer),
+                path: None,
+                role: Role::Writer,
+            }])?;
             Ok(Self::assemble(writer, None, "memory".to_owned(), options))
         })
         .await
@@ -249,20 +318,28 @@ impl LibraryStore {
             std::fs::create_dir_all(parent)?;
         }
         check_identity(path)?;
-        let mut writer = open_connection(path, Role::Writer)?;
+        let mut writer = open_connection(Some(path), Role::Writer)?;
         let journal_mode = prepare_file(&mut writer)?;
-        let readers = (0..options.readers)
-            .map(|_| open_connection(path, Role::Reader))
-            .collect::<StoreResult<Vec<_>>>()?;
-        let readers = (!readers.is_empty())
-            .then(|| Pool::new(readers, Some((path.to_path_buf(), Role::Reader))));
-        let writer = Pool::new(vec![writer], Some((path.to_path_buf(), Role::Writer)));
+        let mut readers = Vec::with_capacity(options.readers);
+        for _ in 0..options.readers {
+            readers.push(Slot {
+                connection: Some(open_connection(Some(path), Role::Reader)?),
+                path: Some(path.to_path_buf()),
+                role: Role::Reader,
+            });
+        }
+        let readers = if readers.is_empty() { None } else { Some(Queue::start(readers)?) };
+        let writer = Queue::start(vec![Slot {
+            connection: Some(writer),
+            path: Some(path.to_path_buf()),
+            role: Role::Writer,
+        }])?;
         Ok(Self::assemble(writer, readers, journal_mode, options))
     }
 
     fn assemble(
-        writer: Pool,
-        readers: Option<Pool>,
+        writer: Queue,
+        readers: Option<Queue>,
         journal_mode: String,
         options: StoreOptions,
     ) -> Self {
@@ -280,117 +357,101 @@ impl LibraryStore {
         R: Send + 'static,
         F: FnOnce(&Connection) -> StoreResult<R> + Send + 'static,
     {
+        // Reads stay read-only when they run on the writer, as they would on a reader.
+        let (queue, borrows_writer) = match &self.inner.readers {
+            Some(readers) => (readers, false),
+            None => (&self.inner.writer, true),
+        };
         let deadline = self.inner.options.read_deadline;
-        self.run(PoolKind::Reader, TransactionBehavior::Deferred, deadline, move |tx| task(tx))
+        self.run(queue, TransactionBehavior::Deferred, deadline, borrows_writer, move |tx| task(tx))
             .await
     }
 
-    /// Runs `task` in a write transaction, committed if it returns `Ok` and its caller is still
-    /// waiting.
+    /// Runs `task` in a write transaction, committed if it returns `Ok` and was not cancelled
+    /// before its commit point.
     pub async fn write<R, F>(&self, task: F) -> StoreResult<R>
     where
         R: Send + 'static,
         F: FnOnce(&Transaction<'_>) -> StoreResult<R> + Send + 'static,
     {
         let deadline = self.inner.options.write_deadline;
-        self.run(PoolKind::Writer, TransactionBehavior::Immediate, deadline, task).await
+        self.run(&self.inner.writer, TransactionBehavior::Immediate, deadline, false, task).await
     }
 
     async fn run<R, F>(
         &self,
-        kind: PoolKind,
+        queue: &Queue,
         behavior: TransactionBehavior,
         deadline: Duration,
+        read_only: bool,
         task: F,
     ) -> StoreResult<R>
     where
         R: Send + 'static,
         F: FnOnce(&Transaction<'_>) -> StoreResult<R> + Send + 'static,
     {
-        let permits = Arc::clone(&self.inner.pool(kind).permits);
-        let permit =
-            tokio::time::timeout(self.inner.options.admission_wait, permits.acquire_owned())
-                .await
-                .map_err(|_| StoreError::ConnectionTimeout)?
-                .map_err(|_| StoreError::TaskFailed)?;
-        let until = Instant::now() + deadline;
-        let mut cancel = CancelOnDrop { cancelled: Arc::new(AtomicBool::new(false)), armed: true };
-        let cancelled = Arc::clone(&cancel.cancelled);
-        let inner = Arc::clone(&self.inner);
-        let result = tokio::task::spawn_blocking(move || {
-            let pool = inner.pool(kind);
-            // Reads stay read-only when they run on the writer, as they would on a reader.
-            let borrows_writer = matches!(kind, PoolKind::Reader) && inner.readers.is_none();
-            let mut lease = Lease {
-                pool,
-                connection: None,
-                permit: Some(permit),
-                restore_writable: borrows_writer,
-            };
-            lease.connection = Some(pool.take()?);
-            let connection = lease.connection()?;
-            if borrows_writer {
-                connection.pragma_update(None, "query_only", true)?;
+        let state = Arc::new(AtomicU8::new(QUEUED));
+        let (reply, mut receive) = oneshot::channel();
+        let job_state = Arc::clone(&state);
+        queue.submit(Box::new(move |slot: &mut Slot| {
+            if !transition(&job_state, QUEUED, RUNNING) {
+                return;
             }
-            run_task(connection, behavior, until, &cancelled, task)
-        })
-        .await
-        .map_err(|_| StoreError::TaskFailed);
+            let context =
+                TaskContext { state: Arc::clone(&job_state), until: Instant::now() + deadline };
+            let result = with_context(context, || -> StoreResult<R> {
+                let connection = slot.connection()?;
+                if read_only {
+                    connection.pragma_update(None, "query_only", true)?;
+                }
+                let tx = connection.transaction_with_behavior(behavior)?;
+                let value = task(&tx)?;
+                if !transition(&job_state, RUNNING, COMMITTING) {
+                    return Err(StoreError::Interrupted);
+                }
+                tx.commit()?;
+                Ok(value)
+            });
+            let _ = reply.send(result);
+        }))?;
+        let mut cancel = CancelOnDrop { state: Arc::clone(&state), armed: true };
+        let result =
+            match tokio::time::timeout(self.inner.options.admission_wait, &mut receive).await {
+                Ok(result) => result,
+                Err(_) if transition(&state, QUEUED, CANCELLED) => {
+                    cancel.armed = false;
+                    return Err(StoreError::ConnectionTimeout);
+                }
+                Err(_) => receive.await,
+            };
         cancel.armed = false;
-        result?
+        result.map_err(|_| StoreError::TaskFailed)?
     }
 }
 
-fn run_task<R>(
-    connection: &mut Connection,
-    behavior: TransactionBehavior,
-    until: Instant,
-    cancelled: &Arc<AtomicBool>,
-    task: impl FnOnce(&Transaction<'_>) -> StoreResult<R>,
-) -> StoreResult<R> {
-    let remaining = until.saturating_duration_since(Instant::now());
-    if remaining.is_zero() || cancelled.load(Ordering::Relaxed) {
-        return Err(StoreError::Interrupted);
-    }
-    connection.busy_timeout(remaining.min(connection::BUSY_TIMEOUT))?;
-    let stop = Arc::clone(cancelled);
-    connection.progress_handler(
-        PROGRESS_OPS,
-        Some(move || stop.load(Ordering::Relaxed) || Instant::now() >= until),
-    )?;
-    let tx = connection.transaction_with_behavior(behavior)?;
-    let value = task(&tx)?;
-    if cancelled.load(Ordering::Relaxed) {
-        return Err(StoreError::Interrupted);
-    }
-    tx.commit()?;
-    Ok(value)
-}
-
-/// Switches the file to WAL and migrates it, retrying while another connection does the same,
-/// within one shared budget of [`connection::BUSY_TIMEOUT`].
+/// Switches the file to WAL and migrates it within one budget of [`connection::BUSY_TIMEOUT`],
+/// retrying while another connection does the same.
 ///
 /// Two connections preparing one new file at once (the GUI and the CLI starting together) can
 /// deadlock: each holds a shared lock and wants the exclusive one to change the journal mode.
-/// SQLite then answers `SQLITE_BUSY` at once instead of waiting in the busy handler. Both steps
-/// are idempotent and the migration is one transaction, so retrying is safe.
+/// SQLite then answers `SQLITE_BUSY` at once instead of calling the busy handler. Both steps are
+/// idempotent and the migration is one transaction, so retrying is safe; ordinary lock waits
+/// inside either step end at the same deadline through the busy handler.
 fn prepare_file(writer: &mut Connection) -> StoreResult<String> {
     let until = Instant::now() + connection::BUSY_TIMEOUT;
-    let result = loop {
-        let remaining = until.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            break Err(StoreError::Interrupted);
+    let context = TaskContext { state: Arc::new(AtomicU8::new(RUNNING)), until };
+    with_context(context, || {
+        loop {
+            let attempt = connection::enable_wal(writer)
+                .and_then(|mode| migrate::migrate(writer, &now()).map(|()| mode));
+            match attempt {
+                Err(StoreError::Busy(_)) if Instant::now() < until => {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                other => break other,
+            }
         }
-        writer.busy_timeout(remaining)?;
-        let attempt = connection::enable_wal(writer)
-            .and_then(|mode| migrate::migrate(writer, &now()).map(|()| mode));
-        match attempt {
-            Err(StoreError::Busy(_)) => std::thread::sleep(Duration::from_millis(20)),
-            other => break other,
-        }
-    };
-    writer.busy_timeout(connection::BUSY_TIMEOUT)?;
-    result
+    })
 }
 
 fn now() -> String {

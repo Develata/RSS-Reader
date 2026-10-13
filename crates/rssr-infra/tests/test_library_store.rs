@@ -62,7 +62,11 @@ impl Watchdog {
 
 impl Drop for Watchdog {
     fn drop(&mut self) {
-        self.0.store(true, Ordering::Relaxed);
+        // Stay armed while unwinding: a failed assertion can still leave the runtime waiting
+        // for a task that never ends.
+        if !std::thread::panicking() {
+            self.0.store(true, Ordering::Relaxed);
+        }
     }
 }
 
@@ -191,12 +195,78 @@ async fn deadline_interrupts_a_runaway_read_and_the_connection_recovers() {
     let dir = TempDir::new("deadline");
     let options = StoreOptions { readers: 1, read_deadline: Duration::from_millis(100), ..quick() };
     let store = LibraryStore::open_with(dir.library(), options).await.unwrap();
+    let ran = Arc::new(AtomicBool::new(false));
+    let marker = Arc::clone(&ran);
     let started = Instant::now();
-    let stopped =
-        store.read(|conn| Ok(conn.query_row(RUN_FOREVER, [], |row| row.get::<_, i64>(0))?)).await;
+    let stopped = store
+        .read(move |conn| {
+            marker.store(true, Ordering::SeqCst);
+            Ok(conn.query_row(RUN_FOREVER, [], |row| row.get::<_, i64>(0))?)
+        })
+        .await;
+    assert!(ran.load(Ordering::SeqCst), "the statement ran");
     assert!(matches!(stopped, Err(StoreError::Interrupted)), "{stopped:?}");
     assert!(started.elapsed() < Duration::from_secs(5));
     assert_eq!(feed_count(&store).await, 0);
+}
+
+/// Waiting for another connection's write lock ends at the task's deadline, not after SQLite's
+/// fixed busy timeout.
+#[tokio::test(flavor = "multi_thread")]
+async fn waiting_for_another_writer_ends_at_the_deadline() {
+    let _watchdog = Watchdog::arm(Duration::from_secs(60));
+    let dir = TempDir::new("lock-wait");
+    let holder = LibraryStore::open_with(dir.library(), quick()).await.unwrap();
+    let options = StoreOptions { write_deadline: Duration::from_millis(300), ..quick() };
+    let waiter = LibraryStore::open_with(dir.library(), options).await.unwrap();
+
+    let (locked, wait_locked) = mpsc::channel();
+    let (release, wait_release) = mpsc::channel::<()>();
+    let holding = tokio::spawn(async move {
+        holder
+            .write(move |tx| {
+                tx.execute(
+                    "INSERT INTO feeds (url, created_at, updated_at) VALUES ('https://held.test', 't', 't')",
+                    [],
+                )?;
+                locked.send(()).unwrap();
+                wait_release.recv_timeout(Duration::from_secs(10)).unwrap();
+                Ok(())
+            })
+            .await
+    });
+    wait_for(wait_locked).await;
+    let begun = Instant::now();
+    let blocked = insert_feed(&waiter, "https://waiting.test").await;
+    let waited = begun.elapsed();
+    release.send(()).unwrap();
+    holding.await.unwrap().unwrap();
+    assert!(matches!(blocked, Err(StoreError::Busy(_))), "{blocked:?}");
+    assert!(waited < Duration::from_secs(3), "waited {waited:?}");
+}
+
+/// A queued task whose caller stopped waiting never runs.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_task_that_times_out_in_the_queue_never_runs() {
+    let dir = TempDir::new("queued");
+    let store = LibraryStore::open_with(dir.library(), quick()).await.unwrap();
+    let (started, wait_started) = mpsc::channel();
+    let (release, wait_release) = mpsc::channel::<()>();
+    let busy = store.clone();
+    let occupying = tokio::spawn(async move {
+        busy.write(move |_| {
+            started.send(()).unwrap();
+            wait_release.recv_timeout(Duration::from_secs(10)).unwrap();
+            Ok(())
+        })
+        .await
+    });
+    wait_for(wait_started).await;
+    let queued = insert_feed(&store, "https://queued.test").await;
+    assert!(matches!(queued, Err(StoreError::ConnectionTimeout)), "{queued:?}");
+    release.send(()).unwrap();
+    occupying.await.unwrap().unwrap();
+    assert_eq!(feed_count(&store).await, 0, "the timed-out task did not run later");
 }
 
 /// A caller that goes away interrupts its running statement long before the deadline.
@@ -376,6 +446,53 @@ async fn a_foreign_rollback_journal_database_is_refused_byte_for_byte() {
     let conn = rusqlite::Connection::open(&path).unwrap();
     let mode: String = conn.query_row("PRAGMA journal_mode", [], |row| row.get(0)).unwrap();
     assert_eq!(mode, "delete");
+}
+
+/// A foreign database in WAL mode, closed cleanly (no `-wal`/`-shm` on disk), is refused
+/// without creating or changing any file.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_foreign_wal_database_is_refused_without_touching_any_file() {
+    let dir = TempDir::new("foreign-wal");
+    let path = dir.0.join("other.db");
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        let mode: String =
+            conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0)).unwrap();
+        assert_eq!(mode, "wal");
+        conn.execute_batch("CREATE TABLE notes (id INTEGER PRIMARY KEY)").unwrap();
+    }
+    let listing = || {
+        let mut names: Vec<String> = std::fs::read_dir(&dir.0)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    };
+    assert_eq!(listing(), ["other.db"]);
+    // A stale shared-memory file left behind: SQLite would rebuild it on open and delete it on
+    // close, so it shows whether anything opened the database.
+    let shm = dir.0.join("other.db-shm");
+    std::fs::write(&shm, vec![0x5a_u8; 32 * 1024]).unwrap();
+    let files_before = listing();
+    let before = std::fs::read(&path).unwrap();
+
+    let refused = LibraryStore::open(&path).await;
+    assert!(matches!(refused, Err(StoreError::NotALibrary)), "{:?}", refused.err());
+    assert_eq!(listing(), files_before, "no auxiliary file was created or removed");
+    assert_eq!(std::fs::read(&shm).unwrap(), vec![0x5a_u8; 32 * 1024]);
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+}
+
+/// A file that is not SQLite at all is not a library either.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_file_that_is_not_sqlite_is_refused_untouched() {
+    let dir = TempDir::new("not-sqlite");
+    let path = dir.0.join("notes.txt");
+    std::fs::write(&path, b"plain text, not a database").unwrap();
+    let refused = LibraryStore::open(&path).await;
+    assert!(matches!(refused, Err(StoreError::NotALibrary)), "{:?}", refused.err());
+    assert_eq!(std::fs::read(&path).unwrap(), b"plain text, not a database");
 }
 
 /// A v0.1.x index database is not a library: opening it fails and leaves it untouched.
