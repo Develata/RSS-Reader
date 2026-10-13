@@ -18,3 +18,5 @@ pub mod html;
 pub mod opml;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod parser;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod store;

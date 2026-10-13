@@ -1,0 +1,282 @@
+//! Native connection ownership for the library.
+//!
+//! Invariants:
+//! - one writer connection, so writes from this process queue here instead of busy-waiting on
+//!   SQLite's lock; readers are `query_only` and see WAL snapshots;
+//! - a task gets a connection only after the previous task on it has returned: the connection
+//!   and the admission permit move into the blocking task and come back when it ends, even when
+//!   the caller's future is dropped (`spawn_blocking` cannot be cancelled);
+//! - every task runs in one transaction (`BEGIN IMMEDIATE` for writes, deferred for reads) and
+//!   under a deadline enforced inside SQLite by the progress handler;
+//! - a connection goes back to its pool outside any transaction, also after a panic.
+
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use rusqlite::{Connection, Transaction, TransactionBehavior};
+use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
+use tokio::sync::Semaphore;
+
+use super::connection::{self, Role};
+use super::error::{StoreError, StoreResult};
+use super::migrate;
+
+/// SQLite calls the progress handler every this many VM instructions.
+const PROGRESS_OPS: i32 = 1_000;
+
+#[derive(Debug, Clone)]
+pub struct StoreOptions {
+    /// Reader connections for a file library; an in-memory library uses its one connection.
+    pub readers: usize,
+    /// How long a task waits for a free connection.
+    pub admission_wait: Duration,
+    pub read_deadline: Duration,
+    pub write_deadline: Duration,
+}
+
+impl Default for StoreOptions {
+    fn default() -> Self {
+        Self {
+            readers: 4,
+            admission_wait: Duration::from_secs(30),
+            read_deadline: Duration::from_secs(30),
+            write_deadline: Duration::from_secs(60),
+        }
+    }
+}
+
+/// Handle to one library database. Cheap to clone.
+#[derive(Clone)]
+pub struct LibraryStore {
+    inner: Arc<Inner>,
+}
+
+struct Inner {
+    writer: Pool,
+    readers: Option<Pool>,
+    journal_mode: String,
+    options: StoreOptions,
+}
+
+#[derive(Clone, Copy)]
+enum PoolKind {
+    Writer,
+    Reader,
+}
+
+impl Inner {
+    fn pool(&self, kind: PoolKind) -> &Pool {
+        match kind {
+            PoolKind::Reader => self.readers.as_ref().unwrap_or(&self.writer),
+            PoolKind::Writer => &self.writer,
+        }
+    }
+}
+
+/// Idle connections plus one permit per connection: holding a permit guarantees an idle one.
+struct Pool {
+    idle: Mutex<Vec<Connection>>,
+    permits: Arc<Semaphore>,
+}
+
+impl Pool {
+    fn new(connections: Vec<Connection>) -> Self {
+        let permits = Arc::new(Semaphore::new(connections.len()));
+        Self { idle: Mutex::new(connections), permits }
+    }
+
+    fn take(&self) -> StoreResult<Connection> {
+        let mut idle = self.idle.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        idle.pop().ok_or(StoreError::TaskFailed)
+    }
+
+    fn put(&self, connection: Connection) {
+        self.idle.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).push(connection);
+    }
+}
+
+/// Returns the connection to its pool when the task ends, including by panic.
+struct Lease<'a> {
+    pool: &'a Pool,
+    connection: Option<Connection>,
+    /// A read borrowed the writer (in-memory library) and made it `query_only` meanwhile.
+    restore_writable: bool,
+}
+
+impl Drop for Lease<'_> {
+    fn drop(&mut self) {
+        let Some(connection) = self.connection.take() else { return };
+        // A transaction dropped during unwinding already rolled back; this covers raw SQL that
+        // left one open.
+        if !connection.is_autocommit() {
+            let _ = connection.execute_batch("ROLLBACK");
+        }
+        let _ = connection.progress_handler(0, None::<fn() -> bool>);
+        if self.restore_writable {
+            let _ = connection.pragma_update(None, "query_only", false);
+        }
+        self.pool.put(connection);
+    }
+}
+
+impl LibraryStore {
+    /// Opens (creating if needed) the library at `path` and brings its schema up to date.
+    pub async fn open(path: impl AsRef<Path>) -> StoreResult<Self> {
+        Self::open_with(path, StoreOptions::default()).await
+    }
+
+    pub async fn open_with(path: impl AsRef<Path>, options: StoreOptions) -> StoreResult<Self> {
+        let path = path.as_ref().to_path_buf();
+        tokio::task::spawn_blocking(move || Self::open_file(&path, options))
+            .await
+            .map_err(|_| StoreError::TaskFailed)?
+    }
+
+    /// A private in-memory library on a single connection (tests, throwaway use).
+    pub async fn open_in_memory() -> StoreResult<Self> {
+        let options = StoreOptions { readers: 0, ..StoreOptions::default() };
+        tokio::task::spawn_blocking(move || {
+            let mut writer = Connection::open_in_memory()?;
+            connection::configure(&writer, Role::Writer)?;
+            migrate::migrate(&mut writer, &now())?;
+            Ok(Self::assemble(writer, Vec::new(), "memory".to_owned(), options))
+        })
+        .await
+        .map_err(|_| StoreError::TaskFailed)?
+    }
+
+    fn open_file(path: &Path, options: StoreOptions) -> StoreResult<Self> {
+        if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut writer = Connection::open(path)?;
+        connection::configure(&writer, Role::Writer)?;
+        let journal_mode = prepare_file(&mut writer)?;
+        let readers = (0..options.readers)
+            .map(|_| {
+                let reader = Connection::open(path)?;
+                connection::configure(&reader, Role::Reader)?;
+                Ok(reader)
+            })
+            .collect::<StoreResult<Vec<_>>>()?;
+        Ok(Self::assemble(writer, readers, journal_mode, options))
+    }
+
+    fn assemble(
+        writer: Connection,
+        readers: Vec<Connection>,
+        journal_mode: String,
+        options: StoreOptions,
+    ) -> Self {
+        let readers = (!readers.is_empty()).then(|| Pool::new(readers));
+        Self {
+            inner: Arc::new(Inner {
+                writer: Pool::new(vec![writer]),
+                readers,
+                journal_mode,
+                options,
+            }),
+        }
+    }
+
+    /// Journal mode in effect: `wal` for a file library unless the file system refused it.
+    pub fn journal_mode(&self) -> &str {
+        &self.inner.journal_mode
+    }
+
+    /// Runs `task` in a read transaction (one snapshot for all its statements).
+    pub async fn read<R, F>(&self, task: F) -> StoreResult<R>
+    where
+        R: Send + 'static,
+        F: FnOnce(&Connection) -> StoreResult<R> + Send + 'static,
+    {
+        let deadline = self.inner.options.read_deadline;
+        self.run(PoolKind::Reader, TransactionBehavior::Deferred, deadline, move |tx| task(tx))
+            .await
+    }
+
+    /// Runs `task` in a write transaction, committed if it returns `Ok`.
+    pub async fn write<R, F>(&self, task: F) -> StoreResult<R>
+    where
+        R: Send + 'static,
+        F: FnOnce(&Transaction<'_>) -> StoreResult<R> + Send + 'static,
+    {
+        let deadline = self.inner.options.write_deadline;
+        self.run(PoolKind::Writer, TransactionBehavior::Immediate, deadline, task).await
+    }
+
+    async fn run<R, F>(
+        &self,
+        kind: PoolKind,
+        behavior: TransactionBehavior,
+        deadline: Duration,
+        task: F,
+    ) -> StoreResult<R>
+    where
+        R: Send + 'static,
+        F: FnOnce(&Transaction<'_>) -> StoreResult<R> + Send + 'static,
+    {
+        let permits = Arc::clone(&self.inner.pool(kind).permits);
+        let permit =
+            tokio::time::timeout(self.inner.options.admission_wait, permits.acquire_owned())
+                .await
+                .map_err(|_| StoreError::ConnectionTimeout)?
+                .map_err(|_| StoreError::TaskFailed)?;
+        let inner = Arc::clone(&self.inner);
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            let pool = inner.pool(kind);
+            // Reads stay read-only when they run on the writer, as they would on a reader.
+            let borrows_writer = matches!(kind, PoolKind::Reader) && inner.readers.is_none();
+            let mut lease =
+                Lease { pool, connection: Some(pool.take()?), restore_writable: borrows_writer };
+            let connection = lease.connection.as_mut().ok_or(StoreError::TaskFailed)?;
+            if borrows_writer {
+                connection.pragma_update(None, "query_only", true)?;
+            }
+            run_task(connection, behavior, deadline, task)
+        })
+        .await
+        .map_err(|_| StoreError::TaskFailed)?
+    }
+}
+
+fn run_task<R>(
+    connection: &mut Connection,
+    behavior: TransactionBehavior,
+    deadline: Duration,
+    task: impl FnOnce(&Transaction<'_>) -> StoreResult<R>,
+) -> StoreResult<R> {
+    let until = Instant::now() + deadline;
+    connection.progress_handler(PROGRESS_OPS, Some(move || Instant::now() >= until))?;
+    let tx = connection.transaction_with_behavior(behavior)?;
+    let value = task(&tx)?;
+    tx.commit()?;
+    Ok(value)
+}
+
+/// Switches the file to WAL and migrates it, retrying while another connection does the same.
+///
+/// Two connections preparing one new file at once (the GUI and the CLI starting together) can
+/// deadlock: each holds a shared lock and wants the exclusive one to change the journal mode.
+/// SQLite then answers `SQLITE_BUSY` at once instead of waiting in the busy handler. Both steps
+/// are idempotent and the migration is one transaction, so retrying is safe.
+fn prepare_file(writer: &mut Connection) -> StoreResult<String> {
+    let deadline = Instant::now() + connection::BUSY_TIMEOUT;
+    loop {
+        let attempt = connection::enable_wal(writer)
+            .and_then(|mode| migrate::migrate(writer, &now()).map(|()| mode));
+        match attempt {
+            Err(StoreError::Busy(_)) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            other => return other,
+        }
+    }
+}
+
+fn now() -> String {
+    OffsetDateTime::now_utc().format(&Rfc3339).unwrap_or_default()
+}

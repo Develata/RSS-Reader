@@ -37,6 +37,9 @@ sqlx = { version = "0.9", default-features = false, features = ["macros", "migra
 # WAL-reset bug (https://sqlite.org/wal.html#walreset). Guarded by
 # `db::tests::bundled_sqlite_has_the_wal_reset_fix`.
 libsqlite3-sys = { version = "0.37", default-features = false }
+# v0.2 library storage (crate::store). Shares libsqlite3-sys 0.37 with sqlx until sqlx is removed.
+rusqlite = { version = "0.39", default-features = false, features = ["bundled", "cache", "functions", "hooks"] }
+tokio = { workspace = true, features = ["rt"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
