@@ -18,6 +18,7 @@ use super::entries;
 use super::error::{StoreError, StoreResult};
 use super::executor::LibraryStore;
 use super::feeds;
+use super::refresh::issue_ticket;
 
 fn mark_removed(conn: &Connection, feed_id: i64, now: &str) -> StoreResult<()> {
     let changed = conn
@@ -128,16 +129,18 @@ impl SubscriptionActivationPort for LibraryMutations {
         &self,
         new_feed: NewFeedSubscription,
     ) -> Result<ActivatedSubscription> {
-        let row = self
+        // The add flow's prepared fetch gets its ticket here, before any other refresh can see
+        // the subscription.
+        let (row, ticket) = self
             .store
-            .write(move |tx| feeds::activate_new_subscription(tx, &new_feed, &now()))
+            .write(move |tx| {
+                let row = feeds::activate_new_subscription(tx, &new_feed, &now())?;
+                let ticket = issue_ticket(tx, row.feed.id)?;
+                Ok((row, ticket))
+            })
             .await
             .map_err(rssr_domain::DomainError::from)?;
-        Ok(ActivatedSubscription {
-            feed: row.feed,
-            generation: row.generation,
-            ticket: Default::default(),
-        })
+        Ok(ActivatedSubscription { feed: row.feed, generation: row.generation, ticket })
     }
 }
 

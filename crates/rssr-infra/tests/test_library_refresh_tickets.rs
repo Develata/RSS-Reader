@@ -1,0 +1,333 @@
+#![cfg(not(target_arch = "wasm32"))]
+
+//! Persistent refresh tickets (docs/design/v0.2-architecture.md, 存储): refreshes of one
+//! subscription from different processes sharing a library never overwrite a newer result with
+//! an older one. Two `LibraryStore` handles on one file stand in for two processes.
+
+#[path = "support/library.rs"]
+mod library;
+
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use anyhow::Result;
+use library::Library;
+use rssr_application::{
+    FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate, ParsedEntryData,
+    ParsedFeedUpdate, RefreshCommit, RefreshFailure, RefreshFeedResult, RefreshHttpMetadata,
+    RefreshService, RefreshStorePort, RefreshTarget, RefreshTicket, SubscriptionActivationPort,
+};
+use rssr_domain::{EntryIndexRepository, EntryQuery, Feed, FeedRepository};
+use rssr_infra::store::{LibraryRefreshStore, LibraryStore};
+
+struct TempDir(PathBuf);
+
+impl TempDir {
+    fn new(label: &str) -> Self {
+        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("rssr-tickets-{label}-{nonce}"));
+        std::fs::create_dir_all(&path).unwrap();
+        Self(path)
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// Two "processes" on one library file, with one subscription.
+async fn two_processes(label: &str) -> (TempDir, Library, Library, Feed) {
+    let dir = TempDir::new(label);
+    let path = dir.0.join("library.sqlite3");
+    let a = Library::over(LibraryStore::open(&path).await.unwrap());
+    let b = Library::over(LibraryStore::open(&path).await.unwrap());
+    let feed = a.add_feed("https://example.com/feed.xml").await;
+    (dir, a, b, feed)
+}
+
+fn metadata(etag: &str) -> RefreshHttpMetadata {
+    RefreshHttpMetadata { etag: Some(etag.into()), last_modified: None }
+}
+
+fn fetched(title: &str, etag: &str, keys: &[&str]) -> RefreshCommit {
+    RefreshCommit::Updated {
+        update: FeedRefreshUpdate {
+            metadata: metadata(etag),
+            feed: ParsedFeedUpdate {
+                title: Some(title.into()),
+                site_url: None,
+                description: None,
+                entries: keys.iter().map(|key| library::entry(key)).collect(),
+            },
+        },
+    }
+}
+
+fn failed(message: &str) -> RefreshCommit {
+    RefreshCommit::Failed { failure: RefreshFailure { message: message.into(), metadata: None } }
+}
+
+async fn begin(library: &Library, feed_id: i64) -> RefreshTarget {
+    library.refresh.begin_refresh(feed_id, None).await.unwrap().expect("active subscription")
+}
+
+async fn superseded(library: &Library, target: &RefreshTarget, commit: RefreshCommit) -> bool {
+    library.refresh.commit(target, commit).await.unwrap().superseded
+}
+
+/// (I, P, D), after checking `0 <= P <= D <= I`.
+async fn tickets(library: &Library, feed_id: i64) -> (i64, i64, i64) {
+    let issued =
+        library.scalar(format!("SELECT refresh_issued FROM feeds WHERE id = {feed_id}")).await;
+    let published =
+        library.scalar(format!("SELECT refresh_published FROM feeds WHERE id = {feed_id}")).await;
+    let diagnosed =
+        library.scalar(format!("SELECT refresh_diagnosed FROM feeds WHERE id = {feed_id}")).await;
+    assert!(0 <= published && published <= diagnosed && diagnosed <= issued);
+    (issued, published, diagnosed)
+}
+
+async fn entry_titles(library: &Library) -> Vec<String> {
+    let mut titles: Vec<String> = library
+        .entries
+        .list_entries(&EntryQuery::default())
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|entry| entry.title)
+        .collect();
+    titles.sort();
+    titles
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn tickets_are_issued_in_fetch_start_order_with_the_published_baseline() {
+    let (_dir, a, b, feed) = two_processes("order").await;
+    let first = begin(&a, feed.id).await;
+    let second = begin(&b, feed.id).await;
+    assert_eq!(first.ticket, RefreshTicket { issued: 1, baseline: 0 });
+    assert_eq!(second.ticket, RefreshTicket { issued: 2, baseline: 0 });
+    assert!(!superseded(&b, &second, fetched("B", "etag-b", &["b"])).await);
+    let third = begin(&a, feed.id).await;
+    assert_eq!(third.ticket, RefreshTicket { issued: 3, baseline: 2 });
+    assert_eq!(tickets(&a, feed.id).await, (3, 2, 2));
+}
+
+/// A response fetched by a refresh that started earlier does not replace a newer publication.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_late_fetched_feed_is_superseded_by_a_newer_publication() {
+    let (_dir, a, b, feed) = two_processes("late-200").await;
+    let older = begin(&a, feed.id).await;
+    let newer = begin(&b, feed.id).await;
+    assert!(!superseded(&b, &newer, fetched("Newer", "etag-new", &["new"])).await);
+    assert!(superseded(&a, &older, fetched("Older", "etag-old", &["old"])).await);
+
+    assert_eq!(entry_titles(&a).await, ["new"]);
+    let stored = a.feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(stored.source_title.as_deref(), Some("Newer"));
+    assert_eq!(stored.etag.as_deref(), Some("etag-new"));
+    assert_eq!(tickets(&a, feed.id).await, (2, 2, 2));
+}
+
+/// A 304 confirms the version whose validators were sent; after a newer publication it confirms
+/// nothing and is discarded.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_304_for_an_older_version_is_discarded() {
+    let (_dir, a, b, feed) = two_processes("stale-304").await;
+    let initial = begin(&a, feed.id).await;
+    assert!(!superseded(&a, &initial, fetched("V1", "etag-1", &["v1"])).await);
+
+    let conditional = begin(&a, feed.id).await;
+    assert_eq!(conditional.etag.as_deref(), Some("etag-1"));
+    let newer = begin(&b, feed.id).await;
+    assert!(!superseded(&b, &newer, fetched("V2", "etag-2", &["v2"])).await);
+    let not_modified = RefreshCommit::NotModified { metadata: metadata("etag-1") };
+    assert!(superseded(&a, &conditional, not_modified).await);
+
+    let stored = a.feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(stored.etag.as_deref(), Some("etag-2"), "the newer validators stay");
+    assert_eq!(tickets(&a, feed.id).await, (3, 3, 3));
+}
+
+/// A 304 that confirms the published version is recorded and becomes the published ticket.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_304_for_the_published_version_is_recorded() {
+    let (_dir, a, _b, feed) = two_processes("current-304").await;
+    let initial = begin(&a, feed.id).await;
+    assert!(!superseded(&a, &initial, fetched("V1", "etag-1", &["v1"])).await);
+    let conditional = begin(&a, feed.id).await;
+    let not_modified = RefreshCommit::NotModified {
+        metadata: RefreshHttpMetadata { etag: None, last_modified: Some("lm".into()) },
+    };
+    assert!(!superseded(&a, &conditional, not_modified).await);
+    let stored = a.feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(stored.etag.as_deref(), Some("etag-1"), "a validator the 304 omits survives");
+    assert_eq!(stored.last_modified.as_deref(), Some("lm"));
+    assert_eq!(tickets(&a, feed.id).await, (2, 2, 2));
+}
+
+/// An older failure arriving after a newer success is not recorded over it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stale_failure_does_not_hide_a_newer_success() {
+    let (_dir, a, b, feed) = two_processes("stale-failure").await;
+    let older = begin(&a, feed.id).await;
+    let newer = begin(&b, feed.id).await;
+    assert!(!superseded(&b, &newer, fetched("Fine", "etag", &["fine"])).await);
+    assert!(superseded(&a, &older, failed("timeout")).await);
+
+    let stored = a.feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(stored.fetch_error, None);
+    assert_eq!(tickets(&a, feed.id).await, (2, 2, 2));
+}
+
+/// An older success arriving after a newer failure publishes its content and validators, but the
+/// newer failure stays the current diagnosis.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_older_success_after_a_newer_failure_keeps_the_newer_diagnosis() {
+    let (_dir, a, b, feed) = two_processes("success-after-failure").await;
+    let older = begin(&a, feed.id).await;
+    let newer = begin(&b, feed.id).await;
+    assert!(!superseded(&b, &newer, failed("newer failure")).await);
+    let fetched_at = a.feeds.get_feed(feed.id).await.unwrap().unwrap().last_fetched_at;
+    assert!(!superseded(&a, &older, fetched("Older", "etag-old", &["old"])).await);
+
+    assert_eq!(entry_titles(&a).await, ["old"]);
+    let stored = a.feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(stored.etag.as_deref(), Some("etag-old"));
+    assert!(stored.last_success_at.is_some());
+    assert_eq!(stored.fetch_error.as_deref(), Some("newer failure"));
+    assert_eq!(stored.last_fetched_at, fetched_at);
+    assert_eq!(tickets(&a, feed.id).await, (2, 1, 2));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn committing_one_ticket_twice_is_superseded_the_second_time() {
+    let (_dir, a, _b, feed) = two_processes("duplicate").await;
+    let target = begin(&a, feed.id).await;
+    assert!(!superseded(&a, &target, fetched("Once", "etag", &["one"])).await);
+    assert!(superseded(&a, &target, fetched("Twice", "etag-2", &["two"])).await);
+    assert_eq!(entry_titles(&a).await, ["one"]);
+}
+
+/// A commit without a ticket (a caller that did not begin a refresh) is the newest refresh.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_untracked_commit_is_issued_a_ticket_as_the_newest_refresh() {
+    let (_dir, a, b, feed) = two_processes("untracked").await;
+    let started = begin(&a, feed.id).await;
+    let untracked = b.refresh.get_target(feed.id).await.unwrap().unwrap();
+    assert_eq!(untracked.ticket, RefreshTicket::UNTRACKED);
+    assert!(!superseded(&b, &untracked, fetched("Untracked", "etag-u", &["u"])).await);
+    assert_eq!(tickets(&a, feed.id).await, (2, 2, 2));
+    assert!(superseded(&a, &started, fetched("Started", "etag-s", &["s"])).await);
+}
+
+/// The add flow's prepared fetch takes its ticket at activation, so a refresh that starts later
+/// and publishes first wins.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_prepared_fetch_at_activation_loses_to_a_later_refresh() {
+    let dir = TempDir::new("prepared");
+    let path = dir.0.join("library.sqlite3");
+    let a = Library::over(LibraryStore::open(&path).await.unwrap());
+    let b = Library::over(LibraryStore::open(&path).await.unwrap());
+    let activated = a
+        .mutations
+        .activate_subscription(library::subscription("https://example.com/new.xml"))
+        .await
+        .unwrap();
+    assert_eq!(activated.ticket, RefreshTicket { issued: 1, baseline: 0 });
+    let prepared = RefreshTarget {
+        feed_id: activated.feed.id,
+        generation: activated.generation,
+        url: activated.feed.url.clone(),
+        etag: None,
+        last_modified: None,
+        ticket: activated.ticket,
+    };
+    let later = begin(&b, activated.feed.id).await;
+    assert!(!superseded(&b, &later, fetched("Later", "etag-l", &["later"])).await);
+    assert!(superseded(&a, &prepared, fetched("Prepared", "etag-p", &["prepared"])).await);
+    assert_eq!(entry_titles(&a).await, ["later"]);
+}
+
+/// A refresh that was started for a subscription that is removed and added again gets no target.
+#[tokio::test(flavor = "multi_thread")]
+async fn begin_refresh_requires_the_expected_generation() {
+    let (_dir, a, _b, feed) = two_processes("generation").await;
+    assert!(a.refresh.begin_refresh(feed.id, Some(1)).await.unwrap().is_none());
+    assert!(a.refresh.begin_refresh(feed.id, Some(0)).await.unwrap().is_some());
+    a.feeds.set_deleted(feed.id, true).await.unwrap();
+    assert!(a.refresh.begin_refresh(feed.id, None).await.unwrap().is_none());
+}
+
+/// A source whose fetch races with another process: while it fetches, the other process begins,
+/// fetches and publishes a newer version.
+struct RacingSource {
+    other: Library,
+    feed_id: i64,
+    output: FeedRefreshSourceOutput,
+    race: bool,
+}
+
+#[async_trait::async_trait]
+impl FeedRefreshSourcePort for RacingSource {
+    async fn refresh(&self, _target: &RefreshTarget) -> Result<FeedRefreshSourceOutput> {
+        if self.race {
+            let newer = begin(&self.other, self.feed_id).await;
+            assert!(!superseded(&self.other, &newer, fetched("Other", "etag-o", &["other"])).await);
+        }
+        Ok(self.output.clone())
+    }
+}
+
+fn service_update(key: &str) -> FeedRefreshSourceOutput {
+    FeedRefreshSourceOutput::Updated(FeedRefreshUpdate {
+        metadata: metadata("etag-service"),
+        feed: ParsedFeedUpdate {
+            title: Some("Service".into()),
+            site_url: None,
+            description: None,
+            entries: vec![ParsedEntryData {
+                content_html: Some(format!("<p>{key}</p>")),
+                ..library::entry(key)
+            }],
+        },
+    })
+}
+
+/// The refresh service begins every refresh with a ticket; a response overtaken by another
+/// process's publication is reported as not modified, with nothing stored or localized.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_refresh_service_takes_a_ticket_and_reports_a_superseded_response() {
+    let (_dir, a, b, feed) = two_processes("service").await;
+    let store: Arc<dyn RefreshStorePort> = Arc::new(LibraryRefreshStore::new(a.store.clone()));
+    let calm = RefreshService::new(
+        Arc::new(RacingSource {
+            other: Library::over(b.store.clone()),
+            feed_id: feed.id,
+            output: service_update("first"),
+            race: false,
+        }),
+        store.clone(),
+    );
+    let outcome = calm.refresh_feed(feed.id).await.unwrap();
+    assert!(matches!(outcome.result, RefreshFeedResult::Updated { inserted_count: 1, .. }));
+    assert_eq!(tickets(&a, feed.id).await, (1, 1, 1));
+
+    let raced = RefreshService::new(
+        Arc::new(RacingSource {
+            other: b,
+            feed_id: feed.id,
+            output: service_update("overtaken"),
+            race: true,
+        }),
+        store,
+    );
+    let outcome = raced.refresh_feed(feed.id).await.unwrap();
+    assert!(matches!(outcome.result, RefreshFeedResult::NotModified), "{outcome:?}");
+    assert_eq!(entry_titles(&a).await, ["first", "other"]);
+    assert_eq!(a.feeds.get_feed(feed.id).await.unwrap().unwrap().etag.as_deref(), Some("etag-o"));
+    assert_eq!(tickets(&a, feed.id).await, (3, 3, 3));
+}
