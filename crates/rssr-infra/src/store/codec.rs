@@ -9,15 +9,20 @@ use url::Url;
 use super::error::{StoreError, StoreResult};
 
 pub fn now() -> String {
-    format_time(OffsetDateTime::now_utc())
+    format_time(OffsetDateTime::now_utc()).expect("the current time is RFC 3339 formattable")
 }
 
-pub fn format_time(value: OffsetDateTime) -> String {
-    value.to_offset(time::UtcOffset::UTC).format(&Rfc3339).unwrap_or_default()
+/// RFC 3339 has four-digit years; a time outside 0000-9999 cannot be stored and fails the
+/// write (it is never stored as an empty string).
+pub fn format_time(value: OffsetDateTime) -> StoreResult<String> {
+    value
+        .to_offset(time::UtcOffset::UTC)
+        .format(&Rfc3339)
+        .map_err(|error| corrupt_input(format!("时间 {value} 无法保存：{error}")))
 }
 
-pub fn format_optional_time(value: Option<OffsetDateTime>) -> Option<String> {
-    value.map(format_time)
+pub fn format_optional_time(value: Option<OffsetDateTime>) -> StoreResult<Option<String>> {
+    value.map(format_time).transpose()
 }
 
 pub fn parse_time(raw: &str) -> StoreResult<OffsetDateTime> {
@@ -34,6 +39,10 @@ pub fn parse_url(raw: &str) -> StoreResult<Url> {
 
 pub fn parse_optional_url(raw: Option<String>) -> StoreResult<Option<Url>> {
     raw.as_deref().map(parse_url).transpose()
+}
+
+fn corrupt_input(detail: String) -> StoreError {
+    StoreError::Domain(DomainError::Persistence(detail))
 }
 
 /// A stored value the program cannot read back.

@@ -62,7 +62,8 @@ pub(crate) fn clear_last_opened_if_removed(
     if removed_feed_ids.is_empty() {
         return Ok(());
     }
-    let mut state: AppStateSnapshot = match load(conn, APP_STATE_KEY) {
+    let Some(raw) = load_raw(conn, APP_STATE_KEY)? else { return Ok(()) };
+    let mut state: AppStateSnapshot = match serde_json::from_str(&raw) {
         Ok(state) => state,
         Err(error) => {
             tracing::warn!(%error, "应用状态无法解析，跳过最后打开订阅的清理");
@@ -152,6 +153,7 @@ impl AppStatePort for LibraryAppState {
                     state.last_opened_feed_id = None;
                 }
             })
-            .await?)
+            .await
+            .map_err(DomainError::from)?)
     }
 }

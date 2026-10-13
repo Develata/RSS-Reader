@@ -48,7 +48,7 @@ impl Filtered {
     /// Feed scopes go through one JSON parameter (`json_each`) whatever their size: one
     /// statement shape for every scope keeps the prepared-statement cache effective and stays
     /// clear of SQLite's parameter limit.
-    fn entry_filters(&mut self, query: &EntryQuery) -> &mut Self {
+    fn entry_filters(&mut self, query: &EntryQuery) -> StoreResult<&mut Self> {
         if let Some(feed_id) = query.feed_id {
             self.push(" AND entries.feed_id = ").bind(feed_id);
         }
@@ -81,12 +81,12 @@ impl Filtered {
             ArchiveFilter::All => {}
             ArchiveFilter::ExcludeArchived { cutoff } => {
                 self.push(" AND (entries.published_at IS NULL OR entries.published_at >= ")
-                    .bind(format_time(cutoff))
+                    .bind(format_time(cutoff)?)
                     .push(")");
             }
             ArchiveFilter::OnlyArchived { cutoff } => {
                 self.push(" AND entries.published_at IS NOT NULL AND entries.published_at < ")
-                    .bind(format_time(cutoff));
+                    .bind(format_time(cutoff)?);
             }
         }
         // Literal substring of the folded title (`%` and `_` are not wildcards), matching the
@@ -96,7 +96,7 @@ impl Filtered {
                 .bind(rssr_domain::fold_for_search(search))
                 .push(") > 0");
         }
-        self
+        Ok(self)
     }
 }
 
@@ -112,7 +112,7 @@ pub(crate) fn list_entries(
                 COALESCE(feeds.custom_title, feeds.title, feeds.url),
                 entries.published_at, entries.is_read, entries.is_starred",
     );
-    sql.push(ACTIVE_ENTRIES).entry_filters(query);
+    sql.push(ACTIVE_ENTRIES).entry_filters(query)?;
     sql.push(" ORDER BY ").push(SORT_KEY).push(" DESC, entries.id DESC");
     if let Some(limit) = query.limit {
         sql.push(" LIMIT ").bind(i64::from(limit));
@@ -136,7 +136,7 @@ pub(crate) fn list_entries(
 
 pub(crate) fn count_entries(conn: &Connection, query: &EntryQuery) -> StoreResult<u64> {
     let mut sql = Filtered::new("SELECT COUNT(*)");
-    sql.push(ACTIVE_ENTRIES).entry_filters(query);
+    sql.push(ACTIVE_ENTRIES).entry_filters(query)?;
     let count: i64 = conn
         .prepare_cached(&sql.sql)?
         .query_row(params_from_iter(&sql.params), |row| row.get(0))?;
@@ -146,7 +146,7 @@ pub(crate) fn count_entries(conn: &Connection, query: &EntryQuery) -> StoreResul
 /// Unread entries matching `query` (its limit ignored), in id order.
 fn unread_selection(conn: &Connection, query: &EntryQuery) -> StoreResult<Vec<i64>> {
     let mut sql = Filtered::new("SELECT entries.id");
-    sql.push(ACTIVE_ENTRIES).push(" AND entries.is_read = 0").entry_filters(query);
+    sql.push(ACTIVE_ENTRIES).push(" AND entries.is_read = 0").entry_filters(query)?;
     sql.push(" ORDER BY entries.id");
     let mut statement = conn.prepare_cached(&sql.sql)?;
     let ids = statement
@@ -190,7 +190,7 @@ pub(crate) fn mark_read_if_unchanged(
     sql.push(" WHERE id IN (SELECT entries.id")
         .push(ACTIVE_ENTRIES)
         .push(" AND entries.is_read = 0");
-    sql.entry_filters(&query).push(")");
+    sql.entry_filters(&query)?.push(")");
     let changed = conn.prepare_cached(&sql.sql)?.execute(params_from_iter(&sql.params))?;
     Ok(MarkReadOutcome::Applied { changed_count: changed as u64 })
 }

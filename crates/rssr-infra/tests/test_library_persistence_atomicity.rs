@@ -17,10 +17,10 @@ use rssr_application::{
     ParsedEntryData, ParsedFeedUpdate, RefreshCommit, RefreshStorePort, SubscriptionActivationPort,
     SubscriptionRemovalPort,
 };
+use rssr_domain::DomainError;
 use rssr_domain::{
     AppStateRepository, Feed, FeedRepository, NewFeedSubscription, SettingsRepository, UserSettings,
 };
-use rssr_infra::store::StoreError;
 use time::OffsetDateTime;
 use url::Url;
 
@@ -186,7 +186,7 @@ async fn reactivation_after_purge_starts_without_old_entries_or_bodies() {
         .commit(&stale_target, library::updated(vec![entry("late")]))
         .await
         .expect_err("work started for the old subscription must not write into the new one");
-    assert!(matches!(late.downcast_ref::<StoreError>(), Some(StoreError::NotFound)));
+    assert!(matches!(late.downcast_ref::<DomainError>(), Some(DomainError::NotFound)));
     assert_eq!(entry_count(&library).await, 0);
     assert_eq!(body_count(&library).await, 0);
 }
@@ -355,7 +355,7 @@ async fn deleted_feed_rejects_late_metadata_update() {
         )
         .await
         .expect_err("deleted feed must reject late metadata");
-    assert!(matches!(error.downcast_ref::<StoreError>(), Some(StoreError::NotFound)));
+    assert!(matches!(error.downcast_ref::<DomainError>(), Some(DomainError::NotFound)));
 
     // 添加时的名称在 `custom_title`；源标题列没有被迟到的元数据写入（审计 B6）。
     let id = feed.id;
@@ -383,7 +383,7 @@ async fn deleted_feed_rejects_late_index_upsert() {
         .await
         .expect_err("deleted feed must reject late refresh");
 
-    assert!(matches!(error.downcast_ref::<StoreError>(), Some(StoreError::NotFound)));
+    assert!(matches!(error.downcast_ref::<DomainError>(), Some(DomainError::NotFound)));
     assert_eq!(entry_count(&library).await, 0);
     assert_eq!(body_count(&library).await, 0);
 }
@@ -413,4 +413,62 @@ async fn unreadable_app_state_does_not_block_subscription_removal() {
         .await
         .expect("removing a subscription must not depend on parsing the app state");
     assert!(library.feeds.get_feed(feed.id).await.expect("get feed").is_none());
+}
+
+/// Only unreadable app-state JSON is skipped; a failing read of the app state fails the removal,
+/// which then changes nothing.
+#[tokio::test]
+async fn an_app_state_read_failure_rolls_the_removal_back() {
+    let library = Library::memory().await;
+    let feed = add_feed(&library, "https://example.com/state-read.xml").await;
+    library.seed(feed.id, vec![entry("kept")]).await;
+    library.exec("ALTER TABLE app_settings RENAME TO app_settings_unavailable").await;
+
+    let removed = library.mutations.remove_subscription(feed.id, true).await;
+    assert!(removed.is_err(), "a storage failure is not an unreadable document");
+    library.exec("ALTER TABLE app_settings_unavailable RENAME TO app_settings").await;
+    assert!(library.feeds.get_feed(feed.id).await.unwrap().is_some());
+    assert_eq!((entry_count(&library).await, body_count(&library).await), (1, 1));
+}
+
+/// A time that RFC 3339 cannot represent fails the refresh commit as a whole: nothing of it is
+/// stored, the library stays readable and the last success does not advance.
+#[tokio::test]
+async fn an_unstorable_entry_time_fails_the_whole_commit() {
+    use rssr_domain::{EntryIndexRepository, EntryQuery};
+    use time::{Date, Month, PrimitiveDateTime, Time};
+
+    let library = Library::memory().await;
+    let feed = add_feed(&library, "https://example.com/time.xml").await;
+    library.seed(feed.id, vec![entry("before")]).await;
+    let target = library.refresh.get_target(feed.id).await.unwrap().unwrap();
+    let last_success = library.feeds.get_feed(feed.id).await.unwrap().unwrap().last_success_at;
+
+    let year_minus_one = PrimitiveDateTime::new(
+        Date::from_calendar_date(-1, Month::January, 1).unwrap(),
+        Time::MIDNIGHT,
+    )
+    .assume_utc();
+    let commit = RefreshCommit::Updated {
+        update: FeedRefreshUpdate {
+            metadata: Default::default(),
+            feed: ParsedFeedUpdate {
+                title: Some("Changed".into()),
+                site_url: None,
+                description: None,
+                entries: vec![
+                    entry("fine"),
+                    ParsedEntryData { published_at: Some(year_minus_one), ..entry("ancient") },
+                ],
+            },
+        },
+    };
+    assert!(library.refresh.commit(&target, commit).await.is_err());
+
+    let listed = library.entries.list_entries(&EntryQuery::default()).await.unwrap();
+    assert_eq!(listed.len(), 1, "only the entry stored before remains");
+    let stored = library.feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(stored.source_title, None, "feed metadata rolled back too");
+    assert_eq!(stored.last_success_at, last_success);
+    assert!(stored.fetch_error.is_some(), "the failure is recorded");
 }

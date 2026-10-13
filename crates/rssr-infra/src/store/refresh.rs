@@ -10,6 +10,7 @@ use rssr_application::{
     FeedRefreshUpdate, ParsedEntryData, RefreshCommit, RefreshCommitOutcome, RefreshFailure,
     RefreshHttpMetadata, RefreshStorePort, RefreshTarget,
 };
+use rssr_domain::DomainError;
 use rusqlite::{Connection, params};
 use url::Url;
 
@@ -209,8 +210,8 @@ fn upsert_entry(
                 rssr_domain::fold_for_search(&entry.title),
                 entry.author,
                 entry.summary,
-                format_optional_time(entry.published_at),
-                format_optional_time(entry.updated_at_source),
+                format_optional_time(entry.published_at)?,
+                format_optional_time(entry.updated_at_source)?,
                 now,
                 has_body,
             ],
@@ -309,6 +310,7 @@ impl LibraryRefreshStore {
                 )
             })
             .await
+            .map_err(DomainError::from)
             .context("更新订阅抓取状态失败")
     }
 }
@@ -316,11 +318,15 @@ impl LibraryRefreshStore {
 #[async_trait::async_trait]
 impl RefreshStorePort for LibraryRefreshStore {
     async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
-        Ok(self.store.read(list_targets).await?)
+        Ok(self.store.read(list_targets).await.map_err(DomainError::from)?)
     }
 
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
-        Ok(self.store.read(move |conn| get_target(conn, feed_id)).await?)
+        Ok(self
+            .store
+            .read(move |conn| get_target(conn, feed_id))
+            .await
+            .map_err(DomainError::from)?)
     }
 
     async fn commit(
@@ -334,6 +340,7 @@ impl RefreshStorePort for LibraryRefreshStore {
                 self.store
                     .write(move |tx| record_not_modified(tx, &target, &metadata, &now()))
                     .await
+                    .map_err(DomainError::from)
                     .context("更新订阅抓取状态失败")?;
                 Ok(RefreshCommitOutcome::default())
             }
@@ -354,7 +361,8 @@ impl RefreshStorePort for LibraryRefreshStore {
                             metadata: Some(metadata),
                         };
                         let _ = self.record_failure(target, failure).await;
-                        Err(anyhow::Error::new(error).context("写入订阅内容失败"))
+                        Err(anyhow::Error::new(DomainError::from(error))
+                            .context("写入订阅内容失败"))
                     }
                 }
             }
