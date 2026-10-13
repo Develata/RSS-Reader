@@ -11,7 +11,7 @@ pub enum StoreError {
     NotFound,
     #[error("违反数据约束")]
     Conflict(#[source] rusqlite::Error),
-    #[error("数据库忙，等待写锁超时")]
+    #[error("数据库被其他连接占用")]
     Busy(#[source] rusqlite::Error),
     #[error("数据库操作超过时限被中断")]
     Interrupted,
@@ -40,13 +40,12 @@ pub enum StoreError {
 impl From<rusqlite::Error> for StoreError {
     fn from(error: rusqlite::Error) -> Self {
         let code = match &error {
-            rusqlite::Error::QueryReturnedNoRows => return Self::NotFound,
             rusqlite::Error::SqliteFailure(failure, _) => failure.code,
             _ => return Self::Sqlite(error),
         };
         match code {
             ErrorCode::ConstraintViolation => Self::Conflict(error),
-            ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked => Self::Busy(error),
+            ErrorCode::DatabaseBusy => Self::Busy(error),
             ErrorCode::OperationInterrupted => Self::Interrupted,
             ErrorCode::DatabaseCorrupt | ErrorCode::NotADatabase => Self::Corrupt(error),
             _ => Self::Sqlite(error),

@@ -1,7 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rssr_infra::store::{LibraryStore, StoreError, StoreOptions};
@@ -34,6 +35,43 @@ fn quick() -> StoreOptions {
         read_deadline: Duration::from_secs(5),
         write_deadline: Duration::from_secs(5),
     }
+}
+
+/// Aborts the test process if a test that runs an unbounded query hangs (a regression of the
+/// deadline would otherwise keep the runtime waiting for the blocking thread forever).
+struct Watchdog(Arc<AtomicBool>);
+
+impl Watchdog {
+    fn arm(limit: Duration) -> Self {
+        let done = Arc::new(AtomicBool::new(false));
+        let observed = Arc::clone(&done);
+        std::thread::spawn(move || {
+            let started = Instant::now();
+            while started.elapsed() < limit {
+                if observed.load(Ordering::Relaxed) {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            eprintln!("watchdog: test exceeded {limit:?}");
+            std::process::abort();
+        });
+        Self(done)
+    }
+}
+
+impl Drop for Watchdog {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Waits (off the async runtime) for a signal from inside a store task.
+async fn wait_for(signal: mpsc::Receiver<()>) {
+    tokio::task::spawn_blocking(move || signal.recv_timeout(Duration::from_secs(10)))
+        .await
+        .unwrap()
+        .expect("task signalled");
 }
 
 const RUN_FOREVER: &str = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n)
@@ -149,6 +187,7 @@ async fn a_read_task_sees_one_snapshot() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn deadline_interrupts_a_runaway_read_and_the_connection_recovers() {
+    let _watchdog = Watchdog::arm(Duration::from_secs(60));
     let dir = TempDir::new("deadline");
     let options = StoreOptions { readers: 1, read_deadline: Duration::from_millis(100), ..quick() };
     let store = LibraryStore::open_with(dir.library(), options).await.unwrap();
@@ -160,27 +199,111 @@ async fn deadline_interrupts_a_runaway_read_and_the_connection_recovers() {
     assert_eq!(feed_count(&store).await, 0);
 }
 
-/// Dropping the caller does not hand the writer to the next task while the first still runs.
+/// A caller that goes away interrupts its running statement long before the deadline.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_cancelled_caller_keeps_the_writer_until_its_task_ends() {
-    let options = StoreOptions { write_deadline: Duration::from_millis(800), ..quick() };
-    let dir = TempDir::new("cancel");
+async fn a_cancelled_caller_interrupts_its_running_statement() {
+    let _watchdog = Watchdog::arm(Duration::from_secs(60));
+    let dir = TempDir::new("cancel-interrupt");
+    let options = StoreOptions {
+        admission_wait: Duration::from_secs(5),
+        write_deadline: Duration::from_secs(30),
+        ..quick()
+    };
     let store = LibraryStore::open_with(dir.library(), options).await.unwrap();
-    let started = Instant::now();
+    let (started, wait_started) = mpsc::channel();
     let long = store.clone();
     let caller = tokio::spawn(async move {
-        long.write(|tx| Ok(tx.query_row(RUN_FOREVER, [], |row| row.get::<_, i64>(0))?)).await
+        long.write(move |tx| {
+            started.send(()).unwrap();
+            Ok(tx.query_row(RUN_FOREVER, [], |row| row.get::<_, i64>(0))?)
+        })
+        .await
     });
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    wait_for(wait_started).await;
+    caller.abort();
+    assert!(caller.await.unwrap_err().is_cancelled());
+
+    let begun = Instant::now();
+    insert_feed(&store, "https://a.test").await.expect("writer freed after the interrupt");
+    assert!(begun.elapsed() < Duration::from_secs(5), "took {:?}", begun.elapsed());
+}
+
+/// Dropping the caller does not hand the writer to the next task while the first still runs,
+/// and the abandoned task is rolled back instead of committed.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cancelled_task_keeps_the_writer_until_it_ends_and_does_not_commit() {
+    let dir = TempDir::new("cancel");
+    let store = LibraryStore::open_with(dir.library(), quick()).await.unwrap();
+    let (started, wait_started) = mpsc::channel();
+    let (release, wait_release) = mpsc::channel::<()>();
+    let long = store.clone();
+    let caller = tokio::spawn(async move {
+        long.write(move |tx| {
+            tx.execute(
+                "INSERT INTO feeds (url, created_at, updated_at) VALUES ('https://late.test', 't', 't')",
+                [],
+            )?;
+            started.send(()).unwrap();
+            // Rust code the progress handler cannot interrupt.
+            wait_release.recv_timeout(Duration::from_secs(10)).unwrap();
+            Ok(())
+        })
+        .await
+    });
+    wait_for(wait_started).await;
     caller.abort();
     assert!(caller.await.unwrap_err().is_cancelled());
 
     let blocked = insert_feed(&store, "https://a.test").await;
     assert!(matches!(blocked, Err(StoreError::ConnectionTimeout)), "{blocked:?}");
 
-    tokio::time::sleep(Duration::from_millis(900).saturating_sub(started.elapsed())).await;
-    insert_feed(&store, "https://a.test").await.unwrap();
-    assert_eq!(feed_count(&store).await, 1);
+    release.send(()).unwrap();
+    let mut inserted = insert_feed(&store, "https://a.test").await;
+    for _ in 0..50 {
+        if !matches!(inserted, Err(StoreError::ConnectionTimeout)) {
+            break;
+        }
+        inserted = insert_feed(&store, "https://a.test").await;
+    }
+    inserted.expect("writer free once the task ended");
+    let late: i64 = store
+        .read(|conn| {
+            Ok(conn.query_row(
+                "SELECT count(*) FROM feeds WHERE url = 'https://late.test'",
+                [],
+                |row| row.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(late, 0, "an abandoned task must not commit");
+}
+
+/// A connection whose cleanup fails is replaced, and what its task wrote is not committed.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_connection_that_cannot_be_cleaned_up_is_replaced() {
+    use rusqlite::hooks::{AuthAction, AuthContext, Authorization, TransactionOperation};
+
+    let dir = TempDir::new("broken");
+    let store = LibraryStore::open_with(dir.library(), quick()).await.unwrap();
+    let failed = store
+        .write(|tx| -> Result<(), StoreError> {
+            tx.execute(
+                "INSERT INTO feeds (url, created_at, updated_at) VALUES ('https://lost.test', 't', 't')",
+                [],
+            )?;
+            tx.authorizer(Some(|context: AuthContext<'_>| match context.action {
+                AuthAction::Transaction { operation: TransactionOperation::Rollback } => {
+                    Authorization::Deny
+                }
+                _ => Authorization::Allow,
+            }))?;
+            Err(StoreError::NotFound)
+        })
+        .await;
+    assert!(matches!(failed, Err(StoreError::NotFound)), "{failed:?}");
+    insert_feed(&store, "https://a.test").await.expect("replacement writer");
+    assert_eq!(feed_count(&store).await, 1, "the broken task's insert was never committed");
 }
 
 /// A panicking task rolls back and the connection goes back to the pool.
@@ -227,6 +350,32 @@ async fn concurrent_first_opens_migrate_once() {
         assert_eq!(store.journal_mode(), "wal");
         assert_eq!(feed_count(store).await, 1);
     }
+}
+
+/// A foreign SQLite file in rollback-journal mode is refused without any write: neither its
+/// bytes nor its journal mode change.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_foreign_rollback_journal_database_is_refused_byte_for_byte() {
+    let dir = TempDir::new("foreign");
+    let path = dir.0.join("other.db");
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        let mode: String =
+            conn.query_row("PRAGMA journal_mode = DELETE", [], |row| row.get(0)).unwrap();
+        assert_eq!(mode, "delete");
+        conn.execute_batch(
+            "CREATE TABLE notes (id INTEGER PRIMARY KEY); INSERT INTO notes DEFAULT VALUES;",
+        )
+        .unwrap();
+    }
+    let before = std::fs::read(&path).unwrap();
+
+    let refused = LibraryStore::open(&path).await;
+    assert!(matches!(refused, Err(StoreError::NotALibrary)), "{:?}", refused.err());
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let mode: String = conn.query_row("PRAGMA journal_mode", [], |row| row.get(0)).unwrap();
+    assert_eq!(mode, "delete");
 }
 
 /// A v0.1.x index database is not a library: opening it fails and leaves it untouched.

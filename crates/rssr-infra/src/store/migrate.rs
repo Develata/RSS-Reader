@@ -88,12 +88,21 @@ fn migrate_with(
     Ok(())
 }
 
-/// Marks an empty file as a library, accepts a library, refuses anything else.
-fn claim_file(connection: &Connection) -> StoreResult<()> {
+/// What an opened SQLite file is, as far as the library is concerned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Identity {
+    /// Carries [`APPLICATION_ID`].
+    Library,
+    /// No schema and no application id: a new file the library may claim.
+    Empty,
+}
+
+/// Reads the file's identity without writing; any other SQLite file is [`StoreError::NotALibrary`].
+pub fn identity(connection: &Connection) -> StoreResult<Identity> {
     let application_id: i32 =
         connection.query_row("PRAGMA application_id", [], |row| row.get(0))?;
     if application_id == APPLICATION_ID {
-        return Ok(());
+        return Ok(Identity::Library);
     }
     let has_schema = connection
         .query_row("SELECT 1 FROM sqlite_schema LIMIT 1", [], |_| Ok(()))
@@ -102,7 +111,14 @@ fn claim_file(connection: &Connection) -> StoreResult<()> {
     if application_id != 0 || has_schema {
         return Err(StoreError::NotALibrary);
     }
-    connection.pragma_update(None, "application_id", APPLICATION_ID)?;
+    Ok(Identity::Empty)
+}
+
+/// Marks an empty file as a library, accepts a library, refuses anything else.
+fn claim_file(connection: &Connection) -> StoreResult<()> {
+    if identity(connection)? == Identity::Empty {
+        connection.pragma_update(None, "application_id", APPLICATION_ID)?;
+    }
     Ok(())
 }
 
