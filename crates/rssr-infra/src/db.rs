@@ -10,12 +10,10 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::Duration;
 
-use futures_util::future::BoxFuture;
 use sha2::{Digest, Sha384};
 use sqlx::{
     Pool, Sqlite,
-    error::BoxDynError,
-    migrate::{Migration, MigrationSource, Migrator},
+    migrate::Migrator,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
 };
 
@@ -129,14 +127,14 @@ async fn run_line_ending_tolerant(migrator: &Migrator, pool: &SqlitePool) -> any
             let mut migration = migration.clone();
             if let Some(recorded) = recorded.get(&migration.version)
                 && *recorded != *migration.checksum
-                && differs_only_in_line_endings(&migration.sql, recorded)
+                && differs_only_in_line_endings(migration.sql.as_str(), recorded)
             {
                 migration.checksum = Cow::Owned(recorded.clone());
             }
             migration
         })
         .collect();
-    Migrator::new(ResolvedMigrations(migrations)).await?.run(pool).await?;
+    Migrator::with_migrations(migrations).run(pool).await?;
     Ok(())
 }
 
@@ -160,16 +158,6 @@ fn differs_only_in_line_endings(sql: &str, recorded: &[u8]) -> bool {
     let lf = sql.replace("\r\n", "\n");
     let crlf = lf.replace('\n', "\r\n");
     [lf, crlf].iter().any(|variant| Sha384::digest(variant.as_bytes()).as_slice() == recorded)
-}
-
-/// 已经解析好的迁移列表，交给 [`Migrator::new`]（sqlx 的公开构造方式）。
-#[derive(Debug)]
-struct ResolvedMigrations(Vec<Migration>);
-
-impl MigrationSource<'static> for ResolvedMigrations {
-    fn resolve(self) -> BoxFuture<'static, Result<Vec<Migration>, BoxDynError>> {
-        Box::pin(async move { Ok(self.0) })
-    }
 }
 
 /// 读取连接实际生效的 journal 模式。
@@ -202,6 +190,19 @@ pub(crate) fn default_sqlite_max_connections(database_url: &str) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SQLite 3.51.2 及更早版本有 WAL-reset 缺陷：同一库文件的两个连接恰好同时写入或做
+    /// checkpoint 时可能损坏数据库（https://sqlite.org/wal.html#walreset，3.51.3 修复）。
+    /// 连接池、并发刷新以及共用数据目录的 GUI 与 CLI 都会对同一文件开多个连接。
+    #[tokio::test]
+    async fn bundled_sqlite_has_the_wal_reset_fix() {
+        let pool = create_sqlite_pool("sqlite::memory:").await.expect("connect");
+        let version: String =
+            sqlx::query_scalar("SELECT sqlite_version()").fetch_one(&pool).await.expect("version");
+        let parts: Vec<u32> =
+            version.split('.').map(|part| part.parse().expect("numeric version")).collect();
+        assert!(parts >= vec![3, 51, 3], "bundled SQLite {version} lacks the WAL-reset fix");
+    }
 
     #[test]
     fn memory_classification_uses_url_components() {
@@ -249,7 +250,7 @@ mod tests {
 
         for query in [PENDING_TITLE_SEARCH, NEXT_TITLE_SEARCH_BATCH] {
             let plan: Vec<(i64, i64, i64, String)> =
-                sqlx::query_as(&format!("EXPLAIN QUERY PLAN {query}"))
+                sqlx::query_as(sqlx::AssertSqlSafe(format!("EXPLAIN QUERY PLAN {query}")))
                     .bind(500_i64)
                     .fetch_all(&pool)
                     .await

@@ -98,6 +98,14 @@
 - 第二单元（OPML，`8a64904`，第十一轮评审后由 `f48ef80` 修订）：按 OPML 2.0，`text` 是显示的名称、`title` 来自订阅源。导入取 `text`，空白时退回 `title`（分组同样），任何非空名称都按指定名称导入，不与订阅地址比较。导出 `text` 写显示名称，没有名称时写空串（OPML 要求有 `text`）；`title` 只在知道源标题时写；文档带 `<head/>`。属性值里的制表、换行、回车写成字符引用，XML 1.0 不允许的字符去掉（不让一个远端标题里的控制字符使整份导出失败）。`OpmlCodecPort::encode` 改收新的 `OpmlFeed`（地址、显示名称、源标题、分组）；配置包格式不变，所以 OPML 导出直接从订阅仓储取列表，不再经配置包导出。
 - D5（随第二单元完成）：Web 端 OPML 委托共用的 `OpmlCodec`，删除了 Web 端那份更宽松的副本。两端在写入前整体拒绝：被截断或标签未闭合、根元素前后有多余内容、`<body>` 之外的 `outline`（原先两端都静默跳过，报告成功）、任何元素上 quick-xml 能识别的属性语法错误（缺等号或引号、重复属性；原先只检查 `opml` 与 `outline` 的属性）。不做完整的 XML 良构性校验：属性值里的裸 `<`、未定义的实体（只出现在不读取取值的元素上时）、两个属性之间缺空白仍会通过（第十二轮评审）。
 
+### SQLite 引擎与 sqlx 0.9（新发现，你已同意先做）
+
+- 讨论跨进程刷新协调时查到：SQLite 官方确认的 WAL-reset 缺陷影响 3.7.0–3.51.2，在 3.51.3 修复（另有 3.44.6、3.50.7 回移）。触发条件是同一个 WAL 库文件上两个以上连接恰好同时写入或做 checkpoint，可能损坏数据库，官方称概率很低（https://sqlite.org/wal.html#walreset）。原来捆绑的是 3.46.0（sqlx 0.8.6 只能用 libsqlite3-sys 0.30.x）；应用的连接池与并发刷新本来就满足触发条件，GUI 与 CLI 共用数据目录后会更常见。
+- 处理：sqlx 0.8.6 → 0.9.0；`rssr-infra` 直接声明 `libsqlite3-sys = 0.37`（捆绑 SQLite 3.51.3，已在 rusqlite 仓库 `v0.39.0` 标签核对），按 sqlx 0.9 CHANGELOG 的建议用依赖声明固定版本。只靠锁文件会被意外回退：升级过程中锁文件就被同时运行的 IDE 改回过 0.30.1，是新加的版本守卫测试发现的。
+- 代码改动：`runtime-tokio-rustls` 组合特性已删除，改为 `runtime-tokio`（SQLite 不需要 TLS）；`query*()` 只接受静态或显式审计的 SQL：文章已读/收藏标记原来在运行时拼列名，改成封闭枚举 `EntryFlag`，每种标记一条固定 SQL；两处测试里的动态 SQL 用 `AssertSqlSafe` 标注；`QueryBuilder` 不再带生命周期参数；`Migration::sql` 变成 `SqlStr`；G1 的换行容错改用 sqlx 0.9 的 `Migrator::with_migrations`，去掉了自写的 `MigrationSource` 包装。校验和算法未变（仍是 SQL 原文的 SHA-384，已在 sqlx-core 0.9.0 源码核对）。
+- 新测试 `db::tests::bundled_sqlite_has_the_wal_reset_fix`：实际链接的 SQLite 低于 3.51.3 时失败（锁文件回退到 0.30.1 时它确实报出了 3.46.0）。
+- 未采用：sqlx 0.9 新增的“计算迁移校验和时忽略指定字符”配置会改变校验和，已有数据库里的记录对不上，不能替代 G1 的容错层。
+
 ### CLI 与界面
 
 - H1：`remove-feed --keep-entries`。
@@ -120,6 +128,7 @@
 - B6 第一单元（提交前在工作区实测）：`cargo test --workspace --locked -j 2` 430 passed / 0 failed / 3 ignored；三个浏览器 harness 30/30、24/24（新增 3 个）、3/3；`rssr-infra` wasm lib 测试 14/14；全工作区与 wasm32 clippy、`cargo fmt --all --check` 通过。新增测试：两端共用的名称契约（`support/feed_title_cases.rs`，原生与浏览器各跑一遍：指定名称与源标题分开、刷新不覆盖、`None` 保留、空白清除、无名称时 URL 只在列表兜底、重新激活时清除旧名称、配置包设置或清除）、0008→0009 真实旧库升级（已有标题留作源标题并继续跟随刷新）、添加时探测标题只进源标题、OPML 导入不看快照、浏览器提交头 v1 原地升级与未知版本拒绝。预期改变的旧测试 4 个：`test_application_refresh_store_adapter` 两处（添加时带名称、刷新后原断言为源标题，改为名称保留、源标题单独核对）、`test_persistence_atomicity::deleted_feed_rejects_late_metadata_update`（名称改存 `custom_title`，源标题列保持为空）、`wasm_subscription_contract_harness` 的去重测试（持久化字段改为 `custom_title`）。变异（实测，均恢复）：原生显示名偏向源标题、探测标题填回指定名称、OPML 缺名称传 `None`、配置导入不写 `custom_title`、0009 复制旧标题，浏览器显示名偏向源标题、只读打开不升级提交头、接受未知版本，各自让对应测试失败。
 - 第十轮独立评审（第一单元）的处理与第二单元（`d872fdc`、`8a64904` 的内容，提交前在工作区实测）：`cargo test --workspace --locked -j 2` 433 passed / 0 failed / 3 ignored；三个浏览器 harness 30/30、26/26、4/4；`rssr-infra` wasm lib 测试 14/14；全工作区与 wasm32 clippy、`cargo fmt --all --check` 通过。评审处理：迟到刷新的测试补查源标题（去掉元数据更新的 generation 条件后，迟到刷新确实写入了 "Feed stale"，现在被抓到）；浏览器提交头升级补两条失败路径（提交头写失败时一切不变、同一句柄下次访问重试升级；数据片损坏时不升级）；workflow 测试的桩按真实契约返回显示名称、改为核对激活端口收到的参数；CLI 帮助说明省略 `--title` 时保留已有名称。旧版本标签页的拒绝只能读旧版代码确认（它在读数据片之前就拒绝版本 1 以外的提交头），当前构建无法实际运行旧版。第二单元新增测试：`text` 优先与空白退回、与地址相同的名称、导出属性与往返、Web 端 OPML（此前没有任何 harness 覆盖：按 `text` 导入、导出两个名称、残缺文档在写入前拒绝）。现有 OPML 夹具的 `text` 与 `title` 都相同，改优先级没有翻转旧断言；预期改变的只有“OPML 导出取自配置包导出”这一个应用层测试（改为核对两个名称都传给编码器）。变异（实测，均恢复）：去掉 generation 条件、升级时重写数据片、读数据片之前先发布新提交头、探测标题填回指定名称、`title` 优先于 `text`、保留与地址相同的名称、导出 `title` 写显示名称、服务层丢掉源标题，各自让对应测试失败。
 - 第十一轮独立评审的处理（`f48ef80`，实测）：`test_opml_interop` 7/7、`test_config_exchange_contract_harness` 9/9、`test_config_package_io`、`test_regression_smoke`、`rssr-application` 60/60、浏览器 config harness 4/4、原生与 wasm32 clippy、fmt 通过。上一条里“与地址相同的名称不算名称”的规则及其测试已在这次删除（改为无名称时导出空 `text`）。变异：去掉 `<body>` 外订阅的检查、去掉逐元素的属性检查、去掉换行的字符引用，各自让对应测试失败。
+- sqlx 0.9 / SQLite 3.51.3（提交前在工作区实测）：`cargo test --workspace --locked -j 2` 436 passed / 0 failed / 3 ignored（新增版本守卫 1 个）；三个浏览器 harness 30/30、26/26、4/4；`rssr-infra` wasm lib 14/14（Chrome 已自动升级到 155，改用 Scoop 的 ChromeDriver 155.0.8059.39；临时目录里的 wasm-bindgen 0.2.126 测试运行器被删过一次，已重新安装到同一位置）；原生与 wasm32 clippy、`cargo fmt --all --check` 通过；`cargo check -p rssr-infra -p rssr-cli --target aarch64-linux-android`（本机 NDK 28.2，CI 用 27.3）通过，含为 Android 编译的捆绑 SQLite。release 版 CLI（SHA-256 `d09fd228…51e4f89a`）重跑升级验收：v0.1.23 → 候选 8/8、v0.1.21 → 候选 10/10。
 - 变异验证（实测，每次恢复后复跑通过）：C2 计数（把无图文章也计数 → 0 次请求）；F1/F2 三个测试（名额留在调用方、表满不记录、设备共用名额）；C1 三个测试（去掉正文条件、哈希忽略地址、仅规范化也写回）；A1（只在成功后登记）、A2（普通 `BEGIN`）、A3（忽略缺席条目）；第四轮的断开记账（在处理函数里校验与记账）、A1 部分写入（只在成功后登记）、NULL 哈希（`=` 比较）、A3 归档计数。第五轮的闸门测试（在请求里记账、提前释放名额，各自失败）；第六轮的满名额测试（在任务里取名额 → 第一次 poll 为 `Pending`，失败）。每个测试都在对应修复撤掉后失败。会话先验签名的顺序无法用行为测试观察，改由类型保证（`VerifiedPayload`），未做时序测量。
 - 红→绿（实测）：8 个审计红测试解除忽略后通过；A2 在 SQLite（改成延迟事务即失败）与浏览器（改成先读后写即丢更新）两端各有一个红测试；E1 卸载测试在任务归页面作用域时失败；srcset、`data:` 媒体类型、声明固定等用例在修复前的实现上失败。
 
@@ -161,6 +170,12 @@
   - 桌面 / Android：数据库升级到迁移 0009 之后，旧版本程序无法打开，降级需要恢复升级前的完整备份；更新时请先退出所有使用同一数据库的 GUI 与 CLI 进程。
   OPML 已接受的后果：B6 之前本应用导出的 OPML 给无标题订阅写的是 `text=title=订阅地址`，重新导入时地址会成为指定名称（只影响从未取到标题的订阅）；其他阅读器导入本应用 `text=""` 的条目可能显示空名称；优先读 `title` 的阅读器（例如 Miniflux 的实现）会取到源标题而不是指定名称。第十一轮评审另提的两项只记录不改：新旧两个构建的浏览器标签页交错已用 v0.1.23 与候选版本实测（见“手工验收”），不再只是静态分析。测试里临时替换 `Storage.prototype.setItem` 的恢复不在 `finally` 里，与该文件已有测试的写法一致，测试中途崩溃、被取消或超时时可能影响同一页面后续的用例。
   已接受的后果（第一单元起）：同名订阅在文章页“按来源”分组时合并，指定名称会影响分组与目录定位（既有语义）；已在运行的旧版本原生进程仍可能按旧语义写 `title`；配置包 v2 格式固定（版本精确匹配、`deny_unknown_fields`），无法区分名称来源。
+- 你确认的后续顺序（2026-10-13）：
+  1. sqlx 0.9 / SQLite 3.51.3：已完成（上文）。
+  2. 跨进程刷新协调：采用 Codex 设计的“持久化抓取序号 + 条件原子发布”——每个订阅持久化 I（已发出的最大序号）、P（已发布的最大序号）、D（已记录诊断的最大序号），始终 0 ≤ P ≤ D ≤ I；200 只有序号大于 P 才发布，304 还要求它校验的版本正是当前已发布的版本，失败只更新诊断；添加订阅时预抓取的结果在激活事务里领序号；任何锁都不跨网络请求。原生端按你的决定把正文库并回索引库（同一个 SQLite 文件、表仍分开），让发布成为单个事务；迁移 0010 一次性复制正文，旧正文库保留为备份。设计原文在会话临时目录 `review/design-refresh-review.md`，实施前先出实施方案并送评审。
+  3. GUI 与 CLI：不合并，见 [GUI 与 CLI 的分发形式](../design/cli-gui-distribution.md)；Scoop 包与 macOS 数据目录（现在会写进 `.app` 包内）待实施。
+  4. D1：Claude 与 Codex 独立得出同一建议——浏览器端全部状态迁入同一个 IndexedDB、按记录存储，localStorage 只留阻止旧版本写入的版本栅栏；待你确认。若采用，浏览器端的刷新序号直接放在 IndexedDB 的订阅记录里。
+  5. “Web 界面读写服务器上的数据库”属于产品边界问题，未决定。
 - 待办：D2、D4、D7、E2、E3、G2–G6、H2、H3、B7、F2 其余部分（`/logout` 用 GET、CSP）未处理；D1 是否允许缩短 Web 正文保留期限、Scoop 分发时 GUI 与 CLI 是否共用数据库，两项产品决定仍待你确认。
 
 ## 给下一位 Agent 的备注

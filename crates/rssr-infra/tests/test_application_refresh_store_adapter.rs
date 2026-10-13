@@ -231,10 +231,10 @@ async fn check_retry_after_failed_write(fail_content: bool) {
 
     let (failure_pool, table) =
         if fail_content { (&content_pool, "entry_contents") } else { (&index_pool, "entries") };
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "CREATE TRIGGER fail_refresh_write BEFORE INSERT ON {table} \
          BEGIN SELECT RAISE(FAIL, 'injected write failure'); END"
-    ))
+    )))
     .execute(failure_pool)
     .await
     .expect("inject actual SQLite write failure");

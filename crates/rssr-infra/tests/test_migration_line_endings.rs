@@ -79,7 +79,10 @@ async fn check(database: Database) {
         .migrator()
         .iter()
         .map(|migration| {
-            (migration.version, other_line_ending_checksum(&migration.sql, &migration.checksum))
+            (
+                migration.version,
+                other_line_ending_checksum(migration.sql.as_str(), &migration.checksum),
+            )
         })
         .collect();
     for (version, checksum) in &other {

@@ -674,16 +674,11 @@ impl SqliteEntryRepository {
     async fn update_entry_flags(
         &self,
         entry_id: i64,
-        field: &str,
-        timestamp_field: &str,
+        flag: EntryFlag,
         enabled: bool,
     ) -> DomainResult<()> {
         let now = enabled.then(now_rfc3339);
-        let sql = format!(
-            "UPDATE entries SET {field} = ?2, {timestamp_field} = ?3, updated_at = ?4 WHERE id = ?1"
-        );
-
-        let result = sqlx::query(&sql)
+        let result = sqlx::query(flag.update_sql())
             .bind(entry_id)
             .bind(if enabled { 1_i64 } else { 0_i64 })
             .bind(now.as_deref())
@@ -864,11 +859,11 @@ impl EntryIndexRepository for SqliteEntryRepository {
     }
 
     async fn set_read(&self, entry_id: i64, is_read: bool) -> DomainResult<()> {
-        self.update_entry_flags(entry_id, "is_read", "read_at", is_read).await
+        self.update_entry_flags(entry_id, EntryFlag::Read, is_read).await
     }
 
     async fn set_starred(&self, entry_id: i64, is_starred: bool) -> DomainResult<()> {
-        self.update_entry_flags(entry_id, "is_starred", "starred_at", is_starred).await
+        self.update_entry_flags(entry_id, EntryFlag::Starred, is_starred).await
     }
 
     async fn delete_for_feed(&self, feed_id: i64) -> DomainResult<()> {
@@ -1121,7 +1116,27 @@ async fn resolve_entry_ids_by_dedup_keys(
     Ok(resolved)
 }
 
-fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a EntryQuery) {
+/// 文章的两个标记，各对应一条固定的 SQL：列名不在运行时拼接。
+#[derive(Clone, Copy)]
+enum EntryFlag {
+    Read,
+    Starred,
+}
+
+impl EntryFlag {
+    fn update_sql(self) -> &'static str {
+        match self {
+            Self::Read => {
+                "UPDATE entries SET is_read = ?2, read_at = ?3, updated_at = ?4 WHERE id = ?1"
+            }
+            Self::Starred => {
+                "UPDATE entries SET is_starred = ?2, starred_at = ?3, updated_at = ?4 WHERE id = ?1"
+            }
+        }
+    }
+}
+
+fn push_entry_query_filters(qb: &mut QueryBuilder<Sqlite>, query: &EntryQuery) {
     if let Some(feed_id) = query.feed_id {
         qb.push(" AND entries.feed_id = ").push_bind(feed_id);
     }
