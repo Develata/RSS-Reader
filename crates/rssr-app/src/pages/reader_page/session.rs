@@ -52,18 +52,19 @@ impl ReaderPageSession {
         }));
     }
 
+    /// The reader's buttons and shortcuts toggle: they ask for the opposite of what it shows.
     pub(crate) fn toggle_read(self, via_shortcut: bool) {
-        self.spawn_ui_command(UiCommand::Reader(ReaderCommand::ToggleRead {
+        self.spawn_ui_command(UiCommand::Reader(ReaderCommand::SetRead {
             entry_id: self.entry_id,
-            currently_read: self.state.peek().is_read,
+            read: !self.state.peek().is_read,
             via_shortcut,
         }));
     }
 
     pub(crate) fn toggle_starred(self, via_shortcut: bool) {
-        self.spawn_ui_command(UiCommand::Reader(ReaderCommand::ToggleStarred {
+        self.spawn_ui_command(UiCommand::Reader(ReaderCommand::SetStarred {
             entry_id: self.entry_id,
-            currently_starred: self.state.peek().is_starred,
+            starred: !self.state.peek().is_starred,
             via_shortcut,
         }));
     }

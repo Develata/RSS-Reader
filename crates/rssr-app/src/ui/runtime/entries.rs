@@ -1,10 +1,9 @@
+use super::entry_flags::{Flag, flag_message, flag_tone};
 use crate::{
     pages::entries_page::intent::EntriesPageIntent,
     ui::{commands::EntriesCommand, runtime::backend::backend, snapshot::UiIntent},
 };
-use rssr_application::{
-    EntriesBootstrapInput, EntriesBootstrapOutcome, ToggleEntryReadInput, ToggleEntryStarredInput,
-};
+use rssr_application::{EntriesBootstrapInput, EntriesBootstrapOutcome, EntryFlagOutcome};
 use rssr_domain::EntriesWorkspaceState;
 
 pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
@@ -70,68 +69,14 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
             },
             Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
         },
-        EntriesCommand::ToggleRead { entry_id, entry_title, currently_read } => {
-            match backend().await {
-                Ok(services) => {
-                    match services
-                        .toggle_entry_read(ToggleEntryReadInput { entry_id, currently_read })
-                        .await
-                    {
-                        Ok(outcome) => entries_intents(vec![
-                            EntriesPageIntent::SetStatus {
-                                message: format!(
-                                    "已将《{}》{}。",
-                                    entry_title,
-                                    if outcome.is_read {
-                                        "标记为已读"
-                                    } else {
-                                        "标记为未读"
-                                    }
-                                ),
-                                tone: "info".to_string(),
-                            },
-                            EntriesPageIntent::PatchEntryFlags {
-                                entry_id,
-                                is_read: Some(outcome.is_read),
-                                is_starred: None,
-                            },
-                        ]),
-                        Err(err) => entries_status_error(format!("{err}")),
-                    }
-                }
-                Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
-            }
+        EntriesCommand::SetRead { entry_id, entry_title, read } => {
+            let result = async { backend().await?.set_entry_read(entry_id, read).await }.await;
+            entry_flag_intents(Flag::Read, entry_id, &entry_title, result)
         }
-        EntriesCommand::ToggleStarred { entry_id, entry_title, currently_starred } => {
-            match backend().await {
-                Ok(services) => {
-                    match services
-                        .toggle_entry_starred(ToggleEntryStarredInput {
-                            entry_id,
-                            currently_starred,
-                        })
-                        .await
-                    {
-                        Ok(outcome) => entries_intents(vec![
-                            EntriesPageIntent::SetStatus {
-                                message: format!(
-                                    "已{}《{}》。",
-                                    if outcome.is_starred { "收藏" } else { "取消收藏" },
-                                    entry_title
-                                ),
-                                tone: "info".to_string(),
-                            },
-                            EntriesPageIntent::PatchEntryFlags {
-                                entry_id,
-                                is_read: None,
-                                is_starred: Some(outcome.is_starred),
-                            },
-                        ]),
-                        Err(err) => entries_status_error(format!("{err}")),
-                    }
-                }
-                Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
-            }
+        EntriesCommand::SetStarred { entry_id, entry_title, starred } => {
+            let result =
+                async { backend().await?.set_entry_starred(entry_id, starred).await }.await;
+            entry_flag_intents(Flag::Starred, entry_id, &entry_title, result)
         }
         EntriesCommand::SaveBrowsingPreferences {
             grouping_mode,
@@ -194,6 +139,31 @@ fn entries_status_error(message: impl Into<String>) -> Vec<UiIntent> {
         message: message.into(),
         tone: "error".to_string(),
     }])
+}
+
+/// The status and, when the entry still exists, the flag patch for a list card.
+fn entry_flag_intents(
+    flag: Flag,
+    entry_id: i64,
+    entry_title: &str,
+    result: anyhow::Result<EntryFlagOutcome>,
+) -> Vec<UiIntent> {
+    let outcome = match result {
+        Ok(outcome) => outcome,
+        Err(err) => return entries_status_error(format!("{err}")),
+    };
+    let mut intents = vec![EntriesPageIntent::SetStatus {
+        message: flag_message(flag, &format!("《{entry_title}》"), outcome),
+        tone: flag_tone(outcome).to_string(),
+    }];
+    if let EntryFlagOutcome::Set { value, .. } = outcome {
+        intents.push(EntriesPageIntent::PatchEntryFlags {
+            entry_id,
+            is_read: (flag == Flag::Read).then_some(value),
+            is_starred: (flag == Flag::Starred).then_some(value),
+        });
+    }
+    entries_intents(intents)
 }
 
 #[cfg(test)]

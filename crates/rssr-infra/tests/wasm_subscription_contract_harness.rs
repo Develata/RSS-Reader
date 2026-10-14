@@ -382,15 +382,28 @@ async fn reader_metadata_and_global_unread_counts_survive_failed_flag_writes() {
     .await;
     let entries = Arc::new(BrowserEntryRepository::new(state.clone()));
     let feeds = Arc::new(BrowserFeedRepository::new(state.clone()));
-    let reader =
-        ReaderService::new(entries.clone(), Arc::new(BrowserLibraryQueries::new(state.clone())));
+    let reader = ReaderService::new(Arc::new(BrowserLibraryQueries::new(state.clone())));
     let snapshot = reader.load_entry(1).await.unwrap();
     assert_eq!(snapshot.feed_title, feeds.get_feed(1).await.unwrap().unwrap().title);
     assert!(snapshot.entry.unwrap().content_html.is_some());
     assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 2);
-    entries.set_read(1, true).await.unwrap();
+    assert!(entries.set_read(1, true).await.unwrap(), "the first request changes it");
     assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
-    entries.set_read(1, true).await.unwrap();
+    // A repeat writes nothing and keeps the original time.
+    {
+        let mut baseline = state.snapshot().await.unwrap();
+        let flag = baseline.entry_flags.entries.iter_mut().find(|flag| flag.id == 1).unwrap();
+        flag.read_at = Some(OffsetDateTime::UNIX_EPOCH);
+        seed_state(baseline).await;
+    }
+    let flags_before = browser_storage::committed_slice(ENTRY_FLAGS_STORAGE_KEY);
+    assert!(!entries.set_read(1, true).await.unwrap(), "a repeat changes nothing");
+    assert_eq!(browser_storage::committed_slice(ENTRY_FLAGS_STORAGE_KEY), flags_before);
+    assert_eq!(
+        entries.get_entry_record(1).await.unwrap().unwrap().read_at,
+        Some(OffsetDateTime::UNIX_EPOCH)
+    );
+    assert!(!entries.set_starred(2, false).await.unwrap(), "an unstarred entry stays unstarred");
     assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
     entries
         .list_entries(&EntryQuery {

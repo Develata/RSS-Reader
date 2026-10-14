@@ -407,20 +407,41 @@ async fn ui_commands_produce_the_recorded_intents() {
     transcript
         .run(
             "toggle read in list",
-            entries(EntriesCommand::ToggleRead {
+            entries(EntriesCommand::SetRead {
                 entry_id: 1,
                 entry_title: "Alpha one".into(),
-                currently_read: false,
+                read: true,
             }),
         )
         .await;
     transcript
         .run(
             "toggle starred in list",
-            entries(EntriesCommand::ToggleStarred {
+            entries(EntriesCommand::SetStarred {
                 entry_id: 2,
                 entry_title: "Alpha two".into(),
-                currently_starred: false,
+                starred: true,
+            }),
+        )
+        .await;
+    // Target values: a repeat changes nothing; a missing entry is reported, not an error.
+    transcript
+        .run(
+            "repeat read in list",
+            entries(EntriesCommand::SetRead {
+                entry_id: 1,
+                entry_title: "Alpha one".into(),
+                read: true,
+            }),
+        )
+        .await;
+    transcript
+        .run(
+            "set read on a missing entry",
+            entries(EntriesCommand::SetRead {
+                entry_id: 999,
+                entry_title: "Gone".into(),
+                read: true,
             }),
         )
         .await;
@@ -486,21 +507,25 @@ async fn ui_commands_produce_the_recorded_intents() {
     transcript
         .run(
             "reader toggle read",
-            reader(ReaderCommand::ToggleRead {
-                entry_id: 1,
-                currently_read: true,
-                via_shortcut: false,
-            }),
+            reader(ReaderCommand::SetRead { entry_id: 1, read: false, via_shortcut: false }),
         )
         .await;
     transcript
         .run(
             "reader toggle starred by shortcut",
-            reader(ReaderCommand::ToggleStarred {
-                entry_id: 1,
-                currently_starred: false,
-                via_shortcut: true,
-            }),
+            reader(ReaderCommand::SetStarred { entry_id: 1, starred: true, via_shortcut: true }),
+        )
+        .await;
+    transcript
+        .run(
+            "reader set read on a missing entry",
+            reader(ReaderCommand::SetRead { entry_id: 999, read: true, via_shortcut: true }),
+        )
+        .await;
+    transcript
+        .run(
+            "reader repeat starred by shortcut",
+            reader(ReaderCommand::SetStarred { entry_id: 1, starred: true, via_shortcut: true }),
         )
         .await;
     transcript

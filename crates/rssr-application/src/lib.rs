@@ -5,6 +5,7 @@ pub mod app_state_service;
 pub mod composition;
 pub mod entries_list_service;
 pub mod entries_workspace_service;
+pub mod entry_flags_service;
 pub mod feed_catalog_service;
 pub mod feed_service;
 pub mod feeds_snapshot_service;
@@ -22,14 +23,12 @@ pub use subscription_discovery::*;
 
 pub use app_state_service::AppStateService;
 pub use composition::{AppCompositionInput, AppStateServicesPort, AppUseCases};
-pub use entries_list_service::{
-    EntriesListOutcome, EntriesListService, ToggleEntryReadInput, ToggleEntryReadOutcome,
-    ToggleEntryStarredInput, ToggleEntryStarredOutcome,
-};
+pub use entries_list_service::{EntriesListOutcome, EntriesListService};
 pub use entries_workspace_service::{
     EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesWorkspaceService,
     SaveEntriesWorkspaceOutcome,
 };
+pub use entry_flags_service::{EntryFlagOutcome, EntryFlagsService};
 pub use feed_catalog_service::FeedCatalogService;
 pub use feed_service::{AddSubscriptionInput, FeedService, RemoveSubscriptionInput};
 pub use feeds_snapshot_service::{FeedsSnapshotOutcome, FeedsSnapshotService};
@@ -44,10 +43,7 @@ pub use persistence_mutation::{
     ActivatedSubscription, ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan,
     ConfigReplacementPort, SubscriptionActivationPort, SubscriptionRemovalPort,
 };
-pub use reader_service::{
-    ReaderEntrySnapshot, ReaderService, ToggleReadInput, ToggleReadOutcome, ToggleStarredInput,
-    ToggleStarredOutcome,
-};
+pub use reader_service::{ReaderEntrySnapshot, ReaderService};
 pub use refresh_service::{
     DEFAULT_REFRESH_CONCURRENCY, FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate,
     ParsedEntryData, ParsedFeedUpdate, PreparedUpdateTicket, RefreshAllInput, RefreshAllOutcome,

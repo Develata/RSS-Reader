@@ -41,6 +41,11 @@ EntriesPage(PatchEntryFlags { entry_id: 1, is_read: Some(true), is_starred: None
 ## toggle starred in list
 EntriesPage(SetStatus { message: "已收藏《Alpha two》。", tone: "info" })
 EntriesPage(PatchEntryFlags { entry_id: 2, is_read: None, is_starred: Some(true) })
+## repeat read in list
+EntriesPage(SetStatus { message: "《Alpha one》已是已读。", tone: "info" })
+EntriesPage(PatchEntryFlags { entry_id: 1, is_read: Some(true), is_starred: None })
+## set read on a missing entry
+EntriesPage(SetStatus { message: "《Gone》已不存在，可能已被刷新清理或订阅已删除。", tone: "error" })
 ## save browsing preferences
 ## save the same browsing preferences
 ## entries bootstrap after saving preferences
@@ -62,6 +67,11 @@ ReaderPage(SetStatus { message: "已将当前文章标记为未读。", tone: "i
 ReaderPage(PatchEntryFlags { entry_id: 1, is_read: Some(false), is_starred: None })
 ## reader toggle starred by shortcut
 ReaderPage(SetStatus { message: "已通过快捷键收藏文章。", tone: "info" })
+ReaderPage(PatchEntryFlags { entry_id: 1, is_read: None, is_starred: Some(true) })
+## reader set read on a missing entry
+ReaderPage(SetStatus { message: "当前文章已不存在，可能已被刷新清理或订阅已删除。", tone: "error" })
+## reader repeat starred by shortcut
+ReaderPage(SetStatus { message: "当前文章已在收藏中。", tone: "info" })
 ReaderPage(PatchEntryFlags { entry_id: 1, is_read: None, is_starred: Some(true) })
 ## reader localize assets
 ## reader localize the image entry

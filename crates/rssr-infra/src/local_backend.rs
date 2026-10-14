@@ -26,12 +26,10 @@ use rssr_api::{
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, AppliedRemoteConfigOutcome,
     ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome,
-    FeedsSnapshotOutcome, OpmlImportOutcome, PrepareSubscriptionOutcome, ReaderEntrySnapshot,
-    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
+    EntryFlagOutcome, FeedsSnapshotOutcome, OpmlImportOutcome, PrepareSubscriptionOutcome,
+    ReaderEntrySnapshot, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
     RefreshLocalizedEntry, RemoteConfigPushOutcome, RemoteConfigStore, RemoveSubscriptionInput,
-    StartupTarget, ToggleEntryReadInput, ToggleEntryReadOutcome, ToggleEntryStarredInput,
-    ToggleEntryStarredOutcome, ToggleReadInput, ToggleReadOutcome, ToggleStarredInput,
-    ToggleStarredOutcome,
+    StartupTarget,
 };
 use rssr_domain::{
     EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview, UserSettings,
@@ -294,18 +292,12 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         self.inner.use_cases.entries_list_service.list_entries(query).await
     }
 
-    async fn toggle_entry_read(
-        &self,
-        input: ToggleEntryReadInput,
-    ) -> Result<ToggleEntryReadOutcome> {
-        self.inner.use_cases.entries_list_service.toggle_read(input).await
+    async fn set_entry_read(&self, entry_id: i64, read: bool) -> Result<EntryFlagOutcome> {
+        self.inner.use_cases.entry_flags_service.set_read(entry_id, read).await
     }
 
-    async fn toggle_entry_starred(
-        &self,
-        input: ToggleEntryStarredInput,
-    ) -> Result<ToggleEntryStarredOutcome> {
-        self.inner.use_cases.entries_list_service.toggle_starred(input).await
+    async fn set_entry_starred(&self, entry_id: i64, starred: bool) -> Result<EntryFlagOutcome> {
+        self.inner.use_cases.entry_flags_service.set_starred(entry_id, starred).await
     }
 
     async fn preview_mark_read(&self, query: &EntryQuery) -> Result<MarkReadPreview> {
@@ -318,17 +310,6 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
 
     async fn load_reader_entry(&self, entry_id: i64) -> Result<ReaderEntrySnapshot> {
         self.inner.use_cases.reader_service.load_entry(entry_id).await
-    }
-
-    async fn toggle_reader_read(&self, input: ToggleReadInput) -> Result<ToggleReadOutcome> {
-        self.inner.use_cases.reader_service.toggle_read(input).await
-    }
-
-    async fn toggle_reader_starred(
-        &self,
-        input: ToggleStarredInput,
-    ) -> Result<ToggleStarredOutcome> {
-        self.inner.use_cases.reader_service.toggle_starred(input).await
     }
 
     async fn localize_entry_assets(&self, entry_id: i64) -> Result<bool> {

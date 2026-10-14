@@ -12,11 +12,9 @@
 use anyhow::Result;
 use rssr_application::{
     AppliedRemoteConfigOutcome, ConfigImportOutcome, EntriesBootstrapInput,
-    EntriesBootstrapOutcome, EntriesListOutcome, FeedDiscoveryCandidate, FeedsSnapshotOutcome,
-    OpmlImportOutcome, ReaderEntrySnapshot, RemoteConfigPushOutcome, StartupTarget,
-    ToggleEntryReadInput, ToggleEntryReadOutcome, ToggleEntryStarredInput,
-    ToggleEntryStarredOutcome, ToggleReadInput, ToggleReadOutcome, ToggleStarredInput,
-    ToggleStarredOutcome,
+    EntriesBootstrapOutcome, EntriesListOutcome, EntryFlagOutcome, FeedDiscoveryCandidate,
+    FeedsSnapshotOutcome, OpmlImportOutcome, ReaderEntrySnapshot, RemoteConfigPushOutcome,
+    StartupTarget,
 };
 use rssr_domain::{
     EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview, UserSettings,
@@ -89,24 +87,15 @@ pub trait Backend {
         workspace: EntriesWorkspaceState,
     ) -> Result<bool>;
     async fn list_entries(&self, query: &EntryQuery) -> Result<EntriesListOutcome>;
-    async fn toggle_entry_read(
-        &self,
-        input: ToggleEntryReadInput,
-    ) -> Result<ToggleEntryReadOutcome>;
-    async fn toggle_entry_starred(
-        &self,
-        input: ToggleEntryStarredInput,
-    ) -> Result<ToggleEntryStarredOutcome>;
+    /// Sets the entry's read flag to `read` (the entry list and the reader alike).
+    async fn set_entry_read(&self, entry_id: i64, read: bool) -> Result<EntryFlagOutcome>;
+    /// Sets the entry's starred flag to `starred`.
+    async fn set_entry_starred(&self, entry_id: i64, starred: bool) -> Result<EntryFlagOutcome>;
     async fn preview_mark_read(&self, query: &EntryQuery) -> Result<MarkReadPreview>;
     async fn mark_read_if_unchanged(&self, preview: &MarkReadPreview) -> Result<MarkReadOutcome>;
 
     // Reader.
     async fn load_reader_entry(&self, entry_id: i64) -> Result<ReaderEntrySnapshot>;
-    async fn toggle_reader_read(&self, input: ToggleReadInput) -> Result<ToggleReadOutcome>;
-    async fn toggle_reader_starred(
-        &self,
-        input: ToggleStarredInput,
-    ) -> Result<ToggleStarredOutcome>;
     /// Stores the entry's images locally where this backend can; `true` when it did.
     async fn localize_entry_assets(&self, entry_id: i64) -> Result<bool>;
 

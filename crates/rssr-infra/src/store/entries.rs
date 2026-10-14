@@ -337,32 +337,39 @@ impl EntryFlag {
     fn update_sql(self) -> &'static str {
         match self {
             Self::Read => {
-                "UPDATE entries SET is_read = ?2, read_at = ?3, updated_at = ?4 WHERE id = ?1"
+                "UPDATE entries SET is_read = ?2, read_at = ?3, updated_at = ?4
+                 WHERE id = ?1 AND is_read <> ?2"
             }
             Self::Starred => {
-                "UPDATE entries SET is_starred = ?2, starred_at = ?3, updated_at = ?4 WHERE id = ?1"
+                "UPDATE entries SET is_starred = ?2, starred_at = ?3, updated_at = ?4
+                 WHERE id = ?1 AND is_starred <> ?2"
             }
         }
     }
 }
 
+/// Sets the flag to `enabled`; `true` when it changed. The row (and its timestamps) is only
+/// written on a change, so repeating a request keeps the original time.
 pub(crate) fn set_flag(
     conn: &Connection,
     entry_id: i64,
     flag: EntryFlag,
     enabled: bool,
     now: &str,
-) -> StoreResult<()> {
+) -> StoreResult<bool> {
     let changed = conn.prepare_cached(flag.update_sql())?.execute(params![
         entry_id,
         enabled,
         enabled.then_some(now),
         now
     ])?;
-    if changed == 0 {
-        return Err(StoreError::NotFound);
+    if changed > 0 {
+        return Ok(true);
     }
-    Ok(())
+    let exists: bool = conn
+        .prepare_cached("SELECT EXISTS (SELECT 1 FROM entries WHERE id = ?1)")?
+        .query_row([entry_id], |row| row.get(0))?;
+    if exists { Ok(false) } else { Err(StoreError::NotFound) }
 }
 
 /// Deletes a subscription's entries; their bodies go with them (foreign-key cascade).
@@ -428,14 +435,14 @@ impl EntryIndexRepository for LibraryEntries {
         Ok(self.store.read(move |conn| reader_navigation(conn, current_entry_id)).await?)
     }
 
-    async fn set_read(&self, entry_id: i64, is_read: bool) -> DomainResult<()> {
+    async fn set_read(&self, entry_id: i64, is_read: bool) -> DomainResult<bool> {
         Ok(self
             .store
             .write(move |tx| set_flag(tx, entry_id, EntryFlag::Read, is_read, &now()))
             .await?)
     }
 
-    async fn set_starred(&self, entry_id: i64, is_starred: bool) -> DomainResult<()> {
+    async fn set_starred(&self, entry_id: i64, is_starred: bool) -> DomainResult<bool> {
         Ok(self
             .store
             .write(move |tx| set_flag(tx, entry_id, EntryFlag::Starred, is_starred, &now()))

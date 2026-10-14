@@ -188,11 +188,12 @@ impl EntriesPageSession {
         preferences_loaded && self.state.peek().preferences_load.is_loaded()
     }
 
+    /// The card's button toggles: it asks for the opposite of what the card shows.
     pub(crate) fn toggle_read(self, entry_id: i64, entry_title: String, currently_read: bool) {
-        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::ToggleRead {
+        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::SetRead {
             entry_id,
             entry_title,
-            currently_read,
+            read: !currently_read,
         }));
     }
 
@@ -202,10 +203,10 @@ impl EntriesPageSession {
         entry_title: String,
         currently_starred: bool,
     ) {
-        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::ToggleStarred {
+        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::SetStarred {
             entry_id,
             entry_title,
-            currently_starred,
+            starred: !currently_starred,
         }));
     }
 
@@ -327,7 +328,7 @@ mod tests {
             // 例如：跨秒重渲染或刷新完成触发了新查询，它先于下面的写入读到“未读”。
             session
                 .spawn_entries_query(async { stale_receiver.await.expect("stale query result") });
-            // ToggleRead 成功后 runtime 投递的修补。
+            // SetRead 成功后 runtime 投递的修补。
             session.dispatch(EntriesPageIntent::PatchEntryFlags {
                 entry_id: 1,
                 is_read: Some(true),

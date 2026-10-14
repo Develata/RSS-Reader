@@ -262,14 +262,13 @@ async fn unread_summaries_are_global_idempotent_and_unchanged_on_failure() {
     let parsed = FeedParser::new().parse(SAMPLE_FEED).unwrap();
     library.seed(feed.id, to_data(parsed.entries)).await;
     let all = entries.list_entries(&EntryQuery::default()).await.unwrap();
-    let reader =
-        rssr_application::ReaderService::new(entries.clone(), Arc::new(library.queries.clone()));
+    let reader = rssr_application::ReaderService::new(Arc::new(library.queries.clone()));
     let snapshot = reader.load_entry(all[0].id).await.unwrap();
     assert_eq!(snapshot.feed_title.as_deref(), Some("Example Feed"));
     assert_eq!(snapshot.entry.unwrap().id, all[0].id);
     assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 2);
-    entries.set_read(all[0].id, true).await.unwrap();
-    entries.set_read(all[0].id, true).await.unwrap();
+    assert!(entries.set_read(all[0].id, true).await.unwrap(), "the first request changes it");
+    assert!(!entries.set_read(all[0].id, true).await.unwrap(), "a repeat changes nothing");
     assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
     entries
         .list_entries(&EntryQuery {
@@ -286,6 +285,36 @@ async fn unread_summaries_are_global_idempotent_and_unchanged_on_failure() {
     assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 0);
     entries.set_read(all[0].id, false).await.unwrap();
     assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
+}
+
+/// Flags are set to target values: a repeat writes nothing and keeps the original time;
+/// unsetting clears it.
+#[tokio::test]
+async fn repeated_flag_requests_keep_the_original_time() {
+    let library = Library::memory().await;
+    let feed = named_feed(&library, "https://example.com/feed.xml", None).await;
+    let parsed = FeedParser::new().parse(SAMPLE_FEED).unwrap();
+    library.seed(feed.id, to_data(parsed.entries)).await;
+    let id = library.entries.list_entries(&EntryQuery::default()).await.unwrap()[0].id;
+    assert!(library.entries.set_read(id, true).await.unwrap());
+    assert!(library.entries.set_starred(id, true).await.unwrap());
+    let original = "2000-01-01T00:00:00Z";
+    library
+        .exec(format!(
+            "UPDATE entries SET read_at = '{original}', starred_at = '{original}',
+             updated_at = '{original}' WHERE id = {id}"
+        ))
+        .await;
+
+    assert!(!library.entries.set_read(id, true).await.unwrap());
+    assert!(!library.entries.set_starred(id, true).await.unwrap());
+    let times = format!("SELECT read_at || starred_at || updated_at FROM entries WHERE id = {id}");
+    assert_eq!(library.text(times.clone()).await, Some(original.repeat(3)));
+
+    assert!(library.entries.set_read(id, false).await.unwrap());
+    let record = library.entries.get_entry_record(id).await.unwrap().unwrap();
+    assert!(!record.is_read && record.read_at.is_none());
+    assert_eq!(record.starred_at, Some(OffsetDateTime::parse(original, &Rfc3339).unwrap()));
 }
 
 /// 标题搜索是字面量匹配：`%`、`_`、`\` 不能作为 LIKE 通配符扩大命中集合。

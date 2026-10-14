@@ -17,15 +17,15 @@ pub(crate) enum EntriesCommand {
     LoadEntries {
         query: EntryQuery,
     },
-    ToggleRead {
+    SetRead {
         entry_id: i64,
         entry_title: String,
-        currently_read: bool,
+        read: bool,
     },
-    ToggleStarred {
+    SetStarred {
         entry_id: i64,
         entry_title: String,
-        currently_starred: bool,
+        starred: bool,
     },
     SaveBrowsingPreferences {
         grouping_mode: EntryGroupingPreference,

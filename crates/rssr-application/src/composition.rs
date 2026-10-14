@@ -4,10 +4,10 @@ use rssr_domain::{AppStateRepository, EntryIndexRepository, FeedRepository, Sett
 
 use crate::{
     AppStatePort, AppStateService, ClockPort, ConfigReplacementPort, EntriesListService,
-    EntriesWorkspaceService, FeedCatalogService, FeedRefreshSourcePort, FeedService,
-    FeedsSnapshotService, ImportExportService, LibraryQueryPort, OpmlCodecPort, ReaderService,
-    RefreshService, RefreshStorePort, SettingsService, SettingsSyncService, StartupService,
-    SubscriptionActivationPort, SubscriptionRemovalPort, SubscriptionWorkflow,
+    EntriesWorkspaceService, EntryFlagsService, FeedCatalogService, FeedRefreshSourcePort,
+    FeedService, FeedsSnapshotService, ImportExportService, LibraryQueryPort, OpmlCodecPort,
+    ReaderService, RefreshService, RefreshStorePort, SettingsService, SettingsSyncService,
+    StartupService, SubscriptionActivationPort, SubscriptionRemovalPort, SubscriptionWorkflow,
 };
 
 // 架构护栏：如果某次设计/计划开始要求严重代码分叉、污染 infra 边界、引发前后端大规模迁移
@@ -47,6 +47,7 @@ pub struct AppUseCases {
     pub startup_service: StartupService,
     pub entries_list_service: EntriesListService,
     pub entries_workspace_service: EntriesWorkspaceService,
+    pub entry_flags_service: EntryFlagsService,
     pub feeds_snapshot_service: FeedsSnapshotService,
     pub reader_service: ReaderService,
 }
@@ -89,12 +90,13 @@ impl AppUseCases {
                 input.entry_index_repository.clone(),
                 input.library_queries.clone(),
             ),
+            entry_flags_service: EntryFlagsService::new(input.entry_index_repository),
             entries_workspace_service: EntriesWorkspaceService::new(
                 app_state_service,
                 input.library_queries.clone(),
             ),
             feeds_snapshot_service: FeedsSnapshotService::new(input.feed_repository),
-            reader_service: ReaderService::new(input.entry_index_repository, input.library_queries),
+            reader_service: ReaderService::new(input.library_queries),
         }
     }
 }

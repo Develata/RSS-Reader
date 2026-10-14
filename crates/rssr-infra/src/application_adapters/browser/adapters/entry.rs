@@ -18,33 +18,38 @@ impl BrowserEntryRepository {
         Self { store }
     }
 
+    /// Applies `update` to the latest committed flags of the entry, preserving the other bit.
+    /// `update` returns whether it changed anything; only then is the state touched and
+    /// written (an unchanged write must not leave a cache edit that storage never sees).
     async fn update_flags(
         &self,
         entry_id: i64,
-        update: impl FnOnce(&mut PersistedEntryFlag) + Send + 'static,
-    ) -> rssr_domain::Result<()> {
+        update: impl FnOnce(&mut PersistedEntryFlag) -> bool + Send + 'static,
+    ) -> rssr_domain::Result<bool> {
         self.store
             .update(move |state| {
-                // The operation is applied to the latest committed flag, preserving the other bit.
                 if !state.core.entries.iter().any(|entry| entry.id == entry_id) {
                     return Err(DomainError::NotFound.into());
                 }
-                let index =
-                    match state.entry_flags.entries.iter().position(|entry| entry.id == entry_id) {
-                        Some(index) => index,
-                        None => {
-                            state.entry_flags.entries.push(PersistedEntryFlag {
-                                id: entry_id,
-                                is_read: false,
-                                is_starred: false,
-                                read_at: None,
-                                starred_at: None,
-                            });
-                            state.entry_flags.entries.len() - 1
-                        }
-                    };
-                update(&mut state.entry_flags.entries[index]);
-                Ok(((), Changes::FLAGS))
+                let index = state.entry_flags.entries.iter().position(|entry| entry.id == entry_id);
+                let mut flag = match index {
+                    Some(index) => state.entry_flags.entries[index].clone(),
+                    None => PersistedEntryFlag {
+                        id: entry_id,
+                        is_read: false,
+                        is_starred: false,
+                        read_at: None,
+                        starred_at: None,
+                    },
+                };
+                if !update(&mut flag) {
+                    return Ok((false, Changes::NONE));
+                }
+                match index {
+                    Some(index) => state.entry_flags.entries[index] = flag,
+                    None => state.entry_flags.entries.push(flag),
+                }
+                Ok((true, Changes::FLAGS))
             })
             .await
             .map_err(map_store_error)
@@ -142,17 +147,25 @@ impl EntryIndexRepository for BrowserEntryRepository {
             .await
             .map_err(map_store_error)
     }
-    async fn set_read(&self, entry_id: i64, is_read: bool) -> rssr_domain::Result<()> {
+    async fn set_read(&self, entry_id: i64, is_read: bool) -> rssr_domain::Result<bool> {
         self.update_flags(entry_id, move |entry| {
-            entry.is_read = is_read;
-            entry.read_at = is_read.then(now_utc);
+            let changed = entry.is_read != is_read;
+            if changed {
+                entry.is_read = is_read;
+                entry.read_at = is_read.then(now_utc);
+            }
+            changed
         })
         .await
     }
-    async fn set_starred(&self, entry_id: i64, is_starred: bool) -> rssr_domain::Result<()> {
+    async fn set_starred(&self, entry_id: i64, is_starred: bool) -> rssr_domain::Result<bool> {
         self.update_flags(entry_id, move |entry| {
-            entry.is_starred = is_starred;
-            entry.starred_at = is_starred.then(now_utc);
+            let changed = entry.is_starred != is_starred;
+            if changed {
+                entry.is_starred = is_starred;
+                entry.starred_at = is_starred.then(now_utc);
+            }
+            changed
         })
         .await
     }

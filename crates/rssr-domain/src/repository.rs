@@ -45,8 +45,12 @@ pub trait EntryIndexRepository: Send + Sync {
     async fn count_entries(&self, query: &EntryQuery) -> crate::Result<u64>;
     async fn get_entry_record(&self, entry_id: i64) -> crate::Result<Option<EntryRecord>>;
     async fn reader_navigation(&self, current_entry_id: i64) -> crate::Result<EntryNavigation>;
-    async fn set_read(&self, entry_id: i64, is_read: bool) -> crate::Result<()>;
-    async fn set_starred(&self, entry_id: i64, is_starred: bool) -> crate::Result<()>;
+    /// Sets the flag to `is_read`; `true` when it changed. `read_at` moves only on a change.
+    /// A missing entry is [`crate::DomainError::NotFound`].
+    async fn set_read(&self, entry_id: i64, is_read: bool) -> crate::Result<bool>;
+    /// Sets the flag to `is_starred`; `true` when it changed. `starred_at` moves only on a
+    /// change. A missing entry is [`crate::DomainError::NotFound`].
+    async fn set_starred(&self, entry_id: i64, is_starred: bool) -> crate::Result<bool>;
     async fn delete_for_feed(&self, feed_id: i64) -> crate::Result<()>;
 }
 

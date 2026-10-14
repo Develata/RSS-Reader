@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rssr_domain::{Entry, EntryIndexRepository, EntryNavigation};
+use rssr_domain::{Entry, EntryNavigation};
 
 use crate::library_queries::{LibraryQueryPort, ReaderSnapshot};
 
@@ -12,40 +12,14 @@ pub struct ReaderEntrySnapshot {
     pub feed_title: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ToggleReadInput {
-    pub entry_id: i64,
-    pub currently_read: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ToggleReadOutcome {
-    pub is_read: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ToggleStarredInput {
-    pub entry_id: i64,
-    pub currently_starred: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ToggleStarredOutcome {
-    pub is_starred: bool,
-}
-
 #[derive(Clone)]
 pub struct ReaderService {
-    entry_index_repository: Arc<dyn EntryIndexRepository>,
     queries: Arc<dyn LibraryQueryPort>,
 }
 
 impl ReaderService {
-    pub fn new(
-        entry_index_repository: Arc<dyn EntryIndexRepository>,
-        queries: Arc<dyn LibraryQueryPort>,
-    ) -> Self {
-        Self { entry_index_repository, queries }
+    pub fn new(queries: Arc<dyn LibraryQueryPort>) -> Self {
+        Self { queries }
     }
 
     /// 文章、正文、导航与订阅名称来自同一个读快照：要么整体读到，要么整体报错，不会把
@@ -64,32 +38,11 @@ impl ReaderService {
         });
         Ok(ReaderEntrySnapshot { entry: Some(record.into_entry(content)), navigation, feed_title })
     }
-
-    pub async fn toggle_read(&self, input: ToggleReadInput) -> anyhow::Result<ToggleReadOutcome> {
-        let is_read = !input.currently_read;
-        self.entry_index_repository
-            .set_read(input.entry_id, is_read)
-            .await
-            .context("更新已读状态失败")?;
-        Ok(ToggleReadOutcome { is_read })
-    }
-
-    pub async fn toggle_starred(
-        &self,
-        input: ToggleStarredInput,
-    ) -> anyhow::Result<ToggleStarredOutcome> {
-        let is_starred = !input.currently_starred;
-        self.entry_index_repository
-            .set_starred(input.entry_id, is_starred)
-            .await
-            .context("更新收藏状态失败")?;
-        Ok(ToggleStarredOutcome { is_starred })
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     use rssr_domain::{
         EntryContent, EntryContentRepository, EntryIndexRepository, EntryNavigation, EntryQuery,
@@ -98,7 +51,7 @@ mod tests {
     use time::{OffsetDateTime, format_description::well_known::Rfc3339};
     use url::Url;
 
-    use super::{ReaderService, ToggleReadInput, ToggleStarredInput};
+    use super::ReaderService;
     use crate::library_queries::test_support::RepositoryQueries;
 
     #[derive(Debug, Default)]
@@ -106,8 +59,6 @@ mod tests {
         entry: Option<EntryRecord>,
         navigation: EntryNavigation,
         fail_navigation: bool,
-        read_calls: Mutex<Vec<(i64, bool)>>,
-        starred_calls: Mutex<Vec<(i64, bool)>>,
     }
 
     #[async_trait::async_trait]
@@ -153,14 +104,12 @@ mod tests {
             Ok(self.navigation)
         }
 
-        async fn set_read(&self, entry_id: i64, is_read: bool) -> rssr_domain::Result<()> {
-            self.read_calls.lock().expect("lock read calls").push((entry_id, is_read));
-            Ok(())
+        async fn set_read(&self, _entry_id: i64, _is_read: bool) -> rssr_domain::Result<bool> {
+            unreachable!("the reader does not set flags")
         }
 
-        async fn set_starred(&self, entry_id: i64, is_starred: bool) -> rssr_domain::Result<()> {
-            self.starred_calls.lock().expect("lock starred calls").push((entry_id, is_starred));
-            Ok(())
+        async fn set_starred(&self, _entry_id: i64, _starred: bool) -> rssr_domain::Result<bool> {
+            unreachable!("the reader does not set flags")
         }
 
         async fn delete_for_feed(&self, _feed_id: i64) -> rssr_domain::Result<()> {
@@ -343,11 +292,11 @@ mod tests {
     ) -> ReaderService {
         let queries = RepositoryQueries {
             feeds: Some(feed_repository),
-            entries: Some(index_repository.clone()),
+            entries: Some(index_repository),
             contents: Some(content_repository),
             ..RepositoryQueries::default()
         };
-        ReaderService::new(index_repository, Arc::new(queries))
+        ReaderService::new(Arc::new(queries))
     }
 
     fn service(
@@ -416,36 +365,5 @@ mod tests {
         assert_eq!(entry.summary.as_deref(), Some("Summary"));
         assert!(entry.content_html.is_none());
         assert!(entry.content_text.is_none());
-    }
-
-    #[tokio::test]
-    async fn toggle_read_persists_inverted_state() {
-        let repository = Arc::new(EntryIndexRepositoryStub::default());
-        let content_repository = Arc::new(EntryContentRepositoryStub::default());
-
-        let outcome = service(repository.clone(), content_repository)
-            .toggle_read(ToggleReadInput { entry_id: 42, currently_read: false })
-            .await
-            .expect("toggle read");
-
-        assert!(outcome.is_read);
-        assert_eq!(*repository.read_calls.lock().expect("lock read calls"), vec![(42, true)]);
-    }
-
-    #[tokio::test]
-    async fn toggle_starred_persists_inverted_state() {
-        let repository = Arc::new(EntryIndexRepositoryStub::default());
-        let content_repository = Arc::new(EntryContentRepositoryStub::default());
-
-        let outcome = service(repository.clone(), content_repository)
-            .toggle_starred(ToggleStarredInput { entry_id: 42, currently_starred: true })
-            .await
-            .expect("toggle starred");
-
-        assert!(!outcome.is_starred);
-        assert_eq!(
-            *repository.starred_calls.lock().expect("lock starred calls"),
-            vec![(42, false)]
-        );
     }
 }
