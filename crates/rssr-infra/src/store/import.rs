@@ -27,7 +27,8 @@
 //! `custom_title` is empty (v0.1.x names are source titles); `title_search` is computed; refresh
 //! tickets start at 0; `has_content` is true exactly when a body row exists, and a body row exists
 //! exactly when the source has HTML or text for the entry (v0.1.0–v0.1.6 also hashed title-only
-//! entries; like v0.1.7's own upgrade, that hash without a body is not kept); bodies of entries
+//! entries; a hash without a body has no use where a body row means a body to show); bodies of
+//! entries
 //! that no longer exist are dropped. A split library without its body database imports only when
 //! the index records no entry with a body. Documents keep their `updated_at`.
 //!
@@ -163,6 +164,16 @@ fn check_history(conn: &Connection, released: &[(i64, &str)], label: &str) -> St
     Ok(applied.last().map_or(0, |(version, _, _)| *version))
 }
 
+/// Opens a scratch database by file name (never as a URI, like every library connection).
+fn open_scratch(path: &Path) -> rusqlite::Result<Connection> {
+    Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE
+            | OpenFlags::SQLITE_OPEN_CREATE
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+}
+
 /// Copies a consistent snapshot of `source` to `copy` without writing to `source`.
 ///
 /// One step copies every page under one read snapshot. Waiting for a lock is bounded by `busy`
@@ -174,7 +185,7 @@ fn snapshot(source: &Path, copy: &Path, busy: Duration) -> StoreResult<()> {
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )?;
     from.busy_timeout(busy)?;
-    let mut to = Connection::open(copy)?;
+    let mut to = open_scratch(copy)?;
     let backup = Backup::new(&from, &mut to)?;
     loop {
         match backup.step(-1)? {
@@ -299,6 +310,9 @@ pub fn import_v01(source: &V01Library, target: &Path) -> StoreResult<ImportOutco
 }
 
 fn import_with(source: &V01Library, target: &Path, busy: Duration) -> StoreResult<ImportOutcome> {
+    // One interpretation of the path for the lock, the scratch files and SQLite (an absolute path
+    // never reads as a `file:` URI).
+    let target = &std::path::absolute(target)?;
     let taken = || unsupported(format!("目标资料库已存在：{}", target.display()));
     if target.exists() {
         return Err(taken());
@@ -311,7 +325,7 @@ fn import_with(source: &V01Library, target: &Path, busy: Duration) -> StoreResul
     let index_copy = lock.scratch("import-index");
     snapshot(&source.index, index_copy.path(), busy)?;
     let (index_version, bodies_claimed) = {
-        let index = Connection::open(index_copy.path())?;
+        let index = open_scratch(index_copy.path())?;
         let version = check_history(&index, INDEX_MIGRATIONS, "索引库")?;
         let claimed = if version >= 2 {
             count(&index, "SELECT COUNT(*) FROM entries WHERE has_content <> 0")?
@@ -325,7 +339,7 @@ fn import_with(source: &V01Library, target: &Path, busy: Duration) -> StoreResul
         (Some(path), Layout::Split) => {
             let copy = lock.scratch("import-content");
             snapshot(path, copy.path(), busy)?;
-            check_history(&Connection::open(copy.path())?, CONTENT_MIGRATIONS, "正文库")?;
+            check_history(&open_scratch(copy.path())?, CONTENT_MIGRATIONS, "正文库")?;
             Some(copy)
         }
         // v0.1.7+ creates the body database with the index: without it, bodies the index records
@@ -339,7 +353,7 @@ fn import_with(source: &V01Library, target: &Path, busy: Duration) -> StoreResul
     };
 
     let staging = lock.scratch("importing");
-    let mut conn = Connection::open(staging.path())?;
+    let mut conn = open_scratch(staging.path())?;
     connection::configure(&conn, Role::Writer)?;
     migrate::migrate(&mut conn, &super::codec::now())?;
     conn.execute("ATTACH DATABASE ?1 AS v01", [&index_copy.path().to_string_lossy()])?;

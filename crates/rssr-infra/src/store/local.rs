@@ -154,7 +154,8 @@ pub async fn open_library_in(
     options: StoreOptions,
 ) -> StoreResult<OpenedLibrary> {
     ensure_dir(data_dir)?;
-    let path = data_dir.join(LIBRARY_FILE);
+    // Absolute, so the import and the store agree with the file system on which file it is.
+    let path = std::path::absolute(data_dir)?.join(LIBRARY_FILE);
     let mut imported = None;
     if !path.exists()
         && let Some(source) = V01Library::find(legacy_dir)

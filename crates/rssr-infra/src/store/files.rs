@@ -116,7 +116,8 @@ pub struct CreationLock {
 }
 
 impl CreationLock {
-    /// Waits for the lock of `target`.
+    /// Waits for the lock of `target`, without a time limit: the holder is a live process (the
+    /// lock ends with it), so a holder that hangs blocks other creators until it ends.
     pub fn acquire(target: &Path) -> StoreResult<Self> {
         let file = std::fs::OpenOptions::new()
             .create(true)
