@@ -19,7 +19,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use super::error::{StoreError, StoreResult};
-use super::executor::{LibraryStore, StoreOptions};
+use super::executor::{LibraryStore, StoreOptions, on_thread};
 use super::import::{self, ImportOutcome, V01Library};
 
 /// File name of the library in a data directory.
@@ -136,16 +136,20 @@ pub struct OpenedLibrary {
 /// Opens the library in `data_dir`. When there is none yet and the directory holds a v0.1.x
 /// library, imports it first; when another program imported it meanwhile, opens that library.
 pub async fn open_library_in(data_dir: &Path, options: StoreOptions) -> StoreResult<OpenedLibrary> {
-    ensure_dir(data_dir)?;
-    // Absolute, so the import and the store agree with the file system on which file it is.
+    // Absolute, so the import and the store agree with the file system on which file it is; a
+    // directory SQLite cannot be given (not UTF-8) is refused before anything is created.
     let data_dir = std::path::absolute(data_dir)?;
+    if data_dir.to_str().is_none() {
+        return Err(io_error(format!("数据目录不是有效的 UTF-8：{}", data_dir.display())));
+    }
+    ensure_dir(&data_dir)?;
     let path = data_dir.join(LIBRARY_FILE);
     let mut imported = None;
     if !path.exists()
         && let Some(source) = V01Library::find(&data_dir)?
     {
         let target = path.clone();
-        match run_on_thread(move || import::import_v01(&source, &target)).await {
+        match on_thread(move |gave_up| import::import_unless(&source, &target, gave_up)).await {
             Ok(outcome) => {
                 tracing::info!(?outcome, "已导入 v0.1 资料库");
                 imported = Some(outcome);
@@ -162,16 +166,6 @@ pub async fn open_library_in(data_dir: &Path, options: StoreOptions) -> StoreRes
 /// Opens this installation's library (see the module documentation for the locations).
 pub async fn open_local_library() -> StoreResult<OpenedLibrary> {
     open_library_in(&local_data_dir()?, StoreOptions::default()).await
-}
-
-async fn run_on_thread<R: Send + 'static>(
-    body: impl FnOnce() -> StoreResult<R> + Send + 'static,
-) -> StoreResult<R> {
-    let (reply, receive) = tokio::sync::oneshot::channel();
-    std::thread::Builder::new().name("rssr-library-import".to_owned()).spawn(move || {
-        let _ = reply.send(body());
-    })?;
-    receive.await.map_err(|_| StoreError::TaskFailed)?
 }
 
 // Every case uses Unix paths or permissions.

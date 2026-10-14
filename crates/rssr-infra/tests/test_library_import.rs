@@ -383,10 +383,13 @@ async fn a_missing_body_database_is_refused_when_bodies_existed() {
 fn concurrent_imports_publish_one_complete_library() {
     let dir = TempDir::new("concurrent-import");
     let source = fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
-    let results: Vec<_> = std::thread::scope(|scope| {
-        let workers: Vec<_> =
-            (0..4).map(|_| scope.spawn(|| import_v01(&source, &dir.target()))).collect();
-        workers.into_iter().map(|worker| worker.join().unwrap()).collect()
+    let target = dir.target();
+    let results: Vec<_> = within(std::time::Duration::from_secs(120), move || {
+        std::thread::scope(|scope| {
+            let workers: Vec<_> =
+                (0..4).map(|_| scope.spawn(|| import_v01(&source, &target))).collect();
+            workers.into_iter().map(|worker| worker.join().unwrap()).collect()
+        })
     });
     let published: Vec<_> = results.iter().filter_map(|result| result.as_ref().ok()).collect();
     assert_eq!(published.len(), 1, "{results:?}");
@@ -403,12 +406,15 @@ async fn the_library_published_by_concurrent_imports_is_complete() {
     let dir = TempDir::new("concurrent-import-content");
     let source = fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
     let target = dir.target();
-    std::thread::scope(|scope| {
-        for _ in 0..4 {
-            scope.spawn(|| {
-                let _ = import_v01(&source, &target);
-            });
-        }
+    let importing = target.clone();
+    within(std::time::Duration::from_secs(120), move || {
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                scope.spawn(|| {
+                    let _ = import_v01(&source, &importing);
+                });
+            }
+        })
     });
     assert_imported_library(&target, 3).await;
 }
@@ -426,7 +432,7 @@ async fn inconsistent_split_libraries_are_imported_and_reported() {
             .execute_batch(
                 "UPDATE entry_contents SET content_html = NULL, content_text = NULL
                  WHERE entry_id = 2;
-                 UPDATE entry_contents SET feed_id = 2 WHERE entry_id = 1;",
+                 UPDATE entry_contents SET feed_id = 2 WHERE entry_id IN (1, 2);",
             )
             .unwrap();
         Connection::open(&source.index)
@@ -463,6 +469,18 @@ async fn uncheckpointed_writes_are_imported() {
     let outcome = import_v01(&source, &dir.target()).unwrap();
     assert_eq!(outcome.feeds, 3);
     drop(writer);
+}
+
+/// Runs `body` where a hang cannot hold the test.
+fn within<R: Send + 'static>(
+    limit: std::time::Duration,
+    body: impl FnOnce() -> R + Send + 'static,
+) -> R {
+    let (answer, receive) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = answer.send(body());
+    });
+    receive.recv_timeout(limit).expect("finished within the limit")
 }
 
 /// Files next to the library other than the library and its creation lock.
@@ -547,6 +565,15 @@ fn a_data_directory_without_a_v01_index_has_nothing_to_import() {
     let odd = TempDir::new("odd");
     std::fs::create_dir(odd.0.join("rss-reader.db")).unwrap();
     assert!(V01Library::find(&odd.0).is_err());
+
+    // A link to nowhere at the old name is an error, not "no old library".
+    #[cfg(unix)]
+    {
+        let dangling = TempDir::new("dangling");
+        std::os::unix::fs::symlink(dangling.0.join("gone.db"), dangling.0.join("rss-reader.db"))
+            .unwrap();
+        assert!(V01Library::find(&dangling.0).is_err());
+    }
 }
 
 /// Opening a data directory that holds only a v0.1 library imports it once; later opens use the

@@ -3,6 +3,7 @@
 use std::ffi::OsStr;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use std::time::{Duration, Instant};
 
@@ -131,15 +132,19 @@ pub struct CreationLock {
 
 impl CreationLock {
     /// Waits for the lock of `target` up to [`CREATION_WAIT`] (an import of a large library takes
-    /// a while; a holder that hangs makes the others fail instead of waiting forever).
-    pub fn acquire(target: &Path) -> StoreResult<Self> {
-        Self::acquire_within(target, CREATION_WAIT)
+    /// a while; a holder that hangs makes the others fail instead of waiting forever), and stops
+    /// waiting once `gave_up` is set (whoever asked for the library went away).
+    pub fn acquire(target: &Path, gave_up: &AtomicBool) -> StoreResult<Self> {
+        Self::acquire_within(target, CREATION_WAIT, gave_up)
     }
 
-    fn acquire_within(target: &Path, wait: Duration) -> StoreResult<Self> {
+    fn acquire_within(target: &Path, wait: Duration, gave_up: &AtomicBool) -> StoreResult<Self> {
         let file = Self::open_lock_file(target)?;
         let until = Instant::now() + wait;
         loop {
+            if gave_up.load(Ordering::SeqCst) {
+                return Err(StoreError::Interrupted);
+            }
             match file.try_lock() {
                 Ok(()) => return Ok(Self { target: target.to_path_buf(), _file: file }),
                 Err(std::fs::TryLockError::WouldBlock) if Instant::now() < until => {
@@ -240,6 +245,7 @@ pub fn remove_stale_scratch(target: &Path) {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::time::Duration;
 
     use super::*;
@@ -298,7 +304,8 @@ mod tests {
     fn creators_of_one_library_take_turns() {
         let dir = temp_dir("lock");
         let target = dir.join("library.sqlite3");
-        let first = CreationLock::acquire(&target).unwrap();
+        let never = AtomicBool::new(false);
+        let first = CreationLock::acquire(&target, &never).unwrap();
         assert!(CreationLock::try_acquire(&target).unwrap().is_none(), "held");
         let (acquired, receive) = std::sync::mpsc::channel();
         let (asking, wait_asking) = std::sync::mpsc::channel();
@@ -306,7 +313,7 @@ mod tests {
             let target = target.clone();
             std::thread::spawn(move || {
                 asking.send(()).unwrap();
-                let _second = CreationLock::acquire(&target).unwrap();
+                let _second = CreationLock::acquire(&target, &AtomicBool::new(false)).unwrap();
                 acquired.send(()).unwrap();
             })
         };
@@ -316,14 +323,29 @@ mod tests {
         receive.recv_timeout(Duration::from_secs(10)).expect("second one proceeds");
         waiter.join().unwrap();
 
-        // A holder that never lets go makes the next creator fail instead of waiting forever.
-        let holder = CreationLock::acquire(&target).unwrap();
-        let started = Instant::now();
-        let refused = CreationLock::acquire_within(&target, Duration::from_millis(200));
+        // A holder that never lets go makes the next creator fail instead of waiting forever, and
+        // a creator whose caller gave up stops waiting. Both run where a hang cannot hold the
+        // test.
+        let holder = CreationLock::acquire(&target, &never).unwrap();
+        let attempt = |wait: Duration, gave_up: Arc<AtomicBool>| {
+            let target = target.clone();
+            let (answer, receive) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let started = Instant::now();
+                let result = CreationLock::acquire_within(&target, wait, &gave_up).map(drop);
+                let _ = answer.send((result, started.elapsed()));
+            });
+            receive.recv_timeout(Duration::from_secs(10)).expect("the wait ends on its own")
+        };
+        let (refused, waited) =
+            attempt(Duration::from_millis(200), Arc::new(AtomicBool::new(false)));
         assert!(
             matches!(refused, Err(StoreError::Io(ref error)) if error.kind() == std::io::ErrorKind::TimedOut)
         );
-        assert!(started.elapsed() >= Duration::from_millis(200));
+        assert!(waited >= Duration::from_millis(200));
+        let (stopped, waited) = attempt(Duration::from_secs(60), Arc::new(AtomicBool::new(true)));
+        assert!(matches!(stopped, Err(StoreError::Interrupted)));
+        assert!(waited < Duration::from_secs(5));
         drop(holder);
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -332,7 +354,7 @@ mod tests {
     fn publishing_never_replaces_a_file_and_scratch_files_start_empty() {
         let dir = temp_dir("publish");
         let target = dir.join("library.sqlite3");
-        let lock = CreationLock::acquire(&target).unwrap();
+        let lock = CreationLock::acquire(&target, &AtomicBool::new(false)).unwrap();
         // Left behind by a holder that died.
         let stale = sibling(&target, "creating");
         std::fs::write(&stale, b"stale").unwrap();

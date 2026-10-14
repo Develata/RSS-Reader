@@ -431,6 +431,28 @@ async fn a_task_given_up_while_waiting_for_room_is_discarded_safely() {
     insert_feed(&store, "https://after-room.test").await.unwrap();
 }
 
+/// An open given up while another creator holds the creation lock does not go on to create the
+/// library once the lock is free.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_open_given_up_while_waiting_to_create_creates_nothing() {
+    let dir = TempDir::new("open-gave-up");
+    let path = dir.library();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let other_creator = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path.with_file_name("library.sqlite3.create-lock"))
+        .unwrap();
+    other_creator.lock().unwrap();
+    let opening = LibraryStore::open(&path);
+    assert!(tokio::time::timeout(Duration::from_millis(300), opening).await.is_err());
+    other_creator.unlock().unwrap();
+    // Time enough for the abandoned opener to take the free lock and create, had it continued.
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert!(!path.exists(), "nothing is created for a caller that gave up");
+}
+
 /// A caller that goes away interrupts its running statement long before the deadline.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_cancelled_caller_interrupts_its_running_statement() {

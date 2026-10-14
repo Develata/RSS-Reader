@@ -42,7 +42,7 @@
 use std::cell::RefCell;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -326,26 +326,39 @@ impl Drop for CancelOnDrop {
 }
 
 /// Runs `body` on a new thread and waits for its result without blocking the async runtime.
-async fn on_thread<R: Send + 'static>(
-    body: impl FnOnce() -> StoreResult<R> + Send + 'static,
+/// `body` sees a flag that is set once the caller has gone away, so that it does not start (or
+/// keep waiting to start) work nobody waits for.
+pub(super) async fn on_thread<R: Send + 'static>(
+    body: impl FnOnce(&AtomicBool) -> StoreResult<R> + Send + 'static,
 ) -> StoreResult<R> {
+    struct GiveUpOnDrop(Arc<AtomicBool>);
+    impl Drop for GiveUpOnDrop {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+    let gave_up = Arc::new(AtomicBool::new(false));
+    let _give_up = GiveUpOnDrop(Arc::clone(&gave_up));
     let (reply, receive) = oneshot::channel();
     std::thread::Builder::new().name("rssr-library-open".to_owned()).spawn(move || {
-        let _ = reply.send(body());
+        let _ = reply.send(body(&gave_up));
     })?;
     receive.await.map_err(|_| StoreError::TaskFailed)?
 }
 
 /// Creates the library at `path` if it does not exist: built in a temporary file next to it and
 /// published only when complete, never over an existing file.
-fn create_if_missing(path: &Path) -> StoreResult<()> {
+fn create_if_missing(path: &Path, gave_up: &AtomicBool) -> StoreResult<()> {
     if path.exists() {
         return Ok(());
     }
-    let lock = files::CreationLock::acquire(path)?;
+    let lock = files::CreationLock::acquire(path, gave_up)?;
     // Another creator (an import, another process) may have finished while this one waited.
     if path.exists() {
         return Ok(());
+    }
+    if gave_up.load(Ordering::SeqCst) {
+        return Err(StoreError::Interrupted);
     }
     let staging = lock.scratch("creating")?;
     let mut connection = open_connection(Some(staging.path()), Role::Writer)?;
@@ -366,13 +379,13 @@ impl LibraryStore {
 
     pub async fn open_with(path: impl AsRef<Path>, options: StoreOptions) -> StoreResult<Self> {
         let path = path.as_ref().to_path_buf();
-        on_thread(move || Self::open_file(&path, options)).await
+        on_thread(move |gave_up| Self::open_file(&path, options, gave_up)).await
     }
 
     /// A private in-memory library on a single connection (tests, throwaway use).
     pub async fn open_in_memory() -> StoreResult<Self> {
         let options = StoreOptions { readers: 0, ..StoreOptions::default() };
-        on_thread(move || {
+        on_thread(move |_| {
             let mut writer = open_connection(None, Role::Writer)?;
             let context = TaskContext {
                 state: Arc::new(AtomicU8::new(RUNNING)),
@@ -388,7 +401,7 @@ impl LibraryStore {
         .await
     }
 
-    fn open_file(path: &Path, options: StoreOptions) -> StoreResult<Self> {
+    fn open_file(path: &Path, options: StoreOptions, gave_up: &AtomicBool) -> StoreResult<Self> {
         // One interpretation of the path for the probe, creation and every connection; a path
         // SQLite cannot be given as a URI is refused before anything is created.
         let path = &std::path::absolute(path)?;
@@ -396,7 +409,7 @@ impl LibraryStore {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        create_if_missing(path)?;
+        create_if_missing(path, gave_up)?;
         files::check_library(&probe)?;
         // Only next to a file known to be a library: a foreign file gets no lock file beside it.
         files::remove_stale_scratch(path);

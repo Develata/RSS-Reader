@@ -42,6 +42,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use rssr_domain::{AppStateSnapshot, EntriesWorkspaceState, UserSettings};
@@ -88,13 +89,15 @@ pub struct ImportOutcome {
     pub feeds: u64,
     pub entries: u64,
     pub bodies: u64,
-    /// Body rows whose entry no longer existed.
+    /// Body rows with HTML or text whose entry no longer existed (not imported).
     pub orphan_bodies: u64,
-    /// Body rows with neither HTML nor text (not imported).
+    /// Body rows with neither HTML nor text, whatever their entry (not imported). `bodies`,
+    /// `orphan_bodies` and `empty_bodies` partition the source's body rows.
     pub empty_bodies: u64,
-    /// Entries the source marked as having a body that it did not have.
+    /// Entries the source marked as having a body and that have none after the import (an entry
+    /// whose only body row was empty counts here too).
     pub missing_bodies: u64,
-    /// Bodies filed under another subscription than their entry's (imported with the entry).
+    /// Imported bodies the source filed under another subscription than their entry's.
     pub misfiled_bodies: u64,
     /// Legacy keys moved to app state: the v0.1.6 settings keys and `last_opened_feed_id`.
     pub moved_legacy_keys: Vec<String>,
@@ -122,11 +125,16 @@ impl V01Library {
 }
 
 fn existing_file(path: PathBuf) -> StoreResult<Option<PathBuf>> {
+    // Only a name that is not there at all means "no file"; a link to nowhere is an error.
+    match std::fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+        Ok(_) => {}
+    }
     match std::fs::metadata(&path) {
         Ok(metadata) if metadata.is_file() => Ok(Some(path)),
         Ok(_) => Err(unsupported(format!("{} 不是普通文件", path.display()))),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error.into()),
+        Err(error) => Err(unsupported(format!("{} 无法读取：{error}", path.display()))),
     }
 }
 
@@ -323,13 +331,31 @@ fn count(conn: &Connection, sql: &str) -> StoreResult<u64> {
 
 /// Imports the v0.1.x library `source` into a new library at `target`, which must not exist.
 pub fn import_v01(source: &V01Library, target: &Path) -> StoreResult<ImportOutcome> {
-    import_with(source, target, connection::BUSY_TIMEOUT)
+    import_unless(source, target, &AtomicBool::new(false))
 }
 
-fn import_with(source: &V01Library, target: &Path, busy: Duration) -> StoreResult<ImportOutcome> {
-    // One interpretation of the path for the lock, the scratch files and SQLite (an absolute path
-    // never reads as a `file:` URI).
+/// [`import_v01`] that does not start (or keeps waiting to start) once `gave_up` is set.
+pub(super) fn import_unless(
+    source: &V01Library,
+    target: &Path,
+    gave_up: &AtomicBool,
+) -> StoreResult<ImportOutcome> {
+    import_with(source, target, connection::BUSY_TIMEOUT, gave_up)
+}
+
+fn import_with(
+    source: &V01Library,
+    target: &Path,
+    busy: Duration,
+    gave_up: &AtomicBool,
+) -> StoreResult<ImportOutcome> {
+    // One interpretation of every path for the lock, the scratch files and SQLite (an absolute
+    // path never reads as a `file:` URI), fixed before anything happens.
     let target = &std::path::absolute(target)?;
+    let source = &V01Library {
+        index: std::path::absolute(&source.index)?,
+        content: source.content.as_deref().map(std::path::absolute).transpose()?,
+    };
     // ATTACH names the scratch files by text: a path that is not UTF-8 is refused before anything
     // is created (scratch names only add ASCII to it).
     if target.to_str().is_none() {
@@ -339,9 +365,12 @@ fn import_with(source: &V01Library, target: &Path, busy: Duration) -> StoreResul
     if target.exists() {
         return Err(taken());
     }
-    let lock = CreationLock::acquire(target)?;
+    let lock = CreationLock::acquire(target, gave_up)?;
     if target.exists() {
         return Err(taken());
+    }
+    if gave_up.load(Ordering::SeqCst) {
+        return Err(StoreError::Interrupted);
     }
 
     let index_copy = lock.scratch("import-index")?;
@@ -466,6 +495,7 @@ fn copy_library(
             count(
                 tx,
                 "SELECT COUNT(*) FROM v01c.entry_contents AS body
+                 JOIN main.entry_contents AS kept ON kept.entry_id = body.entry_id
                  JOIN main.entries AS entry ON entry.id = body.entry_id
                  WHERE body.feed_id IS NOT entry.feed_id",
             )?,
