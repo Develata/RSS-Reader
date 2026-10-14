@@ -33,6 +33,17 @@ mod tests {
 
     #[async_trait::async_trait]
     impl FeedRepository for FeedRepositoryStub {
+        async fn upsert_subscriptions(
+            &self,
+            new_feeds: &[rssr_domain::NewFeedSubscription],
+        ) -> rssr_domain::Result<Vec<rssr_domain::Feed>> {
+            let mut feeds = Vec::with_capacity(new_feeds.len());
+            for new_feed in new_feeds {
+                feeds.push(self.upsert_subscription(new_feed).await?);
+            }
+            Ok(feeds)
+        }
+
         async fn upsert_subscription(
             &self,
             _new_feed: &NewFeedSubscription,

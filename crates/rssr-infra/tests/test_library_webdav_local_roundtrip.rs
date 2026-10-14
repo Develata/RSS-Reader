@@ -38,10 +38,10 @@ async fn local_webdav_roundtrip_restores_config_over_http_put_get() {
     let library = Library::memory().await;
     let service = ImportExportService::new(
         Arc::new(library.feeds.clone()),
-        Arc::new(library.entries.clone()),
-        Arc::new(library.entries.clone()),
         Arc::new(library.settings.clone()),
         Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
+        Arc::new(rssr_application::SystemClock),
+        Arc::new(library.mutations.clone()),
     );
 
     library

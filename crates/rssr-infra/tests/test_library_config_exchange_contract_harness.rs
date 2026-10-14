@@ -3,10 +3,8 @@
 //! The configuration-exchange contract run against the v0.2 library store (ports of
 //! `test_config_exchange_contract_harness.rs`).
 //!
-//! The v0.1.x tests drove a hand-built `ImportExportService` without a replacement port, i.e.
-//! the application-level fallback over the repository ports. Those cases are kept as they were
-//! (`Mode::Fallback`) and the cases that import a package are repeated through the shipping
-//! path, the library's one-transaction `ConfigReplacementPort` (`Mode::Atomic`).
+//! Every case runs through the shipping path: the library's one-transaction
+//! `ConfigReplacementPort` (the application has no other way to replace a configuration).
 
 #[path = "support/library.rs"]
 mod library;
@@ -45,33 +43,20 @@ impl RemoteConfigStore for MemoryRemoteConfigStore {
     }
 }
 
-#[derive(Clone, Copy)]
-enum Mode {
-    /// No replacement port: the service replaces the configuration through the repositories.
-    Fallback,
-    /// The library's `ConfigReplacementPort`, as in the shipping composition.
-    Atomic,
-}
-
 struct Fixture {
     service: ImportExportService,
     library: Library,
 }
 
-async fn build_fixture(mode: Mode) -> Fixture {
+async fn build_fixture() -> Fixture {
     let library = Library::memory().await;
-    let service = ImportExportService::new_with_app_state_cleanup(
+    let service = ImportExportService::new(
         Arc::new(library.feeds.clone()),
-        Arc::new(library.entries.clone()),
-        Arc::new(library.entries.clone()),
         Arc::new(library.settings.clone()),
         Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
-        Arc::new(library.app_state.clone()),
+        Arc::new(rssr_application::SystemClock),
+        Arc::new(library.mutations.clone()),
     );
-    let service = match mode {
-        Mode::Fallback => service,
-        Mode::Atomic => service.with_config_replacement_port(Arc::new(library.mutations.clone())),
-    };
     Fixture { service, library }
 }
 
@@ -123,8 +108,8 @@ fn sample_entry(label: &str) -> ParsedEntryData {
     }
 }
 
-async fn json_roundtrip_restores_feeds_and_settings(mode: Mode) {
-    let export_fixture = build_fixture(mode).await;
+async fn json_roundtrip_restores_feeds_and_settings() {
+    let export_fixture = build_fixture().await;
     let export = &export_fixture.library;
 
     export
@@ -149,7 +134,7 @@ async fn json_roundtrip_restores_feeds_and_settings(mode: Mode) {
     )
     .expect("decode config package");
 
-    let import_fixture = build_fixture(mode).await;
+    let import_fixture = build_fixture().await;
     import_fixture.service.import_config_package(&package).await.expect("import package");
 
     let imported_feeds = import_fixture.library.feeds.list_feeds().await.expect("list feeds");
@@ -164,16 +149,11 @@ async fn json_roundtrip_restores_feeds_and_settings(mode: Mode) {
 
 #[tokio::test]
 async fn config_exchange_contract_json_roundtrip_restores_feeds_and_settings() {
-    json_roundtrip_restores_feeds_and_settings(Mode::Fallback).await;
+    json_roundtrip_restores_feeds_and_settings().await;
 }
 
-#[tokio::test]
-async fn config_exchange_contract_json_roundtrip_restores_feeds_and_settings_atomically() {
-    json_roundtrip_restores_feeds_and_settings(Mode::Atomic).await;
-}
-
-async fn import_cleans_removed_feed_entries_and_last_opened_state(mode: Mode) {
-    let fixture = build_fixture(mode).await;
+async fn import_cleans_removed_feed_entries_and_last_opened_state() {
+    let fixture = build_fixture().await;
     let library = &fixture.library;
 
     let retained_feed = library
@@ -225,18 +205,12 @@ async fn import_cleans_removed_feed_entries_and_last_opened_state(mode: Mode) {
 
 #[tokio::test]
 async fn config_exchange_contract_import_cleans_removed_feed_entries_and_last_opened_state() {
-    import_cleans_removed_feed_entries_and_last_opened_state(Mode::Fallback).await;
-}
-
-#[tokio::test]
-async fn config_exchange_contract_import_cleans_removed_feed_entries_and_last_opened_state_atomically()
- {
-    import_cleans_removed_feed_entries_and_last_opened_state(Mode::Atomic).await;
+    import_cleans_removed_feed_entries_and_last_opened_state().await;
 }
 
 #[tokio::test]
 async fn config_exchange_contract_opml_import_upserts_normalized_feeds() {
-    let fixture = build_fixture(Mode::Fallback).await;
+    let fixture = build_fixture().await;
 
     fixture
         .service
@@ -258,8 +232,8 @@ async fn config_exchange_contract_opml_import_upserts_normalized_feeds() {
     assert_eq!(feeds[1].url.as_str(), "https://second.example.com/rss");
 }
 
-async fn remote_push_and_pull_roundtrip(mode: Mode) {
-    let export_fixture = build_fixture(mode).await;
+async fn remote_push_and_pull_roundtrip() {
+    let export_fixture = build_fixture().await;
     export_fixture
         .library
         .feeds
@@ -275,7 +249,7 @@ async fn remote_push_and_pull_roundtrip(mode: Mode) {
     assert!(payload.contains("\"feeds\""));
     assert!(payload.contains("Example Feed"));
 
-    let import_fixture = build_fixture(mode).await;
+    let import_fixture = build_fixture().await;
     let pulled = import_fixture
         .service
         .pull_remote_config(remote.as_ref())
@@ -292,17 +266,12 @@ async fn remote_push_and_pull_roundtrip(mode: Mode) {
 
 #[tokio::test]
 async fn config_exchange_contract_remote_push_and_pull_roundtrip() {
-    remote_push_and_pull_roundtrip(Mode::Fallback).await;
-}
-
-#[tokio::test]
-async fn config_exchange_contract_remote_push_and_pull_roundtrip_atomically() {
-    remote_push_and_pull_roundtrip(Mode::Atomic).await;
+    remote_push_and_pull_roundtrip().await;
 }
 
 #[tokio::test]
 async fn opml_import_rejects_truncation_without_persisting_prefix() {
-    let fixture = build_fixture(Mode::Fallback).await;
+    let fixture = build_fixture().await;
     fixture
         .service
         .import_opml(
@@ -317,7 +286,7 @@ async fn opml_import_rejects_truncation_without_persisting_prefix() {
 
 #[tokio::test]
 async fn opml_import_rejects_unsupported_scheme_before_any_write() {
-    let fixture = build_fixture(Mode::Fallback).await;
+    let fixture = build_fixture().await;
     let error = fixture
         .service
         .import_opml(
@@ -335,7 +304,7 @@ async fn opml_import_rejects_unsupported_scheme_before_any_write() {
 
 #[tokio::test]
 async fn opml_batch_database_failure_rolls_back_earlier_feed() {
-    let fixture = build_fixture(Mode::Fallback).await;
+    let fixture = build_fixture().await;
     fixture
         .library
         .exec(
@@ -364,7 +333,7 @@ async fn opml_batch_database_failure_rolls_back_earlier_feed() {
 
 #[tokio::test]
 async fn opml_import_rejects_material_before_root_without_persisting() {
-    let fixture = build_fixture(Mode::Fallback).await;
+    let fixture = build_fixture().await;
     fixture
         .service
         .import_opml(
@@ -380,7 +349,7 @@ async fn opml_import_rejects_material_before_root_without_persisting() {
 
 #[tokio::test]
 async fn opml_import_rejects_material_after_root_without_persisting() {
-    let fixture = build_fixture(Mode::Fallback).await;
+    let fixture = build_fixture().await;
     fixture
         .service
         .import_opml(

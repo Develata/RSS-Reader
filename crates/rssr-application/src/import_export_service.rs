@@ -6,27 +6,24 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use rssr_domain::{
-    ConfigFeed, ConfigPackage, EntryContentRepository, EntryIndexRepository, FeedRepository,
-    NewFeedSubscription, OpmlFeed, SettingsRepository, normalize_feed_url, parse_feed_url,
+    ConfigFeed, ConfigPackage, FeedRepository, NewFeedSubscription, OpmlFeed, SettingsRepository,
+    parse_feed_url,
 };
 use time::OffsetDateTime;
 
 use self::rules::{import_field, validate_config_package};
-use crate::{
-    persistence_mutation::{ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort},
-    subscription_workflow::AppStatePort,
+use crate::persistence_mutation::{
+    ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort,
 };
 
 #[derive(Clone)]
 pub struct ImportExportService {
     feed_repository: Arc<dyn FeedRepository>,
-    entry_index_repository: Arc<dyn EntryIndexRepository>,
-    entry_content_repository: Arc<dyn EntryContentRepository>,
     settings_repository: Arc<dyn SettingsRepository>,
     opml_codec: Arc<dyn OpmlCodecPort>,
-    app_state_cleanup: Arc<dyn AppStatePort>,
     clock: Arc<dyn ClockPort>,
-    config_replacement_port: Option<Arc<dyn ConfigReplacementPort>>,
+    /// Replaces the subscriptions and settings in one transaction of the store.
+    config_replacement: Arc<dyn ConfigReplacementPort>,
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -106,80 +103,15 @@ impl RemoteConfigPullOutcome {
     }
 }
 
-#[derive(Default)]
-struct NoopAppStateCleanup;
-
-#[async_trait::async_trait]
-impl AppStatePort for NoopAppStateCleanup {
-    async fn clear_last_opened_feed_if_matches(&self, _feed_id: i64) -> Result<()> {
-        Ok(())
-    }
-}
-
 impl ImportExportService {
     pub fn new(
         feed_repository: Arc<dyn FeedRepository>,
-        entry_index_repository: Arc<dyn EntryIndexRepository>,
-        entry_content_repository: Arc<dyn EntryContentRepository>,
         settings_repository: Arc<dyn SettingsRepository>,
         opml_codec: Arc<dyn OpmlCodecPort>,
-    ) -> Self {
-        Self::new_with_app_state_cleanup(
-            feed_repository,
-            entry_index_repository,
-            entry_content_repository,
-            settings_repository,
-            opml_codec,
-            Arc::new(NoopAppStateCleanup),
-        )
-    }
-
-    pub fn new_with_app_state_cleanup(
-        feed_repository: Arc<dyn FeedRepository>,
-        entry_index_repository: Arc<dyn EntryIndexRepository>,
-        entry_content_repository: Arc<dyn EntryContentRepository>,
-        settings_repository: Arc<dyn SettingsRepository>,
-        opml_codec: Arc<dyn OpmlCodecPort>,
-        app_state_cleanup: Arc<dyn AppStatePort>,
-    ) -> Self {
-        Self::new_with_app_state_cleanup_and_clock(
-            feed_repository,
-            entry_index_repository,
-            entry_content_repository,
-            settings_repository,
-            opml_codec,
-            app_state_cleanup,
-            Arc::new(SystemClock),
-        )
-    }
-
-    pub fn new_with_app_state_cleanup_and_clock(
-        feed_repository: Arc<dyn FeedRepository>,
-        entry_index_repository: Arc<dyn EntryIndexRepository>,
-        entry_content_repository: Arc<dyn EntryContentRepository>,
-        settings_repository: Arc<dyn SettingsRepository>,
-        opml_codec: Arc<dyn OpmlCodecPort>,
-        app_state_cleanup: Arc<dyn AppStatePort>,
         clock: Arc<dyn ClockPort>,
+        config_replacement: Arc<dyn ConfigReplacementPort>,
     ) -> Self {
-        Self {
-            feed_repository,
-            entry_index_repository,
-            entry_content_repository,
-            settings_repository,
-            opml_codec,
-            app_state_cleanup,
-            clock,
-            config_replacement_port: None,
-        }
-    }
-
-    pub fn with_config_replacement_port(
-        mut self,
-        config_replacement_port: Arc<dyn ConfigReplacementPort>,
-    ) -> Self {
-        self.config_replacement_port = Some(config_replacement_port);
-        self
+        Self { feed_repository, settings_repository, opml_codec, clock, config_replacement }
     }
 
     pub async fn export_config(&self) -> Result<ConfigPackage> {
@@ -227,53 +159,17 @@ impl ImportExportService {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        if let Some(port) = &self.config_replacement_port {
-            let outcome = port
-                .replace_config(ConfigReplacementPlan {
-                    feeds: desired_feeds,
-                    settings: package.settings.clone(),
-                })
-                .await?;
-            return Ok(ConfigImportOutcome {
-                imported_feed_count: package.feeds.len(),
-                removed_feed_count: outcome.removed_feed_count,
-                settings_updated: outcome.settings_updated,
-            });
-        }
-
-        // Legacy/test fallback for hand-built services that do not inject a backend-native
-        // replacement port. Shipping native/Web compositions always use the atomic path above.
-        let current_feeds = self.feed_repository.list_feeds().await?;
-        let current_settings = self.settings_repository.load().await?;
-        let imported_urls = desired_feeds.iter().map(|feed| feed.url.clone()).collect::<Vec<_>>();
-
-        for feed in desired_feeds {
-            self.feed_repository
-                .upsert_subscription(&NewFeedSubscription {
-                    site_url: None,
-                    url: feed.url,
-                    title: Some(import_field(feed.title)),
-                    source_title: None,
-                    folder: Some(import_field(feed.folder)),
-                })
-                .await?;
-        }
-
-        let removed_feed_ids = current_feeds
-            .iter()
-            .filter(|feed| !imported_urls.iter().any(|url| *url == normalize_feed_url(&feed.url)))
-            .map(|feed| feed.id)
-            .collect::<Vec<_>>();
-        let removed_feed_count = removed_feed_ids.len();
-        for feed_id in removed_feed_ids {
-            self.remove_feed_with_cleanup(feed_id).await?;
-        }
-        self.settings_repository.save(&package.settings).await?;
-
+        let outcome = self
+            .config_replacement
+            .replace_config(ConfigReplacementPlan {
+                feeds: desired_feeds,
+                settings: package.settings.clone(),
+            })
+            .await?;
         Ok(ConfigImportOutcome {
             imported_feed_count: package.feeds.len(),
-            removed_feed_count,
-            settings_updated: current_settings != package.settings,
+            removed_feed_count: outcome.removed_feed_count,
+            settings_updated: outcome.settings_updated,
         })
     }
 
@@ -348,14 +244,5 @@ impl ImportExportService {
             }
             None => Ok(RemoteConfigPullOutcome::not_found()),
         }
-    }
-
-    async fn remove_feed_with_cleanup(&self, feed_id: i64) -> Result<()> {
-        // Keep the fallback failure mode consistent with direct removal: once cleanup begins,
-        // the feed is hidden first, so a later cleanup error cannot expose an empty subscription.
-        self.feed_repository.set_deleted(feed_id, true).await?;
-        self.entry_index_repository.delete_for_feed(feed_id).await?;
-        self.entry_content_repository.delete_for_feed(feed_id).await?;
-        self.app_state_cleanup.clear_last_opened_feed_if_matches(feed_id).await
     }
 }

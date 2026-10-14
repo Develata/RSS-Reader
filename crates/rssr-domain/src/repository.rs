@@ -14,16 +14,11 @@ pub trait HealthRepository {
 #[async_trait::async_trait]
 pub trait FeedRepository: Send + Sync {
     async fn upsert_subscription(&self, new_feed: &NewFeedSubscription) -> crate::Result<Feed>;
+    /// Adds or updates all of `new_feeds` in one transaction of the store.
     async fn upsert_subscriptions(
         &self,
         new_feeds: &[NewFeedSubscription],
-    ) -> crate::Result<Vec<Feed>> {
-        let mut feeds = Vec::with_capacity(new_feeds.len());
-        for new_feed in new_feeds {
-            feeds.push(self.upsert_subscription(new_feed).await?);
-        }
-        Ok(feeds)
-    }
+    ) -> crate::Result<Vec<Feed>>;
     async fn has_active_subscription_url(&self, url: &Url) -> crate::Result<bool> {
         let normalized_url = normalize_feed_url(url);
         Ok(self

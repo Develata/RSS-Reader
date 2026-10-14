@@ -103,17 +103,13 @@ fn sample_entry_content(id: i64, feed_id: i64, index: i64) -> PersistedEntryCont
 }
 
 fn build_service(state: BrowserStore) -> ImportExportService {
-    let entry_repository = Arc::new(BrowserEntryRepository::new(state.clone()));
-    ImportExportService::new_with_app_state_cleanup_and_clock(
+    ImportExportService::new(
         Arc::new(BrowserFeedRepository::new(state.clone())),
-        entry_repository.clone(),
-        entry_repository,
         Arc::new(BrowserSettingsRepository::new(state.clone())),
         Arc::new(BrowserOpmlCodec),
-        Arc::new(BrowserAppStateAdapter::new(state.clone())),
         Arc::new(FixedClock),
+        Arc::new(BrowserPersistenceMutations::new(state)),
     )
-    .with_config_replacement_port(Arc::new(BrowserPersistenceMutations::new(state)))
 }
 
 #[wasm_bindgen_test]

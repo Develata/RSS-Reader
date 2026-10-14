@@ -79,16 +79,13 @@ impl AppUseCases {
                 refresh_service,
                 input.subscription_probe,
             ),
-            import_export_service: ImportExportService::new_with_app_state_cleanup_and_clock(
+            import_export_service: ImportExportService::new(
                 input.feed_repository.clone(),
-                input.entry_index_repository.clone(),
-                input.entry_content_repository.clone(),
                 input.settings_repository,
                 input.opml_codec,
-                input.app_state,
                 input.clock,
-            )
-            .with_config_replacement_port(input.config_replacement),
+                input.config_replacement,
+            ),
             startup_service: StartupService::new(
                 settings_service.clone(),
                 app_state_service.clone(),

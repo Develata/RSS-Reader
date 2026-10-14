@@ -1,9 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 //! Configuration package export and import against the v0.2 library store (ports of
-//! `test_config_package_io.rs`). As there, the service is built without a replacement port
-//! (the repository fallback); each case is repeated through the library's one-transaction
-//! `ConfigReplacementPort`, the shipping path (`_atomically`).
+//! `test_config_package_io.rs`), through the library's one-transaction `ConfigReplacementPort`
+//! (the only way the application replaces a configuration).
 
 #[path = "support/library.rs"]
 mod library;
@@ -24,19 +23,14 @@ use rssr_infra::{
 use time::OffsetDateTime;
 use url::Url;
 
-fn service(library: &Library, atomic: bool) -> ImportExportService {
-    let service = ImportExportService::new(
+fn service(library: &Library) -> ImportExportService {
+    ImportExportService::new(
         Arc::new(library.feeds.clone()),
-        Arc::new(library.entries.clone()),
-        Arc::new(library.entries.clone()),
         Arc::new(library.settings.clone()),
         Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
-    );
-    if atomic {
-        service.with_config_replacement_port(Arc::new(library.mutations.clone()))
-    } else {
-        service
-    }
+        Arc::new(rssr_application::SystemClock),
+        Arc::new(library.mutations.clone()),
+    )
 }
 
 fn named(url: &str, title: &str, folder: Option<&str>) -> NewFeedSubscription {
@@ -47,7 +41,7 @@ fn named(url: &str, title: &str, folder: Option<&str>) -> NewFeedSubscription {
     }
 }
 
-async fn roundtrip_restores_feeds_and_settings(atomic: bool) {
+async fn roundtrip_restores_feeds_and_settings() {
     let export = Library::memory().await;
     export
         .feeds
@@ -72,12 +66,12 @@ async fn roundtrip_restores_feeds_and_settings(atomic: bool) {
     };
     export.settings.save(&expected_settings).await.expect("save settings");
 
-    let exported = service(&export, atomic).export_config().await.expect("export config");
+    let exported = service(&export).export_config().await.expect("export config");
     let encoded = encode_config_package(&exported).expect("encode config package");
     let decoded = decode_config_package(&encoded).expect("decode config package");
 
     let import = Library::memory().await;
-    service(&import, atomic).import_config_package(&decoded).await.expect("import config package");
+    service(&import).import_config_package(&decoded).await.expect("import config package");
 
     let imported_feeds = import.feeds.list_feeds().await.expect("list imported feeds");
     assert_eq!(imported_feeds.len(), 2);
@@ -90,17 +84,12 @@ async fn roundtrip_restores_feeds_and_settings(atomic: bool) {
 
 #[tokio::test]
 async fn config_package_roundtrip_restores_feeds_and_settings() {
-    roundtrip_restores_feeds_and_settings(false).await;
+    roundtrip_restores_feeds_and_settings().await;
 }
 
-#[tokio::test]
-async fn config_package_roundtrip_restores_feeds_and_settings_atomically() {
-    roundtrip_restores_feeds_and_settings(true).await;
-}
-
-async fn import_overwrites_local_feed_membership(atomic: bool) {
+async fn import_overwrites_local_feed_membership() {
     let library = Library::memory().await;
-    let service = service(&library, atomic);
+    let service = service(&library);
 
     library
         .feeds
@@ -129,17 +118,12 @@ async fn import_overwrites_local_feed_membership(atomic: bool) {
 
 #[tokio::test]
 async fn config_import_overwrites_local_feed_membership() {
-    import_overwrites_local_feed_membership(false).await;
+    import_overwrites_local_feed_membership().await;
 }
 
-#[tokio::test]
-async fn config_import_overwrites_local_feed_membership_atomically() {
-    import_overwrites_local_feed_membership(true).await;
-}
-
-async fn import_removes_dropped_feed_entries_and_clears_metadata(atomic: bool) {
+async fn import_removes_dropped_feed_entries_and_clears_metadata() {
     let library = Library::memory().await;
-    let service = service(&library, atomic);
+    let service = service(&library);
 
     let retained_feed = library
         .feeds
@@ -198,10 +182,5 @@ async fn import_removes_dropped_feed_entries_and_clears_metadata(atomic: bool) {
 
 #[tokio::test]
 async fn config_import_removes_dropped_feed_entries_and_clears_metadata() {
-    import_removes_dropped_feed_entries_and_clears_metadata(false).await;
-}
-
-#[tokio::test]
-async fn config_import_removes_dropped_feed_entries_and_clears_metadata_atomically() {
-    import_removes_dropped_feed_entries_and_clears_metadata(true).await;
+    import_removes_dropped_feed_entries_and_clears_metadata().await;
 }
