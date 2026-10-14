@@ -7,6 +7,7 @@ use rssr_domain::{
 use time::OffsetDateTime;
 use url::Url;
 
+use crate::library_queries::test_support::RepositoryQueries;
 use crate::persistence_mutation::{
     ConfigReplacementOutcome, ConfigReplacementPlan, ConfigReplacementPort,
 };
@@ -37,9 +38,14 @@ fn service(
     codec: Arc<dyn OpmlCodecPort>,
 ) -> (ImportExportService, Arc<RecordingConfigReplacement>) {
     let replacement = Arc::new(RecordingConfigReplacement::default());
+    let queries = RepositoryQueries {
+        feeds: Some(feeds.clone()),
+        settings: Some(settings),
+        ..RepositoryQueries::default()
+    };
     let service = ImportExportService::new(
         feeds,
-        settings,
+        Arc::new(queries),
         codec,
         Arc::new(FixedClock { now: OffsetDateTime::UNIX_EPOCH }),
         replacement.clone(),

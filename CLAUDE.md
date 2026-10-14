@@ -46,7 +46,7 @@ dx bundle --platform web --package rssr-app --release --debug-symbols false --ou
 七个 crate 组成分层架构，依赖方向严格向内（UI → application → domain；infra 实现 domain/application 定义的接口）：
 
 - **`rssr-domain`** — 实体（`Feed`、`Entry`、`UserSettings`、`AppStateSnapshot`）、仓储 trait（`FeedRepository`、`EntryIndexRepository`、`EntryContentRepository` 等）、`DomainError`。无任何 I/O。
-- **`rssr-application`** — 用例服务（`RefreshService`、`ReaderService`、`EntriesListService`、`ImportExportService`、`SubscriptionWorkflow` 等）。`composition.rs` 中的 `AppUseCases::compose(AppCompositionInput)` 用端口 trait（`FeedRefreshSourcePort`、`RefreshStorePort`、`OpmlCodecPort`、`ClockPort`、`AppStatePort`）组装全部服务，平台无关。
+- **`rssr-application`** — 用例服务（`RefreshService`、`ReaderService`、`EntriesListService`、`ImportExportService`、`SubscriptionWorkflow` 等）。`composition.rs` 中的 `AppUseCases::compose(AppCompositionInput)` 用端口 trait（`FeedRefreshSourcePort`、`RefreshStorePort`、`OpmlCodecPort`、`ClockPort`、`AppStatePort`、原子写端口与 `LibraryQueryPort`）组装全部服务，平台无关。界面的一次读取需要多条查询时走 `LibraryQueryPort`（`library_queries.rs`），由存储在一个读快照内回答。
 - **`rssr-infra`** — 端口适配器，按编译目标二选一（`lib.rs` 中 `#[cfg(not(target_arch = "wasm32"))]` 门控）：
   - **原生（桌面/Android/CLI）**：`store` 模块，rusqlite 单库 `library.sqlite3`（索引、正文、设置、刷新序号；基线 schema 在 `store/migrations/`，根目录 `migrations/` 与 `migrations_content/` 冻结为 v0.1.x 历史，只供 `store::import` 单向导入旧库）；reqwest 抓取 + `BodyAssetLocalizer` 正文图片本地化；feed-rs/quick-xml 解析；OPML 编解码；WebDAV 配置同步。入口 `store::local::open_local_library()`（首次打开时导入同一数据目录中的 v0.1.x 库）+ `compose_library_use_cases(store)`。
   - **wasm32**：`application_adapters/browser/` 下的适配器共用 `BrowserStore`，通过 Web Locks 协调 `localStorage` 四片数据，以单一提交头发布；缓存按版本同步，刷新逐订阅持久化，仅正文记录变化时写正文片。`store`/`fetch`/`parser`/`config_sync` 模块在 wasm 上不编译。入口 `compose_browser_use_cases`。

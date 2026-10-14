@@ -263,7 +263,7 @@ async fn unread_summaries_are_global_idempotent_and_unchanged_on_failure() {
     library.seed(feed.id, to_data(parsed.entries)).await;
     let all = entries.list_entries(&EntryQuery::default()).await.unwrap();
     let reader =
-        rssr_application::ReaderService::new(entries.clone(), entries.clone(), feeds.clone());
+        rssr_application::ReaderService::new(entries.clone(), Arc::new(library.queries.clone()));
     let snapshot = reader.load_entry(all[0].id).await.unwrap();
     assert_eq!(snapshot.feed_title.as_deref(), Some("Example Feed"));
     assert_eq!(snapshot.entry.unwrap().id, all[0].id);

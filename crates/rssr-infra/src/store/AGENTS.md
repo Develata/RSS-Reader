@@ -9,6 +9,7 @@
 - `files.rs`：文件层面的事——身份探测（`immutable=1`）、创建锁、暂存文件与原子发布。
 - `migrate.rs` + `migrations/`：基线 schema 与迁移器（应用 id、LF 校验和、单事务）。
 - `feeds.rs` / `entries.rs` / `documents.rs` / `mutations.rs` / `refresh.rs`：各领域端口的 SQL 实现；`refresh.rs` 持有刷新序号 `I/P/D` 的规则。
+- `queries.rs`：application 的聚合查询端口（`LibraryQueryPort`），每个方法一次读事务，只组合上面各文件已有的查询函数。
 - `import.rs`：v0.1.x 旧库的单向导入（只读快照、迁移历史核对、整库映射、校验后发布）。
 - `local.rs`：各平台数据目录规则与“打开或导入”入口；GUI、CLI 与界面偏好共用。
 - `codec.rs` / `error.rs`：时间与 URL 编解码、错误分类。

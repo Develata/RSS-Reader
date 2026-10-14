@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rssr_domain::{
-    Entry, EntryContentRepository, EntryIndexRepository, EntryNavigation, FeedRepository,
-};
+use rssr_domain::{Entry, EntryIndexRepository, EntryNavigation};
+
+use crate::library_queries::{LibraryQueryPort, ReaderSnapshot};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReaderEntrySnapshot {
@@ -37,55 +37,32 @@ pub struct ToggleStarredOutcome {
 #[derive(Clone)]
 pub struct ReaderService {
     entry_index_repository: Arc<dyn EntryIndexRepository>,
-    entry_content_repository: Arc<dyn EntryContentRepository>,
-    feed_repository: Arc<dyn FeedRepository>,
+    queries: Arc<dyn LibraryQueryPort>,
 }
 
 impl ReaderService {
     pub fn new(
         entry_index_repository: Arc<dyn EntryIndexRepository>,
-        entry_content_repository: Arc<dyn EntryContentRepository>,
-        feed_repository: Arc<dyn FeedRepository>,
+        queries: Arc<dyn LibraryQueryPort>,
     ) -> Self {
-        Self { entry_index_repository, entry_content_repository, feed_repository }
+        Self { entry_index_repository, queries }
     }
 
+    /// 文章、正文、导航与订阅名称来自同一个读快照：要么整体读到，要么整体报错，不会把
+    /// 正文与另一时刻的导航拼在一起。
     pub async fn load_entry(&self, entry_id: i64) -> anyhow::Result<ReaderEntrySnapshot> {
-        let record =
-            self.entry_index_repository.get_entry_record(entry_id).await.context("读取文章失败")?;
-        let navigation = if record.is_some() {
-            self.entry_index_repository.reader_navigation(entry_id).await.unwrap_or_default()
-        } else {
-            EntryNavigation::default()
+        let snapshot = self.queries.reader_snapshot(entry_id).await.context("读取文章失败")?;
+        let Some(ReaderSnapshot { record, content, navigation, feed }) = snapshot else {
+            return Ok(ReaderEntrySnapshot {
+                entry: None,
+                navigation: EntryNavigation::default(),
+                feed_title: None,
+            });
         };
-        let entry = match record {
-            Some(record) => Some(
-                record.into_entry(
-                    self.entry_content_repository
-                        .get_content(entry_id)
-                        .await
-                        .context("读取文章正文失败")?,
-                ),
-            ),
-            None => None,
-        };
-
-        let feed_title = match entry.as_ref() {
-            Some(entry) => match self.feed_repository.get_feed(entry.feed_id).await {
-                Ok(Some(feed)) => Some(
-                    feed.title
-                        .filter(|title| !title.trim().is_empty())
-                        .unwrap_or_else(|| feed.url.to_string()),
-                ),
-                Ok(None) => None,
-                Err(error) => {
-                    tracing::warn!(feed_id = entry.feed_id, %error, "读取订阅元信息失败，保留正文");
-                    None
-                }
-            },
-            None => None,
-        };
-        Ok(ReaderEntrySnapshot { entry, navigation, feed_title })
+        let feed_title = feed.map(|feed| {
+            feed.title.filter(|title| !title.trim().is_empty()).unwrap_or_else(|| feed.url.into())
+        });
+        Ok(ReaderEntrySnapshot { entry: Some(record.into_entry(content)), navigation, feed_title })
     }
 
     pub async fn toggle_read(&self, input: ToggleReadInput) -> anyhow::Result<ToggleReadOutcome> {
@@ -122,6 +99,7 @@ mod tests {
     use url::Url;
 
     use super::{ReaderService, ToggleReadInput, ToggleStarredInput};
+    use crate::library_queries::test_support::RepositoryQueries;
 
     #[derive(Debug, Default)]
     struct EntryIndexRepositoryStub {
@@ -274,21 +252,22 @@ mod tests {
         }
     }
 
+    /// The feed name is the custom title when it has text, else the address; none for a removed
+    /// subscription.
     #[tokio::test]
-    async fn metadata_is_independent_and_best_effort() {
-        for (feed, fail, expected) in [
-            (Some(feed(Some("Source"))), false, Some("Source")),
-            (Some(feed(None)), false, Some("https://example.com/feed")),
-            (Some(feed(Some("  "))), false, Some("https://example.com/feed")),
-            (None, false, None),
-            (None, true, None),
+    async fn the_feed_name_falls_back_to_the_address() {
+        for (feed, expected) in [
+            (Some(feed(Some("Source"))), Some("Source")),
+            (Some(feed(None)), Some("https://example.com/feed")),
+            (Some(feed(Some("  "))), Some("https://example.com/feed")),
+            (None, None),
         ] {
             let mut record = entry_record();
             record.author = Some("Writer".into());
-            let service = ReaderService::new(
+            let service = service_with(
                 Arc::new(EntryIndexRepositoryStub { entry: Some(record), ..Default::default() }),
                 Arc::new(EntryContentRepositoryStub { content: Some(entry_content()) }),
-                Arc::new(FeedRepositoryStub { feed, fail }),
+                Arc::new(FeedRepositoryStub { feed, fail: false }),
             );
             let snapshot = service.load_entry(42).await.unwrap();
             assert_eq!(snapshot.feed_title.as_deref(), expected);
@@ -296,6 +275,30 @@ mod tests {
             assert_eq!(entry.author.as_deref(), Some("Writer"));
             assert_eq!(entry.content_html.as_deref(), Some("<p>Body</p>"));
         }
+    }
+
+    /// The snapshot is read whole or not at all: a failing part fails the load.
+    #[tokio::test]
+    async fn a_failing_part_fails_the_whole_snapshot() {
+        let failing_feed = service_with(
+            Arc::new(EntryIndexRepositoryStub {
+                entry: Some(entry_record()),
+                ..Default::default()
+            }),
+            Arc::new(EntryContentRepositoryStub { content: Some(entry_content()) }),
+            Arc::new(FeedRepositoryStub { feed: None, fail: true }),
+        );
+        assert!(failing_feed.load_entry(42).await.is_err());
+
+        let failing_navigation = service(
+            Arc::new(EntryIndexRepositoryStub {
+                entry: Some(entry_record()),
+                fail_navigation: true,
+                ..EntryIndexRepositoryStub::default()
+            }),
+            Arc::new(EntryContentRepositoryStub { content: Some(entry_content()) }),
+        );
+        assert!(failing_navigation.load_entry(42).await.is_err());
     }
 
     fn entry_record() -> EntryRecord {
@@ -333,15 +336,25 @@ mod tests {
         }
     }
 
+    fn service_with(
+        index_repository: Arc<EntryIndexRepositoryStub>,
+        content_repository: Arc<EntryContentRepositoryStub>,
+        feed_repository: Arc<FeedRepositoryStub>,
+    ) -> ReaderService {
+        let queries = RepositoryQueries {
+            feeds: Some(feed_repository),
+            entries: Some(index_repository.clone()),
+            contents: Some(content_repository),
+            ..RepositoryQueries::default()
+        };
+        ReaderService::new(index_repository, Arc::new(queries))
+    }
+
     fn service(
         index_repository: Arc<EntryIndexRepositoryStub>,
         content_repository: Arc<EntryContentRepositoryStub>,
     ) -> ReaderService {
-        ReaderService::new(
-            index_repository,
-            content_repository,
-            Arc::new(FeedRepositoryStub::default()),
-        )
+        service_with(index_repository, content_repository, Arc::new(FeedRepositoryStub::default()))
     }
 
     #[tokio::test]
@@ -367,25 +380,6 @@ mod tests {
         assert_eq!(snapshot.entry.expect("entry").id, 42);
         assert_eq!(snapshot.navigation.next_unread_entry_id, Some(2));
         assert_eq!(snapshot.navigation.next_feed_entry_id, Some(4));
-    }
-
-    #[tokio::test]
-    async fn load_entry_keeps_navigation_best_effort() {
-        let repository = Arc::new(EntryIndexRepositoryStub {
-            entry: Some(entry_record()),
-            fail_navigation: true,
-            ..EntryIndexRepositoryStub::default()
-        });
-        let content_repository =
-            Arc::new(EntryContentRepositoryStub { content: Some(entry_content()) });
-
-        let snapshot = service(repository, content_repository)
-            .load_entry(42)
-            .await
-            .expect("load reader entry");
-
-        assert!(snapshot.entry.is_some());
-        assert_eq!(snapshot.navigation, EntryNavigation::default());
     }
 
     #[tokio::test]

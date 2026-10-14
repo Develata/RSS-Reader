@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rssr_domain::{EntriesWorkspaceState, FeedRepository, FeedSummary, UserSettings};
+use rssr_domain::{EntriesWorkspaceState, FeedSummary, UserSettings};
 
-use crate::{AppStateService, SettingsService};
+use crate::AppStateService;
+use crate::library_queries::{EntriesStart, LibraryQueryPort};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EntriesBootstrapInput {
@@ -26,18 +27,13 @@ pub struct SaveEntriesWorkspaceOutcome {
 
 #[derive(Clone)]
 pub struct EntriesWorkspaceService {
-    settings_service: SettingsService,
     app_state_service: AppStateService,
-    feed_repository: Arc<dyn FeedRepository>,
+    queries: Arc<dyn LibraryQueryPort>,
 }
 
 impl EntriesWorkspaceService {
-    pub fn new(
-        settings_service: SettingsService,
-        app_state_service: AppStateService,
-        feed_repository: Arc<dyn FeedRepository>,
-    ) -> Self {
-        Self { settings_service, app_state_service, feed_repository }
+    pub fn new(app_state_service: AppStateService, queries: Arc<dyn LibraryQueryPort>) -> Self {
+        Self { app_state_service, queries }
     }
 
     pub async fn bootstrap(
@@ -48,28 +44,12 @@ impl EntriesWorkspaceService {
             let _ = self.app_state_service.save_last_opened_feed_id(Some(feed_id)).await;
         }
 
-        let settings = if input.load_preferences {
-            Some(self.settings_service.load().await.context("读取设置失败")?)
-        } else {
-            None
-        };
-
-        let workspace = if input.load_preferences {
-            Some(
-                self.app_state_service
-                    .load_entries_workspace()
-                    .await
-                    .context("读取文章页工作区状态失败")?,
-            )
-        } else {
-            None
-        };
-
-        let feeds = if input.load_feeds {
-            Some(self.feed_repository.list_summaries().await.context("读取订阅失败")?)
-        } else {
-            None
-        };
+        // 设置、列表偏好与订阅来自同一个读快照。
+        let EntriesStart { settings, workspace, feeds } = self
+            .queries
+            .entries_start(input.load_preferences, input.load_feeds)
+            .await
+            .context("读取文章页初始数据失败")?;
 
         Ok(EntriesBootstrapOutcome { settings, workspace, feeds })
     }
@@ -99,6 +79,7 @@ mod tests {
     };
 
     use super::{EntriesBootstrapInput, EntriesWorkspaceService};
+    use crate::library_queries::test_support::RepositoryQueries;
 
     struct SettingsRepositoryStub {
         settings: UserSettings,
@@ -184,13 +165,11 @@ mod tests {
         feeds: Vec<i64>,
         fail_save: bool,
     ) -> EntriesWorkspaceService {
-        EntriesWorkspaceService::new(
-            crate::SettingsService::new(Arc::new(SettingsRepositoryStub { settings })),
-            crate::AppStateService::new(Arc::new(AppStateRepositoryStub {
-                state: Mutex::new(state),
-                fail_save,
-            })),
-            Arc::new(FeedRepositoryStub {
+        let app_state = Arc::new(AppStateRepositoryStub { state: Mutex::new(state), fail_save });
+        let queries = RepositoryQueries {
+            settings: Some(Arc::new(SettingsRepositoryStub { settings })),
+            app_state: Some(app_state.clone()),
+            feeds: Some(Arc::new(FeedRepositoryStub {
                 summaries: feeds
                     .into_iter()
                     .map(|id| FeedSummary {
@@ -204,8 +183,10 @@ mod tests {
                         fetch_error: None,
                     })
                     .collect(),
-            }),
-        )
+            })),
+            ..RepositoryQueries::default()
+        };
+        EntriesWorkspaceService::new(crate::AppStateService::new(app_state), Arc::new(queries))
     }
 
     #[tokio::test]

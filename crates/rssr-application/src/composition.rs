@@ -1,15 +1,12 @@
 use std::sync::Arc;
 
-use rssr_domain::{
-    AppStateRepository, EntryContentRepository, EntryIndexRepository, FeedRepository,
-    SettingsRepository,
-};
+use rssr_domain::{AppStateRepository, EntryIndexRepository, FeedRepository, SettingsRepository};
 
 use crate::{
     AppStatePort, AppStateService, ClockPort, ConfigReplacementPort, EntriesListService,
     EntriesWorkspaceService, FeedCatalogService, FeedRefreshSourcePort, FeedService,
-    FeedsSnapshotService, ImportExportService, OpmlCodecPort, ReaderService, RefreshService,
-    RefreshStorePort, SettingsService, SettingsSyncService, StartupService,
+    FeedsSnapshotService, ImportExportService, LibraryQueryPort, OpmlCodecPort, ReaderService,
+    RefreshService, RefreshStorePort, SettingsService, SettingsSyncService, StartupService,
     SubscriptionActivationPort, SubscriptionRemovalPort, SubscriptionWorkflow,
 };
 
@@ -23,7 +20,6 @@ impl<T> AppStateServicesPort for T where T: AppStateRepository + AppStatePort + 
 pub struct AppCompositionInput {
     pub feed_repository: Arc<dyn FeedRepository>,
     pub entry_index_repository: Arc<dyn EntryIndexRepository>,
-    pub entry_content_repository: Arc<dyn EntryContentRepository>,
     pub settings_repository: Arc<dyn SettingsRepository>,
     pub app_state: Arc<dyn AppStateServicesPort>,
     pub subscription_probe: Arc<dyn crate::SubscriptionProbePort>,
@@ -34,6 +30,8 @@ pub struct AppCompositionInput {
     pub subscription_activation: Arc<dyn SubscriptionActivationPort>,
     pub subscription_removal: Arc<dyn SubscriptionRemovalPort>,
     pub config_replacement: Arc<dyn ConfigReplacementPort>,
+    /// Reads the user interface needs, each answered from one snapshot of the library.
+    pub library_queries: Arc<dyn LibraryQueryPort>,
 }
 
 #[derive(Clone)]
@@ -63,7 +61,7 @@ impl AppUseCases {
         let feed_catalog_service = FeedCatalogService::new(input.feed_repository.clone());
         let refresh_service = RefreshService::new(input.refresh_source, input.refresh_store);
 
-        let settings_service = SettingsService::new(input.settings_repository.clone());
+        let settings_service = SettingsService::new(input.settings_repository);
         let settings_sync_service = SettingsSyncService::new(settings_service.clone());
         let app_state_service = AppStateService::new(input.app_state.clone());
 
@@ -81,28 +79,22 @@ impl AppUseCases {
             ),
             import_export_service: ImportExportService::new(
                 input.feed_repository.clone(),
-                input.settings_repository,
+                input.library_queries.clone(),
                 input.opml_codec,
                 input.clock,
                 input.config_replacement,
             ),
-            startup_service: StartupService::new(
-                settings_service.clone(),
-                app_state_service.clone(),
-                input.feed_repository.clone(),
+            startup_service: StartupService::new(input.library_queries.clone()),
+            entries_list_service: EntriesListService::new(
+                input.entry_index_repository.clone(),
+                input.library_queries.clone(),
             ),
-            entries_list_service: EntriesListService::new(input.entry_index_repository.clone()),
             entries_workspace_service: EntriesWorkspaceService::new(
-                settings_service,
                 app_state_service,
-                input.feed_repository.clone(),
+                input.library_queries.clone(),
             ),
-            feeds_snapshot_service: FeedsSnapshotService::new(input.feed_repository.clone()),
-            reader_service: ReaderService::new(
-                input.entry_index_repository,
-                input.entry_content_repository,
-                input.feed_repository,
-            ),
+            feeds_snapshot_service: FeedsSnapshotService::new(input.feed_repository),
+            reader_service: ReaderService::new(input.entry_index_repository, input.library_queries),
         }
     }
 }

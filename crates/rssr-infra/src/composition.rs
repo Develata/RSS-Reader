@@ -18,8 +18,8 @@ use {
     crate::application_adapters::browser::{
         adapters::{
             BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRefreshSource,
-            BrowserFeedRepository, BrowserOpmlCodec, BrowserPersistenceMutations,
-            BrowserRefreshStore, BrowserSettingsRepository,
+            BrowserFeedRepository, BrowserLibraryQueries, BrowserOpmlCodec,
+            BrowserPersistenceMutations, BrowserRefreshStore, BrowserSettingsRepository,
         },
         state::BrowserStore,
     },
@@ -36,8 +36,8 @@ pub struct LibraryComposition {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn compose_library_use_cases(store: crate::store::LibraryStore) -> LibraryComposition {
     use crate::store::{
-        LibraryAppState, LibraryEntries, LibraryFeeds, LibraryMutations, LibraryRefreshStore,
-        LibrarySettings,
+        LibraryAppState, LibraryEntries, LibraryFeeds, LibraryMutations, LibraryQueries,
+        LibraryRefreshStore, LibrarySettings,
     };
 
     let entries = Arc::new(LibraryEntries::new(store.clone()));
@@ -45,7 +45,6 @@ pub fn compose_library_use_cases(store: crate::store::LibraryStore) -> LibraryCo
     let use_cases = AppUseCases::compose(AppCompositionInput {
         feed_repository: Arc::new(LibraryFeeds::new(store.clone())),
         entry_index_repository: entries.clone(),
-        entry_content_repository: entries.clone(),
         settings_repository: Arc::new(LibrarySettings::new(store.clone())),
         app_state: Arc::new(LibraryAppState::new(store.clone())),
         subscription_probe: Arc::new(
@@ -55,12 +54,13 @@ pub fn compose_library_use_cases(store: crate::store::LibraryStore) -> LibraryCo
             FetchClient::new(),
             FeedParser::new(),
         )),
-        refresh_store: Arc::new(LibraryRefreshStore::new(store)),
+        refresh_store: Arc::new(LibraryRefreshStore::new(store.clone())),
         opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
         clock: Arc::new(SystemClock),
         subscription_activation: mutations.clone(),
         subscription_removal: mutations.clone(),
         config_replacement: mutations,
+        library_queries: Arc::new(LibraryQueries::new(store)),
     });
     LibraryComposition { use_cases, entries }
 }
@@ -79,19 +79,19 @@ pub fn compose_browser_use_cases(
 
     AppUseCases::compose(AppCompositionInput {
         feed_repository: feed_repository.clone(),
-        entry_index_repository: entry_repository.clone(),
-        entry_content_repository: entry_repository,
+        entry_index_repository: entry_repository,
         settings_repository,
         app_state,
         subscription_probe: Arc::new(crate::subscription_probe::HttpSubscriptionProbe::new(
             client.clone(),
         )),
         refresh_source: Arc::new(BrowserFeedRefreshSource::new(client.clone())),
-        refresh_store: Arc::new(BrowserRefreshStore::new(state)),
+        refresh_store: Arc::new(BrowserRefreshStore::new(state.clone())),
         opml_codec: Arc::new(BrowserOpmlCodec),
         clock,
         subscription_activation: persistence_mutations.clone(),
         subscription_removal: persistence_mutations.clone(),
         config_replacement: persistence_mutations,
+        library_queries: Arc::new(BrowserLibraryQueries::new(state)),
     })
 }

@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use rssr_domain::{FeedRepository, StartupView};
+use anyhow::Context;
+use rssr_domain::StartupView;
 
-use crate::{AppStateService, SettingsService};
+use crate::library_queries::{LibraryQueryPort, StartupState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StartupTarget {
@@ -12,43 +13,22 @@ pub enum StartupTarget {
 
 #[derive(Clone)]
 pub struct StartupService {
-    settings_service: SettingsService,
-    app_state_service: AppStateService,
-    feed_repository: Arc<dyn FeedRepository>,
+    queries: Arc<dyn LibraryQueryPort>,
 }
 
 impl StartupService {
-    pub fn new(
-        settings_service: SettingsService,
-        app_state_service: AppStateService,
-        feed_repository: Arc<dyn FeedRepository>,
-    ) -> Self {
-        Self { settings_service, app_state_service, feed_repository }
+    pub fn new(queries: Arc<dyn LibraryQueryPort>) -> Self {
+        Self { queries }
     }
 
+    /// 设置与“上次打开的订阅”来自同一个读快照；该订阅已删除时回到全部文章。
     pub async fn resolve_startup_target(&self) -> anyhow::Result<StartupTarget> {
-        let settings = self.settings_service.load().await?;
-        if settings.startup_view == StartupView::All {
-            return Ok(StartupTarget::AllEntries);
-        }
-
-        let Some(feed_id) = self.app_state_service.load_last_opened_feed_id().await.ok().flatten()
-        else {
-            return Ok(StartupTarget::AllEntries);
-        };
-
-        let feed_exists = self
-            .feed_repository
-            .get_feed(feed_id)
-            .await
-            .map(|feed| feed.is_some())
-            .unwrap_or(false);
-
-        if feed_exists {
-            Ok(StartupTarget::FeedEntries { feed_id })
-        } else {
-            Ok(StartupTarget::AllEntries)
-        }
+        let StartupState { settings, last_opened_feed_id } =
+            self.queries.startup_state().await.context("读取启动数据失败")?;
+        Ok(match (settings.startup_view, last_opened_feed_id) {
+            (StartupView::LastFeed, Some(feed_id)) => StartupTarget::FeedEntries { feed_id },
+            (StartupView::All, _) | (StartupView::LastFeed, None) => StartupTarget::AllEntries,
+        })
     }
 }
 
@@ -64,6 +44,7 @@ mod tests {
     use url::Url;
 
     use super::{StartupService, StartupTarget};
+    use crate::library_queries::test_support::RepositoryQueries;
 
     struct SettingsRepositoryStub {
         settings: UserSettings,
@@ -163,12 +144,10 @@ mod tests {
     }
 
     fn service(settings: UserSettings, state: AppStateSnapshot, feeds: Vec<i64>) -> StartupService {
-        StartupService::new(
-            crate::SettingsService::new(Arc::new(SettingsRepositoryStub { settings })),
-            crate::AppStateService::new(Arc::new(AppStateRepositoryStub {
-                state: Mutex::new(state),
-            })),
-            Arc::new(FeedRepositoryStub {
+        let queries = RepositoryQueries {
+            settings: Some(Arc::new(SettingsRepositoryStub { settings })),
+            app_state: Some(Arc::new(AppStateRepositoryStub { state: Mutex::new(state) })),
+            feeds: Some(Arc::new(FeedRepositoryStub {
                 summaries: feeds
                     .into_iter()
                     .map(|id| FeedSummary {
@@ -182,8 +161,10 @@ mod tests {
                         fetch_error: None,
                     })
                     .collect(),
-            }),
-        )
+            })),
+            ..RepositoryQueries::default()
+        };
+        StartupService::new(Arc::new(queries))
     }
 
     #[tokio::test]

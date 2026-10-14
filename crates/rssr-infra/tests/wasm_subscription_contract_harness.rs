@@ -10,7 +10,10 @@ use rssr_application::{
 };
 use rssr_domain::{EntryIndexRepository, EntryQuery, FeedRepository, NewFeedSubscription};
 use rssr_infra::application_adapters::browser::{
-    adapters::{BrowserEntryRepository, BrowserFeedRepository, BrowserPersistenceMutations},
+    adapters::{
+        BrowserEntryRepository, BrowserFeedRepository, BrowserLibraryQueries,
+        BrowserPersistenceMutations,
+    },
     state::{
         BrowserState, BrowserStore, ENTRY_FLAGS_STORAGE_KEY, PersistedAppStateSlice,
         PersistedEntryContent, PersistedEntryContentSlice, PersistedEntryIndex, PersistedFeed,
@@ -327,6 +330,41 @@ async fn browser_subscription_remove_preserves_other_last_opened_feed() {
     clear_browser_state_storage();
 }
 
+/// The aggregate reads over the browser state: removed subscriptions are left out, and the
+/// last opened subscription only counts while it is active.
+#[wasm_bindgen_test]
+async fn library_queries_leave_out_removed_subscriptions() {
+    use rssr_application::LibraryQueryPort;
+    clear_browser_state_storage();
+    let state = seed_state(BrowserState {
+        core: PersistedState {
+            feeds: vec![
+                sample_feed(1, "https://example.com/kept.xml", false),
+                sample_feed(2, "https://example.com/removed.xml", true),
+            ],
+            entries: vec![sample_entry_index(1, 1, 1), sample_entry_index(2, 1, 2)],
+            ..Default::default()
+        },
+        app_state: PersistedAppStateSlice {
+            last_opened_feed_id: Some(2),
+            ..PersistedAppStateSlice::default()
+        },
+        ..Default::default()
+    })
+    .await;
+    let queries = BrowserLibraryQueries::new(state);
+
+    assert_eq!(queries.startup_state().await.unwrap().last_opened_feed_id, None);
+    let config = queries.config_snapshot().await.unwrap();
+    assert_eq!(config.feeds.iter().map(|feed| feed.id).collect::<Vec<_>>(), [1]);
+    let page = queries.entries_page(&EntryQuery::default(), Some(&EntryQuery::default())).await;
+    let page = page.unwrap();
+    assert_eq!((page.entries.len(), page.counted), (2, Some(2)));
+    let start = queries.entries_start(true, true).await.unwrap();
+    assert_eq!(start.feeds.map(|feeds| feeds.len()), Some(1));
+    assert!(start.settings.is_some() && start.workspace.is_some());
+}
+
 #[wasm_bindgen_test]
 async fn reader_metadata_and_global_unread_counts_survive_failed_flag_writes() {
     use rssr_application::ReaderService;
@@ -344,7 +382,8 @@ async fn reader_metadata_and_global_unread_counts_survive_failed_flag_writes() {
     .await;
     let entries = Arc::new(BrowserEntryRepository::new(state.clone()));
     let feeds = Arc::new(BrowserFeedRepository::new(state.clone()));
-    let reader = ReaderService::new(entries.clone(), entries.clone(), feeds.clone());
+    let reader =
+        ReaderService::new(entries.clone(), Arc::new(BrowserLibraryQueries::new(state.clone())));
     let snapshot = reader.load_entry(1).await.unwrap();
     assert_eq!(snapshot.feed_title, feeds.get_feed(1).await.unwrap().unwrap().title);
     assert!(snapshot.entry.unwrap().content_html.is_some());

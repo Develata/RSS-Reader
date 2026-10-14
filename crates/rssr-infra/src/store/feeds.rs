@@ -181,7 +181,7 @@ pub(crate) fn set_deleted(
     Ok(())
 }
 
-fn list_summaries(conn: &Connection) -> StoreResult<Vec<FeedSummary>> {
+pub(crate) fn list_summaries(conn: &Connection) -> StoreResult<Vec<FeedSummary>> {
     let mut statement = conn.prepare_cached(
         "SELECT feeds.id,
                 COALESCE(feeds.custom_title, feeds.title, feeds.url) AS display_title,

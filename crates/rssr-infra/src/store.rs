@@ -16,6 +16,7 @@ pub mod import;
 pub mod local;
 pub mod migrate;
 mod mutations;
+mod queries;
 mod refresh;
 
 pub use documents::{LibraryAppState, LibrarySettings};
@@ -24,4 +25,5 @@ pub use error::{StoreError, StoreResult};
 pub use executor::{LibraryStore, StoreOptions};
 pub use feeds::LibraryFeeds;
 pub use mutations::LibraryMutations;
+pub use queries::LibraryQueries;
 pub use refresh::LibraryRefreshStore;

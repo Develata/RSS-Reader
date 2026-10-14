@@ -52,7 +52,7 @@ async fn build_fixture() -> Fixture {
     let library = Library::memory().await;
     let service = ImportExportService::new(
         Arc::new(library.feeds.clone()),
-        Arc::new(library.settings.clone()),
+        Arc::new(library.queries.clone()),
         Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
         Arc::new(rssr_application::SystemClock),
         Arc::new(library.mutations.clone()),

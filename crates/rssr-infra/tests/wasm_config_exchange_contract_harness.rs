@@ -6,8 +6,7 @@ use rssr_application::import_export_service::{ClockPort, ImportExportService, Re
 use rssr_domain::{ConfigFeed, ConfigPackage, UserSettings};
 use rssr_infra::application_adapters::browser::{
     adapters::{
-        BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRepository, BrowserOpmlCodec,
-        BrowserPersistenceMutations, BrowserSettingsRepository,
+        BrowserFeedRepository, BrowserLibraryQueries, BrowserOpmlCodec, BrowserPersistenceMutations,
     },
     state::{
         BrowserState, BrowserStore, PersistedAppStateSlice, PersistedEntryContent,
@@ -105,7 +104,7 @@ fn sample_entry_content(id: i64, feed_id: i64, index: i64) -> PersistedEntryCont
 fn build_service(state: BrowserStore) -> ImportExportService {
     ImportExportService::new(
         Arc::new(BrowserFeedRepository::new(state.clone())),
-        Arc::new(BrowserSettingsRepository::new(state.clone())),
+        Arc::new(BrowserLibraryQueries::new(state.clone())),
         Arc::new(BrowserOpmlCodec),
         Arc::new(FixedClock),
         Arc::new(BrowserPersistenceMutations::new(state)),

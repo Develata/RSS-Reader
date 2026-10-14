@@ -203,7 +203,7 @@ fn reset_remote_feed_state(feed: &mut PersistedFeed) {
     feed.fetch_error = None;
 }
 
-fn persisted_feed_to_domain(feed: &PersistedFeed) -> rssr_domain::Result<Feed> {
+pub(super) fn persisted_feed_to_domain(feed: &PersistedFeed) -> rssr_domain::Result<Feed> {
     Ok(Feed {
         id: feed.id,
         url: url::Url::parse(&feed.url).map_err(map_persistence_error)?,

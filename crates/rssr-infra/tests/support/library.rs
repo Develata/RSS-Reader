@@ -7,8 +7,8 @@ use rssr_application::{
 };
 use rssr_domain::{Feed, FeedRepository, NewFeedSubscription};
 use rssr_infra::store::{
-    LibraryAppState, LibraryEntries, LibraryFeeds, LibraryMutations, LibraryRefreshStore,
-    LibrarySettings, LibraryStore,
+    LibraryAppState, LibraryEntries, LibraryFeeds, LibraryMutations, LibraryQueries,
+    LibraryRefreshStore, LibrarySettings, LibraryStore,
 };
 use time::OffsetDateTime;
 use url::Url;
@@ -21,6 +21,7 @@ pub struct Library {
     pub mutations: LibraryMutations,
     pub settings: LibrarySettings,
     pub app_state: LibraryAppState,
+    pub queries: LibraryQueries,
 }
 
 impl Library {
@@ -36,6 +37,7 @@ impl Library {
             mutations: LibraryMutations::new(store.clone()),
             settings: LibrarySettings::new(store.clone()),
             app_state: LibraryAppState::new(store.clone()),
+            queries: LibraryQueries::new(store.clone()),
             store,
         }
     }

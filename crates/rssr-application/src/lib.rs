@@ -9,6 +9,7 @@ pub mod feed_catalog_service;
 pub mod feed_service;
 pub mod feeds_snapshot_service;
 pub mod import_export_service;
+pub mod library_queries;
 pub mod persistence_mutation;
 pub mod reader_service;
 pub mod refresh_service;
@@ -35,6 +36,9 @@ pub use feeds_snapshot_service::{FeedsSnapshotOutcome, FeedsSnapshotService};
 pub use import_export_service::{
     ClockPort, ConfigImportOutcome, ImportExportService, OpmlCodecPort, OpmlImportOutcome,
     RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore, SystemClock,
+};
+pub use library_queries::{
+    ConfigSnapshot, EntriesPage, EntriesStart, LibraryQueryPort, ReaderSnapshot, StartupState,
 };
 pub use persistence_mutation::{
     ActivatedSubscription, ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan,

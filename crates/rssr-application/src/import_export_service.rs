@@ -6,12 +6,12 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use rssr_domain::{
-    ConfigFeed, ConfigPackage, FeedRepository, NewFeedSubscription, OpmlFeed, SettingsRepository,
-    parse_feed_url,
+    ConfigFeed, ConfigPackage, FeedRepository, NewFeedSubscription, OpmlFeed, parse_feed_url,
 };
 use time::OffsetDateTime;
 
 use self::rules::{import_field, validate_config_package};
+use crate::library_queries::{ConfigSnapshot, LibraryQueryPort};
 use crate::persistence_mutation::{
     ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort,
 };
@@ -19,7 +19,7 @@ use crate::persistence_mutation::{
 #[derive(Clone)]
 pub struct ImportExportService {
     feed_repository: Arc<dyn FeedRepository>,
-    settings_repository: Arc<dyn SettingsRepository>,
+    queries: Arc<dyn LibraryQueryPort>,
     opml_codec: Arc<dyn OpmlCodecPort>,
     clock: Arc<dyn ClockPort>,
     /// Replaces the subscriptions and settings in one transaction of the store.
@@ -106,29 +106,25 @@ impl RemoteConfigPullOutcome {
 impl ImportExportService {
     pub fn new(
         feed_repository: Arc<dyn FeedRepository>,
-        settings_repository: Arc<dyn SettingsRepository>,
+        queries: Arc<dyn LibraryQueryPort>,
         opml_codec: Arc<dyn OpmlCodecPort>,
         clock: Arc<dyn ClockPort>,
         config_replacement: Arc<dyn ConfigReplacementPort>,
     ) -> Self {
-        Self { feed_repository, settings_repository, opml_codec, clock, config_replacement }
+        Self { feed_repository, queries, opml_codec, clock, config_replacement }
     }
 
+    /// 订阅与设置来自同一个读快照，导出的配置不会是两个时刻拼起来的。
     pub async fn export_config(&self) -> Result<ConfigPackage> {
-        let feeds = self
-            .feed_repository
-            .list_feeds()
-            .await?
+        let ConfigSnapshot { feeds, settings } = self.queries.config_snapshot().await?;
+        let feeds = feeds
             .into_iter()
-            .filter(|feed| !feed.is_deleted)
             .map(|feed| ConfigFeed {
                 url: feed.url.to_string(),
                 title: feed.title,
                 folder: feed.folder,
             })
             .collect();
-
-        let settings = self.settings_repository.load().await?;
 
         Ok(ConfigPackage {
             version: rssr_domain::CONFIG_PACKAGE_VERSION,
