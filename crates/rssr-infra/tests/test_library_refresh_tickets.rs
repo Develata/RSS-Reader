@@ -466,7 +466,12 @@ async fn the_refresh_service_takes_a_ticket_and_reports_a_superseded_response() 
 #[ignore = "measurement"]
 async fn measure_ticket_issuing() {
     let (_dir, a, _b, feed) = two_processes("measure").await;
-    let synchronous = a.scalar("PRAGMA synchronous").await;
+    // Read on the writer: that connection issues the tickets (readers may differ).
+    let synchronous: i64 = a
+        .store
+        .write(|tx| Ok(tx.query_row("PRAGMA synchronous", [], |row| row.get(0))?))
+        .await
+        .unwrap();
     let rounds = 500;
     let started = std::time::Instant::now();
     for _ in 0..rounds {
@@ -479,4 +484,109 @@ async fn measure_ticket_issuing() {
         elapsed.as_millis(),
         elapsed.as_micros() / rounds
     );
+}
+
+fn fetched_last_modified(title: &str, last_modified: &str, keys: &[&str]) -> RefreshCommit {
+    let RefreshCommit::Updated { mut update } = fetched(title, "unused", keys) else {
+        unreachable!()
+    };
+    update.metadata = RefreshHttpMetadata { etag: None, last_modified: Some(last_modified.into()) };
+    RefreshCommit::Updated { update }
+}
+
+/// The `Last-Modified` counterpart of `a_304_after_a_failure_keeps_the_validators_of_the_published_version`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_304_after_a_failure_keeps_the_last_modified_of_the_published_version() {
+    let (_dir, a, b, feed) = two_processes("failure-then-304-lm").await;
+    let initial = begin(&a, feed.id).await;
+    assert!(!superseded(&a, &initial, fetched_last_modified("A", "lm-a", &["a"])).await);
+
+    let failing = begin(&a, feed.id).await;
+    let conditional = begin(&b, feed.id).await;
+    assert_eq!(conditional.last_modified.as_deref(), Some("lm-a"));
+    let failure = RefreshCommit::Failed {
+        failure: RefreshFailure {
+            message: "write failed".into(),
+            metadata: Some(RefreshHttpMetadata { etag: None, last_modified: Some("lm-b".into()) }),
+        },
+    };
+    assert!(!superseded(&a, &failing, failure).await);
+    let not_modified = RefreshCommit::NotModified { metadata: RefreshHttpMetadata::default() };
+    assert!(!superseded(&b, &conditional, not_modified).await);
+
+    let stored = a.feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(stored.last_modified.as_deref(), Some("lm-a"));
+    assert_eq!(begin(&a, feed.id).await.last_modified.as_deref(), Some("lm-a"));
+}
+
+/// A 304 or a failure committed twice with one ticket is recorded once.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_304_or_a_failure_committed_twice_is_superseded_the_second_time() {
+    let (_dir, a, _b, feed) = two_processes("duplicate-304-failure").await;
+    let initial = begin(&a, feed.id).await;
+    assert!(!superseded(&a, &initial, fetched("V1", "etag-1", &["v1"])).await);
+
+    let conditional = begin(&a, feed.id).await;
+    let not_modified = || RefreshCommit::NotModified { metadata: metadata("etag-1") };
+    assert!(!superseded(&a, &conditional, not_modified()).await);
+    assert!(superseded(&a, &conditional, not_modified()).await);
+    assert_eq!(tickets(&a, feed.id).await, (2, 2, 2));
+
+    let failing = begin(&a, feed.id).await;
+    assert!(!superseded(&a, &failing, failed("first")).await);
+    assert!(superseded(&a, &failing, failed("second")).await);
+    let stored = a.feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(stored.fetch_error.as_deref(), Some("first"));
+    assert_eq!(tickets(&a, feed.id).await, (3, 2, 3));
+}
+
+/// A refresh started before the subscription was removed and added again writes nothing into the
+/// new subscription, whatever it reports.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_refresh_from_before_a_removal_and_re_add_writes_nothing() {
+    let (_dir, a, b, feed) = two_processes("re-add").await;
+    let initial = begin(&a, feed.id).await;
+    assert!(!superseded(&a, &initial, fetched("V1", "etag-1", &["v1"])).await);
+    let stale = [begin(&a, feed.id).await, begin(&a, feed.id).await, begin(&a, feed.id).await];
+
+    b.feeds.set_deleted(feed.id, true).await.unwrap();
+    let again = b.add_feed("https://example.com/feed.xml").await;
+    assert_eq!(again.id, feed.id);
+    let before = (tickets(&a, feed.id).await, entry_titles(&a).await);
+    let stored_before = a.feeds.get_feed(feed.id).await.unwrap().unwrap();
+
+    let commits = [
+        fetched("Stale", "etag-stale", &["stale"]),
+        RefreshCommit::NotModified { metadata: metadata("etag-stale") },
+        failed("stale failure"),
+    ];
+    for (target, commit) in stale.iter().zip(commits) {
+        let result = a.refresh.commit(target, commit).await;
+        assert!(result.is_err() || result.unwrap().superseded);
+    }
+    assert_eq!((tickets(&a, feed.id).await, entry_titles(&a).await), before);
+    let stored = a.feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(
+        (stored.etag, stored.last_modified, stored.fetch_error),
+        (stored_before.etag, stored_before.last_modified, stored_before.fetch_error)
+    );
+}
+
+/// Refreshes started at once from two processes get distinct tickets, in one sequence.
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_refreshes_get_distinct_tickets() {
+    let (_dir, a, b, feed) = two_processes("concurrent-issue").await;
+    let (a, b) = (Arc::new(a), Arc::new(b));
+    let mut tasks = Vec::new();
+    for index in 0..40 {
+        let library = Arc::clone(if index % 2 == 0 { &a } else { &b });
+        tasks.push(tokio::spawn(async move { begin(&library, feed.id).await.ticket.issued }));
+    }
+    let mut issued = Vec::new();
+    for task in tasks {
+        issued.push(task.await.unwrap());
+    }
+    issued.sort_unstable();
+    assert_eq!(issued, (1..=40).collect::<Vec<i64>>());
+    assert_eq!(tickets(&a, feed.id).await, (40, 0, 0));
 }

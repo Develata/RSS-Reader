@@ -45,7 +45,8 @@ pub struct RefreshTicket {
 }
 
 impl RefreshTicket {
-    /// No ticket: a store that tracks tickets treats the commit as issued at commit time.
+    /// No ticket: for stores without persistent tickets (the browser store), ordered by the
+    /// in-process sequence instead; a store that tracks tickets refuses commits carrying it.
     pub const UNTRACKED: Self = Self { issued: 0, baseline: 0 };
 }
 
