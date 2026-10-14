@@ -5,15 +5,7 @@ use rssr_application::{AppCompositionInput, AppUseCases};
 #[cfg(not(target_arch = "wasm32"))]
 use {
     crate::{
-        application_adapters::{
-            InfraFeedRefreshSource, InfraOpmlCodec, SqliteAppStateAdapter,
-            SqlitePersistenceMutations, SqliteRefreshStore,
-        },
-        db::{
-            SqlitePool, app_state_repository::SqliteAppStateRepository,
-            entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository,
-            settings_repository::SqliteSettingsRepository,
-        },
+        application_adapters::{InfraFeedRefreshSource, InfraOpmlCodec},
         fetch::FetchClient,
         opml::OpmlCodec,
         parser::FeedParser,
@@ -33,55 +25,6 @@ use {
     },
     rssr_application::ClockPort,
 };
-
-#[cfg(not(target_arch = "wasm32"))]
-pub struct NativeSqliteComposition {
-    pub use_cases: AppUseCases,
-    pub entry_repository: Arc<SqliteEntryRepository>,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn compose_native_sqlite_use_cases(
-    index_pool: SqlitePool,
-    content_pool: SqlitePool,
-) -> NativeSqliteComposition {
-    let feed_repository = Arc::new(SqliteFeedRepository::new(index_pool.clone()));
-    let entry_repository = Arc::new(SqliteEntryRepository::new_with_content_pool(
-        index_pool.clone(),
-        content_pool.clone(),
-    ));
-    let settings_repository = Arc::new(SqliteSettingsRepository::new(index_pool.clone()));
-    let app_state_repository = Arc::new(SqliteAppStateRepository::new(index_pool.clone()));
-    let app_state = Arc::new(SqliteAppStateAdapter::new(app_state_repository));
-    let persistence_mutations =
-        Arc::new(SqlitePersistenceMutations::new(index_pool, content_pool.clone()));
-
-    let use_cases = AppUseCases::compose(AppCompositionInput {
-        feed_repository: feed_repository.clone(),
-        entry_index_repository: entry_repository.clone(),
-        entry_content_repository: entry_repository.clone(),
-        settings_repository,
-        app_state,
-        subscription_probe: Arc::new(
-            crate::subscription_probe::HttpSubscriptionProbe::with_feed_client(),
-        ),
-        refresh_source: Arc::new(InfraFeedRefreshSource::new(
-            FetchClient::new(),
-            FeedParser::new(),
-        )),
-        refresh_store: Arc::new(SqliteRefreshStore::new(
-            feed_repository.clone(),
-            entry_repository.clone(),
-        )),
-        opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
-        clock: Arc::new(SystemClock),
-        subscription_activation: persistence_mutations.clone(),
-        subscription_removal: persistence_mutations.clone(),
-        config_replacement: persistence_mutations,
-    });
-
-    NativeSqliteComposition { use_cases, entry_repository }
-}
 
 /// Use cases over one v0.2 library file, plus the entry store the GUI's body localization uses.
 #[cfg(not(target_arch = "wasm32"))]

@@ -478,6 +478,16 @@ impl EntryContentRepository for LibraryEntries {
     }
 }
 
+/// The source-body hash stored with a refreshed body (`entry_contents.content_hash`).
+pub fn compute_entry_content_hash(
+    html: Option<&str>,
+    text: Option<&str>,
+    title: Option<&str>,
+    url: Option<&url::Url>,
+) -> Option<String> {
+    crate::feed_normalization::hash_content(html, text, title, url.map(url::Url::as_str))
+}
+
 /// A localized body to write back over the body it was derived from.
 ///
 /// `expected_content_hash` is the source hash the derivation started from, compared with `IS`

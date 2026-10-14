@@ -13,8 +13,11 @@
 //! - `Running -> Committing` is where cancellation stops being accepted: from then on the commit
 //!   runs to its end (it can still fail, for example when a lock wait reaches the deadline), and
 //!   a caller that went away does not learn which way it went;
-//! - a queued task carries the time it may start until; the worker cancels it when it is taken
-//!   later, and a cancelled task's closure (with the data it captured) is dropped at once.
+//! - a queued task carries the time it may start until; a task the worker marks running after
+//!   that time is cancelled instead of run, and a cancelled task's closure (with the data it
+//!   captured) is dropped at once, a panic in that drop contained;
+//! - each queue admits at most `queue_capacity` tasks not yet taken by a worker (cancelled ones
+//!   included); waiting for room counts against the admission time.
 //!
 //! A running task has a deadline (`*_deadline`, from the moment it starts): waits for another
 //! connection's lock end at the deadline (busy handler), and a statement still running at the
@@ -27,12 +30,14 @@
 //! role's `query_only`); a connection that cannot be is discarded, and the worker opens a new one
 //! for the next task (an in-memory library cannot, and reports itself unusable).
 //!
-//! Opening runs on its own thread too. A missing library is created in a temporary file and
-//! published only when complete, with its application id in the header ([`files::publish_new`]),
-//! so an existing library file either is complete or is not a library at all; its identity is
-//! read with [`files::check_library`] before anything could write to it. Switching to WAL and the
-//! migration share one budget of [`connection::BUSY_TIMEOUT`]; checking the file and opening the
-//! connections are local file operations outside it.
+//! Opening runs on its own thread too. The path is made absolute once, and the identity probe and
+//! every connection use that one path (connections never read it as a URI). A missing library is
+//! created in a scratch file under the path's creation lock and published only when complete, with
+//! its application id in the header ([`files::CreationLock`]), so an existing library file either
+//! is complete or is not a library at all; its identity is read with [`files::check_library`]
+//! before anything could write to it. Switching to WAL and the migration share one budget of
+//! [`connection::BUSY_TIMEOUT`]; checking the file and opening the connections are local file
+//! operations outside it.
 
 use std::cell::RefCell;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -42,10 +47,10 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use rusqlite::{Connection, Transaction, TransactionBehavior};
+use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
-use tokio::sync::oneshot;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, oneshot};
 
 use super::connection::{self, Role};
 use super::error::{StoreError, StoreResult};
@@ -58,8 +63,10 @@ const PROGRESS_OPS: i32 = 1_000;
 pub struct StoreOptions {
     /// Reader workers for a file library; an in-memory library uses its one worker.
     pub readers: usize,
-    /// How long a task may wait in the queue before it starts.
+    /// How long a task may wait for room in the queue and in the queue before it starts.
     pub admission_wait: Duration,
+    /// Tasks a queue holds before a worker takes them; further tasks wait for room.
+    pub queue_capacity: usize,
     pub read_deadline: Duration,
     pub write_deadline: Duration,
 }
@@ -69,6 +76,7 @@ impl Default for StoreOptions {
         Self {
             readers: 4,
             admission_wait: Duration::from_secs(30),
+            queue_capacity: 256,
             read_deadline: Duration::from_secs(30),
             write_deadline: Duration::from_secs(60),
         }
@@ -130,10 +138,16 @@ fn busy_wait(attempt: i32) -> bool {
     !current_should_stop()
 }
 
-/// Opens a connection with the library settings and the context-driven handlers.
+/// Opens a connection with the library settings and the context-driven handlers. A path is a
+/// file name, never a URI (`file:` names stay names).
 fn open_connection(path: Option<&Path>, role: Role) -> StoreResult<Connection> {
     let connection = match path {
-        Some(path) => Connection::open(path)?,
+        Some(path) => Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE
+                | OpenFlags::SQLITE_OPEN_CREATE
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?,
         None => Connection::open_in_memory()?,
     };
     connection::configure(&connection, role)?;
@@ -180,33 +194,46 @@ impl Slot {
 
 type Job = Box<dyn FnOnce(&mut Slot) + Send>;
 
-/// A queued task: its state, the time it may start until, and its closure until it starts or is
-/// cancelled.
+/// Drops the closure of a task that will not run; a panic in dropping what it captured is
+/// contained, so it can neither stop a worker nor reach a caller that gave up.
+fn discard(job: Option<Job>) {
+    let _ = catch_unwind(AssertUnwindSafe(move || drop(job)));
+}
+
+/// A queued task: its state, the time it may start until, its closure until it starts or is
+/// cancelled, and its room in the queue until a worker takes it.
 struct Pending {
     state: Arc<AtomicU8>,
     start_until: Instant,
     job: Mutex<Option<Job>>,
+    room: Mutex<Option<OwnedSemaphorePermit>>,
 }
 
 impl Pending {
+    fn take_job(&self) -> Option<Job> {
+        self.job.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take()
+    }
+
     /// Cancels the task if it has not started; its closure and captured data are dropped now.
     fn cancel_if_queued(&self) -> bool {
         let cancelled = transition(&self.state, QUEUED, CANCELLED);
         if cancelled {
-            drop(self.job.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take());
+            discard(self.take_job());
         }
         cancelled
     }
 }
 
-/// A queue served by one or more workers, each owning one connection. It holds only small
-/// task cells: a cancelled task's closure is dropped when it is cancelled.
+/// A queue served by one or more workers, each owning one connection. It holds at most
+/// `capacity` small task cells (a cancelled task's closure is dropped when it is cancelled; its
+/// cell leaves when a worker takes it).
 struct Queue {
     sender: mpsc::Sender<Arc<Pending>>,
+    room: Arc<Semaphore>,
 }
 
 impl Queue {
-    fn start(slots: Vec<Slot>) -> StoreResult<Self> {
+    fn start(slots: Vec<Slot>, capacity: usize) -> StoreResult<Self> {
         let (sender, receiver) = mpsc::channel::<Arc<Pending>>();
         let receiver = Arc::new(Mutex::new(receiver));
         for slot in slots {
@@ -215,17 +242,24 @@ impl Queue {
                 .name("rssr-library".to_owned())
                 .spawn(move || serve(&receiver, slot))?;
         }
-        Ok(Self { sender })
+        Ok(Self { sender, room: Arc::new(Semaphore::new(capacity.max(1))) })
     }
 
-    fn submit(&self, pending: Arc<Pending>) -> StoreResult<()> {
+    /// Waits for room until the task's start time, then queues it.
+    async fn submit(&self, pending: Arc<Pending>) -> StoreResult<()> {
+        let until = tokio::time::Instant::from_std(pending.start_until);
+        let room = tokio::time::timeout_at(until, Arc::clone(&self.room).acquire_owned())
+            .await
+            .map_err(|_| StoreError::ConnectionTimeout)?
+            .map_err(|_| StoreError::TaskFailed)?;
+        *pending.room.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(room);
         self.sender.send(pending).map_err(|_| StoreError::TaskFailed)
     }
 }
 
-/// Worker loop: runs tasks one at a time until the store is dropped. A task taken after the time
-/// it could start until is cancelled instead; a panicking task is contained here (its caller sees
-/// `TaskFailed`).
+/// Worker loop: runs tasks one at a time until the store is dropped. A task that becomes running
+/// only after the time it could start until is cancelled instead; a panicking task is contained
+/// here (its caller sees `TaskFailed`).
 fn serve(receiver: &Mutex<mpsc::Receiver<Arc<Pending>>>, mut slot: Slot) {
     loop {
         let pending = match receiver.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).recv()
@@ -233,14 +267,19 @@ fn serve(receiver: &Mutex<mpsc::Receiver<Arc<Pending>>>, mut slot: Slot) {
             Ok(pending) => pending,
             Err(_) => return,
         };
-        if Instant::now() > pending.start_until && pending.cancel_if_queued() {
-            continue;
-        }
+        drop(pending.room.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take());
+        // Cancelled while queued: its closure is already gone.
         if !transition(&pending.state, QUEUED, RUNNING) {
             continue;
         }
-        let job = pending.job.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
-        if let Some(job) = job {
+        // Checked after the state change, so a task that becomes running late never starts,
+        // whether or not its caller has noticed the time yet.
+        if Instant::now() > pending.start_until {
+            pending.state.store(CANCELLED, Ordering::SeqCst);
+            discard(pending.take_job());
+            continue;
+        }
+        if let Some(job) = pending.take_job() {
             let _ = catch_unwind(AssertUnwindSafe(|| job(&mut slot)));
         }
         slot.reset_after_task();
@@ -292,26 +331,20 @@ fn create_if_missing(path: &Path) -> StoreResult<()> {
     if path.exists() {
         return Ok(());
     }
-    let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_nanos())
-        .unwrap_or_default();
-    let staging = path.with_file_name(format!("{name}.{}-{nonce}.creating", std::process::id()));
-    let built = (|| -> StoreResult<()> {
-        let mut connection = open_connection(Some(&staging), Role::Writer)?;
-        let context = TaskContext {
-            state: Arc::new(AtomicU8::new(RUNNING)),
-            until: Instant::now() + connection::BUSY_TIMEOUT,
-        };
-        with_context(context, || migrate::migrate(&mut connection, &now()))?;
-        drop(connection);
-        files::publish_new(&staging, path).map(drop)
-    })();
-    for suffix in ["", "-journal"] {
-        let _ = std::fs::remove_file(format!("{}{suffix}", staging.display()));
+    let lock = files::CreationLock::acquire(path)?;
+    // Another creator (an import, another process) may have finished while this one waited.
+    if path.exists() {
+        return Ok(());
     }
-    built
+    let staging = lock.scratch("creating");
+    let mut connection = open_connection(Some(staging.path()), Role::Writer)?;
+    let context = TaskContext {
+        state: Arc::new(AtomicU8::new(RUNNING)),
+        until: Instant::now() + connection::BUSY_TIMEOUT,
+    };
+    with_context(context, || migrate::migrate(&mut connection, &now()))?;
+    connection.close().map_err(|(_, error)| error)?;
+    lock.publish(staging)
 }
 
 impl LibraryStore {
@@ -335,22 +368,25 @@ impl LibraryStore {
                 until: Instant::now() + connection::BUSY_TIMEOUT,
             };
             with_context(context, || migrate::migrate(&mut writer, &now()))?;
-            let writer = Queue::start(vec![Slot {
-                connection: Some(writer),
-                path: None,
-                role: Role::Writer,
-            }])?;
+            let writer = Queue::start(
+                vec![Slot { connection: Some(writer), path: None, role: Role::Writer }],
+                options.queue_capacity,
+            )?;
             Ok(Self::assemble(writer, None, "memory".to_owned(), options))
         })
         .await
     }
 
     fn open_file(path: &Path, options: StoreOptions) -> StoreResult<Self> {
-        if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        // One interpretation of the path for the probe, creation and every connection; a path
+        // SQLite cannot be given as a URI is refused before anything is created.
+        let path = &std::path::absolute(path)?;
+        let probe = files::probe_uri(path)?;
+        if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
         create_if_missing(path)?;
-        files::check_library(path)?;
+        files::check_library(&probe)?;
         let mut writer = open_connection(Some(path), Role::Writer)?;
         let journal_mode = prepare_file(&mut writer)?;
         let mut readers = Vec::with_capacity(options.readers);
@@ -361,12 +397,17 @@ impl LibraryStore {
                 role: Role::Reader,
             });
         }
-        let readers = if readers.is_empty() { None } else { Some(Queue::start(readers)?) };
-        let writer = Queue::start(vec![Slot {
-            connection: Some(writer),
-            path: Some(path.to_path_buf()),
-            role: Role::Writer,
-        }])?;
+        let capacity = options.queue_capacity;
+        let readers =
+            if readers.is_empty() { None } else { Some(Queue::start(readers, capacity)?) };
+        let writer = Queue::start(
+            vec![Slot {
+                connection: Some(writer),
+                path: Some(path.to_path_buf()),
+                role: Role::Writer,
+            }],
+            capacity,
+        )?;
         Ok(Self::assemble(writer, readers, journal_mode, options))
     }
 
@@ -401,7 +442,7 @@ impl LibraryStore {
     }
 
     /// Runs `task` in a write transaction, committed if it returns `Ok` and was not cancelled
-    /// before its commit point.
+    /// before its commit point (the commit itself can still fail).
     pub async fn write<R, F>(&self, task: F) -> StoreResult<R>
     where
         R: Send + 'static,
@@ -444,15 +485,21 @@ impl LibraryStore {
             });
             let _ = reply.send(result);
         });
-        let admission_wait = self.inner.options.admission_wait;
+        let start_until = Instant::now() + self.inner.options.admission_wait;
         let pending = Arc::new(Pending {
             state: Arc::clone(&state),
-            start_until: Instant::now() + admission_wait,
+            start_until,
             job: Mutex::new(Some(job)),
+            room: Mutex::new(None),
         });
-        queue.submit(Arc::clone(&pending))?;
+        if let Err(error) = queue.submit(Arc::clone(&pending)).await {
+            // Never queued: drop its closure here, contained like any other discarded one.
+            discard(pending.take_job());
+            return Err(error);
+        }
         let mut cancel = CancelOnDrop { pending, armed: true };
-        let result = match tokio::time::timeout(admission_wait, &mut receive).await {
+        let until = tokio::time::Instant::from_std(start_until);
+        let result = match tokio::time::timeout_at(until, &mut receive).await {
             Ok(result) => result,
             Err(_) if cancel.pending.cancel_if_queued() => {
                 cancel.armed = false;
@@ -499,4 +546,39 @@ fn prepare_file(writer: &mut Connection) -> StoreResult<String> {
 
 fn now() -> String {
     OffsetDateTime::now_utc().format(&Rfc3339).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pending(start_until: Instant) -> Arc<Pending> {
+        Arc::new(Pending {
+            state: Arc::new(AtomicU8::new(QUEUED)),
+            start_until,
+            job: Mutex::new(None),
+            room: Mutex::new(None),
+        })
+    }
+
+    /// Cells not yet taken by a worker, cancelled or not, are bounded by the capacity; taking one
+    /// makes room.
+    #[tokio::test]
+    async fn a_queue_holds_at_most_its_capacity_until_a_worker_takes_tasks() {
+        let (sender, receiver) = mpsc::channel();
+        let queue = Queue { sender, room: Arc::new(Semaphore::new(2)) };
+        let soon = || Instant::now() + Duration::from_millis(200);
+        for _ in 0..2 {
+            let queued = pending(soon());
+            queue.submit(Arc::clone(&queued)).await.unwrap();
+            assert!(queued.cancel_if_queued(), "cancelled cells keep their room");
+        }
+        assert!(matches!(queue.submit(pending(soon())).await, Err(StoreError::ConnectionTimeout)));
+
+        // What the worker does when it takes a cell.
+        let taken = receiver.recv().unwrap();
+        drop(taken.room.lock().unwrap().take());
+        queue.submit(pending(soon())).await.unwrap();
+        assert!(matches!(queue.submit(pending(soon())).await, Err(StoreError::ConnectionTimeout)));
+    }
 }

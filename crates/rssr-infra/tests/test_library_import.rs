@@ -94,7 +94,8 @@ const T: &str = "2026-03-01T10:00:00Z";
 
 /// A v0.1.x library at index migration `version`: two feeds (one removed, its entries kept), four
 /// entries (the last inserted one deleted again, so the AUTOINCREMENT mark is above the highest
-/// id), bodies for entries 1 and 2, one orphan body, settings and app state.
+/// id), bodies for entries 1 and 2, one orphan body, settings and app state. Inline entries without
+/// a body still carry a title hash, as v0.1.0–v0.1.6 wrote them.
 fn fixture(
     dir: &Path,
     version: usize,
@@ -130,7 +131,15 @@ fn fixture(
                     "INSERT INTO entries (id, feed_id, external_id, dedup_key, title, content_html,
                          content_hash, first_seen_at, is_read, created_at, updated_at, published_at)
                      VALUES (?1, ?2, ?1, ?1, ?3, ?4, ?5, ?6, ?7, ?6, ?6, ?6)",
-                    params![id, feed, title, body, body.as_ref().map(|_| "hash"), T, read],
+                    params![
+                        id,
+                        feed,
+                        title,
+                        body,
+                        if body.is_some() { "hash" } else { "title-hash" },
+                        T,
+                        read
+                    ],
                 )
                 .unwrap();
         } else {
@@ -265,9 +274,10 @@ async fn a_split_library_from_v0_1_7_is_imported() {
     assert_imported_library(&dir.target(), 0).await;
 }
 
-/// v0.1.6 kept five entry-list preferences in the settings; they move to app state.
+/// v0.1.6 kept five entry-list preferences in the settings and the last opened feed under its own
+/// key; both move to app state. Documents keep their time.
 #[tokio::test(flavor = "multi_thread")]
-async fn an_inline_library_from_v0_1_6_is_imported_with_its_list_preferences() {
+async fn an_inline_library_from_v0_1_6_is_imported_with_its_legacy_state() {
     let dir = TempDir::new("v016");
     let workspace = EntriesWorkspaceState {
         grouping_mode: EntryGroupingPreference::Source,
@@ -290,19 +300,101 @@ async fn an_inline_library_from_v0_1_6_is_imported_with_its_list_preferences() {
     settings.as_object_mut().unwrap().remove("entries_page_size");
     let source = fixture(&dir.0, 1, Endings::Crlf, &settings, None);
     assert!(source.content.is_none());
+    Connection::open(&source.index)
+        .unwrap()
+        .execute(
+            "INSERT INTO app_settings (key, value, updated_at) VALUES ('last_opened_feed_id', '1', ?1)",
+            [T],
+        )
+        .unwrap();
 
     let outcome = import_v01(&source, &dir.target()).unwrap();
     assert_eq!((outcome.layout, outcome.schema_version), (Layout::Inline, 1));
-    assert_eq!(outcome.moved_settings.len(), 5);
-    assert_eq!(outcome.orphan_bodies, 0);
+    assert_eq!(outcome.moved_legacy_keys.len(), 6);
+    assert!(outcome.moved_legacy_keys.iter().any(|key| key == "last_opened_feed_id"));
+    assert_eq!((outcome.bodies, outcome.orphan_bodies), (2, 0), "title hashes are not bodies");
     let library = Library::over(LibraryStore::open(dir.target()).await.unwrap());
-    assert_eq!(library.app_state.load().await.unwrap().entries_workspace, workspace);
+    let state = library.app_state.load().await.unwrap();
+    assert_eq!(state.entries_workspace, workspace);
+    assert_eq!(state.last_opened_feed_id, Some(1));
+    assert_eq!(
+        library
+            .text("SELECT updated_at FROM app_settings WHERE key = 'user_settings'")
+            .await
+            .as_deref(),
+        Some(T)
+    );
     let imported = library.settings.load().await.unwrap();
     assert_eq!(imported.custom_css, "body { color: red }");
     assert_eq!(imported.entries_page_size, UserSettings::default().entries_page_size);
     let body = library.entries.get_content(1).await.unwrap().expect("inline body moved");
     assert_eq!(body.content_html.as_deref(), Some("<p>body 1</p>"));
     assert_eq!(library.scalar("SELECT COUNT(*) FROM entry_contents").await, 2);
+    assert_eq!(library.scalar("SELECT COUNT(*) FROM entries WHERE has_content = 1").await, 2);
+}
+
+/// App state written by v0.1.7+ wins over a stale v0.1.6 key that was never removed.
+#[tokio::test(flavor = "multi_thread")]
+async fn app_state_wins_over_the_legacy_last_opened_key() {
+    let dir = TempDir::new("stale-key");
+    let app_state = json!({ "last_opened_feed_id": 1 });
+    let source = fixture(&dir.0, 7, Endings::Lf, &current_settings(), Some(&app_state));
+    Connection::open(&source.index)
+        .unwrap()
+        .execute(
+            "INSERT INTO app_settings (key, value, updated_at) VALUES ('last_opened_feed_id', '2', ?1)",
+            [T],
+        )
+        .unwrap();
+    let outcome = import_v01(&source, &dir.target()).unwrap();
+    assert!(outcome.moved_legacy_keys.is_empty());
+    let library = Library::over(LibraryStore::open(dir.target()).await.unwrap());
+    assert_eq!(library.app_state.load().await.unwrap().last_opened_feed_id, Some(1));
+    assert_eq!(
+        library
+            .text("SELECT updated_at FROM app_settings WHERE key = 'app_state_v2'")
+            .await
+            .as_deref(),
+        Some(T)
+    );
+}
+
+/// A split library whose body database is missing imports only when no entry had a body.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_missing_body_database_is_refused_when_bodies_existed() {
+    let dir = TempDir::new("no-content");
+    let mut source = fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
+    source.content = None;
+    refused(&source, &dir.target(), "找不到正文库");
+
+    Connection::open(&source.index)
+        .unwrap()
+        .execute("UPDATE entries SET has_content = 0", [])
+        .unwrap();
+    let outcome = import_v01(&source, &dir.target()).unwrap();
+    assert_eq!((outcome.entries, outcome.bodies, outcome.orphan_bodies), (3, 0, 0));
+    let library = Library::over(LibraryStore::open(dir.target()).await.unwrap());
+    assert_eq!(library.scalar("SELECT COUNT(*) FROM entry_contents").await, 0);
+}
+
+/// Two imports into one target at once: one publishes, the other finds the target taken; the
+/// published library is the complete one.
+#[test]
+fn concurrent_imports_publish_one_complete_library() {
+    let dir = TempDir::new("concurrent-import");
+    let source = fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
+    let results: Vec<_> = std::thread::scope(|scope| {
+        let workers: Vec<_> =
+            (0..4).map(|_| scope.spawn(|| import_v01(&source, &dir.target()))).collect();
+        workers.into_iter().map(|worker| worker.join().unwrap()).collect()
+    });
+    let published: Vec<_> = results.iter().filter_map(|result| result.as_ref().ok()).collect();
+    assert_eq!(published.len(), 1, "{results:?}");
+    assert_eq!(published[0].entries, 3);
+    for error in results.iter().filter_map(|result| result.as_ref().err()) {
+        assert!(error.to_string().contains("目标资料库已存在"), "{error}");
+    }
+    assert_eq!(scratch_files(&dir.0), Vec::<String>::new());
 }
 
 /// Data still in the WAL of an open v0.1 process is part of the snapshot.
@@ -323,16 +415,22 @@ async fn uncheckpointed_writes_are_imported() {
     drop(writer);
 }
 
+/// Files next to the library other than the library and its creation lock.
+fn scratch_files(dir: &Path) -> Vec<String> {
+    std::fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with("library.sqlite3."))
+        .filter(|name| name != "library.sqlite3.create-lock")
+        .collect()
+}
+
 fn refused(source: &V01Library, target: &Path, needle: &str) {
     let error = import_v01(source, target).expect_err("import refused").to_string();
     assert!(error.contains(needle), "{error}");
     assert!(!target.exists(), "nothing published");
-    let leftovers: Vec<_> = std::fs::read_dir(target.parent().unwrap())
-        .unwrap()
-        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-        .filter(|name| name.starts_with("library.sqlite3"))
-        .collect();
-    assert!(leftovers.is_empty(), "temporary files removed: {leftovers:?}");
+    let leftovers = scratch_files(target.parent().unwrap());
+    assert!(leftovers.is_empty(), "scratch files removed: {leftovers:?}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -394,4 +492,61 @@ fn a_data_directory_without_a_v01_index_has_nothing_to_import() {
     std::fs::write(dir.0.join("rss-reader.db"), b"").unwrap();
     let found = V01Library::find(&dir.0).unwrap();
     assert!(found.content.is_none());
+}
+
+/// Opening a data directory that holds only a v0.1 library imports it once; later opens use the
+/// library.
+#[tokio::test(flavor = "multi_thread")]
+async fn opening_a_data_directory_imports_its_v01_library_once() {
+    use rssr_infra::store::local::open_library_in;
+    let dir = TempDir::new("open-imports");
+    fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
+    let first = open_library_in(&dir.0, &dir.0, Default::default()).await.unwrap();
+    assert_eq!(first.imported.as_ref().map(|outcome| outcome.feeds), Some(2));
+    assert_eq!(first.path, dir.target());
+    drop(first);
+    let second = open_library_in(&dir.0, &dir.0, Default::default()).await.unwrap();
+    assert!(second.imported.is_none());
+    assert_imported_library(&dir.target(), 3).await;
+}
+
+/// A v0.1 library that cannot be imported fails the open and leaves no empty library that would
+/// hide the old data.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_import_does_not_create_an_empty_library() {
+    use rssr_infra::store::local::open_library_in;
+    let dir = TempDir::new("open-fails");
+    fixture(&dir.0, 9, Endings::Lf, &current_settings(), None);
+    assert!(open_library_in(&dir.0, &dir.0, Default::default()).await.is_err());
+    assert!(!dir.target().exists());
+}
+
+/// Two processes starting together import once and both open the published library.
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_first_opens_import_once() {
+    use rssr_infra::store::local::open_library_in;
+    let dir = TempDir::new("open-concurrent");
+    fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
+    let (a, b) = tokio::join!(
+        open_library_in(&dir.0, &dir.0, Default::default()),
+        open_library_in(&dir.0, &dir.0, Default::default())
+    );
+    let (a, b) = (a.unwrap(), b.unwrap());
+    assert_eq!(usize::from(a.imported.is_some()) + usize::from(b.imported.is_some()), 1);
+    let leftovers = scratch_files(&dir.0);
+    assert!(leftovers.iter().all(|name| name.ends_with("-wal") || name.ends_with("-shm")));
+    drop((a, b));
+    assert_imported_library(&dir.target(), 3).await;
+}
+
+/// Without a v0.1 library the first open creates a new, empty library.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_fresh_data_directory_gets_a_new_library() {
+    use rssr_infra::store::local::open_library_in;
+    let dir = TempDir::new("open-fresh");
+    let opened = open_library_in(&dir.0.join("nested"), &dir.0.join("nested"), Default::default())
+        .await
+        .unwrap();
+    assert!(opened.imported.is_none());
+    assert!(dir.0.join("nested").join("library.sqlite3").is_file());
 }

@@ -9,17 +9,21 @@ use rssr_application::{
 };
 use rssr_domain::{Feed, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
-    application_adapters::cleanup_pending_entry_content,
-    composition::compose_native_sqlite_use_cases,
+    composition::compose_library_use_cases,
     config_sync::webdav::WebDavConfigSync,
-    db::{sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend},
+    store::{
+        StoreOptions,
+        local::{self, open_library_in},
+    },
 };
 
 #[derive(Parser, Debug)]
 #[command(name = "rssr", version = cli_version(), about = "RSS-Reader command-line interface")]
 struct Cli {
-    #[arg(long)]
-    database_url: Option<String>,
+    /// Data directory holding `library.sqlite3` (and, before the first open, a v0.1.x library to
+    /// import). Defaults to this installation's data directory.
+    #[arg(long, env = "RSSR_DATA_DIR", value_name = "DIR")]
+    data_dir: Option<PathBuf>,
 
     #[command(subcommand)]
     command: Command,
@@ -185,7 +189,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter("info").with_writer(std::io::stderr).init();
 
     let cli = Cli::parse();
-    let services = CliServices::new(cli.database_url.as_deref()).await?;
+    let services = CliServices::new(cli.data_dir).await?;
 
     match cli.command {
         Command::MarkRead(args) => {
@@ -314,37 +318,23 @@ struct CliServices {
 }
 
 impl CliServices {
-    async fn new(database_url: Option<&str>) -> anyhow::Result<Self> {
-        let native_backend = match database_url {
-            Some(database_url) => NativeSqliteBackend::new(database_url),
-            None => {
-                NativeSqliteBackend::from_default_location().context("确定本地数据库位置失败")?
-            }
+    async fn new(data_dir: Option<PathBuf>) -> anyhow::Result<Self> {
+        // An explicit data directory is also where a v0.1.x library is imported from.
+        let (data_dir, legacy_dir) = match data_dir {
+            Some(dir) => (dir.clone(), dir),
+            None => (
+                local::local_data_dir().context("确定本地数据目录失败")?,
+                local::legacy_data_dir().context("确定本地数据目录失败")?,
+            ),
         };
-        tracing::info!(
-            backend = native_backend.label(),
-            database = %native_backend.database_label(),
-            content_database = %native_backend.content_database_label().unwrap_or_else(|_| "<unavailable>".to_string()),
-            "初始化 CLI 本地数据库"
-        );
-        let index_pool = native_backend.connect().await.context("连接本地索引数据库失败")?;
-        native_backend.migrate(&index_pool).await.context("执行索引数据库迁移失败")?;
-        let content_pool =
-            native_backend.connect_content().await.context("连接本地正文数据库失败")?;
-        native_backend.migrate_content(&content_pool).await.context("执行正文数据库迁移失败")?;
-
-        match cleanup_pending_entry_content(&index_pool, &content_pool).await {
-            Ok(removed_rows) if removed_rows > 0 => {
-                tracing::info!(removed_rows, "已清理待回收正文缓存");
-            }
-            Ok(_) => {}
-            Err(error) => {
-                tracing::warn!(%error, "正文缓存清理失败，将在下次启动重试");
-            }
+        tracing::info!(data_dir = %data_dir.display(), "初始化 CLI 本地资料库");
+        let opened = open_library_in(&data_dir, &legacy_dir, StoreOptions::default())
+            .await
+            .context("打开本地资料库失败")?;
+        if let Some(imported) = &opened.imported {
+            tracing::info!(?imported, "已从 v0.1 数据导入资料库");
         }
-
-        let use_cases = compose_native_sqlite_use_cases(index_pool, content_pool).use_cases;
-
+        let use_cases = compose_library_use_cases(opened.store).use_cases;
         Ok(Self { use_cases })
     }
 

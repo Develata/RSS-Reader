@@ -1,15 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
-use rssr_application::RefreshService;
-use rssr_domain::{EntryQuery, FeedRepository, NewFeedSubscription};
 use rssr_infra::{
-    application_adapters::{InfraFeedRefreshSource, SqliteRefreshStore},
-    db::{
-        entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
-        sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
-    },
     fetch::{FetchClient, FetchRequest, FetchResult},
     subscription_probe::MAX_SUBSCRIPTION_BYTES,
 };
@@ -132,46 +125,4 @@ async fn feed_body_stall_still_obeys_the_30_second_request_timeout() {
             .is_some_and(reqwest::Error::is_timeout)),
         "{error:#}"
     );
-}
-
-#[tokio::test]
-async fn oversized_refresh_keeps_old_articles_counts_and_success_history() {
-    let xml = br#"<rss version="2.0"><channel><title>Test</title><description>Test</description><item><guid>entry</guid><title>Article</title><description>body</description></item></channel></rss>"#;
-    let (url, server) = server(
-        vec![
-            response("Content-Type: application/rss+xml\r\n", xml),
-            response(&format!("Content-Length: {}\r\n", MAX_SUBSCRIPTION_BYTES + 1), &[]),
-        ],
-        false,
-    )
-    .await;
-    let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.unwrap();
-    migrate(&pool).await.unwrap();
-    let feeds = Arc::new(SqliteFeedRepository::new(pool.clone()));
-    let entries = Arc::new(SqliteEntryRepository::new(pool));
-    let feed = feeds
-        .upsert_subscription(&NewFeedSubscription {
-            url: url.parse().unwrap(),
-            title: None,
-            source_title: None,
-            site_url: None,
-            folder: None,
-        })
-        .await
-        .unwrap();
-    let service = RefreshService::new(
-        Arc::new(InfraFeedRefreshSource::default()),
-        Arc::new(SqliteRefreshStore::new(feeds.clone(), entries.clone())),
-    );
-    assert_eq!(service.refresh_feed(feed.id).await.unwrap().inserted_count(), 1);
-    let before = entries.get_content(1).await.unwrap().unwrap();
-    let success_at = feeds.get_feed(feed.id).await.unwrap().unwrap().last_success_at;
-    let outcome = service.refresh_feed(feed.id).await.unwrap();
-    assert_eq!(outcome.inserted_count(), 0);
-    assert!(outcome.failure_message().unwrap().contains("8 MiB"));
-    assert_eq!(entries.get_content(1).await.unwrap().unwrap(), before);
-    assert_eq!(entries.list_entries(&EntryQuery::default()).await.unwrap().len(), 1);
-    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
-    assert_eq!(feeds.get_feed(feed.id).await.unwrap().unwrap().last_success_at, success_at);
-    server.await.unwrap();
 }

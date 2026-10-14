@@ -16,7 +16,7 @@
 
 - 不在这里渲染 UI
 - 不在这里写桌面端 / Android 专用逻辑
-- 不在这里引入 `sqlx` 或原生 SQLite 路径
+- 不在这里引入原生 SQLite（`rssr_infra::store`）路径
 - 不把 `rssr-web` 的服务端认证/代理职责混进来
 
 ## 修改约束

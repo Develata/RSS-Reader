@@ -102,7 +102,7 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 - [crates/rssr-app/src/bootstrap/web/AGENTS.md](../crates/rssr-app/src/bootstrap/web/AGENTS.md)
 - [crates/rssr-app/src/pages/AGENTS.md](../crates/rssr-app/src/pages/AGENTS.md)
 - [crates/rssr-web/src/auth/AGENTS.md](../crates/rssr-web/src/auth/AGENTS.md)
-- [crates/rssr-infra/src/db/AGENTS.md](../crates/rssr-infra/src/db/AGENTS.md)
+- [crates/rssr-infra/src/store/AGENTS.md](../crates/rssr-infra/src/store/AGENTS.md)
 - [crates/rssr-application/src/import_export_service/AGENTS.md](../crates/rssr-application/src/import_export_service/AGENTS.md)
 
 它们的定位是：

@@ -7,7 +7,7 @@
 - Rust 稳定版（Edition 2024）
 - Dioxus / dioxus-router 0.7.9
 - tokio
-- sqlx
+- rusqlite（捆绑 SQLite）
 - reqwest
 - feed-rs
 - quick-xml
@@ -53,7 +53,7 @@ specs/
 ## 当前架构与入口
 
 - 六个 crate：UI、CLI 和 Web 部署服务为入口；application 统一用例语义，domain 定义模型与端口，infra 实现平台适配。
-- 原生端使用 SQLite 索引库和正文库，迁移分别在 `migrations/`、`migrations_content/`。
+- 原生端使用单个 SQLite 资料库 `library.sqlite3`（rusqlite），实现与基线 schema 在 `crates/rssr-infra/src/store/`；根目录的 `migrations/`、`migrations_content/` 冻结为 v0.1.x 历史，只供旧库导入核对。
 - Web 使用 infra 的 `BrowserStore`：`localStorage` 分片、版本化提交和 Web Locks 协调写入；不使用 SQLite。
 - 页面通过 facade/session 派发 `UiCommand`；runtime 调用 application 用例或 host capability，页面不直接执行 I/O。
 - 用户操作见 `docs/user-guide.md`，边界见 `docs/design/functional-design-philosophy.md`，UI 契约见 `docs/design/frontend-command-reference.md` 与 `docs/design/theme-author-selector-reference.md`。

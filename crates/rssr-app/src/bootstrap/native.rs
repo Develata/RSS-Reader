@@ -14,17 +14,10 @@ use rssr_application::{
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_domain::UserSettings;
 use rssr_infra::{
-    application_adapters::cleanup_pending_entry_content,
-    composition::compose_native_sqlite_use_cases,
+    composition::compose_library_use_cases,
     config_sync::webdav::WebDavConfigSync,
-    db::{
-        entry_repository::{
-            LocalizedEntryUpdate, SqliteEntryRepository, compute_entry_content_hash,
-        },
-        sqlite_native::NativeSqliteBackend,
-        storage_backend::StorageBackend,
-    },
     fetch::BodyAssetLocalizer,
+    store::{LibraryEntries, LocalizedBody, compute_entry_content_hash, local::open_local_library},
 };
 use time::OffsetDateTime;
 use tokio::sync::OnceCell;
@@ -71,7 +64,7 @@ struct RemoteConfigCapability {
 
 #[derive(Clone)]
 struct ImageLocalizationWorker {
-    entry_repository: Arc<SqliteEntryRepository>,
+    entry_repository: Arc<LibraryEntries>,
     background_asset_localizer: BodyAssetLocalizer,
     reader_asset_localizer: BodyAssetLocalizer,
     background: Arc<BackgroundLocalizationQueue>,
@@ -109,38 +102,15 @@ impl AppServices {
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES
             .get_or_try_init(|| async {
-                let native_backend = NativeSqliteBackend::from_default_location()
-                    .context("确定本地数据库位置失败")?;
-                tracing::info!(
-                    backend = native_backend.label(),
-                    database = %native_backend.database_label(),
-                    content_database = %native_backend.content_database_label().unwrap_or_else(|_| "<unavailable>".to_string()),
-                    "初始化桌面端本地数据库"
-                );
-                let index_pool = native_backend.connect().await.context("连接本地索引数据库失败")?;
-                native_backend.migrate(&index_pool).await.context("执行索引数据库迁移失败")?;
-                let content_pool =
-                    native_backend.connect_content().await.context("连接本地正文数据库失败")?;
-                native_backend
-                    .migrate_content(&content_pool)
-                    .await
-                    .context("执行正文数据库迁移失败")?;
-
-                match cleanup_pending_entry_content(&index_pool, &content_pool).await {
-                    Ok(removed_rows) if removed_rows > 0 => {
-                        tracing::info!(removed_rows, "已清理待回收正文缓存");
-                    }
-                    Ok(_) => {}
-                    Err(error) => {
-                        tracing::warn!(%error, "正文缓存清理失败，将在下次启动重试");
-                    }
+                let opened = open_local_library().await.context("打开本地资料库失败")?;
+                tracing::info!(library = %opened.path.display(), "本地资料库已打开");
+                if let Some(imported) = &opened.imported {
+                    tracing::info!(?imported, "已从 v0.1 数据导入资料库");
                 }
 
-                // 实测一次 journal 模式再决定并发度：WAL 没启用成功时退回串行，
+                // 实测的 journal 模式决定并发度：WAL 没启用成功时退回串行，
                 // 否则并发写者会互相干等并把前台查询一起卡住。
-                let journal_mode = rssr_infra::db::effective_journal_mode(&index_pool)
-                    .await
-                    .unwrap_or_else(|_| "unknown".to_string());
+                let journal_mode = opened.store.journal_mode().to_owned();
                 let refresh_concurrency = if journal_mode == "wal" {
                     DEFAULT_REFRESH_CONCURRENCY
                 } else {
@@ -152,13 +122,11 @@ impl AppServices {
                 };
                 tracing::info!(journal_mode = %journal_mode, refresh_concurrency, "本地数据库就绪");
 
-                let composition = compose_native_sqlite_use_cases(index_pool, content_pool);
+                let composition = compose_library_use_cases(opened.store);
 
                 Ok(Arc::new(Self {
                     use_cases: composition.use_cases,
-                    image_localization_worker: ImageLocalizationWorker::new(
-                        composition.entry_repository,
-                    ),
+                    image_localization_worker: ImageLocalizationWorker::new(composition.entries),
                     auto_refresh_started: AtomicBool::new(false),
                     refresh_flight: super::refresh_flight::RefreshFlight::default(),
                     refresh_concurrency,
@@ -398,7 +366,7 @@ impl ImageLocalizationWorker {
     /// 同时进行后台本地化的订阅数。
     const MAX_CONCURRENT_FEEDS: usize = 2;
 
-    fn new(entry_repository: Arc<SqliteEntryRepository>) -> Self {
+    fn new(entry_repository: Arc<LibraryEntries>) -> Self {
         Self {
             entry_repository,
             background_asset_localizer: BodyAssetLocalizer::new(),
@@ -463,7 +431,7 @@ impl ImageLocalizationWorker {
             return Ok(false);
         }
 
-        let Some(original_html) = entry.content_html.clone() else {
+        let Some(original_html) = entry.content_html.as_deref().map(Arc::<str>::from) else {
             return Ok(false);
         };
 
@@ -497,14 +465,14 @@ impl ImageLocalizationWorker {
 
         let updated = self
             .entry_repository
-            .update_localized_html_if_hash_matches_for_generation(
+            .update_localized_body(
                 feed_id,
                 generation,
-                &LocalizedEntryUpdate {
-                    dedup_key: &entry.dedup_key,
-                    expected_content_hash: expected_content_hash.as_deref(),
-                    base_html: &original_html,
-                    localized_html: &localized_html,
+                LocalizedBody {
+                    dedup_key: entry.dedup_key,
+                    expected_content_hash,
+                    base_html: original_html,
+                    localized_html,
                 },
             )
             .await
@@ -520,7 +488,7 @@ impl ImageLocalizationWorker {
 /// 正文已是这份源正文的派生版本（源未变的刷新会保留它，见审计 C1）而跳过的，以及无图、正文超出
 /// 预算等根本没有发请求的。图片持续失败的文章每轮仍会占用尝试次数，直到源正文变化。
 async fn localize_feed_entries(
-    entry_repository: &SqliteEntryRepository,
+    entry_repository: &LibraryEntries,
     localizer: &BodyAssetLocalizer,
     feed_id: i64,
     entries: Vec<RefreshLocalizedEntry>,
@@ -531,7 +499,8 @@ async fn localize_feed_entries(
         if attempts >= max_attempts {
             break;
         }
-        let original_html = entry.content_html;
+        // Shared with the store calls below instead of copied into them.
+        let original_html: Arc<str> = Arc::from(entry.content_html);
         let Some(expected_content_hash) = compute_entry_content_hash(
             Some(&original_html),
             entry.content_text.as_deref(),
@@ -541,7 +510,12 @@ async fn localize_feed_entries(
             continue;
         };
         match entry_repository
-            .has_derived_body(feed_id, &entry.dedup_key, &expected_content_hash, &original_html)
+            .has_derived_body(
+                feed_id,
+                entry.dedup_key.clone(),
+                expected_content_hash.clone(),
+                Arc::clone(&original_html),
+            )
             .await
         {
             Ok(true) => continue,
@@ -587,20 +561,13 @@ async fn localize_feed_entries(
             }
         };
 
-        let update = LocalizedEntryUpdate {
-            dedup_key: &entry.dedup_key,
-            expected_content_hash: Some(&expected_content_hash),
-            base_html: &original_html,
-            localized_html: &localized_html,
+        let update = LocalizedBody {
+            dedup_key: entry.dedup_key.clone(),
+            expected_content_hash: Some(expected_content_hash),
+            base_html: original_html,
+            localized_html,
         };
-        match entry_repository
-            .update_localized_html_if_hash_matches_for_generation(
-                feed_id,
-                entry.generation,
-                &update,
-            )
-            .await
-        {
+        match entry_repository.update_localized_body(feed_id, entry.generation, update).await {
             Ok(true) => {}
             Ok(false) => {
                 tracing::debug!(
@@ -637,17 +604,54 @@ mod tests {
         thread,
     };
 
-    use rssr_domain::{FeedRepository, NewFeedSubscription};
-    use rssr_infra::{
-        db::{
-            entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository,
-            migrate, sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
-        },
-        parser::feed_parser::ParsedEntry,
+    use rssr_application::{
+        FeedRefreshUpdate, ParsedEntryData, ParsedFeedUpdate, RefreshCommit, RefreshStorePort,
     };
+    use rssr_domain::{FeedRepository, NewFeedSubscription};
+    use rssr_infra::store::{LibraryEntries, LibraryFeeds, LibraryRefreshStore, LibraryStore};
     use url::Url;
 
     use super::{BodyAssetLocalizer, ImageLocalizationWorker, localize_feed_entries};
+
+    /// An in-memory library with one subscription and one entry written by a refresh.
+    async fn library_with_entry(url: Url, html: &str) -> (Arc<LibraryEntries>, i64) {
+        let store = LibraryStore::open_in_memory().await.expect("open library");
+        let feed = LibraryFeeds::new(store.clone())
+            .upsert_subscription(&NewFeedSubscription {
+                site_url: None,
+                url: Url::parse("https://example.com/feed.xml").expect("feed url"),
+                title: Some("Example".to_string()),
+                source_title: None,
+                folder: None,
+            })
+            .await
+            .expect("create feed");
+        let refresh = LibraryRefreshStore::new(store.clone());
+        let target = refresh.get_target(feed.id).await.expect("target").expect("active feed");
+        let entry = ParsedEntryData {
+            external_id: "entry-1".to_string(),
+            dedup_key: "entry-1".to_string(),
+            url: Some(url),
+            title: "Entry".to_string(),
+            author: None,
+            summary: Some("summary".to_string()),
+            content_html: Some(html.to_string()),
+            content_text: None,
+            published_at: None,
+            updated_at_source: None,
+        };
+        let update = FeedRefreshUpdate {
+            metadata: Default::default(),
+            feed: ParsedFeedUpdate {
+                title: None,
+                site_url: None,
+                description: None,
+                entries: vec![entry],
+            },
+        };
+        refresh.commit(&target, RefreshCommit::Updated { update }).await.expect("insert entry");
+        (Arc::new(LibraryEntries::new(store)), feed.id)
+    }
 
     #[tokio::test]
     async fn localize_entry_on_demand_rewrites_current_entry_html() {
@@ -668,42 +672,9 @@ mod tests {
             stream.flush().expect("flush response");
         });
 
-        let backend = NativeSqliteBackend::new("sqlite::memory:");
-        let pool = backend.connect().await.expect("connect sqlite memory");
-        migrate(&pool).await.expect("migrate sqlite");
-
-        let feed_repository = Arc::new(SqliteFeedRepository::new(pool.clone()));
-        let entry_repository = Arc::new(SqliteEntryRepository::new(pool.clone()));
-        let feed = feed_repository
-            .upsert_subscription(&NewFeedSubscription {
-                site_url: None,
-                url: Url::parse("https://example.com/feed.xml").expect("feed url"),
-                title: Some("Example".to_string()),
-                source_title: None,
-                folder: None,
-            })
-            .await
-            .expect("create feed");
-
         let article_url = Url::parse(&format!("http://{addr}/article")).expect("article url");
-        entry_repository
-            .upsert_entries(
-                feed.id,
-                &[ParsedEntry {
-                    external_id: "entry-1".to_string(),
-                    dedup_key: "entry-1".to_string(),
-                    url: Some(article_url.clone()),
-                    title: "Entry".to_string(),
-                    author: None,
-                    summary: Some("summary".to_string()),
-                    content_html: Some(r#"<p><img src="/hero.png" alt="hero"></p>"#.to_string()),
-                    content_text: Some("summary".to_string()),
-                    published_at: None,
-                    updated_at_source: None,
-                }],
-            )
-            .await
-            .expect("insert entry");
+        let (entry_repository, _) =
+            library_with_entry(article_url, r#"<p><img src="/hero.png" alt="hero"></p>"#).await;
 
         let worker = ImageLocalizationWorker::new(entry_repository.clone());
 
@@ -729,9 +700,8 @@ mod tests {
     async fn background_localization_stops_after_its_attempt_budget() {
         let (addr, requests, server) = forbidden_image_server().await;
 
-        let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.expect("connect");
-        migrate(&pool).await.expect("migrate sqlite");
-        let entry_repository = SqliteEntryRepository::new(pool);
+        let store = LibraryStore::open_in_memory().await.expect("open library");
+        let entry_repository = LibraryEntries::new(store);
         let article = Url::parse(&format!("http://{addr}/article")).expect("article url");
         let entries = (0..13)
             .map(|index| rssr_application::RefreshLocalizedEntry {
@@ -762,40 +732,9 @@ mod tests {
     #[tokio::test]
     async fn failed_background_localization_leaves_the_source_body_for_a_retry() {
         let (addr, requests, server) = forbidden_image_server().await;
-        let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.expect("connect");
-        migrate(&pool).await.expect("migrate sqlite");
-        let feed_repository = SqliteFeedRepository::new(pool.clone());
-        let entry_repository = SqliteEntryRepository::new(pool);
-        let feed = feed_repository
-            .upsert_subscription(&NewFeedSubscription {
-                site_url: None,
-                url: Url::parse("https://example.com/feed.xml").expect("feed url"),
-                title: None,
-                source_title: None,
-                folder: None,
-            })
-            .await
-            .expect("create feed");
         let article = Url::parse(&format!("http://{addr}/posts/1")).expect("article url");
         let source_html = r#"<p><img src="/image.png"></p>"#;
-        entry_repository
-            .upsert_entries(
-                feed.id,
-                &[ParsedEntry {
-                    external_id: "entry-1".to_string(),
-                    dedup_key: "entry-1".to_string(),
-                    url: Some(article.clone()),
-                    title: "Entry".to_string(),
-                    author: None,
-                    summary: None,
-                    content_html: Some(source_html.to_string()),
-                    content_text: None,
-                    published_at: None,
-                    updated_at_source: None,
-                }],
-            )
-            .await
-            .expect("insert entry");
+        let (entry_repository, feed_id) = library_with_entry(article.clone(), source_html).await;
         let (_, generation) =
             entry_repository.active_entry_generation(1).await.expect("generation").expect("active");
         let entry = rssr_application::RefreshLocalizedEntry {
@@ -810,7 +749,7 @@ mod tests {
         let attempts = localize_feed_entries(
             &entry_repository,
             &BodyAssetLocalizer::new(),
-            feed.id,
+            feed_id,
             vec![entry],
             5,
         )

@@ -5,6 +5,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+#[path = "support/v01_schema.rs"]
+mod v01_schema;
+
 use rssr_infra::store::{LibraryStore, StoreError, StoreOptions};
 
 struct TempDir(PathBuf);
@@ -32,6 +35,7 @@ fn quick() -> StoreOptions {
     StoreOptions {
         readers: 2,
         admission_wait: Duration::from_millis(200),
+        queue_capacity: 256,
         read_deadline: Duration::from_secs(5),
         write_deadline: Duration::from_secs(5),
     }
@@ -290,6 +294,110 @@ async fn a_task_that_times_out_in_the_queue_never_runs() {
     // A later task on the same writer runs after the cancelled one would have.
     insert_feed(&store, "https://after.test").await.unwrap();
     assert!(!ran.load(Ordering::SeqCst), "the timed-out task never started");
+}
+
+/// Polls `future` once without a waker that does anything: the task is submitted, then its caller
+/// stops looking.
+fn submit_and_look_away<F: std::future::Future>(future: std::pin::Pin<&mut F>) {
+    let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+    assert!(future.poll(&mut context).is_pending());
+}
+
+/// Reports, when dropped, the name of the thread that dropped it.
+struct DropProbe(mpsc::Sender<Option<String>>);
+
+impl Drop for DropProbe {
+    fn drop(&mut self) {
+        let _ = self.0.send(std::thread::current().name().map(str::to_owned));
+    }
+}
+
+/// Holds the writer until released; returns the release handle and the occupying task.
+async fn occupy_writer(
+    store: &LibraryStore,
+) -> (mpsc::Sender<()>, tokio::task::JoinHandle<Result<(), StoreError>>) {
+    let (started, wait_started) = mpsc::channel();
+    let (release, wait_release) = mpsc::channel::<()>();
+    let busy = store.clone();
+    let occupying = tokio::spawn(async move {
+        busy.write(move |_| {
+            started.send(()).unwrap();
+            wait_release.recv_timeout(Duration::from_secs(10)).unwrap();
+            Ok(())
+        })
+        .await
+    });
+    wait_for(wait_started).await;
+    (release, occupying)
+}
+
+/// A task the worker takes after its start time never runs, even while its caller has not looked
+/// at the clock yet: the worker itself cancels it (and drops what it captured).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_task_taken_after_its_start_time_never_runs() {
+    let dir = TempDir::new("taken-late");
+    let store = LibraryStore::open_with(dir.library(), quick()).await.unwrap();
+    let (release, occupying) = occupy_writer(&store).await;
+    let ran = Arc::new(AtomicBool::new(false));
+    let marker = Arc::clone(&ran);
+    let (dropped, wait_dropped) = mpsc::channel();
+    let probe = DropProbe(dropped);
+    let mut queued = std::pin::pin!(store.write(move |_| {
+        let _probe = &probe;
+        marker.store(true, Ordering::SeqCst);
+        Ok(())
+    }));
+    submit_and_look_away(queued.as_mut());
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    release.send(()).unwrap();
+    occupying.await.unwrap().unwrap();
+
+    let dropper = wait_dropped.recv_timeout(Duration::from_secs(10)).expect("closure dropped");
+    assert_eq!(dropper.as_deref(), Some("rssr-library"), "the worker cancelled it");
+    assert!(matches!(queued.await, Err(StoreError::ConnectionTimeout)));
+    assert!(!ran.load(Ordering::SeqCst));
+    insert_feed(&store, "https://after-late.test").await.unwrap();
+}
+
+/// A panic while dropping what a cancelled task captured does not stop the worker.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_panic_while_dropping_a_cancelled_task_is_contained() {
+    struct PanicOnDrop;
+    impl Drop for PanicOnDrop {
+        fn drop(&mut self) {
+            panic!("dropping a cancelled task's data");
+        }
+    }
+
+    let dir = TempDir::new("panic-drop");
+    let store = LibraryStore::open_with(dir.library(), quick()).await.unwrap();
+    let (release, occupying) = occupy_writer(&store).await;
+    let doomed = PanicOnDrop;
+    let mut queued = std::pin::pin!(store.write(move |_| {
+        let _doomed = &doomed;
+        Ok(())
+    }));
+    submit_and_look_away(queued.as_mut());
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    release.send(()).unwrap();
+    occupying.await.unwrap().unwrap();
+    assert!(matches!(queued.await, Err(StoreError::ConnectionTimeout)));
+    // The same writer still serves tasks.
+    insert_feed(&store, "https://after-panic.test").await.unwrap();
+
+    // The caller's own cancellation contains it too.
+    let (release, occupying) = occupy_writer(&store).await;
+    let doomed = PanicOnDrop;
+    let cancelled = store
+        .write(move |_| {
+            let _doomed = &doomed;
+            Ok(())
+        })
+        .await;
+    assert!(matches!(cancelled, Err(StoreError::ConnectionTimeout)));
+    release.send(()).unwrap();
+    occupying.await.unwrap().unwrap();
+    insert_feed(&store, "https://after-caller-panic.test").await.unwrap();
 }
 
 /// A caller that goes away interrupts its running statement long before the deadline.
@@ -574,11 +682,13 @@ async fn a_file_that_is_not_sqlite_is_refused_untouched() {
 async fn a_v01_database_is_refused_and_left_untouched() {
     let dir = TempDir::new("v01");
     let path = dir.0.join("rss-reader.db");
-    let pool = rssr_infra::db::create_sqlite_pool(&format!("sqlite://{}?mode=rwc", path.display()))
-        .await
-        .unwrap();
-    rssr_infra::db::migrate(&pool).await.unwrap();
-    pool.close().await;
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        let mode: String =
+            conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0)).unwrap();
+        assert_eq!(mode, "wal", "v0.1.x databases ran in WAL mode");
+        v01_schema::apply_index(&conn, 7);
+    }
     let before = std::fs::read(&path).unwrap();
 
     let refused = LibraryStore::open(&path).await;
@@ -640,4 +750,19 @@ async fn opening_again_keeps_this_process_file_locks() {
     let again = LibraryStore::open(dir.library()).await.unwrap();
     assert!(another_process_sees_a_lock(&dir.library()), "opening again dropped the locks");
     drop((store, again));
+}
+
+/// The project's SQLite baseline is 3.51.3: earlier versions (except the backports 3.44.6 and
+/// 3.50.7) have the WAL-reset bug, which can corrupt a database when two connections to the same
+/// file write or checkpoint at the same moment (https://sqlite.org/wal.html#walreset). The GUI,
+/// the CLI and the server open several connections to one library.
+#[tokio::test(flavor = "multi_thread")]
+async fn bundled_sqlite_has_the_wal_reset_fix() {
+    let store = LibraryStore::open_in_memory().await.unwrap();
+    let version: String = store
+        .read(|conn| Ok(conn.query_row("SELECT sqlite_version()", [], |row| row.get(0))?))
+        .await
+        .unwrap();
+    let parts: Vec<u32> = version.split('.').map(|part| part.parse().unwrap()).collect();
+    assert!(parts >= vec![3, 51, 3], "SQLite {version} is below the project baseline 3.51.3");
 }

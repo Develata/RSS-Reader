@@ -2,12 +2,15 @@
 
 //! The v0.2 baseline equals the v0.1.x schema (index migrations 0001-0009 plus content
 //! migration 0001) except for the changes listed here, which are the ones decided in
-//! docs/design/v0.2-architecture.md. Runs while sqlx still provides the v0.1.x migrations.
+//! docs/design/v0.2-architecture.md. The v0.1.x schema is built from the frozen migration files.
+
+#[path = "support/v01_schema.rs"]
+mod v01_schema;
 
 use std::collections::BTreeSet;
 
 use rssr_infra::store::LibraryStore;
-use sqlx::Row;
+use rusqlite::Connection;
 
 const COLUMNS: &str = "
     SELECT m.name || '.' || p.name || ' ' || p.type || ' notnull=' || p.\"notnull\"
@@ -30,15 +33,20 @@ const INDEXES: &str = "
 const INDEX_SQL: &str = "
     SELECT name, sql FROM sqlite_schema WHERE type = 'index' AND sql IS NOT NULL";
 
+fn v01_index() -> Connection {
+    let index = Connection::open_in_memory().unwrap();
+    v01_schema::apply_index(&index, v01_schema::INDEX.len());
+    index
+}
+
 async fn v01_schema(query: &str) -> BTreeSet<String> {
-    let index = rssr_infra::db::create_sqlite_pool("sqlite::memory:").await.unwrap();
-    rssr_infra::db::migrate(&index).await.unwrap();
-    let content = rssr_infra::db::create_sqlite_pool("sqlite::memory:").await.unwrap();
-    rssr_infra::db::migrate_content(&content).await.unwrap();
+    let content = Connection::open_in_memory().unwrap();
+    v01_schema::apply_content(&content);
     let mut rows = BTreeSet::new();
-    for pool in [&index, &content] {
-        for row in sqlx::query(sqlx::AssertSqlSafe(query)).fetch_all(pool).await.unwrap() {
-            rows.insert(row.get::<String, _>(0));
+    for conn in [&v01_index(), &content] {
+        let mut statement = conn.prepare(query).unwrap();
+        for row in statement.query_map([], |row| row.get::<_, String>(0)).unwrap() {
+            rows.insert(row.unwrap());
         }
     }
     rows
@@ -132,9 +140,14 @@ async fn kept_indexes_have_the_same_definition() {
     fn normalize(sql: &str) -> String {
         sql.replace("IF NOT EXISTS ", "").split_whitespace().collect::<Vec<_>>().join(" ")
     }
-    let index = rssr_infra::db::create_sqlite_pool("sqlite::memory:").await.unwrap();
-    rssr_infra::db::migrate(&index).await.unwrap();
-    let v01: Vec<(String, String)> = sqlx::query_as(INDEX_SQL).fetch_all(&index).await.unwrap();
+    let index = v01_index();
+    let v01: Vec<(String, String)> = index
+        .prepare(INDEX_SQL)
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
     let baseline: Vec<(String, String)> = LibraryStore::open_in_memory()
         .await
         .unwrap()

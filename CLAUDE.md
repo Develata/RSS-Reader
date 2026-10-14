@@ -28,7 +28,7 @@ cargo check -p rssr-app --target wasm32-unknown-unknown --locked   # 涉及 UI/�
 cargo check -p rssr-app --target aarch64-linux-android --locked    # 涉及移动端交互时
 
 # 单个集成测试（集成测试集中在 crates/rssr-infra/tests/）
-cargo test -p rssr-infra --test test_entry_state_and_search --locked
+cargo test -p rssr-infra --test test_library_entry_state_and_search --locked
 # 按名称过滤单元测试
 cargo test -p rssr-application --locked <test_name>
 
@@ -48,28 +48,28 @@ dx bundle --platform web --package rssr-app --release --debug-symbols false --ou
 - **`rssr-domain`** — 实体（`Feed`、`Entry`、`UserSettings`、`AppStateSnapshot`）、仓储 trait（`FeedRepository`、`EntryIndexRepository`、`EntryContentRepository` 等）、`DomainError`。无任何 I/O。
 - **`rssr-application`** — 用例服务（`RefreshService`、`ReaderService`、`EntriesListService`、`ImportExportService`、`SubscriptionWorkflow` 等）。`composition.rs` 中的 `AppUseCases::compose(AppCompositionInput)` 用端口 trait（`FeedRefreshSourcePort`、`RefreshStorePort`、`OpmlCodecPort`、`ClockPort`、`AppStatePort`）组装全部服务，平台无关。
 - **`rssr-infra`** — 端口适配器，按编译目标二选一（`lib.rs` 中 `#[cfg(not(target_arch = "wasm32"))]` 门控）：
-  - **原生（桌面/Android）**：sqlx SQLite，**索引库与正文库是两个独立数据库**（迁移分别在 `migrations/` 与 `migrations_content/`）；reqwest 抓取 + `BodyAssetLocalizer` 正文图片本地化；feed-rs/quick-xml 解析；OPML 编解码；WebDAV 配置同步。入口 `compose_native_sqlite_use_cases(index_pool, content_pool)`。
-  - **wasm32**：`application_adapters/browser/` 下的适配器共用 `BrowserStore`，通过 Web Locks 协调 `localStorage` 四片数据，以单一提交头发布；缓存按版本同步，刷新逐订阅持久化，仅正文记录变化时写正文片。`db`/`fetch`/`parser`/`config_sync` 模块在 wasm 上不编译。入口 `compose_browser_use_cases`。
+  - **原生（桌面/Android/CLI）**：`store` 模块，rusqlite 单库 `library.sqlite3`（索引、正文、设置、刷新序号；基线 schema 在 `store/migrations/`，根目录 `migrations/` 与 `migrations_content/` 冻结为 v0.1.x 历史，只供 `store::import` 单向导入旧库）；reqwest 抓取 + `BodyAssetLocalizer` 正文图片本地化；feed-rs/quick-xml 解析；OPML 编解码；WebDAV 配置同步。入口 `store::local::open_local_library()`（首次打开时导入同目录的 v0.1.x 库）+ `compose_library_use_cases(store)`。
+  - **wasm32**：`application_adapters/browser/` 下的适配器共用 `BrowserStore`，通过 Web Locks 协调 `localStorage` 四片数据，以单一提交头发布；缓存按版本同步，刷新逐订阅持久化，仅正文记录变化时写正文片。`store`/`fetch`/`parser`/`config_sync` 模块在 wasm 上不编译。入口 `compose_browser_use_cases`。
 - **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 与 `bootstrap/web.rs` 按平台选择组装并暴露 host capabilities（刷新、剪贴板、图片本地化、远程配置）；`ui/` 分 shell / commands / runtime；`pages/` 通过 facade/session 派发命令，runtime 调用统一用例或 host capability。
 - **`rssr-cli`** — 复用同一 application 层的自动化入口。
 - **`rssr-web`** — 仅用于 Web 部署的薄 axum 服务：Argon2 登录、HttpOnly 会话 cookie、静态包托管 + SPA 回退、`/feed-proxy` 服务端代抓（绕过浏览器 CORS）。桌面端、CLI、本地开发都不依赖它。
 
 关键约束：**平台差异只允许存在于 infra / adapter / host capability 层**，application/domain 的语义必须跨平台统一。UI 组件里禁止直接写 SQL、HTTP 或 feed/OPML/JSON 解析。
 
-Linux `/usr/bin` 安装版的数据库首次启动时创建于 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`）；其它桌面/便携版仍在可执行文件同目录 `RSS-Reader/`。路径规则集中在 `rssr-infra::db::sqlite_native`，索引库、正文库及界面偏好共用它。
+数据目录：Linux `/usr/bin` 安装版在 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`）；macOS 在 `~/Library/Application Support/RSS-Reader/`（首次启动从应用包旁的旧目录导入）；Android 在应用私有目录 `$HOME/RSS-Reader/`；其它桌面/便携版在可执行文件同目录 `RSS-Reader/`。CLI 可用 `--data-dir` / `RSSR_DATA_DIR` 指定。路径规则集中在 `rssr-infra::store::local`，资料库与界面偏好共用它。
 
 ## 仓库规则（来自 AGENTS.md，必须遵守）
 
 - **交接记录**：每完成一次可交付工作，必须在 `docs/handoffs/` 新增/更新 `YYYY-MM-DD-<slug>.md` 记录（模板 `docs/handoffs/TEMPLATE.md`），含工作摘要、受影响模块、验证命令与结果、commit 状态。未补记录不算完整交付。
 - **架构护栏**：出现代码严重分叉、平台差异回流到 application/domain 语义、前后端大规模职责重分配、或违背功能设计哲学的方案时，必须先做保守分析并向用户明确提出，默认持保守/负面倾向，不得静默推进。
-- **就近 AGENTS.md**：`crates/rssr-infra/src/db/AGENTS.md` 与 `crates/rssr-app/src/pages/AGENTS.md` 对各自目录有更细的修改约束（如改 `entry_repository.rs` 的排序/筛选必须同步考虑列表页、阅读导航、搜索一致性，并跑 `test_entry_state_and_search`）。改这些目录前先读。
+- **就近 AGENTS.md**：`crates/rssr-infra/src/store/AGENTS.md` 与 `crates/rssr-app/src/pages/AGENTS.md` 对各自目录有更细的修改约束（如改文章排序/筛选必须同步考虑列表页、阅读导航、搜索一致性，并跑 `test_library_entry_state_and_search`）。改这些目录前先读。
 - **页面层改动默认同时影响 Web / 桌面 / Android**，不要只按桌面视口判断；改完至少跑 wasm target check。
 - 行为边界、用户流程、配置方式变化时同步更新 `README.md`、`docs/`、`specs/`。
 
 ## 平台差异提醒
 
 - Web 端受浏览器 CORS 限制：部分 feed 桌面端可刷、Web 直连失败，需经 `rssr-web` 的 `/feed-proxy` 验证。
-- Web 端持久化是 `localStorage` 序列化状态，不是 SQLite；不要把两套语义混写。
+- Web 端持久化是 `localStorage` 序列化状态，不是 SQLite；不要把两套语义混写（v0.2 阶段 D 前的现状）。
 - Android 本地打包需在 `dx bundle` 后运行 `python3 scripts/prepare_android_bundle.py`，再用生成的 Gradle 工程出 APK。发布流水线额外传 `--release-tag`，把 tag 转成 `versionCode` / `versionName`（`Cargo.toml` 版本号长期停在 0.1.0，不能作为版本来源）。
 - Android 发布产物的断言只认资源名（`aapt2 dump resources` 里的 `mipmap/rssr_launcher`），不认文件路径：release 会跑 `optimizeReleaseResources` 压缩资源路径，按路径断言的写法只在 debug 上成立。
 

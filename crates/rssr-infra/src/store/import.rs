@@ -8,28 +8,40 @@
 //! | v0.1.0–v0.1.6 | 0001 | inline in `entries` |
 //! | v0.1.7–v0.1.23 | 0001–0002, up to 0007 | `entry_contents` in the body database |
 //!
-//! The import never changes the v0.1.x files. It
+//! The import never changes the v0.1.x files. Holding the target's creation lock (see
+//! [`super::files::CreationLock`]) from checking that the target is missing until it is published,
+//! it
 //! 1. copies a consistent snapshot of each (SQLite backup from a read-only connection, so data
-//!    still in the WAL is included);
+//!    still in the WAL is included; a lock held longer than the busy timeout fails the import);
 //! 2. checks the snapshot's `_sqlx_migrations` against the released migrations (prefix, success,
 //!    checksum with LF or CRLF line endings); unreleased development schemas (0008, 0009) and
 //!    anything unknown are refused;
-//! 3. builds the new library in a temporary file in one transaction, maps every row, checks the
+//! 3. builds the new library in a scratch file in one transaction, maps every row, checks the
 //!    counts and the database's integrity;
-//! 4. publishes it by renaming the temporary file to the target, which must not exist.
+//! 4. publishes it by renaming the scratch file to the target.
+//!
+//! The two snapshots are taken one after the other, so v0.1.x programs must be closed first (the
+//! documented upgrade rule): they do not know the creation lock.
 //!
 //! Mapping: identifiers are kept (and AUTOINCREMENT high-water marks, so ids are never reused);
 //! `custom_title` is empty (v0.1.x names are source titles); `title_search` is computed; refresh
-//! tickets start at 0; `has_content` is true exactly when a body row exists; bodies of entries
-//! that no longer exist are dropped. Settings written by v0.1.6 carried five entry-list
-//! preferences that later versions keep in app state: they move to app state (when it has none)
-//! and are removed from the settings.
+//! tickets start at 0; `has_content` is true exactly when a body row exists, and a body row exists
+//! exactly when the source has HTML or text for the entry (v0.1.0–v0.1.6 also hashed title-only
+//! entries; like v0.1.7's own upgrade, that hash without a body is not kept); bodies of entries
+//! that no longer exist are dropped. A split library without its body database imports only when
+//! the index records no entry with a body. Documents keep their `updated_at`.
+//!
+//! Legacy documents: settings written by v0.1.6 carried five entry-list preferences that later
+//! versions keep in app state, and v0.1.2–v0.1.6 kept the last opened feed under its own key
+//! (`last_opened_feed_id`). When the source has no app state, both form it; the five keys are
+//! removed from the settings either way.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use rssr_domain::{AppStateSnapshot, EntriesWorkspaceState, UserSettings};
-use rusqlite::backup::Backup;
+use rusqlite::backup::{Backup, StepResult};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior, params};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha384};
@@ -37,6 +49,7 @@ use sha2::{Digest, Sha384};
 use super::connection::{self, Role};
 use super::documents::{APP_STATE_KEY, USER_SETTINGS_KEY};
 use super::error::{StoreError, StoreResult};
+use super::files::CreationLock;
 use super::migrate;
 
 /// Released v0.1.x index migrations, exactly as shipped (line endings aside).
@@ -73,8 +86,8 @@ pub struct ImportOutcome {
     pub bodies: u64,
     /// Body rows whose entry no longer existed.
     pub orphan_bodies: u64,
-    /// v0.1.6 settings keys moved to app state.
-    pub moved_settings: Vec<String>,
+    /// Legacy keys moved to app state: the v0.1.6 settings keys and `last_opened_feed_id`.
+    pub moved_legacy_keys: Vec<String>,
     /// App state that could not be read and was not imported.
     pub dropped_app_state: bool,
 }
@@ -151,28 +164,29 @@ fn check_history(conn: &Connection, released: &[(i64, &str)], label: &str) -> St
 }
 
 /// Copies a consistent snapshot of `source` to `copy` without writing to `source`.
-fn snapshot(source: &Path, copy: &Path) -> StoreResult<()> {
-    let _ = std::fs::remove_file(copy);
+///
+/// One step copies every page under one read snapshot. Waiting for a lock is bounded by `busy`
+/// (the source connection's busy timeout): `rusqlite`'s `run_to_completion` would retry a busy
+/// source forever.
+fn snapshot(source: &Path, copy: &Path, busy: Duration) -> StoreResult<()> {
     let from = Connection::open_with_flags(
         source,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )?;
-    from.busy_timeout(connection::BUSY_TIMEOUT)?;
+    from.busy_timeout(busy)?;
     let mut to = Connection::open(copy)?;
-    // One step copies every page under one read snapshot.
-    Backup::new(&from, &mut to)?.run_to_completion(i32::MAX, std::time::Duration::ZERO, None)?;
-    Ok(())
-}
-
-/// Removes the temporary files of an import, whatever happens.
-struct Scratch(Vec<PathBuf>);
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        for path in &self.0 {
-            for suffix in ["", "-wal", "-shm", "-journal"] {
-                let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+    let backup = Backup::new(&from, &mut to)?;
+    loop {
+        match backup.step(-1)? {
+            StepResult::Done => return Ok(()),
+            StepResult::More => {}
+            StepResult::Busy | StepResult::Locked => {
+                return Err(unsupported(format!(
+                    "{} 被其他程序占用，请先关闭旧版 RSS-Reader",
+                    source.display()
+                )));
             }
+            _ => return Err(unsupported("备份返回了未知状态")),
         }
     }
 }
@@ -186,66 +200,92 @@ const LEGACY_WORKSPACE_KEYS: [(&str, &str); 5] = [
     ("entry_filtered_feed_urls", "selected_feed_urls"),
 ];
 
+/// Key of the last opened feed in v0.1.2–v0.1.6 (a decimal feed id).
+const LEGACY_LAST_OPENED_FEED_KEY: &str = "last_opened_feed_id";
+
+/// v0.1.x documents as stored: `(value, updated_at)` per key.
+struct SourceDocuments {
+    settings: Option<(String, String)>,
+    app_state: Option<(String, String)>,
+    last_opened_feed: Option<(String, String)>,
+}
+
 struct Documents {
-    settings: Option<String>,
-    app_state: Option<String>,
-    moved_settings: Vec<String>,
+    /// `(key, value, updated_at)`; `None` time means the import's.
+    rows: Vec<(&'static str, String, Option<String>)>,
+    moved_legacy_keys: Vec<String>,
     dropped_app_state: bool,
 }
 
 /// Turns v0.1.x documents into ones v0.2 reads. Unknown settings fail the import (nothing is
 /// silently lost) except the legacy keys, which move to app state.
-fn convert_documents(
-    settings: Option<String>,
-    app_state: Option<String>,
-) -> StoreResult<Documents> {
+fn convert_documents(source: SourceDocuments) -> StoreResult<Documents> {
     let mut workspace = Map::new();
-    let mut moved_settings = Vec::new();
-    let settings = match settings {
-        None => None,
-        Some(raw) => {
+    let mut moved_legacy_keys = Vec::new();
+    let mut rows = Vec::new();
+    match source.settings {
+        None => {}
+        Some((raw, updated_at)) => {
             let mut object: Map<String, Value> = serde_json::from_str(&raw)
                 .map_err(|error| unsupported(format!("设置无法解析：{error}")))?;
             for (legacy, current) in LEGACY_WORKSPACE_KEYS {
                 if let Some(value) = object.remove(legacy) {
                     workspace.insert(current.to_owned(), value);
-                    moved_settings.push(legacy.to_owned());
+                    moved_legacy_keys.push(legacy.to_owned());
                 }
             }
             let parsed: UserSettings = serde_json::from_value(Value::Object(object))
                 .map_err(|error| unsupported(format!("设置无法解析：{error}")))?;
-            Some(serde_json::to_string(&parsed).map_err(|error| unsupported(error.to_string()))?)
+            let value =
+                serde_json::to_string(&parsed).map_err(|error| unsupported(error.to_string()))?;
+            rows.push((USER_SETTINGS_KEY, value, Some(updated_at)));
         }
-    };
+    }
     let mut dropped_app_state = false;
-    let app_state = match app_state {
-        Some(raw) => match serde_json::from_str::<AppStateSnapshot>(&raw) {
-            Ok(_) => Some(raw),
+    match source.app_state {
+        Some((raw, updated_at)) => match serde_json::from_str::<AppStateSnapshot>(&raw) {
+            Ok(_) => rows.push((APP_STATE_KEY, raw, Some(updated_at))),
             Err(error) => {
                 tracing::warn!(%error, "旧版应用状态无法解析，不导入");
                 dropped_app_state = true;
-                None
             }
         },
-        None if !workspace.is_empty() => {
-            match serde_json::from_value::<EntriesWorkspaceState>(Value::Object(workspace)) {
-                Ok(entries_workspace) => Some(
-                    serde_json::to_string(&AppStateSnapshot {
-                        entries_workspace,
-                        ..AppStateSnapshot::default()
-                    })
-                    .map_err(|error| unsupported(error.to_string()))?,
-                ),
-                Err(error) => {
-                    tracing::warn!(%error, "旧版文章列表偏好无法解析，不导入");
-                    dropped_app_state = true;
-                    None
+        None => {
+            let mut snapshot = AppStateSnapshot::default();
+            let mut legacy = false;
+            if !workspace.is_empty() {
+                match serde_json::from_value::<EntriesWorkspaceState>(Value::Object(workspace)) {
+                    Ok(entries_workspace) => {
+                        snapshot.entries_workspace = entries_workspace;
+                        legacy = true;
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "旧版文章列表偏好无法解析，不导入");
+                        dropped_app_state = true;
+                    }
                 }
             }
+            if let Some((raw, _)) = source.last_opened_feed {
+                match raw.parse::<i64>() {
+                    Ok(feed_id) => {
+                        snapshot.last_opened_feed_id = Some(feed_id);
+                        moved_legacy_keys.push(LEGACY_LAST_OPENED_FEED_KEY.to_owned());
+                        legacy = true;
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "旧版上次打开的订阅无法解析，不导入");
+                        dropped_app_state = true;
+                    }
+                }
+            }
+            if legacy {
+                let value = serde_json::to_string(&snapshot)
+                    .map_err(|error| unsupported(error.to_string()))?;
+                rows.push((APP_STATE_KEY, value, None));
+            }
         }
-        None => None,
-    };
-    Ok(Documents { settings, app_state, moved_settings, dropped_app_state })
+    }
+    Ok(Documents { rows, moved_legacy_keys, dropped_app_state })
 }
 
 fn count(conn: &Connection, sql: &str) -> StoreResult<u64> {
@@ -255,46 +295,65 @@ fn count(conn: &Connection, sql: &str) -> StoreResult<u64> {
 
 /// Imports the v0.1.x library `source` into a new library at `target`, which must not exist.
 pub fn import_v01(source: &V01Library, target: &Path) -> StoreResult<ImportOutcome> {
+    import_with(source, target, connection::BUSY_TIMEOUT)
+}
+
+fn import_with(source: &V01Library, target: &Path, busy: Duration) -> StoreResult<ImportOutcome> {
+    let taken = || unsupported(format!("目标资料库已存在：{}", target.display()));
     if target.exists() {
-        return Err(unsupported(format!("目标资料库已存在：{}", target.display())));
+        return Err(taken());
     }
-    let staging = target.with_extension("sqlite3.importing");
-    let index_copy = target.with_extension("sqlite3.import-index");
-    let content_copy = target.with_extension("sqlite3.import-content");
-    let _scratch = Scratch(vec![staging.clone(), index_copy.clone(), content_copy.clone()]);
-    for leftover in [&staging, &index_copy, &content_copy] {
-        let _ = std::fs::remove_file(leftover);
+    let lock = CreationLock::acquire(target)?;
+    if target.exists() {
+        return Err(taken());
     }
 
-    snapshot(&source.index, &index_copy)?;
-    let index_version = check_history(&Connection::open(&index_copy)?, INDEX_MIGRATIONS, "索引库")?;
+    let index_copy = lock.scratch("import-index");
+    snapshot(&source.index, index_copy.path(), busy)?;
+    let (index_version, bodies_claimed) = {
+        let index = Connection::open(index_copy.path())?;
+        let version = check_history(&index, INDEX_MIGRATIONS, "索引库")?;
+        let claimed = if version >= 2 {
+            count(&index, "SELECT COUNT(*) FROM entries WHERE has_content <> 0")?
+        } else {
+            0
+        };
+        (version, claimed)
+    };
     let layout = if index_version >= 2 { Layout::Split } else { Layout::Inline };
-    let content = match (&source.content, layout) {
+    let content_copy = match (&source.content, layout) {
         (Some(path), Layout::Split) => {
-            snapshot(path, &content_copy)?;
-            check_history(&Connection::open(&content_copy)?, CONTENT_MIGRATIONS, "正文库")?;
-            true
+            let copy = lock.scratch("import-content");
+            snapshot(path, copy.path(), busy)?;
+            check_history(&Connection::open(copy.path())?, CONTENT_MIGRATIONS, "正文库")?;
+            Some(copy)
         }
-        _ => false,
+        // v0.1.7+ creates the body database with the index: without it, bodies the index records
+        // would be lost silently.
+        (None, Layout::Split) if bodies_claimed > 0 => {
+            return Err(unsupported(format!(
+                "找不到正文库 rss-reader-content.db，而索引库记录了 {bodies_claimed} 篇有正文的文章"
+            )));
+        }
+        _ => None,
     };
 
-    let mut conn = Connection::open(&staging)?;
+    let staging = lock.scratch("importing");
+    let mut conn = Connection::open(staging.path())?;
     connection::configure(&conn, Role::Writer)?;
     migrate::migrate(&mut conn, &super::codec::now())?;
-    let index_path = index_copy.to_string_lossy().into_owned();
-    conn.execute("ATTACH DATABASE ?1 AS v01", [&index_path])?;
-    if content {
-        let content_path = content_copy.to_string_lossy().into_owned();
-        conn.execute("ATTACH DATABASE ?1 AS v01c", [&content_path])?;
+    conn.execute("ATTACH DATABASE ?1 AS v01", [&index_copy.path().to_string_lossy()])?;
+    if let Some(copy) = &content_copy {
+        conn.execute("ATTACH DATABASE ?1 AS v01c", [&copy.path().to_string_lossy()])?;
     }
     let outcome = {
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let outcome = copy_library(&tx, layout, index_version, content)?;
+        let outcome = copy_library(&tx, layout, index_version, content_copy.is_some())?;
         tx.commit()?;
         outcome
     };
     conn.execute_batch("DETACH DATABASE v01")?;
-    if content {
+    if content_copy.is_some() {
         conn.execute_batch("DETACH DATABASE v01c")?;
     }
     let integrity: String = conn.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
@@ -303,10 +362,8 @@ pub fn import_v01(source: &V01Library, target: &Path) -> StoreResult<ImportOutco
     if integrity != "ok" || foreign_keys.is_some() {
         return Err(unsupported(format!("新资料库校验失败：{integrity}")));
     }
-    drop(conn);
-    if !super::files::publish_new(&staging, target)? {
-        return Err(unsupported(format!("目标资料库已存在：{}", target.display())));
-    }
+    conn.close().map_err(|(_, error)| error)?;
+    lock.publish(staging)?;
     Ok(outcome)
 }
 
@@ -335,26 +392,31 @@ fn copy_library(
                 read_at, starred_at, created_at, updated_at
          FROM v01.entries;"
     ))?;
-    let (bodies_sql, source_bodies) = match (layout, content) {
-        (Layout::Inline, _) => (
+    let bodies_sql = match (layout, content) {
+        (Layout::Inline, _) => Some((
             "INSERT INTO entry_contents (entry_id, content_html, content_text, content_hash,
                                          updated_at)
              SELECT id, content_html, content_text, content_hash, updated_at FROM v01.entries
              WHERE content_html IS NOT NULL OR content_text IS NOT NULL",
             "SELECT COUNT(*) FROM v01.entries
              WHERE content_html IS NOT NULL OR content_text IS NOT NULL",
-        ),
-        (Layout::Split, true) => (
+        )),
+        (Layout::Split, true) => Some((
             "INSERT INTO entry_contents (entry_id, content_html, content_text, content_hash,
                                          updated_at)
              SELECT entry_id, content_html, content_text, content_hash, updated_at
              FROM v01c.entry_contents WHERE entry_id IN (SELECT id FROM main.entries)",
             "SELECT COUNT(*) FROM v01c.entry_contents",
-        ),
-        (Layout::Split, false) => ("SELECT 1 WHERE 0", "SELECT 0"),
+        )),
+        (Layout::Split, false) => None,
     };
-    let bodies = tx.execute(bodies_sql, [])? as u64;
-    let source_bodies = count(tx, source_bodies)?;
+    let (bodies, source_bodies) = match bodies_sql {
+        Some((insert, source)) => (tx.execute(insert, [])? as u64, count(tx, source)?),
+        None => (0, 0),
+    };
+    let orphan_bodies = source_bodies
+        .checked_sub(bodies)
+        .ok_or_else(|| unsupported(format!("正文行数不一致：{source_bodies} → {bodies}")))?;
     tx.execute_batch(
         "UPDATE entries SET has_content = 1 WHERE id IN (SELECT entry_id FROM entry_contents);
          INSERT INTO main.sqlite_sequence (name, seq)
@@ -368,25 +430,27 @@ fn copy_library(
     )?;
 
     let documents = {
-        let read = |key: &str| -> StoreResult<Option<String>> {
+        let read = |key: &str| -> StoreResult<Option<(String, String)>> {
             Ok(tx
-                .query_row("SELECT value FROM v01.app_settings WHERE key = ?1", [key], |row| {
-                    row.get(0)
-                })
+                .query_row(
+                    "SELECT value, updated_at FROM v01.app_settings WHERE key = ?1",
+                    [key],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
                 .optional()?)
         };
-        convert_documents(read(USER_SETTINGS_KEY)?, read(APP_STATE_KEY)?)?
+        convert_documents(SourceDocuments {
+            settings: read(USER_SETTINGS_KEY)?,
+            app_state: read(APP_STATE_KEY)?,
+            last_opened_feed: read(LEGACY_LAST_OPENED_FEED_KEY)?,
+        })?
     };
     let now = super::codec::now();
-    for (key, value) in
-        [(USER_SETTINGS_KEY, &documents.settings), (APP_STATE_KEY, &documents.app_state)]
-    {
-        if let Some(value) = value {
-            tx.execute(
-                "INSERT INTO app_settings (key, value, updated_at) VALUES (?1, ?2, ?3)",
-                params![key, value, now],
-            )?;
-        }
+    for (key, value, updated_at) in &documents.rows {
+        tx.execute(
+            "INSERT INTO app_settings (key, value, updated_at) VALUES (?1, ?2, ?3)",
+            params![key, value, updated_at.as_deref().unwrap_or(&now)],
+        )?;
     }
 
     let outcome = ImportOutcome {
@@ -395,8 +459,8 @@ fn copy_library(
         feeds: count(tx, "SELECT COUNT(*) FROM main.feeds")?,
         entries: count(tx, "SELECT COUNT(*) FROM main.entries")?,
         bodies,
-        orphan_bodies: source_bodies - bodies,
-        moved_settings: documents.moved_settings,
+        orphan_bodies,
+        moved_legacy_keys: documents.moved_legacy_keys,
         dropped_app_state: documents.dropped_app_state,
     };
     let expected: BTreeMap<&str, u64> = [
@@ -410,4 +474,43 @@ fn copy_library(
         return Err(unsupported(format!("复制后的行数不一致：{expected:?} → {actual:?}")));
     }
     Ok(outcome)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Instant;
+
+    use super::*;
+
+    /// A source locked longer than the busy timeout fails the snapshot instead of waiting forever.
+    #[test]
+    fn a_locked_source_fails_the_snapshot_within_the_busy_timeout() {
+        let nonce =
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("rssr-snapshot-busy-{nonce}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("rss-reader.db");
+        let holder = Connection::open(&source).unwrap();
+        holder
+            .execute_batch(
+                "CREATE TABLE t (x); INSERT INTO t VALUES (1);
+                 BEGIN EXCLUSIVE; INSERT INTO t VALUES (2);",
+            )
+            .unwrap();
+
+        let started = Instant::now();
+        let error = snapshot(&source, &dir.join("copy"), Duration::from_millis(100)).unwrap_err();
+        assert!(error.to_string().contains("被其他程序占用"), "{error}");
+        assert!(started.elapsed() < Duration::from_secs(5), "{:?}", started.elapsed());
+
+        holder.execute_batch("ROLLBACK").unwrap();
+        snapshot(&source, &dir.join("copy-2"), Duration::from_millis(100)).unwrap();
+        let copied: i64 = Connection::open(dir.join("copy-2"))
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM t", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(copied, 1);
+        drop(holder);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

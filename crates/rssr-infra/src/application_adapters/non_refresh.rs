@@ -1,58 +1,7 @@
-use std::sync::Arc;
-
 use anyhow::Result;
-use rssr_application::{AppStatePort, OpmlCodecPort, RemoteConfigStore};
-use rssr_domain::{AppStateMutation, AppStateRepository, AppStateSnapshot};
+use rssr_application::{OpmlCodecPort, RemoteConfigStore};
 
-use crate::{
-    config_sync::webdav::WebDavConfigSync, db::app_state_repository::SqliteAppStateRepository,
-    opml::OpmlCodec,
-};
-
-#[derive(Clone)]
-pub struct SqliteAppStateAdapter {
-    repository: Arc<SqliteAppStateRepository>,
-}
-
-impl SqliteAppStateAdapter {
-    pub fn new(repository: Arc<SqliteAppStateRepository>) -> Self {
-        Self { repository }
-    }
-
-    async fn clear_last_opened_feed_if_matches_impl(&self, feed_id: i64) -> Result<()> {
-        self.repository
-            .update_snapshot(|state| {
-                if state.last_opened_feed_id == Some(feed_id) {
-                    state.last_opened_feed_id = None;
-                }
-            })
-            .await
-            .map_err(Into::into)
-    }
-
-    pub async fn load_snapshot(&self) -> Result<AppStateSnapshot> {
-        self.repository.load_snapshot().await.map_err(Into::into)
-    }
-}
-
-#[async_trait::async_trait]
-impl AppStateRepository for SqliteAppStateAdapter {
-    async fn load(&self) -> rssr_domain::Result<AppStateSnapshot> {
-        self.repository.load_snapshot().await
-    }
-
-    async fn update(&self, mutate: AppStateMutation) -> rssr_domain::Result<()> {
-        self.repository.update_snapshot(mutate).await
-    }
-}
-
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl AppStatePort for SqliteAppStateAdapter {
-    async fn clear_last_opened_feed_if_matches(&self, feed_id: i64) -> Result<()> {
-        self.clear_last_opened_feed_if_matches_impl(feed_id).await
-    }
-}
+use crate::{config_sync::webdav::WebDavConfigSync, opml::OpmlCodec};
 
 #[derive(Clone, Default)]
 pub struct InfraOpmlCodec {

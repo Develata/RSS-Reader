@@ -19,9 +19,9 @@ impl Workspace {
     }
 
     fn run(&self, arguments: &[&str]) -> Output {
-        let database_url = format!("sqlite://{}?mode=rwc", self.0.join("reader.db").display());
         Command::new(env!("CARGO_BIN_EXE_rssr-cli"))
-            .args(["--database-url", &database_url])
+            .arg("--data-dir")
+            .arg(self.0.join("数据 dir"))
             .args(arguments)
             .output()
             .expect("run actual CLI binary")
@@ -36,7 +36,7 @@ impl Drop for Workspace {
 
 fn success(output: Output) -> String {
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("初始化 CLI 本地数据库"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("初始化 CLI 本地资料库"));
     String::from_utf8(output.stdout).expect("UTF-8 stdout")
 }
 
@@ -81,10 +81,13 @@ fn refresh_requires_exactly_one_target_before_opening_database() {
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
         assert!(!output.stderr.is_empty());
-        assert!(!workspace.0.join("reader.db").exists());
+        assert!(
+            !workspace.0.join("数据 dir").exists(),
+            "no data directory before parsing succeeds"
+        );
     }
 
     let output = workspace.run(&["refresh", "--all"]);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert!(workspace.0.join("reader.db").exists());
+    assert!(workspace.0.join("数据 dir").join("library.sqlite3").exists());
 }

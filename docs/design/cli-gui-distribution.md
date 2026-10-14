@@ -33,7 +33,7 @@
 | Windows zip / Scoop | `RSS-Reader.exe` 与 `rssr-cli.exe` 放在同一目录，共用旁边的 `RSS-Reader/` 数据目录 |
 | Linux `.deb` | 两个程序都装到 `/usr/bin`，共用 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`） |
 | Linux 便携包 | 两个程序同目录，共用旁边的 `RSS-Reader/` |
-| macOS | 待改：现在按“可执行文件旁的 `RSS-Reader/`”规则会写进 `.app` 包内部；签名后的应用包应视为只读，数据应改放 `~/Library/Application Support/` 下的应用目录 |
+| macOS | v0.2 起为 `~/Library/Application Support/RSS-Reader/`（签名后的应用包视为只读）；首次启动从 v0.1.x 写在应用包旁的 `RSS-Reader/` 导入 |
 
 计划中的 Scoop 清单关键字段（完整清单还需版本、下载地址与校验和）：
 
@@ -54,7 +54,7 @@
 - SQLite WAL 允许跨进程读写并行，但每个数据库同一时刻只有一个写者；设置的 30 秒 `busy_timeout` 是等锁时长，不是整条命令的超时。
 - 迁移锁只串行化迁移，不保护已经在运行的旧版本进程。升级前应退出所有使用同一数据目录的 GUI 与 CLI。
 - 刷新目前只在同一进程内协调；GUI 自动刷新与 agent 用 CLI 刷新同一订阅时可能交错。跨进程刷新协调（持久化抓取序号与条件发布）在 v0.2 阶段 A 实施，见 [v0.2 架构](./v0.2-architecture.md#存储)。
-- 打包的 SQLite 需不低于 3.51.3：更早版本有官方确认的 WAL-reset 缺陷，触发条件正是同一库文件上多个连接同时写入或做检查点（见 [SQLite WAL](https://sqlite.org/wal.html#walreset)）。已随 sqlx 0.9（`libsqlite3-sys 0.37`）解决，并有测试守住这一基线。
+- 打包的 SQLite 需不低于 3.51.3：更早版本有官方确认的 WAL-reset 缺陷，触发条件正是同一库文件上多个连接同时写入或做检查点（见 [SQLite WAL](https://sqlite.org/wal.html#walreset)）。现由 `rusqlite 0.40.2`（`libsqlite3-sys 0.38.2`，SQLite 3.53.2）满足，测试 `bundled_sqlite_has_the_wal_reset_fix` 守住这一基线。
 
 ## 服务器上的 CLI 与 Web 部署
 

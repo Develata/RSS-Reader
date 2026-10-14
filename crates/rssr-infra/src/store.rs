@@ -13,12 +13,13 @@ mod executor;
 mod feeds;
 mod files;
 pub mod import;
+pub mod local;
 pub mod migrate;
 mod mutations;
 mod refresh;
 
 pub use documents::{LibraryAppState, LibrarySettings};
-pub use entries::{LibraryEntries, LocalizedBody};
+pub use entries::{LibraryEntries, LocalizedBody, compute_entry_content_hash};
 pub use error::{StoreError, StoreResult};
 pub use executor::{LibraryStore, StoreOptions};
 pub use feeds::LibraryFeeds;
