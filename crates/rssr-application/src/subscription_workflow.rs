@@ -121,7 +121,7 @@ impl SubscriptionWorkflow {
             ticket: activated.ticket,
         };
         let first_refresh = if input.refresh_after_add {
-            Some(self.refresh_service.apply_prepared_update(target, prepared.update, ticket).await?)
+            Some(self.refresh_service.apply_prepared_update(target, prepared.update, ticket).await)
         } else {
             None
         };
@@ -314,6 +314,8 @@ mod tests {
 
     struct StoreStub {
         targets: Vec<RefreshTarget>,
+        /// Fails every content write, as a full disk would.
+        fail_commits: bool,
     }
 
     #[async_trait::async_trait]
@@ -331,6 +333,9 @@ mod tests {
             _target: &RefreshTarget,
             _commit: crate::RefreshCommit,
         ) -> Result<crate::RefreshCommitOutcome> {
+            if self.fail_commits {
+                return Err(rssr_domain::DomainError::Persistence("disk full".into()).into());
+            }
             Ok(Default::default())
         }
     }
@@ -348,6 +353,14 @@ mod tests {
         targets: Vec<RefreshTarget>,
         removal: Arc<RemovalStub>,
     ) -> SubscriptionWorkflow {
+        workflow_over(activation, StoreStub { targets, fail_commits: false }, removal)
+    }
+
+    fn workflow_over(
+        activation: Arc<ActivationStub>,
+        store: StoreStub,
+        removal: Arc<RemovalStub>,
+    ) -> SubscriptionWorkflow {
         let next_id = *activation.next_id.lock().expect("lock activation id");
         SubscriptionWorkflow::new(
             crate::FeedService::new(
@@ -355,7 +368,7 @@ mod tests {
                 activation,
                 removal,
             ),
-            crate::RefreshService::new(Arc::new(SourceStub), Arc::new(StoreStub { targets })),
+            crate::RefreshService::new(Arc::new(SourceStub), Arc::new(store)),
             Arc::new(SourceStub),
         )
     }
@@ -435,6 +448,40 @@ mod tests {
             assert_eq!(received[0].title.as_deref(), chosen, "only the chosen name");
             assert_eq!(received[0].source_title.as_deref(), Some("Example"), "probed title");
         }
+    }
+
+    /// Saved but its first write failed: the add succeeds with the saved subscription and a
+    /// failed first refresh, not an error that would hide that the subscription exists.
+    #[tokio::test]
+    async fn a_failed_first_write_keeps_the_saved_subscription() {
+        let workflow = workflow_over(
+            Arc::new(ActivationStub::new(4)),
+            StoreStub { targets: Vec::new(), fail_commits: true },
+            Arc::new(RemovalStub::default()),
+        );
+
+        let outcome = workflow
+            .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
+                subscription: crate::AddSubscriptionInput {
+                    url: "https://example.com/feed.xml".to_string(),
+                    title: None,
+                    folder: None,
+                },
+                refresh_after_add: true,
+            })
+            .await
+            .expect("the subscription is saved");
+
+        assert_eq!(outcome.feed.id, 4);
+        let refresh = outcome.first_refresh.expect("first refresh outcome");
+        assert_eq!(refresh.feed_id, 4);
+        assert_eq!(
+            refresh.result,
+            crate::RefreshFeedResult::Failed {
+                kind: crate::ErrorKind::Storage,
+                message: crate::ErrorKind::Storage.generic_message().to_string(),
+            }
+        );
     }
 
     #[tokio::test]

@@ -203,7 +203,7 @@ fn add_feed_result(result: Result<AddSubscriptionOutcome, String>) -> Vec<UiInte
         Ok(AddSubscriptionOutcome::SavedAndRefreshed) => {
             (true, "订阅已保存并完成首次刷新。".to_string(), "info")
         }
-        Ok(AddSubscriptionOutcome::SavedRefreshFailed { message }) => {
+        Ok(AddSubscriptionOutcome::SavedRefreshFailed { message, .. }) => {
             (true, format!("订阅已保存，但首次刷新失败：{message}"), "error")
         }
         Err(message) => (false, message, "error"),
@@ -227,7 +227,10 @@ mod tests {
         for (result, expected_saved, expected_tone) in [
             (Ok(AddSubscriptionOutcome::SavedAndRefreshed), true, "info"),
             (
-                Ok(AddSubscriptionOutcome::SavedRefreshFailed { message: "offline".into() }),
+                Ok(AddSubscriptionOutcome::SavedRefreshFailed {
+                    feed_id: 7,
+                    message: "offline".into(),
+                }),
                 true,
                 "error",
             ),

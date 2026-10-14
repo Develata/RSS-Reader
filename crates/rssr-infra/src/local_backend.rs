@@ -355,10 +355,11 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
             )
             .await
             .context("保存订阅失败")?;
+        let feed_id = outcome.feed.id;
         let refresh = outcome.first_refresh.expect("refresh_after_add produces refresh outcome");
         let outcome = self.handle_refresh_feed_outcome(refresh);
         match outcome.failure_message {
-            Some(message) => Ok(AddSubscriptionOutcome::SavedRefreshFailed { message }),
+            Some(message) => Ok(AddSubscriptionOutcome::SavedRefreshFailed { feed_id, message }),
             None => Ok(AddSubscriptionOutcome::SavedAndRefreshed),
         }
     }

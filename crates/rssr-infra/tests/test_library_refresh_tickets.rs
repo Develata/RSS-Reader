@@ -336,7 +336,7 @@ async fn a_prepared_fetch_survives_a_failed_refresh_in_the_same_process() {
     let FeedRefreshSourceOutput::Updated(update) = service_update("prepared") else {
         unreachable!()
     };
-    let outcome = service.apply_prepared_update(prepared, update, prepared_ticket).await.unwrap();
+    let outcome = service.apply_prepared_update(prepared, update, prepared_ticket).await;
     assert!(
         matches!(outcome.result, RefreshFeedResult::Updated { inserted_count: 1, .. }),
         "{outcome:?}"

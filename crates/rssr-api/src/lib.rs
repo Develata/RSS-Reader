@@ -38,8 +38,10 @@ pub enum AddSubscriptionOutcome {
         candidates: Vec<FeedDiscoveryCandidate>,
     },
     SavedAndRefreshed,
-    /// Saved, but its first refresh failed.
+    /// Saved (as `feed_id`), but its first refresh failed: the subscription exists and later
+    /// refreshes may succeed.
     SavedRefreshFailed {
+        feed_id: i64,
         message: String,
     },
 }

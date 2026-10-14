@@ -497,27 +497,35 @@ impl RefreshService {
     ///
     /// 订阅激活后、首刷拿到锁之前，后台刷新可能已经把更新的内容落库；那时预抓取的结果
     /// 已经过时，不再写入，按“未变化”返回（审计 A1）。
+    /// Writes the response fetched while adding the subscription. The subscription is saved by
+    /// then: a failed write is this refresh's failure, not the add's (B2-D5).
     pub async fn apply_prepared_update(
         &self,
         target: RefreshTarget,
         update: FeedRefreshUpdate,
         ticket: PreparedUpdateTicket,
-    ) -> Result<RefreshFeedOutcome> {
+    ) -> RefreshFeedOutcome {
         let lock = self.feed_locks.lock_for(target.feed_id);
         let _serialized = lock.lock().await;
         // A target with a persistent ticket is ordered by the store; the in-process sequence only
         // serves stores without tickets.
         if target.ticket == RefreshTicket::UNTRACKED {
             if self.feed_locks.superseded(target.feed_id, ticket.0) {
-                return Ok(RefreshFeedOutcome {
+                return RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),
                     result: RefreshFeedResult::NotModified,
-                });
+                };
             }
             self.feed_locks.record_commit(target.feed_id, ticket.0);
         }
-        self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await
+        let (feed_id, url) = (target.feed_id, target.url.to_string());
+        match self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                RefreshFeedOutcome { feed_id, url, result: RefreshFeedResult::failed(&error) }
+            }
+        }
     }
 
     pub async fn refresh_feed(&self, feed_id: i64) -> Result<RefreshFeedOutcome> {
@@ -1452,8 +1460,7 @@ mod tests {
                     update_titled("V1 prepared"),
                     ticket,
                 )
-                .await
-                .expect("first refresh");
+                .await;
 
             assert_eq!(committed_titles(&store), expected);
             assert!(first.is_success());
@@ -1563,8 +1570,7 @@ mod tests {
                     ticket,
                 ),
             )
-            .await
-            .expect("prepared update");
+            .await;
 
             assert_eq!(committed_titles(&store.inner), expected);
         }
