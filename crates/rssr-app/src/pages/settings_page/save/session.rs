@@ -66,6 +66,14 @@ impl SettingsPageSaveSession {
             return;
         }
 
+        // One settings write at a time: a pull in flight replaces the stored settings.
+        if !self.page.begin_write() {
+            self.page.set_status(
+                "正在从 WebDAV 下载配置；修改已保留在草稿中，完成后请再次保存。",
+                "info",
+            );
+            return;
+        }
         let mut state = self.state;
         state.with_mut(|state| state.pending_save = true);
 
@@ -79,7 +87,6 @@ impl SettingsPageSaveSession {
         }
 
         let patch = SettingsPatch::between(&baseline, &next);
-        self.page.begin_write();
         let saving = execute(SettingsCommand::UpdateSettings { patch, success_message });
         spawn(async move {
             let intents = saving.await;
@@ -109,6 +116,7 @@ impl SettingsPageSaveSession {
                 status_message.push_str(" 草稿已保留，可修改后重试。");
                 set_status_error(status, status_tone, status_message);
             }
+            self.page.end_write();
         });
     }
 }
@@ -443,5 +451,124 @@ mod tests {
                 SettingsPatch { theme: Some(ThemeMode::System), ..Default::default() }
             );
         });
+    }
+
+    /// A load overlapped by a save that stores nothing (here it fails) still applies, whether
+    /// it is answered during the save or after it: no write superseded the read, and nothing
+    /// else would show the stored settings.
+    #[test]
+    fn a_load_overlapped_by_a_failed_save_still_applies() {
+        for reply_after_the_save in [false, true] {
+            let (mut dom, session, theme) = setup();
+            let load = dom.in_scope(ScopeId::APP, || start_load(session));
+            let save = dom.in_scope(ScopeId::APP, || {
+                session.page.draft().write().list_density = ListDensity::Compact;
+                start_save(session)
+            });
+            dom.render_immediate_to_vec();
+            if reply_after_the_save {
+                save.send(false).expect("fail the save");
+                dom.render_immediate_to_vec();
+                load.send(customized()).expect("deliver the load");
+            } else {
+                load.send(customized()).expect("deliver the load");
+                dom.render_immediate_to_vec();
+                save.send(false).expect("fail the save");
+            }
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                let edited = UserSettings { list_density: ListDensity::Compact, ..customized() };
+                assert_eq!(*session.page.draft().peek(), edited, "after: {reply_after_the_save}");
+                assert_eq!(*theme.settings.peek(), customized());
+                assert_eq!(
+                    submitted_patch(session),
+                    SettingsPatch {
+                        list_density: Some(ListDensity::Compact),
+                        ..Default::default()
+                    }
+                );
+            });
+        }
+    }
+
+    /// One settings write at a time: a save while a pull is in flight is not sent, so the two
+    /// replies are never merged against a baseline the other one changed.
+    #[test]
+    fn a_save_is_not_sent_while_a_pull_is_in_flight() {
+        let (dom, session, _theme) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            let _ = session.page.begin_write();
+            session.page.draft().write().theme = ThemeMode::Dark;
+            let called = Rc::new(Cell::new(false));
+            let check = Rc::clone(&called);
+            session.save_with("设置已保存。".into(), move |_| {
+                called.set(true);
+                std::future::ready(Vec::new())
+            });
+            assert!(!check.get(), "the save must wait for the pull");
+            assert!(!session.snapshot().pending_save);
+            assert!(session.page.status().contains("WebDAV"));
+
+            // The pull stores other settings; the draft keeps its edit, which a save now sends.
+            let pulled = UserSettings { refresh_interval_minutes: 45, ..UserSettings::default() };
+            session.page.dispatch(SettingsPageIntent::SettingsLoaded(pulled.clone()));
+            session.page.end_write();
+            assert_eq!(
+                *session.page.draft().peek(),
+                UserSettings { theme: ThemeMode::Dark, ..pulled }
+            );
+            assert_eq!(
+                submitted_patch(session),
+                SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() }
+            );
+        });
+    }
+
+    /// A pull waits for a save in flight, as a save waits for a pull.
+    #[test]
+    fn a_pull_cannot_start_while_a_save_is_in_flight() {
+        let (mut dom, session, theme) = setup();
+        let save = dom.in_scope(ScopeId::APP, || {
+            session.page.draft().write().theme = ThemeMode::Dark;
+            start_save(session)
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || assert!(!session.page.begin_write()));
+        save.send(true).expect("complete the save");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
+            assert!(session.page.begin_write(), "the save has ended");
+        });
+    }
+
+    /// A load overlapped by a pull that finds no remote configuration applies when the pull
+    /// ends; one overlapped by a pull that stores settings is dropped.
+    #[test]
+    fn a_load_overlapped_by_a_pull_applies_only_if_the_pull_stored_nothing() {
+        for pull_stores in [false, true] {
+            let (mut dom, session, _theme) = setup();
+            let load = dom.in_scope(ScopeId::APP, || start_load(session));
+            dom.in_scope(ScopeId::APP, || assert!(session.page.begin_write()));
+            load.send(customized()).expect("deliver the load");
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                assert_eq!(*session.page.draft().peek(), UserSettings::default(), "held");
+                let pulled =
+                    UserSettings { refresh_interval_minutes: 45, ..UserSettings::default() };
+                if pull_stores {
+                    session.page.dispatch(SettingsPageIntent::SettingsLoaded(pulled.clone()));
+                } else {
+                    session.page.dispatch(SettingsPageIntent::SetStatus {
+                        message: "远端配置不存在。".into(),
+                        tone: "info".into(),
+                    });
+                }
+                session.page.end_write();
+                let expected = if pull_stores { pulled } else { customized() };
+                assert_eq!(*session.page.draft().peek(), expected, "pull stores: {pull_stores}");
+                assert_eq!(submitted_patch(session), SettingsPatch::default());
+            });
+        }
     }
 }

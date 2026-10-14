@@ -20,19 +20,31 @@ pub(crate) struct SettingsPageSession {
     theme: ThemeController,
     baseline: Signal<UserSettings>,
     draft: Signal<UserSettings>,
-    /// How many writes (saves, pulls) the page has started; a load whose reply arrives after one
-    /// started is discarded, see [`Self::load_with`].
-    writes: Signal<u64>,
+    writes: Signal<Writes>,
     preset_choice: Signal<String>,
     status: Signal<String>,
     status_tone: Signal<String>,
+}
+
+/// The page's writes (saves, pulls) as its loads see them (B2-D4).
+#[derive(Clone, Default, PartialEq)]
+struct Writes {
+    /// One write at a time: each reply is merged against the baseline, so a second write in
+    /// flight would be merged against a baseline the first one changes, and lose edits.
+    in_flight: bool,
+    /// Writes whose reply carried the stored settings. A load issued before one of them may
+    /// predate it, so its reply is discarded.
+    stored: u64,
+    /// A load answered while a write was in flight. It waits for the write: dropped if the write
+    /// stores settings, applied if it stores nothing (it failed, or the remote had none).
+    held_load: Option<UserSettings>,
 }
 
 impl SettingsPageSession {
     pub(crate) fn new(theme: ThemeController) -> Self {
         let baseline = use_signal(|| theme.settings.peek().clone());
         let draft = use_signal(|| baseline.peek().clone());
-        let writes = use_signal(|| 0);
+        let writes = use_signal(Writes::default);
         let preset_choice =
             use_signal(|| detect_preset_key(&baseline.peek().custom_css).to_string());
         let status = use_signal(String::new);
@@ -51,10 +63,34 @@ impl SettingsPageSession {
         self.baseline.peek().clone()
     }
 
-    /// Marks the start of a write whose reply carries the stored settings (a save, a pull), so
-    /// that a load already in flight is not applied after it.
-    pub(crate) fn begin_write(mut self) {
-        *self.writes.write() += 1;
+    /// Starts a write whose reply may carry the stored settings (a save, a pull). Returns false,
+    /// changing nothing, while another write is in flight.
+    pub(crate) fn begin_write(mut self) -> bool {
+        if self.writes.peek().in_flight {
+            return false;
+        }
+        self.writes.write().in_flight = true;
+        true
+    }
+
+    /// Ends the write started by [`Self::begin_write`], after its reply has been applied. A load
+    /// answered meanwhile applies now unless the write stored settings.
+    pub(crate) fn end_write(mut self) {
+        let held_load = {
+            let mut writes = self.writes.write();
+            writes.in_flight = false;
+            writes.held_load.take()
+        };
+        if let Some(settings) = held_load {
+            self.apply_stored_settings(settings);
+        }
+    }
+
+    /// Records that a write stored `settings`: loads issued before it are stale.
+    fn note_stored(mut self) {
+        let mut writes = self.writes.write();
+        writes.stored += 1;
+        writes.held_load = None;
     }
 
     pub(crate) fn preset_choice(self) -> Signal<String> {
@@ -81,33 +117,44 @@ impl SettingsPageSession {
         self.load_with(|command| execute_ui_command(UiCommand::Settings(command)));
     }
 
-    /// Reads the stored settings. If the page starts a write before the reply arrives, the whole
-    /// reply is discarded: the read may predate the write, and the write's own reply carries the
-    /// newer settings (B2-D4). The page loads once, when it opens, so no write of it is pending
-    /// when a load is issued.
+    /// Reads the stored settings (B2-D4). A write that stores settings after the load was issued
+    /// supersedes it: the read may predate the write, so the whole reply is discarded. A reply
+    /// that arrives while a write is in flight waits for the write to end.
     pub(super) fn load_with<F: Future<Output = Vec<UiIntent>> + 'static>(
         self,
         execute: impl FnOnce(SettingsCommand) -> F,
     ) {
-        let issued = *self.writes.peek();
+        let issued = self.writes.peek().stored;
         let loading = execute(SettingsCommand::Load);
         spawn(async move {
             let intents = loading.await;
-            if *self.writes.peek() == issued {
-                apply_projected_ui_intents(
-                    intents,
-                    UiIntent::into_settings_page_intent,
-                    |intent| {
-                        self.dispatch(intent);
-                    },
-                );
+            if self.writes.peek().stored != issued {
+                return;
             }
+            apply_projected_ui_intents(intents, UiIntent::into_settings_page_intent, |intent| {
+                match intent {
+                    SettingsPageIntent::SettingsLoaded(settings) => self.receive_load(settings),
+                    status => self.dispatch(status),
+                }
+            });
         });
     }
 
+    fn receive_load(mut self, settings: UserSettings) {
+        if self.writes.peek().in_flight {
+            self.writes.write().held_load = Some(settings);
+        } else {
+            self.apply_stored_settings(settings);
+        }
+    }
+
+    /// Applies a write's reply: settings in it are what the write stored (a pull).
     pub(crate) fn dispatch(self, intent: SettingsPageIntent) {
         match intent {
-            SettingsPageIntent::SettingsLoaded(settings) => self.apply_stored_settings(settings),
+            SettingsPageIntent::SettingsLoaded(settings) => {
+                self.note_stored();
+                self.apply_stored_settings(settings);
+            }
             SettingsPageIntent::SetStatus { message, tone } => self.set_status(message, tone),
         }
     }
@@ -134,6 +181,7 @@ impl SettingsPageSession {
         submitted_draft: &UserSettings,
         submitted_preset: &str,
     ) -> bool {
+        self.note_stored();
         let later_edits = SettingsPatch::between(submitted_draft, &self.draft.peek());
         self.draft.set(later_edits.applied(&settings));
         if self.preset_choice.peek().as_str() == submitted_preset {

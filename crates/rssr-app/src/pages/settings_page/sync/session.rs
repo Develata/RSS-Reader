@@ -1,7 +1,10 @@
 use dioxus::prelude::*;
 
 use super::state::SettingsPageSyncState;
-use crate::ui::{SettingsCommand, UiCommand, UiIntent, spawn_projected_ui_command};
+use crate::ui::{
+    SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, execute_ui_command,
+    spawn_projected_ui_command,
+};
 use crate::{pages::settings_page::session::SettingsPageSession, status::set_status_info};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -53,12 +56,30 @@ impl SettingsPageSyncSession {
             return;
         }
 
+        // A pull replaces the stored settings: it waits for a save in flight, like a save waits
+        // for it (the confirmation stays, so the next click pulls).
+        if !self.page.begin_write() {
+            set_status_info(
+                self.page.status_signal(),
+                self.page.status_tone_signal(),
+                "设置仍在保存，完成后再从 WebDAV 下载配置。",
+            );
+            return;
+        }
         let snapshot = self.snapshot();
-        self.page.begin_write();
-        self.apply_ui_command(UiCommand::Settings(SettingsCommand::PullConfig {
+        self.state.with_mut(|state| state.clear_pending_remote_pull());
+        let page = self.page;
+        let command = UiCommand::Settings(SettingsCommand::PullConfig {
             endpoint: snapshot.endpoint,
             remote_path: snapshot.remote_path,
-        }));
+        });
+        spawn(async move {
+            let intents = execute_ui_command(command).await;
+            apply_projected_ui_intents(intents, UiIntent::into_settings_page_intent, |intent| {
+                page.dispatch(intent);
+            });
+            page.end_write();
+        });
     }
 
     fn apply_ui_command(mut self, command: UiCommand) {

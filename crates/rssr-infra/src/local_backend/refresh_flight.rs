@@ -72,7 +72,7 @@ mod tests {
                 calls.fetch_add(1, Ordering::SeqCst);
                 tokio::task::yield_now().await;
                 if failed {
-                    anyhow::bail!("fixture failure");
+                    return Err(rssr_domain::DomainError::Unavailable("fixture".into()).into());
                 }
                 Ok(RefreshAllExecutionOutcome {
                     inserted_count: 0,
@@ -83,6 +83,11 @@ mod tests {
             };
             let (first, second) = tokio::join!(flight.run(request()), flight.run(request()));
             assert_eq!(calls.load(Ordering::SeqCst), 1);
+            if failed {
+                // Every waiter gets the classified error, with its kind.
+                assert_eq!(first.as_ref().unwrap_err().code, ErrorCode::Unavailable);
+                assert_eq!(second.as_ref().unwrap_err().code, ErrorCode::Unavailable);
+            }
             assert_eq!(first.map_err(|e| e.to_string()), second.map_err(|e| e.to_string()));
             let _ = flight.run(request()).await;
             assert_eq!(calls.load(Ordering::SeqCst), 2);

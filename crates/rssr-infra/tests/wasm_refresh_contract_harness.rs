@@ -30,10 +30,11 @@ mod refresh_content_cases;
 mod archive_boundary_cases;
 
 /// Another tab holding the store for longer than the five-second wait is a temporary condition:
-/// the operation is unavailable, not an internal error (B2-D5).
+/// the operation is unavailable, not an internal error (B2-D5), on the store and through the
+/// refresh port's adapter (`RefreshFlight` keeps the kind: its own unit test).
 #[wasm_bindgen_test]
 async fn a_store_held_by_another_tab_is_unavailable() {
-    let (state, _) = store_with_one_feed().await;
+    let (state, store) = store_with_one_feed().await;
     let held = js_sys::eval(
         "new Promise(acquired => navigator.locks.request('rssr-browser-state-v1', () =>
             new Promise(release => { globalThis.__release = release; acquired(); })))",
@@ -41,9 +42,12 @@ async fn a_store_held_by_another_tab_is_unavailable() {
     .unwrap();
     wasm_bindgen_futures::JsFuture::from(js_sys::Promise::from(held)).await.unwrap();
 
-    let error = state.snapshot().await.expect_err("the lock is held elsewhere");
+    let (read, target) = futures_util::join!(state.snapshot(), store.get_target(1));
     js_sys::eval("globalThis.__release(); delete globalThis.__release;").unwrap();
-    assert_eq!(classify(&error).kind, ErrorKind::Unavailable, "{error:#}");
+    let read = read.expect_err("the lock is held elsewhere");
+    assert_eq!(classify(&read).kind, ErrorKind::Unavailable, "{read:#}");
+    let target = target.expect_err("the lock is held elsewhere");
+    assert_eq!(classify(&target).kind, ErrorKind::Unavailable, "{target:#}");
     state.snapshot().await.expect("the store is usable once the lock is released");
     clear_browser_state_storage();
 }
