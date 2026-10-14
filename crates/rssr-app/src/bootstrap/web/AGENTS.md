@@ -4,12 +4,9 @@
 
 ## 职责边界
 
-- `refresh.rs`
-  - Web host 的刷新协调、自动刷新调度及状态通知
-- `exchange.rs`
-  - 浏览器文件导入导出、远程配置交换等 host capability
 - `../web.rs`
-  - 组装 infra 浏览器适配器与 application 用例，向 UI 暴露 host capability
+  - 组装 infra 浏览器适配器与 application 用例，建好 `LocalBackend<WebHost>`；`WebHost` 只提供浏览器的差异（`spawn_local`、gloo 计时器、浏览器时钟、远端配置的 `fetch` 存储、演示站的网络与自动刷新开关）
+- 添加订阅、刷新编排、`RefreshFlight` 与自动刷新循环在 `rssr_infra::local_backend`，与原生端共用；不要在此重建。
 - 浏览器状态、仓储查询、feed 拉取解析和 OPML 编解码已位于 `rssr-infra/src/application_adapters/browser/`；不要在此重建平行实现。
 
 ## 不应在这里做的事

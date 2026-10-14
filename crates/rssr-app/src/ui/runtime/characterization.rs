@@ -3,9 +3,11 @@
 //! server), and the resulting `UiIntent`s are compared with a recorded transcript. Refactors of
 //! the seam must leave the transcript unchanged.
 //!
-//! Volatile parts are normalised: timestamps (`<time>`) and the server port (`<port>`). To record
-//! a new transcript after an intended change, run with `RSSR_UPDATE_UI_TRANSCRIPT=1` and review
-//! the diff.
+//! Volatile parts are normalised: the server port (`<port>`), and timestamps — a time near the
+//! moment of the run becomes `<now>`, any other time is rewritten in UTC (so fixed fixture times
+//! stay checked whatever the machine's time zone), and text that does not parse as a time is left
+//! alone. To record a new transcript after an intended change, run with
+//! `RSSR_UPDATE_UI_TRANSCRIPT=1` and review the diff.
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -26,6 +28,15 @@ use crate::ui::commands::{
 };
 use crate::ui::runtime::backend::test_host;
 use crate::ui::snapshot::UiIntent;
+
+/// A 1×1 PNG.
+const PIXEL_PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0,
+    0x1f, 0x00, 0x05, 0x00, 0x01, 0xff, 0x89, 0x99, 0x3d, 0x1d, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+];
 
 const TRANSCRIPT: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/src/ui/runtime/characterization.transcript");
@@ -117,6 +128,21 @@ fn route(
 ) -> (&'static str, &'static str, Vec<u8>) {
     const XML: &str = "application/rss+xml";
     match (method, path) {
+        ("GET", "/img.xml") => (
+            "200 OK",
+            XML,
+            format!(
+                "<?xml version=\"1.0\"?><rss version=\"2.0\" \
+                 xmlns:content=\"http://purl.org/rss/1.0/modules/content/\"><channel>\
+                 <title>Feed I</title><link>https://example.invalid/</link>\
+                 <description>images</description><item><guid>i1</guid><title>Image one</title>\
+                 <link>https://example.invalid/i1</link><pubDate>Sun, 05 Apr 2026 10:00:00 GMT</pubDate>\
+                 <content:encoded><![CDATA[<p>Picture</p><img src=\"http://127.0.0.1:{port}/pixel.png\">]]>\
+                 </content:encoded></item></channel></rss>"
+            )
+            .into_bytes(),
+        ),
+        ("GET", "/pixel.png") => ("200 OK", "image/png", PIXEL_PNG.to_vec()),
         ("GET", "/a.xml") => (
             "200 OK",
             XML,
@@ -160,17 +186,31 @@ fn route(
     }
 }
 
-/// Normalises what changes between runs and machines: times (and the local offset) and the
-/// server port.
+/// Normalises what changes between runs and machines: the server port, and times (see the
+/// module documentation).
 fn normalise(text: &str, port: u16) -> String {
     let text = text
         .replace(&format!("127.0.0.1:{port}"), "127.0.0.1:<port>")
         .replace(&format!("port: Some({port})"), "port: Some(<port>)");
+    let now = time::OffsetDateTime::now_utc();
     let mut out = String::with_capacity(text.len());
     let mut index = 0;
     while index < text.len() {
-        if let Some(length) = timestamp_at(&text.as_bytes()[index..]) {
-            out.push_str("<time>");
+        if let Some((length, at)) = timestamp_at(&text.as_bytes()[index..]) {
+            if (at - now).abs() < time::Duration::days(2) {
+                out.push_str("<now>");
+            } else {
+                let utc = at.to_offset(time::UtcOffset::UTC);
+                out.push_str(&format!(
+                    "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+                    utc.year(),
+                    u8::from(utc.month()),
+                    utc.day(),
+                    utc.hour(),
+                    utc.minute(),
+                    utc.second()
+                ));
+            }
             index += length;
         } else {
             let ch = text[index..].chars().next().expect("char");
@@ -181,61 +221,98 @@ fn normalise(text: &str, port: u16) -> String {
     out
 }
 
-/// Length of a timestamp at the start of `bytes`: `YYYY-MM-DD`, a space or `T`, `H:MM` or
-/// `HH:MM`, optional `:SS` and fraction, then an optional offset (`Z`, `+hh:mm`, ` +hh:mm:ss`,
-/// ` UTC+hh:mm`).
-fn timestamp_at(bytes: &[u8]) -> Option<usize> {
+/// A time at the start of `bytes` and its length: `YYYY-MM-DD`, a space or `T`, `H:MM` or `HH:MM`,
+/// optional `:SS` and fraction, then an offset (`Z`, `+hh:mm`, ` +hh:mm:ss` as `time` prints it,
+/// ` UTC+hh:mm` as the reader shows it). Only text that is a valid instant counts.
+fn timestamp_at(bytes: &[u8]) -> Option<(usize, time::OffsetDateTime)> {
     let digit = |index: usize| bytes.get(index).is_some_and(u8::is_ascii_digit);
     let at = |index: usize, byte: u8| bytes.get(index) == Some(&byte);
-    let digits = |from: usize, count: usize| (from..from + count).all(digit);
-    if !(digits(0, 4) && at(4, b'-') && digits(5, 2) && at(7, b'-') && digits(8, 2))
-        || !(at(10, b' ') || at(10, b'T'))
-    {
+    let number = |from: usize, count: usize| -> Option<u32> {
+        (from..from + count).all(digit).then(|| {
+            bytes[from..from + count]
+                .iter()
+                .fold(0, |value, byte| value * 10 + u32::from(byte - b'0'))
+        })
+    };
+    let (year, month, day) = (number(0, 4)?, number(5, 2)?, number(8, 2)?);
+    if !(at(4, b'-') && at(7, b'-') && (at(10, b' ') || at(10, b'T'))) {
         return None;
     }
     let mut end = 11;
-    let hour_digits = if digits(end, 2) {
-        2
-    } else if digit(end) {
-        1
-    } else {
-        return None;
-    };
+    let hour_digits = if digits_at(bytes, end, 2) { 2 } else { 1 };
+    let hour = number(end, hour_digits)?;
     end += hour_digits;
-    if !(at(end, b':') && digits(end + 1, 2)) {
+    if !at(end, b':') {
         return None;
     }
+    let minute = number(end + 1, 2)?;
     end += 3;
-    if at(end, b':') && digits(end + 1, 2) {
+    let mut second = 0;
+    let mut nanosecond = 0;
+    if at(end, b':') && digits_at(bytes, end + 1, 2) {
+        second = number(end + 1, 2)?;
         end += 3;
         if at(end, b'.') && digit(end + 1) {
             end += 1;
+            let mut scale = 100_000_000;
             while digit(end) {
+                nanosecond += u32::from(bytes[end] - b'0') * scale;
+                scale /= 10;
                 end += 1;
             }
         }
     }
-    if at(end, b'Z') {
-        return Some(end + 1);
-    }
-    let offset = |start: usize| {
-        (matches!(bytes.get(start), Some(b'+' | b'-'))
-            && digits(start + 1, 2)
-            && at(start + 3, b':')
-            && digits(start + 4, 2))
-        .then(|| if at(start + 6, b':') && digits(start + 7, 2) { start + 9 } else { start + 6 })
-    };
-    for start in [end, end + 1, end + 4] {
-        let prefix_ok = match start - end {
-            0 => true,
-            1 => at(end, b' '),
-            _ => bytes.get(end..end + 4) == Some(b" UTC"),
+    let offset_at = |start: usize| -> Option<(usize, i32)> {
+        let sign = match bytes.get(start) {
+            Some(b'+') => 1,
+            Some(b'-') => -1,
+            _ => return None,
         };
-        if prefix_ok && let Some(stop) = offset(start) {
-            return Some(stop);
+        let hours = number(start + 1, 2)? as i32;
+        if !at(start + 3, b':') {
+            return None;
         }
-    }
-    Some(end)
+        let minutes = number(start + 4, 2)? as i32;
+        let (stop, seconds) = match number(start + 7, 2) {
+            Some(seconds) if at(start + 6, b':') => (start + 9, seconds as i32),
+            _ => (start + 6, 0),
+        };
+        Some((stop, sign * (hours * 3600 + minutes * 60 + seconds)))
+    };
+    let (stop, offset_seconds) = if at(end, b'Z') {
+        (end + 1, 0)
+    } else if let Some(found) = offset_at(end) {
+        found
+    } else if at(end, b' ')
+        && let Some(found) = offset_at(end + 1)
+    {
+        found
+    } else if bytes.get(end..end + 4) == Some(b" UTC")
+        && let Some(found) = offset_at(end + 4)
+    {
+        found
+    } else {
+        return None;
+    };
+    let date = time::Date::from_calendar_date(
+        i32::try_from(year).ok()?,
+        time::Month::try_from(u8::try_from(month).ok()?).ok()?,
+        u8::try_from(day).ok()?,
+    )
+    .ok()?;
+    let clock = time::Time::from_hms_nano(
+        u8::try_from(hour).ok()?,
+        u8::try_from(minute).ok()?,
+        u8::try_from(second).ok()?,
+        nanosecond,
+    )
+    .ok()?;
+    let offset = time::UtcOffset::from_whole_seconds(offset_seconds).ok()?;
+    Some((stop, time::PrimitiveDateTime::new(date, clock).assume_offset(offset)))
+}
+
+fn digits_at(bytes: &[u8], from: usize, count: usize) -> bool {
+    bytes.get(from..from + count).is_some_and(|slice| slice.iter().all(u8::is_ascii_digit))
 }
 
 struct Transcript {
@@ -289,6 +366,7 @@ async fn ui_commands_produce_the_recorded_intents() {
         ("add discovery page", "/page.html"),
         ("add failing feed", "/broken.xml"),
         ("add duplicate feed a", "/a.xml"),
+        ("add feed with an image", "/img.xml"),
     ] {
         let command = FeedsCommand::AddFeed { raw_url: server.url(path), fallback_site_url: None };
         transcript.run(label, feeds(command)).await;
@@ -370,6 +448,16 @@ async fn ui_commands_produce_the_recorded_intents() {
             }),
         )
         .await;
+    transcript
+        .run(
+            "entries bootstrap after saving preferences",
+            entries(EntriesCommand::Bootstrap {
+                feed_id: None,
+                load_preferences: true,
+                load_feeds: false,
+            }),
+        )
+        .await;
     let previewed = transcript
         .run(
             "preview mark read",
@@ -418,6 +506,20 @@ async fn ui_commands_produce_the_recorded_intents() {
     transcript
         .run("reader localize assets", reader(ReaderCommand::LocalizeEntryAssets { entry_id: 1 }))
         .await;
+    // The entry with an image: localizing stores it locally; loading it again shows that.
+    let image_entry = 5;
+    transcript
+        .run(
+            "reader localize the image entry",
+            reader(ReaderCommand::LocalizeEntryAssets { entry_id: image_entry }),
+        )
+        .await;
+    transcript
+        .run(
+            "reader load the image entry",
+            reader(ReaderCommand::LoadEntry { entry_id: image_entry }),
+        )
+        .await;
 
     transcript
         .run(
@@ -445,6 +547,7 @@ async fn ui_commands_produce_the_recorded_intents() {
     transcript
         .run("import opml, broken", feeds(FeedsCommand::ImportOpml { raw: "<opml".into() }))
         .await;
+    let config_before_settings = config.clone();
     transcript.run("import config", feeds(FeedsCommand::ImportConfig { raw: config })).await;
     transcript
         .run("import config, broken", feeds(FeedsCommand::ImportConfig { raw: "{".into() }))
@@ -472,6 +575,13 @@ async fn ui_commands_produce_the_recorded_intents() {
                 settings: UserSettings { entries_page_size: 0, ..UserSettings::default() },
                 success_message: "已保存".into(),
             }),
+        )
+        .await;
+    // The configuration exported before the settings changed brings the old settings back.
+    transcript
+        .run(
+            "import config with other settings",
+            feeds(FeedsCommand::ImportConfig { raw: config_before_settings }),
         )
         .await;
     transcript
@@ -532,7 +642,7 @@ async fn ui_commands_produce_the_recorded_intents() {
     let _empty = test_host::install(library());
     transcript.run("authenticated shell", shell(ShellCommand::LoadAuthenticatedShell)).await;
 
-    if std::env::var_os("RSSR_UPDATE_UI_TRANSCRIPT").is_some() {
+    if std::env::var("RSSR_UPDATE_UI_TRANSCRIPT").as_deref() == Ok("1") {
         std::fs::write(TRANSCRIPT, &transcript.text).expect("write transcript");
         return;
     }

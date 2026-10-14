@@ -424,3 +424,60 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         self.inner.use_cases.import_export_service.import_opml(raw).await
     }
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::*;
+    use crate::composition::compose_library_use_cases;
+    use crate::store::LibraryStore;
+
+    /// Records what the backend asks of its host; runs nothing.
+    struct RecordingHost {
+        runs_auto_refresh: bool,
+        spawned: Mutex<usize>,
+    }
+
+    #[async_trait::async_trait]
+    impl LocalHost for RecordingHost {
+        fn refresh_concurrency(&self) -> usize {
+            1
+        }
+        fn runs_auto_refresh(&self) -> bool {
+            self.runs_auto_refresh
+        }
+        fn now_utc(&self) -> OffsetDateTime {
+            OffsetDateTime::UNIX_EPOCH
+        }
+        fn spawn(&self, _task: LocalTask) {
+            *self.spawned.lock().unwrap() += 1;
+        }
+        async fn sleep(&self, _duration: Duration) {}
+        fn remote_config_store(&self, _: &str, _: &str) -> Result<Box<dyn RemoteConfigStore>> {
+            anyhow::bail!("unused")
+        }
+    }
+
+    async fn recording_backend(runs_auto_refresh: bool) -> LocalBackend<RecordingHost> {
+        let store = LibraryStore::open_in_memory().await.unwrap();
+        LocalBackend::new(
+            compose_library_use_cases(store).use_cases,
+            RecordingHost { runs_auto_refresh, spawned: Mutex::new(0) },
+        )
+    }
+
+    #[tokio::test]
+    async fn the_periodic_refresh_starts_once_and_not_where_the_host_does_not_run_it() {
+        let backend = recording_backend(true).await;
+        backend.ensure_auto_refresh_started();
+        backend.clone().ensure_auto_refresh_started();
+        assert_eq!(*backend.host().spawned.lock().unwrap(), 1, "once per backend, clones included");
+
+        let disabled = recording_backend(false).await;
+        disabled.ensure_auto_refresh_started();
+        assert_eq!(*disabled.host().spawned.lock().unwrap(), 0);
+        // Not marked as started: a host that later allows it is not locked out.
+        assert!(!disabled.inner.auto_refresh_started.load(Ordering::SeqCst));
+    }
+}
