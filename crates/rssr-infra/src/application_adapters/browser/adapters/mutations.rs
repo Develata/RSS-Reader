@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rssr_application::{
     ActivatedSubscription, ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan,
     ConfigReplacementPort, SubscriptionActivationPort, SubscriptionRemovalPort,
@@ -41,7 +41,11 @@ impl SubscriptionActivationPort for BrowserPersistenceMutations {
                     .iter()
                     .any(|feed| feed.url == normalized_url.as_str() && !feed.is_deleted)
                 {
-                    anyhow::bail!("该地址已订阅：{normalized_url}");
+                    // As on the native store: a request the user can correct.
+                    return Err(rssr_domain::DomainError::InvalidInput(format!(
+                        "该地址已订阅：{normalized_url}"
+                    ))
+                    .into());
                 }
                 let feed = upsert_subscription_in_state(state, &new_feed)?;
                 let generation =
@@ -68,7 +72,7 @@ impl SubscriptionRemovalPort for BrowserPersistenceMutations {
                     .feeds
                     .iter_mut()
                     .find(|feed| feed.id == feed_id)
-                    .context("订阅不存在")?;
+                    .ok_or(rssr_domain::DomainError::NotFound)?;
                 feed.is_deleted = true;
                 feed.updated_at = now_utc();
 

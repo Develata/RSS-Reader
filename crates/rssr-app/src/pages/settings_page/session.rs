@@ -69,9 +69,16 @@ impl SettingsPageSession {
         }
     }
 
+    /// Loaded settings replace what the page last saw stored; fields edited since then stay in
+    /// the draft. A load that returns after edits, or while a save is pending, cannot wipe them
+    /// (the save's reply then merges the same way, see [`Self::apply_saved_settings`]).
     pub(crate) fn apply_loaded_settings(mut self, settings: UserSettings) {
-        self.preset_choice.set(detect_preset_key(&settings.custom_css).to_string());
-        self.draft.set(settings.clone());
+        let edits = SettingsPatch::between(&self.theme.settings.peek(), &self.draft.peek());
+        let draft = edits.applied(&settings);
+        if edits.custom_css.is_none() {
+            self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
+        }
+        self.draft.set(draft);
         self.theme.settings.set(settings);
     }
 

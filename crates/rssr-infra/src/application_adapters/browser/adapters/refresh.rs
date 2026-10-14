@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use reqwest::{StatusCode, header};
 use rssr_application::{
     FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate, ParsedEntryData,
@@ -12,7 +12,7 @@ use crate::application_adapters::browser::{
     state::{BrowserStore, Changes, upsert_entries},
 };
 
-use super::shared::map_persistence_error;
+use super::shared::{map_persistence_error, map_store_error};
 
 #[derive(Clone)]
 pub struct BrowserFeedRefreshSource {
@@ -131,6 +131,8 @@ impl RefreshStorePort for BrowserRefreshStore {
                     .collect()
             })
             .await
+            .map_err(map_store_error)
+            .map_err(Into::into)
     }
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
         self.store
@@ -148,6 +150,8 @@ impl RefreshStorePort for BrowserRefreshStore {
                     .transpose()
             })
             .await
+            .map_err(map_store_error)
+            .map_err(Into::into)
     }
     async fn commit(
         &self,
@@ -160,8 +164,10 @@ impl RefreshStorePort for BrowserRefreshStore {
                 let now = now_utc();
                 let current_generation =
                     state.core.feed_generations.get(&target.feed_id).copied().unwrap_or_default();
+                // As on the native store: a subscription removed or re-added since the refresh
+                // began is not found for it.
                 if current_generation != target.generation {
-                    anyhow::bail!("订阅 generation 已变化，丢弃旧刷新结果");
+                    return Err(rssr_domain::DomainError::NotFound.into());
                 }
                 // Do not resurrect a feed removed while HTTP was in flight.
                 let feed = state
@@ -169,7 +175,7 @@ impl RefreshStorePort for BrowserRefreshStore {
                     .feeds
                     .iter_mut()
                     .find(|feed| feed.id == target.feed_id && !feed.is_deleted)
-                    .context("订阅不存在或已删除")?;
+                    .ok_or(rssr_domain::DomainError::NotFound)?;
                 let mut inserted_count = 0;
                 let mut changes = Changes::CORE;
                 match commit {
@@ -231,6 +237,8 @@ impl RefreshStorePort for BrowserRefreshStore {
                 ))
             })
             .await
+            .map_err(map_store_error)
+            .map_err(Into::into)
     }
 }
 fn refresh_target(

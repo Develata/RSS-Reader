@@ -45,5 +45,7 @@ impl SettingsUpdatePort for BrowserSettingsRepository {
                 Ok((next, Changes::CORE))
             })
             .await
+            .map_err(map_store_error)
+            .map_err(Into::into)
     }
 }

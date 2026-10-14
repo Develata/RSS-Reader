@@ -465,6 +465,30 @@ fn belongs_to_target(file: &Path, target: &Path) -> StoreResult<bool> {
     Ok(same_dir && (file_name == target_name || name.starts_with(prefix.as_ref())))
 }
 
+/// Published times in the library are whole-second UTC RFC 3339 text: the archive cutoff (a
+/// whole second, B2-D7) is compared with them as text, which orders correctly only when both
+/// have the same form. The feed parser only produces such times; an imported library may hold
+/// others (a fraction of a second, an offset), so those rows are rewritten here. A time that
+/// does not parse is left as it was: reading it fails as it did in v0.1.x.
+fn normalize_published_times(tx: &Connection) -> StoreResult<()> {
+    let stray: Vec<(i64, String)> = {
+        let mut statement = tx.prepare(
+            "SELECT id, published_at FROM entries
+             WHERE published_at IS NOT NULL
+               AND (published_at GLOB '*.*' OR published_at NOT GLOB '*Z')",
+        )?;
+        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        rows.collect::<Result<_, _>>()?
+    };
+    let mut update = tx.prepare("UPDATE entries SET published_at = ?2 WHERE id = ?1")?;
+    for (id, raw) in stray {
+        let Ok(time) = super::codec::parse_time(&raw) else { continue };
+        let whole = time.replace_nanosecond(0).expect("zero nanoseconds are valid");
+        update.execute(rusqlite::params![id, super::codec::format_time(whole)?])?;
+    }
+    Ok(())
+}
+
 fn copy_library(
     tx: &Connection,
     layout: Layout,
@@ -490,6 +514,7 @@ fn copy_library(
                 read_at, starred_at, created_at, updated_at
          FROM v01.entries;"
     ))?;
+    normalize_published_times(tx)?;
     let bodies_sql = match (layout, content) {
         (Layout::Inline, _) => Some((
             "INSERT INTO entry_contents (entry_id, content_html, content_text, content_hash,

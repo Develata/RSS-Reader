@@ -58,11 +58,17 @@ impl From<rusqlite::Error> for StoreError {
 impl From<StoreError> for DomainError {
     /// Keeps what a caller can act on: a constraint violation means another write got there
     /// first (read again), busy / interrupted / timed out may pass when retried.
+    ///
+    /// A conflict's text is shown to the user, so it is a fixed one: SQLite's message (which can
+    /// carry a trigger's or a constraint's own words) goes to the log only.
     fn from(error: StoreError) -> Self {
         match error {
             StoreError::NotFound => Self::NotFound,
             StoreError::Domain(error) => error,
-            StoreError::Conflict(_) => Self::Conflict(error_chain(&error)),
+            StoreError::Conflict(_) => {
+                tracing::warn!(error = %error_chain(&error), "存储写入违反约束");
+                Self::Conflict(STORE_CONFLICT.to_string())
+            }
             StoreError::Busy(_) | StoreError::Interrupted | StoreError::ConnectionTimeout => {
                 Self::Unavailable(error_chain(&error))
             }
@@ -70,6 +76,9 @@ impl From<StoreError> for DomainError {
         }
     }
 }
+
+/// What a constraint violation tells the user (B2-D5: storage details stay in the log).
+pub(crate) const STORE_CONFLICT: &str = "数据已被其他操作修改，请重新读取后再试";
 
 /// The error and its sources on one line, as `anyhow`'s `{:#}` would print them.
 fn error_chain(error: &(dyn std::error::Error + 'static)) -> String {
@@ -101,10 +110,14 @@ mod tests {
     /// when busy; the rest is a storage failure.
     #[test]
     fn domain_errors_keep_the_actionable_categories() {
-        assert!(matches!(
-            DomainError::from(sqlite(ffi::SQLITE_CONSTRAINT)),
-            DomainError::Conflict(_)
-        ));
+        let conflict = rusqlite::Error::SqliteFailure(
+            ffi::Error::new(ffi::SQLITE_CONSTRAINT),
+            Some("injected write failure".into()),
+        );
+        match DomainError::from(StoreError::from(conflict)) {
+            DomainError::Conflict(detail) => assert_eq!(detail, super::STORE_CONFLICT),
+            other => panic!("expected a conflict, got {other:?}"),
+        }
         assert!(matches!(DomainError::from(sqlite(ffi::SQLITE_BUSY)), DomainError::Unavailable(_)));
         assert!(matches!(DomainError::from(StoreError::Interrupted), DomainError::Unavailable(_)));
         assert!(matches!(

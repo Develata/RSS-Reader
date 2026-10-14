@@ -4,9 +4,8 @@ use anyhow::Context;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, ConfigImportOutcome,
-    DEFAULT_REFRESH_CONCURRENCY, OpmlImportOutcome, RefreshAllInput, RefreshAllOutcome,
-    RefreshFailureItem, RefreshFeedOutcome, RemoteConfigPullOutcome, RemoteConfigPushOutcome,
-    RemoveSubscriptionInput, SettingsPatch,
+    DEFAULT_REFRESH_CONCURRENCY, OpmlImportOutcome, RefreshAllInput, RefreshFailureItem,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput, SettingsPatch,
 };
 use rssr_domain::{ConfigFingerprint, Feed, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
@@ -361,8 +360,9 @@ impl CliServices {
             .await
             .context("保存订阅失败")?;
 
-        if let Some(first_refresh) = outcome.first_refresh {
-            ensure_refresh_feed_succeeded(&first_refresh).context("首次刷新订阅失败")?;
+        let first_failure = outcome.first_refresh.and_then(|refresh| refresh.failure_summary());
+        if let Some(failure) = self.named(first_failure.into_iter().collect()).await.pop() {
+            return Err(anyhow::anyhow!("{}", failure_line(&failure)).context("首次刷新订阅失败"));
         }
 
         Ok(())
@@ -387,12 +387,38 @@ impl CliServices {
             }
         }
         println!("合计：{}", new_entries_message(outcome.summary().inserted_count));
-        ensure_refresh_all_succeeded(&outcome)
+        let failures = self.named(outcome.failure_summaries()).await;
+        if !failures.is_empty() {
+            let lines = failures.iter().map(failure_line).collect::<Vec<_>>().join(" | ");
+            anyhow::bail!("部分订阅刷新失败: {lines}");
+        }
+        Ok(())
+    }
+
+    /// The display names of failed subscriptions, read once; without them the address stands in.
+    async fn named(&self, mut failures: Vec<RefreshFailureItem>) -> Vec<RefreshFailureItem> {
+        if failures.is_empty() {
+            return failures;
+        }
+        if let Ok(snapshot) = self.use_cases.feeds_snapshot_service.load_snapshot().await {
+            for failure in &mut failures {
+                failure.name = snapshot
+                    .feeds
+                    .iter()
+                    .find(|feed| feed.id == failure.feed_id)
+                    .map(|feed| feed.title.clone());
+            }
+        }
+        failures
     }
 
     async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
         let outcome = self.use_cases.refresh_service.refresh_feed(feed_id).await?;
-        ensure_refresh_feed_succeeded(&outcome)?;
+        if let Some(failure) =
+            self.named(outcome.failure_summary().into_iter().collect()).await.pop()
+        {
+            anyhow::bail!("{}", failure_line(&failure));
+        }
         println!("订阅 {feed_id}：{}", new_entries_message(outcome.inserted_count()));
         Ok(())
     }
@@ -498,24 +524,9 @@ fn print_feeds(feeds: &[Feed]) {
     }
 }
 
+/// One failed subscription: its name, or its address when it has none (B2-D7).
 fn failure_line(failure: &RefreshFailureItem) -> String {
-    format!("{}: {}", failure.url, failure.message)
-}
-
-fn ensure_refresh_feed_succeeded(outcome: &RefreshFeedOutcome) -> anyhow::Result<()> {
-    if let Some(failure) = outcome.failure_summary() {
-        anyhow::bail!("{}", failure_line(&failure));
-    }
-    Ok(())
-}
-
-fn ensure_refresh_all_succeeded(outcome: &RefreshAllOutcome) -> anyhow::Result<()> {
-    let failures = outcome.failure_summaries();
-    if !failures.is_empty() {
-        let lines = failures.iter().map(failure_line).collect::<Vec<_>>().join(" | ");
-        anyhow::bail!("部分订阅刷新失败: {lines}");
-    }
-    Ok(())
+    format!("{}: {}", failure.name.as_deref().unwrap_or(&failure.url), failure.message)
 }
 
 fn config_import_summary(outcome: &ConfigImportOutcome) -> String {

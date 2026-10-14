@@ -1,5 +1,7 @@
 //! Conversions between stored text and domain values. Times are RFC 3339 UTC strings, so their
-//! lexical order is their time order (list sorting and the archive cutoff rely on it).
+//! lexical order is their time order (list sorting and the archive cutoff rely on it). Published
+//! times are moreover whole seconds, like archive cutoffs (B2-D7): the parser produces only such
+//! times and the v0.1.x import normalizes the others.
 
 use rssr_domain::DomainError;
 use time::OffsetDateTime;

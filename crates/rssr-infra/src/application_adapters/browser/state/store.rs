@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use wasm_bindgen::{JsCast, prelude::*};
 
 use super::{
@@ -89,17 +89,23 @@ impl BrowserStore {
             });
             let locked = with_storage_lock(callback.as_ref().unchecked_ref()).await;
             let value = match locked {
-                Ok(_) => {
-                    result.borrow_mut().take().unwrap_or_else(|| anyhow::bail!("存储操作已取消"))
-                }
+                Ok(_) => result.borrow_mut().take().unwrap_or_else(|| {
+                    Err(rssr_domain::DomainError::Unavailable("存储操作已取消".into()).into())
+                }),
                 Err(error) => {
-                    Err(anyhow::anyhow!("无法取得浏览器存储锁（最多等待 5 秒）: {error:?}"))
+                    // Another tab holds the store: retrying later may work.
+                    Err(rssr_domain::DomainError::Unavailable(format!(
+                        "无法取得浏览器存储锁（最多等待 5 秒）: {error:?}"
+                    ))
+                    .into())
                 }
             };
             if let Some(sender) = sender.borrow_mut().take() {
                 let _ = sender.send(value);
             }
         });
-        receiver.await.context("浏览器存储任务已中断")?
+        receiver
+            .await
+            .map_err(|_| rssr_domain::DomainError::Unavailable("浏览器存储任务已中断".into()))?
     }
 }

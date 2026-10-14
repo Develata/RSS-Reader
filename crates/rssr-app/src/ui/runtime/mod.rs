@@ -28,9 +28,10 @@ pub(super) fn new_entries_message(inserted_count: u64) -> String {
     }
 }
 
-/// One failed subscription as the status line shows it.
+/// One failed subscription as the status line shows it: its name, or its address when it has
+/// none (B2-D7).
 pub(super) fn failure_line(failure: &rssr_application::RefreshFailureItem) -> String {
-    format!("{}: {}", failure.url, failure.message)
+    format!("{}: {}", failure.name.as_deref().unwrap_or(&failure.url), failure.message)
 }
 
 /// Every failed subscription on one status line; `None` when nothing failed.
@@ -46,4 +47,26 @@ pub(super) fn config_import_summary(outcome: &rssr_application::ConfigImportOutc
         "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
         outcome.imported_feed_count, outcome.removed_feed_count
     )
+}
+
+#[cfg(test)]
+mod failure_line_tests {
+    use rssr_application::{ErrorKind, RefreshFailureItem};
+
+    #[test]
+    fn a_failure_names_the_subscription_or_its_address() {
+        let failure = |name: Option<&str>| RefreshFailureItem {
+            feed_id: 1,
+            url: "https://example.com/feed.xml".into(),
+            name: name.map(str::to_string),
+            kind: ErrorKind::Network,
+            message: "HTTP 404".into(),
+        };
+        assert_eq!(super::failure_line(&failure(Some("技术资讯"))), "技术资讯: HTTP 404");
+        assert_eq!(super::failure_line(&failure(None)), "https://example.com/feed.xml: HTTP 404");
+        assert_eq!(
+            super::failure_lines(&[failure(Some("甲")), failure(None)]).as_deref(),
+            Some("甲: HTTP 404 | https://example.com/feed.xml: HTTP 404")
+        );
+    }
 }

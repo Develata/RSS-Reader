@@ -309,4 +309,40 @@ mod tests {
             assert!(session.page.status().contains("尚未保存"));
         });
     }
+
+    /// A load that returns after an edit and during a save keeps the edits (B2-D4): load A is
+    /// in flight, the user saves a theme, keeps editing, then A and the save reply arrive.
+    #[test]
+    fn a_load_reply_during_a_save_keeps_the_edits() {
+        let (mut dom, session, theme) = setup();
+        let stored_elsewhere =
+            UserSettings { refresh_interval_minutes: 90, ..UserSettings::default() };
+        let sender = dom.in_scope(ScopeId::APP, || {
+            session.page.draft().write().theme = ThemeMode::Dark;
+            start_save_over(session, stored_elsewhere.clone())
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            session.page.draft().write().list_density = ListDensity::Compact;
+            session.page.apply_loaded_settings(stored_elsewhere.clone());
+            let draft = session.page.draft().peek().clone();
+            assert_eq!(
+                (draft.theme, draft.list_density, draft.refresh_interval_minutes),
+                (ThemeMode::Dark, ListDensity::Compact, 90),
+                "the load keeps both edits and takes the stored interval"
+            );
+        });
+        sender.send(true).expect("complete the save");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            let draft = session.page.draft().peek().clone();
+            assert_eq!(
+                (draft.theme, draft.list_density, draft.refresh_interval_minutes),
+                (ThemeMode::Dark, ListDensity::Compact, 90)
+            );
+            let saved = theme.settings.peek().clone();
+            assert_eq!((saved.theme, saved.refresh_interval_minutes), (ThemeMode::Dark, 90));
+            assert!(session.page.status().contains("尚未保存"), "the density edit is unsaved");
+        });
+    }
 }

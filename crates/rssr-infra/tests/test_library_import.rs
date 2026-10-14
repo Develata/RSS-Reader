@@ -256,6 +256,31 @@ async fn a_split_library_from_v0_1_23_is_imported() {
     assert_eq!(library.app_state.load().await.unwrap().last_opened_feed_id, Some(1));
 }
 
+/// Imported published times become whole-second UTC text, the form the archive cutoff is
+/// compared with (B2-D7): a fraction of a second or an offset in a v0.1.x library would sort
+/// differently from the same instant written by the parser.
+#[tokio::test(flavor = "multi_thread")]
+async fn imported_published_times_are_whole_seconds_in_utc() {
+    let dir = TempDir::new("v01-times");
+    let source = fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
+    let index = Connection::open(&source.index).unwrap();
+    index
+        .execute_batch(
+            "UPDATE entries SET published_at = '2026-03-01T18:00:00.5+08:00' WHERE id = 1;
+             UPDATE entries SET published_at = 'not a time' WHERE id = 2;",
+        )
+        .unwrap();
+    drop(index);
+
+    import_v01(&source, &dir.target()).unwrap();
+    let library = Library::over(LibraryStore::open(&dir.target()).await.unwrap());
+    let published =
+        |id: i64| library.text(format!("SELECT published_at FROM entries WHERE id = {id}"));
+    assert_eq!(published(1).await.as_deref(), Some("2026-03-01T10:00:00Z"));
+    assert_eq!(published(2).await.as_deref(), Some("not a time"), "left as it was");
+    assert_eq!(published(3).await.as_deref(), Some(T), "already whole-second UTC");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_split_library_from_v0_1_21_with_crlf_checksums_is_imported() {
     let dir = TempDir::new("v0121");

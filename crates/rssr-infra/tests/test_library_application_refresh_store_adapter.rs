@@ -233,7 +233,19 @@ async fn check_retry_after_failed_write(table: &str) {
         store.clone(),
     );
     let error = service.refresh_feed(feed.id).await.expect_err("write must fail");
-    assert!(format!("{error:#}").contains("injected write failure"));
+    // What the user sees carries none of the store's own text (B2-D5): the trigger's message
+    // only reaches the log; the error is a conflict with a fixed text, and the diagnostic the
+    // subscriptions page shows is generic too.
+    assert!(!format!("{error:#}").contains("injected"), "{error:#}");
+    let public = rssr_application::classify(&error);
+    assert_eq!(public.kind, rssr_application::ErrorKind::Conflict);
+    assert!(!public.message.contains("injected"), "{}", public.message);
+    let shown = library.feeds.list_summaries().await.unwrap()[0].fetch_error.clone();
+    assert!(!shown.as_deref().unwrap_or_default().contains("injected"), "{shown:?}");
+    // Refreshing everything reports the same failure without the store's text.
+    let all = service.refresh_all(RefreshAllInput::default()).await.expect("a per-feed failure");
+    let failure = all.failure_summaries().pop().expect("the feed failed");
+    assert!(!failure.message.contains("injected"), "{}", failure.message);
     let failed_feed = library.feeds.get_feed(feed.id).await.unwrap().unwrap();
     assert_eq!(failed_feed.last_success_at, last_success);
     assert!(failed_feed.fetch_error.is_some());

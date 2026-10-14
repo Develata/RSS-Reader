@@ -147,6 +147,32 @@ fn build_workflow(state: BrowserStore) -> SubscriptionWorkflow {
     SubscriptionWorkflow::new(feed_service, refresh_service, Arc::new(UnusedRefreshSource))
 }
 
+/// A storage write that fails (here the quota) is a storage error, not an internal one, on the
+/// settings and refresh ports too (B2-D5).
+#[wasm_bindgen_test]
+async fn browser_write_failures_are_storage_errors() {
+    use rssr_application::{ErrorKind, SettingsPatch, SettingsUpdatePort, classify};
+    use rssr_infra::application_adapters::browser::adapters::BrowserSettingsRepository;
+    clear_browser_state_storage();
+    let state = seed_state(BrowserState::default()).await;
+    let settings = BrowserSettingsRepository::new(state);
+
+    js_sys::eval("globalThis.__quotaSet = Storage.prototype.setItem; Storage.prototype.setItem = function() { throw new DOMException('test quota', 'QuotaExceededError'); };").unwrap();
+    let failed = settings
+        .update_settings(SettingsPatch { refresh_interval_minutes: Some(45), ..Default::default() })
+        .await;
+    js_sys::eval(
+        "Storage.prototype.setItem = globalThis.__quotaSet; delete globalThis.__quotaSet;",
+    )
+    .unwrap();
+
+    let error = failed.expect_err("the write cannot be stored");
+    let public = classify(&error);
+    assert_eq!(public.kind, ErrorKind::Storage);
+    assert!(!public.message.contains("quota"), "{}", public.message);
+    clear_browser_state_storage();
+}
+
 #[wasm_bindgen_test]
 async fn browser_activation_port_captures_generation_and_rejects_active_duplicate() {
     clear_browser_state_storage();
@@ -169,6 +195,14 @@ async fn browser_activation_port_captures_generation_and_rejects_active_duplicat
         .await
         .expect_err("active duplicate must be rejected under the Web Lock");
     assert!(duplicate.to_string().contains("已订阅"));
+    // The same kinds as on the native store (B2-D5): the user can correct a duplicate; a
+    // subscription that does not exist is not found.
+    assert_eq!(
+        rssr_application::classify(&duplicate).kind,
+        rssr_application::ErrorKind::InvalidInput
+    );
+    let missing = mutations.remove_subscription(999, false).await.expect_err("no such feed");
+    assert_eq!(rssr_application::classify(&missing).kind, rssr_application::ErrorKind::NotFound);
 
     mutations.remove_subscription(first.feed.id, false).await.unwrap();
     let reactivated = mutations.activate_subscription(subscription).await.unwrap();
