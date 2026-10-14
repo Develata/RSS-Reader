@@ -457,14 +457,18 @@ impl RefreshService {
     ) -> Result<RefreshFeedOutcome> {
         let lock = self.feed_locks.lock_for(target.feed_id);
         let _serialized = lock.lock().await;
-        if self.feed_locks.superseded(target.feed_id, ticket.0) {
-            return Ok(RefreshFeedOutcome {
-                feed_id: target.feed_id,
-                url: target.url.to_string(),
-                result: RefreshFeedResult::NotModified,
-            });
+        // A target with a persistent ticket is ordered by the store; the in-process sequence only
+        // serves stores without tickets.
+        if target.ticket == RefreshTicket::UNTRACKED {
+            if self.feed_locks.superseded(target.feed_id, ticket.0) {
+                return Ok(RefreshFeedOutcome {
+                    feed_id: target.feed_id,
+                    url: target.url.to_string(),
+                    result: RefreshFeedResult::NotModified,
+                });
+            }
+            self.feed_locks.record_commit(target.feed_id, ticket.0);
         }
-        self.feed_locks.record_commit(target.feed_id, ticket.0);
         self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await
     }
 
@@ -651,7 +655,9 @@ impl RefreshService {
         // 中途出错或被丢弃时前面的步骤可能已经落库。宁可让更早的预抓取结果作废（下次刷新会
         // 补上），也不让它覆盖可能已经写入的更新内容（独立评审）。调用方持有该订阅的锁，
         // 预抓取结果的检查与这里的登记不会交错。
-        if !matches!(source_output, FeedRefreshSourceOutput::Failed(_)) {
+        if target.ticket == RefreshTicket::UNTRACKED
+            && !matches!(source_output, FeedRefreshSourceOutput::Failed(_))
+        {
             self.feed_locks.record_commit(target.feed_id, fetch);
         }
         self.apply_source_output(target, source_output).await
@@ -699,9 +705,18 @@ impl RefreshService {
                 })
             }
             FeedRefreshSourceOutput::Failed(failure) => {
-                self.store
+                let committed = self
+                    .store
                     .commit(&target, RefreshCommit::Failed { failure: failure.clone() })
                     .await?;
+                if committed.superseded {
+                    // A newer refresh already succeeded or was diagnosed; this failure is stale.
+                    return Ok(RefreshFeedOutcome {
+                        feed_id: target.feed_id,
+                        url: target.url.to_string(),
+                        result: RefreshFeedResult::NotModified,
+                    });
+                }
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),

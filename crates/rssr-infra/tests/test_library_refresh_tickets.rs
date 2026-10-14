@@ -212,16 +212,144 @@ async fn committing_one_ticket_twice_is_superseded_the_second_time() {
     assert_eq!(entry_titles(&a).await, ["one"]);
 }
 
-/// A commit without a ticket (a caller that did not begin a refresh) is the newest refresh.
+/// A commit must answer a ticketed request: one without a ticket (a target from `list_targets`)
+/// is refused and writes nothing, and `get_target` hands out ticketed targets.
 #[tokio::test(flavor = "multi_thread")]
-async fn an_untracked_commit_is_issued_a_ticket_as_the_newest_refresh() {
-    let (_dir, a, b, feed) = two_processes("untracked").await;
-    let started = begin(&a, feed.id).await;
-    let untracked = b.refresh.get_target(feed.id).await.unwrap().unwrap();
-    assert_eq!(untracked.ticket, RefreshTicket::UNTRACKED);
-    assert!(!superseded(&b, &untracked, fetched("Untracked", "etag-u", &["u"])).await);
-    assert_eq!(tickets(&a, feed.id).await, (2, 2, 2));
-    assert!(superseded(&a, &started, fetched("Started", "etag-s", &["s"])).await);
+async fn a_commit_without_a_ticket_is_refused() {
+    let (_dir, a, _b, feed) = two_processes("untracked").await;
+    let listed = a.refresh.list_targets().await.unwrap().remove(0);
+    assert_eq!(listed.ticket, RefreshTicket::UNTRACKED);
+    for commit in [
+        fetched("Untracked", "etag-u", &["u"]),
+        RefreshCommit::NotModified { metadata: metadata("etag-u") },
+        failed("untracked"),
+    ] {
+        assert!(a.refresh.commit(&listed, commit).await.is_err());
+    }
+    assert_eq!(tickets(&a, feed.id).await, (0, 0, 0));
+    assert!(entry_titles(&a).await.is_empty());
+    let stored = a.feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!((stored.etag, stored.fetch_error), (None, None));
+
+    let handed_out = a.refresh.get_target(feed.id).await.unwrap().unwrap();
+    assert_eq!(handed_out.ticket, RefreshTicket { issued: 1, baseline: 0 });
+}
+
+/// A failure that stored its response's validators does not let a later 304 (which omits them)
+/// bind those validators to content they never described: the 304 completes its validators from
+/// the request it answers.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_304_after_a_failure_keeps_the_validators_of_the_published_version() {
+    let (_dir, a, b, feed) = two_processes("failure-then-304").await;
+    let initial = begin(&a, feed.id).await;
+    assert!(!superseded(&a, &initial, fetched("A", "etag-a", &["a"])).await);
+
+    let failing = begin(&a, feed.id).await;
+    let conditional = begin(&b, feed.id).await;
+    assert_eq!(conditional.etag.as_deref(), Some("etag-a"));
+    let failure = RefreshCommit::Failed {
+        failure: RefreshFailure {
+            message: "write failed".into(),
+            metadata: Some(metadata("etag-b")),
+        },
+    };
+    assert!(!superseded(&a, &failing, failure).await);
+    assert_eq!(
+        a.feeds.get_feed(feed.id).await.unwrap().unwrap().etag.as_deref(),
+        Some("etag-b"),
+        "the failure stored its response's validators (shared contract)"
+    );
+    let not_modified = RefreshCommit::NotModified { metadata: RefreshHttpMetadata::default() };
+    assert!(!superseded(&b, &conditional, not_modified).await);
+
+    let stored = a.feeds.get_feed(feed.id).await.unwrap().unwrap();
+    assert_eq!(stored.etag.as_deref(), Some("etag-a"), "validators of the stored content");
+    assert_eq!(stored.fetch_error, None);
+    let next = begin(&a, feed.id).await;
+    assert_eq!(
+        next.etag.as_deref(),
+        Some("etag-a"),
+        "the next request asks about the stored content"
+    );
+    assert_eq!(entry_titles(&a).await, ["a"]);
+}
+
+/// An older failure overtaken by a newer success is reported as not modified by the refresh
+/// service, not as a failure.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_refresh_service_reports_a_superseded_failure_as_not_modified() {
+    let (_dir, a, b, feed) = two_processes("service-failure").await;
+    let service = RefreshService::new(
+        Arc::new(RacingSource {
+            other: b,
+            feed_id: feed.id,
+            output: FeedRefreshSourceOutput::Failed(RefreshFailure {
+                message: "timeout".into(),
+                metadata: None,
+            }),
+            race: true,
+        }),
+        Arc::new(LibraryRefreshStore::new(a.store.clone())),
+    );
+    let outcome = service.refresh_feed(feed.id).await.unwrap();
+    assert!(matches!(outcome.result, RefreshFeedResult::NotModified), "{outcome:?}");
+    assert_eq!(a.feeds.get_feed(feed.id).await.unwrap().unwrap().fetch_error, None);
+}
+
+/// In one process, a refresh whose write failed after the subscription was added does not make
+/// the add flow drop its prepared fetch: the persistent tickets decide, and they accept it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_prepared_fetch_survives_a_failed_refresh_in_the_same_process() {
+    let dir = TempDir::new("prepared-after-failure");
+    let library = Library::over(LibraryStore::open(dir.0.join("library.sqlite3")).await.unwrap());
+    let activated = library
+        .mutations
+        .activate_subscription(library::subscription("https://example.com/new.xml"))
+        .await
+        .unwrap();
+    let store: Arc<dyn RefreshStorePort> =
+        Arc::new(LibraryRefreshStore::new(library.store.clone()));
+    let service = RefreshService::new(
+        Arc::new(RacingSource {
+            other: Library::over(library.store.clone()),
+            feed_id: activated.feed.id,
+            output: service_update("background"),
+            race: false,
+        }),
+        store,
+    );
+    let prepared_ticket = service.prepared_update_ticket();
+    // The background refresh fetches, but its write fails.
+    library
+        .exec(
+            "CREATE TRIGGER fail_background BEFORE INSERT ON entries WHEN NEW.dedup_key = 'background'
+             BEGIN SELECT RAISE(ABORT, 'disk full'); END",
+        )
+        .await;
+    // `refresh_feed` reports a failed write as an error (refresh_all turns it into a Failed
+    // outcome per feed); the failure is recorded under the background refresh's ticket.
+    assert!(service.refresh_feed(activated.feed.id).await.is_err());
+    library.exec("DROP TRIGGER fail_background").await;
+
+    let prepared = RefreshTarget {
+        feed_id: activated.feed.id,
+        generation: activated.generation,
+        url: activated.feed.url.clone(),
+        etag: None,
+        last_modified: None,
+        ticket: activated.ticket,
+    };
+    let FeedRefreshSourceOutput::Updated(update) = service_update("prepared") else {
+        unreachable!()
+    };
+    let outcome = service.apply_prepared_update(prepared, update, prepared_ticket).await.unwrap();
+    assert!(
+        matches!(outcome.result, RefreshFeedResult::Updated { inserted_count: 1, .. }),
+        "{outcome:?}"
+    );
+    assert_eq!(entry_titles(&library).await, ["prepared"]);
+    let stored = library.feeds.get_feed(activated.feed.id).await.unwrap().unwrap();
+    assert!(stored.fetch_error.is_some(), "the newer failure stays the diagnosis");
 }
 
 /// The add flow's prepared fetch takes its ticket at activation, so a refresh that starts later
@@ -330,4 +458,25 @@ async fn the_refresh_service_takes_a_ticket_and_reports_a_superseded_response() 
     assert_eq!(entry_titles(&a).await, ["first", "other"]);
     assert_eq!(a.feeds.get_feed(feed.id).await.unwrap().unwrap().etag.as_deref(), Some("etag-o"));
     assert_eq!(tickets(&a, feed.id).await, (3, 3, 3));
+}
+
+/// Cost of the write transaction that issues a ticket, on a file library (run explicitly:
+/// `cargo test --release --test test_library_refresh_tickets -- --ignored --nocapture`).
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "measurement"]
+async fn measure_ticket_issuing() {
+    let (_dir, a, _b, feed) = two_processes("measure").await;
+    let synchronous = a.scalar("PRAGMA synchronous").await;
+    let rounds = 500;
+    let started = std::time::Instant::now();
+    for _ in 0..rounds {
+        begin(&a, feed.id).await;
+    }
+    let elapsed = started.elapsed();
+    eprintln!(
+        "TICKETS rounds={rounds} synchronous={synchronous} journal={} total_ms={} per_ticket_us={}",
+        a.store.journal_mode(),
+        elapsed.as_millis(),
+        elapsed.as_micros() / rounds
+    );
 }

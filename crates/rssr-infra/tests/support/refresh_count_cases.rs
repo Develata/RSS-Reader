@@ -31,21 +31,32 @@ fn update(items: &[(i64, &str)]) -> RefreshCommit {
     }
 }
 
+/// Commits as a new refresh would: each response answers its own request (target), so stores that
+/// order refreshes by ticket see a fresh one every time.
+async fn commit_fresh(
+    store: &dyn RefreshStorePort,
+    feed_id: i64,
+    commit: RefreshCommit,
+) -> anyhow::Result<rssr_application::RefreshCommitOutcome> {
+    let target = store.get_target(feed_id).await?.expect("active subscription");
+    store.commit(&target, commit).await
+}
+
 pub async fn verify_counts(store: &dyn RefreshStorePort, feed_id: i64) {
-    let target = store.get_target(feed_id).await.unwrap().unwrap();
     store.begin_batch().await.unwrap();
     assert_eq!(
-        store
-            .commit(&target, update(&[(1, "one"), (1, "one again")]))
+        commit_fresh(store, feed_id, update(&[(1, "one"), (1, "one again")]))
             .await
             .unwrap()
             .inserted_count,
         1
     );
-    assert_eq!(store.commit(&target, update(&[(1, "one again")])).await.unwrap().inserted_count, 0);
     assert_eq!(
-        store
-            .commit(&target, update(&[(1, "changed body"), (2, "two"), (3, "three")]))
+        commit_fresh(store, feed_id, update(&[(1, "one again")])).await.unwrap().inserted_count,
+        0
+    );
+    assert_eq!(
+        commit_fresh(store, feed_id, update(&[(1, "changed body"), (2, "two"), (3, "three")]))
             .await
             .unwrap()
             .inserted_count,
@@ -53,28 +64,30 @@ pub async fn verify_counts(store: &dyn RefreshStorePort, feed_id: i64) {
     );
     store.end_batch().await.unwrap();
     assert_eq!(
-        store.commit(&target, update(&[(1, "changed body again")])).await.unwrap().inserted_count,
-        0
-    );
-    assert_eq!(
-        store
-            .commit(&target, RefreshCommit::NotModified { metadata: Default::default() })
+        commit_fresh(store, feed_id, update(&[(1, "changed body again")]))
             .await
             .unwrap()
             .inserted_count,
         0
     );
     assert_eq!(
-        store
-            .commit(
-                &target,
-                RefreshCommit::Failed {
-                    failure: RefreshFailure { message: "offline".into(), metadata: None }
-                }
-            )
+        commit_fresh(store, feed_id, RefreshCommit::NotModified { metadata: Default::default() })
             .await
             .unwrap()
             .inserted_count,
+        0
+    );
+    assert_eq!(
+        commit_fresh(
+            store,
+            feed_id,
+            RefreshCommit::Failed {
+                failure: RefreshFailure { message: "offline".into(), metadata: None }
+            }
+        )
+        .await
+        .unwrap()
+        .inserted_count,
         0
     );
 }

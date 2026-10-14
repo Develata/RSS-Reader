@@ -15,13 +15,21 @@
 //! | response | applied when | effect |
 //! |---|---|---|
 //! | fetched feed | `t > P` | content and validators; `P := t`, `D := max(D, t)` |
-//! | 304 | `baseline == P` | keeps the content, refreshes validators; `P := t`, `D := max(D, t)` |
+//! | 304 | `baseline == P` | keeps the content; validators the 304 omits come from the request; `P := t`, `D := max(D, t)` |
 //! | failure | `t > D` | error and fetch time; `D := t` |
 //!
 //! The fetch time and the error describe the newest diagnosis, so a publication with `t < D` (an
 //! older success arriving after a newer failure) leaves them as they are. A commit that is not
-//! applied writes nothing and reports itself superseded. A commit without a ticket is issued one
-//! inside its transaction: it is the newest refresh.
+//! applied writes nothing and reports itself superseded.
+//!
+//! Every commit carries the ticket of the request it answers: from `begin_refresh` (which
+//! `get_target` also goes through) or from the activation of a new subscription. A commit without
+//! one is refused: issuing a ticket only at commit time would put an earlier request after later
+//! ones and give an old 304 a baseline it never had. Targets from `list_targets` only enumerate.
+//!
+//! A 304 completes the validators it omits from the ones the request sent (they belong to the
+//! version P was when the ticket was issued), never from the stored row: a failure since then may
+//! have stored the validators of a response that was never published.
 
 use anyhow::{Context, Result};
 use rssr_application::{
@@ -79,12 +87,6 @@ fn list_targets(conn: &Connection) -> StoreResult<Vec<RefreshTarget>> {
     Ok(targets)
 }
 
-fn get_target(conn: &Connection, feed_id: i64) -> StoreResult<Option<RefreshTarget>> {
-    let Some(row) = feeds::get_active(conn, feed_id)? else { return Ok(None) };
-    let has_entries = has_entries(conn, feed_id)?;
-    Ok(Some(target_from(row, has_entries)))
-}
-
 /// Fails with `NotFound` unless the subscription is active in the target's generation: a
 /// refresh never writes into a subscription that was removed, or removed and added again.
 fn ensure_generation(conn: &Connection, target: &RefreshTarget) -> StoreResult<()> {
@@ -107,13 +109,15 @@ pub(crate) fn issue_ticket(conn: &Connection, feed_id: i64) -> StoreResult<Refre
     .ok_or(StoreError::NotFound)
 }
 
-/// The commit's ticket; a commit without one is issued one now, as the newest refresh.
-fn commit_ticket(conn: &Connection, target: &RefreshTarget) -> StoreResult<RefreshTicket> {
+/// The commit's ticket; a commit without one is refused (see the module documentation).
+fn commit_ticket(target: &RefreshTarget) -> StoreResult<RefreshTicket> {
     if target.ticket == RefreshTicket::UNTRACKED {
-        issue_ticket(conn, target.feed_id)
-    } else {
-        Ok(target.ticket)
+        return Err(DomainError::InvalidInput(
+            "刷新提交缺少序号：目标必须来自 begin_refresh 或订阅激活".to_owned(),
+        )
+        .into());
     }
+    Ok(target.ticket)
 }
 
 /// Published (P) and diagnosed (D) tickets.
@@ -138,24 +142,21 @@ fn begin_refresh(
     Ok(Some(RefreshTarget { ticket, ..target_from(row, has_entries) }))
 }
 
-/// Records the version published by ticket `ticket`. Validators and the last success belong to
-/// the published version; the fetch time and the error to the newest diagnosis, so they change
-/// only when `ticket >= D`. A 304 keeps validators the server did not resend
-/// (`keep_missing_validators`): RFC 9110 lets it omit them, and losing them loses the conditions
-/// of the next request.
+/// Records the version published by ticket `ticket` with `validators`. Validators and the last
+/// success belong to the published version; the fetch time and the error to the newest
+/// diagnosis, so they change only when `ticket >= D`.
 fn record_publication(
     conn: &Connection,
     target: &RefreshTarget,
     ticket: i64,
-    metadata: &RefreshHttpMetadata,
-    keep_missing_validators: bool,
+    validators: &RefreshHttpMetadata,
     now: &str,
 ) -> StoreResult<()> {
     let changed = conn
         .prepare_cached(
             "UPDATE feeds
-             SET etag = CASE WHEN ?7 THEN COALESCE(?3, etag) ELSE ?3 END,
-                 last_modified = CASE WHEN ?7 THEN COALESCE(?4, last_modified) ELSE ?4 END,
+             SET etag = ?3,
+                 last_modified = ?4,
                  last_success_at = ?5,
                  last_fetched_at = CASE WHEN ?6 >= refresh_diagnosed THEN ?5
                                         ELSE last_fetched_at END,
@@ -168,11 +169,10 @@ fn record_publication(
         .execute(params![
             target.feed_id,
             target.generation,
-            metadata.etag.as_deref(),
-            metadata.last_modified.as_deref(),
+            validators.etag.as_deref(),
+            validators.last_modified.as_deref(),
             now,
             ticket,
-            keep_missing_validators,
         ])?;
     if changed == 0 {
         return Err(StoreError::NotFound);
@@ -180,7 +180,8 @@ fn record_publication(
     Ok(())
 }
 
-/// A 304: applied (`true`) only when it confirms exactly the published version.
+/// A 304: applied (`true`) only when it confirms exactly the published version. RFC 9110 lets
+/// it omit validators; those come from the request, which sent the published version's.
 fn record_not_modified(
     conn: &Connection,
     target: &RefreshTarget,
@@ -188,12 +189,16 @@ fn record_not_modified(
     now: &str,
 ) -> StoreResult<bool> {
     ensure_generation(conn, target)?;
-    let ticket = commit_ticket(conn, target)?;
+    let ticket = commit_ticket(target)?;
     let (published, _) = published_and_diagnosed(conn, target.feed_id)?;
     if ticket.baseline != published {
         return Ok(false);
     }
-    record_publication(conn, target, ticket.issued, metadata, true, now)?;
+    let validators = RefreshHttpMetadata {
+        etag: metadata.etag.clone().or_else(|| target.etag.clone()),
+        last_modified: metadata.last_modified.clone().or_else(|| target.last_modified.clone()),
+    };
+    record_publication(conn, target, ticket.issued, &validators, now)?;
     Ok(true)
 }
 
@@ -206,7 +211,7 @@ fn record_failure(
     now: &str,
 ) -> StoreResult<bool> {
     ensure_generation(conn, target)?;
-    let ticket = commit_ticket(conn, target)?;
+    let ticket = commit_ticket(target)?;
     let (_, diagnosed) = published_and_diagnosed(conn, target.feed_id)?;
     if ticket.issued <= diagnosed {
         return Ok(false);
@@ -357,7 +362,7 @@ fn commit_update(
     now: &str,
 ) -> StoreResult<Option<u64>> {
     ensure_generation(conn, target)?;
-    let ticket = commit_ticket(conn, target)?;
+    let ticket = commit_ticket(target)?;
     let (published, _) = published_and_diagnosed(conn, target.feed_id)?;
     if ticket.issued <= published {
         return Ok(None);
@@ -383,7 +388,7 @@ fn commit_update(
         upsert_entry(conn, target.feed_id, entry, now)?;
     }
     let inserted_count = entry_count(conn, target.feed_id)? - before;
-    record_publication(conn, target, ticket.issued, &update.metadata, false, now)?;
+    record_publication(conn, target, ticket.issued, &update.metadata, now)?;
     Ok(Some(inserted_count))
 }
 
@@ -419,12 +424,10 @@ impl RefreshStorePort for LibraryRefreshStore {
         Ok(self.store.read(list_targets).await.map_err(DomainError::from)?)
     }
 
+    /// Hands out the target with a new ticket, as `begin_refresh` does: a target that can be
+    /// committed is always a ticketed request.
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
-        Ok(self
-            .store
-            .read(move |conn| get_target(conn, feed_id))
-            .await
-            .map_err(DomainError::from)?)
+        self.begin_refresh(feed_id, None).await
     }
 
     async fn begin_refresh(
