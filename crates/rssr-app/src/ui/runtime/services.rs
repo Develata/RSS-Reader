@@ -21,7 +21,7 @@ pub(crate) struct UiServices {
 
 impl UiServices {
     pub(crate) async fn shared() -> Result<Self> {
-        let host = AppServices::shared().await?;
+        let host = host().await?;
         let use_cases = host.use_cases();
         let host_capabilities = host.host_capabilities();
         Ok(Self { use_cases, host_capabilities })
@@ -57,6 +57,44 @@ impl UiServices {
             use_cases: self.use_cases.clone(),
             host_capabilities: self.host_capabilities.clone(),
         }
+    }
+}
+
+async fn host() -> Result<std::sync::Arc<AppServices>> {
+    #[cfg(test)]
+    if let Some(host) = test_host::current() {
+        return Ok(host);
+    }
+    AppServices::shared().await
+}
+
+/// Runs UI commands of the current test thread against chosen services instead of the
+/// process-wide ones (tests run on a current-thread runtime).
+#[cfg(test)]
+pub(crate) mod test_host {
+    use std::cell::RefCell;
+    use std::sync::Arc;
+
+    use crate::bootstrap::AppServices;
+
+    thread_local! {
+        static HOST: RefCell<Option<Arc<AppServices>>> = const { RefCell::new(None) };
+    }
+
+    pub(crate) fn current() -> Option<Arc<AppServices>> {
+        HOST.with(|host| host.borrow().clone())
+    }
+
+    /// Installs `host` until the returned guard is dropped.
+    pub(crate) fn install(host: Arc<AppServices>) -> impl Drop {
+        struct Restore(Option<Arc<AppServices>>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                let previous = self.0.take();
+                HOST.with(|host| *host.borrow_mut() = previous);
+            }
+        }
+        Restore(HOST.with(|current| current.borrow_mut().replace(host)))
     }
 }
 

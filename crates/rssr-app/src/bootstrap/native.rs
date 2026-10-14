@@ -17,7 +17,10 @@ use rssr_infra::{
     composition::compose_library_use_cases,
     config_sync::webdav::WebDavConfigSync,
     fetch::BodyAssetLocalizer,
-    store::{LibraryEntries, LocalizedBody, compute_entry_content_hash, local::open_local_library},
+    store::{
+        LibraryEntries, LibraryStore, LocalizedBody, compute_entry_content_hash,
+        local::open_local_library,
+    },
 };
 use time::OffsetDateTime;
 use tokio::sync::OnceCell;
@@ -107,33 +110,37 @@ impl AppServices {
                 if let Some(imported) = &opened.imported {
                     tracing::info!(?imported, "已从 v0.1 数据导入资料库");
                 }
-
-                // 实测的 journal 模式决定并发度：WAL 没启用成功时退回串行，
-                // 否则并发写者会互相干等并把前台查询一起卡住。
-                let journal_mode = opened.store.journal_mode().to_owned();
-                let refresh_concurrency = if journal_mode == "wal" {
-                    DEFAULT_REFRESH_CONCURRENCY
-                } else {
-                    tracing::warn!(
-                        journal_mode = %journal_mode,
-                        "数据库未运行在 WAL 模式（可能位于不支持共享内存的文件系统），                         刷新退回串行以避免写者互相阻塞"
-                    );
-                    SERIAL_REFRESH_CONCURRENCY
-                };
-                tracing::info!(journal_mode = %journal_mode, refresh_concurrency, "本地数据库就绪");
-
-                let composition = compose_library_use_cases(opened.store);
-
-                Ok(Arc::new(Self {
-                    use_cases: composition.use_cases,
-                    image_localization_worker: ImageLocalizationWorker::new(composition.entries),
-                    auto_refresh_started: AtomicBool::new(false),
-                    refresh_flight: super::refresh_flight::RefreshFlight::default(),
-                    refresh_concurrency,
-                }))
+                Ok(Self::over(opened.store))
             })
             .await
             .map(Arc::clone)
+    }
+
+    /// The services over an opened library; [`Self::shared`] builds the process-wide one over the
+    /// local library.
+    pub(crate) fn over(store: LibraryStore) -> Arc<Self> {
+        // 实测的 journal 模式决定并发度：WAL 没启用成功时退回串行，
+        // 否则并发写者会互相干等并把前台查询一起卡住。
+        let journal_mode = store.journal_mode().to_owned();
+        let refresh_concurrency = if journal_mode == "wal" {
+            DEFAULT_REFRESH_CONCURRENCY
+        } else {
+            tracing::warn!(
+                journal_mode = %journal_mode,
+                "数据库未运行在 WAL 模式（可能位于不支持共享内存的文件系统），                 刷新退回串行以避免写者互相阻塞"
+            );
+            SERIAL_REFRESH_CONCURRENCY
+        };
+        tracing::info!(journal_mode = %journal_mode, refresh_concurrency, "本地数据库就绪");
+
+        let composition = compose_library_use_cases(store);
+        Arc::new(Self {
+            use_cases: composition.use_cases,
+            image_localization_worker: ImageLocalizationWorker::new(composition.entries),
+            auto_refresh_started: AtomicBool::new(false),
+            refresh_flight: super::refresh_flight::RefreshFlight::default(),
+            refresh_concurrency,
+        })
     }
 
     pub fn default_settings() -> UserSettings {
