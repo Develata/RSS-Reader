@@ -41,26 +41,57 @@ async fn a_webdav_download_that_never_finishes_times_out() {
         "config/rss-reader.json",
     )
     .with_request_timeout(std::time::Duration::from_millis(300));
-    // Like a real fetch, the body stream fails when the request's signal aborts.
+    // Like a real fetch, the body stream fails when the request's signal aborts. The mock records
+    // that the body was being read and why the request was aborted.
     js_sys::eval(r#"
+        globalThis.__abortReason = null;
+        globalThis.__bodyRead = false;
         globalThis.__fetch = globalThis.fetch;
         globalThis.fetch = async function(request) {
-            const stream = new ReadableStream({ start(controller) {
-                controller.enqueue(new TextEncoder().encode('{"version":'));
-                request.signal.addEventListener('abort', () =>
-                    controller.error(new DOMException('aborted', 'AbortError')));
-            }});
+            const stream = new ReadableStream({
+                start(controller) {
+                    controller.enqueue(new TextEncoder().encode('{"version":'));
+                    request.signal.addEventListener('abort', () => {
+                        globalThis.__abortReason = String(request.signal.reason);
+                        controller.error(new DOMException('aborted', 'AbortError'));
+                    });
+                },
+                pull() { globalThis.__bodyRead = true; },
+            });
             const response = new Response(stream, {status: 200, headers: {'Content-Type': 'application/json'}});
             Object.defineProperty(response, 'url', {value: request.url});
             return response;
         };
     "#).unwrap();
     let started = js_sys::Date::now();
-    let result = store.download_config().await;
-    js_sys::eval("globalThis.fetch = __fetch; delete globalThis.__fetch;").unwrap();
+    // Without a bound the download would never end: fail at a deadline instead of hanging.
+    let deadline = js_sys::Promise::from(
+        js_sys::eval("new Promise(resolve => setTimeout(resolve, 5000))").unwrap(),
+    );
+    let raced = futures_util::future::select(
+        store.download_config(),
+        wasm_bindgen_futures::JsFuture::from(deadline),
+    )
+    .await;
+    let elapsed = js_sys::Date::now() - started;
+    let reason = js_sys::eval("globalThis.__abortReason").unwrap().as_string();
+    let body_read = js_sys::eval("globalThis.__bodyRead").unwrap().as_bool();
+    js_sys::eval(
+        "globalThis.fetch = __fetch; delete globalThis.__fetch; \
+         delete globalThis.__abortReason; delete globalThis.__bodyRead;",
+    )
+    .unwrap();
+    let futures_util::future::Either::Left((result, _)) = raced else {
+        panic!("the download did not end within five seconds");
+    };
     let error = result.expect_err("the body never finishes");
     assert_eq!(classify(&error).kind, ErrorKind::Network, "{error:#}");
-    assert!(js_sys::Date::now() - started < 5_000.0, "bounded by the request timeout");
+    assert_eq!(body_read, Some(true), "the body was being read when the request ended");
+    assert!(
+        reason.as_deref().is_some_and(|reason| reason.contains("TimedOut")),
+        "aborted by the request timeout, not earlier: {reason:?}"
+    );
+    assert!(elapsed >= 250.0, "ended by the 300 ms bound, not before it: {elapsed} ms");
 }
 
 /// Another tab holding the store for longer than the five-second wait is a temporary condition:

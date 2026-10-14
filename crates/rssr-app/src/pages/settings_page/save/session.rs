@@ -629,4 +629,31 @@ mod tests {
             );
         });
     }
+
+    /// An edit made during a save stays pending even when its value is the one the save stored
+    /// (changed away and back): the status says so, as the edit is still sent by the next save.
+    #[test]
+    fn an_edit_matching_the_saved_value_is_still_reported_unsaved() {
+        let (mut dom, session, theme) = setup();
+        let save = dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+            start_save(session)
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.theme = ThemeMode::Light);
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+        });
+        save.send(true).expect("complete the save");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
+            assert_eq!(session.page.draft().theme, ThemeMode::Dark);
+            assert!(session.page.status().contains("尚未保存"), "{}", session.page.status());
+            assert_eq!(
+                submitted_patch(session),
+                SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() }
+            );
+        });
+    }
 }

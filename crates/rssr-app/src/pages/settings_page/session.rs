@@ -229,8 +229,8 @@ impl SettingsPageSession {
     }
 
     /// A save stored `settings`: its edits are done, the ones made since stay on top. The preset
-    /// follows the stored CSS unless one was chosen during the save. Returns whether the draft
-    /// still differs from what is stored.
+    /// follows the stored CSS unless one was chosen during the save. Returns whether edits are
+    /// still pending (even ones whose value is the stored one: the next save sends them).
     pub(crate) fn apply_saved_settings(
         mut self,
         settings: UserSettings,
@@ -242,7 +242,7 @@ impl SettingsPageSession {
         if self.preset_choice.peek().as_str() == submitted_preset {
             self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
         }
-        let has_unsaved_edits = draft != settings;
+        let has_unsaved_edits = !self.edits.peek().pending.is_empty();
         self.draft.set(draft);
         self.stored.set(settings.clone());
         self.theme.settings.set(settings);
