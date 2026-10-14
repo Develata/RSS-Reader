@@ -46,4 +46,10 @@ pub enum DomainError {
     /// The data changed since the caller read it; it must read again before retrying.
     #[error("操作冲突：{0}")]
     Conflict(String),
+    /// A remote site could not be reached or answered with a failure.
+    #[error("网络访问失败：{0}")]
+    Network(String),
+    /// The store is busy, timed out or was interrupted; retrying later may work.
+    #[error("暂时不可用：{0}")]
+    Unavailable(String),
 }

@@ -110,7 +110,7 @@ fn reader_flag_intents(
     flag: Flag,
     entry_id: i64,
     via_shortcut: bool,
-    result: anyhow::Result<EntryFlagOutcome>,
+    result: rssr_api::Result<EntryFlagOutcome>,
 ) -> Vec<UiIntent> {
     let outcome = match result {
         Ok(outcome) => outcome,

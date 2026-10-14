@@ -477,7 +477,11 @@ impl RefreshService {
         let lock = self.feed_locks.lock_for(feed_id);
         let _serialized = lock.lock().await;
         // 在锁内读取目标：排在前一次刷新之后的请求要带上它刚写入的校验器。
-        let target = self.store.begin_refresh(feed_id, None).await?.context("订阅不存在")?;
+        let target = self
+            .store
+            .begin_refresh(feed_id, None)
+            .await?
+            .ok_or(rssr_domain::DomainError::NotFound)?;
         self.fetch_and_apply(target).await
     }
 

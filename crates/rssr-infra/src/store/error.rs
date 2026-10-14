@@ -56,10 +56,16 @@ impl From<rusqlite::Error> for StoreError {
 }
 
 impl From<StoreError> for DomainError {
+    /// Keeps what a caller can act on: a constraint violation means another write got there
+    /// first (read again), busy / interrupted / timed out may pass when retried.
     fn from(error: StoreError) -> Self {
         match error {
             StoreError::NotFound => Self::NotFound,
             StoreError::Domain(error) => error,
+            StoreError::Conflict(_) => Self::Conflict(error_chain(&error)),
+            StoreError::Busy(_) | StoreError::Interrupted | StoreError::ConnectionTimeout => {
+                Self::Unavailable(error_chain(&error))
+            }
             other => Self::Persistence(error_chain(&other)),
         }
     }
@@ -78,4 +84,41 @@ fn error_chain(error: &(dyn std::error::Error + 'static)) -> String {
         source = cause.source();
     }
     text
+}
+
+#[cfg(test)]
+mod tests {
+    use rssr_domain::DomainError;
+    use rusqlite::ffi;
+
+    use super::StoreError;
+
+    fn sqlite(code: i32) -> StoreError {
+        rusqlite::Error::SqliteFailure(ffi::Error::new(code), None).into()
+    }
+
+    /// What a caller can act on survives the conversion: read again after a conflict, retry
+    /// when busy; the rest is a storage failure.
+    #[test]
+    fn domain_errors_keep_the_actionable_categories() {
+        assert!(matches!(
+            DomainError::from(sqlite(ffi::SQLITE_CONSTRAINT)),
+            DomainError::Conflict(_)
+        ));
+        assert!(matches!(DomainError::from(sqlite(ffi::SQLITE_BUSY)), DomainError::Unavailable(_)));
+        assert!(matches!(DomainError::from(StoreError::Interrupted), DomainError::Unavailable(_)));
+        assert!(matches!(
+            DomainError::from(StoreError::ConnectionTimeout),
+            DomainError::Unavailable(_)
+        ));
+        assert!(matches!(
+            DomainError::from(sqlite(ffi::SQLITE_IOERR)),
+            DomainError::Persistence(_)
+        ));
+        assert!(matches!(DomainError::from(StoreError::NotFound), DomainError::NotFound));
+        assert!(matches!(
+            DomainError::from(StoreError::Domain(DomainError::InvalidInput("x".into()))),
+            DomainError::InvalidInput(_)
+        ));
+    }
 }

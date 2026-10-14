@@ -3,8 +3,8 @@ use crate::{
     pages::feeds_page::intent::{FeedsPageIntent, FeedsPageSnapshot},
     ui::{commands::FeedsCommand, runtime::backend::backend, snapshot::UiIntent},
 };
+use rssr_api::ErrorCode;
 use rssr_application::{ConfigImportOutcome, OpmlImportOutcome};
-use rssr_domain::DomainError;
 
 pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
     match command {
@@ -102,7 +102,7 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             let result = match backend().await {
                 Ok(services) => match services.import_config_json(&raw, &expected).await {
                     Ok(outcome) => ConfigImportResult::Imported(outcome),
-                    Err(err) if is_conflict(&err) => ConfigImportResult::Conflict,
+                    Err(err) if err.code == ErrorCode::Conflict => ConfigImportResult::Conflict,
                     Err(err) => ConfigImportResult::Failed(format!("导入配置包失败：{err}")),
                 },
                 Err(err) => ConfigImportResult::Failed(format!("初始化应用失败：{err}")),
@@ -156,11 +156,6 @@ enum ConfigImportResult {
     /// The configuration changed after the page read it; nothing was replaced.
     Conflict,
     Failed(String),
-}
-
-/// Whether the store refused because the data changed since it was read.
-fn is_conflict(error: &anyhow::Error) -> bool {
-    error.chain().any(|cause| matches!(cause.downcast_ref(), Some(DomainError::Conflict(_))))
 }
 
 fn import_config_result(result: ConfigImportResult) -> Vec<UiIntent> {

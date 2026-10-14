@@ -5,11 +5,11 @@
 //! implement it over HTTP. Data types are the application's own (`rssr_application`,
 //! `rssr_domain`); this crate adds no parallel copies.
 //!
-//! Phase B1 (`docs/design/v0.2-architecture.md`): the interface mirrors the UI's existing
-//! operations one to one with their existing types. Contract changes (serializable types,
-//! fixed-width counts, error categories, device state) come separately.
+//! Phase B1 (`docs/design/v0.2-architecture.md`) made the interface mirror the UI's operations;
+//! phase B2 (`docs/design/v0.2-phase-b2-contracts.md`) changes the contract item by item. Every
+//! operation fails with a [`BackendError`]: a stable [`ErrorCode`], a message for the user and a
+//! request id.
 
-use anyhow::Result;
 use rssr_application::{
     ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome,
     EntryFlagOutcome, FeedDiscoveryCandidate, FeedsSnapshotOutcome, OpmlImportOutcome,
@@ -21,6 +21,13 @@ use rssr_domain::{
     UserSettings,
 };
 use url::Url;
+
+mod error;
+
+pub use error::{BackendError, ErrorCode};
+
+/// Every operation's result: a [`BackendError`] carries the stable code and the user's message.
+pub type Result<T, E = BackendError> = std::result::Result<T, E>;
 
 /// What adding a subscription led to.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -9,6 +9,7 @@ use rssr_application::{
 use url::Url;
 
 use crate::feed_body::read_feed_text;
+use crate::remote_failure::{invalid, network};
 
 pub const MAX_SUBSCRIPTION_BYTES: usize = crate::feed_body::MAX_FEED_RESPONSE_BYTES;
 
@@ -38,8 +39,16 @@ impl HttpSubscriptionProbe {
 impl SubscriptionProbePort for HttpSubscriptionProbe {
     async fn probe(&self, url: &Url) -> Result<SubscriptionProbeOutcome> {
         if !matches!(url.scheme(), "http" | "https") {
-            bail!("订阅只支持 HTTP 或 HTTPS 地址。");
+            return Err(invalid(anyhow::anyhow!("订阅只支持 HTTP 或 HTTPS 地址。")));
         }
+        let (final_url, metadata, content_type, body) = self.fetch(url).await.map_err(network)?;
+        classify_subscription_response(final_url, metadata, &content_type, &body).map_err(invalid)
+    }
+}
+
+impl HttpSubscriptionProbe {
+    /// The response for `url`: its final address, validators, content type and text.
+    async fn fetch(&self, url: &Url) -> Result<(Url, RefreshHttpMetadata, String, String)> {
         #[cfg(not(target_arch = "wasm32"))]
         let response =
             self.client.get(url.clone()).timeout(std::time::Duration::from_secs(30)).send().await?;
@@ -75,7 +84,7 @@ impl SubscriptionProbePort for HttpSubscriptionProbe {
             .unwrap_or("")
             .to_string();
         let body = read_feed_text(response).await?;
-        classify_subscription_response(final_url, metadata, &content_type, &body)
+        Ok((final_url, metadata, content_type, body))
     }
 }
 

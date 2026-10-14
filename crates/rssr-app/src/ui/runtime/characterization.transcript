@@ -92,7 +92,7 @@ FeedsPage(SetStatus { message: "已导出 OPML。", tone: "info" })
 FeedsPage(SetStatus { message: "OPML 已导入：1 个订阅。", tone: "info" })
 FeedsPage(BumpReload)
 ## import opml, broken
-FeedsPage(SetStatus { message: "导入 OPML 失败：syntax error: tag not closed: `>` not found before end of input", tone: "error" })
+FeedsPage(SetStatus { message: "导入 OPML 失败：OPML 无法解析：syntax error: tag not closed: `>` not found before end of input", tone: "error" })
 ## feeds snapshot before import
 FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { feeds: [FeedSummary { id: 4, title: "Extra", url: "http://127.0.0.1:<port>/extra.xml", unread_count: 0, entry_count: 0, last_fetched_at: None, last_success_at: None, fetch_error: None }, FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 1, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 4, entry_count: 5, fingerprint: ConfigFingerprint(<3>) })))
 ## import config
@@ -101,7 +101,7 @@ FeedsPage(BumpReload)
 FeedsPage(SetStatus { message: "配置包已导入：导入 3 个订阅，清理 1 个缺失订阅，设置未变化。", tone: "info" })
 ## import config, broken
 FeedsPage(PendingConfigImportSet(false))
-FeedsPage(SetStatus { message: "导入配置包失败：EOF while parsing an object at line 1 column 1", tone: "error" })
+FeedsPage(SetStatus { message: "导入配置包失败：配置包不是有效的 JSON：EOF while parsing an object at line 1 column 1", tone: "error" })
 ## import config from a stale page
 FeedsPage(PendingConfigImportSet(false))
 FeedsPage(BumpReload)
@@ -112,9 +112,9 @@ SettingsPage(SettingsLoaded(UserSettings { theme: System, list_density: Comforta
 SettingsPage(SettingsLoaded(UserSettings { theme: System, list_density: Comfortable, startup_view: LastFeed, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "body { color: red }" }))
 SettingsPage(SetStatus { message: "已保存", tone: "info" })
 ## settings save, invalid
-SettingsPage(SetStatus { message: "保存设置失败：输入无效：文章页每页数量必须在 1 到 200 之间", tone: "error" })
+SettingsPage(SetStatus { message: "保存设置失败：文章页每页数量必须在 1 到 200 之间", tone: "error" })
 ## settings save, invalid CSS
-SettingsPage(SetStatus { message: "保存设置失败：输入无效：自定义 CSS 格式无效：存在未闭合的括号或花括号", tone: "error" })
+SettingsPage(SetStatus { message: "保存设置失败：自定义 CSS 格式无效：存在未闭合的括号或花括号", tone: "error" })
 ## feeds snapshot after settings
 FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { feeds: [FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 1, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 3, entry_count: 5, fingerprint: ConfigFingerprint(<4>) })))
 ## import config with other settings

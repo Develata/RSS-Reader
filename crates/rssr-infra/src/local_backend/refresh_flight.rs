@@ -4,9 +4,9 @@ use std::{future::Future, sync::Mutex};
 
 use tokio::sync::watch;
 
-use rssr_api::RefreshAllExecutionOutcome;
+use rssr_api::{BackendError, ErrorCode, RefreshAllExecutionOutcome};
 
-type SharedResult = Result<RefreshAllExecutionOutcome, String>;
+type SharedResult = Result<RefreshAllExecutionOutcome, BackendError>;
 type Receiver = watch::Receiver<Option<SharedResult>>;
 
 #[derive(Default)]
@@ -18,7 +18,7 @@ impl RefreshFlight {
     pub(crate) async fn run(
         &self,
         refresh: impl Future<Output = anyhow::Result<RefreshAllExecutionOutcome>>,
-    ) -> anyhow::Result<RefreshAllExecutionOutcome> {
+    ) -> SharedResult {
         let (mut receiver, sender) = {
             let mut slot = self.current.lock().unwrap_or_else(|error| error.into_inner());
             match slot.as_ref().filter(|receiver| receiver.has_changed().is_ok()) {
@@ -33,19 +33,23 @@ impl RefreshFlight {
         if let Some(sender) = sender {
             // If the owner is dropped, closing the channel wakes waiters and lets the next
             // call replace the closed slot. No in-flight bit can remain stuck on cancellation.
-            let result = refresh.await.map_err(|error| format!("{error:#}"));
+            // Classified once, so every waiter gets the same code and message.
+            let result = refresh.await.map_err(BackendError::from);
             sender.send_replace(Some(result.clone()));
             *self.current.lock().unwrap_or_else(|error| error.into_inner()) = None;
-            result.map_err(anyhow::Error::msg)
+            result
         } else {
             receiver
                 .wait_for(Option::is_some)
                 .await
-                .map_err(|_| anyhow::anyhow!("刷新任务已中断，请重试"))?
+                .map_err(|_| BackendError {
+                    code: ErrorCode::Unavailable,
+                    message: "刷新任务已中断，请重试".to_string(),
+                    request_id: None,
+                })?
                 .as_ref()
                 .expect("wait_for requires a completed result")
                 .clone()
-                .map_err(anyhow::Error::msg)
         }
     }
 }

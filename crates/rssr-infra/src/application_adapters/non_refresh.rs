@@ -1,7 +1,11 @@
 use anyhow::Result;
 use rssr_application::{OpmlCodecPort, RemoteConfigStore};
 
-use crate::{config_sync::webdav::WebDavConfigSync, opml::OpmlCodec};
+use crate::{
+    config_sync::webdav::WebDavConfigSync,
+    opml::OpmlCodec,
+    remote_failure::{invalid, network},
+};
 
 #[derive(Clone, Default)]
 pub struct InfraOpmlCodec {
@@ -28,10 +32,12 @@ impl OpmlCodecPort for InfraOpmlCodec {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl RemoteConfigStore for WebDavConfigSync {
     async fn upload_config(&self, raw: &str) -> Result<()> {
-        self.upload_text(raw).await
+        self.remote_url().map_err(invalid)?;
+        self.upload_text(raw).await.map_err(network)
     }
 
     async fn download_config(&self) -> Result<Option<String>> {
-        self.download_text().await
+        self.remote_url().map_err(invalid)?;
+        self.download_text().await.map_err(network)
     }
 }

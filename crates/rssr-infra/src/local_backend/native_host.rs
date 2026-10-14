@@ -76,7 +76,10 @@ impl LocalHost for NativeHost {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<Box<dyn RemoteConfigStore>> {
-        Ok(Box::new(WebDavConfigSync::new(endpoint, remote_path)?))
+        // An endpoint that cannot be used is the user's to correct.
+        let store = WebDavConfigSync::new(endpoint, remote_path)
+            .map_err(|error| rssr_domain::DomainError::InvalidInput(format!("{error:#}")))?;
+        Ok(Box::new(store))
     }
 
     fn feed_refreshed(&self, feed_id: i64, entries: Vec<RefreshLocalizedEntry>) {

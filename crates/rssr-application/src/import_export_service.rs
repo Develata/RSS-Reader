@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use rssr_domain::{
-    ConfigFeed, ConfigFingerprint, ConfigPackage, FeedRepository, NewFeedSubscription, OpmlFeed,
-    UserSettings, parse_feed_url,
+    ConfigFeed, ConfigFingerprint, ConfigPackage, DomainError, FeedRepository, NewFeedSubscription,
+    OpmlFeed, UserSettings, parse_feed_url,
 };
 use time::OffsetDateTime;
 
@@ -191,7 +191,9 @@ impl ImportExportService {
         raw: &str,
         expected: &ConfigFingerprint,
     ) -> Result<ConfigImportOutcome> {
-        let package: ConfigPackage = serde_json::from_str(raw)?;
+        let package: ConfigPackage = serde_json::from_str(raw).map_err(|error| {
+            DomainError::InvalidInput(format!("配置包不是有效的 JSON：{error}"))
+        })?;
         self.import_config_package(&package, expected).await
     }
 
@@ -214,7 +216,10 @@ impl ImportExportService {
     }
 
     pub async fn import_opml(&self, raw: &str) -> Result<OpmlImportOutcome> {
-        let feeds = self.opml_codec.decode(raw)?;
+        let feeds = self
+            .opml_codec
+            .decode(raw)
+            .map_err(|error| DomainError::InvalidInput(format!("OPML 无法解析：{error}")))?;
         let imported_feed_count = feeds.len();
         let mut subscriptions = Vec::with_capacity(imported_feed_count);
 

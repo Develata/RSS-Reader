@@ -104,7 +104,7 @@ impl SettingsRepository for LibrarySettings {
 #[async_trait::async_trait]
 impl SettingsUpdatePort for LibrarySettings {
     async fn update_settings(&self, patch: SettingsPatch) -> Result<UserSettings> {
-        // No added context: an invalid patch's own message is what the user needs to read.
+        // As a domain error, so an invalid patch keeps its kind and text in the chain.
         Ok(self
             .store
             .write(move |tx| {
@@ -115,7 +115,8 @@ impl SettingsUpdatePort for LibrarySettings {
                 }
                 Ok(next)
             })
-            .await?)
+            .await
+            .map_err(DomainError::from)?)
     }
 }
 

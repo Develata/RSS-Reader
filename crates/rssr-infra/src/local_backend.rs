@@ -22,6 +22,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use rssr_api::{
     AddSubscriptionOutcome, Backend, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome,
+    Result as BackendResult,
 };
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, ConfigImportOutcome,
@@ -225,12 +226,12 @@ impl<H: LocalHost> LocalBackend<H> {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<H: LocalHost> Backend for LocalBackend<H> {
-    async fn load_settings(&self) -> Result<UserSettings> {
-        self.inner.use_cases.settings_service.load().await
+    async fn load_settings(&self) -> BackendResult<UserSettings> {
+        Ok(self.inner.use_cases.settings_service.load().await?)
     }
 
-    async fn update_settings(&self, patch: SettingsPatch) -> Result<UserSettings> {
-        self.inner.use_cases.settings_service.update(patch).await
+    async fn update_settings(&self, patch: SettingsPatch) -> BackendResult<UserSettings> {
+        Ok(self.inner.use_cases.settings_service.update(patch).await?)
     }
 
     fn ensure_auto_refresh_started(&self) {
@@ -242,41 +243,41 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         self.inner.host.spawn(Box::pin(self.clone().auto_refresh_loop()));
     }
 
-    async fn resolve_startup_target(&self) -> Result<StartupTarget> {
-        self.inner.use_cases.startup_service.resolve_startup_target().await
+    async fn resolve_startup_target(&self) -> BackendResult<StartupTarget> {
+        Ok(self.inner.use_cases.startup_service.resolve_startup_target().await?)
     }
 
     async fn push_remote_config(
         &self,
         endpoint: &str,
         remote_path: &str,
-    ) -> Result<RemoteConfigPushOutcome> {
+    ) -> BackendResult<RemoteConfigPushOutcome> {
         self.inner.host.require_network()?;
         let remote = self.inner.host.remote_config_store(endpoint, remote_path)?;
-        self.inner.use_cases.import_export_service.push_remote_config(remote.as_ref()).await
+        Ok(self.inner.use_cases.import_export_service.push_remote_config(remote.as_ref()).await?)
     }
 
     async fn pull_remote_config(
         &self,
         endpoint: &str,
         remote_path: &str,
-    ) -> Result<RemoteConfigPullOutcome> {
+    ) -> BackendResult<RemoteConfigPullOutcome> {
         self.inner.host.require_network()?;
         let remote = self.inner.host.remote_config_store(endpoint, remote_path)?;
-        self.inner.use_cases.import_export_service.pull_remote_config(remote.as_ref()).await
+        Ok(self.inner.use_cases.import_export_service.pull_remote_config(remote.as_ref()).await?)
     }
 
     async fn bootstrap_entries(
         &self,
         input: EntriesBootstrapInput,
-    ) -> Result<EntriesBootstrapOutcome> {
-        self.inner.use_cases.entries_workspace_service.bootstrap(input).await
+    ) -> BackendResult<EntriesBootstrapOutcome> {
+        Ok(self.inner.use_cases.entries_workspace_service.bootstrap(input).await?)
     }
 
     async fn save_entries_workspace_if_changed(
         &self,
         workspace: EntriesWorkspaceState,
-    ) -> Result<bool> {
+    ) -> BackendResult<bool> {
         Ok(self
             .inner
             .use_cases
@@ -286,43 +287,50 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
             .changed)
     }
 
-    async fn list_entries(&self, query: &EntryQuery) -> Result<EntriesListOutcome> {
-        self.inner.use_cases.entries_list_service.list_entries(query).await
+    async fn list_entries(&self, query: &EntryQuery) -> BackendResult<EntriesListOutcome> {
+        Ok(self.inner.use_cases.entries_list_service.list_entries(query).await?)
     }
 
-    async fn set_entry_read(&self, entry_id: i64, read: bool) -> Result<EntryFlagOutcome> {
-        self.inner.use_cases.entry_flags_service.set_read(entry_id, read).await
+    async fn set_entry_read(&self, entry_id: i64, read: bool) -> BackendResult<EntryFlagOutcome> {
+        Ok(self.inner.use_cases.entry_flags_service.set_read(entry_id, read).await?)
     }
 
-    async fn set_entry_starred(&self, entry_id: i64, starred: bool) -> Result<EntryFlagOutcome> {
-        self.inner.use_cases.entry_flags_service.set_starred(entry_id, starred).await
+    async fn set_entry_starred(
+        &self,
+        entry_id: i64,
+        starred: bool,
+    ) -> BackendResult<EntryFlagOutcome> {
+        Ok(self.inner.use_cases.entry_flags_service.set_starred(entry_id, starred).await?)
     }
 
-    async fn preview_mark_read(&self, query: &EntryQuery) -> Result<MarkReadPreview> {
-        self.inner.use_cases.entries_list_service.preview_mark_read(query).await
+    async fn preview_mark_read(&self, query: &EntryQuery) -> BackendResult<MarkReadPreview> {
+        Ok(self.inner.use_cases.entries_list_service.preview_mark_read(query).await?)
     }
 
-    async fn mark_read_if_unchanged(&self, preview: &MarkReadPreview) -> Result<MarkReadOutcome> {
-        self.inner.use_cases.entries_list_service.mark_read_if_unchanged(preview).await
+    async fn mark_read_if_unchanged(
+        &self,
+        preview: &MarkReadPreview,
+    ) -> BackendResult<MarkReadOutcome> {
+        Ok(self.inner.use_cases.entries_list_service.mark_read_if_unchanged(preview).await?)
     }
 
-    async fn load_reader_entry(&self, entry_id: i64) -> Result<ReaderEntrySnapshot> {
-        self.inner.use_cases.reader_service.load_entry(entry_id).await
+    async fn load_reader_entry(&self, entry_id: i64) -> BackendResult<ReaderEntrySnapshot> {
+        Ok(self.inner.use_cases.reader_service.load_entry(entry_id).await?)
     }
 
-    async fn localize_entry_assets(&self, entry_id: i64) -> Result<bool> {
-        self.inner.host.localize_entry_assets(entry_id).await
+    async fn localize_entry_assets(&self, entry_id: i64) -> BackendResult<bool> {
+        Ok(self.inner.host.localize_entry_assets(entry_id).await?)
     }
 
-    async fn load_feeds_snapshot(&self) -> Result<FeedsSnapshotOutcome> {
-        self.inner.use_cases.feeds_snapshot_service.load_snapshot().await
+    async fn load_feeds_snapshot(&self) -> BackendResult<FeedsSnapshotOutcome> {
+        Ok(self.inner.use_cases.feeds_snapshot_service.load_snapshot().await?)
     }
 
     async fn add_subscription(
         &self,
         raw_url: &str,
         fallback_site_url: Option<url::Url>,
-    ) -> Result<AddSubscriptionOutcome> {
+    ) -> BackendResult<AddSubscriptionOutcome> {
         self.inner.host.require_network()?;
         let workflow = &self.inner.use_cases.subscription_workflow;
         let prepared = match workflow.prepare_subscription(raw_url).await? {
@@ -355,7 +363,7 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         }
     }
 
-    async fn refresh_all(&self) -> Result<RefreshAllExecutionOutcome> {
+    async fn refresh_all(&self) -> BackendResult<RefreshAllExecutionOutcome> {
         self.inner.host.require_network()?;
         self.inner
             .refresh_flight
@@ -373,38 +381,39 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
             .await
     }
 
-    async fn refresh_feed(&self, feed_id: i64) -> Result<RefreshFeedExecutionOutcome> {
+    async fn refresh_feed(&self, feed_id: i64) -> BackendResult<RefreshFeedExecutionOutcome> {
         self.inner.host.require_network()?;
         let outcome = self.inner.use_cases.refresh_service.refresh_feed(feed_id).await?;
         Ok(self.handle_refresh_feed_outcome(outcome))
     }
 
-    async fn remove_feed(&self, feed_id: i64) -> Result<()> {
-        self.inner
+    async fn remove_feed(&self, feed_id: i64) -> BackendResult<()> {
+        Ok(self
+            .inner
             .use_cases
             .subscription_workflow
             .remove_subscription(RemoveSubscriptionInput { feed_id, purge_entries: true })
-            .await
+            .await?)
     }
 
-    async fn export_config_json(&self) -> Result<String> {
-        self.inner.use_cases.import_export_service.export_config_json().await
+    async fn export_config_json(&self) -> BackendResult<String> {
+        Ok(self.inner.use_cases.import_export_service.export_config_json().await?)
     }
 
     async fn import_config_json(
         &self,
         raw: &str,
         expected: &ConfigFingerprint,
-    ) -> Result<ConfigImportOutcome> {
-        self.inner.use_cases.import_export_service.import_config_json(raw, expected).await
+    ) -> BackendResult<ConfigImportOutcome> {
+        Ok(self.inner.use_cases.import_export_service.import_config_json(raw, expected).await?)
     }
 
-    async fn export_opml(&self) -> Result<String> {
-        self.inner.use_cases.import_export_service.export_opml().await
+    async fn export_opml(&self) -> BackendResult<String> {
+        Ok(self.inner.use_cases.import_export_service.export_opml().await?)
     }
 
-    async fn import_opml(&self, raw: &str) -> Result<OpmlImportOutcome> {
-        self.inner.use_cases.import_export_service.import_opml(raw).await
+    async fn import_opml(&self, raw: &str) -> BackendResult<OpmlImportOutcome> {
+        Ok(self.inner.use_cases.import_export_service.import_opml(raw).await?)
     }
 }
 
@@ -462,5 +471,45 @@ mod tests {
         assert_eq!(*disabled.host().spawned.lock().unwrap(), 0);
         // Not marked as started: a host that later allows it is not locked out.
         assert!(!disabled.inner.auto_refresh_started.load(Ordering::SeqCst));
+    }
+
+    /// Each failure reaches the UI with its code; only the kinds meant for the user keep their
+    /// own text. (`unavailable` needs a busy library and `network` a remote; both are covered
+    /// where they arise: the store's error mapping and the remote adapters.)
+    #[tokio::test]
+    async fn failures_reach_the_ui_with_their_codes() {
+        use rssr_api::ErrorCode;
+
+        let backend = recording_backend(false).await;
+        let invalid =
+            rssr_application::SettingsPatch { entries_page_size: Some(0), ..Default::default() };
+        let error = backend.update_settings(invalid).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidInput);
+        assert!(error.message.starts_with("文章页每页数量"), "{}", error.message);
+
+        let error = backend.remove_feed(999).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::NotFound);
+        let error = backend.refresh_feed(999).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::NotFound);
+
+        let error = backend.add_subscription("not a url", None).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidInput);
+        let error = backend.import_opml("<opml").await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidInput);
+
+        let stale = backend.load_feeds_snapshot().await.unwrap().fingerprint;
+        backend
+            .update_settings(rssr_application::SettingsPatch {
+                refresh_interval_minutes: Some(45),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let package = backend.export_config_json().await.unwrap();
+        let error = backend.import_config_json(&package, &stale).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::Conflict);
+        let error = backend.import_config_json("{", &stale).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidInput);
+        assert!(error.message.contains("JSON"), "{}", error.message);
     }
 }

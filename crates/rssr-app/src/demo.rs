@@ -4,10 +4,13 @@ pub(crate) const NOTICE: &str = "公开静态演示：首次使用载入合成�
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn require_network() -> anyhow::Result<()> {
-    anyhow::ensure!(
-        !ENABLED,
-        "静态演示已禁用此网络操作：GitHub Pages 不提供 feed/CORS 代理。请使用桌面版或自行部署 rssr-web。"
-    );
+    if ENABLED {
+        return Err(rssr_domain::DomainError::Network(
+            "静态演示已禁用此网络操作：GitHub Pages 不提供 feed/CORS 代理。请使用桌面版或自行部署 rssr-web。"
+                .to_string(),
+        )
+        .into());
+    }
     Ok(())
 }
 

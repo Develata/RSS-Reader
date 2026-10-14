@@ -4,12 +4,12 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use rssr_api::Backend;
+use rssr_api::{Backend, BackendError};
 
 use crate::bootstrap::AppServices;
 
-/// The backend of this process.
-pub(crate) async fn backend() -> Result<Arc<dyn Backend>> {
+/// The backend of this process. Failing to open it is classified like any backend error.
+pub(crate) async fn backend() -> Result<Arc<dyn Backend>, BackendError> {
     Ok(host().await?.backend())
 }
 

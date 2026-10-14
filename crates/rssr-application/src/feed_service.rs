@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use rssr_domain::{Feed, FeedRepository, NewFeedSubscription, normalize_feed_url, parse_feed_url};
+use rssr_domain::{
+    DomainError, Feed, FeedRepository, NewFeedSubscription, normalize_feed_url, parse_feed_url,
+};
 use url::Url;
 
 use crate::{ActivatedSubscription, SubscriptionActivationPort, SubscriptionRemovalPort};
@@ -42,7 +44,7 @@ impl FeedService {
     pub(crate) async fn ensure_not_subscribed(&self, url: &Url) -> Result<()> {
         let url = normalize_feed_url(url);
         if self.feed_repository.has_active_subscription_url(&url).await? {
-            anyhow::bail!("该地址已订阅：{url}");
+            return Err(DomainError::InvalidInput(format!("该地址已订阅：{url}")).into());
         }
         Ok(())
     }

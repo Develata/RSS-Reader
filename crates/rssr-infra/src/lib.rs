@@ -10,6 +10,7 @@ mod feed_normalization;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod fetch;
 pub mod local_backend;
+mod remote_failure;
 pub mod subscription_probe;
 mod xml_declaration;
 // 有意不加 target_arch 门控：正文 HTML 处理是纯字符串运算，Web 端同样需要。

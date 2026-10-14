@@ -155,10 +155,8 @@ impl SubscriptionRemovalPort for LibraryMutations {
         self.store
             .write(move |tx| remove_subscription(tx, feed_id, purge_entries, &now()))
             .await
-            .map_err(|error| match error {
-                StoreError::NotFound => anyhow::anyhow!("订阅不存在"),
-                other => anyhow::Error::new(other).context("删除订阅失败"),
-            })
+            .map_err(DomainError::from)
+            .context("删除订阅失败")
     }
 }
 
