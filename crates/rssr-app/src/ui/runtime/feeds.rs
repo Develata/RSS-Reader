@@ -38,16 +38,16 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             Ok(services) => match services.refresh_feed(feed_id).await {
                 Ok(outcome) => feeds_intents(vec![
                     FeedsPageIntent::SetStatus {
-                        message: outcome.failure_message.as_ref().map_or_else(
+                        message: outcome.failure.as_ref().map_or_else(
                             || {
                                 format!(
                                     "{}：{feed_title}",
                                     super::new_entries_message(outcome.inserted_count)
                                 )
                             },
-                            |failure| format!("刷新订阅失败：{failure}"),
+                            |failure| format!("刷新订阅失败：{}", super::failure_line(failure)),
                         ),
-                        tone: if outcome.failure_message.is_some() {
+                        tone: if outcome.failure.is_some() {
                             "error".to_string()
                         } else {
                             "info".to_string()
@@ -162,7 +162,7 @@ fn import_config_result(result: ConfigImportResult) -> Vec<UiIntent> {
     let mut intents = vec![FeedsPageIntent::PendingConfigImportSet(false)];
     let (message, tone) = match result {
         ConfigImportResult::Imported(outcome) => {
-            let summary = outcome.summary_line();
+            let summary = super::config_import_summary(&outcome);
             intents.push(FeedsPageIntent::BumpReload);
             // 配置包可以替换外观设置：替换提交的设置随结果返回，交给全局主题立即生效。
             if outcome.settings_updated {
@@ -203,9 +203,11 @@ fn add_feed_result(result: Result<AddSubscriptionOutcome, String>) -> Vec<UiInte
         Ok(AddSubscriptionOutcome::SavedAndRefreshed) => {
             (true, "订阅已保存并完成首次刷新。".to_string(), "info")
         }
-        Ok(AddSubscriptionOutcome::SavedRefreshFailed { message, .. }) => {
-            (true, format!("订阅已保存，但首次刷新失败：{message}"), "error")
-        }
+        Ok(AddSubscriptionOutcome::SavedRefreshFailed { failure }) => (
+            true,
+            format!("订阅已保存，但首次刷新失败：{}", super::failure_line(&failure)),
+            "error",
+        ),
         Err(message) => (false, message, "error"),
     };
     let mut intents = vec![
@@ -228,8 +230,13 @@ mod tests {
             (Ok(AddSubscriptionOutcome::SavedAndRefreshed), true, "info"),
             (
                 Ok(AddSubscriptionOutcome::SavedRefreshFailed {
-                    feed_id: 7,
-                    message: "offline".into(),
+                    failure: rssr_application::RefreshFailureItem {
+                        feed_id: 7,
+                        url: "https://example.com/feed.xml".into(),
+                        name: None,
+                        kind: rssr_application::ErrorKind::Network,
+                        message: "offline".into(),
+                    },
                 }),
                 true,
                 "error",

@@ -10,11 +10,14 @@
 //! operation fails with a [`BackendError`]: a stable [`ErrorCode`], a message for the user and a
 //! request id.
 
+pub use rssr_application::{
+    AddSubscriptionOutcome, RefreshAllExecutionOutcome, RefreshFailureItem,
+    RefreshFeedExecutionOutcome,
+};
 use rssr_application::{
     ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome,
-    EntryFlagOutcome, FeedDiscoveryCandidate, FeedsSnapshotOutcome, OpmlImportOutcome,
-    ReaderEntrySnapshot, RemoteConfigPullOutcome, RemoteConfigPushOutcome, SettingsPatch,
-    StartupTarget,
+    EntryFlagOutcome, FeedsSnapshotOutcome, OpmlImportOutcome, ReaderEntrySnapshot,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome, SettingsPatch, StartupTarget,
 };
 use rssr_domain::{
     ConfigFingerprint, EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview,
@@ -28,39 +31,6 @@ pub use error::{BackendError, ErrorCode};
 
 /// Every operation's result: a [`BackendError`] carries the stable code and the user's message.
 pub type Result<T, E = BackendError> = std::result::Result<T, E>;
-
-/// What adding a subscription led to.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AddSubscriptionOutcome {
-    /// The address is a page listing several feeds; the user picks one.
-    NeedsSelection {
-        page_url: Url,
-        candidates: Vec<FeedDiscoveryCandidate>,
-    },
-    SavedAndRefreshed,
-    /// Saved (as `feed_id`), but its first refresh failed: the subscription exists and later
-    /// refreshes may succeed.
-    SavedRefreshFailed {
-        feed_id: i64,
-        message: String,
-    },
-}
-
-/// What refreshing every subscription led to.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RefreshAllExecutionOutcome {
-    pub inserted_count: u64,
-    pub total_count: usize,
-    pub failed_count: usize,
-    pub failure_message: Option<String>,
-}
-
-/// What refreshing one subscription led to.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RefreshFeedExecutionOutcome {
-    pub inserted_count: u64,
-    pub failure_message: Option<String>,
-}
 
 /// Every operation of the user interface.
 // `async_trait` marks its boxed futures `#[must_use]` twice.

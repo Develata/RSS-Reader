@@ -31,6 +31,22 @@ pub struct AddSubscriptionLifecycleOutcome {
     pub first_refresh: Option<RefreshFeedOutcome>,
 }
 
+/// What adding a subscription led to, as the user interface receives it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AddSubscriptionOutcome {
+    /// The address is a page listing several feeds; the user picks one.
+    NeedsSelection {
+        page_url: url::Url,
+        candidates: Vec<crate::FeedDiscoveryCandidate>,
+    },
+    SavedAndRefreshed,
+    /// Saved, but its first refresh failed: the subscription exists and later refreshes may
+    /// succeed.
+    SavedRefreshFailed {
+        failure: crate::RefreshFailureItem,
+    },
+}
+
 #[derive(Clone)]
 pub struct SubscriptionWorkflow {
     pub(crate) feed_service: FeedService,

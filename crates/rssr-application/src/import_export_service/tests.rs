@@ -160,30 +160,6 @@ impl ClockPort for FixedClock {
     }
 }
 
-#[test]
-fn config_import_outcome_summary_line_formats_settings_state() {
-    assert_eq!(
-        super::ConfigImportOutcome {
-            imported_feed_count: 2,
-            removed_feed_count: 1,
-            settings_updated: true,
-            settings: UserSettings::default(),
-        }
-        .summary_line(),
-        "导入 2 个订阅，清理 1 个缺失订阅，设置已更新"
-    );
-    assert_eq!(
-        super::ConfigImportOutcome {
-            imported_feed_count: 0,
-            removed_feed_count: 0,
-            settings_updated: false,
-            settings: UserSettings::default(),
-        }
-        .summary_line(),
-        "导入 0 个订阅，清理 0 个缺失订阅，设置未变化"
-    );
-}
-
 struct MemoryFeedRepository {
     feeds: Mutex<Vec<Feed>>,
 }

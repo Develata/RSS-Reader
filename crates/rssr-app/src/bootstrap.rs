@@ -13,4 +13,4 @@ mod imp;
 pub(crate) use imp::install_history_capture;
 pub use imp::{AppServices, ReaderNavigation};
 
-pub(crate) use rssr_api::AddSubscriptionOutcome;
+pub(crate) use rssr_application::AddSubscriptionOutcome;

@@ -20,15 +20,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use rssr_api::{
-    AddSubscriptionOutcome, Backend, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome,
-    Result as BackendResult,
-};
+use rssr_api::{Backend, Result as BackendResult};
 use rssr_application::{
-    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, ConfigImportOutcome,
-    EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome, EntryFlagOutcome,
-    FeedsSnapshotOutcome, OpmlImportOutcome, PrepareSubscriptionOutcome, ReaderEntrySnapshot,
-    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
+    AddSubscriptionInput, AddSubscriptionLifecycleInput, AddSubscriptionOutcome, AppUseCases,
+    ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome,
+    EntryFlagOutcome, FeedsSnapshotOutcome, OpmlImportOutcome, PrepareSubscriptionOutcome,
+    ReaderEntrySnapshot, RefreshAllExecutionOutcome, RefreshAllInput, RefreshAllOutcome,
+    RefreshFailureItem, RefreshFeedExecutionOutcome, RefreshFeedOutcome, RefreshFeedResult,
     RefreshLocalizedEntry, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore,
     RemoveSubscriptionInput, SettingsPatch, StartupTarget,
 };
@@ -135,9 +133,32 @@ impl<H: LocalHost> LocalBackend<H> {
         &self.inner.host
     }
 
-    fn handle_refresh_all_outcome(&self, outcome: RefreshAllOutcome) -> RefreshAllExecutionOutcome {
+    /// The display names of failed subscriptions, read once after the refresh; a failure to
+    /// read them only leaves the names out (the address is shown instead).
+    async fn named(&self, mut failures: Vec<RefreshFailureItem>) -> Vec<RefreshFailureItem> {
+        if failures.is_empty() {
+            return failures;
+        }
+        match self.inner.use_cases.feeds_snapshot_service.load_snapshot().await {
+            Ok(snapshot) => {
+                for failure in &mut failures {
+                    failure.name = snapshot
+                        .feeds
+                        .iter()
+                        .find(|feed| feed.id == failure.feed_id)
+                        .map(|feed| feed.title.clone());
+                }
+            }
+            Err(error) => tracing::warn!(error = %format!("{error:#}"), "读取订阅名称失败"),
+        }
+        failures
+    }
+
+    async fn handle_refresh_all_outcome(
+        &self,
+        outcome: RefreshAllOutcome,
+    ) -> RefreshAllExecutionOutcome {
         let summary = outcome.summary();
-        let failure_lines = summary.joined_failure_lines();
         for feed in outcome.feeds {
             match feed.result {
                 RefreshFeedResult::Updated { localization_entries, .. } => {
@@ -153,37 +174,32 @@ impl<H: LocalHost> LocalBackend<H> {
             }
         }
         RefreshAllExecutionOutcome {
-            failure_message: failure_lines,
             inserted_count: summary.inserted_count,
-            total_count: summary.total_count,
-            failed_count: summary.failed_count,
+            total_count: summary.total_count as u64,
+            failed_count: summary.failed_count as u64,
+            failures: self.named(summary.failures).await,
         }
     }
 
-    fn handle_refresh_feed_outcome(
+    /// Hands new entries to the host's image localization before turning the outcome into what
+    /// the user interface receives.
+    async fn handle_refresh_feed_outcome(
         &self,
         outcome: RefreshFeedOutcome,
     ) -> RefreshFeedExecutionOutcome {
         let inserted_count = outcome.inserted_count();
-        let failure_message = outcome.failure_line();
+        let failure = outcome.failure_summary();
         match outcome.result {
             RefreshFeedResult::Updated { localization_entries, .. } => {
                 self.inner.host.feed_refreshed(outcome.feed_id, localization_entries);
-                RefreshFeedExecutionOutcome { inserted_count, failure_message: None }
             }
-            RefreshFeedResult::NotModified => {
-                RefreshFeedExecutionOutcome { inserted_count, failure_message: None }
-            }
+            RefreshFeedResult::NotModified => {}
             RefreshFeedResult::Failed { message, .. } => {
                 tracing::warn!(feed_id = outcome.feed_id, error = %message, "刷新订阅失败");
-                RefreshFeedExecutionOutcome {
-                    inserted_count,
-                    failure_message: Some(
-                        failure_message.unwrap_or_else(|| "刷新订阅失败".to_string()),
-                    ),
-                }
             }
         }
+        let failure = self.named(failure.into_iter().collect()).await.pop();
+        RefreshFeedExecutionOutcome { inserted_count, failure }
     }
 
     /// The periodic refresh: refreshes everything when due, then sleeps until next time.
@@ -359,11 +375,9 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
             )
             .await
             .context("保存订阅失败")?;
-        let feed_id = outcome.feed.id;
         let refresh = outcome.first_refresh.expect("refresh_after_add produces refresh outcome");
-        let outcome = self.handle_refresh_feed_outcome(refresh);
-        match outcome.failure_message {
-            Some(message) => Ok(AddSubscriptionOutcome::SavedRefreshFailed { feed_id, message }),
+        match self.handle_refresh_feed_outcome(refresh).await.failure {
+            Some(failure) => Ok(AddSubscriptionOutcome::SavedRefreshFailed { failure }),
             None => Ok(AddSubscriptionOutcome::SavedAndRefreshed),
         }
     }
@@ -381,7 +395,7 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
                         max_concurrency: self.inner.host.refresh_concurrency(),
                     })
                     .await?;
-                Ok(self.handle_refresh_all_outcome(outcome))
+                Ok(self.handle_refresh_all_outcome(outcome).await)
             })
             .await
     }
@@ -389,7 +403,7 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
     async fn refresh_feed(&self, feed_id: i64) -> BackendResult<RefreshFeedExecutionOutcome> {
         self.inner.host.require_network()?;
         let outcome = self.inner.use_cases.refresh_service.refresh_feed(feed_id).await?;
-        Ok(self.handle_refresh_feed_outcome(outcome))
+        Ok(self.handle_refresh_feed_outcome(outcome).await)
     }
 
     async fn remove_feed(&self, feed_id: i64) -> BackendResult<()> {
@@ -516,5 +530,31 @@ mod tests {
         let error = backend.import_config_json("{", &stale).await.unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidInput);
         assert!(error.message.contains("JSON"), "{}", error.message);
+    }
+
+    /// A failed refresh reaches the UI as a structured item with the subscription's name, so
+    /// the GUI and the CLI word it themselves.
+    #[tokio::test]
+    async fn refresh_failures_carry_the_subscription_name() {
+        let backend = recording_backend(false).await;
+        // Nothing listens on the discard port: the fetch fails at once, without a network.
+        let feed = backend
+            .use_cases()
+            .feed_service
+            .add_subscription(&AddSubscriptionInput {
+                url: "http://127.0.0.1:9/feed.xml".into(),
+                title: Some("Named".into()),
+                folder: None,
+            })
+            .await
+            .unwrap();
+
+        let failure = backend.refresh_feed(feed.id).await.unwrap().failure.expect("failed");
+        assert_eq!((failure.feed_id, failure.name.as_deref()), (feed.id, Some("Named")));
+        assert_eq!(failure.kind, rssr_application::ErrorKind::Network);
+
+        let all = backend.refresh_all().await.unwrap();
+        assert_eq!((all.total_count, all.failed_count), (1, 1));
+        assert_eq!(all.failures[0].name.as_deref(), Some("Named"));
     }
 }

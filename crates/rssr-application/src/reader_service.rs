@@ -5,9 +5,44 @@ use rssr_domain::{Entry, EntryNavigation};
 
 use crate::library_queries::{LibraryQueryPort, ReaderSnapshot};
 
+/// An entry as the reader shows it; storage details (identity keys, hashes, first-seen time)
+/// stay inside.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReaderEntry {
+    pub id: i64,
+    pub feed_id: i64,
+    pub url: Option<url::Url>,
+    pub title: String,
+    pub author: Option<String>,
+    pub summary: Option<String>,
+    pub content_html: Option<String>,
+    pub content_text: Option<String>,
+    pub published_at: Option<time::OffsetDateTime>,
+    pub is_read: bool,
+    pub is_starred: bool,
+}
+
+impl From<Entry> for ReaderEntry {
+    fn from(entry: Entry) -> Self {
+        Self {
+            id: entry.id,
+            feed_id: entry.feed_id,
+            url: entry.url,
+            title: entry.title,
+            author: entry.author,
+            summary: entry.summary,
+            content_html: entry.content_html,
+            content_text: entry.content_text,
+            published_at: entry.published_at,
+            is_read: entry.is_read,
+            is_starred: entry.is_starred,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReaderEntrySnapshot {
-    pub entry: Option<Entry>,
+    pub entry: Option<ReaderEntry>,
     pub navigation: EntryNavigation,
     pub feed_title: Option<String>,
 }
@@ -36,7 +71,8 @@ impl ReaderService {
         let feed_title = feed.map(|feed| {
             feed.title.filter(|title| !title.trim().is_empty()).unwrap_or_else(|| feed.url.into())
         });
-        Ok(ReaderEntrySnapshot { entry: Some(record.into_entry(content)), navigation, feed_title })
+        let entry = ReaderEntry::from(record.into_entry(content));
+        Ok(ReaderEntrySnapshot { entry: Some(entry), navigation, feed_title })
     }
 }
 

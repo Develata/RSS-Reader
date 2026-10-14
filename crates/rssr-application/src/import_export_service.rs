@@ -63,16 +63,6 @@ pub struct ConfigImportOutcome {
     pub settings: UserSettings,
 }
 
-impl ConfigImportOutcome {
-    pub fn summary_line(&self) -> String {
-        let settings = if self.settings_updated { "设置已更新" } else { "设置未变化" };
-        format!(
-            "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
-            self.imported_feed_count, self.removed_feed_count
-        )
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpmlImportOutcome {
     pub imported_feed_count: usize,

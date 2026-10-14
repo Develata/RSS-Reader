@@ -14,8 +14,7 @@ pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
             Ok(services) => match services.refresh_all().await {
                 Ok(outcome) => vec![UiIntent::SetStatus {
                     message: refresh_message(&outcome),
-                    tone: if outcome.failure_message.is_some() { "error" } else { "info" }
-                        .to_string(),
+                    tone: if outcome.failures.is_empty() { "info" } else { "error" }.to_string(),
                 }],
                 Err(err) => status_error(format!("刷新失败：{err}")),
             },
@@ -64,9 +63,9 @@ fn resolve_with_fallback(message: impl Into<String>) -> Vec<UiIntent> {
     ]
 }
 
-fn refresh_message(outcome: &rssr_api::RefreshAllExecutionOutcome) -> String {
+fn refresh_message(outcome: &rssr_application::RefreshAllExecutionOutcome) -> String {
     let success = super::new_entries_message(outcome.inserted_count);
-    match &outcome.failure_message {
+    match &super::failure_lines(&outcome.failures) {
         Some(failure) if outcome.total_count > 0 && outcome.failed_count == outcome.total_count => {
             format!("刷新失败：{failure}")
         }

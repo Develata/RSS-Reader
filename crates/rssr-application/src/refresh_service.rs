@@ -224,30 +224,48 @@ impl RefreshFeedOutcome {
         }
     }
 
-    pub fn failure_summary(&self) -> Option<RefreshFeedFailureSummary> {
-        self.failure_message().map(|message| RefreshFeedFailureSummary {
-            feed_id: self.feed_id,
-            url: self.url.clone(),
-            message: message.to_string(),
-        })
-    }
-
-    pub fn failure_line(&self) -> Option<String> {
-        self.failure_summary().map(|failure| failure.display_line())
+    /// The failure, without a name (the refresh does not read it).
+    pub fn failure_summary(&self) -> Option<RefreshFailureItem> {
+        match &self.result {
+            RefreshFeedResult::Failed { kind, message } => Some(RefreshFailureItem {
+                feed_id: self.feed_id,
+                url: self.url.clone(),
+                name: None,
+                kind: *kind,
+                message: message.clone(),
+            }),
+            _ => None,
+        }
     }
 }
 
+/// A subscription whose refresh failed. The GUI and the CLI format it themselves.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RefreshFeedFailureSummary {
+pub struct RefreshFailureItem {
     pub feed_id: i64,
     pub url: String,
+    /// The subscription's display name when known; show the address otherwise.
+    pub name: Option<String>,
+    pub kind: ErrorKind,
+    /// For the user (see [`RefreshFeedResult::Failed`]).
     pub message: String,
 }
 
-impl RefreshFeedFailureSummary {
-    pub fn display_line(&self) -> String {
-        format!("{}: {}", self.url, self.message)
-    }
+/// What refreshing every subscription led to, as the user interface receives it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefreshAllExecutionOutcome {
+    pub inserted_count: u64,
+    pub total_count: u64,
+    pub failed_count: u64,
+    /// Empty when everything succeeded; fewer than `total_count` is a partial success.
+    pub failures: Vec<RefreshFailureItem>,
+}
+
+/// What refreshing one subscription led to, as the user interface receives it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefreshFeedExecutionOutcome {
+    pub inserted_count: u64,
+    pub failure: Option<RefreshFailureItem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -295,12 +313,8 @@ impl RefreshAllOutcome {
         self.feeds.iter().filter(|outcome| outcome.failure_message().is_some()).collect()
     }
 
-    pub fn failure_summaries(&self) -> Vec<RefreshFeedFailureSummary> {
+    pub fn failure_summaries(&self) -> Vec<RefreshFailureItem> {
         self.summary().failures
-    }
-
-    pub fn joined_failure_lines(&self) -> Option<String> {
-        self.summary().joined_failure_lines()
     }
 }
 
@@ -311,26 +325,12 @@ pub struct RefreshAllSummary {
     pub updated_count: usize,
     pub not_modified_count: usize,
     pub failed_count: usize,
-    pub failures: Vec<RefreshFeedFailureSummary>,
+    pub failures: Vec<RefreshFailureItem>,
 }
 
 impl RefreshAllSummary {
     pub fn has_failures(&self) -> bool {
         self.failed_count > 0
-    }
-
-    pub fn joined_failure_lines(&self) -> Option<String> {
-        if self.failures.is_empty() {
-            None
-        } else {
-            Some(
-                self.failures
-                    .iter()
-                    .map(RefreshFeedFailureSummary::display_line)
-                    .collect::<Vec<_>>()
-                    .join(" | "),
-            )
-        }
     }
 }
 
@@ -908,19 +908,14 @@ mod tests {
 
         assert!(!outcome.is_success());
         assert_eq!(outcome.failure_message(), Some("boom"));
-        assert_eq!(outcome.failure_line(), Some("https://example.com/feed.xml: boom".to_string()));
-        assert_eq!(
-            outcome.failure_summary(),
-            Some(super::RefreshFeedFailureSummary {
-                feed_id: 9,
-                url: "https://example.com/feed.xml".to_string(),
-                message: "boom".to_string(),
-            })
-        );
+        let failure = outcome.failure_summary().expect("failure");
+        assert_eq!((failure.feed_id, failure.url.as_str()), (9, "https://example.com/feed.xml"));
+        assert_eq!((failure.name, failure.message.as_str()), (None, "boom"));
+        assert_eq!(failure.kind, crate::ErrorKind::Network);
     }
 
     #[test]
-    fn refresh_all_summary_counts_results_and_formats_failures() {
+    fn refresh_all_summary_counts_results_and_lists_failures() {
         let outcome = super::RefreshAllOutcome {
             feeds: vec![
                 super::RefreshFeedOutcome {
@@ -959,10 +954,8 @@ mod tests {
         assert_eq!(summary.failures[0].feed_id, 3);
         assert_eq!(outcome.updated_count(), 1);
         assert_eq!(outcome.not_modified_count(), 1);
-        assert_eq!(
-            outcome.joined_failure_lines(),
-            Some("https://example.com/three.xml: boom".to_string())
-        );
+        assert_eq!(summary.failures[0].url, "https://example.com/three.xml");
+        assert_eq!(summary.failures[0].message, "boom");
     }
 
     #[tokio::test]

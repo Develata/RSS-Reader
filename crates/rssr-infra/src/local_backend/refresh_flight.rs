@@ -4,7 +4,8 @@ use std::{future::Future, sync::Mutex};
 
 use tokio::sync::watch;
 
-use rssr_api::{BackendError, ErrorCode, RefreshAllExecutionOutcome};
+use rssr_api::{BackendError, ErrorCode};
+use rssr_application::RefreshAllExecutionOutcome;
 
 type SharedResult = Result<RefreshAllExecutionOutcome, BackendError>;
 type Receiver = watch::Receiver<Option<SharedResult>>;
@@ -77,7 +78,7 @@ mod tests {
                     inserted_count: 0,
                     total_count: 0,
                     failed_count: 0,
-                    failure_message: None,
+                    failures: Vec::new(),
                 })
             };
             let (first, second) = tokio::join!(flight.run(request()), flight.run(request()));
@@ -126,13 +127,13 @@ mod tests {
                     inserted_count: 0,
                     total_count: 0,
                     failed_count: 0,
-                    failure_message: None,
+                    failures: Vec::new(),
                 })
             }),
         )
         .await
         .expect("retry must not hang")
         .expect("retry succeeds");
-        assert_eq!(result.failure_message, None);
+        assert!(result.failures.is_empty());
     }
 }

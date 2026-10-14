@@ -47,7 +47,10 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
                 Ok(RemoteConfigPullOutcome { import: Some(import) }) => settings_intents(vec![
                     SettingsPageIntent::SettingsLoaded(import.settings.clone()),
                     SettingsPageIntent::SetStatus {
-                        message: format!("已从 WebDAV 下载并导入配置：{}。", import.summary_line()),
+                        message: format!(
+                            "已从 WebDAV 下载并导入配置：{}。",
+                            super::config_import_summary(&import)
+                        ),
                         tone: "info".to_string(),
                     },
                 ]),

@@ -45,18 +45,18 @@ pub use persistence_mutation::{
     ActivatedSubscription, ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan,
     ConfigReplacementPort, SettingsUpdatePort, SubscriptionActivationPort, SubscriptionRemovalPort,
 };
-pub use reader_service::{ReaderEntrySnapshot, ReaderService};
+pub use reader_service::{ReaderEntry, ReaderEntrySnapshot, ReaderService};
 pub use refresh_service::{
     DEFAULT_REFRESH_CONCURRENCY, FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate,
-    ParsedEntryData, ParsedFeedUpdate, PreparedUpdateTicket, RefreshAllInput, RefreshAllOutcome,
-    RefreshAllSummary, RefreshCommit, RefreshCommitOutcome, RefreshFailure,
-    RefreshFeedFailureSummary, RefreshFeedOutcome, RefreshFeedResult, RefreshHttpMetadata,
-    RefreshLocalizedEntry, RefreshService, RefreshStorePort, RefreshTarget, RefreshTicket,
-    SERIAL_REFRESH_CONCURRENCY,
+    ParsedEntryData, ParsedFeedUpdate, PreparedUpdateTicket, RefreshAllExecutionOutcome,
+    RefreshAllInput, RefreshAllOutcome, RefreshAllSummary, RefreshCommit, RefreshCommitOutcome,
+    RefreshFailure, RefreshFailureItem, RefreshFeedExecutionOutcome, RefreshFeedOutcome,
+    RefreshFeedResult, RefreshHttpMetadata, RefreshLocalizedEntry, RefreshService,
+    RefreshStorePort, RefreshTarget, RefreshTicket, SERIAL_REFRESH_CONCURRENCY,
 };
 pub use settings_service::{SettingsPatch, SettingsService};
 pub use startup_service::{StartupService, StartupTarget};
 pub use subscription_workflow::{
     AddSubscriptionAndRefreshOutcome, AddSubscriptionLifecycleInput,
-    AddSubscriptionLifecycleOutcome, AppStatePort, SubscriptionWorkflow,
+    AddSubscriptionLifecycleOutcome, AddSubscriptionOutcome, AppStatePort, SubscriptionWorkflow,
 };

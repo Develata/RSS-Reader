@@ -5,8 +5,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, ConfigImportOutcome,
     DEFAULT_REFRESH_CONCURRENCY, OpmlImportOutcome, RefreshAllInput, RefreshAllOutcome,
-    RefreshFeedOutcome, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput,
-    SettingsPatch,
+    RefreshFailureItem, RefreshFeedOutcome, RemoteConfigPullOutcome, RemoteConfigPushOutcome,
+    RemoveSubscriptionInput, SettingsPatch,
 };
 use rssr_domain::{ConfigFingerprint, Feed, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
@@ -278,7 +278,7 @@ async fn main() -> anyhow::Result<()> {
             // The CLI replaces what is stored now: it reads the fingerprint just before.
             let expected = services.use_cases.import_export_service.config_fingerprint().await?;
             let outcome = services.import_config_json(&raw, &expected).await?;
-            println!("配置已导入：{}。", outcome.summary_line());
+            println!("配置已导入：{}。", config_import_summary(&outcome));
         }
         Command::ExportOpml(args) => {
             let raw = services.export_opml().await?;
@@ -306,7 +306,7 @@ async fn main() -> anyhow::Result<()> {
         Command::PullWebdav(args) => {
             let outcome = services.pull_remote_config(&args.endpoint, &args.remote_path).await?;
             if let Some(import) = outcome.import {
-                println!("已从 WebDAV 下载并导入配置：{}。", import.summary_line());
+                println!("已从 WebDAV 下载并导入配置：{}。", config_import_summary(&import));
             } else {
                 println!("远端配置不存在。");
             }
@@ -498,18 +498,32 @@ fn print_feeds(feeds: &[Feed]) {
     }
 }
 
+fn failure_line(failure: &RefreshFailureItem) -> String {
+    format!("{}: {}", failure.url, failure.message)
+}
+
 fn ensure_refresh_feed_succeeded(outcome: &RefreshFeedOutcome) -> anyhow::Result<()> {
-    if let Some(failure_line) = outcome.failure_line() {
-        anyhow::bail!("{failure_line}");
+    if let Some(failure) = outcome.failure_summary() {
+        anyhow::bail!("{}", failure_line(&failure));
     }
     Ok(())
 }
 
 fn ensure_refresh_all_succeeded(outcome: &RefreshAllOutcome) -> anyhow::Result<()> {
-    if let Some(failures) = outcome.joined_failure_lines() {
-        anyhow::bail!("部分订阅刷新失败: {failures}");
+    let failures = outcome.failure_summaries();
+    if !failures.is_empty() {
+        let lines = failures.iter().map(failure_line).collect::<Vec<_>>().join(" | ");
+        anyhow::bail!("部分订阅刷新失败: {lines}");
     }
     Ok(())
+}
+
+fn config_import_summary(outcome: &ConfigImportOutcome) -> String {
+    let settings = if outcome.settings_updated { "设置已更新" } else { "设置未变化" };
+    format!(
+        "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
+        outcome.imported_feed_count, outcome.removed_feed_count
+    )
 }
 
 fn new_entries_message(count: u64) -> String {
