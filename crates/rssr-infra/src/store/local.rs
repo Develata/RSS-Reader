@@ -150,10 +150,7 @@ pub async fn open_library_in(data_dir: &Path, options: StoreOptions) -> StoreRes
     {
         let target = path.clone();
         match on_thread(move |gave_up| import::import_unless(&source, &target, gave_up)).await {
-            Ok(outcome) => {
-                tracing::info!(?outcome, "已导入 v0.1 资料库");
-                imported = Some(outcome);
-            }
+            Ok(outcome) => imported = Some(outcome),
             // Another program sharing the directory imported the same library first.
             Err(StoreError::LibraryExists(_)) => {}
             Err(error) => return Err(error),

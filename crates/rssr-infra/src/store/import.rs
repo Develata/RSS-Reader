@@ -361,6 +361,17 @@ fn import_with(
     if target.to_str().is_none() {
         return Err(unsupported(format!("路径不是有效的 UTF-8：{}", target.display())));
     }
+    // The target's scratch files are cleared before use: a source that is one of them (or sits
+    // where one would) would be deleted.
+    for source_file in std::iter::once(&source.index).chain(source.content.as_ref()) {
+        if belongs_to_target(source_file, target)? {
+            return Err(unsupported(format!(
+                "旧版资料库文件 {} 与目标 {} 的临时文件同名",
+                source_file.display(),
+                target.display()
+            )));
+        }
+    }
     let taken = || StoreError::LibraryExists(target.display().to_string());
     if target.exists() {
         return Err(taken());
@@ -429,7 +440,29 @@ fn import_with(
     }
     conn.close().map_err(|(_, error)| error)?;
     lock.publish(staging)?;
+    // Logged here: the caller may have gone away while the import ran.
+    tracing::info!(?outcome, target = %target.display(), "已导入 v0.1 资料库");
     Ok(outcome)
+}
+
+/// Whether `file` is the target or a file the target's creators own next to it
+/// (`<target name>.<anything>`), comparing the real directories.
+fn belongs_to_target(file: &Path, target: &Path) -> StoreResult<bool> {
+    let (Some(file_dir), Some(file_name), Some(target_dir), Some(target_name)) =
+        (file.parent(), file.file_name(), target.parent(), target.file_name())
+    else {
+        return Ok(false);
+    };
+    let same_dir = match (std::fs::canonicalize(file_dir), std::fs::canonicalize(target_dir)) {
+        (Ok(file_dir), Ok(target_dir)) => file_dir == target_dir,
+        // A target directory that does not exist holds no scratch files.
+        (_, Err(error)) if error.kind() == std::io::ErrorKind::NotFound => false,
+        (Err(error), _) | (_, Err(error)) => return Err(error.into()),
+    };
+    let mut prefix = target_name.to_os_string();
+    prefix.push(".");
+    let (name, prefix) = (file_name.to_string_lossy(), prefix.to_string_lossy());
+    Ok(same_dir && (file_name == target_name || name.starts_with(prefix.as_ref())))
 }
 
 fn copy_library(

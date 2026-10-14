@@ -343,9 +343,16 @@ mod tests {
             matches!(refused, Err(StoreError::Io(ref error)) if error.kind() == std::io::ErrorKind::TimedOut)
         );
         assert!(waited >= Duration::from_millis(200));
-        let (stopped, waited) = attempt(Duration::from_secs(60), Arc::new(AtomicBool::new(true)));
+        // Given up while already waiting (not before): the wait itself notices.
+        let gave_up = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&gave_up);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            flag.store(true, Ordering::SeqCst);
+        });
+        let (stopped, waited) = attempt(Duration::from_secs(60), gave_up);
         assert!(matches!(stopped, Err(StoreError::Interrupted)));
-        assert!(waited < Duration::from_secs(5));
+        assert!(waited >= Duration::from_millis(300) && waited < Duration::from_secs(5));
         drop(holder);
         std::fs::remove_dir_all(dir).unwrap();
     }

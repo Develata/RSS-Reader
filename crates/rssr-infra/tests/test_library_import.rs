@@ -483,6 +483,43 @@ fn within<R: Send + 'static>(
     receive.recv_timeout(limit).expect("finished within the limit")
 }
 
+/// A source named like one of the target's scratch files is refused before anything is cleared.
+#[test]
+fn a_source_named_like_a_scratch_file_is_refused_untouched() {
+    let dir = TempDir::new("scratch-name");
+    let source = fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
+    let disguised = dir.0.join("library.sqlite3.import-index");
+    std::fs::rename(&source.index, &disguised).unwrap();
+    let before = std::fs::read(&disguised).unwrap();
+    let source = V01Library { index: disguised.clone(), content: source.content };
+    let error = import_v01(&source, &dir.target()).expect_err("refused").to_string();
+    assert!(error.contains("临时文件同名"), "{error}");
+    assert_eq!(std::fs::read(&disguised).unwrap(), before, "the source is untouched");
+    assert!(!dir.target().exists());
+}
+
+/// An open given up while another creator holds the creation lock imports nothing once the lock is
+/// free.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_open_given_up_while_waiting_to_import_imports_nothing() {
+    use rssr_infra::store::local::open_library_in;
+    let dir = TempDir::new("import-gave-up");
+    fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
+    let other_creator = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(dir.0.join("library.sqlite3.create-lock"))
+        .unwrap();
+    other_creator.lock().unwrap();
+    let opening = open_library_in(&dir.0, Default::default());
+    assert!(tokio::time::timeout(std::time::Duration::from_millis(300), opening).await.is_err());
+    other_creator.unlock().unwrap();
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    assert!(!dir.target().exists(), "nothing is imported for a caller that gave up");
+    assert_eq!(scratch_files(&dir.0), Vec::<String>::new());
+}
+
 /// Files next to the library other than the library and its creation lock.
 fn scratch_files(dir: &Path) -> Vec<String> {
     std::fs::read_dir(dir)
