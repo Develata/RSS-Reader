@@ -11,14 +11,19 @@ use crate::{
     ui::{SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, execute_ui_command},
 };
 
-/// The page edits a draft against a baseline, the stored settings as the page itself last read
-/// or wrote them; a save sends only the fields where the two differ (B2-D4). The baseline is the
-/// page's own: the app-wide [`ThemeController`] signal, which startup and other pages also set
-/// whenever their replies arrive, only renders the settings.
+/// The settings page shows the stored settings with the user's edits on top (B2-D4).
+///
+/// Edits are tracked, not inferred: every field the form sets through [`Self::edit`] is an edit
+/// with its latest value until a save stores it, even when it is set back to the value it had.
+/// A save sends exactly these fields; a reply carrying stored settings replaces the rest. The
+/// stored settings are the page's own: the app-wide [`ThemeController`] signal, which startup
+/// and other pages also set whenever their replies arrive, only renders the settings.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SettingsPageSession {
     theme: ThemeController,
-    baseline: Signal<UserSettings>,
+    stored: Signal<UserSettings>,
+    edits: Signal<Edits>,
+    /// `stored` with the edits on top; what the form shows.
     draft: Signal<UserSettings>,
     writes: Signal<Writes>,
     preset_choice: Signal<String>,
@@ -26,11 +31,32 @@ pub(crate) struct SettingsPageSession {
     status_tone: Signal<String>,
 }
 
-/// The page's writes (saves, pulls) as its loads see them (B2-D4).
+/// The user's edits that are not stored yet.
+#[derive(Clone, Default, PartialEq)]
+struct Edits {
+    /// Sent by the save in flight: stored by its reply, or edits again if it fails.
+    submitted: Option<SettingsPatch>,
+    /// Made since (all of them while no save is in flight).
+    pending: SettingsPatch,
+}
+
+impl Edits {
+    fn over(&self, stored: &UserSettings) -> UserSettings {
+        let submitted = self.submitted.as_ref().map(|patch| patch.applied(stored));
+        self.pending.applied(submitted.as_ref().unwrap_or(stored))
+    }
+
+    fn edit_custom_css(&self) -> bool {
+        self.pending.custom_css.is_some()
+            || self.submitted.as_ref().is_some_and(|patch| patch.custom_css.is_some())
+    }
+}
+
+/// The page's writes (saves, pulls) as its loads see them.
 #[derive(Clone, Default, PartialEq)]
 struct Writes {
-    /// One write at a time: each reply is merged against the baseline, so a second write in
-    /// flight would be merged against a baseline the first one changes, and lose edits.
+    /// One write at a time: a pull replaces the stored settings a save in flight is measured
+    /// against, and a save would store over a pull it does not know of.
     in_flight: bool,
     /// Writes whose reply carried the stored settings. A load issued before one of them may
     /// predate it, so its reply is discarded.
@@ -42,25 +68,55 @@ struct Writes {
 
 impl SettingsPageSession {
     pub(crate) fn new(theme: ThemeController) -> Self {
-        let baseline = use_signal(|| theme.settings.peek().clone());
-        let draft = use_signal(|| baseline.peek().clone());
+        let stored = use_signal(|| theme.settings.peek().clone());
+        let edits = use_signal(Edits::default);
+        let draft = use_signal(|| stored.peek().clone());
         let writes = use_signal(Writes::default);
-        let preset_choice =
-            use_signal(|| detect_preset_key(&baseline.peek().custom_css).to_string());
+        let preset_choice = use_signal(|| detect_preset_key(&stored.peek().custom_css).to_string());
         let status = use_signal(String::new);
         let status_tone = use_signal(|| "info".to_string());
 
-        Self { theme, baseline, draft, writes, preset_choice, status, status_tone }
+        Self { theme, stored, edits, draft, writes, preset_choice, status, status_tone }
     }
 
-    pub(crate) fn draft(self) -> Signal<UserSettings> {
-        self.draft
+    /// What the form shows (a reactive read).
+    pub(crate) fn draft(self) -> UserSettings {
+        (self.draft)()
     }
 
-    /// The settings as the page last read or wrote them: the baseline a save compares the
-    /// draft with.
-    pub(crate) fn saved_settings(self) -> UserSettings {
-        self.baseline.peek().clone()
+    /// The one way the form changes the draft: the fields `change` sets become edits.
+    pub(crate) fn edit(mut self, change: impl FnOnce(&mut UserSettings)) {
+        let mut next = self.draft.peek().clone();
+        change(&mut next);
+        let changed = SettingsPatch::between(&self.draft.peek(), &next);
+        if changed.is_empty() {
+            return;
+        }
+        self.edits.with_mut(|edits| {
+            edits.pending = std::mem::take(&mut edits.pending).followed_by(changed);
+        });
+        self.draft.set(next);
+    }
+
+    /// The edits a save would send.
+    pub(crate) fn pending_edits(self) -> SettingsPatch {
+        self.edits.peek().pending.clone()
+    }
+
+    /// Hands the pending edits to a save; call after [`Self::begin_write`] succeeded.
+    pub(crate) fn submit_edits(mut self) -> SettingsPatch {
+        let mut edits = self.edits.write();
+        let submitted = std::mem::take(&mut edits.pending);
+        edits.submitted = Some(submitted.clone());
+        submitted
+    }
+
+    /// The save failed: what it sent is an edit again, under the ones made since.
+    pub(crate) fn restore_submitted_edits(mut self) {
+        let mut edits = self.edits.write();
+        if let Some(submitted) = edits.submitted.take() {
+            edits.pending = submitted.followed_by(std::mem::take(&mut edits.pending));
+        }
     }
 
     /// Starts a write whose reply may carry the stored settings (a save, a pull). Returns false,
@@ -86,7 +142,7 @@ impl SettingsPageSession {
         }
     }
 
-    /// Records that a write stored `settings`: loads issued before it are stale.
+    /// Records that a write stored settings: loads issued before it are stale.
     fn note_stored(mut self) {
         let mut writes = self.writes.write();
         writes.stored += 1;
@@ -117,7 +173,7 @@ impl SettingsPageSession {
         self.load_with(|command| execute_ui_command(UiCommand::Settings(command)));
     }
 
-    /// Reads the stored settings (B2-D4). A write that stores settings after the load was issued
+    /// Reads the stored settings. A write that stores settings after the load was issued
     /// supersedes it: the read may predate the write, so the whole reply is discarded. A reply
     /// that arrives while a write is in flight waits for the write to end.
     pub(super) fn load_with<F: Future<Output = Vec<UiIntent>> + 'static>(
@@ -148,7 +204,8 @@ impl SettingsPageSession {
         }
     }
 
-    /// Applies a write's reply: settings in it are what the write stored (a pull).
+    /// Applies an intent from a reply other than a load's: statuses, and the settings a pull
+    /// stored.
     pub(crate) fn dispatch(self, intent: SettingsPageIntent) {
         match intent {
             SettingsPageIntent::SettingsLoaded(settings) => {
@@ -159,36 +216,35 @@ impl SettingsPageSession {
         }
     }
 
-    /// Stored settings that were read or pulled become the baseline; fields edited since the
-    /// previous baseline stay in the draft.
+    /// Settings that were read or pulled are the stored ones; the edits stay on top. The preset
+    /// follows the stored CSS unless the CSS is edited.
     fn apply_stored_settings(mut self, settings: UserSettings) {
-        let edits = SettingsPatch::between(&self.baseline.peek(), &self.draft.peek());
-        let draft = edits.applied(&settings);
-        if edits.custom_css.is_none() {
+        let draft = self.edits.peek().over(&settings);
+        if !self.edits.peek().edit_custom_css() {
             self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
         }
         self.draft.set(draft);
-        self.baseline.set(settings.clone());
+        self.stored.set(settings.clone());
         self.theme.settings.set(settings);
     }
 
-    /// Persisted settings and editable input are different snapshots while a save is pending.
-    /// The draft takes every stored field except the ones edited since the submission (including
-    /// a newly selected preset), which stay for the next explicit save.
+    /// A save stored `settings`: its edits are done, the ones made since stay on top. The preset
+    /// follows the stored CSS unless one was chosen during the save. Returns whether the draft
+    /// still differs from what is stored.
     pub(crate) fn apply_saved_settings(
         mut self,
         settings: UserSettings,
-        submitted_draft: &UserSettings,
         submitted_preset: &str,
     ) -> bool {
         self.note_stored();
-        let later_edits = SettingsPatch::between(submitted_draft, &self.draft.peek());
-        self.draft.set(later_edits.applied(&settings));
+        self.edits.write().submitted = None;
+        let draft = self.edits.peek().over(&settings);
         if self.preset_choice.peek().as_str() == submitted_preset {
-            self.preset_choice.set(detect_preset_key(&self.draft.peek().custom_css).to_string());
+            self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
         }
-        let has_unsaved_edits = *self.draft.peek() != settings;
-        self.baseline.set(settings.clone());
+        let has_unsaved_edits = draft != settings;
+        self.draft.set(draft);
+        self.stored.set(settings.clone());
         self.theme.settings.set(settings);
         has_unsaved_edits
     }

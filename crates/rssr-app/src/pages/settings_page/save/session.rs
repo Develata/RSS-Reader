@@ -1,7 +1,6 @@
 use std::future::Future;
 
 use dioxus::prelude::*;
-use rssr_application::SettingsPatch;
 use rssr_domain::DEFAULT_ENTRIES_PAGE_SIZE;
 
 use super::state::SettingsPageSaveState;
@@ -49,14 +48,10 @@ impl SettingsPageSaveSession {
                 .set_status("上一份设置仍在保存；新修改已保留在草稿中，完成后请再次保存。", "info");
             return;
         }
-        let submitted_draft = self.page.draft().peek().clone();
-        let submitted_preset = self.page.preset_choice().peek().clone();
-        let mut next = submitted_draft.clone();
-        // The baseline is what the page last saw stored; only fields edited since are sent, so
-        // a change saved elsewhere meanwhile (an import, another device) is not overwritten.
-        let baseline = self.page.saved_settings();
-        if next.custom_css != baseline.custom_css
-            && let Err(err) = validate_custom_css(&next.custom_css)
+        // Only the edited fields are sent, so a change saved elsewhere meanwhile (an import,
+        // another device) is not overwritten; the CSS is checked only when it is edited.
+        if let Some(custom_css) = &self.page.pending_edits().custom_css
+            && let Err(err) = validate_custom_css(custom_css)
         {
             set_status_error(
                 self.page.status_signal(),
@@ -79,14 +74,14 @@ impl SettingsPageSaveSession {
 
         let status = self.page.status_signal();
         let status_tone = self.page.status_tone_signal();
-        if next.entries_page_size == 0 {
-            next.entries_page_size = DEFAULT_ENTRIES_PAGE_SIZE;
+        let submitted_preset = self.page.preset_choice().peek().clone();
+        let mut patch = self.page.submit_edits();
+        if patch.entries_page_size == Some(0) {
+            patch.entries_page_size = Some(DEFAULT_ENTRIES_PAGE_SIZE);
             success_message.push_str(&format!(
                 " 文章页每页数量输入为 0，已回退为默认值 {DEFAULT_ENTRIES_PAGE_SIZE}。"
             ));
         }
-
-        let patch = SettingsPatch::between(&baseline, &next);
         let saving = execute(SettingsCommand::UpdateSettings { patch, success_message });
         spawn(async move {
             let intents = saving.await;
@@ -104,15 +99,12 @@ impl SettingsPageSaveSession {
                 }
             });
             if let Some(saved_settings) = saved_settings {
-                if self.page.apply_saved_settings(
-                    saved_settings,
-                    &submitted_draft,
-                    &submitted_preset,
-                ) {
+                if self.page.apply_saved_settings(saved_settings, &submitted_preset) {
                     status_message.push_str(" 保存期间的新修改仍保留在草稿中，尚未保存。");
                 }
                 set_status_info(status, status_tone, status_message);
             } else {
+                self.page.restore_submitted_edits();
                 status_message.push_str(" 草稿已保留，可修改后重试。");
                 set_status_error(status, status_tone, status_message);
             }
@@ -127,6 +119,7 @@ mod tests {
 
     use super::*;
     use crate::theme::ThemeController;
+    use rssr_application::SettingsPatch;
     use rssr_domain::{ListDensity, ThemeMode, UserSettings};
     use tokio::sync::oneshot;
 
@@ -185,12 +178,12 @@ mod tests {
     fn save_keeps_later_edits_and_synchronously_gates_duplicate_requests() {
         let (mut dom, session, theme) = setup();
         let sender = dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().theme = ThemeMode::Dark;
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
             start_save(session)
         });
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().theme = ThemeMode::Light;
+            session.page.edit(|draft| draft.theme = ThemeMode::Light);
             session.page.preset_choice().set("newsprint".into());
             let called = Rc::new(Cell::new(false));
             let check = Rc::clone(&called);
@@ -205,7 +198,7 @@ mod tests {
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
             assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
-            assert_eq!(session.page.draft().peek().theme, ThemeMode::Light);
+            assert_eq!(session.page.draft().theme, ThemeMode::Light);
             assert_eq!(session.page.preset_choice().peek().as_str(), "newsprint");
             assert!(session.page.status().contains("尚未保存"));
             assert!(!session.snapshot().pending_save);
@@ -224,14 +217,14 @@ mod tests {
     fn failed_save_preserves_draft_and_can_be_retried() {
         let (mut dom, session, theme) = setup();
         let sender = dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().theme = ThemeMode::Dark;
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
             start_save(session)
         });
         dom.render_immediate_to_vec();
         sender.send(false).expect("fail persistence");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            assert_eq!(session.page.draft().peek().theme, ThemeMode::Dark);
+            assert_eq!(session.page.draft().theme, ThemeMode::Dark);
             assert_eq!(theme.settings.peek().theme, UserSettings::default().theme);
             assert_eq!(session.page.status_tone(), "error");
             assert!(session.page.status().contains("草稿已保留"));
@@ -250,7 +243,7 @@ mod tests {
     fn unedited_submission_receives_normalized_value_without_losing_preset_selection() {
         let (mut dom, session, theme) = setup();
         let sender = dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().entries_page_size = 0;
+            session.page.edit(|draft| draft.entries_page_size = 0);
             start_save(session)
         });
         dom.render_immediate_to_vec();
@@ -260,7 +253,7 @@ mod tests {
         sender.send(true).expect("persist normalized value");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            assert_eq!(session.page.draft().peek().entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
+            assert_eq!(session.page.draft().entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
             assert_eq!(theme.settings.peek().entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
             assert_eq!(session.page.preset_choice().peek().as_str(), "atlas-sidebar");
             assert!(!session.page.status().contains("尚未保存"));
@@ -276,7 +269,7 @@ mod tests {
         let stored_elsewhere =
             UserSettings { refresh_interval_minutes: 90, ..UserSettings::default() };
         let sender = dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().theme = ThemeMode::Dark;
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
             let (sender, receiver) = oneshot::channel::<()>();
             let stored = stored_elsewhere.clone();
             session.save_with("设置已保存。".into(), move |command| async move {
@@ -305,14 +298,14 @@ mod tests {
         });
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().list_density = ListDensity::Compact
+            session.page.edit(|draft| draft.list_density = ListDensity::Compact)
         });
         sender.send(()).expect("complete save");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
             let saved = theme.settings.peek().clone();
             assert_eq!((saved.theme, saved.refresh_interval_minutes), (ThemeMode::Dark, 90));
-            let draft = session.page.draft().peek().clone();
+            let draft = session.page.draft();
             assert_eq!(draft.refresh_interval_minutes, 90, "the stored field reaches the draft");
             assert_eq!(draft.list_density, ListDensity::Compact, "the later edit stays");
             assert!(session.page.status().contains("尚未保存"));
@@ -368,7 +361,7 @@ mod tests {
         load.send(customized()).expect("deliver the load");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            assert_eq!(*session.page.draft().peek(), customized());
+            assert_eq!(session.page.draft(), customized());
             assert_eq!(submitted_patch(session), SettingsPatch::default());
         });
     }
@@ -379,12 +372,12 @@ mod tests {
         let (mut dom, session, theme) = setup();
         let load = dom.in_scope(ScopeId::APP, || start_load(session));
         dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().list_density = ListDensity::Compact;
+            session.page.edit(|draft| draft.list_density = ListDensity::Compact);
         });
         load.send(customized()).expect("deliver the load");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            let draft = session.page.draft().peek().clone();
+            let draft = session.page.draft();
             assert_eq!(draft, UserSettings { list_density: ListDensity::Compact, ..customized() });
             assert_eq!(*theme.settings.peek(), customized());
             assert_eq!(
@@ -402,7 +395,7 @@ mod tests {
             let (mut dom, session, theme) = setup();
             let load = dom.in_scope(ScopeId::APP, || start_load(session));
             let save = dom.in_scope(ScopeId::APP, || {
-                session.page.draft().write().theme = ThemeMode::Dark;
+                session.page.edit(|draft| draft.theme = ThemeMode::Dark);
                 start_save(session)
             });
             dom.render_immediate_to_vec();
@@ -419,7 +412,7 @@ mod tests {
             dom.in_scope(ScopeId::APP, || {
                 let saved = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
                 assert_eq!(*theme.settings.peek(), saved, "after the save: {reply_after_the_save}");
-                assert_eq!(*session.page.draft().peek(), saved);
+                assert_eq!(session.page.draft(), saved);
                 assert_eq!(submitted_patch(session), SettingsPatch::default());
             });
         }
@@ -432,11 +425,11 @@ mod tests {
         let (mut dom, session, theme) = setup();
         let load = dom.in_scope(ScopeId::APP, || start_load(session));
         let save = dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().theme = ThemeMode::Dark;
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
             start_save(session)
         });
         dom.render_immediate_to_vec();
-        dom.in_scope(ScopeId::APP, || session.page.draft().write().theme = ThemeMode::System);
+        dom.in_scope(ScopeId::APP, || session.page.edit(|draft| draft.theme = ThemeMode::System));
         load.send(UserSettings { theme: ThemeMode::Light, ..UserSettings::default() })
             .expect("deliver the load");
         dom.render_immediate_to_vec();
@@ -444,7 +437,7 @@ mod tests {
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
             assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
-            assert_eq!(session.page.draft().peek().theme, ThemeMode::System);
+            assert_eq!(session.page.draft().theme, ThemeMode::System);
             assert!(session.page.status().contains("尚未保存"));
             assert_eq!(
                 submitted_patch(session),
@@ -462,7 +455,7 @@ mod tests {
             let (mut dom, session, theme) = setup();
             let load = dom.in_scope(ScopeId::APP, || start_load(session));
             let save = dom.in_scope(ScopeId::APP, || {
-                session.page.draft().write().list_density = ListDensity::Compact;
+                session.page.edit(|draft| draft.list_density = ListDensity::Compact);
                 start_save(session)
             });
             dom.render_immediate_to_vec();
@@ -478,7 +471,7 @@ mod tests {
             dom.render_immediate_to_vec();
             dom.in_scope(ScopeId::APP, || {
                 let edited = UserSettings { list_density: ListDensity::Compact, ..customized() };
-                assert_eq!(*session.page.draft().peek(), edited, "after: {reply_after_the_save}");
+                assert_eq!(session.page.draft(), edited, "after: {reply_after_the_save}");
                 assert_eq!(*theme.settings.peek(), customized());
                 assert_eq!(
                     submitted_patch(session),
@@ -498,7 +491,7 @@ mod tests {
         let (dom, session, _theme) = setup();
         dom.in_scope(ScopeId::APP, || {
             let _ = session.page.begin_write();
-            session.page.draft().write().theme = ThemeMode::Dark;
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
             let called = Rc::new(Cell::new(false));
             let check = Rc::clone(&called);
             session.save_with("设置已保存。".into(), move |_| {
@@ -513,10 +506,7 @@ mod tests {
             let pulled = UserSettings { refresh_interval_minutes: 45, ..UserSettings::default() };
             session.page.dispatch(SettingsPageIntent::SettingsLoaded(pulled.clone()));
             session.page.end_write();
-            assert_eq!(
-                *session.page.draft().peek(),
-                UserSettings { theme: ThemeMode::Dark, ..pulled }
-            );
+            assert_eq!(session.page.draft(), UserSettings { theme: ThemeMode::Dark, ..pulled });
             assert_eq!(
                 submitted_patch(session),
                 SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() }
@@ -529,7 +519,7 @@ mod tests {
     fn a_pull_cannot_start_while_a_save_is_in_flight() {
         let (mut dom, session, theme) = setup();
         let save = dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().theme = ThemeMode::Dark;
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
             start_save(session)
         });
         dom.render_immediate_to_vec();
@@ -553,7 +543,7 @@ mod tests {
             load.send(customized()).expect("deliver the load");
             dom.render_immediate_to_vec();
             dom.in_scope(ScopeId::APP, || {
-                assert_eq!(*session.page.draft().peek(), UserSettings::default(), "held");
+                assert_eq!(session.page.draft(), UserSettings::default(), "held");
                 let pulled =
                     UserSettings { refresh_interval_minutes: 45, ..UserSettings::default() };
                 if pull_stores {
@@ -566,9 +556,77 @@ mod tests {
                 }
                 session.page.end_write();
                 let expected = if pull_stores { pulled } else { customized() };
-                assert_eq!(*session.page.draft().peek(), expected, "pull stores: {pull_stores}");
+                assert_eq!(session.page.draft(), expected, "pull stores: {pull_stores}");
                 assert_eq!(submitted_patch(session), SettingsPatch::default());
             });
         }
+    }
+
+    /// An edit reverted during a save that then fails is still an edit: the load the save
+    /// overlapped (answered during the save or after it) takes the stored value only for the
+    /// untouched fields.
+    #[test]
+    fn an_edit_reverted_during_a_failed_save_survives_the_overlapped_load() {
+        for reply_after_the_save in [false, true] {
+            let (mut dom, session, theme) = setup();
+            let load = dom.in_scope(ScopeId::APP, || start_load(session));
+            let save = dom.in_scope(ScopeId::APP, || {
+                session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+                start_save(session)
+            });
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                session.page.edit(|draft| draft.theme = ThemeMode::System)
+            });
+            let stored = UserSettings { theme: ThemeMode::Light, ..customized() };
+            if reply_after_the_save {
+                save.send(false).expect("fail the save");
+                dom.render_immediate_to_vec();
+                load.send(stored.clone()).expect("deliver the load");
+            } else {
+                load.send(stored.clone()).expect("deliver the load");
+                dom.render_immediate_to_vec();
+                save.send(false).expect("fail the save");
+            }
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                assert_eq!(*theme.settings.peek(), stored, "after: {reply_after_the_save}");
+                assert_eq!(
+                    session.page.draft(),
+                    UserSettings { theme: ThemeMode::System, ..stored.clone() },
+                    "after: {reply_after_the_save}"
+                );
+                assert_eq!(
+                    submitted_patch(session),
+                    SettingsPatch { theme: Some(ThemeMode::System), ..Default::default() }
+                );
+            });
+        }
+    }
+
+    /// Edits are tracked, not inferred: a field set back to the value it had is still an edit
+    /// and stays over a load that brings another stored value; a field never set takes it.
+    #[test]
+    fn a_field_set_back_to_its_value_is_still_an_edit() {
+        let (mut dom, session, _theme) = setup();
+        let load = dom.in_scope(ScopeId::APP, || start_load(session));
+        dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+            session.page.edit(|draft| draft.theme = ThemeMode::System);
+            session.page.edit(|draft| draft.list_density = ListDensity::Comfortable);
+        });
+        load.send(UserSettings { theme: ThemeMode::Light, ..customized() }).expect("load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(
+                session.page.draft(),
+                UserSettings { theme: ThemeMode::System, ..customized() }
+            );
+            assert_eq!(
+                submitted_patch(session),
+                SettingsPatch { theme: Some(ThemeMode::System), ..Default::default() },
+                "setting a field to the value it shows is no edit"
+            );
+        });
     }
 }

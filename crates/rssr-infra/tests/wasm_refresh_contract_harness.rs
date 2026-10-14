@@ -29,6 +29,40 @@ mod refresh_content_cases;
 #[path = "support/archive_boundary_cases.rs"]
 mod archive_boundary_cases;
 
+/// A WebDAV server that answers but never finishes the body cannot hold a pull open: the request
+/// bound covers the body, and the failure is a network one (B2-D4, B2-D5).
+#[wasm_bindgen_test]
+async fn a_webdav_download_that_never_finishes_times_out() {
+    use rssr_application::RemoteConfigStore;
+    use rssr_infra::application_adapters::browser::adapters::BrowserRemoteConfigStore;
+    let store = BrowserRemoteConfigStore::new(
+        reqwest::Client::new(),
+        "https://dav.example.com/base/",
+        "config/rss-reader.json",
+    )
+    .with_request_timeout(std::time::Duration::from_millis(300));
+    // Like a real fetch, the body stream fails when the request's signal aborts.
+    js_sys::eval(r#"
+        globalThis.__fetch = globalThis.fetch;
+        globalThis.fetch = async function(request) {
+            const stream = new ReadableStream({ start(controller) {
+                controller.enqueue(new TextEncoder().encode('{"version":'));
+                request.signal.addEventListener('abort', () =>
+                    controller.error(new DOMException('aborted', 'AbortError')));
+            }});
+            const response = new Response(stream, {status: 200, headers: {'Content-Type': 'application/json'}});
+            Object.defineProperty(response, 'url', {value: request.url});
+            return response;
+        };
+    "#).unwrap();
+    let started = js_sys::Date::now();
+    let result = store.download_config().await;
+    js_sys::eval("globalThis.fetch = __fetch; delete globalThis.__fetch;").unwrap();
+    let error = result.expect_err("the body never finishes");
+    assert_eq!(classify(&error).kind, ErrorKind::Network, "{error:#}");
+    assert!(js_sys::Date::now() - started < 5_000.0, "bounded by the request timeout");
+}
+
 /// Another tab holding the store for longer than the five-second wait is a temporary condition:
 /// the operation is unavailable, not an internal error (B2-D5), on the store and through the
 /// refresh port's adapter (`RefreshFlight` keeps the kind: its own unit test).
@@ -42,12 +76,15 @@ async fn a_store_held_by_another_tab_is_unavailable() {
     .unwrap();
     wasm_bindgen_futures::JsFuture::from(js_sys::Promise::from(held)).await.unwrap();
 
-    let (read, target) = futures_util::join!(state.snapshot(), store.get_target(1));
+    let (read, target, targets) =
+        futures_util::join!(state.snapshot(), store.get_target(1), store.list_targets());
     js_sys::eval("globalThis.__release(); delete globalThis.__release;").unwrap();
     let read = read.expect_err("the lock is held elsewhere");
     assert_eq!(classify(&read).kind, ErrorKind::Unavailable, "{read:#}");
     let target = target.expect_err("the lock is held elsewhere");
     assert_eq!(classify(&target).kind, ErrorKind::Unavailable, "{target:#}");
+    let targets = targets.expect_err("the lock is held elsewhere");
+    assert_eq!(classify(&targets).kind, ErrorKind::Unavailable, "{targets:#}");
     state.snapshot().await.expect("the store is usable once the lock is released");
     clear_browser_state_storage();
 }

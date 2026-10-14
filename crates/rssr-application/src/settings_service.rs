@@ -58,6 +58,22 @@ impl SettingsPatch {
         }
     }
 
+    /// This patch with `later`'s fields put in: a field `later` sets wins.
+    pub fn followed_by(self, later: SettingsPatch) -> Self {
+        Self {
+            theme: later.theme.or(self.theme),
+            list_density: later.list_density.or(self.list_density),
+            startup_view: later.startup_view.or(self.startup_view),
+            refresh_interval_minutes: later
+                .refresh_interval_minutes
+                .or(self.refresh_interval_minutes),
+            archive_after_months: later.archive_after_months.or(self.archive_after_months),
+            entries_page_size: later.entries_page_size.or(self.entries_page_size),
+            reader_font_scale: later.reader_font_scale.or(self.reader_font_scale),
+            custom_css: later.custom_css.or(self.custom_css),
+        }
+    }
+
     /// `settings` with this patch's fields put in; nothing is checked.
     pub fn applied(&self, settings: &UserSettings) -> UserSettings {
         let mut next = settings.clone();
@@ -197,6 +213,30 @@ pub(crate) mod tests {
         );
         assert_eq!(patch.applied(&base), edited);
         assert!(SettingsPatch::between(&base, &base).is_empty());
+    }
+
+    /// A later patch's fields win, including one set back to a default value; the others stay.
+    #[test]
+    fn a_later_patch_wins_field_by_field() {
+        let earlier = SettingsPatch {
+            theme: Some(ThemeMode::Dark),
+            refresh_interval_minutes: Some(90),
+            ..SettingsPatch::default()
+        };
+        let later = SettingsPatch {
+            theme: Some(ThemeMode::System),
+            custom_css: Some(String::new()),
+            ..SettingsPatch::default()
+        };
+        assert_eq!(
+            earlier.followed_by(later),
+            SettingsPatch {
+                theme: Some(ThemeMode::System),
+                refresh_interval_minutes: Some(90),
+                custom_css: Some(String::new()),
+                ..SettingsPatch::default()
+            }
+        );
     }
 
     #[test]

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{Context, Result};
 use reqwest::StatusCode;
 use rssr_application::{OpmlCodecPort, RemoteConfigStore};
@@ -22,16 +24,32 @@ impl OpmlCodecPort for BrowserOpmlCodec {
     }
 }
 
+/// Each WebDAV request, its body included, ends within this bound, as on the native client
+/// (`config_sync::webdav`): a server that never finishes its answer cannot hold the settings
+/// page, whose saves wait for a pull in flight (B2-D4).
+const WEBDAV_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 #[derive(Clone)]
 pub struct BrowserRemoteConfigStore {
     client: reqwest::Client,
     endpoint: String,
     remote_path: String,
+    timeout: Duration,
 }
 
 impl BrowserRemoteConfigStore {
     pub fn new(client: reqwest::Client, endpoint: &str, remote_path: &str) -> Self {
-        Self { client, endpoint: endpoint.to_string(), remote_path: remote_path.to_string() }
+        Self {
+            client,
+            endpoint: endpoint.to_string(),
+            remote_path: remote_path.to_string(),
+            timeout: WEBDAV_REQUEST_TIMEOUT,
+        }
+    }
+
+    /// A different bound for each request (30 seconds by default).
+    pub fn with_request_timeout(self, timeout: Duration) -> Self {
+        Self { timeout, ..self }
     }
 }
 
@@ -43,6 +61,7 @@ impl RemoteConfigStore for BrowserRemoteConfigStore {
         async {
             self.client
                 .put(url)
+                .timeout(self.timeout)
                 .header("content-type", "application/json")
                 .body(raw.to_string())
                 .send()
@@ -59,7 +78,13 @@ impl RemoteConfigStore for BrowserRemoteConfigStore {
     async fn download_config(&self) -> Result<Option<String>> {
         let url = remote_url(&self.endpoint, &self.remote_path).map_err(invalid)?;
         async {
-            let response = self.client.get(url).send().await.context("从 WebDAV 下载配置失败")?;
+            let response = self
+                .client
+                .get(url)
+                .timeout(self.timeout)
+                .send()
+                .await
+                .context("从 WebDAV 下载配置失败")?;
             if response.status() == StatusCode::NOT_FOUND {
                 return Ok(None);
             }
