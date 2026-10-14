@@ -148,7 +148,8 @@ fn build_workflow(state: BrowserStore) -> SubscriptionWorkflow {
 }
 
 /// A storage write that fails (here the quota) is a storage error, not an internal one, on the
-/// settings and refresh ports too (B2-D5).
+/// settings port too (B2-D5; the refresh port: `failed_refresh_at_each_publication_stage_…` in
+/// the refresh harness).
 #[wasm_bindgen_test]
 async fn browser_write_failures_are_storage_errors() {
     use rssr_application::{ErrorKind, SettingsPatch, SettingsUpdatePort, classify};

@@ -191,6 +191,14 @@ pub fn is_entry_archived(
     published_at.to_offset(UtcOffset::UTC) < cutoff
 }
 
+/// A published time as the stores keep it: in whole seconds, like the archive cutoff
+/// ([`archive_cutoff_at`]). The SQLite store compares RFC 3339 text and the browser store compares
+/// time values; on whole seconds both orders agree (B2-D7). Dropping the fraction changes no
+/// comparison with a whole-second cutoff `c`: `t < c` exactly when `floor(t) < c`.
+pub fn stored_published_at(published_at: OffsetDateTime) -> OffsetDateTime {
+    published_at.replace_nanosecond(0).expect("zero nanoseconds are valid")
+}
+
 /// 返回归档分界时刻；当 `archive_after_months` 为 0，或大到把分界推出 `Date` 支持的年份区间时
 /// 返回 `None`。归档只是隐藏旧文章，因此算不出分界时按“不归档”处理，永远不会因为一个越界的
 /// 设置值而 panic。全程使用 i64 运算，避免 `u32 as i32` 回绕成负数把分界推到未来。

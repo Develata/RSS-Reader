@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use dioxus::prelude::*;
 use rssr_application::SettingsPatch;
 use rssr_domain::UserSettings;
@@ -6,13 +8,21 @@ use super::{browser::open_repository_url, intent::SettingsPageIntent, themes::de
 use crate::{
     status::{set_status_error, set_status_info},
     theme::ThemeController,
-    ui::{SettingsCommand, UiCommand, UiIntent, spawn_projected_ui_command},
+    ui::{SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, execute_ui_command},
 };
 
+/// The page edits a draft against a baseline, the stored settings as the page itself last read
+/// or wrote them; a save sends only the fields where the two differ (B2-D4). The baseline is the
+/// page's own: the app-wide [`ThemeController`] signal, which startup and other pages also set
+/// whenever their replies arrive, only renders the settings.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SettingsPageSession {
     theme: ThemeController,
+    baseline: Signal<UserSettings>,
     draft: Signal<UserSettings>,
+    /// How many writes (saves, pulls) the page has started; a load whose reply arrives after one
+    /// started is discarded, see [`Self::load_with`].
+    writes: Signal<u64>,
     preset_choice: Signal<String>,
     status: Signal<String>,
     status_tone: Signal<String>,
@@ -20,22 +30,31 @@ pub(crate) struct SettingsPageSession {
 
 impl SettingsPageSession {
     pub(crate) fn new(theme: ThemeController) -> Self {
-        let draft = use_signal(|| (theme.settings)());
+        let baseline = use_signal(|| theme.settings.peek().clone());
+        let draft = use_signal(|| baseline.peek().clone());
+        let writes = use_signal(|| 0);
         let preset_choice =
-            use_signal(|| detect_preset_key(&(theme.settings)().custom_css).to_string());
+            use_signal(|| detect_preset_key(&baseline.peek().custom_css).to_string());
         let status = use_signal(String::new);
         let status_tone = use_signal(|| "info".to_string());
 
-        Self { theme, draft, preset_choice, status, status_tone }
+        Self { theme, baseline, draft, writes, preset_choice, status, status_tone }
     }
 
     pub(crate) fn draft(self) -> Signal<UserSettings> {
         self.draft
     }
 
-    /// The settings as last loaded or saved: the baseline a save compares the draft with.
+    /// The settings as the page last read or wrote them: the baseline a save compares the
+    /// draft with.
     pub(crate) fn saved_settings(self) -> UserSettings {
-        self.theme.settings.peek().clone()
+        self.baseline.peek().clone()
+    }
+
+    /// Marks the start of a write whose reply carries the stored settings (a save, a pull), so
+    /// that a load already in flight is not applied after it.
+    pub(crate) fn begin_write(mut self) {
+        *self.writes.write() += 1;
     }
 
     pub(crate) fn preset_choice(self) -> Signal<String> {
@@ -59,26 +78,50 @@ impl SettingsPageSession {
     }
 
     pub(crate) fn load(self) {
-        self.spawn_ui_command(UiCommand::Settings(SettingsCommand::Load));
+        self.load_with(|command| execute_ui_command(UiCommand::Settings(command)));
+    }
+
+    /// Reads the stored settings. If the page starts a write before the reply arrives, the whole
+    /// reply is discarded: the read may predate the write, and the write's own reply carries the
+    /// newer settings (B2-D4). The page loads once, when it opens, so no write of it is pending
+    /// when a load is issued.
+    pub(super) fn load_with<F: Future<Output = Vec<UiIntent>> + 'static>(
+        self,
+        execute: impl FnOnce(SettingsCommand) -> F,
+    ) {
+        let issued = *self.writes.peek();
+        let loading = execute(SettingsCommand::Load);
+        spawn(async move {
+            let intents = loading.await;
+            if *self.writes.peek() == issued {
+                apply_projected_ui_intents(
+                    intents,
+                    UiIntent::into_settings_page_intent,
+                    |intent| {
+                        self.dispatch(intent);
+                    },
+                );
+            }
+        });
     }
 
     pub(crate) fn dispatch(self, intent: SettingsPageIntent) {
         match intent {
-            SettingsPageIntent::SettingsLoaded(settings) => self.apply_loaded_settings(settings),
+            SettingsPageIntent::SettingsLoaded(settings) => self.apply_stored_settings(settings),
             SettingsPageIntent::SetStatus { message, tone } => self.set_status(message, tone),
         }
     }
 
-    /// Loaded settings replace what the page last saw stored; fields edited since then stay in
-    /// the draft. A load that returns after edits, or while a save is pending, cannot wipe them
-    /// (the save's reply then merges the same way, see [`Self::apply_saved_settings`]).
-    pub(crate) fn apply_loaded_settings(mut self, settings: UserSettings) {
-        let edits = SettingsPatch::between(&self.theme.settings.peek(), &self.draft.peek());
+    /// Stored settings that were read or pulled become the baseline; fields edited since the
+    /// previous baseline stay in the draft.
+    fn apply_stored_settings(mut self, settings: UserSettings) {
+        let edits = SettingsPatch::between(&self.baseline.peek(), &self.draft.peek());
         let draft = edits.applied(&settings);
         if edits.custom_css.is_none() {
             self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
         }
         self.draft.set(draft);
+        self.baseline.set(settings.clone());
         self.theme.settings.set(settings);
     }
 
@@ -97,6 +140,7 @@ impl SettingsPageSession {
             self.preset_choice.set(detect_preset_key(&self.draft.peek().custom_css).to_string());
         }
         let has_unsaved_edits = *self.draft.peek() != settings;
+        self.baseline.set(settings.clone());
         self.theme.settings.set(settings);
         has_unsaved_edits
     }
@@ -115,11 +159,5 @@ impl SettingsPageSession {
         if let Err(err) = open_repository_url() {
             self.set_status(format!("打开 GitHub 仓库失败：{err}"), "error");
         }
-    }
-
-    fn spawn_ui_command(self, command: UiCommand) {
-        spawn_projected_ui_command(command, UiIntent::into_settings_page_intent, move |intent| {
-            self.dispatch(intent);
-        });
     }
 }

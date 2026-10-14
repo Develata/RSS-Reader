@@ -293,7 +293,8 @@ fn map_application_entries(entries: Vec<ParsedEntryData>) -> Vec<ParsedEntry> {
             summary: entry.summary,
             content_html: entry.content_html,
             content_text: entry.content_text,
-            published_at: entry.published_at,
+            // Whole seconds, as the SQLite store keeps them (B2-D7).
+            published_at: entry.published_at.map(rssr_domain::stored_published_at),
             updated_at_source: entry.updated_at_source,
         })
         .collect()

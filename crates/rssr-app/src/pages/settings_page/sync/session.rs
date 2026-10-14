@@ -54,6 +54,7 @@ impl SettingsPageSyncSession {
         }
 
         let snapshot = self.snapshot();
+        self.page.begin_write();
         self.apply_ui_command(UiCommand::Settings(SettingsCommand::PullConfig {
             endpoint: snapshot.endpoint,
             remote_path: snapshot.remote_path,

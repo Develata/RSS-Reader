@@ -15,7 +15,7 @@ pub use config_fingerprint::{ConfigFingerprint, FingerprintFeed};
 pub use entry::{
     ArchiveFilter, Entry, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary,
     MarkReadOutcome, MarkReadPreview, ReadFilter, StarredFilter, archive_cutoff_at,
-    is_entry_archived,
+    is_entry_archived, stored_published_at,
 };
 pub use feed::{
     Feed, FeedSummary, FetchErrorKind, NewFeedSubscription, normalize_feed_url, public_fetch_error,

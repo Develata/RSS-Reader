@@ -79,6 +79,7 @@ impl SettingsPageSaveSession {
         }
 
         let patch = SettingsPatch::between(&baseline, &next);
+        self.page.begin_write();
         let saving = execute(SettingsCommand::UpdateSettings { patch, success_message });
         spawn(async move {
             let intents = saving.await;
@@ -310,39 +311,137 @@ mod tests {
         });
     }
 
-    /// A load that returns after an edit and during a save keeps the edits (B2-D4): load A is
-    /// in flight, the user saves a theme, keeps editing, then A and the save reply arrive.
-    #[test]
-    fn a_load_reply_during_a_save_keeps_the_edits() {
-        let (mut dom, session, theme) = setup();
-        let stored_elsewhere =
-            UserSettings { refresh_interval_minutes: 90, ..UserSettings::default() };
-        let sender = dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().theme = ThemeMode::Dark;
-            start_save_over(session, stored_elsewhere.clone())
+    /// Issues the page's load; the reply is whatever the returned sender delivers.
+    fn start_load(session: SettingsPageSaveSession) -> oneshot::Sender<UserSettings> {
+        let (sender, receiver) = oneshot::channel();
+        session.page.load_with(|command| async move {
+            assert!(matches!(command, SettingsCommand::Load));
+            let settings = receiver.await.expect("controlled load completion");
+            vec![UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(settings))]
         });
+        sender
+    }
+
+    /// The patch a save of the current draft would send.
+    fn submitted_patch(session: SettingsPageSaveSession) -> SettingsPatch {
+        let seen = Rc::new(std::cell::RefCell::new(None));
+        let sink = Rc::clone(&seen);
+        session.save_with("设置已保存。".into(), move |command| {
+            let SettingsCommand::UpdateSettings { patch, .. } = command else {
+                panic!("expected a settings update")
+            };
+            *sink.borrow_mut() = Some(patch);
+            std::future::ready(Vec::new())
+        });
+        seen.take().expect("the save was submitted")
+    }
+
+    fn customized() -> UserSettings {
+        UserSettings {
+            theme: ThemeMode::Dark,
+            refresh_interval_minutes: 90,
+            custom_css: "body { color: red; }".into(),
+            ..UserSettings::default()
+        }
+    }
+
+    /// Opening the page before startup has read the settings: the app-wide settings arrive
+    /// first, then the page's own load. Saving without an edit sends nothing (B2-D4); measuring
+    /// the default draft against the app-wide settings would send the defaults over the stored
+    /// theme, interval and CSS.
+    #[test]
+    fn a_cold_start_save_without_edits_sends_nothing() {
+        let (mut dom, session, theme) = setup();
+        let load = dom.in_scope(ScopeId::APP, || start_load(session));
+        dom.in_scope(ScopeId::APP, || {
+            let mut app_wide = theme.settings;
+            app_wide.set(customized());
+        });
+        load.send(customized()).expect("deliver the load");
         dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(*session.page.draft().peek(), customized());
+            assert_eq!(submitted_patch(session), SettingsPatch::default());
+        });
+    }
+
+    /// Edits made while the load is in flight stay; the other fields come from the store.
+    #[test]
+    fn a_load_reply_keeps_the_edits_made_while_it_was_in_flight() {
+        let (mut dom, session, theme) = setup();
+        let load = dom.in_scope(ScopeId::APP, || start_load(session));
         dom.in_scope(ScopeId::APP, || {
             session.page.draft().write().list_density = ListDensity::Compact;
-            session.page.apply_loaded_settings(stored_elsewhere.clone());
-            let draft = session.page.draft().peek().clone();
-            assert_eq!(
-                (draft.theme, draft.list_density, draft.refresh_interval_minutes),
-                (ThemeMode::Dark, ListDensity::Compact, 90),
-                "the load keeps both edits and takes the stored interval"
-            );
         });
-        sender.send(true).expect("complete the save");
+        load.send(customized()).expect("deliver the load");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
             let draft = session.page.draft().peek().clone();
+            assert_eq!(draft, UserSettings { list_density: ListDensity::Compact, ..customized() });
+            assert_eq!(*theme.settings.peek(), customized());
             assert_eq!(
-                (draft.theme, draft.list_density, draft.refresh_interval_minutes),
-                (ThemeMode::Dark, ListDensity::Compact, 90)
+                submitted_patch(session),
+                SettingsPatch { list_density: Some(ListDensity::Compact), ..Default::default() }
             );
-            let saved = theme.settings.peek().clone();
-            assert_eq!((saved.theme, saved.refresh_interval_minutes), (ThemeMode::Dark, 90));
-            assert!(session.page.status().contains("尚未保存"), "the density edit is unsaved");
+        });
+    }
+
+    /// A load that overlaps a save may have read the store before the save; whether its reply
+    /// arrives during the save or after it, the save's reply is what the page keeps (B2-D4).
+    #[test]
+    fn a_load_that_overlaps_a_save_is_discarded() {
+        for reply_after_the_save in [false, true] {
+            let (mut dom, session, theme) = setup();
+            let load = dom.in_scope(ScopeId::APP, || start_load(session));
+            let save = dom.in_scope(ScopeId::APP, || {
+                session.page.draft().write().theme = ThemeMode::Dark;
+                start_save(session)
+            });
+            dom.render_immediate_to_vec();
+            if reply_after_the_save {
+                save.send(true).expect("complete the save");
+                dom.render_immediate_to_vec();
+                load.send(customized()).expect("deliver the load");
+            } else {
+                load.send(customized()).expect("deliver the load");
+                dom.render_immediate_to_vec();
+                save.send(true).expect("complete the save");
+            }
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                let saved = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+                assert_eq!(*theme.settings.peek(), saved, "after the save: {reply_after_the_save}");
+                assert_eq!(*session.page.draft().peek(), saved);
+                assert_eq!(submitted_patch(session), SettingsPatch::default());
+            });
+        }
+    }
+
+    /// Changing a field back while its save is pending is an edit like any other: it stays in
+    /// the draft over the saved value, even with a load in flight.
+    #[test]
+    fn an_edit_reverted_during_its_save_stays_in_the_draft() {
+        let (mut dom, session, theme) = setup();
+        let load = dom.in_scope(ScopeId::APP, || start_load(session));
+        let save = dom.in_scope(ScopeId::APP, || {
+            session.page.draft().write().theme = ThemeMode::Dark;
+            start_save(session)
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || session.page.draft().write().theme = ThemeMode::System);
+        load.send(UserSettings { theme: ThemeMode::Light, ..UserSettings::default() })
+            .expect("deliver the load");
+        dom.render_immediate_to_vec();
+        save.send(true).expect("complete the save");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
+            assert_eq!(session.page.draft().peek().theme, ThemeMode::System);
+            assert!(session.page.status().contains("尚未保存"));
+            assert_eq!(
+                submitted_patch(session),
+                SettingsPatch { theme: Some(ThemeMode::System), ..Default::default() }
+            );
         });
     }
 }

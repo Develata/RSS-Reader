@@ -257,8 +257,8 @@ async fn a_split_library_from_v0_1_23_is_imported() {
 }
 
 /// Imported published times become whole-second UTC text, the form the archive cutoff is
-/// compared with (B2-D7): a fraction of a second or an offset in a v0.1.x library would sort
-/// differently from the same instant written by the parser.
+/// compared with (B2-D7): a fraction of a second, an offset or a lowercase `t` in a v0.1.x
+/// library would sort differently from the same instant written by a refresh.
 #[tokio::test(flavor = "multi_thread")]
 async fn imported_published_times_are_whole_seconds_in_utc() {
     let dir = TempDir::new("v01-times");
@@ -267,7 +267,8 @@ async fn imported_published_times_are_whole_seconds_in_utc() {
     index
         .execute_batch(
             "UPDATE entries SET published_at = '2026-03-01T18:00:00.5+08:00' WHERE id = 1;
-             UPDATE entries SET published_at = 'not a time' WHERE id = 2;",
+             UPDATE entries SET published_at = '2026-03-01t09:59:59Z' WHERE id = 2;
+             UPDATE entries SET published_at = 'not a time' WHERE id = 3;",
         )
         .unwrap();
     drop(index);
@@ -276,9 +277,20 @@ async fn imported_published_times_are_whole_seconds_in_utc() {
     let library = Library::over(LibraryStore::open(&dir.target()).await.unwrap());
     let published =
         |id: i64| library.text(format!("SELECT published_at FROM entries WHERE id = {id}"));
-    assert_eq!(published(1).await.as_deref(), Some("2026-03-01T10:00:00Z"));
-    assert_eq!(published(2).await.as_deref(), Some("not a time"), "left as it was");
-    assert_eq!(published(3).await.as_deref(), Some(T), "already whole-second UTC");
+    assert_eq!(published(1).await.as_deref(), Some(T));
+    assert_eq!(published(2).await.as_deref(), Some("2026-03-01T09:59:59Z"));
+    assert_eq!(published(3).await.as_deref(), Some("not a time"), "left as it was");
+
+    // At the cutoff T, entry 1 is kept and entry 2 (a second earlier) is archived; in the
+    // original text, `t` sorts after `T` and entry 2 would have been kept.
+    let cutoff = time::OffsetDateTime::parse(T, &time::format_description::well_known::Rfc3339)
+        .expect("T is RFC 3339");
+    let in_feed =
+        |archive_filter| EntryQuery { feed_id: Some(1), archive_filter, ..EntryQuery::default() };
+    let entries = &library.entries;
+    let count = |query| async move { entries.count_entries(&query).await.unwrap() };
+    assert_eq!(count(in_feed(rssr_domain::ArchiveFilter::OnlyArchived { cutoff })).await, 1);
+    assert_eq!(count(in_feed(rssr_domain::ArchiveFilter::ExcludeArchived { cutoff })).await, 1);
 }
 
 #[tokio::test(flavor = "multi_thread")]

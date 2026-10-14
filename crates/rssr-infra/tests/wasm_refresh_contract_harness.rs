@@ -1,6 +1,7 @@
 #![cfg(target_arch = "wasm32")]
 
 use reqwest::StatusCode;
+use rssr_application::{ErrorKind, classify};
 use rssr_application::{
     FeedRefreshSourceOutput, FeedRefreshUpdate, ParsedEntryData, ParsedFeedUpdate, RefreshCommit,
     RefreshCommitOutcome, RefreshFailure, RefreshHttpMetadata, RefreshStorePort,
@@ -24,6 +25,37 @@ use browser_storage::{clear_browser_state_storage, persisted_state, seed_state};
 
 #[path = "support/refresh_content_cases.rs"]
 mod refresh_content_cases;
+
+#[path = "support/archive_boundary_cases.rs"]
+mod archive_boundary_cases;
+
+/// Another tab holding the store for longer than the five-second wait is a temporary condition:
+/// the operation is unavailable, not an internal error (B2-D5).
+#[wasm_bindgen_test]
+async fn a_store_held_by_another_tab_is_unavailable() {
+    let (state, _) = store_with_one_feed().await;
+    let held = js_sys::eval(
+        "new Promise(acquired => navigator.locks.request('rssr-browser-state-v1', () =>
+            new Promise(release => { globalThis.__release = release; acquired(); })))",
+    )
+    .unwrap();
+    wasm_bindgen_futures::JsFuture::from(js_sys::Promise::from(held)).await.unwrap();
+
+    let error = state.snapshot().await.expect_err("the lock is held elsewhere");
+    js_sys::eval("globalThis.__release(); delete globalThis.__release;").unwrap();
+    assert_eq!(classify(&error).kind, ErrorKind::Unavailable, "{error:#}");
+    state.snapshot().await.expect("the store is usable once the lock is released");
+    clear_browser_state_storage();
+}
+
+#[wasm_bindgen_test]
+async fn browser_fractional_published_times_are_archived_by_their_value() {
+    use rssr_infra::application_adapters::browser::adapters::BrowserEntryRepository;
+    let (state, store) = store_with_one_feed().await;
+    let entries = BrowserEntryRepository::new(state);
+    archive_boundary_cases::verify_fractional_published_times(&store, &entries, 1).await;
+    clear_browser_state_storage();
+}
 
 #[wasm_bindgen_test]
 async fn browser_refresh_only_updates_changed_content_records() {
@@ -822,7 +854,8 @@ async fn failed_refresh_at_each_publication_stage_keeps_old_content_and_index() 
         )
         .await;
         js_sys::eval("Storage.prototype.setItem = __set; delete globalThis.__set;").unwrap();
-        assert!(result.is_err(), "stage {fail_at} must not report inserted_count success");
+        let error = result.expect_err("stage {fail_at} must not report inserted_count success");
+        assert_eq!(classify(&error).kind, ErrorKind::Storage, "stage {fail_at}: {error:#}");
         assert_eq!(serde_json::to_value(&state.snapshot().await.unwrap().core).unwrap(), before);
         let persisted = persisted_state().await;
         assert_eq!(serde_json::to_value(&persisted.core).unwrap(), before);
@@ -844,7 +877,11 @@ async fn refresh_after_other_tab_deletes_feed_does_not_resurrect_it() {
         .set_deleted(1, true)
         .await
         .unwrap();
-    assert!(store.commit(&stale_target, not_modified_with_etag("late response")).await.is_err());
+    let error = store
+        .commit(&stale_target, not_modified_with_etag("late response"))
+        .await
+        .expect_err("the subscription was removed");
+    assert_eq!(classify(&error).kind, ErrorKind::NotFound, "{error:#}");
     assert!(persisted_state().await.core.feeds[0].is_deleted);
 }
 
@@ -876,7 +913,11 @@ async fn old_refresh_generation_cannot_commit_after_delete_and_same_url_readd() 
     assert_eq!(fresh_target.generation, 1);
     assert_eq!(fresh_target.etag, None);
     assert_eq!(fresh_target.last_modified, None);
-    assert!(store.commit(&stale_target, not_modified_with_etag("stale-etag")).await.is_err());
+    let error = store
+        .commit(&stale_target, not_modified_with_etag("stale-etag"))
+        .await
+        .expect_err("the old generation is gone");
+    assert_eq!(classify(&error).kind, ErrorKind::NotFound, "{error:#}");
     assert_eq!(persisted_state().await.core.feeds[0].etag, None);
 
     store.commit(&fresh_target, not_modified_with_etag("fresh-etag")).await.unwrap();

@@ -314,7 +314,7 @@ fn upsert_entry(
                 rssr_domain::fold_for_search(&entry.title),
                 entry.author,
                 entry.summary,
-                format_optional_time(entry.published_at)?,
+                format_optional_time(entry.published_at.map(rssr_domain::stored_published_at))?,
                 format_optional_time(entry.updated_at_source)?,
                 now,
                 has_body,

@@ -3,6 +3,8 @@
 //! The shared port contracts, run against the v0.2 library store (the same cases run against
 //! the v0.1.x SQLite repositories and the browser store).
 
+#[path = "support/archive_boundary_cases.rs"]
+mod archive_boundary_cases;
 #[path = "support/bulk_read_cases.rs"]
 mod bulk_read_cases;
 #[path = "support/feed_title_cases.rs"]
@@ -29,6 +31,18 @@ async fn chosen_names_stay_apart_from_source_titles() {
         config: &library.mutations,
         queries: &library.queries,
     })
+    .await;
+}
+
+#[tokio::test]
+async fn fractional_published_times_are_archived_by_their_value() {
+    let library = Library::memory().await;
+    let feed = library.add_feed("https://example.com/archive-boundary.xml").await;
+    archive_boundary_cases::verify_fractional_published_times(
+        &library.refresh,
+        &library.entries,
+        feed.id,
+    )
     .await;
 }
 
