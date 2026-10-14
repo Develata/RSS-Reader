@@ -29,6 +29,19 @@ python -X utf8 scripts/verify_release_upgrade.py `
 
 `summary.json` 是本轮结果，`commands.json` 是调用证据，`legacy-snapshot.json` 是旧数据基准。原始库位于 `legacy-original/`，其它场景各自使用副本。脚本不证明二进制来源，调用者仍须完成前述官方包核验。
 
+## v0.2：导入真实旧库的验收
+
+v0.2 不再原地迁移旧库，而是把 v0.1.x 库单向导入新的 `library.sqlite3`（[v0.2 架构](../design/v0.2-architecture.md#兼容性断代)）。在 CLI 接入导入之前，用上面脚本产出的 `legacy-original/` 与 `legacy-snapshot.json` 验证导入器本身：
+
+```powershell
+Copy-Item target/upgrade/run-1/legacy-original target/upgrade/import-1 -Recurse
+$env:RSSR_V01_LIBRARY_DIR = "target/upgrade/import-1"
+$env:RSSR_V01_SNAPSHOT = "target/upgrade/run-1/legacy-snapshot.json"
+cargo test -p rssr-infra --locked --test test_library_import_release_acceptance -- --ignored --nocapture
+```
+
+测试把副本导入新库，逐表逐列比对快照：订阅（`custom_title` 为空、刷新序号为 0）、文章（`title_search` 等于折叠标题、`has_content` 与正文是否存在一致）、正文（去掉已无文章的孤儿正文与 `feed_id`）、设置与应用状态，最后用 `LibraryStore` 打开新库。必须使用副本：导入以只读连接读取原库，SQLite 仍可能在原库旁创建 `-shm`。CLI 接入导入后，本页的升级脚本改为“官方旧版建库 → 候选版导入 → 比对 → 重启”的完整链路。
+
 ## 仍需独立完成的发布门禁
 
 升级脚本不能替代 Windows GUI、Android 实机、签名和最终多平台发布包验收。GUI 测试要另复制原始库到隔离安装，先用旧版启动，关闭后覆盖该测试安装中的程序，再验证新版和重启；不修改 `legacy-original/`。Android 必须在安全隔离应用/数据上验证保留数据升级，不能卸载用户应用来获得“干净通过”。降级操作边界见[数据备份](../user-guide.md#数据备份)。

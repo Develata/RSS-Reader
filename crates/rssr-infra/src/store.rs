@@ -12,6 +12,7 @@ mod error;
 mod executor;
 mod feeds;
 mod files;
+pub mod import;
 pub mod migrate;
 mod mutations;
 mod refresh;
