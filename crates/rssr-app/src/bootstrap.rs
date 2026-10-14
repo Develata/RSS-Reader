@@ -35,13 +35,24 @@ pub(crate) struct HostCapabilities {
     pub(crate) remote_config: Arc<dyn RemoteConfigPort>,
 }
 
-pub(crate) trait AutoRefreshPort {
+/// What the host capabilities must be to sit behind a `Backend`: shareable across threads on
+/// native targets (the backend's futures are `Send` there), anything on wasm32.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) trait HostBound: Send + Sync {}
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: Send + Sync> HostBound for T {}
+#[cfg(target_arch = "wasm32")]
+pub(crate) trait HostBound {}
+#[cfg(target_arch = "wasm32")]
+impl<T> HostBound for T {}
+
+pub(crate) trait AutoRefreshPort: HostBound {
     fn ensure_started(&self);
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub(crate) trait RefreshPort {
+pub(crate) trait RefreshPort: HostBound {
     async fn add_subscription(
         &self,
         raw_url: &str,
@@ -53,7 +64,7 @@ pub(crate) trait RefreshPort {
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub(crate) trait ReaderAssetPort {
+pub(crate) trait ReaderAssetPort: HostBound {
     async fn localize_entry_assets(
         &self,
         entry_id: i64,
@@ -62,7 +73,7 @@ pub(crate) trait ReaderAssetPort {
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub(crate) trait RemoteConfigPort {
+pub(crate) trait RemoteConfigPort: HostBound {
     async fn push(
         &self,
         endpoint: &str,

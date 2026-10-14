@@ -1,9 +1,9 @@
+mod backend;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod characterization;
 mod entries;
 mod feeds;
 mod reader;
-mod services;
 mod settings;
 mod shell;
 

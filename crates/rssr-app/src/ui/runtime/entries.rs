@@ -1,6 +1,6 @@
 use crate::{
     pages::entries_page::intent::EntriesPageIntent,
-    ui::{commands::EntriesCommand, runtime::services::UiServices, snapshot::UiIntent},
+    ui::{commands::EntriesCommand, runtime::backend::backend, snapshot::UiIntent},
 };
 use rssr_application::{
     EntriesBootstrapInput, EntriesBootstrapOutcome, ToggleEntryReadInput, ToggleEntryStarredInput,
@@ -10,19 +10,14 @@ use rssr_domain::EntriesWorkspaceState;
 pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
     match command {
         EntriesCommand::PreviewMarkRead { query } => {
-            let result =
-                async { UiServices::shared().await?.entries().preview_mark_read(&query).await }
-                    .await;
+            let result = async { backend().await?.preview_mark_read(&query).await }.await;
             vec![UiIntent::EntriesPage(match result {
                 Ok(preview) => EntriesPageIntent::BulkPreview(preview),
                 Err(error) => EntriesPageIntent::BulkFailed(error.to_string()),
             })]
         }
         EntriesCommand::ConfirmMarkRead { preview } => {
-            let result = async {
-                UiServices::shared().await?.entries().mark_read_if_unchanged(&preview).await
-            }
-            .await;
+            let result = async { backend().await?.mark_read_if_unchanged(&preview).await }.await;
             vec![UiIntent::EntriesPage(match result {
                 Ok(rssr_domain::MarkReadOutcome::Applied { changed_count }) => {
                     EntriesPageIntent::BulkApplied(changed_count)
@@ -35,11 +30,14 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
         }
 
         EntriesCommand::Bootstrap { feed_id, load_preferences, load_feeds } => {
-            match UiServices::shared().await {
+            match backend().await {
                 Ok(services) => {
                     match services
-                        .entries()
-                        .bootstrap(EntriesBootstrapInput { feed_id, load_preferences, load_feeds })
+                        .bootstrap_entries(EntriesBootstrapInput {
+                            feed_id,
+                            load_preferences,
+                            load_feeds,
+                        })
                         .await
                     {
                         Ok(outcome) => bootstrap_intents(outcome, load_preferences),
@@ -52,8 +50,8 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                 Err(err) => bootstrap_error(format!("初始化应用失败：{err}"), load_preferences),
             }
         }
-        EntriesCommand::LoadEntries { query } => match UiServices::shared().await {
-            Ok(services) => match services.entries().list_entries(&query).await {
+        EntriesCommand::LoadEntries { query } => match backend().await {
+            Ok(services) => match services.list_entries(&query).await {
                 Ok(outcome) => {
                     vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries {
                         entries: outcome
@@ -73,11 +71,10 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
             Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
         },
         EntriesCommand::ToggleRead { entry_id, entry_title, currently_read } => {
-            match UiServices::shared().await {
+            match backend().await {
                 Ok(services) => {
                     match services
-                        .entries()
-                        .toggle_read(ToggleEntryReadInput { entry_id, currently_read })
+                        .toggle_entry_read(ToggleEntryReadInput { entry_id, currently_read })
                         .await
                     {
                         Ok(outcome) => entries_intents(vec![
@@ -106,11 +103,13 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
             }
         }
         EntriesCommand::ToggleStarred { entry_id, entry_title, currently_starred } => {
-            match UiServices::shared().await {
+            match backend().await {
                 Ok(services) => {
                     match services
-                        .entries()
-                        .toggle_starred(ToggleEntryStarredInput { entry_id, currently_starred })
+                        .toggle_entry_starred(ToggleEntryStarredInput {
+                            entry_id,
+                            currently_starred,
+                        })
                         .await
                     {
                         Ok(outcome) => entries_intents(vec![
@@ -140,7 +139,7 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
             read_filter,
             starred_filter,
             selected_feed_urls,
-        } => match UiServices::shared().await {
+        } => match backend().await {
             Ok(services) => {
                 let next = EntriesWorkspaceState {
                     grouping_mode,
@@ -149,7 +148,7 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                     starred_filter,
                     selected_feed_urls,
                 };
-                match services.entries().save_workspace_if_changed(next).await {
+                match services.save_entries_workspace_if_changed(next).await {
                     Ok(true) | Ok(false) => Vec::new(),
                     Err(err) => entries_status_error(format!("保存文章页偏好失败：{err}")),
                 }

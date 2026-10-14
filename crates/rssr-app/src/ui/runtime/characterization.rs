@@ -24,7 +24,7 @@ use crate::pages::feeds_page::intent::FeedsPageIntent;
 use crate::ui::commands::{
     EntriesCommand, FeedsCommand, ReaderCommand, SettingsCommand, ShellCommand, UiCommand,
 };
-use crate::ui::runtime::services::test_host;
+use crate::ui::runtime::backend::test_host;
 use crate::ui::snapshot::UiIntent;
 
 const TRANSCRIPT: &str =

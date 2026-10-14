@@ -5,17 +5,17 @@ use crate::{
         state::ReaderPageLoadedContent,
         support::{ReaderBody, select_reader_body},
     },
-    ui::{commands::ReaderCommand, runtime::services::UiServices, snapshot::UiIntent},
+    ui::{commands::ReaderCommand, runtime::backend::backend, snapshot::UiIntent},
 };
 use rssr_application::{ToggleReadInput, ToggleStarredInput};
 
 pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
     match command {
-        ReaderCommand::LoadEntry { entry_id } => match UiServices::shared().await {
+        ReaderCommand::LoadEntry { entry_id } => match backend().await {
             Ok(services) => {
                 // BeginLoading 由 session 在发起加载前同步派发，这里只产出结果。
                 let mut intents = Vec::new();
-                match services.reader().load_entry(entry_id).await {
+                match services.load_reader_entry(entry_id).await {
                     Ok(snapshot) => {
                         let Some(entry) = snapshot.entry else {
                             intents.push(UiIntent::ReaderPage(ReaderPageIntent::SetError {
@@ -65,8 +65,8 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
             }
             Err(err) => reader_status_error(format!("初始化应用失败：{err}")),
         },
-        ReaderCommand::LocalizeEntryAssets { entry_id } => match UiServices::shared().await {
-            Ok(services) => match services.reader().localize_entry_assets(entry_id).await {
+        ReaderCommand::LocalizeEntryAssets { entry_id } => match backend().await {
+            Ok(services) => match services.localize_entry_assets(entry_id).await {
                 // 缓存写回供下次打开使用。即使仍在同一篇，也不替换正在阅读的 HTML：
                 // 这会销毁原生选区、图片焦点及当前滚动位置。
                 Ok(_) => Vec::new(),
@@ -81,10 +81,9 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
             }
         },
         ReaderCommand::ToggleRead { entry_id, currently_read, via_shortcut } => {
-            match UiServices::shared().await {
+            match backend().await {
                 Ok(services) => match services
-                    .reader()
-                    .toggle_read(ToggleReadInput { entry_id, currently_read })
+                    .toggle_reader_read(ToggleReadInput { entry_id, currently_read })
                     .await
                 {
                     Ok(outcome) => reader_intents(vec![
@@ -114,11 +113,10 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
             }
         }
         ReaderCommand::ToggleStarred { entry_id, currently_starred, via_shortcut } => {
-            match UiServices::shared().await {
+            match backend().await {
                 Ok(services) => {
                     match services
-                        .reader()
-                        .toggle_starred(ToggleStarredInput { entry_id, currently_starred })
+                        .toggle_reader_starred(ToggleStarredInput { entry_id, currently_starred })
                         .await
                     {
                         Ok(outcome) => reader_intents(vec![

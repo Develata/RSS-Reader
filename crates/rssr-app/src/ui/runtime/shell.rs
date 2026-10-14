@@ -2,7 +2,7 @@ use crate::{
     router::AppRoute,
     ui::{
         commands::ShellCommand,
-        runtime::services::UiServices,
+        runtime::backend::backend,
         snapshot::{AuthenticatedShellSnapshot, StartupRouteSnapshot, UiIntent},
     },
 };
@@ -10,8 +10,8 @@ use rssr_application::StartupTarget;
 
 pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
     match command {
-        ShellCommand::ManualRefresh => match UiServices::shared().await {
-            Ok(services) => match services.feeds().refresh_all().await {
+        ShellCommand::ManualRefresh => match backend().await {
+            Ok(services) => match services.refresh_all().await {
                 Ok(outcome) => vec![UiIntent::SetStatus {
                     message: refresh_message(&outcome),
                     tone: if outcome.failure_message.is_some() { "error" } else { "info" }
@@ -21,10 +21,10 @@ pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
             },
             Err(err) => status_error(format!("初始化应用失败：{err}")),
         },
-        ShellCommand::LoadAuthenticatedShell => match UiServices::shared().await {
+        ShellCommand::LoadAuthenticatedShell => match backend().await {
             Ok(services) => {
-                let shell = services.shell();
-                let settings = match shell.load_authenticated_shell().await {
+                let shell = &services;
+                let settings = match shell.load_settings().await {
                     Ok(settings) => settings,
                     Err(err) => return status_error(format!("读取设置失败：{err}")),
                 };
@@ -33,9 +33,9 @@ pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
             }
             Err(err) => status_error(format!("初始化应用失败：{err}")),
         },
-        ShellCommand::ResolveStartupRoute => match UiServices::shared().await {
+        ShellCommand::ResolveStartupRoute => match backend().await {
             Ok(services) => {
-                let shell = services.shell();
+                let shell = &services;
                 let target = match shell.resolve_startup_target().await {
                     Ok(target) => target,
                     Err(err) => return resolve_with_fallback(format!("解析启动页面失败：{err}")),

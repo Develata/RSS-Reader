@@ -1,15 +1,15 @@
 use crate::{
     bootstrap::AddSubscriptionOutcome,
     pages::feeds_page::intent::{FeedsPageIntent, FeedsPageSnapshot},
-    ui::{commands::FeedsCommand, runtime::services::UiServices, snapshot::UiIntent},
+    ui::{commands::FeedsCommand, runtime::backend::backend, snapshot::UiIntent},
 };
 use rssr_application::{ConfigImportOutcome, OpmlImportOutcome};
 use rssr_domain::UserSettings;
 
 pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
     match command {
-        FeedsCommand::LoadSnapshot => match UiServices::shared().await {
-            Ok(services) => match services.feeds().load_snapshot().await {
+        FeedsCommand::LoadSnapshot => match backend().await {
+            Ok(services) => match services.load_feeds_snapshot().await {
                 Ok(outcome) => {
                     feeds_intents(vec![FeedsPageIntent::SnapshotLoaded(Ok(FeedsPageSnapshot {
                         feeds: outcome.feeds,
@@ -24,9 +24,8 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
         FeedsCommand::AddFeed { raw_url, fallback_site_url } => {
-            let result = match UiServices::shared().await {
+            let result = match backend().await {
                 Ok(services) => services
-                    .feeds()
                     .add_subscription(&raw_url, fallback_site_url)
                     .await
                     .map_err(|err| format!("{err:#}")),
@@ -34,8 +33,8 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             };
             add_feed_result(result)
         }
-        FeedsCommand::RefreshFeed { feed_id, feed_title } => match UiServices::shared().await {
-            Ok(services) => match services.feeds().refresh_feed(feed_id).await {
+        FeedsCommand::RefreshFeed { feed_id, feed_title } => match backend().await {
+            Ok(services) => match services.refresh_feed(feed_id).await {
                 Ok(outcome) => feeds_intents(vec![
                     FeedsPageIntent::SetStatus {
                         message: outcome.failure_message.as_ref().map_or_else(
@@ -59,8 +58,8 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
-        FeedsCommand::RemoveFeed { feed_id, feed_title } => match UiServices::shared().await {
-            Ok(services) => match services.feeds().remove_feed(feed_id).await {
+        FeedsCommand::RemoveFeed { feed_id, feed_title } => match backend().await {
+            Ok(services) => match services.remove_feed(feed_id).await {
                 Ok(()) => feeds_intents(vec![
                     FeedsPageIntent::PendingDeleteFeedSet(None),
                     FeedsPageIntent::SetStatus {
@@ -85,8 +84,8 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
                 },
             ]),
         },
-        FeedsCommand::ExportConfig => match UiServices::shared().await {
-            Ok(services) => match services.feeds().export_config_json().await {
+        FeedsCommand::ExportConfig => match backend().await {
+            Ok(services) => match services.export_config_json().await {
                 Ok(raw) => feeds_intents(vec![
                     FeedsPageIntent::ConfigTextExported(raw),
                     FeedsPageIntent::SetStatus {
@@ -99,11 +98,11 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
         FeedsCommand::ImportConfig { raw } => {
-            let result = match UiServices::shared().await {
-                Ok(services) => match services.feeds().import_config_json(&raw).await {
+            let result = match backend().await {
+                Ok(services) => match services.import_config_json(&raw).await {
                     // 配置包可以替换外观设置：读回持久化后的设置，交给全局主题立即生效。
                     Ok(outcome) if outcome.settings_updated => {
-                        let settings = services.settings().load_settings().await;
+                        let settings = services.load_settings().await;
                         Ok((outcome, Some(settings.map_err(|err| err.to_string()))))
                     }
                     Ok(outcome) => Ok((outcome, None)),
@@ -113,8 +112,8 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             };
             import_config_result(result)
         }
-        FeedsCommand::ExportOpml => match UiServices::shared().await {
-            Ok(services) => match services.feeds().export_opml().await {
+        FeedsCommand::ExportOpml => match backend().await {
+            Ok(services) => match services.export_opml().await {
                 Ok(raw) => feeds_intents(vec![
                     FeedsPageIntent::OpmlTextExported(raw),
                     FeedsPageIntent::SetStatus {
@@ -126,8 +125,8 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
-        FeedsCommand::ImportOpml { raw } => match UiServices::shared().await {
-            Ok(services) => match services.feeds().import_opml(&raw).await {
+        FeedsCommand::ImportOpml { raw } => match backend().await {
+            Ok(services) => match services.import_opml(&raw).await {
                 Ok(outcome) => feeds_intents(vec![
                     FeedsPageIntent::SetStatus {
                         message: format!("OPML 已导入：{}。", opml_import_summary(&outcome)),
