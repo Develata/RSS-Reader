@@ -64,7 +64,7 @@ fn resolve_with_fallback(message: impl Into<String>) -> Vec<UiIntent> {
     ]
 }
 
-fn refresh_message(outcome: &crate::bootstrap::RefreshAllExecutionOutcome) -> String {
+fn refresh_message(outcome: &rssr_api::RefreshAllExecutionOutcome) -> String {
     let success = super::new_entries_message(outcome.inserted_count);
     match &outcome.failure_message {
         Some(failure) if outcome.total_count > 0 && outcome.failed_count == outcome.total_count => {

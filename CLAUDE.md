@@ -43,14 +43,15 @@ dx bundle --platform web --package rssr-app --release --debug-symbols false --ou
 
 ## 架构
 
-六个 crate 组成分层架构，依赖方向严格向内（UI → application → domain；infra 实现 domain/application 定义的接口）：
+七个 crate 组成分层架构，依赖方向严格向内（UI → application → domain；infra 实现 domain/application 定义的接口）：
 
 - **`rssr-domain`** — 实体（`Feed`、`Entry`、`UserSettings`、`AppStateSnapshot`）、仓储 trait（`FeedRepository`、`EntryIndexRepository`、`EntryContentRepository` 等）、`DomainError`。无任何 I/O。
 - **`rssr-application`** — 用例服务（`RefreshService`、`ReaderService`、`EntriesListService`、`ImportExportService`、`SubscriptionWorkflow` 等）。`composition.rs` 中的 `AppUseCases::compose(AppCompositionInput)` 用端口 trait（`FeedRefreshSourcePort`、`RefreshStorePort`、`OpmlCodecPort`、`ClockPort`、`AppStatePort`）组装全部服务，平台无关。
 - **`rssr-infra`** — 端口适配器，按编译目标二选一（`lib.rs` 中 `#[cfg(not(target_arch = "wasm32"))]` 门控）：
   - **原生（桌面/Android/CLI）**：`store` 模块，rusqlite 单库 `library.sqlite3`（索引、正文、设置、刷新序号；基线 schema 在 `store/migrations/`，根目录 `migrations/` 与 `migrations_content/` 冻结为 v0.1.x 历史，只供 `store::import` 单向导入旧库）；reqwest 抓取 + `BodyAssetLocalizer` 正文图片本地化；feed-rs/quick-xml 解析；OPML 编解码；WebDAV 配置同步。入口 `store::local::open_local_library()`（首次打开时导入同一数据目录中的 v0.1.x 库）+ `compose_library_use_cases(store)`。
   - **wasm32**：`application_adapters/browser/` 下的适配器共用 `BrowserStore`，通过 Web Locks 协调 `localStorage` 四片数据，以单一提交头发布；缓存按版本同步，刷新逐订阅持久化，仅正文记录变化时写正文片。`store`/`fetch`/`parser`/`config_sync` 模块在 wasm 上不编译。入口 `compose_browser_use_cases`。
-- **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 与 `bootstrap/web.rs` 按平台选择组装并暴露 host capabilities（刷新、剪贴板、图片本地化、远程配置）；`ui/` 分 shell / commands / runtime；`pages/` 通过 facade/session 派发命令，runtime 调用统一用例或 host capability。
+- **`rssr-api`** — 界面与用例之间的 `Backend` 接口（界面的全部操作；阶段 C 的 `HttpBackend` 与本机 `LocalBackend` 都实现它），只依赖 application / domain；依赖图门禁见 `crates/rssr-api/tests/dependency_graph.rs`（Web 构建不含 SQLite）。
+- **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 与 `bootstrap/web.rs` 按平台建好 `LocalBackend`（infra 的 `local_backend`：共享的添加订阅、刷新编排、`RefreshFlight` 与自动刷新循环；平台差异在 `LocalHost`：原生 `NativeHost` 含图片本地化与 WebDAV，Web 的 `WebHost` 在 `bootstrap/web.rs`）；`ui/` 分 shell / commands / runtime；`pages/` 通过 facade/session 派发命令，runtime 只经 `Arc<dyn Backend>` 调用。界面接缝的特征测试：`ui/runtime/characterization.rs`。
 - **`rssr-cli`** — 复用同一 application 层的自动化入口。
 - **`rssr-web`** — 仅用于 Web 部署的薄 axum 服务：Argon2 登录、HttpOnly 会话 cookie、静态包托管 + SPA 回退、`/feed-proxy` 服务端代抓（绕过浏览器 CORS）。桌面端、CLI、本地开发都不依赖它。
 

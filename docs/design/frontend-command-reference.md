@@ -51,7 +51,7 @@ CLI 直接复用 `AppUseCases`，不依赖 UI 命令类型。实现边界见
 | `data-action="entry-page-previous"` / `entry-page-next` | 既有 Entries reducer 更新并限制页号，保持筛选和分组，滚至新页起点 |
 | `data-action="open-reader-image"` / `close-reader-image` | `ImageViewerState::Closed / Open`，复用已渲染图片地址；Esc、背景或 Android back 同样关闭 |
 
-手动刷新在 App scope 中运行，同步取得 in-flight 状态，连续 R、下拉和订阅页“刷新全部”不会重复创建批次。页面卸载不取消该任务。完成或部分失败后 revision 只让列表与订阅快照重取；Reader 正文不订阅刷新 revision。自动刷新继续使用现有 host 调度；host capability 内的共享 `RefreshFlight` 让自动与手动的重叠请求等待同一轮结果，不改变阅读页加载语义。进行中任务被取消时，等待者收到错误，下一次请求可以重试；不缓存已完成的刷新结果。
+手动刷新在 App scope 中运行，同步取得 in-flight 状态，连续 R、下拉和订阅页“刷新全部”不会重复创建批次。页面卸载不取消该任务。完成或部分失败后 revision 只让列表与订阅快照重取；Reader 正文不订阅刷新 revision。自动刷新由 `rssr_infra::local_backend` 的循环调度；其中共享的 `RefreshFlight` 让自动与手动的重叠请求等待同一轮结果，不改变阅读页加载语义。进行中任务被取消时，等待者收到错误，下一次请求可以重试；不缓存已完成的刷新结果。
 
 订阅探测与刷新在 infra 共用 8 MiB 响应限制，按解压后的流及转码后的 UTF-8 文本检查，超限走既有失败反馈并保留文章。SQLite 与 Web 的 `EntryContent.updated_at` 只在正文记录（含哈希）变化时更新；订阅刷新时间与文章索引更新时间仍正常更新。Web 仅在正文记录变化时发布正文片，逐订阅完整提交及新增数语义保持不变。没有新增 UI 命令或 `data-*` 接口。
 

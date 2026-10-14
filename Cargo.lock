@@ -5055,6 +5055,7 @@ dependencies = [
  "quick-xml 0.37.5",
  "regex",
  "reqwest",
+ "rssr-api",
  "rssr-application",
  "rssr-domain",
  "rusqlite",
