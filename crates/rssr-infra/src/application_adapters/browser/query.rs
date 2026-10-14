@@ -17,7 +17,7 @@ fn build_entry_flag_index(state: &BrowserState) -> HashMap<i64, &PersistedEntryF
 
 pub fn list_feeds(state: &BrowserState) -> Vec<FeedSummary> {
     let entry_flags = build_entry_flag_index(state);
-    let mut counts_by_feed = HashMap::<i64, (u32, u32)>::new();
+    let mut counts_by_feed = HashMap::<i64, (u64, u64)>::new();
     for entry in &state.core.entries {
         let counts = counts_by_feed.entry(entry.feed_id).or_insert((0, 0));
         counts.0 += 1;

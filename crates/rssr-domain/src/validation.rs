@@ -57,6 +57,20 @@ pub fn validate_user_settings(settings: &UserSettings) -> crate::Result<()> {
     Ok(())
 }
 
+/// 校验文章查询：归档分界必须是整秒（原生端按 RFC3339 文本比较，非整秒会与浏览器端的时间值
+/// 比较不一致）。列表、计数、批量已读的预览与确认共用这一条规则。
+pub fn validate_entry_query(query: &crate::EntryQuery) -> crate::Result<()> {
+    match query.archive_filter {
+        crate::ArchiveFilter::ExcludeArchived { cutoff }
+        | crate::ArchiveFilter::OnlyArchived { cutoff }
+            if cutoff.nanosecond() != 0 =>
+        {
+            Err(invalid("归档分界必须是整秒"))
+        }
+        _ => Ok(()),
+    }
+}
+
 /// 校验自定义 CSS 的括号、引号与注释是否闭合。
 ///
 /// 返回原始原因字符串而不是 [`DomainError`]，因为两个调用方要用不同的方式包装它：

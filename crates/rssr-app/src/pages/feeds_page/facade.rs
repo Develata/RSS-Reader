@@ -102,11 +102,11 @@ impl FeedsPageFacade {
         &self.snapshot.feeds
     }
 
-    pub(crate) fn total_feed_count(&self) -> usize {
+    pub(crate) fn total_feed_count(&self) -> u64 {
         self.snapshot.feed_count
     }
 
-    pub(crate) fn total_entry_count(&self) -> usize {
+    pub(crate) fn total_entry_count(&self) -> u64 {
         self.snapshot.entry_count
     }
 

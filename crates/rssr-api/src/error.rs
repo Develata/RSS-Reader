@@ -6,7 +6,8 @@ use std::fmt;
 use rssr_application::{ErrorKind, classify};
 
 /// Stable error codes. Phase C adds protocol-level ones (authentication, version mismatch).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
     InvalidInput,
     NotFound,
@@ -48,8 +49,9 @@ impl From<ErrorKind> for ErrorCode {
     }
 }
 
-/// A failed operation as the user interface sees it. Its `Display` is the message.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A failed operation as the user interface sees it. Its `Display` is the message. On the wire:
+/// `{ "code": "...", "message": "...", "request_id": null | "..." }`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BackendError {
     pub code: ErrorCode,
     /// For the user; internal details stay in the log.
@@ -80,6 +82,8 @@ mod tests {
     use anyhow::Context;
     use rssr_domain::DomainError;
 
+    use serde_json::json;
+
     use super::{BackendError, ErrorCode};
 
     #[test]
@@ -92,5 +96,31 @@ mod tests {
         assert_eq!(error.to_string(), "配置已被修改");
         assert_eq!(error.code.as_str(), "conflict");
         assert_eq!(error.request_id, None);
+    }
+
+    #[test]
+    fn the_wire_form_is_code_message_and_request_id() {
+        let error = BackendError {
+            code: ErrorCode::Conflict,
+            message: "配置已被修改".into(),
+            request_id: None,
+        };
+        let encoded = serde_json::to_value(&error).unwrap();
+        assert_eq!(
+            encoded,
+            json!({ "code": "conflict", "message": "配置已被修改", "request_id": null })
+        );
+        assert_eq!(serde_json::from_value::<BackendError>(encoded).unwrap(), error);
+        for code in [
+            ErrorCode::InvalidInput,
+            ErrorCode::NotFound,
+            ErrorCode::Conflict,
+            ErrorCode::Network,
+            ErrorCode::Unavailable,
+            ErrorCode::Storage,
+            ErrorCode::Internal,
+        ] {
+            assert_eq!(serde_json::to_value(code).unwrap(), json!(code.as_str()));
+        }
     }
 }

@@ -131,7 +131,7 @@ pub(crate) struct EntriesPagePresenter {
     pub(crate) total_pages: u32,
     pub(crate) page_start: usize,
     pub(crate) page_end: usize,
-    pub(crate) source_filter_options: Vec<(i64, String, String, u32)>,
+    pub(crate) source_filter_options: Vec<(i64, String, String, u64)>,
     pub(crate) source_grouped_entries: Vec<EntrySourceGroup>,
     pub(crate) time_grouped_entries: Vec<EntryMonthGroup>,
     pub(crate) directory_months: Vec<EntryDirectoryMonth>,

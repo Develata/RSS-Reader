@@ -8,7 +8,8 @@
 
 use rssr_domain::DomainError;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ErrorKind {
     /// The request itself is wrong (a bad address, an invalid setting, a malformed file).
     InvalidInput,

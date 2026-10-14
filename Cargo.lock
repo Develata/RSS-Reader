@@ -4949,6 +4949,8 @@ dependencies = [
  "async-trait",
  "rssr-application",
  "rssr-domain",
+ "serde",
+ "serde_json",
  "url",
 ]
 

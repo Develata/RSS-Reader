@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rssr_domain::{ArchiveFilter, EntryIndexRepository, EntryQuery, EntrySummary};
+use rssr_domain::{
+    ArchiveFilter, EntryIndexRepository, EntryQuery, EntrySummary, validate_entry_query,
+};
 
 use crate::library_queries::LibraryQueryPort;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EntriesListOutcome {
     pub entries: Vec<EntrySummary>,
     /// 因自动归档而被本次查询排除掉的条目数，用于提示「已归档 N 篇」。
@@ -25,12 +27,14 @@ impl EntriesListService {
         &self,
         query: &EntryQuery,
     ) -> anyhow::Result<rssr_domain::MarkReadPreview> {
+        validate_entry_query(query)?;
         self.entry_repository.preview_mark_read(query).await.context("预览批量已读失败")
     }
     pub async fn mark_read_if_unchanged(
         &self,
         preview: &rssr_domain::MarkReadPreview,
     ) -> anyhow::Result<rssr_domain::MarkReadOutcome> {
+        validate_entry_query(&preview.query)?;
         self.entry_repository.mark_read_if_unchanged(preview).await.context("批量标为已读失败")
     }
 
@@ -46,6 +50,7 @@ impl EntriesListService {
     /// 归档筛选与计数都发生在存储层：页面层不再为了「数一下有多少被归档」而把已归档的文章
     /// 全量读回内存；同一快照保证计数与这一页对应同一份数据。
     pub async fn list_entries(&self, query: &EntryQuery) -> anyhow::Result<EntriesListOutcome> {
+        validate_entry_query(query)?;
         let archived_query = match query.archive_filter {
             ArchiveFilter::ExcludeArchived { cutoff } => Some(EntryQuery {
                 archive_filter: ArchiveFilter::OnlyArchived { cutoff },

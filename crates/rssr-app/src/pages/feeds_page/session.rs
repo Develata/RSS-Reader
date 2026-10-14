@@ -380,7 +380,7 @@ mod tests {
         snapshot(0).into_iter().find_map(UiIntent::into_feeds_page_intent).expect("snapshot")
     }
 
-    fn snapshot(count: usize) -> Vec<UiIntent> {
+    fn snapshot(count: u64) -> Vec<UiIntent> {
         vec![UiIntent::FeedsPage(FeedsPageIntent::SnapshotLoaded(Ok(FeedsPageSnapshot {
             feeds: Vec::new(),
             feed_count: count,

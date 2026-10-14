@@ -6,13 +6,13 @@ use rssr_domain::{EntriesWorkspaceState, FeedSummary, UserSettings};
 use crate::AppStateService;
 use crate::library_queries::{EntriesStart, LibraryQueryPort};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EntriesBootstrapInput {
     pub load_preferences: bool,
     pub load_feeds: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EntriesBootstrapOutcome {
     pub settings: Option<UserSettings>,
     pub workspace: Option<EntriesWorkspaceState>,

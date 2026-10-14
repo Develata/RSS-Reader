@@ -10,4 +10,8 @@ anyhow.workspace = true
 async-trait.workspace = true
 rssr-application = { path = "../rssr-application" }
 rssr-domain = { path = "../rssr-domain" }
+serde.workspace = true
 url.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

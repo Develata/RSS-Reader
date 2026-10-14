@@ -89,18 +89,19 @@ impl EntryRecord {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntrySummary {
     pub id: i64,
     pub feed_id: i64,
     pub title: String,
     pub feed_title: String,
+    #[serde(with = "time::serde::rfc3339::option")]
     pub published_at: Option<OffsetDateTime>,
     pub is_read: bool,
     pub is_starred: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct EntryNavigation {
     pub previous_unread_entry_id: Option<i64>,
     pub next_unread_entry_id: Option<i64>,
@@ -131,15 +132,25 @@ pub enum StarredFilter {
 /// 归档只看 `published_at`：没有发布时间的条目永远不算归档（与 [`is_entry_archived`] 一致）。
 /// 这个筛选此前是在页面层对全量结果做的内存过滤，意味着每次查询都要把已归档的文章也一并
 /// 读出来再丢掉；放进查询后由存储层直接筛掉，两个平台共用同一套语义。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// 分界必须是整秒：原生端按 RFC3339 文本比较，非整秒会与浏览器端的时间值比较不一致（B2-D7）。
+/// [`archive_cutoff_at`] 只产生整秒；外来输入由 [`crate::validate_entry_query`] 检查。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ArchiveFilter {
     /// 不施加归档约束。
     #[default]
     All,
     /// 只要未归档的：`published_at IS NULL OR published_at >= cutoff`。
-    ExcludeArchived { cutoff: OffsetDateTime },
+    ExcludeArchived {
+        #[serde(with = "time::serde::rfc3339")]
+        cutoff: OffsetDateTime,
+    },
     /// 只要已归档的：`published_at IS NOT NULL AND published_at < cutoff`，用于统计被隐藏的数量。
-    OnlyArchived { cutoff: OffsetDateTime },
+    OnlyArchived {
+        #[serde(with = "time::serde::rfc3339")]
+        cutoff: OffsetDateTime,
+    },
 }
 
 impl ArchiveFilter {
@@ -152,7 +163,7 @@ impl ArchiveFilter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct EntryQuery {
     pub feed_id: Option<i64>,
     pub read_filter: ReadFilter,
@@ -298,13 +309,15 @@ mod tests {
     }
 }
 
-/// 冻结筛选条件与完整未读集合；分页限制在预览时清除。
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// 冻结筛选条件（含归档分界）与完整未读集合；分页限制在预览时清除。确认时用同一查询，在
+/// 同一写事务里比较完整集合，不一致就返回新的预览、不写入。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MarkReadPreview {
     pub query: EntryQuery,
     pub unread_entry_ids: Vec<i64>,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum MarkReadOutcome {
     Applied { changed_count: u64 },
     SelectionChanged { preview: MarkReadPreview },

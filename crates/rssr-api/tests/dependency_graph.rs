@@ -57,5 +57,9 @@ fn the_api_crate_depends_on_no_infrastructure() {
     let mut direct: Vec<&str> = self::packages(&direct).into_iter().skip(1).collect();
     direct.sort_unstable();
     direct.dedup();
-    assert_eq!(direct, ["anyhow", "async-trait", "rssr-application", "rssr-domain", "url"]);
+    // `serde` for the protocol types (`serde_json` is a test-only dependency, not listed).
+    assert_eq!(
+        direct,
+        ["anyhow", "async-trait", "rssr-application", "rssr-domain", "serde", "url"]
+    );
 }

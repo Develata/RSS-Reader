@@ -247,7 +247,7 @@ impl EntriesPageFacade {
         )
     }
 
-    pub(crate) fn source_filter_options(&self) -> &[(i64, String, String, u32)] {
+    pub(crate) fn source_filter_options(&self) -> &[(i64, String, String, u64)] {
         &self.presenter.source_filter_options
     }
 

@@ -557,4 +557,26 @@ mod tests {
         assert_eq!((all.total_count, all.failed_count), (1, 1));
         assert_eq!(all.failures[0].name.as_deref(), Some("Named"));
     }
+
+    /// An archive cutoff must be a whole second: the library compares RFC3339 text, so a
+    /// fractional one would not match the browser's comparison. It is refused, not compared.
+    #[tokio::test]
+    async fn a_fractional_archive_cutoff_is_refused() {
+        use rssr_api::ErrorCode;
+        use rssr_domain::ArchiveFilter;
+
+        let backend = recording_backend(false).await;
+        let whole = OffsetDateTime::UNIX_EPOCH + Duration::from_secs(86_400);
+        let query = |cutoff| EntryQuery {
+            archive_filter: ArchiveFilter::ExcludeArchived { cutoff },
+            ..EntryQuery::default()
+        };
+        backend.list_entries(&query(whole)).await.expect("a whole second is accepted");
+
+        let fractional = whole + Duration::from_millis(250);
+        let error = backend.list_entries(&query(fractional)).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidInput);
+        let error = backend.preview_mark_read(&query(fractional)).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidInput);
+    }
 }

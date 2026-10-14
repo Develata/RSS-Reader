@@ -32,7 +32,8 @@ pub struct AddSubscriptionLifecycleOutcome {
 }
 
 /// What adding a subscription led to, as the user interface receives it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum AddSubscriptionOutcome {
     /// The address is a page listing several feeds; the user picks one.
     NeedsSelection {

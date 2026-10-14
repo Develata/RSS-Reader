@@ -7,7 +7,7 @@ use crate::library_queries::{LibraryQueryPort, ReaderSnapshot};
 
 /// An entry as the reader shows it; storage details (identity keys, hashes, first-seen time)
 /// stay inside.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReaderEntry {
     pub id: i64,
     pub feed_id: i64,
@@ -17,6 +17,7 @@ pub struct ReaderEntry {
     pub summary: Option<String>,
     pub content_html: Option<String>,
     pub content_text: Option<String>,
+    #[serde(with = "time::serde::rfc3339::option")]
     pub published_at: Option<time::OffsetDateTime>,
     pub is_read: bool,
     pub is_starred: bool,
@@ -40,7 +41,7 @@ impl From<Entry> for ReaderEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReaderEntrySnapshot {
     pub entry: Option<ReaderEntry>,
     pub navigation: EntryNavigation,

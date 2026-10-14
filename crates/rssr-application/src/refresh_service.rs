@@ -240,7 +240,7 @@ impl RefreshFeedOutcome {
 }
 
 /// A subscription whose refresh failed. The GUI and the CLI format it themselves.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RefreshFailureItem {
     pub feed_id: i64,
     pub url: String,
@@ -252,7 +252,7 @@ pub struct RefreshFailureItem {
 }
 
 /// What refreshing every subscription led to, as the user interface receives it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RefreshAllExecutionOutcome {
     pub inserted_count: u64,
     pub total_count: u64,
@@ -262,7 +262,7 @@ pub struct RefreshAllExecutionOutcome {
 }
 
 /// What refreshing one subscription led to, as the user interface receives it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RefreshFeedExecutionOutcome {
     pub inserted_count: u64,
     pub failure: Option<RefreshFailureItem>,

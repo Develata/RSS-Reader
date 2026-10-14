@@ -4,7 +4,8 @@ use anyhow::Context;
 use rssr_domain::{DomainError, EntryIndexRepository};
 
 /// What setting an entry's read or starred flag to a value did.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum EntryFlagOutcome {
     /// The entry now has `value`; `changed` is false when it already had it (nothing written).
     Set { value: bool, changed: bool },

@@ -259,8 +259,9 @@ pub(crate) fn list_summaries(conn: &Connection) -> StoreResult<Vec<FeedSummary>>
             id: row.get(0)?,
             title: row.get(1)?,
             url: row.get(2)?,
-            unread_count: row.get(3)?,
-            entry_count: row.get(4)?,
+            // Counts from COUNT / SUM are never negative.
+            unread_count: row.get::<_, i64>(3)?.unsigned_abs(),
+            entry_count: row.get::<_, i64>(4)?.unsigned_abs(),
             // A summary is for display: an unreadable time shows as unknown.
             last_fetched_at: parse_optional_time(row.get(5)?).ok().flatten(),
             last_success_at: parse_optional_time(row.get(6)?).ok().flatten(),

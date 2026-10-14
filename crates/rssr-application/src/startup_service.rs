@@ -5,7 +5,8 @@ use rssr_domain::StartupView;
 
 use crate::library_queries::{LibraryQueryPort, StartupState};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum StartupTarget {
     AllEntries,
     FeedEntries { feed_id: i64 },

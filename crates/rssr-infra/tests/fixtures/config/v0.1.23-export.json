@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "exported_at": "2026-10-14 18:23:46.1692044 +00:00:00",
+  "feeds": [
+    {
+      "url": "https://bare.example.net/atom.xml",
+      "title": "",
+      "folder": null
+    },
+    {
+      "url": "https://example.com/feed.xml",
+      "title": "Example",
+      "folder": "Tech"
+    },
+    {
+      "url": "https://news.example.org/rss",
+      "title": "中文订阅",
+      "folder": null
+    }
+  ],
+  "settings": {
+    "theme": "dark",
+    "list_density": "compact",
+    "startup_view": "last_feed",
+    "refresh_interval_minutes": 45,
+    "archive_after_months": 6,
+    "entries_page_size": 100,
+    "reader_font_scale": 1.2,
+    "custom_css": "[data-page=\"feeds\"] .feed-card { order: 2; }"
+  }
+}

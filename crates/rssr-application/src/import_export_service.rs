@@ -54,26 +54,26 @@ impl ClockPort for SystemClock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ConfigImportOutcome {
-    pub imported_feed_count: usize,
-    pub removed_feed_count: usize,
+    pub imported_feed_count: u64,
+    pub removed_feed_count: u64,
     pub settings_updated: bool,
     /// The settings now stored (committed by the replacement; no second read).
     pub settings: UserSettings,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct OpmlImportOutcome {
-    pub imported_feed_count: usize,
+    pub imported_feed_count: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RemoteConfigPushOutcome {
-    pub exported_feed_count: usize,
+    pub exported_feed_count: u64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RemoteConfigPullOutcome {
     pub import: Option<ConfigImportOutcome>,
 }
@@ -165,8 +165,8 @@ impl ImportExportService {
             })
             .await?;
         Ok(ConfigImportOutcome {
-            imported_feed_count: package.feeds.len(),
-            removed_feed_count: outcome.removed_feed_count,
+            imported_feed_count: package.feeds.len() as u64,
+            removed_feed_count: outcome.removed_feed_count as u64,
             settings_updated: outcome.settings_updated,
             settings: outcome.settings,
         })
@@ -210,8 +210,8 @@ impl ImportExportService {
             .opml_codec
             .decode(raw)
             .map_err(|error| DomainError::InvalidInput(format!("OPML 无法解析：{error}")))?;
-        let imported_feed_count = feeds.len();
-        let mut subscriptions = Vec::with_capacity(imported_feed_count);
+        let imported_feed_count = feeds.len() as u64;
+        let mut subscriptions = Vec::with_capacity(feeds.len());
 
         // Validate and normalize the complete document before the first write. A bad URL near the
         // end of an OPML file must not leave the valid prefix imported.
@@ -236,7 +236,7 @@ impl ImportExportService {
         remote: &dyn RemoteConfigStore,
     ) -> Result<RemoteConfigPushOutcome> {
         let package = self.export_config().await?;
-        let exported_feed_count = package.feeds.len();
+        let exported_feed_count = package.feeds.len() as u64;
         let raw = serde_json::to_string_pretty(&package)?;
         remote.upload_config(&raw).await?;
         Ok(RemoteConfigPushOutcome { exported_feed_count })

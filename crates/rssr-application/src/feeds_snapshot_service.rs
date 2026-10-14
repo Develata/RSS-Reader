@@ -5,11 +5,11 @@ use rssr_domain::{ConfigFingerprint, FeedSummary};
 
 use crate::library_queries::{FeedsOverview, LibraryQueryPort};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FeedsSnapshotOutcome {
     pub feeds: Vec<FeedSummary>,
-    pub feed_count: usize,
-    pub entry_count: usize,
+    pub feed_count: u64,
+    pub entry_count: u64,
     /// What a configuration import from this page expects to replace.
     pub fingerprint: ConfigFingerprint,
 }
@@ -28,8 +28,8 @@ impl FeedsSnapshotService {
     pub async fn load_snapshot(&self) -> anyhow::Result<FeedsSnapshotOutcome> {
         let FeedsOverview { feeds, fingerprint } =
             self.queries.feeds_overview().await.context("读取订阅失败")?;
-        let feed_count = feeds.len();
-        let entry_count = feeds.iter().map(|feed| feed.entry_count as usize).sum();
+        let feed_count = feeds.len() as u64;
+        let entry_count = feeds.iter().map(|feed| feed.entry_count).sum();
         Ok(FeedsSnapshotOutcome { feeds, feed_count, entry_count, fingerprint })
     }
 }
@@ -94,7 +94,7 @@ mod tests {
         FeedsSnapshotService::new(Arc::new(queries))
     }
 
-    fn feed(id: i64, entry_count: u32) -> FeedSummary {
+    fn feed(id: i64, entry_count: u64) -> FeedSummary {
         FeedSummary {
             id,
             title: format!("Feed {id}"),

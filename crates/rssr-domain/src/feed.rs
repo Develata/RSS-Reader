@@ -25,15 +25,18 @@ pub struct Feed {
     pub updated_at: OffsetDateTime,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FeedSummary {
     pub id: i64,
     pub title: String,
     pub url: String,
-    pub unread_count: u32,
-    pub entry_count: u32,
+    pub unread_count: u64,
+    pub entry_count: u64,
+    #[serde(with = "time::serde::rfc3339::option")]
     pub last_fetched_at: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339::option")]
     pub last_success_at: Option<OffsetDateTime>,
+    /// For the user: see [`public_fetch_error`].
     pub fetch_error: Option<String>,
 }
 

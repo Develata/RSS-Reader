@@ -32,7 +32,7 @@ pub use settings::{
 };
 pub use validation::{
     CONFIG_PACKAGE_VERSION, parse_and_normalize_feed_url, parse_feed_url, validate_config_package,
-    validate_user_settings,
+    validate_entry_query, validate_user_settings,
 };
 
 pub type Result<T> = std::result::Result<T, DomainError>;

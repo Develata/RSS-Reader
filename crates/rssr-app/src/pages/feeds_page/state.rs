@@ -10,8 +10,8 @@ pub(crate) struct FeedsPageState {
     pub(crate) pending_config_import: bool,
     pub(crate) pending_delete_feed: Option<i64>,
     pub(crate) feeds: Vec<FeedSummary>,
-    pub(crate) feed_count: usize,
-    pub(crate) entry_count: usize,
+    pub(crate) feed_count: u64,
+    pub(crate) entry_count: u64,
     /// The configuration the shown snapshot reflects; an import expects it.
     pub(crate) fingerprint: Option<rssr_domain::ConfigFingerprint>,
     pub(crate) status_revision: u64,
