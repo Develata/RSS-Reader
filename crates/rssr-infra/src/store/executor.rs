@@ -10,9 +10,11 @@
 //!   cancelled and never runs;
 //! - a running task whose caller goes away is cancelled: the progress handler interrupts its
 //!   current statement and it is rolled back;
-//! - `Running -> Committing` is the commit point: a task that reaches it commits even if its
-//!   caller has gone away meanwhile, so a dropped caller may or may not see its write applied
-//!   (as with any interrupted request).
+//! - `Running -> Committing` is where cancellation stops being accepted: from then on the commit
+//!   runs to its end (it can still fail, for example when a lock wait reaches the deadline), and
+//!   a caller that went away does not learn which way it went;
+//! - a queued task carries the time it may start until; the worker cancels it when it is taken
+//!   later, and a cancelled task's closure (with the data it captured) is dropped at once.
 //!
 //! A running task has a deadline (`*_deadline`, from the moment it starts): waits for another
 //! connection's lock end at the deadline (busy handler), and a statement still running at the
@@ -24,10 +26,15 @@
 //! After every task the connection is brought back to its idle state (no open transaction, the
 //! role's `query_only`); a connection that cannot be is discarded, and the worker opens a new one
 //! for the next task (an in-memory library cannot, and reports itself unusable).
+//!
+//! Opening runs on its own thread too. A missing library is created in a temporary file and
+//! published only when complete, with its application id in the header ([`files::publish_new`]),
+//! so an existing library file either is complete or is not a library at all; its identity is
+//! read with [`files::check_library`] before anything could write to it. Switching to WAL and the
+//! migration share one budget of [`connection::BUSY_TIMEOUT`]; checking the file and opening the
+//! connections are local file operations outside it.
 
 use std::cell::RefCell;
-use std::fs::File;
-use std::io::Read;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -42,7 +49,7 @@ use tokio::sync::oneshot;
 
 use super::connection::{self, Role};
 use super::error::{StoreError, StoreResult};
-use super::migrate;
+use super::{files, migrate};
 
 /// SQLite calls the progress handler every this many VM instructions.
 const PROGRESS_OPS: i32 = 1_000;
@@ -173,14 +180,34 @@ impl Slot {
 
 type Job = Box<dyn FnOnce(&mut Slot) + Send>;
 
-/// A queue served by one or more workers, each owning one connection.
+/// A queued task: its state, the time it may start until, and its closure until it starts or is
+/// cancelled.
+struct Pending {
+    state: Arc<AtomicU8>,
+    start_until: Instant,
+    job: Mutex<Option<Job>>,
+}
+
+impl Pending {
+    /// Cancels the task if it has not started; its closure and captured data are dropped now.
+    fn cancel_if_queued(&self) -> bool {
+        let cancelled = transition(&self.state, QUEUED, CANCELLED);
+        if cancelled {
+            drop(self.job.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take());
+        }
+        cancelled
+    }
+}
+
+/// A queue served by one or more workers, each owning one connection. It holds only small
+/// task cells: a cancelled task's closure is dropped when it is cancelled.
 struct Queue {
-    sender: mpsc::Sender<Job>,
+    sender: mpsc::Sender<Arc<Pending>>,
 }
 
 impl Queue {
     fn start(slots: Vec<Slot>) -> StoreResult<Self> {
-        let (sender, receiver) = mpsc::channel::<Job>();
+        let (sender, receiver) = mpsc::channel::<Arc<Pending>>();
         let receiver = Arc::new(Mutex::new(receiver));
         for slot in slots {
             let receiver = Arc::clone(&receiver);
@@ -191,20 +218,31 @@ impl Queue {
         Ok(Self { sender })
     }
 
-    fn submit(&self, job: Job) -> StoreResult<()> {
-        self.sender.send(job).map_err(|_| StoreError::TaskFailed)
+    fn submit(&self, pending: Arc<Pending>) -> StoreResult<()> {
+        self.sender.send(pending).map_err(|_| StoreError::TaskFailed)
     }
 }
 
-/// Worker loop: runs tasks one at a time until the store is dropped. A panicking task is
-/// contained here; its caller sees `TaskFailed`.
-fn serve(receiver: &Mutex<mpsc::Receiver<Job>>, mut slot: Slot) {
+/// Worker loop: runs tasks one at a time until the store is dropped. A task taken after the time
+/// it could start until is cancelled instead; a panicking task is contained here (its caller sees
+/// `TaskFailed`).
+fn serve(receiver: &Mutex<mpsc::Receiver<Arc<Pending>>>, mut slot: Slot) {
     loop {
-        let job = match receiver.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).recv() {
-            Ok(job) => job,
+        let pending = match receiver.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).recv()
+        {
+            Ok(pending) => pending,
             Err(_) => return,
         };
-        let _ = catch_unwind(AssertUnwindSafe(|| job(&mut slot)));
+        if Instant::now() > pending.start_until && pending.cancel_if_queued() {
+            continue;
+        }
+        if !transition(&pending.state, QUEUED, RUNNING) {
+            continue;
+        }
+        let job = pending.job.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
+        if let Some(job) = job {
+            let _ = catch_unwind(AssertUnwindSafe(|| job(&mut slot)));
+        }
         slot.reset_after_task();
     }
 }
@@ -225,58 +263,55 @@ struct Inner {
 
 /// Cancels the task when the caller's future is dropped before the task ended.
 struct CancelOnDrop {
-    state: Arc<AtomicU8>,
+    pending: Arc<Pending>,
     armed: bool,
 }
 
 impl Drop for CancelOnDrop {
     fn drop(&mut self) {
-        if self.armed && !transition(&self.state, QUEUED, CANCELLED) {
-            transition(&self.state, RUNNING, CANCELLED);
+        if self.armed && !self.pending.cancel_if_queued() {
+            transition(&self.pending.state, RUNNING, CANCELLED);
         }
     }
 }
 
-/// Refuses a file that is not a library without opening it with SQLite: the identity comes from
-/// the 100-byte database header, so nothing (not even a `-shm` or `-wal` file) is created or
-/// changed. A missing or empty file, or a header with neither an application id nor a schema
-/// change yet, is left to the migration, which decides inside its write transaction (the header
-/// may lag behind changes still in the WAL).
-fn check_identity(path: &Path) -> StoreResult<()> {
-    let mut file = match File::open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(error.into()),
-    };
-    let mut header = [0_u8; 100];
-    let mut read = 0;
-    while read < header.len() {
-        match file.read(&mut header[read..])? {
-            0 => break,
-            count => read += count,
-        }
-    }
-    if read == 0 {
+/// Runs `body` on a new thread and waits for its result without blocking the async runtime.
+async fn on_thread<R: Send + 'static>(
+    body: impl FnOnce() -> StoreResult<R> + Send + 'static,
+) -> StoreResult<R> {
+    let (reply, receive) = oneshot::channel();
+    std::thread::Builder::new().name("rssr-library-open".to_owned()).spawn(move || {
+        let _ = reply.send(body());
+    })?;
+    receive.await.map_err(|_| StoreError::TaskFailed)?
+}
+
+/// Creates the library at `path` if it does not exist: built in a temporary file next to it and
+/// published only when complete, never over an existing file.
+fn create_if_missing(path: &Path) -> StoreResult<()> {
+    if path.exists() {
         return Ok(());
     }
-    if read < header.len() || &header[..16] != b"SQLite format 3\0" {
-        return Err(StoreError::NotALibrary);
+    let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or_default();
+    let staging = path.with_file_name(format!("{name}.{}-{nonce}.creating", std::process::id()));
+    let built = (|| -> StoreResult<()> {
+        let mut connection = open_connection(Some(&staging), Role::Writer)?;
+        let context = TaskContext {
+            state: Arc::new(AtomicU8::new(RUNNING)),
+            until: Instant::now() + connection::BUSY_TIMEOUT,
+        };
+        with_context(context, || migrate::migrate(&mut connection, &now()))?;
+        drop(connection);
+        files::publish_new(&staging, path).map(drop)
+    })();
+    for suffix in ["", "-journal"] {
+        let _ = std::fs::remove_file(format!("{}{suffix}", staging.display()));
     }
-    let field = |offset: usize| {
-        u32::from_be_bytes([
-            header[offset],
-            header[offset + 1],
-            header[offset + 2],
-            header[offset + 3],
-        ])
-    };
-    let application_id = field(68) as i32;
-    let schema_cookie = field(40);
-    if application_id == migrate::APPLICATION_ID || (application_id == 0 && schema_cookie == 0) {
-        Ok(())
-    } else {
-        Err(StoreError::NotALibrary)
-    }
+    built
 }
 
 impl LibraryStore {
@@ -287,15 +322,13 @@ impl LibraryStore {
 
     pub async fn open_with(path: impl AsRef<Path>, options: StoreOptions) -> StoreResult<Self> {
         let path = path.as_ref().to_path_buf();
-        tokio::task::spawn_blocking(move || Self::open_file(&path, options))
-            .await
-            .map_err(|_| StoreError::TaskFailed)?
+        on_thread(move || Self::open_file(&path, options)).await
     }
 
     /// A private in-memory library on a single connection (tests, throwaway use).
     pub async fn open_in_memory() -> StoreResult<Self> {
         let options = StoreOptions { readers: 0, ..StoreOptions::default() };
-        tokio::task::spawn_blocking(move || {
+        on_thread(move || {
             let mut writer = open_connection(None, Role::Writer)?;
             let context = TaskContext {
                 state: Arc::new(AtomicU8::new(RUNNING)),
@@ -310,14 +343,14 @@ impl LibraryStore {
             Ok(Self::assemble(writer, None, "memory".to_owned(), options))
         })
         .await
-        .map_err(|_| StoreError::TaskFailed)?
     }
 
     fn open_file(path: &Path, options: StoreOptions) -> StoreResult<Self> {
         if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent)?;
         }
-        check_identity(path)?;
+        create_if_missing(path)?;
+        files::check_library(path)?;
         let mut writer = open_connection(Some(path), Role::Writer)?;
         let journal_mode = prepare_file(&mut writer)?;
         let mut readers = Vec::with_capacity(options.readers);
@@ -393,10 +426,7 @@ impl LibraryStore {
         let state = Arc::new(AtomicU8::new(QUEUED));
         let (reply, mut receive) = oneshot::channel();
         let job_state = Arc::clone(&state);
-        queue.submit(Box::new(move |slot: &mut Slot| {
-            if !transition(&job_state, QUEUED, RUNNING) {
-                return;
-            }
+        let job: Job = Box::new(move |slot: &mut Slot| {
             let context =
                 TaskContext { state: Arc::clone(&job_state), until: Instant::now() + deadline };
             let result = with_context(context, || -> StoreResult<R> {
@@ -413,19 +443,32 @@ impl LibraryStore {
                 Ok(value)
             });
             let _ = reply.send(result);
-        }))?;
-        let mut cancel = CancelOnDrop { state: Arc::clone(&state), armed: true };
-        let result =
-            match tokio::time::timeout(self.inner.options.admission_wait, &mut receive).await {
-                Ok(result) => result,
-                Err(_) if transition(&state, QUEUED, CANCELLED) => {
-                    cancel.armed = false;
-                    return Err(StoreError::ConnectionTimeout);
-                }
-                Err(_) => receive.await,
-            };
+        });
+        let admission_wait = self.inner.options.admission_wait;
+        let pending = Arc::new(Pending {
+            state: Arc::clone(&state),
+            start_until: Instant::now() + admission_wait,
+            job: Mutex::new(Some(job)),
+        });
+        queue.submit(Arc::clone(&pending))?;
+        let mut cancel = CancelOnDrop { pending, armed: true };
+        let result = match tokio::time::timeout(admission_wait, &mut receive).await {
+            Ok(result) => result,
+            Err(_) if cancel.pending.cancel_if_queued() => {
+                cancel.armed = false;
+                return Err(StoreError::ConnectionTimeout);
+            }
+            Err(_) => receive.await,
+        };
         cancel.armed = false;
-        result.map_err(|_| StoreError::TaskFailed)?
+        match result {
+            Ok(result) => result,
+            // The worker cancelled it: it was taken after the time it could start until.
+            Err(_) if state.load(Ordering::SeqCst) == CANCELLED => {
+                Err(StoreError::ConnectionTimeout)
+            }
+            Err(_) => Err(StoreError::TaskFailed),
+        }
     }
 }
 

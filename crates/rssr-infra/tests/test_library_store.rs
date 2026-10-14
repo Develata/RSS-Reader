@@ -200,8 +200,22 @@ async fn deadline_interrupts_a_runaway_read_and_the_connection_recovers() {
     let started = Instant::now();
     let stopped = store
         .read(move |conn| {
-            marker.store(true, Ordering::SeqCst);
-            Ok(conn.query_row(RUN_FOREVER, [], |row| row.get::<_, i64>(0))?)
+            // Called by the statement itself, so it proves the statement executed.
+            conn.create_scalar_function(
+                "mark_running",
+                0,
+                rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+                move |_| {
+                    marker.store(true, Ordering::SeqCst);
+                    Ok(1_i64)
+                },
+            )?;
+            Ok(conn.query_row(
+                "WITH RECURSIVE n(i) AS (SELECT mark_running() UNION ALL SELECT i + 1 FROM n)
+                 SELECT count(*) FROM n",
+                [],
+                |row| row.get::<_, i64>(0),
+            )?)
         })
         .await;
     assert!(ran.load(Ordering::SeqCst), "the statement ran");
@@ -262,11 +276,20 @@ async fn a_task_that_times_out_in_the_queue_never_runs() {
         .await
     });
     wait_for(wait_started).await;
-    let queued = insert_feed(&store, "https://queued.test").await;
+    let ran = Arc::new(AtomicBool::new(false));
+    let marker = Arc::clone(&ran);
+    let queued = store
+        .write(move |_| {
+            marker.store(true, Ordering::SeqCst);
+            Ok(())
+        })
+        .await;
     assert!(matches!(queued, Err(StoreError::ConnectionTimeout)), "{queued:?}");
     release.send(()).unwrap();
     occupying.await.unwrap().unwrap();
-    assert_eq!(feed_count(&store).await, 0, "the timed-out task did not run later");
+    // A later task on the same writer runs after the cancelled one would have.
+    insert_feed(&store, "https://after.test").await.unwrap();
+    assert!(!ran.load(Ordering::SeqCst), "the timed-out task never started");
 }
 
 /// A caller that goes away interrupts its running statement long before the deadline.
@@ -470,6 +493,11 @@ async fn a_foreign_wal_database_is_refused_without_touching_any_file() {
         names
     };
     assert_eq!(listing(), ["other.db"]);
+    let untouched = std::fs::read(&path).unwrap();
+    let refused = LibraryStore::open(&path).await;
+    assert!(matches!(refused, Err(StoreError::NotALibrary)), "{:?}", refused.err());
+    assert_eq!(listing(), ["other.db"], "no -wal or -shm was created");
+    assert_eq!(std::fs::read(&path).unwrap(), untouched);
     // A stale shared-memory file left behind: SQLite would rebuild it on open and delete it on
     // close, so it shows whether anything opened the database.
     let shm = dir.0.join("other.db-shm");
@@ -482,6 +510,52 @@ async fn a_foreign_wal_database_is_refused_without_touching_any_file() {
     assert_eq!(listing(), files_before, "no auxiliary file was created or removed");
     assert_eq!(std::fs::read(&shm).unwrap(), vec![0x5a_u8; 32 * 1024]);
     assert_eq!(std::fs::read(&path).unwrap(), before);
+}
+
+/// A header with no application id and no schema cookie does not make a file empty: a foreign
+/// database with tables but `schema_version` set back to 0 is refused untouched.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_foreign_database_with_a_zero_header_is_refused_untouched() {
+    let dir = TempDir::new("zero-header");
+    let path = dir.0.join("other.db");
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE notes (id INTEGER PRIMARY KEY); PRAGMA writable_schema = ON;
+             PRAGMA schema_version = 0; PRAGMA writable_schema = OFF;",
+        )
+        .unwrap();
+        let cookie: i64 = conn.query_row("PRAGMA schema_version", [], |row| row.get(0)).unwrap();
+        assert_eq!(cookie, 0);
+    }
+    let before = std::fs::read(&path).unwrap();
+    let refused = LibraryStore::open(&path).await;
+    assert!(matches!(refused, Err(StoreError::NotALibrary)), "{:?}", refused.err());
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+}
+
+/// An empty file where the library should be is not taken over.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_empty_file_at_the_library_path_is_refused() {
+    let dir = TempDir::new("empty-file");
+    std::fs::write(dir.0.join("library.sqlite3"), b"").unwrap();
+    let refused = LibraryStore::open(dir.0.join("library.sqlite3")).await;
+    assert!(matches!(refused, Err(StoreError::NotALibrary)), "{:?}", refused.err());
+    assert_eq!(std::fs::read(dir.0.join("library.sqlite3")).unwrap(), b"");
+}
+
+/// Characters that mean something in a `file:` URI do not confuse which file is checked.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_library_path_with_uri_characters_opens_the_named_file() {
+    let dir = TempDir::new("uri # % 中文");
+    // `?` is not allowed in Windows file names; `#`, `%`, `&` and `=` are.
+    let path = dir.0.join("lib #1&mode=memory %20.sqlite3");
+    let store = LibraryStore::open(&path).await.unwrap();
+    insert_feed(&store, "https://a.test").await.unwrap();
+    drop(store);
+    assert!(path.is_file(), "the library is the named file");
+    let reopened = LibraryStore::open(&path).await.unwrap();
+    assert_eq!(feed_count(&reopened).await, 1);
 }
 
 /// A file that is not SQLite at all is not a library either.
@@ -510,4 +584,60 @@ async fn a_v01_database_is_refused_and_left_untouched() {
     let refused = LibraryStore::open(&path).await;
     assert!(matches!(refused, Err(StoreError::NotALibrary)), "{:?}", refused.err());
     assert_eq!(std::fs::read(&path).unwrap(), before);
+}
+
+/// SQLite's byte range for shared locks on the main database file (`SHARED_FIRST`,
+/// `SHARED_SIZE` in sqlite3.c).
+#[cfg(unix)]
+const SHARED_FIRST: i64 = 0x4000_0000 + 2;
+#[cfg(unix)]
+const SHARED_SIZE: i64 = 510;
+
+/// Child process for `opening_again_keeps_this_process_file_locks`: reports whether another
+/// process holds a lock on the shared-lock range of `RSSR_LOCK_PROBE_PATH`.
+#[cfg(unix)]
+#[test]
+#[ignore = "child process of opening_again_keeps_this_process_file_locks"]
+fn lock_state_child() {
+    use std::os::fd::AsRawFd;
+
+    let Some(path) = std::env::var_os("RSSR_LOCK_PROBE_PATH") else { return };
+    let file = std::fs::OpenOptions::new().read(true).write(true).open(path).unwrap();
+    let mut lock: libc::flock = unsafe { std::mem::zeroed() };
+    lock.l_type = libc::F_WRLCK as libc::c_short;
+    lock.l_whence = libc::SEEK_SET as libc::c_short;
+    lock.l_start = SHARED_FIRST as libc::off_t;
+    lock.l_len = SHARED_SIZE as libc::off_t;
+    // SAFETY: a valid descriptor and a valid, initialised flock.
+    let result = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETLK, &mut lock) };
+    assert_eq!(result, 0);
+    std::process::exit(if libc::c_int::from(lock.l_type) == libc::F_UNLCK { 10 } else { 20 });
+}
+
+#[cfg(unix)]
+fn another_process_sees_a_lock(path: &std::path::Path) -> bool {
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["lock_state_child", "--exact", "--ignored", "--nocapture"])
+        .env("RSSR_LOCK_PROBE_PATH", path)
+        .status()
+        .unwrap();
+    match status.code() {
+        Some(20) => true,
+        Some(10) => false,
+        other => panic!("lock probe failed: {other:?}"),
+    }
+}
+
+/// Opening a library again in the same process must not drop the POSIX locks the existing
+/// connections hold (closing any descriptor of the file would, so the identity check goes
+/// through SQLite).
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn opening_again_keeps_this_process_file_locks() {
+    let dir = TempDir::new("posix-locks");
+    let store = LibraryStore::open(dir.library()).await.unwrap();
+    assert!(another_process_sees_a_lock(&dir.library()), "an open library holds a shared lock");
+    let again = LibraryStore::open(dir.library()).await.unwrap();
+    assert!(another_process_sees_a_lock(&dir.library()), "opening again dropped the locks");
+    drop((store, again));
 }

@@ -39,7 +39,6 @@ sqlx = { version = "0.9", default-features = false, features = ["macros", "migra
 libsqlite3-sys = { version = "0.37", default-features = false }
 # v0.2 library storage (crate::store). Shares libsqlite3-sys 0.37 with sqlx until sqlx is removed.
 rusqlite = { version = "0.39", default-features = false, features = ["bundled", "cache", "functions", "hooks"] }
-tokio = { workspace = true, features = ["rt"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
@@ -54,6 +53,9 @@ rssr-application = { path = "../rssr-application" }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }

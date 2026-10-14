@@ -11,6 +11,7 @@ mod entries;
 mod error;
 mod executor;
 mod feeds;
+mod files;
 pub mod migrate;
 mod mutations;
 mod refresh;
