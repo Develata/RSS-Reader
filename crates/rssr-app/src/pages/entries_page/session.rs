@@ -105,11 +105,12 @@ impl EntriesPageSession {
         // Reading readiness must not subscribe the bootstrap effect to its own
         // completion and start a second feed-summary query.
         let load_preferences = !self.state.peek().preferences_load.is_loaded();
-        UiCommand::Entries(EntriesCommand::Bootstrap {
-            feed_id: self.feed_id,
-            load_preferences,
-            load_feeds: true,
-        })
+        UiCommand::Entries(EntriesCommand::Bootstrap { load_preferences, load_feeds: true })
+    }
+
+    /// Opening a subscription's page remembers it for the startup view; a failure is shown.
+    pub(crate) fn remember_opened_feed(self, feed_id: i64) {
+        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::RememberOpenedFeed { feed_id }));
     }
 
     pub(crate) fn load_entries_query(self, query: EntryQuery) {
@@ -496,7 +497,7 @@ mod tests {
                     let query = state.entry_query(None, None, OffsetDateTime::now_utc());
                     assert_eq!(state.page_size(), 50);
                     assert_eq!(query.read_filter, ReadFilter::UnreadOnly);
-                    assert_eq!(query.feed_ids, vec![7]);
+                    assert_eq!(query.feed_ids, Some(vec![7]));
                     queries.set(queries.get() + 1);
                     loaded(1)
                 });

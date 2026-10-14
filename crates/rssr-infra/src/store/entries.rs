@@ -52,8 +52,8 @@ impl Filtered {
         if let Some(feed_id) = query.feed_id {
             self.push(" AND entries.feed_id = ").bind(feed_id);
         }
-        if !query.feed_ids.is_empty() {
-            let encoded = serde_json::to_string(&query.feed_ids).unwrap_or_default();
+        if let Some(feed_ids) = &query.feed_ids {
+            let encoded = serde_json::to_string(feed_ids).unwrap_or_default();
             self.push(" AND entries.feed_id IN (SELECT value FROM json_each(")
                 .bind(encoded)
                 .push("))");

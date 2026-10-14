@@ -133,10 +133,11 @@ impl EntriesPageState {
             } else {
                 ArchiveFilter::exclude_archived(now, self.archive_after_months)
             },
-            feed_ids: if feed_id.is_some() {
-                Vec::new()
+            feed_ids: if feed_id.is_some() || self.selected_feed_urls.is_empty() {
+                None
             } else {
-                map_selected_feed_urls_to_ids(&self.feeds, &self.selected_feed_urls)
+                // Chosen sources that are all gone match nothing, never everything.
+                Some(map_selected_feed_urls_to_ids(&self.feeds, &self.selected_feed_urls))
             },
             search_title,
             limit: None,
@@ -252,5 +253,34 @@ mod tests {
         for trigger in changed {
             assert_ne!(trigger, base);
         }
+    }
+
+    /// No chosen sources means every subscription; chosen sources that are all gone match
+    /// nothing, so a bulk mark-read cannot widen to every subscription (B2-D6).
+    #[test]
+    fn chosen_sources_that_are_gone_match_nothing() {
+        let now = time::OffsetDateTime::UNIX_EPOCH;
+        let mut state = EntriesPageState::new(true);
+        assert_eq!(state.entry_query(None, None, now).feed_ids, None);
+
+        state.feeds = std::sync::Arc::new(vec![rssr_domain::FeedSummary {
+            id: 7,
+            title: "Kept".into(),
+            url: "https://example.com/kept.xml".into(),
+            unread_count: 0,
+            entry_count: 0,
+            last_fetched_at: None,
+            last_success_at: None,
+            fetch_error: None,
+        }]);
+        state.selected_feed_urls = vec!["https://example.com/kept.xml".into()];
+        assert_eq!(state.entry_query(None, None, now).feed_ids, Some(vec![7]));
+        state.selected_feed_urls = vec!["https://example.com/gone.xml".into()];
+        assert_eq!(state.entry_query(None, None, now).feed_ids, Some(Vec::new()));
+        assert_eq!(
+            state.entry_query(Some(7), None, now).feed_ids,
+            None,
+            "a feed page ignores them"
+        );
     }
 }

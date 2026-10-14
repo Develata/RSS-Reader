@@ -82,7 +82,7 @@ async fn names(ports: &Ports<'_>, feed_id: i64) -> (Option<String>, Option<Strin
 async fn listed(ports: &Ports<'_>, feed_id: i64) -> (String, Option<String>) {
     let summary = ports.feeds.list_summaries().await.unwrap();
     let title = summary.into_iter().find(|feed| feed.id == feed_id).expect("listed feed").title;
-    let query = EntryQuery { feed_ids: vec![feed_id], ..EntryQuery::default() };
+    let query = EntryQuery { feed_ids: Some(vec![feed_id]), ..EntryQuery::default() };
     let entry_title = ports
         .entries
         .list_entries(&query)

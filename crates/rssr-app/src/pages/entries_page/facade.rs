@@ -264,6 +264,15 @@ impl EntriesPageFacade {
     }
 
     pub(crate) fn empty_entries_message(&self) -> String {
+        if self.has_source_filter()
+            && super::state::map_selected_feed_urls_to_ids(
+                &self.snapshot.feeds,
+                self.selected_feed_urls(),
+            )
+            .is_empty()
+        {
+            return "所选来源都已删除，可清除筛选后查看全部文章。".into();
+        }
         if self.has_active_filters() {
             return "当前筛选没有匹配的文章，可清除筛选后查看。".into();
         }

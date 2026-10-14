@@ -94,6 +94,8 @@ pub trait Backend {
         &self,
         input: EntriesBootstrapInput,
     ) -> Result<EntriesBootstrapOutcome>;
+    /// Remembers the subscription the user opened, for the startup view.
+    async fn remember_opened_feed(&self, feed_id: i64) -> Result<()>;
     /// Saves the entry-list preferences; `true` when they changed.
     async fn save_entries_workspace_if_changed(
         &self,

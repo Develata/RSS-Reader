@@ -215,7 +215,8 @@ async fn main() -> anyhow::Result<()> {
                 },
             };
             let query = EntryQuery {
-                feed_ids: args.feed_id,
+                // `--all` is every subscription; `--feed-id` only those.
+                feed_ids: (!args.all).then_some(args.feed_id),
                 search_title: args.search,
                 read_filter: match args.read_filter {
                     BulkReadFilter::All => ReadFilter::All,

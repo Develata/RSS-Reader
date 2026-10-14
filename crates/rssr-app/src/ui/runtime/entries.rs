@@ -28,25 +28,24 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
             })]
         }
 
-        EntriesCommand::Bootstrap { feed_id, load_preferences, load_feeds } => {
-            match backend().await {
-                Ok(services) => {
-                    match services
-                        .bootstrap_entries(EntriesBootstrapInput {
-                            feed_id,
-                            load_preferences,
-                            load_feeds,
-                        })
-                        .await
-                    {
-                        Ok(outcome) => bootstrap_intents(outcome, load_preferences),
-                        Err(err) => bootstrap_error(
-                            format!("加载文章页初始状态失败：{err}"),
-                            load_preferences,
-                        ),
+        EntriesCommand::Bootstrap { load_preferences, load_feeds } => match backend().await {
+            Ok(services) => {
+                match services
+                    .bootstrap_entries(EntriesBootstrapInput { load_preferences, load_feeds })
+                    .await
+                {
+                    Ok(outcome) => bootstrap_intents(outcome, load_preferences),
+                    Err(err) => {
+                        bootstrap_error(format!("加载文章页初始状态失败：{err}"), load_preferences)
                     }
                 }
-                Err(err) => bootstrap_error(format!("初始化应用失败：{err}"), load_preferences),
+            }
+            Err(err) => bootstrap_error(format!("初始化应用失败：{err}"), load_preferences),
+        },
+        EntriesCommand::RememberOpenedFeed { feed_id } => {
+            match async { backend().await?.remember_opened_feed(feed_id).await }.await {
+                Ok(()) => Vec::new(),
+                Err(err) => entries_status_error(format!("记住上次打开的订阅失败：{err}")),
             }
         }
         EntriesCommand::LoadEntries { query } => match backend().await {

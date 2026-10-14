@@ -270,6 +270,12 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     });
 
     use_reactive_task((feed_id, refresh_revision), move |_| session.bootstrap());
+    // Once per opened subscription, not per refresh.
+    use_reactive_task(feed_id, move |feed_id| {
+        if let Some(feed_id) = feed_id {
+            session.remember_opened_feed(feed_id);
+        }
+    });
 
     use_reactive_task(
         (

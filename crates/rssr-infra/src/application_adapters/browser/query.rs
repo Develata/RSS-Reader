@@ -51,8 +51,8 @@ pub fn list_feeds(state: &BrowserState) -> Vec<FeedSummary> {
 
 pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummary> {
     let entry_flags = build_entry_flag_index(state);
-    let allowed_feed_ids = (!query.feed_ids.is_empty())
-        .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
+    let allowed_feed_ids =
+        query.feed_ids.as_ref().map(|ids| ids.iter().copied().collect::<HashSet<_>>());
     let search_lower = query.search_title.as_deref().map(rssr_domain::fold_for_search);
     let active_feed_ids = state
         .core
@@ -110,8 +110,8 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
 
 pub fn count_entries(state: &BrowserState, query: &EntryQuery) -> u64 {
     let entry_flags = build_entry_flag_index(state);
-    let allowed_feed_ids = (!query.feed_ids.is_empty())
-        .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
+    let allowed_feed_ids =
+        query.feed_ids.as_ref().map(|ids| ids.iter().copied().collect::<HashSet<_>>());
     let search_lower = query.search_title.as_deref().map(rssr_domain::fold_for_search);
     let active_feed_ids = state
         .core
@@ -303,8 +303,7 @@ fn compare_entry_order(
 /// 与列表共用筛选谓词，但不复制标题或排序整份 EntrySummary。
 pub fn unread_selection(state: &BrowserState, query: &EntryQuery) -> Vec<i64> {
     let flags = build_entry_flag_index(state);
-    let allowed = (!query.feed_ids.is_empty())
-        .then(|| query.feed_ids.iter().copied().collect::<HashSet<_>>());
+    let allowed = query.feed_ids.as_ref().map(|ids| ids.iter().copied().collect::<HashSet<_>>());
     let search = query.search_title.as_deref().map(rssr_domain::fold_for_search);
     let active =
         state.core.feeds.iter().filter(|f| !f.is_deleted).map(|f| f.id).collect::<HashSet<_>>();

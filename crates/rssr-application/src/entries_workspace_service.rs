@@ -8,7 +8,6 @@ use crate::library_queries::{EntriesStart, LibraryQueryPort};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EntriesBootstrapInput {
-    pub feed_id: Option<i64>,
     pub load_preferences: bool,
     pub load_feeds: bool,
 }
@@ -40,10 +39,6 @@ impl EntriesWorkspaceService {
         &self,
         input: EntriesBootstrapInput,
     ) -> anyhow::Result<EntriesBootstrapOutcome> {
-        if let Some(feed_id) = input.feed_id {
-            let _ = self.app_state_service.save_last_opened_feed_id(Some(feed_id)).await;
-        }
-
         // 设置、列表偏好与订阅来自同一个读快照。
         let EntriesStart { settings, workspace, feeds } = self
             .queries
@@ -52,6 +47,15 @@ impl EntriesWorkspaceService {
             .context("读取文章页初始数据失败")?;
 
         Ok(EntriesBootstrapOutcome { settings, workspace, feeds })
+    }
+
+    /// Remembers `feed_id` as the last opened subscription, for the startup view. A read never
+    /// writes it on the side (B2-D6); the page calls this when it opens a subscription.
+    pub async fn remember_opened_feed(&self, feed_id: i64) -> anyhow::Result<()> {
+        self.app_state_service
+            .save_last_opened_feed_id(Some(feed_id))
+            .await
+            .context("记住上次打开的订阅失败")
     }
 
     pub async fn save_workspace_if_changed(
@@ -202,11 +206,7 @@ mod tests {
         };
 
         let outcome = service(settings.clone(), state, vec![1, 2], false)
-            .bootstrap(EntriesBootstrapInput {
-                feed_id: None,
-                load_preferences: true,
-                load_feeds: true,
-            })
+            .bootstrap(EntriesBootstrapInput { load_preferences: true, load_feeds: true })
             .await
             .expect("bootstrap entries");
 
@@ -215,21 +215,22 @@ mod tests {
         assert_eq!(outcome.feeds.expect("feeds").len(), 2);
     }
 
+    /// Reading the page's start data writes nothing; remembering the opened subscription is its
+    /// own write, and its failure is reported.
     #[tokio::test]
-    async fn bootstrap_remembers_feed_best_effort_without_blocking() {
-        let outcome =
-            service(UserSettings::default(), AppStateSnapshot::default(), Vec::new(), true)
-                .bootstrap(EntriesBootstrapInput {
-                    feed_id: Some(7),
-                    load_preferences: false,
-                    load_feeds: false,
-                })
-                .await
-                .expect("bootstrap ignores failed last feed save");
+    async fn remembering_the_opened_feed_is_an_explicit_write() {
+        let failing =
+            service(UserSettings::default(), AppStateSnapshot::default(), Vec::new(), true);
+        let outcome = failing
+            .bootstrap(EntriesBootstrapInput { load_preferences: false, load_feeds: false })
+            .await
+            .expect("a read does not write");
+        assert_eq!((outcome.settings, outcome.workspace, outcome.feeds), (None, None, None));
+        assert!(failing.remember_opened_feed(7).await.is_err());
 
-        assert_eq!(outcome.settings, None);
-        assert_eq!(outcome.workspace, None);
-        assert_eq!(outcome.feeds, None);
+        let working =
+            service(UserSettings::default(), AppStateSnapshot::default(), Vec::new(), false);
+        working.remember_opened_feed(7).await.expect("remember");
     }
 
     #[tokio::test]

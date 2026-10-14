@@ -418,22 +418,18 @@ async fn ui_commands_produce_the_recorded_intents() {
     transcript
         .run(
             "entries bootstrap, all",
-            entries(EntriesCommand::Bootstrap {
-                feed_id: None,
-                load_preferences: true,
-                load_feeds: true,
-            }),
+            entries(EntriesCommand::Bootstrap { load_preferences: true, load_feeds: true }),
         )
         .await;
     transcript
         .run(
             "entries bootstrap, feed 1",
-            entries(EntriesCommand::Bootstrap {
-                feed_id: Some(1),
-                load_preferences: false,
-                load_feeds: false,
-            }),
+            entries(EntriesCommand::Bootstrap { load_preferences: false, load_feeds: false }),
         )
+        .await;
+    // Opening a subscription's page remembers it, separately from reading the page's data.
+    transcript
+        .run("remember opened feed 1", entries(EntriesCommand::RememberOpenedFeed { feed_id: 1 }))
         .await;
     transcript
         .run("list entries", entries(EntriesCommand::LoadEntries { query: EntryQuery::default() }))
@@ -514,11 +510,7 @@ async fn ui_commands_produce_the_recorded_intents() {
     transcript
         .run(
             "entries bootstrap after saving preferences",
-            entries(EntriesCommand::Bootstrap {
-                feed_id: None,
-                load_preferences: true,
-                load_feeds: false,
-            }),
+            entries(EntriesCommand::Bootstrap { load_preferences: true, load_feeds: false }),
         )
         .await;
     let previewed = transcript

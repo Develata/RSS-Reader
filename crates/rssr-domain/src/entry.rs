@@ -158,7 +158,9 @@ pub struct EntryQuery {
     pub read_filter: ReadFilter,
     pub starred_filter: StarredFilter,
     pub archive_filter: ArchiveFilter,
-    pub feed_ids: Vec<i64>,
+    /// `None`: every subscription. `Some(ids)`: only these, so `Some(vec![])` matches nothing
+    /// (all the chosen sources are gone) rather than everything.
+    pub feed_ids: Option<Vec<i64>>,
     pub search_title: Option<String>,
     pub limit: Option<u32>,
 }

@@ -161,6 +161,7 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 ### 配置交换相关
 
 - `rssr-cli export-config [--output <path>]`
+- 文章页的来源筛选：没有所选来源表示全部订阅；所选来源都已删除时结果为空并提示，批量已读不会扩大到全部订阅。按订阅打开文章页时单独记住“上次打开的订阅”。
 - `rssr-cli import-config <file>`（读取当前配置指纹后立即替换；界面的导入则携带订阅页快照的指纹，配置在载入后被改过时拒绝并重新载入）
 - `rssr-cli export-opml [--output <path>]`
 - `rssr-cli import-opml <file>`

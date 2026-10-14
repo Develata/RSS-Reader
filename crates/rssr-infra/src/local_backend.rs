@@ -274,6 +274,10 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         Ok(self.inner.use_cases.entries_workspace_service.bootstrap(input).await?)
     }
 
+    async fn remember_opened_feed(&self, feed_id: i64) -> BackendResult<()> {
+        Ok(self.inner.use_cases.entries_workspace_service.remember_opened_feed(feed_id).await?)
+    }
+
     async fn save_entries_workspace_if_changed(
         &self,
         workspace: EntriesWorkspaceState,

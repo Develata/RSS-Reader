@@ -10,12 +10,15 @@ pub(crate) enum EntriesCommand {
     },
 
     Bootstrap {
-        feed_id: Option<i64>,
         load_preferences: bool,
         load_feeds: bool,
     },
     LoadEntries {
         query: EntryQuery,
+    },
+    /// The page opened this subscription: remember it for the startup view.
+    RememberOpenedFeed {
+        feed_id: i64,
     },
     SetRead {
         entry_id: i64,

@@ -31,6 +31,7 @@ EntriesPage(ApplyLoadedWorkspaceState(EntriesWorkspaceState { grouping_mode: Tim
 EntriesPage(SetFeeds([FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 3, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }]))
 EntriesPage(PreferencesLoaded)
 ## entries bootstrap, feed 1
+## remember opened feed 1
 ## list entries
 EntriesPage(SetEntries { entries: [EntrySummary { id: 5, feed_id: 3, title: "Image one", feed_title: "Feed I", published_at: Some(2026-04-05T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 4, feed_id: 2, title: "Bravo one", feed_title: "Feed B", published_at: Some(2026-04-04T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 3, feed_id: 1, title: "Alpha three", feed_title: "Feed A", published_at: Some(2026-04-03T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 2, feed_id: 1, title: "Alpha two", feed_title: "Feed A", published_at: Some(2026-04-02T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 1, feed_id: 1, title: "Alpha one", feed_title: "Feed A", published_at: Some(2026-04-01T10:00:00Z), is_read: false, is_starred: false }], archived_count: 0 })
 ## list entries of feed 2
@@ -53,11 +54,11 @@ EntriesPage(ApplyLoadedSettings(UserSettings { theme: System, list_density: Comf
 EntriesPage(ApplyLoadedWorkspaceState(EntriesWorkspaceState { grouping_mode: Source, show_archived: true, read_filter: UnreadOnly, starred_filter: All, selected_feed_urls: ["http://127.0.0.1:<port>/a.xml"] }))
 EntriesPage(PreferencesLoaded)
 ## preview mark read
-EntriesPage(BulkPreview(MarkReadPreview { query: EntryQuery { feed_id: None, read_filter: All, starred_filter: All, archive_filter: All, feed_ids: [], search_title: None, limit: None }, unread_entry_ids: [2, 3, 4, 5] }))
+EntriesPage(BulkPreview(MarkReadPreview { query: EntryQuery { feed_id: None, read_filter: All, starred_filter: All, archive_filter: All, feed_ids: None, search_title: None, limit: None }, unread_entry_ids: [2, 3, 4, 5] }))
 ## confirm mark read
 EntriesPage(BulkApplied(4))
 ## confirm a stale preview
-EntriesPage(BulkPreview(MarkReadPreview { query: EntryQuery { feed_id: None, read_filter: All, starred_filter: All, archive_filter: All, feed_ids: [], search_title: None, limit: None }, unread_entry_ids: [] }))
+EntriesPage(BulkPreview(MarkReadPreview { query: EntryQuery { feed_id: None, read_filter: All, starred_filter: All, archive_filter: All, feed_ids: None, search_title: None, limit: None }, unread_entry_ids: [] }))
 ## reader load
 ReaderPage(ApplyLoadedContent { entry_id: 1, content: ReaderPageLoadedContent { title: "Alpha one", body_text: "", body_html: Some("<p>Body of Alpha one</p>"), source: "Feed A", author: None, original_url: Some("https://example.invalid/a1"), published_at: "2026-04-01T10:00:00Z", navigation_state: EntryNavigation { previous_unread_entry_id: None, next_unread_entry_id: None, previous_feed_entry_id: Some(2), next_feed_entry_id: None }, is_read: true, is_starred: false } })
 ## reader load missing

@@ -146,7 +146,7 @@ async fn entry_query_accepts_more_feed_ids_than_the_parameter_limit() {
     let feed = library.add_feed("https://example.com/selected").await;
     library.seed(feed.id, vec![library::entry("selected-entry")]).await;
     let entries = &library.entries;
-    let query = EntryQuery { feed_ids: (1_i64..=40_000).collect(), ..EntryQuery::default() };
+    let query = EntryQuery { feed_ids: Some((1_i64..=40_000).collect()), ..EntryQuery::default() };
     assert_eq!(entries.count_entries(&query).await.unwrap(), 1);
     assert_eq!(entries.list_entries(&query).await.unwrap().len(), 1);
     let preview = entries.preview_mark_read(&query).await.unwrap();

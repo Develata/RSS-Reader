@@ -20,7 +20,9 @@ pub fn cases() -> Vec<(EntryQuery, Vec<i64>)> {
     let cutoff = OffsetDateTime::UNIX_EPOCH + time::Duration::days(20454);
     vec![
         (EntryQuery { limit: Some(1), ..Default::default() }, vec![1, 2, 3, 4, 6]),
-        (EntryQuery { feed_ids: vec![1], ..Default::default() }, vec![1, 2, 3]),
+        (EntryQuery { feed_ids: Some(vec![1]), ..Default::default() }, vec![1, 2, 3]),
+        // Chosen sources that are all gone match nothing, never everything.
+        (EntryQuery { feed_ids: Some(Vec::new()), ..Default::default() }, vec![]),
         (EntryQuery { search_title: Some("Rust".into()), ..Default::default() }, vec![1, 2, 4]),
         (
             EntryQuery {
