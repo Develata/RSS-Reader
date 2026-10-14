@@ -18,26 +18,9 @@ mod imp;
 pub(crate) use imp::install_history_capture;
 pub use imp::{AppServices, ReaderNavigation};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum AddSubscriptionOutcome {
-    NeedsSelection { page_url: url::Url, candidates: Vec<rssr_application::FeedDiscoveryCandidate> },
-    SavedAndRefreshed,
-    SavedRefreshFailed { message: String },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RefreshAllExecutionOutcome {
-    pub(crate) inserted_count: u64,
-    pub(crate) total_count: usize,
-    pub(crate) failed_count: usize,
-    pub(crate) failure_message: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RefreshFeedExecutionOutcome {
-    pub(crate) inserted_count: u64,
-    pub(crate) failure_message: Option<String>,
-}
+pub(crate) use rssr_api::{
+    AddSubscriptionOutcome, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) struct ReaderAssetLocalizationOutcome {

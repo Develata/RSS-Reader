@@ -15,6 +15,7 @@ anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 dioxus-router.workspace = true
+rssr-api = { path = "../rssr-api" }
 rssr-application = { path = "../rssr-application" }
 rssr-domain = { path = "../rssr-domain" }
 serde.workspace = true

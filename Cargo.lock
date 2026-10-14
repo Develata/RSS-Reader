@@ -4942,6 +4942,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rssr-api"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "rssr-application",
+ "rssr-domain",
+ "url",
+]
+
+[[package]]
 name = "rssr-app"
 version = "0.1.0"
 dependencies = [
@@ -4960,6 +4971,7 @@ dependencies = [
  "ndk-context",
  "reqwest",
  "rfd",
+ "rssr-api",
  "rssr-application",
  "rssr-domain",
  "rssr-infra",

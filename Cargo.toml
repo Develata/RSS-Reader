@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/rssr-api",
     "crates/rssr-app",
     "crates/rssr-cli",
     "crates/rssr-web",
