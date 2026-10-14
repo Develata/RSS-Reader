@@ -42,10 +42,12 @@ pub fn compose_library_use_cases(store: crate::store::LibraryStore) -> LibraryCo
 
     let entries = Arc::new(LibraryEntries::new(store.clone()));
     let mutations = Arc::new(LibraryMutations::new(store.clone()));
+    let settings = Arc::new(LibrarySettings::new(store.clone()));
     let use_cases = AppUseCases::compose(AppCompositionInput {
         feed_repository: Arc::new(LibraryFeeds::new(store.clone())),
         entry_index_repository: entries.clone(),
-        settings_repository: Arc::new(LibrarySettings::new(store.clone())),
+        settings_repository: settings.clone(),
+        settings_update: settings,
         app_state: Arc::new(LibraryAppState::new(store.clone())),
         subscription_probe: Arc::new(
             crate::subscription_probe::HttpSubscriptionProbe::with_feed_client(),
@@ -80,7 +82,8 @@ pub fn compose_browser_use_cases(
     AppUseCases::compose(AppCompositionInput {
         feed_repository: feed_repository.clone(),
         entry_index_repository: entry_repository,
-        settings_repository,
+        settings_repository: settings_repository.clone(),
+        settings_update: settings_repository,
         app_state,
         subscription_probe: Arc::new(crate::subscription_probe::HttpSubscriptionProbe::new(
             client.clone(),

@@ -14,7 +14,7 @@ use rssr_application::{
     AppliedRemoteConfigOutcome, ConfigImportOutcome, EntriesBootstrapInput,
     EntriesBootstrapOutcome, EntriesListOutcome, EntryFlagOutcome, FeedDiscoveryCandidate,
     FeedsSnapshotOutcome, OpmlImportOutcome, ReaderEntrySnapshot, RemoteConfigPushOutcome,
-    StartupTarget,
+    SettingsPatch, StartupTarget,
 };
 use rssr_domain::{
     EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview, UserSettings,
@@ -60,7 +60,9 @@ pub struct RefreshFeedExecutionOutcome {
 pub trait Backend {
     // Shell and settings.
     async fn load_settings(&self) -> Result<UserSettings>;
-    async fn save_settings(&self, settings: &UserSettings) -> Result<()>;
+    /// Changes the given settings fields (merged, checked and saved in one write) and returns
+    /// the settings now stored; an empty patch only reads them.
+    async fn update_settings(&self, patch: SettingsPatch) -> Result<UserSettings>;
     /// Starts periodic refreshing where this backend runs it (once; later calls do nothing).
     fn ensure_auto_refresh_started(&self);
     async fn resolve_startup_target(&self) -> Result<StartupTarget>;

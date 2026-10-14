@@ -7,7 +7,8 @@ use crate::{
     EntriesWorkspaceService, EntryFlagsService, FeedCatalogService, FeedRefreshSourcePort,
     FeedService, FeedsSnapshotService, ImportExportService, LibraryQueryPort, OpmlCodecPort,
     ReaderService, RefreshService, RefreshStorePort, SettingsService, SettingsSyncService,
-    StartupService, SubscriptionActivationPort, SubscriptionRemovalPort, SubscriptionWorkflow,
+    SettingsUpdatePort, StartupService, SubscriptionActivationPort, SubscriptionRemovalPort,
+    SubscriptionWorkflow,
 };
 
 // 架构护栏：如果某次设计/计划开始要求严重代码分叉、污染 infra 边界、引发前后端大规模迁移
@@ -21,6 +22,8 @@ pub struct AppCompositionInput {
     pub feed_repository: Arc<dyn FeedRepository>,
     pub entry_index_repository: Arc<dyn EntryIndexRepository>,
     pub settings_repository: Arc<dyn SettingsRepository>,
+    /// Merges and saves settings changes in one write of the store.
+    pub settings_update: Arc<dyn SettingsUpdatePort>,
     pub app_state: Arc<dyn AppStateServicesPort>,
     pub subscription_probe: Arc<dyn crate::SubscriptionProbePort>,
     pub refresh_source: Arc<dyn FeedRefreshSourcePort>,
@@ -62,7 +65,8 @@ impl AppUseCases {
         let feed_catalog_service = FeedCatalogService::new(input.feed_repository.clone());
         let refresh_service = RefreshService::new(input.refresh_source, input.refresh_store);
 
-        let settings_service = SettingsService::new(input.settings_repository);
+        let settings_service =
+            SettingsService::new(input.settings_repository, input.settings_update);
         let settings_sync_service = SettingsSyncService::new(settings_service.clone());
         let app_state_service = AppStateService::new(input.app_state.clone());
 

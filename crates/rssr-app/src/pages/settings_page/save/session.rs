@@ -1,6 +1,7 @@
 use std::future::Future;
 
 use dioxus::prelude::*;
+use rssr_application::SettingsPatch;
 use rssr_domain::DEFAULT_ENTRIES_PAGE_SIZE;
 
 use super::state::SettingsPageSaveState;
@@ -51,7 +52,12 @@ impl SettingsPageSaveSession {
         let submitted_draft = self.page.draft().peek().clone();
         let submitted_preset = self.page.preset_choice().peek().clone();
         let mut next = submitted_draft.clone();
-        if let Err(err) = validate_custom_css(&next.custom_css) {
+        // The baseline is what the page last saw stored; only fields edited since are sent, so
+        // a change saved elsewhere meanwhile (an import, another device) is not overwritten.
+        let baseline = self.page.saved_settings();
+        if next.custom_css != baseline.custom_css
+            && let Err(err) = validate_custom_css(&next.custom_css)
+        {
             set_status_error(
                 self.page.status_signal(),
                 self.page.status_tone_signal(),
@@ -72,7 +78,8 @@ impl SettingsPageSaveSession {
             ));
         }
 
-        let saving = execute(SettingsCommand::SaveAppearance { settings: next, success_message });
+        let patch = SettingsPatch::between(&baseline, &next);
+        let saving = execute(SettingsCommand::UpdateSettings { patch, success_message });
         spawn(async move {
             let intents = saving.await;
             state.with_mut(|state| state.pending_save = false);
@@ -111,7 +118,7 @@ mod tests {
 
     use super::*;
     use crate::theme::ThemeController;
-    use rssr_domain::{ThemeMode, UserSettings};
+    use rssr_domain::{ListDensity, ThemeMode, UserSettings};
     use tokio::sync::oneshot;
 
     fn harness() -> Element {
@@ -132,14 +139,24 @@ mod tests {
     }
 
     fn start_save(session: SettingsPageSaveSession) -> oneshot::Sender<bool> {
+        start_save_over(session, UserSettings::default())
+    }
+
+    /// Saves against a store holding `stored`: the reply is the patch applied to it.
+    fn start_save_over(
+        session: SettingsPageSaveSession,
+        stored: UserSettings,
+    ) -> oneshot::Sender<bool> {
         let (sender, receiver) = oneshot::channel();
         session.save_with("设置已保存。".into(), |command| async move {
-            let SettingsCommand::SaveAppearance { settings, success_message } = command else {
-                panic!("expected appearance save")
+            let SettingsCommand::UpdateSettings { patch, success_message } = command else {
+                panic!("expected a settings update")
             };
             if receiver.await.expect("controlled save completion") {
                 vec![
-                    UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(settings)),
+                    UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(
+                        patch.applied(&stored),
+                    )),
                     UiIntent::SettingsPage(SettingsPageIntent::SetStatus {
                         message: success_message,
                         tone: "info".into(),
@@ -184,7 +201,8 @@ mod tests {
             assert!(session.page.status().contains("尚未保存"));
             assert!(!session.snapshot().pending_save);
         });
-        let retry = dom.in_scope(ScopeId::APP, || start_save(session));
+        let retry =
+            dom.in_scope(ScopeId::APP, || start_save_over(session, theme.settings.peek().clone()));
         retry.send(true).expect("save later draft");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
@@ -237,6 +255,58 @@ mod tests {
             assert_eq!(theme.settings.peek().entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
             assert_eq!(session.page.preset_choice().peek().as_str(), "atlas-sidebar");
             assert!(!session.page.status().contains("尚未保存"));
+        });
+    }
+
+    /// Only edited fields are sent: a field changed elsewhere since the page loaded (here the
+    /// refresh interval) survives the save and reaches the draft, while an edit made during the
+    /// save stays in the draft.
+    #[test]
+    fn save_sends_only_edited_fields_and_takes_the_rest_from_the_store() {
+        let (mut dom, session, theme) = setup();
+        let stored_elsewhere =
+            UserSettings { refresh_interval_minutes: 90, ..UserSettings::default() };
+        let sender = dom.in_scope(ScopeId::APP, || {
+            session.page.draft().write().theme = ThemeMode::Dark;
+            let (sender, receiver) = oneshot::channel::<()>();
+            let stored = stored_elsewhere.clone();
+            session.save_with("设置已保存。".into(), move |command| async move {
+                let SettingsCommand::UpdateSettings { patch, success_message } = command else {
+                    panic!("expected a settings update")
+                };
+                assert_eq!(
+                    patch,
+                    rssr_application::SettingsPatch {
+                        theme: Some(ThemeMode::Dark),
+                        ..Default::default()
+                    }
+                );
+                receiver.await.expect("controlled save completion");
+                vec![
+                    UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(
+                        patch.applied(&stored),
+                    )),
+                    UiIntent::SettingsPage(SettingsPageIntent::SetStatus {
+                        message: success_message,
+                        tone: "info".into(),
+                    }),
+                ]
+            });
+            sender
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            session.page.draft().write().list_density = ListDensity::Compact
+        });
+        sender.send(()).expect("complete save");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            let saved = theme.settings.peek().clone();
+            assert_eq!((saved.theme, saved.refresh_interval_minutes), (ThemeMode::Dark, 90));
+            let draft = session.page.draft().peek().clone();
+            assert_eq!(draft.refresh_interval_minutes, 90, "the stored field reaches the draft");
+            assert_eq!(draft.list_density, ListDensity::Compact, "the later edit stays");
+            assert!(session.page.status().contains("尚未保存"));
         });
     }
 }

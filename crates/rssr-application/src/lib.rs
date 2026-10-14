@@ -41,7 +41,7 @@ pub use library_queries::{
 };
 pub use persistence_mutation::{
     ActivatedSubscription, ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan,
-    ConfigReplacementPort, SubscriptionActivationPort, SubscriptionRemovalPort,
+    ConfigReplacementPort, SettingsUpdatePort, SubscriptionActivationPort, SubscriptionRemovalPort,
 };
 pub use reader_service::{ReaderEntrySnapshot, ReaderService};
 pub use refresh_service::{
@@ -52,7 +52,7 @@ pub use refresh_service::{
     RefreshLocalizedEntry, RefreshService, RefreshStorePort, RefreshTarget, RefreshTicket,
     SERIAL_REFRESH_CONCURRENCY,
 };
-pub use settings_service::SettingsService;
+pub use settings_service::{SettingsPatch, SettingsService};
 pub use settings_sync_service::{AppliedRemoteConfigOutcome, SettingsSyncService};
 pub use startup_service::{StartupService, StartupTarget};
 pub use subscription_workflow::{

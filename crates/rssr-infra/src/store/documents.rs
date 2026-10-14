@@ -1,7 +1,7 @@
 //! JSON documents kept in `app_settings`: user settings and app state.
 
 use anyhow::Result;
-use rssr_application::AppStatePort;
+use rssr_application::{AppStatePort, SettingsPatch, SettingsUpdatePort};
 use rssr_domain::{
     AppStateMutation, AppStateRepository, AppStateSnapshot, DomainError, Result as DomainResult,
     SettingsRepository, UserSettings,
@@ -98,6 +98,24 @@ impl SettingsRepository for LibrarySettings {
     async fn save(&self, settings: &UserSettings) -> DomainResult<()> {
         let settings = settings.clone();
         Ok(self.store.write(move |tx| save(tx, USER_SETTINGS_KEY, &settings, &now())).await?)
+    }
+}
+
+#[async_trait::async_trait]
+impl SettingsUpdatePort for LibrarySettings {
+    async fn update_settings(&self, patch: SettingsPatch) -> Result<UserSettings> {
+        // No added context: an invalid patch's own message is what the user needs to read.
+        Ok(self
+            .store
+            .write(move |tx| {
+                let current: UserSettings = load(tx, USER_SETTINGS_KEY)?;
+                let next = patch.merge(&current)?;
+                if next != current {
+                    save(tx, USER_SETTINGS_KEY, &next, &now())?;
+                }
+                Ok(next)
+            })
+            .await?)
     }
 }
 

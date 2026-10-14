@@ -6,6 +6,7 @@ use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, ConfigImportOutcome,
     DEFAULT_REFRESH_CONCURRENCY, OpmlImportOutcome, RefreshAllInput, RefreshAllOutcome,
     RefreshFeedOutcome, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput,
+    SettingsPatch,
 };
 use rssr_domain::{Feed, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
@@ -291,9 +292,8 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&settings).context("序列化设置失败")?);
         }
         Command::SaveSettings(args) => {
-            let mut settings = services.load_settings().await?;
-            apply_settings_patch(&mut settings, args)?;
-            services.save_settings(&settings).await?;
+            // Only the options given change; the merge happens in the library's write.
+            services.update_settings(settings_patch(args)?).await?;
             println!("设置已保存。");
         }
         Command::PushWebdav(args) => {
@@ -414,8 +414,8 @@ impl CliServices {
         self.use_cases.settings_service.load().await
     }
 
-    async fn save_settings(&self, settings: &UserSettings) -> anyhow::Result<()> {
-        self.use_cases.settings_service.save(settings).await
+    async fn update_settings(&self, patch: SettingsPatch) -> anyhow::Result<UserSettings> {
+        self.use_cases.settings_service.update(patch).await
     }
 
     async fn push_remote_config(
@@ -437,55 +437,38 @@ impl CliServices {
     }
 }
 
-fn apply_settings_patch(settings: &mut UserSettings, args: SaveSettingsArgs) -> anyhow::Result<()> {
-    if let Some(theme) = args.theme {
-        settings.theme = match theme {
+/// The settings change the options ask for. Of the custom CSS options, a file wins over
+/// `--custom-css`, which wins over `--clear-custom-css`.
+fn settings_patch(args: SaveSettingsArgs) -> anyhow::Result<SettingsPatch> {
+    let custom_css = match (args.custom_css_file, args.custom_css, args.clear_custom_css) {
+        (Some(path), _, _) => Some(
+            fs::read_to_string(&path)
+                .with_context(|| format!("读取自定义 CSS 文件失败: {}", path.display()))?,
+        ),
+        (None, Some(custom_css), _) => Some(custom_css),
+        (None, None, true) => Some(String::new()),
+        (None, None, false) => None,
+    };
+    Ok(SettingsPatch {
+        theme: args.theme.map(|theme| match theme {
             CliThemeMode::Light => ThemeMode::Light,
             CliThemeMode::Dark => ThemeMode::Dark,
             CliThemeMode::System => ThemeMode::System,
-        };
-    }
-
-    if let Some(list_density) = args.list_density {
-        settings.list_density = match list_density {
+        }),
+        list_density: args.list_density.map(|density| match density {
             CliListDensity::Comfortable => ListDensity::Comfortable,
             CliListDensity::Compact => ListDensity::Compact,
-        };
-    }
-
-    if let Some(startup_view) = args.startup_view {
-        settings.startup_view = match startup_view {
+        }),
+        startup_view: args.startup_view.map(|view| match view {
             CliStartupView::All => StartupView::All,
             CliStartupView::LastFeed => StartupView::LastFeed,
-        };
-    }
-
-    if let Some(refresh_interval_minutes) = args.refresh_interval_minutes {
-        settings.refresh_interval_minutes = refresh_interval_minutes;
-    }
-
-    if let Some(archive_after_months) = args.archive_after_months {
-        settings.archive_after_months = archive_after_months;
-    }
-
-    if let Some(reader_font_scale) = args.reader_font_scale {
-        settings.reader_font_scale = reader_font_scale;
-    }
-
-    if args.clear_custom_css {
-        settings.custom_css.clear();
-    }
-
-    if let Some(custom_css) = args.custom_css {
-        settings.custom_css = custom_css;
-    }
-
-    if let Some(path) = args.custom_css_file {
-        settings.custom_css = fs::read_to_string(&path)
-            .with_context(|| format!("读取自定义 CSS 文件失败: {}", path.display()))?;
-    }
-
-    Ok(())
+        }),
+        refresh_interval_minutes: args.refresh_interval_minutes,
+        archive_after_months: args.archive_after_months,
+        entries_page_size: None,
+        reader_font_scale: args.reader_font_scale,
+        custom_css,
+    })
 }
 
 fn write_output(output: Option<PathBuf>, raw: &str) -> anyhow::Result<()> {

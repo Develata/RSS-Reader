@@ -36,31 +36,16 @@ impl SettingsSyncService {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use rssr_domain::{SettingsRepository, UserSettings};
+    use rssr_domain::UserSettings;
 
     use super::{AppliedRemoteConfigOutcome, SettingsSyncService};
 
-    #[derive(Default)]
-    struct SettingsRepositoryStub {
-        settings: Mutex<UserSettings>,
-    }
-
-    #[async_trait::async_trait]
-    impl SettingsRepository for SettingsRepositoryStub {
-        async fn load(&self) -> rssr_domain::Result<UserSettings> {
-            Ok(self.settings.lock().expect("lock settings").clone())
-        }
-
-        async fn save(&self, settings: &UserSettings) -> rssr_domain::Result<()> {
-            *self.settings.lock().expect("lock settings") = settings.clone();
-            Ok(())
-        }
-    }
-
     fn service(settings: UserSettings) -> SettingsSyncService {
-        SettingsSyncService::new(crate::SettingsService::new(Arc::new(SettingsRepositoryStub {
+        let store = Arc::new(crate::settings_service::tests::MemorySettings {
             settings: Mutex::new(settings),
-        })))
+            ..Default::default()
+        });
+        SettingsSyncService::new(crate::SettingsService::new(store.clone(), store))
     }
 
     #[tokio::test]

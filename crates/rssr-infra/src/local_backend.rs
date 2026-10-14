@@ -29,7 +29,7 @@ use rssr_application::{
     EntryFlagOutcome, FeedsSnapshotOutcome, OpmlImportOutcome, PrepareSubscriptionOutcome,
     ReaderEntrySnapshot, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
     RefreshLocalizedEntry, RemoteConfigPushOutcome, RemoteConfigStore, RemoveSubscriptionInput,
-    StartupTarget,
+    SettingsPatch, StartupTarget,
 };
 use rssr_domain::{
     EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview, UserSettings,
@@ -228,9 +228,8 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         self.inner.use_cases.settings_service.load().await
     }
 
-    async fn save_settings(&self, settings: &UserSettings) -> Result<()> {
-        self.inner.use_cases.settings_service.save(settings).await?;
-        Ok(())
+    async fn update_settings(&self, patch: SettingsPatch) -> Result<UserSettings> {
+        self.inner.use_cases.settings_service.update(patch).await
     }
 
     fn ensure_auto_refresh_started(&self) {

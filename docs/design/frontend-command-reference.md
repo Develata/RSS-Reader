@@ -181,7 +181,7 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 - `rssr-cli mark-read --all [筛选参数]` 或 `--feed-id <id>`（可重复）；默认只预览，加 `--yes` 执行。
 - 筛选参数为 `--search`、`--read-filter all|unread|read`、`--starred-filter all|starred|unstarred`、`--archive-filter active|all|archived`。
 - `add-feed <url>` 同样接受网站首页；多个候选列出 URL 后非零退出。`--skip-refresh` 仍验证订阅，只跳过文章入库。
-- `save-settings` 的参数以 `--help` 为准；当前 CLI 没有设置文章每页数量的参数。
+- `save-settings` 的参数以 `--help` 为准；当前 CLI 没有设置文章每页数量的参数。只提交给出的参数（设置补丁），未给出的字段保持资料库中的值；合并、校验与保存在同一次写入中完成。自定义 CSS 的三个参数同时给出时，文件优先于 `--custom-css`，再优先于 `--clear-custom-css`。
 - 当前参数定义与执行入口均在 `crates/rssr-cli/src/main.rs`，不存在独立 `args.rs`。
 
 ## 页面级接口

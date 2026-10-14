@@ -15,9 +15,9 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
             },
             Err(err) => settings_status_error(format!("初始化应用失败：{err}")),
         },
-        SettingsCommand::SaveAppearance { settings, success_message } => match backend().await {
-            Ok(services) => match services.save_settings(&settings).await {
-                Ok(()) => settings_intents(vec![
+        SettingsCommand::UpdateSettings { patch, success_message } => match backend().await {
+            Ok(services) => match services.update_settings(patch).await {
+                Ok(settings) => settings_intents(vec![
                     SettingsPageIntent::SettingsLoaded(settings),
                     SettingsPageIntent::SetStatus {
                         message: success_message,

@@ -3,10 +3,12 @@
 use std::sync::{Arc, Mutex};
 
 use rssr_application::import_export_service::{ClockPort, ImportExportService, RemoteConfigStore};
+use rssr_application::{SettingsPatch, SettingsUpdatePort};
 use rssr_domain::{ConfigFeed, ConfigPackage, UserSettings};
 use rssr_infra::application_adapters::browser::{
     adapters::{
-        BrowserFeedRepository, BrowserLibraryQueries, BrowserOpmlCodec, BrowserPersistenceMutations,
+        BrowserFeedRepository, BrowserLibraryQueries, BrowserOpmlCodec,
+        BrowserPersistenceMutations, BrowserSettingsRepository,
     },
     state::{
         BrowserState, BrowserStore, PersistedAppStateSlice, PersistedEntryContent,
@@ -22,7 +24,7 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 #[path = "support/browser_storage.rs"]
 #[allow(dead_code)]
 mod browser_storage;
-use browser_storage::{clear_browser_state_storage, persisted_state, seed_state};
+use browser_storage::{clear_browser_state_storage, committed_slice, persisted_state, seed_state};
 
 #[derive(Default)]
 struct MemoryRemoteConfigStore {
@@ -109,6 +111,35 @@ fn build_service(state: BrowserStore) -> ImportExportService {
         Arc::new(FixedClock),
         Arc::new(BrowserPersistenceMutations::new(state)),
     )
+}
+
+/// A settings patch is merged under the store's lock: a no-op publishes nothing, an invalid
+/// patch leaves the settings as they were.
+#[wasm_bindgen_test]
+async fn browser_settings_updates_merge_in_one_write() {
+    clear_browser_state_storage();
+    let state = seed_state(BrowserState::default()).await;
+    let settings = BrowserSettingsRepository::new(state);
+
+    let core_before =
+        committed_slice(rssr_infra::application_adapters::browser::state::STORAGE_KEY);
+    let same = SettingsPatch { theme: Some(UserSettings::default().theme), ..Default::default() };
+    assert_eq!(settings.update_settings(same).await.unwrap(), UserSettings::default());
+    assert_eq!(
+        committed_slice(rssr_infra::application_adapters::browser::state::STORAGE_KEY),
+        core_before,
+        "a no-op publishes nothing"
+    );
+
+    let patch = SettingsPatch { refresh_interval_minutes: Some(45), ..Default::default() };
+    let saved = settings.update_settings(patch).await.unwrap();
+    assert_eq!(saved.refresh_interval_minutes, 45);
+    assert_eq!(persisted_state().await.core.settings, saved);
+
+    let invalid = SettingsPatch { entries_page_size: Some(0), ..Default::default() };
+    assert!(settings.update_settings(invalid).await.is_err());
+    assert_eq!(persisted_state().await.core.settings, saved);
+    clear_browser_state_storage();
 }
 
 #[wasm_bindgen_test]

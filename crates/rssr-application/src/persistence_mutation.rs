@@ -53,6 +53,14 @@ pub trait SubscriptionRemovalPort: Send + Sync {
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+pub trait SettingsUpdatePort: Send + Sync {
+    /// In one write of the store: merges `patch` into the stored settings with
+    /// [`crate::SettingsPatch::merge`], saves the result when it differs, and returns it.
+    async fn update_settings(&self, patch: crate::SettingsPatch) -> Result<UserSettings>;
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait ConfigReplacementPort: Send + Sync {
     /// Replace the persisted configuration from desired state. Implementations must derive the
     /// removal diff only after acquiring their backend write lock/transaction.

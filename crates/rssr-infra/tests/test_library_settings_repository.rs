@@ -7,6 +7,7 @@
 mod library;
 
 use library::Library;
+use rssr_application::{SettingsPatch, SettingsUpdatePort};
 use rssr_domain::{ListDensity, SettingsRepository, StartupView, ThemeMode, UserSettings};
 
 #[tokio::test]
@@ -51,4 +52,32 @@ async fn settings_repository_loads_legacy_settings_without_custom_css() {
     assert_eq!(loaded.archive_after_months, 3);
     assert_eq!(loaded.entries_page_size, 100);
     assert_eq!(loaded.theme, ThemeMode::Light);
+}
+
+/// A patch is merged in the write: only its fields change, a no-op writes nothing, an invalid
+/// patch leaves the stored settings as they were, and stored CSS from before the check does not
+/// block an unrelated field.
+#[tokio::test]
+async fn settings_updates_merge_in_one_write() {
+    let library = Library::memory().await;
+    let stored = UserSettings { custom_css: "a { color: red;".into(), ..UserSettings::default() };
+    library.settings.save(&stored).await.expect("save settings");
+    library.exec("UPDATE app_settings SET updated_at = 'before' WHERE key = 'user_settings'").await;
+    let updated_at = "SELECT updated_at FROM app_settings WHERE key = 'user_settings'";
+
+    let same = SettingsPatch { theme: Some(stored.theme), ..SettingsPatch::default() };
+    assert_eq!(library.settings.update_settings(same).await.unwrap(), stored);
+    assert_eq!(library.text(updated_at).await.as_deref(), Some("before"), "a no-op writes nothing");
+
+    let dark = SettingsPatch { theme: Some(ThemeMode::Dark), ..SettingsPatch::default() };
+    let saved = library.settings.update_settings(dark).await.expect("unrelated to the CSS");
+    assert_eq!(saved, UserSettings { theme: ThemeMode::Dark, ..stored.clone() });
+    assert_eq!(library.settings.load().await.unwrap(), saved);
+
+    let invalid = SettingsPatch { entries_page_size: Some(0), ..SettingsPatch::default() };
+    let error = library.settings.update_settings(invalid).await.unwrap_err();
+    assert!(error.to_string().contains("文章页每页数量"), "{error}");
+    let invalid_css = SettingsPatch { custom_css: Some("b {".into()), ..SettingsPatch::default() };
+    assert!(library.settings.update_settings(invalid_css).await.is_err());
+    assert_eq!(library.settings.load().await.unwrap(), saved);
 }

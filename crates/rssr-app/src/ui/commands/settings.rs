@@ -1,9 +1,19 @@
-use rssr_domain::UserSettings;
+use rssr_application::SettingsPatch;
 
 #[derive(Debug, Clone)]
 pub(crate) enum SettingsCommand {
     Load,
-    SaveAppearance { settings: UserSettings, success_message: String },
-    PushConfig { endpoint: String, remote_path: String },
-    PullConfig { endpoint: String, remote_path: String },
+    /// Saves only the fields the page changed; the reply carries every stored field.
+    UpdateSettings {
+        patch: SettingsPatch,
+        success_message: String,
+    },
+    PushConfig {
+        endpoint: String,
+        remote_path: String,
+    },
+    PullConfig {
+        endpoint: String,
+        remote_path: String,
+    },
 }

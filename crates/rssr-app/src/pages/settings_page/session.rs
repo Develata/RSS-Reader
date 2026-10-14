@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use rssr_application::SettingsPatch;
 use rssr_domain::UserSettings;
 
 use super::{browser::open_repository_url, intent::SettingsPageIntent, themes::detect_preset_key};
@@ -30,6 +31,11 @@ impl SettingsPageSession {
 
     pub(crate) fn draft(self) -> Signal<UserSettings> {
         self.draft
+    }
+
+    /// The settings as last loaded or saved: the baseline a save compares the draft with.
+    pub(crate) fn saved_settings(self) -> UserSettings {
+        self.theme.settings.peek().clone()
     }
 
     pub(crate) fn preset_choice(self) -> Signal<String> {
@@ -70,16 +76,16 @@ impl SettingsPageSession {
     }
 
     /// Persisted settings and editable input are different snapshots while a save is pending.
-    /// Keep subsequent edits, including a newly selected preset, for the next explicit save.
+    /// The draft takes every stored field except the ones edited since the submission (including
+    /// a newly selected preset), which stay for the next explicit save.
     pub(crate) fn apply_saved_settings(
         mut self,
         settings: UserSettings,
         submitted_draft: &UserSettings,
         submitted_preset: &str,
     ) -> bool {
-        if *self.draft.peek() == *submitted_draft {
-            self.draft.set(settings.clone());
-        }
+        let later_edits = SettingsPatch::between(submitted_draft, &self.draft.peek());
+        self.draft.set(later_edits.applied(&settings));
         if self.preset_choice.peek().as_str() == submitted_preset {
             self.preset_choice.set(detect_preset_key(&self.draft.peek().custom_css).to_string());
         }

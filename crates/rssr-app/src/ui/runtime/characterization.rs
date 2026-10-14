@@ -14,9 +14,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
-use rssr_domain::{
-    EntryGroupingPreference, EntryQuery, ReadFilter, StarredFilter, StartupView, UserSettings,
-};
+use rssr_application::SettingsPatch;
+use rssr_domain::{EntryGroupingPreference, EntryQuery, ReadFilter, StarredFilter, StartupView};
 use rssr_infra::store::LibraryStore;
 
 use super::execute_ui_command;
@@ -579,16 +578,16 @@ async fn ui_commands_produce_the_recorded_intents() {
         .await;
 
     transcript.run("settings load", settings(SettingsCommand::Load)).await;
-    let changed = UserSettings {
-        startup_view: StartupView::LastFeed,
-        custom_css: "body { color: red }".into(),
-        ..UserSettings::default()
+    let changed = SettingsPatch {
+        startup_view: Some(StartupView::LastFeed),
+        custom_css: Some("body { color: red }".into()),
+        ..SettingsPatch::default()
     };
     transcript
         .run(
             "settings save",
-            settings(SettingsCommand::SaveAppearance {
-                settings: changed,
+            settings(SettingsCommand::UpdateSettings {
+                patch: changed,
                 success_message: "已保存".into(),
             }),
         )
@@ -596,8 +595,17 @@ async fn ui_commands_produce_the_recorded_intents() {
     transcript
         .run(
             "settings save, invalid",
-            settings(SettingsCommand::SaveAppearance {
-                settings: UserSettings { entries_page_size: 0, ..UserSettings::default() },
+            settings(SettingsCommand::UpdateSettings {
+                patch: SettingsPatch { entries_page_size: Some(0), ..SettingsPatch::default() },
+                success_message: "已保存".into(),
+            }),
+        )
+        .await;
+    transcript
+        .run(
+            "settings save, invalid CSS",
+            settings(SettingsCommand::UpdateSettings {
+                patch: SettingsPatch { custom_css: Some("a {".into()), ..SettingsPatch::default() },
                 success_message: "已保存".into(),
             }),
         )

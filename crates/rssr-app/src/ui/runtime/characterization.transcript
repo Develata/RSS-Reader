@@ -107,6 +107,8 @@ SettingsPage(SettingsLoaded(UserSettings { theme: System, list_density: Comforta
 SettingsPage(SetStatus { message: "已保存", tone: "info" })
 ## settings save, invalid
 SettingsPage(SetStatus { message: "保存设置失败：输入无效：文章页每页数量必须在 1 到 200 之间", tone: "error" })
+## settings save, invalid CSS
+SettingsPage(SetStatus { message: "保存设置失败：输入无效：自定义 CSS 格式无效：存在未闭合的括号或花括号", tone: "error" })
 ## import config with other settings
 FeedsPage(PendingConfigImportSet(false))
 FeedsPage(BumpReload)
