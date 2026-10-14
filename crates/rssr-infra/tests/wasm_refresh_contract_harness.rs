@@ -63,7 +63,9 @@ async fn a_webdav_download_that_never_finishes_times_out() {
             return response;
         };
     "#).unwrap();
-    let started = js_sys::Date::now();
+    // A monotonic clock: a system clock adjustment must not move the measured duration.
+    let now = || js_sys::eval("performance.now()").unwrap().as_f64().unwrap();
+    let started = now();
     // Without a bound the download would never end: fail at a deadline instead of hanging.
     let deadline = js_sys::Promise::from(
         js_sys::eval("new Promise(resolve => setTimeout(resolve, 5000))").unwrap(),
@@ -73,7 +75,7 @@ async fn a_webdav_download_that_never_finishes_times_out() {
         wasm_bindgen_futures::JsFuture::from(deadline),
     )
     .await;
-    let elapsed = js_sys::Date::now() - started;
+    let elapsed = now() - started;
     let reason = js_sys::eval("globalThis.__abortReason").unwrap().as_string();
     let body_read = js_sys::eval("globalThis.__bodyRead").unwrap().as_bool();
     js_sys::eval(
