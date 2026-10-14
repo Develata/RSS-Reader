@@ -8,7 +8,7 @@ use rssr_application::{
     RefreshFeedOutcome, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput,
     SettingsPatch,
 };
-use rssr_domain::{Feed, ListDensity, StartupView, ThemeMode, UserSettings};
+use rssr_domain::{ConfigFingerprint, Feed, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
     composition::compose_library_use_cases,
     config_sync::webdav::WebDavConfigSync,
@@ -274,7 +274,9 @@ async fn main() -> anyhow::Result<()> {
         Command::ImportConfig(args) => {
             let raw = fs::read_to_string(&args.input)
                 .with_context(|| format!("读取配置文件失败: {}", args.input.display()))?;
-            let outcome = services.import_config_json(&raw).await?;
+            // The CLI replaces what is stored now: it reads the fingerprint just before.
+            let expected = services.use_cases.import_export_service.config_fingerprint().await?;
+            let outcome = services.import_config_json(&raw, &expected).await?;
             println!("配置已导入：{}。", outcome.summary_line());
         }
         Command::ExportOpml(args) => {
@@ -398,8 +400,12 @@ impl CliServices {
         self.use_cases.import_export_service.export_config_json().await
     }
 
-    async fn import_config_json(&self, raw: &str) -> anyhow::Result<ConfigImportOutcome> {
-        self.use_cases.import_export_service.import_config_json(raw).await
+    async fn import_config_json(
+        &self,
+        raw: &str,
+        expected: &ConfigFingerprint,
+    ) -> anyhow::Result<ConfigImportOutcome> {
+        self.use_cases.import_export_service.import_config_json(raw, expected).await
     }
 
     async fn export_opml(&self) -> anyhow::Result<String> {

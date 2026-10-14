@@ -2,12 +2,13 @@
 //! store's Web Lock, so all its parts come from the same committed version.
 
 use rssr_application::{
-    ConfigSnapshot, EntriesPage, EntriesStart, LibraryQueryPort, ReaderSnapshot, StartupState,
+    ConfigSnapshot, EntriesPage, EntriesStart, FeedsOverview, LibraryQueryPort, ReaderSnapshot,
+    StartupState,
 };
-use rssr_domain::EntryQuery;
+use rssr_domain::{ConfigFingerprint, EntryQuery};
 
 use super::feed::persisted_feed_to_domain;
-use super::shared::map_store_error;
+use super::shared::{config_fingerprint, map_store_error};
 use crate::application_adapters::browser::{
     query,
     state::{BrowserState, BrowserStore},
@@ -101,6 +102,22 @@ impl LibraryQueryPort for BrowserLibraryQueries {
             })
             .await
             .map_err(map_store_error)
+    }
+
+    async fn feeds_overview(&self) -> rssr_domain::Result<FeedsOverview> {
+        self.store
+            .read(|state| {
+                Ok(FeedsOverview {
+                    feeds: query::list_feeds(state),
+                    fingerprint: config_fingerprint(state),
+                })
+            })
+            .await
+            .map_err(map_store_error)
+    }
+
+    async fn config_fingerprint(&self) -> rssr_domain::Result<ConfigFingerprint> {
+        self.store.read(|state| Ok(config_fingerprint(state))).await.map_err(map_store_error)
     }
 
     async fn config_snapshot(&self) -> rssr_domain::Result<ConfigSnapshot> {

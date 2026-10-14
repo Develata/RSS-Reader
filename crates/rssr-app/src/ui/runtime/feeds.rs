@@ -4,7 +4,7 @@ use crate::{
     ui::{commands::FeedsCommand, runtime::backend::backend, snapshot::UiIntent},
 };
 use rssr_application::{ConfigImportOutcome, OpmlImportOutcome};
-use rssr_domain::UserSettings;
+use rssr_domain::DomainError;
 
 pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
     match command {
@@ -15,6 +15,7 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
                         feeds: outcome.feeds,
                         feed_count: outcome.feed_count,
                         entry_count: outcome.entry_count,
+                        fingerprint: outcome.fingerprint,
                     }))])
                 }
                 Err(err) => {
@@ -97,18 +98,14 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
             },
             Err(err) => feeds_status_error(format!("初始化应用失败：{err}")),
         },
-        FeedsCommand::ImportConfig { raw } => {
+        FeedsCommand::ImportConfig { raw, expected } => {
             let result = match backend().await {
-                Ok(services) => match services.import_config_json(&raw).await {
-                    // 配置包可以替换外观设置：读回持久化后的设置，交给全局主题立即生效。
-                    Ok(outcome) if outcome.settings_updated => {
-                        let settings = services.load_settings().await;
-                        Ok((outcome, Some(settings.map_err(|err| err.to_string()))))
-                    }
-                    Ok(outcome) => Ok((outcome, None)),
-                    Err(err) => Err(format!("导入配置包失败：{err}")),
+                Ok(services) => match services.import_config_json(&raw, &expected).await {
+                    Ok(outcome) => ConfigImportResult::Imported(outcome),
+                    Err(err) if is_conflict(&err) => ConfigImportResult::Conflict,
+                    Err(err) => ConfigImportResult::Failed(format!("导入配置包失败：{err}")),
                 },
-                Err(err) => Err(format!("初始化应用失败：{err}")),
+                Err(err) => ConfigImportResult::Failed(format!("初始化应用失败：{err}")),
             };
             import_config_result(result)
         }
@@ -153,27 +150,40 @@ fn feeds_status_error(message: impl Into<String>) -> Vec<UiIntent> {
 }
 
 /// `settings` 只在配置包更新了设置时存在。读回失败不影响导入本身已经提交的结果。
-fn import_config_result(
-    result: Result<(ConfigImportOutcome, Option<Result<UserSettings, String>>), String>,
-) -> Vec<UiIntent> {
+/// What a configuration import led to.
+enum ConfigImportResult {
+    Imported(ConfigImportOutcome),
+    /// The configuration changed after the page read it; nothing was replaced.
+    Conflict,
+    Failed(String),
+}
+
+/// Whether the store refused because the data changed since it was read.
+fn is_conflict(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| matches!(cause.downcast_ref(), Some(DomainError::Conflict(_))))
+}
+
+fn import_config_result(result: ConfigImportResult) -> Vec<UiIntent> {
     let mut intents = vec![FeedsPageIntent::PendingConfigImportSet(false)];
     let (message, tone) = match result {
-        Ok((outcome, settings)) => {
+        ConfigImportResult::Imported(outcome) => {
             let summary = outcome.summary_line();
             intents.push(FeedsPageIntent::BumpReload);
-            match settings {
-                Some(Err(err)) => (
-                    format!("配置包已导入：{summary}；但新外观尚未应用，请打开设置页重试：{err}"),
-                    "error",
-                ),
-                Some(Ok(settings)) => {
-                    intents.push(FeedsPageIntent::SettingsReplaced(settings));
-                    (format!("配置包已导入：{summary}。"), "info")
-                }
-                None => (format!("配置包已导入：{summary}。"), "info"),
+            // 配置包可以替换外观设置：替换提交的设置随结果返回，交给全局主题立即生效。
+            if outcome.settings_updated {
+                intents.push(FeedsPageIntent::SettingsReplaced(outcome.settings));
             }
+            (format!("配置包已导入：{summary}。"), "info")
         }
-        Err(message) => (message, "error"),
+        ConfigImportResult::Conflict => {
+            intents.push(FeedsPageIntent::BumpReload);
+            (
+                "订阅或设置在本页载入后已被修改，配置包未导入；已重新载入，请确认后再导入。"
+                    .to_string(),
+                "error",
+            )
+        }
+        ConfigImportResult::Failed(message) => (message, "error"),
     };
     intents.push(FeedsPageIntent::SetStatus { message, tone: tone.to_string() });
     feeds_intents(intents)
@@ -245,20 +255,25 @@ mod tests {
         }
     }
 
+    /// The committed settings from the outcome go to the shell when they changed; a conflict
+    /// reloads the page and says so; other failures leave the page as it is.
     #[test]
     fn config_import_hands_replaced_settings_to_the_shell() {
+        let replaced = rssr_domain::UserSettings {
+            custom_css: "body { color: red; }".into(),
+            ..rssr_domain::UserSettings::default()
+        };
         let outcome = |settings_updated| ConfigImportOutcome {
             imported_feed_count: 1,
             removed_feed_count: 0,
             settings_updated,
+            settings: replaced.clone(),
         };
-        let replaced =
-            UserSettings { custom_css: "body { color: red; }".into(), ..UserSettings::default() };
         for (result, expected_settings, expected_tone, reloads) in [
-            (Ok((outcome(true), Some(Ok(replaced.clone())))), Some(&replaced), "info", true),
-            (Ok((outcome(false), None)), None, "info", true),
-            (Ok((outcome(true), Some(Err("locked".to_string())))), None, "error", true),
-            (Err("导入配置包失败：bad json".to_string()), None, "error", false),
+            (ConfigImportResult::Imported(outcome(true)), Some(&replaced), "info", true),
+            (ConfigImportResult::Imported(outcome(false)), None, "info", true),
+            (ConfigImportResult::Conflict, None, "error", true),
+            (ConfigImportResult::Failed("导入配置包失败：bad json".into()), None, "error", false),
         ] {
             let intents = import_config_result(result)
                 .into_iter()

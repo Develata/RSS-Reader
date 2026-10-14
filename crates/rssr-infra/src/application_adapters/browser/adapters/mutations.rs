@@ -9,7 +9,10 @@ use crate::application_adapters::browser::{
     state::{BrowserStore, Changes, PersistedFeed},
 };
 
-use super::{feed::upsert_subscription_in_state, shared::map_store_error};
+use super::{
+    feed::upsert_subscription_in_state,
+    shared::{config_fingerprint, map_store_error},
+};
 
 #[derive(Clone)]
 pub struct BrowserPersistenceMutations {
@@ -115,6 +118,12 @@ impl ConfigReplacementPort for BrowserPersistenceMutations {
     ) -> Result<ConfigReplacementOutcome> {
         self.store
             .update(move |state| {
+                if config_fingerprint(state) != plan.expected {
+                    return Err(rssr_domain::DomainError::Conflict(
+                        "配置在读取后已被修改，请重新读取后再替换".to_string(),
+                    )
+                    .into());
+                }
                 let desired_urls = plan
                     .feeds
                     .iter()
@@ -149,7 +158,7 @@ impl ConfigReplacementPort for BrowserPersistenceMutations {
                     }
                 }
                 state.core.entries.retain(|entry| !removed.contains(&entry.feed_id));
-                state.core.settings = plan.settings;
+                state.core.settings = plan.settings.clone();
 
                 let mut changes = Changes::CORE;
                 let flags_before = state.entry_flags.entries.len();
@@ -173,7 +182,12 @@ impl ConfigReplacementPort for BrowserPersistenceMutations {
                     changes = changes | Changes::APP_STATE;
                 }
 
-                Ok((ConfigReplacementOutcome { removed_feed_count, settings_updated }, changes))
+                let outcome = ConfigReplacementOutcome {
+                    removed_feed_count,
+                    settings_updated,
+                    settings: plan.settings,
+                };
+                Ok((outcome, changes))
             })
             .await
             .map_err(map_store_error)

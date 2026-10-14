@@ -119,6 +119,12 @@ pub(crate) fn reduce_feeds_page_intent(
         }
         FeedsPageIntent::ImportConfigRequested => {
             state.pending_delete_feed = None;
+            let Some(expected) = state.fingerprint.clone() else {
+                state.pending_config_import = false;
+                state.status = "订阅列表尚未载入，载入后再导入配置。".to_string();
+                state.status_tone = "info".to_string();
+                return Vec::new();
+            };
             if !state.pending_config_import {
                 state.pending_config_import = true;
                 state.status = "导入配置会按配置包覆盖当前订阅集合，并清理缺失订阅的本地文章；再次点击才会执行。"
@@ -127,7 +133,10 @@ pub(crate) fn reduce_feeds_page_intent(
                 return Vec::new();
             }
 
-            vec![UiCommand::Feeds(FeedsCommand::ImportConfig { raw: state.config_text.clone() })]
+            vec![UiCommand::Feeds(FeedsCommand::ImportConfig {
+                raw: state.config_text.clone(),
+                expected,
+            })]
         }
         FeedsPageIntent::ExportOpmlRequested => {
             clear_pending_confirmations(state);
@@ -143,6 +152,7 @@ pub(crate) fn reduce_feeds_page_intent(
                     state.feed_count = snapshot.feed_count;
                     state.entry_count = snapshot.entry_count;
                     state.feeds = snapshot.feeds;
+                    state.fingerprint = Some(snapshot.fingerprint);
                 }
                 Err(err) => {
                     state.status = err;
@@ -227,9 +237,32 @@ mod tests {
         }
     }
 
+    fn loaded_state() -> FeedsPageState {
+        let mut state = FeedsPageState::new();
+        state.fingerprint = Some(fingerprint());
+        state
+    }
+
+    fn fingerprint() -> rssr_domain::ConfigFingerprint {
+        rssr_domain::ConfigFingerprint::compute(Vec::new(), &rssr_domain::UserSettings::default())
+    }
+
+    /// Until a snapshot is shown there is no configuration to replace knowingly.
+    #[test]
+    fn import_config_waits_for_the_snapshot() {
+        let mut state = FeedsPageState::new();
+        state.pending_config_import = true;
+
+        let effects = reduce_feeds_page_intent(&mut state, FeedsPageIntent::ImportConfigRequested);
+
+        assert!(effects.is_empty());
+        assert!(!state.pending_config_import);
+        assert!(state.status.contains("尚未载入"));
+    }
+
     #[test]
     fn import_config_first_request_sets_pending_without_command() {
-        let mut state = FeedsPageState::new();
+        let mut state = loaded_state();
 
         let effects = reduce_feeds_page_intent(&mut state, FeedsPageIntent::ImportConfigRequested);
 
@@ -244,7 +277,7 @@ mod tests {
 
     #[test]
     fn import_config_confirmed_request_emits_execution_command() {
-        let mut state = FeedsPageState::new();
+        let mut state = loaded_state();
         state.pending_config_import = true;
         state.config_text = "{\"feeds\":[]}".to_string();
 
@@ -252,8 +285,9 @@ mod tests {
 
         assert_eq!(effects.len(), 1);
         match &effects[0] {
-            UiCommand::Feeds(FeedsCommand::ImportConfig { raw }) => {
+            UiCommand::Feeds(FeedsCommand::ImportConfig { raw, expected }) => {
                 assert_eq!(raw, "{\"feeds\":[]}");
+                assert_eq!(expected, &fingerprint());
             }
             other => panic!("unexpected effect: {other:?}"),
         }
@@ -306,7 +340,7 @@ mod tests {
 
     #[test]
     fn switching_confirmation_domains_clears_previous_pending_state() {
-        let mut state = FeedsPageState::new();
+        let mut state = loaded_state();
         state.pending_delete_feed = Some(42);
 
         let effects = reduce_feeds_page_intent(&mut state, FeedsPageIntent::ImportConfigRequested);

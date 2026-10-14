@@ -1,8 +1,9 @@
+use rssr_application::RemoteConfigPullOutcome;
+
 use crate::{
     pages::settings_page::intent::SettingsPageIntent,
     ui::{commands::SettingsCommand, runtime::backend::backend, snapshot::UiIntent},
 };
-use rssr_application::AppliedRemoteConfigOutcome;
 
 pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
     match command {
@@ -43,19 +44,14 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
         },
         SettingsCommand::PullConfig { endpoint, remote_path } => match backend().await {
             Ok(services) => match services.pull_remote_config(&endpoint, &remote_path).await {
-                Ok(AppliedRemoteConfigOutcome::Imported { import, settings }) => {
-                    settings_intents(vec![
-                        SettingsPageIntent::SettingsLoaded(settings),
-                        SettingsPageIntent::SetStatus {
-                            message: format!(
-                                "已从 WebDAV 下载并导入配置：{}。",
-                                import.summary_line()
-                            ),
-                            tone: "info".to_string(),
-                        },
-                    ])
-                }
-                Ok(AppliedRemoteConfigOutcome::NotFound) => {
+                Ok(RemoteConfigPullOutcome { import: Some(import) }) => settings_intents(vec![
+                    SettingsPageIntent::SettingsLoaded(import.settings.clone()),
+                    SettingsPageIntent::SetStatus {
+                        message: format!("已从 WebDAV 下载并导入配置：{}。", import.summary_line()),
+                        tone: "info".to_string(),
+                    },
+                ]),
+                Ok(RemoteConfigPullOutcome { import: None }) => {
                     settings_intents(vec![SettingsPageIntent::SetStatus {
                         message: "远端配置不存在。".to_string(),
                         tone: "info".to_string(),

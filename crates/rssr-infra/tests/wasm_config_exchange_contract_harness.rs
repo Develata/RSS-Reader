@@ -209,18 +209,22 @@ async fn browser_config_exchange_import_cleans_removed_feed_entries_and_last_ope
     })
     .await;
     let service = build_service(state.clone());
+    let current = service.config_fingerprint().await.unwrap();
 
     service
-        .import_config_package(&ConfigPackage {
-            version: 2,
-            exported_at: OffsetDateTime::UNIX_EPOCH,
-            feeds: vec![ConfigFeed {
-                url: "https://example.com/feed.xml".to_string(),
-                title: None,
-                folder: None,
-            }],
-            settings: UserSettings::default(),
-        })
+        .import_config_package(
+            &ConfigPackage {
+                version: 2,
+                exported_at: OffsetDateTime::UNIX_EPOCH,
+                feeds: vec![ConfigFeed {
+                    url: "https://example.com/feed.xml".to_string(),
+                    title: None,
+                    folder: None,
+                }],
+                settings: UserSettings::default(),
+            },
+            &current,
+        )
         .await
         .expect("import config package");
 

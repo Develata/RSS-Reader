@@ -71,7 +71,11 @@ async fn roundtrip_restores_feeds_and_settings() {
     let decoded = decode_config_package(&encoded).expect("decode config package");
 
     let import = Library::memory().await;
-    service(&import).import_config_package(&decoded).await.expect("import config package");
+    let current = service(&import).config_fingerprint().await.unwrap();
+    service(&import)
+        .import_config_package(&decoded, &current)
+        .await
+        .expect("import config package");
 
     let imported_feeds = import.feeds.list_feeds().await.expect("list imported feeds");
     assert_eq!(imported_feeds.len(), 2);
@@ -108,7 +112,8 @@ async fn import_overwrites_local_feed_membership() {
         settings: UserSettings::default(),
     };
 
-    service.import_config_package(&package).await.expect("import package");
+    let current = service.config_fingerprint().await.unwrap();
+    service.import_config_package(&package, &current).await.expect("import package");
 
     let feeds = library.feeds.list_feeds().await.expect("list feeds");
     assert_eq!(feeds.len(), 1);
@@ -154,17 +159,21 @@ async fn import_removes_dropped_feed_entries_and_clears_metadata() {
         )
         .await;
 
+    let current = service.config_fingerprint().await.unwrap();
     service
-        .import_config_package(&ConfigPackage {
-            version: 2,
-            exported_at: OffsetDateTime::UNIX_EPOCH,
-            feeds: vec![ConfigFeed {
-                url: retained_feed.url.to_string(),
-                title: None,
-                folder: None,
-            }],
-            settings: UserSettings::default(),
-        })
+        .import_config_package(
+            &ConfigPackage {
+                version: 2,
+                exported_at: OffsetDateTime::UNIX_EPOCH,
+                feeds: vec![ConfigFeed {
+                    url: retained_feed.url.to_string(),
+                    title: None,
+                    folder: None,
+                }],
+                settings: UserSettings::default(),
+            },
+            &current,
+        )
         .await
         .expect("import config package");
 

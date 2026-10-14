@@ -1,11 +1,13 @@
-//! 指定名称与源标题分开保存（审计 B6）：原生 SQLite 与浏览器适配器跑同一组断言。
+//! 指定名称与源标题分开保存（审计 B6），配置指纹只跟随指定名称（B2-D4）：原生 SQLite 与
+//! 浏览器适配器跑同一组断言。
 use rssr_application::{
     ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort, FeedRefreshUpdate,
-    ParsedEntryData, ParsedFeedUpdate, RefreshCommit, RefreshStorePort, SubscriptionActivationPort,
-    SubscriptionRemovalPort,
+    LibraryQueryPort, ParsedEntryData, ParsedFeedUpdate, RefreshCommit, RefreshStorePort,
+    SubscriptionActivationPort, SubscriptionRemovalPort,
 };
 use rssr_domain::{
-    EntryIndexRepository, EntryQuery, FeedRepository, NewFeedSubscription, UserSettings,
+    ConfigFingerprint, DomainError, EntryIndexRepository, EntryQuery, FeedRepository,
+    NewFeedSubscription, UserSettings,
 };
 use url::Url;
 
@@ -16,6 +18,11 @@ pub struct Ports<'a> {
     pub removal: &'a dyn SubscriptionRemovalPort,
     pub refresh: &'a dyn RefreshStorePort,
     pub config: &'a dyn ConfigReplacementPort,
+    pub queries: &'a dyn LibraryQueryPort,
+}
+
+async fn fingerprint(ports: &Ports<'_>) -> ConfigFingerprint {
+    ports.queries.config_fingerprint().await.unwrap()
 }
 
 const NAMED: &str = "https://example.com/named.xml";
@@ -131,15 +138,37 @@ pub async fn verify_custom_titles(ports: &Ports<'_>) {
     assert_eq!(names(ports, deleted.id).await, (None, None));
 
     // 配置包里的名称是指定名称：有就设置，没有就清除；源标题不受影响。
-    let replace = |title: Option<&'static str>| ConfigReplacementPlan {
+    let replace = |title: Option<&'static str>, expected| ConfigReplacementPlan {
         feeds: vec![config_feed(NAMED, title), config_feed(BARE, None), config_feed(DELETED, None)],
         settings: UserSettings::default(),
+        expected,
     };
-    ports.config.replace_config(replace(Some(" 配置名 "))).await.unwrap();
+    ports.config.replace_config(replace(Some(" 配置名 "), fingerprint(ports).await)).await.unwrap();
     assert_eq!(names(ports, named.id).await, pair("配置名", "Example News"));
+
+    // 配置指纹只看指定名称：只有源标题变化不算配置变化，先前读到的指纹仍然有效。
+    let before_refresh = fingerprint(ports).await;
     let target = ports.refresh.get_target(named.id).await.unwrap().unwrap();
     ports.refresh.commit(&target, source_update("Renamed Upstream")).await.unwrap();
     assert_eq!(names(ports, named.id).await, pair("配置名", "Renamed Upstream"));
-    ports.config.replace_config(replace(None)).await.unwrap();
+    assert_eq!(fingerprint(ports).await, before_refresh, "only the source title changed");
+    ports.config.replace_config(replace(None, before_refresh)).await.unwrap();
     assert_eq!(names(ports, named.id).await, pair("Renamed Upstream", "Renamed Upstream"));
+
+    // 指定名称等于源标题：显示不变，配置却变了；用之前的指纹替换是冲突，什么都不改。
+    let unnamed = fingerprint(ports).await;
+    ports
+        .feeds
+        .upsert_subscription(&subscription(NAMED, Some("Renamed Upstream"), None))
+        .await
+        .unwrap();
+    assert_eq!(names(ports, named.id).await, pair("Renamed Upstream", "Renamed Upstream"));
+    let named_again = fingerprint(ports).await;
+    assert_ne!(named_again, unnamed, "a chosen name equal to the source title is still chosen");
+    let error = ports.config.replace_config(replace(None, unnamed)).await.unwrap_err();
+    assert!(
+        error.chain().any(|cause| matches!(cause.downcast_ref(), Some(DomainError::Conflict(_)))),
+        "{error:#}"
+    );
+    assert_eq!(fingerprint(ports).await, named_again, "a refused replacement changes nothing");
 }

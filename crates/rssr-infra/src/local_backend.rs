@@ -24,15 +24,16 @@ use rssr_api::{
     AddSubscriptionOutcome, Backend, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome,
 };
 use rssr_application::{
-    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, AppliedRemoteConfigOutcome,
-    ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome,
-    EntryFlagOutcome, FeedsSnapshotOutcome, OpmlImportOutcome, PrepareSubscriptionOutcome,
-    ReaderEntrySnapshot, RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
-    RefreshLocalizedEntry, RemoteConfigPushOutcome, RemoteConfigStore, RemoveSubscriptionInput,
-    SettingsPatch, StartupTarget,
+    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, ConfigImportOutcome,
+    EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome, EntryFlagOutcome,
+    FeedsSnapshotOutcome, OpmlImportOutcome, PrepareSubscriptionOutcome, ReaderEntrySnapshot,
+    RefreshAllInput, RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult,
+    RefreshLocalizedEntry, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore,
+    RemoveSubscriptionInput, SettingsPatch, StartupTarget,
 };
 use rssr_domain::{
-    EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview, UserSettings,
+    ConfigFingerprint, EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview,
+    UserSettings,
 };
 use time::OffsetDateTime;
 
@@ -259,12 +260,10 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         &self,
         endpoint: &str,
         remote_path: &str,
-    ) -> Result<AppliedRemoteConfigOutcome> {
+    ) -> Result<RemoteConfigPullOutcome> {
         self.inner.host.require_network()?;
         let remote = self.inner.host.remote_config_store(endpoint, remote_path)?;
-        let outcome =
-            self.inner.use_cases.import_export_service.pull_remote_config(remote.as_ref()).await?;
-        self.inner.use_cases.settings_sync_service.apply_remote_pull(outcome).await
+        self.inner.use_cases.import_export_service.pull_remote_config(remote.as_ref()).await
     }
 
     async fn bootstrap_entries(
@@ -392,8 +391,12 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         self.inner.use_cases.import_export_service.export_config_json().await
     }
 
-    async fn import_config_json(&self, raw: &str) -> Result<ConfigImportOutcome> {
-        self.inner.use_cases.import_export_service.import_config_json(raw).await
+    async fn import_config_json(
+        &self,
+        raw: &str,
+        expected: &ConfigFingerprint,
+    ) -> Result<ConfigImportOutcome> {
+        self.inner.use_cases.import_export_service.import_config_json(raw, expected).await
     }
 
     async fn export_opml(&self) -> Result<String> {

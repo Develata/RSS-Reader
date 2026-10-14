@@ -630,6 +630,7 @@ async fn browser_keeps_chosen_names_apart_from_source_titles() {
     let feeds = BrowserFeedRepository::new(state.clone());
     let entries = BrowserEntryRepository::new(state.clone());
     let mutations = BrowserPersistenceMutations::new(state.clone());
+    let queries = BrowserLibraryQueries::new(state.clone());
     let refresh =
         rssr_infra::application_adapters::browser::adapters::BrowserRefreshStore::new(state);
     feed_title_cases::verify_custom_titles(&feed_title_cases::Ports {
@@ -639,6 +640,7 @@ async fn browser_keeps_chosen_names_apart_from_source_titles() {
         removal: &mutations,
         refresh: &refresh,
         config: &mutations,
+        queries: &queries,
     })
     .await;
     clear_browser_state_storage();

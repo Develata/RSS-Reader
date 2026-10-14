@@ -135,7 +135,8 @@ async fn json_roundtrip_restores_feeds_and_settings() {
     .expect("decode config package");
 
     let import_fixture = build_fixture().await;
-    import_fixture.service.import_config_package(&package).await.expect("import package");
+    let current = import_fixture.service.config_fingerprint().await.unwrap();
+    import_fixture.service.import_config_package(&package, &current).await.expect("import package");
 
     let imported_feeds = import_fixture.library.feeds.list_feeds().await.expect("list feeds");
     assert_eq!(imported_feeds.len(), 2);
@@ -169,18 +170,22 @@ async fn import_cleans_removed_feed_entries_and_last_opened_state() {
     library.seed(dropped_feed.id, vec![sample_entry("stale")]).await;
     set_last_opened(library, dropped_feed.id).await;
 
+    let current = fixture.service.config_fingerprint().await.unwrap();
     fixture
         .service
-        .import_config_package(&ConfigPackage {
-            version: 2,
-            exported_at: OffsetDateTime::UNIX_EPOCH,
-            feeds: vec![ConfigFeed {
-                url: retained_feed.url.to_string(),
-                title: None,
-                folder: None,
-            }],
-            settings: UserSettings::default(),
-        })
+        .import_config_package(
+            &ConfigPackage {
+                version: 2,
+                exported_at: OffsetDateTime::UNIX_EPOCH,
+                feeds: vec![ConfigFeed {
+                    url: retained_feed.url.to_string(),
+                    title: None,
+                    folder: None,
+                }],
+                settings: UserSettings::default(),
+            },
+            &current,
+        )
         .await
         .expect("import config package");
 

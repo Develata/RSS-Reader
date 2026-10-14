@@ -6,9 +6,8 @@ use crate::{
     AppStatePort, AppStateService, ClockPort, ConfigReplacementPort, EntriesListService,
     EntriesWorkspaceService, EntryFlagsService, FeedCatalogService, FeedRefreshSourcePort,
     FeedService, FeedsSnapshotService, ImportExportService, LibraryQueryPort, OpmlCodecPort,
-    ReaderService, RefreshService, RefreshStorePort, SettingsService, SettingsSyncService,
-    SettingsUpdatePort, StartupService, SubscriptionActivationPort, SubscriptionRemovalPort,
-    SubscriptionWorkflow,
+    ReaderService, RefreshService, RefreshStorePort, SettingsService, SettingsUpdatePort,
+    StartupService, SubscriptionActivationPort, SubscriptionRemovalPort, SubscriptionWorkflow,
 };
 
 // 架构护栏：如果某次设计/计划开始要求严重代码分叉、污染 infra 边界、引发前后端大规模迁移
@@ -42,7 +41,6 @@ pub struct AppUseCases {
     pub feed_catalog_service: FeedCatalogService,
     pub feed_service: FeedService,
     pub settings_service: SettingsService,
-    pub settings_sync_service: SettingsSyncService,
     pub app_state_service: AppStateService,
     pub refresh_service: RefreshService,
     pub subscription_workflow: SubscriptionWorkflow,
@@ -67,14 +65,12 @@ impl AppUseCases {
 
         let settings_service =
             SettingsService::new(input.settings_repository, input.settings_update);
-        let settings_sync_service = SettingsSyncService::new(settings_service.clone());
         let app_state_service = AppStateService::new(input.app_state.clone());
 
         Self {
             feed_catalog_service,
             feed_service: feed_service.clone(),
             settings_service: settings_service.clone(),
-            settings_sync_service,
             app_state_service: app_state_service.clone(),
             refresh_service: refresh_service.clone(),
             subscription_workflow: SubscriptionWorkflow::new(
@@ -99,7 +95,7 @@ impl AppUseCases {
                 app_state_service,
                 input.library_queries.clone(),
             ),
-            feeds_snapshot_service: FeedsSnapshotService::new(input.feed_repository),
+            feeds_snapshot_service: FeedsSnapshotService::new(input.library_queries.clone()),
             reader_service: ReaderService::new(input.library_queries),
         }
     }

@@ -12,6 +12,8 @@ pub(crate) struct FeedsPageState {
     pub(crate) feeds: Vec<FeedSummary>,
     pub(crate) feed_count: usize,
     pub(crate) entry_count: usize,
+    /// The configuration the shown snapshot reflects; an import expects it.
+    pub(crate) fingerprint: Option<rssr_domain::ConfigFingerprint>,
     pub(crate) status_revision: u64,
     pub(crate) status: String,
     pub(crate) status_tone: String,
@@ -31,6 +33,7 @@ impl FeedsPageState {
             feeds: Vec::new(),
             feed_count: 0,
             entry_count: 0,
+            fingerprint: None,
             status_revision: 0,
             status: String::new(),
             status_tone: "info".to_string(),

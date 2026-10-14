@@ -9,7 +9,7 @@ use rssr_application::{
     ActivatedSubscription, ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan,
     ConfigReplacementPort, SubscriptionActivationPort, SubscriptionRemovalPort,
 };
-use rssr_domain::{NewFeedSubscription, UserSettings};
+use rssr_domain::{DomainError, NewFeedSubscription, UserSettings};
 use rusqlite::{Connection, params};
 
 use super::codec::now;
@@ -75,28 +75,29 @@ fn upsert_config_feed(
     Ok(())
 }
 
-/// Makes the library's subscriptions and settings equal to `plan`. The removals are derived
+/// Shown when a replacement finds the configuration changed since it was read.
+pub(crate) const CONFIG_CHANGED: &str = "配置在读取后已被修改，请重新读取后再替换";
+
+/// Makes the library's subscriptions and settings equal to `plan`, unless the configuration no
+/// longer matches `plan.expected`. The removals are derived
 /// inside the write transaction, from the state it locked.
 fn replace_config(
     conn: &Connection,
     plan: &ConfigReplacementPlan,
     now: &str,
 ) -> StoreResult<ConfigReplacementOutcome> {
-    let desired: HashSet<&str> = plan.feeds.iter().map(|feed| feed.url.as_str()).collect();
-    let removed_feed_ids: Vec<i64> = {
-        let mut statement =
-            conn.prepare_cached("SELECT id, url FROM feeds WHERE is_deleted = 0")?;
-        let mut rows = statement.query([])?;
-        let mut removed = Vec::new();
-        while let Some(row) = rows.next()? {
-            let url: String = row.get(1)?;
-            if !desired.contains(url.as_str()) {
-                removed.push(row.get(0)?);
-            }
-        }
-        removed
-    };
+    // One read of the current configuration serves the conflict check and the removal diff.
+    let current = feeds::config_rows(conn)?;
     let current_settings: UserSettings = documents::load(conn, USER_SETTINGS_KEY)?;
+    if feeds::fingerprint_of(&current, &current_settings) != plan.expected {
+        return Err(DomainError::Conflict(CONFIG_CHANGED.to_string()).into());
+    }
+    let desired: HashSet<&str> = plan.feeds.iter().map(|feed| feed.url.as_str()).collect();
+    let removed_feed_ids: Vec<i64> = current
+        .iter()
+        .filter(|row| !desired.contains(row.url.as_str()))
+        .map(|row| row.id)
+        .collect();
     let settings_updated = current_settings != plan.settings;
 
     for feed in &plan.feeds {
@@ -108,7 +109,11 @@ fn replace_config(
     }
     documents::save(conn, USER_SETTINGS_KEY, &plan.settings, now)?;
     documents::clear_last_opened_if_removed(conn, &removed_feed_ids, now)?;
-    Ok(ConfigReplacementOutcome { removed_feed_count: removed_feed_ids.len(), settings_updated })
+    Ok(ConfigReplacementOutcome {
+        removed_feed_count: removed_feed_ids.len(),
+        settings_updated,
+        settings: plan.settings.clone(),
+    })
 }
 
 /// Activation, removal and configuration replacement over the library.
@@ -163,6 +168,11 @@ impl ConfigReplacementPort for LibraryMutations {
         &self,
         plan: ConfigReplacementPlan,
     ) -> Result<ConfigReplacementOutcome> {
-        self.store.write(move |tx| replace_config(tx, &plan, &now())).await.context("替换配置失败")
+        // As a domain error, so a conflict is recognizable through the context.
+        self.store
+            .write(move |tx| replace_config(tx, &plan, &now()))
+            .await
+            .map_err(DomainError::from)
+            .context("替换配置失败")
     }
 }

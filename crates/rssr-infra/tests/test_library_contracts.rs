@@ -27,6 +27,7 @@ async fn chosen_names_stay_apart_from_source_titles() {
         removal: &library.mutations,
         refresh: &library.refresh,
         config: &library.mutations,
+        queries: &library.queries,
     })
     .await;
 }

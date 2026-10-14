@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use rssr_domain::{
-    ConfigFeed, ConfigPackage, Feed, FeedRepository, FeedSummary, NewFeedSubscription, OpmlFeed,
-    SettingsRepository, UserSettings,
+    ConfigFeed, ConfigFingerprint, ConfigPackage, Feed, FeedRepository, FeedSummary,
+    NewFeedSubscription, OpmlFeed, SettingsRepository, UserSettings,
 };
 use time::OffsetDateTime;
 use url::Url;
@@ -26,8 +26,9 @@ impl ConfigReplacementPort for RecordingConfigReplacement {
         &self,
         plan: ConfigReplacementPlan,
     ) -> anyhow::Result<ConfigReplacementOutcome> {
+        let settings = plan.settings.clone();
         self.plans.lock().expect("lock plans").push(plan);
-        Ok(ConfigReplacementOutcome { removed_feed_count: 1, settings_updated: true })
+        Ok(ConfigReplacementOutcome { removed_feed_count: 1, settings_updated: true, settings })
     }
 }
 
@@ -166,6 +167,7 @@ fn config_import_outcome_summary_line_formats_settings_state() {
             imported_feed_count: 2,
             removed_feed_count: 1,
             settings_updated: true,
+            settings: UserSettings::default(),
         }
         .summary_line(),
         "导入 2 个订阅，清理 1 个缺失订阅，设置已更新"
@@ -175,6 +177,7 @@ fn config_import_outcome_summary_line_formats_settings_state() {
             imported_feed_count: 0,
             removed_feed_count: 0,
             settings_updated: false,
+            settings: UserSettings::default(),
         }
         .summary_line(),
         "导入 0 个订阅，清理 0 个缺失订阅，设置未变化"
@@ -361,6 +364,7 @@ async fn remote_config_roundtrip_uses_json_payload() {
     let remote = StubRemoteConfigStore { payload: Mutex::new(None) };
 
     let pushed = service.push_remote_config(&remote).await.expect("push config");
+    let fingerprint = service.config_fingerprint().await.expect("fingerprint");
     let pulled = service.pull_remote_config(&remote).await.expect("pull config");
 
     assert_eq!(pushed.exported_feed_count, 1);
@@ -377,6 +381,8 @@ async fn remote_config_roundtrip_uses_json_payload() {
     let plans = replacement.plans.lock().expect("lock plans");
     assert_eq!(plans.len(), 1, "the pulled configuration replaces through the atomic port");
     assert_eq!(plans[0].feeds[0].url.as_str(), "https://example.com/feed.xml");
+    assert_eq!(plans[0].expected, fingerprint, "expects the configuration read before download");
+    assert_eq!(pulled.import().map(|import| &import.settings), Some(&plans[0].settings));
 }
 
 #[tokio::test]
@@ -406,25 +412,29 @@ async fn import_config_hands_the_whole_package_to_the_atomic_port() {
     );
     let mut imported_settings = UserSettings::default();
     imported_settings.refresh_interval_minutes += 1;
+    let expected = ConfigFingerprint::compute(Vec::new(), &UserSettings::default());
 
     let outcome = service
-        .import_config_package(&ConfigPackage {
-            version: 2,
-            exported_at: OffsetDateTime::UNIX_EPOCH,
-            feeds: vec![
-                ConfigFeed {
-                    url: "https://example.com:443/feed.xml#top".to_string(),
-                    title: Some("Example".to_string()),
-                    folder: Some("Tech".to_string()),
-                },
-                ConfigFeed {
-                    url: "https://other.example.com/rss".to_string(),
-                    title: None,
-                    folder: None,
-                },
-            ],
-            settings: imported_settings.clone(),
-        })
+        .import_config_package(
+            &ConfigPackage {
+                version: 2,
+                exported_at: OffsetDateTime::UNIX_EPOCH,
+                feeds: vec![
+                    ConfigFeed {
+                        url: "https://example.com:443/feed.xml#top".to_string(),
+                        title: Some("Example".to_string()),
+                        folder: Some("Tech".to_string()),
+                    },
+                    ConfigFeed {
+                        url: "https://other.example.com/rss".to_string(),
+                        title: None,
+                        folder: None,
+                    },
+                ],
+                settings: imported_settings.clone(),
+            },
+            &expected,
+        )
         .await
         .expect("import package");
 
@@ -447,6 +457,8 @@ async fn import_config_hands_the_whole_package_to_the_atomic_port() {
         ]
     );
     assert_eq!(plans[0].settings, imported_settings);
+    assert_eq!(plans[0].expected, expected);
+    assert_eq!(outcome.settings, imported_settings, "the committed settings come back");
 }
 
 /// An invalid package is refused before the port is asked to change anything.
@@ -463,7 +475,8 @@ async fn an_invalid_package_never_reaches_the_atomic_port() {
         feeds: vec![ConfigFeed { url: "not a url".to_string(), title: None, folder: None }],
         settings: UserSettings::default(),
     };
-    assert!(service.import_config_package(&package).await.is_err());
+    let expected = ConfigFingerprint::compute(Vec::new(), &UserSettings::default());
+    assert!(service.import_config_package(&package, &expected).await.is_err());
     assert!(replacement.plans.lock().expect("lock plans").is_empty());
 }
 

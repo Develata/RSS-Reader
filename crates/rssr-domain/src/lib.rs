@@ -2,6 +2,7 @@
 // https://github.com/rust-lang/rust-clippy/issues/17529
 #![allow(clippy::double_must_use)]
 pub mod app_state;
+pub mod config_fingerprint;
 pub mod entry;
 pub mod feed;
 pub mod repository;
@@ -10,6 +11,7 @@ pub mod settings;
 pub mod validation;
 
 pub use app_state::{AppStateSnapshot, EntriesWorkspaceState, EntryGroupingPreference};
+pub use config_fingerprint::{ConfigFingerprint, FingerprintFeed};
 pub use entry::{
     ArchiveFilter, Entry, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary,
     MarkReadOutcome, MarkReadPreview, ReadFilter, StarredFilter, archive_cutoff_at,
@@ -41,4 +43,7 @@ pub enum DomainError {
     InvalidInput(String),
     #[error("持久化失败：{0}")]
     Persistence(String),
+    /// The data changed since the caller read it; it must read again before retrying.
+    #[error("操作冲突：{0}")]
+    Conflict(String),
 }

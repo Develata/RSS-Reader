@@ -62,7 +62,7 @@ CLI：`rssr-cli mark-read --all --search Rust --read-filter unread --starred-fil
 
 已保存的主题 CSS 是当时的快照，升级不会自动覆盖。内置主题更新后，重新应用对应预设即可使用新样式；旧版内置主题仍保留原来的名称与移除入口。
 
-配置交换支持 JSON 配置包、OPML 和 WebDAV 上传 / 下载。它用于迁移订阅和设置，不同步文章库、已读或收藏。CLI 对应命令见 `cargo run --locked -p rssr-cli -- --help`；刷新需明确指定 `refresh --all` 或 `refresh --feed-id <id>`，两者不能同时指定。`export-config`、`export-opml`、`show-settings` 的数据写入 stdout，诊断写入 stderr，可直接重定向到文件。
+配置交换支持 JSON 配置包、OPML 和 WebDAV 上传 / 下载。它用于迁移订阅和设置，不同步文章库、已读或收藏。导入配置包会替换整份配置：订阅页载入后若订阅或设置在别处被改过（另一台设备、另一个页面），导入会被拒绝、什么都不改，页面重新载入后再确认导入即可；只有订阅源自己的标题被刷新更新不算改动。WebDAV 下载在下载前记下当前配置，下载期间本地配置被改动同样会被拒绝。CLI 对应命令见 `cargo run --locked -p rssr-cli -- --help`；刷新需明确指定 `refresh --all` 或 `refresh --feed-id <id>`，两者不能同时指定。`export-config`、`export-opml`、`show-settings` 的数据写入 stdout，诊断写入 stderr，可直接重定向到文件。
 
 需要登录的 WebDAV 服务可在设置页 Endpoint 中填 `https://用户名:密码@dav.example.com/base/`。客户端会把凭据从请求 URL 中剥离，改用 HTTP Basic；Endpoint 只保存在当前设置会话，不进入本地配置包或导出的数据。用户名或密码含 `@`、`:` 等保留字符时，按 URL 规则百分号编码。避免在截图或共享屏幕时暴露当前输入框中的凭据。
 

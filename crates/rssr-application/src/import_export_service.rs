@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use rssr_domain::{
-    ConfigFeed, ConfigPackage, FeedRepository, NewFeedSubscription, OpmlFeed, parse_feed_url,
+    ConfigFeed, ConfigFingerprint, ConfigPackage, FeedRepository, NewFeedSubscription, OpmlFeed,
+    UserSettings, parse_feed_url,
 };
 use time::OffsetDateTime;
 
@@ -53,11 +54,13 @@ impl ClockPort for SystemClock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ConfigImportOutcome {
     pub imported_feed_count: usize,
     pub removed_feed_count: usize,
     pub settings_updated: bool,
+    /// The settings now stored (committed by the replacement; no second read).
+    pub settings: UserSettings,
 }
 
 impl ConfigImportOutcome {
@@ -80,7 +83,7 @@ pub struct RemoteConfigPushOutcome {
     pub exported_feed_count: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RemoteConfigPullOutcome {
     pub import: Option<ConfigImportOutcome>,
 }
@@ -134,9 +137,17 @@ impl ImportExportService {
         })
     }
 
+    /// The fingerprint of the configuration as stored now; a replacement expects it.
+    pub async fn config_fingerprint(&self) -> Result<ConfigFingerprint> {
+        Ok(self.queries.config_fingerprint().await?)
+    }
+
+    /// Replaces the configuration with `package`, unless it changed since the caller read
+    /// `expected` (then [`rssr_domain::DomainError::Conflict`], nothing changed).
     pub async fn import_config_package(
         &self,
         package: &ConfigPackage,
+        expected: &ConfigFingerprint,
     ) -> Result<ConfigImportOutcome> {
         validate_config_package(package)?;
 
@@ -160,12 +171,14 @@ impl ImportExportService {
             .replace_config(ConfigReplacementPlan {
                 feeds: desired_feeds,
                 settings: package.settings.clone(),
+                expected: expected.clone(),
             })
             .await?;
         Ok(ConfigImportOutcome {
             imported_feed_count: package.feeds.len(),
             removed_feed_count: outcome.removed_feed_count,
             settings_updated: outcome.settings_updated,
+            settings: outcome.settings,
         })
     }
 
@@ -173,9 +186,13 @@ impl ImportExportService {
         Ok(serde_json::to_string_pretty(&self.export_config().await?)?)
     }
 
-    pub async fn import_config_json(&self, raw: &str) -> Result<ConfigImportOutcome> {
+    pub async fn import_config_json(
+        &self,
+        raw: &str,
+        expected: &ConfigFingerprint,
+    ) -> Result<ConfigImportOutcome> {
         let package: ConfigPackage = serde_json::from_str(raw)?;
-        self.import_config_package(&package).await
+        self.import_config_package(&package, expected).await
     }
 
     /// 与配置包导出同一份订阅列表，另外带上源标题：配置包格式只有一个名称，带不了它。
@@ -230,14 +247,18 @@ impl ImportExportService {
         Ok(RemoteConfigPushOutcome { exported_feed_count })
     }
 
+    /// Downloads the configuration and replaces the local one with it. The expected
+    /// fingerprint is read before the download, so a local change made while downloading is
+    /// not overwritten.
     pub async fn pull_remote_config(
         &self,
         remote: &dyn RemoteConfigStore,
     ) -> Result<RemoteConfigPullOutcome> {
+        let expected = self.config_fingerprint().await?;
         match remote.download_config().await? {
-            Some(raw) => {
-                Ok(RemoteConfigPullOutcome::imported(self.import_config_json(&raw).await?))
-            }
+            Some(raw) => Ok(RemoteConfigPullOutcome::imported(
+                self.import_config_json(&raw, &expected).await?,
+            )),
             None => Ok(RemoteConfigPullOutcome::not_found()),
         }
     }

@@ -235,6 +235,7 @@ mod tests {
         let (sender, receiver) = oneshot::channel();
         let mut receiver = Some(receiver);
         dom.in_scope(page_scope, || {
+            session.dispatch_intent(shown_snapshot());
             session.dispatch_intent(FeedsPageIntent::PendingConfigImportSet(true));
             session.dispatch_intent_with(FeedsPageIntent::ImportConfigRequested, |command| {
                 assert!(matches!(command, UiCommand::Feeds(FeedsCommand::ImportConfig { .. })));
@@ -282,6 +283,7 @@ mod tests {
         };
         let reply = replaced.clone();
         dom.in_scope(ScopeId::APP, || {
+            session.dispatch_intent(shown_snapshot());
             session.dispatch_intent(FeedsPageIntent::PendingConfigImportSet(true));
             let mut reply = Some(reply);
             session.dispatch_intent_with(FeedsPageIntent::ImportConfigRequested, |command| {
@@ -373,11 +375,20 @@ mod tests {
         dom.in_scope(ScopeId::APP, || assert!(session.snapshot().feed_url.is_empty()));
     }
 
+    /// The page showing an empty library: an import from it expects that configuration.
+    fn shown_snapshot() -> FeedsPageIntent {
+        snapshot(0).into_iter().find_map(UiIntent::into_feeds_page_intent).expect("snapshot")
+    }
+
     fn snapshot(count: usize) -> Vec<UiIntent> {
         vec![UiIntent::FeedsPage(FeedsPageIntent::SnapshotLoaded(Ok(FeedsPageSnapshot {
             feeds: Vec::new(),
             feed_count: count,
             entry_count: count * 10,
+            fingerprint: rssr_domain::ConfigFingerprint::compute(
+                Vec::new(),
+                &rssr_domain::UserSettings::default(),
+            ),
         })))]
     }
 

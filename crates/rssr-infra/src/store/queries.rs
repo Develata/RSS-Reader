@@ -2,16 +2,19 @@
 //! transaction, so they all see the same snapshot.
 
 use rssr_application::{
-    ConfigSnapshot, EntriesPage, EntriesStart, LibraryQueryPort, ReaderSnapshot, StartupState,
+    ConfigSnapshot, EntriesPage, EntriesStart, FeedsOverview, LibraryQueryPort, ReaderSnapshot,
+    StartupState,
 };
-use rssr_domain::{AppStateSnapshot, EntryQuery, Result as DomainResult, UserSettings};
+use rssr_domain::{
+    AppStateSnapshot, ConfigFingerprint, EntryQuery, Result as DomainResult, UserSettings,
+};
 
 use super::documents::{APP_STATE_KEY, USER_SETTINGS_KEY, load};
 use super::entries::{
     count_entries, get_content, get_entry_record, list_entries, reader_navigation,
 };
 use super::executor::LibraryStore;
-use super::feeds::{get_active, list_active, list_summaries};
+use super::feeds::{config_fingerprint, get_active, list_active, list_summaries};
 
 #[derive(Clone)]
 pub struct LibraryQueries {
@@ -86,6 +89,22 @@ impl LibraryQueryPort for LibraryQueries {
                 Ok(StartupState { settings, last_opened_feed_id })
             })
             .await?)
+    }
+
+    async fn feeds_overview(&self) -> DomainResult<FeedsOverview> {
+        Ok(self
+            .store
+            .read(|conn| {
+                Ok(FeedsOverview {
+                    feeds: list_summaries(conn)?,
+                    fingerprint: config_fingerprint(conn)?,
+                })
+            })
+            .await?)
+    }
+
+    async fn config_fingerprint(&self) -> DomainResult<ConfigFingerprint> {
+        Ok(self.store.read(config_fingerprint).await?)
     }
 
     async fn config_snapshot(&self) -> DomainResult<ConfigSnapshot> {

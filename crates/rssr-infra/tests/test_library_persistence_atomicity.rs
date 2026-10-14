@@ -14,8 +14,8 @@ mod library;
 use library::Library;
 use rssr_application::{
     ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort, FeedRefreshUpdate,
-    ParsedEntryData, ParsedFeedUpdate, RefreshCommit, RefreshStorePort, SubscriptionActivationPort,
-    SubscriptionRemovalPort,
+    LibraryQueryPort, ParsedEntryData, ParsedFeedUpdate, RefreshCommit, RefreshStorePort,
+    SubscriptionActivationPort, SubscriptionRemovalPort,
 };
 use rssr_domain::DomainError;
 use rssr_domain::{
@@ -237,6 +237,7 @@ async fn config_replacement_failure_rolls_back_every_library_change() {
             },
         ],
         settings: changed_settings,
+        expected: library.queries.config_fingerprint().await.unwrap(),
     };
 
     library.mutations.replace_config(plan).await.expect_err("forced failure");
@@ -276,6 +277,7 @@ async fn config_replacement_removes_bodies_with_entries_or_changes_nothing() {
         .replace_config(ConfigReplacementPlan {
             feeds: Vec::new(),
             settings: changed_settings.clone(),
+            expected: library.queries.config_fingerprint().await.unwrap(),
         })
         .await
         .expect_err("forced failure");
@@ -290,6 +292,7 @@ async fn config_replacement_removes_bodies_with_entries_or_changes_nothing() {
         .replace_config(ConfigReplacementPlan {
             feeds: Vec::new(),
             settings: changed_settings.clone(),
+            expected: library.queries.config_fingerprint().await.unwrap(),
         })
         .await
         .unwrap();
@@ -315,6 +318,7 @@ async fn config_replacement_derives_removals_from_locked_current_state() {
                 folder: None,
             }],
             settings: UserSettings::default(),
+            expected: library.queries.config_fingerprint().await.unwrap(),
         })
         .await
         .unwrap();

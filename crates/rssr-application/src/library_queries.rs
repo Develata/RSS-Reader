@@ -4,8 +4,8 @@
 //! reads could mix states, for example an entry with the navigation of a newer list.
 
 use rssr_domain::{
-    EntriesWorkspaceState, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary,
-    Feed, FeedSummary, UserSettings,
+    ConfigFingerprint, EntriesWorkspaceState, EntryContent, EntryNavigation, EntryQuery,
+    EntryRecord, EntrySummary, Feed, FeedSummary, UserSettings,
 };
 
 /// A page of entries and, when asked for, a count of entries matching a second query.
@@ -41,6 +41,14 @@ pub struct StartupState {
     pub last_opened_feed_id: Option<i64>,
 }
 
+/// The subscriptions page: every active subscription and the fingerprint a configuration
+/// import from this page expects.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeedsOverview {
+    pub feeds: Vec<FeedSummary>,
+    pub fingerprint: ConfigFingerprint,
+}
+
 /// The configuration as exported: the active subscriptions and the settings.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConfigSnapshot {
@@ -65,7 +73,9 @@ pub trait LibraryQueryPort: Send + Sync {
         feeds: bool,
     ) -> rssr_domain::Result<EntriesStart>;
     async fn startup_state(&self) -> rssr_domain::Result<StartupState>;
+    async fn feeds_overview(&self) -> rssr_domain::Result<FeedsOverview>;
     async fn config_snapshot(&self) -> rssr_domain::Result<ConfigSnapshot>;
+    async fn config_fingerprint(&self) -> rssr_domain::Result<ConfigFingerprint>;
 }
 
 /// Answers the queries one repository read at a time — no snapshot. Only for unit tests of the
@@ -76,7 +86,7 @@ pub(crate) mod test_support {
 
     use rssr_domain::{
         AppStateRepository, EntryContentRepository, EntryIndexRepository, EntryQuery,
-        FeedRepository, SettingsRepository,
+        FeedRepository, FingerprintFeed, SettingsRepository,
     };
 
     use super::*;
@@ -150,6 +160,30 @@ pub(crate) mod test_support {
                 None => None,
             };
             Ok(StartupState { settings, last_opened_feed_id })
+        }
+
+        async fn feeds_overview(&self) -> rssr_domain::Result<FeedsOverview> {
+            Ok(FeedsOverview {
+                feeds: needed(&self.feeds).list_summaries().await?,
+                fingerprint: self.config_fingerprint().await?,
+            })
+        }
+
+        /// Repositories hold no generations or raw names: the display name stands in for the
+        /// custom one, generation 0 for all.
+        async fn config_fingerprint(&self) -> rssr_domain::Result<ConfigFingerprint> {
+            let ConfigSnapshot { feeds, settings } = self.config_snapshot().await?;
+            let projection = feeds
+                .iter()
+                .map(|feed| FingerprintFeed {
+                    id: feed.id,
+                    url: feed.url.as_str(),
+                    generation: 0,
+                    custom_title: feed.title.as_deref(),
+                    folder: feed.folder.as_deref(),
+                })
+                .collect();
+            Ok(ConfigFingerprint::compute(projection, &settings))
         }
 
         async fn config_snapshot(&self) -> rssr_domain::Result<ConfigSnapshot> {

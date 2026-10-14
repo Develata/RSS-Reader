@@ -161,7 +161,7 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 ### 配置交换相关
 
 - `rssr-cli export-config [--output <path>]`
-- `rssr-cli import-config <file>`
+- `rssr-cli import-config <file>`（读取当前配置指纹后立即替换；界面的导入则携带订阅页快照的指纹，配置在载入后被改过时拒绝并重新载入）
 - `rssr-cli export-opml [--output <path>]`
 - `rssr-cli import-opml <file>`
 - `rssr-cli push-webdav <endpoint> <remote-path>`

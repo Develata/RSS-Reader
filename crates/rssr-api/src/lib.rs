@@ -11,13 +11,14 @@
 
 use anyhow::Result;
 use rssr_application::{
-    AppliedRemoteConfigOutcome, ConfigImportOutcome, EntriesBootstrapInput,
-    EntriesBootstrapOutcome, EntriesListOutcome, EntryFlagOutcome, FeedDiscoveryCandidate,
-    FeedsSnapshotOutcome, OpmlImportOutcome, ReaderEntrySnapshot, RemoteConfigPushOutcome,
-    SettingsPatch, StartupTarget,
+    ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome,
+    EntryFlagOutcome, FeedDiscoveryCandidate, FeedsSnapshotOutcome, OpmlImportOutcome,
+    ReaderEntrySnapshot, RemoteConfigPullOutcome, RemoteConfigPushOutcome, SettingsPatch,
+    StartupTarget,
 };
 use rssr_domain::{
-    EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview, UserSettings,
+    ConfigFingerprint, EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview,
+    UserSettings,
 };
 use url::Url;
 
@@ -71,12 +72,13 @@ pub trait Backend {
         endpoint: &str,
         remote_path: &str,
     ) -> Result<RemoteConfigPushOutcome>;
-    /// Downloads the configuration, applies it and returns the resulting settings.
+    /// Downloads the configuration and replaces the local one with it; the outcome carries the
+    /// settings now stored. A local change made during the download makes it a conflict.
     async fn pull_remote_config(
         &self,
         endpoint: &str,
         remote_path: &str,
-    ) -> Result<AppliedRemoteConfigOutcome>;
+    ) -> Result<RemoteConfigPullOutcome>;
 
     // Entry list.
     async fn bootstrap_entries(
@@ -113,7 +115,14 @@ pub trait Backend {
     /// Removes the subscription and its entries.
     async fn remove_feed(&self, feed_id: i64) -> Result<()>;
     async fn export_config_json(&self) -> Result<String>;
-    async fn import_config_json(&self, raw: &str) -> Result<ConfigImportOutcome>;
+    /// Replaces the configuration with the package `raw`, unless it changed since the caller
+    /// read `expected` (from [`Backend::load_feeds_snapshot`]): then a conflict
+    /// ([`rssr_domain::DomainError::Conflict`] in the error chain) and nothing changed.
+    async fn import_config_json(
+        &self,
+        raw: &str,
+        expected: &ConfigFingerprint,
+    ) -> Result<ConfigImportOutcome>;
     async fn export_opml(&self) -> Result<String>;
     async fn import_opml(&self, raw: &str) -> Result<OpmlImportOutcome>;
 }

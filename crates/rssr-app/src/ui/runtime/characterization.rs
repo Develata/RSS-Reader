@@ -317,6 +317,8 @@ fn digits_at(bytes: &[u8], from: usize, count: usize) -> bool {
 struct Transcript {
     port: u16,
     text: String,
+    /// Configuration fingerprints in order of first appearance.
+    fingerprints: Vec<String>,
 }
 
 impl Transcript {
@@ -324,11 +326,51 @@ impl Transcript {
         let intents = execute_ui_command(command).await;
         self.text.push_str(&format!("## {label}\n"));
         for intent in &intents {
-            self.text.push_str(&normalise(&format!("{intent:?}"), self.port));
+            let text = self.label_fingerprints(&format!("{intent:?}"));
+            self.text.push_str(&normalise(&text, self.port));
             self.text.push('\n');
         }
         intents
     }
+
+    /// Configuration fingerprints hash the feed addresses, which carry the test server's port:
+    /// each distinct one is written as its order of first appearance, so the transcript still
+    /// shows when the configuration changed.
+    fn label_fingerprints(&mut self, text: &str) -> String {
+        const PREFIX: &str = "ConfigFingerprint(\"";
+        let mut out = String::with_capacity(text.len());
+        let mut rest = text;
+        while let Some(at) = rest.find(PREFIX) {
+            let start = at + PREFIX.len();
+            let end = start + rest[start..].find('"').expect("closing quote");
+            let hash = &rest[start..end];
+            let number = match self.fingerprints.iter().position(|seen| seen == hash) {
+                Some(index) => index + 1,
+                None => {
+                    self.fingerprints.push(hash.to_owned());
+                    self.fingerprints.len()
+                }
+            };
+            out.push_str(&rest[..at]);
+            out.push_str(&format!("ConfigFingerprint(<{number}>)"));
+            rest = &rest[end + "\")".len()..];
+        }
+        out.push_str(rest);
+        out
+    }
+}
+
+/// The fingerprint of the configuration a feeds snapshot shows.
+fn shown_fingerprint(intents: &[UiIntent]) -> rssr_domain::ConfigFingerprint {
+    intents
+        .iter()
+        .find_map(|intent| match intent {
+            UiIntent::FeedsPage(FeedsPageIntent::SnapshotLoaded(Ok(snapshot))) => {
+                Some(snapshot.fingerprint.clone())
+            }
+            _ => None,
+        })
+        .expect("a loaded feeds snapshot")
 }
 
 fn library() -> Arc<AppServices> {
@@ -348,7 +390,8 @@ fn library() -> Arc<AppServices> {
 #[tokio::test(flavor = "current_thread")]
 async fn ui_commands_produce_the_recorded_intents() {
     let server = Server::start();
-    let mut transcript = Transcript { port: server.port, text: String::new() };
+    let mut transcript =
+        Transcript { port: server.port, text: String::new(), fingerprints: Vec::new() };
     let _host = test_host::install(library());
 
     let feeds = |command| UiCommand::Feeds(command);
@@ -572,10 +615,15 @@ async fn ui_commands_produce_the_recorded_intents() {
         .run("import opml, broken", feeds(FeedsCommand::ImportOpml { raw: "<opml".into() }))
         .await;
     let config_before_settings = config.clone();
-    transcript.run("import config", feeds(FeedsCommand::ImportConfig { raw: config })).await;
-    transcript
-        .run("import config, broken", feeds(FeedsCommand::ImportConfig { raw: "{".into() }))
-        .await;
+    let shown = transcript.run("feeds snapshot before import", feeds(FeedsCommand::LoadSnapshot));
+    let expected = shown_fingerprint(&shown.await);
+    let import = |raw: String, expected: &rssr_domain::ConfigFingerprint| {
+        feeds(FeedsCommand::ImportConfig { raw, expected: expected.clone() })
+    };
+    transcript.run("import config", import(config.clone(), &expected)).await;
+    transcript.run("import config, broken", import("{".into(), &expected)).await;
+    // The first import changed the configuration the page showed: the same page cannot import.
+    transcript.run("import config from a stale page", import(config, &expected)).await;
 
     transcript.run("settings load", settings(SettingsCommand::Load)).await;
     let changed = SettingsPatch {
@@ -611,11 +659,10 @@ async fn ui_commands_produce_the_recorded_intents() {
         )
         .await;
     // The configuration exported before the settings changed brings the old settings back.
+    let shown = transcript.run("feeds snapshot after settings", feeds(FeedsCommand::LoadSnapshot));
+    let expected = shown_fingerprint(&shown.await);
     transcript
-        .run(
-            "import config with other settings",
-            feeds(FeedsCommand::ImportConfig { raw: config_before_settings }),
-        )
+        .run("import config with other settings", import(config_before_settings, &expected))
         .await;
     transcript
         .run(

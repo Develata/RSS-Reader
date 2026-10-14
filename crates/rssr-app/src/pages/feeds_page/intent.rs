@@ -5,6 +5,7 @@ pub(crate) struct FeedsPageSnapshot {
     pub(crate) feeds: Vec<FeedSummary>,
     pub(crate) feed_count: usize,
     pub(crate) entry_count: usize,
+    pub(crate) fingerprint: rssr_domain::ConfigFingerprint,
 }
 
 #[derive(Debug, Clone)]

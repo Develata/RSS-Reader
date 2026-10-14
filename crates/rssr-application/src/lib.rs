@@ -15,7 +15,6 @@ pub mod persistence_mutation;
 pub mod reader_service;
 pub mod refresh_service;
 pub mod settings_service;
-pub mod settings_sync_service;
 pub mod startup_service;
 mod subscription_discovery;
 pub mod subscription_workflow;
@@ -37,7 +36,8 @@ pub use import_export_service::{
     RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore, SystemClock,
 };
 pub use library_queries::{
-    ConfigSnapshot, EntriesPage, EntriesStart, LibraryQueryPort, ReaderSnapshot, StartupState,
+    ConfigSnapshot, EntriesPage, EntriesStart, FeedsOverview, LibraryQueryPort, ReaderSnapshot,
+    StartupState,
 };
 pub use persistence_mutation::{
     ActivatedSubscription, ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan,
@@ -53,7 +53,6 @@ pub use refresh_service::{
     SERIAL_REFRESH_CONCURRENCY,
 };
 pub use settings_service::{SettingsPatch, SettingsService};
-pub use settings_sync_service::{AppliedRemoteConfigOutcome, SettingsSyncService};
 pub use startup_service::{StartupService, StartupTarget};
 pub use subscription_workflow::{
     AddSubscriptionAndRefreshOutcome, AddSubscriptionLifecycleInput,

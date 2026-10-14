@@ -2,13 +2,14 @@
 //! [`FeedRepository`] port over a [`LibraryStore`].
 
 use rssr_domain::{
-    DomainError, Feed, FeedRepository, FeedSummary, NewFeedSubscription, Result as DomainResult,
-    normalize_feed_url,
+    ConfigFingerprint, DomainError, Feed, FeedRepository, FeedSummary, FingerprintFeed,
+    NewFeedSubscription, Result as DomainResult, UserSettings, normalize_feed_url,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use url::Url;
 
 use super::codec::{now, parse_optional_time, parse_optional_url, parse_time, parse_url};
+use super::documents;
 use super::error::{StoreError, StoreResult};
 use super::executor::LibraryStore;
 
@@ -179,6 +180,54 @@ pub(crate) fn set_deleted(
         return Err(StoreError::NotFound);
     }
     Ok(())
+}
+
+/// An active subscription's configuration fields, raw: the custom name as stored (never the
+/// source title) and the generation.
+pub(crate) struct ConfigRow {
+    pub id: i64,
+    pub url: String,
+    pub generation: i64,
+    pub custom_title: Option<String>,
+    pub folder: Option<String>,
+}
+
+pub(crate) fn config_rows(conn: &Connection) -> StoreResult<Vec<ConfigRow>> {
+    let mut statement = conn.prepare_cached(
+        "SELECT id, url, generation, custom_title, folder FROM feeds WHERE is_deleted = 0",
+    )?;
+    let mut rows = statement.query([])?;
+    let mut config = Vec::new();
+    while let Some(row) = rows.next()? {
+        config.push(ConfigRow {
+            id: row.get(0)?,
+            url: row.get(1)?,
+            generation: row.get(2)?,
+            custom_title: row.get(3)?,
+            folder: row.get(4)?,
+        });
+    }
+    Ok(config)
+}
+
+pub(crate) fn fingerprint_of(rows: &[ConfigRow], settings: &UserSettings) -> ConfigFingerprint {
+    let projection = rows
+        .iter()
+        .map(|row| FingerprintFeed {
+            id: row.id,
+            url: &row.url,
+            generation: row.generation,
+            custom_title: row.custom_title.as_deref(),
+            folder: row.folder.as_deref(),
+        })
+        .collect();
+    ConfigFingerprint::compute(projection, settings)
+}
+
+/// The fingerprint of the configuration as this transaction sees it.
+pub(crate) fn config_fingerprint(conn: &Connection) -> StoreResult<ConfigFingerprint> {
+    let settings: UserSettings = documents::load(conn, documents::USER_SETTINGS_KEY)?;
+    Ok(fingerprint_of(&config_rows(conn)?, &settings))
 }
 
 pub(crate) fn list_summaries(conn: &Connection) -> StoreResult<Vec<FeedSummary>> {
