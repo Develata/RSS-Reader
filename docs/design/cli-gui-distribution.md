@@ -33,7 +33,7 @@
 | Windows zip / Scoop | `RSS-Reader.exe` 与 `rssr-cli.exe` 放在同一目录，共用旁边的 `RSS-Reader/` 数据目录 |
 | Linux `.deb` | 两个程序都装到 `/usr/bin`，共用 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`） |
 | Linux 便携包 | 两个程序同目录，共用旁边的 `RSS-Reader/` |
-| macOS | v0.2 起为 `~/Library/Application Support/RSS-Reader/`（签名后的应用包视为只读）；首次启动从 v0.1.x 写在应用包旁的 `RSS-Reader/` 导入 |
+| macOS | v0.2 起为 `~/Library/Application Support/RSS-Reader/`（签名后的应用包视为只读）；v0.1.x 的数据在应用包内，替换应用包会删除它，升级前由用户把两个旧库文件复制到新目录，首次启动导入 |
 
 计划中的 Scoop 清单关键字段（完整清单还需版本、下载地址与校验和）：
 

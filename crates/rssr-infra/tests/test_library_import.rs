@@ -392,9 +392,59 @@ fn concurrent_imports_publish_one_complete_library() {
     assert_eq!(published.len(), 1, "{results:?}");
     assert_eq!(published[0].entries, 3);
     for error in results.iter().filter_map(|result| result.as_ref().err()) {
-        assert!(error.to_string().contains("目标资料库已存在"), "{error}");
+        assert!(matches!(error, rssr_infra::store::StoreError::LibraryExists(_)), "{error}");
     }
     assert_eq!(scratch_files(&dir.0), Vec::<String>::new());
+}
+
+/// The library the concurrent imports published is the complete one, read back from the file.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_library_published_by_concurrent_imports_is_complete() {
+    let dir = TempDir::new("concurrent-import-content");
+    let source = fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
+    let target = dir.target();
+    std::thread::scope(|scope| {
+        for _ in 0..4 {
+            scope.spawn(|| {
+                let _ = import_v01(&source, &target);
+            });
+        }
+    });
+    assert_imported_library(&target, 3).await;
+}
+
+/// What a split library holds inconsistently is reported: a body with neither HTML nor text is not
+/// imported, an entry marked as having a body without one is counted, and a body filed under
+/// another subscription stays with its entry.
+#[tokio::test(flavor = "multi_thread")]
+async fn inconsistent_split_libraries_are_imported_and_reported() {
+    let dir = TempDir::new("inconsistent");
+    let source = fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
+    {
+        let content = Connection::open(source.content.as_ref().unwrap()).unwrap();
+        content
+            .execute_batch(
+                "UPDATE entry_contents SET content_html = NULL, content_text = NULL
+                 WHERE entry_id = 2;
+                 UPDATE entry_contents SET feed_id = 2 WHERE entry_id = 1;",
+            )
+            .unwrap();
+        Connection::open(&source.index)
+            .unwrap()
+            .execute("UPDATE entries SET has_content = 1 WHERE id = 3", [])
+            .unwrap();
+    }
+    let outcome = import_v01(&source, &dir.target()).unwrap();
+    assert_eq!(
+        (outcome.bodies, outcome.empty_bodies, outcome.missing_bodies, outcome.misfiled_bodies),
+        (1, 1, 2, 1),
+        "{outcome:?}"
+    );
+    let library = Library::over(LibraryStore::open(dir.target()).await.unwrap());
+    assert_eq!(library.scalar("SELECT COUNT(*) FROM entry_contents").await, 1);
+    assert_eq!(library.scalar("SELECT has_content FROM entries WHERE id = 2").await, 0);
+    let body = library.entries.get_content(1).await.unwrap().expect("kept with its entry");
+    assert_eq!(body.content_html.as_deref(), Some("<p>body 1</p>"));
 }
 
 /// Data still in the WAL of an open v0.1 process is part of the snapshot.
@@ -488,10 +538,15 @@ async fn unreadable_app_state_is_left_behind() {
 #[test]
 fn a_data_directory_without_a_v01_index_has_nothing_to_import() {
     let dir = TempDir::new("empty");
-    assert!(V01Library::find(&dir.0).is_none());
+    assert!(V01Library::find(&dir.0).unwrap().is_none());
     std::fs::write(dir.0.join("rss-reader.db"), b"").unwrap();
-    let found = V01Library::find(&dir.0).unwrap();
+    let found = V01Library::find(&dir.0).unwrap().unwrap();
     assert!(found.content.is_none());
+
+    // Something at the old name that is not a file is not mistaken for "no old library".
+    let odd = TempDir::new("odd");
+    std::fs::create_dir(odd.0.join("rss-reader.db")).unwrap();
+    assert!(V01Library::find(&odd.0).is_err());
 }
 
 /// Opening a data directory that holds only a v0.1 library imports it once; later opens use the
@@ -501,11 +556,11 @@ async fn opening_a_data_directory_imports_its_v01_library_once() {
     use rssr_infra::store::local::open_library_in;
     let dir = TempDir::new("open-imports");
     fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
-    let first = open_library_in(&dir.0, &dir.0, Default::default()).await.unwrap();
+    let first = open_library_in(&dir.0, Default::default()).await.unwrap();
     assert_eq!(first.imported.as_ref().map(|outcome| outcome.feeds), Some(2));
     assert_eq!(first.path, dir.target());
     drop(first);
-    let second = open_library_in(&dir.0, &dir.0, Default::default()).await.unwrap();
+    let second = open_library_in(&dir.0, Default::default()).await.unwrap();
     assert!(second.imported.is_none());
     assert_imported_library(&dir.target(), 3).await;
 }
@@ -517,7 +572,7 @@ async fn a_failed_import_does_not_create_an_empty_library() {
     use rssr_infra::store::local::open_library_in;
     let dir = TempDir::new("open-fails");
     fixture(&dir.0, 9, Endings::Lf, &current_settings(), None);
-    assert!(open_library_in(&dir.0, &dir.0, Default::default()).await.is_err());
+    assert!(open_library_in(&dir.0, Default::default()).await.is_err());
     assert!(!dir.target().exists());
 }
 
@@ -528,8 +583,8 @@ async fn concurrent_first_opens_import_once() {
     let dir = TempDir::new("open-concurrent");
     fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
     let (a, b) = tokio::join!(
-        open_library_in(&dir.0, &dir.0, Default::default()),
-        open_library_in(&dir.0, &dir.0, Default::default())
+        open_library_in(&dir.0, Default::default()),
+        open_library_in(&dir.0, Default::default())
     );
     let (a, b) = (a.unwrap(), b.unwrap());
     assert_eq!(usize::from(a.imported.is_some()) + usize::from(b.imported.is_some()), 1);
@@ -544,9 +599,7 @@ async fn concurrent_first_opens_import_once() {
 async fn a_fresh_data_directory_gets_a_new_library() {
     use rssr_infra::store::local::open_library_in;
     let dir = TempDir::new("open-fresh");
-    let opened = open_library_in(&dir.0.join("nested"), &dir.0.join("nested"), Default::default())
-        .await
-        .unwrap();
+    let opened = open_library_in(&dir.0.join("nested"), Default::default()).await.unwrap();
     assert!(opened.imported.is_none());
     assert!(dir.0.join("nested").join("library.sqlite3").is_file());
 }

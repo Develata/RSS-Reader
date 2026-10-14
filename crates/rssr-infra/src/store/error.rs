@@ -19,6 +19,8 @@ pub enum StoreError {
     Corrupt(#[source] rusqlite::Error),
     #[error("不是 RSS-Reader 资料库")]
     NotALibrary,
+    #[error("资料库已存在：{0}")]
+    LibraryExists(String),
     #[error("资料库由更新版本的程序创建（结构版本 {0}）")]
     NewerLibrary(i64),
     #[error("资料库记录的结构迁移 {0} 与本程序的不一致")]

@@ -26,11 +26,14 @@
 //! Mapping: identifiers are kept (and AUTOINCREMENT high-water marks, so ids are never reused);
 //! `custom_title` is empty (v0.1.x names are source titles); `title_search` is computed; refresh
 //! tickets start at 0; `has_content` is true exactly when a body row exists, and a body row exists
-//! exactly when the source has HTML or text for the entry (v0.1.0–v0.1.6 also hashed title-only
-//! entries; a hash without a body has no use where a body row means a body to show); bodies of
-//! entries
-//! that no longer exist are dropped. A split library without its body database imports only when
-//! the index records no entry with a body. Documents keep their `updated_at`.
+//! exactly when the source has HTML or text for the entry, in either layout (v0.1.0–v0.1.6 also
+//! hashed title-only entries; a hash without a body has no use where a body row means a body to
+//! show); bodies of entries that no longer exist are dropped. A split library without its body
+//! database imports only when the index records no entry with a body. Documents keep their
+//! `updated_at`. What the source holds inconsistently is reported, not hidden: entries marked as
+//! having a body without one (every v0.1.6 library upgraded by v0.1.7, whose migration 0002 dropped
+//! the inline bodies), bodies filed under another subscription than their entry's (kept with the
+//! entry), and bodies with neither HTML nor text (dropped).
 //!
 //! Legacy documents: settings written by v0.1.6 carried five entry-list preferences that later
 //! versions keep in app state, and v0.1.2–v0.1.6 kept the last opened feed under its own key
@@ -87,6 +90,12 @@ pub struct ImportOutcome {
     pub bodies: u64,
     /// Body rows whose entry no longer existed.
     pub orphan_bodies: u64,
+    /// Body rows with neither HTML nor text (not imported).
+    pub empty_bodies: u64,
+    /// Entries the source marked as having a body that it did not have.
+    pub missing_bodies: u64,
+    /// Bodies filed under another subscription than their entry's (imported with the entry).
+    pub misfiled_bodies: u64,
     /// Legacy keys moved to app state: the v0.1.6 settings keys and `last_opened_feed_id`.
     pub moved_legacy_keys: Vec<String>,
     /// App state that could not be read and was not imported.
@@ -102,14 +111,22 @@ pub struct V01Library {
 }
 
 impl V01Library {
-    /// The v0.1.x files in a data directory, if an index database is there.
-    pub fn find(data_dir: &Path) -> Option<Self> {
-        let index = data_dir.join("rss-reader.db");
-        if !index.is_file() {
-            return None;
-        }
-        let content = data_dir.join("rss-reader-content.db");
-        Some(Self { index, content: content.is_file().then_some(content) })
+    /// The v0.1.x files in a data directory: `None` only when there is no index database; a path
+    /// that cannot be examined or is not a file is an error (an upgrade must not mistake it for a
+    /// fresh start).
+    pub fn find(data_dir: &Path) -> StoreResult<Option<Self>> {
+        let Some(index) = existing_file(data_dir.join("rss-reader.db"))? else { return Ok(None) };
+        let content = existing_file(data_dir.join("rss-reader-content.db"))?;
+        Ok(Some(Self { index, content }))
+    }
+}
+
+fn existing_file(path: PathBuf) -> StoreResult<Option<PathBuf>> {
+    match std::fs::metadata(&path) {
+        Ok(metadata) if metadata.is_file() => Ok(Some(path)),
+        Ok(_) => Err(unsupported(format!("{} 不是普通文件", path.display()))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -313,7 +330,12 @@ fn import_with(source: &V01Library, target: &Path, busy: Duration) -> StoreResul
     // One interpretation of the path for the lock, the scratch files and SQLite (an absolute path
     // never reads as a `file:` URI).
     let target = &std::path::absolute(target)?;
-    let taken = || unsupported(format!("目标资料库已存在：{}", target.display()));
+    // ATTACH names the scratch files by text: a path that is not UTF-8 is refused before anything
+    // is created (scratch names only add ASCII to it).
+    if target.to_str().is_none() {
+        return Err(unsupported(format!("路径不是有效的 UTF-8：{}", target.display())));
+    }
+    let taken = || StoreError::LibraryExists(target.display().to_string());
     if target.exists() {
         return Err(taken());
     }
@@ -322,7 +344,7 @@ fn import_with(source: &V01Library, target: &Path, busy: Duration) -> StoreResul
         return Err(taken());
     }
 
-    let index_copy = lock.scratch("import-index");
+    let index_copy = lock.scratch("import-index")?;
     snapshot(&source.index, index_copy.path(), busy)?;
     let (index_version, bodies_claimed) = {
         let index = open_scratch(index_copy.path())?;
@@ -337,7 +359,7 @@ fn import_with(source: &V01Library, target: &Path, busy: Duration) -> StoreResul
     let layout = if index_version >= 2 { Layout::Split } else { Layout::Inline };
     let content_copy = match (&source.content, layout) {
         (Some(path), Layout::Split) => {
-            let copy = lock.scratch("import-content");
+            let copy = lock.scratch("import-content")?;
             snapshot(path, copy.path(), busy)?;
             check_history(&open_scratch(copy.path())?, CONTENT_MIGRATIONS, "正文库")?;
             Some(copy)
@@ -352,7 +374,7 @@ fn import_with(source: &V01Library, target: &Path, busy: Duration) -> StoreResul
         _ => None,
     };
 
-    let staging = lock.scratch("importing");
+    let staging = lock.scratch("importing")?;
     let mut conn = open_scratch(staging.path())?;
     connection::configure(&conn, Role::Writer)?;
     migrate::migrate(&mut conn, &super::codec::now())?;
@@ -419,8 +441,11 @@ fn copy_library(
             "INSERT INTO entry_contents (entry_id, content_html, content_text, content_hash,
                                          updated_at)
              SELECT entry_id, content_html, content_text, content_hash, updated_at
-             FROM v01c.entry_contents WHERE entry_id IN (SELECT id FROM main.entries)",
-            "SELECT COUNT(*) FROM v01c.entry_contents",
+             FROM v01c.entry_contents
+             WHERE entry_id IN (SELECT id FROM main.entries)
+               AND (content_html IS NOT NULL OR content_text IS NOT NULL)",
+            "SELECT COUNT(*) FROM v01c.entry_contents
+             WHERE content_html IS NOT NULL OR content_text IS NOT NULL",
         )),
         (Layout::Split, false) => None,
     };
@@ -431,6 +456,32 @@ fn copy_library(
     let orphan_bodies = source_bodies
         .checked_sub(bodies)
         .ok_or_else(|| unsupported(format!("正文行数不一致：{source_bodies} → {bodies}")))?;
+    let (empty_bodies, misfiled_bodies) = if layout == Layout::Split && content {
+        (
+            count(
+                tx,
+                "SELECT COUNT(*) FROM v01c.entry_contents
+                 WHERE content_html IS NULL AND content_text IS NULL",
+            )?,
+            count(
+                tx,
+                "SELECT COUNT(*) FROM v01c.entry_contents AS body
+                 JOIN main.entries AS entry ON entry.id = body.entry_id
+                 WHERE body.feed_id IS NOT entry.feed_id",
+            )?,
+        )
+    } else {
+        (0, 0)
+    };
+    let missing_bodies = if layout == Layout::Split {
+        count(
+            tx,
+            "SELECT COUNT(*) FROM v01.entries
+             WHERE has_content <> 0 AND id NOT IN (SELECT entry_id FROM main.entry_contents)",
+        )?
+    } else {
+        0
+    };
     tx.execute_batch(
         "UPDATE entries SET has_content = 1 WHERE id IN (SELECT entry_id FROM entry_contents);
          INSERT INTO main.sqlite_sequence (name, seq)
@@ -474,6 +525,9 @@ fn copy_library(
         entries: count(tx, "SELECT COUNT(*) FROM main.entries")?,
         bodies,
         orphan_bodies,
+        empty_bodies,
+        missing_bodies,
+        misfiled_bodies,
         moved_legacy_keys: documents.moved_legacy_keys,
         dropped_app_state: documents.dropped_app_state,
     };
@@ -512,8 +566,17 @@ mod tests {
             )
             .unwrap();
 
+        // Run where a hang cannot hold the test: the answer must come within the bound.
+        let (answer, receive) = std::sync::mpsc::channel();
+        let (from, to) = (source.clone(), dir.join("copy"));
+        std::thread::spawn(move || {
+            let _ = answer.send(snapshot(&from, &to, Duration::from_millis(100)));
+        });
         let started = Instant::now();
-        let error = snapshot(&source, &dir.join("copy"), Duration::from_millis(100)).unwrap_err();
+        let error = receive
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the snapshot gives up within its busy timeout")
+            .unwrap_err();
         assert!(error.to_string().contains("被其他程序占用"), "{error}");
         assert!(started.elapsed() < Duration::from_secs(5), "{:?}", started.elapsed());
 

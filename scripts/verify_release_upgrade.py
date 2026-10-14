@@ -210,6 +210,9 @@ def main():
         "checks": [],
         "limitations": [
             "Favorites seeded with SQL after legacy CLI ingestion (legacy CLI has no star command).",
+            "Shapes the legacy CLI cannot produce are seeded with SQL too: a re-added subscription's "
+            "generation (releases with migration 0006), an entry removed above the highest id (its "
+            "body left as an orphan), and app state.",
             "Covers the split layout written by the legacy release; the inline v0.1.0-v0.1.6 layout "
             "is covered by fixture tests only.",
             "Forced process termination covers the creation-lock wait, not power loss during disk flush.",
@@ -262,6 +265,18 @@ def main():
             thread.join(timeout=5)
         with sqlite3.connect(original / DB_NAMES[0]) as conn:
             conn.execute("UPDATE entries SET is_starred=1, starred_at=created_at WHERE id % 7 = 0")
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(feeds)")]
+            if "generation" in columns:
+                conn.execute("UPDATE feeds SET generation = 2 WHERE id = 2")
+            removed = conn.execute(
+                "DELETE FROM entries WHERE id = (SELECT MAX(id) FROM entries) "
+                "AND is_read = 0 AND is_starred = 0"
+            ).rowcount
+            assert removed == 1, "the highest entry is expected unread and not starred"
+            conn.execute(
+                "INSERT INTO app_settings (key, value, updated_at) VALUES ('app_state_v2', ?, ?)",
+                (json.dumps({"last_opened_feed_id": 2}), "2026-05-01T08:00:00Z"),
+            )
         run_legacy(original, "show-settings")
         checkpoint(original)
         expected = snapshot(original)
@@ -270,7 +285,9 @@ def main():
         assert 5 <= legacy_last <= RELEASED_MIGRATIONS, expected["migrations"]
         report["legacy_migrations"] = legacy_last
         assert len(expected["feeds"]) == 3
-        assert len(expected["entries"]) == len(expected["entry_contents"]) == 144
+        assert len(expected["entries"]) == 143 and len(expected["entry_contents"]) == 144
+        entry_mark = {row["name"]: row["seq"] for row in expected["sqlite_sequence"]}["entries"]
+        assert entry_mark > max(row["id"] for row in expected["entries"]), entry_mark
         assert sum(row["is_read"] for row in expected["entries"]) == 48
         assert sum(row["is_starred"] for row in expected["entries"]) == 20
         assert CSS in json.dumps(expected["app_settings"])
@@ -278,11 +295,14 @@ def main():
         original_hashes = {name: digest(original / name) for name in DB_NAMES}
         report["original_sha256"] = original_hashes
         (root / "legacy-snapshot.json").write_text(json.dumps(expected, ensure_ascii=False, indent=2), encoding="utf-8")
-        record(f"legacy binary created migrations 1-{legacy_last}, 3 subscriptions, 144 bodies, 48 read, 20 starred, settings and CSS")
+        record(f"legacy binary created migrations 1-{legacy_last}, 3 subscriptions, 144 bodies, 48 read, 20 starred, settings and CSS; "
+               "SQL seeded a generation, a removed highest entry and app state")
 
         imported = copy_databases(original, root / "import-success")
-        run_candidate(imported, "list-feeds")
+        result = run_candidate(imported, "list-feeds")
         verify_imported(imported, expected)
+        log = result.stderr.decode("utf-8", "replace")
+        assert "orphan_bodies: 1" in log and "missing_bodies: 0" in log, log
         assert scratch_files(imported) == [], scratch_files(imported)
         assert {name: digest(imported / name) for name in DB_NAMES} == original_hashes
         record("candidate imports every feed, entry, body, document and id mark; generation, times and "

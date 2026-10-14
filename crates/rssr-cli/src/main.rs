@@ -319,16 +319,13 @@ struct CliServices {
 
 impl CliServices {
     async fn new(data_dir: Option<PathBuf>) -> anyhow::Result<Self> {
-        // An explicit data directory is also where a v0.1.x library is imported from.
-        let (data_dir, legacy_dir) = match data_dir {
-            Some(dir) => (dir.clone(), dir),
-            None => (
-                local::local_data_dir().context("确定本地数据目录失败")?,
-                local::legacy_data_dir().context("确定本地数据目录失败")?,
-            ),
+        // A v0.1.x library in the data directory is imported on the first open.
+        let data_dir = match data_dir {
+            Some(dir) => dir,
+            None => local::local_data_dir().context("确定本地数据目录失败")?,
         };
         tracing::info!(data_dir = %data_dir.display(), "初始化 CLI 本地资料库");
-        let opened = open_library_in(&data_dir, &legacy_dir, StoreOptions::default())
+        let opened = open_library_in(&data_dir, StoreOptions::default())
             .await
             .context("打开本地资料库失败")?;
         if let Some(imported) = &opened.imported {

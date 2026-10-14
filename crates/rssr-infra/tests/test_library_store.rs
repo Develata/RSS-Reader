@@ -400,6 +400,37 @@ async fn a_panic_while_dropping_a_cancelled_task_is_contained() {
     insert_feed(&store, "https://after-caller-panic.test").await.unwrap();
 }
 
+/// A caller that gives up while its task waits for room in a full queue drops nothing that
+/// panics into its own code, and the store keeps working.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_task_given_up_while_waiting_for_room_is_discarded_safely() {
+    struct PanicOnDrop;
+    impl Drop for PanicOnDrop {
+        fn drop(&mut self) {
+            panic!("dropping data of a task that never got room");
+        }
+    }
+
+    let dir = TempDir::new("room-panic");
+    let options =
+        StoreOptions { queue_capacity: 1, admission_wait: Duration::from_secs(5), ..quick() };
+    let store = LibraryStore::open_with(dir.library(), options).await.unwrap();
+    let (release, occupying) = occupy_writer(&store).await;
+    let mut queued = std::pin::pin!(store.write(|_| Ok(())));
+    submit_and_look_away(queued.as_mut());
+    let doomed = PanicOnDrop;
+    let waiting = store.write(move |_| {
+        let _doomed = &doomed;
+        Ok(())
+    });
+    // No room: the write is still waiting when its caller gives up.
+    assert!(tokio::time::timeout(Duration::from_millis(200), waiting).await.is_err());
+    release.send(()).unwrap();
+    occupying.await.unwrap().unwrap();
+    queued.await.unwrap();
+    insert_feed(&store, "https://after-room.test").await.unwrap();
+}
+
 /// A caller that goes away interrupts its running statement long before the deadline.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_cancelled_caller_interrupts_its_running_statement() {

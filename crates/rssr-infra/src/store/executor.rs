@@ -195,9 +195,12 @@ impl Slot {
 type Job = Box<dyn FnOnce(&mut Slot) + Send>;
 
 /// Drops the closure of a task that will not run; a panic in dropping what it captured is
-/// contained, so it can neither stop a worker nor reach a caller that gave up.
+/// contained, so it can neither stop a worker nor reach a caller that gave up. The panic's payload
+/// is leaked rather than dropped: dropping it could panic again.
 fn discard(job: Option<Job>) {
-    let _ = catch_unwind(AssertUnwindSafe(move || drop(job)));
+    if let Err(payload) = catch_unwind(AssertUnwindSafe(move || drop(job))) {
+        std::mem::forget(payload);
+    }
 }
 
 /// A queued task: its state, the time it may start until, its closure until it starts or is
@@ -207,6 +210,14 @@ struct Pending {
     start_until: Instant,
     job: Mutex<Option<Job>>,
     room: Mutex<Option<OwnedSemaphorePermit>>,
+}
+
+/// Whatever path a task cell leaves by (cancelled while waiting for room, never queued, dropped
+/// with the queue), a closure still in it is discarded, not dropped plainly.
+impl Drop for Pending {
+    fn drop(&mut self) {
+        discard(self.job.get_mut().unwrap_or_else(|poisoned| poisoned.into_inner()).take());
+    }
 }
 
 impl Pending {
@@ -336,7 +347,7 @@ fn create_if_missing(path: &Path) -> StoreResult<()> {
     if path.exists() {
         return Ok(());
     }
-    let staging = lock.scratch("creating");
+    let staging = lock.scratch("creating")?;
     let mut connection = open_connection(Some(staging.path()), Role::Writer)?;
     let context = TaskContext {
         state: Arc::new(AtomicU8::new(RUNNING)),
@@ -387,6 +398,8 @@ impl LibraryStore {
         }
         create_if_missing(path)?;
         files::check_library(&probe)?;
+        // Only next to a file known to be a library: a foreign file gets no lock file beside it.
+        files::remove_stale_scratch(path);
         let mut writer = open_connection(Some(path), Role::Writer)?;
         let journal_mode = prepare_file(&mut writer)?;
         let mut readers = Vec::with_capacity(options.readers);
@@ -492,11 +505,8 @@ impl LibraryStore {
             job: Mutex::new(Some(job)),
             room: Mutex::new(None),
         });
-        if let Err(error) = queue.submit(Arc::clone(&pending)).await {
-            // Never queued: drop its closure here, contained like any other discarded one.
-            discard(pending.take_job());
-            return Err(error);
-        }
+        // Never queued (no room in time, store gone): the cell's drop discards the closure.
+        queue.submit(Arc::clone(&pending)).await?;
         let mut cancel = CancelOnDrop { pending, armed: true };
         let until = tokio::time::Instant::from_std(start_until);
         let result = match tokio::time::timeout_at(until, &mut receive).await {

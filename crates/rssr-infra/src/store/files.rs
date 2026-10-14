@@ -55,8 +55,9 @@ const SETTLE: Duration = Duration::from_secs(2);
 /// decides; anything else is not a library.
 ///
 /// Without locks the read can meet a checkpoint in progress, which SQLite reports as corruption;
-/// that is retried for [`SETTLE`] before the file is refused. A file without the SQLite header is
-/// refused at once (the header never changes).
+/// that is retried for [`SETTLE`] (a mitigation: nothing bounds a checkpoint's duration), then
+/// reported as corruption, which refuses the open without writing. A file whose format is not
+/// SQLite's is refused at once as not a library.
 pub fn check_library(probe: &str) -> StoreResult<()> {
     let until = Instant::now() + SETTLE;
     loop {
@@ -67,9 +68,7 @@ pub fn check_library(probe: &str) -> StoreResult<()> {
                 Some(ErrorCode::DatabaseCorrupt) if Instant::now() < until => {
                     std::thread::sleep(Duration::from_millis(20));
                 }
-                Some(ErrorCode::DatabaseCorrupt | ErrorCode::NotADatabase) => {
-                    return Err(StoreError::NotALibrary);
-                }
+                Some(ErrorCode::NotADatabase) => return Err(StoreError::NotALibrary),
                 _ => return Err(error.into()),
             },
         }
@@ -94,14 +93,25 @@ fn sibling(path: &Path, suffix: &str) -> PathBuf {
     path.with_file_name(name)
 }
 
-/// Removes `path` and the side files SQLite may have left next to it.
-fn remove_with_side_files(path: &Path) {
+/// Removes `path` and the side files SQLite may have left next to it; a file that is not there
+/// is fine, any other failure is reported.
+fn remove_with_side_files(path: &Path) -> std::io::Result<()> {
     for suffix in ["", "-wal", "-shm", "-journal"] {
         let mut name = path.as_os_str().to_os_string();
         name.push(suffix);
-        let _ = std::fs::remove_file(name);
+        match std::fs::remove_file(name) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error),
+            _ => {}
+        }
     }
+    Ok(())
 }
+
+/// Scratch files a creator uses (`<name>.<label>`); see [`CreationLock::scratch`].
+pub const SCRATCH_LABELS: [&str; 4] = ["creating", "importing", "import-index", "import-content"];
+
+/// How long a creator waits for another creator of the same library.
+const CREATION_WAIT: Duration = Duration::from_secs(120);
 
 /// The exclusive right to create the library at a path: an advisory lock on `<name>.create-lock`
 /// next to it (`flock` / `LockFileEx`), released when dropped or when the process ends.
@@ -110,31 +120,75 @@ fn remove_with_side_files(path: &Path) {
 /// library is missing until it is published, so concurrent creators wait for each other instead of
 /// racing, and the scratch files beside the target belong to the holder alone. The lock file stays
 /// in place: removing it would let a waiter lock a file that later creators no longer see.
+///
+/// The guarantee holds among the programs that take this lock; a file put at the target by
+/// anything else between the check and the rename is not protected (`rename` replaces it on most
+/// platforms).
 pub struct CreationLock {
     target: PathBuf,
     _file: std::fs::File,
 }
 
 impl CreationLock {
-    /// Waits for the lock of `target`, without a time limit: the holder is a live process (the
-    /// lock ends with it), so a holder that hangs blocks other creators until it ends.
+    /// Waits for the lock of `target` up to [`CREATION_WAIT`] (an import of a large library takes
+    /// a while; a holder that hangs makes the others fail instead of waiting forever).
     pub fn acquire(target: &Path) -> StoreResult<Self> {
-        let file = std::fs::OpenOptions::new()
+        Self::acquire_within(target, CREATION_WAIT)
+    }
+
+    fn acquire_within(target: &Path, wait: Duration) -> StoreResult<Self> {
+        let file = Self::open_lock_file(target)?;
+        let until = Instant::now() + wait;
+        loop {
+            match file.try_lock() {
+                Ok(()) => return Ok(Self { target: target.to_path_buf(), _file: file }),
+                Err(std::fs::TryLockError::WouldBlock) if Instant::now() < until => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(std::fs::TryLockError::WouldBlock) => {
+                    return Err(StoreError::Io(std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        format!("另一个程序仍在建立或导入资料库：{}", target.display()),
+                    )));
+                }
+                Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
+            }
+        }
+    }
+
+    /// The lock of `target` if nobody holds it now.
+    pub fn try_acquire(target: &Path) -> StoreResult<Option<Self>> {
+        let file = Self::open_lock_file(target)?;
+        match file.try_lock() {
+            Ok(()) => Ok(Some(Self { target: target.to_path_buf(), _file: file })),
+            Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+            Err(std::fs::TryLockError::Error(error)) => Err(error.into()),
+        }
+    }
+
+    fn open_lock_file(target: &Path) -> std::io::Result<std::fs::File> {
+        std::fs::OpenOptions::new()
             .create(true)
             .truncate(false)
             .write(true)
-            .open(sibling(target, "create-lock"))?;
-        file.lock()?;
-        Ok(Self { target: target.to_path_buf(), _file: file })
+            .open(sibling(target, "create-lock"))
     }
 
     /// The scratch file `<name>.<label>` next to the target, cleared of anything a process that
     /// died holding the lock left there. It borrows the lock, so it is removed before the lock is
     /// released.
-    pub fn scratch(&self, label: &str) -> ScratchFile<'_> {
+    pub fn scratch(&self, label: &str) -> StoreResult<ScratchFile<'_>> {
         let path = sibling(&self.target, label);
-        remove_with_side_files(&path);
-        ScratchFile { path, _lock: PhantomData }
+        remove_with_side_files(&path)?;
+        Ok(ScratchFile { path, _lock: PhantomData })
+    }
+
+    /// Removes every scratch file a creator that died after publishing (or before) left behind.
+    pub fn remove_leftovers(&self) -> StoreResult<()> {
+        for label in SCRATCH_LABELS {
+            remove_with_side_files(&sibling(&self.target, label))?;
+        }
+        Ok(())
     }
 
     /// Publishes the finished, closed `scratch` file as the target, which must still be missing
@@ -167,7 +221,20 @@ impl ScratchFile<'_> {
 
 impl Drop for ScratchFile<'_> {
     fn drop(&mut self) {
-        remove_with_side_files(&self.path);
+        if let Err(error) = remove_with_side_files(&self.path) {
+            // Removed by the next creator holding the lock (`remove_leftovers`, `scratch`).
+            tracing::warn!(%error, path = %self.path.display(), "无法删除资料库暂存文件");
+        }
+    }
+}
+
+/// Removes scratch files left next to an existing library by a creator that died, when no creator
+/// is at work (best effort: a library on read-only media keeps whatever is there).
+pub fn remove_stale_scratch(target: &Path) {
+    let removed = CreationLock::try_acquire(target)
+        .and_then(|lock| lock.map_or(Ok(()), |lock| lock.remove_leftovers()));
+    if let Err(error) = removed {
+        tracing::debug!(%error, "未能清理资料库旁的暂存文件");
     }
 }
 
@@ -185,8 +252,9 @@ mod tests {
         dir
     }
 
-    /// A library caught with page 1 counting more pages than the file has (as during another
-    /// process's checkpoint) is accepted once the file catches up, and refused if it never does.
+    /// A library caught with page 1 counting more pages than the file has (simulated by cutting
+    /// off the last page, as a checkpoint growing the file would show it) is accepted once the
+    /// file catches up, and reported as corrupt if it never does.
     #[test]
     fn a_probe_that_meets_a_checkpoint_waits_for_it() {
         let dir = temp_dir("settle");
@@ -214,7 +282,7 @@ mod tests {
 
         std::fs::write(&target, &complete[..complete.len() - page]).unwrap();
         let started = Instant::now();
-        assert!(matches!(check_library(&probe), Err(StoreError::NotALibrary)));
+        assert!(matches!(check_library(&probe), Err(StoreError::Corrupt(_))));
         assert!(started.elapsed() >= SETTLE);
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -231,18 +299,32 @@ mod tests {
         let dir = temp_dir("lock");
         let target = dir.join("library.sqlite3");
         let first = CreationLock::acquire(&target).unwrap();
+        assert!(CreationLock::try_acquire(&target).unwrap().is_none(), "held");
         let (acquired, receive) = std::sync::mpsc::channel();
+        let (asking, wait_asking) = std::sync::mpsc::channel();
         let waiter = {
             let target = target.clone();
             std::thread::spawn(move || {
+                asking.send(()).unwrap();
                 let _second = CreationLock::acquire(&target).unwrap();
                 acquired.send(()).unwrap();
             })
         };
+        wait_asking.recv_timeout(Duration::from_secs(10)).unwrap();
         assert!(receive.recv_timeout(Duration::from_millis(300)).is_err(), "second one waits");
         drop(first);
         receive.recv_timeout(Duration::from_secs(10)).expect("second one proceeds");
         waiter.join().unwrap();
+
+        // A holder that never lets go makes the next creator fail instead of waiting forever.
+        let holder = CreationLock::acquire(&target).unwrap();
+        let started = Instant::now();
+        let refused = CreationLock::acquire_within(&target, Duration::from_millis(200));
+        assert!(
+            matches!(refused, Err(StoreError::Io(ref error)) if error.kind() == std::io::ErrorKind::TimedOut)
+        );
+        assert!(started.elapsed() >= Duration::from_millis(200));
+        drop(holder);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -256,7 +338,7 @@ mod tests {
         std::fs::write(&stale, b"stale").unwrap();
         std::fs::write(dir.join("library.sqlite3.creating-journal"), b"stale").unwrap();
 
-        let scratch = lock.scratch("creating");
+        let scratch = lock.scratch("creating").unwrap();
         assert!(!scratch.path().exists());
         assert!(!dir.join("library.sqlite3.creating-journal").exists());
         std::fs::write(scratch.path(), b"new").unwrap();
@@ -266,12 +348,23 @@ mod tests {
         assert!(!stale.exists(), "a refused scratch file is removed");
 
         std::fs::remove_file(&target).unwrap();
-        let scratch = lock.scratch("creating");
+        let scratch = lock.scratch("creating").unwrap();
         std::fs::write(scratch.path(), b"new").unwrap();
         lock.publish(scratch).unwrap();
         assert_eq!(std::fs::read(&target).unwrap(), b"new");
         assert!(!stale.exists());
+
+        // Left behind by a creator that died after publishing: removed once nobody creates.
+        for label in SCRATCH_LABELS {
+            std::fs::write(sibling(&target, label), b"left").unwrap();
+        }
+        remove_stale_scratch(&target);
+        assert!(sibling(&target, "importing").exists(), "kept while a creator holds the lock");
         drop(lock);
+        remove_stale_scratch(&target);
+        for label in SCRATCH_LABELS {
+            assert!(!sibling(&target, label).exists(), "{label}");
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

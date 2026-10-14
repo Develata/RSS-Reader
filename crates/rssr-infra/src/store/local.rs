@@ -4,14 +4,15 @@
 //! - Linux: installed under `/usr/bin` -> `$XDG_DATA_HOME/rss-reader` (default
 //!   `~/.local/share/rss-reader`); otherwise portable, next to the executable (`RSS-Reader/`);
 //! - macOS: `~/Library/Application Support/RSS-Reader` (an app bundle is read-only once signed);
-//!   v0.1.x kept its data next to the executable inside the bundle, which is where the first
-//!   start imports from;
 //! - Android: `$HOME/RSS-Reader` (the app's private directory);
 //! - other platforms: next to the executable (`RSS-Reader/`).
 //!
-//! The first open in a data directory without a library imports a v0.1.x library found there
-//! (see [`super::import`]). A failed import fails the open: an empty library would hide the old
-//! data.
+//! The first open in a data directory without a library imports a v0.1.x library found in that
+//! same directory (see [`super::import`]). Every program sharing a data directory therefore makes
+//! the same choice, whichever starts first. A failed import fails the open: an empty library would
+//! hide the old data. v0.1.x on macOS kept its data inside the app bundle (next to the executable),
+//! which replacing the bundle deletes; users copy those files into the data directory before the
+//! first start (`docs/user-guide.md`).
 
 #[cfg(target_os = "linux")]
 use std::ffi::OsStr;
@@ -66,20 +67,7 @@ pub fn local_data_dir() -> StoreResult<PathBuf> {
     }
 }
 
-/// Where a v0.1.x installation of this platform kept its library: the data directory, except on
-/// macOS, where it was next to the executable.
-pub fn legacy_data_dir() -> StoreResult<PathBuf> {
-    #[cfg(target_os = "macos")]
-    {
-        Ok(executable_dir()?.join(LOCAL_DATA_DIR_NAME))
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        local_data_dir()
-    }
-}
-
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "macos")))]
 fn executable_dir() -> StoreResult<PathBuf> {
     let executable = std::env::current_exe()?;
     executable.parent().map(Path::to_path_buf).ok_or_else(|| io_error("无法定位可执行文件所在目录"))
@@ -145,30 +133,25 @@ pub struct OpenedLibrary {
     pub imported: Option<ImportOutcome>,
 }
 
-/// Opens the library in `data_dir`. When there is none yet and `legacy_dir` holds a v0.1.x
-/// library, imports it first; when another process imports at the same time, opens the library
-/// it published.
-pub async fn open_library_in(
-    data_dir: &Path,
-    legacy_dir: &Path,
-    options: StoreOptions,
-) -> StoreResult<OpenedLibrary> {
+/// Opens the library in `data_dir`. When there is none yet and the directory holds a v0.1.x
+/// library, imports it first; when another program imported it meanwhile, opens that library.
+pub async fn open_library_in(data_dir: &Path, options: StoreOptions) -> StoreResult<OpenedLibrary> {
     ensure_dir(data_dir)?;
     // Absolute, so the import and the store agree with the file system on which file it is.
-    let path = std::path::absolute(data_dir)?.join(LIBRARY_FILE);
+    let data_dir = std::path::absolute(data_dir)?;
+    let path = data_dir.join(LIBRARY_FILE);
     let mut imported = None;
     if !path.exists()
-        && let Some(source) = V01Library::find(legacy_dir)
+        && let Some(source) = V01Library::find(&data_dir)?
     {
         let target = path.clone();
-        let result = run_on_thread(move || import::import_v01(&source, &target)).await;
-        match result {
+        match run_on_thread(move || import::import_v01(&source, &target)).await {
             Ok(outcome) => {
                 tracing::info!(?outcome, "已导入 v0.1 资料库");
                 imported = Some(outcome);
             }
-            // Another process published the library meanwhile: use it.
-            Err(_) if path.exists() => {}
+            // Another program sharing the directory imported the same library first.
+            Err(StoreError::LibraryExists(_)) => {}
             Err(error) => return Err(error),
         }
     }
@@ -178,7 +161,7 @@ pub async fn open_library_in(
 
 /// Opens this installation's library (see the module documentation for the locations).
 pub async fn open_local_library() -> StoreResult<OpenedLibrary> {
-    open_library_in(&local_data_dir()?, &legacy_data_dir()?, StoreOptions::default()).await
+    open_library_in(&local_data_dir()?, StoreOptions::default()).await
 }
 
 async fn run_on_thread<R: Send + 'static>(
