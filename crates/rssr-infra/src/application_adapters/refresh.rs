@@ -36,10 +36,10 @@ impl FeedRefreshSourcePort for InfraFeedRefreshSource {
         {
             Ok(response) => response,
             Err(error) => {
-                return Ok(FeedRefreshSourceOutput::Failed(RefreshFailure {
-                    message: format!("抓取订阅失败: {error}"),
-                    metadata: None,
-                }));
+                return Ok(FeedRefreshSourceOutput::Failed(RefreshFailure::fetch(
+                    format!("抓取订阅失败: {error}"),
+                    None,
+                )));
             }
         };
 
@@ -52,10 +52,10 @@ impl FeedRefreshSourcePort for InfraFeedRefreshSource {
                     metadata: map_http_metadata(metadata),
                     feed: map_parsed_feed(parsed),
                 })),
-                Err(error) => Ok(FeedRefreshSourceOutput::Failed(RefreshFailure {
-                    message: format!("解析订阅失败: {error}"),
-                    metadata: Some(map_http_metadata(metadata)),
-                })),
+                Err(error) => Ok(FeedRefreshSourceOutput::Failed(RefreshFailure::parse(
+                    format!("解析订阅失败: {error}"),
+                    Some(map_http_metadata(metadata)),
+                ))),
             },
         }
     }

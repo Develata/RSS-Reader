@@ -180,6 +180,7 @@ pub(super) fn upsert_subscription_in_state(
             last_fetched_at: None,
             last_success_at: None,
             fetch_error: None,
+            fetch_error_kind: None,
             is_deleted: false,
             created_at: now,
             updated_at: now,
@@ -201,6 +202,7 @@ fn reset_remote_feed_state(feed: &mut PersistedFeed) {
     feed.last_fetched_at = None;
     feed.last_success_at = None;
     feed.fetch_error = None;
+    feed.fetch_error_kind = None;
 }
 
 pub(super) fn persisted_feed_to_domain(feed: &PersistedFeed) -> rssr_domain::Result<Feed> {

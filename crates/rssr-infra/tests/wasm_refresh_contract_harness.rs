@@ -123,6 +123,7 @@ fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
         last_fetched_at: None,
         last_success_at: None,
         fetch_error: None,
+        fetch_error_kind: None,
         is_deleted,
         created_at: OffsetDateTime::UNIX_EPOCH,
         updated_at: OffsetDateTime::UNIX_EPOCH,
@@ -520,13 +521,13 @@ async fn browser_refresh_store_commit_failed_persists_error_without_success_time
         &store,
         1,
         RefreshCommit::Failed {
-            failure: RefreshFailure {
-                message: "network timeout".to_string(),
-                metadata: Some(RefreshHttpMetadata {
+            failure: RefreshFailure::fetch(
+                "network timeout",
+                Some(RefreshHttpMetadata {
                     etag: Some("etag-failed".to_string()),
                     last_modified: Some("Fri, 03 Apr 2026 10:00:00 GMT".to_string()),
                 }),
-            },
+            ),
         },
     )
     .await
@@ -547,6 +548,17 @@ async fn browser_refresh_store_commit_failed_persists_error_without_success_time
 
     let persisted = persisted_state().await;
     assert_eq!(persisted.core.feeds[0].fetch_error.as_deref(), Some("network timeout"));
+    assert_eq!(persisted.core.feeds[0].fetch_error_kind, Some(rssr_domain::FetchErrorKind::Fetch));
+
+    // The subscriptions page shows a fetch diagnostic as recorded; one without a category
+    // (written before the categories) as a fixed text.
+    let summary = |state: &BrowserState| {
+        rssr_infra::application_adapters::browser::query::list_feeds(state)[0].fetch_error.clone()
+    };
+    assert_eq!(summary(&persisted).as_deref(), Some("network timeout"));
+    let mut legacy = persisted;
+    legacy.core.feeds[0].fetch_error_kind = None;
+    assert_eq!(summary(&legacy).as_deref(), Some("上次刷新失败"));
 
     clear_browser_state_storage();
 }
@@ -571,9 +583,7 @@ async fn browser_refresh_store_commit_failed_preserves_previous_success_timestam
     commit_for(
         &store,
         1,
-        RefreshCommit::Failed {
-            failure: RefreshFailure { message: "still failing".to_string(), metadata: None },
-        },
+        RefreshCommit::Failed { failure: RefreshFailure::fetch("still failing", None) },
     )
     .await
     .expect("commit failed");

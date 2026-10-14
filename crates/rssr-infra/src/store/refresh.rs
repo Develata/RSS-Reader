@@ -161,6 +161,8 @@ fn record_publication(
                  last_fetched_at = CASE WHEN ?6 >= refresh_diagnosed THEN ?5
                                         ELSE last_fetched_at END,
                  fetch_error = CASE WHEN ?6 >= refresh_diagnosed THEN NULL ELSE fetch_error END,
+                 fetch_error_kind = CASE WHEN ?6 >= refresh_diagnosed THEN NULL
+                                         ELSE fetch_error_kind END,
                  refresh_published = ?6,
                  refresh_diagnosed = MAX(refresh_diagnosed, ?6),
                  updated_at = ?5
@@ -220,7 +222,7 @@ fn record_failure(
     conn.prepare_cached(
         "UPDATE feeds
          SET etag = ?2, last_modified = ?3, last_fetched_at = ?4, fetch_error = ?5,
-             refresh_diagnosed = ?6, updated_at = ?4
+             fetch_error_kind = ?7, refresh_diagnosed = ?6, updated_at = ?4
          WHERE id = ?1",
     )?
     .execute(params![
@@ -230,6 +232,7 @@ fn record_failure(
         now,
         failure.message,
         ticket.issued,
+        failure.kind.as_str(),
     ])?;
     Ok(true)
 }
@@ -471,10 +474,10 @@ impl RefreshStorePort for LibraryRefreshStore {
                     }
                     Ok(None) => Ok(RefreshCommitOutcome { inserted_count: 0, superseded: true }),
                     Err(error) => {
-                        let failure = RefreshFailure {
-                            message: format!("写入订阅内容失败: {error}"),
-                            metadata: Some(metadata),
-                        };
+                        let failure = RefreshFailure::storage(
+                            format!("写入订阅内容失败: {error}"),
+                            Some(metadata),
+                        );
                         let _ = self.record_failure(target, failure).await;
                         Err(anyhow::Error::new(DomainError::from(error))
                             .context("写入订阅内容失败"))

@@ -39,7 +39,10 @@ pub fn list_feeds(state: &BrowserState) -> Vec<FeedSummary> {
             entry_count: counts_by_feed.get(&feed.id).map(|(all, _)| *all).unwrap_or(0),
             last_fetched_at: feed.last_fetched_at,
             last_success_at: feed.last_success_at,
-            fetch_error: feed.fetch_error.clone(),
+            fetch_error: rssr_domain::public_fetch_error(
+                feed.fetch_error_kind,
+                feed.fetch_error.clone(),
+            ),
         })
         .collect::<Vec<_>>();
     feeds.sort_by(|left, right| left.title.cmp(&right.title));
@@ -358,6 +361,7 @@ mod tests {
             last_fetched_at: None,
             last_success_at: None,
             fetch_error: None,
+            fetch_error_kind: None,
             is_deleted: false,
             created_at: now,
             updated_at: now,

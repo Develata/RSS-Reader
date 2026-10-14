@@ -102,6 +102,7 @@ async fn columns_differ_only_by_the_decided_changes() {
         ],
         &[
             "entries.title_search TEXT notnull=1 default=- pk=0",
+            "feeds.fetch_error_kind TEXT notnull=0 default=- pk=0",
             "feeds.refresh_diagnosed INTEGER notnull=1 default=0 pk=0",
             "feeds.refresh_issued INTEGER notnull=1 default=0 pk=0",
             "feeds.refresh_published INTEGER notnull=1 default=0 pk=0",

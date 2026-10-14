@@ -67,6 +67,7 @@ fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
         last_fetched_at: None,
         last_success_at: None,
         fetch_error: None,
+        fetch_error_kind: None,
         is_deleted,
         created_at: OffsetDateTime::UNIX_EPOCH,
         updated_at: OffsetDateTime::UNIX_EPOCH,

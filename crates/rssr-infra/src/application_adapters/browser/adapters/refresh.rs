@@ -32,10 +32,10 @@ impl FeedRefreshSourcePort for BrowserFeedRefreshSource {
         let response = match web_fetch_feed_response(&self.client, target.url.as_str()).await {
             Ok(response) => response,
             Err(error) => {
-                return Ok(FeedRefreshSourceOutput::Failed(RefreshFailure {
-                    message: format!("抓取订阅失败: {error}"),
-                    metadata: None,
-                }));
+                return Ok(FeedRefreshSourceOutput::Failed(RefreshFailure::fetch(
+                    format!("抓取订阅失败: {error}"),
+                    None,
+                )));
             }
         };
 
@@ -59,10 +59,10 @@ impl FeedRefreshSourcePort for BrowserFeedRefreshSource {
         let body = match crate::feed_body::read_feed_text(response).await {
             Ok(body) => body,
             Err(error) => {
-                return Ok(FeedRefreshSourceOutput::Failed(RefreshFailure {
-                    message: format!("读取 feed 响应正文失败: {error:#}"),
-                    metadata: Some(metadata),
-                }));
+                return Ok(FeedRefreshSourceOutput::Failed(RefreshFailure::fetch(
+                    format!("读取 feed 响应正文失败: {error:#}"),
+                    Some(metadata),
+                )));
             }
         };
 
@@ -77,10 +77,10 @@ pub fn classify_browser_refresh_status(
     if status == StatusCode::NOT_MODIFIED {
         Some(FeedRefreshSourceOutput::NotModified(metadata))
     } else if !status.is_success() {
-        Some(FeedRefreshSourceOutput::Failed(RefreshFailure {
-            message: format!("feed 抓取返回非成功状态: HTTP status {status}"),
-            metadata: Some(metadata),
-        }))
+        Some(FeedRefreshSourceOutput::Failed(RefreshFailure::fetch(
+            format!("feed 抓取返回非成功状态: HTTP status {status}"),
+            Some(metadata),
+        )))
     } else {
         None
     }
@@ -95,10 +95,10 @@ pub fn classify_browser_refresh_body(
             metadata,
             feed: map_parsed_feed(parsed),
         }),
-        Err(error) => FeedRefreshSourceOutput::Failed(RefreshFailure {
-            message: format!("解析订阅失败: {error}"),
-            metadata: Some(metadata),
-        }),
+        Err(error) => FeedRefreshSourceOutput::Failed(RefreshFailure::parse(
+            format!("解析订阅失败: {error}"),
+            Some(metadata),
+        )),
     }
 }
 
@@ -184,6 +184,7 @@ impl RefreshStorePort for BrowserRefreshStore {
                         feed.last_fetched_at = Some(now);
                         feed.last_success_at = Some(now);
                         feed.fetch_error = None;
+                        feed.fetch_error_kind = None;
                         feed.updated_at = now;
                     }
                     RefreshCommit::Updated { update } => {
@@ -201,6 +202,7 @@ impl RefreshStorePort for BrowserRefreshStore {
                         feed.last_fetched_at = Some(now);
                         feed.last_success_at = Some(now);
                         feed.fetch_error = None;
+                        feed.fetch_error_kind = None;
                         feed.updated_at = now;
                         let outcome = upsert_entries(
                             state,
@@ -219,6 +221,7 @@ impl RefreshStorePort for BrowserRefreshStore {
                         }
                         feed.last_fetched_at = Some(now);
                         feed.fetch_error = Some(failure.message);
+                        feed.fetch_error_kind = Some(failure.kind);
                         feed.updated_at = now;
                     }
                 }

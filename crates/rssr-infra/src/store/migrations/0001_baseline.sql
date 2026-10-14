@@ -27,6 +27,9 @@ CREATE TABLE feeds (
     last_fetched_at TEXT,
     last_success_at TEXT,
     fetch_error TEXT,
+    -- Where fetch_error came from: fetch, parse or storage; NULL for a diagnostic imported
+    -- from v0.1.x (shown generically).
+    fetch_error_kind TEXT CHECK (fetch_error_kind IN ('fetch', 'parse', 'storage')),
     is_deleted INTEGER NOT NULL DEFAULT 0,
     -- Bumped when a removed subscription is added again, so work started for the old
     -- subscription cannot write into the new one.

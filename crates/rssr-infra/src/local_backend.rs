@@ -147,7 +147,7 @@ impl<H: LocalHost> LocalBackend<H> {
                 RefreshFeedResult::NotModified => {
                     tracing::debug!(feed_id = feed.feed_id, "订阅未变化");
                 }
-                RefreshFeedResult::Failed { message } => {
+                RefreshFeedResult::Failed { message, .. } => {
                     tracing::warn!(feed_id = feed.feed_id, error = %message, "刷新订阅失败");
                 }
             }
@@ -174,7 +174,7 @@ impl<H: LocalHost> LocalBackend<H> {
             RefreshFeedResult::NotModified => {
                 RefreshFeedExecutionOutcome { inserted_count, failure_message: None }
             }
-            RefreshFeedResult::Failed { message } => {
+            RefreshFeedResult::Failed { message, .. } => {
                 tracing::warn!(feed_id = outcome.feed_id, error = %message, "刷新订阅失败");
                 RefreshFeedExecutionOutcome {
                     inserted_count,

@@ -67,7 +67,7 @@ fn fetched(title: &str, etag: &str, keys: &[&str]) -> RefreshCommit {
 }
 
 fn failed(message: &str) -> RefreshCommit {
-    RefreshCommit::Failed { failure: RefreshFailure { message: message.into(), metadata: None } }
+    RefreshCommit::Failed { failure: RefreshFailure::fetch(message, None) }
 }
 
 async fn begin(library: &Library, feed_id: i64) -> RefreshTarget {
@@ -248,10 +248,7 @@ async fn a_304_after_a_failure_keeps_the_validators_of_the_published_version() {
     let conditional = begin(&b, feed.id).await;
     assert_eq!(conditional.etag.as_deref(), Some("etag-a"));
     let failure = RefreshCommit::Failed {
-        failure: RefreshFailure {
-            message: "write failed".into(),
-            metadata: Some(metadata("etag-b")),
-        },
+        failure: RefreshFailure::fetch("write failed", Some(metadata("etag-b"))),
     };
     assert!(!superseded(&a, &failing, failure).await);
     assert_eq!(
@@ -283,10 +280,7 @@ async fn the_refresh_service_reports_a_superseded_failure_as_not_modified() {
         Arc::new(RacingSource {
             other: b,
             feed_id: feed.id,
-            output: FeedRefreshSourceOutput::Failed(RefreshFailure {
-                message: "timeout".into(),
-                metadata: None,
-            }),
+            output: FeedRefreshSourceOutput::Failed(RefreshFailure::fetch("timeout", None)),
             race: true,
         }),
         Arc::new(LibraryRefreshStore::new(a.store.clone())),
@@ -505,10 +499,10 @@ async fn a_304_after_a_failure_keeps_the_last_modified_of_the_published_version(
     let conditional = begin(&b, feed.id).await;
     assert_eq!(conditional.last_modified.as_deref(), Some("lm-a"));
     let failure = RefreshCommit::Failed {
-        failure: RefreshFailure {
-            message: "write failed".into(),
-            metadata: Some(RefreshHttpMetadata { etag: None, last_modified: Some("lm-b".into()) }),
-        },
+        failure: RefreshFailure::fetch(
+            "write failed",
+            Some(RefreshHttpMetadata { etag: None, last_modified: Some("lm-b".into()) }),
+        ),
     };
     assert!(!superseded(&a, &failing, failure).await);
     let not_modified = RefreshCommit::NotModified { metadata: RefreshHttpMetadata::default() };

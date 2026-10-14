@@ -83,3 +83,71 @@ mod tests {
         assert_eq!(normalize_feed_url(&url).as_str(), "https://example.com/feed.xml");
     }
 }
+
+/// Where a recorded refresh failure came from (B2-D5). A diagnostic without one predates the
+/// categories (imported from v0.1.x) and is shown generically.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FetchErrorKind {
+    /// Reaching the feed failed: network, HTTP status, response size.
+    Fetch,
+    /// The response was not a readable feed.
+    Parse,
+    /// Saving what was fetched failed.
+    Storage,
+}
+
+impl FetchErrorKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Fetch => "fetch",
+            Self::Parse => "parse",
+            Self::Storage => "storage",
+        }
+    }
+
+    pub fn from_stored(raw: &str) -> Option<Self> {
+        match raw {
+            "fetch" => Some(Self::Fetch),
+            "parse" => Some(Self::Parse),
+            "storage" => Some(Self::Storage),
+            _ => None,
+        }
+    }
+}
+
+/// The recorded diagnostic as the subscriptions page shows it: fetch and parse failures as
+/// recorded (they name the address, the status or the format); a storage failure or one without
+/// a category as a fixed text, since its detail is internal.
+pub fn public_fetch_error(
+    kind: Option<FetchErrorKind>,
+    recorded: Option<String>,
+) -> Option<String> {
+    let recorded = recorded?;
+    Some(match kind {
+        Some(FetchErrorKind::Fetch | FetchErrorKind::Parse) => recorded,
+        Some(FetchErrorKind::Storage) => "上次刷新时本地存储出错，请稍后重试".to_string(),
+        None => "上次刷新失败".to_string(),
+    })
+}
+
+#[cfg(test)]
+mod fetch_error_tests {
+    use super::{FetchErrorKind, public_fetch_error};
+
+    #[test]
+    fn only_fetch_and_parse_diagnostics_show_their_text() {
+        let shown = |kind| public_fetch_error(kind, Some("HTTP 404".to_string()));
+        assert_eq!(shown(Some(FetchErrorKind::Fetch)).as_deref(), Some("HTTP 404"));
+        assert_eq!(shown(Some(FetchErrorKind::Parse)).as_deref(), Some("HTTP 404"));
+        assert_eq!(
+            shown(Some(FetchErrorKind::Storage)).as_deref(),
+            Some("上次刷新时本地存储出错，请稍后重试")
+        );
+        assert_eq!(shown(None).as_deref(), Some("上次刷新失败"));
+        assert_eq!(public_fetch_error(Some(FetchErrorKind::Fetch), None), None);
+        for kind in [FetchErrorKind::Fetch, FetchErrorKind::Parse, FetchErrorKind::Storage] {
+            assert_eq!(FetchErrorKind::from_stored(kind.as_str()), Some(kind));
+        }
+    }
+}

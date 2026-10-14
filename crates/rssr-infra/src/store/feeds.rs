@@ -2,8 +2,9 @@
 //! [`FeedRepository`] port over a [`LibraryStore`].
 
 use rssr_domain::{
-    ConfigFingerprint, DomainError, Feed, FeedRepository, FeedSummary, FingerprintFeed,
-    NewFeedSubscription, Result as DomainResult, UserSettings, normalize_feed_url,
+    ConfigFingerprint, DomainError, Feed, FeedRepository, FeedSummary, FetchErrorKind,
+    FingerprintFeed, NewFeedSubscription, Result as DomainResult, UserSettings, normalize_feed_url,
+    public_fetch_error,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use url::Url;
@@ -117,6 +118,8 @@ pub(crate) fn upsert_subscription(
              last_fetched_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_fetched_at END,
              last_success_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_success_at END,
              fetch_error = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.fetch_error END,
+             fetch_error_kind = CASE WHEN feeds.is_deleted = 1 THEN NULL
+                                     ELSE feeds.fetch_error_kind END,
              generation = CASE WHEN feeds.is_deleted = 1 THEN feeds.generation + 1
                                ELSE feeds.generation END,
              is_deleted = 0,
@@ -171,6 +174,8 @@ pub(crate) fn set_deleted(
                  last_fetched_at = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL ELSE last_fetched_at END,
                  last_success_at = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL ELSE last_success_at END,
                  fetch_error = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL ELSE fetch_error END,
+                 fetch_error_kind = CASE WHEN is_deleted = 1 AND ?2 = 0 THEN NULL
+                                         ELSE fetch_error_kind END,
                  is_deleted = ?2,
                  updated_at = ?3
              WHERE id = ?1",
@@ -239,7 +244,8 @@ pub(crate) fn list_summaries(conn: &Connection) -> StoreResult<Vec<FeedSummary>>
                 COUNT(entries.id),
                 feeds.last_fetched_at,
                 feeds.last_success_at,
-                feeds.fetch_error
+                feeds.fetch_error,
+                feeds.fetch_error_kind
          FROM feeds
          LEFT JOIN entries ON entries.feed_id = feeds.id
          WHERE feeds.is_deleted = 0
@@ -258,7 +264,11 @@ pub(crate) fn list_summaries(conn: &Connection) -> StoreResult<Vec<FeedSummary>>
             // A summary is for display: an unreadable time shows as unknown.
             last_fetched_at: parse_optional_time(row.get(5)?).ok().flatten(),
             last_success_at: parse_optional_time(row.get(6)?).ok().flatten(),
-            fetch_error: row.get(7)?,
+            // The page shows fetch and parse diagnostics; others as a fixed text.
+            fetch_error: public_fetch_error(
+                row.get::<_, Option<String>>(8)?.as_deref().and_then(FetchErrorKind::from_stored),
+                row.get(7)?,
+            ),
         });
     }
     Ok(summaries)

@@ -66,6 +66,8 @@ fn upsert_config_feed(
              last_fetched_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_fetched_at END,
              last_success_at = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.last_success_at END,
              fetch_error = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.fetch_error END,
+             fetch_error_kind = CASE WHEN feeds.is_deleted = 1 THEN NULL
+                                     ELSE feeds.fetch_error_kind END,
              generation = CASE WHEN feeds.is_deleted = 1 THEN feeds.generation + 1
                                ELSE feeds.generation END,
              is_deleted = 0,

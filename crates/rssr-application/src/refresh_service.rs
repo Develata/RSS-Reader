@@ -7,7 +7,10 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use rssr_domain::{DomainError, FetchErrorKind};
 use time::OffsetDateTime;
+
+use crate::error::{ErrorKind, classify};
 use url::Url;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -84,10 +87,27 @@ pub struct FeedRefreshUpdate {
     pub feed: ParsedFeedUpdate,
 }
 
+/// A failed fetch of one subscription, as the store records it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RefreshFailure {
+    pub kind: FetchErrorKind,
+    /// Shown as recorded for fetch and parse failures; internal for storage ones.
     pub message: String,
     pub metadata: Option<RefreshHttpMetadata>,
+}
+
+impl RefreshFailure {
+    pub fn fetch(message: impl Into<String>, metadata: Option<RefreshHttpMetadata>) -> Self {
+        Self { kind: FetchErrorKind::Fetch, message: message.into(), metadata }
+    }
+
+    pub fn parse(message: impl Into<String>, metadata: Option<RefreshHttpMetadata>) -> Self {
+        Self { kind: FetchErrorKind::Parse, message: message.into(), metadata }
+    }
+
+    pub fn storage(message: impl Into<String>, metadata: Option<RefreshHttpMetadata>) -> Self {
+        Self { kind: FetchErrorKind::Storage, message: message.into(), metadata }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,9 +155,36 @@ pub enum RefreshFeedResult {
         inserted_count: u64,
         localization_entries: Vec<RefreshLocalizedEntry>,
     },
+    /// `message` is for the user: a storage or internal cause is a fixed text (logged in full
+    /// where it was classified).
     Failed {
+        kind: ErrorKind,
         message: String,
     },
+}
+
+impl RefreshFeedResult {
+    /// The failure an error stands for, classified before it becomes text.
+    fn failed(error: &anyhow::Error) -> Self {
+        let public = classify(error);
+        Self::Failed { kind: public.kind, message: public.message }
+    }
+
+    /// The failure a fetch reported: a remote failure shows its text, a storage one does not.
+    fn source_failed(failure: &RefreshFailure) -> Self {
+        match failure.kind {
+            FetchErrorKind::Fetch | FetchErrorKind::Parse => {
+                Self::Failed { kind: ErrorKind::Network, message: failure.message.clone() }
+            }
+            FetchErrorKind::Storage => {
+                tracing::warn!(error = %failure.message, "保存刷新结果失败");
+                Self::Failed {
+                    kind: ErrorKind::Storage,
+                    message: ErrorKind::Storage.generic_message().to_string(),
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -172,7 +219,7 @@ impl RefreshFeedOutcome {
 
     pub fn failure_message(&self) -> Option<&str> {
         match &self.result {
-            RefreshFeedResult::Failed { message } => Some(message),
+            RefreshFeedResult::Failed { message, .. } => Some(message),
             _ => None,
         }
     }
@@ -523,10 +570,10 @@ impl RefreshService {
             return;
         };
 
-        let message = format!("刷新结果写入本地存储失败: {error}");
+        let failed = RefreshFeedResult::failed(&error.context("刷新结果写入本地存储失败"));
         for outcome in outcomes.iter_mut() {
             if !matches!(outcome.result, RefreshFeedResult::Failed { .. }) {
-                outcome.result = RefreshFeedResult::Failed { message: message.clone() };
+                outcome.result = failed.clone();
             }
         }
     }
@@ -597,12 +644,11 @@ impl RefreshService {
                     }
                     Err(join_error) => {
                         if let Some((feed_id, url)) = pending.remove(&join_error.id()) {
+                            let error = anyhow::Error::new(join_error).context("刷新任务意外结束");
                             outcomes.push(RefreshFeedOutcome {
                                 feed_id,
                                 url,
-                                result: RefreshFeedResult::Failed {
-                                    message: format!("刷新任务意外结束: {join_error}"),
-                                },
+                                result: RefreshFeedResult::failed(&error),
                             });
                         }
                     }
@@ -623,11 +669,9 @@ impl RefreshService {
 
         match self.refresh_target(target).await {
             Ok(outcome) => outcome,
-            Err(error) => RefreshFeedOutcome {
-                feed_id,
-                url,
-                result: RefreshFeedResult::Failed { message: error.to_string() },
-            },
+            Err(error) => {
+                RefreshFeedOutcome { feed_id, url, result: RefreshFeedResult::failed(&error) }
+            }
         }
     }
 
@@ -640,7 +684,9 @@ impl RefreshService {
         let target = match self.store.begin_refresh(listed.feed_id, Some(listed.generation)).await?
         {
             Some(current) => current,
-            None => anyhow::bail!("订阅已删除或已重新订阅"),
+            None => {
+                return Err(DomainError::Conflict("订阅已删除或已重新订阅".to_string()).into());
+            }
         };
         self.fetch_and_apply(target).await
     }
@@ -650,10 +696,9 @@ impl RefreshService {
         let fetch = self.feed_locks.begin_fetch();
         let source_output = match self.source.refresh(&target).await {
             Ok(output) => output,
-            Err(error) => FeedRefreshSourceOutput::Failed(RefreshFailure {
-                message: error.to_string(),
-                metadata: None,
-            }),
+            Err(error) => {
+                FeedRefreshSourceOutput::Failed(RefreshFailure::fetch(error.to_string(), None))
+            }
         };
         // 失败的抓取没有带来内容，不能让预抓取的结果因此作废。带来内容的落库在开始前就登记
         // 序号，不论成功、失败还是被取消：SQLite 适配器分几步提交（索引、正文、抓取状态），
@@ -725,7 +770,7 @@ impl RefreshService {
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),
-                    result: RefreshFeedResult::Failed { message: failure.message },
+                    result: RefreshFeedResult::source_failed(&failure),
                 })
             }
         }
@@ -847,7 +892,10 @@ mod tests {
         let outcome = super::RefreshFeedOutcome {
             feed_id: 9,
             url: "https://example.com/feed.xml".to_string(),
-            result: super::RefreshFeedResult::Failed { message: "boom".to_string() },
+            result: super::RefreshFeedResult::Failed {
+                kind: crate::ErrorKind::Network,
+                message: "boom".to_string(),
+            },
         };
 
         assert!(!outcome.is_success());
@@ -884,7 +932,10 @@ mod tests {
                 super::RefreshFeedOutcome {
                     feed_id: 3,
                     url: "https://example.com/three.xml".to_string(),
-                    result: super::RefreshFeedResult::Failed { message: "boom".to_string() },
+                    result: super::RefreshFeedResult::Failed {
+                        kind: crate::ErrorKind::Network,
+                        message: "boom".to_string(),
+                    },
                 },
             ],
         };
@@ -976,10 +1027,10 @@ mod tests {
         });
         let service = RefreshService::new(
             Arc::new(SourceStub {
-                outputs: Mutex::new(vec![FeedRefreshSourceOutput::Failed(RefreshFailure {
-                    message: "抓取订阅失败".to_string(),
-                    metadata: None,
-                })]),
+                outputs: Mutex::new(vec![FeedRefreshSourceOutput::Failed(RefreshFailure::fetch(
+                    "抓取订阅失败",
+                    None,
+                ))]),
             }),
             store.clone(),
         );
@@ -1118,7 +1169,9 @@ mod tests {
         async fn end_batch(&self) -> Result<()> {
             self.record("end");
             match &self.end_batch_error {
-                Some(message) => anyhow::bail!("{message}"),
+                Some(message) => {
+                    return Err(rssr_domain::DomainError::Persistence(message.to_string()).into());
+                }
                 None => Ok(()),
             }
         }
@@ -1205,11 +1258,10 @@ mod tests {
         assert_eq!(outcome.summary().inserted_count, 0);
         for feed in &outcome.feeds {
             match &feed.result {
-                super::RefreshFeedResult::Failed { message } => {
-                    assert!(
-                        message.contains("存储配额已满"),
-                        "失败原因要带上真正的写入错误：{message}"
-                    );
+                // A storage cause is classified and shown as the fixed text; the detail is logged.
+                super::RefreshFeedResult::Failed { kind, message } => {
+                    assert_eq!(*kind, crate::ErrorKind::Storage);
+                    assert_eq!(message, crate::ErrorKind::Storage.generic_message());
                 }
                 other => panic!("批次没写成功时不该报成功：{other:?}"),
             }
@@ -1252,10 +1304,7 @@ mod tests {
             Arc::new(SourceStub {
                 outputs: Mutex::new(vec![
                     FeedRefreshSourceOutput::NotModified(RefreshHttpMetadata::default()),
-                    FeedRefreshSourceOutput::Failed(RefreshFailure {
-                        message: "boom".to_string(),
-                        metadata: None,
-                    }),
+                    FeedRefreshSourceOutput::Failed(RefreshFailure::fetch("boom", None)),
                 ]),
             }),
             Arc::new(StoreStub {
@@ -1382,10 +1431,7 @@ mod tests {
         for (later_refresh, expected) in [
             (FeedRefreshSourceOutput::Updated(update_titled("V2 newer")), vec!["V2 newer"]),
             (
-                FeedRefreshSourceOutput::Failed(RefreshFailure {
-                    message: "offline".into(),
-                    metadata: None,
-                }),
+                FeedRefreshSourceOutput::Failed(RefreshFailure::fetch("offline", None)),
                 vec!["V1 prepared"],
             ),
         ] {

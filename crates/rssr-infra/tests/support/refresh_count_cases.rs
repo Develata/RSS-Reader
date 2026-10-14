@@ -81,9 +81,7 @@ pub async fn verify_counts(store: &dyn RefreshStorePort, feed_id: i64) {
         commit_fresh(
             store,
             feed_id,
-            RefreshCommit::Failed {
-                failure: RefreshFailure { message: "offline".into(), metadata: None }
-            }
+            RefreshCommit::Failed { failure: RefreshFailure::fetch("offline", None) }
         )
         .await
         .unwrap()

@@ -167,10 +167,10 @@ async fn refresh_contract_records_not_modified_without_creating_entries() {
 async fn refresh_contract_records_failure_message_and_fetch_timestamp() {
     let fixture = build_library_fixture(
         &["https://example.com/feed.xml"],
-        vec![FeedRefreshSourceOutput::Failed(RefreshFailure {
-            message: "抓取订阅失败: network timeout".to_string(),
-            metadata: Some(metadata("etag-failed", "Fri, 03 Apr 2026 10:00:00 GMT")),
-        })],
+        vec![FeedRefreshSourceOutput::Failed(RefreshFailure::fetch(
+            "抓取订阅失败: network timeout",
+            Some(metadata("etag-failed", "Fri, 03 Apr 2026 10:00:00 GMT")),
+        ))],
     )
     .await;
 
@@ -178,7 +178,7 @@ async fn refresh_contract_records_failure_message_and_fetch_timestamp() {
 
     assert!(matches!(
         outcome.result,
-        rssr_application::RefreshFeedResult::Failed { ref message }
+        rssr_application::RefreshFeedResult::Failed { ref message, .. }
         if message == "抓取订阅失败: network timeout"
     ));
 
@@ -194,6 +194,22 @@ async fn refresh_contract_records_failure_message_and_fetch_timestamp() {
     assert!(stored_feed.last_fetched_at.is_some());
     assert!(stored_feed.last_success_at.is_none());
     assert_eq!(stored_feed.fetch_error.as_deref(), Some("抓取订阅失败: network timeout"));
+
+    // The subscriptions page shows a fetch diagnostic as recorded; a storage one or one without
+    // a category (imported from v0.1.x) as a fixed text.
+    let shown =
+        || async { fixture.library.feeds.list_summaries().await.unwrap()[0].fetch_error.clone() };
+    assert_eq!(shown().await.as_deref(), Some("抓取订阅失败: network timeout"));
+    let id = fixture.feed_ids[0];
+    let kind = "SELECT fetch_error_kind FROM feeds WHERE id = ";
+    assert_eq!(fixture.library.text(format!("{kind}{id}")).await.as_deref(), Some("fetch"));
+    fixture
+        .library
+        .exec(format!("UPDATE feeds SET fetch_error_kind = 'storage' WHERE id = {id}"))
+        .await;
+    assert_eq!(shown().await.as_deref(), Some("上次刷新时本地存储出错，请稍后重试"));
+    fixture.library.exec(format!("UPDATE feeds SET fetch_error_kind = NULL WHERE id = {id}")).await;
+    assert_eq!(shown().await.as_deref(), Some("上次刷新失败"));
 }
 
 #[tokio::test]

@@ -49,6 +49,10 @@ pub struct PersistedFeed {
     pub last_fetched_at: Option<OffsetDateTime>,
     pub last_success_at: Option<OffsetDateTime>,
     pub fetch_error: Option<String>,
+    /// Where `fetch_error` came from; absent in data written before the categories (shown
+    /// generically, replaced by the next refresh).
+    #[serde(default)]
+    pub fetch_error_kind: Option<rssr_domain::FetchErrorKind>,
     pub is_deleted: bool,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,

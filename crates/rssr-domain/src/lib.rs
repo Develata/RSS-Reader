@@ -17,7 +17,9 @@ pub use entry::{
     MarkReadOutcome, MarkReadPreview, ReadFilter, StarredFilter, archive_cutoff_at,
     is_entry_archived,
 };
-pub use feed::{Feed, FeedSummary, NewFeedSubscription, normalize_feed_url};
+pub use feed::{
+    Feed, FeedSummary, FetchErrorKind, NewFeedSubscription, normalize_feed_url, public_fetch_error,
+};
 pub use repository::{
     AppStateMutation, AppStateRepository, EntryContentRepository, EntryIndexRepository,
     EntryRepository, FeedRepository, HealthRepository, SettingsRepository,
