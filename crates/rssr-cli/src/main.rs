@@ -9,8 +9,9 @@ use rssr_application::{
 };
 use rssr_domain::{ConfigFingerprint, Feed, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
-    composition::compose_library_use_cases,
+    composition::compose_library_use_cases_with,
     config_sync::webdav::WebDavConfigSync,
+    outbound::{self, OutboundPolicy},
     store::{
         StoreOptions,
         local::{self, open_library_in},
@@ -317,6 +318,9 @@ async fn main() -> anyhow::Result<()> {
 
 struct CliServices {
     use_cases: AppUseCases,
+    /// The data directory's outbound policy (`outbound.json`): a server's directory makes the CLI
+    /// public-only too.
+    policy: OutboundPolicy,
 }
 
 impl CliServices {
@@ -327,14 +331,16 @@ impl CliServices {
             None => local::local_data_dir().context("确定本地数据目录失败")?,
         };
         tracing::info!(data_dir = %data_dir.display(), "初始化 CLI 本地资料库");
+        // Before the library is opened: a policy that cannot be read stops the CLI here.
+        let policy = outbound::load_policy(&data_dir).context("读取出站策略失败")?;
         let opened = open_library_in(&data_dir, StoreOptions::default())
             .await
             .context("打开本地资料库失败")?;
         if let Some(imported) = &opened.imported {
             tracing::info!(?imported, "已从 v0.1 数据导入资料库");
         }
-        let use_cases = compose_library_use_cases(opened.store).use_cases;
-        Ok(Self { use_cases })
+        let use_cases = compose_library_use_cases_with(opened.store, &policy)?.use_cases;
+        Ok(Self { use_cases, policy })
     }
 
     async fn list_feeds(&self) -> anyhow::Result<Vec<Feed>> {
@@ -456,7 +462,7 @@ impl CliServices {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<RemoteConfigPushOutcome> {
-        let remote = WebDavConfigSync::new(endpoint, remote_path)?;
+        let remote = WebDavConfigSync::with_policy(endpoint, remote_path, self.policy.clone())?;
         self.use_cases.import_export_service.push_remote_config(&remote).await
     }
 
@@ -465,7 +471,7 @@ impl CliServices {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<RemoteConfigPullOutcome> {
-        let remote = WebDavConfigSync::new(endpoint, remote_path)?;
+        let remote = WebDavConfigSync::with_policy(endpoint, remote_path, self.policy.clone())?;
         self.use_cases.import_export_service.pull_remote_config(&remote).await
     }
 }

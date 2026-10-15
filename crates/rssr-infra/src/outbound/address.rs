@@ -80,7 +80,8 @@ fn in_ipv6_network(ip: Ipv6Addr, network: Ipv6Addr, prefix: u8) -> bool {
 mod tests {
     use super::is_public_address;
 
-    /// Every special-purpose form is refused; ordinary public hosts are accepted. Embedded IPv4:
+    /// The project policy (not the registries alone): its exclusions are refused, the addresses
+    /// just outside each of them are accepted, ordinary public hosts are accepted. Embedded IPv4:
     /// the well-known NAT64 prefix follows the embedded address, every other form is refused even
     /// around a public address.
     #[test]
@@ -98,6 +99,25 @@ mod tests {
             "198.17.255.255",
             "198.20.0.0",
             "223.255.255.255",
+            "9.255.255.255",
+            "11.0.0.0",
+            "126.255.255.255",
+            "128.0.0.0",
+            "169.253.255.255",
+            "169.255.0.0",
+            "192.0.3.0",
+            "192.88.100.0",
+            "192.167.255.255",
+            "192.169.0.0",
+            "198.51.99.255",
+            "198.51.101.0",
+            "203.0.112.255",
+            "203.0.114.0",
+            "2001:db7:ffff::1",
+            "2001:db9::1",
+            "2001:ffff::1",
+            "3fff:1000::1",
+            "3ffe:ffff::1",
             "2606:4700:4700::1111",
             "2001:4860:4860::8888",
             "2a00:1450:4001:80b::200e",
@@ -158,6 +178,13 @@ mod tests {
             "ff02::1",
             "1fff:ffff::1",
             "4000::1",
+            "1fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+            "5f00::1",
+            "2001:20::1",
+            "2001:30::1",
+            "2001:1ff:ffff:ffff:ffff:ffff:ffff:ffff",
+            "3fff:fff:ffff:ffff:ffff:ffff:ffff:ffff",
+            "2002:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
         ];
         for raw in public {
             assert!(is_public_address(raw.parse().unwrap()), "{raw} should be public");

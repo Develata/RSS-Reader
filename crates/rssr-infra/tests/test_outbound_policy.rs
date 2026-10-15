@@ -141,6 +141,29 @@ async fn feed_fetching_reaches_only_allowed_destinations() {
     assert_eq!(at.refused.connections(), 1);
 }
 
+/// Every form a URL can give a literal address in (as the URL parser reads it), and a user name
+/// that looks like a host: none of them reaches the refused listener.
+#[tokio::test(flavor = "multi_thread")]
+async fn literal_address_forms_never_reach_a_refused_destination() {
+    let at = Destinations::start(feed_response(), "/feed.xml").await;
+    let port = at.refused.address.port();
+    let client = FetchClient::with_policy(policy(false)).unwrap();
+    for url in [
+        format!("http://2130706435:{port}/feed.xml"),
+        format!("http://0x7f.0.0.3:{port}/feed.xml"),
+        format!("http://0177.0.0.3:{port}/feed.xml"),
+        format!("http://127.3:{port}/feed.xml"),
+        format!("http://%31%32%37.0.0.3:{port}/feed.xml"),
+        format!("http://example.com@127.0.0.3:{port}/feed.xml"),
+        format!("http://[::ffff:127.0.0.3]:{port}/feed.xml"),
+        format!("http://localhost.:{}/feed.xml", at.named.address.port()),
+    ] {
+        let request = FetchRequest { url: url.clone(), etag: None, last_modified: None };
+        assert!(client.fetch(&request).await.is_err(), "{url}");
+    }
+    assert_eq!((at.refused.connections(), at.named.connections()), (0, 0));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn subscription_probing_reaches_only_allowed_destinations() {
     let at = Destinations::start(feed_response(), "/feed.xml").await;

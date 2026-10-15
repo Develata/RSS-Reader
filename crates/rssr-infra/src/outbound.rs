@@ -18,6 +18,7 @@
 //! to private IPv4 must block it in its egress rules, or list it under `deny`.
 
 mod address;
+mod policy_file;
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -27,6 +28,7 @@ use reqwest::redirect::{Action, Attempt, Policy};
 use url::{Host, Url};
 
 pub use address::is_public_address;
+pub use policy_file::{POLICY_FILE, ensure_server_policy, load_policy};
 
 /// Where outbound requests may go.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
