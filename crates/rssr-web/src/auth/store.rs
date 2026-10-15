@@ -497,6 +497,27 @@ mod tests {
         assert!(!store.validate(&lapsed, T0 + HOUR + 30 * DAY + HOUR).unwrap());
     }
 
+    /// 续期语句自身的保证，不依赖调用方先判断粒度（例如另一个进程打开了同一个库）：不满一个
+    /// 粒度不写，从不往回改。
+    #[test]
+    fn the_renewal_statement_writes_hourly_and_never_backwards() {
+        let scratch = Scratch::new("renew-statement");
+        let store = open(&scratch);
+        let token = login(&store, T0);
+        let renew = |now| renew_session(&store.connection(), &token.digest(), now).unwrap();
+
+        renew(T0 + HOUR - 1);
+        assert_eq!(last_used(&store, &token), T0, "less than a granularity later");
+        renew(T0 + 2 * HOUR);
+        assert_eq!(last_used(&store, &token), T0 + 2 * HOUR);
+        renew(T0 + HOUR + 1);
+        assert_eq!(last_used(&store, &token), T0 + 2 * HOUR, "never moved backwards");
+        renew(T0 + 3 * HOUR - 1);
+        assert_eq!(last_used(&store, &token), T0 + 2 * HOUR);
+        renew(T0 + 3 * HOUR);
+        assert_eq!(last_used(&store, &token), T0 + 3 * HOUR);
+    }
+
     /// 天天使用的会话也在创建后 180 天整过期；之后原样重放这个 cookie 仍被拒绝。
     #[test]
     fn a_session_in_daily_use_still_ends_at_the_absolute_limit() {
