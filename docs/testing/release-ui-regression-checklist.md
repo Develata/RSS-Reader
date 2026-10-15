@@ -150,8 +150,10 @@ bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
 - 确认未登录访问 `/entries` 会重定向到 `/login`
 - 用临时凭据完成一次真实登录
 - 确认已登录后 `/session-probe` 返回 `204`
-- 确认已登录后 `/feeds` 和 `/settings` 返回 `200`
-- 确认 `/logout` 后回到 `/login`
+- 确认来自其他来源（同一主机的其他端口）的登录提交返回 `403`
+- 确认已登录后 `/feeds`、`/settings` 与 `/api/v1/session` 返回 `200`
+- 确认 `GET /logout` 是带 CSRF 令牌的确认页，带 `Origin` 与令牌的 `POST /logout` 回到 `/login`
+- 确认退出后重放旧会话 cookie 被拒绝（服务器已吊销会话）
 
 同源 fixture 的登录后添加与首刷已有自动化；真实远端代理 feed 和未覆盖的交互仍需补验。
 

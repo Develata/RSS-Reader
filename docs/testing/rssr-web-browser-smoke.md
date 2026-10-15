@@ -56,7 +56,7 @@ bash scripts/run_rssr_web_browser_smoke.sh --feed-url https://example.com/feed.x
 7. 点击该卡片上的 `data-action="refresh-feed"`。
 8. 如果页面出现文章，点击 `data-nav="feed-entries"` 进入文章页；如能进入阅读页，再补看 `/entries/:entry_id` 阅读页。
 9. 打开 `/settings`，确认设置页在登录态下正常可达。
-10. 打开 `/logout`，确认会回到 `/login`。
+10. 打开 `/logout`，在确认页点“退出登录”，确认会回到 `/login`。
 
 ## 固定 selector / 期望
 
@@ -71,7 +71,7 @@ bash scripts/run_rssr_web_browser_smoke.sh --feed-url https://example.com/feed.x
 - 添加 feed 后，新的 feed 卡片可见
 - 刷新后不应回到登录页，也不应出现明显错误壳
 - `/settings` 可达
-- `/logout` 后回到 `/login`
+- `/logout` 确认后回到 `/login`
 
 ## 与自动化 smoke 的分工
 

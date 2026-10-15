@@ -45,8 +45,7 @@ async function main() {
   Object.assign(env, {
     RSSR_PROXY_ISOLATION_TEST: '1', RSS_READER_WEB_USERNAME: 'isolation-test',
     RSS_READER_WEB_PASSWORD: 'fixture-password-only',
-    RSS_READER_WEB_SESSION_SECRET: 'feed-proxy-isolation-test-secret-0123456789',
-    RSS_READER_WEB_AUTH_STATE_FILE: path.join(run, 'auth.json'),
+    RSSR_DATA_DIR: path.join(run, 'data'),
     RSS_READER_WEB_STATIC_DIR: path.resolve(publicDir),
     TEMP: run, TMP: run, TMPDIR: run,
   });

@@ -53,7 +53,7 @@ bash scripts/run_windows_chrome_visible_regression.sh \
 - 静态 `/feeds`
 - settings 主题实验室到 `/entries/2` 阅读页的主题矩阵
 - 小视口 `360×800` / DPR 3 下的 `/entries`、`/feeds`、`/settings`、`/entries/2`
-- `rssr-web` 的 `__codex/browser-feed-smoke` 浏览器态 helper
+- `rssr-web` 的浏览器 feed 冒烟页（`/__smoke/browser-feed-smoke.html`，经真实登录表单进入；见 [浏览器 feed smoke](./rssr-web-browser-feed-smoke.md)）
 
 断言策略：
 

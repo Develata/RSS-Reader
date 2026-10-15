@@ -28,14 +28,17 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --home-dir /app rssr \
-    && mkdir -p /app/auth \
-    && chown -R rssr:rssr /app
+    && mkdir -p /app/auth /data \
+    && chown -R rssr:rssr /app /data \
+    && chmod 700 /data
 
 COPY --from=builder /app/rssr-web /usr/local/bin/rssr-web
 COPY --from=builder /app/web-dist/public /app/public
 
 ENV RSS_READER_WEB_BIND=0.0.0.0:8080
 ENV RSS_READER_WEB_STATIC_DIR=/app/public
+# Data directory: auth.sqlite3 (v0.2 phase C). Mount a volume here.
+ENV RSSR_DATA_DIR=/data
 
 USER rssr
 

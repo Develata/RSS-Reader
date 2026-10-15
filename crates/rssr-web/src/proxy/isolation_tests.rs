@@ -2,12 +2,12 @@
 //! No fixture route or network-policy override is compiled into rssr-web.
 use std::{io::Write, sync::Arc};
 
-use axum::{Router, extract::Query, http::StatusCode, middleware, routing::get};
+use axum::{Router, extract::Query, http::StatusCode, routing::get};
 use reqwest::{ResponseBuilderExt, Url};
 use tower_http::services::{ServeDir, ServeFile};
 
 use super::{FeedProxyQuery, MAX_PROXIED_FEED_BYTES, build_proxy_response, feed_proxy};
-use crate::auth::{AppState, handle_login, load_config, require_auth, session_probe, show_login};
+use crate::auth::{AppState, load_config, open_store, session_probe, with_auth};
 
 const PROBE: &str = "window.__proxyExecuted = true; window.__proxyRead = localStorage.getItem('rssr-proxy-sentinel'); localStorage.setItem('rssr-proxy-read', window.__proxyRead); localStorage.setItem('rssr-proxy-sentinel', 'changed-by-fixture');";
 const LAST_MODIFIED: &str = "Wed, 07 Oct 2026 00:00:00 GMT";
@@ -125,12 +125,15 @@ async fn response_body_limit_remains_enforced() {
 
 /// Started only by scripts/browser/feed_proxy_isolation.mjs in an isolated process.
 #[tokio::test]
-#[ignore = "requires the isolated CDP browser driver and an explicit temporary auth path"]
+#[ignore = "requires the isolated CDP browser driver and an explicit temporary data directory"]
 async fn browser_fixture_server() {
     assert!(std::env::var_os("RSSR_PROXY_ISOLATION_TEST").is_some());
-    assert!(std::env::var_os("RSS_READER_WEB_AUTH_STATE_FILE").is_some());
+    let data_dir = std::env::var_os("RSSR_DATA_DIR").expect("an explicit temporary data directory");
     let config = Arc::new(load_config().unwrap());
-    let state = AppState::new(config.clone());
+    let store = Arc::new(open_store(std::path::Path::new(&data_dir)).unwrap());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    // Trusted origins come from the address actually bound, not from the configuration.
+    let state = AppState::new(config.clone(), store, listener.local_addr().unwrap()).unwrap();
     let protected = Router::new()
         .route("/session-probe", get(session_probe))
         .route(
@@ -166,13 +169,8 @@ async fn browser_fixture_server() {
         .fallback_service(
             ServeDir::new(&config.static_dir)
                 .not_found_service(ServeFile::new(config.static_dir.join("index.html"))),
-        )
-        .layer(middleware::from_fn_with_state(state.clone(), require_auth));
-    let app = Router::new()
-        .route("/login", get(show_login).post(handle_login))
-        .merge(protected)
-        .with_state(state);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        );
+    let app = with_auth(protected, state);
     println!("RSSR_PROXY_TEST_URL=http://{}", listener.local_addr().unwrap());
     std::io::stdout().flush().unwrap();
     axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())

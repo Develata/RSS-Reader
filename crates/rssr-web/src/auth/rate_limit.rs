@@ -28,15 +28,16 @@ pub(crate) struct LoginThrottleState {
 /// 登录失败计数的键（审计 F1）。不看用户名：任何用户名的失败都记在同一个来源上，否则只有
 /// 真实用户名会触发限速，限速本身就成了判断用户名是否存在的信号。
 ///
-/// - 带有效已知设备标记的请求按设备计数：只有它自己的失败才会锁住它。
+/// - 带有效已知设备标记（`device_key` 签发）的请求按设备计数：只有它自己的失败才会锁住它。
 /// - 其余请求按客户端地址计数：默认取 TCP 对端地址；只有显式信任代理头时才取转发地址。
 pub(crate) fn rate_limit_key(
     config: &AuthConfig,
+    device_key: &[u8; 32],
     headers: &HeaderMap,
     peer: Option<IpAddr>,
 ) -> String {
-    if let Some(nonce) =
-        extract_cookie(headers, DEVICE_COOKIE).and_then(|value| device_nonce(config, value))
+    if let Some(nonce) = extract_cookie(headers, DEVICE_COOKIE)
+        .and_then(|value| device_nonce(device_key, &config.username, value))
     {
         return format!("{DEVICE_KEY_PREFIX}{nonce}");
     }

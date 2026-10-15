@@ -571,9 +571,14 @@ class Acceptance(unittest.TestCase):
         requests = self.auth_requests()
         self.assertEqual([(r["method"], r["path"]) for r in requests], [
             ("GET", "/healthz"), ("GET", "/login"), ("GET", "/entries"),
-            ("POST", "/login"), ("GET", "/session-probe"), ("GET", "/feeds"),
-            ("GET", "/settings"), ("GET", "/logout")])
-        self.assertEqual(requests[3]["form"]["next"], ["/feeds"])
+            ("POST", "/login"), ("POST", "/login"), ("GET", "/session-probe"), ("GET", "/feeds"),
+            ("GET", "/settings"), ("GET", "/api/v1/session"), ("GET", "/session-probe"),
+            ("GET", "/logout"), ("POST", "/logout"), ("GET", "/session-probe")])
+        self.assertEqual(requests[3]["origin"], "http://127.0.0.1:1")
+        self.assertEqual(requests[4]["origin"], f"http://127.0.0.1:{port}")
+        self.assertEqual(requests[4]["form"]["next"], ["/feeds"])
+        self.assertEqual(requests[9]["cookie"], "rssr_web_session=fixture-token")
+        self.assertEqual(requests[11]["form"], {"csrf": ["fixture-csrf"]})
         self.assertEqual(self.report()["schema_version"], 1)
         self.no_auth_tree(port)
         self.assertIn("auth fixture listening", (self.log / "rssr-web.log").read_text())
@@ -596,11 +601,12 @@ class Acceptance(unittest.TestCase):
             self.env["BASH_ENV"] = startup.as_posix()
         self.run_cli("--web-auth-only", "--web-port", str(port))
         calls = trace.read_text(encoding="utf-8").splitlines()
-        # Readiness and all 7 assertions must honor the selected caller curl.
-        self.assertGreaterEqual(len(calls), 8)
-        self.assertEqual(sum('"-D"' in line for line in calls), 7)
-        self.assertIn("rssr-session", (self.log / "rssr-web.cookies").read_text())
-        for name in ["login", "entries", "login-post", "session-probe", "feeds", "settings", "logout"]:
+        # Readiness and all 12 requests must honor the selected caller curl.
+        self.assertGreaterEqual(len(calls), 13)
+        self.assertEqual(sum('"-D"' in line for line in calls), 12)
+        self.assertIn("rssr_web_session", (self.log / "rssr-web.cookies").read_text())
+        for name in ["login", "entries", "login-foreign", "login-post", "session-probe", "feeds",
+                     "settings", "api-session", "session-replay", "logout-page", "logout", "revoked"]:
             self.assertTrue((self.log / f"rssr-web-{name}.headers").is_file())
         self.no_auth_tree(port)
 

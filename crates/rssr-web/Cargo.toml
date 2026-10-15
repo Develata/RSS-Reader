@@ -19,6 +19,7 @@ rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+subtle.workspace = true
 time.workspace = true
 tokio = { workspace = true, features = ["fs", "net", "rt-multi-thread", "signal", "sync"] }
 tower-http.workspace = true

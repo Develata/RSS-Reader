@@ -25,11 +25,11 @@ bash scripts/run_rssr_web_browser_feed_smoke.sh
 默认行为：
 
 - 构建 `rssr-app` web bundle
-- 启动启用 smoke helper 的 `rssr-web`
-- 打开 `http://127.0.0.1:<port>/__codex/browser-feed-smoke`
-- 自动完成：
-  - 登录
-  - 在 `/feeds` 添加 `http://127.0.0.1:<port>/__codex/feed-fixture.xml`
+- 用 `scripts/prepare_rssr_web_feed_smoke.sh` 复制一份 bundle，在 `/__smoke/` 下放入冒烟页与当前日期的 feed fixture（普通静态文件；`rssr-web` 没有测试专用路由）
+- 以这份目录和临时数据目录启动 `rssr-web`
+- 打开 `http://127.0.0.1:<port>/login?next=/__smoke/browser-feed-smoke.html`，经真实登录表单登录（同源提交，带 `Origin`）
+- 冒烟页自动完成：
+  - 在 `/feeds` 添加 `http://127.0.0.1:<port>/__smoke/feed-fixture.xml`
   - 点击 `refresh-feed`
   - 点击 `feed-entries`
 - 产出：
@@ -58,7 +58,7 @@ bash scripts/run_rssr_web_browser_feed_smoke.sh --release
 
 ## 覆盖边界
 
-这条 smoke 使用同源 `__codex/feed-fixture.xml`，主要验证：
+这条 smoke 使用同源 `__smoke/feed-fixture.xml`，主要验证：
 
 - 登录后的 browser UI 自动流程
 - browser refresh source -> store -> UI 的成功路径
@@ -66,7 +66,7 @@ bash scripts/run_rssr_web_browser_feed_smoke.sh --release
 
 它不验证真实外部站点的 network / CORS failure。
 
-helper 在 iframe 所属的 window 中构造输入事件，避免跨 realm 的模拟事件被 Web renderer 当作空输入。fixture 使用当前 UTC 日期，防止固定历史日期随时间进入默认归档窗口而造成误报；文章 GUID 仍固定，重复刷新继续验证同一篇文章。
+冒烟页在 iframe 所属的 window 中构造输入事件，避免跨 realm 的模拟事件被 Web renderer 当作空输入。fixture 使用当前 UTC 日期，防止固定历史日期随时间进入默认归档窗口而造成误报；文章 GUID 仍固定，重复刷新继续验证同一篇文章。
 
 真实外部 feed 与 `/feed-proxy` 部署壳链路由 [`rssr-web` 代理 Feed Smoke](./rssr-web-proxy-feed-smoke.md) 覆盖。纯静态 Web 的 CORS 限制归入 [环境限制索引](./environment-limitations.md)。
 

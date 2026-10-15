@@ -17,7 +17,6 @@ log_dir=""
 browser_check_dir="${CODEX_BROWSER_CHECK_DIR:-$HOME/codex-browser-check}"
 username="smoke"
 password="smoke-pass-123"
-session_secret="rssr-web-browser-feed-smoke-session-secret-0123456789"
 
 usage() {
   cat <<EOF
@@ -123,7 +122,8 @@ fi
 public_dir="target/dx/rssr-app/${profile}/web/public"
 static_log="$log_dir/static-web.log"
 rssr_web_log="$log_dir/rssr-web.log"
-auth_state_file="$log_dir/rssr-web-auth.json"
+rssr_web_public_dir="$log_dir/rssr-web-public"
+rssr_web_data_dir="$log_dir/rssr-web-data"
 chrome_pid_file="$log_dir/windows-chrome.pid"
 chrome_pid_file_win="$(wslpath -w "$chrome_pid_file")"
 launcher_ps1="$log_dir/launch-windows-chrome.ps1"
@@ -188,13 +188,13 @@ if [[ "$use_existing_servers" != "true" ]]; then
     exit 1
   fi
 
+  # The feed smoke page and fixture are static files in a copy of the bundle.
+  bash scripts/prepare_rssr_web_feed_smoke.sh "$public_dir" "$rssr_web_public_dir"
   RSS_READER_WEB_BIND="127.0.0.1:${rssr_web_port}" \
-  RSS_READER_WEB_STATIC_DIR="$public_dir" \
+  RSS_READER_WEB_STATIC_DIR="$rssr_web_public_dir" \
   RSS_READER_WEB_USERNAME="$username" \
   RSS_READER_WEB_PASSWORD="$password" \
-  RSS_READER_WEB_SESSION_SECRET="$session_secret" \
-  RSS_READER_WEB_AUTH_STATE_FILE="$auth_state_file" \
-  RSS_READER_WEB_ENABLE_SMOKE_HELPERS="true" \
+  RSSR_DATA_DIR="$rssr_web_data_dir" \
   cargo run -p rssr-web >"$rssr_web_log" 2>&1 &
   rssr_web_pid=$!
   wait_for_url "http://127.0.0.1:${rssr_web_port}/healthz" "rssr-web server"

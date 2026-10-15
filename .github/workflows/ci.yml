@@ -302,7 +302,6 @@ jobs:
           name: ci-feed-proxy-isolation
           path: |
             target/ci-feed-proxy-isolation/run-*/*.json
-            !target/ci-feed-proxy-isolation/run-*/auth.json
             target/ci-feed-proxy-isolation/run-*/*.log
             target/ci-feed-proxy-isolation/run-*/*.png
           retention-days: 7

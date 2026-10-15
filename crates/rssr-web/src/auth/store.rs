@@ -435,28 +435,12 @@ mod tests {
 
     const T0: i64 = 1_800_000_000;
 
-    struct Scratch(PathBuf);
+    use crate::auth::test_support::ScratchDir as Scratch;
 
-    impl Scratch {
-        fn new(label: &str) -> Self {
-            let nonce = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
-            Self(std::env::temp_dir().join(format!("rssr-auth-{label}-{nonce}")))
-        }
-
-        fn store(&self) -> AuthStore {
-            let store = AuthStore::open(&self.0).unwrap();
-            store.initialize(|| Ok("hash-v1".to_owned())).unwrap();
-            store
-        }
-    }
-
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
+    fn open(scratch: &Scratch) -> AuthStore {
+        let store = AuthStore::open(scratch.path()).unwrap();
+        store.initialize(|| Ok("hash-v1".to_owned())).unwrap();
+        store
     }
 
     fn login(store: &AuthStore, now: i64) -> SessionToken {
@@ -477,7 +461,7 @@ mod tests {
     #[test]
     fn an_unused_session_expires_thirty_days_and_one_granularity_after_its_last_record() {
         let scratch = Scratch::new("idle");
-        let store = scratch.store();
+        let store = open(&scratch);
         for (offset, valid) in [
             (29 * DAY, true),
             (30 * DAY, true),
@@ -496,7 +480,7 @@ mod tests {
     #[test]
     fn use_is_recorded_once_per_granularity_and_moves_the_idle_deadline() {
         let scratch = Scratch::new("renew");
-        let store = scratch.store();
+        let store = open(&scratch);
 
         let unrecorded = login(&store, T0);
         assert!(store.validate(&unrecorded, T0 + HOUR - 1).unwrap());
@@ -517,7 +501,7 @@ mod tests {
     #[test]
     fn a_session_in_daily_use_still_ends_at_the_absolute_limit() {
         let scratch = Scratch::new("absolute");
-        let store = scratch.store();
+        let store = open(&scratch);
         let token = login(&store, T0);
         for day in 1..180 {
             assert!(store.validate(&token, T0 + day * DAY).unwrap(), "day {day}");
@@ -535,7 +519,7 @@ mod tests {
     #[test]
     fn a_clock_set_back_more_than_the_tolerance_rejects_and_deletes() {
         let scratch = Scratch::new("clock");
-        let store = scratch.store();
+        let store = open(&scratch);
         let token = login(&store, T0);
         let recorded = T0 + 2 * HOUR;
         assert!(store.validate(&token, recorded).unwrap());
@@ -551,7 +535,7 @@ mod tests {
     #[test]
     fn an_expired_session_stays_invalid_when_the_clock_goes_back() {
         let scratch = Scratch::new("expired");
-        let store = scratch.store();
+        let store = open(&scratch);
         let token = login(&store, T0);
         assert!(!store.validate(&token, T0 + 31 * DAY).unwrap());
         assert!(!store.validate(&token, T0 + 1).unwrap());
@@ -560,8 +544,8 @@ mod tests {
     #[test]
     fn sessions_survive_a_restart() {
         let scratch = Scratch::new("restart");
-        let token = login(&scratch.store(), T0);
-        let reopened = AuthStore::open(&scratch.0).unwrap();
+        let token = login(&open(&scratch), T0);
+        let reopened = AuthStore::open(scratch.path()).unwrap();
         assert!(reopened.validate(&token, T0 + DAY).unwrap());
     }
 
@@ -569,7 +553,7 @@ mod tests {
     #[test]
     fn logout_and_renewal_in_either_order() {
         let scratch = Scratch::new("logout");
-        let store = scratch.store();
+        let store = open(&scratch);
 
         let token = login(&store, T0);
         store.revoke(&token).unwrap();
@@ -587,7 +571,7 @@ mod tests {
     #[test]
     fn login_and_password_change_in_either_order() {
         let scratch = Scratch::new("passwd");
-        let store = scratch.store();
+        let store = open(&scratch);
 
         let credential = store.credential().unwrap().unwrap();
         store.change_password("hash-v2").unwrap();
@@ -604,7 +588,7 @@ mod tests {
     #[test]
     fn a_session_from_an_older_credential_is_rejected() {
         let scratch = Scratch::new("generation");
-        let store = scratch.store();
+        let store = open(&scratch);
         let token = login(&store, T0);
         store.connection().execute("UPDATE owner SET generation = generation + 1", []).unwrap();
         assert!(!store.validate(&token, T0 + 1).unwrap());
@@ -614,7 +598,7 @@ mod tests {
     #[test]
     fn revoke_all_keeps_the_credential() {
         let scratch = Scratch::new("revoke-all");
-        let store = scratch.store();
+        let store = open(&scratch);
         let tokens = [login(&store, T0), login(&store, T0)];
         let generation = store.credential().unwrap().unwrap().generation;
         assert_eq!(store.revoke_all().unwrap(), 2);
@@ -633,7 +617,7 @@ mod tests {
     #[test]
     fn a_login_purges_expired_sessions() {
         let scratch = Scratch::new("purge");
-        let store = scratch.store();
+        let store = open(&scratch);
         login(&store, T0);
         let recent = login(&store, T0 + DAY);
         login(&store, T0 + IDLE + HOUR);
@@ -641,7 +625,7 @@ mod tests {
         assert!(store.validate(&recent, T0 + IDLE + HOUR).unwrap());
 
         let scratch = Scratch::new("purge-absolute");
-        let store = scratch.store();
+        let store = open(&scratch);
         let busy = login(&store, T0);
         for period in 1..=6 {
             assert!(store.validate(&busy, T0 + period * 29 * DAY).unwrap());
@@ -653,7 +637,7 @@ mod tests {
     #[test]
     fn the_credential_is_seeded_once() {
         let scratch = Scratch::new("seed");
-        let store = AuthStore::open(&scratch.0).unwrap();
+        let store = AuthStore::open(scratch.path()).unwrap();
         assert!(!store.has_owner().unwrap());
         assert!(store.initialize(|| Ok("first".to_owned())).unwrap());
         let key = store.device_key().unwrap();
@@ -667,7 +651,7 @@ mod tests {
     fn unknown_and_legacy_cookies_are_rejected() {
         use hmac::{Hmac, Mac};
         let scratch = Scratch::new("legacy");
-        let store = scratch.store();
+        let store = open(&scratch);
         let payload = URL_SAFE_NO_PAD.encode("demo:9999999999");
         let mut mac = Hmac::<Sha256>::new_from_slice(&[7; 32]).unwrap();
         mac.update(b"demo:9999999999");
@@ -691,20 +675,19 @@ mod tests {
     fn the_database_is_private_to_its_owner() {
         use std::os::unix::fs::PermissionsExt;
         let scratch = Scratch::new("private");
-        scratch.store();
-        let path = scratch.0.join(AUTH_DB);
+        open(&scratch);
+        let path = scratch.path().join(AUTH_DB);
         assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
 
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
-        assert!(AuthStore::open(&scratch.0).is_err(), "readable by the group");
+        assert!(AuthStore::open(scratch.path()).is_err(), "readable by the group");
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
-        std::fs::set_permissions(&scratch.0, std::fs::Permissions::from_mode(0o777)).unwrap();
-        assert!(AuthStore::open(&scratch.0).is_err(), "a directory others can write");
-        std::fs::set_permissions(&scratch.0, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::set_permissions(scratch.path(), std::fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(AuthStore::open(scratch.path()).is_err(), "a directory others can write");
+        std::fs::set_permissions(scratch.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
 
         let linked = Scratch::new("linked");
-        std::fs::create_dir_all(&linked.0).unwrap();
-        std::os::unix::fs::symlink(&path, linked.0.join(AUTH_DB)).unwrap();
-        assert!(AuthStore::open(&linked.0).is_err(), "a symbolic link");
+        std::os::unix::fs::symlink(&path, linked.path().join(AUTH_DB)).unwrap();
+        assert!(AuthStore::open(linked.path()).is_err(), "a symbolic link");
     }
 }

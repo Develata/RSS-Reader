@@ -7,7 +7,6 @@ skip_build="false"
 log_dir=""
 username="smoke"
 password="smoke-pass-123"
-session_secret="rssr-web-proxy-feed-smoke-session-secret-0123456789"
 feed_url="https://www.ruanyifeng.com/blog/atom.xml"
 
 while [[ $# -gt 0 ]]; do
@@ -40,16 +39,12 @@ while [[ $# -gt 0 ]]; do
       password="${2:?missing password value}"
       shift 2
       ;;
-    --session-secret)
-      session_secret="${2:?missing session secret value}"
-      shift 2
-      ;;
     --feed-url)
       feed_url="${2:?missing feed url value}"
       shift 2
       ;;
     *)
-      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--username USER] [--password PASS] [--session-secret SECRET] [--feed-url URL]" >&2
+      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--username USER] [--password PASS] [--feed-url URL]" >&2
       exit 1
       ;;
   esac
@@ -62,7 +57,7 @@ fi
 mkdir -p "$log_dir"
 
 public_dir="target/dx/rssr-app/${profile}/web/public"
-auth_state_file="$log_dir/rssr-web-auth.json"
+data_dir="$log_dir/data"
 server_log="$log_dir/rssr-web.log"
 summary_file="$log_dir/summary.md"
 cookie_jar="$log_dir/rssr-web.cookies"
@@ -108,8 +103,7 @@ RSS_READER_WEB_BIND="127.0.0.1:${port}" \
 RSS_READER_WEB_STATIC_DIR="$public_dir" \
 RSS_READER_WEB_USERNAME="$username" \
 RSS_READER_WEB_PASSWORD="$password" \
-RSS_READER_WEB_SESSION_SECRET="$session_secret" \
-RSS_READER_WEB_AUTH_STATE_FILE="$auth_state_file" \
+RSSR_DATA_DIR="$data_dir" \
 cargo run -p rssr-web >"$server_log" 2>&1 &
 server_pid=$!
 
@@ -142,6 +136,7 @@ curl -sS \
   -D "$login_headers" \
   -o /dev/null \
   -X POST \
+  -H "Origin: http://127.0.0.1:${port}" \
   --data-urlencode "username=${username}" \
   --data-urlencode "password=${password}" \
   --data-urlencode "next=/feeds" \

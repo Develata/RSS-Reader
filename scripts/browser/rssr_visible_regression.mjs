@@ -8,6 +8,7 @@ import {
   navigate,
   newPage,
   selectorExists,
+  submitLoginForm,
 } from './cdp_session.mjs';
 
 async function runStaticPageChecks(client) {
@@ -81,7 +82,9 @@ async function runSmallViewportChecks(client) {
 }
 
 async function runRssrWebFeedSmoke(client) {
-  await navigate(client, `${rssrWebBase}/__codex/browser-feed-smoke`);
+  // Served from the smoke copy of the bundle (scripts/prepare_rssr_web_feed_smoke.sh).
+  await navigate(client, `${rssrWebBase}/login?next=%2F__smoke%2Fbrowser-feed-smoke.html`);
+  await submitLoginForm(client, 'smoke', 'smoke-pass-123');
   await selectorExists(
     client,
     '[data-smoke="rssr-web-browser-feed-smoke"][data-result="pass"]',

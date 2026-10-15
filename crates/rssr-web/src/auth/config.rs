@@ -1,40 +1,35 @@
-use std::{
-    env, fs,
-    net::SocketAddr,
-    path::{Path, PathBuf},
-};
+use std::{env, net::SocketAddr, path::PathBuf};
 
-use anyhow::{Context, Result, anyhow, ensure};
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use rand_core::{OsRng, RngCore};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use time::Duration;
-use tracing::{info, warn};
-
-use super::persisted_state::{
-    PersistedAuthState, load_persisted_auth_state, persist_auth_state, resolve_auth_state_file,
-};
+use tracing::warn;
+use url::Url;
 
 const DEFAULT_LOGIN_RATE_LIMIT_WINDOW_MINUTES: i64 = 15;
 const DEFAULT_LOGIN_RATE_LIMIT_BLOCK_MINUTES: i64 = 15;
 const DEFAULT_LOGIN_RATE_LIMIT_MAX_FAILURES: u32 = 5;
+
+/// 已不再使用的旧配置：设置了只记一条警告，旧部署升级时不用改。
+const OBSOLETE_VARIABLES: [(&str, &str); 4] = [
+    ("RSS_READER_WEB_SESSION_SECRET", "会话改为服务器保存的不透明令牌"),
+    ("RSS_READER_WEB_SESSION_TTL_HOURS", "会话固定为 30 天未使用过期、180 天绝对上限"),
+    (
+        "RSS_READER_WEB_SECURE_COOKIE",
+        "cookie 是否带 Secure 由 RSS_READER_WEB_PUBLIC_ORIGIN 的协议决定",
+    ),
+    ("RSS_READER_WEB_ENABLE_SMOKE_HELPERS", "冒烟辅助路由已删除"),
+];
 
 #[derive(Clone)]
 pub(crate) struct AuthConfig {
     pub(crate) bind_addr: SocketAddr,
     pub(crate) static_dir: PathBuf,
     pub(crate) username: String,
-    pub(crate) password_policy: PasswordPolicy,
-    pub(crate) session_secret: Vec<u8>,
-    pub(crate) secure_cookie: bool,
+    /// 用户访问本服务的来源（`RSS_READER_WEB_PUBLIC_ORIGIN`）；开发环境可以不设，
+    /// 见 [`super::origin::TrustedOrigins`]。
+    pub(crate) public_origin: Option<Url>,
     pub(crate) trust_proxy_headers: bool,
-    pub(crate) session_ttl: Duration,
     pub(crate) login_rate_limit: LoginRateLimit,
-}
-
-#[derive(Clone)]
-pub(crate) enum PasswordPolicy {
-    Argon2Hash(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,84 +53,63 @@ pub(crate) fn load_config() -> Result<AuthConfig> {
     let static_dir = PathBuf::from(
         env::var("RSS_READER_WEB_STATIC_DIR").unwrap_or_else(|_| "/app/public".to_string()),
     );
-    let auth_state_file = resolve_auth_state_file();
     let username = required_env("RSS_READER_WEB_USERNAME")?;
-    let password_policy = load_password_policy(&username, &auth_state_file)?;
-    let session_secret = resolve_session_secret(&auth_state_file)?;
-    ensure!(session_secret.len() >= 32, "RSS_READER_WEB_SESSION_SECRET 至少需要 32 个字符");
     let environment = env::var("RSS_READER_WEB_ENV")
         .ok()
         .map(parse_environment)
         .transpose()?
         .unwrap_or(WebEnvironment::Development);
-    let secure_cookie = env::var("RSS_READER_WEB_SECURE_COOKIE")
-        .ok()
-        .map(|raw| matches!(raw.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
-        .unwrap_or(false);
+    let public_origin = optional_env("RSS_READER_WEB_PUBLIC_ORIGIN")
+        .map(|raw| parse_public_origin(&raw))
+        .transpose()?;
     let trust_proxy_headers = env::var("RSS_READER_WEB_TRUST_PROXY_HEADERS")
         .ok()
         .map(|raw| matches!(raw.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
         .unwrap_or(false);
-    let session_ttl_hours = env::var("RSS_READER_WEB_SESSION_TTL_HOURS")
-        .ok()
-        .map(|raw| raw.parse::<i64>())
-        .transpose()
-        .context("解析 RSS_READER_WEB_SESSION_TTL_HOURS 失败")?
-        .unwrap_or(12);
-    ensure!(session_ttl_hours > 0, "会话时长必须大于 0");
     let login_rate_limit = load_login_rate_limit()?;
 
     if environment == WebEnvironment::Production {
-        ensure!(secure_cookie, "生产环境必须开启 RSS_READER_WEB_SECURE_COOKIE=true。");
+        let Some(origin) = &public_origin else {
+            bail!("生产环境必须设置 RSS_READER_WEB_PUBLIC_ORIGIN（用户访问本服务的 https 地址）");
+        };
         ensure!(
-            matches!(password_policy, PasswordPolicy::Argon2Hash(_)),
-            "生产环境必须使用 Argon2 密码哈希（可来自 RSS_READER_WEB_PASSWORD_HASH、首次启动自动生成，或认证状态文件）。"
+            origin.scheme() == "https",
+            "生产环境的 RSS_READER_WEB_PUBLIC_ORIGIN 必须是 https 地址：会话 cookie 需要 Secure"
         );
-    } else if env::var("RSS_READER_WEB_PASSWORD").is_ok()
-        && env::var("RSS_READER_WEB_PASSWORD_HASH").is_err()
-    {
-        warn!(
-            auth_state_file = %auth_state_file.display(),
-            "rssr-web 正在使用明文 RSS_READER_WEB_PASSWORD 启动，并会自动生成 Argon2 哈希写入认证状态文件；建议后续移除明文密码配置。"
-        );
+    }
+    for (name, reason) in OBSOLETE_VARIABLES {
+        if env::var_os(name).is_some() {
+            warn!("{name} 已不再使用：{reason}");
+        }
     }
 
     Ok(AuthConfig {
         bind_addr,
         static_dir,
         username,
-        password_policy,
-        session_secret: session_secret.into_bytes(),
-        secure_cookie,
+        public_origin,
         trust_proxy_headers,
-        session_ttl: Duration::hours(session_ttl_hours),
         login_rate_limit,
     })
 }
 
-pub(crate) fn generate_password_hash(password: &str) -> Result<String> {
-    ensure!(password.len() >= 8, "密码至少需要 8 个字符");
-    let salt = SaltString::generate(&mut OsRng);
-    let hash = Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|_| anyhow!("生成密码哈希失败"))?;
-    Ok(hash.to_string())
-}
-
-/// 用户名不对也照样做一次 Argon2 校验：否则错误用户名立即返回、正确用户名才耗时，
-/// 响应时间就泄露了哪个用户名是真的（审计 F2）。
-pub(crate) fn verify_credentials(config: &AuthConfig, username: &str, password: &str) -> bool {
-    let password_matches = match &config.password_policy {
-        PasswordPolicy::Argon2Hash(hash) => verify_password_hash(hash, password),
-    };
-    password_matches && username.trim() == config.username
-}
-
-pub(crate) fn verify_password_hash(hash: &str, password: &str) -> bool {
-    let Ok(parsed) = PasswordHash::new(hash) else {
-        return false;
-    };
-    Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok()
+/// 公开来源只能是 `协议://主机[:端口]`（http 或 https），不带用户信息、路径、查询或片段：
+/// 它与浏览器的 `Origin` 请求头逐字比较。
+pub(crate) fn parse_public_origin(raw: &str) -> Result<Url> {
+    let url = Url::parse(raw)
+        .with_context(|| format!("RSS_READER_WEB_PUBLIC_ORIGIN 不是合法的地址：{raw}"))?;
+    let origin_only = matches!(url.scheme(), "http" | "https")
+        && url.host().is_some()
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.path() == "/"
+        && url.query().is_none()
+        && url.fragment().is_none();
+    ensure!(
+        origin_only,
+        "RSS_READER_WEB_PUBLIC_ORIGIN 只能是 协议://主机[:端口]（http 或 https），例如 https://reader.example.com；当前为 {raw}"
+    );
+    Ok(url)
 }
 
 fn required_env(name: &str) -> Result<String> {
@@ -155,117 +129,6 @@ fn parse_environment(raw: String) -> Result<WebEnvironment> {
         "prod" | "production" => Ok(WebEnvironment::Production),
         _ => Err(anyhow!("RSS_READER_WEB_ENV 只能是 development 或 production")),
     }
-}
-
-fn load_password_policy(username: &str, auth_state_file: &Path) -> Result<PasswordPolicy> {
-    resolve_password_policy(
-        username,
-        optional_env("RSS_READER_WEB_PASSWORD_HASH"),
-        optional_env("RSS_READER_WEB_PASSWORD"),
-        auth_state_file,
-    )
-}
-
-fn resolve_session_secret(auth_state_file: &Path) -> Result<String> {
-    if let Some(session_secret) = optional_env("RSS_READER_WEB_SESSION_SECRET") {
-        ensure!(session_secret.len() >= 32, "RSS_READER_WEB_SESSION_SECRET 至少需要 32 个字符");
-        persist_auth_state_with_merge(auth_state_file, None, Some(&session_secret))?;
-        return Ok(session_secret);
-    }
-
-    if let Some(state) = load_persisted_auth_state(auth_state_file)?
-        && let Some(session_secret) = state.session_secret
-    {
-        ensure!(session_secret.len() >= 32, "认证状态文件中的 session secret 长度不足 32 个字符");
-        return Ok(session_secret);
-    }
-
-    let generated = generate_session_secret();
-    persist_auth_state_with_merge(auth_state_file, None, Some(&generated))?;
-    info!(
-        auth_state_file = %auth_state_file.display(),
-        "已自动生成并持久化 RSS_READER_WEB_SESSION_SECRET"
-    );
-    Ok(generated)
-}
-
-fn resolve_password_policy(
-    username: &str,
-    password_hash: Option<String>,
-    password: Option<String>,
-    auth_state_file: &Path,
-) -> Result<PasswordPolicy> {
-    if let Some(hash) = password_hash {
-        validate_password_hash(&hash)?;
-        persist_auth_state_with_merge(auth_state_file, Some(&hash), None)?;
-        return Ok(PasswordPolicy::Argon2Hash(hash));
-    }
-
-    if let Some(password) = password {
-        ensure!(password.len() >= 8, "RSS_READER_WEB_PASSWORD 至少需要 8 个字符");
-
-        if let Some(persisted_hash) = load_persisted_password_hash(auth_state_file)?
-            && verify_password_hash(&persisted_hash, &password)
-        {
-            return Ok(PasswordPolicy::Argon2Hash(persisted_hash));
-        }
-
-        let generated_hash = generate_password_hash(&password)?;
-        persist_auth_state_with_merge(auth_state_file, Some(&generated_hash), None)?;
-        info!(
-            username = username,
-            auth_state_file = %auth_state_file.display(),
-            "已根据 RSS_READER_WEB_PASSWORD 自动生成并持久化密码哈希"
-        );
-        return Ok(PasswordPolicy::Argon2Hash(generated_hash));
-    }
-
-    if let Some(persisted_hash) = load_persisted_password_hash(auth_state_file)? {
-        return Ok(PasswordPolicy::Argon2Hash(persisted_hash));
-    }
-
-    Err(anyhow!(
-        "缺少环境变量：RSS_READER_WEB_PASSWORD_HASH、RSS_READER_WEB_PASSWORD，且认证状态文件中也没有可用的密码哈希"
-    ))
-}
-
-fn load_persisted_password_hash(auth_state_file: &Path) -> Result<Option<String>> {
-    let Some(state) = load_persisted_auth_state(auth_state_file)? else {
-        return Ok(None);
-    };
-    validate_password_hash(&state.password_hash)?;
-    Ok(Some(state.password_hash))
-}
-
-fn persist_auth_state_with_merge(
-    auth_state_file: &Path,
-    password_hash: Option<&str>,
-    session_secret: Option<&str>,
-) -> Result<()> {
-    if let Some(password_hash) = password_hash {
-        validate_password_hash(password_hash)?;
-    }
-    if let Some(session_secret) = session_secret {
-        ensure!(session_secret.len() >= 32, "RSS_READER_WEB_SESSION_SECRET 至少需要 32 个字符");
-    }
-
-    if let Some(parent) = auth_state_file.parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("创建认证状态目录失败：{}", parent.display()))?;
-    }
-
-    let existing = load_persisted_auth_state(auth_state_file)?;
-    let password_hash = password_hash
-        .map(ToOwned::to_owned)
-        .or_else(|| existing.as_ref().map(|state| state.password_hash.clone()))
-        .ok_or_else(|| anyhow!("写入认证状态文件失败：缺少密码哈希"))?;
-    let session_secret = session_secret
-        .map(ToOwned::to_owned)
-        .or_else(|| existing.and_then(|state| state.session_secret));
-
-    persist_auth_state(auth_state_file, &PersistedAuthState { password_hash, session_secret })
 }
 
 fn load_login_rate_limit() -> Result<LoginRateLimit> {
@@ -300,14 +163,32 @@ fn load_login_rate_limit() -> Result<LoginRateLimit> {
     })
 }
 
-fn validate_password_hash(raw: &str) -> Result<()> {
-    PasswordHash::new(raw)
-        .map_err(|_| anyhow!("RSS_READER_WEB_PASSWORD_HASH 不是合法的 Argon2 哈希"))?;
-    Ok(())
-}
+#[cfg(test)]
+mod tests {
+    use super::parse_public_origin;
 
-fn generate_session_secret() -> String {
-    let mut bytes = [0_u8; 32];
-    OsRng.fill_bytes(&mut bytes);
-    URL_SAFE_NO_PAD.encode(bytes)
+    #[test]
+    fn a_public_origin_is_scheme_host_and_port_only() {
+        for (raw, origin) in [
+            ("https://reader.example.com", "https://reader.example.com"),
+            ("https://reader.example.com/", "https://reader.example.com"),
+            ("https://reader.example.com:443", "https://reader.example.com"),
+            ("http://localhost:8039", "http://localhost:8039"),
+            ("https://阅读.example", "https://xn--hf3ar1r.example"),
+        ] {
+            let url = parse_public_origin(raw).unwrap();
+            assert_eq!(url.origin().ascii_serialization(), origin, "{raw}");
+        }
+        for raw in [
+            "reader.example.com",
+            "ftp://reader.example.com",
+            "https://user:pass@reader.example.com",
+            "https://reader.example.com/app",
+            "https://reader.example.com/?x=1",
+            "https://reader.example.com/#top",
+            "null",
+        ] {
+            assert!(parse_public_origin(raw).is_err(), "{raw}");
+        }
+    }
 }

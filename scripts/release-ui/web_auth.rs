@@ -24,8 +24,7 @@ pub fn spawn(root: &Path, profile: &str, port: u16, logs: &Path) -> io::Result<O
         .env("RSS_READER_WEB_STATIC_DIR", format!("target/dx/rssr-app/{profile}/web/public"))
         .env("RSS_READER_WEB_USERNAME", "smoke")
         .env("RSS_READER_WEB_PASSWORD", "smoke-pass-123")
-        .env("RSS_READER_WEB_SESSION_SECRET", "release-ui-regression-session-secret-0123456789")
-        .env("RSS_READER_WEB_AUTH_STATE_FILE", logs.join("rssr-web-auth.json"));
+        .env("RSSR_DATA_DIR", logs.join("rssr-web-data"));
     OwnedProcess::spawn(command, &log)
 }
 

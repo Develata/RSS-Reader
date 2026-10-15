@@ -20,6 +20,8 @@ if "--leaf" in sys.argv:
 
 lock = threading.Lock()
 health_count = 0
+revoked = False
+SESSION = "rssr_web_session=fixture-token"
 Path("auth-leaf-ready").unlink(missing_ok=True)
 leaf = subprocess.Popen([sys.executable, __file__, "--leaf"])
 deadline = time.monotonic() + 5
@@ -33,12 +35,16 @@ Path("auth-pids.json").write_text(json.dumps([os.getpid(), leaf.pid]), encoding=
 class Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
-    def reply(self, status, headers=None):
+    def reply(self, status, headers=None, body=b""):
         self.send_response(status)
         for key, value in (headers or {}).items():
             self.send_header(key, value)
-        self.send_header("Content-Length", "0")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
+        self.wfile.write(body)
+
+    def trusted_origin(self):
+        return self.headers.get("Origin") == f"http://127.0.0.1:{port}"
 
     def do_GET(self):
         global health_count
@@ -57,32 +63,51 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.reply(200)
         elif self.path == "/entries":
             self.reply(302, {"Location": "/login"})
-        elif self.path in ["/session-probe", "/feeds", "/settings", "/logout"]:
-            if self.headers.get("Cookie") != "rssr-session=fixture-token":
+        elif self.path in ["/session-probe", "/feeds", "/settings", "/api/v1/session", "/logout"]:
+            if self.headers.get("Cookie") != SESSION:
                 self.reply(401)
+                return
+            if revoked:
+                self.reply(302, {"Location": "/login?error=session_expired&next=%2F"})
                 return
             if os.environ.get("AUTH_EXIT_DURING_ASSERTIONS") and self.path == "/feeds":
                 os._exit(17)
             if self.path == "/logout":
-                self.reply(303, {"Location": "/login"})
+                self.reply(200, body=b'<form method="post" action="/logout">'
+                                     b'<input type="hidden" name="csrf" value="fixture-csrf"></form>')
+            elif self.path == "/api/v1/session":
+                self.reply(200, body=b'{"csrf_token":"fixture-csrf"}')
             else:
                 self.reply(204 if self.path == "/session-probe" else 200)
         else:
             self.reply(404)
 
     def do_POST(self):
+        global revoked
         body = self.rfile.read(int(self.headers["Content-Length"])).decode("ascii")
         form = urllib.parse.parse_qs(body)
         with lock:
             with Path("auth-requests.jsonl").open("a", encoding="utf-8") as out:
-                out.write(json.dumps({"method": "POST", "path": self.path, "form": form}) + "\n")
+                out.write(json.dumps({"method": "POST", "path": self.path, "form": form,
+                                      "origin": self.headers.get("Origin")}) + "\n")
+        if not self.trusted_origin():
+            self.reply(403)
+            return
+        if self.path == "/logout":
+            if self.headers.get("Cookie") != SESSION or form != {"csrf": ["fixture-csrf"]}:
+                self.reply(403)
+                return
+            revoked = True
+            self.reply(303, {"Location": "/login",
+                             "Set-Cookie": "rssr_web_session=deleted; Path=/; HttpOnly; Max-Age=0"})
+            return
         if self.path != "/login" or form != {
             "username": ["smoke"], "password": ["smoke-pass-123"], "next": ["/feeds"]}:
             self.reply(422)
             return
         self.reply(303, {
             "Location": "/wrong" if os.environ.get("AUTH_BAD_REDIRECT") else "/feeds",
-            "Set-Cookie": "rssr-session=fixture-token; Path=/; HttpOnly; SameSite=Lax",
+            "Set-Cookie": f"{SESSION}; Path=/; HttpOnly; SameSite=Lax",
         })
 
 

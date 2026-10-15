@@ -27,7 +27,7 @@
   - `dx serve --platform web --package rssr-app --locked`
 - CLI:
   - `cargo run -p rssr-cli --locked -- --help`
-- Web 部署态：按 [Web / Docker 部署指南](../../docs/deployment/web.md) 构建并配置独立凭据与 session secret；本地验收可使用项目 smoke 脚本生成的临时配置。
+- Web 部署态：按 [Web / Docker 部署指南](../../docs/deployment/web.md) 构建并配置独立凭据、公开地址（`RSS_READER_WEB_PUBLIC_ORIGIN`）与数据目录；本地验收可使用项目 smoke 脚本生成的临时配置。
 
 ## 4. 核心使用流程
 

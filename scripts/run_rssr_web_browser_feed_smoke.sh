@@ -7,7 +7,6 @@ skip_build="false"
 log_dir=""
 username="smoke"
 password="smoke-pass-123"
-session_secret="rssr-web-browser-feed-smoke-session-secret-0123456789"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -39,12 +38,8 @@ while [[ $# -gt 0 ]]; do
       password="${2:?missing password value}"
       shift 2
       ;;
-    --session-secret)
-      session_secret="${2:?missing session secret value}"
-      shift 2
-      ;;
     *)
-      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--username USER] [--password PASS] [--session-secret SECRET]" >&2
+      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--username USER] [--password PASS]" >&2
       exit 1
       ;;
   esac
@@ -57,7 +52,8 @@ fi
 mkdir -p "$log_dir"
 
 public_dir="target/dx/rssr-app/${profile}/web/public"
-auth_state_file="$log_dir/rssr-web-auth.json"
+smoke_dir="$log_dir/public"
+data_dir="$log_dir/data"
 log_file="$log_dir/rssr-web.log"
 chrome_log="$log_dir/chrome.log"
 dom_file="$log_dir/browser-feed-smoke.html"
@@ -94,11 +90,10 @@ cat >"$summary_file" <<EOF
 
 ## 固定动作
 
-1. 打开 \`/__codex/browser-feed-smoke\`
-2. 自动完成：
-   - 建立登录态
+1. 打开 \`/login?next=/__smoke/browser-feed-smoke.html\`，经真实登录表单登录
+2. 冒烟页（静态文件，见 \`scripts/prepare_rssr_web_feed_smoke.sh\`）自动完成：
    - 打开 \`/feeds\`
-   - 填入同源 \`/__codex/feed-fixture.xml\`
+   - 填入同源 \`/__smoke/feed-fixture.xml\`
    - 点击 \`data-action="add-feed"\`
    - 点击 \`data-action="refresh-feed"\`
    - 点击 \`data-nav="feed-entries"\`
@@ -113,13 +108,13 @@ cat >"$summary_file" <<EOF
 - 是否通过：
 EOF
 
+bash scripts/prepare_rssr_web_feed_smoke.sh "$public_dir" "$smoke_dir"
+
 RSS_READER_WEB_BIND="127.0.0.1:${port}" \
-RSS_READER_WEB_STATIC_DIR="$public_dir" \
+RSS_READER_WEB_STATIC_DIR="$smoke_dir" \
 RSS_READER_WEB_USERNAME="$username" \
 RSS_READER_WEB_PASSWORD="$password" \
-RSS_READER_WEB_SESSION_SECRET="$session_secret" \
-RSS_READER_WEB_AUTH_STATE_FILE="$auth_state_file" \
-RSS_READER_WEB_ENABLE_SMOKE_HELPERS="true" \
+RSSR_DATA_DIR="$data_dir" \
 cargo run -p rssr-web >"$log_file" 2>&1 &
 server_pid=$!
 
@@ -146,8 +141,9 @@ if [[ "$ready" != "true" ]]; then
   exit 1
 fi
 
-helper_url="http://127.0.0.1:${port}/__codex/browser-feed-smoke"
+helper_url="http://127.0.0.1:${port}/login?next=%2F__smoke%2Fbrowser-feed-smoke.html"
 
+SMOKE_LOGIN_USERNAME="$username" SMOKE_LOGIN_PASSWORD="$password" \
 "${NODE_BIN:-node}" scripts/browser/capture_smoke_page.mjs \
   "$helper_url" '[data-smoke="rssr-web-browser-feed-smoke"][data-result="pass"]' \
   "$log_dir/browser-feed-smoke" "${CHROME_BIN:-google-chrome}" >"$chrome_log" 2>&1

@@ -189,6 +189,28 @@ export async function navigate(client, url, slowMs = defaultSlowMs) {
   await sleep(slowMs);
 }
 
+// Signs in through rssr-web's real login form on the current page. The form posts from the
+// server's own origin, so the browser sends the Origin header the server checks; the server then
+// redirects to the form's `next`.
+export async function submitLoginForm(client, username, password, timeoutMs = 30000) {
+  const loaded = client.waitForEvent('Page.loadEventFired', timeoutMs).catch(() => null);
+  const submitted = await evaluate(
+    client,
+    `(() => {
+      const form = document.querySelector('form[action="/login"]');
+      if (!form) return false;
+      form.elements.username.value = ${JSON.stringify(username)};
+      form.elements.password.value = ${JSON.stringify(password)};
+      form.submit();
+      return true;
+    })()`,
+  );
+  if (!submitted) {
+    throw new Error('rssr-web login form not found');
+  }
+  await loaded;
+}
+
 export async function clickSelector(client, selector, slowMs = defaultSlowMs) {
   const clicked = await evaluate(
     client,

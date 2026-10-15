@@ -70,25 +70,42 @@ jobs:
           CONTAINER_NAME="rss-reader-smoke"
           trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true' EXIT
 
+          ORIGIN="http://127.0.0.1:18080"
+          # The container listens on 0.0.0.0, so it needs the public origin to start.
           docker run -d \
             --name "$CONTAINER_NAME" \
             -p 18080:8080 \
             -e RSS_READER_WEB_USERNAME=smoke \
             -e RSS_READER_WEB_PASSWORD=smoke-pass \
             -e RSS_READER_WEB_ENV=development \
-            -e RSS_READER_WEB_SECURE_COOKIE=false \
+            -e RSS_READER_WEB_PUBLIC_ORIGIN="$ORIGIN" \
             "$SMOKE_IMAGE"
 
+          healthy=false
           for ((attempt = 1; attempt <= 20; attempt++)); do
-            if curl --fail --silent --connect-timeout 2 --max-time 3 http://127.0.0.1:18080/healthz >/dev/null; then
-              exit 0
+            if curl --fail --silent --connect-timeout 2 --max-time 3 "$ORIGIN/healthz" >/dev/null; then
+              healthy=true
+              break
             fi
             sleep 2
           done
+          if [[ "$healthy" != true ]]; then
+            echo "container health check failed" >&2
+            docker logs "$CONTAINER_NAME" || true
+            exit 1
+          fi
 
-          echo "container health check failed" >&2
-          docker logs "$CONTAINER_NAME" || true
-          exit 1
+          # A login from the public origin creates a session in /data/auth.sqlite3.
+          status="$(curl --silent --show-error --max-time 10 -o /dev/null -w '%{http_code}' \
+            -c cookies.txt -X POST -H "Origin: $ORIGIN" \
+            --data-urlencode username=smoke --data-urlencode password=smoke-pass \
+            --data-urlencode next=/ "$ORIGIN/login")"
+          if [[ "$status" != 303 ]] || ! curl --fail --silent --show-error --max-time 10 \
+            -b cookies.txt "$ORIGIN/api/v1/session" | grep -q csrf_token; then
+            echo "container login failed (status $status)" >&2
+            docker logs "$CONTAINER_NAME" || true
+            exit 1
+          fi
 
       - name: Build and push image
         if: env.SHOULD_PUSH_IMAGE == 'true'

@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { connect, evaluate, navigate, newPage, selectorExists, sleep } from './cdp_session.mjs';
+import { connect, evaluate, navigate, newPage, selectorExists, sleep, submitLoginForm } from './cdp_session.mjs';
 
 const [url, selector, outputPrefix, chromeBin = process.env.CHROME_BIN ?? 'google-chrome'] = process.argv.slice(2);
 if (!url || !selector || !outputPrefix) {
@@ -47,6 +47,10 @@ try {
       width: 1440, height: 1200, deviceScaleFactor: 1, mobile: false,
     });
     await navigate(client, url);
+    // A page behind rssr-web's login: URL is the login page with `next`, signed in for real.
+    if (process.env.SMOKE_LOGIN_USERNAME) {
+      await submitLoginForm(client, process.env.SMOKE_LOGIN_USERNAME, process.env.SMOKE_LOGIN_PASSWORD ?? '');
+    }
     await selectorExists(client, selector, timeoutMs);
     await evaluate(client, 'document.fonts.ready.then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))');
     if (errors.length) throw new Error(`Page exceptions: ${JSON.stringify(errors)}`);
