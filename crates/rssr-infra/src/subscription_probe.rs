@@ -16,21 +16,38 @@ pub const MAX_SUBSCRIPTION_BYTES: usize = crate::feed_body::MAX_FEED_RESPONSE_BY
 #[derive(Clone)]
 pub struct HttpSubscriptionProbe {
     client: reqwest::Client,
+    #[cfg(not(target_arch = "wasm32"))]
+    policy: crate::outbound::OutboundPolicy,
 }
 
 impl HttpSubscriptionProbe {
     pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            #[cfg(not(target_arch = "wasm32"))]
+            policy: crate::outbound::OutboundPolicy::Unrestricted,
+        }
     }
 
     /// 原生端探测与订阅刷新共用同一套客户端配置（User-Agent、连接与总时限）。
     #[cfg(not(target_arch = "wasm32"))]
     pub fn with_feed_client() -> Self {
         Self::new(
-            crate::fetch::client::feed_client_builder()
-                .build()
-                .unwrap_or_else(|_| reqwest::Client::new()),
+            crate::fetch::client::feed_client_builder(
+                &crate::outbound::OutboundPolicy::Unrestricted,
+            )
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new()),
         )
+    }
+
+    /// The feed client configuration under `policy`; a client that cannot be built is an error.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_policy(policy: crate::outbound::OutboundPolicy) -> Result<Self> {
+        let client = crate::fetch::client::feed_client_builder(&policy)
+            .build()
+            .context("创建订阅探测客户端失败")?;
+        Ok(Self { client, policy })
     }
 }
 
@@ -49,6 +66,8 @@ impl SubscriptionProbePort for HttpSubscriptionProbe {
 impl HttpSubscriptionProbe {
     /// The response for `url`: its final address, validators, content type and text.
     async fn fetch(&self, url: &Url) -> Result<(Url, RefreshHttpMetadata, String, String)> {
+        #[cfg(not(target_arch = "wasm32"))]
+        self.policy.check_url(url)?;
         #[cfg(not(target_arch = "wasm32"))]
         let response =
             self.client.get(url.clone()).timeout(std::time::Duration::from_secs(30)).send().await?;

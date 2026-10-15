@@ -7,10 +7,12 @@ use tokio::sync::Semaphore;
 use url::Url;
 
 use crate::html::{LocalizableImageDocument, normalize_html_for_live_display};
+use crate::outbound::OutboundPolicy;
 
 #[derive(Debug, Clone)]
 pub struct BodyAssetLocalizer {
     inner: reqwest::Client,
+    policy: OutboundPolicy,
     image_request_slots: Arc<Semaphore>,
     budget: LocalizationBudget,
 }
@@ -75,35 +77,50 @@ impl BodyAssetLocalizer {
     };
 
     pub fn new() -> Self {
-        Self::with_budget(Self::BACKGROUND_BUDGET)
+        Self::with_budget(Self::BACKGROUND_BUDGET, OutboundPolicy::Unrestricted)
+            .expect("build image client with safe redirect policy")
     }
 
     pub fn for_reader_entry() -> Self {
-        Self::with_budget(Self::READER_BUDGET)
+        Self::with_budget(Self::READER_BUDGET, OutboundPolicy::Unrestricted)
+            .expect("build image client with safe redirect policy")
     }
 
-    fn with_budget(budget: LocalizationBudget) -> Self {
-        Self {
-            inner: reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(3))
-                // reqwest otherwise replaces our Referer with the previous image URL,
-                // including its query, on every redirect.
-                .referer(false)
-                .redirect(redirect::Policy::custom(|attempt| {
-                    if !attempt
-                        .previous()
-                        .last()
-                        .is_some_and(|previous| image_redirect_allowed(previous, attempt.url()))
-                    {
-                        return attempt.error("unsafe image redirect");
-                    }
-                    redirect::Policy::limited(10).redirect(attempt)
-                }))
-                .build()
-                .expect("build image client with safe redirect policy"),
+    /// Background localization under `policy`.
+    pub fn background(policy: OutboundPolicy) -> anyhow::Result<Self> {
+        Self::with_budget(Self::BACKGROUND_BUDGET, policy)
+    }
+
+    /// Reader-page localization under `policy`.
+    pub fn reader(policy: OutboundPolicy) -> anyhow::Result<Self> {
+        Self::with_budget(Self::READER_BUDGET, policy)
+    }
+
+    fn with_budget(budget: LocalizationBudget, policy: OutboundPolicy) -> anyhow::Result<Self> {
+        let inner = policy
+            .client_builder()
+            .connect_timeout(Duration::from_secs(3))
+            // reqwest otherwise replaces our Referer with the previous image URL,
+            // including its query, on every redirect.
+            .referer(false)
+            .redirect(policy.redirect(|attempt| {
+                if !attempt
+                    .previous()
+                    .last()
+                    .is_some_and(|previous| image_redirect_allowed(previous, attempt.url()))
+                {
+                    return attempt.error("unsafe image redirect");
+                }
+                redirect::Policy::limited(10).redirect(attempt)
+            }))
+            .build()
+            .context("创建正文图片客户端失败")?;
+        Ok(Self {
+            inner,
+            policy,
             image_request_slots: Arc::new(Semaphore::new(budget.max_concurrent_image_requests)),
             budget,
-        }
+        })
     }
 
     pub fn max_images_per_entry(&self) -> usize {
@@ -155,6 +172,9 @@ impl BodyAssetLocalizer {
         referer: Option<&Url>,
         max_bytes: usize,
     ) -> Result<(String, usize), FetchImageError> {
+        self.policy
+            .check_url(url)
+            .map_err(|refused| FetchImageError::Request(refused.to_string()))?;
         let mut request = self
             .inner
             .get(url.clone())

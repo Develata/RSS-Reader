@@ -37,7 +37,7 @@ use rssr_domain::{
 use time::OffsetDateTime;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use native_host::{NativeHost, native_local_backend};
+pub use native_host::{NativeHost, native_local_backend, native_local_backend_with};
 use refresh_flight::RefreshFlight;
 
 /// Background work a host runs: `Send` on native targets, anything on wasm32.

@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, header, redirect};
 use url::Url;
 
+use crate::outbound::OutboundPolicy;
+
 const WEBDAV_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const WEBDAV_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// 远端配置包是一个 JSON 文件，正常只有几十 KB；设个上限避免被超大响应拖垮。
@@ -12,6 +14,7 @@ const MAX_REMOTE_CONFIG_BYTES: usize = 4 * 1024 * 1024;
 #[derive(Debug, Clone)]
 pub struct WebDavConfigSync {
     client: Client,
+    policy: OutboundPolicy,
     /// 已剥离 userinfo 的端点。凭据单独存放，避免被拼进日志或错误信息里。
     pub endpoint: Url,
     pub remote_path: String,
@@ -34,6 +37,15 @@ impl WebDavConfigSync {
     /// 之所以走 URL 而不是新增配置项：端点本身是设置页的会话内状态，既不写盘也不进配置包，
     /// 把密码放在这里不会被 `export_config` 导出，也不会被推到远端。
     pub fn new(endpoint: impl AsRef<str>, remote_path: impl Into<String>) -> Result<Self> {
+        Self::with_policy(endpoint, remote_path, OutboundPolicy::Unrestricted)
+    }
+
+    /// [`Self::new`] under `policy`: the endpoint, its resolution and every redirect are checked.
+    pub fn with_policy(
+        endpoint: impl AsRef<str>,
+        remote_path: impl Into<String>,
+        policy: OutboundPolicy,
+    ) -> Result<Self> {
         let mut endpoint = Url::parse(endpoint.as_ref()).context("无效的 WebDAV endpoint")?;
         anyhow::ensure!(
             matches!(endpoint.scheme(), "http" | "https"),
@@ -41,13 +53,16 @@ impl WebDavConfigSync {
         );
         let credentials = take_url_credentials(&mut endpoint);
 
+        policy.check_url(&endpoint)?;
+
         Ok(Self {
-            client: Client::builder()
+            client: policy
+                .client_builder()
                 .user_agent(crate::fetch::client::user_agent())
                 .timeout(WEBDAV_REQUEST_TIMEOUT)
                 .connect_timeout(WEBDAV_CONNECT_TIMEOUT)
                 .referer(false)
-                .redirect(redirect::Policy::custom(|attempt| {
+                .redirect(policy.redirect(|attempt| {
                     // reqwest 0.12.28 preserves GET/PUT on 301/302/307/308, but
                     // 303 turns PUT into GET. Reject 303 for this shared client.
                     if attempt.status() == StatusCode::SEE_OTHER {
@@ -65,6 +80,7 @@ impl WebDavConfigSync {
                 .build()
                 .map_err(reqwest::Error::without_url)
                 .context("创建 WebDAV 客户端失败")?,
+            policy,
             endpoint,
             remote_path: remote_path.into(),
             credentials,
@@ -100,7 +116,7 @@ impl WebDavConfigSync {
 
     pub async fn upload_text(&self, body: &str) -> Result<()> {
         let response = self
-            .authenticated(self.client.put(self.remote_url()?))
+            .authenticated(self.client.put(self.checked_remote_url()?))
             .header(header::CONNECTION, "close")
             .header(header::CONTENT_TYPE, "application/json")
             .body(body.to_string())
@@ -118,7 +134,7 @@ impl WebDavConfigSync {
 
     pub async fn download_text(&self) -> Result<Option<String>> {
         let mut response = self
-            .authenticated(self.client.get(self.remote_url()?))
+            .authenticated(self.client.get(self.checked_remote_url()?))
             .header(header::CONNECTION, "close")
             .send()
             .await
@@ -149,6 +165,13 @@ impl WebDavConfigSync {
         }
 
         Ok(Some(String::from_utf8(buffered).context("WebDAV 配置响应不是有效 UTF-8")?))
+    }
+
+    /// The remote URL, checked against the outbound policy before it is requested.
+    fn checked_remote_url(&self) -> Result<Url> {
+        let url = self.remote_url()?;
+        self.policy.check_url(&url)?;
+        Ok(url)
     }
 
     fn authenticated(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {

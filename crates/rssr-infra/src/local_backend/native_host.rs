@@ -12,13 +12,56 @@ use rssr_application::{
 use time::OffsetDateTime;
 
 use super::{LocalBackend, LocalHost, LocalTask};
-use crate::composition::compose_library_use_cases;
+use crate::composition::{
+    LibraryComposition, compose_library_use_cases, compose_library_use_cases_with,
+};
 use crate::config_sync::webdav::WebDavConfigSync;
 use crate::fetch::BodyAssetLocalizer;
+use crate::outbound::OutboundPolicy;
 use crate::store::{LibraryEntries, LibraryStore, LocalizedBody, compute_entry_content_hash};
 
-/// The backend over an opened library, with this host.
+/// The backend over an opened library, with this host; outbound requests are unrestricted (the
+/// desktop app, Android, an ordinary CLI).
 pub fn native_local_backend(store: LibraryStore) -> LocalBackend<NativeHost> {
+    let refresh_concurrency = refresh_concurrency(&store);
+    let composition = compose_library_use_cases(store);
+    let worker = ImageLocalizationWorker::new(
+        composition.entries.clone(),
+        BodyAssetLocalizer::new(),
+        BodyAssetLocalizer::for_reader_entry(),
+    );
+    backend(composition, worker, refresh_concurrency, OutboundPolicy::Unrestricted)
+}
+
+/// [`native_local_backend`] whose every outbound request (feeds, subscriptions, images, WebDAV)
+/// follows `policy`; a client that cannot be built is an error.
+pub fn native_local_backend_with(
+    store: LibraryStore,
+    policy: OutboundPolicy,
+) -> anyhow::Result<LocalBackend<NativeHost>> {
+    let refresh_concurrency = refresh_concurrency(&store);
+    let composition = compose_library_use_cases_with(store, &policy)?;
+    let worker = ImageLocalizationWorker::new(
+        composition.entries.clone(),
+        BodyAssetLocalizer::background(policy.clone())?,
+        BodyAssetLocalizer::reader(policy.clone())?,
+    );
+    Ok(backend(composition, worker, refresh_concurrency, policy))
+}
+
+fn backend(
+    composition: LibraryComposition,
+    image_localization_worker: ImageLocalizationWorker,
+    refresh_concurrency: usize,
+    policy: OutboundPolicy,
+) -> LocalBackend<NativeHost> {
+    LocalBackend::new(
+        composition.use_cases,
+        NativeHost { image_localization_worker, refresh_concurrency, policy },
+    )
+}
+
+fn refresh_concurrency(store: &LibraryStore) -> usize {
     // 实测的 journal 模式决定并发度：WAL 没启用成功时退回串行，
     // 否则并发写者会互相干等并把前台查询一起卡住。
     //
@@ -35,15 +78,7 @@ pub fn native_local_backend(store: LibraryStore) -> LocalBackend<NativeHost> {
         SERIAL_REFRESH_CONCURRENCY
     };
     tracing::info!(journal_mode = %journal_mode, refresh_concurrency, "本地数据库就绪");
-
-    let composition = compose_library_use_cases(store);
-    LocalBackend::new(
-        composition.use_cases,
-        NativeHost {
-            image_localization_worker: ImageLocalizationWorker::new(composition.entries),
-            refresh_concurrency,
-        },
-    )
+    refresh_concurrency
 }
 
 /// tokio for background work and time, WebDAV for configuration exchange, and image
@@ -51,6 +86,7 @@ pub fn native_local_backend(store: LibraryStore) -> LocalBackend<NativeHost> {
 pub struct NativeHost {
     image_localization_worker: ImageLocalizationWorker,
     refresh_concurrency: usize,
+    policy: OutboundPolicy,
 }
 
 #[async_trait::async_trait]
@@ -77,7 +113,7 @@ impl LocalHost for NativeHost {
         remote_path: &str,
     ) -> anyhow::Result<Box<dyn RemoteConfigStore>> {
         // An endpoint that cannot be used is the user's to correct.
-        let store = WebDavConfigSync::new(endpoint, remote_path)
+        let store = WebDavConfigSync::with_policy(endpoint, remote_path, self.policy.clone())
             .map_err(|error| rssr_domain::DomainError::InvalidInput(format!("{error:#}")))?;
         Ok(Box::new(store))
     }
@@ -133,11 +169,15 @@ impl ImageLocalizationWorker {
     /// 同时进行后台本地化的订阅数。
     const MAX_CONCURRENT_FEEDS: usize = 2;
 
-    fn new(entry_repository: Arc<LibraryEntries>) -> Self {
+    fn new(
+        entry_repository: Arc<LibraryEntries>,
+        background_asset_localizer: BodyAssetLocalizer,
+        reader_asset_localizer: BodyAssetLocalizer,
+    ) -> Self {
         Self {
             entry_repository,
-            background_asset_localizer: BodyAssetLocalizer::new(),
-            reader_asset_localizer: BodyAssetLocalizer::for_reader_entry(),
+            background_asset_localizer,
+            reader_asset_localizer,
             background: Arc::new(BackgroundLocalizationQueue {
                 slots: tokio::sync::Semaphore::new(Self::MAX_CONCURRENT_FEEDS),
                 pending_feeds: Default::default(),
@@ -443,7 +483,11 @@ mod tests {
         let (entry_repository, _) =
             library_with_entry(article_url, r#"<p><img src="/hero.png" alt="hero"></p>"#).await;
 
-        let worker = ImageLocalizationWorker::new(entry_repository.clone());
+        let worker = ImageLocalizationWorker::new(
+            entry_repository.clone(),
+            BodyAssetLocalizer::new(),
+            BodyAssetLocalizer::for_reader_entry(),
+        );
 
         let updated = worker.localize_entry_on_demand(1).await.expect("localize current entry");
         assert!(updated, "expected current reader entry to be rewritten");

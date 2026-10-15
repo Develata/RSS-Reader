@@ -8,7 +8,9 @@ use {
         application_adapters::{InfraFeedRefreshSource, InfraOpmlCodec},
         fetch::FetchClient,
         opml::OpmlCodec,
+        outbound::OutboundPolicy,
         parser::FeedParser,
+        subscription_probe::HttpSubscriptionProbe,
     },
     rssr_application::SystemClock,
 };
@@ -35,6 +37,33 @@ pub struct LibraryComposition {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn compose_library_use_cases(store: crate::store::LibraryStore) -> LibraryComposition {
+    compose_library_with_sources(
+        store,
+        HttpSubscriptionProbe::with_feed_client(),
+        FetchClient::new(),
+    )
+}
+
+/// [`compose_library_use_cases`] whose subscription probing and feed fetching follow `policy`
+/// (a server's [`OutboundPolicy::PublicOnly`]); a client that cannot be built is an error.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn compose_library_use_cases_with(
+    store: crate::store::LibraryStore,
+    policy: &OutboundPolicy,
+) -> anyhow::Result<LibraryComposition> {
+    Ok(compose_library_with_sources(
+        store,
+        HttpSubscriptionProbe::with_policy(policy.clone())?,
+        FetchClient::with_policy(policy.clone())?,
+    ))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn compose_library_with_sources(
+    store: crate::store::LibraryStore,
+    subscription_probe: HttpSubscriptionProbe,
+    fetch_client: FetchClient,
+) -> LibraryComposition {
     use crate::store::{
         LibraryAppState, LibraryEntries, LibraryFeeds, LibraryMutations, LibraryQueries,
         LibraryRefreshStore, LibrarySettings,
@@ -49,13 +78,8 @@ pub fn compose_library_use_cases(store: crate::store::LibraryStore) -> LibraryCo
         settings_repository: settings.clone(),
         settings_update: settings,
         app_state: Arc::new(LibraryAppState::new(store.clone())),
-        subscription_probe: Arc::new(
-            crate::subscription_probe::HttpSubscriptionProbe::with_feed_client(),
-        ),
-        refresh_source: Arc::new(InfraFeedRefreshSource::new(
-            FetchClient::new(),
-            FeedParser::new(),
-        )),
+        subscription_probe: Arc::new(subscription_probe),
+        refresh_source: Arc::new(InfraFeedRefreshSource::new(fetch_client, FeedParser::new())),
         refresh_store: Arc::new(LibraryRefreshStore::new(store.clone())),
         opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
         clock: Arc::new(SystemClock),
