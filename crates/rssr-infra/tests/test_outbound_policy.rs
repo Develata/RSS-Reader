@@ -121,6 +121,9 @@ fn response(status: &str, headers: &[(&str, String)], body: &[u8]) -> Vec<u8> {
     bytes
 }
 
+/// A localizer constructor under a policy (background or reader).
+type NewLocalizer = fn(OutboundPolicy) -> anyhow::Result<BodyAssetLocalizer>;
+
 fn feed_response() -> Vec<u8> {
     response("200 OK", &[("Content-Type", "application/rss+xml".to_owned())], FEED.as_bytes())
 }
@@ -216,7 +219,7 @@ async fn image_localization_reaches_only_allowed_destinations() {
         let html = format!(r#"<p><img src="{src}"></p>"#);
         localizer.localize_html_images(&html, None).await.unwrap().contains("data:image/png")
     };
-    let localizers: [(&str, fn(OutboundPolicy) -> anyhow::Result<BodyAssetLocalizer>); 2] =
+    let localizers: [(&str, NewLocalizer); 2] =
         [("background", BodyAssetLocalizer::background), ("reader", BodyAssetLocalizer::reader)];
     for (kind, localizer) in localizers {
         let at = Destinations::start(image.clone(), "/a.png").await;
