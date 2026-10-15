@@ -145,12 +145,17 @@ pub struct Refused(String);
 
 impl Refused {
     fn url(url: &Url) -> Self {
-        let target = match (url.host_str(), url.port()) {
-            (Some(host), Some(port)) => format!("{}://{host}:{port}", url.scheme()),
-            (Some(host), None) => format!("{}://{host}", url.scheme()),
-            (None, _) => format!("{}:", url.scheme()),
-        };
-        Self(target)
+        Self(redacted(url))
+    }
+}
+
+/// A URL as errors and logs may show it: scheme, host and port, never user information, path or
+/// query (which can carry credentials or tokens).
+pub fn redacted(url: &Url) -> String {
+    match (url.host_str(), url.port()) {
+        (Some(host), Some(port)) => format!("{}://{host}:{port}", url.scheme()),
+        (Some(host), None) => format!("{}://{host}", url.scheme()),
+        (None, _) => format!("{}:", url.scheme()),
     }
 }
 

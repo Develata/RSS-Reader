@@ -94,13 +94,22 @@ impl FetchClient {
             builder = builder.header(header::IF_MODIFIED_SINCE, last_modified);
         }
 
-        let response = builder.send().await.context("发送 feed 抓取请求失败")?;
+        // reqwest errors carry the request URL (on a redirect, the previous hop's): never in the
+        // error chain, which reaches diagnostics.
+        let response = builder
+            .send()
+            .await
+            .map_err(reqwest::Error::without_url)
+            .context("发送 feed 抓取请求失败")?;
         let metadata = http_metadata_from_headers(response.headers());
         if classify_feed_response_status(response.status()) == FeedResponseStatus::NotModified {
             return Ok(FetchResult::NotModified(metadata));
         }
 
-        let response = response.error_for_status().context("feed 抓取返回非成功状态")?;
+        let response = response
+            .error_for_status()
+            .map_err(reqwest::Error::without_url)
+            .context("feed 抓取返回非成功状态")?;
         let body = read_feed_text(response).await?;
 
         Ok(FetchResult::Fetched { body, metadata })

@@ -46,7 +46,7 @@ enum Mode {
 /// public-only as the file says otherwise; any other state is an error.
 pub fn load_policy(data_dir: &Path) -> Result<OutboundPolicy> {
     match std::fs::metadata(data_dir) {
-        Err(error) if error.kind() == ErrorKind::NotFound => {
+        Err(error) if is_absent(&error) => {
             return Ok(OutboundPolicy::Unrestricted);
         }
         Err(error) => {
@@ -80,7 +80,7 @@ pub fn load_policy(data_dir: &Path) -> Result<OutboundPolicy> {
 pub fn ensure_server_policy(data_dir: &Path) -> Result<OutboundPolicy> {
     let path = data_dir.join(POLICY_FILE);
     let absent = match std::fs::symlink_metadata(&path) {
-        Err(error) if error.kind() == ErrorKind::NotFound => true,
+        Err(error) if is_absent(&error) => true,
         Err(error) => return Err(error).with_context(|| format!("无法读取 {}", path.display())),
         Ok(_) => false,
     };
@@ -104,17 +104,23 @@ fn publish_default(data_dir: &Path, path: &Path) -> Result<()> {
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     // A name already taken (by a leftover, or a concurrent call) is never ours to remove: try
     // another one.
-    let (temporary, mut file) = loop {
-        let attempt = ATTEMPT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let temporary =
-            data_dir.join(format!("{POLICY_FILE}.new-{}-{attempt}", std::process::id()));
+    let mut created = None;
+    for _ in 0..1000 {
+        let suffix = ATTEMPT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let temporary = data_dir.join(format!("{POLICY_FILE}.new-{}-{suffix}", std::process::id()));
         match options.open(&temporary) {
-            Ok(file) => break (temporary, file),
-            Err(error) if error.kind() == ErrorKind::AlreadyExists && attempt < 1000 => continue,
+            Ok(file) => {
+                created = Some((temporary, file));
+                break;
+            }
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
             Err(error) => {
                 return Err(error).with_context(|| format!("无法创建 {}", temporary.display()));
             }
         }
+    }
+    let Some((temporary, mut file)) = created else {
+        bail!("无法为默认出站策略找到可用的临时文件名（{}）", data_dir.display());
     };
     let written = file.write_all(DEFAULT_POLICY.as_bytes()).and_then(|()| file.sync_all());
     drop(file);
@@ -184,13 +190,23 @@ fn open_without_following(path: &Path) -> Result<Option<std::fs::File>> {
         Ok(file) => Ok(Some(file)),
         // Not following the last component, a link (dangling or not) is opened or refused itself,
         // so NotFound means the entry is absent (the directory itself was checked first).
-        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(error) if is_absent(&error) => Ok(None),
         Err(error) => Err(error).with_context(|| format!("无法打开出站策略 {}", path.display())),
     }
 }
 
 #[cfg(windows)]
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+
+/// Whether `error` proves the entry is not there. Windows also reports an unreachable network
+/// path, a share or a drive as NotFound, which proves nothing about the policy: there only "file
+/// not found" (2) and "path not found" (3) count, and every other failure is an error.
+fn is_absent(error: &std::io::Error) -> bool {
+    #[cfg(windows)]
+    return matches!(error.raw_os_error(), Some(2 | 3));
+    #[cfg(not(windows))]
+    return error.kind() == ErrorKind::NotFound;
+}
 
 /// The data directory belongs to the user running this program.
 #[cfg(unix)]

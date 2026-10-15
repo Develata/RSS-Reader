@@ -289,7 +289,7 @@ impl BodyAssetLocalizer {
                         tracing::warn!(
                             profile = self.budget.profile,
                             reason = "too_large_total",
-                            asset_url = %slot.resolved_url(),
+                            asset_url = %crate::outbound::redacted(slot.resolved_url()),
                             byte_len,
                             total_localized_bytes,
                             max_total_image_bytes = self.budget.max_total_image_bytes,
@@ -304,7 +304,7 @@ impl BodyAssetLocalizer {
                     tracing::warn!(
                         profile = self.budget.profile,
                         reason = "timeout",
-                        asset_url = %slot.resolved_url(),
+                        asset_url = %crate::outbound::redacted(slot.resolved_url()),
                         timeout_secs = self.budget.image_request_timeout.as_secs(),
                         "正文图片抓取超时，保留远端地址"
                     );
@@ -313,7 +313,7 @@ impl BodyAssetLocalizer {
                     tracing::warn!(
                         profile = self.budget.profile,
                         reason = "http_status",
-                        asset_url = %slot.resolved_url(),
+                        asset_url = %crate::outbound::redacted(slot.resolved_url()),
                         status,
                         "正文图片返回非成功状态，保留远端地址"
                     );
@@ -322,7 +322,7 @@ impl BodyAssetLocalizer {
                     tracing::warn!(
                         profile = self.budget.profile,
                         reason = "non_image_content_type",
-                        asset_url = %slot.resolved_url(),
+                        asset_url = %crate::outbound::redacted(slot.resolved_url()),
                         content_type = content_type.as_deref().unwrap_or("<missing>"),
                         "正文图片地址返回了非图片内容，保留远端地址"
                     );
@@ -331,7 +331,7 @@ impl BodyAssetLocalizer {
                     tracing::warn!(
                         profile = self.budget.profile,
                         reason = "too_large",
-                        asset_url = %slot.resolved_url(),
+                        asset_url = %crate::outbound::redacted(slot.resolved_url()),
                         byte_len,
                         max_bytes,
                         "正文图片体积超过单图预算，保留远端地址"
@@ -341,7 +341,7 @@ impl BodyAssetLocalizer {
                     tracing::warn!(
                         profile = self.budget.profile,
                         reason = "request_failed",
-                        asset_url = %slot.resolved_url(),
+                        asset_url = %crate::outbound::redacted(slot.resolved_url()),
                         error = %error,
                         "正文图片本地化失败，保留远端地址"
                     );

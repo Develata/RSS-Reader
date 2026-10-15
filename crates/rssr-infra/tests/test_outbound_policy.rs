@@ -124,6 +124,13 @@ fn response(status: &str, headers: &[(&str, String)], body: &[u8]) -> Vec<u8> {
 /// A localizer constructor under a policy (background or reader).
 type NewLocalizer = fn(OutboundPolicy) -> anyhow::Result<BodyAssetLocalizer>;
 
+/// The policy's own refusal, not some other failure (a resolver that dropped the refused answers
+/// and connected to the public one would fail later, for another reason).
+fn assert_policy_refusal(error: &anyhow::Error, url: &str) {
+    let chain = format!("{error:#}");
+    assert!(chain.contains("出站访问策略不允许访问"), "{url}: {chain}");
+}
+
 fn feed_response() -> Vec<u8> {
     response("200 OK", &[("Content-Type", "application/rss+xml".to_owned())], FEED.as_bytes())
 }
@@ -191,7 +198,8 @@ async fn feed_fetching_reaches_only_allowed_destinations() {
     let request = |url: String| FetchRequest { url, etag: None, last_modified: None };
     let client = FetchClient::with_policy(policy()).unwrap();
     for url in at.refused_urls("/feed.xml") {
-        assert!(client.fetch(&request(url.clone())).await.is_err(), "{url}");
+        let error = client.fetch(&request(url.clone())).await.expect_err(&url);
+        assert_policy_refusal(&error, &url);
     }
     at.assert_refused().await;
     client.fetch(&request(at.allowed_url("/feed.xml"))).await.expect("allowed by name");
@@ -203,7 +211,8 @@ async fn subscription_probing_reaches_only_allowed_destinations() {
     let at = Destinations::start(feed_response(), "/feed.xml").await;
     let probe = HttpSubscriptionProbe::with_policy(policy()).unwrap();
     for url in at.refused_urls("/feed.xml") {
-        assert!(probe.probe(&Url::parse(&url).unwrap()).await.is_err(), "{url}");
+        let error = probe.probe(&Url::parse(&url).unwrap()).await.expect_err(&url);
+        assert_policy_refusal(&error, &url);
     }
     at.assert_refused().await;
     let allowed = Url::parse(&at.allowed_url("/feed.xml")).unwrap();
@@ -246,7 +255,8 @@ async fn webdav_download_and_upload_reach_only_allowed_destinations() {
             }
         };
         for url in at.refused_urls("/dav/") {
-            assert!(attempt(url.clone()).await.is_err(), "upload {upload}: {url}");
+            let error = attempt(url.clone()).await.expect_err(&url);
+            assert_policy_refusal(&error, &format!("upload {upload}: {url}"));
         }
         at.assert_refused().await;
         attempt(at.allowed_url("/dav/")).await.expect("allowed by name");
@@ -281,9 +291,78 @@ async fn literal_address_forms_are_refused_and_reach_the_listener_when_unrestric
     }
     assert_eq!(target.settled_connections().await, 0);
 
+    let allowed = Server::start(feed_response()).await;
+    let named = format!("http://allowed.test.:{}/feed.xml", allowed.port());
+    client.fetch(&request(&named)).await.expect("a trailing-dot allowed name is allowed");
+    assert_eq!(allowed.settled_connections().await, 1);
+
     let unrestricted = FetchClient::new();
     for url in &reachable {
         unrestricted.fetch(&request(url)).await.unwrap_or_else(|error| panic!("{url}: {error:#}"));
     }
     assert_eq!(target.settled_connections().await, reachable.len());
+}
+
+/// A refusal reached through a redirect keeps the previous hop's credentials and token out of
+/// the whole error chain (reqwest attaches that URL to a redirect error).
+#[tokio::test(flavor = "multi_thread")]
+async fn refusals_keep_credentials_out_of_the_error_chain() {
+    let at = Destinations::start(feed_response(), "/feed.xml").await;
+    let secret_url = format!(
+        "http://user:SECRET-PASSWORD@allowed.test:{}/feed.xml?token=SECRET-TOKEN",
+        at.redirector.port()
+    );
+    let request = FetchRequest { url: secret_url.clone(), etag: None, last_modified: None };
+    let feed = FetchClient::with_policy(policy()).unwrap().fetch(&request).await.unwrap_err();
+    let probe = HttpSubscriptionProbe::with_policy(policy()).unwrap();
+    let probed = probe.probe(&Url::parse(&secret_url).unwrap()).await.unwrap_err();
+    for error in [feed, probed] {
+        let chain = format!("{error:#}");
+        assert!(chain.contains("出站访问策略不允许访问"), "{chain}");
+        assert!(!chain.contains("SECRET"), "{chain}");
+    }
+}
+
+/// Subscription discovery: a page on an allowed host that declares a feed elsewhere cannot lead
+/// the probe to a refused destination; a declared feed on an allowed host is subscribed.
+#[tokio::test(flavor = "multi_thread")]
+async fn discovered_candidates_are_checked_like_any_request() {
+    use rssr_application::AddSubscriptionInput;
+    use rssr_infra::composition::compose_library_use_cases_with;
+    use rssr_infra::store::LibraryStore;
+
+    let at = Destinations::start(feed_response(), "/feed.xml").await;
+    let page_declaring = |feed: &str| {
+        let html = format!(
+            r#"<html><head><link rel="alternate" type="application/rss+xml" href="{feed}"></head><body>page</body></html>"#
+        );
+        response("200 OK", &[("Content-Type", "text/html".to_owned())], html.as_bytes())
+    };
+    let add = |page_port: u16| async move {
+        let store = LibraryStore::open_in_memory().await.unwrap();
+        let use_cases = compose_library_use_cases_with(store, &policy()).unwrap().use_cases;
+        let input = AddSubscriptionInput {
+            url: format!("http://allowed.test:{page_port}/"),
+            title: None,
+            folder: None,
+        };
+        use_cases.subscription_workflow.add_subscription(&input).await
+    };
+
+    let target = at.target.port();
+    for candidate in [
+        format!("http://127.0.0.1:{target}/feed.xml"),
+        format!("http://refused.test:{target}/feed.xml"),
+        format!("http://mixed-a.test:{target}/feed.xml"),
+        format!("http://mixed-b.test:{target}/feed.xml"),
+    ] {
+        let page = Server::start(page_declaring(&candidate)).await;
+        assert!(add(page.port()).await.is_err(), "{candidate}");
+        assert_eq!(page.settled_connections().await, 1, "the allowed page was read");
+    }
+    assert_eq!(at.target.settled_connections().await, 0, "no candidate reached the target");
+
+    let page = Server::start(page_declaring(&at.allowed_url("/feed.xml"))).await;
+    add(page.port()).await.expect("a declared feed on an allowed host");
+    assert_eq!(at.allowed.settled_connections().await, 1);
 }

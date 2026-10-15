@@ -69,8 +69,13 @@ impl HttpSubscriptionProbe {
         #[cfg(not(target_arch = "wasm32"))]
         self.policy.check_url(url)?;
         #[cfg(not(target_arch = "wasm32"))]
-        let response =
-            self.client.get(url.clone()).timeout(std::time::Duration::from_secs(30)).send().await?;
+        let response = self
+            .client
+            .get(url.clone())
+            .timeout(std::time::Duration::from_secs(30))
+            .send()
+            .await
+            .map_err(reqwest::Error::without_url)?;
         #[cfg(not(target_arch = "wasm32"))]
         let (response, final_url) = {
             let final_url = response.url().clone();
@@ -83,7 +88,10 @@ impl HttpSubscriptionProbe {
                 url.as_str(),
             )
             .await?;
-        let response = response.error_for_status().context("订阅探测返回非成功状态")?;
+        let response = response
+            .error_for_status()
+            .map_err(reqwest::Error::without_url)
+            .context("订阅探测返回非成功状态")?;
         let metadata = RefreshHttpMetadata {
             etag: response
                 .headers()
