@@ -47,6 +47,7 @@ enum Mode {
 pub fn load_policy(data_dir: &Path) -> Result<OutboundPolicy> {
     match std::fs::metadata(data_dir) {
         Err(error) if is_absent(&error) => {
+            confirm_absent_directory(data_dir)?;
             return Ok(OutboundPolicy::Unrestricted);
         }
         Err(error) => {
@@ -80,7 +81,7 @@ pub fn load_policy(data_dir: &Path) -> Result<OutboundPolicy> {
 pub fn ensure_server_policy(data_dir: &Path) -> Result<OutboundPolicy> {
     let path = data_dir.join(POLICY_FILE);
     let absent = match std::fs::symlink_metadata(&path) {
-        Err(error) if is_absent(&error) => true,
+        Err(error) if is_absent_entry(&error) => true,
         Err(error) => return Err(error).with_context(|| format!("无法读取 {}", path.display())),
         Ok(_) => false,
     };
@@ -190,7 +191,7 @@ fn open_without_following(path: &Path) -> Result<Option<std::fs::File>> {
         Ok(file) => Ok(Some(file)),
         // Not following the last component, a link (dangling or not) is opened or refused itself,
         // so NotFound means the entry is absent (the directory itself was checked first).
-        Err(error) if is_absent(&error) => Ok(None),
+        Err(error) if is_absent_entry(&error) => Ok(None),
         Err(error) => Err(error).with_context(|| format!("无法打开出站策略 {}", path.display())),
     }
 }
@@ -198,14 +199,46 @@ fn open_without_following(path: &Path) -> Result<Option<std::fs::File>> {
 #[cfg(windows)]
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 
-/// Whether `error` proves the entry is not there. Windows also reports an unreachable network
-/// path, a share or a drive as NotFound, which proves nothing about the policy: there only "file
-/// not found" (2) and "path not found" (3) count, and every other failure is an error.
+/// Whether `error` says a path does not exist. Windows also reports an unreachable network path,
+/// a share or a drive as NotFound, which proves nothing: there only "file not found" (2) and "path
+/// not found" (3) count, and every other failure is an error. "Path not found" can still come
+/// from an ancestor that cannot be resolved, so a missing data directory is confirmed by
+/// [`confirm_absent_directory`], and an entry in a directory known to exist uses
+/// [`is_absent_entry`].
 fn is_absent(error: &std::io::Error) -> bool {
     #[cfg(windows)]
     return matches!(error.raw_os_error(), Some(2 | 3));
     #[cfg(not(windows))]
     return error.kind() == ErrorKind::NotFound;
+}
+
+/// Whether `error`, opening an entry of a directory known to exist, says the entry is not there:
+/// on Windows only "file not found" (2).
+fn is_absent_entry(error: &std::io::Error) -> bool {
+    #[cfg(windows)]
+    return error.raw_os_error() == Some(2);
+    #[cfg(not(windows))]
+    return error.kind() == ErrorKind::NotFound;
+}
+
+/// A data directory that does not exist means no policy only when that is certain: its nearest
+/// existing ancestor is a directory. An ancestor that cannot be read (an unreachable drive or
+/// share, an unresolvable link) is an error, not an absence.
+fn confirm_absent_directory(data_dir: &Path) -> Result<()> {
+    let absolute = std::path::absolute(data_dir)
+        .with_context(|| format!("无法确定数据目录 {}", data_dir.display()))?;
+    let mut ancestor = absolute.parent();
+    while let Some(directory) = ancestor {
+        match std::fs::metadata(directory) {
+            Ok(metadata) if metadata.is_dir() => return Ok(()),
+            Ok(_) => bail!("数据目录的上级 {} 不是目录", directory.display()),
+            Err(error) if is_absent(&error) => ancestor = directory.parent(),
+            Err(error) => {
+                return Err(error).with_context(|| format!("无法读取 {}", directory.display()));
+            }
+        }
+    }
+    bail!("无法确认数据目录 {} 不存在", data_dir.display())
 }
 
 /// The data directory belongs to the user running this program.
@@ -314,6 +347,12 @@ mod tests {
         let file = dir.join("not-a-directory");
         std::fs::write(&file, "").unwrap();
         assert!(load_policy(&file).is_err(), "a data directory that is a file");
+        assert!(load_policy(&file.join("below")).is_err(), "a data directory below a file");
+        assert_eq!(
+            load_policy(&dir.join("missing").join("nested")).unwrap(),
+            OutboundPolicy::Unrestricted,
+            "missing directories under an existing one"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 

@@ -233,7 +233,7 @@ impl BodyAssetLocalizer {
                 reason = "html_too_large",
                 html_len = html.len(),
                 max_html_bytes = self.budget.max_html_bytes,
-                entry_url = ?base_url,
+                entry_url = ?base_url.map(crate::outbound::redacted),
                 "正文 HTML 超过图片本地化预算，跳过当前文章"
             );
             return None;
@@ -250,7 +250,7 @@ impl BodyAssetLocalizer {
                 profile = self.budget.profile,
                 reason = "unsupported_pattern",
                 unsupported_slot_count = document.unsupported_slot_count(),
-                entry_url = ?base_url,
+                entry_url = ?base_url.map(crate::outbound::redacted),
                 "正文中存在未命中的图片模式，保留原始地址"
             );
         }
@@ -259,7 +259,7 @@ impl BodyAssetLocalizer {
                 profile = self.budget.profile,
                 reason = "resolve_failed",
                 unresolved_slot_count = document.unresolved_slot_count(),
-                entry_url = ?base_url,
+                entry_url = ?base_url.map(crate::outbound::redacted),
                 "正文图片地址无法基于当前上下文解析"
             );
         }

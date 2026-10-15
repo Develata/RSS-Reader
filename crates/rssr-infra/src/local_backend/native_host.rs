@@ -264,7 +264,7 @@ impl ImageLocalizationWorker {
                 tracing::warn!(
                     entry_id,
                     feed_id = entry.feed_id,
-                    entry_url = ?entry.url,
+                    entry_url = ?entry.url.as_ref().map(crate::outbound::redacted),
                     reason = "timeout",
                     timeout_secs = localization_timeout(&localizer).as_secs(),
                     "当前阅读文章正文图片按需本地化超时，保留原始 HTML"
@@ -362,7 +362,7 @@ async fn localize_feed_entries(
                 attempts += 1;
                 tracing::warn!(
                     feed_id,
-                    entry_url = ?entry.url,
+                    entry_url = ?entry.url.as_ref().map(crate::outbound::redacted),
                     reason = "timeout",
                     timeout_secs = localization_timeout(localizer).as_secs(),
                     "后台正文图片本地化超时，跳过当前文章"

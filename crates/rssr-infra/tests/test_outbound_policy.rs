@@ -4,8 +4,9 @@
 //! probing, image localization (background and reader) and WebDAV (download and upload). Under
 //! `PublicOnly` a refused destination receives no connection, whether it is named by a literal
 //! address, reached by a redirect from an allowed host, or behind a host name whose answers are all
-//! refused or mixed (in either order). Each path has a control: the same client reaches an allowed
-//! destination, so the listeners are known to work.
+//! refused or mixed (in either order), and each refusal names the stage that refused it (the
+//! resolver names the host and the refused address). Each path has a control: a client built the
+//! same way reaches an allowed destination, so the listeners are known to work.
 //!
 //! Every listener is on `127.0.0.1` (no loopback aliases needed). Host names resolve through the
 //! policy's own resolver from fixed answers: `allowed.test` is allowed by name; `refused.test`,
@@ -124,11 +125,12 @@ fn response(status: &str, headers: &[(&str, String)], body: &[u8]) -> Vec<u8> {
 /// A localizer constructor under a policy (background or reader).
 type NewLocalizer = fn(OutboundPolicy) -> anyhow::Result<BodyAssetLocalizer>;
 
-/// The policy's own refusal, not some other failure (a resolver that dropped the refused answers
-/// and connected to the public one would fail later, for another reason).
-fn assert_policy_refusal(error: &anyhow::Error, url: &str) {
+/// The policy's own refusal, at the expected stage (`reason`), not some other failure: a resolver
+/// that dropped the refused answers and connected to the public one would fail later, or be
+/// refused at a redirect, for another reason.
+fn assert_policy_refusal(error: &anyhow::Error, url: &str, reason: &str) {
     let chain = format!("{error:#}");
-    assert!(chain.contains("出站访问策略不允许访问"), "{url}: {chain}");
+    assert!(chain.contains(&format!("出站访问策略不允许访问 {reason}")), "{url}: {chain}");
 }
 
 fn feed_response() -> Vec<u8> {
@@ -169,15 +171,18 @@ impl Destinations {
         Self { target, redirector, allowed }
     }
 
-    /// Every way to reach the target that the policy must refuse.
-    fn refused_urls(&self, path: &str) -> Vec<String> {
+    /// Every way to reach the target that the policy must refuse, with the refusal it must give:
+    /// the literal address (before sending, or at the redirect), or the resolver's host and
+    /// refused address.
+    fn refused_urls(&self, path: &str) -> Vec<(String, String)> {
         let target = self.target.port();
+        let literal = format!("http://127.0.0.1:{target}");
         vec![
-            format!("http://127.0.0.1:{target}{path}"),
-            format!("http://allowed.test:{}{path}", self.redirector.port()),
-            format!("http://refused.test:{target}{path}"),
-            format!("http://mixed-a.test:{target}{path}"),
-            format!("http://mixed-b.test:{target}{path}"),
+            (format!("{literal}{path}"), literal.clone()),
+            (format!("http://allowed.test:{}{path}", self.redirector.port()), literal),
+            (format!("http://refused.test:{target}{path}"), "refused.test（127.0.0.1）".to_owned()),
+            (format!("http://mixed-a.test:{target}{path}"), "mixed-a.test（127.0.0.1）".to_owned()),
+            (format!("http://mixed-b.test:{target}{path}"), "mixed-b.test（127.0.0.1）".to_owned()),
         ]
     }
 
@@ -197,9 +202,9 @@ async fn feed_fetching_reaches_only_allowed_destinations() {
     let at = Destinations::start(feed_response(), "/feed.xml").await;
     let request = |url: String| FetchRequest { url, etag: None, last_modified: None };
     let client = FetchClient::with_policy(policy()).unwrap();
-    for url in at.refused_urls("/feed.xml") {
+    for (url, reason) in at.refused_urls("/feed.xml") {
         let error = client.fetch(&request(url.clone())).await.expect_err(&url);
-        assert_policy_refusal(&error, &url);
+        assert_policy_refusal(&error, &url, &reason);
     }
     at.assert_refused().await;
     client.fetch(&request(at.allowed_url("/feed.xml"))).await.expect("allowed by name");
@@ -210,9 +215,9 @@ async fn feed_fetching_reaches_only_allowed_destinations() {
 async fn subscription_probing_reaches_only_allowed_destinations() {
     let at = Destinations::start(feed_response(), "/feed.xml").await;
     let probe = HttpSubscriptionProbe::with_policy(policy()).unwrap();
-    for url in at.refused_urls("/feed.xml") {
+    for (url, reason) in at.refused_urls("/feed.xml") {
         let error = probe.probe(&Url::parse(&url).unwrap()).await.expect_err(&url);
-        assert_policy_refusal(&error, &url);
+        assert_policy_refusal(&error, &url, &reason);
     }
     at.assert_refused().await;
     let allowed = Url::parse(&at.allowed_url("/feed.xml")).unwrap();
@@ -232,7 +237,7 @@ async fn image_localization_reaches_only_allowed_destinations() {
         [("background", BodyAssetLocalizer::background), ("reader", BodyAssetLocalizer::reader)];
     for (kind, localizer) in localizers {
         let at = Destinations::start(image.clone(), "/a.png").await;
-        for url in at.refused_urls("/a.png") {
+        for (url, _) in at.refused_urls("/a.png") {
             assert!(!localized(localizer(policy()).unwrap(), url.clone()).await, "{kind}: {url}");
         }
         at.assert_refused().await;
@@ -254,9 +259,9 @@ async fn webdav_download_and_upload_reach_only_allowed_destinations() {
                 sync.download_text().await
             }
         };
-        for url in at.refused_urls("/dav/") {
+        for (url, reason) in at.refused_urls("/dav/") {
             let error = attempt(url.clone()).await.expect_err(&url);
-            assert_policy_refusal(&error, &format!("upload {upload}: {url}"));
+            assert_policy_refusal(&error, &format!("upload {upload}: {url}"), &reason);
         }
         at.assert_refused().await;
         attempt(at.allowed_url("/dav/")).await.expect("allowed by name");
@@ -265,8 +270,9 @@ async fn webdav_download_and_upload_reach_only_allowed_destinations() {
 }
 
 /// Every form a URL can give a literal loopback address in (as the URL parser reads it), a user
-/// name that looks like a host, and a trailing-dot host name: refused under `PublicOnly`, while
-/// the unrestricted client reaches the same listener through each literal form.
+/// name that looks like a host, and a trailing-dot host name: refused by the policy under
+/// `PublicOnly`. The unrestricted client reaches the listener through each IPv4 form; the
+/// IPv4-mapped form has no such control (on Windows an IPv6 socket does not reach IPv4).
 #[tokio::test(flavor = "multi_thread")]
 async fn literal_address_forms_are_refused_and_reach_the_listener_when_unrestricted() {
     let target = Server::start(feed_response()).await;
@@ -279,15 +285,21 @@ async fn literal_address_forms_are_refused_and_reach_the_listener_when_unrestric
         format!("http://%31%32%37.0.0.1:{port}/feed.xml"),
         format!("http://example.com@127.0.0.1:{port}/feed.xml"),
     ];
+    let literal = format!("http://127.0.0.1:{port}");
     let refused_only = [
-        format!("http://[::ffff:127.0.0.1]:{port}/feed.xml"),
-        format!("http://refused.test.:{port}/feed.xml"),
+        (
+            format!("http://[::ffff:127.0.0.1]:{port}/feed.xml"),
+            format!("http://[::ffff:7f00:1]:{port}"),
+        ),
+        (format!("http://refused.test.:{port}/feed.xml"), "refused.test".to_owned()),
     ];
     let request = |url: &String| FetchRequest { url: url.clone(), etag: None, last_modified: None };
 
     let client = FetchClient::with_policy(policy()).unwrap();
-    for url in reachable.iter().chain(&refused_only) {
-        assert!(client.fetch(&request(url)).await.is_err(), "{url}");
+    let refused = reachable.iter().map(|url| (url.clone(), literal.clone())).chain(refused_only);
+    for (url, reason) in refused {
+        let error = client.fetch(&request(&url)).await.expect_err(&url);
+        assert_policy_refusal(&error, &url, &reason);
     }
     assert_eq!(target.settled_connections().await, 0);
 
@@ -350,14 +362,15 @@ async fn discovered_candidates_are_checked_like_any_request() {
     };
 
     let target = at.target.port();
-    for candidate in [
-        format!("http://127.0.0.1:{target}/feed.xml"),
-        format!("http://refused.test:{target}/feed.xml"),
-        format!("http://mixed-a.test:{target}/feed.xml"),
-        format!("http://mixed-b.test:{target}/feed.xml"),
+    for (candidate, reason) in [
+        (format!("http://127.0.0.1:{target}/feed.xml"), format!("http://127.0.0.1:{target}")),
+        (format!("http://refused.test:{target}/feed.xml"), "refused.test（127.0.0.1）".to_owned()),
+        (format!("http://mixed-a.test:{target}/feed.xml"), "mixed-a.test（127.0.0.1）".to_owned()),
+        (format!("http://mixed-b.test:{target}/feed.xml"), "mixed-b.test（127.0.0.1）".to_owned()),
     ] {
         let page = Server::start(page_declaring(&candidate)).await;
-        assert!(add(page.port()).await.is_err(), "{candidate}");
+        let error = add(page.port()).await.expect_err(&candidate);
+        assert_policy_refusal(&error, &candidate, &reason);
         assert_eq!(page.settled_connections().await, 1, "the allowed page was read");
     }
     assert_eq!(at.target.settled_connections().await, 0, "no candidate reached the target");
