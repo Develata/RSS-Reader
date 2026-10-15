@@ -3,6 +3,8 @@
 //! One-way import of v0.1.x libraries (both released layouts) into a v0.2 library. Fixtures are
 //! built with the released migration files, recorded the way sqlx records them.
 
+#[path = "support/disk_full.rs"]
+mod disk_full;
 #[path = "support/library.rs"]
 mod library;
 
@@ -703,4 +705,41 @@ async fn a_fresh_data_directory_gets_a_new_library() {
     let opened = open_library_in(&dir.0.join("nested"), Default::default()).await.unwrap();
     assert!(opened.imported.is_none());
     assert!(dir.0.join("nested").join("library.sqlite3").is_file());
+}
+
+/// A real full disk during an import (phase A gate): nothing is published and no scratch file
+/// stays, the source is untouched, and the import succeeds once space is freed. Runs only on a
+/// small file system (`RSSR_DISK_FULL_DIR`); the source lives on the normal one.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_import_onto_a_full_disk_publishes_nothing() {
+    let Some(root) = disk_full::dir("import") else { return };
+    let dir = TempDir::new("v01-disk-full");
+    let source = fixture(&dir.0, 7, Endings::Lf, &current_settings(), None);
+    let snapshot = |library: &V01Library| {
+        [Some(&library.index), library.content.as_ref()]
+            .into_iter()
+            .flatten()
+            .map(|path| std::fs::read(path).unwrap())
+            .collect::<Vec<_>>()
+    };
+    let before = snapshot(&source);
+    let target = root.join("library.sqlite3");
+
+    let filler = disk_full::fill(&root, 16 * 1024);
+    let error = import_v01(&source, &target).expect_err("the disk is full");
+    eprintln!("import onto a full disk: {error}");
+    assert!(!target.exists(), "nothing published");
+    let mut left = std::fs::read_dir(&root)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect::<Vec<_>>();
+    left.sort();
+    assert_eq!(left, ["filler", "library.sqlite3.create-lock"], "no scratch file stays");
+    assert_eq!(snapshot(&source), before, "the source is untouched");
+
+    std::fs::remove_file(&filler).unwrap();
+    import_v01(&source, &target).expect("imports once space is freed");
+    let library = Library::over(LibraryStore::open(&target).await.unwrap());
+    assert_eq!(library.scalar("SELECT COUNT(*) FROM entries").await, 3);
+    assert_eq!(library.text("PRAGMA integrity_check").await.as_deref(), Some("ok"));
 }

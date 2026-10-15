@@ -5,6 +5,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+#[path = "support/disk_full.rs"]
+mod disk_full;
+#[path = "support/library.rs"]
+mod library;
 #[path = "support/v01_schema.rs"]
 mod v01_schema;
 
@@ -818,4 +822,68 @@ async fn bundled_sqlite_has_the_wal_reset_fix() {
         .unwrap();
     let parts: Vec<u32> = version.split('.').map(|part| part.parse().unwrap()).collect();
     assert!(parts >= vec![3, 51, 3], "SQLite {version} is below the project baseline 3.51.3");
+}
+
+/// A real full disk (phase A gate): a refresh that cannot be written fails as a storage error and
+/// is rolled back whole, and a new one cannot start; the library stays sound, takes writes again once space is freed, and
+/// opens again. Runs only on a small file system (`RSSR_DISK_FULL_DIR`).
+#[tokio::test(flavor = "multi_thread")]
+async fn writes_on_a_full_disk_roll_back_and_resume() {
+    use rssr_application::{
+        ErrorKind, FeedRefreshUpdate, ParsedEntryData, ParsedFeedUpdate, RefreshCommit,
+        RefreshStorePort, classify,
+    };
+
+    let Some(root) = disk_full::dir("store") else { return };
+    let path = root.join("library.sqlite3");
+    let entries = |from: usize, count: usize| -> Vec<ParsedEntryData> {
+        (from..from + count)
+            .map(|index| ParsedEntryData {
+                external_id: format!("entry-{index}"),
+                dedup_key: format!("entry-{index}"),
+                url: None,
+                title: format!("Entry {index}"),
+                author: None,
+                summary: None,
+                content_html: Some(format!("<p>{}</p>", "x".repeat(64 * 1024))),
+                content_text: None,
+                published_at: None,
+                updated_at_source: None,
+            })
+            .collect()
+    };
+    let commit = |entries: Vec<ParsedEntryData>| RefreshCommit::Updated {
+        update: FeedRefreshUpdate {
+            metadata: Default::default(),
+            feed: ParsedFeedUpdate { title: None, site_url: None, description: None, entries },
+        },
+    };
+    let count = "SELECT COUNT(*) FROM entries";
+    let integrity = "PRAGMA integrity_check";
+
+    let library = library::Library::over(LibraryStore::open(&path).await.unwrap());
+    let feed = library.add_feed("https://example.com/full.xml").await;
+    assert_eq!(library.seed(feed.id, entries(0, 4)).await, 4);
+
+    // A refresh under way when the disk fills: its commit fails.
+    let target = library.refresh.get_target(feed.id).await.unwrap().unwrap();
+    let filler = disk_full::fill(&root, 0);
+    let error = library
+        .refresh
+        .commit(&target, commit(entries(4, 32)))
+        .await
+        .expect_err("the disk is full");
+    assert_eq!(classify(&error).kind, ErrorKind::Storage, "{error:#}");
+    // A new refresh cannot start either: taking its ticket is a write.
+    let error = library.refresh.get_target(feed.id).await.expect_err("the disk is full");
+    assert_eq!(classify(&error).kind, ErrorKind::Storage, "{error:#}");
+    assert_eq!(library.scalar(count).await, 4, "the failed refresh left nothing");
+    assert_eq!(library.text(integrity).await.as_deref(), Some("ok"));
+
+    std::fs::remove_file(&filler).unwrap();
+    assert_eq!(library.seed(feed.id, entries(4, 32)).await, 32, "writes work again");
+    drop(library);
+    let reopened = library::Library::over(LibraryStore::open(&path).await.unwrap());
+    assert_eq!(reopened.scalar(count).await, 36);
+    assert_eq!(reopened.text(integrity).await.as_deref(), Some("ok"));
 }

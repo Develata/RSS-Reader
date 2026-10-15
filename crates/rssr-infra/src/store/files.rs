@@ -293,6 +293,52 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    /// Real checkpoints (phase A gate): while another connection keeps growing the library in
+    /// WAL mode, checkpointing it into the main file and shrinking it again (`VACUUM`), every
+    /// probe accepts it. The simulated case above shows why a probe can meet a checkpoint midway.
+    #[test]
+    fn probes_accept_a_library_while_it_is_checkpointed() {
+        let dir = temp_dir("checkpoint");
+        let target = dir.join("library.sqlite3");
+        {
+            let mut conn = Connection::open(&target).unwrap();
+            migrate::migrate(&mut conn, "2026-01-01T00:00:00Z").unwrap();
+        }
+        let probe = probe_uri(&target).unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let writer = {
+            let (target, stop) = (target.clone(), Arc::clone(&stop));
+            std::thread::spawn(move || {
+                let conn = Connection::open(&target).unwrap();
+                conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+                conn.pragma_update(None, "wal_autocheckpoint", 0).unwrap();
+                conn.execute_batch("CREATE TABLE stress (body BLOB NOT NULL)").unwrap();
+                let mut checkpoints = 0u64;
+                while !stop.load(Ordering::Relaxed) {
+                    conn.execute("INSERT INTO stress (body) VALUES (zeroblob(65536))", []).unwrap();
+                    conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(())).unwrap();
+                    checkpoints += 1;
+                    if checkpoints.is_multiple_of(64) {
+                        conn.execute_batch("DELETE FROM stress; VACUUM;").unwrap();
+                        conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(())).unwrap();
+                    }
+                }
+                checkpoints
+            })
+        };
+
+        let started = Instant::now();
+        let mut probes = 0u64;
+        while started.elapsed() < Duration::from_millis(1500) {
+            check_library(&probe).expect("a library being checkpointed is still a library");
+            probes += 1;
+        }
+        stop.store(true, Ordering::Relaxed);
+        let checkpoints = writer.join().unwrap();
+        assert!(checkpoints >= 64 && probes > 0, "{checkpoints} checkpoints, {probes} probes");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn a_backslash_is_part_of_a_unix_file_name() {
