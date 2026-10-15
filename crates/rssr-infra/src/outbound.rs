@@ -20,6 +20,7 @@
 mod address;
 mod policy_file;
 
+use std::collections::BTreeMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
@@ -46,12 +47,22 @@ pub struct PublicOnly {
     allow_hosts: Vec<String>,
     allow_networks: Vec<Network>,
     deny_networks: Vec<Network>,
+    /// Answers given in place of the system resolver, for tests: the policy still checks them.
+    fixed_answers: BTreeMap<String, Vec<IpAddr>>,
 }
 
 impl PublicOnly {
     pub fn new(allow_hosts: Vec<String>, allow_networks: Vec<Network>, deny: Vec<Network>) -> Self {
         let allow_hosts = allow_hosts.iter().map(|host| normalized_host(host)).collect();
-        Self { allow_hosts, allow_networks, deny_networks: deny }
+        Self { allow_hosts, allow_networks, deny_networks: deny, fixed_answers: BTreeMap::new() }
+    }
+
+    /// Tests only: resolve `host` to `answers` (in this order) instead of asking the system, so
+    /// mixed and ordered answers can go through the real resolver and connection path.
+    #[doc(hidden)]
+    pub fn with_fixed_answers(mut self, host: &str, answers: Vec<IpAddr>) -> Self {
+        self.fixed_answers.insert(normalized_host(host), answers);
+        self
     }
 
     /// Whether `ip`, reached as `host` (`None` for a literal address), may be connected to.
@@ -126,17 +137,29 @@ impl std::str::FromStr for Network {
     }
 }
 
-/// A destination the policy does not allow.
+/// A destination the policy does not allow. It names the scheme, host and port only: a URL's user
+/// information, path and query (which can hold credentials or tokens) never reach the message.
 #[derive(Debug, thiserror::Error)]
 #[error("出站访问策略不允许访问 {0}")]
 pub struct Refused(String);
+
+impl Refused {
+    fn url(url: &Url) -> Self {
+        let target = match (url.host_str(), url.port()) {
+            (Some(host), Some(port)) => format!("{}://{host}:{port}", url.scheme()),
+            (Some(host), None) => format!("{}://{host}", url.scheme()),
+            (None, _) => format!("{}:", url.scheme()),
+        };
+        Self(target)
+    }
+}
 
 impl OutboundPolicy {
     /// Checks a URL before it is requested, and every redirect target: only http(s), and a literal
     /// address must be allowed. A host name is checked when it resolves.
     pub fn check_url(&self, url: &Url) -> Result<(), Refused> {
         let Self::PublicOnly(policy) = self else { return Ok(()) };
-        let refused = || Refused(url.as_str().to_owned());
+        let refused = || Refused::url(url);
         if !matches!(url.scheme(), "http" | "https") {
             return Err(refused());
         }
@@ -177,8 +200,13 @@ impl Resolve for PolicyResolver {
         let policy = self.0.clone();
         Box::pin(async move {
             let host = name.as_str().to_owned();
-            let resolved: std::io::Result<Vec<SocketAddr>> =
-                tokio::net::lookup_host((host.as_str(), 0)).await.map(Iterator::collect);
+            let resolved: std::io::Result<Vec<SocketAddr>> = match policy
+                .fixed_answers
+                .get(&normalized_host(&host))
+            {
+                Some(answers) => Ok(answers.iter().map(|ip| SocketAddr::new(*ip, 0)).collect()),
+                None => tokio::net::lookup_host((host.as_str(), 0)).await.map(Iterator::collect),
+            };
             let addresses = policy.checked(&host, resolved?)?;
             Ok::<Addrs, Box<dyn std::error::Error + Send + Sync>>(Box::new(addresses.into_iter()))
         })
@@ -244,6 +272,20 @@ mod tests {
                 .check_url(&Url::parse("http://127.0.0.1/").unwrap())
                 .is_ok()
         );
+    }
+
+    /// A refusal names where, never the credentials or tokens a URL may carry.
+    #[test]
+    fn refusals_keep_credentials_and_tokens_out_of_the_message() {
+        let policy = public_only(&[], &[], &[]);
+        let url =
+            Url::parse("http://user:SECRET-PASSWORD@127.0.0.1:8080/feed?token=SECRET-TOKEN#x")
+                .unwrap();
+        let message = policy.check_url(&url).unwrap_err().to_string();
+        assert!(message.contains("http://127.0.0.1:8080"), "{message}");
+        assert!(!message.contains("SECRET") && !message.contains("user"), "{message}");
+        let file = policy.check_url(&Url::parse("file:///home/user/secret.txt").unwrap());
+        assert!(!file.unwrap_err().to_string().contains("secret"));
     }
 
     /// Exceptions: an allowed network or host name lets a private address through; a denied

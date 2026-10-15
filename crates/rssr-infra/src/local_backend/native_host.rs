@@ -39,6 +39,9 @@ pub fn native_local_backend_with(
     store: LibraryStore,
     policy: OutboundPolicy,
 ) -> anyhow::Result<LocalBackend<NativeHost>> {
+    if policy == OutboundPolicy::Unrestricted {
+        return Ok(native_local_backend(store));
+    }
     let refresh_concurrency = refresh_concurrency(&store);
     let composition = compose_library_use_cases_with(store, &policy)?;
     let worker = ImageLocalizationWorker::new(

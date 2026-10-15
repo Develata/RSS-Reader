@@ -85,6 +85,9 @@ pub fn ensure_server_policy(data_dir: &Path) -> Result<OutboundPolicy> {
         Ok(_) => false,
     };
     if absent {
+        // A server started by the wrong user must not leave a policy the right one cannot read.
+        #[cfg(unix)]
+        check_directory_owner(data_dir)?;
         publish_default(data_dir, &path)?;
     }
     match load_policy(data_dir)? {
@@ -94,18 +97,27 @@ pub fn ensure_server_policy(data_dir: &Path) -> Result<OutboundPolicy> {
 }
 
 fn publish_default(data_dir: &Path, path: &Path) -> Result<()> {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_nanos());
-    let temporary = data_dir.join(format!("{POLICY_FILE}.new-{}-{nonce}", std::process::id()));
+    static ATTEMPT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    let written = options.open(&temporary).and_then(|mut file| {
-        file.write_all(DEFAULT_POLICY.as_bytes())?;
-        file.sync_all()
-    });
+    // A name already taken (by a leftover, or a concurrent call) is never ours to remove: try
+    // another one.
+    let (temporary, mut file) = loop {
+        let attempt = ATTEMPT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let temporary =
+            data_dir.join(format!("{POLICY_FILE}.new-{}-{attempt}", std::process::id()));
+        match options.open(&temporary) {
+            Ok(file) => break (temporary, file),
+            Err(error) if error.kind() == ErrorKind::AlreadyExists && attempt < 1000 => continue,
+            Err(error) => {
+                return Err(error).with_context(|| format!("无法创建 {}", temporary.display()));
+            }
+        }
+    };
+    let written = file.write_all(DEFAULT_POLICY.as_bytes()).and_then(|()| file.sync_all());
+    drop(file);
     let published = written.and_then(|()| match std::fs::hard_link(&temporary, path) {
         Err(error) if error.kind() == ErrorKind::AlreadyExists => Ok(()),
         linked => linked,
@@ -164,22 +176,36 @@ fn open_without_following(path: &Path) -> Result<Option<std::fs::File>> {
         &mut options,
         libc::O_NOFOLLOW | libc::O_NONBLOCK,
     );
-    #[cfg(not(unix))]
-    match std::fs::symlink_metadata(path) {
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error).with_context(|| format!("无法读取 {}", path.display())),
-        Ok(metadata) if metadata.file_type().is_symlink() => {
-            bail!("出站策略 {} 是符号链接", path.display())
-        }
-        Ok(_) => {}
-    }
+    // Windows: the handle is the link itself (FILE_FLAG_OPEN_REPARSE_POINT), whose type then fails
+    // the regular-file check; one open, so nothing can be swapped between a check and the read.
+    #[cfg(windows)]
+    std::os::windows::fs::OpenOptionsExt::custom_flags(&mut options, FILE_FLAG_OPEN_REPARSE_POINT);
     match options.open(path) {
         Ok(file) => Ok(Some(file)),
-        // With O_NOFOLLOW a symbolic link (dangling or not) fails with ELOOP, so NotFound means the
-        // entry is absent (the directory itself was checked first).
+        // Not following the last component, a link (dangling or not) is opened or refused itself,
+        // so NotFound means the entry is absent (the directory itself was checked first).
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error).with_context(|| format!("无法打开出站策略 {}", path.display())),
     }
+}
+
+#[cfg(windows)]
+const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+
+/// The data directory belongs to the user running this program.
+#[cfg(unix)]
+fn check_directory_owner(data_dir: &Path) -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    // SAFETY: geteuid has no preconditions and cannot fail.
+    let user = unsafe { libc::geteuid() };
+    let owner = std::fs::metadata(data_dir)?.uid();
+    if owner != user {
+        bail!(
+            "数据目录 {} 属于用户 {owner}，当前用户是 {user}：请以数据目录的所有者运行",
+            data_dir.display()
+        );
+    }
+    Ok(())
 }
 
 /// The policy is the server user's: the directory and the file belong to the user running this
@@ -187,13 +213,13 @@ fn open_without_following(path: &Path) -> Result<Option<std::fs::File>> {
 #[cfg(unix)]
 fn check_ownership(data_dir: &Path, path: &Path, metadata: &std::fs::Metadata) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
+    check_directory_owner(data_dir)?;
     // SAFETY: geteuid has no preconditions and cannot fail.
     let user = unsafe { libc::geteuid() };
-    let dir_owner = std::fs::metadata(data_dir)?.uid();
-    if dir_owner != user || metadata.uid() != user {
+    if metadata.uid() != user {
         bail!(
-            "数据目录 {} 属于用户 {dir_owner}，出站策略属于用户 {}，当前用户是 {user}：请以数据目录的所有者运行",
-            data_dir.display(),
+            "出站策略 {} 属于用户 {}，当前用户是 {user}：请以数据目录的所有者运行",
+            path.display(),
             metadata.uid()
         );
     }

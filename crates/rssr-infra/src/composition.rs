@@ -51,6 +51,9 @@ pub fn compose_library_use_cases_with(
     store: crate::store::LibraryStore,
     policy: &OutboundPolicy,
 ) -> anyhow::Result<LibraryComposition> {
+    if *policy == OutboundPolicy::Unrestricted {
+        return Ok(compose_library_use_cases(store));
+    }
     Ok(compose_library_with_sources(
         store,
         HttpSubscriptionProbe::with_policy(policy.clone())?,
