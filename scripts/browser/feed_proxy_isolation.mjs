@@ -41,9 +41,12 @@ async function poll(check, label, ms = 120000) {
 }
 
 async function main() {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('RSS_READER_WEB_')));
+  // The caller's deployment settings must not reach the fixture: drop them in any letter case
+  // (Windows variable names are case-insensitive), then set the ones it needs.
+  const inherited = key => key.toUpperCase().startsWith('RSS_READER_WEB_') || key.toUpperCase() === 'RSSR_DATA_DIR';
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !inherited(key)));
   Object.assign(env, {
-    RSSR_PROXY_ISOLATION_TEST: '1', RSS_READER_WEB_USERNAME: 'isolation-test',
+    RSSR_PROXY_ISOLATION_TEST: '1', RSS_READER_WEB_ENV: 'development', RSS_READER_WEB_USERNAME: 'isolation-test',
     RSS_READER_WEB_PASSWORD: 'fixture-password-only',
     RSSR_DATA_DIR: path.join(run, 'data'),
     RSS_READER_WEB_STATIC_DIR: path.resolve(publicDir),

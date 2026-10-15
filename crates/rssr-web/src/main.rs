@@ -8,6 +8,7 @@ use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, ensure};
@@ -32,9 +33,11 @@ use crate::{
 };
 
 const FAVICON_ICO: &[u8] = include_bytes!("../../../icons/icon.ico");
-/// 收到停止信号后，等待进行中的请求的最长时间。Docker 在 SIGTERM 之后 10 秒发 SIGKILL，
-/// 要留出结束本次运行（[`AuthStore::end_run`]）的时间。
-const SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+/// 停止的时间预算。Docker 在 SIGTERM 之后 10 秒发 SIGKILL，三段加起来要留出余量：
+/// 等待进行中的请求、结束本次运行（[`AuthStore::end_run`]），以及关闭运行时。
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(4);
+const END_RUN_BUDGET: Duration = Duration::from_secs(3);
+const RUNTIME_SHUTDOWN: Duration = Duration::from_secs(1);
 
 /// RSS-Reader 的 Web 服务：登录保护、静态包托管与 feed 代抓。
 #[derive(Parser)]
@@ -66,8 +69,7 @@ enum SessionsCommand {
     RevokeAll,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     init_tracing();
     let cli = Cli::parse();
 
@@ -79,7 +81,16 @@ async fn main() -> Result<()> {
     match cli.command {
         Some(Command::Passwd) => passwd(&data_dir),
         Some(Command::Sessions { action: SessionsCommand::RevokeAll }) => revoke_all(&data_dir),
-        None => serve(&data_dir).await,
+        None => {
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .context("无法启动异步运行时")?;
+            let result = runtime.block_on(serve(&data_dir));
+            // 不等仍在跑的阻塞任务：认证库已经关闭（`end_run`），它们不会再改动会话。
+            runtime.shutdown_timeout(RUNTIME_SHUTDOWN);
+            result
+        }
     }
 }
 
@@ -90,11 +101,12 @@ async fn serve(data_dir: &Path) -> Result<()> {
         "静态资源目录缺少 index.html：{}",
         config.static_dir.display()
     );
-    let store = Arc::new(open_store(data_dir)?);
+    // 先绑定再开始运行：端口被占时直接退出，不留下运行标记。
     let listener = tokio::net::TcpListener::bind(config.bind_addr)
         .await
         .with_context(|| format!("绑定监听地址失败：{}", config.bind_addr))?;
     let local = listener.local_addr().context("读取监听地址失败")?;
+    let store = Arc::new(open_store(data_dir)?);
     let state = AppState::new(config, Arc::clone(&store), local)?;
 
     info!("starting rssr-web on {local}");
@@ -117,14 +129,15 @@ async fn serve(data_dir: &Path) -> Result<()> {
         } => warn!("停止时放弃了 {SHUTDOWN_GRACE:?} 内没有处理完的请求"),
     }
 
-    // 正常停止：没有删不掉的失效会话时移除运行标记，下次启动保留全部会话。
-    if tokio::task::spawn_blocking(move || store.end_run())
+    // 正常停止：关闭认证库；没有删不掉的失效会话时移除运行标记，下次启动保留全部会话。
+    let deadline = Instant::now() + END_RUN_BUDGET;
+    if tokio::task::spawn_blocking(move || store.end_run(deadline))
         .await
         .context("结束运行的任务失败")??
     {
         info!("rssr-web 已停止");
     } else {
-        warn!("仍有删不掉的失效会话：保留运行标记，下次启动时吊销全部会话");
+        warn!("没能确认失效会话都已删除：保留运行标记，下次启动时吊销全部会话");
     }
     Ok(())
 }

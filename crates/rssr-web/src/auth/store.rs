@@ -25,13 +25,17 @@
 //!   发现它（上次异常退出，或停止时仍有删不掉的失效会话），先吊销全部会话
 //!   （[`AuthStore::begin_run`]、[`AuthStore::end_run`]）。代价：异常退出之后，所有浏览器都要
 //!   重新登录。
+//! - 结束运行时先在互斥锁内关闭认证库：之后的校验、退出与建立会话一律报错，停止时仍在跑的
+//!   阻塞任务也改不了会话，标记是否移除只取决于关闭那一刻的待吊销集合。收尾有总时限，超时
+//!   就保留标记。服务器运行期间持有数据目录的排他锁（[`SERVER_LOCK`]），同一目录只能有一个
+//!   服务器；命令行子命令不占这把锁，照常经 SQLite 事务并发。
 //! - 服务器启动时清理已经失效的会话（[`AuthStore::purge_expired`]），认证库不可写时启动失败。
 
 use std::collections::HashSet;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -44,6 +48,8 @@ use tracing::warn;
 pub(crate) const AUTH_DB: &str = "auth.sqlite3";
 /// 服务器的运行标记：存在即“上次运行没有确认所有吊销都已落盘”。
 pub(crate) const RUN_MARKER: &str = "auth.sqlite3-running";
+/// 服务器运行期间持有排他锁的文件：同一数据目录只能有一个服务器。
+pub(crate) const SERVER_LOCK: &str = "auth.sqlite3-server.lock";
 
 const MINUTE: i64 = 60;
 const HOUR: i64 = 60 * MINUTE;
@@ -188,12 +194,16 @@ impl Stored {
 pub(crate) struct AuthStore {
     inner: Mutex<Inner>,
     run_marker: PathBuf,
+    /// 服务器运行期间持有的排他锁（[`AuthStore::begin_run`] 取得，随认证库一起释放）。
+    server_lock: Mutex<Option<std::fs::File>>,
 }
 
 struct Inner {
     connection: Connection,
     /// 已判定失效、删除却失败的会话摘要。本进程内一直拒绝它们，再次出示时重试删除。
     pending_revocations: HashSet<[u8; 32]>,
+    /// 运行已结束（[`AuthStore::end_run`]）：会话不再变化，请求操作一律报错。
+    closed: bool,
 }
 
 impl Inner {
@@ -233,15 +243,23 @@ impl AuthStore {
         connection.pragma_update(None, "synchronous", "FULL")?;
         migrate(&mut connection).with_context(|| format!("无法初始化认证库 {}", path.display()))?;
         Ok(Self {
-            inner: Mutex::new(Inner { connection, pending_revocations: HashSet::new() }),
+            inner: Mutex::new(Inner {
+                connection,
+                pending_revocations: HashSet::new(),
+                closed: false,
+            }),
             run_marker: data_dir.join(RUN_MARKER),
+            server_lock: Mutex::new(None),
         })
     }
 
     /// 服务器开始运行。上次的运行标记还在（异常退出，或停止时仍有删不掉的失效会话）时先吊销
     /// 全部会话，返回 `true`；然后放下本次的标记（文件与目录都同步到磁盘）。之后即使写入失败、
     /// 进程又异常退出，下次启动也会吊销全部会话，判过期的会话不会因为时钟变化而复活。
+    ///
+    /// 先取得数据目录的服务器排他锁：已有服务器在用这个目录时报错，不碰它的标记与会话。
     pub(crate) fn begin_run(&self) -> Result<bool> {
+        self.take_server_lock()?;
         let unclean = match std::fs::symlink_metadata(&self.run_marker) {
             Ok(metadata) if metadata.file_type().is_file() => true,
             Ok(_) => bail!("运行标记 {} 不是普通文件", self.run_marker.display()),
@@ -269,24 +287,85 @@ impl AuthStore {
         Ok(unclean)
     }
 
-    /// 服务器正常停止。先重试删除待吊销的会话；全部删掉才移除运行标记，返回 `true`。还有删不掉
-    /// 的就保留标记：下次启动吊销全部会话。
-    pub(crate) fn end_run(&self) -> Result<bool> {
-        let mut inner = self.lock();
+    /// 服务器正常停止，最迟在 `deadline` 前返回。
+    ///
+    /// 在互斥锁内先关闭认证库（之后的请求操作一律报错），再重试删除待吊销的会话，全部删掉才
+    /// 移除运行标记，返回 `true`。等不到锁、删除失败或超过时限都保留标记，返回 `false`：下次
+    /// 启动吊销全部会话。关闭发生在检查待吊销集合的同一段锁内，此后仍在跑的阻塞任务无法再
+    /// 加入新的待吊销会话，所以“没有待吊销”在移除标记时依然成立。
+    pub(crate) fn end_run(&self, deadline: Instant) -> Result<bool> {
+        let mut inner = loop {
+            match self.inner.try_lock() {
+                Ok(inner) => break inner,
+                Err(std::sync::TryLockError::Poisoned(poisoned)) => break poisoned.into_inner(),
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    if Instant::now() >= deadline {
+                        warn!("停止时等不到认证库：保留运行标记");
+                        return Ok(false);
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            }
+        };
+        inner.closed = true;
         let pending: Vec<[u8; 32]> = inner.pending_revocations.iter().copied().collect();
         for digest in &pending {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            // 每次删除最多等到总时限：别的连接长期占着写锁时不逐个等满 busy timeout。
+            inner.connection.busy_timeout(remaining.min(BUSY_TIMEOUT))?;
             if let Err(error) = inner.revoke(digest) {
-                warn!(%error, "停止时仍无法删除待吊销的会话");
+                warn!(%error, "停止时仍无法删除待吊销的会话：保留运行标记");
+                break;
             }
         }
         if !inner.pending_revocations.is_empty() {
             return Ok(false);
         }
-        drop(inner);
         std::fs::remove_file(&self.run_marker)
             .with_context(|| format!("无法删除运行标记 {}", self.run_marker.display()))?;
         sync_directory(&self.run_marker)?;
         Ok(true)
+    }
+
+    /// 取得数据目录的服务器排他锁，并一直持有到认证库释放。
+    fn take_server_lock(&self) -> Result<()> {
+        let mut held = self.server_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if held.is_some() {
+            return Ok(());
+        }
+        let path = self.run_marker.with_file_name(SERVER_LOCK);
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        }
+        let file =
+            options.open(&path).with_context(|| format!("无法打开服务器锁 {}", path.display()))?;
+        match file.try_lock() {
+            Ok(()) => {}
+            Err(std::fs::TryLockError::WouldBlock) => {
+                bail!("另一个 rssr-web 服务器正在使用这个数据目录（{}）", path.display())
+            }
+            Err(std::fs::TryLockError::Error(error)) => {
+                return Err(error).with_context(|| format!("无法锁定 {}", path.display()));
+            }
+        }
+        *held = Some(file);
+        Ok(())
+    }
+
+    /// 处理请求的操作：运行结束后报错，不再改动会话。
+    fn lock_open(&self) -> Result<MutexGuard<'_, Inner>> {
+        let inner = self.lock();
+        if inner.closed {
+            bail!("rssr-web 正在停止");
+        }
+        Ok(inner)
     }
 
     fn lock(&self) -> MutexGuard<'_, Inner> {
@@ -358,7 +437,7 @@ impl AuthStore {
         now: i64,
     ) -> Result<Option<SessionToken>> {
         let token = SessionToken::generate();
-        let inner = self.lock();
+        let inner = self.lock_open()?;
         purge(&inner.connection, now)?;
         // 一条语句里再读一次凭据代数：与改密码的事务互斥，不会插入旧凭据下的会话。
         let inserted = inner.connection.execute(
@@ -376,7 +455,7 @@ impl AuthStore {
     /// - 需要续期而写入失败时返回错误：这次使用没有记录，就不放行，空闲期限因此不会提前到来。
     pub(crate) fn validate(&self, token: &SessionToken, now: i64) -> Result<bool> {
         let digest = token.digest();
-        let mut inner = self.lock();
+        let mut inner = self.lock_open()?;
         if inner.pending_revocations.contains(&digest) {
             if let Err(error) = inner.revoke(&digest) {
                 warn!(%error, "仍无法删除待吊销的会话，继续拒绝它");
@@ -393,7 +472,7 @@ impl AuthStore {
     /// 存在（或已待吊销）的会话才会记为待吊销：伪造的令牌不占内存。
     pub(crate) fn revoke(&self, token: &SessionToken) -> Result<()> {
         let digest = token.digest();
-        let mut inner = self.lock();
+        let mut inner = self.lock_open()?;
         if !inner.pending_revocations.contains(&digest)
             && read_session(&inner.connection, &digest)?.is_none()
         {
@@ -624,6 +703,11 @@ mod tests {
     use super::*;
 
     const T0: i64 = 1_800_000_000;
+
+    /// A deadline far enough away not to matter.
+    fn soon() -> Instant {
+        Instant::now() + Duration::from_secs(5)
+    }
 
     use crate::auth::test_support::ScratchDir as Scratch;
 
@@ -1048,7 +1132,7 @@ mod tests {
         assert!(!store.begin_run().unwrap());
         assert!(scratch.path().join(RUN_MARKER).is_file());
         let token = login(&store, T0);
-        assert!(store.end_run().unwrap());
+        assert!(store.end_run(soon()).unwrap());
         assert!(!scratch.path().join(RUN_MARKER).exists());
         drop(store);
 
@@ -1067,7 +1151,7 @@ mod tests {
         let expired = login(&store, T0 - IDLE);
         writes_fail(&store, true);
         assert!(!store.validate(&expired, T0 + HOUR).unwrap());
-        assert!(!store.end_run().unwrap(), "the deletion still fails");
+        assert!(!store.end_run(soon()).unwrap(), "the deletion still fails");
         assert!(scratch.path().join(RUN_MARKER).is_file());
         writes_fail(&store, false);
         drop(store);
@@ -1083,8 +1167,111 @@ mod tests {
         writes_fail(&store, true);
         assert!(!store.validate(&expired, T0 + HOUR).unwrap());
         writes_fail(&store, false);
-        assert!(store.end_run().unwrap(), "the retry at exit succeeded");
+        assert!(store.end_run(soon()).unwrap(), "the retry at exit succeeded");
         assert_eq!(sessions(&store), 0);
+    }
+
+    /// 第三轮评审 R3-B1：运行结束时在锁内关闭认证库。此后请求操作一律报错，停止时仍在跑的
+    /// 任务无法再加入待吊销的会话；标记移除后它依然成立。
+    #[test]
+    fn after_the_run_ends_no_request_can_change_sessions() {
+        let scratch = Scratch::new("closed");
+        let store = open(&scratch);
+        store.begin_run().unwrap();
+        let expired = login(&store, T0);
+        assert!(store.end_run(soon()).unwrap());
+        writes_fail(&store, true);
+        assert!(store.validate(&expired, T0 + IDLE + HOUR).is_err());
+        assert!(store.revoke(&expired).is_err());
+        let credential = store.credential().unwrap().unwrap();
+        assert!(store.create_session(&credential, T0).is_err());
+        assert!(store.lock().pending_revocations.is_empty());
+        assert!(!scratch.path().join(RUN_MARKER).exists());
+    }
+
+    /// 结束运行时，正在进行的操作（持有锁）先做完：它在锁内加入的待吊销会话会被看到，删不掉
+    /// 就保留标记。
+    #[test]
+    fn ending_the_run_sees_what_an_operation_in_progress_recorded() {
+        let scratch = Scratch::new("in-progress");
+        let store = std::sync::Arc::new(open(&scratch));
+        store.begin_run().unwrap();
+        let digest = login(&store, T0).digest();
+        writes_fail(&store, true);
+        let (held, held_rx) = std::sync::mpsc::channel();
+        let operation = std::thread::spawn({
+            let store = std::sync::Arc::clone(&store);
+            move || {
+                let mut inner = store.lock();
+                held.send(()).unwrap();
+                std::thread::sleep(Duration::from_millis(200));
+                // What validate does when the deletion of an expired session fails.
+                assert!(inner.revoke(&digest).is_err());
+            }
+        });
+        held_rx.recv().unwrap();
+        assert!(!store.end_run(soon()).unwrap(), "the pending revocation keeps the marker");
+        operation.join().unwrap();
+        assert!(scratch.path().join(RUN_MARKER).is_file());
+    }
+
+    /// 第三轮评审 R3-S2：收尾有总时限。等不到锁，或别的连接一直占着写锁，都在时限内放弃并
+    /// 保留标记，而不是逐个等满 busy timeout。
+    #[test]
+    fn ending_the_run_gives_up_at_its_deadline() {
+        let scratch = Scratch::new("deadline-lock");
+        let store = std::sync::Arc::new(open(&scratch));
+        store.begin_run().unwrap();
+        let (held, held_rx) = std::sync::mpsc::channel();
+        let holder = std::thread::spawn({
+            let store = std::sync::Arc::clone(&store);
+            move || {
+                let _inner = store.lock();
+                held.send(()).unwrap();
+                std::thread::sleep(Duration::from_millis(1500));
+            }
+        });
+        held_rx.recv().unwrap();
+        let started = Instant::now();
+        assert!(!store.end_run(started + Duration::from_millis(200)).unwrap());
+        assert!(started.elapsed() < Duration::from_millis(1000), "{:?}", started.elapsed());
+        holder.join().unwrap();
+        assert!(scratch.path().join(RUN_MARKER).is_file());
+
+        let scratch = Scratch::new("deadline-busy");
+        let store = open(&scratch);
+        store.begin_run().unwrap();
+        let expired = login(&store, T0);
+        writes_fail(&store, true);
+        assert!(!store.validate(&expired, T0 + IDLE + HOUR).unwrap());
+        writes_fail(&store, false);
+        let other = AuthStore::open(scratch.path()).unwrap();
+        other.lock().connection.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let started = Instant::now();
+        assert!(!store.end_run(started + Duration::from_millis(300)).unwrap());
+        assert!(started.elapsed() < Duration::from_millis(1500), "{:?}", started.elapsed());
+        other.lock().connection.execute_batch("ROLLBACK").unwrap();
+        assert!(scratch.path().join(RUN_MARKER).is_file());
+    }
+
+    /// 第三轮评审 R3-S1：同一数据目录只能有一个服务器。第二个在碰标记与会话之前就被拒绝；
+    /// 第一个释放后才能开始。
+    #[test]
+    fn a_second_server_on_the_same_directory_is_refused() {
+        let scratch = Scratch::new("second-server");
+        let first = open(&scratch);
+        first.begin_run().unwrap();
+        let token = login(&first, T0);
+        let second = AuthStore::open(scratch.path()).unwrap();
+        let error = second.begin_run().unwrap_err().to_string();
+        assert!(error.contains("另一个 rssr-web 服务器"), "{error}");
+        assert!(
+            first.validate(&token, T0 + 1).unwrap(),
+            "the first server's sessions are untouched"
+        );
+        assert!(first.end_run(soon()).unwrap());
+        drop(first);
+        assert!(!second.begin_run().unwrap(), "the first one ended cleanly");
     }
 
     /// 第二轮评审 S-1：读出记录之后，别的连接把使用时间改到了更晚（这里晚得构成时钟回拨）。

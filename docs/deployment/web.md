@@ -47,6 +47,7 @@ printf '%s\n' '新的强密码' | docker compose exec -T rss-reader rssr-web pas
 - 服务器时钟要准确（NTP 同步）：时钟回拨超过 5 分钟时，相关会话会被作废，需要重新登录。
 - 认证库写入失败（例如磁盘满）时偏于拒绝：需要记录使用时间却写不进时，这次请求返回 503；已判定失效的会话即使删除失败也不再被接受。
 - 正常停止（`docker stop`、`docker compose restart`、systemd、Ctrl-C）后再启动，会话保留。服务异常退出（崩溃、断电、被强制结束）后再启动，所有浏览器需要重新登录：服务器无法确认上次运行里失效的会话都已删除，宁可全部作废。数据目录里的 `auth.sqlite3-running` 就是这个运行标记，不要手工删除。
+- 同一个数据目录只能运行一个 `rssr-web` 服务器：第二个会报错退出，不影响正在运行的那个（`auth.sqlite3-server.lock` 是这把锁）。`rssr-web passwd` 等子命令可以在服务器运行时使用。
 - 没有设置 `RSS_READER_WEB_PUBLIC_ORIGIN` 时（只允许开发环境），服务只能监听回环地址，并只信任与监听地址一致的 `http://127.0.0.1:<端口>` 和 `http://localhost:<端口>`。
 
 ## 正式部署
