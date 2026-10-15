@@ -237,7 +237,8 @@ impl AuthStore {
         )
         .with_context(|| format!("无法打开认证库 {}", path.display()))?;
         connection.busy_timeout(BUSY_TIMEOUT)?;
-        // 不支持共享内存的文件系统上 SQLite 保留原来的日志模式，照样正确，只是并发差一些。
+        // WAL 与服务器排他锁都要求数据目录是单机上的本地卷：SQLite 不支持跨主机或网络文件系统
+        // 上的 WAL，网络文件系统上的文件锁也未必可靠（见部署文档）。
         let _: String = connection.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
         // 改密码与吊销会话在提交后必须落盘。
         connection.pragma_update(None, "synchronous", "FULL")?;
@@ -322,6 +323,11 @@ impl AuthStore {
             }
         }
         if !inner.pending_revocations.is_empty() {
+            return Ok(false);
+        }
+        // 超过时限就不再移除：调用方可能已经放弃等待，“超时保留标记”对迟到的收尾同样成立。
+        if Instant::now() >= deadline {
+            warn!("停止的收尾超过时限：保留运行标记");
             return Ok(false);
         }
         std::fs::remove_file(&self.run_marker)
@@ -1178,13 +1184,27 @@ mod tests {
         let scratch = Scratch::new("closed");
         let store = open(&scratch);
         store.begin_run().unwrap();
-        let expired = login(&store, T0);
+        let valid = login(&store, T0);
+        let expired = login(&store, T0 - IDLE);
         assert!(store.end_run(soon()).unwrap());
-        writes_fail(&store, true);
-        assert!(store.validate(&expired, T0 + IDLE + HOUR).is_err());
-        assert!(store.revoke(&expired).is_err());
+        assert!(!scratch.path().join(RUN_MARKER).exists());
+
+        // The database stays writable: each entry point must refuse because the run ended,
+        // not because a write failed (第四轮评审：逐个入口验证关闭检查).
+        let stopping = |result: Result<bool>| {
+            let error = result.unwrap_err().to_string();
+            assert!(error.contains("正在停止"), "{error}");
+        };
+        stopping(store.validate(&valid, T0 + 2 * HOUR));
+        stopping(store.revoke(&valid).map(|()| true));
         let credential = store.credential().unwrap().unwrap();
-        assert!(store.create_session(&credential, T0).is_err());
+        stopping(store.create_session(&credential, T0).map(|token| token.is_some()));
+        assert_eq!(sessions(&store), 2, "nothing was renewed, revoked or created");
+        assert_eq!(last_used(&store, &valid), T0);
+
+        // A still-running task whose deletion would fail cannot record a pending revocation.
+        writes_fail(&store, true);
+        stopping(store.validate(&expired, T0 + HOUR));
         assert!(store.lock().pending_revocations.is_empty());
         assert!(!scratch.path().join(RUN_MARKER).exists());
     }
@@ -1213,6 +1233,9 @@ mod tests {
         assert!(!store.end_run(soon()).unwrap(), "the pending revocation keeps the marker");
         operation.join().unwrap();
         assert!(scratch.path().join(RUN_MARKER).is_file());
+        let inner = store.lock();
+        assert!(inner.closed, "end_run waited for the operation, then closed the store");
+        assert!(inner.pending_revocations.contains(&digest));
     }
 
     /// 第三轮评审 R3-S2：收尾有总时限。等不到锁，或别的连接一直占着写锁，都在时限内放弃并
@@ -1251,6 +1274,16 @@ mod tests {
         assert!(!store.end_run(started + Duration::from_millis(300)).unwrap());
         assert!(started.elapsed() < Duration::from_millis(1500), "{:?}", started.elapsed());
         other.lock().connection.execute_batch("ROLLBACK").unwrap();
+        assert!(scratch.path().join(RUN_MARKER).is_file());
+
+        // Past the deadline the marker stays even with nothing pending and the store free: a
+        // caller that stopped waiting must not find it removed afterwards.
+        let scratch = Scratch::new("deadline-passed");
+        let store = open(&scratch);
+        store.begin_run().unwrap();
+        let passed = Instant::now();
+        std::thread::sleep(Duration::from_millis(5));
+        assert!(!store.end_run(passed).unwrap());
         assert!(scratch.path().join(RUN_MARKER).is_file());
     }
 

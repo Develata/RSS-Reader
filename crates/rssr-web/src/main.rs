@@ -130,14 +130,23 @@ async fn serve(data_dir: &Path) -> Result<()> {
     }
 
     // 正常停止：关闭认证库；没有删不掉的失效会话时移除运行标记，下次启动保留全部会话。
+    // 收尾在独立线程上做（阻塞线程池可能排满），这里最多等到时限：超时也不取消它，但它在
+    // 时限之后不会再移除标记（`end_run`）。日志写入本身阻塞不在这个预算内。
     let deadline = Instant::now() + END_RUN_BUDGET;
-    if tokio::task::spawn_blocking(move || store.end_run(deadline))
-        .await
-        .context("结束运行的任务失败")??
-    {
-        info!("rssr-web 已停止");
-    } else {
-        warn!("没能确认失效会话都已删除：保留运行标记，下次启动时吊销全部会话");
+    let (finished, outcome) = tokio::sync::oneshot::channel();
+    std::thread::Builder::new()
+        .name("rssr-web-end-run".into())
+        .spawn(move || {
+            let _ = finished.send(store.end_run(deadline));
+        })
+        .context("无法启动收尾线程")?;
+    match tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), outcome).await {
+        Ok(Ok(Ok(true))) => info!("rssr-web 已停止"),
+        Ok(Ok(Ok(false))) => {
+            warn!("没能确认失效会话都已删除：保留运行标记，下次启动时吊销全部会话");
+        }
+        Ok(Ok(Err(error))) => warn!(%error, "结束运行失败：保留运行标记"),
+        Ok(Err(_)) | Err(_) => warn!("停止的收尾超过时限：保留运行标记，下次启动时吊销全部会话"),
     }
     Ok(())
 }
