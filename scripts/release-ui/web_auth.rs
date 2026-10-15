@@ -15,10 +15,12 @@ pub fn spawn(root: &Path, profile: &str, port: u16, logs: &Path) -> io::Result<O
     let log = logs.join("rssr-web.log");
     File::create(&log)?;
     let mut command = Command::new("cargo");
-    // The caller's deployment settings (public origin, seed credentials, environment) must
-    // not reach the smoke service: only the variables set below apply.
+    // The caller's deployment settings (public origin, seed credentials, environment, data
+    // directory) must not reach the smoke service: only the variables set below apply. Windows
+    // variable names are case-insensitive, so match them that way (harmless elsewhere).
     for (name, _) in std::env::vars_os() {
-        if name.to_string_lossy().starts_with("RSS_READER_WEB_") {
+        let upper = name.to_string_lossy().to_ascii_uppercase();
+        if upper.starts_with("RSS_READER_WEB_") || upper == "RSSR_DATA_DIR" {
             command.env_remove(&name);
         }
     }

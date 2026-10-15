@@ -353,3 +353,25 @@ async fn session_checks_are_bounded() {
     drop(busy);
     assert_eq!(server.get("/entries", Some(&session)).await.status(), StatusCode::OK);
 }
+
+/// Logout shares the bounded session-check slots: with every slot taken it is refused at once
+/// with 503, and the session stays valid.
+#[tokio::test]
+async fn logout_is_bounded_too() {
+    let server = Server::start(None).await;
+    let session = server.session().await;
+    let csrf = server.csrf(&session).await;
+    let busy = server.state.exhaust_session_checks();
+    let response = server
+        .client
+        .post(server.url("/logout"))
+        .header(header::COOKIE, &session)
+        .header(header::ORIGIN, &server.base)
+        .form(&[("csrf", csrf.as_str())])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    drop(busy);
+    assert_eq!(server.get("/api/v1/session", Some(&session)).await.status(), StatusCode::OK);
+}

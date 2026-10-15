@@ -20,9 +20,12 @@
 //! 写入失败时偏于关闭：
 //! - 删除失败的会话记在本进程的待吊销集合里，一直拒绝，再次出示时重试删除；
 //! - 需要续期却写不进使用时间，校验返回错误，请求被拒绝（这次使用没有记录就不放行）；
+//! - 待吊销集合不跨重启，所以服务器运行期间在数据目录放一个运行标记（[`RUN_MARKER`]），
+//!   启动时就落盘，不依赖出错那一刻还能写入。正常停止且没有待吊销的会话时才删除它；启动时
+//!   发现它（上次异常退出，或停止时仍有删不掉的失效会话），先吊销全部会话
+//!   （[`AuthStore::begin_run`]、[`AuthStore::end_run`]）。代价：异常退出之后，所有浏览器都要
+//!   重新登录。
 //! - 服务器启动时清理已经失效的会话（[`AuthStore::purge_expired`]），认证库不可写时启动失败。
-//!   待吊销集合在重启后丢失：仅因时钟回拨被拒绝、删除又失败的会话，重启后按当时（可信）的
-//!   时钟重新判定。
 
 use std::collections::HashSet;
 use std::io::ErrorKind;
@@ -39,6 +42,8 @@ use tracing::warn;
 
 /// 认证库在数据目录里的文件名。
 pub(crate) const AUTH_DB: &str = "auth.sqlite3";
+/// 服务器的运行标记：存在即“上次运行没有确认所有吊销都已落盘”。
+pub(crate) const RUN_MARKER: &str = "auth.sqlite3-running";
 
 const MINUTE: i64 = 60;
 const HOUR: i64 = 60 * MINUTE;
@@ -182,6 +187,7 @@ impl Stored {
 /// 打开的认证库。一个连接，操作都很短，调用方在阻塞线程上调用。
 pub(crate) struct AuthStore {
     inner: Mutex<Inner>,
+    run_marker: PathBuf,
 }
 
 struct Inner {
@@ -226,7 +232,61 @@ impl AuthStore {
         // 改密码与吊销会话在提交后必须落盘。
         connection.pragma_update(None, "synchronous", "FULL")?;
         migrate(&mut connection).with_context(|| format!("无法初始化认证库 {}", path.display()))?;
-        Ok(Self { inner: Mutex::new(Inner { connection, pending_revocations: HashSet::new() }) })
+        Ok(Self {
+            inner: Mutex::new(Inner { connection, pending_revocations: HashSet::new() }),
+            run_marker: data_dir.join(RUN_MARKER),
+        })
+    }
+
+    /// 服务器开始运行。上次的运行标记还在（异常退出，或停止时仍有删不掉的失效会话）时先吊销
+    /// 全部会话，返回 `true`；然后放下本次的标记（文件与目录都同步到磁盘）。之后即使写入失败、
+    /// 进程又异常退出，下次启动也会吊销全部会话，判过期的会话不会因为时钟变化而复活。
+    pub(crate) fn begin_run(&self) -> Result<bool> {
+        let unclean = match std::fs::symlink_metadata(&self.run_marker) {
+            Ok(metadata) if metadata.file_type().is_file() => true,
+            Ok(_) => bail!("运行标记 {} 不是普通文件", self.run_marker.display()),
+            Err(error) if error.kind() == ErrorKind::NotFound => false,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("无法读取运行标记 {}", self.run_marker.display()));
+            }
+        };
+        if unclean {
+            self.revoke_all().context("上次运行没有正常结束，吊销全部会话失败")?;
+        }
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        }
+        let marker = options
+            .open(&self.run_marker)
+            .with_context(|| format!("无法写入运行标记 {}", self.run_marker.display()))?;
+        marker.sync_all()?;
+        sync_directory(&self.run_marker)?;
+        Ok(unclean)
+    }
+
+    /// 服务器正常停止。先重试删除待吊销的会话；全部删掉才移除运行标记，返回 `true`。还有删不掉
+    /// 的就保留标记：下次启动吊销全部会话。
+    pub(crate) fn end_run(&self) -> Result<bool> {
+        let mut inner = self.lock();
+        let pending: Vec<[u8; 32]> = inner.pending_revocations.iter().copied().collect();
+        for digest in &pending {
+            if let Err(error) = inner.revoke(digest) {
+                warn!(%error, "停止时仍无法删除待吊销的会话");
+            }
+        }
+        if !inner.pending_revocations.is_empty() {
+            return Ok(false);
+        }
+        drop(inner);
+        std::fs::remove_file(&self.run_marker)
+            .with_context(|| format!("无法删除运行标记 {}", self.run_marker.display()))?;
+        sync_directory(&self.run_marker)?;
+        Ok(true)
     }
 
     fn lock(&self) -> MutexGuard<'_, Inner> {
@@ -251,11 +311,20 @@ impl AuthStore {
             return Ok(false);
         }
         let password_hash = seed()?;
-        let inserted = self.lock().connection.execute(
+        let mut inner = self.lock();
+        let transaction =
+            inner.connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let inserted = transaction.execute(
             "INSERT INTO owner (id, password_hash, generation, device_key) VALUES (1, ?1, 1, ?2)
              ON CONFLICT (id) DO NOTHING",
             params![password_hash, random_key()],
         )?;
+        if inserted == 1 {
+            // 没有凭据时留下的会话（恢复不完整的库）不属于任何凭据：建立凭据时一并清除，
+            // 否则它们恰好对上新凭据的代数 1。
+            transaction.execute("DELETE FROM sessions", [])?;
+        }
+        transaction.commit()?;
         Ok(inserted == 1)
     }
 
@@ -317,28 +386,20 @@ impl AuthStore {
         let Some(stored) = read_session(&inner.connection, &digest)? else {
             return Ok(false);
         };
-        match stored.verdict(now) {
-            Verdict::Reject(rejection) => {
-                if let Err(error) = inner.revoke(&digest) {
-                    warn!(?rejection, %error, "删除失效的会话失败，本进程内继续拒绝它");
-                }
-                Ok(false)
-            }
-            Verdict::Valid { renew: false } => Ok(true),
-            Verdict::Valid { renew: true } => {
-                if renew_session(&inner.connection, &digest, now)? {
-                    return Ok(true);
-                }
-                // 没有更新任何行：别的进程已经续期（行还在）或删除了它（行不在）。
-                Ok(read_session(&inner.connection, &digest)?
-                    .is_some_and(|stored| matches!(stored.verdict(now), Verdict::Valid { .. })))
-            }
-        }
+        judge(&mut inner, &digest, stored, now)
     }
 
-    /// 吊销一个会话（退出登录）。删除失败时返回错误，但本进程内不再接受这个会话。
+    /// 吊销一个会话（退出登录）。删除失败时返回错误，但本进程内不再接受这个会话。只有确实
+    /// 存在（或已待吊销）的会话才会记为待吊销：伪造的令牌不占内存。
     pub(crate) fn revoke(&self, token: &SessionToken) -> Result<()> {
-        self.lock().revoke(&token.digest())
+        let digest = token.digest();
+        let mut inner = self.lock();
+        if !inner.pending_revocations.contains(&digest)
+            && read_session(&inner.connection, &digest)?.is_none()
+        {
+            return Ok(());
+        }
+        inner.revoke(&digest)
     }
 
     /// 删除按 `now` 已经失效的会话（空闲、绝对上限、不可能的记录、旧凭据下的会话）。服务器
@@ -373,8 +434,35 @@ impl AuthStore {
     }
 }
 
+/// 按读到的记录 `stored` 判定并执行：失效即删除（删除失败记为待吊销）；需要续期就写入，
+/// 写不进就返回错误。续期没有更新任何行，说明记录在读出之后被别的连接改过（续期或删除）：
+/// 重读一次，按同样的规则再判定，包括失效时的删除。
+fn judge(inner: &mut Inner, digest: &[u8; 32], mut stored: Stored, now: i64) -> Result<bool> {
+    for _ in 0..2 {
+        match stored.verdict(now) {
+            Verdict::Reject(rejection) => {
+                if let Err(error) = inner.revoke(digest) {
+                    warn!(?rejection, %error, "删除失效的会话失败，本进程内继续拒绝它");
+                }
+                return Ok(false);
+            }
+            Verdict::Valid { renew: false } => return Ok(true),
+            Verdict::Valid { renew: true } => {
+                if renew_session(&inner.connection, digest, now)? {
+                    return Ok(true);
+                }
+                match read_session(&inner.connection, digest)? {
+                    Some(current) => stored = current,
+                    None => return Ok(false),
+                }
+            }
+        }
+    }
+    bail!("会话记录在两次读取之后都被别的连接改动，无法记录这次使用")
+}
+
 /// 删除按 `now` 已经失效的会话，返回删除的数目。条件与 [`Stored::verdict`] 的拒绝条件一致
-/// （时钟回拨除外：它只在会话被出示时判定）。
+/// （时钟回拨除外：它只在会话被出示时判定）；没有凭据时，全部会话都不属于任何凭据。
 fn purge(connection: &Connection, now: i64) -> Result<usize> {
     Ok(connection.execute(
         "DELETE FROM sessions
@@ -382,9 +470,22 @@ fn purge(connection: &Connection, now: i64) -> Result<usize> {
             OR last_used_at <= ?1 - ?3
             OR created_at > last_used_at
             OR generation < 1
-            OR generation <> (SELECT generation FROM owner)",
+            OR NOT EXISTS (SELECT 1 FROM owner o WHERE o.generation = sessions.generation)",
         params![now, ABSOLUTE, IDLE + RECORD_GRANULARITY],
     )?)
+}
+
+/// 把 `path` 所在目录的改动（新建、删除）同步到磁盘。只在 Unix 上需要并可行。
+fn sync_directory(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    if let Some(directory) = path.parent() {
+        std::fs::File::open(directory)
+            .and_then(|directory| directory.sync_all())
+            .with_context(|| format!("无法同步目录 {}", directory.display()))?;
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
 }
 
 fn read_session(connection: &Connection, digest: &[u8; 32]) -> Result<Option<Stored>> {
@@ -918,6 +1019,127 @@ mod tests {
         assert!(!restarted.validate(&expired, T0 + 1).unwrap());
         assert!(restarted.validate(&current, T0 + IDLE + HOUR).unwrap());
         assert_eq!(sessions(&restarted), 1);
+    }
+
+    /// 第二轮评审 B-1：判过期、删除失败，进程异常退出（待吊销集合随之丢失），重启时时钟已经
+    /// 回到过期之前。运行标记在出错之前就已落盘，下次启动吊销全部会话，旧会话不会复活。
+    #[test]
+    fn an_unclean_exit_revokes_every_session_at_the_next_start() {
+        let scratch = Scratch::new("unclean-exit");
+        let store = open(&scratch);
+        assert!(!store.begin_run().unwrap(), "a first start");
+        let expired = login(&store, T0);
+        writes_fail(&store, true);
+        assert!(!store.validate(&expired, T0 + IDLE + HOUR).unwrap());
+        drop(store); // no end_run: the process died
+
+        let restarted = AuthStore::open(scratch.path()).unwrap();
+        assert!(restarted.begin_run().unwrap(), "the marker was still there");
+        assert_eq!(restarted.purge_expired(T0 + IDLE + HOUR - 60).unwrap(), 0);
+        assert!(!restarted.validate(&expired, T0 + IDLE + HOUR - 60).unwrap());
+        assert_eq!(sessions(&restarted), 0);
+    }
+
+    /// 正常停止且没有待吊销的会话：移除运行标记，下次启动保留全部会话。
+    #[test]
+    fn a_clean_exit_keeps_sessions() {
+        let scratch = Scratch::new("clean-exit");
+        let store = open(&scratch);
+        assert!(!store.begin_run().unwrap());
+        assert!(scratch.path().join(RUN_MARKER).is_file());
+        let token = login(&store, T0);
+        assert!(store.end_run().unwrap());
+        assert!(!scratch.path().join(RUN_MARKER).exists());
+        drop(store);
+
+        let restarted = AuthStore::open(scratch.path()).unwrap();
+        assert!(!restarted.begin_run().unwrap());
+        assert!(restarted.validate(&token, T0 + 1).unwrap());
+    }
+
+    /// 停止时先重试待吊销的删除：成功就正常结束；仍失败就保留标记，下次启动吊销全部会话。
+    #[test]
+    fn an_exit_with_unresolved_revocations_keeps_the_marker() {
+        let scratch = Scratch::new("unresolved-exit");
+        let store = open(&scratch);
+        store.begin_run().unwrap();
+        let kept = login(&store, T0);
+        let expired = login(&store, T0 - IDLE);
+        writes_fail(&store, true);
+        assert!(!store.validate(&expired, T0 + HOUR).unwrap());
+        assert!(!store.end_run().unwrap(), "the deletion still fails");
+        assert!(scratch.path().join(RUN_MARKER).is_file());
+        writes_fail(&store, false);
+        drop(store);
+
+        let restarted = AuthStore::open(scratch.path()).unwrap();
+        assert!(restarted.begin_run().unwrap());
+        assert!(!restarted.validate(&kept, T0 + 1).unwrap(), "every session was revoked");
+
+        let scratch = Scratch::new("resolved-exit");
+        let store = open(&scratch);
+        store.begin_run().unwrap();
+        let expired = login(&store, T0 - IDLE);
+        writes_fail(&store, true);
+        assert!(!store.validate(&expired, T0 + HOUR).unwrap());
+        writes_fail(&store, false);
+        assert!(store.end_run().unwrap(), "the retry at exit succeeded");
+        assert_eq!(sessions(&store), 0);
+    }
+
+    /// 第二轮评审 S-1：读出记录之后，别的连接把使用时间改到了更晚（这里晚得构成时钟回拨）。
+    /// 续期没有更新任何行，重读后按同样的规则判定：拒绝并删除，而不只是拒绝。
+    #[test]
+    fn a_renewal_that_updates_nothing_judges_the_current_row() {
+        let scratch = Scratch::new("judge-again");
+        let store = open(&scratch);
+        let other = AuthStore::open(scratch.path()).unwrap();
+        let now = T0 + 2 * HOUR;
+        let digest = login(&store, T0).digest();
+        let stale = read_session(&store.lock().connection, &digest).unwrap().unwrap();
+        other
+            .lock()
+            .connection
+            .execute(
+                "UPDATE sessions SET last_used_at = ?1 WHERE digest = ?2",
+                params![now + CLOCK_TOLERANCE + 1, &digest[..]],
+            )
+            .unwrap();
+        assert!(!judge(&mut store.lock(), &digest, stale, now).unwrap());
+        assert_eq!(sessions(&store), 0, "rejected and deleted");
+
+        let digest = login(&store, T0).digest();
+        let stale = read_session(&store.lock().connection, &digest).unwrap().unwrap();
+        renew_session(&other.lock().connection, &digest, now).unwrap();
+        assert!(judge(&mut store.lock(), &digest, stale, now).unwrap(), "renewed elsewhere");
+    }
+
+    /// 第二轮评审 B-2：退出一个并不存在的会话（伪造的令牌）什么也不记，即使写入失败。
+    #[test]
+    fn logging_out_an_unknown_session_records_nothing() {
+        let scratch = Scratch::new("unknown-logout");
+        let store = open(&scratch);
+        writes_fail(&store, true);
+        store.revoke(&SessionToken::generate()).unwrap();
+        assert!(store.lock().pending_revocations.is_empty());
+    }
+
+    /// 第二轮评审 N-1：没有凭据时留下的会话不属于任何凭据：清理时删除，建立凭据时一并清除。
+    #[test]
+    fn sessions_without_an_owner_are_removed() {
+        let scratch = Scratch::new("orphans");
+        let store = open(&scratch);
+        login(&store, T0);
+        store.lock().connection.execute("DELETE FROM owner", []).unwrap();
+        assert_eq!(store.purge_expired(T0 + 1).unwrap(), 1);
+
+        let scratch = Scratch::new("orphans-initialize");
+        let store = open(&scratch);
+        let orphan = login(&store, T0);
+        store.lock().connection.execute("DELETE FROM owner", []).unwrap();
+        assert!(store.initialize(|| Ok("hash-v2".to_owned())).unwrap());
+        assert!(!store.validate(&orphan, T0 + 1).unwrap());
+        assert_eq!(sessions(&store), 0);
     }
 
     /// 不可能的记录不按它计算期限（评审 N1）。

@@ -20,7 +20,7 @@ use axum::{
 use clap::{Parser, Subcommand};
 use tokio::fs;
 use tower_http::services::{ServeDir, ServeFile};
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 use crate::{
@@ -32,6 +32,9 @@ use crate::{
 };
 
 const FAVICON_ICO: &[u8] = include_bytes!("../../../icons/icon.ico");
+/// 收到停止信号后，等待进行中的请求的最长时间。Docker 在 SIGTERM 之后 10 秒发 SIGKILL，
+/// 要留出结束本次运行（[`AuthStore::end_run`]）的时间。
+const SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// RSS-Reader 的 Web 服务：登录保护、静态包托管与 feed 代抓。
 #[derive(Parser)]
@@ -92,15 +95,62 @@ async fn serve(data_dir: &Path) -> Result<()> {
         .await
         .with_context(|| format!("绑定监听地址失败：{}", config.bind_addr))?;
     let local = listener.local_addr().context("读取监听地址失败")?;
-    let state = AppState::new(config, store, local)?;
+    let state = AppState::new(config, Arc::clone(&store), local)?;
 
     info!("starting rssr-web on {local}");
+    let stopping = Arc::new(tokio::sync::Notify::new());
     // 登录限速在不信任代理头时按 TCP 对端地址区分客户端，需要连接信息（审计 F1）。
-    axum::serve(listener, app(state).into_make_service_with_connect_info::<SocketAddr>())
-        .await
-        .context("启动 Web 服务失败")?;
+    let server =
+        axum::serve(listener, app(state).into_make_service_with_connect_info::<SocketAddr>())
+            .with_graceful_shutdown({
+                let stopping = Arc::clone(&stopping);
+                async move {
+                    shutdown_signal().await;
+                    stopping.notify_one();
+                }
+            });
+    tokio::select! {
+        result = std::future::IntoFuture::into_future(server) => result.context("启动 Web 服务失败")?,
+        () = async {
+            stopping.notified().await;
+            tokio::time::sleep(SHUTDOWN_GRACE).await;
+        } => warn!("停止时放弃了 {SHUTDOWN_GRACE:?} 内没有处理完的请求"),
+    }
 
+    // 正常停止：没有删不掉的失效会话时移除运行标记，下次启动保留全部会话。
+    if tokio::task::spawn_blocking(move || store.end_run())
+        .await
+        .context("结束运行的任务失败")??
+    {
+        info!("rssr-web 已停止");
+    } else {
+        warn!("仍有删不掉的失效会话：保留运行标记，下次启动时吊销全部会话");
+    }
     Ok(())
+}
+
+/// Ctrl-C，或 Unix 上的 SIGTERM（`docker stop`、systemd）。注册失败的那一路不会触发停止。
+async fn shutdown_signal() {
+    let interrupt = async {
+        if tokio::signal::ctrl_c().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        () = interrupt => {}
+        () = terminate => {}
+    }
 }
 
 /// 全部路由：应用页面、静态包与 `/feed-proxy` 要求登录（[`with_auth`]）。

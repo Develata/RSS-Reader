@@ -180,9 +180,10 @@ enum CredentialCheck<T> {
     },
 }
 
-/// 打开数据目录里的认证库；还没有凭据时按决定 Q1 的顺序建立它。已有凭据时，凭据环境变量
-/// 不再读取（改密码用 `rssr-web passwd`）。最后清掉已经失效的会话：上次运行里删除失败的
-/// 会话（待吊销集合不跨重启）在这里落实删除，认证库不可写时启动失败。
+/// 服务器打开数据目录里的认证库；还没有凭据时按决定 Q1 的顺序建立它。已有凭据时，凭据
+/// 环境变量不再读取（改密码用 `rssr-web passwd`）。然后开始本次运行：上次没有正常结束时吊销
+/// 全部会话（[`AuthStore::begin_run`]）；最后清掉已经失效的会话。认证库不可写时启动失败。
+/// 停止时调用 [`AuthStore::end_run`]。
 pub(crate) fn open_store(data_dir: &Path) -> Result<AuthStore> {
     let store = AuthStore::open(data_dir)?;
     let mut source = None;
@@ -195,6 +196,9 @@ pub(crate) fn open_store(data_dir: &Path) -> Result<AuthStore> {
         info!(source = source.as_deref().unwrap_or_default(), "已建立认证库的所有者凭据");
     } else if SEED_VARIABLES.iter().any(|name| std::env::var_os(name).is_some()) {
         warn!("认证库已有凭据，忽略 {}；改密码请用 rssr-web passwd", SEED_VARIABLES.join("、"));
+    }
+    if store.begin_run()? {
+        warn!("上次运行没有正常结束，或停止时仍有删不掉的失效会话：已吊销全部会话，需要重新登录");
     }
     let purged = store.purge_expired(now()).context("清理失效的会话失败")?;
     if purged > 0 {
@@ -431,8 +435,17 @@ pub(crate) async fn handle_logout(
         if !csrf_matches(provided.as_deref(), &token.csrf()) {
             return (StatusCode::FORBIDDEN, "缺少或错误的 CSRF 令牌").into_response();
         }
+        // 与会话校验共用名额：伪造的令牌再多，退出请求也排不出无界的阻塞任务。
+        let Ok(slot) = Arc::clone(&state.session_checks).try_acquire_owned() else {
+            return unavailable();
+        };
         let store = Arc::clone(&state.store);
-        match tokio::task::spawn_blocking(move || store.revoke(&token)).await {
+        match tokio::task::spawn_blocking(move || {
+            let _slot = slot;
+            store.revoke(&token)
+        })
+        .await
+        {
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
                 error!(%error, "吊销会话失败");

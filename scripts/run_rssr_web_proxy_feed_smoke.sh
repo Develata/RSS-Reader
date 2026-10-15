@@ -99,9 +99,10 @@ cat >"$summary_file" <<EOF
 - 是否通过：
 EOF
 
-# The caller's deployment settings (public origin, seed credentials, environment) must not reach
+# The caller's deployment settings (public origin, seed credentials, environment, data directory;
+# any letter case, as Windows does not distinguish it) must not reach
 # this smoke service: only the variables set below apply.
-for variable in $(compgen -e | grep '^RSS_READER_WEB_' || true); do unset "$variable"; done
+for variable in $(compgen -e | grep -iE '^(RSS_READER_WEB_.*|RSSR_DATA_DIR)$' || true); do unset "$variable"; done
 RSS_READER_WEB_BIND="127.0.0.1:${port}" \
 RSS_READER_WEB_STATIC_DIR="$public_dir" \
 RSS_READER_WEB_USERNAME="$username" \
