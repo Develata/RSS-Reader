@@ -15,7 +15,7 @@ FeedsPage(FeedCandidates { page_url: Url { scheme: "http", cannot_be_a_base: fal
 FeedsPage(AddFeedFinished { saved: false })
 ## add failing feed
 FeedsPage(AddFeedFinished { saved: false })
-FeedsPage(SetStatus { message: "订阅探测返回非成功状态: HTTP status server error (500 Internal Server Error) for url (http://127.0.0.1:<port>/broken.xml)", tone: "error" })
+FeedsPage(SetStatus { message: "订阅探测返回非成功状态: HTTP status server error (500 Internal Server Error)", tone: "error" })
 ## add duplicate feed a
 FeedsPage(AddFeedFinished { saved: false })
 FeedsPage(SetStatus { message: "该地址已订阅：http://127.0.0.1:<port>/a.xml", tone: "error" })
