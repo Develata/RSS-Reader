@@ -1,17 +1,20 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 //! The outbound policy on every request path (v0.2 phase C, C1): feed fetching, subscription
-//! probing, image localization and WebDAV. Under `PublicOnly`, a refused destination receives no
-//! connection at all, whether it is named by a literal address, reached by a redirect from an
-//! allowed host, or behind a host name that resolves to it. Each case has a control: the same
-//! request with the destination allowed goes through, so the listeners are known to work.
+//! probing, image localization (background and reader) and WebDAV (download and upload). Under
+//! `PublicOnly` a refused destination receives no connection, whether it is named by a literal
+//! address, reached by a redirect from an allowed host, or behind a host name whose answers are all
+//! refused or mixed (in either order). Each path has a control: the same client reaches an allowed
+//! destination, so the listeners are known to work.
 //!
-//! The destinations are loopback listeners: `127.0.0.2` stands for an allowed host (it is listed
-//! in the policy), `127.0.0.3` for a refused one, and `localhost` for a host name.
+//! Every listener is on `127.0.0.1` (no loopback aliases needed). Host names resolve through the
+//! policy's own resolver from fixed answers: `allowed.test` is allowed by name; `refused.test`,
+//! `mixed-a.test` and `mixed-b.test` are not.
 
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::collections::HashSet;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use base64::Engine as _;
 use rssr_application::SubscriptionProbePort;
@@ -20,59 +23,90 @@ use rssr_infra::fetch::{BodyAssetLocalizer, FetchClient, FetchRequest};
 use rssr_infra::outbound::{OutboundPolicy, PublicOnly};
 use rssr_infra::subscription_probe::HttpSubscriptionProbe;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use url::Url;
 
 const FEED: &str = r#"<?xml version="1.0"?><rss version="2.0"><channel><title>T</title><link>https://example.com/</link><item><title>A</title><link>https://example.com/a</link></item></channel></rss>"#;
 const PNG: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
-/// A listener answering every request with one fixed response, counting the connections it
-/// accepted.
+/// A listener answering every request with one fixed response, recording the peers it accepted.
 struct Server {
     address: SocketAddr,
-    connections: Arc<AtomicUsize>,
+    accepted: Arc<Mutex<Vec<SocketAddr>>>,
+    sentinels: Mutex<HashSet<SocketAddr>>,
 }
 
 impl Server {
-    async fn start(ip: &str, response: Vec<u8>) -> Self {
-        let listener = TcpListener::bind((ip, 0)).await.expect("bind a loopback listener");
+    async fn start(response: Vec<u8>) -> Self {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.expect("bind a loopback listener");
         let address = listener.local_addr().unwrap();
-        let connections = Arc::new(AtomicUsize::new(0));
-        let counter = Arc::clone(&connections);
+        let accepted = Arc::new(Mutex::new(Vec::new()));
+        let record = Arc::clone(&accepted);
         let response = Arc::new(response);
         tokio::spawn(async move {
-            while let Ok((mut socket, _)) = listener.accept().await {
-                counter.fetch_add(1, Ordering::SeqCst);
+            while let Ok((mut socket, peer)) = listener.accept().await {
+                record.lock().unwrap().push(peer);
                 let response = Arc::clone(&response);
                 tokio::spawn(async move {
-                    let mut request = Vec::new();
-                    let mut buffer = [0u8; 4096];
-                    while !request.windows(4).any(|window| window == b"\r\n\r\n") {
-                        match socket.read(&mut buffer).await {
-                            Ok(0) | Err(_) => return,
-                            Ok(count) => request.extend_from_slice(&buffer[..count]),
-                        }
+                    if read_request(&mut socket).await {
+                        let _ = socket.write_all(&response).await;
                     }
-                    let _ = socket.write_all(&response).await;
                     let _ = socket.shutdown().await;
                 });
             }
         });
-        Self { address, connections }
+        Self { address, accepted, sentinels: Mutex::new(HashSet::new()) }
     }
 
-    fn connections(&self) -> usize {
-        self.connections.load(Ordering::SeqCst)
+    /// The connections accepted so far, final for everything that reached the listener before
+    /// this call: a sentinel connection is accepted after every earlier one in the queue.
+    async fn settled_connections(&self) -> usize {
+        let sentinel = TcpStream::connect(self.address).await.expect("connect a sentinel");
+        let local = sentinel.local_addr().unwrap();
+        self.sentinels.lock().unwrap().insert(local);
+        for _ in 0..500 {
+            if self.accepted.lock().unwrap().contains(&local) {
+                let sentinels = self.sentinels.lock().unwrap();
+                let accepted = self.accepted.lock().unwrap();
+                return accepted.iter().filter(|peer| !sentinels.contains(peer)).count();
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("the sentinel connection was never accepted");
     }
 
-    fn url(&self, path: &str) -> String {
-        format!("http://{}{path}", self.address)
+    fn port(&self) -> u16 {
+        self.address.port()
     }
+}
 
-    fn named_url(&self, path: &str) -> String {
-        format!("http://localhost:{}{path}", self.address.port())
+/// Reads one request (headers, and a body of the declared length); false if the peer went away.
+async fn read_request(socket: &mut TcpStream) -> bool {
+    let mut request = Vec::new();
+    let mut buffer = [0u8; 4096];
+    let header_end = loop {
+        if let Some(end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+            break end + 4;
+        }
+        match socket.read(&mut buffer).await {
+            Ok(0) | Err(_) => return false,
+            Ok(count) => request.extend_from_slice(&buffer[..count]),
+        }
+    };
+    let headers = String::from_utf8_lossy(&request[..header_end]).to_ascii_lowercase();
+    let length = headers
+        .lines()
+        .find_map(|line| line.strip_prefix("content-length:"))
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or(0);
+    while request.len() < header_end + length {
+        match socket.read(&mut buffer).await {
+            Ok(0) | Err(_) => return false,
+            Ok(count) => request.extend_from_slice(&buffer[..count]),
+        }
     }
+    true
 }
 
 fn response(status: &str, headers: &[(&str, String)], body: &[u8]) -> Vec<u8> {
@@ -87,140 +121,166 @@ fn response(status: &str, headers: &[(&str, String)], body: &[u8]) -> Vec<u8> {
     bytes
 }
 
-fn redirect_to(target: &str) -> Vec<u8> {
-    response("302 Found", &[("Location", target.to_owned())], b"")
+fn feed_response() -> Vec<u8> {
+    response("200 OK", &[("Content-Type", "application/rss+xml".to_owned())], FEED.as_bytes())
 }
 
-/// `127.0.0.2` allowed by network; `localhost` allowed by name only when `named` is set.
-fn policy(named: bool) -> OutboundPolicy {
-    let hosts = if named { vec!["localhost".to_owned()] } else { Vec::new() };
-    OutboundPolicy::PublicOnly(PublicOnly::new(
-        hosts,
-        vec!["127.0.0.2/32".parse().unwrap()],
-        Vec::new(),
-    ))
+fn loopback() -> IpAddr {
+    "127.0.0.1".parse().unwrap()
 }
 
-/// The three ways to reach a refused destination, each with no connection to it, and the
-/// allowed control.
+/// `allowed.test` allowed by name; every other name resolves (in part) to loopback and is refused.
+fn policy() -> OutboundPolicy {
+    let public: IpAddr = "93.184.215.14".parse().unwrap();
+    OutboundPolicy::PublicOnly(
+        PublicOnly::new(vec!["allowed.test".to_owned()], Vec::new(), Vec::new())
+            .with_fixed_answers("allowed.test", vec![loopback()])
+            .with_fixed_answers("refused.test", vec![loopback()])
+            .with_fixed_answers("mixed-a.test", vec![loopback(), public])
+            .with_fixed_answers("mixed-b.test", vec![public, loopback()]),
+    )
+}
+
+/// A refused target, a redirector (reached as `allowed.test`) pointing at it, and an allowed
+/// server with the same content.
 struct Destinations {
-    refused: Server,
+    target: Server,
     redirector: Server,
-    named: Server,
+    allowed: Server,
 }
 
 impl Destinations {
     async fn start(body: Vec<u8>, path: &str) -> Self {
-        let refused = Server::start("127.0.0.3", body.clone()).await;
-        let redirector = Server::start("127.0.0.2", redirect_to(&refused.url(path))).await;
-        let named = Server::start("127.0.0.1", body).await;
-        Self { refused, redirector, named }
+        let target = Server::start(body.clone()).await;
+        let to_target = format!("http://127.0.0.1:{}{path}", target.port());
+        let redirector =
+            Server::start(response("302 Found", &[("Location", to_target)], b"")).await;
+        let allowed = Server::start(body).await;
+        Self { target, redirector, allowed }
     }
-}
 
-fn feed_response() -> Vec<u8> {
-    response("200 OK", &[("Content-Type", "application/rss+xml".to_owned())], FEED.as_bytes())
+    /// Every way to reach the target that the policy must refuse.
+    fn refused_urls(&self, path: &str) -> Vec<String> {
+        let target = self.target.port();
+        vec![
+            format!("http://127.0.0.1:{target}{path}"),
+            format!("http://allowed.test:{}{path}", self.redirector.port()),
+            format!("http://refused.test:{target}{path}"),
+            format!("http://mixed-a.test:{target}{path}"),
+            format!("http://mixed-b.test:{target}{path}"),
+        ]
+    }
+
+    fn allowed_url(&self, path: &str) -> String {
+        format!("http://allowed.test:{}{path}", self.allowed.port())
+    }
+
+    /// After the refused attempts: the target saw nothing, the redirector was asked once.
+    async fn assert_refused(&self) {
+        assert_eq!(self.target.settled_connections().await, 0, "the target was reached");
+        assert_eq!(self.redirector.settled_connections().await, 1, "the redirector was asked");
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn feed_fetching_reaches_only_allowed_destinations() {
     let at = Destinations::start(feed_response(), "/feed.xml").await;
     let request = |url: String| FetchRequest { url, etag: None, last_modified: None };
-    let client = FetchClient::with_policy(policy(false)).unwrap();
-
-    assert!(client.fetch(&request(at.refused.url("/feed.xml"))).await.is_err(), "literal");
-    assert!(client.fetch(&request(at.redirector.url("/feed.xml"))).await.is_err(), "redirect");
-    assert_eq!(at.redirector.connections(), 1, "the allowed redirector was asked");
-    assert!(client.fetch(&request(at.named.named_url("/feed.xml"))).await.is_err(), "name");
-    assert_eq!((at.refused.connections(), at.named.connections()), (0, 0));
-
-    let allowed = FetchClient::with_policy(policy(true)).unwrap();
-    allowed.fetch(&request(at.named.named_url("/feed.xml"))).await.expect("allowed by name");
-    assert_eq!(at.named.connections(), 1);
-    FetchClient::new().fetch(&request(at.refused.url("/feed.xml"))).await.expect("unrestricted");
-    assert_eq!(at.refused.connections(), 1);
-}
-
-/// Every form a URL can give a literal address in (as the URL parser reads it), and a user name
-/// that looks like a host: none of them reaches the refused listener.
-#[tokio::test(flavor = "multi_thread")]
-async fn literal_address_forms_never_reach_a_refused_destination() {
-    let at = Destinations::start(feed_response(), "/feed.xml").await;
-    let port = at.refused.address.port();
-    let client = FetchClient::with_policy(policy(false)).unwrap();
-    for url in [
-        format!("http://2130706435:{port}/feed.xml"),
-        format!("http://0x7f.0.0.3:{port}/feed.xml"),
-        format!("http://0177.0.0.3:{port}/feed.xml"),
-        format!("http://127.3:{port}/feed.xml"),
-        format!("http://%31%32%37.0.0.3:{port}/feed.xml"),
-        format!("http://example.com@127.0.0.3:{port}/feed.xml"),
-        format!("http://[::ffff:127.0.0.3]:{port}/feed.xml"),
-        format!("http://localhost.:{}/feed.xml", at.named.address.port()),
-    ] {
-        let request = FetchRequest { url: url.clone(), etag: None, last_modified: None };
-        assert!(client.fetch(&request).await.is_err(), "{url}");
+    let client = FetchClient::with_policy(policy()).unwrap();
+    for url in at.refused_urls("/feed.xml") {
+        assert!(client.fetch(&request(url.clone())).await.is_err(), "{url}");
     }
-    assert_eq!((at.refused.connections(), at.named.connections()), (0, 0));
+    at.assert_refused().await;
+    client.fetch(&request(at.allowed_url("/feed.xml"))).await.expect("allowed by name");
+    assert_eq!(at.allowed.settled_connections().await, 1);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn subscription_probing_reaches_only_allowed_destinations() {
     let at = Destinations::start(feed_response(), "/feed.xml").await;
-    let probe = HttpSubscriptionProbe::with_policy(policy(false)).unwrap();
-    let url = |raw: String| Url::parse(&raw).unwrap();
-
-    assert!(probe.probe(&url(at.refused.url("/feed.xml"))).await.is_err(), "literal");
-    assert!(probe.probe(&url(at.redirector.url("/feed.xml"))).await.is_err(), "redirect");
-    assert_eq!(at.redirector.connections(), 1);
-    assert!(probe.probe(&url(at.named.named_url("/feed.xml"))).await.is_err(), "name");
-    assert_eq!((at.refused.connections(), at.named.connections()), (0, 0));
-
-    let allowed = HttpSubscriptionProbe::with_policy(policy(true)).unwrap();
-    allowed.probe(&url(at.named.named_url("/feed.xml"))).await.expect("allowed by name");
-    assert_eq!(at.named.connections(), 1);
+    let probe = HttpSubscriptionProbe::with_policy(policy()).unwrap();
+    for url in at.refused_urls("/feed.xml") {
+        assert!(probe.probe(&Url::parse(&url).unwrap()).await.is_err(), "{url}");
+    }
+    at.assert_refused().await;
+    let allowed = Url::parse(&at.allowed_url("/feed.xml")).unwrap();
+    probe.probe(&allowed).await.expect("allowed by name");
+    assert_eq!(at.allowed.settled_connections().await, 1);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn image_localization_reaches_only_allowed_destinations() {
     let png = base64::engine::general_purpose::STANDARD.decode(PNG).unwrap();
     let image = response("200 OK", &[("Content-Type", "image/png".to_owned())], &png);
-    let at = Destinations::start(image, "/a.png").await;
-    let localize = |localizer: BodyAssetLocalizer, src: String| async move {
-        localizer.localize_html_images(&format!(r#"<p><img src="{src}"></p>"#), None).await.unwrap()
+    let localized = |localizer: BodyAssetLocalizer, src: String| async move {
+        let html = format!(r#"<p><img src="{src}"></p>"#);
+        localizer.localize_html_images(&html, None).await.unwrap().contains("data:image/png")
     };
-    let restricted = || BodyAssetLocalizer::background(policy(false)).unwrap();
-
-    for src in [at.refused.url("/a.png"), at.redirector.url("/a.png"), at.named.named_url("/a.png")]
-    {
-        let html = localize(restricted(), src.clone()).await;
-        assert!(!html.contains("data:image/png"), "not localized: {src}");
+    let localizers: [(&str, fn(OutboundPolicy) -> anyhow::Result<BodyAssetLocalizer>); 2] =
+        [("background", BodyAssetLocalizer::background), ("reader", BodyAssetLocalizer::reader)];
+    for (kind, localizer) in localizers {
+        let at = Destinations::start(image.clone(), "/a.png").await;
+        for url in at.refused_urls("/a.png") {
+            assert!(!localized(localizer(policy()).unwrap(), url.clone()).await, "{kind}: {url}");
+        }
+        at.assert_refused().await;
+        assert!(localized(localizer(policy()).unwrap(), at.allowed_url("/a.png")).await, "{kind}");
+        assert_eq!(at.allowed.settled_connections().await, 1, "{kind}");
     }
-    assert_eq!(at.redirector.connections(), 1);
-    assert_eq!((at.refused.connections(), at.named.connections()), (0, 0));
-
-    let allowed = BodyAssetLocalizer::reader(policy(true)).unwrap();
-    assert!(localize(allowed, at.named.named_url("/a.png")).await.contains("data:image/png"));
-    assert_eq!(at.named.connections(), 1);
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn webdav_reaches_only_allowed_destinations() {
+async fn webdav_download_and_upload_reach_only_allowed_destinations() {
     let config = response("200 OK", &[("Content-Type", "application/json".to_owned())], b"{}");
-    let at = Destinations::start(config, "/dav/config.json").await;
-    let sync = |endpoint: String, named: bool| {
-        WebDavConfigSync::with_policy(endpoint, "config.json", policy(named))
-    };
+    for upload in [false, true] {
+        let at = Destinations::start(config.clone(), "/dav/config.json").await;
+        let attempt = |endpoint: String| async move {
+            let sync = WebDavConfigSync::with_policy(endpoint, "config.json", policy())?;
+            if upload {
+                sync.upload_text("{}").await.map(|()| None)
+            } else {
+                sync.download_text().await
+            }
+        };
+        for url in at.refused_urls("/dav/") {
+            assert!(attempt(url.clone()).await.is_err(), "upload {upload}: {url}");
+        }
+        at.assert_refused().await;
+        attempt(at.allowed_url("/dav/")).await.expect("allowed by name");
+        assert_eq!(at.allowed.settled_connections().await, 1, "upload {upload}");
+    }
+}
 
-    assert!(sync(at.refused.url("/dav/"), false).is_err(), "a literal endpoint is refused");
-    let redirected = sync(at.redirector.url("/dav/"), false).unwrap();
-    assert!(redirected.download_text().await.is_err(), "redirect");
-    assert_eq!(at.redirector.connections(), 1);
-    let named = sync(at.named.named_url("/dav/"), false).unwrap();
-    assert!(named.download_text().await.is_err(), "name");
-    assert_eq!((at.refused.connections(), at.named.connections()), (0, 0));
+/// Every form a URL can give a literal loopback address in (as the URL parser reads it), a user
+/// name that looks like a host, and a trailing-dot host name: refused under `PublicOnly`, while
+/// the unrestricted client reaches the same listener through each literal form.
+#[tokio::test(flavor = "multi_thread")]
+async fn literal_address_forms_are_refused_and_reach_the_listener_when_unrestricted() {
+    let target = Server::start(feed_response()).await;
+    let port = target.port();
+    let reachable = [
+        format!("http://2130706433:{port}/feed.xml"),
+        format!("http://0x7f.0.0.1:{port}/feed.xml"),
+        format!("http://0177.0.0.1:{port}/feed.xml"),
+        format!("http://127.1:{port}/feed.xml"),
+        format!("http://%31%32%37.0.0.1:{port}/feed.xml"),
+        format!("http://example.com@127.0.0.1:{port}/feed.xml"),
+    ];
+    let refused_only = [
+        format!("http://[::ffff:127.0.0.1]:{port}/feed.xml"),
+        format!("http://refused.test.:{port}/feed.xml"),
+    ];
+    let request = |url: &String| FetchRequest { url: url.clone(), etag: None, last_modified: None };
 
-    let allowed = sync(at.named.named_url("/dav/"), true).unwrap();
-    assert_eq!(allowed.download_text().await.unwrap().as_deref(), Some("{}"));
-    assert_eq!(at.named.connections(), 1);
+    let client = FetchClient::with_policy(policy()).unwrap();
+    for url in reachable.iter().chain(&refused_only) {
+        assert!(client.fetch(&request(url)).await.is_err(), "{url}");
+    }
+    assert_eq!(target.settled_connections().await, 0);
+
+    let unrestricted = FetchClient::new();
+    for url in &reachable {
+        unrestricted.fetch(&request(url)).await.unwrap_or_else(|error| panic!("{url}: {error:#}"));
+    }
+    assert_eq!(target.settled_connections().await, reachable.len());
 }
