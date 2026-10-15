@@ -4,6 +4,9 @@ mod login_page;
 mod persisted_state;
 mod rate_limit;
 mod session;
+// Wired into the routes by the next commit (C2).
+#[allow(dead_code)]
+mod store;
 
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
