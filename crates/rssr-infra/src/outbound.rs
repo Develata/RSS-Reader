@@ -1,181 +1,311 @@
 //! Outbound access policy (v0.2 phase C, C1): which destinations a server may reach.
 //!
-//! [`is_public_address`] is an allowlist of globally routable unicast addresses, after the IANA
-//! special-purpose address registries, with a few deliberately stricter exclusions (marked below).
+//! Desktop, Android and an ordinary CLI reach any address ([`OutboundPolicy::Unrestricted`]). A
+//! server reaches public addresses only ([`OutboundPolicy::PublicOnly`]), with the exceptions its
+//! policy file names. A public-only request is checked at every hop, in three places, none of which
+//! covers the others:
 //!
-//! IPv6 forms that embed an IPv4 address: the well-known NAT64 prefix `64:ff9b::/96` is judged by
-//! the embedded address (DNS64 gives an IPv6-only server such addresses for every IPv4-only host,
-//! and RFC 6052 forbids the prefix for non-global IPv4); every other form (IPv4-mapped, the
-//! deprecated IPv4-compatible, the local-use NAT64 prefix, 6to4, Teredo) is refused.
+//! 1. before it is sent, [`OutboundPolicy::check_url`] checks the scheme and a literal address
+//!    (a literal IP never reaches a resolver);
+//! 2. a host name resolves through [`OutboundPolicy::client_builder`]'s resolver, which fails the
+//!    request when any answer is refused (no mixed answers, no rebinding to a refused one);
+//! 3. every redirect target goes through [`OutboundPolicy::redirect`], which checks it like (1).
 //!
-//! A network-specific NAT64 prefix inside ordinary global space cannot be recognised from the
-//! address: a deployment that translates such a prefix to private IPv4 must block it in its egress
-//! rules (or refuse it in the policy file).
+//! Public-only clients never use a proxy: a proxy would resolve and connect in our place.
+//!
+//! What counts as public is [`is_public_address`]. A network-specific NAT64 prefix inside ordinary
+//! global space cannot be recognised from the address: a deployment that translates such a prefix
+//! to private IPv4 must block it in its egress rules, or list it under `deny`.
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+mod address;
 
-/// Whether `ip` is a globally routable unicast address a server may connect to.
-///
-/// Refused IPv4 ranges: `0/8`, `10/8`, `100.64/10`, `127/8`, `169.254/16`, `172.16/12`,
-/// `192.0.0/24`, `192.0.2/24`, `192.88.99/24`, `192.168/16`, `198.18/15`, `198.51.100/24`,
-/// `203.0.113/24`, `224/4` and `240/4` (which holds `255.255.255.255`).
-///
-/// IPv6: `64:ff9b::/96` by its embedded IPv4 address; otherwise only `2000::/3`, without
-/// `2001:db8::/32` and `3fff::/20` (documentation), `2001::/23` (IETF protocol assignments,
-/// Teredo among them) and `2002::/16` (6to4). This refuses `::/128`, `::1`, `::ffff:0:0/96`,
-/// `::/96`, `64:ff9b:1::/48`, `100::/64`, `fc00::/7`, `fe80::/10`, `fec0::/10` and `ff00::/8`,
-/// all outside `2000::/3`.
-///
-/// Deliberately stricter than the registries: all of `192.0.0/24` and `2001::/23` (a few anycast
-/// services inside them are globally reachable; a feed reader does not need them), 6to4 and
-/// Teredo (the registry marks their reachability not applicable; both tunnel to arbitrary IPv4).
-pub fn is_public_address(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(ip) => is_public_ipv4(ip),
-        IpAddr::V6(ip) => is_public_ipv6(ip),
+use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
+
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
+use reqwest::redirect::{Action, Attempt, Policy};
+use url::{Host, Url};
+
+pub use address::is_public_address;
+
+/// Where outbound requests may go.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum OutboundPolicy {
+    #[default]
+    Unrestricted,
+    PublicOnly(PublicOnly),
+}
+
+/// Public addresses only, with explicit exceptions; `deny` wins over everything.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PublicOnly {
+    /// Host names whose resolved addresses are allowed (an internal WebDAV server, say),
+    /// lower case and without a trailing dot.
+    allow_hosts: Vec<String>,
+    allow_networks: Vec<Network>,
+    deny_networks: Vec<Network>,
+}
+
+impl PublicOnly {
+    pub fn new(allow_hosts: Vec<String>, allow_networks: Vec<Network>, deny: Vec<Network>) -> Self {
+        let allow_hosts = allow_hosts.iter().map(|host| normalized_host(host)).collect();
+        Self { allow_hosts, allow_networks, deny_networks: deny }
+    }
+
+    /// Whether `ip`, reached as `host` (`None` for a literal address), may be connected to.
+    pub fn allows(&self, host: Option<&str>, ip: IpAddr) -> bool {
+        if self.deny_networks.iter().any(|network| network.contains(ip)) {
+            return false;
+        }
+        let allowed_host = host.is_some_and(|host| {
+            let host = normalized_host(host);
+            self.allow_hosts.contains(&host)
+        });
+        allowed_host
+            || self.allow_networks.iter().any(|network| network.contains(ip))
+            || is_public_address(ip)
+    }
+
+    /// The addresses `host` resolved to, all of them allowed; one refused answer refuses the
+    /// whole request, so the connection cannot fall back to it.
+    fn checked(&self, host: &str, addresses: Vec<SocketAddr>) -> Result<Vec<SocketAddr>, Refused> {
+        if addresses.is_empty() {
+            return Err(Refused(format!("{host}（没有解析结果）")));
+        }
+        match addresses.iter().find(|address| !self.allows(Some(host), address.ip())) {
+            Some(refused) => Err(Refused(format!("{host}（{}）", refused.ip()))),
+            None => Ok(addresses),
+        }
     }
 }
 
-const REFUSED_IPV4: [(Ipv4Addr, u8); 15] = [
-    (Ipv4Addr::new(0, 0, 0, 0), 8),
-    (Ipv4Addr::new(10, 0, 0, 0), 8),
-    (Ipv4Addr::new(100, 64, 0, 0), 10),
-    (Ipv4Addr::new(127, 0, 0, 0), 8),
-    (Ipv4Addr::new(169, 254, 0, 0), 16),
-    (Ipv4Addr::new(172, 16, 0, 0), 12),
-    (Ipv4Addr::new(192, 0, 0, 0), 24),
-    (Ipv4Addr::new(192, 0, 2, 0), 24),
-    (Ipv4Addr::new(192, 88, 99, 0), 24),
-    (Ipv4Addr::new(192, 168, 0, 0), 16),
-    (Ipv4Addr::new(198, 18, 0, 0), 15),
-    (Ipv4Addr::new(198, 51, 100, 0), 24),
-    (Ipv4Addr::new(203, 0, 113, 0), 24),
-    (Ipv4Addr::new(224, 0, 0, 0), 4),
-    (Ipv4Addr::new(240, 0, 0, 0), 4),
-];
-
-const REFUSED_IN_GLOBAL_IPV6: [(Ipv6Addr, u8); 4] = [
-    (Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, 0, 0), 23),
-    (Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0), 32),
-    (Ipv6Addr::new(0x2002, 0, 0, 0, 0, 0, 0, 0), 16),
-    (Ipv6Addr::new(0x3fff, 0, 0, 0, 0, 0, 0, 0), 20),
-];
-
-/// The well-known NAT64 prefix (RFC 6052): the low 32 bits are the IPv4 address.
-const NAT64_WELL_KNOWN: (Ipv6Addr, u8) = (Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0), 96);
-
-fn is_public_ipv4(ip: Ipv4Addr) -> bool {
-    !REFUSED_IPV4.iter().any(|&(network, prefix)| in_ipv4_network(ip, network, prefix))
+/// A network in CIDR notation, or a single address.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Network {
+    address: IpAddr,
+    prefix: u8,
 }
 
-fn is_public_ipv6(ip: Ipv6Addr) -> bool {
-    if in_ipv6_network(ip, NAT64_WELL_KNOWN.0, NAT64_WELL_KNOWN.1) {
-        let [.., a, b, c, d] = ip.octets();
-        return is_public_ipv4(Ipv4Addr::new(a, b, c, d));
+impl Network {
+    pub fn contains(&self, ip: IpAddr) -> bool {
+        match (self.address, ip) {
+            (IpAddr::V4(network), IpAddr::V4(ip)) => {
+                self.prefix == 0
+                    || (u32::from(network) ^ u32::from(ip)) >> (32 - u32::from(self.prefix)) == 0
+            }
+            (IpAddr::V6(network), IpAddr::V6(ip)) => {
+                self.prefix == 0
+                    || (u128::from(network) ^ u128::from(ip)) >> (128 - u32::from(self.prefix)) == 0
+            }
+            _ => false,
+        }
     }
-    in_ipv6_network(ip, Ipv6Addr::new(0x2000, 0, 0, 0, 0, 0, 0, 0), 3)
-        && !REFUSED_IN_GLOBAL_IPV6
-            .iter()
-            .any(|&(network, prefix)| in_ipv6_network(ip, network, prefix))
 }
 
-/// Whether `ip` lies in `network/prefix`; the prefixes above are between 3 and 96 bits.
-fn in_ipv4_network(ip: Ipv4Addr, network: Ipv4Addr, prefix: u8) -> bool {
-    (u32::from(ip) ^ u32::from(network)) >> (32 - u32::from(prefix)) == 0
+impl std::str::FromStr for Network {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let invalid = || format!("不是地址或 CIDR 网段：{text:?}");
+        let (address, prefix) = match text.split_once('/') {
+            Some((address, prefix)) => (address, Some(prefix)),
+            None => (text, None),
+        };
+        let address: IpAddr = address.parse().map_err(|_| invalid())?;
+        let width = if address.is_ipv4() { 32 } else { 128 };
+        let prefix = match prefix {
+            Some(prefix) => prefix.parse::<u8>().map_err(|_| invalid())?,
+            None => width,
+        };
+        if prefix > width {
+            return Err(invalid());
+        }
+        Ok(Self { address, prefix })
+    }
 }
 
-fn in_ipv6_network(ip: Ipv6Addr, network: Ipv6Addr, prefix: u8) -> bool {
-    (u128::from(ip) ^ u128::from(network)) >> (128 - u32::from(prefix)) == 0
+/// A destination the policy does not allow.
+#[derive(Debug, thiserror::Error)]
+#[error("出站访问策略不允许访问 {0}")]
+pub struct Refused(String);
+
+impl OutboundPolicy {
+    /// Checks a URL before it is requested, and every redirect target: only http(s), and a literal
+    /// address must be allowed. A host name is checked when it resolves.
+    pub fn check_url(&self, url: &Url) -> Result<(), Refused> {
+        let Self::PublicOnly(policy) = self else { return Ok(()) };
+        let refused = || Refused(url.as_str().to_owned());
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err(refused());
+        }
+        match url.host() {
+            Some(Host::Domain(_)) => Ok(()),
+            Some(Host::Ipv4(ip)) if policy.allows(None, IpAddr::V4(ip)) => Ok(()),
+            Some(Host::Ipv6(ip)) if policy.allows(None, IpAddr::V6(ip)) => Ok(()),
+            _ => Err(refused()),
+        }
+    }
+
+    /// A client builder for this policy: a public-only one resolves through the policy and uses
+    /// no proxy. Building a client from it must not fall back to a default client on failure.
+    pub fn client_builder(&self) -> reqwest::ClientBuilder {
+        let builder = reqwest::Client::builder();
+        match self {
+            Self::Unrestricted => builder,
+            Self::PublicOnly(policy) => {
+                builder.no_proxy().dns_resolver(Arc::new(PolicyResolver(policy.clone())))
+            }
+        }
+    }
+
+    /// The redirect policy of an operation (`next`), with every target checked first.
+    pub fn redirect(&self, next: impl Fn(Attempt) -> Action + Send + Sync + 'static) -> Policy {
+        let policy = self.clone();
+        Policy::custom(move |attempt| match policy.check_url(attempt.url()) {
+            Ok(()) => next(attempt),
+            Err(refused) => attempt.error(refused),
+        })
+    }
+}
+
+struct PolicyResolver(PublicOnly);
+
+impl Resolve for PolicyResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        let policy = self.0.clone();
+        Box::pin(async move {
+            let host = name.as_str().to_owned();
+            let resolved: std::io::Result<Vec<SocketAddr>> =
+                tokio::net::lookup_host((host.as_str(), 0)).await.map(Iterator::collect);
+            let addresses = policy.checked(&host, resolved?)?;
+            Ok::<Addrs, Box<dyn std::error::Error + Send + Sync>>(Box::new(addresses.into_iter()))
+        })
+    }
+}
+
+/// Lower case, without the trailing dot of a fully qualified name.
+fn normalized_host(host: &str) -> String {
+    host.strip_suffix('.').unwrap_or(host).to_ascii_lowercase()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::is_public_address;
+    use std::net::SocketAddr;
 
-    /// Every special-purpose form is refused; ordinary public hosts are accepted. Embedded IPv4:
-    /// the well-known NAT64 prefix follows the embedded address, every other form is refused even
-    /// around a public address.
+    use url::Url;
+
+    use super::{Network, OutboundPolicy, PublicOnly};
+
+    fn public_only(allow_hosts: &[&str], allow: &[&str], deny: &[&str]) -> OutboundPolicy {
+        let networks = |list: &[&str]| list.iter().map(|text| text.parse().unwrap()).collect();
+        OutboundPolicy::PublicOnly(PublicOnly::new(
+            allow_hosts.iter().map(|host| (*host).to_owned()).collect(),
+            networks(allow),
+            networks(deny),
+        ))
+    }
+
+    /// Literal addresses are checked before a request is sent, in every form the URL parser
+    /// accepts for them (decimal, octal, hexadecimal and shortened IPv4, IPv6 with an embedded
+    /// IPv4); host names wait for their resolution; only http(s) is allowed.
     #[test]
-    fn only_globally_routable_unicast_addresses_are_public() {
-        let public = [
-            "1.1.1.1",
-            "8.8.8.8",
-            "93.184.215.14",
-            "100.63.255.255",
-            "100.128.0.0",
-            "172.15.255.255",
-            "172.32.0.0",
-            "192.0.1.1",
-            "192.88.98.1",
-            "198.17.255.255",
-            "198.20.0.0",
-            "223.255.255.255",
-            "2606:4700:4700::1111",
-            "2001:4860:4860::8888",
-            "2a00:1450:4001:80b::200e",
-            "2001:200::1",
-            "2003::1",
-            "64:ff9b::808:808",
-            "64:ff9b::5db8:d70e",
-        ];
-        let refused = [
-            "0.0.0.0",
-            "0.1.2.3",
-            "10.0.0.1",
-            "100.64.0.1",
-            "100.127.255.255",
-            "127.0.0.1",
-            "169.254.169.254",
-            "172.16.0.1",
-            "172.31.255.255",
-            "192.0.0.1",
-            "192.0.0.9",
-            "192.0.2.1",
-            "192.88.99.1",
-            "192.168.1.1",
-            "198.18.0.1",
-            "198.19.255.255",
-            "198.51.100.1",
-            "203.0.113.1",
-            "224.0.0.1",
-            "239.255.255.250",
-            "240.0.0.1",
-            "255.255.255.255",
-            "::",
-            "::1",
-            "::ffff:127.0.0.1",
-            "::ffff:192.0.0.1",
-            "::ffff:1.2.3.4",
-            "::10.0.0.1",
-            "64:ff9b::a00:1",
-            "64:ff9b::7f00:1",
-            "64:ff9b::c000:1",
-            "64:ff9b:1::a00:1",
-            "64:ff9b:1::808:808",
-            "100::1",
-            "2001::1",
-            "2001:0:4136:e378:8000:63bf:3fff:fdd2",
-            "2001:1ff::1",
-            "2001:db8::1",
-            "2002:a00:1::1",
-            "2002:808:808::1",
-            "2001:1::1",
-            "2001:4:112::1",
-            "3fff::1",
-            "3fff:fff:ffff::1",
-            "fc00::1",
-            "fd12:3456::1",
-            "fe80::1",
-            "fec0::1",
-            "ff02::1",
-            "1fff:ffff::1",
-            "4000::1",
-        ];
-        for raw in public {
-            assert!(is_public_address(raw.parse().unwrap()), "{raw} should be public");
+    fn urls_are_checked_by_scheme_and_literal_address() {
+        let policy = public_only(&[], &[], &[]);
+        let check = |raw: &str| policy.check_url(&Url::parse(raw).unwrap()).is_ok();
+        for allowed in [
+            "https://example.com/feed.xml",
+            "http://localhost./feed.xml",
+            "https://93.184.215.14/feed.xml",
+            "https://[2606:4700:4700::1111]/",
+        ] {
+            assert!(check(allowed), "{allowed}");
         }
-        for raw in refused {
-            assert!(!is_public_address(raw.parse().unwrap()), "{raw} should be refused");
+        for refused in [
+            "http://127.0.0.1:8080/",
+            "http://2130706433/",
+            "http://0x7f.1/",
+            "http://0177.0.0.1/",
+            "http://127.1/",
+            "http://[::1]/",
+            "http://[::ffff:127.0.0.1]/",
+            "http://[::ffff:93.184.215.14]/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://[fe80::1]/",
+            "file:///etc/passwd",
+            "ftp://example.com/",
+            "data:text/plain,hello",
+        ] {
+            assert!(!check(refused), "{refused}");
+        }
+        assert!(
+            OutboundPolicy::Unrestricted
+                .check_url(&Url::parse("http://127.0.0.1/").unwrap())
+                .is_ok()
+        );
+    }
+
+    /// Exceptions: an allowed network or host name lets a private address through; a denied
+    /// network refuses even a public one and wins over the exceptions.
+    #[test]
+    fn allow_and_deny_lists() {
+        let OutboundPolicy::PublicOnly(policy) =
+            public_only(&["DAV.Internal."], &["10.1.0.0/16"], &["93.184.0.0/16", "10.1.2.0/24"])
+        else {
+            unreachable!()
+        };
+        let ip = |raw: &str| raw.parse().unwrap();
+        assert!(policy.allows(None, ip("10.1.9.9")));
+        assert!(!policy.allows(None, ip("10.2.0.1")));
+        assert!(!policy.allows(None, ip("10.1.2.3")), "deny wins over an allowed network");
+        assert!(policy.allows(Some("dav.internal"), ip("192.168.1.5")));
+        assert!(policy.allows(Some("dav.internal."), ip("192.168.1.5")));
+        assert!(!policy.allows(Some("other.internal"), ip("192.168.1.5")));
+        assert!(!policy.allows(Some("dav.internal"), ip("10.1.2.3")), "deny wins over a host");
+        assert!(!policy.allows(None, ip("93.184.215.14")), "a denied public network");
+        assert!(policy.allows(None, ip("1.1.1.1")));
+    }
+
+    /// One refused answer refuses the whole resolution: the connection must not be able to fall
+    /// back to it (a rebinding answer next to a public one).
+    #[test]
+    fn a_resolution_with_any_refused_answer_is_refused() {
+        let OutboundPolicy::PublicOnly(policy) = public_only(&[], &[], &[]) else { unreachable!() };
+        let address = |raw: &str| SocketAddr::new(raw.parse().unwrap(), 0);
+        let public = vec![address("1.1.1.1"), address("2606:4700:4700::1111")];
+        assert_eq!(policy.checked("example.com", public.clone()).unwrap(), public);
+        assert!(
+            policy.checked("example.com", vec![address("1.1.1.1"), address("10.0.0.1")]).is_err()
+        );
+        assert!(policy.checked("example.com", Vec::new()).is_err());
+    }
+
+    /// A real resolution through the policy's resolver: `localhost` is refused unless allowed by
+    /// name.
+    #[tokio::test]
+    async fn the_resolver_refuses_names_that_resolve_to_refused_addresses() {
+        use reqwest::dns::Resolve;
+        let resolve = |policy: OutboundPolicy| async move {
+            let OutboundPolicy::PublicOnly(policy) = policy else { unreachable!() };
+            super::PolicyResolver(policy).resolve("localhost".parse().unwrap()).await
+        };
+        assert!(resolve(public_only(&[], &[], &[])).await.is_err());
+        let allowed = resolve(public_only(&["localhost"], &[], &[])).await.unwrap();
+        assert!(allowed.into_iter().all(|address| address.ip().is_loopback()));
+    }
+
+    #[test]
+    fn networks_parse_as_cidr_or_single_addresses() {
+        let network: Network = "10.0.0.0/8".parse().unwrap();
+        assert!(network.contains("10.255.0.1".parse().unwrap()));
+        assert!(!network.contains("11.0.0.1".parse().unwrap()));
+        let single: Network = "192.168.1.5".parse().unwrap();
+        assert!(single.contains("192.168.1.5".parse().unwrap()));
+        assert!(!single.contains("192.168.1.6".parse().unwrap()));
+        let v6: Network = "fd00::/8".parse().unwrap();
+        assert!(v6.contains("fd12::1".parse().unwrap()));
+        assert!(!v6.contains("10.0.0.1".parse().unwrap()), "families never mix");
+        for invalid in ["10.0.0.0/33", "fd00::/129", "example.com", "10.0.0.0/x", ""] {
+            assert!(invalid.parse::<Network>().is_err(), "{invalid}");
         }
     }
 }

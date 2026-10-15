@@ -31,6 +31,8 @@ tracing.workspace = true
 url.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The outbound policy resolves host names itself (crate::outbound).
+tokio = { workspace = true, features = ["net"] }
 reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "stream", "rustls-tls"] }
 # Library storage (crate::store). The bundled SQLite must be at least 3.51.3: earlier versions
 # have the WAL-reset bug (https://sqlite.org/wal.html#walreset); guarded by
