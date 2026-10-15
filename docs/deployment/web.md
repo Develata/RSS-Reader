@@ -45,6 +45,7 @@ printf '%s\n' '新的强密码' | docker compose exec -T rss-reader rssr-web pas
 - 退出登录：打开 `/logout`，在确认页点“退出登录”。这会吊销这个浏览器的会话；复制出去的 cookie 也随之失效。
 - 改密码（`rssr-web passwd`）吊销全部会话；`rssr-web sessions revoke-all` 只吊销会话、保留密码，例如怀疑 cookie 泄露或恢复备份之后。
 - 服务器时钟要准确（NTP 同步）：时钟回拨超过 5 分钟时，相关会话会被作废，需要重新登录。
+- 认证库写入失败（例如磁盘满）时偏于拒绝：需要记录使用时间却写不进时，这次请求返回 503；已判定失效的会话即使删除失败也不再被接受。
 - 没有设置 `RSS_READER_WEB_PUBLIC_ORIGIN` 时（只允许开发环境），服务只能监听回环地址，并只信任与监听地址一致的 `http://127.0.0.1:<端口>` 和 `http://localhost:<端口>`。
 
 ## 正式部署
@@ -115,7 +116,7 @@ cargo run --locked -p rssr-web
 
 ## 其他配置与构建
 
-[`docker-compose.yml`](../../docker-compose.yml) 是环境变量和健康检查的权威模板。数据目录由 `RSSR_DATA_DIR`（或 `--data-dir`）指定，镜像内默认 `/data`；目录与 `auth.sqlite3` 必须属于运行服务的用户，其他用户不能写入目录、不能读取认证库，否则服务拒绝启动。在容器里运行 `rssr-web passwd` 等子命令时，用镜像默认的运行用户（`docker compose exec` 的默认值）。可选项还有 `RSS_READER_IMAGE` 和 `RSS_READER_PORT`。`RSS_READER_WEB_ENV` 默认为 `development`，正式部署应显式设置。
+[`docker-compose.yml`](../../docker-compose.yml) 是环境变量和健康检查的权威模板。数据目录由 `RSSR_DATA_DIR`（或 `--data-dir`）指定，镜像内默认 `/data`；目录与 `auth.sqlite3`（以及已有的 `-wal`、`-shm`、`-journal` 文件）必须属于运行服务的用户，其他用户不能写入目录、不能读取认证库，否则服务拒绝启动。这些检查只在 Linux 等 Unix 系统上进行；Windows 上不检查文件 ACL，服务器部署请使用 Linux 或容器。在容器里运行 `rssr-web passwd` 等子命令时，用镜像默认的运行用户（`docker compose exec` 的默认值）。可选项还有 `RSS_READER_IMAGE` 和 `RSS_READER_PORT`。`RSS_READER_WEB_ENV` 默认为 `development`，正式部署应显式设置。
 
 要从当前源码构建镜像：
 

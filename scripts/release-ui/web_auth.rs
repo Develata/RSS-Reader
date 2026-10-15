@@ -15,11 +15,19 @@ pub fn spawn(root: &Path, profile: &str, port: u16, logs: &Path) -> io::Result<O
     let log = logs.join("rssr-web.log");
     File::create(&log)?;
     let mut command = Command::new("cargo");
+    // The caller's deployment settings (public origin, seed credentials, environment) must
+    // not reach the smoke service: only the variables set below apply.
+    for (name, _) in std::env::vars_os() {
+        if name.to_string_lossy().starts_with("RSS_READER_WEB_") {
+            command.env_remove(&name);
+        }
+    }
     // profile selects only the static bundle. The server has always used the
     // default Cargo profile, including when the bundle is a release build.
     command
         .current_dir(root)
         .args(["run", "--locked", "-p", "rssr-web"])
+        .env("RSS_READER_WEB_ENV", "development")
         .env("RSS_READER_WEB_BIND", format!("127.0.0.1:{port}"))
         .env("RSS_READER_WEB_STATIC_DIR", format!("target/dx/rssr-app/{profile}/web/public"))
         .env("RSS_READER_WEB_USERNAME", "smoke")

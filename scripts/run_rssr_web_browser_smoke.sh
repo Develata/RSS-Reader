@@ -126,6 +126,9 @@ cat >"$summary_file" <<EOF
 - 这条 smoke 当前仍是手工项，原因不是 selector 不稳定，而是当前仓库环境里的 Chrome MCP / DevTools 连接不稳定，尚未形成可重复的浏览器端 UI 自动化。
 EOF
 
+# The caller's deployment settings (public origin, seed credentials, environment) must not reach
+# this smoke service: only the variables set below apply.
+for variable in $(compgen -e | grep '^RSS_READER_WEB_' || true); do unset "$variable"; done
 RSS_READER_WEB_BIND="127.0.0.1:${port}" \
 RSS_READER_WEB_STATIC_DIR="$public_dir" \
 RSS_READER_WEB_USERNAME="$username" \

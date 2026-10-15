@@ -45,12 +45,14 @@ pub(crate) fn credentials_match(
 /// 1. `RSS_READER_WEB_PASSWORD_HASH`；
 /// 2. `RSS_READER_WEB_PASSWORD`（在这里生成哈希）；
 /// 3. v0.1 认证状态文件里的哈希（只读）。
+///
+/// 设置了却不可用的来源（不是 Unicode、不是可用的 Argon2 哈希）是错误，不跳到下一个来源。
 pub(crate) fn initial_credential() -> Result<(String, String)> {
-    if let Some(hash) = optional_env("RSS_READER_WEB_PASSWORD_HASH") {
+    if let Some(hash) = optional_env("RSS_READER_WEB_PASSWORD_HASH")? {
         validate_password_hash(&hash, "RSS_READER_WEB_PASSWORD_HASH")?;
         return Ok((hash, "RSS_READER_WEB_PASSWORD_HASH".to_owned()));
     }
-    if let Some(password) = optional_env("RSS_READER_WEB_PASSWORD") {
+    if let Some(password) = optional_env("RSS_READER_WEB_PASSWORD")? {
         return Ok((generate_password_hash(&password)?, "RSS_READER_WEB_PASSWORD".to_owned()));
     }
     let file = resolve_auth_state_file();
@@ -64,15 +66,38 @@ pub(crate) fn initial_credential() -> Result<(String, String)> {
     )
 }
 
-fn optional_env(name: &str) -> Option<String> {
-    env::var(name).ok().and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_string())
-    })
+/// 未设置或为空（Compose 用空字符串表示未提供）时为 `None`；不是 Unicode 时是错误。
+fn optional_env(name: &str) -> Result<Option<String>> {
+    match env::var(name) {
+        Ok(value) => {
+            let trimmed = value.trim();
+            Ok((!trimmed.is_empty()).then(|| trimmed.to_string()))
+        }
+        Err(env::VarError::NotPresent) => Ok(None),
+        Err(env::VarError::NotUnicode(_)) => bail!("环境变量 {name} 不是合法的 Unicode"),
+    }
 }
 
+/// 只接受能核对密码的 Argon2 哈希：算法、版本与参数受支持，并且带盐与哈希值。通用的 PHC
+/// 解析允许省略盐与哈希值（例如 `$argon2id`），这样的串核对不了任何密码。不靠试算一次来
+/// 判断：缺少盐或哈希值时核对结果与密码错误无法区分，试算还可能按参数分配大量内存。
 fn validate_password_hash(raw: &str, source: &str) -> Result<()> {
-    PasswordHash::new(raw).map_err(|_| anyhow!("{source} 不是合法的 Argon2 哈希"))?;
+    let usable = PasswordHash::new(raw).is_ok_and(|hash| {
+        let mut salt = [0_u8; 64];
+        argon2::Algorithm::try_from(hash.algorithm).is_ok()
+            && hash.version.is_none_or(|version| argon2::Version::try_from(version).is_ok())
+            && argon2::Params::try_from(&hash).is_ok()
+            && hash.hash.is_some()
+            && hash.salt.is_some_and(|salt_b64| {
+                salt_b64
+                    .decode_b64(&mut salt)
+                    .is_ok_and(|bytes| bytes.len() >= argon2::MIN_SALT_LEN)
+            })
+    });
+    ensure!(
+        usable,
+        "{source} 不是可用的 Argon2 哈希：需要 argon2id、argon2i 或 argon2d，带合法的参数、盐与哈希值"
+    );
     Ok(())
 }
 
@@ -131,6 +156,47 @@ mod tests {
         assert!(initial_credential().is_err());
         unsafe { set("RSS_READER_WEB_PASSWORD_HASH", "not-a-hash") }
         assert!(initial_credential().is_err(), "an invalid hash is not skipped");
+        unsafe { clear() }
+    }
+
+    /// 只有能核对密码的 Argon2 哈希才能成为初始凭据（评审 S2）。
+    #[test]
+    fn only_usable_argon2_hashes_are_accepted() {
+        let generated = generate_password_hash("a-usable-password").unwrap();
+        validate_password_hash(&generated, "generated").unwrap();
+        for unusable in [
+            "$argon2id",
+            "$argon2id$v=19$m=19456,t=2,p=1",
+            "$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHQ",
+            "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaGhhc2hoYXNoaGFzaA",
+            "$argon2id$v=99$m=19456,t=2,p=1$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA",
+            "$argon2id$v=19$m=1,t=2,p=1$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA",
+            "$argon2id$v=19$m=19456,t=2,p=1,x=1$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA",
+            "$scrypt$ln=16,r=8,p=1$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA",
+            "not-a-hash",
+        ] {
+            assert!(validate_password_hash(unusable, "test").is_err(), "{unusable}");
+        }
+        validate_password_hash(
+            "$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA",
+            "well-formed",
+        )
+        .expect("a well-formed hash");
+    }
+
+    /// 设置了却不是 Unicode 的凭据变量是错误，不当作未设置而换用下一个来源（评审 S3）。
+    #[cfg(unix)]
+    #[test]
+    fn a_seed_variable_that_is_not_unicode_is_an_error() {
+        use std::os::unix::ffi::OsStrExt;
+        let _guard = test_env::lock();
+        unsafe {
+            clear();
+            set("RSS_READER_WEB_PASSWORD_HASH", std::ffi::OsStr::from_bytes(b"\xff\xfe"));
+            set("RSS_READER_WEB_PASSWORD", "a-fallback-password");
+        }
+        let error = initial_credential().unwrap_err().to_string();
+        assert!(error.contains("RSS_READER_WEB_PASSWORD_HASH"), "{error}");
         unsafe { clear() }
     }
 }

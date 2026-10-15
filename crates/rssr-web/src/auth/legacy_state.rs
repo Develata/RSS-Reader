@@ -19,10 +19,11 @@ struct LegacyAuthState {
     password_hash: String,
 }
 
+/// 设置了就用它（操作系统路径不必是 Unicode），否则用默认路径。
 pub(super) fn resolve_auth_state_file() -> PathBuf {
-    env::var("RSS_READER_WEB_AUTH_STATE_FILE")
+    env::var_os("RSS_READER_WEB_AUTH_STATE_FILE")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| default_auth_state_dir().join(DEFAULT_AUTH_STATE_FILE_NAME))
+        .unwrap_or_else(|| default_auth_state_dir().join(DEFAULT_AUTH_STATE_FILE_NAME))
 }
 
 /// 旧文件里的密码哈希；文件不存在时为 `None`。文件存在却读不出或格式不对是错误：

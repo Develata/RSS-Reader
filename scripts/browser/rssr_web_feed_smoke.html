@@ -123,7 +123,6 @@
         () => feedCard.querySelector('[data-action="refresh-feed"]'),
         "refresh-feed button"
       );
-      const refreshStateBefore = feedCard.dataset.refreshState || "unknown";
       const lastFetchedAtBefore = BigInt(feedCard.dataset.lastFetchedAt || "0");
       refreshButton.click();
       log("clicked refresh-feed");
@@ -135,10 +134,8 @@
           if (refreshStateAfter === "failed") {
             throw new Error(`refresh failed: ${feedCard.dataset.fetchError || "unknown error"}`);
           }
-          if (refreshStateAfter !== refreshStateBefore && refreshStateAfter !== "never") {
-            return feedCard;
-          }
-          if (lastFetchedAtAfter > lastFetchedAtBefore && refreshStateAfter !== "never") {
+          // Only this refresh succeeding counts: the state says success and the fetch time moved.
+          if (refreshStateAfter === "success" && lastFetchedAtAfter > lastFetchedAtBefore) {
             return feedCard;
           }
           return null;

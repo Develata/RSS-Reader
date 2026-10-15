@@ -188,6 +188,9 @@ if [[ "$use_existing_servers" != "true" ]]; then
     exit 1
   fi
 
+  # The caller's deployment settings (public origin, seed credentials, environment) must not reach
+  # this smoke service: only the variables set below apply.
+  for variable in $(compgen -e | grep '^RSS_READER_WEB_' || true); do unset "$variable"; done
   # The feed smoke page and fixture are static files in a copy of the bundle.
   bash scripts/prepare_rssr_web_feed_smoke.sh "$public_dir" "$rssr_web_public_dir"
   RSS_READER_WEB_BIND="127.0.0.1:${rssr_web_port}" \

@@ -15,6 +15,7 @@ use crate::{
 
 struct Server {
     base: String,
+    state: AppState,
     store: Arc<AuthStore>,
     client: Client,
     _dir: ScratchDir,
@@ -34,10 +35,10 @@ impl Server {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let local = listener.local_addr().unwrap();
         let state = AppState::new(Arc::new(config), Arc::clone(&store), local).unwrap();
-        let service = app(state).into_make_service_with_connect_info::<SocketAddr>();
+        let service = app(state.clone()).into_make_service_with_connect_info::<SocketAddr>();
         tokio::spawn(async move { axum::serve(listener, service).await.unwrap() });
         let client = Client::builder().redirect(Policy::none()).no_proxy().build().unwrap();
-        Self { base: format!("http://{local}"), store, client, _dir: dir }
+        Self { base: format!("http://{local}"), state, store, client, _dir: dir }
     }
 
     fn url(&self, path: &str) -> String {
@@ -328,4 +329,27 @@ async fn a_public_origin_is_the_only_trusted_one() {
     for name in ["rssr_web_session", "rssr_web_gate", "rssr_web_device"] {
         assert!(set_cookie(&response, name).unwrap().contains("; Secure"), "{name}");
     }
+}
+
+/// Session checks are bounded: with every slot taken, requests that carry a session cookie are
+/// refused at once with 503 (JSON under /api), while requests without one still work.
+#[tokio::test]
+async fn session_checks_are_bounded() {
+    let server = Server::start(None).await;
+    let session = server.session().await;
+    let busy = server.state.exhaust_session_checks();
+
+    assert_eq!(
+        server.get("/entries", Some(&session)).await.status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    let response = server.get("/api/v1/session", Some(&session)).await;
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(json_code(response).await, "busy");
+    assert_eq!(server.get("/login", None).await.status(), StatusCode::OK);
+    let response = server.get("/entries", None).await;
+    assert_eq!(location(&response), "/login?next=%2Fentries", "no cookie, no check needed");
+
+    drop(busy);
+    assert_eq!(server.get("/entries", Some(&session)).await.status(), StatusCode::OK);
 }

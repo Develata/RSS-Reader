@@ -16,7 +16,15 @@
 //! - 绝对上限 [`ABSOLUTE`]，按创建时间计，不依赖浏览器丢弃 cookie；
 //! - 当前时间早于最后使用时间超过 [`CLOCK_TOLERANCE`]（时钟回拨）时拒绝；
 //! - 任何拒绝都删除该会话，之后的时钟变化不能让它复活；续期只更新仍存在的行。
+//!
+//! 写入失败时偏于关闭：
+//! - 删除失败的会话记在本进程的待吊销集合里，一直拒绝，再次出示时重试删除；
+//! - 需要续期却写不进使用时间，校验返回错误，请求被拒绝（这次使用没有记录就不放行）；
+//! - 服务器启动时清理已经失效的会话（[`AuthStore::purge_expired`]），认证库不可写时启动失败。
+//!   待吊销集合在重启后丢失：仅因时钟回拨被拒绝、删除又失败的会话，重启后按当时（可信）的
+//!   时钟重新判定。
 
+use std::collections::HashSet;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
@@ -135,6 +143,8 @@ enum Verdict {
 #[derive(Debug, PartialEq, Eq)]
 enum Rejection {
     ClockSetBack,
+    /// 不可能的记录（创建晚于最后使用、凭据代数不为正）：不按它计算期限。
+    Corrupt,
     CredentialChanged,
     Absolute,
     Idle,
@@ -143,13 +153,17 @@ enum Rejection {
 impl Stored {
     /// 会话在 `now` 是否有效。
     ///
-    /// 不变式：库里的 `last_used_at` 不晚于最后一次真实使用，且真实使用 `t` 满足
-    /// `t < last_used_at + RECORD_GRANULARITY`（再晚的使用会触发续期）。因此空闲期限
-    /// `last_used_at + IDLE + RECORD_GRANULARITY` 晚于 `t + IDLE`（不提前过期），且不晚于
-    /// `t + IDLE + RECORD_GRANULARITY`（最多晚一个粒度）。差值用饱和减法，库里的异常值不会溢出。
+    /// 不变式：库里的 `last_used_at` 不晚于最后一次被放行的使用，且每次被放行的使用 `t` 满足
+    /// `t < last_used_at + RECORD_GRANULARITY`：再晚的使用要么续期成功，要么不被放行
+    /// （[`AuthStore::validate`]）。因此空闲期限 `last_used_at + IDLE + RECORD_GRANULARITY` 晚于
+    /// `t + IDLE`（不提前过期），且不晚于 `t + IDLE + RECORD_GRANULARITY`（最多晚一个粒度）。
+    /// 差值用饱和减法，库里的异常值不会溢出。
     fn verdict(&self, now: i64) -> Verdict {
         if self.last_used_at.saturating_sub(now) > CLOCK_TOLERANCE {
             return Verdict::Reject(Rejection::ClockSetBack);
+        }
+        if self.created_at > self.last_used_at || self.generation < 1 {
+            return Verdict::Reject(Rejection::Corrupt);
         }
         if self.generation != self.current_generation {
             return Verdict::Reject(Rejection::CredentialChanged);
@@ -167,7 +181,29 @@ impl Stored {
 
 /// 打开的认证库。一个连接，操作都很短，调用方在阻塞线程上调用。
 pub(crate) struct AuthStore {
-    connection: Mutex<Connection>,
+    inner: Mutex<Inner>,
+}
+
+struct Inner {
+    connection: Connection,
+    /// 已判定失效、删除却失败的会话摘要。本进程内一直拒绝它们，再次出示时重试删除。
+    pending_revocations: HashSet<[u8; 32]>,
+}
+
+impl Inner {
+    /// 删除失效的会话。删除失败时记住它：在删除成功之前，本进程不再接受它。
+    fn revoke(&mut self, digest: &[u8; 32]) -> Result<()> {
+        match delete_session(&self.connection, digest) {
+            Ok(()) => {
+                self.pending_revocations.remove(digest);
+                Ok(())
+            }
+            Err(error) => {
+                self.pending_revocations.insert(*digest);
+                Err(error)
+            }
+        }
+    }
 }
 
 impl AuthStore {
@@ -190,18 +226,21 @@ impl AuthStore {
         // 改密码与吊销会话在提交后必须落盘。
         connection.pragma_update(None, "synchronous", "FULL")?;
         migrate(&mut connection).with_context(|| format!("无法初始化认证库 {}", path.display()))?;
-        Ok(Self { connection: Mutex::new(connection) })
+        Ok(Self { inner: Mutex::new(Inner { connection, pending_revocations: HashSet::new() }) })
     }
 
-    fn connection(&self) -> MutexGuard<'_, Connection> {
+    fn lock(&self) -> MutexGuard<'_, Inner> {
         // 持锁时 panic 的语句已随事务回滚，连接本身仍可用。
-        self.connection.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// 是否已有所有者凭据。
     pub(crate) fn has_owner(&self) -> Result<bool> {
-        let found: Option<i64> =
-            self.connection().query_row("SELECT 1 FROM owner", [], |row| row.get(0)).optional()?;
+        let found: Option<i64> = self
+            .lock()
+            .connection
+            .query_row("SELECT 1 FROM owner", [], |row| row.get(0))
+            .optional()?;
         Ok(found.is_some())
     }
 
@@ -212,7 +251,7 @@ impl AuthStore {
             return Ok(false);
         }
         let password_hash = seed()?;
-        let inserted = self.connection().execute(
+        let inserted = self.lock().connection.execute(
             "INSERT INTO owner (id, password_hash, generation, device_key) VALUES (1, ?1, 1, ?2)
              ON CONFLICT (id) DO NOTHING",
             params![password_hash, random_key()],
@@ -223,7 +262,8 @@ impl AuthStore {
     /// 设备标记的签名密钥。
     pub(crate) fn device_key(&self) -> Result<[u8; 32]> {
         let key: Option<Vec<u8>> = self
-            .connection()
+            .lock()
+            .connection
             .query_row("SELECT device_key FROM owner", [], |row| row.get(0))
             .optional()?;
         let Some(key) = key else { bail!("认证库里还没有所有者凭据") };
@@ -233,7 +273,8 @@ impl AuthStore {
     /// 读出所有者凭据：哈希与凭据代数来自同一次读取。服务器不缓存哈希。
     pub(crate) fn credential(&self) -> Result<Option<Credential>> {
         Ok(self
-            .connection()
+            .lock()
+            .connection
             .query_row("SELECT password_hash, generation FROM owner", [], |row| {
                 Ok(Credential { password_hash: row.get(0)?, generation: row.get(1)? })
             })
@@ -248,13 +289,10 @@ impl AuthStore {
         now: i64,
     ) -> Result<Option<SessionToken>> {
         let token = SessionToken::generate();
-        let connection = self.connection();
-        connection.execute(
-            "DELETE FROM sessions WHERE created_at <= ?1 - ?2 OR last_used_at <= ?1 - ?3",
-            params![now, ABSOLUTE, IDLE + RECORD_GRANULARITY],
-        )?;
+        let inner = self.lock();
+        purge(&inner.connection, now)?;
         // 一条语句里再读一次凭据代数：与改密码的事务互斥，不会插入旧凭据下的会话。
-        let inserted = connection.execute(
+        let inserted = inner.connection.execute(
             "INSERT INTO sessions (digest, created_at, last_used_at, generation)
              SELECT ?1, ?2, ?2, generation FROM owner WHERE generation = ?3",
             params![token.digest(), now, credential.generation],
@@ -264,38 +302,56 @@ impl AuthStore {
 
     /// 会话在 `now` 是否有效；有效时按需续期，无效时删除。
     ///
-    /// 删除失败也照样拒绝；续期失败只记日志，会话仍有效（它已被判定有效，续期只影响空闲期限）。
+    /// - 待吊销的会话（此前删除失败）一律拒绝，并重试删除；
+    /// - 判定失效即删除；删除失败照样拒绝，并记为待吊销；
+    /// - 需要续期而写入失败时返回错误：这次使用没有记录，就不放行，空闲期限因此不会提前到来。
     pub(crate) fn validate(&self, token: &SessionToken, now: i64) -> Result<bool> {
         let digest = token.digest();
-        let connection = self.connection();
-        let Some(stored) = read_session(&connection, &digest)? else {
+        let mut inner = self.lock();
+        if inner.pending_revocations.contains(&digest) {
+            if let Err(error) = inner.revoke(&digest) {
+                warn!(%error, "仍无法删除待吊销的会话，继续拒绝它");
+            }
+            return Ok(false);
+        }
+        let Some(stored) = read_session(&inner.connection, &digest)? else {
             return Ok(false);
         };
         match stored.verdict(now) {
             Verdict::Reject(rejection) => {
-                if let Err(error) = delete_session(&connection, &digest) {
-                    warn!(?rejection, %error, "删除被拒绝的会话失败");
+                if let Err(error) = inner.revoke(&digest) {
+                    warn!(?rejection, %error, "删除失效的会话失败，本进程内继续拒绝它");
                 }
                 Ok(false)
             }
-            Verdict::Valid { renew } => {
-                if renew && let Err(error) = renew_session(&connection, &digest, now) {
-                    warn!(%error, "记录会话的使用时间失败");
+            Verdict::Valid { renew: false } => Ok(true),
+            Verdict::Valid { renew: true } => {
+                if renew_session(&inner.connection, &digest, now)? {
+                    return Ok(true);
                 }
-                Ok(true)
+                // 没有更新任何行：别的进程已经续期（行还在）或删除了它（行不在）。
+                Ok(read_session(&inner.connection, &digest)?
+                    .is_some_and(|stored| matches!(stored.verdict(now), Verdict::Valid { .. })))
             }
         }
     }
 
-    /// 吊销一个会话（退出登录）。
+    /// 吊销一个会话（退出登录）。删除失败时返回错误，但本进程内不再接受这个会话。
     pub(crate) fn revoke(&self, token: &SessionToken) -> Result<()> {
-        delete_session(&self.connection(), &token.digest())
+        self.lock().revoke(&token.digest())
+    }
+
+    /// 删除按 `now` 已经失效的会话（空闲、绝对上限、不可能的记录、旧凭据下的会话）。服务器
+    /// 启动时调用：待吊销集合不跨重启，过期的会话在这里落实删除；认证库不可写时启动失败。
+    pub(crate) fn purge_expired(&self, now: i64) -> Result<usize> {
+        purge(&self.lock().connection, now)
     }
 
     /// 改密码：在一个事务里换哈希、凭据代数加一、删除全部会话。还没有凭据时建立它。
     pub(crate) fn change_password(&self, password_hash: &str) -> Result<()> {
-        let mut connection = self.connection();
-        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut inner = self.lock();
+        let transaction =
+            inner.connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let updated = transaction.execute(
             "UPDATE owner SET password_hash = ?1, generation = generation + 1",
             [password_hash],
@@ -313,8 +369,22 @@ impl AuthStore {
 
     /// 吊销全部会话，保留凭据（恢复备份时用）。返回吊销的数目。
     pub(crate) fn revoke_all(&self) -> Result<usize> {
-        Ok(self.connection().execute("DELETE FROM sessions", [])?)
+        Ok(self.lock().connection.execute("DELETE FROM sessions", [])?)
     }
+}
+
+/// 删除按 `now` 已经失效的会话，返回删除的数目。条件与 [`Stored::verdict`] 的拒绝条件一致
+/// （时钟回拨除外：它只在会话被出示时判定）。
+fn purge(connection: &Connection, now: i64) -> Result<usize> {
+    Ok(connection.execute(
+        "DELETE FROM sessions
+         WHERE created_at <= ?1 - ?2
+            OR last_used_at <= ?1 - ?3
+            OR created_at > last_used_at
+            OR generation < 1
+            OR generation <> (SELECT generation FROM owner)",
+        params![now, ABSOLUTE, IDLE + RECORD_GRANULARITY],
+    )?)
 }
 
 fn read_session(connection: &Connection, digest: &[u8; 32]) -> Result<Option<Stored>> {
@@ -340,14 +410,14 @@ fn delete_session(connection: &Connection, digest: &[u8; 32]) -> Result<()> {
     Ok(())
 }
 
-/// 记录使用时间。只更新仍存在的行（被删除的会话不会复活），只在距上次记录满一个粒度时写，
-/// 新值总比旧值晚（从不往回改）：并发的续期里只有一个真正写入。
-fn renew_session(connection: &Connection, digest: &[u8; 32], now: i64) -> Result<()> {
-    connection.execute(
+/// 记录使用时间，返回是否写入。只更新仍存在的行（被删除的会话不会复活），只在距上次记录满
+/// 一个粒度时写，新值总比旧值晚（从不往回改）：并发的续期里只有一个真正写入。
+fn renew_session(connection: &Connection, digest: &[u8; 32], now: i64) -> Result<bool> {
+    let updated = connection.execute(
         "UPDATE sessions SET last_used_at = ?2 WHERE digest = ?1 AND last_used_at <= ?2 - ?3",
         params![&digest[..], now, RECORD_GRANULARITY],
     )?;
-    Ok(())
+    Ok(updated == 1)
 }
 
 fn migrate(connection: &mut Connection) -> Result<()> {
@@ -371,8 +441,11 @@ fn random_key() -> [u8; 32] {
     key
 }
 
-/// 准备数据目录与认证库文件，返回文件路径。文件以 0600 新建（SQLite 的 `-wal`、`-shm` 沿用
-/// 它的权限）；已存在时必须是普通文件，Unix 上还要属于当前用户且其他用户无权访问。
+/// 准备数据目录与认证库文件，返回文件路径。
+///
+/// 文件以 0600 新建；SQLite 新建的 `-wal`、`-shm` 沿用它的权限。已存在的主库与伴随文件
+/// （`-wal`、`-shm`、`-journal`，例如恢复或异常退出留下的）都必须是普通文件；Unix 上还要属于
+/// 当前用户，且其他用户无权访问：已有的伴随文件不会因为主库是 0600 就被改正。
 fn prepare_file(data_dir: &Path) -> Result<PathBuf> {
     let mut builder = std::fs::DirBuilder::new();
     builder.recursive(true);
@@ -404,6 +477,22 @@ fn prepare_file(data_dir: &Path) -> Result<PathBuf> {
         }
         Err(error) => {
             return Err(error).with_context(|| format!("无法创建认证库 {}", path.display()));
+        }
+    }
+    for suffix in ["-wal", "-shm", "-journal"] {
+        let companion = data_dir.join(format!("{AUTH_DB}{suffix}"));
+        match std::fs::symlink_metadata(&companion) {
+            Ok(metadata) => {
+                if !metadata.file_type().is_file() {
+                    bail!("认证库的伴随文件 {} 不是普通文件", companion.display());
+                }
+                #[cfg(unix)]
+                check_private(&companion, &metadata, 0o077)?;
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| format!("无法读取 {}", companion.display()));
+            }
         }
     }
     Ok(path)
@@ -449,11 +538,15 @@ mod tests {
     }
 
     fn sessions(store: &AuthStore) -> i64 {
-        store.connection().query_row("SELECT count(*) FROM sessions", [], |row| row.get(0)).unwrap()
+        store
+            .lock()
+            .connection
+            .query_row("SELECT count(*) FROM sessions", [], |row| row.get(0))
+            .unwrap()
     }
 
     fn last_used(store: &AuthStore, token: &SessionToken) -> i64 {
-        read_session(&store.connection(), &token.digest()).unwrap().unwrap().last_used_at
+        read_session(&store.lock().connection, &token.digest()).unwrap().unwrap().last_used_at
     }
 
     /// 只在创建时用过一次的会话：第 29 天、第 30 天有效，30 天加 1 小时整前一秒仍有效，
@@ -504,7 +597,7 @@ mod tests {
         let scratch = Scratch::new("renew-statement");
         let store = open(&scratch);
         let token = login(&store, T0);
-        let renew = |now| renew_session(&store.connection(), &token.digest(), now).unwrap();
+        let renew = |now| renew_session(&store.lock().connection, &token.digest(), now).unwrap();
 
         renew(T0 + HOUR - 1);
         assert_eq!(last_used(&store, &token), T0, "less than a granularity later");
@@ -578,7 +671,7 @@ mod tests {
 
         let token = login(&store, T0);
         store.revoke(&token).unwrap();
-        renew_session(&store.connection(), &token.digest(), T0 + 2 * HOUR).unwrap();
+        renew_session(&store.lock().connection, &token.digest(), T0 + 2 * HOUR).unwrap();
         assert_eq!(sessions(&store), 0, "renewal never recreates a session");
         assert!(!store.validate(&token, T0 + 2 * HOUR).unwrap());
 
@@ -611,7 +704,11 @@ mod tests {
         let scratch = Scratch::new("generation");
         let store = open(&scratch);
         let token = login(&store, T0);
-        store.connection().execute("UPDATE owner SET generation = generation + 1", []).unwrap();
+        store
+            .lock()
+            .connection
+            .execute("UPDATE owner SET generation = generation + 1", [])
+            .unwrap();
         assert!(!store.validate(&token, T0 + 1).unwrap());
         assert_eq!(sessions(&store), 0);
     }
@@ -710,5 +807,158 @@ mod tests {
         let linked = Scratch::new("linked");
         std::os::unix::fs::symlink(&path, linked.path().join(AUTH_DB)).unwrap();
         assert!(AuthStore::open(linked.path()).is_err(), "a symbolic link");
+    }
+
+    /// Makes every write of `store` fail (SQLITE_READONLY) while reads keep working.
+    fn writes_fail(store: &AuthStore, fail: bool) {
+        store.lock().connection.pragma_update(None, "query_only", fail).unwrap();
+    }
+
+    /// 判定失效、删除却失败的会话不会因为时钟恢复而复活：本进程一直拒绝它，再次出示时重试
+    /// 删除（评审 B1）。时钟回拨与空闲过期两种拒绝都试。
+    #[test]
+    fn a_session_whose_deletion_failed_stays_rejected() {
+        let scratch = Scratch::new("pending");
+        let store = open(&scratch);
+
+        let rolled_back = login(&store, T0);
+        let recorded = T0 + 2 * HOUR;
+        assert!(store.validate(&rolled_back, recorded).unwrap());
+        writes_fail(&store, true);
+        assert!(!store.validate(&rolled_back, recorded - CLOCK_TOLERANCE - 1).unwrap());
+        assert!(!store.validate(&rolled_back, recorded + 10).unwrap(), "the clock came back");
+        assert_eq!(sessions(&store), 1, "the row is still there");
+
+        let idle = login_with_writes(&store, T0);
+        assert!(!store.validate(&idle, T0 + IDLE + HOUR).unwrap());
+        assert!(!store.validate(&idle, T0 + 1).unwrap(), "the clock went back before expiry");
+
+        writes_fail(&store, false);
+        assert!(!store.validate(&rolled_back, recorded + 20).unwrap());
+        assert!(!store.validate(&idle, T0 + 2).unwrap());
+        assert_eq!(sessions(&store), 0, "retried deletions succeeded");
+        assert!(store.lock().pending_revocations.is_empty());
+    }
+
+    /// Logs in while writes fail for everything else: the login itself must be written.
+    fn login_with_writes(store: &AuthStore, now: i64) -> SessionToken {
+        writes_fail(store, false);
+        let token = login(store, now);
+        writes_fail(store, true);
+        token
+    }
+
+    /// 退出登录时删除失败：报错，但本进程内这个会话已不再被接受。
+    #[test]
+    fn a_failed_logout_still_ends_the_session_here() {
+        let scratch = Scratch::new("failed-logout");
+        let store = open(&scratch);
+        let token = login(&store, T0);
+        writes_fail(&store, true);
+        assert!(store.revoke(&token).is_err());
+        assert!(!store.validate(&token, T0 + 1).unwrap());
+        writes_fail(&store, false);
+        assert!(!store.validate(&token, T0 + 2).unwrap());
+        assert_eq!(sessions(&store), 0);
+    }
+
+    /// 需要续期而写不进时不放行（评审 S1）；不需要续期时只读即可。
+    #[test]
+    fn a_use_that_cannot_be_recorded_is_refused() {
+        let scratch = Scratch::new("failed-renewal");
+        let store = open(&scratch);
+        let token = login(&store, T0);
+        writes_fail(&store, true);
+        assert!(store.validate(&token, T0 + HOUR - 1).unwrap(), "no renewal needed");
+        assert!(store.validate(&token, T0 + HOUR).is_err(), "a renewal that fails");
+        assert_eq!(last_used(&store, &token), T0);
+        writes_fail(&store, false);
+        assert!(store.validate(&token, T0 + HOUR).unwrap());
+        assert_eq!(last_used(&store, &token), T0 + HOUR);
+    }
+
+    /// 另一个进程续过期（这里不再写）或删掉了会话（这里随即拒绝）。
+    #[test]
+    fn renewal_and_deletion_by_another_process_are_seen() {
+        let scratch = Scratch::new("renewed-elsewhere");
+        let store = open(&scratch);
+        let token = login(&store, T0);
+        let other = AuthStore::open(scratch.path()).unwrap();
+        assert!(other.validate(&token, T0 + 2 * HOUR).unwrap());
+        // This store read the row before the other one renewed it: replay its decision.
+        assert!(!renew_session(&store.lock().connection, &token.digest(), T0 + 2 * HOUR).unwrap());
+        assert!(store.validate(&token, T0 + 2 * HOUR).unwrap());
+        other.revoke(&token).unwrap();
+        assert!(!store.validate(&token, T0 + 4 * HOUR).unwrap());
+    }
+
+    /// 待吊销集合不跨重启：启动时的清理落实过期会话的删除，旧凭据下的与不可能的记录也一并删除。
+    #[test]
+    fn the_startup_purge_deletes_what_a_restart_forgot() {
+        let scratch = Scratch::new("restart-purge");
+        let store = open(&scratch);
+        let expired = login(&store, T0);
+        let current = login(&store, T0 + 20 * DAY);
+        let impossible = login(&store, T0 + 20 * DAY);
+        writes_fail(&store, true);
+        assert!(!store.validate(&expired, T0 + IDLE + HOUR).unwrap());
+        writes_fail(&store, false);
+        store
+            .lock()
+            .connection
+            .execute(
+                "UPDATE sessions SET created_at = ?1 WHERE digest = ?2",
+                params![i64::MAX, &impossible.digest()[..]],
+            )
+            .unwrap();
+        drop(store);
+
+        let restarted = AuthStore::open(scratch.path()).unwrap();
+        assert_eq!(restarted.purge_expired(T0 + IDLE + HOUR).unwrap(), 2);
+        assert!(!restarted.validate(&expired, T0 + 1).unwrap());
+        assert!(restarted.validate(&current, T0 + IDLE + HOUR).unwrap());
+        assert_eq!(sessions(&restarted), 1);
+    }
+
+    /// 不可能的记录不按它计算期限（评审 N1）。
+    #[test]
+    fn an_impossible_record_is_rejected() {
+        let scratch = Scratch::new("impossible");
+        let store = open(&scratch);
+        for (column, value) in [("created_at", i64::MAX), ("generation", 0)] {
+            let token = login(&store, T0);
+            store
+                .lock()
+                .connection
+                .execute(
+                    &format!("UPDATE sessions SET {column} = ?1 WHERE digest = ?2"),
+                    params![value, &token.digest()[..]],
+                )
+                .unwrap();
+            assert!(!store.validate(&token, T0).unwrap(), "{column}");
+        }
+        assert_eq!(sessions(&store), 0);
+    }
+
+    /// 已有的伴随文件（恢复或异常退出留下的）同样检查：权限过宽或不是普通文件时拒绝打开
+    /// （评审 S4）。
+    #[cfg(unix)]
+    #[test]
+    fn existing_companion_files_are_checked() {
+        use std::os::unix::fs::PermissionsExt;
+        for suffix in ["-wal", "-shm", "-journal"] {
+            let scratch = Scratch::new("companion");
+            drop(open(&scratch));
+            let companion = scratch.path().join(format!("{AUTH_DB}{suffix}"));
+            std::fs::write(&companion, b"leftover pages").unwrap();
+            std::fs::set_permissions(&companion, std::fs::Permissions::from_mode(0o644)).unwrap();
+            assert!(AuthStore::open(scratch.path()).is_err(), "{suffix} readable by others");
+            std::fs::set_permissions(&companion, std::fs::Permissions::from_mode(0o600)).unwrap();
+            if suffix == "-journal" {
+                std::fs::remove_file(&companion).unwrap();
+                std::os::unix::fs::symlink("/tmp", &companion).unwrap();
+                assert!(AuthStore::open(scratch.path()).is_err(), "a linked {suffix}");
+            }
+        }
     }
 }

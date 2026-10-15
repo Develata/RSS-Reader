@@ -48,6 +48,10 @@ const MAX_CONCURRENT_CREDENTIAL_CHECKS: usize = 2;
 /// 带有效已知设备标记的请求另用的校验名额：其他来源占满上面的名额时，所有者登录过的浏览器
 /// 仍能校验密码。设备标记由服务端签发，攻击者无法批量制造（审计 F1）。
 const MAX_CONCURRENT_DEVICE_CREDENTIAL_CHECKS: usize = 1;
+/// 同时校验的会话上限。每个带会话 cookie 的请求（含静态资源）都要查一次认证库；名额满时
+/// 直接返回 503，不排队：随意伪造的 cookie 再多，阻塞线程池与等待队列也有界（评审 V1）。
+/// 正常的页面加载并发远低于这个数。
+const MAX_CONCURRENT_SESSION_CHECKS: usize = 64;
 /// 登录后的写请求携带 CSRF 令牌的请求头。
 pub(crate) const CSRF_HEADER: &str = "x-rssr-csrf";
 
@@ -60,6 +64,7 @@ pub(crate) struct AppState {
     pub(crate) login_throttle: Arc<Mutex<HashMap<String, LoginThrottleState>>>,
     credential_checks: Arc<Semaphore>,
     device_credential_checks: Arc<Semaphore>,
+    session_checks: Arc<Semaphore>,
 }
 
 impl AppState {
@@ -81,7 +86,16 @@ impl AppState {
             device_credential_checks: Arc::new(Semaphore::new(
                 MAX_CONCURRENT_DEVICE_CREDENTIAL_CHECKS,
             )),
+            session_checks: Arc::new(Semaphore::new(MAX_CONCURRENT_SESSION_CHECKS)),
         })
+    }
+
+    /// 测试用：占满会话校验名额。
+    #[cfg(test)]
+    pub(crate) fn exhaust_session_checks(&self) -> tokio::sync::OwnedSemaphorePermit {
+        Arc::clone(&self.session_checks)
+            .try_acquire_many_owned(MAX_CONCURRENT_SESSION_CHECKS as u32)
+            .expect("all session check slots")
     }
 
     fn secure(&self) -> bool {
@@ -167,7 +181,8 @@ enum CredentialCheck<T> {
 }
 
 /// 打开数据目录里的认证库；还没有凭据时按决定 Q1 的顺序建立它。已有凭据时，凭据环境变量
-/// 不再读取（改密码用 `rssr-web passwd`）。
+/// 不再读取（改密码用 `rssr-web passwd`）。最后清掉已经失效的会话：上次运行里删除失败的
+/// 会话（待吊销集合不跨重启）在这里落实删除，认证库不可写时启动失败。
 pub(crate) fn open_store(data_dir: &Path) -> Result<AuthStore> {
     let store = AuthStore::open(data_dir)?;
     let mut source = None;
@@ -180,6 +195,10 @@ pub(crate) fn open_store(data_dir: &Path) -> Result<AuthStore> {
         info!(source = source.as_deref().unwrap_or_default(), "已建立认证库的所有者凭据");
     } else if SEED_VARIABLES.iter().any(|name| std::env::var_os(name).is_some()) {
         warn!("认证库已有凭据，忽略 {}；改密码请用 rssr-web passwd", SEED_VARIABLES.join("、"));
+    }
+    let purged = store.purge_expired(now()).context("清理失效的会话失败")?;
+    if purged > 0 {
+        info!(purged, "启动时清理了失效的会话");
     }
     Ok(store)
 }
@@ -384,7 +403,10 @@ pub(crate) async fn confirm_logout(State(state): State<AppState>, headers: Heade
         Ok(SessionStatus::Valid(token)) => {
             no_store(Html(render_logout_page(&token.csrf())).into_response())
         }
-        Ok(_) => Redirect::to("/login").into_response(),
+        Ok(SessionStatus::Busy) => unavailable(),
+        Ok(SessionStatus::Missing | SessionStatus::Invalid) => {
+            Redirect::to("/login").into_response()
+        }
         Err(error) => {
             error!(%error, "校验会话失败");
             unavailable()
@@ -466,10 +488,13 @@ enum SessionStatus {
     Missing,
     /// 带了会话 cookie，但它无效（过期、被吊销，或者是旧版本的 cookie）。
     Invalid,
+    /// 会话校验名额已满，没有校验。
+    Busy,
     Valid(SessionToken),
 }
 
-/// 校验请求所带的会话，有效时按需续期。认证库出错时返回错误，调用方拒绝请求（偏于关闭）。
+/// 校验请求所带的会话，有效时按需续期。认证库出错（含该续期却写不进）时返回错误，调用方
+/// 拒绝请求（偏于关闭）。名额在派生阻塞任务之前取得，由任务持有到校验结束。
 async fn session_status(state: &AppState, headers: &HeaderMap) -> Result<SessionStatus> {
     let Some(value) = extract_cookie(headers, SESSION_COOKIE) else {
         return Ok(SessionStatus::Missing);
@@ -477,8 +502,12 @@ async fn session_status(state: &AppState, headers: &HeaderMap) -> Result<Session
     let Some(token) = SessionToken::parse(value) else {
         return Ok(SessionStatus::Invalid);
     };
+    let Ok(permit) = Arc::clone(&state.session_checks).try_acquire_owned() else {
+        return Ok(SessionStatus::Busy);
+    };
     let store = Arc::clone(&state.store);
     tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         Ok(if store.validate(&token, now())? {
             SessionStatus::Valid(token)
         } else {
@@ -524,6 +553,7 @@ pub(crate) async fn require_auth(
         Ok(SessionStatus::Valid(_)) => return next.run(request).await,
         Ok(SessionStatus::Invalid) => Some("session_expired"),
         Ok(SessionStatus::Missing) => None,
+        Ok(SessionStatus::Busy) => return unavailable(),
         Err(error) => {
             error!(%error, "校验会话失败");
             return unavailable();
@@ -543,7 +573,10 @@ async fn require_api_session(
 ) -> Response {
     let token = match session_status(&state, request.headers()).await {
         Ok(SessionStatus::Valid(token)) => token,
-        Ok(_) => {
+        Ok(SessionStatus::Busy) => {
+            return api_error(StatusCode::SERVICE_UNAVAILABLE, "busy", "服务器繁忙，请稍后再试");
+        }
+        Ok(SessionStatus::Missing | SessionStatus::Invalid) => {
             return api_error(StatusCode::UNAUTHORIZED, "unauthenticated", "未登录或登录已过期");
         }
         Err(error) => {

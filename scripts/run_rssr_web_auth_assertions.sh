@@ -18,6 +18,11 @@ replay_headers="rssr-web-session-replay.headers"
 logout_page_headers="rssr-web-logout-page.headers"
 logout_headers="rssr-web-logout.headers"
 revoked_headers="rssr-web-revoked.headers"
+api_unauthenticated_headers="rssr-web-api-unauthenticated.headers"
+api_unauthenticated_body="rssr-web-api-unauthenticated.json"
+relogin_headers="rssr-web-relogin.headers"
+relogin_probe_headers="rssr-web-relogin-probe.headers"
+relogin_jar="rssr-web-relogin.cookies"
 api_session_body="rssr-web-api-session.json"
 logout_page="rssr-web-logout.html"
 cookie_jar="rssr-web.cookies"
@@ -82,6 +87,8 @@ grep -Eq "^HTTP/.* 204" "$log_dir/$probe_headers"
 grep -Eq "^HTTP/.* 200" "$log_dir/$feeds_headers"
 grep -Eq "^HTTP/.* 200" "$log_dir/$settings_headers"
 grep -Eq "^HTTP/.* 200" "$log_dir/$api_session_headers"
+grep -Eiq "^content-type: application/json" "$log_dir/$api_session_headers"
+grep -Eiq "^cache-control: no-store" "$log_dir/$api_session_headers"
 grep -q '"csrf_token"' "$log_dir/$api_session_body"
 
 # Control for the replay below: the extracted session cookie works on its own.
@@ -95,7 +102,7 @@ grep -Eq "^HTTP/.* 200" "$log_dir/$logout_page_headers"
 csrf="$(sed -n 's/.*name="csrf" value="\([^"]*\)".*/\1/p' "$log_dir/$logout_page")"
 [[ -n "$csrf" ]]
 
-# The jar keeps what the login set; the logout response must clear the session cookie.
+# The jar keeps what the login set; the logout response must clear both cookies.
 curl -sS \
   -b "$cookie_jar" \
   -D "$logout_headers" \
@@ -107,9 +114,34 @@ curl -sS \
 grep -Eq "^HTTP/.* 30[237]" "$log_dir/$logout_headers"
 grep -Eq "location: /login|Location: /login" "$log_dir/$logout_headers"
 grep -Eiq "^set-cookie: rssr_web_session=deleted;.*Max-Age=0" "$log_dir/$logout_headers"
+grep -Eiq "^set-cookie: rssr_web_gate=deleted;.*Max-Age=0" "$log_dir/$logout_headers"
 
 # The server revoked the session: replaying the old cookie is refused.
 curl -sS -H "Cookie: rssr_web_session=${session_cookie}" -D "$revoked_headers" -o /dev/null \
   "${origin}/session-probe"
 grep -Eq "^HTTP/.* 30[237]" "$log_dir/$revoked_headers"
 grep -Eq "(location|Location): /login\?error=session_expired" "$log_dir/$revoked_headers"
+
+# Without a session the API answers JSON 401, never the app.
+curl -sS -D "$api_unauthenticated_headers" -o "$api_unauthenticated_body" "${origin}/api/v1/session"
+grep -Eq "^HTTP/.* 401" "$log_dir/$api_unauthenticated_headers"
+grep -Eiq "^content-type: application/json" "$log_dir/$api_unauthenticated_headers"
+grep -q '"unauthenticated"' "$log_dir/$api_unauthenticated_body"
+
+# Logging in again gives a new session, independent of the revoked one.
+curl -sS \
+  -c "$relogin_jar" \
+  -D "$relogin_headers" \
+  -o /dev/null \
+  -X POST \
+  -H "Origin: ${origin}" \
+  --data-urlencode "username=smoke" \
+  --data-urlencode "password=smoke-pass-123" \
+  --data-urlencode "next=/feeds" \
+  "${origin}/login"
+grep -Eq "^HTTP/.* 30[237]" "$log_dir/$relogin_headers"
+new_session_cookie="$(awk -F '\t' '$6 == "rssr_web_session" { sub(/\r$/, "", $7); print $7 }' "$log_dir/$relogin_jar")"
+[[ -n "$new_session_cookie" && "$new_session_cookie" != "$session_cookie" ]]
+curl -sS -H "Cookie: rssr_web_session=${new_session_cookie}" -D "$relogin_probe_headers" \
+  -o /dev/null "${origin}/session-probe"
+grep -Eq "^HTTP/.* 204" "$log_dir/$relogin_probe_headers"
