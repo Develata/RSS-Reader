@@ -26,14 +26,15 @@ pub fn list_feeds(state: &BrowserState) -> Vec<FeedSummary> {
         }
     }
 
-    let mut feeds = state
-        .core
-        .feeds
-        .iter()
-        .filter(|feed| !feed.is_deleted)
+    // Ordered by the whole title, shown cut, as in the native store; no title is copied whole
+    // (review C3-R2 R2-04).
+    let mut active = state.core.feeds.iter().filter(|feed| !feed.is_deleted).collect::<Vec<_>>();
+    active.sort_by(|left, right| left.display_title_ref().cmp(right.display_title_ref()));
+    active
+        .into_iter()
         .map(|feed| FeedSummary {
             id: feed.id,
-            title: feed.display_title(),
+            title: rssr_domain::listed_title(feed.display_title_ref()),
             url: feed.url.clone(),
             unread_count: counts_by_feed.get(&feed.id).map(|(_, unread)| *unread).unwrap_or(0),
             entry_count: counts_by_feed.get(&feed.id).map(|(all, _)| *all).unwrap_or(0),
@@ -44,13 +45,7 @@ pub fn list_feeds(state: &BrowserState) -> Vec<FeedSummary> {
                 feed.fetch_error.clone(),
             ),
         })
-        .collect::<Vec<_>>();
-    // Ordered by the whole title, shown cut, as in the native store.
-    feeds.sort_by(|left, right| left.title.cmp(&right.title));
-    for feed in &mut feeds {
-        feed.title = rssr_domain::listed_title(&feed.title);
-    }
-    feeds
+        .collect()
 }
 
 pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummary> {
@@ -70,7 +65,7 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
         .feeds
         .iter()
         .filter(|feed| !feed.is_deleted)
-        .map(|feed| (feed.id, rssr_domain::listed_title(&feed.display_title())))
+        .map(|feed| (feed.id, rssr_domain::listed_title(feed.display_title_ref())))
         .collect::<HashMap<_, _>>();
 
     // 先在仍带 `created_at` 的持久化条目上排序，再投影成 `EntrySummary`：`EntrySummary` 没有

@@ -62,7 +62,12 @@ impl PersistedFeed {
     /// 列表里显示的名称：指定名称、源标题、URL 依次兜底，与原生端
     /// `COALESCE(custom_title, title, url)` 相同。
     pub fn display_title(&self) -> String {
-        self.custom_title.as_ref().or(self.title.as_ref()).unwrap_or(&self.url).clone()
+        self.display_title_ref().to_owned()
+    }
+
+    /// [`Self::display_title`] without copying it.
+    pub fn display_title_ref(&self) -> &str {
+        self.custom_title.as_deref().or(self.title.as_deref()).unwrap_or(&self.url)
     }
 }
 

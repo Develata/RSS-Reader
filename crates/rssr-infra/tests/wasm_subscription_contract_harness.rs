@@ -656,20 +656,24 @@ mod listed_title_cases;
 /// Titles in lists are cut by the same rule as in the native store (review C3-R1 F04).
 #[wasm_bindgen_test]
 fn browser_titles_in_lists_are_bounded() {
-    use listed_title_cases::{bound_entry_title, long_entry_title, long_feed_title};
+    use listed_title_cases::{bound_entry_title, long_entry_title, long_feed_title, nul_title};
     use rssr_domain::listed_title;
     use rssr_infra::application_adapters::browser::query;
 
     let mut feed = sample_feed(1, "https://example.com/long", false);
     feed.title = Some(long_feed_title());
+    let mut nul_feed = sample_feed(2, "https://example.com/nul", false);
+    nul_feed.title = Some(nul_title());
     let mut long = sample_entry_index(1, 1, 1);
     long.title = long_entry_title();
     let mut bound = sample_entry_index(2, 1, 2);
     bound.title = bound_entry_title();
+    let mut nul = sample_entry_index(3, 1, 3);
+    nul.title = nul_title();
     let state = BrowserState {
         core: PersistedState {
-            feeds: vec![feed],
-            entries: vec![long, bound],
+            feeds: vec![feed, nul_feed],
+            entries: vec![long, bound, nul],
             ..Default::default()
         },
         ..Default::default()
@@ -677,11 +681,15 @@ fn browser_titles_in_lists_are_bounded() {
     let listed = query::list_entries(&state, &EntryQuery::default());
     let mut titles: Vec<_> = listed.iter().map(|entry| entry.title.clone()).collect();
     titles.sort();
-    let mut expected = vec![listed_title(&long_entry_title()), bound_entry_title()];
+    let mut expected =
+        vec![listed_title(&long_entry_title()), bound_entry_title(), listed_title(&nul_title())];
     expected.sort();
     assert_eq!(titles, expected);
     assert!(listed.iter().all(|entry| entry.feed_title == listed_title(&long_feed_title())));
-    assert_eq!(query::list_feeds(&state)[0].title, listed_title(&long_feed_title()));
+    let titles: Vec<_> = query::list_feeds(&state).into_iter().map(|feed| feed.title).collect();
+    let mut expected = vec![listed_title(&long_feed_title()), listed_title(&nul_title())];
+    expected.sort();
+    assert_eq!(titles, expected, "ordered by the whole title, shown cut");
 }
 
 #[path = "support/discovery_cases.rs"]

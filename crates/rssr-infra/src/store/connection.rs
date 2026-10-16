@@ -22,6 +22,9 @@ pub enum Role {
 /// - `foreign_keys`: bodies are removed with their entries (`ON DELETE CASCADE`).
 /// - `busy_timeout`: the GUI, the CLI and the server may share one file.
 /// - `fold_for_search`: the SQL spelling of [`rssr_domain::fold_for_search`].
+/// - `listed_title`: [`rssr_domain::listed_title`] itself, on the stored text without copying it
+///   whole. Not SQLite's `length`/`substr`: they stop at the first NUL, so a title with one could
+///   pass uncut (review C3-R2 R2-01).
 pub fn configure(connection: &Connection, role: Role) -> StoreResult<()> {
     connection.busy_timeout(BUSY_TIMEOUT)?;
     connection.pragma_update(None, "foreign_keys", true)?;
@@ -35,6 +38,19 @@ pub fn configure(connection: &Connection, role: Role) -> StoreResult<()> {
         |context| {
             let text: Option<String> = context.get(0)?;
             Ok(text.map(|text| rssr_domain::fold_for_search(&text)))
+        },
+    )?;
+    connection.create_scalar_function(
+        "listed_title",
+        1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |context| {
+            Ok(match context.get_raw(0) {
+                rusqlite::types::ValueRef::Text(bytes) => {
+                    Some(rssr_domain::listed_title(&String::from_utf8_lossy(bytes)))
+                }
+                _ => None,
+            })
         },
     )?;
     Ok(())

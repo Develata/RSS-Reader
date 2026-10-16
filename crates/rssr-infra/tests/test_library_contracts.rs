@@ -99,7 +99,7 @@ async fn counts_only_real_inserts_including_same_batch_duplicates() {
 /// Titles in lists are cut by the shared rule, in the query; the reader keeps the whole title.
 #[tokio::test]
 async fn titles_in_lists_are_bounded() {
-    use listed_title_cases::{bound_entry_title, long_entry_title, long_feed_title};
+    use listed_title_cases::{bound_entry_title, long_entry_title, long_feed_title, nul_title};
     use rssr_domain::listed_title;
 
     let library = Library::memory().await;
@@ -110,21 +110,35 @@ async fn titles_in_lists_are_bounded() {
             vec![
                 library::published("long", &long_entry_title(), None),
                 library::published("bound", &bound_entry_title(), None),
+                library::published("nul", &nul_title(), None),
             ],
         )
         .await;
     library.exec(format!("UPDATE feeds SET title = '{}'", long_feed_title())).await;
+    let nul_feed = library.add_feed("https://example.com/nul").await;
+    library
+        .exec(format!(
+            "UPDATE feeds SET title = 'a' || char(0) || '{}' WHERE id = {}",
+            "x".repeat(4 * rssr_domain::MAX_LISTED_TITLE_CHARS),
+            nul_feed.id
+        ))
+        .await;
+    let summaries = library.feeds.list_summaries().await.unwrap();
+    let nul_summary = summaries.iter().find(|summary| summary.id == nul_feed.id).unwrap();
+    assert_eq!(nul_summary.title, listed_title(&nul_title()), "a NUL does not stop the cut");
 
     let listed = library.entries.list_entries(&EntryQuery::default()).await.unwrap();
     let mut titles: Vec<_> = listed.iter().map(|entry| entry.title.clone()).collect();
     titles.sort();
-    let mut expected = vec![listed_title(&long_entry_title()), bound_entry_title()];
+    let mut expected =
+        vec![listed_title(&long_entry_title()), bound_entry_title(), listed_title(&nul_title())];
     expected.sort();
     assert_eq!(titles, expected);
     assert!(listed.iter().all(|entry| entry.feed_title == listed_title(&long_feed_title())));
-    let summaries = library.feeds.list_summaries().await.unwrap();
-    assert_eq!(summaries[0].title, listed_title(&long_feed_title()));
-    let long = listed.iter().find(|entry| entry.title != bound_entry_title()).unwrap();
+    let long_summary = summaries.iter().find(|summary| summary.id == feed.id).unwrap();
+    assert_eq!(long_summary.title, listed_title(&long_feed_title()));
+    let long =
+        listed.iter().find(|entry| entry.title == listed_title(&long_entry_title())).unwrap();
     let record = library.entries.get_entry_record(long.id).await.unwrap().unwrap();
     assert_eq!(record.title, long_entry_title(), "the reader keeps the whole title");
 }

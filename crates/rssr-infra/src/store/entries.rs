@@ -104,16 +104,11 @@ impl Filtered {
 const ACTIVE_ENTRIES: &str =
     " FROM entries JOIN feeds ON feeds.id = entries.feed_id WHERE feeds.is_deleted = 0";
 
-/// `expression` (text) as a list shows it: `rssr_domain::listed_title` in SQL, so the title is
-/// cut before it is copied out of the database. SQLite's `length` and `substr` count characters.
+/// `expression` (text) as a list shows it: the `listed_title` function of every library
+/// connection (`connection::configure`), which runs `rssr_domain::listed_title` on the stored
+/// text, so the title is cut before it is copied out of the database.
 pub(crate) fn listed_title_sql(expression: &str) -> String {
-    let max = rssr_domain::MAX_LISTED_TITLE_CHARS;
-    let mark = rssr_domain::LISTED_TITLE_MARK;
-    format!(
-        "CASE WHEN length({expression}) > {max} \
-         THEN substr({expression}, 1, {}) || '{mark}' ELSE {expression} END",
-        max - 1
-    )
+    format!("listed_title({expression})")
 }
 
 pub(crate) fn list_entries(
