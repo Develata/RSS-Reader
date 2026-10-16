@@ -25,6 +25,8 @@ pub(crate) enum EntriesPageIntent {
     SetEntries {
         entries: Vec<EntrySummary>,
         archived_count: usize,
+        /// More entries matched than the list returns (`rssr_application::MAX_LISTED_ENTRIES`).
+        truncated: bool,
     },
     PatchEntryFlags {
         entry_id: i64,

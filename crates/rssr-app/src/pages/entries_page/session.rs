@@ -259,6 +259,7 @@ mod tests {
                 is_starred: false,
             }],
             archived_count: 0,
+            truncated: false,
         })]
     }
 
@@ -383,6 +384,7 @@ mod tests {
             .send(vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries {
                 entries: Vec::new(),
                 archived_count: 0,
+                truncated: false,
             })])
             .expect("deliver the stale empty result");
         dom.render_immediate_to_vec();

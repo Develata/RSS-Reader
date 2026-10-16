@@ -24,7 +24,7 @@ pub use subscription_discovery::*;
 
 pub use app_state_service::AppStateService;
 pub use composition::{AppCompositionInput, AppStateServicesPort, AppUseCases};
-pub use entries_list_service::{EntriesListOutcome, EntriesListService};
+pub use entries_list_service::{EntriesListOutcome, EntriesListService, MAX_LISTED_ENTRIES};
 pub use entries_workspace_service::{
     EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesWorkspaceService,
     SaveEntriesWorkspaceOutcome,

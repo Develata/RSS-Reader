@@ -62,6 +62,7 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                             })
                             .collect(),
                         archived_count: outcome.archived_count as usize,
+                        truncated: outcome.truncated,
                     })]
                 }
                 Err(err) => entries_status_error(format!("{err}")),

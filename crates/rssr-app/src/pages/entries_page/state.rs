@@ -48,6 +48,8 @@ pub(crate) struct EntriesPageState {
     pub(crate) entries: Arc<Vec<Arc<EntrySummary>>>,
     /// 被归档筛选排除掉的条目数，由存储层 COUNT 得出。
     pub(crate) archived_count: usize,
+    /// 匹配的文章多于列表返回的（`MAX_LISTED_ENTRIES`）。
+    pub(crate) entries_truncated: bool,
     pub(crate) feeds: Arc<Vec<FeedSummary>>,
     pub(crate) read_filter: ReadFilter,
     pub(crate) starred_filter: StarredFilter,
@@ -95,6 +97,7 @@ impl EntriesPageState {
             bulk_notice: None,
             entries: Arc::default(),
             archived_count: 0,
+            entries_truncated: false,
             feeds: Arc::default(),
             read_filter: workspace.read_filter,
             starred_filter: workspace.starred_filter,

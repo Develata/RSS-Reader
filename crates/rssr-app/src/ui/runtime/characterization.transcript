@@ -33,9 +33,9 @@ EntriesPage(PreferencesLoaded)
 ## entries bootstrap, feed 1
 ## remember opened feed 1
 ## list entries
-EntriesPage(SetEntries { entries: [EntrySummary { id: 5, feed_id: 3, title: "Image one", feed_title: "Feed I", published_at: Some(2026-04-05T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 4, feed_id: 2, title: "Bravo one", feed_title: "Feed B", published_at: Some(2026-04-04T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 3, feed_id: 1, title: "Alpha three", feed_title: "Feed A", published_at: Some(2026-04-03T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 2, feed_id: 1, title: "Alpha two", feed_title: "Feed A", published_at: Some(2026-04-02T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 1, feed_id: 1, title: "Alpha one", feed_title: "Feed A", published_at: Some(2026-04-01T10:00:00Z), is_read: false, is_starred: false }], archived_count: 0 })
+EntriesPage(SetEntries { entries: [EntrySummary { id: 5, feed_id: 3, title: "Image one", feed_title: "Feed I", published_at: Some(2026-04-05T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 4, feed_id: 2, title: "Bravo one", feed_title: "Feed B", published_at: Some(2026-04-04T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 3, feed_id: 1, title: "Alpha three", feed_title: "Feed A", published_at: Some(2026-04-03T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 2, feed_id: 1, title: "Alpha two", feed_title: "Feed A", published_at: Some(2026-04-02T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 1, feed_id: 1, title: "Alpha one", feed_title: "Feed A", published_at: Some(2026-04-01T10:00:00Z), is_read: false, is_starred: false }], archived_count: 0, truncated: false })
 ## list entries of feed 2
-EntriesPage(SetEntries { entries: [EntrySummary { id: 4, feed_id: 2, title: "Bravo one", feed_title: "Feed B", published_at: Some(2026-04-04T10:00:00Z), is_read: false, is_starred: false }], archived_count: 0 })
+EntriesPage(SetEntries { entries: [EntrySummary { id: 4, feed_id: 2, title: "Bravo one", feed_title: "Feed B", published_at: Some(2026-04-04T10:00:00Z), is_read: false, is_starred: false }], archived_count: 0, truncated: false })
 ## toggle read in list
 EntriesPage(SetStatus { message: "已将《Alpha one》标记为已读。", tone: "info" })
 EntriesPage(PatchEntryFlags { entry_id: 1, is_read: Some(true), is_starred: None })
@@ -141,7 +141,7 @@ FeedsPage(AddFeedFinished { saved: true })
 FeedsPage(SetStatus { message: "订阅已保存并完成首次刷新。", tone: "info" })
 FeedsPage(BumpReload)
 ## list entries of feed 2 after re-adding
-EntriesPage(SetEntries { entries: [EntrySummary { id: 14, feed_id: 2, title: "Bravo one", feed_title: "Feed B", published_at: Some(2026-04-04T10:00:00Z), is_read: false, is_starred: false }], archived_count: 0 })
+EntriesPage(SetEntries { entries: [EntrySummary { id: 14, feed_id: 2, title: "Bravo one", feed_title: "Feed B", published_at: Some(2026-04-04T10:00:00Z), is_read: false, is_starred: false }], archived_count: 0, truncated: false })
 ## feeds snapshot, at the end
 FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { feeds: [FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 1, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 3, entry_count: 5, fingerprint: ConfigFingerprint(<5>) })))
 ## authenticated shell

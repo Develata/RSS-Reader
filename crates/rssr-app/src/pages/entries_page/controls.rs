@@ -121,6 +121,12 @@ pub(super) fn render_entry_controls(facade: &EntriesPageFacade) -> Element {
                     on_change_starred_filter: move |value| starred_filter_facade.set_starred_filter(value),
                     on_change_selected_feed_urls: move |value| selected_sources_facade.set_selected_feed_urls(value),
                 }
+                if facade.entries_truncated() {
+                    StatusBanner {
+                        message: facade.truncated_entries_message(),
+                        tone: "info".to_string()
+                    }
+                }
                 if archived_count > 0 && !facade.show_archived() {
                     StatusBanner {
                         message: facade.archived_entries_message(),

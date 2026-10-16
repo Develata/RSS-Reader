@@ -240,6 +240,18 @@ impl EntriesPageFacade {
         super::directory::DirectoryModel(Arc::clone(&self.presenter))
     }
 
+    /// 匹配的文章多于列表返回的上限。
+    pub(crate) fn entries_truncated(&self) -> bool {
+        self.presenter.truncated
+    }
+
+    pub(crate) fn truncated_entries_message(&self) -> String {
+        format!(
+            "只显示最新的 {} 篇文章，请用筛选或搜索缩小范围。",
+            rssr_application::MAX_LISTED_ENTRIES
+        )
+    }
+
     pub(crate) fn archived_entries_message(&self) -> String {
         format!(
             "当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。",

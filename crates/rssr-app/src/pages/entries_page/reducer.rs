@@ -87,10 +87,11 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = Arc::new(feeds),
         EntriesPageIntent::EntriesQueryStarted => state.query_in_flight = true,
         EntriesPageIntent::EntriesQueryFinished => state.query_in_flight = false,
-        EntriesPageIntent::SetEntries { entries, archived_count } => {
+        EntriesPageIntent::SetEntries { entries, archived_count, truncated } => {
             state.entries_loaded = true;
             state.entries = Arc::new(entries.into_iter().map(Arc::new).collect());
             state.archived_count = archived_count;
+            state.entries_truncated = truncated;
             let count = state.entries.len();
             if let PreferencesLoadState::Unavailable(message) = &state.preferences_load {
                 state.status = format!("{message}；文章偏好暂不保存，共 {count} 篇文章。");
@@ -265,7 +266,11 @@ mod tests {
 
         reduce_entries_page_intent(
             &mut state,
-            EntriesPageIntent::SetEntries { entries: vec![entry(1, false)], archived_count: 0 },
+            EntriesPageIntent::SetEntries {
+                entries: vec![entry(1, false)],
+                archived_count: 0,
+                truncated: false,
+            },
         );
 
         assert_eq!(state.current_page, FIRST_PAGE_NUMBER);
@@ -370,7 +375,11 @@ mod tests {
         reduce_entries_page_intent(&mut state, EntriesPageIntent::EntriesQueryStarted);
         reduce_entries_page_intent(
             &mut state,
-            EntriesPageIntent::SetEntries { entries: Vec::new(), archived_count: 1 },
+            EntriesPageIntent::SetEntries {
+                entries: Vec::new(),
+                archived_count: 1,
+                truncated: false,
+            },
         );
         reduce_entries_page_intent(&mut state, EntriesPageIntent::EntriesQueryFinished);
 

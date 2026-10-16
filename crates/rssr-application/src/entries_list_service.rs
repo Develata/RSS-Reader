@@ -7,6 +7,11 @@ use rssr_domain::{
 
 use crate::library_queries::LibraryQueryPort;
 
+/// Entries a list returns at most, newest first (Develata, 2026-10-16): a response stays around
+/// a megabyte on every platform. More matches set [`EntriesListOutcome::truncated`]; the page
+/// asks to narrow the filter.
+pub const MAX_LISTED_ENTRIES: u32 = 2000;
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EntriesListOutcome {
     pub entries: Vec<EntrySummary>,
@@ -14,6 +19,10 @@ pub struct EntriesListOutcome {
     ///
     /// 由一次 COUNT 查询得到，而不是把已归档的文章也读回来再在页面上数一遍。
     pub archived_count: u64,
+    /// More entries matched than were returned (at most [`MAX_LISTED_ENTRIES`], or the query's
+    /// own limit).
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 #[derive(Clone)]
@@ -58,13 +67,22 @@ impl EntriesListService {
             }),
             ArchiveFilter::All | ArchiveFilter::OnlyArchived { .. } => None,
         };
-        let page = self
+        // One entry past the bound tells whether more matched, without a second query.
+        let shown = query.limit.unwrap_or(MAX_LISTED_ENTRIES).min(MAX_LISTED_ENTRIES);
+        let bounded = EntryQuery { limit: Some(shown + 1), ..query.clone() };
+        let mut page = self
             .queries
-            .entries_page(query, archived_query.as_ref())
+            .entries_page(&bounded, archived_query.as_ref())
             .await
             .context("读取文章失败")?;
+        let truncated = page.entries.len() > shown as usize;
+        page.entries.truncate(shown as usize);
 
-        Ok(EntriesListOutcome { entries: page.entries, archived_count: page.counted.unwrap_or(0) })
+        Ok(EntriesListOutcome {
+            entries: page.entries,
+            archived_count: page.counted.unwrap_or(0),
+            truncated,
+        })
     }
 }
 
@@ -101,11 +119,9 @@ mod tests {
             Err(rssr_domain::DomainError::InvalidInput("此测试替身不支持批量操作".into()))
         }
 
-        async fn list_entries(
-            &self,
-            _query: &EntryQuery,
-        ) -> rssr_domain::Result<Vec<EntrySummary>> {
-            Ok(self.entries.clone())
+        async fn list_entries(&self, query: &EntryQuery) -> rssr_domain::Result<Vec<EntrySummary>> {
+            let limit = query.limit.map_or(usize::MAX, |limit| limit as usize);
+            Ok(self.entries.iter().take(limit).cloned().collect())
         }
 
         async fn count_entries(&self, query: &EntryQuery) -> rssr_domain::Result<u64> {
@@ -170,6 +186,47 @@ mod tests {
         assert_eq!(outcome.entries[0].id, 42);
         assert_eq!(outcome.archived_count, 0);
         assert!(repository.counted.lock().expect("lock counted").is_empty());
+    }
+
+    fn entries(count: i64) -> Vec<EntrySummary> {
+        (0..count)
+            .map(|id| EntrySummary {
+                id,
+                feed_id: 1,
+                title: format!("Entry {id}"),
+                feed_title: "Feed".to_string(),
+                published_at: None,
+                is_read: false,
+                is_starred: false,
+            })
+            .collect()
+    }
+
+    /// A list returns at most `MAX_LISTED_ENTRIES` (or the query's smaller limit) and says when
+    /// more matched; exactly the bound is not truncated.
+    #[tokio::test]
+    async fn a_list_stops_at_its_bound_and_says_so() {
+        let max = super::MAX_LISTED_ENTRIES as i64;
+        for (available, limit, shown, truncated) in [
+            (max + 5, None, max, true),
+            (max, None, max, false),
+            (max - 1, None, max - 1, false),
+            (max + 5, Some(10), 10, true),
+            (10, Some(10), 10, false),
+            (max + 5, Some(u32::MAX), max, true),
+        ] {
+            let repository =
+                Arc::new(EntryRepositoryStub { entries: entries(available), ..Default::default() });
+            let outcome = service(repository)
+                .list_entries(&EntryQuery { limit, ..EntryQuery::default() })
+                .await
+                .unwrap();
+            assert_eq!(
+                (outcome.entries.len() as i64, outcome.truncated),
+                (shown, truncated),
+                "{available} available, limit {limit:?}"
+            );
+        }
     }
 
     /// Excluding archived entries asks for the archived count with the same query otherwise.

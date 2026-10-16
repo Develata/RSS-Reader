@@ -94,6 +94,7 @@ impl PartialEq for GroupingEntries {
 pub(crate) struct EntriesPresenterInput {
     entries: GroupingEntries,
     archived_count: usize,
+    truncated: bool,
     entries_page_size: u32,
     current_page: u32,
     feeds: Arc<Vec<FeedSummary>>,
@@ -108,6 +109,7 @@ impl EntriesPresenterInput {
         Self {
             entries: GroupingEntries::new(&state.entries),
             archived_count: state.archived_count,
+            truncated: state.entries_truncated,
             entries_page_size: state.entries_page_size,
             current_page: state.current_page,
             // 订阅列表只在 bootstrap 时变化；参与比较是为了让来源筛选项跟着更新。
@@ -125,6 +127,8 @@ impl EntriesPresenterInput {
 #[derive(Clone, PartialEq)]
 pub(crate) struct EntriesPagePresenter {
     pub(crate) archived_count: usize,
+    /// 透传，同 `archived_count`。
+    pub(crate) truncated: bool,
     pub(crate) visible_entries_len: usize,
     pub(crate) page_size: usize,
     pub(crate) current_page: u32,
@@ -198,6 +202,7 @@ impl EntriesPagePresenter {
 
         Self {
             archived_count,
+            truncated: input.truncated,
             visible_entries_len,
             page_size,
             current_page,
