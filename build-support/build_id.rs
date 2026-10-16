@@ -4,11 +4,17 @@
 //
 // - `RSSR_BUILD_ID` when set (releases pass the tag; an image build must pass it, since the build
 //   context has no Git metadata);
-// - otherwise `dev-<commit>`, or `dev-<commit>-dirty-<hash>` when the work tree has changes
-//   (`<hash>` covers the diff and the untracked files, so two builds of different changes differ);
+// - otherwise `dev-<commit>`, or `dev-<commit>-dirty-<hash>` when [`BUILD_INPUTS`] have changes
+//   (`<hash>` covers their diff and their untracked files, so two builds of different changes
+//   differ); Cargo computes it again exactly when one of them changes (review C3-R1 F15);
 // - `dev-unknown` without Git.
 //
 // Never `CARGO_PKG_VERSION`: it stays at 0.1.0.
+
+/// What goes into the page and the server: watched by Cargo and hashed, the same list for both,
+/// relative to the repository's root. Changes elsewhere (documents, scripts) leave the id.
+const BUILD_INPUTS: [&str; 6] =
+    ["crates", "build-support", "assets", "Dioxus.toml", "Cargo.toml", "Cargo.lock"];
 
 /// Sets `RSSR_BUILD_ID` for the crate being built (`env!("RSSR_BUILD_ID")`) and tells Cargo when
 /// to compute it again.
@@ -58,14 +64,17 @@ fn dev_build_id() -> String {
         return format!("dev-{commit}");
     };
     let root = std::path::PathBuf::from(root);
-    for watched in ["crates", "build-support", "Cargo.toml", "Cargo.lock"] {
-        println!("cargo:rerun-if-changed={}", root.join(watched).display());
+    for input in BUILD_INPUTS {
+        println!("cargo:rerun-if-changed={}", root.join(input).display());
     }
 
-    // The whole work tree, whatever the crate's directory.
-    let diff = git_in(&root, &["diff", "HEAD", "--binary"]).unwrap_or_default();
-    let untracked =
-        git_in(&root, &["ls-files", "--others", "--exclude-standard", "-z"]).unwrap_or_default();
+    // The inputs in the whole work tree, whatever the crate's directory.
+    let with_inputs = |args: &[&str]| {
+        let args: Vec<&str> = args.iter().copied().chain(["--"]).chain(BUILD_INPUTS).collect();
+        git_in(&root, &args).unwrap_or_default()
+    };
+    let diff = with_inputs(&["diff", "HEAD", "--binary"]);
+    let untracked = with_inputs(&["ls-files", "--others", "--exclude-standard", "-z"]);
     if diff.is_empty() && untracked.is_empty() {
         return format!("dev-{commit}");
     }
