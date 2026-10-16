@@ -170,7 +170,7 @@ async fn browser_fixture_server() {
             ServeDir::new(&config.static_dir)
                 .not_found_service(ServeFile::new(config.static_dir.join("index.html"))),
         );
-    let app = with_auth(protected, state);
+    let app = with_auth(protected, axum::Router::new(), state);
     println!("RSSR_PROXY_TEST_URL=http://{}", listener.local_addr().unwrap());
     std::io::stdout().flush().unwrap();
     axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())

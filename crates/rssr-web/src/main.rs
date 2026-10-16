@@ -1,3 +1,6 @@
+mod api;
+#[cfg(test)]
+mod api_tests;
 mod auth;
 #[cfg(test)]
 mod http_tests;
@@ -19,12 +22,18 @@ use axum::{
     routing::get,
 };
 use clap::{Parser, Subcommand};
+use rssr_infra::{
+    local_backend::native_local_backend_with,
+    outbound::ensure_server_policy,
+    store::{StoreOptions, local::open_library_in},
+};
 use tokio::fs;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 use crate::{
+    api::ApiState,
     auth::{
         AppState, AuthStore, generate_password_hash, load_config, open_store, session_probe,
         with_auth,
@@ -39,10 +48,10 @@ const SHUTDOWN_GRACE: Duration = Duration::from_secs(4);
 const END_RUN_BUDGET: Duration = Duration::from_secs(3);
 const RUNTIME_SHUTDOWN: Duration = Duration::from_secs(1);
 
-/// RSS-Reader 的 Web 服务：登录保护、静态包托管与 feed 代抓。
+/// RSS-Reader 的 Web 服务：登录保护、阅读器接口、静态包托管与 feed 代抓。
 #[derive(Parser)]
 struct Cli {
-    /// 数据目录：认证库 auth.sqlite3 在这里。
+    /// 数据目录：资料库 library.sqlite3、出站策略 outbound.json 与认证库 auth.sqlite3 在这里。
     #[arg(long, env = "RSSR_DATA_DIR", global = true, value_name = "DIR")]
     data_dir: Option<PathBuf>,
     /// 打印密码的 Argon2 哈希（可用作 RSS_READER_WEB_PASSWORD_HASH）后退出。
@@ -106,14 +115,17 @@ async fn serve(data_dir: &Path) -> Result<()> {
         .await
         .with_context(|| format!("绑定监听地址失败：{}", config.bind_addr))?;
     let local = listener.local_addr().context("读取监听地址失败")?;
+    // 资料库在认证库开始运行之前打开：打不开时直接退出，不留下运行标记（否则下次启动会因为
+    // 一个与会话无关的故障吊销全部会话）。
+    let api = ApiState::new(Arc::new(open_backend(data_dir).await?));
     let store = Arc::new(open_store(data_dir)?);
     let state = AppState::new(config, Arc::clone(&store), local)?;
 
-    info!("starting rssr-web on {local}");
+    info!(build = api::BUILD_ID, "starting rssr-web on {local}");
     let stopping = Arc::new(tokio::sync::Notify::new());
     // 登录限速在不信任代理头时按 TCP 对端地址区分客户端，需要连接信息（审计 F1）。
     let server =
-        axum::serve(listener, app(state).into_make_service_with_connect_info::<SocketAddr>())
+        axum::serve(listener, app(state, api).into_make_service_with_connect_info::<SocketAddr>())
             .with_graceful_shutdown({
                 let stopping = Arc::clone(&stopping);
                 async move {
@@ -151,6 +163,23 @@ async fn serve(data_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// 数据目录里的资料库与出站策略（没有时写入默认的服务器策略），以及其上的后端；定时刷新随之
+/// 开始。首次打开时导入同一目录里的 v0.1.x 资料库。
+async fn open_backend(
+    data_dir: &Path,
+) -> Result<rssr_infra::local_backend::LocalBackend<rssr_infra::local_backend::NativeHost>> {
+    let policy = ensure_server_policy(data_dir).context("准备出站策略失败")?;
+    let opened =
+        open_library_in(data_dir, StoreOptions::default()).await.context("打开资料库失败")?;
+    if let Some(imported) = &opened.imported {
+        info!(?imported, "已从 v0.1 数据导入资料库");
+    }
+    info!(library = %opened.path.display(), "已打开资料库");
+    let backend = native_local_backend_with(opened.store, policy).context("建立后端失败")?;
+    rssr_api::Backend::ensure_auto_refresh_started(&backend);
+    Ok(backend)
+}
+
 /// Ctrl-C，或 Unix 上的 SIGTERM（`docker stop`、systemd）。注册失败的那一路不会触发停止。
 async fn shutdown_signal() {
     let interrupt = async {
@@ -175,8 +204,8 @@ async fn shutdown_signal() {
     }
 }
 
-/// 全部路由：应用页面、静态包与 `/feed-proxy` 要求登录（[`with_auth`]）。
-fn app(state: AppState) -> Router {
+/// 全部路由：应用页面、阅读器接口（[`api`]）、静态包与 `/feed-proxy` 要求登录（[`with_auth`]）。
+fn app(state: AppState, api: ApiState) -> Router {
     let static_dir = state.config.static_dir.clone();
     let protected = Router::new()
         .route("/", get(serve_app_shell))
@@ -191,7 +220,9 @@ fn app(state: AppState) -> Router {
             ServeDir::new(&static_dir)
                 .not_found_service(ServeFile::new(static_dir.join("index.html"))),
         );
-    with_auth(protected, state).route("/healthz", get(healthz)).route("/favicon.ico", get(favicon))
+    with_auth(protected, api::routes(api), state)
+        .route("/healthz", get(healthz))
+        .route("/favicon.ico", get(favicon))
 }
 
 /// `rssr-web passwd`：改密码，凭据代数加一，吊销全部会话。认证库不存在时以新密码建立它。

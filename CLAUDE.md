@@ -53,7 +53,7 @@ dx bundle --platform web --package rssr-app --release --debug-symbols false --ou
 - **`rssr-api`** — 界面与用例之间的 `Backend` 接口（界面的全部操作；阶段 C 的 `HttpBackend` 与本机 `LocalBackend` 都实现它），只依赖 application / domain；依赖图门禁见 `crates/rssr-api/tests/dependency_graph.rs`（Web 构建不含 SQLite）。
 - **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 与 `bootstrap/web.rs` 按平台建好 `LocalBackend`（infra 的 `local_backend`：共享的添加订阅、刷新编排、`RefreshFlight` 与自动刷新循环；平台差异在 `LocalHost`：原生 `NativeHost` 含图片本地化与 WebDAV，Web 的 `WebHost` 在 `bootstrap/web.rs`）；`ui/` 分 shell / commands / runtime；`pages/` 通过 facade/session 派发命令，runtime 只经 `Arc<dyn Backend>` 调用。界面接缝的特征测试：`ui/runtime/characterization.rs`。
 - **`rssr-cli`** — 复用同一 application 层的自动化入口。
-- **`rssr-web`** — 仅用于 Web 部署的薄 axum 服务：Argon2 登录与服务器保存的会话（数据目录 `RSSR_DATA_DIR` 里的 `auth.sqlite3`）、写请求的 Origin / CSRF 校验、静态包托管 + SPA 回退、`/feed-proxy` 服务端代抓（绕过浏览器 CORS）。子命令 `passwd`、`sessions revoke-all`。桌面端、CLI、本地开发都不依赖它。
+- **`rssr-web`** — 仅用于 Web 部署的薄 axum 服务：Argon2 登录与服务器保存的会话（数据目录 `RSSR_DATA_DIR` 里的 `auth.sqlite3`）、写请求的 Origin / CSRF 校验、阅读器接口 `/api/v1`（`api` 模块：同一数据目录里 `library.sqlite3` 上的 `LocalBackend`，线上形式见 `rssr-api::protocol`；写请求要求构建标识一致，标识由 `build-support/build_id.rs` 在构建时计算）、静态包托管 + SPA 回退、`/feed-proxy` 服务端代抓（绕过浏览器 CORS）。子命令 `passwd`、`sessions revoke-all`。桌面端、CLI、本地开发都不依赖它。
 
 关键约束：**平台差异只允许存在于 infra / adapter / host capability 层**，application/domain 的语义必须跨平台统一。UI 组件里禁止直接写 SQL、HTTP 或 feed/OPML/JSON 解析。
 

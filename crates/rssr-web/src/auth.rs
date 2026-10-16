@@ -20,6 +20,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
     routing::{any, get},
 };
+use rssr_api::{BackendError, ErrorCode};
 use serde::Deserialize;
 use subtle::ConstantTimeEq;
 use time::OffsetDateTime;
@@ -33,7 +34,8 @@ pub(crate) use self::credentials::generate_password_hash;
 use self::credentials::{SEED_VARIABLES, credentials_match, initial_credential};
 use self::login_flow::{logged_out_response, login_redirect, successful_login_response};
 use self::login_page::{render_login_page, render_logout_page};
-use self::origin::{TrustedOrigins, is_safe};
+use self::origin::TrustedOrigins;
+pub(crate) use self::origin::is_safe;
 use self::rate_limit::{
     LoginThrottleState, clear_login_failures, is_device_key, login_attempt_is_blocked,
     rate_limit_key, record_login_failure,
@@ -209,17 +211,26 @@ pub(crate) fn open_store(data_dir: &Path) -> Result<AuthStore> {
 
 /// 给应用加上认证（v0.2 阶段 C，C2）：
 /// - `protected` 的路由要求有效会话，未登录时跳转登录页；
-/// - `/api` 下的一切要求有效会话，未登录时返回 JSON 401，不存在的接口返回 JSON 404，从不落入
-///   页面回退；写请求还要在 [`CSRF_HEADER`] 里带上本会话的 CSRF 令牌（`GET /api/v1/session`）；
+/// - `/api` 下的一切（含 `api` 的应用接口）要求有效会话，未登录时返回 JSON 401，不存在的接口或
+///   方法返回 JSON 404，从不落入页面回退；写请求还要在 [`CSRF_HEADER`] 里带上本会话的 CSRF
+///   令牌（`GET /api/v1/session`）；错误一律是 [`BackendError`] 的 JSON；
 /// - 登录与退出登录（`GET /logout` 是确认页，`POST /logout` 才退出）；
 /// - 最外层：每个写请求的 `Origin` 必须是信任的来源（[`TrustedOrigins`]）。
-pub(crate) fn with_auth(protected: Router<AppState>, state: AppState) -> Router {
+pub(crate) fn with_auth(
+    protected: Router<AppState>,
+    api: Router<AppState>,
+    state: AppState,
+) -> Router {
     let protected = protected.layer(middleware::from_fn_with_state(state.clone(), require_auth));
+    // 方法不匹配的回退先设好，再加会话检查：`Router::route_layer` 包住每条路由的整个方法路由，
+    // 含这个回退，所以已知路径上的错误方法未登录时也先得到 401，不暴露接口是否存在。
     let api = Router::new()
         .route("/api/v1/session", get(api_session))
         .route("/api", any(api_not_found))
         .route("/api/", any(api_not_found))
         .route("/api/{*rest}", any(api_not_found))
+        .merge(api)
+        .method_not_allowed_fallback(api_not_found)
         .route_layer(middleware::from_fn_with_state(state.clone(), require_api_session));
     Router::new()
         .route("/login", get(show_login).post(handle_login))
@@ -474,13 +485,11 @@ async fn api_session(Extension(SessionCsrf(csrf)): Extension<SessionCsrf>) -> Re
 }
 
 async fn api_not_found() -> Response {
-    api_error(StatusCode::NOT_FOUND, "not_found", "没有这个接口")
+    api_error(ErrorCode::NotFound, "没有这个接口")
 }
 
-fn api_error(status: StatusCode, code: &str, message: &str) -> Response {
-    no_store(
-        (status, Json(serde_json::json!({ "code": code, "message": message }))).into_response(),
-    )
+fn api_error(code: ErrorCode, message: &str) -> Response {
+    crate::api::error_response(BackendError::new(code, message))
 }
 
 fn no_store(mut response: Response) -> Response {
@@ -550,7 +559,7 @@ async fn require_trusted_origin(
         return next.run(request).await;
     }
     if is_api(request.uri().path()) {
-        api_error(StatusCode::FORBIDDEN, "untrusted_origin", "请求来源不受信任")
+        api_error(ErrorCode::UntrustedOrigin, "请求来源不受信任")
     } else {
         (StatusCode::FORBIDDEN, "请求来源不受信任").into_response()
     }
@@ -587,25 +596,21 @@ async fn require_api_session(
     let token = match session_status(&state, request.headers()).await {
         Ok(SessionStatus::Valid(token)) => token,
         Ok(SessionStatus::Busy) => {
-            return api_error(StatusCode::SERVICE_UNAVAILABLE, "busy", "服务器繁忙，请稍后再试");
+            return api_error(ErrorCode::Unavailable, "服务器繁忙，请稍后再试");
         }
         Ok(SessionStatus::Missing | SessionStatus::Invalid) => {
-            return api_error(StatusCode::UNAUTHORIZED, "unauthenticated", "未登录或登录已过期");
+            return api_error(ErrorCode::Unauthenticated, "未登录或登录已过期");
         }
         Err(error) => {
             error!(%error, "校验会话失败");
-            return api_error(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "auth_unavailable",
-                "认证暂时不可用",
-            );
+            return api_error(ErrorCode::Unavailable, "认证暂时不可用");
         }
     };
     let csrf = token.csrf();
     if !is_safe(request.method())
         && !csrf_matches(request.headers().get(CSRF_HEADER).map(HeaderValue::as_bytes), &csrf)
     {
-        return api_error(StatusCode::FORBIDDEN, "csrf_mismatch", "缺少或错误的 CSRF 令牌");
+        return api_error(ErrorCode::CsrfMismatch, "缺少或错误的 CSRF 令牌");
     }
     request.extensions_mut().insert(SessionCsrf(csrf));
     next.run(request).await

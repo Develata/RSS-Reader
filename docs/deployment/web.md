@@ -1,6 +1,6 @@
 # Web / Docker 部署
 
-`RSS-Reader-web.tar.gz` 是 Dioxus 静态站点包。浏览器直接请求 feed 时受目标站点 CORS 策略约束。需要登录门禁和同源 `/feed-proxy` 时，使用仓库里的 `rssr-web` 服务；它托管静态包、验证登录并代抓 feed，不参与桌面端、Android 或 CLI 的运行。Web 的订阅和阅读状态保存在访问者当前浏览器的 `localStorage`；服务器的数据目录（容器内 `/data`）目前只保存认证库 `auth.sqlite3`（登录凭据与会话），**不是文章库备份**。
+`RSS-Reader-web.tar.gz` 是 Dioxus 静态站点包。浏览器直接请求 feed 时受目标站点 CORS 策略约束。需要登录门禁和同源 `/feed-proxy` 时，使用仓库里的 `rssr-web` 服务；它托管静态包、验证登录并代抓 feed，不参与桌面端、Android 或 CLI 的运行。Web 的订阅和阅读状态保存在访问者当前浏览器的 `localStorage`。服务器的数据目录（容器内 `/data`）保存认证库 `auth.sqlite3`（登录凭据与会话），以及服务器端的资料库 `library.sqlite3` 与出站策略 `outbound.json`（没有时以默认的服务器策略写入）。资料库供服务器接口 `/api/v1` 使用（v0.2 阶段 C）；网页改用服务器之前它是空的，**不是网页数据的备份**。
 
 新版浏览器存储使用 Web Locks 协调多个标签页，需要支持该能力的浏览器和安全上下文：正式入口使用 HTTPS，本机 localhost / 127.0.0.1 可使用 HTTP；手机通过局域网 IP 访问普通 HTTP 不满足此条件。缺少能力会显示错误，不会退回可能覆盖数据的无锁写入。升级静态包后应重新加载所有旧标签页，避免混用两种存储协议；不会自动刷新正在阅读的页面。
 

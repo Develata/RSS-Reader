@@ -18,6 +18,7 @@
 
 ```text
 crates/
+├── rssr-api/
 ├── rssr-app/
 ├── rssr-cli/
 ├── rssr-web/
@@ -25,6 +26,7 @@ crates/
 ├── rssr-domain/
 └── rssr-infra/
 
+build-support/   # 构建脚本共用的片段（构建标识）
 assets/
 migrations/
 migrations_content/

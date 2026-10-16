@@ -7,6 +7,18 @@
 //! jobs ([`JobKind`]): the request returns a [`JobCreated`], and the client polls
 //! [`job`] until the [`JobStatus`] is final. Every response body is JSON; every error is a
 //! [`crate::BackendError`] with the HTTP status of its [`crate::ErrorCode`].
+//!
+//! The wire form, which the server and the browser's backend both follow:
+//! - a write's body is the JSON of its request type below, except `POST routes::MARK_READ`,
+//!   whose body is the [`rssr_domain::MarkReadPreview`] itself;
+//! - a success is `200` with the operation's result as JSON; an operation without a result
+//!   answers `null`; the exports (`GET routes::CONFIG_JSON`, `GET routes::CONFIG_OPML`) answer
+//!   the document as a JSON string;
+//! - bodies are bounded ([`MAX_BODY_BYTES`], with the larger bounds of the settings, the
+//!   mark-read confirmation and the imports), and so is a structured read's parameter
+//!   ([`MAX_QUERY_PARAMETER_BYTES`]); more is [`crate::ErrorCode::TooLarge`];
+//! - every answer of the application's routes carries [`REQUEST_ID_HEADER`] (an error carries the
+//!   same id in its body) and is not cached.
 
 use std::time::Duration;
 
@@ -14,7 +26,7 @@ use rssr_application::{
     AddSubscriptionOutcome, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome,
     RemoteConfigPullOutcome, RemoteConfigPushOutcome,
 };
-use rssr_domain::ConfigFingerprint;
+use rssr_domain::{ConfigFingerprint, MAX_CUSTOM_CSS_BYTES};
 use serde::{Deserialize, Serialize};
 
 use crate::BackendError;
@@ -26,11 +38,25 @@ pub const API_PREFIX: &str = "/api/v1";
 pub const BUILD_HEADER: &str = "x-rssr-build";
 /// The session's CSRF token, on every write after login.
 pub const CSRF_HEADER: &str = "x-rssr-csrf";
+/// The id of the request, on every answer of the application's routes; it matches the server's
+/// log entry and the `request_id` of an error.
+pub const REQUEST_ID_HEADER: &str = "x-rssr-request-id";
 /// The longest query parameter a structured read may carry (proxies commonly limit request
 /// lines to 8 KiB).
 pub const MAX_QUERY_PARAMETER_BYTES: usize = 4096;
 /// The longest a single poll of a job waits for it to finish; the client polls again.
 pub const MAX_JOB_WAIT: Duration = Duration::from_secs(10);
+/// The largest body of a write, unless its route has its own bound below.
+pub const MAX_BODY_BYTES: usize = 64 * 1024;
+/// `PATCH routes::SETTINGS`: up to [`MAX_CUSTOM_CSS_BYTES`] of custom CSS, which JSON escaping
+/// makes up to six times longer (a control character becomes `\u00XX`).
+pub const MAX_SETTINGS_BODY_BYTES: usize = 6 * MAX_CUSTOM_CSS_BYTES + 16 * 1024;
+/// `POST routes::MARK_READ`: a preview of up to [`rssr_domain::MAX_MARK_READ_SELECTION`] ids (at
+/// most 20 bytes each, with the comma) and its query (at most [`MAX_QUERY_PARAMETER_BYTES`] when
+/// it was previewed).
+pub const MAX_MARK_READ_BODY_BYTES: usize = 256 * 1024;
+/// `PUT routes::CONFIG_JSON` and `POST routes::CONFIG_OPML`: a configuration document.
+pub const MAX_IMPORT_BODY_BYTES: usize = 4 * 1024 * 1024;
 
 /// Route patterns as the server registers them (`{name}` is a path parameter).
 pub mod routes {
@@ -252,6 +278,29 @@ mod tests {
         }
         let id = JobId::parse("0123456789abcdef0123456789abcdef").unwrap();
         assert_eq!(job(&id), routes::JOB.replace("{job_id}", &id.0));
+    }
+
+    /// The largest legal settings change and mark-read confirmation fit their bodies.
+    #[test]
+    fn the_largest_legal_bodies_fit_their_bounds() {
+        let patch = rssr_application::SettingsPatch {
+            custom_css: Some("\u{1}".repeat(MAX_CUSTOM_CSS_BYTES)),
+            ..Default::default()
+        };
+        let size = serde_json::to_vec(&patch).unwrap().len();
+        assert!(size <= MAX_SETTINGS_BODY_BYTES, "{size}");
+
+        // A previewed query fits its parameter, which is at least as long as its JSON.
+        let query = rssr_domain::EntryQuery {
+            search_title: Some("x".repeat(MAX_QUERY_PARAMETER_BYTES)),
+            ..Default::default()
+        };
+        let preview = rssr_domain::MarkReadPreview {
+            query,
+            unread_entry_ids: vec![i64::MIN; rssr_domain::MAX_MARK_READ_SELECTION],
+        };
+        let size = serde_json::to_vec(&preview).unwrap().len();
+        assert!(size <= MAX_MARK_READ_BODY_BYTES, "{size}");
     }
 
     #[test]

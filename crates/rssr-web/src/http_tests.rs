@@ -1,11 +1,13 @@
 //! The whole router over real HTTP (v0.2 phase C, C2): Origin and CSRF checks, the JSON API
 //! boundary, login, logout and revocation, in the order the middleware actually runs.
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use reqwest::{Client, Response, StatusCode, header, redirect::Policy};
+use rssr_infra::{local_backend::native_local_backend, store::LibraryStore};
 
 use crate::{
+    api::ApiState,
     app,
     auth::{
         AppState, AuthStore, CSRF_HEADER, generate_password_hash, parse_public_origin,
@@ -13,16 +15,31 @@ use crate::{
     },
 };
 
-struct Server {
-    base: String,
-    state: AppState,
-    store: Arc<AuthStore>,
-    client: Client,
+/// The build identifier the test servers expect on writes.
+pub(crate) const TEST_BUILD: &str = "test-build";
+
+pub(crate) struct Server {
+    pub(crate) base: String,
+    pub(crate) state: AppState,
+    pub(crate) store: Arc<AuthStore>,
+    pub(crate) client: Client,
     _dir: ScratchDir,
 }
 
 impl Server {
+    /// A server over an empty library.
     async fn start(public_origin: Option<&str>) -> Self {
+        let library = LibraryStore::open_in_memory().await.unwrap();
+        let api = ApiState::with(
+            Arc::new(native_local_backend(library)),
+            TEST_BUILD,
+            Duration::from_secs(60),
+        );
+        Self::start_with(public_origin, api).await
+    }
+
+    /// A server whose application routes are `api`'s.
+    pub(crate) async fn start_with(public_origin: Option<&str>, api: ApiState) -> Self {
         let dir = ScratchDir::new("http");
         let static_dir = dir.path().join("public");
         std::fs::create_dir_all(&static_dir).unwrap();
@@ -35,13 +52,13 @@ impl Server {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let local = listener.local_addr().unwrap();
         let state = AppState::new(Arc::new(config), Arc::clone(&store), local).unwrap();
-        let service = app(state.clone()).into_make_service_with_connect_info::<SocketAddr>();
+        let service = app(state.clone(), api).into_make_service_with_connect_info::<SocketAddr>();
         tokio::spawn(async move { axum::serve(listener, service).await.unwrap() });
         let client = Client::builder().redirect(Policy::none()).no_proxy().build().unwrap();
         Self { base: format!("http://{local}"), state, store, client, _dir: dir }
     }
 
-    fn url(&self, path: &str) -> String {
+    pub(crate) fn url(&self, path: &str) -> String {
         format!("{}{path}", self.base)
     }
 
@@ -58,13 +75,13 @@ impl Server {
     }
 
     /// Logs in from the trusted origin; returns the `Cookie` header value of the session.
-    async fn session(&self) -> String {
+    pub(crate) async fn session(&self) -> String {
         let response = self.login_from(Some(&self.base), "secret123").await;
         assert_eq!(response.status(), StatusCode::SEE_OTHER);
         cookie(&response, "rssr_web_session").expect("a session cookie")
     }
 
-    async fn get(&self, path: &str, cookie: Option<&str>) -> Response {
+    pub(crate) async fn get(&self, path: &str, cookie: Option<&str>) -> Response {
         let mut request = self.client.get(self.url(path));
         if let Some(cookie) = cookie {
             request = request.header(header::COOKIE, cookie);
@@ -72,7 +89,7 @@ impl Server {
         request.send().await.unwrap()
     }
 
-    async fn csrf(&self, cookie: &str) -> String {
+    pub(crate) async fn csrf(&self, cookie: &str) -> String {
         let response = self.get("/api/v1/session", Some(cookie)).await;
         assert_eq!(response.status(), StatusCode::OK);
         let body: serde_json::Value = response.json().await.unwrap();
@@ -345,7 +362,7 @@ async fn session_checks_are_bounded() {
     );
     let response = server.get("/api/v1/session", Some(&session)).await;
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-    assert_eq!(json_code(response).await, "busy");
+    assert_eq!(json_code(response).await, "unavailable");
     assert_eq!(server.get("/login", None).await.status(), StatusCode::OK);
     let response = server.get("/entries", None).await;
     assert_eq!(location(&response), "/login?next=%2Fentries", "no cookie, no check needed");
