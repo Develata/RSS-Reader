@@ -33,6 +33,10 @@ tracing-subscriber.workspace = true
 url.workspace = true
 urlencoding.workspace = true
 
+[dev-dependencies]
+# Paused time for the background jobs' tests (retention, poll waits).
+tokio = { workspace = true, features = ["test-util"] }
+
 [target.'cfg(unix)'.dependencies]
 # The authentication database's owner check (auth::store).
 libc = "0.2"

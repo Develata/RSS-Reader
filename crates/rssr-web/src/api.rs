@@ -1,5 +1,7 @@
-//! The reader's HTTP API (v0.2 phase C, C3): the synchronous [`Backend`] operations under
-//! `/api/v1` ([`rssr_api::protocol`]), answered from the server's own library.
+//! The reader's HTTP API (v0.2 phase C, C3): every [`Backend`] operation under `/api/v1`
+//! ([`rssr_api::protocol`]), answered from the server's own library. Five network-heavy
+//! operations run as background jobs ([`crate::jobs`]): the request starts the job, the client
+//! polls it.
 //!
 //! [`routes`] goes behind the session check of [`crate::auth::with_auth`], which also checks the
 //! Origin and the CSRF token of every write. Here:
@@ -10,7 +12,8 @@
 //! - bodies and structured reads' parameters are bounded (the limits in [`protocol`]);
 //! - at most [`MAX_OPERATIONS`] operations run at once, and [`MAX_IMPORTS`] import; more are
 //!   refused at once, never queued. An operation runs in its own task that holds its slot until
-//!   it ends, so a client that goes away neither cancels a write halfway nor frees the slot early;
+//!   it ends, so a client that goes away neither cancels a write halfway nor frees the slot early.
+//!   Jobs have their own bounds ([`crate::jobs`]); a poll takes no slot (it only waits);
 //! - every answer is JSON and is not cached.
 
 use std::{future::Future, sync::Arc, time::Duration};
@@ -30,7 +33,10 @@ use axum::{
 use rand_core::{OsRng, RngCore};
 use rssr_api::{
     Backend, BackendError, ErrorCode,
-    protocol::{self, ImportConfigJson, ImportOpml, SetRead, SetStarred, routes},
+    protocol::{
+        self, AddSubscription, ImportConfigJson, ImportOpml, JobCreated, JobId, JobResult,
+        RemoteConfig, SetRead, SetStarred, routes,
+    },
 };
 use rssr_application::{EntriesBootstrapInput, SettingsPatch};
 use rssr_domain::{EntriesWorkspaceState, EntryQuery, MarkReadPreview};
@@ -38,7 +44,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tracing::{error, info, warn};
 
-use crate::auth::is_safe;
+use crate::{auth::is_safe, jobs::Jobs};
 
 /// This build's identifier (`build-support/build_id.rs`).
 pub(crate) const BUILD_ID: &str = env!("RSSR_BUILD_ID");
@@ -59,6 +65,7 @@ pub(crate) struct ApiState {
     operations: Arc<Semaphore>,
     imports: Arc<Semaphore>,
     localize_limit: Duration,
+    jobs: Jobs,
 }
 
 impl ApiState {
@@ -73,6 +80,7 @@ impl ApiState {
             operations: Arc::new(Semaphore::new(MAX_OPERATIONS)),
             imports: Arc::new(Semaphore::new(MAX_IMPORTS)),
             localize_limit,
+            jobs: Jobs::new(),
         }
     }
 
@@ -82,6 +90,12 @@ impl ApiState {
         Arc::clone(&self.operations)
             .try_acquire_many_owned(MAX_OPERATIONS as u32)
             .expect("all operation slots")
+    }
+
+    /// Test only: admits jobs that never finish until no more are admitted.
+    #[cfg(test)]
+    pub(crate) fn fill_jobs(&self) {
+        self.jobs.fill();
     }
 
     /// Test only: takes the import slot.
@@ -121,6 +135,12 @@ pub(crate) fn routes<S: Clone + Send + Sync + 'static>(state: ApiState) -> Route
         .route(routes::FEED, delete(remove_feed))
         .route(routes::CONFIG_JSON, get(export_config_json).put(import_config_json).layer(imports))
         .route(routes::CONFIG_OPML, get(export_opml).post(import_opml).layer(imports))
+        .route(routes::JOB_REFRESH_ALL, post(start_refresh_all))
+        .route(routes::JOB_REFRESH_FEED, post(start_refresh_feed))
+        .route(routes::JOB_ADD_SUBSCRIPTION, post(start_add_subscription))
+        .route(routes::JOB_REMOTE_PUSH, post(start_remote_push))
+        .route(routes::JOB_REMOTE_PULL, post(start_remote_pull))
+        .route(routes::JOB, get(poll_job))
         // Outside the routes' own limits, which take precedence.
         .route_layer(DefaultBodyLimit::max(protocol::MAX_BODY_BYTES))
         .route_layer(middleware::from_fn_with_state(state.clone(), api_context))
@@ -263,6 +283,20 @@ impl Ctx {
     /// The import slot, or `unavailable` at once.
     fn import_slot(&self) -> Result<OwnedSemaphorePermit, Failure> {
         Arc::clone(&self.state.imports).try_acquire_owned().map_err(|_| self.fail(busy()))
+    }
+
+    /// Starts `operation` as a background job: `202` and its id, or `unavailable` when no more
+    /// jobs are admitted. The operation's future is only made here; it runs once admitted.
+    fn start<F, Fut>(self, operation: F) -> Response
+    where
+        F: FnOnce(SharedBackend) -> Fut,
+        Fut: Future<Output = rssr_api::Result<JobResult>> + Send + 'static,
+    {
+        let job = operation(Arc::clone(&self.state.backend));
+        match self.state.jobs.submit(&self.id.0, job) {
+            Ok(job_id) => (StatusCode::ACCEPTED, Json(JobCreated { job_id })).into_response(),
+            Err(error) => failure(error, &self.id),
+        }
     }
 
     /// Runs `operation` in its own task holding an operation slot (and `import`, an import's
@@ -422,4 +456,64 @@ async fn import_opml(ctx: Ctx, body: Body) -> Answer {
     let import = ctx.import_slot()?;
     let ImportOpml { raw } = ctx.body(body)?;
     Ok(ctx.run(Some(import), move |backend| async move { backend.import_opml(&raw).await }).await)
+}
+
+async fn start_refresh_all(ctx: Ctx) -> Response {
+    ctx.start(|backend| async move { Ok(JobResult::RefreshAll(backend.refresh_all().await?)) })
+}
+
+async fn start_refresh_feed(ctx: Ctx, path: PathParam) -> Answer {
+    let feed_id = ctx.path_id(path)?;
+    Ok(ctx.start(move |backend| async move {
+        Ok(JobResult::RefreshFeed(backend.refresh_feed(feed_id).await?))
+    }))
+}
+
+async fn start_add_subscription(ctx: Ctx, body: Body) -> Answer {
+    let AddSubscription { raw_url, fallback_site_url } = ctx.body(body)?;
+    Ok(ctx.start(move |backend| async move {
+        let outcome = backend.add_subscription(&raw_url, fallback_site_url).await?;
+        Ok(JobResult::AddSubscription(outcome))
+    }))
+}
+
+async fn start_remote_push(ctx: Ctx, body: Body) -> Answer {
+    let RemoteConfig { endpoint, remote_path } = ctx.body(body)?;
+    Ok(ctx.start(move |backend| async move {
+        let outcome = backend.push_remote_config(&endpoint, &remote_path).await?;
+        Ok(JobResult::RemoteConfigPush(outcome))
+    }))
+}
+
+async fn start_remote_pull(ctx: Ctx, body: Body) -> Answer {
+    let RemoteConfig { endpoint, remote_path } = ctx.body(body)?;
+    Ok(ctx.start(move |backend| async move {
+        let outcome = backend.pull_remote_config(&endpoint, &remote_path).await?;
+        Ok(JobResult::RemoteConfigPull(outcome))
+    }))
+}
+
+/// A job's status, after waiting up to `wait_ms` (a plain integer, at most
+/// `protocol::MAX_JOB_WAIT`) for it to finish. An id that is malformed, unknown, expired,
+/// evicted or from before a restart is `status_unavailable`.
+async fn poll_job(ctx: Ctx, path: PathParam, RawQuery(raw): RawQuery) -> Answer {
+    let raw = raw.unwrap_or_default();
+    let wait_ms = match url::form_urlencoded::parse(raw.as_bytes())
+        .find_map(|(key, value)| (key == "wait_ms").then_some(value))
+    {
+        None => 0,
+        Some(value) => value.parse::<u64>().map_err(|_| ctx.invalid("wait_ms 必须是非负整数"))?,
+    };
+    let id = path.ok().and_then(|Path(raw)| JobId::parse(&raw));
+    let status = match id {
+        Some(id) => ctx.state.jobs.status(&id, Duration::from_millis(wait_ms)).await,
+        None => None,
+    };
+    let status = status.ok_or_else(|| {
+        ctx.fail(BackendError::new(
+            ErrorCode::StatusUnavailable,
+            "任务的状态已不可用（已过期、被淘汰或服务器重启过），请重新读取相关数据",
+        ))
+    })?;
+    Ok(([(header::CONTENT_TYPE, "application/json")], status).into_response())
 }

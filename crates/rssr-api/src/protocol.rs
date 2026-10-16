@@ -14,6 +14,12 @@
 //! - a success is `200` with the operation's result as JSON; an operation without a result
 //!   answers `null`; the exports (`GET routes::CONFIG_JSON`, `GET routes::CONFIG_OPML`) answer
 //!   the document as a JSON string;
+//! - starting a job answers `202` with a [`JobCreated`]; polling it answers `200` with its
+//!   [`JobStatus`]. `wait_ms` is a plain integer (absent: 0; more than [`MAX_JOB_WAIT`] counts as
+//!   that). A job whose status is gone (an id that is malformed or unknown, a status kept past
+//!   its retention or evicted, a server restarted since) is
+//!   [`crate::ErrorCode::StatusUnavailable`]: the server keeps finished statuses for a while at
+//!   most, never a guaranteed time;
 //! - bodies are bounded ([`MAX_BODY_BYTES`], with the larger bounds of the settings, the
 //!   mark-read confirmation and the imports), and so is a structured read's parameter
 //!   ([`MAX_QUERY_PARAMETER_BYTES`]); more is [`crate::ErrorCode::TooLarge`];

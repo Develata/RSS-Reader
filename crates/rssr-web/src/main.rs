@@ -4,6 +4,7 @@ mod api_tests;
 mod auth;
 #[cfg(test)]
 mod http_tests;
+mod jobs;
 mod proxy;
 
 use std::{

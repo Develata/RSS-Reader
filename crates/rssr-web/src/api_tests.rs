@@ -4,17 +4,24 @@
 //! Every route is compared with an independent [`LocalBackend`] over an identical library: both
 //! subscribe to the same local feeds in the same order, then each operation runs on the server
 //! through HTTP and on the second backend directly, and the answers must be the same JSON (times
-//! of writes aside). Then the protocol's own rules: the build check, request ids, the bounds of
-//! parameters and bodies, the operation and import slots, the mark-read bound, the localization
-//! time limit.
+//! of writes aside). Background jobs are started and polled over HTTP the same way. Then the
+//! protocol's own rules: the build check, request ids, the bounds of parameters and bodies, the
+//! operation and import slots, the mark-read bound, the localization time limit, and the jobs'
+//! admission, ids and lost statuses.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
-use axum::{Router, http::header::CONTENT_TYPE, routing::get};
+use axum::{
+    Router, extract::Path, http::header::CONTENT_TYPE, response::IntoResponse, routing::get,
+};
 use reqwest::{Method, StatusCode, header};
 use rssr_api::{
     AddSubscriptionOutcome, Backend,
-    protocol::{self, routes},
+    protocol::{self, JobId, routes},
 };
 use rssr_application::{EntriesBootstrapInput, SettingsPatch};
 use rssr_domain::{
@@ -32,9 +39,31 @@ use crate::{
     http_tests::{Server, TEST_BUILD},
 };
 
-/// Local feeds and images.
+/// Local feeds and images, and a WebDAV store that keeps what is put.
 struct FeedServer {
     base: String,
+}
+
+type DavFiles = Arc<Mutex<HashMap<String, String>>>;
+
+fn webdav(files: DavFiles) -> axum::routing::MethodRouter {
+    let put_files = Arc::clone(&files);
+    get(move |Path(name): Path<String>| {
+        let files = Arc::clone(&files);
+        async move {
+            match files.lock().unwrap().get(&name).cloned() {
+                Some(body) => body.into_response(),
+                None => StatusCode::NOT_FOUND.into_response(),
+            }
+        }
+    })
+    .put(move |Path(name): Path<String>, body: String| {
+        let files = Arc::clone(&put_files);
+        async move {
+            files.lock().unwrap().insert(name, body);
+            StatusCode::CREATED
+        }
+    })
 }
 
 impl FeedServer {
@@ -80,6 +109,7 @@ impl FeedServer {
                         .collect(),
                 )),
             )
+            .route("/dav/{name}", webdav(DavFiles::default()))
             .route(
                 "/img.png",
                 get(|| async { ([(CONTENT_TYPE, "image/png")], vec![1_u8, 2, 3, 4]) }),
@@ -98,6 +128,14 @@ impl FeedServer {
     fn url(&self, path: &str) -> String {
         format!("{}/{path}", self.base)
     }
+}
+
+/// A final job status's result, checked to be of `kind`.
+#[track_caller]
+fn outcome(status: &Value, kind: &str) -> Value {
+    assert_eq!(status["state"], "succeeded", "{status}");
+    assert_eq!(status["result"]["kind"], kind, "{status}");
+    status["result"]["outcome"].clone()
 }
 
 fn rss(title: &str, items: Vec<String>) -> String {
@@ -207,6 +245,26 @@ impl Client {
 
     async fn get(&self, path: &str) -> Value {
         self.ok(Method::GET, path, None).await
+    }
+
+    /// Starts a job; its id.
+    async fn start_job(&self, path: &str, body: Option<Value>) -> JobId {
+        let response = self.send(Method::POST, path, body.as_ref(), Some(TEST_BUILD)).await;
+        assert_eq!(response.status(), StatusCode::ACCEPTED, "{path}");
+        let created: Value = response.json().await.unwrap();
+        JobId::parse(created["job_id"].as_str().unwrap()).expect("a well-formed job id")
+    }
+
+    /// Starts a job and polls it to its final status.
+    async fn job(&self, path: &str, body: Option<Value>) -> Value {
+        let id = self.start_job(path, body).await;
+        for _ in 0..30 {
+            let status = self.get(&format!("{}?wait_ms=10000", protocol::job(&id))).await;
+            if matches!(status["state"].as_str(), Some("succeeded" | "failed")) {
+                return status;
+            }
+        }
+        panic!("the job {path} did not finish");
     }
 
     /// An error answer: its status, code and message; the request id in the body is the one in
@@ -581,4 +639,97 @@ async fn a_slow_localization_is_given_up() {
     assert_eq!((status, code.as_str()), (StatusCode::SERVICE_UNAVAILABLE, "unavailable"));
     assert!(started.elapsed() < Duration::from_secs(5), "{:?}", started.elapsed());
     assert_eq!(client.get(&protocol::entry(id)).await, before);
+}
+
+/// Every job answers what the backend answers, over the same library, in the same sequence; a
+/// failed job carries the backend's error.
+#[tokio::test]
+async fn every_job_answers_what_the_backend_answers() {
+    let feeds = FeedServer::start().await;
+    let served = library(&feeds, &["a.xml"]).await;
+    let direct = library(&feeds, &["a.xml"]).await;
+    let client = Client::over(served).await;
+
+    let status = client.job(routes::JOB_REFRESH_ALL, None).await;
+    same(outcome(&status, "refresh_all"), direct.refresh_all().await.unwrap(), "refresh all");
+    let feed_id = direct.load_feeds_snapshot().await.unwrap().feeds[0].id;
+    let status = client.job(&protocol::job_refresh_feed(feed_id), None).await;
+    same(outcome(&status, "refresh_feed"), direct.refresh_feed(feed_id).await.unwrap(), "refresh");
+
+    let added = json!({ "raw_url": feeds.url("c.xml"), "fallback_site_url": null });
+    let status = client.job(routes::JOB_ADD_SUBSCRIPTION, Some(added)).await;
+    same(
+        outcome(&status, "add_subscription"),
+        direct.add_subscription(&feeds.url("c.xml"), None).await.unwrap(),
+        "add subscription",
+    );
+    same(client.get(routes::FEEDS).await, direct.load_feeds_snapshot().await.unwrap(), "feeds");
+
+    // Each side has its own remote file.
+    let endpoint = feeds.url("dav/");
+    for (kind, route) in [("push", routes::JOB_REMOTE_PUSH), ("pull", routes::JOB_REMOTE_PULL)] {
+        let body = json!({ "endpoint": endpoint, "remote_path": "served.json" });
+        let status = client.job(route, Some(body)).await;
+        let expected = match kind {
+            "push" => serde_json::to_value(
+                direct.push_remote_config(&endpoint, "direct.json").await.unwrap(),
+            ),
+            _ => serde_json::to_value(
+                direct.pull_remote_config(&endpoint, "direct.json").await.unwrap(),
+            ),
+        }
+        .unwrap();
+        same(outcome(&status, &format!("remote_config_{kind}")), expected, kind);
+    }
+
+    let status = client.job(&protocol::job_refresh_feed(999_999), None).await;
+    let error = direct.refresh_feed(999_999).await.unwrap_err();
+    assert_eq!(status["state"], "failed", "{status}");
+    assert_eq!(status["error"]["code"], error.code.as_str());
+    assert_eq!(status["error"]["message"], error.message);
+    assert!(status["error"]["request_id"].is_string());
+}
+
+/// Starting a job is a write of this build; full admission refuses it; a status that is gone,
+/// or an id that is not one, is `status_unavailable`; a restarted server knows no old job.
+#[tokio::test]
+async fn jobs_follow_the_protocol() {
+    let library = native_local_backend(LibraryStore::open_in_memory().await.unwrap());
+    let backend: crate::api::SharedBackend = Arc::new(library);
+    let api = ApiState::with(Arc::clone(&backend), TEST_BUILD, Duration::from_secs(60));
+    let client = Client::start(api.clone()).await;
+
+    for build in [None, Some("another-build")] {
+        let response = client.send(Method::POST, routes::JOB_REFRESH_ALL, None, build).await;
+        let (status, code, _) = client.error(response).await;
+        assert_eq!((status, code.as_str()), (StatusCode::CONFLICT, "build_mismatch"), "{build:?}");
+    }
+    let response = client.send(Method::GET, routes::JOB_REFRESH_ALL, None, Some(TEST_BUILD)).await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let finished = client.job(routes::JOB_REFRESH_ALL, None).await;
+    assert_eq!(outcome(&finished, "refresh_all")["total_count"], 0);
+    let id = client.start_job(routes::JOB_REFRESH_ALL, None).await;
+    let path = protocol::job(&id);
+    let response = client.send(Method::GET, &format!("{path}?wait_ms=soon"), None, None).await;
+    assert_eq!(client.error(response).await.1, "invalid_input");
+    client.get(&format!("{path}?wait_ms=99999999")).await;
+
+    let unknown = JobId::parse(&"0".repeat(32)).unwrap();
+    for gone in [protocol::job(&unknown), "/api/v1/jobs/not-a-job".to_owned()] {
+        let response = client.send(Method::GET, &gone, None, None).await;
+        let (status, code, _) = client.error(response).await;
+        assert_eq!((status, code.as_str()), (StatusCode::GONE, "status_unavailable"), "{gone}");
+    }
+
+    api.fill_jobs();
+    let response = client.send(Method::POST, routes::JOB_REFRESH_ALL, None, Some(TEST_BUILD)).await;
+    let (status, code, _) = client.error(response).await;
+    assert_eq!((status, code.as_str()), (StatusCode::SERVICE_UNAVAILABLE, "unavailable"));
+
+    let restarted = ApiState::with(backend, TEST_BUILD, Duration::from_secs(60));
+    let client = Client::start(restarted).await;
+    let response = client.send(Method::GET, &path, None, None).await;
+    let (status, code, _) = client.error(response).await;
+    assert_eq!((status, code.as_str()), (StatusCode::GONE, "status_unavailable"));
 }
