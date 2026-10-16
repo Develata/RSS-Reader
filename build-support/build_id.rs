@@ -72,11 +72,11 @@ fn dev_build_id() -> String {
         return format!("dev-{commit}");
     };
     let root = std::path::PathBuf::from(root);
+    // Always, even when missing: while one is missing the script reruns on every build, which
+    // is what notices it coming back (review C3-R3 R3-03). Only the optional Git files above are
+    // watched when present.
     for input in BUILD_INPUTS {
-        // An input that appears later shows in the diff or as untracked once the script runs.
-        if root.join(input).exists() {
-            println!("cargo:rerun-if-changed={}", root.join(input).display());
-        }
+        println!("cargo:rerun-if-changed={}", root.join(input).display());
     }
 
     // The inputs in the whole work tree, whatever the crate's directory.
