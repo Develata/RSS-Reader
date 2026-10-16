@@ -13,8 +13,9 @@
 
 /// What goes into the page and the server: watched by Cargo and hashed, the same list for both,
 /// relative to the repository's root. Changes elsewhere (documents, scripts) leave the id.
-const BUILD_INPUTS: [&str; 6] =
-    ["crates", "build-support", "assets", "Dioxus.toml", "Cargo.toml", "Cargo.lock"];
+/// `icons` is embedded in both (review C3-R2 R2-06).
+const BUILD_INPUTS: [&str; 7] =
+    ["crates", "build-support", "assets", "icons", "Dioxus.toml", "Cargo.toml", "Cargo.lock"];
 
 /// Sets `RSSR_BUILD_ID` for the crate being built (`env!("RSSR_BUILD_ID")`) and tells Cargo when
 /// to compute it again.
@@ -55,9 +56,16 @@ fn dev_build_id() -> String {
     if let Some(branch) = git(&["symbolic-ref", "-q", "HEAD"]).map(text) {
         watched.push(branch);
     }
+    // Only those that exist: Cargo reruns the script on every build for a watched path that does
+    // not (a new repository has no `packed-refs`; a packed branch has no loose ref). HEAD and the
+    // index change with every commit, so a ref that appears later is still noticed
+    // (review C3-R2 R2-07).
     for name in watched {
         if let Some(path) = git(&["rev-parse", "--git-path", &name]).map(text) {
-            println!("cargo:rerun-if-changed={}", manifest_dir.join(path).display());
+            let path = manifest_dir.join(path);
+            if path.exists() {
+                println!("cargo:rerun-if-changed={}", path.display());
+            }
         }
     }
     let Some(root) = git(&["rev-parse", "--show-toplevel"]).map(text) else {
@@ -65,7 +73,10 @@ fn dev_build_id() -> String {
     };
     let root = std::path::PathBuf::from(root);
     for input in BUILD_INPUTS {
-        println!("cargo:rerun-if-changed={}", root.join(input).display());
+        // An input that appears later shows in the diff or as untracked once the script runs.
+        if root.join(input).exists() {
+            println!("cargo:rerun-if-changed={}", root.join(input).display());
+        }
     }
 
     // The inputs in the whole work tree, whatever the crate's directory.
