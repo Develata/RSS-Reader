@@ -278,19 +278,29 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
     };
     assert!(parse(&json(&items.join(","))).unwrap().entries.len() > 3000, "a large JSON Feed");
 
+    // Each flood below is refused by one charge alone; the others would let it through.
     let started = std::time::Instant::now();
-    // 500 000 links resolved against a base of 2 031 bytes, 6 051 once percent-encoded: about
-    // 3 GB of addresses from 7.5 MB.
+    // Links resolved against a base of 2 031 bytes, 6 051 once percent-encoded: 20 000 take about
+    // 120 MB (500 000, in 7.5 MB, about 3 GB).
     let base = format!("https://example.com/{}/", "雪".repeat(670));
-    assert!(parse(&atom(&base, &"<link href=\"\"/>".repeat(500_000))).is_err(), "links");
-    // A million empty items: about a gigabyte of entries.
+    assert!(parse(&atom(&base, &"<link href=\"\"/>".repeat(20_000))).is_err(), "links");
+    // 200 000 empty items (1.4 MB): about 190 MB of entries.
     let empty = format!(
         "<rss version=\"2.0\"><channel><title>t</title>{}</channel></rss>",
-        "<item/>".repeat(1_000_000)
+        "<item/>".repeat(200_000)
     );
     assert!(parse(&empty).is_err(), "empty items");
-    let ids = (0..600_000).map(|i| format!("{{\"id\":\"{i}\"}}")).collect::<Vec<_>>();
+    // 50 000 JSON items: about 100 MB; 300 000 tags of one item (1.2 MB): about 35 MB.
+    let ids = (0..50_000).map(|i| format!("{{\"id\":\"{i}\"}}")).collect::<Vec<_>>();
     assert!(parse(&json(&ids.join(","))).is_err(), "JSON items");
+    let tags = vec!["\"a\""; 300_000].join(",");
+    assert!(parse(&json(&format!("{{\"id\":\"x\",\"tags\":[{tags}]}}"))).is_err(), "JSON tags");
+    // `media:content` is not an Atom text construct: what is inside it is charged.
+    let thumbnails = "<media:thumbnail url=\"\"/>".repeat(300_000);
+    let media = format!(
+        "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\"><channel><title>t</title><item><media:content url=\"\">{thumbnails}</media:content></item></channel></rss>"
+    );
+    assert!(parse(&media).is_err(), "media thumbnails");
     // Outside an Atom text construct elements are charged even where feed-rs would skip them.
     let content = "<x/>".repeat(300_000);
     let outside = format!("<entry><id>x</id>{content}</entry>");
