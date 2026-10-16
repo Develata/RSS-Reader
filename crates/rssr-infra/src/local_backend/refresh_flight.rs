@@ -79,6 +79,7 @@ mod tests {
                     total_count: 0,
                     failed_count: 0,
                     failures: Vec::new(),
+                    failures_truncated: false,
                 })
             };
             let (first, second) = tokio::join!(flight.run(request()), flight.run(request()));
@@ -133,6 +134,7 @@ mod tests {
                     total_count: 0,
                     failed_count: 0,
                     failures: Vec::new(),
+                    failures_truncated: false,
                 })
             }),
         )

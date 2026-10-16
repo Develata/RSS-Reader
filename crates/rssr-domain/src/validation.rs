@@ -14,7 +14,7 @@ use crate::{
     DomainError,
     feed::normalize_feed_url,
     settings::{
-        ConfigPackage, MAX_ARCHIVE_AFTER_MONTHS, MAX_ENTRIES_PAGE_SIZE,
+        ConfigPackage, MAX_ARCHIVE_AFTER_MONTHS, MAX_CUSTOM_CSS_BYTES, MAX_ENTRIES_PAGE_SIZE,
         MAX_REFRESH_INTERVAL_MINUTES, UserSettings,
     },
 };
@@ -52,6 +52,9 @@ pub fn validate_user_settings(settings: &UserSettings) -> crate::Result<()> {
         return Err(invalid(format!(
             "阅读字号缩放必须在 {MIN_READER_FONT_SCALE} 到 {MAX_READER_FONT_SCALE} 之间"
         )));
+    }
+    if settings.custom_css.len() > MAX_CUSTOM_CSS_BYTES {
+        return Err(invalid(format!("自定义 CSS 不能超过 {} KiB", MAX_CUSTOM_CSS_BYTES / 1024)));
     }
 
     Ok(())
@@ -183,7 +186,7 @@ mod tests {
         CONFIG_PACKAGE_VERSION, parse_feed_url, validate_config_package, validate_custom_css,
         validate_user_settings,
     };
-    use crate::settings::{ConfigFeed, ConfigPackage, UserSettings};
+    use crate::settings::{ConfigFeed, ConfigPackage, MAX_CUSTOM_CSS_BYTES, UserSettings};
 
     fn package(feeds: Vec<ConfigFeed>, settings: UserSettings) -> ConfigPackage {
         ConfigPackage {
@@ -219,12 +222,24 @@ mod tests {
             (UserSettings { entries_page_size: 0, ..UserSettings::default() }, "文章页每页数量"),
             (UserSettings { entries_page_size: 201, ..UserSettings::default() }, "文章页每页数量"),
             (UserSettings { reader_font_scale: 0.1, ..UserSettings::default() }, "阅读字号缩放"),
+            (
+                UserSettings {
+                    custom_css: "a".repeat(MAX_CUSTOM_CSS_BYTES + 1),
+                    ..UserSettings::default()
+                },
+                "自定义 CSS",
+            ),
         ];
 
         for (settings, expected) in cases {
             let error = validate_user_settings(&settings).expect_err("expected rejection");
             assert!(error.to_string().contains(expected), "expected `{expected}` in `{error}`");
         }
+        let largest = UserSettings {
+            custom_css: "a".repeat(MAX_CUSTOM_CSS_BYTES),
+            ..UserSettings::default()
+        };
+        assert!(validate_user_settings(&largest).is_ok());
     }
 
     #[test]

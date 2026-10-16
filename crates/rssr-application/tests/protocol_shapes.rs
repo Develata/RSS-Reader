@@ -100,6 +100,7 @@ fn refresh_failures_are_structured() {
             kind: ErrorKind::Network,
             message: "HTTP 404".into(),
         }],
+        failures_truncated: false,
     };
     roundtrip(
         &outcome,
@@ -114,6 +115,7 @@ fn refresh_failures_are_structured() {
                 "kind": "network",
                 "message": "HTTP 404",
             }],
+            "failures_truncated": false,
         }),
     );
 }

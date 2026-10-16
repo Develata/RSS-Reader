@@ -173,12 +173,12 @@ impl<H: LocalHost> LocalBackend<H> {
                 }
             }
         }
-        RefreshAllExecutionOutcome {
-            inserted_count: summary.inserted_count,
-            total_count: summary.total_count as u64,
-            failed_count: summary.failed_count as u64,
-            failures: self.named(summary.failures).await,
-        }
+        RefreshAllExecutionOutcome::bounded(
+            summary.inserted_count,
+            summary.total_count as u64,
+            summary.failed_count as u64,
+            self.named(summary.failures).await,
+        )
     }
 
     /// Hands new entries to the host's image localization before turning the outcome into what
@@ -199,7 +199,10 @@ impl<H: LocalHost> LocalBackend<H> {
             }
         }
         let failure = self.named(failure.into_iter().collect()).await.pop();
-        RefreshFeedExecutionOutcome { inserted_count, failure }
+        RefreshFeedExecutionOutcome {
+            inserted_count,
+            failure: failure.map(RefreshFailureItem::bounded),
+        }
     }
 
     /// The periodic refresh: refreshes everything when due, then sleeps until next time.
@@ -358,7 +361,7 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
                 prepared.with_fallback_site_url(fallback_site_url)
             }
             PrepareSubscriptionOutcome::NeedsSelection { page_url, candidates } => {
-                return Ok(AddSubscriptionOutcome::NeedsSelection { page_url, candidates });
+                return Ok(AddSubscriptionOutcome::needs_selection(page_url, candidates));
             }
         };
         let outcome = workflow

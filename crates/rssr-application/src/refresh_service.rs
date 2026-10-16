@@ -257,8 +257,13 @@ pub struct RefreshAllExecutionOutcome {
     pub inserted_count: u64,
     pub total_count: u64,
     pub failed_count: u64,
-    /// Empty when everything succeeded; fewer than `total_count` is a partial success.
+    /// Empty when everything succeeded; fewer than `total_count` is a partial success. Bounded
+    /// (`RefreshAllExecutionOutcome::bounded`): see `failures_truncated`.
     pub failures: Vec<RefreshFailureItem>,
+    /// Some failures are not listed (too many, or too large to send): `failed_count` is the full
+    /// count.
+    #[serde(default)]
+    pub failures_truncated: bool,
 }
 
 /// What refreshing one subscription led to, as the user interface receives it.

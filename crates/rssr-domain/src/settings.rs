@@ -3,6 +3,8 @@ use time::OffsetDateTime;
 
 pub const DEFAULT_ENTRIES_PAGE_SIZE: u32 = 100;
 pub const MAX_ENTRIES_PAGE_SIZE: u32 = 200;
+/// 自定义 CSS 的上限（字节）：设置会随配置包、远程配置与 HTTP 响应传输。
+pub const MAX_CUSTOM_CSS_BYTES: usize = 64 * 1024;
 /// 自动归档阈值上限（100 年）。除了挡住无意义的输入，也保证归档分界永远落在
 /// `time::Date` 支持的年份区间内，见 [`crate::entry::is_entry_archived`]。
 pub const MAX_ARCHIVE_AFTER_MONTHS: u32 = 1200;

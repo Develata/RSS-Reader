@@ -27,8 +27,8 @@ pub use repository::{
 pub use search::{fold_for_search, title_contains};
 pub use settings::{
     ConfigFeed, ConfigPackage, DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ARCHIVE_AFTER_MONTHS,
-    MAX_ENTRIES_PAGE_SIZE, MAX_REFRESH_INTERVAL_MINUTES, OpmlFeed, StartupView, ThemeMode,
-    UserSettings,
+    MAX_CUSTOM_CSS_BYTES, MAX_ENTRIES_PAGE_SIZE, MAX_REFRESH_INTERVAL_MINUTES, OpmlFeed,
+    StartupView, ThemeMode, UserSettings,
 };
 pub use validation::{
     CONFIG_PACKAGE_VERSION, parse_and_normalize_feed_url, parse_feed_url, validate_config_package,

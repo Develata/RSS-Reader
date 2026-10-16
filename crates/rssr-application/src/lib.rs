@@ -15,6 +15,7 @@ pub mod library_queries;
 pub mod persistence_mutation;
 pub mod reader_service;
 pub mod refresh_service;
+mod result_bounds;
 pub mod settings_service;
 pub mod startup_service;
 mod subscription_discovery;
@@ -53,6 +54,10 @@ pub use refresh_service::{
     RefreshFailure, RefreshFailureItem, RefreshFeedExecutionOutcome, RefreshFeedOutcome,
     RefreshFeedResult, RefreshHttpMetadata, RefreshLocalizedEntry, RefreshService,
     RefreshStorePort, RefreshTarget, RefreshTicket, SERIAL_REFRESH_CONCURRENCY,
+};
+pub use result_bounds::{
+    MAX_DISCOVERY_CANDIDATES, MAX_LISTED_FAILURES, MAX_MESSAGE_BYTES, MAX_NAME_BYTES,
+    MAX_RESULT_BYTES, MAX_URL_BYTES, TRUNCATION_MARK, truncate_marked,
 };
 pub use settings_service::{SettingsPatch, SettingsService};
 pub use startup_service::{StartupService, StartupTarget};
