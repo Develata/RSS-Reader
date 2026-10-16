@@ -112,6 +112,10 @@ struct Inner<H> {
 
 /// How long the periodic refresh waits after failing to read the settings.
 const AUTO_REFRESH_RETRY_DELAY: Duration = Duration::from_secs(30);
+/// The periodic refresh reads the settings at least this often, so an interval changed
+/// elsewhere (another device's page, the CLI on the same library) is seen within it, even while
+/// a refresh runs (v0.2 phase C, C5).
+const AUTO_REFRESH_SETTINGS_PERIOD: Duration = Duration::from_secs(60);
 
 impl<H: LocalHost> LocalBackend<H> {
     pub fn new(use_cases: AppUseCases, host: H) -> Self {
@@ -205,7 +209,11 @@ impl<H: LocalHost> LocalBackend<H> {
         }
     }
 
-    /// The periodic refresh: refreshes everything when due, then sleeps until next time.
+    /// The periodic refresh: reads the settings at least every
+    /// [`AUTO_REFRESH_SETTINGS_PERIOD`] and, when a refresh of everything is due, starts it in
+    /// the background without waiting for it. A new interval does not cancel a refresh in
+    /// progress; the next one is due by the new interval from the last start. A refresh still
+    /// running when the next is due is joined ([`RefreshFlight`]), not started twice.
     async fn auto_refresh_loop(self) {
         let mut last_refresh_started_at = None;
         loop {
@@ -227,9 +235,12 @@ impl<H: LocalHost> LocalBackend<H> {
                     refresh_interval_minutes = settings.refresh_interval_minutes,
                     "触发后台自动刷新全部订阅"
                 );
-                if let Err(error) = self.refresh_all().await {
-                    tracing::warn!(error = %error, "后台自动刷新失败");
-                }
+                let backend = self.clone();
+                self.inner.host.spawn(Box::pin(async move {
+                    if let Err(error) = backend.refresh_all().await {
+                        tracing::warn!(error = %error, "后台自动刷新失败");
+                    }
+                }));
                 last_refresh_started_at = Some(now);
             }
             let wait_for = auto_refresh::wait_duration(
@@ -237,7 +248,7 @@ impl<H: LocalHost> LocalBackend<H> {
                 settings.refresh_interval_minutes,
                 self.inner.host.now_utc(),
             );
-            self.inner.host.sleep(wait_for).await;
+            self.inner.host.sleep(wait_for.min(AUTO_REFRESH_SETTINGS_PERIOD)).await;
         }
     }
 }
@@ -481,6 +492,159 @@ mod tests {
         )
     }
 
+    /// A host whose clock and sleeps the test controls; it runs what it spawns.
+    struct ControlledHost {
+        now: Mutex<OffsetDateTime>,
+        /// Every sleep the periodic refresh asked for.
+        sleeps: Mutex<Vec<Duration>>,
+        /// Releases one sleep.
+        wake: tokio::sync::Notify,
+        spawned: Mutex<usize>,
+    }
+
+    #[async_trait::async_trait]
+    impl LocalHost for ControlledHost {
+        fn refresh_concurrency(&self) -> usize {
+            1
+        }
+        fn now_utc(&self) -> OffsetDateTime {
+            *self.now.lock().unwrap()
+        }
+        fn spawn(&self, task: LocalTask) {
+            *self.spawned.lock().unwrap() += 1;
+            tokio::spawn(task);
+        }
+        async fn sleep(&self, duration: Duration) {
+            self.sleeps.lock().unwrap().push(duration);
+            self.wake.notified().await;
+        }
+        fn remote_config_store(&self, _: &str, _: &str) -> Result<Box<dyn RemoteConfigStore>> {
+            anyhow::bail!("unused")
+        }
+    }
+
+    async fn controlled_backend() -> LocalBackend<ControlledHost> {
+        let store = LibraryStore::open_in_memory().await.unwrap();
+        LocalBackend::new(
+            compose_library_use_cases(store).use_cases,
+            ControlledHost {
+                now: Mutex::new(OffsetDateTime::UNIX_EPOCH),
+                sleeps: Mutex::default(),
+                wake: tokio::sync::Notify::new(),
+                spawned: Mutex::new(0),
+            },
+        )
+    }
+
+    impl LocalBackend<ControlledHost> {
+        /// Waits until the periodic refresh has asked for its `count`-th sleep; that sleep.
+        async fn sleep_number(&self, count: usize) -> Duration {
+            for _ in 0..500 {
+                if let Some(duration) = self.host().sleeps.lock().unwrap().get(count - 1) {
+                    return *duration;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            panic!("the periodic refresh did not sleep {count} times");
+        }
+
+        /// Moves the clock by `by` and ends the current sleep.
+        fn pass(&self, by: time::Duration) {
+            *self.host().now.lock().unwrap() += by;
+            self.host().wake.notify_one();
+        }
+
+        /// Refreshes the periodic refresh has started (the loop itself is the first spawn).
+        fn refreshes_started(&self) -> usize {
+            *self.host().spawned.lock().unwrap() - 1
+        }
+
+        async fn set_interval(&self, minutes: u32) {
+            let patch = rssr_application::SettingsPatch {
+                refresh_interval_minutes: Some(minutes),
+                ..Default::default()
+            };
+            self.update_settings(patch).await.unwrap();
+        }
+    }
+
+    /// The settings are read again every minute, so a long interval shortened elsewhere (the CLI,
+    /// another device) takes effect within a minute instead of after the old interval.
+    #[tokio::test]
+    async fn a_shortened_interval_is_seen_within_a_minute() {
+        let backend = controlled_backend().await;
+        backend.set_interval(24 * 60).await;
+        backend.ensure_auto_refresh_started();
+        assert_eq!(backend.sleep_number(1).await, AUTO_REFRESH_SETTINGS_PERIOD);
+        assert_eq!(backend.refreshes_started(), 1, "never refreshed: at once");
+
+        backend.set_interval(30).await;
+        backend.pass(time::Duration::minutes(29));
+        backend.sleep_number(2).await;
+        assert_eq!(backend.refreshes_started(), 1, "not due yet under the new interval");
+        backend.pass(time::Duration::minutes(1));
+        backend.sleep_number(3).await;
+        assert_eq!(backend.refreshes_started(), 2, "due by the new interval from the last start");
+    }
+
+    /// The loop does not wait for a refresh: while one is in progress the settings are read
+    /// again (a shorter wait shows the new interval), the refresh is not cancelled, and a refresh
+    /// due while it runs joins it instead of fetching again.
+    #[tokio::test]
+    async fn a_refresh_in_progress_does_not_hold_the_loop() {
+        // A feed server that accepts and never answers: the refresh stays in progress.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let accepted = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        std::thread::spawn({
+            let accepted = Arc::clone(&accepted);
+            move || {
+                let mut held = Vec::new();
+                for stream in listener.incoming() {
+                    accepted.fetch_add(1, Ordering::SeqCst);
+                    held.push(stream);
+                }
+            }
+        });
+        let backend = controlled_backend().await;
+        backend
+            .use_cases()
+            .feed_service
+            .add_subscription(&AddSubscriptionInput {
+                url: format!("http://{address}/feed.xml"),
+                title: None,
+                folder: None,
+            })
+            .await
+            .unwrap();
+        backend.set_interval(10).await;
+        backend.ensure_auto_refresh_started();
+        backend.sleep_number(1).await;
+        for _ in 0..500 {
+            if accepted.load(Ordering::SeqCst) > 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(accepted.load(Ordering::SeqCst), 1, "the refresh is in progress");
+
+        backend.set_interval(1).await;
+        backend.pass(time::Duration::seconds(30));
+        assert_eq!(
+            backend.sleep_number(2).await,
+            Duration::from_secs(30),
+            "the new interval was read while the refresh ran"
+        );
+        backend.pass(time::Duration::seconds(30));
+        backend.sleep_number(3).await;
+        assert_eq!(backend.refreshes_started(), 2);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(
+            accepted.load(Ordering::SeqCst),
+            1,
+            "the refresh due while one ran joined it; the first was not cancelled"
+        );
+    }
     #[tokio::test]
     async fn the_periodic_refresh_starts_once_and_not_where_the_host_does_not_run_it() {
         let backend = recording_backend(true).await;
