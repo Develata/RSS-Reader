@@ -650,6 +650,40 @@ async fn browser_bulk_read_refuses_a_selection_over_its_bound() {
     clear_browser_state_storage();
 }
 
+#[path = "support/listed_title_cases.rs"]
+mod listed_title_cases;
+
+/// Titles in lists are cut by the same rule as in the native store (review C3-R1 F04).
+#[wasm_bindgen_test]
+fn browser_titles_in_lists_are_bounded() {
+    use listed_title_cases::{bound_entry_title, long_entry_title, long_feed_title};
+    use rssr_domain::listed_title;
+    use rssr_infra::application_adapters::browser::query;
+
+    let mut feed = sample_feed(1, "https://example.com/long", false);
+    feed.title = Some(long_feed_title());
+    let mut long = sample_entry_index(1, 1, 1);
+    long.title = long_entry_title();
+    let mut bound = sample_entry_index(2, 1, 2);
+    bound.title = bound_entry_title();
+    let state = BrowserState {
+        core: PersistedState {
+            feeds: vec![feed],
+            entries: vec![long, bound],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let listed = query::list_entries(&state, &EntryQuery::default());
+    let mut titles: Vec<_> = listed.iter().map(|entry| entry.title.clone()).collect();
+    titles.sort();
+    let mut expected = vec![listed_title(&long_entry_title()), bound_entry_title()];
+    expected.sort();
+    assert_eq!(titles, expected);
+    assert!(listed.iter().all(|entry| entry.feed_title == listed_title(&long_feed_title())));
+    assert_eq!(query::list_feeds(&state)[0].title, listed_title(&long_feed_title()));
+}
+
 #[path = "support/discovery_cases.rs"]
 mod discovery_cases;
 #[wasm_bindgen_test]

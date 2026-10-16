@@ -11,6 +11,8 @@ mod bulk_read_cases;
 mod feed_title_cases;
 #[path = "support/library.rs"]
 mod library;
+#[path = "support/listed_title_cases.rs"]
+mod listed_title_cases;
 #[path = "support/refresh_content_cases.rs"]
 mod refresh_content_cases;
 #[path = "support/refresh_count_cases.rs"]
@@ -92,6 +94,39 @@ async fn counts_only_real_inserts_including_same_batch_duplicates() {
     let feed = library.add_feed("https://example.com/count").await;
     refresh_count_cases::verify_counts(&library.refresh, feed.id).await;
     assert_eq!(library.feeds.list_summaries().await.unwrap()[0].entry_count, 3);
+}
+
+/// Titles in lists are cut by the shared rule, in the query; the reader keeps the whole title.
+#[tokio::test]
+async fn titles_in_lists_are_bounded() {
+    use listed_title_cases::{bound_entry_title, long_entry_title, long_feed_title};
+    use rssr_domain::listed_title;
+
+    let library = Library::memory().await;
+    let feed = library.add_feed("https://example.com/long").await;
+    library
+        .seed(
+            feed.id,
+            vec![
+                library::published("long", &long_entry_title(), None),
+                library::published("bound", &bound_entry_title(), None),
+            ],
+        )
+        .await;
+    library.exec(format!("UPDATE feeds SET title = '{}'", long_feed_title())).await;
+
+    let listed = library.entries.list_entries(&EntryQuery::default()).await.unwrap();
+    let mut titles: Vec<_> = listed.iter().map(|entry| entry.title.clone()).collect();
+    titles.sort();
+    let mut expected = vec![listed_title(&long_entry_title()), bound_entry_title()];
+    expected.sort();
+    assert_eq!(titles, expected);
+    assert!(listed.iter().all(|entry| entry.feed_title == listed_title(&long_feed_title())));
+    let summaries = library.feeds.list_summaries().await.unwrap();
+    assert_eq!(summaries[0].title, listed_title(&long_feed_title()));
+    let long = listed.iter().find(|entry| entry.title != bound_entry_title()).unwrap();
+    let record = library.entries.get_entry_record(long.id).await.unwrap().unwrap();
+    assert_eq!(record.title, long_entry_title(), "the reader keeps the whole title");
 }
 
 #[tokio::test]

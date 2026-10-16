@@ -65,7 +65,8 @@ impl RefreshAllExecutionOutcome {
     /// bounded, at most [`MAX_LISTED_FAILURES`] are listed, and failures are listed only while the
     /// serialized result stays within [`MAX_RESULT_BYTES`] (measured item by item as they are
     /// added). `failed_count` is always the full count; `failures_truncated` says some are not
-    /// listed. In the smallest form nothing is listed: the counts remain.
+    /// listed: fewer are listed than `failed_count` (the caller may pass only the first ones).
+    /// In the smallest form nothing is listed: the counts remain.
     pub fn bounded(
         inserted_count: u64,
         total_count: u64,
@@ -81,7 +82,6 @@ impl RefreshAllExecutionOutcome {
             failures_truncated: true,
         };
         let mut size = serialized_len(&outcome);
-        let available = failures.len();
         for failure in failures {
             if outcome.failures.len() == MAX_LISTED_FAILURES {
                 break;
@@ -95,7 +95,7 @@ impl RefreshAllExecutionOutcome {
             size += item;
             outcome.failures.push(failure);
         }
-        outcome.failures_truncated = outcome.failures.len() < available;
+        outcome.failures_truncated = (outcome.failures.len() as u64) < failed_count;
         outcome
     }
 }
@@ -177,7 +177,10 @@ mod tests {
 
         let few: Vec<_> = (0..3).map(|id| failure(id, 'z', 5)).collect();
         let whole = RefreshAllExecutionOutcome::bounded(1, 3, 3, few.clone());
-        assert_eq!((whole.failures, whole.failures_truncated), (few, false));
+        assert_eq!((whole.failures, whole.failures_truncated), (few.clone(), false));
+        // Passed fewer than failed (the caller trimmed them first): still marked.
+        let trimmed = RefreshAllExecutionOutcome::bounded(1, 9, 9, few);
+        assert!(trimmed.failures_truncated);
     }
 
     #[test]

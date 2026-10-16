@@ -138,19 +138,22 @@ impl<H: LocalHost> LocalBackend<H> {
     }
 
     /// The display names of failed subscriptions, read once after the refresh; a failure to
-    /// read them only leaves the names out (the address is shown instead).
+    /// read them only leaves the names out (the address is shown instead). Only the failures a
+    /// result can list ([`rssr_application::MAX_LISTED_FAILURES`]) are named (review C3-R1 F08).
     async fn named(&self, mut failures: Vec<RefreshFailureItem>) -> Vec<RefreshFailureItem> {
+        failures.truncate(rssr_application::MAX_LISTED_FAILURES);
         if failures.is_empty() {
             return failures;
         }
         match self.inner.use_cases.feeds_snapshot_service.load_snapshot().await {
             Ok(snapshot) => {
+                let names = snapshot
+                    .feeds
+                    .into_iter()
+                    .map(|feed| (feed.id, feed.title))
+                    .collect::<std::collections::HashMap<_, _>>();
                 for failure in &mut failures {
-                    failure.name = snapshot
-                        .feeds
-                        .iter()
-                        .find(|feed| feed.id == failure.feed_id)
-                        .map(|feed| feed.title.clone());
+                    failure.name = names.get(&failure.feed_id).cloned();
                 }
             }
             Err(error) => tracing::warn!(error = %format!("{error:#}"), "读取订阅名称失败"),
@@ -723,6 +726,48 @@ mod tests {
         let all = backend.refresh_all().await.unwrap();
         assert_eq!((all.total_count, all.failed_count), (1, 1));
         assert_eq!(all.failures[0].name.as_deref(), Some("Named"));
+    }
+
+    /// More failures than a result lists: the first ones are listed and named, the count is
+    /// whole and the result says some are not listed (review C3-R1 F08).
+    #[tokio::test]
+    async fn more_failures_than_a_result_lists() {
+        // A server that answers every request with a failure at once (a refused connection can
+        // take seconds on Windows).
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for mut stream in listener.incoming().flatten() {
+                let _ = stream.read(&mut [0_u8; 4096]);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 500 Internal Server Error
+Content-Length: 0
+Connection: close
+
+",
+                );
+            }
+        });
+        let backend = recording_backend(false).await;
+        let count = rssr_application::MAX_LISTED_FAILURES + 3;
+        for index in 0..count {
+            backend
+                .use_cases()
+                .feed_service
+                .add_subscription(&AddSubscriptionInput {
+                    url: format!("http://{address}/{index}.xml"),
+                    title: Some(format!("Named {index}")),
+                    folder: None,
+                })
+                .await
+                .unwrap();
+        }
+        let all = backend.refresh_all().await.unwrap();
+        assert_eq!((all.total_count, all.failed_count), (count as u64, count as u64));
+        assert_eq!(all.failures.len(), rssr_application::MAX_LISTED_FAILURES);
+        assert!(all.failures_truncated);
+        assert!(all.failures.iter().all(|failure| failure.name.is_some()));
     }
 
     /// An archive cutoff must be a whole second: the library compares RFC3339 text, so a

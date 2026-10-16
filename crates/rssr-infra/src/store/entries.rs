@@ -104,15 +104,28 @@ impl Filtered {
 const ACTIVE_ENTRIES: &str =
     " FROM entries JOIN feeds ON feeds.id = entries.feed_id WHERE feeds.is_deleted = 0";
 
+/// `expression` (text) as a list shows it: `rssr_domain::listed_title` in SQL, so the title is
+/// cut before it is copied out of the database. SQLite's `length` and `substr` count characters.
+pub(crate) fn listed_title_sql(expression: &str) -> String {
+    let max = rssr_domain::MAX_LISTED_TITLE_CHARS;
+    let mark = rssr_domain::LISTED_TITLE_MARK;
+    format!(
+        "CASE WHEN length({expression}) > {max} \
+         THEN substr({expression}, 1, {}) || '{mark}' ELSE {expression} END",
+        max - 1
+    )
+}
+
 pub(crate) fn list_entries(
     conn: &Connection,
     query: &EntryQuery,
 ) -> StoreResult<Vec<EntrySummary>> {
-    let mut sql = Filtered::new(
-        "SELECT entries.id, entries.feed_id, entries.title,
-                COALESCE(feeds.custom_title, feeds.title, feeds.url),
+    let mut sql = Filtered::new(&format!(
+        "SELECT entries.id, entries.feed_id, {}, {},
                 entries.published_at, entries.is_read, entries.is_starred",
-    );
+        listed_title_sql("entries.title"),
+        listed_title_sql("COALESCE(feeds.custom_title, feeds.title, feeds.url)"),
+    ));
     sql.push(ACTIVE_ENTRIES).entry_filters(query)?;
     sql.push(" ORDER BY ").push(SORT_KEY).push(" DESC, entries.id DESC");
     if let Some(limit) = query.limit {

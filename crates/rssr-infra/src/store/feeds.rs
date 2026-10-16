@@ -236,9 +236,10 @@ pub(crate) fn config_fingerprint(conn: &Connection) -> StoreResult<ConfigFingerp
 }
 
 pub(crate) fn list_summaries(conn: &Connection) -> StoreResult<Vec<FeedSummary>> {
-    let mut statement = conn.prepare_cached(
+    // Ordered by the whole title, shown cut (`rssr_domain::listed_title`), as in the browser.
+    let mut statement = conn.prepare_cached(&format!(
         "SELECT feeds.id,
-                COALESCE(feeds.custom_title, feeds.title, feeds.url) AS display_title,
+                {},
                 feeds.url,
                 COALESCE(SUM(CASE WHEN entries.is_read = 0 THEN 1 ELSE 0 END), 0),
                 COUNT(entries.id),
@@ -250,8 +251,9 @@ pub(crate) fn list_summaries(conn: &Connection) -> StoreResult<Vec<FeedSummary>>
          LEFT JOIN entries ON entries.feed_id = feeds.id
          WHERE feeds.is_deleted = 0
          GROUP BY feeds.id
-         ORDER BY display_title ASC",
-    )?;
+         ORDER BY COALESCE(feeds.custom_title, feeds.title, feeds.url) ASC",
+        super::entries::listed_title_sql("COALESCE(feeds.custom_title, feeds.title, feeds.url)"),
+    ))?;
     let mut rows = statement.query([])?;
     let mut summaries = Vec::new();
     while let Some(row) = rows.next()? {

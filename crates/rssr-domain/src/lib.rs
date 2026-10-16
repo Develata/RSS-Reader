@@ -5,6 +5,7 @@ pub mod app_state;
 pub mod config_fingerprint;
 pub mod entry;
 pub mod feed;
+pub mod listed;
 pub mod repository;
 pub mod search;
 pub mod settings;
@@ -20,6 +21,7 @@ pub use entry::{
 pub use feed::{
     Feed, FeedSummary, FetchErrorKind, NewFeedSubscription, normalize_feed_url, public_fetch_error,
 };
+pub use listed::{LISTED_TITLE_MARK, MAX_LISTED_TITLE_CHARS, listed_title};
 pub use repository::{
     AppStateMutation, AppStateRepository, EntryContentRepository, EntryIndexRepository,
     EntryRepository, FeedRepository, HealthRepository, SettingsRepository,

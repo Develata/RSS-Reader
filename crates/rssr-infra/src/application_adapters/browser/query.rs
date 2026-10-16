@@ -45,7 +45,11 @@ pub fn list_feeds(state: &BrowserState) -> Vec<FeedSummary> {
             ),
         })
         .collect::<Vec<_>>();
+    // Ordered by the whole title, shown cut, as in the native store.
     feeds.sort_by(|left, right| left.title.cmp(&right.title));
+    for feed in &mut feeds {
+        feed.title = rssr_domain::listed_title(&feed.title);
+    }
     feeds
 }
 
@@ -66,7 +70,7 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
         .feeds
         .iter()
         .filter(|feed| !feed.is_deleted)
-        .map(|feed| (feed.id, feed.display_title()))
+        .map(|feed| (feed.id, rssr_domain::listed_title(&feed.display_title())))
         .collect::<HashMap<_, _>>();
 
     // 先在仍带 `created_at` 的持久化条目上排序，再投影成 `EntrySummary`：`EntrySummary` 没有
@@ -98,7 +102,7 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
             EntrySummary {
                 id: entry.id,
                 feed_id: entry.feed_id,
-                title: entry.title.clone(),
+                title: rssr_domain::listed_title(&entry.title),
                 feed_title: active_feed_titles.get(&entry.feed_id).cloned().unwrap_or_default(),
                 published_at: entry.published_at,
                 is_read: flags.map(|flag| flag.is_read).unwrap_or(false),
@@ -302,37 +306,27 @@ fn compare_entry_order(
 
 /// 与列表共用筛选谓词，但不复制标题或排序整份 EntrySummary。
 /// Unread entries matching `query` (its limit ignored), in id order; more than
-/// `MAX_MARK_READ_SELECTION` is refused, as in the native store. The state is wholly in memory
-/// already, so the ids are collected and then counted.
+/// `MAX_MARK_READ_SELECTION` is refused, as in the native store, at the first distinct id past
+/// the bound: only a legal selection is collected in full and sorted (review C3-R1 F09).
 pub fn unread_selection(state: &BrowserState, query: &EntryQuery) -> rssr_domain::Result<Vec<i64>> {
     let flags = build_entry_flag_index(state);
     let allowed = query.feed_ids.as_ref().map(|ids| ids.iter().copied().collect::<HashSet<_>>());
     let search = query.search_title.as_deref().map(rssr_domain::fold_for_search);
     let active =
         state.core.feeds.iter().filter(|f| !f.is_deleted).map(|f| f.id).collect::<HashSet<_>>();
-    let mut ids = state
-        .core
-        .entries
-        .iter()
-        .filter(|entry| {
-            let flag = flags.get(&entry.id).copied();
-            !flag.is_some_and(|f| f.is_read)
-                && entry_matches_query(
-                    entry,
-                    flag,
-                    &active,
-                    allowed.as_ref(),
-                    search.as_deref(),
-                    query,
-                )
-        })
-        .map(|e| e.id)
-        .collect::<Vec<_>>();
-    ids.sort_unstable();
-    ids.dedup();
-    if ids.len() > rssr_domain::MAX_MARK_READ_SELECTION {
-        return Err(rssr_domain::mark_read_selection_too_large());
+    let selected = state.core.entries.iter().filter(|entry| {
+        let flag = flags.get(&entry.id).copied();
+        !flag.is_some_and(|f| f.is_read)
+            && entry_matches_query(entry, flag, &active, allowed.as_ref(), search.as_deref(), query)
+    });
+    let mut distinct = HashSet::new();
+    for entry in selected {
+        if distinct.insert(entry.id) && distinct.len() > rssr_domain::MAX_MARK_READ_SELECTION {
+            return Err(rssr_domain::mark_read_selection_too_large());
+        }
     }
+    let mut ids = distinct.into_iter().collect::<Vec<_>>();
+    ids.sort_unstable();
     Ok(ids)
 }
 

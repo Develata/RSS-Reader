@@ -65,6 +65,11 @@ pub const MAX_SETTINGS_BODY_BYTES: usize = 6 * MAX_CUSTOM_CSS_BYTES + 16 * 1024;
 pub const MAX_MARK_READ_BODY_BYTES: usize = 256 * 1024;
 /// `PUT routes::CONFIG_JSON` and `POST routes::CONFIG_OPML`: a configuration document.
 pub const MAX_IMPORT_BODY_BYTES: usize = 4 * 1024 * 1024;
+/// A finished job's status at most. A refresh's or a subscription's result is bounded where it
+/// is built ([`rssr_application::MAX_RESULT_BYTES`]); a configuration download's carries the
+/// settings now stored, bounded by the settings' own bound (custom CSS of up to 64 KiB, up to six
+/// times longer escaped), so its status can be as long as a settings change.
+pub const MAX_JOB_STATUS_BYTES: usize = MAX_SETTINGS_BODY_BYTES;
 
 /// Route patterns as the server registers them (`{name}` is a path parameter).
 pub mod routes {
@@ -309,6 +314,44 @@ mod tests {
         };
         let size = serde_json::to_vec(&preview).unwrap().len();
         assert!(size <= MAX_MARK_READ_BODY_BYTES, "{size}");
+    }
+
+    /// The largest statuses of every kind of job fit [`MAX_JOB_STATUS_BYTES`]: a configuration
+    /// download with the largest legal custom CSS, and a refresh result at its bound.
+    #[test]
+    fn the_largest_job_statuses_fit_their_bound() {
+        let settings = rssr_domain::UserSettings {
+            custom_css: "\u{1}".repeat(MAX_CUSTOM_CSS_BYTES),
+            ..Default::default()
+        };
+        let pulled = rssr_application::RemoteConfigPullOutcome {
+            import: Some(rssr_application::ConfigImportOutcome {
+                imported_feed_count: u64::MAX,
+                removed_feed_count: u64::MAX,
+                settings_updated: true,
+                settings,
+            }),
+        };
+        let failures = (0..1000)
+            .map(|feed_id| rssr_application::RefreshFailureItem {
+                feed_id,
+                url: format!("https://example.com/{}", "\u{1}".repeat(4096)),
+                name: Some("\u{1}".repeat(4096)),
+                kind: rssr_application::ErrorKind::Network,
+                message: "\u{1}".repeat(4096),
+            })
+            .collect();
+        let refreshed = RefreshAllExecutionOutcome::bounded(0, 1000, 1000, failures);
+        let error = BackendError::new(crate::ErrorCode::Network, "x".repeat(1024))
+            .with_request_id("0".repeat(16));
+        for status in [
+            JobStatus::Succeeded { result: JobResult::RemoteConfigPull(pulled) },
+            JobStatus::Succeeded { result: JobResult::RefreshAll(refreshed) },
+            JobStatus::Failed { error },
+        ] {
+            let size = serde_json::to_vec(&status).unwrap().len();
+            assert!(size <= MAX_JOB_STATUS_BYTES, "{size}");
+        }
     }
 
     #[test]
