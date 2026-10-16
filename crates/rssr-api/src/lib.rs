@@ -9,6 +9,9 @@
 //! phase B2 (`docs/design/v0.2-phase-b2-contracts.md`) changes the contract item by item. Every
 //! operation fails with a [`BackendError`]: a stable [`ErrorCode`], a message for the user and a
 //! request id.
+//!
+//! [`protocol`] is the HTTP form of the same operations (phase C): paths, request bodies and
+//! background jobs, shared by the server and the browser's backend.
 
 pub use rssr_application::{
     AddSubscriptionOutcome, RefreshAllExecutionOutcome, RefreshFailureItem,
@@ -26,6 +29,7 @@ use rssr_domain::{
 use url::Url;
 
 mod error;
+pub mod protocol;
 
 pub use error::{BackendError, ErrorCode};
 
