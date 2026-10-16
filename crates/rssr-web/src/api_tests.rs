@@ -270,16 +270,75 @@ impl Client {
     /// An error answer: its status, code and message; the request id in the body is the one in
     /// the header.
     async fn error(&self, response: reqwest::Response) -> (StatusCode, String, String) {
-        let status = response.status();
-        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
-        let header_id = response
-            .headers()
-            .get(protocol::REQUEST_ID_HEADER)
-            .map(|value| value.to_str().unwrap().to_owned());
-        let body: Value = response.json().await.unwrap();
-        assert_eq!(body["request_id"].as_str().map(str::to_owned), header_id, "{body}");
-        (status, body["code"].as_str().unwrap().to_owned(), body["message"].to_string())
+        error_of(response).await
     }
+
+    /// A request whose body stops after `sent` of `declared` bytes, written by hand: its
+    /// answer's status and JSON, which must come within `within`.
+    async fn partial(
+        &self,
+        path: &str,
+        declared: usize,
+        sent: &str,
+        within: Duration,
+    ) -> (u16, Value) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let address = self.server.base.trim_start_matches("http://");
+        let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        let head = format!(
+            "POST {path} HTTP/1.1\r\nHost: {address}\r\nCookie: {}\r\nOrigin: {}\r\n\
+             {CSRF_HEADER}: {}\r\n{}: {TEST_BUILD}\r\nContent-Type: application/json\r\n\
+             Content-Length: {declared}\r\n\r\n{sent}",
+            self.session,
+            self.server.base,
+            self.csrf,
+            protocol::BUILD_HEADER,
+        );
+        stream.write_all(head.as_bytes()).await.unwrap();
+        let mut answer = Vec::new();
+        let read = async {
+            let mut buffer = [0_u8; 4096];
+            loop {
+                let count = stream.read(&mut buffer).await.unwrap();
+                answer.extend_from_slice(&buffer[..count]);
+                let text = String::from_utf8_lossy(&answer);
+                if let Some((head, body)) = text.split_once("\r\n\r\n") {
+                    let length = head
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length: ")
+                                .map(str::to_owned)
+                        })
+                        .and_then(|value| value.trim().parse::<usize>().ok());
+                    if count == 0 || length.is_some_and(|length| body.len() >= length) {
+                        break;
+                    }
+                }
+                assert!(count > 0, "the server closed without an answer");
+            }
+        };
+        tokio::time::timeout(within, read).await.expect("an answer within the limit");
+        let text = String::from_utf8_lossy(&answer).into_owned();
+        let (head, body) = text.split_once("\r\n\r\n").unwrap();
+        let status = head.split(' ').nth(1).unwrap().parse().unwrap();
+        (status, serde_json::from_str(body).unwrap())
+    }
+}
+
+/// An error answer: its status, code and message. It is not cached, and carries a request id,
+/// the same in the header and the body.
+async fn error_of(response: reqwest::Response) -> (StatusCode, String, String) {
+    let status = response.status();
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    let header_id = response
+        .headers()
+        .get(protocol::REQUEST_ID_HEADER)
+        .map(|value| value.to_str().unwrap().to_owned())
+        .expect("a request id header");
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["request_id"].as_str(), Some(header_id.as_str()), "{body}");
+    (status, body["code"].as_str().unwrap().to_owned(), body["message"].to_string())
 }
 
 fn with_json(route: &str, name: &str, value: &impl serde::Serialize) -> String {
@@ -610,16 +669,40 @@ async fn unknown_routes_and_methods_answer_json() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    let body: Value = response.json().await.unwrap();
-    assert_eq!(body["code"], "unauthenticated");
+    let (status, code, _) = error_of(response).await;
+    assert_eq!((status, code.as_str()), (StatusCode::UNAUTHORIZED, "unauthenticated"));
 
     for (method, path) in [(Method::POST, routes::SETTINGS), (Method::GET, routes::WORKSPACE)] {
         let response = client.send(method.clone(), path, None, Some(TEST_BUILD)).await;
-        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path}");
-        let body: Value = response.json().await.unwrap();
-        assert_eq!(body["code"], "not_found", "{method} {path}");
+        let (status, code, _) = error_of(response).await;
+        assert_eq!(
+            (status, code.as_str()),
+            (StatusCode::NOT_FOUND, "not_found"),
+            "{method} {path}"
+        );
     }
+
+    // The authentication's refusals carry ids too (review C3-R1 F14).
+    let untrusted = client
+        .server
+        .client
+        .put(client.server.url(routes::WORKSPACE))
+        .header(header::COOKIE, &client.session)
+        .header(header::ORIGIN, "http://evil.example")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(error_of(untrusted).await.1, "untrusted_origin");
+    let no_token = client
+        .server
+        .client
+        .put(client.server.url(routes::WORKSPACE))
+        .header(header::COOKIE, &client.session)
+        .header(header::ORIGIN, &client.server.base)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(error_of(no_token).await.1, "csrf_mismatch");
 }
 
 /// The reader's image localization is given up at the time limit; the body is unchanged.
@@ -753,4 +836,66 @@ async fn a_new_data_directory_is_created_before_anything_is_written() {
         let library = data_dir.join(rssr_infra::store::local::LIBRARY_FILE);
         assert_eq!(mode(&library) & 0o077, 0, "the library is its owner's alone");
     }
+}
+
+/// The slots are taken before a body is read: with the import slot taken, an import whose body
+/// never completes is refused at once; a body that does not arrive within the receive limit is
+/// refused and frees its slots (review C3-R1 F03).
+#[tokio::test]
+async fn bodies_are_read_only_with_their_slots_and_within_a_limit() {
+    let library = native_local_backend(LibraryStore::open_in_memory().await.unwrap());
+    let api = ApiState::with(Arc::new(library), TEST_BUILD, Duration::from_secs(60))
+        .receiving_within(Duration::from_millis(300));
+    let client = Client::start(api.clone()).await;
+    let declared = 3 * 1024 * 1024;
+
+    let importing = api.exhaust_imports();
+    let (status, body) =
+        client.partial(routes::CONFIG_OPML, declared, "{\"raw\":\"", Duration::from_secs(2)).await;
+    assert_eq!((status, body["code"].as_str()), (503, Some("unavailable")), "{body}");
+    drop(importing);
+
+    let (status, body) =
+        client.partial(routes::CONFIG_OPML, declared, "{\"raw\":\"", Duration::from_secs(5)).await;
+    assert_eq!((status, body["code"].as_str()), (400, Some("invalid_input")), "{body}");
+    let opml = json!({ "raw": "<opml version=\"2.0\"><body/></opml>" });
+    client.ok(Method::POST, routes::CONFIG_OPML, Some(opml)).await;
+
+    let busy = api.exhaust_operations();
+    let (status, _) = client.partial(routes::MARK_READ, 1024, "{", Duration::from_secs(2)).await;
+    assert_eq!(status, 503, "no operation slot: refused before the body");
+    drop(busy);
+}
+
+/// A write that takes no body refuses one; a poll takes one of a bounded number of slots; a
+/// parameter given twice is refused (review C3-R1 F13, F10).
+#[tokio::test]
+async fn writes_without_a_body_polls_and_parameters_are_checked() {
+    let library = native_local_backend(LibraryStore::open_in_memory().await.unwrap());
+    let api = ApiState::with(Arc::new(library), TEST_BUILD, Duration::from_secs(60));
+    let client = Client::start(api.clone()).await;
+    let body = json!({ "unexpected": true });
+    for path in [routes::JOB_REFRESH_ALL.to_owned(), protocol::opened_feed(1)] {
+        let method = if path == routes::JOB_REFRESH_ALL { Method::POST } else { Method::PUT };
+        let response = client.send(method, &path, Some(&body), Some(TEST_BUILD)).await;
+        assert_eq!(error_of(response).await.1, "invalid_input", "{path}");
+    }
+
+    let id = client.start_job(routes::JOB_REFRESH_ALL, None).await;
+    let polls = api.exhaust_polls();
+    let response = client.send(Method::GET, &protocol::job(&id), None, None).await;
+    let (status, code, _) = error_of(response).await;
+    assert_eq!((status, code.as_str()), (StatusCode::SERVICE_UNAVAILABLE, "unavailable"));
+    drop(polls);
+    client.get(&protocol::job(&id)).await;
+
+    let query = serde_json::to_string(&EntryQuery::default()).unwrap();
+    let twice = format!(
+        "{}?query={}&query={}",
+        routes::ENTRIES,
+        urlencoding::encode(&query),
+        urlencoding::encode(&query)
+    );
+    let response = client.send(Method::GET, &twice, None, None).await;
+    assert_eq!(error_of(response).await.1, "invalid_input");
 }

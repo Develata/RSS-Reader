@@ -23,8 +23,10 @@
 //! - bodies are bounded ([`MAX_BODY_BYTES`], with the larger bounds of the settings, the
 //!   mark-read confirmation and the imports), and so is a structured read's parameter
 //!   ([`MAX_QUERY_PARAMETER_BYTES`]); more is [`crate::ErrorCode::TooLarge`];
-//! - every answer of the application's routes carries [`REQUEST_ID_HEADER`] (an error carries the
-//!   same id in its body) and is not cached.
+//! - a write that takes no body refuses one; a poll may be refused as busy (the server bounds the
+//!   polls waiting at once);
+//! - every answer under the prefix carries [`REQUEST_ID_HEADER`]; every error carries the same id
+//!   in its body, the authentication's refusals included. Answers are not cached.
 
 use std::time::Duration;
 

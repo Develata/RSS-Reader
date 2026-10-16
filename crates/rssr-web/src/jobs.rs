@@ -215,10 +215,8 @@ where
     match tokio::spawn(job).await {
         Ok(Ok(result)) => JobStatus::Succeeded { result },
         Ok(Err(error)) => {
-            warn!(
-                job_id = %job_id.0, request_id, code = error.code.as_str(),
-                message = %error.message, "后台任务失败"
-            );
+            // The message may quote a subscription's address with its credentials: not logged.
+            warn!(job_id = %job_id.0, request_id, code = error.code.as_str(), "后台任务失败");
             let message = truncate_marked(error.message, MAX_MESSAGE_BYTES);
             JobStatus::Failed {
                 error: BackendError { message, ..error }.with_request_id(request_id),
