@@ -1,22 +1,54 @@
 use html5ever::tokenizer::{
     BufferQueue, EndTag, StartTag, Token, TokenSink, TokenSinkResult, Tokenizer,
 };
-use rssr_application::{FeedDiscoveryCandidate, MAX_DISCOVERY_CANDIDATES, MAX_URL_BYTES};
-use std::cell::RefCell;
+use rssr_application::{
+    FeedDiscoveryCandidate, MAX_DISCOVERY_CANDIDATES, MAX_NAME_BYTES, MAX_URL_BYTES,
+    truncate_marked_str,
+};
+use std::{cell::RefCell, collections::HashSet};
 use url::Url;
+
+/// Input fed to the tokenizer at a time.
+const CHUNK_BYTES: usize = 4 * 1024;
+/// Input a single token (a tag, a comment) may span. The tokenizer compares each attribute of a
+/// tag with all the earlier ones, so a tag of many attributes costs their number squared: with
+/// this bound a page cannot make that more than a few milliseconds (review C3-R4 R4-01). Text,
+/// scripts and styles are emitted as they are read and do not count.
+const MAX_TOKEN_BYTES: usize = 32 * 1024;
+/// Distinct links collected at most; enough for [`MAX_DISCOVERY_CANDIDATES`] after resolution.
+const MAX_COLLECTED_LINKS: usize = 4 * MAX_DISCOVERY_CANDIDATES;
+
+/// The page's first `<base href>`.
+#[derive(Default)]
+enum BaseHref {
+    #[default]
+    Absent,
+    Href(String),
+    /// Longer than [`MAX_URL_BYTES`]: relative links cannot be resolved within the bound.
+    Unusable,
+}
 
 #[derive(Default)]
 struct Head {
     finished: bool,
     raw: Option<String>,
     template_depth: usize,
-    base: Option<String>,
+    base: BaseHref,
     links: Vec<(String, Option<String>)>,
+    hrefs: HashSet<String>,
+    /// Tokens other than parse errors: a tag still being read emits none (its duplicate
+    /// attributes emit errors, which do not count).
+    progress: usize,
 }
+
 struct Sink(RefCell<Head>);
+
 impl TokenSink for Sink {
     type Handle = ();
     fn process_token(&self, token: Token, _: u64) -> TokenSinkResult<()> {
+        if !matches!(token, Token::ParseError(_)) {
+            self.0.borrow_mut().progress += 1;
+        }
         if let Token::CharacterTokens(text) = &token {
             let mut head = self.0.borrow_mut();
             if head.raw.is_none() && head.template_depth == 0 && !text.trim().is_empty() {
@@ -48,11 +80,19 @@ impl TokenSink for Sink {
         if head.finished || tag.kind != StartTag {
             return TokenSinkResult::Continue;
         }
-        let attr = |key: &str| {
-            tag.attrs.iter().find(|a| a.name.local.as_ref() == key).map(|a| a.value.to_string())
-        };
-        if name == "base" && head.base.is_none() {
-            head.base = attr("href");
+        // Borrowed: a value is copied only once it is known to be within its bound.
+        let attr =
+            |key: &str| tag.attrs.iter().find(|a| a.name.local.as_ref() == key).map(|a| &*a.value);
+        if name == "base"
+            && matches!(head.base, BaseHref::Absent)
+            && let Some(href) = attr("href")
+        {
+            // The first `<base href>` applies, even one that is too long (review C3-R4 R4-03).
+            head.base = if href.trim().len() > MAX_URL_BYTES {
+                BaseHref::Unusable
+            } else {
+                BaseHref::Href(href.trim().to_owned())
+            };
         }
         if name == "link"
             && attr("rel").is_some_and(|rel| {
@@ -64,9 +104,14 @@ impl TokenSink for Sink {
                     "application/rss+xml" | "application/atom+xml"
                 )
             })
-            && let Some(href) = attr("href")
+            && let Some(href) = attr("href").map(str::trim)
+            && href.len() <= MAX_URL_BYTES
+            && head.hrefs.len() < MAX_COLLECTED_LINKS
+            && !head.hrefs.contains(href)
         {
-            head.links.push((href, attr("title")));
+            let title = attr("title").map(|title| truncate_marked_str(title, MAX_NAME_BYTES));
+            head.hrefs.insert(href.to_owned());
+            head.links.push((href.to_owned(), title));
         }
         // 正文开始的普通元素结束隐式 head，脚本内容交给 tokenizer 原生 raw-text 状态。
         if matches!(name, "script" | "style" | "title" | "noscript") {
@@ -86,42 +131,74 @@ impl TokenSink for Sink {
     }
 }
 
+/// The head of `body`, read in chunks: reading stops where the head ends, and where a single
+/// token has spanned more than [`MAX_TOKEN_BYTES`] (the links read until then are kept).
+fn read_head(body: &str) -> Head {
+    let tokenizer = Tokenizer::new(Sink(RefCell::new(Head::default())), Default::default());
+    let queue = BufferQueue::default();
+    let mut rest = body;
+    let mut without_progress = 0;
+    while !rest.is_empty() {
+        let mut split = rest.len().min(CHUNK_BYTES);
+        while !rest.is_char_boundary(split) {
+            split -= 1;
+        }
+        let (chunk, tail) = rest.split_at(split);
+        rest = tail;
+        let before = tokenizer.sink.0.borrow().progress;
+        queue.push_back(chunk.into());
+        let _ = tokenizer.feed(&queue);
+        let head = tokenizer.sink.0.borrow();
+        if head.finished {
+            drop(head);
+            return tokenizer.sink.0.into_inner();
+        }
+        if head.progress == before {
+            without_progress += chunk.len();
+            if without_progress > MAX_TOKEN_BYTES {
+                drop(head);
+                return tokenizer.sink.0.into_inner();
+            }
+        } else {
+            without_progress = 0;
+        }
+    }
+    tokenizer.end();
+    tokenizer.sink.0.into_inner()
+}
+
 /// The feeds a page offers, at most [`MAX_DISCOVERY_CANDIDATES`] distinct ones.
 ///
-/// Bounded while it is built (review C3-R3 R3-01): a `<base>` or a link longer than
-/// [`MAX_URL_BYTES`] is ignored, and so is an address longer than that once resolved, before it is
-/// copied or compared. A long base would otherwise be repeated in every resolved link: a page of a
-/// megabyte could make gigabytes of addresses that are left out only afterwards.
+/// Bounded while it is built (reviews C3-R3 R3-01, C3-R4): reading stops at a token over
+/// [`MAX_TOKEN_BYTES`]; at most [`MAX_COLLECTED_LINKS`] distinct links are collected, a link or
+/// `<base>` longer than [`MAX_URL_BYTES`] is ignored before it is copied, titles are cut before
+/// they are copied, and a resolved address longer than the bound is ignored before it is compared.
+/// Without a usable base (one too long) only absolute links are offered.
 pub(super) fn discover(page_url: &Url, body: &str) -> Vec<FeedDiscoveryCandidate> {
-    let queue = BufferQueue::default();
-    queue.push_back(body.into());
-    let tokenizer = Tokenizer::new(Sink(RefCell::new(Head::default())), Default::default());
-    let _ = tokenizer.feed(&queue);
-    tokenizer.end();
-    let head = tokenizer.sink.0.into_inner();
+    let head = read_head(body);
     let base = match head.base {
-        // Its links cannot be resolved within the bound.
-        Some(href) if href.trim().len() > MAX_URL_BYTES => return Vec::new(),
-        Some(href) => page_url
-            .join(href.trim())
-            .ok()
-            .filter(|u| matches!(u.scheme(), "http" | "https"))
-            .unwrap_or_else(|| page_url.clone()),
-        None => page_url.clone(),
-    };
-    if base.as_str().len() > MAX_URL_BYTES {
-        return Vec::new();
+        BaseHref::Unusable => None,
+        BaseHref::Href(href) => Some(
+            page_url
+                .join(&href)
+                .ok()
+                .filter(|u| matches!(u.scheme(), "http" | "https"))
+                .unwrap_or_else(|| page_url.clone()),
+        ),
+        BaseHref::Absent => Some(page_url.clone()),
     }
+    .filter(|base| base.as_str().len() <= MAX_URL_BYTES);
     let mut result = Vec::new();
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = HashSet::new();
     for (href, title) in head.links {
         if result.len() == MAX_DISCOVERY_CANDIDATES {
             break;
         }
-        if href.trim().len() > MAX_URL_BYTES {
-            continue;
-        }
-        if let Ok(url) = base.join(href.trim())
+        let resolved = match &base {
+            Some(base) => base.join(&href),
+            None => Url::parse(&href),
+        };
+        if let Ok(url) = resolved
             && matches!(url.scheme(), "http" | "https")
             && url.as_str().len() <= MAX_URL_BYTES
         {
@@ -135,4 +212,23 @@ pub(super) fn discover(page_url: &Url, body: &str) -> Vec<FeedDiscoveryCandidate
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Links are collected once each and at most `MAX_COLLECTED_LINKS` of them, whatever the
+    /// page repeats or adds (review C3-R4 R4-02).
+    #[test]
+    fn collection_is_bounded() {
+        let link =
+            |href: &str| format!("<link rel=alternate type=application/rss+xml href='{href}'>");
+        let repeated = link("/same.xml").repeat(5000);
+        let distinct = (0..300).map(|index| link(&format!("/{index}.xml"))).collect::<String>();
+        let head = read_head(&format!("<html><head>{repeated}{distinct}</head></html>"));
+        assert_eq!(head.links.len(), MAX_COLLECTED_LINKS);
+        assert_eq!(head.links[0].0, "/same.xml");
+        assert_eq!(head.links[1].0, "/0.xml");
+    }
 }

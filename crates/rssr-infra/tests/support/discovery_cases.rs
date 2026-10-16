@@ -33,6 +33,60 @@ pub fn assert_discovery_bounds() {
     assert_eq!(candidates.len(), MAX_DISCOVERY_CANDIDATES);
     assert!(candidates[0].url.as_str().ends_with("/feed0.xml"), "the long link is left out");
     assert!(candidates.iter().all(|candidate| candidate.url.as_str().len() <= MAX_URL_BYTES));
+
+    // A tag of 100 000 distinct attributes (the tokenizer compares each with the earlier ones):
+    // reading stops at it; the link before it is kept (review C3-R4 R4-01).
+    let urls = |candidates: Vec<rssr_application::FeedDiscoveryCandidate>| {
+        candidates.into_iter().map(|candidate| candidate.url.to_string()).collect::<Vec<_>>()
+    };
+    let attributes = (0..100_000).map(|index| format!(" a{index}")).collect::<String>();
+    let html = format!(
+        "<html><head>{}<meta{attributes}>{}</head></html>",
+        link("/before.xml"),
+        link("/after.xml")
+    );
+    assert_eq!(urls(probe(&html)), ["https://example.com/before.xml"]);
+    // Duplicate attributes make the tokenizer report errors while the tag is still open: they do
+    // not count as reading on.
+    let attributes = (0..20_000).map(|index| format!(" d{index} d{index}")).collect::<String>();
+    let html = format!(
+        "<html><head>{}<meta{attributes}>{}</head></html>",
+        link("/before.xml"),
+        link("/after.xml")
+    );
+    assert_eq!(urls(probe(&html)), ["https://example.com/before.xml"]);
+
+    // Text, scripts and styles are read as they come: a large inline script does not stop it.
+    let script = format!("<script>{}</script>", "var x = 1;\n".repeat(20_000));
+    let html = format!("<html><head>{script}{}</head></html>", link("/after-script.xml"));
+    assert_eq!(urls(probe(&html)), ["https://example.com/after-script.xml"]);
+
+    // A tag under the bound is read; its title is cut to the bound of a name.
+    let titled = format!(
+        "<link rel=alternate type=application/rss+xml href='/titled.xml' title='{}'>",
+        "t".repeat(20 * 1024)
+    );
+    let candidates = probe(&format!("<html><head>{titled}</head></html>"));
+    assert_eq!(candidates.len(), 1);
+    assert!(candidates[0].title.as_ref().unwrap().len() <= rssr_application::MAX_NAME_BYTES);
+
+    // The first <base href> applies even when too long: absolute links are still offered,
+    // relative ones are not, and a later base is not used (review C3-R4 R4-03).
+    let long_base = format!("<base href='/{}/'>", "b".repeat(3000));
+    let html = format!(
+        "<html><head>{long_base}<base href='/short/'>{}{}</head></html>",
+        link("https://feeds.example/absolute.xml"),
+        link("relative.xml")
+    );
+    assert_eq!(urls(probe(&html)), ["https://feeds.example/absolute.xml"]);
+
+    // Repeated links are collected once: they do not crowd out a distinct one (R4-02).
+    let repeated = link("/same.xml").repeat(5000);
+    let html = format!("<html><head>{repeated}{}</head></html>", link("/other.xml"));
+    assert_eq!(
+        urls(probe(&html)),
+        ["https://example.com/same.xml", "https://example.com/other.xml"]
+    );
 }
 
 pub fn assert_discovery_cases() {

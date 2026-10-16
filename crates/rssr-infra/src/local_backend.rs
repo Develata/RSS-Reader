@@ -205,7 +205,8 @@ impl<H: LocalHost> LocalBackend<H> {
         outcome: RefreshFeedOutcome,
     ) -> RefreshFeedExecutionOutcome {
         let inserted_count = outcome.inserted_count();
-        let failure = outcome.failure_summary();
+        // Built within the bounds of a result (review C3-R4 R4-04).
+        let failure = outcome.bounded_failure_summary();
         match outcome.result {
             RefreshFeedResult::Updated { localization_entries, .. } => {
                 self.inner.host.feed_refreshed(outcome.feed_id, localization_entries);
