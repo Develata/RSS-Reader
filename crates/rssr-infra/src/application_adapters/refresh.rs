@@ -47,16 +47,19 @@ impl FeedRefreshSourcePort for InfraFeedRefreshSource {
             FetchResult::NotModified(metadata) => {
                 Ok(FeedRefreshSourceOutput::NotModified(map_http_metadata(metadata)))
             }
-            FetchResult::Fetched { body, metadata } => match self.parser.parse(&body) {
-                Ok(parsed) => Ok(FeedRefreshSourceOutput::Updated(FeedRefreshUpdate {
-                    metadata: map_http_metadata(metadata),
-                    feed: map_parsed_feed(parsed),
-                })),
-                Err(error) => Ok(FeedRefreshSourceOutput::Failed(RefreshFailure::parse(
-                    format!("解析订阅失败: {error}"),
-                    Some(map_http_metadata(metadata)),
-                ))),
-            },
+            FetchResult::Fetched { body, metadata } => {
+                let _slot = crate::feed_normalization::PARSE_SLOTS.acquire().await;
+                match self.parser.parse(&body) {
+                    Ok(parsed) => Ok(FeedRefreshSourceOutput::Updated(FeedRefreshUpdate {
+                        metadata: map_http_metadata(metadata),
+                        feed: map_parsed_feed(parsed),
+                    })),
+                    Err(error) => Ok(FeedRefreshSourceOutput::Failed(RefreshFailure::parse(
+                        format!("解析订阅失败: {error}"),
+                        Some(map_http_metadata(metadata)),
+                    ))),
+                }
+            }
         }
     }
 }

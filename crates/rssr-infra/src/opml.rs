@@ -251,11 +251,18 @@ fn push_attribute(element: &mut BytesStart<'_>, key: &str, raw: &str) {
 /// 缺等号、缺引号或重复属性的文档整体拒绝。这不是完整的 XML 良构性校验（属性值里的裸 `<`
 /// 等仍会通过）。
 ///
-/// quick-xml 0.41 checks duplicates with a hash pre-filter past a few attributes, so a tag of many
-/// attributes is read in linear time; long outlines (a long title appears twice) stay importable
-/// (review C3-R5 R5-06).
+/// quick-xml 0.41 checks duplicates with a hash pre-filter past a few attributes, but a name
+/// whose hash matches an earlier one is checked by scanning the tag's earlier names, and the hash
+/// keys are fixed: the attributes of a tag are bounded like a feed's (review C3-R6 R6-01). The
+/// bound is on their number, not length, so long outlines (a long title appears twice) stay
+/// importable (review C3-R5 R5-06).
 fn check_attributes(event: &BytesStart<'_>) -> Result<()> {
-    for attribute in event.attributes() {
+    for (index, attribute) in event.attributes().enumerate() {
+        ensure!(
+            index < crate::feed_structure::MAX_XML_ATTRIBUTES,
+            "OPML 的标签属性超过 {} 个",
+            crate::feed_structure::MAX_XML_ATTRIBUTES
+        );
         attribute?;
     }
     Ok(())

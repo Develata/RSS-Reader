@@ -159,16 +159,123 @@ fn feed_structure_is_bounded_before_feed_rs_reads_it() {
     let doctype = format!("<!DOCTYPE rss [<!-- << -->]>{}", rss(&nested(50_000)));
     assert!(parse(&doctype).is_err(), "a comment in the DOCTYPE does not hide the feed");
 
-    let attributes = (0..100_000).map(|index| format!(" a{index}=\"x\"")).collect::<String>();
-    let wide = format!(
-        "<rss version=\"2.0\"><channel><title>t</title><item{attributes}><title>i</title></item></channel></rss>"
-    );
-    assert!(parse(&wide).is_ok(), "a tag of many attributes");
-    let opml = format!(
-        "<opml version=\"2.0\"><head/><body><outline{attributes} xmlUrl=\"https://example.com/f.xml\"/></body></opml>"
-    );
-    assert_eq!(rssr_infra::opml::OpmlCodec::new().decode(&opml).unwrap().len(), 1);
+    // A tag of 256 attributes is read; one of 257 is not, in a feed or an OPML file (review C3-R6
+    // R6-01). A repeated name is looked up by scanning the earlier ones: 100 000 distinct names
+    // followed by 100 000 repeats would take 10^10 comparisons.
+    let attributes = |count: usize| (0..count).map(|i| format!(" a{i}=\"x\"")).collect::<String>();
+    let item = |attributes: &str| {
+        format!(
+            "<rss version=\"2.0\"><channel><title>t</title><item{attributes}><title>i</title></item></channel></rss>"
+        )
+    };
+    assert!(parse(&item(&attributes(256))).is_ok(), "256 attributes");
+    assert!(parse(&item(&attributes(257))).is_err(), "257 attributes");
+    let repeated = format!("{}{}", attributes(100_000), " a99999=\"x\"".repeat(100_000));
+    assert!(parse(&item(&repeated)).is_err(), "repeated attributes");
+    let opml = |attributes: &str| {
+        format!(
+            "<opml version=\"2.0\"><head/><body><outline{attributes} xmlUrl=\"https://example.com/f.xml\"/></body></opml>"
+        )
+    };
+    let codec = rssr_infra::opml::OpmlCodec::new();
+    assert_eq!(codec.decode(&opml(&attributes(255))).unwrap().len(), 1);
+    assert!(codec.decode(&opml(&attributes(256))).is_err(), "257 attributes in OPML");
+
+    // After a repeated name quick-xml resumes reading at the first space inside the value, so
+    // `a="0" a=" xml:base='…'"` hides a base in a value. The check reads attributes as feed-rs
+    // does, and counts and measures the hidden base (review C3-R6 R6-02).
+    let hidden = |base: &str, levels: usize| {
+        let open = format!("<x a=\"0\" a=\" xml:base='{base}'\">");
+        format!("{}{}", open.repeat(levels), "</x>".repeat(levels))
+    };
+    assert!(parse(&rss(&hidden("a/", 1))).is_ok(), "one hidden base");
+    assert!(parse(&rss(&hidden("a/", 15))).is_ok(), "16 bases in force, 15 of them hidden");
+    assert!(parse(&rss(&hidden("a/", 16))).is_err(), "17 bases in force, 16 of them hidden");
+    assert!(parse(&rss(&hidden(&"雪".repeat(1000), 1))).is_err(), "a hidden base over 2 KiB");
     assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
+}
+
+/// What feed-rs builds is estimated before it reads the feed (review C3-R6 R6-03): large real
+/// feeds stay within the estimate; floods of small entries, or of addresses resolved against a
+/// long base, do not.
+#[test]
+fn feed_model_is_bounded_before_feed_rs_builds_it() {
+    let parse = |feed: &str| rssr_infra::parser::FeedParser::new().parse(feed);
+    const LIMIT: usize = 8 * 1024 * 1024 - 4096;
+
+    // A podcast at the response limit: about 3 000 episodes with full descriptions.
+    let mut items = String::new();
+    while items.len() < LIMIT {
+        let i = items.len();
+        let description = "An episode description &lt;p&gt;with markup&lt;/p&gt;. ".repeat(36);
+        items.push_str(&format!(
+            "<item><title>Episode {i}</title><link>https://example.com/episodes/{i}</link><guid isPermaLink=\"false\">urn:episode:{i}</guid><pubDate>Mon, 01 Jan 2024 00:00:00 +0000</pubDate><description>{description}</description><enclosure url=\"https://cdn.example.com/{i}.mp3\" length=\"12345678\" type=\"audio/mpeg\"/><itunes:duration>01:02:03</itunes:duration><itunes:episode>{i}</itunes:episode><itunes:explicit>false</itunes:explicit><itunes:image href=\"https://cdn.example.com/{i}.jpg\"/><itunes:author>Host</itunes:author><itunes:summary>Summary</itunes:summary><dc:creator>Host</dc:creator><category>Society</category><category>Culture</category><media:content url=\"https://cdn.example.com/{i}.mp3\" type=\"audio/mpeg\" medium=\"audio\"/></item>"
+        ));
+    }
+    let podcast = format!(
+        "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><channel><title>t</title>{items}</channel></rss>"
+    );
+    assert!(parse(&podcast).unwrap().entries.len() > 2500, "a large podcast");
+
+    // A full-text Atom feed at the limit, with an `xml:base` and inline XHTML: the elements of the
+    // XHTML are kept as text.
+    let mut entries = String::new();
+    while entries.len() < LIMIT {
+        let i = entries.len();
+        let paragraphs =
+            "<p>Text with <a href=\"/posts/x\">a link</a> and <em>emphasis</em>.</p>".repeat(20);
+        entries.push_str(&format!(
+            "<entry><title>Post {i}</title><link rel=\"alternate\" href=\"/posts/{i}\"/><id>tag:example.com,2024:{i}</id><updated>2024-01-01T00:00:00Z</updated><author><name>A</name></author><category term=\"x\"/><content type=\"xhtml\"><div xmlns=\"http://www.w3.org/1999/xhtml\">{paragraphs}</div></content></entry>"
+        ));
+    }
+    let atom = |base: &str, inner: &str| {
+        format!(
+            "<feed xmlns=\"http://www.w3.org/2005/Atom\" xml:base=\"{base}\"><title>t</title><id>i</id><updated>2024-01-01T00:00:00Z</updated>{inner}</feed>"
+        )
+    };
+    let full_text = atom("https://example.com/blog/wp-atom.php", &entries);
+    assert!(parse(&full_text).unwrap().entries.len() > 4000, "a full-text Atom feed");
+
+    // A JSON Feed at the limit.
+    let mut items = Vec::new();
+    let mut size = 0;
+    while size < LIMIT {
+        let i = items.len();
+        let item = format!(
+            "{{\"id\":\"{i}\",\"url\":\"https://example.com/{i}\",\"title\":\"Post {i}\",\"content_html\":\"{}\",\"date_published\":\"2024-01-01T00:00:00Z\",\"authors\":[{{\"name\":\"A\"}}],\"tags\":[\"a\",\"b\"]}}",
+            "<p>Some text.</p>".repeat(120)
+        );
+        size += item.len() + 1;
+        items.push(item);
+    }
+    let json = |items: &str| {
+        format!(
+            "{{\"version\":\"https://jsonfeed.org/version/1.1\",\"title\":\"t\",\"items\":[{items}]}}"
+        )
+    };
+    assert!(parse(&json(&items.join(","))).unwrap().entries.len() > 3000, "a large JSON Feed");
+
+    let started = std::time::Instant::now();
+    // 500 000 links resolved against a base of 2 031 bytes, 6 051 once percent-encoded: about
+    // 3 GB of addresses from 7.5 MB.
+    let base = format!("https://example.com/{}/", "雪".repeat(670));
+    assert!(parse(&atom(&base, &"<link href=\"\"/>".repeat(500_000))).is_err(), "links");
+    // A million empty items: about a gigabyte of entries.
+    let empty = format!(
+        "<rss version=\"2.0\"><channel><title>t</title>{}</channel></rss>",
+        "<item/>".repeat(1_000_000)
+    );
+    assert!(parse(&empty).is_err(), "empty items");
+    let ids = (0..600_000).map(|i| format!("{{\"id\":\"{i}\"}}")).collect::<Vec<_>>();
+    assert!(parse(&json(&ids.join(","))).is_err(), "JSON items");
+    // Outside an Atom text construct elements are charged even where feed-rs would skip them.
+    let content = "<x/>".repeat(300_000);
+    let outside = format!("<entry><id>x</id>{content}</entry>");
+    assert!(parse(&atom("https://example.com/", &outside)).is_err(), "elements outside it");
+    assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
+    // Inside one they are text.
+    let xhtml = format!("<entry><id>x</id><content type=\"xhtml\">{content}</content></entry>");
+    assert!(parse(&atom("https://example.com/", &xhtml)).is_ok(), "elements in content");
 }
 
 /// An OPML export with a long title imports again (review C3-R5 R5-06).

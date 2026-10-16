@@ -7,6 +7,7 @@ pub mod composition;
 pub mod config_sync;
 mod feed_body;
 mod feed_normalization;
+mod feed_structure;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod fetch;
 pub mod local_backend;

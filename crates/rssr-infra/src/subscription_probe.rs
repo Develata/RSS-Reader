@@ -59,6 +59,8 @@ impl SubscriptionProbePort for HttpSubscriptionProbe {
             return Err(invalid(anyhow::anyhow!("订阅只支持 HTTP 或 HTTPS 地址。")));
         }
         let (final_url, metadata, content_type, body) = self.fetch(url).await.map_err(network)?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let _slot = crate::feed_normalization::PARSE_SLOTS.acquire().await;
         classify_subscription_response(final_url, metadata, &content_type, &body).map_err(invalid)
     }
 }

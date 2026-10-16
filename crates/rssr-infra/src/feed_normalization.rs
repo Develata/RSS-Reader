@@ -27,12 +27,21 @@ pub struct ParsedEntry {
     pub updated_at_source: Option<OffsetDateTime>,
 }
 
+/// Feeds parsed at once in this process. A parse runs to its end without yielding, and its model
+/// may approach [`crate::feed_structure::MAX_FEED_MODEL_BYTES`]; refresh fetches several feeds at
+/// once and background jobs run beside it, so their parses take turns (review C3-R6).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) static PARSE_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+
 pub fn parse_feed_xml(raw: &str) -> anyhow::Result<ParsedFeed> {
-    // feed-rs keeps a base address per open element and per nested `xml:base`: depth and nested
-    // bases are bounded before it reads the feed (review C3-R5 R5-02). JSON feeds are not XML.
-    if raw.bytes().find(|&byte| byte == b'<' || byte == b'{') == Some(b'<') {
-        crate::xml_declaration::check_feed_structure(raw).context("解析 RSS/Atom feed 失败")?;
+    // feed-rs builds its whole model before normalisation: what it reads and builds is bounded
+    // before it reads the feed (reviews C3-R5 R5-02, C3-R6). It reads XML or JSON by the first
+    // `<` or `{`, as `utf8_parser_input` does.
+    match raw.bytes().find(|&byte| byte == b'<' || byte == b'{') {
+        Some(b'<') => crate::feed_structure::check_feed_structure(raw),
+        _ => crate::feed_structure::check_json_feed_structure(raw),
     }
+    .context("解析 RSS/Atom feed 失败")?;
     // feed-rs normally synthesizes IDs for entries that omit one. Downstream we need to
     // distinguish a source-provided GUID from that fallback; guessing by "looks like a hash"
     // incorrectly discards legitimate hexadecimal GUIDs. Keep missing IDs empty here and let
