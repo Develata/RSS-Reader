@@ -56,6 +56,34 @@ fn skip_space(text: &[u8], from: usize, end: usize) -> usize {
     from + text[from..end].iter().take_while(|&&b| is_xml_space(b)).count()
 }
 
+/// The longest start tag (its name and attributes) a feed or an OPML document may have. quick-xml
+/// checks each attribute of a tag against all the earlier ones when they are read, so a tag of
+/// many attributes costs their number squared; within this bound that stays negligible. No real
+/// feed or OPML element comes near it: contents are text, not attributes.
+pub(crate) const MAX_XML_TAG_BYTES: usize = 16 * 1024;
+
+/// Refuses an XML document with a start tag longer than [`MAX_XML_TAG_BYTES`], read with
+/// quick-xml itself so the tags are the ones the parsers see; a document quick-xml cannot read
+/// is left to the parser to refuse. Linear, without copying.
+pub(crate) fn check_xml_tag_sizes(raw: &str) -> anyhow::Result<()> {
+    use quick_xml::events::Event;
+
+    let mut reader = quick_xml::Reader::from_str(raw);
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(tag) | Event::Empty(tag)) => {
+                anyhow::ensure!(
+                    tag.len() <= MAX_XML_TAG_BYTES,
+                    "XML 元素过长（超过 {} KiB），无法解析",
+                    MAX_XML_TAG_BYTES / 1024
+                );
+            }
+            Ok(Event::Eof) | Err(_) => return Ok(()),
+            Ok(_) => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::leading_declared_encoding;

@@ -28,6 +28,11 @@ pub struct ParsedEntry {
 }
 
 pub fn parse_feed_xml(raw: &str) -> anyhow::Result<ParsedFeed> {
+    // feed-rs reads every attribute of every element through quick-xml's duplicate check: a tag
+    // of many attributes would cost their number squared (review C3-R4 sweep).
+    if raw.bytes().find(|&byte| byte == b'<' || byte == b'{') == Some(b'<') {
+        crate::xml_declaration::check_xml_tag_sizes(raw).context("解析 RSS/Atom feed 失败")?;
+    }
     // feed-rs normally synthesizes IDs for entries that omit one. Downstream we need to
     // distinguish a source-provided GUID from that fallback; guessing by "looks like a hash"
     // incorrectly discards legitimate hexadecimal GUIDs. Keep missing IDs empty here and let

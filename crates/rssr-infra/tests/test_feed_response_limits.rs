@@ -126,3 +126,25 @@ async fn feed_body_stall_still_obeys_the_30_second_request_timeout() {
         "{error:#}"
     );
 }
+
+/// A feed or an OPML document with a tag of 100 000 distinct attributes is refused before
+/// quick-xml's duplicate check reads them (it costs their number squared); a feed with a long
+/// but legitimate tag is read (review C3-R4 sweep).
+#[test]
+fn a_tag_of_many_attributes_is_refused_before_it_is_read() {
+    let attributes = (0..100_000).map(|index| format!(" a{index}=\"x\"")).collect::<String>();
+    let started = std::time::Instant::now();
+    let feed = format!(
+        "<rss version=\"2.0\"><channel><title>t</title><item{attributes}><title>i</title></item></channel></rss>"
+    );
+    assert!(rssr_infra::parser::FeedParser::new().parse(&feed).is_err());
+    let opml = format!(
+        "<opml version=\"2.0\"><head/><body><outline{attributes} xmlUrl=\"https://example.com/f.xml\"/></body></opml>"
+    );
+    assert!(rssr_infra::opml::OpmlCodec::new().decode(&opml).is_err());
+    assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
+
+    let long = format!("<item data=\"{}\"><title>i</title></item>", "x".repeat(8 * 1024));
+    let feed = format!("<rss version=\"2.0\"><channel><title>t</title>{long}</channel></rss>");
+    assert!(rssr_infra::parser::FeedParser::new().parse(&feed).is_ok());
+}

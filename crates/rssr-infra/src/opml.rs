@@ -249,7 +249,15 @@ fn push_attribute(element: &mut BytesStart<'_>, key: &str, raw: &str) {
 /// quick-xml 产生起始标签事件时不检查属性语法，只有读取属性才会报错；每个元素都读一遍，
 /// 缺等号、缺引号或重复属性的文档整体拒绝。这不是完整的 XML 良构性校验（属性值里的裸 `<`
 /// 等仍会通过）。
+///
+/// A tag longer than [`crate::xml_declaration::MAX_XML_TAG_BYTES`] is refused before its
+/// attributes are read: the duplicate check costs their number squared (review C3-R4 sweep).
 fn check_attributes(event: &BytesStart<'_>) -> Result<()> {
+    ensure!(
+        event.len() <= crate::xml_declaration::MAX_XML_TAG_BYTES,
+        "OPML 元素过长（超过 {} KiB）",
+        crate::xml_declaration::MAX_XML_TAG_BYTES / 1024
+    );
     for attribute in event.attributes() {
         attribute?;
     }
