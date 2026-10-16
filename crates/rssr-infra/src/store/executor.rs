@@ -28,7 +28,9 @@
 //!
 //! After every task the connection is brought back to its idle state (no open transaction, the
 //! role's `query_only`); a connection that cannot be is discarded, and the worker opens a new one
-//! for the next task (an in-memory library cannot, and reports itself unusable).
+//! for the next task (an in-memory library cannot, and reports itself unusable). This happens
+//! after the task's caller has its result, so it counts against the next task's admission wait;
+//! the reopen happens once that task is running.
 //!
 //! Opening runs on its own thread too. The path is made absolute once, and the identity probe and
 //! every connection use that one path (connections never read it as a URI). A missing library is

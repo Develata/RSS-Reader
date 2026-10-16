@@ -543,7 +543,10 @@ async fn a_connection_that_cannot_be_cleaned_up_is_replaced() {
     use rusqlite::hooks::{AuthAction, AuthContext, Authorization, TransactionOperation};
 
     let dir = TempDir::new("broken");
-    let store = LibraryStore::open_with(dir.library(), quick()).await.unwrap();
+    // The worker closes the broken connection after the failed task has replied, so the next
+    // task's admission wait includes that close, which can exceed `quick()`'s under load.
+    let options = StoreOptions { admission_wait: Duration::from_secs(5), ..quick() };
+    let store = LibraryStore::open_with(dir.library(), options).await.unwrap();
     let failed = store
         .write(|tx| -> Result<(), StoreError> {
             tx.execute(
