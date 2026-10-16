@@ -57,7 +57,7 @@ pub use refresh_service::{
 };
 pub use result_bounds::{
     MAX_DISCOVERY_CANDIDATES, MAX_LISTED_FAILURES, MAX_MESSAGE_BYTES, MAX_NAME_BYTES,
-    MAX_RESULT_BYTES, MAX_URL_BYTES, TRUNCATION_MARK, truncate_marked,
+    MAX_RESULT_BYTES, MAX_URL_BYTES, TRUNCATION_MARK, truncate_marked, truncate_marked_str,
 };
 pub use settings_service::{SettingsPatch, SettingsService};
 pub use startup_service::{StartupService, StartupTarget};

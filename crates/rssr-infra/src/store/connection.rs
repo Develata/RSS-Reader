@@ -45,9 +45,15 @@ pub fn configure(connection: &Connection, role: Role) -> StoreResult<()> {
         1,
         FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
         |context| {
+            // The first `MAX + 1` characters decide the result and fit in `4 * (MAX + 1)` bytes:
+            // only that prefix is decoded (review C3-R3 R3-04). Within it at least `MAX` whole
+            // characters and something after them: a cut title keeps exactly the characters a
+            // decoding of the whole text would.
+            let window = 4 * (rssr_domain::MAX_LISTED_TITLE_CHARS + 1);
             Ok(match context.get_raw(0) {
-                rusqlite::types::ValueRef::Text(bytes) => {
-                    Some(rssr_domain::listed_title(&String::from_utf8_lossy(bytes)))
+                rusqlite::types::ValueRef::Text(bytes) | rusqlite::types::ValueRef::Blob(bytes) => {
+                    let prefix = &bytes[..bytes.len().min(window)];
+                    Some(rssr_domain::listed_title(&String::from_utf8_lossy(prefix)))
                 }
                 _ => None,
             })

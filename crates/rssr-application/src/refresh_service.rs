@@ -224,6 +224,24 @@ impl RefreshFeedOutcome {
         }
     }
 
+    /// [`Self::failure_summary`] within the bounds of a result: the address and the message are
+    /// cut to [`crate::MAX_URL_BYTES`] and [`crate::MAX_MESSAGE_BYTES`] before they are copied.
+    pub fn bounded_failure_summary(&self) -> Option<RefreshFailureItem> {
+        match &self.result {
+            RefreshFeedResult::Failed { kind, message } => Some(RefreshFailureItem {
+                feed_id: self.feed_id,
+                url: crate::result_bounds::truncate_marked_str(&self.url, crate::MAX_URL_BYTES),
+                name: None,
+                kind: *kind,
+                message: crate::result_bounds::truncate_marked_str(
+                    message,
+                    crate::MAX_MESSAGE_BYTES,
+                ),
+            }),
+            _ => None,
+        }
+    }
+
     /// The failure, without a name (the refresh does not read it).
     pub fn failure_summary(&self) -> Option<RefreshFailureItem> {
         match &self.result {
@@ -280,12 +298,22 @@ pub struct RefreshAllOutcome {
 
 impl RefreshAllOutcome {
     pub fn summary(&self) -> RefreshAllSummary {
-        self.summary_listing(usize::MAX)
+        self.summarize(usize::MAX, RefreshFeedOutcome::failure_summary)
     }
 
-    /// [`Self::summary`] with at most `max_failures` failures listed (the first ones); a failure
-    /// is built only when it is listed, the counts cover every subscription.
+    /// [`Self::summary`] for a result: at most `max_failures` failures listed (the first ones),
+    /// each built only when it is listed and within the bounds of a result
+    /// ([`RefreshFeedOutcome::bounded_failure_summary`]); the counts cover every subscription
+    /// (review C3-R2 R2-03, C3-R3 R3-02).
     pub fn summary_listing(&self, max_failures: usize) -> RefreshAllSummary {
+        self.summarize(max_failures, RefreshFeedOutcome::bounded_failure_summary)
+    }
+
+    fn summarize(
+        &self,
+        max_failures: usize,
+        failure: fn(&RefreshFeedOutcome) -> Option<RefreshFailureItem>,
+    ) -> RefreshAllSummary {
         let mut summary =
             RefreshAllSummary { total_count: self.feeds.len(), ..RefreshAllSummary::default() };
 
@@ -299,7 +327,7 @@ impl RefreshAllOutcome {
                 RefreshFeedResult::Failed { .. } => {
                     summary.failed_count += 1;
                     if summary.failures.len() < max_failures
-                        && let Some(failure) = outcome.failure_summary()
+                        && let Some(failure) = failure(outcome)
                     {
                         summary.failures.push(failure);
                     }
@@ -947,6 +975,22 @@ mod tests {
         let listed: Vec<_> = summary.failures.iter().map(|failure| failure.feed_id).collect();
         assert_eq!(listed, [0, 1]);
         assert_eq!(outcome.summary().failures.len(), 5);
+
+        // Listed failures are cut to the bounds of a result; the full summary keeps them whole.
+        let long = super::RefreshAllOutcome {
+            feeds: vec![super::RefreshFeedOutcome {
+                feed_id: 1,
+                url: format!("https://example.com/{}", "u".repeat(10 * crate::MAX_URL_BYTES)),
+                result: super::RefreshFeedResult::Failed {
+                    kind: crate::ErrorKind::Network,
+                    message: "m".repeat(10 * crate::MAX_MESSAGE_BYTES),
+                },
+            }],
+        };
+        let listed = &long.summary_listing(1).failures[0];
+        assert!(listed.url.len() <= crate::MAX_URL_BYTES);
+        assert!(listed.message.len() <= crate::MAX_MESSAGE_BYTES);
+        assert_eq!(long.summary().failures[0].message.len(), 10 * crate::MAX_MESSAGE_BYTES);
     }
 
     #[test]

@@ -37,8 +37,13 @@ pub const TRUNCATION_MARK: &str = "…（已截断）";
 /// Precondition: `max >= TRUNCATION_MARK.len()`. Postcondition: the result is `text` when it fits,
 /// otherwise a prefix of `text` followed by the mark, and never longer than `max`.
 pub fn truncate_marked(text: String, max: usize) -> String {
+    if text.len() <= max { text } else { truncate_marked_str(&text, max) }
+}
+
+/// [`truncate_marked`] of a borrowed `text`: only the kept prefix is copied.
+pub fn truncate_marked_str(text: &str, max: usize) -> String {
     if text.len() <= max {
-        return text;
+        return text.to_owned();
     }
     let mut keep = max.saturating_sub(TRUNCATION_MARK.len());
     while !text.is_char_boundary(keep) {

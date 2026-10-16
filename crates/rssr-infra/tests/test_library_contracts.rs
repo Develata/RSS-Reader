@@ -126,6 +126,16 @@ async fn titles_in_lists_are_bounded() {
     let summaries = library.feeds.list_summaries().await.unwrap();
     let nul_summary = summaries.iter().find(|summary| summary.id == nul_feed.id).unwrap();
     assert_eq!(nul_summary.title, listed_title(&nul_title()), "a NUL does not stop the cut");
+    // Text that is not UTF-8 (written outside the program) is shown with replacements.
+    library
+        .exec(format!(
+            "UPDATE feeds SET title = CAST(x'61ff62' AS TEXT) WHERE id = {}",
+            nul_feed.id
+        ))
+        .await;
+    let summaries = library.feeds.list_summaries().await.unwrap();
+    let invalid = summaries.iter().find(|summary| summary.id == nul_feed.id).unwrap();
+    assert_eq!(invalid.title, "a\u{fffd}b");
 
     let listed = library.entries.list_entries(&EntryQuery::default()).await.unwrap();
     let mut titles: Vec<_> = listed.iter().map(|entry| entry.title.clone()).collect();
