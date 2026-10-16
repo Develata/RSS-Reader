@@ -699,6 +699,11 @@ fn browser_discovery_parser_matches_native() {
     discovery_cases::assert_discovery_cases();
 }
 
+#[wasm_bindgen_test]
+fn browser_discovery_is_bounded_while_the_page_is_read() {
+    discovery_cases::assert_discovery_bounds();
+}
+
 /// 两个窄字段更新并发时都必须留下（审计 A2）：浏览器端的读改写在同一次 Web Lock 内完成。
 #[wasm_bindgen_test]
 async fn browser_app_state_narrow_updates_do_not_lose_each_other() {

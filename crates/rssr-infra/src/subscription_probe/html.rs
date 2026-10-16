@@ -1,7 +1,7 @@
 use html5ever::tokenizer::{
     BufferQueue, EndTag, StartTag, Token, TokenSink, TokenSinkResult, Tokenizer,
 };
-use rssr_application::FeedDiscoveryCandidate;
+use rssr_application::{FeedDiscoveryCandidate, MAX_DISCOVERY_CANDIDATES, MAX_URL_BYTES};
 use std::cell::RefCell;
 use url::Url;
 
@@ -86,6 +86,12 @@ impl TokenSink for Sink {
     }
 }
 
+/// The feeds a page offers, at most [`MAX_DISCOVERY_CANDIDATES`] distinct ones.
+///
+/// Bounded while it is built (review C3-R3 R3-01): a `<base>` or a link longer than
+/// [`MAX_URL_BYTES`] is ignored, and so is an address longer than that once resolved, before it is
+/// copied or compared. A long base would otherwise be repeated in every resolved link: a page of a
+/// megabyte could make gigabytes of addresses that are left out only afterwards.
 pub(super) fn discover(page_url: &Url, body: &str) -> Vec<FeedDiscoveryCandidate> {
     let queue = BufferQueue::default();
     queue.push_back(body.into());
@@ -93,16 +99,31 @@ pub(super) fn discover(page_url: &Url, body: &str) -> Vec<FeedDiscoveryCandidate
     let _ = tokenizer.feed(&queue);
     tokenizer.end();
     let head = tokenizer.sink.0.into_inner();
-    let base = head
-        .base
-        .and_then(|href| page_url.join(href.trim()).ok())
-        .filter(|u| matches!(u.scheme(), "http" | "https"))
-        .unwrap_or_else(|| page_url.clone());
+    let base = match head.base {
+        // Its links cannot be resolved within the bound.
+        Some(href) if href.trim().len() > MAX_URL_BYTES => return Vec::new(),
+        Some(href) => page_url
+            .join(href.trim())
+            .ok()
+            .filter(|u| matches!(u.scheme(), "http" | "https"))
+            .unwrap_or_else(|| page_url.clone()),
+        None => page_url.clone(),
+    };
+    if base.as_str().len() > MAX_URL_BYTES {
+        return Vec::new();
+    }
     let mut result = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for (href, title) in head.links {
+        if result.len() == MAX_DISCOVERY_CANDIDATES {
+            break;
+        }
+        if href.trim().len() > MAX_URL_BYTES {
+            continue;
+        }
         if let Ok(url) = base.join(href.trim())
             && matches!(url.scheme(), "http" | "https")
+            && url.as_str().len() <= MAX_URL_BYTES
         {
             let url = rssr_domain::normalize_feed_url(&url);
             if seen.insert(url.clone()) {
