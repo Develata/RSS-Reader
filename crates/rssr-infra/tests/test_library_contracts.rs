@@ -95,6 +95,17 @@ async fn counts_only_real_inserts_including_same_batch_duplicates() {
 }
 
 #[tokio::test]
+async fn bulk_read_refuses_a_selection_over_its_bound() {
+    let library = Library::memory().await;
+    let feed = library.add_feed("https://example.com/many").await;
+    let count = rssr_domain::MAX_MARK_READ_SELECTION + 1;
+    let parsed = (0..count).map(|key| library::published(&key.to_string(), "Entry", None));
+    assert_eq!(library.seed(feed.id, parsed.collect()).await, count as u64);
+    let toggle = library.scalar("SELECT MIN(id) FROM entries").await;
+    bulk_read_cases::verify_selection_bound(&library.entries, toggle).await;
+}
+
+#[tokio::test]
 async fn bulk_read_scope_confirmation_atomic_failure_and_zero() {
     let library = Library::memory().await;
     let entries = &library.entries;
@@ -187,16 +198,23 @@ async fn bulk_read_large_dataset_measurement() {
         )
         .await;
     let entries = &library.entries;
+    // Over the bound: refused after reading one id past it.
+    let started = std::time::Instant::now();
+    assert!(entries.preview_mark_read(&EntryQuery::default()).await.is_err());
+    let refuse_ms = started.elapsed().as_millis();
+    // At the bound: the largest selection a bulk mark-read covers.
+    let max = rssr_domain::MAX_MARK_READ_SELECTION;
+    library.exec(format!("UPDATE entries SET is_read = 1 WHERE id > {max}")).await;
     let started = std::time::Instant::now();
     let preview = entries.preview_mark_read(&EntryQuery::default()).await.unwrap();
     let preview_ms = started.elapsed().as_millis();
     let started = std::time::Instant::now();
     assert_eq!(
         entries.mark_read_if_unchanged(&preview).await.unwrap(),
-        MarkReadOutcome::Applied { changed_count: 50000 }
+        MarkReadOutcome::Applied { changed_count: max as u64 }
     );
     eprintln!(
-        "bulk_read rows=50000 preview_ms={preview_ms} apply_ms={}",
+        "bulk_read rows=50000 refuse_ms={refuse_ms} selected={max} preview_ms={preview_ms} apply_ms={}",
         started.elapsed().as_millis()
     );
 }

@@ -64,7 +64,7 @@ impl EntryIndexRepository for BrowserEntryRepository {
         let query = EntryQuery { limit: None, ..query.clone() };
         self.store
             .read(move |state| {
-                let unread_entry_ids = query::unread_selection(state, &query);
+                let unread_entry_ids = query::unread_selection(state, &query)?;
                 Ok(rssr_domain::MarkReadPreview { query, unread_entry_ids })
             })
             .await
@@ -78,7 +78,8 @@ impl EntryIndexRepository for BrowserEntryRepository {
         self.store
             .update(move |state| {
                 let query = EntryQuery { limit: None, ..preview.query };
-                let ids = query::unread_selection(state, &query);
+                // A selection grown past the bound is refused before the comparison.
+                let ids = query::unread_selection(state, &query)?;
                 if ids != preview.unread_entry_ids {
                     return Ok((
                         rssr_domain::MarkReadOutcome::SelectionChanged {

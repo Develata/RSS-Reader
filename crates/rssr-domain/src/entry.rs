@@ -317,6 +317,18 @@ mod tests {
     }
 }
 
+/// 一次批量已读最多覆盖的未读文章数（v0.2 阶段 C）。预览与确认都携带完整的选择集，确认时
+/// 整份比较，所以选择集有上限：更大的选择一律拒绝（[`mark_read_selection_too_large`]），
+/// 不截断、不分批。
+pub const MAX_MARK_READ_SELECTION: usize = 10_000;
+
+/// 选择集超过 [`MAX_MARK_READ_SELECTION`] 时的错误；各平台、CLI 与服务器给出同一句话。
+pub fn mark_read_selection_too_large() -> crate::DomainError {
+    crate::DomainError::InvalidInput(format!(
+        "范围过大：一次最多将 {MAX_MARK_READ_SELECTION} 篇未读文章标为已读，请缩小筛选"
+    ))
+}
+
 /// 冻结筛选条件（含归档分界）与完整未读集合；分页限制在预览时清除。确认时用同一查询，在
 /// 同一写事务里比较完整集合，不一致就返回新的预览、不写入。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

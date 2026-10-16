@@ -301,7 +301,10 @@ fn compare_entry_order(
 }
 
 /// 与列表共用筛选谓词，但不复制标题或排序整份 EntrySummary。
-pub fn unread_selection(state: &BrowserState, query: &EntryQuery) -> Vec<i64> {
+/// Unread entries matching `query` (its limit ignored), in id order; more than
+/// `MAX_MARK_READ_SELECTION` is refused, as in the native store. The state is wholly in memory
+/// already, so the ids are collected and then counted.
+pub fn unread_selection(state: &BrowserState, query: &EntryQuery) -> rssr_domain::Result<Vec<i64>> {
     let flags = build_entry_flag_index(state);
     let allowed = query.feed_ids.as_ref().map(|ids| ids.iter().copied().collect::<HashSet<_>>());
     let search = query.search_title.as_deref().map(rssr_domain::fold_for_search);
@@ -327,7 +330,10 @@ pub fn unread_selection(state: &BrowserState, query: &EntryQuery) -> Vec<i64> {
         .collect::<Vec<_>>();
     ids.sort_unstable();
     ids.dedup();
-    ids
+    if ids.len() > rssr_domain::MAX_MARK_READ_SELECTION {
+        return Err(rssr_domain::mark_read_selection_too_large());
+    }
+    Ok(ids)
 }
 
 #[cfg(test)]

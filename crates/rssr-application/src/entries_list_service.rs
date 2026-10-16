@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use rssr_domain::{
     ArchiveFilter, EntryIndexRepository, EntryQuery, EntrySummary, validate_entry_query,
+    validate_mark_read_preview,
 };
 
 use crate::library_queries::LibraryQueryPort;
@@ -43,7 +44,7 @@ impl EntriesListService {
         &self,
         preview: &rssr_domain::MarkReadPreview,
     ) -> anyhow::Result<rssr_domain::MarkReadOutcome> {
-        validate_entry_query(&preview.query)?;
+        validate_mark_read_preview(preview)?;
         self.entry_repository.mark_read_if_unchanged(preview).await.context("批量标为已读失败")
     }
 
@@ -227,6 +228,29 @@ mod tests {
                 "{available} available, limit {limit:?}"
             );
         }
+    }
+
+    /// A confirmation carrying more ids than any preview holds is refused before the store.
+    #[tokio::test]
+    async fn a_confirmation_over_the_bound_never_reaches_the_store() {
+        let service = service(Arc::new(EntryRepositoryStub::default()));
+        let ids = (0..=rssr_domain::MAX_MARK_READ_SELECTION as i64).collect();
+        let forged =
+            rssr_domain::MarkReadPreview { query: EntryQuery::default(), unread_entry_ids: ids };
+        let error = service.mark_read_if_unchanged(&forged).await.unwrap_err();
+        let Some(rssr_domain::DomainError::InvalidInput(message)) =
+            error.downcast_ref::<rssr_domain::DomainError>()
+        else {
+            panic!("{error:#}");
+        };
+        assert!(message.starts_with("范围过大"), "the stub was reached: {message}");
+
+        let at_bound = rssr_domain::MarkReadPreview {
+            unread_entry_ids: forged.unread_entry_ids[1..].to_vec(),
+            ..forged
+        };
+        let error = service.mark_read_if_unchanged(&at_bound).await.unwrap_err();
+        assert!(format!("{error:#}").contains("此测试替身"), "{error:#}");
     }
 
     /// Excluding archived entries asks for the archived count with the same query otherwise.

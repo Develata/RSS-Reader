@@ -9,8 +9,9 @@ use std::sync::Arc;
 
 use rssr_domain::{
     ArchiveFilter, Entry, EntryContent, EntryContentRepository, EntryIndexRepository,
-    EntryNavigation, EntryQuery, EntryRecord, EntrySummary, MarkReadOutcome, MarkReadPreview,
-    ReadFilter, Result as DomainResult, StarredFilter,
+    EntryNavigation, EntryQuery, EntryRecord, EntrySummary, MAX_MARK_READ_SELECTION,
+    MarkReadOutcome, MarkReadPreview, ReadFilter, Result as DomainResult, StarredFilter,
+    mark_read_selection_too_large,
 };
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
@@ -143,15 +144,20 @@ pub(crate) fn count_entries(conn: &Connection, query: &EntryQuery) -> StoreResul
     Ok(count as u64)
 }
 
-/// Unread entries matching `query` (its limit ignored), in id order.
+/// Unread entries matching `query` (its limit ignored), in id order; more than
+/// `MAX_MARK_READ_SELECTION` is refused. The query stops one id past the bound, so a large
+/// selection is neither read into memory nor scanned twice.
 fn unread_selection(conn: &Connection, query: &EntryQuery) -> StoreResult<Vec<i64>> {
     let mut sql = Filtered::new("SELECT entries.id");
     sql.push(ACTIVE_ENTRIES).push(" AND entries.is_read = 0").entry_filters(query)?;
-    sql.push(" ORDER BY entries.id");
+    sql.push(" ORDER BY entries.id LIMIT ").bind(MAX_MARK_READ_SELECTION as i64 + 1);
     let mut statement = conn.prepare_cached(&sql.sql)?;
-    let ids = statement
+    let ids: Vec<i64> = statement
         .query_map(params_from_iter(&sql.params), |row| row.get(0))?
         .collect::<Result<_, _>>()?;
+    if ids.len() > MAX_MARK_READ_SELECTION {
+        return Err(mark_read_selection_too_large().into());
+    }
     Ok(ids)
 }
 
@@ -169,7 +175,8 @@ pub(crate) fn preview_mark_read(
 }
 
 /// Marks the previewed entries read if the selection is still exactly the previewed one; the
-/// comparison and the update run in the caller's write transaction.
+/// comparison and the update run in the caller's write transaction. A selection grown past the
+/// bound is refused before the comparison.
 pub(crate) fn mark_read_if_unchanged(
     conn: &Connection,
     preview: &MarkReadPreview,

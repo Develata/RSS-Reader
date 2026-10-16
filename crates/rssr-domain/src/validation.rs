@@ -74,6 +74,16 @@ pub fn validate_entry_query(query: &crate::EntryQuery) -> crate::Result<()> {
     }
 }
 
+/// 校验批量已读的确认：查询同 [`validate_entry_query`]；存储给出的预览不会超过
+/// [`crate::MAX_MARK_READ_SELECTION`]，超过的预览不是存储给出的，不进存储就拒绝。
+pub fn validate_mark_read_preview(preview: &crate::MarkReadPreview) -> crate::Result<()> {
+    validate_entry_query(&preview.query)?;
+    if preview.unread_entry_ids.len() > crate::MAX_MARK_READ_SELECTION {
+        return Err(crate::mark_read_selection_too_large());
+    }
+    Ok(())
+}
+
 /// 校验自定义 CSS 的括号、引号与注释是否闭合。
 ///
 /// 返回原始原因字符串而不是 [`DomainError`]，因为两个调用方要用不同的方式包装它：

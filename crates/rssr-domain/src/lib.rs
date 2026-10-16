@@ -14,8 +14,8 @@ pub use app_state::{AppStateSnapshot, EntriesWorkspaceState, EntryGroupingPrefer
 pub use config_fingerprint::{ConfigFingerprint, FingerprintFeed};
 pub use entry::{
     ArchiveFilter, Entry, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary,
-    MarkReadOutcome, MarkReadPreview, ReadFilter, StarredFilter, archive_cutoff_at,
-    is_entry_archived, stored_published_at,
+    MAX_MARK_READ_SELECTION, MarkReadOutcome, MarkReadPreview, ReadFilter, StarredFilter,
+    archive_cutoff_at, is_entry_archived, mark_read_selection_too_large, stored_published_at,
 };
 pub use feed::{
     Feed, FeedSummary, FetchErrorKind, NewFeedSubscription, normalize_feed_url, public_fetch_error,
@@ -32,7 +32,7 @@ pub use settings::{
 };
 pub use validation::{
     CONFIG_PACKAGE_VERSION, parse_and_normalize_feed_url, parse_feed_url, validate_config_package,
-    validate_entry_query, validate_user_settings,
+    validate_entry_query, validate_mark_read_preview, validate_user_settings,
 };
 
 pub type Result<T> = std::result::Result<T, DomainError>;

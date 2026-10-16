@@ -624,6 +624,32 @@ async fn browser_bulk_read_matches_sqlite_cases_and_rolls_back_failed_storage() 
     clear_browser_state_storage();
 }
 
+/// Entries without address, author or summary keep the seeded state small for `localStorage`.
+#[wasm_bindgen_test]
+async fn browser_bulk_read_refuses_a_selection_over_its_bound() {
+    let count = rssr_domain::MAX_MARK_READ_SELECTION as i64 + 1;
+    let state = seed_state(BrowserState {
+        core: PersistedState {
+            next_feed_id: 2,
+            next_entry_id: count + 1,
+            feeds: vec![sample_feed(1, "https://example.com/1", false)],
+            entries: (1..=count)
+                .map(|id| PersistedEntryIndex {
+                    url: None,
+                    author: None,
+                    summary: None,
+                    ..sample_entry_index(id, 1, id)
+                })
+                .collect(),
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .await;
+    bulk_cases::verify_selection_bound(&BrowserEntryRepository::new(state), 1).await;
+    clear_browser_state_storage();
+}
+
 #[path = "support/discovery_cases.rs"]
 mod discovery_cases;
 #[wasm_bindgen_test]

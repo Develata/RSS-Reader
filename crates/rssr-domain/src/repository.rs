@@ -35,7 +35,13 @@ pub trait FeedRepository: Send + Sync {
 
 #[async_trait::async_trait]
 pub trait EntryIndexRepository: Send + Sync {
+    /// The unread entries `query` selects (its limit ignored). More than
+    /// [`crate::MAX_MARK_READ_SELECTION`] is refused ([`crate::mark_read_selection_too_large`]):
+    /// a returned preview never holds more.
     async fn preview_mark_read(&self, query: &EntryQuery) -> crate::Result<crate::MarkReadPreview>;
+    /// Marks the previewed entries read if the selection, read again in the same transaction, is
+    /// exactly the previewed one. A selection grown past the bound is refused, not returned as
+    /// `SelectionChanged`.
     async fn mark_read_if_unchanged(
         &self,
         preview: &crate::MarkReadPreview,
