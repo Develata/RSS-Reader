@@ -198,7 +198,8 @@ fn validate_opml_root(event: &BytesStart<'_>, decoder: Decoder) -> Result<()> {
     for attribute in event.attributes() {
         let attribute = attribute?;
         if attribute.key.as_ref() == b"version" {
-            let version = attribute.decode_and_unescape_value(decoder)?;
+            let version = attribute
+                .decoded_and_normalized_value(quick_xml::XmlVersion::default(), decoder)?;
             if !matches!(version.as_ref(), "1.0" | "1.1" | "2.0") {
                 bail!("不支持的 OPML 版本：{version}");
             }
@@ -250,14 +251,10 @@ fn push_attribute(element: &mut BytesStart<'_>, key: &str, raw: &str) {
 /// 缺等号、缺引号或重复属性的文档整体拒绝。这不是完整的 XML 良构性校验（属性值里的裸 `<`
 /// 等仍会通过）。
 ///
-/// A tag longer than [`crate::xml_declaration::MAX_XML_TAG_BYTES`] is refused before its
-/// attributes are read: the duplicate check costs their number squared (review C3-R4 sweep).
+/// quick-xml 0.41 checks duplicates with a hash pre-filter past a few attributes, so a tag of many
+/// attributes is read in linear time; long outlines (a long title appears twice) stay importable
+/// (review C3-R5 R5-06).
 fn check_attributes(event: &BytesStart<'_>) -> Result<()> {
-    ensure!(
-        event.len() <= crate::xml_declaration::MAX_XML_TAG_BYTES,
-        "OPML 元素过长（超过 {} KiB）",
-        crate::xml_declaration::MAX_XML_TAG_BYTES / 1024
-    );
     for attribute in event.attributes() {
         attribute?;
     }
@@ -295,7 +292,9 @@ impl OutlineAttrs {
 
         for attribute in event.attributes() {
             let attribute = attribute?;
-            let value = attribute.decode_and_unescape_value(decoder)?.into_owned();
+            let value = attribute
+                .decoded_and_normalized_value(quick_xml::XmlVersion::default(), decoder)?
+                .into_owned();
             match attribute.key.as_ref() {
                 b"text" => text = Some(value),
                 b"title" => title = Some(value),
