@@ -58,7 +58,8 @@ pub fn assert_discovery_bounds() {
 
     // Many tags each under the token bound: their attributes add up, and reading stops
     // (review C3-R5 R5-01).
-    let tag = format!("<meta{}>", (0..8_000).map(|index| format!(" a{index}")).collect::<String>());
+    let tag = format!("<meta{}>", (0..5_000).map(|index| format!(" a{index}")).collect::<String>());
+    assert!(tag.len() < 32 * 1024, "each tag is under the single-token bound: {}", tag.len());
     let html = format!(
         "<html><head>{}{}{}</head></html>",
         link("/first.xml"),
