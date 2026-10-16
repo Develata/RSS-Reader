@@ -41,7 +41,7 @@ use self::rate_limit::{
     rate_limit_key, record_login_failure,
 };
 use self::session::{SESSION_COOKIE, build_device_token, device_cookie_header, extract_cookie};
-pub(crate) use self::store::AuthStore;
+pub(crate) use self::store::{AuthStore, make_library_private, prepare_data_dir};
 use self::store::{Credential, SessionToken};
 
 /// 同时进行的密码校验上限。Argon2 每次都要占用一个阻塞线程和可观的内存，登录请求再多

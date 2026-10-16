@@ -36,8 +36,8 @@ use tracing_subscriber::EnvFilter;
 use crate::{
     api::ApiState,
     auth::{
-        AppState, AuthStore, generate_password_hash, load_config, open_store, session_probe,
-        with_auth,
+        AppState, AuthStore, generate_password_hash, load_config, make_library_private, open_store,
+        prepare_data_dir, session_probe, with_auth,
     },
     proxy::feed_proxy,
 };
@@ -80,6 +80,13 @@ enum SessionsCommand {
 }
 
 fn main() -> Result<()> {
+    // Files this process creates are its user's alone (the library, its WAL and shared memory,
+    // the policy): a data directory may be readable by others (review C3-R1 F02).
+    #[cfg(unix)]
+    // SAFETY: umask has no preconditions and cannot fail; set before any thread starts.
+    unsafe {
+        libc::umask(0o077);
+    }
     init_tracing();
     let cli = Cli::parse();
 
@@ -118,8 +125,12 @@ async fn serve(data_dir: &Path) -> Result<()> {
     let local = listener.local_addr().context("读取监听地址失败")?;
     // 资料库在认证库开始运行之前打开：打不开时直接退出，不留下运行标记（否则下次启动会因为
     // 一个与会话无关的故障吊销全部会话）。
-    let api = ApiState::new(Arc::new(open_backend(data_dir).await?));
+    let backend = Arc::new(open_backend(data_dir).await?);
     let store = Arc::new(open_store(data_dir)?);
+    // 取得服务器排他锁（`open_store` 的 `begin_run`）之后才开始定时刷新：同一目录上被拒绝的
+    // 第二个服务器不抓取任何 feed（审计 C3-R1 F12）。
+    rssr_api::Backend::ensure_auto_refresh_started(backend.as_ref());
+    let api = ApiState::new(backend);
     let state = AppState::new(config, Arc::clone(&store), local)?;
 
     info!(build = api::BUILD_ID, "starting rssr-web on {local}");
@@ -164,21 +175,24 @@ async fn serve(data_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// 数据目录里的资料库与出站策略（没有时写入默认的服务器策略），以及其上的后端；定时刷新随之
-/// 开始。首次打开时导入同一目录里的 v0.1.x 资料库。
+/// 数据目录里的资料库与出站策略（没有时写入默认的服务器策略），以及其上的后端（定时刷新由
+/// 调用方在取得服务器排他锁之后开始）。数据目录不存在时先以仅所有者可访问的权限创建；已有的
+/// 资料库文件改为仅所有者可读写。首次打开时导入同一目录里的 v0.1.x 资料库。
 async fn open_backend(
     data_dir: &Path,
 ) -> Result<rssr_infra::local_backend::LocalBackend<rssr_infra::local_backend::NativeHost>> {
+    prepare_data_dir(data_dir)?;
     let policy = ensure_server_policy(data_dir).context("准备出站策略失败")?;
+    make_library_private(data_dir)?;
     let opened =
         open_library_in(data_dir, StoreOptions::default()).await.context("打开资料库失败")?;
     if let Some(imported) = &opened.imported {
         info!(?imported, "已从 v0.1 数据导入资料库");
     }
+    // Again for the files the open itself created (the umask of `main` covers them too).
+    make_library_private(data_dir)?;
     info!(library = %opened.path.display(), "已打开资料库");
-    let backend = native_local_backend_with(opened.store, policy).context("建立后端失败")?;
-    rssr_api::Backend::ensure_auto_refresh_started(&backend);
-    Ok(backend)
+    native_local_backend_with(opened.store, policy).context("建立后端失败")
 }
 
 /// Ctrl-C，或 Unix 上的 SIGTERM（`docker stop`、systemd）。注册失败的那一路不会触发停止。

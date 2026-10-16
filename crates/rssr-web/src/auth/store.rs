@@ -633,17 +633,7 @@ fn random_key() -> [u8; 32] {
 /// （`-wal`、`-shm`、`-journal`，例如恢复或异常退出留下的）都必须是普通文件；Unix 上还要属于
 /// 当前用户，且其他用户无权访问：已有的伴随文件不会因为主库是 0600 就被改正。
 fn prepare_file(data_dir: &Path) -> Result<PathBuf> {
-    let mut builder = std::fs::DirBuilder::new();
-    builder.recursive(true);
-    #[cfg(unix)]
-    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
-    builder.create(data_dir).with_context(|| format!("无法创建数据目录 {}", data_dir.display()))?;
-    #[cfg(unix)]
-    {
-        let metadata = std::fs::metadata(data_dir)
-            .with_context(|| format!("无法读取数据目录 {}", data_dir.display()))?;
-        check_private(data_dir, &metadata, 0o022)?;
-    }
+    prepare_data_dir(data_dir)?;
 
     let path = data_dir.join(AUTH_DB);
     let mut options = std::fs::OpenOptions::new();
@@ -682,6 +672,57 @@ fn prepare_file(data_dir: &Path) -> Result<PathBuf> {
         }
     }
     Ok(path)
+}
+
+/// 数据目录不存在时以仅所有者可访问的权限创建（逐级）；Unix 上它必须属于当前用户、不能被
+/// 其他用户写入。服务器写入任何文件之前先调用（审计 C3-R1 F01）。
+pub(crate) fn prepare_data_dir(data_dir: &Path) -> Result<()> {
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    builder.create(data_dir).with_context(|| format!("无法创建数据目录 {}", data_dir.display()))?;
+    #[cfg(unix)]
+    {
+        let metadata = std::fs::metadata(data_dir)
+            .with_context(|| format!("无法读取数据目录 {}", data_dir.display()))?;
+        check_private(data_dir, &metadata, 0o022)?;
+    }
+    Ok(())
+}
+
+/// 资料库 `library.sqlite3` 与已有的伴随文件改为仅所有者可读写（审计 C3-R1 F02）。
+///
+/// 数据目录只要求其他用户不能写入，可以是 0755；而同一目录里的 CLI 按默认 umask 建出的资料库
+/// 是 0644，其他本机用户能读到订阅地址与正文。每个已有的文件必须是普通文件、属于当前用户，
+/// 组与其他用户的权限位被清除；SQLite 之后新建的 `-wal`、`-shm` 沿用主库的权限。
+pub(crate) fn make_library_private(data_dir: &Path) -> Result<()> {
+    let library = rssr_infra::store::local::LIBRARY_FILE;
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+        let path = data_dir.join(format!("{library}{suffix}"));
+        let metadata = match std::fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(error).with_context(|| format!("无法读取 {}", path.display()));
+            }
+        };
+        if !metadata.file_type().is_file() {
+            bail!("资料库文件 {} 不是普通文件", path.display());
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{MetadataExt, PermissionsExt};
+            check_private(&path, &metadata, 0)?;
+            let mode = metadata.mode() & 0o777;
+            if mode & 0o077 != 0 {
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode & 0o700))
+                    .with_context(|| format!("无法收紧 {} 的权限", path.display()))?;
+                warn!(path = %path.display(), from = format_args!("{mode:o}"), "资料库文件对其他用户可见，已改为仅所有者可访问");
+            }
+        }
+    }
+    Ok(())
 }
 
 /// `path` 属于当前用户，且权限里没有 `forbidden` 中的位。
@@ -1380,6 +1421,31 @@ mod tests {
             assert!(!store.validate(&token, T0).unwrap(), "{column}");
         }
         assert_eq!(sessions(&store), 0);
+    }
+
+    /// 资料库与伴随文件对其他用户可见时被改为仅所有者可读写；不是普通文件时拒绝（审计
+    /// C3-R1 F02）。
+    #[cfg(unix)]
+    #[test]
+    fn the_library_is_made_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let scratch = Scratch::new("library");
+        assert!(make_library_private(scratch.path()).is_ok(), "nothing there yet");
+        let library = rssr_infra::store::local::LIBRARY_FILE;
+        for suffix in ["", "-wal"] {
+            let path = scratch.path().join(format!("{library}{suffix}"));
+            std::fs::write(&path, b"pages").unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        make_library_private(scratch.path()).unwrap();
+        for suffix in ["", "-wal"] {
+            let path = scratch.path().join(format!("{library}{suffix}"));
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "{suffix}");
+        }
+        let shm = scratch.path().join(format!("{library}-shm"));
+        std::os::unix::fs::symlink("/tmp", &shm).unwrap();
+        assert!(make_library_private(scratch.path()).is_err(), "a linked companion");
     }
 
     /// 已有的伴随文件（恢复或异常退出留下的）同样检查：权限过宽或不是普通文件时拒绝打开

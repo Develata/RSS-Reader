@@ -733,3 +733,24 @@ async fn jobs_follow_the_protocol() {
     let (status, code, _) = client.error(response).await;
     assert_eq!((status, code.as_str()), (StatusCode::GONE, "status_unavailable"));
 }
+
+/// A data directory that does not exist yet is created (private on Unix) before the policy and
+/// the library are written; the library is private (review C3-R1 F01, F02).
+#[tokio::test]
+async fn a_new_data_directory_is_created_before_anything_is_written() {
+    let scratch = crate::auth::test_support::ScratchDir::new("fresh");
+    let data_dir = scratch.path().join("not").join("yet");
+    let backend = crate::open_backend(&data_dir).await.expect("starts on a new directory");
+    drop(backend);
+    for file in ["outbound.json", rssr_infra::store::local::LIBRARY_FILE] {
+        assert!(data_dir.join(file).is_file(), "{file}");
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |path: &std::path::Path| std::fs::metadata(path).unwrap().permissions().mode();
+        assert_eq!(mode(&data_dir) & 0o777, 0o700);
+        let library = data_dir.join(rssr_infra::store::local::LIBRARY_FILE);
+        assert_eq!(mode(&library) & 0o077, 0, "the library is its owner's alone");
+    }
+}
