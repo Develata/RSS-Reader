@@ -110,6 +110,15 @@ struct Inner<H> {
     auto_refresh_started: AtomicBool,
 }
 
+/// Clears the periodic refresh's "in progress" flag when dropped.
+struct InProgress(Arc<AtomicBool>);
+
+impl Drop for InProgress {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
 /// How long the periodic refresh waits after failing to read the settings.
 const AUTO_REFRESH_RETRY_DELAY: Duration = Duration::from_secs(30);
 /// The periodic refresh reads the settings at least this often, so an interval changed
@@ -215,10 +224,12 @@ impl<H: LocalHost> LocalBackend<H> {
     /// The periodic refresh: reads the settings at least every
     /// [`AUTO_REFRESH_SETTINGS_PERIOD`] and, when a refresh of everything is due, starts it in
     /// the background without waiting for it. A new interval does not cancel a refresh in
-    /// progress; the next one is due by the new interval from the last start. A refresh still
-    /// running when the next is due is joined ([`RefreshFlight`]), not started twice.
+    /// progress; the next one is due by the new interval from the last start. At most one
+    /// refresh it started is in progress: one due while it still runs is not started (nor a
+    /// waiter for it made, review C3-R1 F11) and starts at the first check after it ends.
     async fn auto_refresh_loop(self) {
         let mut last_refresh_started_at = None;
+        let in_progress = Arc::new(AtomicBool::new(false));
         loop {
             let settings = match self.inner.use_cases.settings_service.load().await {
                 Ok(settings) => settings,
@@ -229,29 +240,40 @@ impl<H: LocalHost> LocalBackend<H> {
                 }
             };
             let now = self.inner.host.now_utc();
-            if auto_refresh::should_trigger(
+            let due = auto_refresh::should_trigger(
                 last_refresh_started_at,
                 settings.refresh_interval_minutes,
                 now,
-            ) {
+            );
+            let started = due && !in_progress.swap(true, Ordering::SeqCst);
+            if started {
                 tracing::info!(
                     refresh_interval_minutes = settings.refresh_interval_minutes,
                     "触发后台自动刷新全部订阅"
                 );
                 let backend = self.clone();
+                let done = InProgress(Arc::clone(&in_progress));
                 self.inner.host.spawn(Box::pin(async move {
+                    // Cleared when the refresh ends, however it ends.
+                    let _done = done;
                     if let Err(error) = backend.refresh_all().await {
                         tracing::warn!(error = %error, "后台自动刷新失败");
                     }
                 }));
                 last_refresh_started_at = Some(now);
             }
-            let wait_for = auto_refresh::wait_duration(
-                last_refresh_started_at,
-                settings.refresh_interval_minutes,
-                self.inner.host.now_utc(),
-            );
-            self.inner.host.sleep(wait_for.min(AUTO_REFRESH_SETTINGS_PERIOD)).await;
+            let wait_for = if due && !started {
+                // Due while the last one still runs: check again a settings period later.
+                AUTO_REFRESH_SETTINGS_PERIOD
+            } else {
+                auto_refresh::wait_duration(
+                    last_refresh_started_at,
+                    settings.refresh_interval_minutes,
+                    self.inner.host.now_utc(),
+                )
+                .min(AUTO_REFRESH_SETTINGS_PERIOD)
+            };
+            self.inner.host.sleep(wait_for).await;
         }
     }
 }
@@ -591,21 +613,22 @@ mod tests {
     }
 
     /// The loop does not wait for a refresh: while one is in progress the settings are read
-    /// again (a shorter wait shows the new interval), the refresh is not cancelled, and a refresh
-    /// due while it runs joins it instead of fetching again.
+    /// again (a shorter wait shows the new interval) and the refresh is not cancelled. A refresh
+    /// due while it runs is not started (nor waited for); it starts once the first one ends.
     #[tokio::test]
     async fn a_refresh_in_progress_does_not_hold_the_loop() {
         // A feed server that accepts and never answers: the refresh stays in progress.
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let accepted = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let held = Arc::new(Mutex::new(Vec::new()));
         std::thread::spawn({
             let accepted = Arc::clone(&accepted);
+            let held = Arc::clone(&held);
             move || {
-                let mut held = Vec::new();
                 for stream in listener.incoming() {
                     accepted.fetch_add(1, Ordering::SeqCst);
-                    held.push(stream);
+                    held.lock().unwrap().push(stream);
                 }
             }
         });
@@ -639,14 +662,31 @@ mod tests {
             "the new interval was read while the refresh ran"
         );
         backend.pass(time::Duration::seconds(30));
-        backend.sleep_number(3).await;
-        assert_eq!(backend.refreshes_started(), 2);
+        assert_eq!(backend.sleep_number(3).await, AUTO_REFRESH_SETTINGS_PERIOD);
+        assert_eq!(backend.refreshes_started(), 1, "due, but the first still runs");
         tokio::time::sleep(Duration::from_millis(200)).await;
-        assert_eq!(
-            accepted.load(Ordering::SeqCst),
-            1,
-            "the refresh due while one ran joined it; the first was not cancelled"
-        );
+        assert_eq!(accepted.load(Ordering::SeqCst), 1, "the first was not cancelled");
+
+        // The first refresh ends (its connection is closed): the due one starts at the next check.
+        held.lock().unwrap().clear();
+        for _ in 0..500 {
+            let feeds = backend.load_feeds_snapshot().await.unwrap().feeds;
+            if feeds[0].fetch_error.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        backend.pass(time::Duration::ZERO);
+        backend.sleep_number(4).await;
+        assert_eq!(backend.refreshes_started(), 2);
+        for _ in 0..500 {
+            if accepted.load(Ordering::SeqCst) == 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(accepted.load(Ordering::SeqCst), 2);
     }
     #[tokio::test]
     async fn the_periodic_refresh_starts_once_and_not_where_the_host_does_not_run_it() {
