@@ -6,8 +6,11 @@
 //! - a refresh of all subscriptions lists at most [`MAX_LISTED_FAILURES`] failures, and the whole
 //!   result serializes to at most [`MAX_RESULT_BYTES`]; failures that do not fit are counted
 //!   (`failed_count`) but not listed (`failures_truncated`);
-//! - subscription discovery offers at most [`MAX_DISCOVERY_CANDIDATES`] feeds.
+//! - subscription discovery offers at most [`MAX_DISCOVERY_CANDIDATES`] feeds, and its whole
+//!   result serializes to at most [`MAX_RESULT_BYTES`] too; a page that offers none that fit, or
+//!   whose own address is too long to send, is an error the user can act on.
 
+use rssr_domain::DomainError;
 use url::Url;
 
 use crate::{
@@ -103,18 +106,49 @@ impl RefreshAllExecutionOutcome {
 impl AddSubscriptionOutcome {
     /// A page that lists several feeds, offering at most [`MAX_DISCOVERY_CANDIDATES`]: titles are
     /// cut to their bound, and an address longer than [`MAX_URL_BYTES`] is left out (an address
-    /// cannot be cut and still lead to the feed).
-    pub fn needs_selection(page_url: Url, candidates: Vec<FeedDiscoveryCandidate>) -> Self {
-        let candidates = candidates
+    /// cannot be cut and still lead to the feed). Candidates are offered only while the
+    /// serialized result stays within [`MAX_RESULT_BYTES`] (measured item by item, escapes
+    /// included).
+    ///
+    /// Errors (review C3-R2 R2-02, R2-05): the page's own address is longer than
+    /// [`MAX_URL_BYTES`], or no candidate is left to offer; the user enters a feed's address.
+    pub fn needs_selection(
+        page_url: Url,
+        candidates: Vec<FeedDiscoveryCandidate>,
+    ) -> Result<Self, DomainError> {
+        if page_url.as_str().len() > MAX_URL_BYTES {
+            return Err(DomainError::InvalidInput(
+                "列出订阅的页面地址过长，请直接输入订阅源的地址".into(),
+            ));
+        }
+        let mut size = serialized_len(&Self::NeedsSelection {
+            page_url: page_url.clone(),
+            candidates: Vec::new(),
+        });
+        let mut offered = Vec::new();
+        for candidate in candidates
             .into_iter()
             .filter(|candidate| candidate.url.as_str().len() <= MAX_URL_BYTES)
             .take(MAX_DISCOVERY_CANDIDATES)
-            .map(|candidate| FeedDiscoveryCandidate {
+        {
+            let candidate = FeedDiscoveryCandidate {
                 title: candidate.title.map(|title| truncate_marked(title, MAX_NAME_BYTES)),
                 ..candidate
-            })
-            .collect();
-        Self::NeedsSelection { page_url, candidates }
+            };
+            // The item and the comma before it.
+            let item = serialized_len(&candidate) + 1;
+            if size.saturating_add(item) > MAX_RESULT_BYTES {
+                break;
+            }
+            size += item;
+            offered.push(candidate);
+        }
+        if offered.is_empty() {
+            return Err(DomainError::InvalidInput(
+                "页面列出的订阅都无法提供（地址过长），请直接输入订阅源的地址".into(),
+            ));
+        }
+        Ok(Self::NeedsSelection { page_url, candidates: offered })
     }
 }
 
@@ -193,7 +227,7 @@ mod tests {
             title: Some("题".repeat(500)),
         }));
         let AddSubscriptionOutcome::NeedsSelection { candidates, .. } =
-            AddSubscriptionOutcome::needs_selection(page, candidates)
+            AddSubscriptionOutcome::needs_selection(page, candidates).unwrap()
         else {
             unreachable!()
         };
@@ -203,5 +237,39 @@ mod tests {
             "the over-long address is left out"
         );
         assert!(candidates.iter().all(|c| c.title.as_ref().unwrap().len() <= MAX_NAME_BYTES));
+    }
+
+    /// Escapes count: candidates whose addresses and titles grow when serialized are offered only
+    /// while the result fits; a long page address, or nothing left to offer, is an error.
+    #[test]
+    fn discovery_is_bounded_by_its_serialized_size() {
+        let worst = |index: usize| FeedDiscoveryCandidate {
+            url: Url::parse(&format!(
+                "https://example.com/{index}?{}",
+                "\\".repeat(MAX_URL_BYTES - 40)
+            ))
+            .unwrap(),
+            title: Some("\u{1}".repeat(MAX_NAME_BYTES)),
+        };
+        let page =
+            Url::parse(&format!("https://example.com/{}", "p".repeat(MAX_URL_BYTES - 30))).unwrap();
+        let candidates = (0..MAX_DISCOVERY_CANDIDATES).map(worst).collect::<Vec<_>>();
+        assert!(candidates.iter().all(|c| c.url.as_str().len() <= MAX_URL_BYTES));
+        let outcome = AddSubscriptionOutcome::needs_selection(page.clone(), candidates).unwrap();
+        let size = serde_json::to_vec(&outcome).unwrap().len();
+        assert!(size <= MAX_RESULT_BYTES, "{size}");
+        let AddSubscriptionOutcome::NeedsSelection { candidates, .. } = outcome else {
+            unreachable!()
+        };
+        assert!(!candidates.is_empty() && candidates.len() < MAX_DISCOVERY_CANDIDATES);
+
+        let too_long =
+            Url::parse(&format!("https://example.com/{}", "p".repeat(MAX_URL_BYTES))).unwrap();
+        assert!(AddSubscriptionOutcome::needs_selection(too_long, vec![worst(0)]).is_err());
+        let unusable = FeedDiscoveryCandidate {
+            url: Url::parse(&format!("https://example.com/{}", "u".repeat(MAX_URL_BYTES))).unwrap(),
+            title: None,
+        };
+        assert!(AddSubscriptionOutcome::needs_selection(page, vec![unusable]).is_err());
     }
 }

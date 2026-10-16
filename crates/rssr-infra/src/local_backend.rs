@@ -174,7 +174,8 @@ impl<H: LocalHost> LocalBackend<H> {
         &self,
         outcome: RefreshAllOutcome,
     ) -> RefreshAllExecutionOutcome {
-        let summary = outcome.summary();
+        // Only the failures a result can list are built (review C3-R2 R2-03).
+        let summary = outcome.summary_listing(rssr_application::MAX_LISTED_FAILURES);
         for feed in outcome.feeds {
             match feed.result {
                 RefreshFeedResult::Updated { localization_entries, .. } => {
@@ -397,7 +398,8 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
                 prepared.with_fallback_site_url(fallback_site_url)
             }
             PrepareSubscriptionOutcome::NeedsSelection { page_url, candidates } => {
-                return Ok(AddSubscriptionOutcome::needs_selection(page_url, candidates));
+                let outcome = AddSubscriptionOutcome::needs_selection(page_url, candidates);
+                return Ok(outcome.map_err(anyhow::Error::from)?);
             }
         };
         let outcome = workflow

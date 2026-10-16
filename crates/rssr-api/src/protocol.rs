@@ -342,11 +342,27 @@ mod tests {
             })
             .collect();
         let refreshed = RefreshAllExecutionOutcome::bounded(0, 1000, 1000, failures);
+        let page = url::Url::parse(&format!("https://example.com/{}", "\\".repeat(2000))).unwrap();
+        let discovered = AddSubscriptionOutcome::needs_selection(
+            page,
+            (0..100)
+                .map(|index| rssr_application::FeedDiscoveryCandidate {
+                    url: url::Url::parse(&format!(
+                        "https://example.com/{index}?{}",
+                        "\\".repeat(2000)
+                    ))
+                    .unwrap(),
+                    title: Some("\u{1}".repeat(4096)),
+                })
+                .collect(),
+        )
+        .unwrap();
         let error = BackendError::new(crate::ErrorCode::Network, "x".repeat(1024))
             .with_request_id("0".repeat(16));
         for status in [
             JobStatus::Succeeded { result: JobResult::RemoteConfigPull(pulled) },
             JobStatus::Succeeded { result: JobResult::RefreshAll(refreshed) },
+            JobStatus::Succeeded { result: JobResult::AddSubscription(discovered) },
             JobStatus::Failed { error },
         ] {
             let size = serde_json::to_vec(&status).unwrap().len();

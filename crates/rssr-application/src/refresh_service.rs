@@ -280,6 +280,12 @@ pub struct RefreshAllOutcome {
 
 impl RefreshAllOutcome {
     pub fn summary(&self) -> RefreshAllSummary {
+        self.summary_listing(usize::MAX)
+    }
+
+    /// [`Self::summary`] with at most `max_failures` failures listed (the first ones); a failure
+    /// is built only when it is listed, the counts cover every subscription.
+    pub fn summary_listing(&self, max_failures: usize) -> RefreshAllSummary {
         let mut summary =
             RefreshAllSummary { total_count: self.feeds.len(), ..RefreshAllSummary::default() };
 
@@ -292,7 +298,9 @@ impl RefreshAllOutcome {
                 RefreshFeedResult::NotModified => summary.not_modified_count += 1,
                 RefreshFeedResult::Failed { .. } => {
                     summary.failed_count += 1;
-                    if let Some(failure) = outcome.failure_summary() {
+                    if summary.failures.len() < max_failures
+                        && let Some(failure) = outcome.failure_summary()
+                    {
                         summary.failures.push(failure);
                     }
                 }
@@ -917,6 +925,28 @@ mod tests {
         assert_eq!((failure.feed_id, failure.url.as_str()), (9, "https://example.com/feed.xml"));
         assert_eq!((failure.name, failure.message.as_str()), (None, "boom"));
         assert_eq!(failure.kind, crate::ErrorKind::Network);
+    }
+
+    /// Listing at most some failures builds only those; the counts cover every subscription.
+    #[test]
+    fn a_summary_lists_at_most_the_failures_asked_for() {
+        let outcome = super::RefreshAllOutcome {
+            feeds: (0..5)
+                .map(|feed_id| super::RefreshFeedOutcome {
+                    feed_id,
+                    url: format!("https://example.com/{feed_id}.xml"),
+                    result: super::RefreshFeedResult::Failed {
+                        kind: crate::ErrorKind::Network,
+                        message: "boom".to_string(),
+                    },
+                })
+                .collect(),
+        };
+        let summary = outcome.summary_listing(2);
+        assert_eq!((summary.total_count, summary.failed_count), (5, 5));
+        let listed: Vec<_> = summary.failures.iter().map(|failure| failure.feed_id).collect();
+        assert_eq!(listed, [0, 1]);
+        assert_eq!(outcome.summary().failures.len(), 5);
     }
 
     #[test]
