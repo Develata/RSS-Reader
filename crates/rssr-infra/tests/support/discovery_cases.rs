@@ -56,6 +56,33 @@ pub fn assert_discovery_bounds() {
     );
     assert_eq!(urls(probe(&html)), ["https://example.com/before.xml"]);
 
+    // Many tags each under the token bound: their attributes add up, and reading stops
+    // (review C3-R5 R5-01).
+    let tag = format!("<meta{}>", (0..8_000).map(|index| format!(" a{index}")).collect::<String>());
+    let html = format!(
+        "<html><head>{}{}{}</head></html>",
+        link("/first.xml"),
+        tag.repeat(40),
+        link("/late.xml")
+    );
+    assert_eq!(urls(probe(&html)), ["https://example.com/first.xml"]);
+
+    // A byte order mark inside an address is kept wherever the page splits it into chunks; one at
+    // the start is dropped (review C3-R5 R5-04).
+    let prefix = "<html><head>";
+    let padding = " ".repeat(
+        4096 - prefix.len() - "<link rel=alternate type=application/rss+xml href='/a".len(),
+    );
+    let html = format!("{prefix}{padding}{}</head></html>", link("/a\u{feff}b.xml"));
+    assert_eq!(urls(probe(&format!("\u{feff}{html}"))), ["https://example.com/a%EF%BB%BFb.xml"]);
+
+    // A comment of 30 KiB is read through; one of 45 KiB stops reading (R5-05).
+    for (size, found) in [(30 * 1024, true), (45 * 1024, false)] {
+        let comment = format!("<!--{}-->", "x".repeat(size));
+        let html = format!("<html><head>{comment}{}</head></html>", link("/after-comment.xml"));
+        assert_eq!(!probe(&html).is_empty(), found, "a comment of {size} bytes");
+    }
+
     // Text, scripts and styles are read as they come: a large inline script does not stop it.
     let script = format!("<script>{}</script>", "var x = 1;\n".repeat(20_000));
     let html = format!("<html><head>{script}{}</head></html>", link("/after-script.xml"));

@@ -1,5 +1,5 @@
 use html5ever::tokenizer::{
-    BufferQueue, EndTag, StartTag, Token, TokenSink, TokenSinkResult, Tokenizer,
+    BufferQueue, EndTag, StartTag, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts,
 };
 use rssr_application::{
     FeedDiscoveryCandidate, MAX_DISCOVERY_CANDIDATES, MAX_NAME_BYTES, MAX_URL_BYTES,
@@ -10,11 +10,16 @@ use url::Url;
 
 /// Input fed to the tokenizer at a time.
 const CHUNK_BYTES: usize = 4 * 1024;
-/// Input a single token (a tag, a comment) may span. The tokenizer compares each attribute of a
-/// tag with all the earlier ones, so a tag of many attributes costs their number squared: with
-/// this bound a page cannot make that more than a few milliseconds (review C3-R4 R4-01). Text,
-/// scripts and styles are emitted as they are read and do not count.
+/// Input read without any token completing before reading stops (review C3-R4 R4-01). Checked
+/// once per chunk, so a token that does complete spans at most this plus two chunks (40 KiB,
+/// review C3-R5 R5-05). Text, scripts and styles are emitted as they are read and do not count.
 const MAX_TOKEN_BYTES: usize = 32 * 1024;
+/// Attributes read at most (in all tags of the head, a duplicate counted where it is refused).
+/// The tokenizer compares each attribute of a tag with the earlier ones of that tag: the work of
+/// a tag is at most its attributes times the attributes of the largest tag (about 10 000 within
+/// the token bound), so this bound keeps the work of a page under about 10^8 comparisons, however
+/// many tags carry them (review C3-R5 R5-01).
+const MAX_HEAD_ATTRIBUTES: usize = 16 * 1024;
 /// Distinct links collected at most; enough for [`MAX_DISCOVERY_CANDIDATES`] after resolution.
 const MAX_COLLECTED_LINKS: usize = 4 * MAX_DISCOVERY_CANDIDATES;
 
@@ -39,6 +44,8 @@ struct Head {
     /// Tokens other than parse errors: a tag still being read emits none (its duplicate
     /// attributes emit errors, which do not count).
     progress: usize,
+    /// Attributes of the tags read, and parse errors (each duplicate attribute is one).
+    attributes: usize,
 }
 
 struct Sink(RefCell<Head>);
@@ -46,8 +53,14 @@ struct Sink(RefCell<Head>);
 impl TokenSink for Sink {
     type Handle = ();
     fn process_token(&self, token: Token, _: u64) -> TokenSinkResult<()> {
-        if !matches!(token, Token::ParseError(_)) {
-            self.0.borrow_mut().progress += 1;
+        match &token {
+            Token::ParseError(_) => self.0.borrow_mut().attributes += 1,
+            Token::TagToken(tag) => {
+                let mut head = self.0.borrow_mut();
+                head.progress += 1;
+                head.attributes += tag.attrs.len();
+            }
+            _ => self.0.borrow_mut().progress += 1,
         }
         if let Token::CharacterTokens(text) = &token {
             let mut head = self.0.borrow_mut();
@@ -131,12 +144,17 @@ impl TokenSink for Sink {
     }
 }
 
-/// The head of `body`, read in chunks: reading stops where the head ends, and where a single
-/// token has spanned more than [`MAX_TOKEN_BYTES`] (the links read until then are kept).
+/// The head of `body`, read in chunks: reading stops where the head ends, after
+/// [`MAX_TOKEN_BYTES`] without a token, and past [`MAX_HEAD_ATTRIBUTES`] (the links read until
+/// then are kept).
 fn read_head(body: &str) -> Head {
-    let tokenizer = Tokenizer::new(Sink(RefCell::new(Head::default())), Default::default());
+    // A byte order mark is stripped once, at the start. The tokenizer's own stripping applies to
+    // every `feed`, so chunked reading would drop one in the middle of an address (review
+    // C3-R5 R5-04).
+    let options = TokenizerOpts { discard_bom: false, ..TokenizerOpts::default() };
+    let tokenizer = Tokenizer::new(Sink(RefCell::new(Head::default())), options);
     let queue = BufferQueue::default();
-    let mut rest = body;
+    let mut rest = body.strip_prefix('\u{feff}').unwrap_or(body);
     let mut without_progress = 0;
     while !rest.is_empty() {
         let mut split = rest.len().min(CHUNK_BYTES);
@@ -149,7 +167,7 @@ fn read_head(body: &str) -> Head {
         queue.push_back(chunk.into());
         let _ = tokenizer.feed(&queue);
         let head = tokenizer.sink.0.borrow();
-        if head.finished {
+        if head.finished || head.attributes > MAX_HEAD_ATTRIBUTES {
             drop(head);
             return tokenizer.sink.0.into_inner();
         }
@@ -169,8 +187,8 @@ fn read_head(body: &str) -> Head {
 
 /// The feeds a page offers, at most [`MAX_DISCOVERY_CANDIDATES`] distinct ones.
 ///
-/// Bounded while it is built (reviews C3-R3 R3-01, C3-R4): reading stops at a token over
-/// [`MAX_TOKEN_BYTES`]; at most [`MAX_COLLECTED_LINKS`] distinct links are collected, a link or
+/// Bounded while it is built (reviews C3-R3 R3-01, C3-R4, C3-R5): reading stops at a token
+/// over [`MAX_TOKEN_BYTES`] and past [`MAX_HEAD_ATTRIBUTES`]; at most [`MAX_COLLECTED_LINKS`] distinct links are collected, a link or
 /// `<base>` longer than [`MAX_URL_BYTES`] is ignored before it is copied, titles are cut before
 /// they are copied, and a resolved address longer than the bound is ignored before it is compared.
 /// Without a usable base (one too long) only absolute links are offered.
