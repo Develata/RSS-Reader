@@ -148,13 +148,14 @@ impl TokenSink for Sink {
 /// [`MAX_TOKEN_BYTES`] without a token, and past [`MAX_HEAD_ATTRIBUTES`] (the links read until
 /// then are kept).
 fn read_head(body: &str) -> Head {
-    // A byte order mark is stripped once, at the start. The tokenizer's own stripping applies to
-    // every `feed`, so chunked reading would drop one in the middle of an address (review
-    // C3-R5 R5-04).
+    // The byte order mark is removed where the body is decoded (`feed_body`, or the browser's
+    // `Response.text()`); a U+FEFF here is text (review C3-R6 R6-04). The tokenizer's own
+    // stripping applies to every `feed`, so chunked reading would drop one in the middle of an
+    // address (review C3-R5 R5-04).
     let options = TokenizerOpts { discard_bom: false, ..TokenizerOpts::default() };
     let tokenizer = Tokenizer::new(Sink(RefCell::new(Head::default())), options);
     let queue = BufferQueue::default();
-    let mut rest = body.strip_prefix('\u{feff}').unwrap_or(body);
+    let mut rest = body;
     let mut without_progress = 0;
     while !rest.is_empty() {
         let mut split = rest.len().min(CHUNK_BYTES);

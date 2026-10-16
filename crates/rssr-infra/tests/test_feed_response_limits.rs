@@ -114,6 +114,29 @@ async fn feed_preserves_charset_and_bom_decoding_and_bounds_converted_text() {
     assert!(error.to_string().contains("8 MiB"), "{error:#}");
 }
 
+/// The byte order mark is removed once, where the body is decoded: a page after one is read; a
+/// second is text, which ends the head (review C3-R6 R6-04).
+#[tokio::test]
+async fn discovery_reads_the_page_after_one_byte_order_mark() {
+    use rssr_application::{SubscriptionProbeOutcome, SubscriptionProbePort};
+    let page =
+        b"<html><head><link rel=alternate type=application/rss+xml href='/f.xml'></head></html>";
+    for (marks, expected) in [(0, 1), (1, 1), (2, 0)] {
+        let body = [b"\xef\xbb\xbf".repeat(marks), page.to_vec()].concat();
+        let (url, server) =
+            server(vec![response("Content-Type: text/html\r\n", &body)], false).await;
+        let outcome = rssr_infra::subscription_probe::HttpSubscriptionProbe::with_feed_client()
+            .probe(&url.parse().unwrap())
+            .await
+            .unwrap();
+        server.abort();
+        let SubscriptionProbeOutcome::Html { candidates, .. } = outcome else {
+            panic!("an HTML page");
+        };
+        assert_eq!(candidates.len(), expected, "{marks} byte order marks");
+    }
+}
+
 #[tokio::test]
 async fn feed_body_stall_still_obeys_the_30_second_request_timeout() {
     let error = fetch(response("Content-Length: 100\r\n", b"x"), true, Duration::from_secs(35))

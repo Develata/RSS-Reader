@@ -68,14 +68,16 @@ pub fn assert_discovery_bounds() {
     );
     assert_eq!(urls(probe(&html)), ["https://example.com/first.xml"]);
 
-    // A byte order mark inside an address is kept wherever the page splits it into chunks; one at
-    // the start is dropped (review C3-R5 R5-04).
+    // A byte order mark inside an address is kept wherever the page splits it into chunks (review
+    // C3-R5 R5-04). The one at the start is removed where the body is decoded: one that reaches
+    // discovery is text, which ends the head (review C3-R6 R6-04).
     let prefix = "<html><head>";
     let padding = " ".repeat(
         4096 - prefix.len() - "<link rel=alternate type=application/rss+xml href='/a".len(),
     );
     let html = format!("{prefix}{padding}{}</head></html>", link("/a\u{feff}b.xml"));
-    assert_eq!(urls(probe(&format!("\u{feff}{html}"))), ["https://example.com/a%EF%BB%BFb.xml"]);
+    assert_eq!(urls(probe(&html)), ["https://example.com/a%EF%BB%BFb.xml"]);
+    assert!(probe(&format!("\u{feff}{html}")).is_empty());
 
     // A comment of 30 KiB is read through; one of 45 KiB stops reading (R5-05).
     for (size, found) in [(30 * 1024, true), (45 * 1024, false)] {
