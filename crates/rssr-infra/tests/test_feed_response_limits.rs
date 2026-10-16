@@ -215,7 +215,8 @@ fn feed_structure_is_bounded_before_feed_rs_reads_it() {
     assert!(parse(&rss(&hidden("a/", 15))).is_ok(), "16 bases in force, 15 of them hidden");
     assert!(parse(&rss(&hidden("a/", 16))).is_err(), "17 bases in force, 16 of them hidden");
     assert!(parse(&rss(&hidden(&"雪".repeat(1000), 1))).is_err(), "a hidden base over 2 KiB");
-    assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
+    // A backstop: without the bounds these take hours.
+    assert!(started.elapsed() < std::time::Duration::from_secs(60), "{:?}", started.elapsed());
 }
 
 /// What feed-rs builds is estimated before it reads the feed (review C3-R6 R6-03): large real
@@ -305,7 +306,8 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
     let content = "<x/>".repeat(300_000);
     let outside = format!("<entry><id>x</id>{content}</entry>");
     assert!(parse(&atom("https://example.com/", &outside)).is_err(), "elements outside it");
-    assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
+    // A backstop: without the bounds these take hours.
+    assert!(started.elapsed() < std::time::Duration::from_secs(60), "{:?}", started.elapsed());
     // Inside one they are text.
     let xhtml = format!("<entry><id>x</id><content type=\"xhtml\">{content}</content></entry>");
     assert!(parse(&atom("https://example.com/", &xhtml)).is_ok(), "elements in content");

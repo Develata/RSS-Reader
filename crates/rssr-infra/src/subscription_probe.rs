@@ -59,9 +59,14 @@ impl SubscriptionProbePort for HttpSubscriptionProbe {
             return Err(invalid(anyhow::anyhow!("订阅只支持 HTTP 或 HTTPS 地址。")));
         }
         let (final_url, metadata, content_type, body) = self.fetch(url).await.map_err(network)?;
-        #[cfg(not(target_arch = "wasm32"))]
-        let _slot = crate::feed_normalization::PARSE_SLOTS.acquire().await;
-        classify_subscription_response(final_url, metadata, &content_type, &body).map_err(invalid)
+        // Only the feed parse takes the process-wide parse slot: discovery's work is bounded and
+        // its memory small, and a page that makes it work hard should not hold up refresh.
+        let feed = {
+            #[cfg(not(target_arch = "wasm32"))]
+            let _slot = crate::feed_normalization::PARSE_SLOTS.acquire().await;
+            parse_subscription_feed(&body)
+        };
+        classify(final_url, metadata, &content_type, &body, feed).map_err(invalid)
     }
 }
 
@@ -123,10 +128,29 @@ pub fn classify_subscription_response(
     content_type: &str,
     body: &str,
 ) -> Result<SubscriptionProbeOutcome> {
+    classify(url, metadata, content_type, body, parse_subscription_feed(body))
+}
+
+/// The feed `body` holds, if it is one within the size bound.
+fn parse_subscription_feed(body: &str) -> Option<crate::feed_normalization::ParsedFeed> {
+    if body.len() > MAX_SUBSCRIPTION_BYTES {
+        return None;
+    }
+    crate::feed_normalization::parse_feed_xml(body).ok()
+}
+
+/// What `body` is, given the feed parsed from it, if any.
+fn classify(
+    url: Url,
+    metadata: RefreshHttpMetadata,
+    content_type: &str,
+    body: &str,
+    feed: Option<crate::feed_normalization::ParsedFeed>,
+) -> Result<SubscriptionProbeOutcome> {
     if body.len() > MAX_SUBSCRIPTION_BYTES {
         bail!("订阅响应超过 8 MiB 上限。");
     }
-    if let Ok(parsed) = crate::feed_normalization::parse_feed_xml(body) {
+    if let Some(parsed) = feed {
         return Ok(SubscriptionProbeOutcome::Feed {
             url: rssr_domain::normalize_feed_url(&url),
             update: FeedRefreshUpdate { metadata, feed: map_parsed_feed(parsed) },
