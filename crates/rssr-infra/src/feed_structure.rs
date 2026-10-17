@@ -466,10 +466,18 @@ mod tests {
         // Five objects, seven value strings, and two items each charged the feed's author.
         let author = JSON_AUTHOR_COST + "\"ab".len() + "\"cd".len();
         assert_eq!(json(feed), 5 * JSON_OBJECT_COST + 7 * JSON_STRING_COST + 2 * author);
-        // Escaped keys are the same keys to serde.
-        let escaped = r#"{"author":{"name":"ab","url":"cd"},"items":[{"id":"1"}]}"#;
+        // Escaped keys are the same keys to serde: `author` with its first letter as `u0061` after
+        // a backslash (built here, so no tool or editor decodes it first).
+        let escape =
+            |key: &str| format!("{}u{:04x}{}", char::from(92), key.as_bytes()[0], &key[1..]);
+        let escaped = format!(
+            r#"{{"{}":{{"name":"ab","url":"cd"}},"{}":[{{"id":"1"}}]}}"#,
+            escape("author"),
+            escape("items")
+        );
+        assert!(escaped.contains("u0061uthor"), "{escaped}");
         assert_eq!(
-            json(escaped),
+            json(&escaped),
             3 * JSON_OBJECT_COST + 3 * JSON_STRING_COST + JSON_AUTHOR_COST + 6
         );
         // An author list takes at most MAX_JSON_AUTHORS authors.
