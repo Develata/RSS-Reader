@@ -347,6 +347,13 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
     let raw = std::panic::catch_unwind(|| feed_rs::parser::parse(duration.as_bytes()).is_ok());
     assert!(raw.is_err(), "feed-rs panics on it");
     assert!(parse(&duration).is_err(), "a duration feed-rs cannot hold");
+    // An invalid character reference whose error feed-rs swallows puts its walk out of step: the
+    // item inside the Atom content of the channel title is read as an item of the channel, where
+    // the estimate saw text (review C3-R9 R9A-01).
+    let desync = "<rss version=\"2.0\" xmlns:a=\"http://www.w3.org/2005/Atom\"><channel><title><a:content><w>&#0;</w><item><title>hidden</title></item></a:content></title></channel></rss>";
+    let read = feed_rs::parser::parse(desync.as_bytes()).unwrap();
+    assert_eq!(read.entries.len(), 1, "feed-rs reads the item inside the title");
+    assert!(parse(desync).is_err(), "an invalid character reference");
     // `media:content` is not an Atom text construct: what is inside it is charged.
     let thumbnails = "<media:thumbnail url=\"\"/>".repeat(300_000);
     let media = format!(

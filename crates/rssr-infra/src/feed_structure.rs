@@ -4,16 +4,20 @@
 //! times the size of the text: an empty `<item/>` becomes an entry of about a kilobyte, every
 //! address in a feed is resolved against the `xml:base` in force and kept as its own string, and a
 //! few values are copied into many places. The checks here bound the nesting, the bases, the
-//! attributes of a tag, the copying and an estimate of the model, so that the work and memory of
-//! one parse follow the estimate rather than the shape of the feed (reviews C3-R5 R5-02, C3-R6,
-//! C3-R7, C3-R8). The estimate is calibrated by measurement, not a proven bound on the heap.
+//! attributes of a tag, the copying and an estimate of the model, and refuse a feed whose
+//! estimate is over its budget (reviews C3-R5 R5-02, C3-R6 to C3-R9). The estimate is calibrated
+//! by measurement: it is not a proven bound on the heap, and no process memory ceiling follows from
+//! it.
 //!
 //! The estimate mirrors feed-rs 2.4.0, which the workspace pins. Its parsers (`src/parser`) and
 //! XML layer (`src/xml`) were read for every loop, copy and panic: the copies that grow faster
 //! than the text are the JSON Feed author inheritance and author comparison, and the Media RSS
 //! rating propagation (into `media:content` and RSS `enclosure`); serde reads a JSON object
 //! written as an array; and the Media RSS time parser (`parse_npt`) panics on numbers it cannot
-//! hold. All are charged, bounded or refused here. A new feed-rs version needs the same reading.
+//! hold. All are charged, bounded or refused here. The estimate also assumes feed-rs walks the
+//! elements as they nest: it does unless an error it swallows breaks off a walk, and the only
+//! such error a document reaching it can raise is an invalid character reference, which is
+//! refused here (review C3-R9 R9A-01). A new feed-rs version needs the same reading.
 
 use std::borrow::Cow;
 
@@ -42,8 +46,10 @@ pub(crate) const MAX_MEDIA_RATINGS: usize = 16;
 /// Authors one JSON Feed author list may have at most. feed-rs compares each with the ones before
 /// it (review C3-R7 R7A-04). Real feeds list a few.
 pub(crate) const MAX_JSON_AUTHORS: usize = 64;
-/// Objects and arrays a JSON Feed may nest at most: serde_json's own limit, so nothing feed-rs
-/// would read is refused, and the scan keeps a bounded stack (review C3-R8 R8C-01).
+/// Objects and arrays a JSON Feed may nest at most, unknown fields included, so the scan keeps a
+/// bounded stack (review C3-R8 R8C-01). It is this application's limit: serde_json's recursion
+/// limit is also 128, but it skips unknown fields without one, so a feed with an extension nested
+/// deeper is readable by feed-rs and refused here (review C3-R9 R9A-02).
 pub(crate) const MAX_JSON_DEPTH: usize = 128;
 /// Digits a Media RSS time or iTunes duration may run to. feed-rs parses each run into a `u64`
 /// and multiplies the hours by 3 600, and panics when it cannot (review C3-R8 R8A-04).
@@ -310,6 +316,11 @@ fn xml_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
                 }
             }
             (_, Event::GeneralRef(reference)) => {
+                // feed-rs resolves every character reference and, in places, swallows the error
+                // of an invalid one, which leaves its walk of the elements out of step with their
+                // nesting: elements inside a text construct are then read as items (review C3-R9
+                // R9A-01). Refused wherever it is, text constructs included.
+                ensure!(reference.resolve_char_ref().is_ok(), "feed 含无效的字符引用");
                 // feed-rs keeps an unknown reference with its `&` and `;` (review C3-R8 R8A-03).
                 add_rating_bytes(&mut rating, reference.len() + 2);
                 if let Some((_, run)) = &mut duration {
@@ -583,6 +594,20 @@ mod tests {
         // An unknown reference is kept with its delimiters (review C3-R8 R8A-03).
         let referenced = media(&format!(r#"{contents}<media:rating>&x;&x;</media:rating>"#));
         assert_eq!(xml(&referenced), base + 3 * ELEMENT_COST + 2 * (RATING_COST + 6));
+    }
+
+    #[test]
+    fn an_invalid_character_reference_is_refused_anywhere() {
+        let ok = |raw: &str| xml_model(raw, usize::MAX).is_ok();
+        assert!(ok("<rss><channel><title>&#65;&amp;&x;</title></channel></rss>"));
+        for reference in ["&#0;", "&#xD800;", "&#x110000;", "&#;", "&#x;"] {
+            assert!(!ok(&format!("<rss><channel><title>{reference}</title></channel></rss>")));
+            // Inside an Atom text construct too, where elements are otherwise not charged.
+            let inside = format!(
+                r#"<rss xmlns:a="{ATOM}"><channel><title><a:content><x>{reference}</x></a:content></title></channel></rss>"#
+            );
+            assert!(!ok(&inside), "{reference}");
+        }
     }
 
     #[test]
