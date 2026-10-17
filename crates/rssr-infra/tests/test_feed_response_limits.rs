@@ -300,8 +300,13 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
     // (review C3-R7 R7A-01).
     let author = format!("{{\"name\":\"a\",\"url\":\"{}\"}}", "u".repeat(64 * 1024));
     let items = (0..2_000).map(|i| format!("{{\"id\":\"{i}\"}}")).collect::<Vec<_>>().join(",");
-    let inherited = format!("{{\"author\":{author},\"items\":[{items}]}}");
+    let inherited = format!(
+        "{{\"version\":\"https://jsonfeed.org/version/1.1\",\"title\":\"t\",\"author\":{author},\"items\":[{items}]}}"
+    );
     assert!(parse(&inherited).is_err(), "inherited authors");
+    // The same feed with its author's address short is read: the refusal is the copies'.
+    let short = inherited.replace(&"u".repeat(64 * 1024), "https://example.com/");
+    assert_eq!(parse(&short).unwrap().entries.len(), 2_000, "a short inherited author");
     // A 64 KiB rating is copied into each of the 2 000 contents before it: about 130 MB
     // (review C3-R7 R7A-02).
     let contents = "<media:content url=\"https://example.com/a\"/>".repeat(2_000);
@@ -310,6 +315,8 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
         "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\"><channel><title>t</title><item><title>i</title>{contents}{rating}</item></channel></rss>"
     );
     assert!(parse(&rated).is_err(), "a copied rating");
+    let short_rating = rated.replace(&"r".repeat(64 * 1024), "nonadult");
+    assert_eq!(parse(&short_rating).unwrap().entries.len(), 1, "a short copied rating");
     // feed-rs reads `a:b:entry` as an Atom entry: 100 000 of them are charged as entries
     // (review C3-R7 R7A-03).
     let entries = "<a:b:entry/>".repeat(100_000);
@@ -317,6 +324,8 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
         "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:a=\"http://www.w3.org/2005/Atom\"><title>t</title>{entries}</feed>"
     );
     assert!(parse(&colons).is_err(), "entries named after a second colon");
+    let few = colons.replace(&entries, &"<a:b:entry/>".repeat(1_000));
+    assert_eq!(parse(&few).unwrap().entries.len(), 1_000, "feed-rs reads them as entries");
     // `media:content` is not an Atom text construct: what is inside it is charged.
     let thumbnails = "<media:thumbnail url=\"\"/>".repeat(300_000);
     let media = format!(
