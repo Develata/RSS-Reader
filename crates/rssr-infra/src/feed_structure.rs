@@ -574,6 +574,12 @@ mod tests {
         let own = r#"<media:content url="a"><media:rating>r</media:rating></media:content>"#;
         let gallery = media(&own.repeat(MAX_MEDIA_RATINGS + 1));
         assert_eq!(xml(&gallery), base + 2 * (MAX_MEDIA_RATINGS + 1) * ELEMENT_COST);
+        // feed-rs keeps the last of a content's own ratings: any number of them is read.
+        let many = format!(
+            r#"<media:content url="a">{}</media:content>"#,
+            "<media:rating>r</media:rating>".repeat(MAX_MEDIA_RATINGS + 1)
+        );
+        assert!(xml_model(&media(&many), usize::MAX).is_ok());
         // An unknown reference is kept with its delimiters (review C3-R8 R8A-03).
         let referenced = media(&format!(r#"{contents}<media:rating>&x;&x;</media:rating>"#));
         assert_eq!(xml(&referenced), base + 3 * ELEMENT_COST + 2 * (RATING_COST + 6));
