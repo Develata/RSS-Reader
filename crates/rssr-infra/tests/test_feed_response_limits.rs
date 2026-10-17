@@ -326,6 +326,27 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
     assert!(parse(&colons).is_err(), "entries named after a second colon");
     let few = colons.replace(&entries, &"<a:b:entry/>".repeat(1_000));
     assert_eq!(parse(&few).unwrap().entries.len(), 1_000, "feed-rs reads them as entries");
+    // RSS enclosures receive the rating's copies as Media RSS contents do (review C3-R8 R8A-02).
+    let enclosures = "<enclosure url=\"https://example.com/a.mp3\"/>".repeat(2_000);
+    let rated = format!(
+        "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\"><channel><title>t</title><item><title>i</title>{enclosures}{rating}</item></channel></rss>"
+    );
+    assert!(parse(&rated).is_err(), "a rating copied into enclosures");
+    let short_rating = rated.replace(&"r".repeat(64 * 1024), "nonadult");
+    assert_eq!(parse(&short_rating).unwrap().entries.len(), 1, "a short rating with enclosures");
+    // serde reads an author from an array of its fields; feed-rs accepts it, the check refuses it
+    // (review C3-R8 R8A-01).
+    let positional = "{\"version\":\"https://jsonfeed.org/version/1.1\",\"title\":\"t\",\"author\":[\"a\",\"https://example.com/\"],\"items\":[{\"id\":\"1\"}]}";
+    assert_eq!(feed_rs::parser::parse(positional.as_bytes()).unwrap().entries.len(), 1);
+    assert!(parse(positional).is_err(), "a positional author");
+    // A duration feed-rs cannot hold makes it panic; the check refuses it (review C3-R8 R8A-04).
+    let duration = format!(
+        "<rss version=\"2.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"><channel><title>t</title><item><title>i</title><itunes:duration>{}</itunes:duration></item></channel></rss>",
+        "1".repeat(21)
+    );
+    let raw = std::panic::catch_unwind(|| feed_rs::parser::parse(duration.as_bytes()).is_ok());
+    assert!(raw.is_err(), "feed-rs panics on it");
+    assert!(parse(&duration).is_err(), "a duration feed-rs cannot hold");
     // `media:content` is not an Atom text construct: what is inside it is charged.
     let thumbnails = "<media:thumbnail url=\"\"/>".repeat(300_000);
     let media = format!(

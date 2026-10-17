@@ -50,9 +50,19 @@ pub fn parse_feed_xml(raw: &str) -> anyhow::Result<ParsedFeed> {
     // incorrectly discards legitimate hexadecimal GUIDs. Keep missing IDs empty here and let
     // our normalization choose the URL/title+timestamp fallback explicitly.
     let parser = feed_rs::parser::Builder::new().id_generator(|_, _, _| String::new()).build();
-    let feed =
-        parser.parse(utf8_parser_input(raw.as_bytes())).context("解析 RSS/Atom feed 失败")?;
+    let parsed = without_panic(|| parser.parse(utf8_parser_input(raw.as_bytes())))
+        .context("解析 RSS/Atom feed 失败")?;
+    let feed = parsed.context("解析 RSS/Atom feed 失败")?;
     Ok(normalize_feed(feed))
+}
+
+/// Runs `parse`, a panic becoming an error: a panic in feed-rs is a refused feed, not a failed
+/// refresh (review C3-R8 R8A-04). The parser is built for one call and dropped with it, so nothing
+/// is left half-updated. A wasm build aborts on a panic instead; `feed_structure` refuses the one
+/// input known to cause one.
+fn without_panic<T>(parse: impl FnOnce() -> T) -> anyhow::Result<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(parse))
+        .map_err(|_| anyhow::anyhow!("feed 解析器异常"))
 }
 
 const UTF8_DECLARATION: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>"#;
@@ -218,6 +228,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::parse_feed_xml;
+
+    #[test]
+    fn a_panic_in_the_parser_is_an_error() {
+        assert!(super::without_panic(|| -> u8 { panic!("feed-rs") }).is_err());
+        assert_eq!(super::without_panic(|| 7).unwrap(), 7);
+    }
 
     /// 产品决策（2026-10-09）：无摘要、无正文的条目保留为仅索引条目，而不是整条丢弃。
     #[test]

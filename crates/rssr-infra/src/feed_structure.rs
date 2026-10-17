@@ -4,13 +4,16 @@
 //! times the size of the text: an empty `<item/>` becomes an entry of about a kilobyte, every
 //! address in a feed is resolved against the `xml:base` in force and kept as its own string, and a
 //! few values are copied into many places. The checks here bound the nesting, the bases, the
-//! attributes of a tag, the copying and an estimate of the model, so the work and memory of one
-//! parse stay within a fixed budget whatever the feed (reviews C3-R5 R5-02, C3-R6, C3-R7).
+//! attributes of a tag, the copying and an estimate of the model, so that the work and memory of
+//! one parse follow the estimate rather than the shape of the feed (reviews C3-R5 R5-02, C3-R6,
+//! C3-R7, C3-R8). The estimate is calibrated by measurement, not a proven bound on the heap.
 //!
-//! The estimate mirrors feed-rs 2.4.0, which the workspace pins. Its parsers (`src/parser`) were
-//! read for every loop and copy; the copies that grow faster than the text are the JSON Feed
-//! author inheritance and author comparison, and the Media RSS rating propagation, all charged
-//! or bounded here. A new feed-rs version needs the same reading before it is used.
+//! The estimate mirrors feed-rs 2.4.0, which the workspace pins. Its parsers (`src/parser`) and
+//! XML layer (`src/xml`) were read for every loop, copy and panic: the copies that grow faster
+//! than the text are the JSON Feed author inheritance and author comparison, and the Media RSS
+//! rating propagation (into `media:content` and RSS `enclosure`); serde reads a JSON object
+//! written as an array; and the Media RSS time parser (`parse_npt`) panics on numbers it cannot
+//! hold. All are charged, bounded or refused here. A new feed-rs version needs the same reading.
 
 use std::borrow::Cow;
 
@@ -39,6 +42,12 @@ pub(crate) const MAX_MEDIA_RATINGS: usize = 16;
 /// Authors one JSON Feed author list may have at most. feed-rs compares each with the ones before
 /// it (review C3-R7 R7A-04). Real feeds list a few.
 pub(crate) const MAX_JSON_AUTHORS: usize = 64;
+/// Objects and arrays a JSON Feed may nest at most: serde_json's own limit, so nothing feed-rs
+/// would read is refused, and the scan keeps a bounded stack (review C3-R8 R8C-01).
+pub(crate) const MAX_JSON_DEPTH: usize = 128;
+/// Digits a Media RSS time or iTunes duration may run to. feed-rs parses each run into a `u64`
+/// and multiplies the hours by 3 600, and panics when it cannot (review C3-R8 R8A-04).
+pub(crate) const MAX_TIME_DIGITS: usize = 12;
 
 /// The estimated size of what feed-rs may build from one feed, at most.
 ///
@@ -104,11 +113,42 @@ fn resolve_base(raw: &[u8], parent: Option<&Url>) -> Option<Url> {
     }
 }
 
-/// A media object being read: an item, entry or `media:group`.
+/// A media object being read (an item, entry or `media:group`), or a `media:content`: a rating
+/// inside a content is its own, not copied (`mediarss.rs`, `handle_media_content`).
 struct MediaScope {
     depth: usize,
+    content: bool,
     contents: usize,
     ratings: usize,
+}
+
+/// Refuses a Media RSS time or iTunes duration feed-rs would panic on (`parser/util.rs`,
+/// `parse_npt`): a decimal digit outside ASCII, or a run of more than [`MAX_TIME_DIGITS`] digits.
+/// `run` carries the run across the pieces of one value.
+fn check_time(run: &mut usize, text: &str) -> anyhow::Result<()> {
+    for character in text.chars() {
+        if character.is_ascii_digit() {
+            *run += 1;
+            ensure!(*run <= MAX_TIME_DIGITS, "feed 的时长或时间数字过长");
+        } else {
+            ensure!(!character.is_numeric(), "feed 的时长或时间含非 ASCII 数字");
+            *run = 0;
+        }
+    }
+    Ok(())
+}
+
+/// The text feed-rs makes of a reference (`xml/mod.rs`, `fetch_next`): the character, the
+/// predefined entity, or the reference kept as written.
+fn reference_text(reference: &quick_xml::events::BytesRef<'_>) -> String {
+    let name = String::from_utf8_lossy(reference.as_ref());
+    if let Ok(Some(character)) = reference.resolve_char_ref() {
+        return character.to_string();
+    }
+    match quick_xml::escape::resolve_predefined_entity(&name) {
+        Some(resolved) => resolved.to_owned(),
+        None => format!("&{name};"),
+    }
 }
 
 /// A media rating being read: the contents it is copied into and its bytes so far.
@@ -130,8 +170,10 @@ struct Rating {
 /// Every element outside an Atom text construct is charged [`ELEMENT_COST`], plus
 /// [`ENTRY_COST`] if it is an `item` or `entry`, plus the length of the base in force (resolved
 /// and serialised as feed-rs does, so percent-encoding and international domain names are
-/// counted) for the element and for each of its attributes. A rating is charged, for every content
-/// read before it in its media object, [`RATING_COST`] and its bytes. Text and attribute values
+/// counted) for the element and for each of its attributes. A rating of a media object (not one
+/// inside a `media:content`) is charged, for every content or enclosure read before it in the
+/// object, [`RATING_COST`] and its bytes, an unknown reference counted with its delimiters as
+/// feed-rs keeps it. Times and durations feed-rs parses are checked with [`check_time`]. Text and attribute values
 /// are copied a few times (decoding, normalisation, percent-encoding and international domain
 /// names in addresses): that grows with the length of the text, not with its structure, and is not
 /// charged.
@@ -149,6 +191,8 @@ fn xml_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
     let mut text_construct = None;
     let mut scopes: Vec<MediaScope> = Vec::new();
     let mut rating: Option<Rating> = None;
+    // The depth of the duration being read and its current run of digits.
+    let mut duration: Option<(usize, usize)> = None;
     let mut model = 0_usize;
     loop {
         match reader.read_resolved_event()? {
@@ -197,14 +241,26 @@ fn xml_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
                     if atom && ATOM_TEXT_CONSTRUCTS.contains(&local) {
                         text_construct = Some(open.len());
                     } else if matches!(local, b"item" | b"entry" | b"group") {
-                        scopes.push(MediaScope { depth: open.len(), contents: 0, ratings: 0 });
-                    } else if local == b"content" {
-                        if let Some(scope) = scopes.last_mut() {
+                        let depth = open.len();
+                        scopes.push(MediaScope { depth, content: false, contents: 0, ratings: 0 });
+                    } else if matches!(local, b"content" | b"enclosure") {
+                        // feed-rs adds both to the contents of the media object around them.
+                        if let Some(scope) = scopes.iter_mut().rev().find(|scope| !scope.content) {
                             scope.contents += 1;
+                        }
+                        if local == b"content" {
+                            let depth = open.len();
+                            scopes.push(MediaScope {
+                                depth,
+                                content: true,
+                                contents: 0,
+                                ratings: 0,
+                            });
                         }
                     } else if local == b"rating"
                         && rating.is_none()
                         && let Some(scope) = scopes.last_mut()
+                        && !scope.content
                     {
                         scope.ratings += 1;
                         ensure!(
@@ -218,11 +274,48 @@ fn xml_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
                         });
                     }
                 }
+                if text_construct.is_none() {
+                    let name = tag.name();
+                    let local = local_name(name.as_ref());
+                    let times: &[&[u8]] = match local {
+                        b"thumbnail" => &[b"time"],
+                        b"text" => &[b"start", b"end"],
+                        _ => &[],
+                    };
+                    for attribute in tag.attributes().flatten() {
+                        if times.contains(&attribute.key.as_ref()) {
+                            let value = String::from_utf8_lossy(&attribute.value);
+                            let value = quick_xml::escape::unescape(&value)
+                                .map(|text| text.into_owned())
+                                .unwrap_or_else(|_| value.into_owned());
+                            check_time(&mut 0, &value)?;
+                        }
+                    }
+                    if local == b"duration" && duration.is_none() {
+                        duration = Some((open.len(), 0));
+                    }
+                }
                 open.push((base.is_some(), pushed));
             }
-            (_, Event::Text(text)) => add_rating_bytes(&mut rating, text.len()),
-            (_, Event::CData(text)) => add_rating_bytes(&mut rating, text.len()),
-            (_, Event::GeneralRef(reference)) => add_rating_bytes(&mut rating, reference.len()),
+            (_, Event::Text(text)) => {
+                add_rating_bytes(&mut rating, text.len());
+                if let Some((_, run)) = &mut duration {
+                    check_time(run, &String::from_utf8_lossy(&text))?;
+                }
+            }
+            (_, Event::CData(text)) => {
+                add_rating_bytes(&mut rating, text.len());
+                if let Some((_, run)) = &mut duration {
+                    check_time(run, &String::from_utf8_lossy(&text))?;
+                }
+            }
+            (_, Event::GeneralRef(reference)) => {
+                // feed-rs keeps an unknown reference with its `&` and `;` (review C3-R8 R8A-03).
+                add_rating_bytes(&mut rating, reference.len() + 2);
+                if let Some((_, run)) = &mut duration {
+                    check_time(run, &reference_text(&reference))?;
+                }
+            }
             (_, Event::End(_)) => {
                 if let Some((has_base, pushed)) = open.pop() {
                     bases -= usize::from(has_base);
@@ -241,6 +334,9 @@ fn xml_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
                 }
                 if scopes.last().is_some_and(|scope| scope.depth == depth) {
                     scopes.pop();
+                }
+                if duration.is_some_and(|(at, _)| at == depth) {
+                    duration = None;
                 }
             }
             (_, Event::Eof) => return Ok(model),
@@ -294,8 +390,11 @@ fn role_of(role: Role, key: &str) -> Role {
 /// [`JSON_STRING_COST`]. feed-rs copies the feed's authors into every item that names none, and the
 /// normalisation copies an item's first author: every item is charged the feed's authors, each
 /// [`JSON_AUTHOR_COST`] and its strings (review C3-R7 R7A-01). Keys are compared after their
-/// escapes are decoded, as serde matches them. The scan follows strings, objects and arrays only,
-/// so a document that is not JSON is estimated as if it were; feed-rs rejects it afterwards.
+/// escapes are decoded, as serde matches them. serde also reads an object from an array of its
+/// fields in order, which JSON Feed does not allow: an array where the root, an item or an author
+/// is expected is refused, so every one of them is counted (review C3-R8 R8A-01). Nesting deeper
+/// than [`MAX_JSON_DEPTH`] is refused. The scan follows strings, objects and arrays only, so a
+/// document that is not JSON is estimated as if it were; feed-rs rejects it afterwards.
 fn json_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
     let bytes = raw.as_bytes();
     let mut frames: Vec<Frame> = Vec::new();
@@ -316,6 +415,15 @@ fn json_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
                         _ => std::mem::replace(&mut parent.next, Role::Other),
                     },
                 };
+                ensure!(frames.len() < MAX_JSON_DEPTH, "feed 的 JSON 嵌套超过 {MAX_JSON_DEPTH} 层");
+                ensure!(
+                    open == b'{'
+                        || !matches!(
+                            role,
+                            Role::Root | Role::Item | Role::FeedAuthor | Role::ItemAuthor
+                        ),
+                    "feed 的 JSON 对象写成了数组"
+                );
                 if open == b'{' {
                     model = model.saturating_add(JSON_OBJECT_COST);
                     if let Some(parent) = frames.last_mut()
@@ -457,6 +565,47 @@ mod tests {
         let ratings = |count| media(&"<media:rating>r</media:rating>".repeat(count));
         assert!(xml_model(&ratings(MAX_MEDIA_RATINGS), usize::MAX).is_ok());
         assert!(xml_model(&ratings(MAX_MEDIA_RATINGS + 1), usize::MAX).is_err());
+        // RSS enclosures receive copies too (review C3-R8 R8A-02).
+        let enclosures = r#"<enclosure url="a"/><enclosure url="b"/>"#;
+        let rated = media(&format!(r#"{enclosures}<media:rating>abc</media:rating>"#));
+        assert_eq!(xml(&rated), base + 3 * ELEMENT_COST + 2 * (RATING_COST + 3));
+        // A rating inside a content is its own: no copies, and it takes no place in the object's
+        // ratings (review C3-R8 R8A-05).
+        let own = r#"<media:content url="a"><media:rating>r</media:rating></media:content>"#;
+        let gallery = media(&own.repeat(MAX_MEDIA_RATINGS + 1));
+        assert_eq!(xml(&gallery), base + 2 * (MAX_MEDIA_RATINGS + 1) * ELEMENT_COST);
+        // An unknown reference is kept with its delimiters (review C3-R8 R8A-03).
+        let referenced = media(&format!(r#"{contents}<media:rating>&x;&x;</media:rating>"#));
+        assert_eq!(xml(&referenced), base + 3 * ELEMENT_COST + 2 * (RATING_COST + 6));
+    }
+
+    #[test]
+    fn times_feed_rs_cannot_hold_are_refused() {
+        let item = |inner: &str| {
+            format!(
+                r#"<rss xmlns:itunes="i" xmlns:media="m"><channel><item>{inner}</item></channel></rss>"#
+            )
+        };
+        let ok = |inner: &str| xml_model(&item(inner), usize::MAX).is_ok();
+        let digits = |count: usize| "9".repeat(count);
+        let twelve = digits(MAX_TIME_DIGITS);
+        let thirteen = digits(MAX_TIME_DIGITS + 1);
+        assert!(ok(&format!("<itunes:duration>{twelve}:00:00.{twelve}</itunes:duration>")));
+        assert!(!ok(&format!("<itunes:duration>{thirteen}</itunes:duration>")));
+        assert!(!ok(&format!("<itunes:duration>0.{thirteen}</itunes:duration>")));
+        // A run split by references is still one run in the text feed-rs reads.
+        let split = format!("{}&#57;{}", digits(6), digits(6));
+        assert!(!ok(&format!("<itunes:duration>{split}</itunes:duration>")));
+        // A decimal digit outside ASCII, written or referenced (U+0663 ARABIC-INDIC DIGIT THREE).
+        let arabic = char::from_u32(0x663).unwrap();
+        assert!(!ok(&format!("<itunes:duration>1{arabic}</itunes:duration>")));
+        assert!(!ok("<itunes:duration>&#x663;</itunes:duration>"));
+        assert!(!ok(&format!(r#"<media:thumbnail url="a" time="{thirteen}"/>"#)));
+        assert!(!ok(&format!(r#"<media:text start="{thirteen}">t</media:text>"#)));
+        assert!(!ok(&format!(r#"<media:text end="{thirteen}">t</media:text>"#)));
+        // Other attributes, and these names on other elements, are not times.
+        assert!(ok(&format!(r#"<media:thumbnail url="{thirteen}" time="1"/>"#)));
+        assert!(ok(&format!(r#"<media:content time="{thirteen}"/>"#)));
     }
 
     #[test]
@@ -480,6 +629,21 @@ mod tests {
             json(&escaped),
             3 * JSON_OBJECT_COST + 3 * JSON_STRING_COST + JSON_AUTHOR_COST + 6
         );
+        // serde reads an object from an array of its fields: where an object is counted, an array
+        // is refused (review C3-R8 R8A-01).
+        let rejected = |raw: &str| json_model(raw, usize::MAX).is_err();
+        assert!(rejected(r#"["v","t"]"#));
+        assert!(rejected(r#"{"items":[["1"]]}"#));
+        assert!(rejected(r#"{"author":["a","https://example.com/"],"items":[]}"#));
+        assert!(rejected(r#"{"authors":[["a",null]],"items":[]}"#));
+        assert!(rejected(r#"{"items":[{"id":"1","author":["a",null]}]}"#));
+        assert!(rejected(r#"{"items":[{"id":"1","authors":[["a",null]]}]}"#));
+        assert!(!rejected(r#"{"items":[{"id":"1","tags":["a"],"attachments":[]}]}"#));
+        // Nesting is bounded like serde_json's (review C3-R8 R8C-01).
+        let nested =
+            |depth: usize| format!(r#"{{"x":{}{}}}"#, "[".repeat(depth - 1), "]".repeat(depth - 1));
+        assert!(!rejected(&nested(MAX_JSON_DEPTH)));
+        assert!(rejected(&nested(MAX_JSON_DEPTH + 1)));
         // An author list takes at most MAX_JSON_AUTHORS authors.
         let authors = |count| {
             let list = vec![r#"{"name":"a"}"#; count].join(",");
