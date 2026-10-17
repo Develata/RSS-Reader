@@ -27,9 +27,12 @@ pub struct ParsedEntry {
     pub updated_at_source: Option<OffsetDateTime>,
 }
 
-/// Feeds parsed at once in this process. A parse runs to its end without yielding, and its model
-/// may approach [`crate::feed_structure::MAX_FEED_MODEL_BYTES`]; refresh fetches several feeds at
-/// once and background jobs run beside it, so their parses take turns (review C3-R6).
+/// Feed parses of the native services at once: refresh (`application_adapters::refresh`) and the
+/// subscription probe take a slot around the parse. A parse runs to its end without yielding, and
+/// its model may approach [`crate::feed_structure::MAX_FEED_MODEL_BYTES`]; refresh fetches several
+/// feeds at once and background jobs run beside it, so their parses take turns (review C3-R6).
+/// The synchronous helpers (`FeedParser::parse`, `classify_subscription_response`) take no slot:
+/// a caller running several of them at once bounds them itself (review C3-R7 R7B-01).
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) static PARSE_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 

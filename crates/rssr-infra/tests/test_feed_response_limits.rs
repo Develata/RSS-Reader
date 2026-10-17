@@ -274,7 +274,7 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
     }
     let json = |items: &str| {
         format!(
-            "{{\"version\":\"https://jsonfeed.org/version/1.1\",\"title\":\"t\",\"items\":[{items}]}}"
+            "{{\"version\":\"https://jsonfeed.org/version/1.1\",\"title\":\"t\",\"authors\":[{{\"name\":\"Site\",\"url\":\"https://example.com/\"}}],\"items\":[{items}]}}"
         )
     };
     assert!(parse(&json(&items.join(","))).unwrap().entries.len() > 3000, "a large JSON Feed");
@@ -296,6 +296,27 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
     assert!(parse(&json(&ids.join(","))).is_err(), "JSON items");
     let tags = vec!["\"a\""; 300_000].join(",");
     assert!(parse(&json(&format!("{{\"id\":\"x\",\"tags\":[{tags}]}}"))).is_err(), "JSON tags");
+    // A feed author with a 64 KiB address is copied into each of 2 000 items: about 130 MB
+    // (review C3-R7 R7A-01).
+    let author = format!("{{\"name\":\"a\",\"url\":\"{}\"}}", "u".repeat(64 * 1024));
+    let items = (0..2_000).map(|i| format!("{{\"id\":\"{i}\"}}")).collect::<Vec<_>>().join(",");
+    let inherited = format!("{{\"author\":{author},\"items\":[{items}]}}");
+    assert!(parse(&inherited).is_err(), "inherited authors");
+    // A 64 KiB rating is copied into each of the 2 000 contents before it: about 130 MB
+    // (review C3-R7 R7A-02).
+    let contents = "<media:content url=\"https://example.com/a\"/>".repeat(2_000);
+    let rating = format!("<media:rating>{}</media:rating>", "r".repeat(64 * 1024));
+    let rated = format!(
+        "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\"><channel><title>t</title><item><title>i</title>{contents}{rating}</item></channel></rss>"
+    );
+    assert!(parse(&rated).is_err(), "a copied rating");
+    // feed-rs reads `a:b:entry` as an Atom entry: 100 000 of them are charged as entries
+    // (review C3-R7 R7A-03).
+    let entries = "<a:b:entry/>".repeat(100_000);
+    let colons = format!(
+        "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:a=\"http://www.w3.org/2005/Atom\"><title>t</title>{entries}</feed>"
+    );
+    assert!(parse(&colons).is_err(), "entries named after a second colon");
     // `media:content` is not an Atom text construct: what is inside it is charged.
     let thumbnails = "<media:thumbnail url=\"\"/>".repeat(300_000);
     let media = format!(
@@ -311,6 +332,12 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
     // Inside one they are text.
     let xhtml = format!("<entry><id>x</id><content type=\"xhtml\">{content}</content></entry>");
     assert!(parse(&atom("https://example.com/", &xhtml)).is_ok(), "elements in content");
+    // A gallery: 200 contents and one rating in an item.
+    let gallery = format!(
+        "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\"><channel><title>t</title><item><title>i</title>{}<media:rating scheme=\"urn:simple\">nonadult</media:rating></item></channel></rss>",
+        "<media:content url=\"https://example.com/p.jpg\" medium=\"image\"/>".repeat(200)
+    );
+    assert_eq!(parse(&gallery).unwrap().entries.len(), 1, "a gallery");
 }
 
 /// An OPML export with a long title imports again (review C3-R5 R5-06).

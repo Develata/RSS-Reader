@@ -28,7 +28,9 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "4", features = ["derive", "env"] }
 dioxus = { version = "0.7.9", features = ["router"] }
 dioxus-router = "0.7.9"
-feed-rs = "2"
+# Exact: rssr-infra `feed_structure` mirrors how this version reads and copies a feed; read its
+# parsers again before changing it.
+feed-rs = "=2.4.0"
 getrandom = { version = "0.2", features = ["js"] }
 hmac = "0.12"
 percent-encoding = "2"
