@@ -354,6 +354,13 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
     let read = feed_rs::parser::parse(desync.as_bytes()).unwrap();
     assert_eq!(read.entries.len(), 1, "feed-rs reads the item inside the title");
     assert!(parse(desync).is_err(), "an invalid character reference");
+    // feed-rs reads a feed missing only its closing root tag, so an open document is not refused
+    // as such; a charge it would have taken at an end tag is taken at the end of the document
+    // instead (review C3-R10 R10A-01, unit tests in feed_structure).
+    let unclosed =
+        "<rss version=\"2.0\"><channel><title>t</title><item><title>a</title></item></channel>";
+    assert_eq!(feed_rs::parser::parse(unclosed.as_bytes()).unwrap().entries.len(), 1);
+    assert!(parse(unclosed).is_ok(), "a feed missing its closing root tag");
     // `media:content` is not an Atom text construct: what is inside it is charged.
     let thumbnails = "<media:thumbnail url=\"\"/>".repeat(300_000);
     let media = format!(

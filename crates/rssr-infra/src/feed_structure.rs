@@ -16,8 +16,13 @@
 //! written as an array; and the Media RSS time parser (`parse_npt`) panics on numbers it cannot
 //! hold. All are charged, bounded or refused here. The estimate also assumes feed-rs walks the
 //! elements as they nest: it does unless an error it swallows breaks off a walk, and the only
-//! such error a document reaching it can raise is an invalid character reference, which is
-//! refused here (review C3-R9 R9A-01). A new feed-rs version needs the same reading.
+//! such error a document reaching it can raise is an invalid character reference in character
+//! data, which is refused here (review C3-R9 R9A-01). In an attribute value feed-rs keeps the
+//! reference as written and its walk is unaffected, so that is accepted. A document may also end
+//! inside open elements: feed-rs reads up to the end, and copies a rating it ends inside, before it
+//! finds an end tag missing, and a feed missing only its closing root tag is read in full, so a
+//! charge taken when an element closes is also taken when the document ends inside it (review
+//! C3-R10 R10A-01). A new feed-rs version needs the same reading.
 
 use std::borrow::Cow;
 
@@ -164,6 +169,13 @@ struct Rating {
     bytes: usize,
 }
 
+impl Rating {
+    /// What feed-rs builds when it copies the rating into each of its contents.
+    fn copies(&self) -> usize {
+        self.contents.saturating_mul(RATING_COST.saturating_add(self.bytes))
+    }
+}
+
 /// The estimated model of an XML feed, refused past `limit` (and past the structure bounds).
 ///
 /// Read with the quick-xml version and reader settings feed-rs uses, so the elements are the ones
@@ -179,7 +191,8 @@ struct Rating {
 /// counted) for the element and for each of its attributes. A rating of a media object (not one
 /// inside a `media:content`) is charged, for every content or enclosure read before it in the
 /// object, [`RATING_COST`] and its bytes, an unknown reference counted with its delimiters as
-/// feed-rs keeps it. Times and durations feed-rs parses are checked with [`check_time`]. Text and attribute values
+/// feed-rs keeps it, when the rating closes or the document ends inside it. Times and durations
+/// feed-rs parses are checked with [`check_time`]. Text and attribute values
 /// are copied a few times (decoding, normalisation, percent-encoding and international domain
 /// names in addresses): that grows with the length of the text, not with its structure, and is not
 /// charged.
@@ -319,7 +332,8 @@ fn xml_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
                 // feed-rs resolves every character reference and, in places, swallows the error
                 // of an invalid one, which leaves its walk of the elements out of step with their
                 // nesting: elements inside a text construct are then read as items (review C3-R9
-                // R9A-01). Refused wherever it is, text constructs included.
+                // R9A-01). Refused wherever it is in character data, text constructs included; in
+                // an attribute value feed-rs keeps it as written (review C3-R10 R10A-02).
                 ensure!(reference.resolve_char_ref().is_ok(), "feed 含无效的字符引用");
                 // feed-rs keeps an unknown reference with its `&` and `;` (review C3-R8 R8A-03).
                 add_rating_bytes(&mut rating, reference.len() + 2);
@@ -339,8 +353,7 @@ fn xml_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
                     text_construct = None;
                 }
                 if let Some(read) = rating.take_if(|read| read.depth == depth) {
-                    let copy = RATING_COST.saturating_add(read.bytes);
-                    model = model.saturating_add(read.contents.saturating_mul(copy));
+                    model = model.saturating_add(read.copies());
                     ensure!(model <= limit, "feed 的条目与地址过多");
                 }
                 if scopes.last().is_some_and(|scope| scope.depth == depth) {
@@ -350,7 +363,17 @@ fn xml_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
                     duration = None;
                 }
             }
-            (_, Event::Eof) => return Ok(model),
+            (_, Event::Eof) => {
+                // quick-xml ends a document without its end tags. feed-rs takes the text a rating
+                // ends with and copies it into the contents before it finds an end tag missing
+                // (review C3-R10 R10A-01); refusing an open document instead would also refuse a
+                // feed missing only its closing root tag, which feed-rs reads.
+                if let Some(read) = rating.take() {
+                    model = model.saturating_add(read.copies());
+                    ensure!(model <= limit, "feed 的条目与地址过多");
+                }
+                return Ok(model);
+            }
             _ => {}
         }
     }
@@ -594,10 +617,16 @@ mod tests {
         // An unknown reference is kept with its delimiters (review C3-R8 R8A-03).
         let referenced = media(&format!(r#"{contents}<media:rating>&x;&x;</media:rating>"#));
         assert_eq!(xml(&referenced), base + 3 * ELEMENT_COST + 2 * (RATING_COST + 6));
+        // A document that ends inside a rating is charged its copies all the same (review C3-R10
+        // R10A-01).
+        let rated = media(&format!(r#"{enclosures}<media:rating>abc</media:rating>"#));
+        let open = &rated[..rated.find("</media:rating>").unwrap()];
+        assert_eq!(xml(open), xml(&rated));
+        assert!(xml_model(open, xml(open) - 1).is_err());
     }
 
     #[test]
-    fn an_invalid_character_reference_is_refused_anywhere() {
+    fn an_invalid_character_reference_in_character_data_is_refused() {
         let ok = |raw: &str| xml_model(raw, usize::MAX).is_ok();
         assert!(ok("<rss><channel><title>&#65;&amp;&x;</title></channel></rss>"));
         for reference in ["&#0;", "&#xD800;", "&#x110000;", "&#;", "&#x;"] {
@@ -607,6 +636,9 @@ mod tests {
                 r#"<rss xmlns:a="{ATOM}"><channel><title><a:content><x>{reference}</x></a:content></title></channel></rss>"#
             );
             assert!(!ok(&inside), "{reference}");
+            // In an attribute value feed-rs keeps it as written (review C3-R10 R10A-02).
+            let attribute = format!(r#"<rss><channel><link title="{reference}"/></channel></rss>"#);
+            assert!(ok(&attribute), "{reference}");
         }
     }
 
@@ -670,7 +702,8 @@ mod tests {
         assert!(rejected(r#"{"items":[{"id":"1","author":["a",null]}]}"#));
         assert!(rejected(r#"{"items":[{"id":"1","authors":[["a",null]]}]}"#));
         assert!(!rejected(r#"{"items":[{"id":"1","tags":["a"],"attachments":[]}]}"#));
-        // Nesting is bounded like serde_json's (review C3-R8 R8C-01).
+        // Nesting is bounded by this application's limit, unknown fields included (reviews C3-R8
+        // R8C-01, C3-R10 R10C-03).
         let nested =
             |depth: usize| format!(r#"{{"x":{}{}}}"#, "[".repeat(depth - 1), "]".repeat(depth - 1));
         assert!(!rejected(&nested(MAX_JSON_DEPTH)));
