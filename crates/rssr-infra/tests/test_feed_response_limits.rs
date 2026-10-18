@@ -354,9 +354,10 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
     let read = feed_rs::parser::parse(desync.as_bytes()).unwrap();
     assert_eq!(read.entries.len(), 1, "feed-rs reads the item inside the title");
     assert!(parse(desync).is_err(), "an invalid character reference");
-    // feed-rs reads a feed missing only its closing root tag, so an open document is not refused
-    // as such; a charge it would have taken at an end tag is taken at the end of the document
-    // instead (review C3-R10 R10A-01, unit tests in feed_structure).
+    // feed-rs reads an RSS 2.0 feed missing only its closing root tag (it returns after the
+    // channel; Atom and RSS 1.0 fail), so an open document is not refused as such; a charge it
+    // would have taken at an end tag is taken at the end of the document instead (reviews C3-R10
+    // R10A-01, C3-R11; unit tests in feed_structure).
     let unclosed =
         "<rss version=\"2.0\"><channel><title>t</title><item><title>a</title></item></channel>";
     assert_eq!(feed_rs::parser::parse(unclosed.as_bytes()).unwrap().entries.len(), 1);

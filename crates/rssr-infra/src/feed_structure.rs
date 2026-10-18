@@ -20,9 +20,10 @@
 //! data, which is refused here (review C3-R9 R9A-01). In an attribute value feed-rs keeps the
 //! reference as written and its walk is unaffected, so that is accepted. A document may also end
 //! inside open elements: feed-rs reads up to the end, and copies a rating it ends inside, before it
-//! finds an end tag missing, and a feed missing only its closing root tag is read in full, so a
-//! charge taken when an element closes is also taken when the document ends inside it (review
-//! C3-R10 R10A-01). A new feed-rs version needs the same reading.
+//! finds an end tag missing, and an RSS 2.0 or 0.9x feed missing only its closing root tag is read
+//! in full (feed-rs returns after the channel; Atom and RSS 1.0 fail), so a charge taken when an
+//! element closes is also taken when the document ends inside it (reviews C3-R10 R10A-01,
+//! C3-R11). A new feed-rs version needs the same reading.
 
 use std::borrow::Cow;
 
@@ -366,8 +367,8 @@ fn xml_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
             (_, Event::Eof) => {
                 // quick-xml ends a document without its end tags. feed-rs takes the text a rating
                 // ends with and copies it into the contents before it finds an end tag missing
-                // (review C3-R10 R10A-01); refusing an open document instead would also refuse a
-                // feed missing only its closing root tag, which feed-rs reads.
+                // (review C3-R10 R10A-01); refusing an open document instead would also refuse an
+                // RSS 2.0 or 0.9x feed missing only its closing root tag, which feed-rs reads.
                 if let Some(read) = rating.take() {
                     model = model.saturating_add(read.copies());
                     ensure!(model <= limit, "feed 的条目与地址过多");
