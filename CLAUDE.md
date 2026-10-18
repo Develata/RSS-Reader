@@ -32,7 +32,7 @@ cargo test -p rssr-infra --test test_library_entry_state_and_search --locked
 # 按名称过滤单元测试
 cargo test -p rssr-application --locked <test_name>
 
-# wasm 浏览器契约测试（CI 三个 harness；需 wasm-bindgen-cli 0.2.126 + Chrome for Testing）
+# wasm 浏览器契约测试（CI 三个 harness；需与 Cargo.lock 中 wasm-bindgen 同版本的 wasm-bindgen-cli（当前 0.2.128，脚本会核对）+ Chrome for Testing）
 bash scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness
 # 其余：wasm_subscription_contract_harness / wasm_config_exchange_contract_harness
 
