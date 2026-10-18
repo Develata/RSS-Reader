@@ -48,13 +48,14 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             AppNav { on_back: move |_| {
                 if !viewer.write().close() { navigate_back(navigator, Some(AppRoute::EntriesPage {})); }
             } }
-            // 快捷键监听整个页面（hooks/use_reader_shortcuts.rs），输入框里的按键不算；
-            // 这里只保留有名字的阅读区与快捷键说明。
+            // 快捷键监听整个页面（hooks/use_reader_shortcuts.rs），输入框里的按键不算；阅读区
+            // 仍可用 Tab 进入，读屏在这里读出快捷键说明。
             div {
                 "data-layout": "reader-shortcut-scope",
                 role: "region",
                 aria_label: "文章阅读区",
                 aria_describedby: "reader-shortcuts-help",
+                tabindex: 0,
             p { id: "reader-shortcuts-help", class: "sr-only",
                 "阅读页可用 J、K 或左右方向键切换未读文章，M 切换已读，F 切换收藏；在输入框里不生效。"
             }

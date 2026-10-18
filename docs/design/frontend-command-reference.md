@@ -71,7 +71,7 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 
 返回列表的文章可有 `data-return-highlight="true"`，约 2 秒后移除；这是定位提示，不代表已读。`data-position-key` / `data-position-page` / `data-position-ready` / `data-position-entry` 是内部桥接字段，不作为用户主题接口。Web 页面刷新或应用结束清除位置，位置不参与配置交换。
 
-位置采集发生在操作边界：DOM 捕获阶段的控件点击、阅读区内无修饰键的左右方向键切文、表单提交与浏览器 `popstate`。搜索框光标移动、带修饰键及输入法组词期间的按键不采集位置，阅读快捷键同样放行组词输入。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
+位置采集发生在操作边界：DOM 捕获阶段的控件点击、阅读页上无修饰键的 J / K 与左右方向键切文（输入框与可编辑区域内、图片查看器打开时除外）、表单提交与浏览器 `popstate`。搜索框光标移动、带修饰键及输入法组词期间的按键不采集位置，阅读快捷键同样放行组词输入。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
 
 `data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好仍被忽略，搜索词与文章筛选折叠偏好保留。`app-nav-shell` 的 `data-state` 为 `normal` / `search` / `collapsed`。
 
@@ -100,7 +100,7 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 
 四个主要页面的主标题为 `h1`，应用自身的小节标题按层级递进；Reader 正文中的来源 HTML 保留内容标题语义，不作为应用导航层级改写。字号由稳定的 `data-slot` 样式控制。
 
-`data-layout="reader-shortcut-scope"` 是可用 Tab 进入的具名 `region`，提供 M / F / 左右方向键说明和可见焦点。快捷键仍限定在阅读区，带修饰键或输入法组合中的事件放行。收藏按钮的固定名称与 `aria-pressed` 搭配，底栏四个装饰图标均为 `aria-hidden="true"`。
+`data-layout="reader-shortcut-scope"` 是可用 Tab 进入的具名 `region`，提供 M / F / J / K / 左右方向键说明和可见焦点。快捷键监听整个阅读页，不要求焦点在阅读区（`hooks/reader_shortcuts.js`）；输入框与可编辑区域内、带修饰键、输入法组合中、自动重复以及图片查看器打开时的事件放行。底栏固定在视口底部，渲染在阅读页之外，以免主题的 `backdrop-filter` 困住 fixed 定位。收藏按钮的固定名称与 `aria-pressed` 搭配，底栏四个装饰图标均为 `aria-hidden="true"`。
 
 动态操作结果使用持续挂载的 `StatusBanner` live region：`role="status"`、`aria-live="polite"`、`aria-atomic="true"`。空消息区域保留在可访问树中但不占布局空间；加载/成功/错误更新文本时不抢焦点。静态空列表或归档说明不参与播报。颜色状态继续使用 `data-state="info|success|error"`，不把错误色自动映射成打断式通知。
 
