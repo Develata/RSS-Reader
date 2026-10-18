@@ -553,15 +553,35 @@ async function checkReader(client) {
         });
       const shortcuts = [...document.querySelectorAll('[data-slot="reader-bottom-bar-shortcut"]')]
         .map((element) => getComputedStyle(element).display);
+      const bar = document.querySelector('[data-layout="reader-bottom-bar"]');
+      const barStyle = getComputedStyle(bar);
+      scrollTo(0, document.documentElement.scrollHeight);
+      const barRect = bar.getBoundingClientRect();
+      const lastControl = [...document.querySelectorAll('[data-layout="reader-page"] button, [data-layout="reader-page"] a')]
+        .filter((element) => element.getClientRects().length > 0)
+        .map((element) => element.getBoundingClientRect().bottom)
+        .reduce((lowest, bottom) => Math.max(lowest, bottom), 0);
+      scrollTo(0, 0);
       return {
         rootClientWidth: root.clientWidth,
         rootScrollWidth: root.scrollWidth,
         titleBoundsOk: titleRect.left >= rootRect.left - 1 && titleRect.right <= rootRect.right + 1,
         buttons,
         shortcuts,
+        barPosition: barStyle.position,
+        barOutsidePage: !bar.closest('[data-layout="reader-page"]'),
+        barGap: innerHeight - barRect.bottom,
+        barTop: barRect.top,
+        lastControl,
       };
     })()`,
   );
+  assertThat('reader bottom bar is fixed beside the page, not inside it',
+    evidence.barPosition === 'fixed' && evidence.barOutsidePage, evidence);
+  assertThat('reader bottom bar sits just above the viewport bottom whatever the article length',
+    evidence.barGap >= 8 && evidence.barGap <= 24, evidence);
+  assertThat('the page keeps room below its last control for the bar',
+    evidence.lastControl <= evidence.barTop, evidence);
   assertThat('reader title stays inside the viewport', evidence.titleBoundsOk, evidence);
   assertThat('reader page has no horizontal overflow', evidence.rootScrollWidth <= evidence.rootClientWidth + 1, evidence);
   assertThat(
@@ -643,8 +663,9 @@ async function checkEntriesInitialization(client) {
       message:document.querySelector('[data-layout="entries-main"] > [role="status"]').textContent,
       empty:!!document.querySelector('[data-layout="entries-page-state"]')
     })`);
+    // v0.2 阶段 B2 起界面只显示面向用户的通用错误，底层的存储错误留在诊断里。
     assertThat('failed initial reads expose the error without an empty-library claim',
-      failed.message.includes('读取浏览器本地存储失败') && !failed.empty, failed);
+      failed.message.includes('初始化应用失败') && !failed.empty, failed);
   } finally {
     await client.send('Page.removeScriptToEvaluateOnNewDocument', {identifier});
     await navigate(client, `${staticBase}/entries`);
@@ -673,8 +694,20 @@ async function checkPrimaryWorkflow(client) {
   ]});
   try {
     await seedAndNavigate(client, 'reader-demo', '/entries/1', '[data-page="reader"][data-position-ready="true"]');
-    await evaluate(client, `document.querySelector('[data-layout="reader-shortcut-scope"]').focus({preventScroll:true})`);
-    await key(client, 'ArrowLeft', 'ArrowLeft');
+    // A key typed into a field is the field's, not a shortcut (the nav search stays collapsed
+    // here, so a field is placed in the reading region for the check).
+    await evaluate(client, `(() => {
+      const field = document.createElement('input');
+      document.querySelector('[data-layout="reader-body"]').append(field);
+      field.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', bubbles: true, cancelable: true}));
+      field.remove();
+    })()`);
+    await sleep(100);
+    assertThat('a key typed into a field does not switch entries',
+      await evaluate(client, `location.pathname === '/entries/1'`));
+    // Shortcuts belong to the whole page: nothing needs focus first.
+    await evaluate(client, `document.activeElement?.blur()`);
+    await key(client, 'k', 'KeyK');
     await waitFor(client, `location.pathname === '/entries/2' && document.querySelector('[data-page="reader"][data-position-ready="true"]')`);
     assertThat('unread keyboard navigation reaches the actual unread entry',
       await evaluate(client, `document.querySelector('[data-action="mark-read"]').dataset.state === 'unread'`));
@@ -682,9 +715,10 @@ async function checkPrimaryWorkflow(client) {
     await waitFor(client, `document.querySelector('[data-action="mark-read"]').dataset.state === 'read'`);
     assertThat('finishing all unread entries disables both unread directions', await evaluate(client,
       `['previous','next'].every(direction => document.querySelector('[data-nav="' + direction + '-unread-entry"]').disabled)`));
-    await evaluate(client, `document.querySelector('[data-layout="reader-shortcut-scope"]').focus({preventScroll:true})`);
+    await evaluate(client, `document.activeElement?.blur()`);
     await key(client, 'ArrowLeft', 'ArrowLeft');
     await key(client, 'ArrowRight', 'ArrowRight');
+    await key(client, 'j', 'KeyJ');
     await sleep(100);
     assertThat('unread shortcuts do not fall back to already read feed entries', await evaluate(client, `location.pathname === '/entries/2'`));
     await tap('[data-nav="next-feed-entry"]');

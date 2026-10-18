@@ -1,5 +1,3 @@
-use dioxus::prelude::Callback;
-
 use crate::bootstrap::ReaderNavigation;
 
 use super::{session::ReaderPageSession, state::ReaderPageState};
@@ -8,7 +6,6 @@ use super::{session::ReaderPageSession, state::ReaderPageState};
 pub(crate) struct ReaderPageFacade {
     session: ReaderPageSession,
     snapshot: ReaderPageState,
-    shortcuts: Callback<dioxus::events::KeyboardEvent>,
 }
 
 impl ReaderPageFacade {
@@ -17,16 +14,13 @@ impl ReaderPageFacade {
             && self.snapshot.content_loaded
             && self.snapshot.error.is_none()
     }
-    pub(crate) fn new(
-        session: ReaderPageSession,
-        snapshot: ReaderPageState,
-        shortcuts: Callback<dioxus::events::KeyboardEvent>,
-    ) -> Self {
-        Self { session, snapshot, shortcuts }
+    pub(crate) fn new(session: ReaderPageSession, snapshot: ReaderPageState) -> Self {
+        Self { session, snapshot }
     }
 
-    pub(crate) fn shortcuts(&self) -> Callback<dioxus::events::KeyboardEvent> {
-        self.shortcuts
+    /// 已读、收藏按钮可用：屏幕上的标记就是这篇文章存储里的值。
+    pub(crate) fn flags_known(&self, entry_id: i64) -> bool {
+        self.snapshot.flags_known(entry_id)
     }
 
     pub(crate) fn title(&self) -> &str {

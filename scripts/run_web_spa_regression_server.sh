@@ -374,7 +374,13 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_HEAD()
 
 
+class SpaServer(socketserver.TCPServer):
+    # 浏览器会并行请求 wasm 的各个 JS 片段；默认只积压 5 个连接，在 Windows 上多出来的
+    # 连接被直接拒绝（ERR_CONNECTION_REFUSED），页面加载不出来。仍是单线程逐个处理。
+    request_queue_size = 128
+
+
 handler = partial(SpaFallbackHandler, directory=root)
-with socketserver.TCPServer(("127.0.0.1", port), handler) as httpd:
+with SpaServer(("127.0.0.1", port), handler) as httpd:
     httpd.serve_forever()
 PY

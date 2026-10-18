@@ -62,6 +62,12 @@ impl ReaderPageState {
         }
     }
 
+    /// 屏幕上的已读/收藏是否就是 `entry_id` 存储里的值，可以据此切换：加载中不是（标记先被
+    /// 清成 false，切换之后才到的加载结果还会把它改回去），加载失败也不是。
+    pub(crate) fn flags_known(&self, entry_id: i64) -> bool {
+        self.current_entry_id == entry_id && self.content_loaded && self.error.is_none()
+    }
+
     /// 开始加载 `entry_id`。
     ///
     /// 同一篇的显式重载保留提示，切换文章时清空提示。

@@ -206,4 +206,29 @@ mod tests {
         reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 1 });
         assert!(!state.asset_localization_requested);
     }
+
+    /// 加载中与加载失败时，屏幕上的已读/收藏不是存储里的值，不能据此切换：加载中按下的
+    /// 切换会被迟到的加载结果盖掉，界面显示与库里不一致。
+    #[test]
+    fn flags_are_known_only_once_the_entry_has_loaded() {
+        let mut state = ReaderPageState::new();
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 7 });
+        assert!(!state.flags_known(7), "加载中");
+
+        reduce_reader_page_intent(
+            &mut state,
+            ReaderPageIntent::ApplyLoadedContent { entry_id: 7, content: loaded_content("Story") },
+        );
+        assert!(state.flags_known(7));
+        assert!(!state.flags_known(8), "另一篇文章的标记不是这些");
+
+        reduce_reader_page_intent(
+            &mut state,
+            ReaderPageIntent::SetError { entry_id: 7, error: Some("读取失败".to_string()) },
+        );
+        assert!(!state.flags_known(7), "加载失败");
+
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 8 });
+        assert!(!state.flags_known(8), "换文章后重新加载中");
+    }
 }

@@ -175,17 +175,20 @@
 
 [data-layout="reader-pagination"][data-context="feed"] {
   justify-content: center;
-  margin-bottom: 92px;
 }
 
+/* 固定在视口底部：短文章里也不随正文长短跳动。是阅读页的同级元素，主题给阅读页加的
+ * backdrop-filter 困不住它的 fixed 定位；页面底部留出它的高度（80px）与间隙。 */
 [data-layout="reader-bottom-bar"] {
-  position: sticky;
+  position: fixed;
   bottom: calc(18px + var(--safe-area-bottom));
+  left: 50%;
+  z-index: 12;
+  transform: translateX(-50%);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   width: min(560px, calc(100% - 24px));
-  margin: 0 auto;
   padding: 10px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-card);
@@ -243,6 +246,10 @@
 [data-slot="reader-bottom-bar-label"] {
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+.app-shell:has([data-layout="reader-bottom-bar"]) {
+  padding-bottom: calc(116px + var(--safe-area-bottom));
 }
 
 /* 键盘快捷键提示只对有能力按键盘的设备展示；触屏（coarse pointer、无 hover）隐藏。 */

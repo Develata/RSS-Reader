@@ -54,19 +54,27 @@ impl ReaderPageSession {
 
     /// The reader's buttons and shortcuts toggle: they ask for the opposite of what it shows.
     pub(crate) fn toggle_read(self, via_shortcut: bool) {
+        let Some(read) = self.known_flags().map(|(read, _)| !read) else { return };
         self.spawn_ui_command(UiCommand::Reader(ReaderCommand::SetRead {
             entry_id: self.entry_id,
-            read: !self.state.peek().is_read,
+            read,
             via_shortcut,
         }));
     }
 
     pub(crate) fn toggle_starred(self, via_shortcut: bool) {
+        let Some(starred) = self.known_flags().map(|(_, starred)| !starred) else { return };
         self.spawn_ui_command(UiCommand::Reader(ReaderCommand::SetStarred {
             entry_id: self.entry_id,
-            starred: !self.state.peek().is_starred,
+            starred,
             via_shortcut,
         }));
+    }
+
+    /// 已读与收藏，只在它们是这篇文章存储里的值时给出；加载中按下的切换不发出。
+    fn known_flags(self) -> Option<(bool, bool)> {
+        let state = self.state.peek();
+        state.flags_known(self.entry_id).then_some((state.is_read, state.is_starred))
     }
 
     fn spawn_ui_command(self, command: UiCommand) {
