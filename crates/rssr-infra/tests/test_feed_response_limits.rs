@@ -361,6 +361,12 @@ fn feed_model_is_bounded_before_feed_rs_builds_it() {
         "<rss version=\"2.0\"><channel><title>t</title><item><title>a</title></item></channel>";
     assert_eq!(feed_rs::parser::parse(unclosed.as_bytes()).unwrap().entries.len(), 1);
     assert!(parse(unclosed).is_ok(), "a feed missing its closing root tag");
+    // The time checks match by local name in any namespace, so a long number in an extension
+    // element feed-rs ignores is refused too: conservative, and stated in the plan (review C3-R11
+    // R11A-01).
+    let extension = "<rss version=\"2.0\" xmlns:x=\"urn:x\"><channel><title>t</title><x:duration>1234567890123</x:duration></channel></rss>";
+    assert!(feed_rs::parser::parse(extension.as_bytes()).is_ok());
+    assert!(parse(extension).is_err(), "a time checked by its local name");
     // `media:content` is not an Atom text construct: what is inside it is charged.
     let thumbnails = "<media:thumbnail url=\"\"/>".repeat(300_000);
     let media = format!(
