@@ -63,7 +63,7 @@ pub fn FeedEntriesPage(feed_id: i64) -> Element {
 }
 
 fn entries_page_content(feed_id: Option<i64>) -> Element {
-    use_mobile_back_navigation(feed_id.map(|_| AppRoute::FeedsPage {}));
+    let exit_hint = use_mobile_back_navigation(feed_id.map(|_| AppRoute::FeedsPage {}));
 
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
@@ -198,6 +198,11 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             }
         }
         { pagination }
+        // Android 首页按一次返回后的提示（use_mobile_back_navigation）；与翻页条一样放在页面
+        // 面板之外。
+        if exit_hint() {
+            p { "data-layout": "exit-hint", role: "status", "再按一次返回键退出" }
+        }
     }
 }
 

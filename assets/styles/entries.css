@@ -581,6 +581,24 @@
 [data-layout="entry-pagination"] button:disabled { opacity: 0.4; cursor: default; }
 [data-slot="entry-pagination-status"] { color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
 .app-shell:has([data-layout="entry-pagination"]) { padding-bottom: calc(92px + var(--safe-area-bottom)); }
+/* Android 首页“再按一次返回键退出”：停在翻页条上方，样式随翻页条。 */
+[data-layout="exit-hint"] {
+  position: fixed;
+  bottom: calc(76px + var(--safe-area-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 13;
+  margin: 0;
+  padding: 8px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-pill);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow-float);
+  color: var(--ink);
+  font-size: 0.9rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
 html:has([data-page="entries"][data-entry-scope="all"]) { overscroll-behavior-y: contain; }
 [data-slot="pull-refresh"] {
   display: block;
