@@ -1,10 +1,11 @@
 //! Backups of a library file (phase C5): whole transactions while another store writes, a target
-//! never replaced, one winner among backups of one target, only the scratch files a lock file
-//! records removed (including after a backup killed once it had published, and under another
-//! spelling only where the file system makes it the same lock file), names other than *.sqlite3
-//! refused, a missing library never created, the lock file required to be a regular file and not
-//! a link, a held lock waited for a bounded time, limits too long to represent taken as none, and
-//! nothing left behind by a backup that was cancelled, dropped or ran past its deadline.
+//! never replaced, one winner among backups of one target, only scratch-named entries of the
+//! target's scratch directory removed (including after a backup killed once it had published, and
+//! under another spelling only where the file system makes it the same directory), a scratch
+//! directory name that is not a directory refused, names other than *.sqlite3 refused, a missing
+//! library never created, the lock file required to be a regular file and not a link (and never
+//! written), a held lock waited for a bounded time, limits too long to represent taken as none,
+//! and nothing left behind by a backup that was cancelled, dropped or ran past its deadline.
 
 #[path = "support/library.rs"]
 mod library;
@@ -52,27 +53,38 @@ impl Dir {
         names
     }
 
+    /// The scratch directories (`<target>.partial`) and what they hold, as `dir/` and
+    /// `dir/entry`. A directory that cannot be read fails the test rather than reading as empty.
     fn scratch_names(&self) -> Vec<String> {
-        self.names().into_iter().filter(|name| name.contains(".partial-")).collect()
+        let mut found = Vec::new();
+        for name in self.names().into_iter().filter(|name| name.ends_with(".partial")) {
+            found.push(format!("{name}/"));
+            for entry in std::fs::read_dir(self.join(&name)).expect("read scratch directory") {
+                let entry = entry.expect("entry").file_name().to_string_lossy().into_owned();
+                found.push(format!("{name}/{entry}"));
+            }
+        }
+        found
     }
 
     /// Whether a scratch file itself (not a companion file of SQLite's) has content: the copy is
     /// running.
     fn scratch_filling(&self) -> bool {
         self.scratch_names().iter().any(|name| {
-            !["-journal", "-wal", "-shm"].iter().any(|suffix| name.ends_with(suffix))
+            !name.ends_with('/')
+                && !["-journal", "-wal", "-shm"].iter().any(|suffix| name.ends_with(suffix))
                 && std::fs::metadata(self.join(name)).is_ok_and(|metadata| metadata.len() > 0)
         })
     }
 
-    /// What the lock file of `target` records (empty when nothing, or when it does not exist).
-    fn record(&self, target: &str) -> String {
-        std::fs::read_to_string(self.join(&format!("{target}.lock"))).unwrap_or_default()
-    }
-
-    /// Leaves what a backup that died leaves: the lock file `lock` recording `scratch`.
-    fn record_scratch(&self, lock: &str, scratch: &str) {
-        std::fs::write(self.join(lock), scratch).expect("record");
+    /// Leaves a file named `name` in the scratch directory of `target`, as a backup that died
+    /// leaves its scratch file there.
+    fn leave_scratch(&self, target: &str, name: &str) -> PathBuf {
+        let dir = self.join(&format!("{target}.partial"));
+        std::fs::create_dir_all(&dir).expect("scratch directory");
+        let path = dir.join(name);
+        std::fs::write(&path, b"half a backup").expect("leftover");
+        path
     }
 
     /// Whether the directory's file system resolves names without regard to case.
@@ -181,8 +193,12 @@ async fn a_backup_holds_whole_transactions_while_another_store_writes() {
     let pairs = scalar(&target, "SELECT count(*) FROM pairs");
     assert_eq!(pairs % 2, 0, "whole transactions only ({pairs} rows)");
     assert!(commits > 0, "the other store kept writing");
-    assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
-    assert_eq!(dir.record("backup.sqlite3"), "", "the record is cleared");
+    assert!(dir.scratch_names().is_empty(), "{:?}", dir.scratch_names());
+    assert_eq!(
+        std::fs::read(dir.join("backup.sqlite3.lock")).expect("lock file"),
+        b"",
+        "never written"
+    );
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -228,80 +244,98 @@ async fn two_backups_of_one_target_publish_once() {
     assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
 }
 
-/// Only what the lock file records is removed: the scratch file a backup of this target that died
-/// left, with SQLite's companion of it. No other name is guessed to be a leftover, scratch-like
-/// or not, and the record is cleared (review C5-R1 B1, C5-R3-02).
+/// Only scratch-named entries of this target's scratch directory are removed: the scratch file a
+/// backup of this target that died left, with SQLite's companion of it. Other entries there stay
+/// (and keep the directory), and nothing outside it is touched: another target's scratch
+/// directory, or a file named the way scratch files used to be (review C5-R1 B1, C5-R3-02).
 #[tokio::test(flavor = "multi_thread")]
-async fn only_the_recorded_scratch_files_are_removed() {
+async fn only_scratch_named_entries_of_the_scratch_directory_are_removed() {
     let dir = Dir::new("leftovers");
     let _source = library(&dir, 3, 0).await;
     let target = dir.join("backup.sqlite3");
-    let leftover = format!("backup.sqlite3.partial-{NONCE}");
-    dir.record_scratch("backup.sqlite3.lock", &leftover);
-    for name in [leftover.clone(), format!("{leftover}-journal")] {
-        std::fs::write(dir.join(&name), b"half a backup").expect("leftover");
-    }
-    let kept = [
-        "backup.sqlite3.partial-kept".to_owned(),
-        format!("backup.sqlite3.partial-{OTHER}"),
-        format!("other.sqlite3.partial-{NONCE}"),
+    let leftovers = [
+        dir.leave_scratch("backup.sqlite3", &format!("partial-{NONCE}")),
+        dir.leave_scratch("backup.sqlite3", &format!("partial-{NONCE}-journal")),
     ];
-    for name in &kept {
-        std::fs::write(dir.join(name), b"not ours").expect("unrelated file");
-    }
+    let kept = [
+        dir.leave_scratch("backup.sqlite3", "partial-kept"),
+        dir.leave_scratch("backup.sqlite3", "notes.txt"),
+        dir.leave_scratch("other.sqlite3", &format!("partial-{OTHER}")),
+    ];
+    let old_style = dir.join(&format!("backup.sqlite3.partial-{NONCE}"));
+    std::fs::write(&old_style, b"not ours").expect("unrelated file");
 
     backup_library(&dir.library(), &target, options(), &BackupCancel::new()).await.expect("backup");
-    let names = dir.names();
-    for name in kept.iter().map(String::as_str).chain(["backup.sqlite3"]) {
-        assert!(names.iter().any(|present| present == name), "{name} kept: {names:?}");
+    for path in &leftovers {
+        assert!(!path.exists(), "{} removed: {:?}", path.display(), dir.scratch_names());
     }
-    assert!(!names.contains(&leftover), "{names:?}");
-    assert!(!names.contains(&format!("{leftover}-journal")), "{names:?}");
-    assert_eq!(dir.record("backup.sqlite3"), "");
+    for path in kept.iter().chain([&old_style]) {
+        assert!(path.exists(), "{} kept: {:?}", path.display(), dir.scratch_names());
+    }
     assert_eq!(integrity(&target), "ok");
 }
 
-/// A record names a scratch file that was never created (the backup died in between), or names
-/// something that is not a scratch file: nothing is removed, the record is cleared and the backup
-/// goes on.
+/// The scratch directory's name holding a file, or a link to a directory: refused before anything
+/// is removed, and nothing is created. A link is not followed into what it points to.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_record_is_acted_on_only_when_it_names_a_scratch_file() {
-    let dir = Dir::new("records");
+async fn a_scratch_directory_name_that_is_not_a_directory_is_refused() {
+    let dir = Dir::new("scratch-kind");
     let _source = library(&dir, 3, 0).await;
-    dir.record_scratch("first.sqlite3.lock", &format!("first.sqlite3.partial-{NONCE}"));
-    dir.record_scratch("second.sqlite3.lock", "library.sqlite3");
-    for target in ["first.sqlite3", "second.sqlite3"] {
-        backup_library(&dir.library(), &dir.join(target), options(), &BackupCancel::new())
+    std::fs::write(dir.join("file.sqlite3.partial"), b"someone's file").expect("a file");
+    let error =
+        backup_library(&dir.library(), &dir.join("file.sqlite3"), options(), &BackupCancel::new())
             .await
-            .expect("backup");
-        assert_eq!(dir.record(target), "", "{target}");
+            .expect_err("a file is no scratch directory");
+    assert!(error.to_string().contains("不是目录"), "{error}");
+    assert_eq!(std::fs::read(dir.join("file.sqlite3.partial")).expect("file"), b"someone's file");
+    assert!(!dir.join("file.sqlite3").exists());
+
+    let elsewhere = dir.join("elsewhere");
+    std::fs::create_dir(&elsewhere).expect("a directory");
+    let named_like_scratch = elsewhere.join(format!("partial-{NONCE}"));
+    std::fs::write(&named_like_scratch, b"not ours").expect("file there");
+    #[cfg(unix)]
+    let linked = std::os::unix::fs::symlink(&elsewhere, dir.join("link.sqlite3.partial"));
+    #[cfg(windows)]
+    let linked = std::os::windows::fs::symlink_dir(&elsewhere, dir.join("link.sqlite3.partial"));
+    match linked {
+        Ok(()) => {
+            let error = backup_library(
+                &dir.library(),
+                &dir.join("link.sqlite3"),
+                options(),
+                &BackupCancel::new(),
+            )
+            .await
+            .expect_err("a link is no scratch directory");
+            assert!(error.to_string().contains("不是目录"), "{error}");
+            assert!(named_like_scratch.exists(), "nothing removed through the link");
+        }
+        // Windows lets only administrators or developer mode create links.
+        Err(error) => eprintln!("SKIPPED the link half: cannot create a link: {error}"),
     }
-    assert_eq!(integrity(&dir.library()), "ok", "the library is still there");
-    assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
 }
 
-/// A backup of `Backup.sqlite3` died and left its scratch file, recorded in `Backup.sqlite3.lock`.
-/// The next backup, of `backup.sqlite3`, removes it where the file system makes the two names one
-/// target (both reach that lock file and its record); on a case-sensitive one they are two
-/// targets and it stays (review C5-R2-02, C5-R3-02).
+/// A backup of `Backup.sqlite3` died and left its scratch file in `Backup.sqlite3.partial`. The
+/// next backup, of `backup.sqlite3`, removes it where the file system makes the two names one
+/// target (both reach that directory, as they reach one lock file); on a case-sensitive one they
+/// are two targets and it stays (review C5-R2-02, C5-R3-02).
 #[tokio::test(flavor = "multi_thread")]
 async fn a_leftover_under_another_spelling_is_removed_only_for_the_same_target() {
     let dir = Dir::new("spelling");
     let _source = library(&dir, 3, 0).await;
     let insensitive = dir.case_insensitive();
     eprintln!("file system case-insensitive: {insensitive}");
-    let leftover = format!("Backup.sqlite3.partial-{NONCE}");
-    dir.record_scratch("Backup.sqlite3.lock", &leftover);
-    std::fs::write(dir.join(&leftover), b"half a backup").expect("leftover");
+    let leftover = dir.leave_scratch("Backup.sqlite3", &format!("partial-{NONCE}"));
 
     backup_library(&dir.library(), &dir.join("backup.sqlite3"), options(), &BackupCancel::new())
         .await
         .expect("backup");
-    let names = dir.names();
     assert_eq!(
-        names.contains(&leftover),
+        leftover.exists(),
         !insensitive,
-        "case-insensitive: {insensitive}, {names:?}"
+        "case-insensitive: {insensitive}, {:?}",
+        dir.scratch_names()
     );
 }
 
@@ -316,17 +350,15 @@ async fn a_backup_killed_after_publishing_is_tidied_by_the_next() {
     backup_library(&dir.library(), &target, options(), &BackupCancel::new())
         .await
         .expect("first backup");
-    let scratch_name = format!("backup.sqlite3.partial-{NONCE}");
-    let scratch = dir.join(&scratch_name);
+    std::fs::create_dir(dir.join("backup.sqlite3.partial")).expect("scratch directory");
+    let scratch = dir.join(&format!("backup.sqlite3.partial/partial-{NONCE}"));
     std::fs::hard_link(&target, &scratch).expect("second name, as a killed backup leaves it");
-    dir.record_scratch("backup.sqlite3.lock", &scratch_name);
 
     let error = backup_library(&dir.library(), &target, options(), &BackupCancel::new())
         .await
         .expect_err("the target exists");
     assert!(error.to_string().contains("已存在"), "{error}");
-    assert!(!scratch.exists(), "{:?}", dir.names());
-    assert_eq!(dir.record("backup.sqlite3"), "");
+    assert!(dir.scratch_names().is_empty(), "{:?}", dir.scratch_names());
     assert_eq!(integrity(&target), "ok");
 }
 
@@ -344,6 +376,7 @@ async fn only_names_ending_in_sqlite3_are_accepted() {
         "backup.lock".to_owned(),
         "backup.sqlite3.lock".to_owned(),
         format!("backup.sqlite3.partial-{NONCE}"),
+        "backup.sqlite3.partial".to_owned(),
         "library.sqlite3-wal".to_owned(),
         "library.sqlite3-shm".to_owned(),
         "library.sqlite3-journal".to_owned(),
@@ -473,9 +506,9 @@ async fn a_held_lock_is_waited_for_a_bounded_time() {
     assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
 }
 
-/// A copy past its deadline is interrupted: one past it from the start, and one whose deadline
-/// passes while it copies about 10 MB. No target, no scratch file; the target can be backed up
-/// afterwards.
+/// A copy past its deadline is interrupted: one past it from the start, and one with 1 ms, which
+/// passes while it prepares or copies about 10 MB (which of the two is not observed). No target,
+/// no scratch file; the target can be backed up afterwards.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_backup_cut_off_by_its_deadline_leaves_nothing() {
     let dir = Dir::new("deadline");
@@ -508,7 +541,7 @@ async fn limits_too_long_to_represent_are_none() {
 }
 
 /// Dropping the future of a backup whose scratch file is being filled cancels it: its thread stops
-/// on its own, removes its scratch file and clears its record, then releases the lock; nothing is
+/// on its own, removes its scratch file and directory, then releases the lock; nothing is
 /// published (review C5-R2-06, C5-R3-04).
 #[tokio::test(flavor = "multi_thread")]
 async fn a_dropped_backup_stops_and_leaves_nothing() {
@@ -532,8 +565,7 @@ async fn a_dropped_backup_stops_and_leaves_nothing() {
     }
     dir.wait_for_lock("backup.sqlite3");
     assert!(!target.exists());
-    assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
-    assert_eq!(dir.record("backup.sqlite3"), "");
+    assert!(dir.scratch_names().is_empty(), "{:?}", dir.scratch_names());
 }
 
 /// Cancelled before it starts, and cancelled once its scratch file exists (the copy is about to run
@@ -566,6 +598,5 @@ async fn a_cancelled_backup_stops_before_it_reports_and_leaves_nothing() {
     let error = running.await.expect("task").expect_err("cancelled while copying");
     assert!(error.to_string().contains("已取消"), "{error}");
     assert!(!target.exists());
-    assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
-    assert_eq!(dir.record("backup.sqlite3"), "");
+    assert!(dir.scratch_names().is_empty(), "{:?}", dir.scratch_names());
 }

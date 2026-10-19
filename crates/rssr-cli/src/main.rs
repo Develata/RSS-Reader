@@ -356,10 +356,17 @@ async fn backup(data_dir: Option<PathBuf>, args: BackupArgs) -> anyhow::Result<(
         ..BackupOptions::default()
     };
     let cancel = BackupCancel::new();
+    // Listening starts here, before the backup does; a listener that cannot be set up is reported
+    // instead of a backup Ctrl-C could not stop (review C5-R4-04).
+    #[cfg(unix)]
+    let mut interrupts = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+        .context("无法监听 Ctrl-C")?;
+    #[cfg(windows)]
+    let mut interrupts = tokio::signal::windows::ctrl_c().context("无法监听 Ctrl-C")?;
     let on_ctrl_c = {
         let cancel = cancel.clone();
         tokio::spawn(async move {
-            if tokio::signal::ctrl_c().await.is_ok() {
+            if interrupts.recv().await.is_some() {
                 // Cancel first: a console that cannot be written must not keep the backup going.
                 cancel.cancel();
                 let _ = writeln!(std::io::stderr(), "正在取消备份…");
