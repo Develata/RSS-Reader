@@ -43,6 +43,10 @@ rusqlite = { workspace = true, features = ["backup", "cache", "functions", "hook
 # The outbound policy file's owner check (crate::outbound).
 libc = "0.2"
 
+[target.'cfg(windows)'.dependencies]
+# A backup's lock file identity (crate::store::backup); std's file index is unstable on Windows.
+same-file = "1"
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "stream"] }

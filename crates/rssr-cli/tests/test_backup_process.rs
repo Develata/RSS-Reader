@@ -1,6 +1,7 @@
 //! `rssr-cli backup` as a process (phase C5): a backup killed while it copies leaves only its
 //! scratch file, which the next backup of that target removes before it writes a complete copy;
-//! a data directory without a library is refused and left without one.
+//! two processes backing up one target publish once; a data directory without a library is
+//! refused and left without one.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -81,10 +82,11 @@ async fn a_backup_killed_while_copying_is_cleaned_up_by_the_next() {
         .spawn()
         .expect("start backup");
     let started = Instant::now();
-    // Killed once its scratch file is being filled.
+    // Killed once its scratch file itself (not a companion file of SQLite's) is being filled.
     loop {
         let filling = dir.scratch_names().iter().any(|name| {
-            std::fs::metadata(dir.0.join(name)).is_ok_and(|metadata| metadata.len() > 0)
+            !["-journal", "-wal", "-shm"].iter().any(|suffix| name.ends_with(suffix))
+                && std::fs::metadata(dir.0.join(name)).is_ok_and(|metadata| metadata.len() > 0)
         });
         if filling {
             break;
@@ -101,6 +103,38 @@ async fn a_backup_killed_while_copying_is_cleaned_up_by_the_next() {
     let output =
         cli(&dir.data(), &["backup".as_ref(), target.as_os_str()]).output().expect("backup");
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(dir.scratch_names().is_empty(), "{:?}", dir.scratch_names());
+    assert_eq!(padding_rows(&target).await, 65_536);
+}
+
+/// Two processes back up to one target at once: one publishes; the other waits for the lock,
+/// then finds the target taken (or gives up waiting). Nothing else is left (review C5-R2-06).
+#[tokio::test(flavor = "multi_thread")]
+async fn two_processes_backing_up_one_target_publish_once() {
+    let dir = Dir::new("two");
+    large_library(&dir.data()).await;
+    let target = dir.0.join("backup.sqlite3");
+    let start = || {
+        cli(&dir.data(), &["backup".as_ref(), target.as_os_str()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("start backup")
+    };
+    let (first, second) = (start(), start());
+    let outputs =
+        [first.wait_with_output().expect("first"), second.wait_with_output().expect("second")];
+    let errors: Vec<String> = outputs
+        .iter()
+        .filter(|output| !output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stderr).into_owned())
+        .collect();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].contains("已存在") || errors[0].contains("另一个备份仍在写入"),
+        "{}",
+        errors[0]
+    );
     assert!(dir.scratch_names().is_empty(), "{:?}", dir.scratch_names());
     assert_eq!(padding_rows(&target).await, 65_536);
 }

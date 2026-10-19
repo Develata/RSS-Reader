@@ -8,14 +8,15 @@
 //!
 //! 1. The library is opened only if it exists and is a library: no creation, no v0.1 import.
 //! 2. Backups of one target exclude each other through an advisory lock on `<target>.lock`
-//!    (`flock` / `LockFileEx`), waited for a bounded time. The lock file must be a regular file
-//!    (on Unix it is opened without following a link and without blocking on a FIFO); it stays in
+//!    (`flock` / `LockFileEx`), waited for a bounded time. The lock file must be a regular file,
+//!    opened without following a link (and on Unix without blocking on a FIFO); it stays in
 //!    place, since removing it would let a waiter lock a file the next backup no longer sees.
-//! 3. Holding the lock, the scratch files this protocol names are removed first: only a backup
-//!    that died can have left them (a running one holds the lock), including one killed after it
-//!    published. Their names are `<target>.partial-<32 hex digits>`, with SQLite's `-journal`,
-//!    `-wal` or `-shm` after it; a target whose name has that form or ends in `.lock` is refused,
-//!    so the removal never touches a backup. Then a target that exists is refused.
+//! 3. Holding the lock, the scratch files of this target are removed first: only a backup that
+//!    died can have left them (a running one holds the lock), including one killed after it
+//!    published. Their names are `<owner>.partial-<32 hex digits>`, with SQLite's `-journal`,
+//!    `-wal` or `-shm` after it, where `<owner>.lock` is the lock file this backup holds: the
+//!    target's own name, or another spelling of it that the file system resolves to the same file
+//!    (a case-insensitive one). Then a target that exists is refused.
 //! 4. The scratch file is created only if missing (`VACUUM INTO` accepts an empty file), owner-only
 //!    on Unix as the library is, filled, synced and checked to be a library.
 //! 5. Cancellation is checked last before publication; past it the backup is published by a hard
@@ -24,11 +25,25 @@
 //!    file. The scratch name is then removed and the directory synced; a failure of those two is
 //!    logged, not reported, because the backup is already in place.
 //!
-//! The copy statement is interrupted at SQLite's next progress check once the deadline has passed
-//! or the backup was cancelled. The checks come every [`PROGRESS_OPS`] virtual machine
+//! Target names that a lock, a scratch file or SQLite would claim are refused, without regard to
+//! case: names ending in `.lock`, `-journal`, `-wal` or `-shm`, and the scratch form. A backup
+//! named like a database's companion file would be taken by that database as its journal or
+//! shared memory and overwritten the next time it is opened.
+//!
+//! Limits. The copy statement is interrupted at SQLite's next progress check once the deadline
+//! has passed or the backup was cancelled. The checks come every [`PROGRESS_OPS`] virtual machine
 //! instructions, so the deadline is cooperative: one instruction copying a large record runs to its
-//! end first. The lock wait has its own bound, and preparing and publishing are short file
-//! operations that check for cancellation between steps but are outside the deadline.
+//! end first. A deadline or lock wait too long to represent is none. Outside the deadline and
+//! cancellation: the lock wait (bounded on its own), the scan of the target's directory for
+//! leftovers (it checks for cancellation at each entry), SQLite waiting for another connection's
+//! lock (up to its busy timeout), closing the connection (which checkpoints the library's WAL when
+//! no other process has the library open), and the file operations around publication. While the
+//! copy reads its snapshot, another process's writes collect in the library's `-wal` file, which
+//! can be recycled only after the copy ends.
+//!
+//! The protocol assumes that only the user running the backup can change the target's directory:
+//! it does not defend against another writer replacing names there while it runs. Each call runs
+//! on a thread of its own; the caller bounds how many run at once (the CLI starts one).
 
 use std::fs::{File, OpenOptions, TryLockError};
 use std::hash::{BuildHasher, Hasher, RandomState};
@@ -93,7 +108,8 @@ pub struct BackupReport {
 }
 
 /// Writes a consistent copy of the library file `library` to `target`, which must not exist.
-/// Dropping the returned future cancels the backup; its thread still cleans up after itself.
+/// Dropping the returned future cancels the backup; its thread still cleans up after itself, and
+/// the result is lost.
 pub async fn backup_library(
     library: &Path,
     target: &Path,
@@ -128,15 +144,20 @@ fn run(
     cancel: &BackupCancel,
 ) -> StoreResult<BackupReport> {
     let (parent, name) = check_target(target)?;
-    let _lock = lock(&sibling(target, ".lock"), options.lock_wait, cancel, target)?;
-    remove_leftovers(parent, name, cancel, target)?;
+    let lock = lock(&sibling(target, ".lock"), options.lock_wait, cancel, target)?;
+    remove_leftovers(parent, name, &lock, cancel, target)?;
     if target.symlink_metadata().is_ok() {
         return Err(exists(target));
     }
     stop_if_cancelled(cancel, target)?;
     let scratch = Scratch::create(sibling(target, &format!(".partial-{}", nonce())))?;
     copy(library, &scratch.path, options.deadline, cancel, target)?;
-    OpenOptions::new().write(true).open(&scratch.path)?.sync_all()?;
+    stop_if_cancelled(cancel, target)?;
+    // Windows' `FlushFileBuffers` needs a handle that can write.
+    let written = OpenOptions::new().write(true).open(&scratch.path)?;
+    written.sync_all()?;
+    let bytes = written.metadata()?.len();
+    drop(written);
     files::check_library(&files::probe_uri(&scratch.path)?)?;
     stop_if_cancelled(cancel, target)?;
     match std::fs::hard_link(&scratch.path, target) {
@@ -152,16 +173,20 @@ fn run(
             )));
         }
     }
-    // Published: what follows only tidies up.
+    // Published: nothing below can fail the backup, it only tidies up.
     drop(scratch);
     if let Err(error) = sync_dir(parent) {
         tracing::warn!(%error, dir = %parent.display(), "备份已写入，同步所在目录失败");
     }
-    let bytes = std::fs::metadata(target)?.len();
+    drop(lock);
     Ok(BackupReport { path: target.to_path_buf(), bytes })
 }
 
-/// The target's directory and file name; a name this protocol uses for its own files is refused.
+/// The suffixes SQLite gives a database's companion files.
+const SQLITE_COMPANIONS: [&str; 3] = ["-journal", "-wal", "-shm"];
+
+/// The target's directory and file name; a name the protocol or SQLite claims is refused,
+/// without regard to case (a case-insensitive file system resolves `X.LOCK` to `x.lock`).
 fn check_target(target: &Path) -> StoreResult<(&Path, &str)> {
     let parent = target
         .parent()
@@ -170,9 +195,12 @@ fn check_target(target: &Path) -> StoreResult<(&Path, &str)> {
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| invalid(format!("备份文件名须是 UTF-8 文件名：{}", target.display())))?;
-    if name.ends_with(".lock") || scratch_owner(name).is_some() {
+    let folded = name.to_lowercase();
+    if [".lock"].iter().chain(&SQLITE_COMPANIONS).any(|suffix| folded.ends_with(suffix))
+        || scratch_owner(&folded).is_some()
+    {
         return Err(invalid(format!(
-            "备份文件名不能以 .lock 结尾，也不能是 <名字>.partial-<32 位十六进制> 的形式（留给备份自己的文件）：{name}"
+            "备份文件名不能以 .lock、-journal、-wal 或 -shm 结尾，也不能是 <名字>.partial-<32 位十六进制> 的形式，不分大小写（留给备份自己的文件与 SQLite 的附属文件）：{name}"
         )));
     }
     Ok((parent, name))
@@ -181,10 +209,8 @@ fn check_target(target: &Path) -> StoreResult<(&Path, &str)> {
 /// For a scratch file name of this protocol (`<owner>.partial-<32 hex>`, optionally followed by
 /// `-journal`, `-wal` or `-shm`), the owner's name.
 fn scratch_owner(name: &str) -> Option<&str> {
-    let base = ["-journal", "-wal", "-shm"]
-        .iter()
-        .find_map(|suffix| name.strip_suffix(suffix))
-        .unwrap_or(name);
+    let base =
+        SQLITE_COMPANIONS.iter().find_map(|suffix| name.strip_suffix(suffix)).unwrap_or(name);
     let (owner, nonce) = base.rsplit_once(".partial-")?;
     let hex =
         nonce.len() == 32 && nonce.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'));
@@ -200,21 +226,25 @@ fn lock(path: &Path, wait: Duration, cancel: &BackupCancel, target: &Path) -> St
     }
     let mut options = OpenOptions::new();
     options.create(true).truncate(false).write(true);
+    // Whatever is at the name now is opened itself, not what a link there points to: a link put
+    // in place after the check above is refused below (review C5-R2-04).
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::custom_flags(
         &mut options,
         libc::O_NONBLOCK | libc::O_NOFOLLOW,
     );
+    #[cfg(windows)]
+    std::os::windows::fs::OpenOptionsExt::custom_flags(&mut options, FILE_FLAG_OPEN_REPARSE_POINT);
     let file = options.open(path)?;
     if !file.metadata()?.is_file() {
         return Err(not_regular(path));
     }
-    let until = Instant::now() + wait;
+    let until = Instant::now().checked_add(wait);
     loop {
         stop_if_cancelled(cancel, target)?;
         match file.try_lock() {
             Ok(()) => return Ok(file),
-            Err(TryLockError::WouldBlock) if Instant::now() < until => {
+            Err(TryLockError::WouldBlock) if until.is_none_or(|until| Instant::now() < until) => {
                 std::thread::sleep(Duration::from_millis(50));
             }
             Err(TryLockError::WouldBlock) => {
@@ -228,10 +258,14 @@ fn lock(path: &Path, wait: Duration, cancel: &BackupCancel, target: &Path) -> St
     }
 }
 
-/// Removes the scratch files of `name` that a backup which died left in `dir`.
+/// Removes the scratch files a backup which died left in `dir` for the target `name`: those
+/// whose owner's lock file is `lock`, the one held. Another spelling of the name is the same
+/// target only where the file system resolves both to one file; a case-sensitive one keeps the
+/// scratch files of a target that differs only in case (review C5-R2-02).
 fn remove_leftovers(
     dir: &Path,
     name: &str,
+    lock: &File,
     cancel: &BackupCancel,
     target: &Path,
 ) -> StoreResult<()> {
@@ -239,7 +273,10 @@ fn remove_leftovers(
         stop_if_cancelled(cancel, target)?;
         let entry = entry?;
         let file_name = entry.file_name();
-        if file_name.to_str().and_then(scratch_owner) != Some(name) {
+        let Some(owner) = file_name.to_str().and_then(scratch_owner) else {
+            continue;
+        };
+        if owner != name && !is_held_lock(&dir.join(format!("{owner}.lock")), lock) {
             continue;
         }
         match std::fs::remove_file(entry.path()) {
@@ -267,11 +304,11 @@ fn copy(
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )?;
     connection::configure(&connection, Role::Writer)?;
-    let until = Instant::now() + deadline;
+    let until = Instant::now().checked_add(deadline);
     let stop = cancel.clone();
     connection.progress_handler(
         PROGRESS_OPS,
-        Some(move || stop.is_cancelled() || Instant::now() >= until),
+        Some(move || stop.is_cancelled() || until.is_some_and(|until| Instant::now() >= until)),
     )?;
     match connection.execute("VACUUM INTO ?1", [into]) {
         Ok(_) => Ok(()),
@@ -327,6 +364,38 @@ impl Drop for Scratch {
     }
 }
 
+/// Whether `path` names the regular file `held` is open on. On Unix it is read from the directory
+/// entry without opening it, so a FIFO cannot block; a link is never the lock.
+fn is_held_lock(path: &Path, held: &File) -> bool {
+    let Ok(metadata) = path.symlink_metadata() else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        held.metadata()
+            .is_ok_and(|held| held.dev() == metadata.dev() && held.ino() == metadata.ino())
+    }
+    // std's file index is unstable on Windows; `same-file` reads it.
+    #[cfg(windows)]
+    {
+        let held = held.try_clone().and_then(same_file::Handle::from_file);
+        matches!((same_file::Handle::from_path(path), held), (Ok(other), Ok(held)) if other == held)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = held;
+        false
+    }
+}
+
+/// `CreateFileW` opens a reparse point (a link) itself instead of its target.
+#[cfg(windows)]
+const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+
 #[cfg(unix)]
 fn sync_dir(dir: &Path) -> std::io::Result<()> {
     File::open(dir)?.sync_all()
@@ -344,8 +413,9 @@ fn sibling(target: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(name)
 }
 
-/// 128 bits from two randomly keyed hashers (std seeds each `RandomState` from the system's
-/// random source), as 32 lowercase hex digits.
+/// 32 lowercase hex digits from two SipHash outputs under std's random hasher keys (drawn from
+/// the system's random source once per thread, then varied for each `RandomState`; a backup runs
+/// on a new thread). Not a fresh 128-bit draw, but unpredictable; a collision fails `create_new`.
 fn nonce() -> String {
     let half = || RandomState::new().build_hasher().finish();
     format!("{:016x}{:016x}", half(), half())

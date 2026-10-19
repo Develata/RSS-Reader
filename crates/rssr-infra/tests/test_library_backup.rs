@@ -1,14 +1,18 @@
 //! Backups of a library file (phase C5): whole transactions while another store writes, a target
-//! never replaced, one winner among backups of one target, only this protocol's scratch files
-//! removed (including after a backup killed once it had published), reserved names refused, a
-//! missing library never created, the lock file required to be a regular file, and nothing left
-//! behind by a backup that was cancelled or ran past its deadline.
+//! never replaced, one winner among backups of one target, only this target's scratch files
+//! removed (including after a backup killed once it had published, and under another spelling
+//! only where the file system makes it the same target), reserved names refused (SQLite's
+//! companion names included), a missing library never created, the lock file required to be a
+//! regular file and not a link, a held lock waited for a bounded time, limits too long to
+//! represent taken as none, and nothing left behind by a backup that was cancelled, dropped or
+//! ran past its deadline.
 
 #[path = "support/library.rs"]
 mod library;
 
+use std::fs::TryLockError;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rssr_application::ParsedEntryData;
 use rssr_infra::store::LibraryStore;
@@ -50,6 +54,35 @@ impl Dir {
 
     fn scratch_names(&self) -> Vec<String> {
         self.names().into_iter().filter(|name| name.contains(".partial-")).collect()
+    }
+
+    /// Whether the directory's file system resolves names without regard to case.
+    fn case_insensitive(&self) -> bool {
+        std::fs::write(self.join("probe-case"), b"").expect("probe");
+        let insensitive = self.join("PROBE-CASE").exists();
+        std::fs::remove_file(self.join("probe-case")).expect("remove probe");
+        insensitive
+    }
+
+    /// Waits until nothing holds the lock of `target` (a backup's thread ends on its own).
+    fn wait_for_lock(&self, target: &str) {
+        let lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(self.join(&format!("{target}.lock")))
+            .expect("lock file");
+        let started = Instant::now();
+        loop {
+            match lock.try_lock() {
+                Ok(()) => return,
+                Err(TryLockError::WouldBlock) => {
+                    assert!(started.elapsed() < Duration::from_secs(30), "the lock stays held");
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(TryLockError::Error(error)) => panic!("lock: {error}"),
+            }
+        }
     }
 }
 
@@ -209,6 +242,31 @@ async fn only_this_targets_scratch_files_are_removed() {
     assert_eq!(integrity(&target), "ok");
 }
 
+/// A backup killed while writing `Backup.sqlite3` left its scratch file. The next backup, of
+/// `backup.sqlite3`, removes it where the file system makes the two names one target (both reach
+/// the same lock file); on a case-sensitive one they are two targets and it stays (review
+/// C5-R2-02).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_leftover_under_another_spelling_is_removed_only_for_the_same_target() {
+    let dir = Dir::new("spelling");
+    let _source = library(&dir, 3, 0).await;
+    let insensitive = dir.case_insensitive();
+    eprintln!("file system case-insensitive: {insensitive}");
+    std::fs::write(dir.join("Backup.sqlite3.lock"), b"").expect("its lock");
+    let leftover = format!("Backup.sqlite3.partial-{NONCE}");
+    std::fs::write(dir.join(&leftover), b"half a backup").expect("leftover");
+
+    backup_library(&dir.library(), &dir.join("backup.sqlite3"), options(), &BackupCancel::new())
+        .await
+        .expect("backup");
+    let names = dir.names();
+    assert_eq!(
+        names.contains(&leftover),
+        !insensitive,
+        "case-insensitive: {insensitive}, {names:?}"
+    );
+}
+
 /// A backup killed after it published, before removing its scratch name, leaves two names for one
 /// complete file. The next backup of that target removes the scratch name first, then refuses
 /// the target, which it leaves as it is (review C5-R1 S3).
@@ -236,7 +294,18 @@ async fn names_reserved_for_the_protocol_are_refused() {
     let dir = Dir::new("reserved");
     let _source = library(&dir, 3, 0).await;
     let before = dir.names();
-    for name in ["backup.lock".to_owned(), format!("backup.sqlite3.partial-{NONCE}")] {
+    // A backup at a companion name of the library (or of any database beside it) would be taken
+    // as its journal or shared memory and overwritten (review C5-R2-01).
+    for name in [
+        "backup.lock".to_owned(),
+        "backup.LOCK".to_owned(),
+        format!("backup.sqlite3.partial-{NONCE}"),
+        format!("backup.sqlite3.PARTIAL-{}", NONCE.to_uppercase()),
+        "library.sqlite3-wal".to_owned(),
+        "library.sqlite3-shm".to_owned(),
+        "library.sqlite3-journal".to_owned(),
+        "backup.sqlite3-WAL".to_owned(),
+    ] {
         let error =
             backup_library(&dir.library(), &dir.join(&name), options(), &BackupCancel::new())
                 .await
@@ -291,6 +360,31 @@ async fn a_lock_path_that_is_not_a_file_is_refused() {
     assert!(!target.exists());
 }
 
+/// A link at the lock's name is refused, never followed (review C5-R2-04).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_link_at_the_lock_name_is_refused() {
+    let dir = Dir::new("lock-link");
+    let _source = library(&dir, 3, 0).await;
+    let target = dir.join("backup.sqlite3");
+    std::fs::write(dir.join("elsewhere"), b"").expect("a regular file");
+    #[cfg(unix)]
+    let linked = std::os::unix::fs::symlink(dir.join("elsewhere"), dir.join("backup.sqlite3.lock"));
+    #[cfg(windows)]
+    let linked =
+        std::os::windows::fs::symlink_file(dir.join("elsewhere"), dir.join("backup.sqlite3.lock"));
+    if let Err(error) = linked {
+        // Windows lets only administrators or developer mode create links.
+        eprintln!("SKIPPED a_link_at_the_lock_name_is_refused: cannot create a link: {error}");
+        return;
+    }
+    let error = backup_library(&dir.library(), &target, options(), &BackupCancel::new())
+        .await
+        .expect_err("a link is no lock file");
+    assert!(error.to_string().contains("不是普通文件"), "{error}");
+    assert!(!target.exists());
+    assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
+}
+
 /// Another holder of the lock: the backup waits its bounded time, then gives up; a cancel while it
 /// waits stops it sooner.
 #[tokio::test(flavor = "multi_thread")]
@@ -307,10 +401,16 @@ async fn a_held_lock_is_waited_for_a_bounded_time() {
     holder.lock().expect("hold the lock");
 
     let short = BackupOptions { lock_wait: Duration::from_millis(200), ..options() };
+    let started = Instant::now();
     let error = backup_library(&dir.library(), &target, short, &BackupCancel::new())
         .await
         .expect_err("the lock stays held");
+    let waited = started.elapsed();
     assert!(error.to_string().contains("另一个备份"), "{error}");
+    assert!(
+        waited >= Duration::from_millis(200) && waited < Duration::from_secs(5),
+        "waited {waited:?}"
+    );
 
     let cancel = BackupCancel::new();
     let waiting = {
@@ -326,24 +426,65 @@ async fn a_held_lock_is_waited_for_a_bounded_time() {
     assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
 }
 
-/// A copy past its deadline is interrupted: no target, no scratch file; the target can be backed up
+/// A copy past its deadline is interrupted: one past it from the start, and one whose deadline
+/// passes while it copies about 10 MB. No target, no scratch file; the target can be backed up
 /// afterwards.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_backup_cut_off_by_its_deadline_leaves_nothing() {
     let dir = Dir::new("deadline");
-    let _source = library(&dir, 2_000, 0).await;
+    let _source = library(&dir, 5_000, 2_000).await;
     let target = dir.join("backup.sqlite3");
-    let zero = BackupOptions { deadline: Duration::ZERO, ..options() };
 
-    let error = backup_library(&dir.library(), &target, zero, &BackupCancel::new())
-        .await
-        .expect_err("a copy past its deadline is interrupted");
-    assert!(error.to_string().contains("超过时限"), "{error}");
-    assert!(!target.exists());
-    assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
+    for deadline in [Duration::ZERO, Duration::from_millis(1)] {
+        let cut = BackupOptions { deadline, ..options() };
+        let error = backup_library(&dir.library(), &target, cut, &BackupCancel::new())
+            .await
+            .expect_err("a copy past its deadline is interrupted");
+        assert!(error.to_string().contains("超过时限"), "{deadline:?}: {error}");
+        assert!(!target.exists());
+        assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
+    }
 
     backup_library(&dir.library(), &target, options(), &BackupCancel::new()).await.expect("backup");
-    assert_eq!(scalar(&target, "SELECT count(*) FROM entries"), 2_000);
+    assert_eq!(scalar(&target, "SELECT count(*) FROM entries"), 5_000);
+}
+
+/// Limits too long to represent are none, not a panic (review C5-R2-07).
+#[tokio::test(flavor = "multi_thread")]
+async fn limits_too_long_to_represent_are_none() {
+    let dir = Dir::new("unbounded");
+    let _source = library(&dir, 3, 0).await;
+    let target = dir.join("backup.sqlite3");
+    let unbounded = BackupOptions { deadline: Duration::MAX, lock_wait: Duration::MAX };
+    backup_library(&dir.library(), &target, unbounded, &BackupCancel::new()).await.expect("backup");
+    assert_eq!(integrity(&target), "ok");
+}
+
+/// Dropping the future of a running backup cancels it: its thread stops on its own, removes its
+/// scratch file, then releases the lock; nothing is published (review C5-R2-06).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_dropped_backup_stops_and_leaves_nothing() {
+    let dir = Dir::new("dropped");
+    let _source = library(&dir, 5_000, 2_000).await;
+    let target = dir.join("backup.sqlite3");
+    let library = dir.library();
+    let cancel = BackupCancel::new();
+    let started = async {
+        let started = Instant::now();
+        while dir.scratch_names().is_empty() {
+            assert!(started.elapsed() < Duration::from_secs(30), "the copy never started");
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+    };
+    tokio::select! {
+        result = backup_library(&library, &target, options(), &cancel) => {
+            panic!("the backup ended before it was dropped: {result:?}");
+        }
+        () = started => {}
+    }
+    dir.wait_for_lock("backup.sqlite3");
+    assert!(!target.exists());
+    assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
 }
 
 /// Cancelled before it starts, and cancelled once its scratch file exists (the copy is about to run

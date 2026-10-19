@@ -5054,6 +5054,7 @@ dependencies = [
  "rssr-application",
  "rssr-domain",
  "rusqlite",
+ "same-file",
  "serde",
  "serde_json",
  "sha2",
