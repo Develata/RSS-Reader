@@ -167,6 +167,14 @@
   overflow-x: auto;
 }
 
+/* Long formulas scroll inside themselves instead of widening the page. Keep the UA
+   `display` (`block math` / `math`): overriding it to `block` breaks MathML layout. */
+[data-slot="reader-body-html"] math {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 [data-layout="reader-pagination"] {
   margin-top: 30px;
   padding-top: 24px;

@@ -4,17 +4,58 @@
 //! [`super::live_display`] 重复的标签解析器和 HTML 实体解码。页面层只应该负责显示，
 //! 解析和消毒是基础设施职责，因此收敛到这里并复用同一个解析器。
 
+use std::sync::LazyLock;
+
 use url::Url;
 
 use super::live_display::{
     attribute_value, looks_like_wordpress_emoji_asset, normalize_html_for_live_display,
     parse_html_tags,
 };
+use super::math;
+
+/// 阅读页的消毒策略：基础策略加 MathML。只构建一次，`clean` 只需要共享引用。
+static READER_SANITIZER: LazyLock<ammonia::Builder<'static>> = LazyLock::new(|| {
+    let mut builder = base_policy();
+    math::extend_policy(&mut builder);
+    builder
+});
+
+/// 不含 MathML 的保守策略，只在公式后处理认不出 ammonia 输出时使用：宁可丢公式，
+/// 也不放行没经过预算的公式。
+static CONSERVATIVE_SANITIZER: LazyLock<ammonia::Builder<'static>> = LazyLock::new(base_policy);
+
+fn base_policy() -> ammonia::Builder<'static> {
+    let mut builder = ammonia::Builder::default();
+    builder
+        .add_tags(&["picture", "source"])
+        .add_url_schemes(&["data"])
+        .add_tag_attributes(
+            "img",
+            &[
+                "class",
+                "data-src",
+                "data-original",
+                "data-lazy-src",
+                "data-orig-file",
+                "data-srcset",
+                "srcset",
+                "sizes",
+                "loading",
+                "decoding",
+                "fetchpriority",
+                "media",
+                "type",
+            ],
+        )
+        .add_tag_attributes("source", &["src", "srcset", "data-srcset", "sizes", "media", "type"]);
+    builder
+}
 
 /// 判断一段纯文本字段里是否其实塞的是 HTML 片段。
 ///
 /// 不少 feed 会把完整 HTML 放进 `summary`/`content_text`，这时按纯文本渲染会把标签当字面量
-/// 显示出来。
+/// 显示出来。公式常夹在普通文字中间，所以只要有真正的 `<math` 起始标签也算。
 pub fn looks_like_html_fragment(raw: &str) -> bool {
     const HTML_FRAGMENT_MARKERS: &[&str] = &[
         "<p",
@@ -41,50 +82,40 @@ pub fn looks_like_html_fragment(raw: &str) -> bool {
     ];
 
     let trimmed = raw.trim();
-    if !(trimmed.starts_with('<') && trimmed.contains('>')) {
-        return false;
+    if trimmed.starts_with('<') && trimmed.contains('>') {
+        let lower = trimmed.to_ascii_lowercase();
+        if HTML_FRAGMENT_MARKERS.iter().any(|marker| lower.contains(marker)) {
+            return true;
+        }
     }
-
-    let lower = trimmed.to_ascii_lowercase();
-    HTML_FRAGMENT_MARKERS.iter().any(|marker| lower.contains(marker))
+    math::contains_math_start_tag(trimmed)
 }
 
 /// 把远端正文 HTML 处理成可以直接塞进阅读页的安全片段。
 ///
 /// 顺序是有意义的：先做 emoji 替换和地址归一化（需要看到原始标签和 `data-*` 懒加载属性），
-/// 再交给 ammonia 消毒。反过来做的话，归一化依赖的属性已经被消毒掉了。
+/// 再交给 ammonia 消毒，最后在消毒结果上施加公式预算。归一化放在消毒之后的话，它依赖的
+/// 属性已经被消毒掉了；公式预算放在消毒之前的话，只能面对未经规范化的原始标记。
 ///
 /// 返回 `None` 表示消毒后没有任何可显示内容，调用方应回退到纯文本。
 pub fn sanitize_reader_html(raw: &str, base_url: Option<&Url>) -> Option<String> {
     let normalized =
         normalize_html_for_live_display(&replace_wordpress_emoji_images(raw), base_url);
-    let sanitized = ammonia::Builder::default()
-        .add_tags(&["picture", "source"])
-        .add_url_schemes(&["data"])
-        .add_tag_attributes(
-            "img",
-            &[
-                "class",
-                "data-src",
-                "data-original",
-                "data-lazy-src",
-                "data-orig-file",
-                "data-srcset",
-                "srcset",
-                "sizes",
-                "loading",
-                "decoding",
-                "fetchpriority",
-                "media",
-                "type",
-            ],
-        )
-        .add_tag_attributes("source", &["src", "srcset", "data-srcset", "sizes", "media", "type"])
-        .clean(&normalized)
-        .to_string();
+    let sanitized = READER_SANITIZER.clean(&normalized).to_string();
+    let constrained = match math::constrain_formulas(&sanitized) {
+        Ok(None) => sanitized,
+        Ok(Some(rewritten)) => rewritten,
+        Err(math::UnexpectedSerialization) => CONSERVATIVE_SANITIZER.clean(&normalized).to_string(),
+    };
 
-    let trimmed = sanitized.trim();
-    (!trimmed.is_empty()).then(|| trimmed.to_string())
+    let trimmed = constrained.trim();
+    if trimmed.is_empty() {
+        None
+    } else if trimmed.len() == constrained.len() {
+        Some(constrained)
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 /// 把 WordPress 的 emoji 图片换回它的 `alt` 文本。
@@ -217,5 +248,107 @@ mod tests {
         assert!(looks_like_html_fragment("<p>Summary fallback</p>"));
         assert!(!looks_like_html_fragment("plain summary text"));
         assert!(!looks_like_html_fragment("2 > 1 and 1 < 2"));
+        assert!(looks_like_html_fragment("Euler: <math><mi>e</mi></math>"));
+        assert!(!looks_like_html_fragment("see &lt;math&gt; and <mathematics>"));
+    }
+
+    fn sanitize(raw: &str) -> String {
+        sanitize_reader_html(raw, None).expect("sanitized html")
+    }
+
+    #[test]
+    fn keeps_mathml_formulas() {
+        let sanitized = sanitize(
+            r#"<p>x = <math display="block"><mfrac><mi>a</mi><mi>b</mi></mfrac></math></p>"#,
+        );
+        assert_eq!(
+            sanitized,
+            r#"<p>x = <math display="block"><mfrac><mi>a</mi><mi>b</mi></mfrac></math></p>"#
+        );
+    }
+
+    #[test]
+    fn keeps_operand_structure_of_legacy_presentation_elements() {
+        let menclose = sanitize(
+            r#"<math><mfrac><menclose notation="box"><mi>a</mi><mo>+</mo><mi>b</mi></menclose><mi>c</mi></mfrac></math>"#,
+        );
+        assert!(menclose.contains(
+            r#"<mfrac><menclose notation="box"><mi>a</mi><mo>+</mo><mi>b</mi></menclose><mi>c</mi></mfrac>"#
+        ));
+
+        let none =
+            sanitize("<math><mmultiscripts><mi>T</mi><none/><mi>i</mi></mmultiscripts></math>");
+        assert!(none.contains("<mmultiscripts><mi>T</mi><none></none><mi>i</mi></mmultiscripts>"));
+    }
+
+    #[test]
+    fn keeps_semantics_with_tex_annotation() {
+        let sanitized = sanitize(
+            r#"<math><semantics><mrow><msup><mi>x</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">x^2</annotation></semantics></math>"#,
+        );
+        assert!(sanitized.contains(r#"<annotation encoding="application/x-tex">x^2</annotation>"#));
+        assert!(sanitized.contains("<msup><mi>x</mi><mn>2</mn></msup>"));
+    }
+
+    #[test]
+    fn strips_dangerous_attributes_from_mathml() {
+        let sanitized = sanitize(
+            r#"<math onload="alert(1)" style="color:red" href="javascript:alert(2)" mathcolor="red"><mi xlink:href="javascript:alert(3)" class="x" mathvariant="bold">x</mi><mspace width="1e9em" height="1em"></mspace><mstyle scriptlevel="-8"><mi>y</mi></mstyle></math>"#,
+        );
+        for forbidden in
+            ["onload", "style=", "href", "javascript", "mathcolor", "class=", "1e9em", "-8"]
+        {
+            assert!(!sanitized.contains(forbidden), "{forbidden} in {sanitized}");
+        }
+        assert!(sanitized.contains(r#"<mi mathvariant="bold">x</mi>"#));
+        assert!(sanitized.contains(r#"<mspace height="1em"></mspace>"#));
+    }
+
+    #[test]
+    fn neutralizes_namespace_confusion_payloads() {
+        for payload in [
+            "<math><mtext><table><mglyph><style><img src=x onerror=alert(1)>",
+            r#"<math><annotation-xml encoding="text/html"><img src=x onerror=alert(1)></annotation-xml></math>"#,
+            "<math><mi><svg><foreignObject><img src=x onerror=alert(1)></foreignObject></svg></mi></math>",
+            "<math><mtext><svg><script>alert(1)</script></svg></mtext></math>",
+            "<svg><math><mi>x</mi></math></svg>",
+            "<math><style><img src=x onerror=alert(1)></style></math>",
+        ] {
+            let sanitized = sanitize_reader_html(payload, None).unwrap_or_default();
+            for forbidden in [
+                "onerror",
+                "<script",
+                "<style",
+                "<svg",
+                "<foreignobject",
+                "annotation-xml",
+                "mglyph",
+            ] {
+                assert!(
+                    !sanitized.to_ascii_lowercase().contains(forbidden),
+                    "{forbidden} survived {payload}: {sanitized}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn drops_the_katex_html_copy_end_to_end() {
+        let sanitized = sanitize(
+            r#"<p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi></mrow><annotation encoding="application/x-tex">x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span></span></span></span></p>"#,
+        );
+        assert_eq!(
+            sanitized,
+            r#"<p><span><span><math><semantics><mrow><mi>x</mi></mrow><annotation encoding="application/x-tex">x</annotation></semantics></math></span></span></p>"#
+        );
+    }
+
+    #[test]
+    fn keeps_unrelated_classes_stripped() {
+        let sanitized = sanitize(
+            r#"<p><span class="katex-html other">x</span><span class="mord">y</span></p>"#,
+        );
+        // ammonia 开了 class 白名单后，被过滤掉的 class 会留下空属性，无害。
+        assert_eq!(sanitized, r#"<p><span class="katex-html">x</span><span class="">y</span></p>"#);
     }
 }

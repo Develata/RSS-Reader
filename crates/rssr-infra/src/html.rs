@@ -9,6 +9,7 @@
 //! 演进。正文的解析、归一化与消毒属于基础设施职责，页面层只负责显示，所以统一放在这里。
 
 mod live_display;
+mod math;
 mod reader;
 
 pub use live_display::normalize_html_for_live_display;
