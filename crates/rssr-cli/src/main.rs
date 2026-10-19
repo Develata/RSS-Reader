@@ -14,7 +14,7 @@ use rssr_infra::{
     outbound::{self, OutboundPolicy},
     store::{
         StoreOptions,
-        backup::{BackupOptions, backup_library},
+        backup::{BackupCancel, BackupOptions, backup_library},
         local::{self, open_library_in},
     },
 };
@@ -341,24 +341,31 @@ struct CliServices {
     policy: OutboundPolicy,
 }
 
-/// `backup`: needs no outbound policy or use cases, and refuses a data directory without a
-/// library rather than creating an empty one to copy.
+/// `backup`: copies the data directory's library file as it is. It needs no outbound policy or
+/// use cases and does not open the library through the store, so it never creates or imports one.
+/// Ctrl-C asks the backup to stop; the command still waits for it and reports what it did.
 async fn backup(data_dir: Option<PathBuf>, args: BackupArgs) -> anyhow::Result<()> {
-    let data_dir = resolve_data_dir(data_dir)?;
-    let library = data_dir.join(local::LIBRARY_FILE);
+    let library = resolve_data_dir(data_dir)?.join(local::LIBRARY_FILE);
     if !library.is_file() {
         anyhow::bail!("没有找到资料库：{}", library.display());
     }
-    let opened =
-        open_library_in(&data_dir, StoreOptions::default()).await.context("打开本地资料库失败")?;
     let options = BackupOptions {
         deadline: std::time::Duration::from_secs(args.timeout),
         ..BackupOptions::default()
     };
-    let report = tokio::select! {
-        report = backup_library(&opened.store, &args.file, options) => report.context("备份失败")?,
-        _ = tokio::signal::ctrl_c() => anyhow::bail!("已取消备份，未写入 {}", args.file.display()),
+    let cancel = BackupCancel::new();
+    let on_ctrl_c = {
+        let cancel = cancel.clone();
+        tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                eprintln!("正在取消备份…");
+                cancel.cancel();
+            }
+        })
     };
+    let result = backup_library(&library, &args.file, options, &cancel).await;
+    on_ctrl_c.abort();
+    let report = result.context("备份失败")?;
     println!("已备份到 {}（{} 字节）", report.path.display(), report.bytes);
     Ok(())
 }
