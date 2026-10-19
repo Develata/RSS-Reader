@@ -57,10 +57,14 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
   结束标签、属性值和正文里的 `<` `>` 已转义），形状不符时返回错误，调用方退回不含 MathML 的保守策略。
 - 预算以最外层 `<math>` 为原子单位：单公式元素 ≤ 2048、深度 ≤ 64、文本 ≤ 16 KiB；整篇按 MathML 保留的
   公式 ≤ 4096 个、元素合计 ≤ 100,000。超限公式整体替换为 `<code>` + TeX annotation（序列化后的转义片段，
-  不解码；空白 annotation 跳过）或 `alttext`，再不然显示占位文字；文本含省略号 ≤ 2 KiB。**阈值是实验参数，尚未用问题订阅源校准。**
-- KaTeX 去重：`span.katex` 恰好两个元素子节点（`katex-mathml` 在前且其中 `<math>` 有元素子节点，
-  `katex-html` 在后），其间只有空白时，删掉 HTML 副本并去掉三个 class；其它形状原样保留；与预算替换
-  重叠时整组让位；嵌在已删除 HTML 副本里的容器跳过。重叠检查用单调游标，整体线性。
+  不解码；只含空白或 `&nbsp;` 的 annotation 跳过）或 `alttext`，再不然显示占位文字；文本含省略号 ≤ 2 KiB。**阈值是实验参数，尚未用问题订阅源校准。**
+- 编辑规划是对标签表的单遍遍历（`plan_edits`）：产出覆盖子树的编辑后立即跳过该子树，其余编辑只覆盖
+  单个起始标签，所以编辑按构造有序、互不重叠，不排序、不做区间比较。最外层 `<math>` 是原子单位，判定预算后
+  整个跳过，内部（含集成点里的嵌套公式与 KaTeX 结构）不再改写——保留的公式原样输出，不去重也不丢内容。
+- KaTeX 去重：`span.katex` 恰好两个元素子节点（`katex-mathml` 在前且其中第一个 `<math>` 有元素子节点，
+  `katex-html` 在后），其间只有空白时，去掉两个起始标签上的识别 class，继续遍历 MathML 分支（其中公式照常过
+  预算），走到 HTML 副本时整段删除；嵌在 MathML 分支里的容器同样处理（HTML 副本下标入栈，后进先出）。
+  “分支内第一个公式”用预计算的下一个 `<math>` 位置数组 O(1) 查询。其它形状原样保留。
 
 ### 样式
 
@@ -70,11 +74,11 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
 
 ### 自动化验证
 
-本机内存紧张（可用提交约 3 GB），全部以 `-j 1` 执行。以下为评审修复后的最终结果（首轮实现的同组命令也全部通过）。
+本机内存紧张（可用提交约 3 GB），全部以 `-j 1` 执行。以下为第三轮修复后的最终结果（前两轮的同组命令也全部通过）。
 
 - `cargo fmt --all --check`：通过
 - `cargo clippy --workspace --all-targets --locked -j 1 -- -D warnings`：通过
-- `cargo test --workspace --locked -j 1`：通过，43 个测试套件合计 398 passed / 0 failed / 4 ignored
+- `cargo test --workspace --locked -j 1`：通过，43 个测试套件合计 403 passed / 0 failed / 4 ignored（第三轮修复后）
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked -j 1`：通过
 - `bash scripts/run_wasm_contract_harness.sh wasm_reader_html_contract_harness`（headless Chrome，
   wasm-bindgen-test-runner 0.2.126，真实 chromedriver）：通过，5 passed；含超预算降级路径（`<code>` 在 HTML
@@ -83,7 +87,8 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
   （390px 容器被撑到 1693px），恢复后通过
 - `cargo test -p rssr-infra --release --test test_reader_html_stress -- --ignored --nocapture`（计时，不作断言）：
   嵌套 mrow 1 万层 21 ms；单公式 20 万个兄弟 `mi`（2 MB）399 ms；6 万个公式 232 ms；2 万个 KaTeX 包装（2.3 MB）
-  360 ms；纯文本 4 MiB 74 ms；嵌套 div 1 万层 204 ms、5 万层 8.44 s
+  382 ms；KaTeX 逐层嵌套 2 万层（1.9 MB）322 ms；纯文本 4 MiB 56 ms；嵌套 div 1 万层 294 ms、5 万层 8.48 s
+  （第三轮修复后重测）
 - 未执行：其余三个 wasm harness（未改动它们覆盖的代码，交给 CI）；Android target check（未改移动端交互）
 
 ### 正式评审
@@ -93,8 +98,13 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
   `mpadded` 百分比可嵌套放大 → 空白/偏移类长度拒绝百分比；`mfenced` 定界符被删 → 保留 `open`/`close`/`separators`；
   空 TeX annotation 遮挡 `alttext` → 跳过空白 annotation；harness 未覆盖降级路径 → 新增浏览器用例并断言首次解析逐字不变；
   降级文本超出 2 KiB 3 字节 → 预留省略号字节。
-- 自查追加：嵌套 KaTeX 容器会产生重叠编辑导致切片 panic（首轮即存在）→ 跳过嵌在已删除副本里的容器，
-  `apply_edits` 加前置条件断言；顺带保留 `maction selection`。
+- 自查追加：嵌套 KaTeX 容器会产生重叠编辑导致切片 panic（首轮即存在）；顺带保留 `maction selection`。
+- Codex 复核 `c31313b..bf90393`：reject。上轮 7 条中 5 条 RESOLVED、2 条 PARTIALLY；新发现：被拒的外层 KaTeX 组
+  推进了共享游标，内层组漏检预算重叠，41 KB 输入仍可切片 panic；`has_non_empty_formula` 对嵌套容器重复扫描，
+  1.9 MB 输入 4 亿次检查；“跳过嵌在已接受容器里的组”误伤保留的 MathML 分支；`&nbsp;` 形式的空白 annotation
+  仍遮挡 `alttext`。修复：区间 + 游标 + 排序的合并模型整体换成单遍编辑规划（见上），分支内公式改为 O(1) 查询，
+  空白判断识别 `&nbsp;`；顺带接受 `linethickness` 的 `thin`/`medium`/`thick`。评审的两个组合反例与嵌套链
+  反例均已加入回归。
 
 ### 手工验收
 
@@ -103,7 +113,7 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
 
 ## 结果
 
-- 自动化验证通过；评审修复待 Codex 复核；阈值待用真实订阅源校准。
+- 自动化验证通过；第三轮修复待 Codex 复核；阈值待用真实订阅源校准。
 - 用户影响：带 MathML 的正文重新打开即显示公式；KaTeX 公式不再重复显示。
 
 ## 风险与后续事项

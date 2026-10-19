@@ -16,7 +16,8 @@
 //! `script`/`style` 已删、非 void 元素都有显式结束标签、属性值里的 `<` `>` `"` `&` 和正文里的
 //! `<` `>` `&` 都已转义。所以“遇到 `<` 就是标签、遇到 `>` 就是标签结束”在这里是精确的。
 //! 后处理只删除子树、去掉 KaTeX 识别 class、把超限公式替换成 `<code>` 包着的转义文本；
-//! 不新增其它标签或属性，不会削弱消毒。各步都是对标签表的单遍线性处理。
+//! 不新增其它标签或属性，不会削弱消毒。扫描、配对和编辑规划都是对标签表的单遍处理，
+//! 编辑按构造即有序且互不重叠，总代价与输入长度成线性。
 
 use std::borrow::Cow;
 
@@ -235,7 +236,10 @@ fn filter_attribute<'a>(element: &str, attribute: &str, value: &'a str) -> Optio
             is_bounded_length(value, LengthRule::ABSOLUTE)
         }
         // 线宽的百分比相对默认线宽，不随嵌套累积。
-        "linethickness" => is_bounded_length(value, LengthRule::PERCENT),
+        "linethickness" => {
+            is_keyword(value, &["thin", "medium", "thick"])
+                || is_bounded_length(value, LengthRule::PERCENT)
+        }
         // 算符伸缩尺寸的百分比和无单位倍数都相对算符自身的默认尺寸。
         "minsize" | "maxsize" => is_bounded_length(value, LengthRule::PERCENT_OR_MULTIPLIER),
         "scriptlevel" => is_non_growing_script_level(value),
@@ -397,57 +401,11 @@ pub(super) fn constrain_formulas(html: &str) -> Result<Option<String>, Unexpecte
     }
 
     let document = SerializedDocument::scan(html)?;
-    let mut edits = Vec::new();
-    let mut budget = ArticleBudget::default();
-    let mut index = 0;
-    while index < document.tags.len() {
-        let tag = &document.tags[index];
-        if tag.kind == TagKind::Start && tag.name == "math" {
-            let close = document.close[index];
-            let stats = document.formula_stats(index, close);
-            if !budget.admit(&stats) {
-                edits.push(Edit {
-                    start: tag.start,
-                    end: document.tags[close].end,
-                    replacement: Cow::Owned(document.fallback(index, close)),
-                });
-            }
-            // 跳过整个公式：里面的 `<math>`（集成点里的嵌套公式）随外层一起计数和替换。
-            index = close + 1;
-        } else {
-            index += 1;
-        }
-    }
-
-    // KaTeX 去重是可选优化：一个容器的三处编辑要么全做，要么全不做；任何一处与预算替换
-    // 重叠就整组让位。两组编辑都按文档顺序产生，用单调游标做区间比较，整体线性。
-    // 嵌在已接受容器 HTML 副本里的容器会随副本一起删掉，跳过它以免编辑重叠。
-    let budget_edits = edits.len();
-    let mut cursor = 0;
-    let mut accepted_katex_end = 0;
-    for group in document.katex_edits() {
-        if group[0].start >= accepted_katex_end
-            && group.iter().all(|edit| !overlaps_sorted(&edits[..budget_edits], &mut cursor, edit))
-        {
-            accepted_katex_end = group[2].end;
-            edits.extend(group);
-        }
-    }
-
+    let edits = document.plan_edits();
     if edits.is_empty() {
         return Ok(None);
     }
-    edits.sort_by_key(|edit| edit.start);
     Ok(Some(apply_edits(html, &edits)))
-}
-
-/// `sorted` 按起点升序且互不重叠；`edit` 的起点在多次调用间单调不减。
-/// 游标跳过所有在 `edit` 之前结束的区间，于是只需看游标处那一个。
-fn overlaps_sorted(sorted: &[Edit<'_>], cursor: &mut usize, edit: &Edit<'_>) -> bool {
-    while sorted.get(*cursor).is_some_and(|candidate| candidate.end <= edit.start) {
-        *cursor += 1;
-    }
-    sorted.get(*cursor).is_some_and(|candidate| candidate.start < edit.end)
 }
 
 #[derive(Default)]
@@ -588,14 +546,119 @@ impl<'a> SerializedDocument<'a> {
         FormulaStats { elements, depth: max_depth, text_bytes }
     }
 
+    /// 单遍遍历标签表，按文档顺序产出编辑。
+    ///
+    /// 不变式：凡是产出覆盖整棵子树的编辑（公式降级、删除 KaTeX 的 HTML 副本），遍历立即跳过
+    /// 那棵子树；其余编辑只覆盖单个起始标签。所以编辑起点严格递增、区间互不重叠，无需排序。
+    ///
+    /// - 最外层 `<math>` 是原子单位：判定预算后整个跳过，内部（包括集成点里的嵌套公式和
+    ///   KaTeX 结构）不再处理。
+    /// - KaTeX 容器命中时，去掉容器和 MathML 分支起始标签上的识别 class，继续遍历 MathML 分支
+    ///   （其中的公式照常过预算），走到 HTML 副本时整段删除并跳过。嵌在 MathML 分支里的容器
+    ///   同样会被处理；它的 HTML 副本位置更靠前，用栈按后进先出匹配。
+    fn plan_edits(&self) -> Vec<Edit<'static>> {
+        let next_formula = self.next_formula_starts();
+        let mut edits = Vec::new();
+        let mut budget = ArticleBudget::default();
+        let mut pending_html_copies = Vec::new();
+        let mut index = 0;
+        while index < self.tags.len() {
+            if pending_html_copies.last() == Some(&index) {
+                pending_html_copies.pop();
+                edits.push(self.removal(index));
+                index = self.close[index] + 1;
+                continue;
+            }
+
+            let tag = &self.tags[index];
+            if tag.kind == TagKind::Start && tag.name == "math" {
+                let close = self.close[index];
+                if !budget.admit(&self.formula_stats(index, close)) {
+                    edits.push(Edit {
+                        start: tag.start,
+                        end: self.tags[close].end,
+                        replacement: Cow::Owned(self.fallback(index, close)),
+                    });
+                }
+                index = close + 1;
+                continue;
+            }
+
+            if let Some([mathml, html_copy]) = self.katex_pair(index, &next_formula) {
+                edits.push(self.without_class(index));
+                edits.push(self.without_class(mathml));
+                pending_html_copies.push(html_copy);
+                index = mathml + 1;
+                continue;
+            }
+            index += 1;
+        }
+        edits
+    }
+
+    /// `next[i]` 是下标不小于 `i` 的第一个 `<math>` 起始标签，没有时为 `usize::MAX`。
+    fn next_formula_starts(&self) -> Vec<usize> {
+        let mut next = vec![usize::MAX; self.tags.len() + 1];
+        for index in (0..self.tags.len()).rev() {
+            let tag = &self.tags[index];
+            next[index] = if tag.kind == TagKind::Start && tag.name == "math" {
+                index
+            } else {
+                next[index + 1]
+            };
+        }
+        next
+    }
+
+    /// KaTeX 双份输出：`span.katex` 恰好有两个元素子节点，依次是 `span.katex-mathml` 和
+    /// `span.katex-html`，子节点之间只有空白，且 MathML 分支里的第一个 `<math>` 消毒后仍有
+    /// 元素子节点。命中时返回两个分支的下标；任何别的形状都不处理。
+    fn katex_pair(&self, index: usize, next_formula: &[usize]) -> Option<[usize; 2]> {
+        if !self.is_span_with_class(index, KATEX_CLASS) {
+            return None;
+        }
+        let [mathml, html_copy] = self.two_element_children(index)?;
+        let formula = next_formula[mathml + 1];
+        let has_formula =
+            formula < self.close[mathml] && self.tags[formula + 1].kind != TagKind::End;
+        (self.is_span_with_class(mathml, KATEX_MATHML_CLASS)
+            && self.is_span_with_class(html_copy, KATEX_HTML_CLASS)
+            && has_formula)
+            .then_some([mathml, html_copy])
+    }
+
+    fn without_class(&self, index: usize) -> Edit<'static> {
+        let tag = &self.tags[index];
+        Edit {
+            start: tag.start,
+            end: tag.end,
+            replacement: Cow::Owned(format!(
+                "<{}{}>",
+                tag.name,
+                without_attribute(tag.attributes, "class")
+            )),
+        }
+    }
+
+    fn removal(&self, index: usize) -> Edit<'static> {
+        Edit {
+            start: self.tags[index].start,
+            end: self.tags[self.close[index]].end,
+            replacement: Cow::Borrowed(""),
+        }
+    }
+
     /// 超限公式的替代文本：优先 TeX 源码，其次 `alttext`，都没有就用占位文字。
     ///
     /// 两种来源都直接搬用序列化后的转义片段，不解码，所以不可能还原出标签。
     fn fallback(&self, open: usize, close: usize) -> String {
-        let non_blank = |text: &'a str| Some(text.trim()).filter(|text| !text.is_empty());
         let source = self
             .tex_annotation(open, close)
-            .or_else(|| attribute_value(self.tags[open].attributes, "alttext").and_then(non_blank))
+            .or_else(|| {
+                attribute_value(self.tags[open].attributes, "alttext")
+                    .filter(|text| !is_blank(text))
+            })
+            .map(str::trim)
             .unwrap_or(FALLBACK_PLACEHOLDER);
         format!("<code>{}</code>", truncate_escaped_text(source, MAX_FALLBACK_BYTES))
     }
@@ -609,54 +672,9 @@ impl<'a> SerializedDocument<'a> {
                     .is_some_and(|encoding| encoding.eq_ignore_ascii_case("application/x-tex"));
             // annotation 里只该有文本；带子元素的不当作源码用，空白的跳过，继续找下一个。
             (is_tex && self.close[index] == index + 1)
-                .then(|| self.html[tag.end..self.tags[index + 1].start].trim())
-                .filter(|text| !text.is_empty())
+                .then(|| &self.html[tag.end..self.tags[index + 1].start])
+                .filter(|text| !is_blank(text))
         })
-    }
-
-    /// KaTeX 双份输出：`span.katex` 恰好有两个元素子节点，依次是 `span.katex-mathml`（里面的
-    /// `<math>` 消毒后仍有元素子节点）和 `span.katex-html`，子节点之间只有空白。命中时删掉
-    /// HTML 副本、去掉三个识别 class；任何别的形状都原样保留。
-    ///
-    /// 每个命中的容器产出一组按位置升序的三处编辑；各组按文档顺序排列。
-    fn katex_edits(&self) -> Vec<[Edit<'static>; 3]> {
-        let mut groups = Vec::new();
-        for index in 0..self.tags.len() {
-            if !self.is_span_with_class(index, KATEX_CLASS) {
-                continue;
-            }
-            let Some([mathml, html]) = self.two_element_children(index) else {
-                continue;
-            };
-            if !self.is_span_with_class(mathml, KATEX_MATHML_CLASS)
-                || !self.is_span_with_class(html, KATEX_HTML_CLASS)
-                || !self.has_non_empty_formula(mathml)
-            {
-                continue;
-            }
-
-            let unclassed = |span: usize| {
-                let span_tag = &self.tags[span];
-                Edit {
-                    start: span_tag.start,
-                    end: span_tag.end,
-                    replacement: Cow::Owned(format!(
-                        "<span{}>",
-                        without_attribute(span_tag.attributes, "class")
-                    )),
-                }
-            };
-            groups.push([
-                unclassed(index),
-                unclassed(mathml),
-                Edit {
-                    start: self.tags[html].start,
-                    end: self.tags[self.close[html]].end,
-                    replacement: Cow::Borrowed(""),
-                },
-            ]);
-        }
-        groups
     }
 
     fn is_span_with_class(&self, index: usize, class: &str) -> bool {
@@ -668,13 +686,14 @@ impl<'a> SerializedDocument<'a> {
     }
 
     /// 直接子元素恰好两个、且子元素之间及前后只有空白文本时返回它们的下标。
+    /// 最多看三个子节点就返回，代价与子树大小无关。
     fn two_element_children(&self, parent: usize) -> Option<[usize; 2]> {
         let parent_close = self.close[parent];
         let mut children = Vec::with_capacity(2);
         let mut index = parent + 1;
         let mut text_start = self.tags[parent].end;
         while index < parent_close {
-            if !self.html[text_start..self.tags[index].start].trim().is_empty() {
+            if !is_blank(&self.html[text_start..self.tags[index].start]) {
                 return None;
             }
             children.push(index);
@@ -684,20 +703,20 @@ impl<'a> SerializedDocument<'a> {
             text_start = self.tags[self.close[index]].end;
             index = self.close[index] + 1;
         }
-        if !self.html[text_start..self.tags[parent_close].start].trim().is_empty() {
+        if !is_blank(&self.html[text_start..self.tags[parent_close].start]) {
             return None;
         }
         children.try_into().ok()
     }
+}
 
-    fn has_non_empty_formula(&self, container: usize) -> bool {
-        (container + 1..self.close[container]).any(|index| {
-            let tag = &self.tags[index];
-            tag.kind == TagKind::Start
-                && tag.name == "math"
-                && self.tags[index + 1].kind != TagKind::End
-        })
+/// 转义后的文本是否只有空白。html5ever 把 U+00A0 序列化成 `&nbsp;`，其它空白保持原字符。
+fn is_blank(escaped: &str) -> bool {
+    let mut rest = escaped.trim_start();
+    while let Some(after) = rest.strip_prefix("&nbsp;") {
+        rest = after.trim_start();
     }
+    rest.is_empty()
 }
 
 fn parse_tag(inner: &str, start: usize, end: usize) -> Result<Tag<'_>, UnexpectedSerialization> {
@@ -970,6 +989,64 @@ mod tests {
         let outer = katex(&formula("<mi>x</mi>"), &inner);
         let rewritten = constrain_formulas(&outer).unwrap().unwrap();
         assert_eq!(rewritten, "<span><span><math><mi>x</mi></math></span></span>");
+    }
+
+    #[test]
+    fn katex_containers_nested_in_the_mathml_branch_are_deduped_too() {
+        let inner = katex(&formula("<mi>y</mi>"), "inner copy");
+        let outer = format!(
+            "<span class=\"katex\"><span class=\"katex-mathml\">{inner}{}</span><span class=\"katex-html\">outer copy</span></span>",
+            formula("<mi>x</mi>")
+        );
+        let rewritten = constrain_formulas(&outer).unwrap().unwrap();
+        assert_eq!(
+            rewritten,
+            "<span><span><span><span><math><mi>y</mi></math></span></span><math><mi>x</mi></math></span></span>"
+        );
+    }
+
+    #[test]
+    fn downgraded_formula_in_the_mathml_branch_with_an_over_budget_html_copy() {
+        // 评审复核给出的组合：MathML 分支和 HTML 副本里各有一个超限公式，前者的集成点里还嵌着
+        // 一个 KaTeX 容器。曾因共享游标漏检重叠而切片越界。
+        let wide = "<mi>x</mi>".repeat(MAX_FORMULA_ELEMENTS);
+        let inner = katex(&formula("<mi>y</mi>"), "INNER_HTML");
+        let mathml_branch = format!("<math><mtext>{inner}</mtext>{wide}</math>");
+        let html_copy = format!("<math>{wide}</math>");
+        let html = katex(&mathml_branch, &html_copy);
+        assert_eq!(
+            constrain_formulas(&html),
+            Ok(Some(format!("<span><span><code>{FALLBACK_PLACEHOLDER}</code></span></span>")))
+        );
+    }
+
+    #[test]
+    fn kept_formulas_are_atomic_for_katex_dedupe() {
+        // 保留下来的公式整体原样输出，集成点里的结构不再改写（不会丢内容，只是不去重）。
+        let inner = katex(&formula("<mi>y</mi>"), "INNER_HTML");
+        let html = katex(&format!("<math><mtext>{inner}</mtext></math>"), "OUTER_HTML");
+        let rewritten = constrain_formulas(&html).unwrap().unwrap();
+        assert_eq!(
+            rewritten,
+            format!("<span><span><math><mtext>{inner}</mtext></math></span></span>")
+        );
+    }
+
+    #[test]
+    fn nbsp_only_tex_annotation_falls_through() {
+        let html = format!(
+            "<math alttext=\"readable\"><semantics><mrow>{}</mrow><annotation encoding=\"application/x-tex\">&nbsp; &nbsp;</annotation><annotation encoding=\"application/x-tex\">x^2</annotation></semantics></math>",
+            "<mi>x</mi>".repeat(MAX_FORMULA_ELEMENTS)
+        );
+        assert_eq!(constrain_formulas(&html), Ok(Some("<code>x^2</code>".to_string())));
+
+        let html = format!(
+            "<math alttext=\"readable\"><semantics><mrow>{}</mrow><annotation encoding=\"application/x-tex\">&nbsp;</annotation></semantics></math>",
+            "<mi>x</mi>".repeat(MAX_FORMULA_ELEMENTS)
+        );
+        assert_eq!(constrain_formulas(&html), Ok(Some("<code>readable</code>".to_string())));
+        assert!(is_blank(" &nbsp;\u{2003}&nbsp; "));
+        assert!(!is_blank("&nbsp;x"));
     }
 
     #[test]

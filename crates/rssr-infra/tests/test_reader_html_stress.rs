@@ -110,6 +110,23 @@ fn many_katex_wrappers_with_budget_downgrades_complete() {
 }
 
 #[test]
+fn deeply_nested_katex_wrappers_are_planned_in_one_pass() {
+    // 评审复核反例：KaTeX 容器逐层嵌在上一层的 MathML 分支里，查找分支内公式曾是平方级。
+    let output = sanitize(&nested_katex(20_000));
+    assert!(!output.contains("katex"));
+    assert_eq!(output.matches("<math>").count(), 1);
+}
+
+fn nested_katex(depth: usize) -> String {
+    nested(
+        r#"<span class="katex"><span class="katex-mathml">"#,
+        r#"</span><span class="katex-html">x</span></span>"#,
+        depth,
+        "<math><mi>x</mi></math>",
+    )
+}
+
+#[test]
 fn unterminated_math_tags_in_text_fields_are_scanned_once() {
     // 评审反例：6 MB 没有 `>` 的 `<math/`，逐候选搜索后缀曾是平方级。
     let text = "<math/".repeat(1_000_000);
@@ -144,6 +161,7 @@ fn reader_html_stress_timings() {
             )
             .repeat(20_000),
         ),
+        ("nested katex 20k", nested_katex(20_000)),
         ("nested div 10k", nested("<div>", "</div>", 10_000, "x")),
         ("nested div 50k", nested("<div>", "</div>", 50_000, "x")),
         ("plain 4 MiB", format!("<p>{}</p>", "x".repeat(4 * 1024 * 1024))),
