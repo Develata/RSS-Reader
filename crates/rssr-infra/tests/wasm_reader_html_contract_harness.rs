@@ -50,9 +50,17 @@ fn render(raw: &str) -> Value {
             const maths = [...second.querySelectorAll('math')];
             const childCounts = (selector) => [...second.querySelectorAll(selector)]
                 .map((node) => node.children.length);
+            const codes = [...second.querySelectorAll('code')];
             const result = {
                 unsafe,
+                // 浏览器第一次解析就不改变结构：序列化回来与消毒输出逐字相同。
+                parsedVerbatim: once === globalThis.__rssrHtml,
                 stable: once === twice,
+                codes: codes.map((node) => ({
+                    html: node.namespaceURI === 'http://www.w3.org/1999/xhtml',
+                    text: node.textContent,
+                    children: node.children.length,
+                })),
                 maths: maths.length,
                 mathNamespaceOk: maths.every((node) =>
                     node.namespaceURI === 'http://www.w3.org/1998/Math/MathML'),
@@ -81,6 +89,7 @@ fn formulas_keep_namespace_and_operand_structure_after_browser_reparse() {
     ));
     assert_eq!(result["unsafe"], Value::Array(Vec::new()), "{result}");
     assert_eq!(result["stable"], true, "{result}");
+    assert_eq!(result["parsedVerbatim"], true, "{result}");
     assert_eq!(result["maths"], 2, "{result}");
     assert_eq!(result["mathNamespaceOk"], true, "{result}");
     assert_eq!(result["mfracChildren"], serde_json::json!([2]), "{result}");
@@ -105,8 +114,36 @@ fn namespace_confusion_payloads_stay_inert_after_browser_reparse() {
         let result = render(payload);
         assert_eq!(result["unsafe"], Value::Array(Vec::new()), "{payload}: {result}");
         assert_eq!(result["stable"], true, "{payload}: {result}");
+        assert_eq!(result["parsedVerbatim"], true, "{payload}: {result}");
         assert_eq!(result["mathNamespaceOk"], true, "{payload}: {result}");
     }
+}
+
+#[wasm_bindgen_test]
+fn over_budget_formulas_degrade_to_literal_text() {
+    let wide = "<mi>x</mi>".repeat(3_000);
+    let payload = format!(
+        concat!(
+            r#"<p>a<math><semantics><mrow>{wide}</mrow><annotation encoding="application/x-tex">"#,
+            r#"\frac{{1}}{{2}} &lt;img src=x onerror=alert(1)&gt;</annotation></semantics></math>b</p>"#,
+            r#"<p><math alttext="&lt;svg onload=alert(2)&gt; &amp;lt;b&amp;gt;"><mrow>{wide}</mrow></math></p>"#,
+            r#"<p><math><mtext><span><math><mi>z</mi></math></span></mtext>{wide}</math></p>"#,
+            r#"<p><span class="katex"><span class="katex-mathml"><math>{wide}</math></span>"#,
+            r#"<span class="katex-html">garbled</span></span></p>"#,
+        ),
+        wide = wide
+    );
+    let result = render(&payload);
+    assert_eq!(result["unsafe"], Value::Array(Vec::new()), "{result}");
+    assert_eq!(result["parsedVerbatim"], true, "{result}");
+    assert_eq!(result["maths"], 0, "{result}");
+    let codes = result["codes"].as_array().unwrap();
+    assert_eq!(codes.len(), 4, "{result}");
+    assert!(codes.iter().all(|code| code["html"] == true && code["children"] == 0), "{result}");
+    assert_eq!(codes[0]["text"], r"\frac{1}{2} <img src=x onerror=alert(1)>", "{result}");
+    assert_eq!(codes[1]["text"], "<svg onload=alert(2)> &lt;b&gt;", "{result}");
+    assert_eq!(codes[2]["text"], "[公式过大，未渲染]", "{result}");
+    assert!(!result["text"].as_str().unwrap().contains("garbled"), "{result}");
 }
 
 #[wasm_bindgen_test]

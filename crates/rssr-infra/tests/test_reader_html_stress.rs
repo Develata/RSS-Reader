@@ -4,7 +4,7 @@
 //! 越界的数值属性被删、输出大小有界。不对耗时做断言；计时放在默认忽略的
 //! `reader_html_stress_timings` 里，CI 的作业超时兜底防止卡死。
 
-use rssr_infra::html::sanitize_reader_html;
+use rssr_infra::html::{looks_like_html_fragment, sanitize_reader_html};
 
 fn sanitize(raw: &str) -> String {
     sanitize_reader_html(raw, None).unwrap_or_default()
@@ -98,6 +98,27 @@ fn many_small_formulas_stay_rendered_until_the_article_budget() {
 }
 
 #[test]
+fn many_katex_wrappers_with_budget_downgrades_complete() {
+    // 评审反例：2.3 MB 的 KaTeX 包装叠加预算降级，编辑重叠检查曾是平方级。
+    let unit = concat!(
+        r#"<span class="katex"><span class="katex-mathml"><math><mi>x</mi></math></span>"#,
+        r#"<span class="katex-html">x</span></span>"#,
+    );
+    let output = sanitize(&unit.repeat(20_000));
+    assert!(!output.contains("katex"));
+    assert_eq!(output.matches("<math>").count() + output.matches("<code>").count(), 20_000);
+}
+
+#[test]
+fn unterminated_math_tags_in_text_fields_are_scanned_once() {
+    // 评审反例：6 MB 没有 `>` 的 `<math/`，逐候选搜索后缀曾是平方级。
+    let text = "<math/".repeat(1_000_000);
+    assert!(!looks_like_html_fragment(&text));
+    let terminated = format!("{text}>");
+    assert!(looks_like_html_fragment(&terminated));
+}
+
+#[test]
 fn deep_non_math_nesting_completes() {
     // 与公式无关的既有路径：html5ever 对深层 div 的作用域扫描。这里只确认能正常结束，
     // 耗时见忽略的计时用例。
@@ -115,6 +136,14 @@ fn reader_html_stress_timings() {
         ("nested mrow 10k", format!("<math>{}</math>", nested("<mrow>", "</mrow>", 10_000, "x"))),
         ("sibling mi 200k", format!("<math>{}</math>", "<mi>x</mi>".repeat(200_000))),
         ("formulas 60k", "<math><mi>x</mi></math>".repeat(60_000)),
+        (
+            "katex wrappers 20k",
+            concat!(
+                r#"<span class="katex"><span class="katex-mathml"><math><mi>x</mi></math></span>"#,
+                r#"<span class="katex-html">x</span></span>"#,
+            )
+            .repeat(20_000),
+        ),
         ("nested div 10k", nested("<div>", "</div>", 10_000, "x")),
         ("nested div 50k", nested("<div>", "</div>", 50_000, "x")),
         ("plain 4 MiB", format!("<p>{}</p>", "x".repeat(4 * 1024 * 1024))),

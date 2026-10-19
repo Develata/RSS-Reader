@@ -282,6 +282,28 @@ mod tests {
     }
 
     #[test]
+    fn keeps_meaning_bearing_attributes() {
+        let sanitized = sanitize(
+            r#"<math><mfenced open="[" close=")" separators=";"><mi>a</mi><mi>b</mi></mfenced><maction selection="2"><mi>c</mi><mi>d</mi></maction></math>"#,
+        );
+        assert!(
+            sanitized.contains(r#"<mfenced open="[" close=")" separators=";">"#),
+            "{sanitized}"
+        );
+        assert!(sanitized.contains(r#"<maction selection="2">"#), "{sanitized}");
+    }
+
+    #[test]
+    fn rejects_padding_percentages_that_compound_when_nested() {
+        let sanitized = sanitize(
+            r#"<math><mpadded height="1000%" width="+0.5em"><mpadded height="1000%"><mspace height="1em" width="50%"></mspace></mpadded></mpadded><mfrac linethickness="200%"><mi>a</mi><mi>b</mi></mfrac></math>"#,
+        );
+        assert!(!sanitized.contains("1000%") && !sanitized.contains("50%"), "{sanitized}");
+        assert!(sanitized.contains(r#"<mpadded width="+0.5em">"#), "{sanitized}");
+        assert!(sanitized.contains(r#"<mfrac linethickness="200%">"#), "{sanitized}");
+    }
+
+    #[test]
     fn keeps_semantics_with_tex_annotation() {
         let sanitized = sanitize(
             r#"<math><semantics><mrow><msup><mi>x</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">x^2</annotation></semantics></math>"#,

@@ -15,7 +15,8 @@
 //! 后处理只扫描 ammonia 的输出而不是原始输入。那是 html5ever 0.39 的规范序列化：注释已删、
 //! `script`/`style` 已删、非 void 元素都有显式结束标签、属性值里的 `<` `>` `"` `&` 和正文里的
 //! `<` `>` `&` 都已转义。所以“遇到 `<` 就是标签、遇到 `>` 就是标签结束”在这里是精确的。
-//! 后处理只删除子树、只把公式替换成转义过的文本，不新增标签或属性，不会削弱消毒。
+//! 后处理只删除子树、去掉 KaTeX 识别 class、把超限公式替换成 `<code>` 包着的转义文本；
+//! 不新增其它标签或属性，不会削弱消毒。各步都是对标签表的单遍线性处理。
 
 use std::borrow::Cow;
 
@@ -75,8 +76,11 @@ const COMMON_ATTRIBUTES: &[&str] = &["dir", "displaystyle", "scriptlevel"];
 /// `mathsize` 和事件属性：颜色、字号交给阅读器主题，链接不该藏在公式里。
 const TAG_ATTRIBUTES: &[(&str, &[&str])] = &[
     ("annotation", &["encoding"]),
+    ("maction", &["selection"]),
     ("math", &["display", "alttext"]),
     ("menclose", &["notation"]),
+    // 定界符决定数学含义：`[a,b]` 和 `(a,b)` 是不同的区间。
+    ("mfenced", &["open", "close", "separators"]),
     ("mfrac", &["linethickness"]),
     ("mi", &["mathvariant"]),
     ("mn", &["mathvariant"]),
@@ -179,6 +183,8 @@ const MAX_SCRIPT_LEVEL: u8 = 7;
 const MAX_TABLE_SPAN: u32 = 64;
 /// `alttext`/`encoding`/`notation` 这类自由文本属性的长度上限。
 const MAX_TEXT_ATTRIBUTE_BYTES: usize = 4096;
+/// `mfenced` 定界符与分隔符列表的长度上限。
+const MAX_DELIMITER_BYTES: usize = 32;
 
 // 渲染预算。初始值是实验参数，按真实语料（问题订阅源、KaTeX 输出、LaTeXML 测试样例）的
 // 统计留出余量，再用压力输入在目标 WebView 上复核；校准记录见 docs/handoffs。
@@ -223,12 +229,18 @@ fn filter_attribute<'a>(element: &str, attribute: &str, value: &'a str) -> Optio
     }
 
     let accepted = match attribute {
-        "width" | "height" | "depth" | "lspace" | "rspace" | "voffset" | "linethickness" => {
-            is_bounded_length(value, false)
+        // `mpadded` 的百分比在 MathML 3 里是子内容尺寸的倍数，嵌套几层就会成倍放大，
+        // 所以空白、偏移类长度不接受百分比。
+        "width" | "height" | "depth" | "lspace" | "rspace" | "voffset" => {
+            is_bounded_length(value, LengthRule::ABSOLUTE)
         }
-        "minsize" | "maxsize" => is_bounded_length(value, true),
+        // 线宽的百分比相对默认线宽，不随嵌套累积。
+        "linethickness" => is_bounded_length(value, LengthRule::PERCENT),
+        // 算符伸缩尺寸的百分比和无单位倍数都相对算符自身的默认尺寸。
+        "minsize" | "maxsize" => is_bounded_length(value, LengthRule::PERCENT_OR_MULTIPLIER),
         "scriptlevel" => is_non_growing_script_level(value),
-        "rowspan" | "columnspan" => is_bounded_span(value),
+        "rowspan" | "columnspan" | "selection" => is_bounded_span(value),
+        "open" | "close" | "separators" => value.len() <= MAX_DELIMITER_BYTES,
         "displaystyle" | "stretchy" | "symmetric" | "largeop" | "movablelimits" | "accent"
         | "accentunder" | "fence" | "separator" => is_keyword(value, &["true", "false"]),
         "display" => is_keyword(value, &["block", "inline"]),
@@ -246,9 +258,22 @@ fn is_keyword(value: &str, keywords: &[&str]) -> bool {
     keywords.iter().any(|keyword| value.eq_ignore_ascii_case(keyword))
 }
 
+/// 某个长度属性除绝对单位外还接受哪些写法。
+#[derive(Clone, Copy)]
+struct LengthRule {
+    percent: bool,
+    multiplier: bool,
+}
+
+impl LengthRule {
+    const ABSOLUTE: Self = Self { percent: false, multiplier: false };
+    const PERCENT: Self = Self { percent: true, multiplier: false };
+    const PERCENT_OR_MULTIPLIER: Self = Self { percent: true, multiplier: true };
+}
+
 /// 长度属性：CSS 数字（可带符号、小数、指数）加一个已知单位，或命名空白；
-/// 无单位数只接受 0，`minsize`/`maxsize` 另外接受有界倍数。
-fn is_bounded_length(raw: &str, allows_multiplier: bool) -> bool {
+/// 无单位数只接受 0，百分比与无单位倍数按 [`LengthRule`] 放行。
+fn is_bounded_length(raw: &str, rule: LengthRule) -> bool {
     let value = raw.trim();
     if value.is_empty() || value.len() > MAX_NUMERIC_ATTRIBUTE_BYTES {
         return false;
@@ -262,10 +287,10 @@ fn is_bounded_length(raw: &str, allows_multiplier: bool) -> bool {
     };
     let magnitude = number.abs();
     if unit.is_empty() {
-        return magnitude == 0.0 || (allows_multiplier && magnitude <= MAX_SIZE_MULTIPLIER);
+        return magnitude == 0.0 || (rule.multiplier && magnitude <= MAX_SIZE_MULTIPLIER);
     }
     if unit == "%" {
-        return magnitude <= MAX_LENGTH_PERCENT;
+        return rule.percent && magnitude <= MAX_LENGTH_PERCENT;
     }
     LENGTH_UNITS_IN_EM
         .iter()
@@ -342,14 +367,17 @@ fn is_bounded_span(raw: &str) -> bool {
 /// 标签名之后必须是 HTML 空白、`/` 或 `>`，所以 `<mathematics>` 不算；不解码实体，
 /// 所以转义过的 `&lt;math&gt;` 也不算。
 pub(super) fn contains_math_start_tag(raw: &str) -> bool {
+    // 标签要以 `>` 结束：先定位最后一个 `>`，单遍扫描，避免对每个候选重新搜索后缀。
+    let Some(last_close) = raw.rfind('>') else {
+        return false;
+    };
     let bytes = raw.as_bytes();
-    raw.match_indices('<').any(|(start, _)| {
+    raw[..last_close].match_indices('<').any(|(start, _)| {
         bytes.get(start + 1..start + 5).is_some_and(|name| name.eq_ignore_ascii_case(b"math"))
             && matches!(
                 bytes.get(start + 5),
                 Some(b'\t' | b'\n' | b'\x0c' | b'\r' | b' ' | b'/' | b'>')
             )
-            && raw[start..].contains('>')
     })
 }
 
@@ -391,10 +419,18 @@ pub(super) fn constrain_formulas(html: &str) -> Result<Option<String>, Unexpecte
         }
     }
 
-    // KaTeX 去重是可选优化：与预算替换重叠时让位给预算替换。
-    for katex_edit in document.katex_edits() {
-        if !edits.iter().any(|edit| edit.overlaps(&katex_edit)) {
-            edits.push(katex_edit);
+    // KaTeX 去重是可选优化：一个容器的三处编辑要么全做，要么全不做；任何一处与预算替换
+    // 重叠就整组让位。两组编辑都按文档顺序产生，用单调游标做区间比较，整体线性。
+    // 嵌在已接受容器 HTML 副本里的容器会随副本一起删掉，跳过它以免编辑重叠。
+    let budget_edits = edits.len();
+    let mut cursor = 0;
+    let mut accepted_katex_end = 0;
+    for group in document.katex_edits() {
+        if group[0].start >= accepted_katex_end
+            && group.iter().all(|edit| !overlaps_sorted(&edits[..budget_edits], &mut cursor, edit))
+        {
+            accepted_katex_end = group[2].end;
+            edits.extend(group);
         }
     }
 
@@ -403,6 +439,15 @@ pub(super) fn constrain_formulas(html: &str) -> Result<Option<String>, Unexpecte
     }
     edits.sort_by_key(|edit| edit.start);
     Ok(Some(apply_edits(html, &edits)))
+}
+
+/// `sorted` 按起点升序且互不重叠；`edit` 的起点在多次调用间单调不减。
+/// 游标跳过所有在 `edit` 之前结束的区间，于是只需看游标处那一个。
+fn overlaps_sorted(sorted: &[Edit<'_>], cursor: &mut usize, edit: &Edit<'_>) -> bool {
+    while sorted.get(*cursor).is_some_and(|candidate| candidate.end <= edit.start) {
+        *cursor += 1;
+    }
+    sorted.get(*cursor).is_some_and(|candidate| candidate.start < edit.end)
 }
 
 #[derive(Default)]
@@ -439,13 +484,9 @@ struct Edit<'a> {
     replacement: Cow<'a, str>,
 }
 
-impl Edit<'_> {
-    fn overlaps(&self, other: &Edit<'_>) -> bool {
-        self.start < other.end && other.start < self.end
-    }
-}
-
+/// 前置条件：`edits` 按起点升序且互不重叠。
 fn apply_edits(html: &str, edits: &[Edit<'_>]) -> String {
+    debug_assert!(edits.windows(2).all(|pair| pair[0].end <= pair[1].start));
     let mut output = String::with_capacity(html.len());
     let mut cursor = 0;
     for edit in edits {
@@ -551,11 +592,10 @@ impl<'a> SerializedDocument<'a> {
     ///
     /// 两种来源都直接搬用序列化后的转义片段，不解码，所以不可能还原出标签。
     fn fallback(&self, open: usize, close: usize) -> String {
+        let non_blank = |text: &'a str| Some(text.trim()).filter(|text| !text.is_empty());
         let source = self
             .tex_annotation(open, close)
-            .or_else(|| attribute_value(self.tags[open].attributes, "alttext"))
-            .map(str::trim)
-            .filter(|text| !text.is_empty())
+            .or_else(|| attribute_value(self.tags[open].attributes, "alttext").and_then(non_blank))
             .unwrap_or(FALLBACK_PLACEHOLDER);
         format!("<code>{}</code>", truncate_escaped_text(source, MAX_FALLBACK_BYTES))
     }
@@ -567,17 +607,20 @@ impl<'a> SerializedDocument<'a> {
                 && tag.name == "annotation"
                 && attribute_value(tag.attributes, "encoding")
                     .is_some_and(|encoding| encoding.eq_ignore_ascii_case("application/x-tex"));
-            // annotation 里只该有文本；带子元素的不当作源码用。
+            // annotation 里只该有文本；带子元素的不当作源码用，空白的跳过，继续找下一个。
             (is_tex && self.close[index] == index + 1)
-                .then(|| &self.html[tag.end..self.tags[index + 1].start])
+                .then(|| self.html[tag.end..self.tags[index + 1].start].trim())
+                .filter(|text| !text.is_empty())
         })
     }
 
     /// KaTeX 双份输出：`span.katex` 恰好有两个元素子节点，依次是 `span.katex-mathml`（里面的
     /// `<math>` 消毒后仍有元素子节点）和 `span.katex-html`，子节点之间只有空白。命中时删掉
     /// HTML 副本、去掉三个识别 class；任何别的形状都原样保留。
-    fn katex_edits(&self) -> Vec<Edit<'static>> {
-        let mut edits = Vec::new();
+    ///
+    /// 每个命中的容器产出一组按位置升序的三处编辑；各组按文档顺序排列。
+    fn katex_edits(&self) -> Vec<[Edit<'static>; 3]> {
+        let mut groups = Vec::new();
         for index in 0..self.tags.len() {
             if !self.is_span_with_class(index, KATEX_CLASS) {
                 continue;
@@ -592,24 +635,28 @@ impl<'a> SerializedDocument<'a> {
                 continue;
             }
 
-            for span in [index, mathml] {
+            let unclassed = |span: usize| {
                 let span_tag = &self.tags[span];
-                edits.push(Edit {
+                Edit {
                     start: span_tag.start,
                     end: span_tag.end,
                     replacement: Cow::Owned(format!(
                         "<span{}>",
                         without_attribute(span_tag.attributes, "class")
                     )),
-                });
-            }
-            edits.push(Edit {
-                start: self.tags[html].start,
-                end: self.tags[self.close[html]].end,
-                replacement: Cow::Borrowed(""),
-            });
+                }
+            };
+            groups.push([
+                unclassed(index),
+                unclassed(mathml),
+                Edit {
+                    start: self.tags[html].start,
+                    end: self.tags[self.close[html]].end,
+                    replacement: Cow::Borrowed(""),
+                },
+            ]);
         }
-        edits
+        groups
     }
 
     fn is_span_with_class(&self, index: usize, class: &str) -> bool {
@@ -709,10 +756,12 @@ fn attribute_spans(attributes: &str) -> impl Iterator<Item = (&str, &str, &str)>
 
 /// 在字节上限内截断已转义文本：落在字符边界上，也不把 `&amp;` 这样的实体截成半截。
 fn truncate_escaped_text(text: &str, max_bytes: usize) -> Cow<'_, str> {
+    const ELLIPSIS: &str = "…";
     if text.len() <= max_bytes {
         return Cow::Borrowed(text);
     }
-    let mut end = max_bytes;
+    // 给省略号留出字节，保证结果整体不超过上限。
+    let mut end = max_bytes - ELLIPSIS.len();
     while !text.is_char_boundary(end) {
         end -= 1;
     }
@@ -722,7 +771,7 @@ fn truncate_escaped_text(text: &str, max_bytes: usize) -> Cow<'_, str> {
     {
         cut = &cut[..ampersand];
     }
-    Cow::Owned(format!("{cut}…"))
+    Cow::Owned(format!("{cut}{ELLIPSIS}"))
 }
 
 #[cfg(test)]
@@ -749,12 +798,11 @@ mod tests {
             "-0.1667em",
             "2px",
             "1cm",
-            "100%",
             "thinmathspace",
             "negativethickmathspace",
             "100em",
         ] {
-            assert!(is_bounded_length(valid, false), "{valid}");
+            assert!(is_bounded_length(valid, LengthRule::ABSOLUTE), "{valid}");
         }
         for invalid in [
             "",
@@ -772,10 +820,14 @@ mod tests {
             "1em 2em",
             "0.000000000000000000000000000001em",
         ] {
-            assert!(!is_bounded_length(invalid, false), "{invalid}");
+            assert!(!is_bounded_length(invalid, LengthRule::ABSOLUTE), "{invalid}");
         }
-        assert!(is_bounded_length("2", true));
-        assert!(!is_bounded_length("11", true));
+        assert!(is_bounded_length("2", LengthRule::PERCENT_OR_MULTIPLIER));
+        assert!(!is_bounded_length("11", LengthRule::PERCENT_OR_MULTIPLIER));
+        assert!(is_bounded_length("100%", LengthRule::PERCENT));
+        assert!(!is_bounded_length("1001%", LengthRule::PERCENT));
+        assert!(!is_bounded_length("100%", LengthRule::ABSOLUTE));
+        assert!(!is_bounded_length("2", LengthRule::PERCENT));
     }
 
     #[test]
@@ -890,13 +942,57 @@ mod tests {
 
     #[test]
     fn fallback_is_bounded_and_keeps_entities_whole() {
-        let tex = format!("{}&amp;tail", "x".repeat(MAX_FALLBACK_BYTES - 2));
+        // 省略号占 3 个字节；截断点落在 `&amp;` 中间时退到实体之前。
+        let kept = MAX_FALLBACK_BYTES - "…".len() - 2;
+        let tex = format!("{}&amp;tail", "x".repeat(kept));
         let html = format!(
             "<math><semantics><mrow>{}</mrow><annotation encoding=\"application/x-tex\">{tex}</annotation></semantics></math>",
             "<mi>x</mi>".repeat(MAX_FORMULA_ELEMENTS)
         );
         let rewritten = constrain_formulas(&html).unwrap().unwrap();
-        assert_eq!(rewritten, format!("<code>{}…</code>", "x".repeat(MAX_FALLBACK_BYTES - 2)));
+        let text = format!("{}…", "x".repeat(kept));
+        assert!(text.len() <= MAX_FALLBACK_BYTES);
+        assert_eq!(rewritten, format!("<code>{text}</code>"));
+    }
+
+    #[test]
+    fn blank_tex_annotation_falls_through_to_alttext() {
+        let html = format!(
+            "<math alttext=\"readable\"><semantics><mrow>{}</mrow><annotation encoding=\"application/x-tex\"> </annotation></semantics></math>",
+            "<mi>x</mi>".repeat(MAX_FORMULA_ELEMENTS)
+        );
+        assert_eq!(constrain_formulas(&html), Ok(Some("<code>readable</code>".to_string())));
+    }
+
+    #[test]
+    fn nested_katex_containers_do_not_produce_overlapping_edits() {
+        let inner = katex(&formula("<mi>y</mi>"), "y");
+        let outer = katex(&formula("<mi>x</mi>"), &inner);
+        let rewritten = constrain_formulas(&outer).unwrap().unwrap();
+        assert_eq!(rewritten, "<span><span><math><mi>x</mi></math></span></span>");
+    }
+
+    #[test]
+    fn katex_inside_a_downgraded_formula_yields_to_the_budget() {
+        let html = format!(
+            "<math><mtext>{}</mtext>{}</math>",
+            katex(&formula("<mi>x</mi>"), "x"),
+            "<mi>y</mi>".repeat(MAX_FORMULA_ELEMENTS)
+        );
+        assert_eq!(
+            constrain_formulas(&html),
+            Ok(Some(format!("<code>{FALLBACK_PLACEHOLDER}</code>")))
+        );
+    }
+
+    #[test]
+    fn many_katex_containers_stay_linear() {
+        // 评审给出的反例：大量 KaTeX 包装叠加公式预算降级，编辑重叠检查曾是平方级。
+        let unit = katex(&formula("<mi>x</mi>"), "x");
+        let html = unit.repeat(20_000);
+        let rewritten = constrain_formulas(&html).unwrap().unwrap();
+        assert!(!rewritten.contains("katex"));
+        assert_eq!(rewritten.matches("<math>").count(), MAX_ARTICLE_FORMULAS);
     }
 
     #[test]
