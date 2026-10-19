@@ -305,6 +305,10 @@
   gap: 12px;
   max-height: calc(100vh - 112px - var(--safe-area-top) - var(--safe-area-bottom));
   overflow-y: auto;
+  /* Vertical only: a hovered row's 1px nudge would otherwise overflow sideways, and the
+     horizontal scrollbar it brings moves the row from under the pointer, ends the hover and
+     goes away again, so the rail jumps up and down. */
+  overflow-x: hidden;
   overscroll-behavior: contain;
   padding: 8px 0 0 20px;
   border-left: 1px solid var(--line-soft);

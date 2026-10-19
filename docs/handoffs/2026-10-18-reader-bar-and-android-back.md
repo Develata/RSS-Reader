@@ -46,6 +46,12 @@ Develata 试用时提出：短文章里阅读页底栏（上一未读 / 已读 /
 - 应用内的 ← 在 Android 上走的是与系统返回键相同的异步路径：先经 `document::eval` 采集阅读位置（最多 500ms）再后退，期间重复点击合并；桌面与 Web 上同一个按钮是同步后退的。排除了：正文过大（这篇 24 KB、没有内嵌图片）、重复 push（列表只有一个 `Link`）、刷新占住界面线程（多线程 tokio 运行时）、有代码替换路由（没有）。卡住的确切机制没有找到；应用的 tracing 写到标准输出，Android 上不进 logcat。
 - 修改：← 在所有平台上同步后退（`navigate_back`）。点击是 DOM 事件，`reading_position.js` 在捕获阶段、路由切换之前已记下位置，不需要再等一轮。系统返回键没有 DOM 事件，保留先采集再后退（`navigate_back_after_capture`，仅 Android）。Develata 用 `7fd0db5` 的测试包在真机上确认已修好（2026-10-19）。
 
+### 文章页日期目录上下跳（2026-10-19，Develata 录屏，Windows 试用版）
+
+- 现象：鼠标在文章页右侧的日期目录上移动时，目录底部的横向滚动条反复出现、消失，整列随之上下跳约 10 像素（录屏逐帧：有滚动条与没有滚动条的两种布局交替）。
+- 原因：目录栏 `[data-layout="entry-directory-rail"]` 只写了 `overflow-y: auto`，按 CSS 规则横向随之成为 `auto`；行宽 100%，悬停时又右移 1 像素（`translateX(1px)`），多出的 1 像素触发横向滚动条。滚动条占去高度、整列上移，鼠标下的那一行移开、悬停结束、滚动条消失，悬停又回来，如此振荡。
+- 修改：目录栏 `overflow-x: hidden`，只允许纵向滚动（Develata 建议去掉这条滚动条）；悬停的 1 像素位移照旧，只是不再溢出。窄屏的顶部目录本就是横向滚动，不受影响。
+
 ### 测试脚本
 
 - 浏览器断言新增：底栏为 fixed 且在阅读页之外、离视口底部 8–24px、页面滚到底时最后一个控件在底栏之上；输入框里按 K 不切文；不先聚焦即可用 K 切到上一篇未读，读完后 ← / → / J 都不跳转。
@@ -72,6 +78,8 @@ Windows（rustc 1.99.0，基准 `de0aad8`；日志在会话临时目录 `evidenc
 - 阅读页改动：`cargo clippy -p rssr-app --all-targets -- -D warnings`、wasm 目标 clippy、Android `cargo check -p rssr-app`：退出码均为 0；`cargo test -p rssr-app`：133 passed / 0 failed / 1 ignored（含新增 `flags_are_known_only_once_the_entry_has_loaded`）。
 - 浏览器（`scripts/run_static_web_small_viewport_smoke.sh --skip-build`，debug web 包由 dioxus-cli 0.7.9 构建，本机 Chrome，360×800 与桌面视口）：通过，282 项断言，控制台无错误。前几次失败与改动无关：冷构建超过脚本等待服务器的时限（改为先构建再 `--skip-build`）；静态服务器拒绝连接（见上）；B2 起过时的一项断言（见上）；新增的一项断言起初找了未展开的搜索框（改为临时插入的输入框）。截图看过手机与桌面阅读页：底栏贴底、桌面显示快捷键提示。
 - 两组改动合在一起：`cargo clippy -p rssr-app --all-targets`、wasm 目标 clippy：退出码 0；`cargo test -p rssr-app`：131 passed / 0 failed / 1 ignored（删去 2 个到不了的按键映射测试）；Android `cargo check -p rssr-app -p rssr-cli`：退出码 0。Android 目标的 `cargo clippy -p rssr-app --no-deps` 报 2 处，都是这个文件里原有的代码：`thread_local` 已写成 `const` 仍报（同一误报也出现在 `rssr-infra` 的 `store/executor.rs`），以及原有的 `let _ = window.set_focus();`；CI 对 Android 只跑 `cargo check`。
+
+- 日期目录修复：只改 CSS（由 `include_str!` 编进程序）；`cargo build --locked --release -p rssr-app`：退出码 0，产物里含新规则；新的 Windows 试用版放在 `target/try-release/RSS-Reader/RSS-Reader.exe`（旧版改名为 `RSS-Reader-45c28c7.exe` 留在旁边）。待 Develata 实际确认。
 
 ### 手工验收
 
