@@ -14,6 +14,7 @@ use rssr_infra::{
     outbound::{self, OutboundPolicy},
     store::{
         StoreOptions,
+        backup::{BackupOptions, backup_library},
         local::{self, open_library_in},
     },
 };
@@ -50,6 +51,18 @@ enum Command {
     SaveSettings(SaveSettingsArgs),
     PushWebdav(WebDavArgs),
     PullWebdav(WebDavArgs),
+    /// Write a consistent copy of the library to FILE, which must not exist yet. Safe while the
+    /// server or another program uses the library; Ctrl-C cancels it.
+    Backup(BackupArgs),
+}
+
+#[derive(Args, Debug)]
+struct BackupArgs {
+    #[arg(value_name = "FILE")]
+    file: PathBuf,
+    /// Give up a copy still running after this many seconds.
+    #[arg(long, value_name = "SECONDS", default_value_t = 600)]
+    timeout: u64,
 }
 
 #[derive(Args, Debug)]
@@ -190,9 +203,13 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter("info").with_writer(std::io::stderr).init();
 
     let cli = Cli::parse();
+    let command = match cli.command {
+        Command::Backup(args) => return backup(cli.data_dir, args).await,
+        command => command,
+    };
     let services = CliServices::new(cli.data_dir).await?;
 
-    match cli.command {
+    match command {
         Command::MarkRead(args) => {
             use rssr_domain::{
                 ArchiveFilter, EntryQuery, MarkReadOutcome, ReadFilter, StarredFilter,
@@ -311,6 +328,7 @@ async fn main() -> anyhow::Result<()> {
                 println!("远端配置不存在。");
             }
         }
+        Command::Backup(_) => unreachable!("备份在组装用例之前已处理"),
     }
 
     Ok(())
@@ -323,13 +341,39 @@ struct CliServices {
     policy: OutboundPolicy,
 }
 
+/// `backup`: needs no outbound policy or use cases, and refuses a data directory without a
+/// library rather than creating an empty one to copy.
+async fn backup(data_dir: Option<PathBuf>, args: BackupArgs) -> anyhow::Result<()> {
+    let data_dir = resolve_data_dir(data_dir)?;
+    let library = data_dir.join(local::LIBRARY_FILE);
+    if !library.is_file() {
+        anyhow::bail!("没有找到资料库：{}", library.display());
+    }
+    let opened =
+        open_library_in(&data_dir, StoreOptions::default()).await.context("打开本地资料库失败")?;
+    let options = BackupOptions {
+        deadline: std::time::Duration::from_secs(args.timeout),
+        ..BackupOptions::default()
+    };
+    let report = tokio::select! {
+        report = backup_library(&opened.store, &args.file, options) => report.context("备份失败")?,
+        _ = tokio::signal::ctrl_c() => anyhow::bail!("已取消备份，未写入 {}", args.file.display()),
+    };
+    println!("已备份到 {}（{} 字节）", report.path.display(), report.bytes);
+    Ok(())
+}
+
+fn resolve_data_dir(data_dir: Option<PathBuf>) -> anyhow::Result<PathBuf> {
+    match data_dir {
+        Some(dir) => Ok(dir),
+        None => local::local_data_dir().context("确定本地数据目录失败"),
+    }
+}
+
 impl CliServices {
     async fn new(data_dir: Option<PathBuf>) -> anyhow::Result<Self> {
         // A v0.1.x library in the data directory is imported on the first open.
-        let data_dir = match data_dir {
-            Some(dir) => dir,
-            None => local::local_data_dir().context("确定本地数据目录失败")?,
-        };
+        let data_dir = resolve_data_dir(data_dir)?;
         tracing::info!(data_dir = %data_dir.display(), "初始化 CLI 本地资料库");
         // Before the library is opened: a policy that cannot be read stops the CLI here.
         let policy = outbound::load_policy(&data_dir).context("读取出站策略失败")?;

@@ -19,6 +19,10 @@
 //! - each queue admits at most `queue_capacity` tasks not yet taken by a worker (cancelled ones
 //!   included); waiting for room counts against the admission time.
 //!
+//! A maintenance task ([`LibraryStore::maintain`], for statements that cannot run in a
+//! transaction such as `VACUUM INTO`) goes through the same queue, states and cancellation on the
+//! writer, with no transaction and a deadline of its own.
+//!
 //! A running task has a deadline (`*_deadline`, from the moment it starts): waits for another
 //! connection's lock end at the deadline (busy handler), and a statement still running at the
 //! deadline is interrupted (progress handler). Both read the task's context from the worker
@@ -480,6 +484,26 @@ impl LibraryStore {
         self.run(&self.inner.writer, TransactionBehavior::Immediate, deadline, false, task).await
     }
 
+    /// Runs `task` on the writer connection outside any transaction, for maintenance statements
+    /// that cannot run in one (`VACUUM INTO`). A statement still running at `deadline` (from the
+    /// moment the task starts) is interrupted, and the task is cancelled like any other when the
+    /// caller goes away; a task cancelled after its last statement still reports `Interrupted`.
+    /// It holds this store's writer for its whole run.
+    pub async fn maintain<R, F>(&self, deadline: Duration, task: F) -> StoreResult<R>
+    where
+        R: Send + 'static,
+        F: FnOnce(&Connection) -> StoreResult<R> + Send + 'static,
+    {
+        self.dispatch(&self.inner.writer, deadline, move |connection, state| {
+            let value = task(connection)?;
+            if !transition(state, RUNNING, COMMITTING) {
+                return Err(StoreError::Interrupted);
+            }
+            Ok(value)
+        })
+        .await
+    }
+
     async fn run<R, F>(
         &self,
         queue: &Queue,
@@ -492,6 +516,29 @@ impl LibraryStore {
         R: Send + 'static,
         F: FnOnce(&Transaction<'_>) -> StoreResult<R> + Send + 'static,
     {
+        self.dispatch(queue, deadline, move |connection, state| {
+            if read_only {
+                connection.pragma_update(None, "query_only", true)?;
+            }
+            let tx = connection.transaction_with_behavior(behavior)?;
+            let value = task(&tx)?;
+            if !transition(state, RUNNING, COMMITTING) {
+                return Err(StoreError::Interrupted);
+            }
+            tx.commit()?;
+            Ok(value)
+        })
+        .await
+    }
+
+    /// Queues `body` on `queue` and waits for it: admission within `admission_wait`, the
+    /// `deadline` from the moment it starts, cancellation when the caller goes away (see the module
+    /// documentation). `body` gets the worker's connection and the task's state.
+    async fn dispatch<R, B>(&self, queue: &Queue, deadline: Duration, body: B) -> StoreResult<R>
+    where
+        R: Send + 'static,
+        B: FnOnce(&mut Connection, &AtomicU8) -> StoreResult<R> + Send + 'static,
+    {
         let state = Arc::new(AtomicU8::new(QUEUED));
         let (reply, mut receive) = oneshot::channel();
         let job_state = Arc::clone(&state);
@@ -500,16 +547,7 @@ impl LibraryStore {
                 TaskContext { state: Arc::clone(&job_state), until: Instant::now() + deadline };
             let result = with_context(context, || -> StoreResult<R> {
                 let connection = slot.connection()?;
-                if read_only {
-                    connection.pragma_update(None, "query_only", true)?;
-                }
-                let tx = connection.transaction_with_behavior(behavior)?;
-                let value = task(&tx)?;
-                if !transition(&job_state, RUNNING, COMMITTING) {
-                    return Err(StoreError::Interrupted);
-                }
-                tx.commit()?;
-                Ok(value)
+                body(connection, &job_state)
             });
             let _ = reply.send(result);
         });

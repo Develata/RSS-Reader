@@ -86,6 +86,32 @@ cargo run --locked -p rssr-web -- --print-password-hash '请换成自己的强�
 
 Compose 的端口发布默认不限制宿主监听地址。对外部署时应由防火墙或反向代理控制访问，并确认 HTTPS 转发与 `RSS_READER_WEB_PUBLIC_ORIGIN` 与实际入口一致。`/healthz` 可用于健康检查。
 
+## 备份与恢复
+
+数据目录（容器内 `/data`）里有三样东西：资料库 `library.sqlite3`（订阅、文章、正文与设置，连同 SQLite 的 `-wal`、`-shm`）、认证库 `auth.sqlite3` 与出站策略 `outbound.json`。
+
+备份资料库用 `rssr-cli backup`，服务器运行时也可以做：
+
+```bash
+rssr-cli --data-dir /data backup /data/backups/library-2026-10-19.sqlite3
+```
+
+- 得到的是某一时刻的一致副本（SQLite `VACUUM INTO`），服务器照常读写；备份文件只有所有者可读写。
+- 目标文件必须不存在，已存在时拒绝、不覆盖。对同一目标同时进行的备份互相等待（`<文件>.lock` 会留在原处），后一个发现目标已存在即报错。
+- 复制默认最多 10 分钟（`--timeout <秒>`），超时或按 Ctrl-C 中断时不留下半成品。进程被强行结束留下的 `<文件>.partial-*`，由下一次对同一目标的备份清理。
+- 备份以硬链接发布，目标所在的文件系统必须支持硬链接（放在数据卷内即可）；不支持时报错，不会改用可能覆盖文件的改名。
+- 以拥有数据目录的用户运行（镜像内附带 CLI 的用法随部署工作补充）。认证库与出站策略另行保存：认证库丢失后按初始凭据的顺序重建，所有浏览器需要重新登录。
+
+恢复：
+
+1. 停止服务器与所有 CLI，确认没有进程打开资料库。
+2. 把旧的 `library.sqlite3` 与它的 `-wal`、`-shm` 一起移走，再把备份文件放到 `library.sqlite3`，属主与权限和数据目录一致（仅所有者可读写）。
+3. 重新放置 `outbound.json`。
+4. 两条路：
+   - 已有 `auth.sqlite3`：运行 `rssr-web sessions revoke-all`，保留凭据、吊销全部会话；
+   - 新主机、没有 `auth.sqlite3`：按上文初始凭据的顺序有意地提供当前凭据。
+5. 启动服务器。
+
 ## 从 v0.1 升级
 
 - 凭据相关的环境变量不用改。新增必填的 `RSS_READER_WEB_PUBLIC_ORIGIN`，以及数据卷 `/data`（仓库的 Compose 文件已包含）。

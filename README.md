@@ -44,7 +44,7 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
 - **设置与迁移：** 滑杆图标进入设置，支持内置主题和自定义 CSS；JSON / OPML 用于配置交换，可选 WebDAV 同步配置。
 - **继续阅读：** 本次运行内返回列表会恢复分页及文章所在位置，短暂标示刚打开的文章；重新打开文章会恢复阅读位置。位置在点击操作、快捷键切文或前进／返回时采集，不随滚动反复扫描正文。重启应用或刷新 Web 页面后清除，不影响已读状态。
 - **收起导航：** 顶栏最右侧的窄箭头可向左收起 Read、搜索、订阅和设置，只留下展开按钮；手机与桌面均可用，同次运行中切页保持状态。
-- **自动化：** `rssr-cli` 支持订阅管理、刷新、设置和配置导入导出；运行 `cargo run --locked -p rssr-cli -- --help` 查看命令。
+- **自动化：** `rssr-cli` 支持订阅管理、刷新、设置、配置导入导出与资料库备份（`backup <文件>`）；运行 `cargo run --locked -p rssr-cli -- --help` 查看命令。
 
 Reader 快捷键在整个阅读页生效，不需要先点阅读区：`M` 切换已读、`F` 切换收藏、`K` 或 `←` 跳转上一篇未读、`J` 或 `→` 跳转下一篇未读；文章加载完成前已读与收藏不可切换。输入框与可编辑区域内、输入法组词期间、按住不放的重复、图片查看器打开时，以及带 Ctrl / Cmd 等修饰键的原生编辑操作，不会触发阅读快捷键或位置采集。阅读页底栏固定在窗口底部，不随文章长短移动。
 
@@ -64,7 +64,7 @@ Reader 快捷键在整个阅读页生效，不需要先点阅读区：`M` 切换
 
 ## 本地数据与边界
 
-Linux `/usr/bin` 安装版在 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`）保存数据；macOS 在 `~/Library/Application Support/RSS-Reader/`；Windows 和 Linux 便携版在可执行文件同目录的 `RSS-Reader/`。v0.2 起目录中是一个资料库 `library.sqlite3`（订阅、文章、正文与设置），还可能有 `shell-prefs.json`；SQLite 的 `-wal`、`-shm` 与 `library.sqlite3.create-lock` 是正常附属文件。备份时先退出应用，再复制整个目录。从 v0.1.x 升级时，首次启动会把同一数据目录中的旧库（`rss-reader.db`、`rss-reader-content.db`）单向导入新资料库，旧文件原样保留；升级前须关闭所有旧版程序，导入失败时不会创建空库。macOS 的 v0.1.x 把数据放在应用包内（可执行文件旁的 `RSS-Reader/`，通常是 `RSS-Reader.app/Contents/MacOS/RSS-Reader/`），替换应用包会把它一起删除：升级前先退出旧版，把该目录中的全部文件（`rss-reader.db`、`rss-reader-content.db` 以及可能存在的 `-wal`、`-shm` 文件）复制到 `~/Library/Application Support/RSS-Reader/`，再启动新版（桌面端或 CLI 任一新版首次启动之前完成）。旧版如曾以管理员身份在 `/usr/bin/RSS-Reader/` 产生数据，升级后不会自动迁移；请在应用退出后备份并由管理员将完整目录复制到新位置、改为当前用户所有。Android 使用应用沙箱内的本地 SQLite；卸载应用会清除本地数据，请先导出配置。Web 将状态序列化保存到当前浏览器的 `localStorage`，它与桌面数据库互不共享；清除站点数据也会清除本地文章库。浏览器给每个站点的 `localStorage` 空间有限（常见约 5 MiB），存满后刷新会提示“浏览器本地存储配额不足或存储受限”且不保存新内容。删除订阅也要先写入剩余数据的新副本，空间非常紧张时同样可能失败，请及时导出配置。
+Linux `/usr/bin` 安装版在 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`）保存数据；macOS 在 `~/Library/Application Support/RSS-Reader/`；Windows 和 Linux 便携版在可执行文件同目录的 `RSS-Reader/`。v0.2 起目录中是一个资料库 `library.sqlite3`（订阅、文章、正文与设置），还可能有 `shell-prefs.json`；SQLite 的 `-wal`、`-shm` 与 `library.sqlite3.create-lock` 是正常附属文件。备份：`rssr-cli backup <文件>` 在应用运行时也能写出资料库的一致副本（目标必须不存在；CLI 不在同一目录时用 `--data-dir` 指向数据目录）；也可以先退出应用，再复制整个目录。从 v0.1.x 升级时，首次启动会把同一数据目录中的旧库（`rss-reader.db`、`rss-reader-content.db`）单向导入新资料库，旧文件原样保留；升级前须关闭所有旧版程序，导入失败时不会创建空库。macOS 的 v0.1.x 把数据放在应用包内（可执行文件旁的 `RSS-Reader/`，通常是 `RSS-Reader.app/Contents/MacOS/RSS-Reader/`），替换应用包会把它一起删除：升级前先退出旧版，把该目录中的全部文件（`rss-reader.db`、`rss-reader-content.db` 以及可能存在的 `-wal`、`-shm` 文件）复制到 `~/Library/Application Support/RSS-Reader/`，再启动新版（桌面端或 CLI 任一新版首次启动之前完成）。旧版如曾以管理员身份在 `/usr/bin/RSS-Reader/` 产生数据，升级后不会自动迁移；请在应用退出后备份并由管理员将完整目录复制到新位置、改为当前用户所有。Android 使用应用沙箱内的本地 SQLite；卸载应用会清除本地数据，请先导出配置。Web 将状态序列化保存到当前浏览器的 `localStorage`，它与桌面数据库互不共享；清除站点数据也会清除本地文章库。浏览器给每个站点的 `localStorage` 空间有限（常见约 5 MiB），存满后刷新会提示“浏览器本地存储配额不足或存储受限”且不保存新内容。删除订阅也要先写入剩余数据的新副本，空间非常紧张时同样可能失败，请及时导出配置。
 
 RSS-Reader 缓存 feed 提供的正文，不主动抓取原网站补全全文。桌面端和 Android 会尽量把正文图片本地化；Web 通常保留远端图片地址，能否显示还取决于站点防盗链、HTTPS 和网络策略。JSON / OPML / WebDAV 交换的是订阅与设置，**不是文章库、已读状态或收藏的跨设备同步**。直接运行静态 Web 包时，某些 feed 会因 CORS 无法刷新；`rssr-web` 提供带登录的同源 `/feed-proxy`，见 [Web 部署指南](./docs/deployment/web.md)。
 

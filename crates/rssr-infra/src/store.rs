@@ -4,6 +4,7 @@
 //! `connection`, `migrate` and `error` are target-neutral so the Pages demo can reuse them on
 //! wasm32; `executor` owns native connections. Native-only until phase D.
 
+pub mod backup;
 mod codec;
 mod connection;
 mod documents;
