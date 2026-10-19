@@ -67,8 +67,8 @@ impl Dir {
         found
     }
 
-    /// Whether a scratch file itself (not a companion file of SQLite's) has content: the copy is
-    /// running.
+    /// Whether a scratch file itself (not a companion file of SQLite's) has content: writing began
+    /// (whether the copy is still running is not observed).
     fn scratch_filling(&self) -> bool {
         self.scratch_names().iter().any(|name| {
             !name.ends_with('/')

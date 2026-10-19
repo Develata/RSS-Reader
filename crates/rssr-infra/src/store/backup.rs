@@ -1,7 +1,8 @@
 //! Backups of the library file (`rssr-cli backup`, phase C5).
 //!
-//! A backup is a consistent copy made with `VACUUM INTO` (one read snapshot, so writers in other
-//! processes are neither blocked nor seen half way) into a scratch file next to the target, and
+//! A backup is a consistent copy made with `VACUUM INTO` (one read snapshot: writers in other
+//! processes are never seen half way, and in WAL mode, which the store uses, they are not blocked
+//! either) into a scratch file next to the target, and
 //! published under the target's name only if that name is still free. One thread does all of it,
 //! on a connection of its own, and owns the lock and the scratch file from start to end: nothing
 //! is released or removed while SQLite may still write. In the target's directory the protocol
@@ -186,18 +187,8 @@ fn run(
     drop(written);
     files::check_library(&files::probe_uri(&scratch.path)?)?;
     stop_if_cancelled(cancel, target)?;
-    match std::fs::hard_link(&scratch.path, target) {
-        Ok(()) => {}
-        Err(error) if error.kind() == ErrorKind::AlreadyExists => return Err(exists(target)),
-        Err(error) => {
-            return Err(StoreError::Io(Error::new(
-                error.kind(),
-                format!(
-                    "无法以硬链接发布备份（文件系统可能不支持硬链接），没有写入 {}：{error}",
-                    target.display()
-                ),
-            )));
-        }
+    if let Err(error) = std::fs::hard_link(&scratch.path, target) {
+        settle_link_error(error, &scratch.path, target)?;
     }
     // Published: nothing below can fail the backup, it only tidies up.
     drop(scratch);
@@ -207,6 +198,52 @@ fn run(
     }
     drop(lock);
     Ok(BackupReport { path: target.to_path_buf(), bytes })
+}
+
+/// What a failed `hard_link(scratch, target)` means. A failure does not always mean no link: a
+/// remote file system can make it and lose the reply (review C5-R6-01). So the target is looked at
+/// again: the scratch file itself under the target's name is a published backup; nothing there
+/// is a failed publication; anything else is reported as such, never as "nothing written" unless
+/// the name is free.
+fn settle_link_error(error: Error, scratch: &Path, target: &Path) -> StoreResult<()> {
+    let Ok(found) = target.symlink_metadata() else {
+        return Err(StoreError::Io(Error::new(
+            error.kind(),
+            format!(
+                "无法以硬链接发布备份（文件系统可能不支持硬链接），没有写入 {}：{error}",
+                target.display()
+            ),
+        )));
+    };
+    if is_same_file(scratch, &found) {
+        tracing::warn!(%error, target = %target.display(), "硬链接报错，但备份已在目标名下");
+        return Ok(());
+    }
+    if error.kind() == ErrorKind::AlreadyExists {
+        return Err(exists(target));
+    }
+    Err(StoreError::Io(Error::new(
+        error.kind(),
+        format!("发布备份时出错，无法确认 {} 是不是这次的备份，请检查：{error}", target.display()),
+    )))
+}
+
+/// Whether `found` (metadata of the target's name, not following a link) is the file `scratch`.
+/// Only Unix can tell (device and inode); elsewhere the answer is no, and the caller reports an
+/// unconfirmed outcome instead.
+fn is_same_file(scratch: &Path, found: &std::fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        scratch
+            .symlink_metadata()
+            .is_ok_and(|ours| ours.dev() == found.dev() && ours.ino() == found.ino())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (scratch, found);
+        false
+    }
 }
 
 /// The ending every backup's file name has.
@@ -490,6 +527,34 @@ fn invalid(message: String) -> StoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A failed link is settled by what is under the target's name afterwards (review C5-R6-01).
+    #[test]
+    fn a_failed_link_is_settled_by_the_target() {
+        let dir = std::env::temp_dir().join(format!("rssr-backup-settle-{}", nonce()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let scratch = dir.join("partial");
+        std::fs::write(&scratch, b"copy").expect("scratch");
+        let target = dir.join("backup.sqlite3");
+        let lost = || Error::other("reply lost");
+
+        let error = settle_link_error(lost(), &scratch, &target).expect_err("nothing there");
+        assert!(error.to_string().contains("没有写入"), "{error}");
+
+        std::fs::write(&target, b"someone's").expect("another file");
+        let error = settle_link_error(lost(), &scratch, &target).expect_err("another file");
+        assert!(error.to_string().contains("无法确认"), "{error}");
+        let taken = Error::from(ErrorKind::AlreadyExists);
+        let error = settle_link_error(taken, &scratch, &target).expect_err("taken");
+        assert!(error.to_string().contains("已存在"), "{error}");
+        std::fs::remove_file(&target).expect("remove");
+
+        std::fs::hard_link(&scratch, &target).expect("the link was made");
+        let settled = settle_link_error(lost(), &scratch, &target);
+        // Only Unix can tell the target is the scratch file; elsewhere it stays unconfirmed.
+        assert_eq!(settled.is_ok(), cfg!(unix), "{settled:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn backups_are_named_sqlite3_and_scratch_files_partial_hex() {

@@ -77,7 +77,8 @@ impl Running {
         }
     }
 
-    /// Waits for all of them, two minutes at most in all, and returns their outputs.
+    /// Waits for all of them and returns their outputs. Polling stops after two minutes in all;
+    /// killing and reaping them then can take longer (a polling watchdog, not a hard bound).
     fn finish(mut self) -> Vec<Output> {
         let deadline = Instant::now() + Duration::from_secs(120);
         while self.0.iter_mut().any(|child| child.try_wait().expect("poll").is_none()) {
