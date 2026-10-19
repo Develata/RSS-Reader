@@ -1,11 +1,10 @@
 //! Backups of a library file (phase C5): whole transactions while another store writes, a target
-//! never replaced, one winner among backups of one target, only this target's scratch files
-//! removed (including after a backup killed once it had published, and under another spelling
-//! only where the file system makes it the same target), reserved names refused (SQLite's
-//! companion names included), a missing library never created, the lock file required to be a
-//! regular file and not a link, a held lock waited for a bounded time, limits too long to
-//! represent taken as none, and nothing left behind by a backup that was cancelled, dropped or
-//! ran past its deadline.
+//! never replaced, one winner among backups of one target, only the scratch files a lock file
+//! records removed (including after a backup killed once it had published, and under another
+//! spelling only where the file system makes it the same lock file), names other than *.sqlite3
+//! refused, a missing library never created, the lock file required to be a regular file and not
+//! a link, a held lock waited for a bounded time, limits too long to represent taken as none, and
+//! nothing left behind by a backup that was cancelled, dropped or ran past its deadline.
 
 #[path = "support/library.rs"]
 mod library;
@@ -21,6 +20,7 @@ use rssr_infra::store::backup::{BackupCancel, BackupOptions, backup_library};
 use library::{Library, entry};
 
 const NONCE: &str = "0123456789abcdef0123456789abcdef";
+const OTHER: &str = "fedcba9876543210fedcba9876543210";
 
 struct Dir(PathBuf);
 
@@ -54,6 +54,25 @@ impl Dir {
 
     fn scratch_names(&self) -> Vec<String> {
         self.names().into_iter().filter(|name| name.contains(".partial-")).collect()
+    }
+
+    /// Whether a scratch file itself (not a companion file of SQLite's) has content: the copy is
+    /// running.
+    fn scratch_filling(&self) -> bool {
+        self.scratch_names().iter().any(|name| {
+            !["-journal", "-wal", "-shm"].iter().any(|suffix| name.ends_with(suffix))
+                && std::fs::metadata(self.join(name)).is_ok_and(|metadata| metadata.len() > 0)
+        })
+    }
+
+    /// What the lock file of `target` records (empty when nothing, or when it does not exist).
+    fn record(&self, target: &str) -> String {
+        std::fs::read_to_string(self.join(&format!("{target}.lock"))).unwrap_or_default()
+    }
+
+    /// Leaves what a backup that died leaves: the lock file `lock` recording `scratch`.
+    fn record_scratch(&self, lock: &str, scratch: &str) {
+        std::fs::write(self.join(lock), scratch).expect("record");
     }
 
     /// Whether the directory's file system resolves names without regard to case.
@@ -163,6 +182,7 @@ async fn a_backup_holds_whole_transactions_while_another_store_writes() {
     assert_eq!(pairs % 2, 0, "whole transactions only ({pairs} rows)");
     assert!(commits > 0, "the other store kept writing");
     assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
+    assert_eq!(dir.record("backup.sqlite3"), "", "the record is cleared");
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -208,25 +228,23 @@ async fn two_backups_of_one_target_publish_once() {
     assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
 }
 
-/// Only this protocol's scratch names for this target are removed: a backup named like a scratch
-/// file of another kind (`backup.sqlite3.partial-kept`) is someone's backup and stays (review
-/// C5-R1 B1).
+/// Only what the lock file records is removed: the scratch file a backup of this target that died
+/// left, with SQLite's companion of it. No other name is guessed to be a leftover, scratch-like
+/// or not, and the record is cleared (review C5-R1 B1, C5-R3-02).
 #[tokio::test(flavor = "multi_thread")]
-async fn only_this_targets_scratch_files_are_removed() {
+async fn only_the_recorded_scratch_files_are_removed() {
     let dir = Dir::new("leftovers");
     let _source = library(&dir, 3, 0).await;
     let target = dir.join("backup.sqlite3");
-    for name in [
-        format!("backup.sqlite3.partial-{NONCE}"),
-        format!("backup.sqlite3.partial-{NONCE}-journal"),
-    ] {
+    let leftover = format!("backup.sqlite3.partial-{NONCE}");
+    dir.record_scratch("backup.sqlite3.lock", &leftover);
+    for name in [leftover.clone(), format!("{leftover}-journal")] {
         std::fs::write(dir.join(&name), b"half a backup").expect("leftover");
     }
     let kept = [
         "backup.sqlite3.partial-kept".to_owned(),
-        "backup.sqlite3.partialx".to_owned(),
+        format!("backup.sqlite3.partial-{OTHER}"),
         format!("other.sqlite3.partial-{NONCE}"),
-        "backup.sqlite3.partial-FEDCBA9876543210FEDCBA9876543210".to_owned(),
     ];
     for name in &kept {
         std::fs::write(dir.join(name), b"not ours").expect("unrelated file");
@@ -237,23 +255,43 @@ async fn only_this_targets_scratch_files_are_removed() {
     for name in kept.iter().map(String::as_str).chain(["backup.sqlite3"]) {
         assert!(names.iter().any(|present| present == name), "{name} kept: {names:?}");
     }
-    assert!(!names.contains(&format!("backup.sqlite3.partial-{NONCE}")), "{names:?}");
-    assert!(!names.contains(&format!("backup.sqlite3.partial-{NONCE}-journal")), "{names:?}");
+    assert!(!names.contains(&leftover), "{names:?}");
+    assert!(!names.contains(&format!("{leftover}-journal")), "{names:?}");
+    assert_eq!(dir.record("backup.sqlite3"), "");
     assert_eq!(integrity(&target), "ok");
 }
 
-/// A backup killed while writing `Backup.sqlite3` left its scratch file. The next backup, of
-/// `backup.sqlite3`, removes it where the file system makes the two names one target (both reach
-/// the same lock file); on a case-sensitive one they are two targets and it stays (review
-/// C5-R2-02).
+/// A record names a scratch file that was never created (the backup died in between), or names
+/// something that is not a scratch file: nothing is removed, the record is cleared and the backup
+/// goes on.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_record_is_acted_on_only_when_it_names_a_scratch_file() {
+    let dir = Dir::new("records");
+    let _source = library(&dir, 3, 0).await;
+    dir.record_scratch("first.sqlite3.lock", &format!("first.sqlite3.partial-{NONCE}"));
+    dir.record_scratch("second.sqlite3.lock", "library.sqlite3");
+    for target in ["first.sqlite3", "second.sqlite3"] {
+        backup_library(&dir.library(), &dir.join(target), options(), &BackupCancel::new())
+            .await
+            .expect("backup");
+        assert_eq!(dir.record(target), "", "{target}");
+    }
+    assert_eq!(integrity(&dir.library()), "ok", "the library is still there");
+    assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
+}
+
+/// A backup of `Backup.sqlite3` died and left its scratch file, recorded in `Backup.sqlite3.lock`.
+/// The next backup, of `backup.sqlite3`, removes it where the file system makes the two names one
+/// target (both reach that lock file and its record); on a case-sensitive one they are two
+/// targets and it stays (review C5-R2-02, C5-R3-02).
 #[tokio::test(flavor = "multi_thread")]
 async fn a_leftover_under_another_spelling_is_removed_only_for_the_same_target() {
     let dir = Dir::new("spelling");
     let _source = library(&dir, 3, 0).await;
     let insensitive = dir.case_insensitive();
     eprintln!("file system case-insensitive: {insensitive}");
-    std::fs::write(dir.join("Backup.sqlite3.lock"), b"").expect("its lock");
     let leftover = format!("Backup.sqlite3.partial-{NONCE}");
+    dir.record_scratch("Backup.sqlite3.lock", &leftover);
     std::fs::write(dir.join(&leftover), b"half a backup").expect("leftover");
 
     backup_library(&dir.library(), &dir.join("backup.sqlite3"), options(), &BackupCancel::new())
@@ -278,39 +316,48 @@ async fn a_backup_killed_after_publishing_is_tidied_by_the_next() {
     backup_library(&dir.library(), &target, options(), &BackupCancel::new())
         .await
         .expect("first backup");
-    let scratch = dir.join(&format!("backup.sqlite3.partial-{NONCE}"));
+    let scratch_name = format!("backup.sqlite3.partial-{NONCE}");
+    let scratch = dir.join(&scratch_name);
     std::fs::hard_link(&target, &scratch).expect("second name, as a killed backup leaves it");
+    dir.record_scratch("backup.sqlite3.lock", &scratch_name);
 
     let error = backup_library(&dir.library(), &target, options(), &BackupCancel::new())
         .await
         .expect_err("the target exists");
     assert!(error.to_string().contains("已存在"), "{error}");
     assert!(!scratch.exists(), "{:?}", dir.names());
+    assert_eq!(dir.record("backup.sqlite3"), "");
     assert_eq!(integrity(&target), "ok");
 }
 
+/// A backup's name must end in `.sqlite3`. That keeps it off the names of a database's companion
+/// files (a backup at one would be taken as the database's journal or shared memory and
+/// overwritten), however the file system folds case (`\u{17f}`, long s, folds to `s` on a
+/// casefolding ext4), and off the protocol's own names (review C5-R2-01, C5-R3-01). Nothing is
+/// created for a refused name.
 #[tokio::test(flavor = "multi_thread")]
-async fn names_reserved_for_the_protocol_are_refused() {
-    let dir = Dir::new("reserved");
+async fn only_names_ending_in_sqlite3_are_accepted() {
+    let dir = Dir::new("names");
     let _source = library(&dir, 3, 0).await;
     let before = dir.names();
-    // A backup at a companion name of the library (or of any database beside it) would be taken
-    // as its journal or shared memory and overwritten (review C5-R2-01).
     for name in [
         "backup.lock".to_owned(),
-        "backup.LOCK".to_owned(),
+        "backup.sqlite3.lock".to_owned(),
         format!("backup.sqlite3.partial-{NONCE}"),
-        format!("backup.sqlite3.PARTIAL-{}", NONCE.to_uppercase()),
         "library.sqlite3-wal".to_owned(),
         "library.sqlite3-shm".to_owned(),
         "library.sqlite3-journal".to_owned(),
-        "backup.sqlite3-WAL".to_owned(),
+        "library.sqlite3-\u{17f}hm".to_owned(),
+        "backup.SQLITE3".to_owned(),
+        ".sqlite3".to_owned(),
+        "backup".to_owned(),
+        "backup.db".to_owned(),
     ] {
         let error =
             backup_library(&dir.library(), &dir.join(&name), options(), &BackupCancel::new())
                 .await
-                .expect_err("a reserved name is refused");
-        assert!(error.to_string().contains("留给备份自己的文件"), "{name}: {error}");
+                .expect_err("only *.sqlite3 is accepted");
+        assert!(error.to_string().contains("须以 .sqlite3 结尾"), "{name}: {error}");
     }
     assert_eq!(dir.names(), before, "nothing created");
 }
@@ -460,8 +507,9 @@ async fn limits_too_long_to_represent_are_none() {
     assert_eq!(integrity(&target), "ok");
 }
 
-/// Dropping the future of a running backup cancels it: its thread stops on its own, removes its
-/// scratch file, then releases the lock; nothing is published (review C5-R2-06).
+/// Dropping the future of a backup whose scratch file is being filled cancels it: its thread stops
+/// on its own, removes its scratch file and clears its record, then releases the lock; nothing is
+/// published (review C5-R2-06, C5-R3-04).
 #[tokio::test(flavor = "multi_thread")]
 async fn a_dropped_backup_stops_and_leaves_nothing() {
     let dir = Dir::new("dropped");
@@ -471,7 +519,7 @@ async fn a_dropped_backup_stops_and_leaves_nothing() {
     let cancel = BackupCancel::new();
     let started = async {
         let started = Instant::now();
-        while dir.scratch_names().is_empty() {
+        while !dir.scratch_filling() {
             assert!(started.elapsed() < Duration::from_secs(30), "the copy never started");
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
@@ -485,6 +533,7 @@ async fn a_dropped_backup_stops_and_leaves_nothing() {
     dir.wait_for_lock("backup.sqlite3");
     assert!(!target.exists());
     assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
+    assert_eq!(dir.record("backup.sqlite3"), "");
 }
 
 /// Cancelled before it starts, and cancelled once its scratch file exists (the copy is about to run
@@ -518,4 +567,5 @@ async fn a_cancelled_backup_stops_before_it_reports_and_leaves_nothing() {
     assert!(error.to_string().contains("已取消"), "{error}");
     assert!(!target.exists());
     assert!(dir.scratch_names().is_empty(), "{:?}", dir.names());
+    assert_eq!(dir.record("backup.sqlite3"), "");
 }

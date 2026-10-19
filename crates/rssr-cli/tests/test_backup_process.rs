@@ -122,8 +122,7 @@ async fn two_processes_backing_up_one_target_publish_once() {
             .expect("start backup")
     };
     let (first, second) = (start(), start());
-    let outputs =
-        [first.wait_with_output().expect("first"), second.wait_with_output().expect("second")];
+    let outputs = [finish(first), finish(second)];
     let errors: Vec<String> = outputs
         .iter()
         .filter(|output| !output.status.success())
@@ -137,6 +136,19 @@ async fn two_processes_backing_up_one_target_publish_once() {
     );
     assert!(dir.scratch_names().is_empty(), "{:?}", dir.scratch_names());
     assert_eq!(padding_rows(&target).await, 65_536);
+}
+
+/// Waits up to two minutes for `child`, killing it if it takes longer.
+fn finish(mut child: std::process::Child) -> std::process::Output {
+    let started = Instant::now();
+    while child.try_wait().expect("poll").is_none() {
+        if started.elapsed() > Duration::from_secs(120) {
+            let _ = child.kill();
+            panic!("a backup did not finish within two minutes");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    child.wait_with_output().expect("output")
 }
 
 #[test]

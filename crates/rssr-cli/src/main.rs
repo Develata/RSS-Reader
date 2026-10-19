@@ -51,8 +51,9 @@ enum Command {
     SaveSettings(SaveSettingsArgs),
     PushWebdav(WebDavArgs),
     PullWebdav(WebDavArgs),
-    /// Write a consistent copy of the library to FILE, which must not exist yet. Safe while the
-    /// server or another program uses the library; Ctrl-C cancels it.
+    /// Write a consistent copy of the library to FILE, which must not exist yet and must be
+    /// named *.sqlite3. Safe while the server or another program uses the library; Ctrl-C
+    /// cancels it.
     Backup(BackupArgs),
 }
 
@@ -345,6 +346,7 @@ struct CliServices {
 /// use cases and does not open the library through the store, so it never creates or imports one.
 /// Ctrl-C asks the backup to stop; the command still waits for it and reports what it did.
 async fn backup(data_dir: Option<PathBuf>, args: BackupArgs) -> anyhow::Result<()> {
+    use std::io::Write as _;
     let library = resolve_data_dir(data_dir)?.join(local::LIBRARY_FILE);
     if !library.is_file() {
         anyhow::bail!("没有找到资料库：{}", library.display());
@@ -358,15 +360,18 @@ async fn backup(data_dir: Option<PathBuf>, args: BackupArgs) -> anyhow::Result<(
         let cancel = cancel.clone();
         tokio::spawn(async move {
             if tokio::signal::ctrl_c().await.is_ok() {
-                eprintln!("正在取消备份…");
+                // Cancel first: a console that cannot be written must not keep the backup going.
                 cancel.cancel();
+                let _ = writeln!(std::io::stderr(), "正在取消备份…");
             }
         })
     };
     let result = backup_library(&library, &args.file, options, &cancel).await;
     on_ctrl_c.abort();
     let report = result.context("备份失败")?;
-    println!("已备份到 {}（{} 字节）", report.path.display(), report.bytes);
+    // The backup is in place whether or not this line can be written (review C5-R3-03).
+    let _ =
+        writeln!(std::io::stdout(), "已备份到 {}（{} 字节）", report.path.display(), report.bytes);
     Ok(())
 }
 
