@@ -211,7 +211,7 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 - 之前出现过：
   - 返回键直接退出 app，或在点过首页目录后按返回没反应
   - 原因（2026-10-18 查明）：tao 在 Android 上不送按键事件，返回键一直由 wry 的 `WryActivity` 沿 WebView 历史后退或交给系统退出，应用内导航从未接上；WebView 历史里只有目录写下的页内锚点
-  - 现在 `MainActivity` 关掉 `handleBackNavigation`，经 JNI 通知 Rust（`use_mobile_back_navigation.rs`）：先关图片查看器，再回上一页或首页；首页按一次提示“再按一次返回键退出”，5 秒内再按退到后台。待真机验收
+  - 现在 `MainActivity` 关掉 `handleBackNavigation`，经 JNI 通知 Rust（`use_mobile_back_navigation.rs`）：先关图片查看器，再回上一页或首页；首页按一次提示“再按一次返回键退出”，5 秒内再按退到后台。2026-10-19 真机确认；阅读页 ← 按钮同步后退（此前在 Android 上先等位置采集，经首页回到阅读页后会卡住数秒）
 - 之前出现过：
   - 按 Home 回桌面，再回 app 后点击无响应
   - 当前已加 `Resumed / Focused(true)` 时恢复窗口可见与焦点

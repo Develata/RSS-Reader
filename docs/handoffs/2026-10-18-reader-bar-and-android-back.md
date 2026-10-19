@@ -6,7 +6,7 @@
 - 当前 HEAD：见两次提交（基于 `de0aad8`）
 - 相关 commit：阅读页一次、Android 返回键一次（本记录随后者提交）
 - 相关 tag / release：N/A
-- 状态：`draft`（阅读页已在浏览器验收；Android 返回键待真机验收）
+- 状态：`validated`（阅读页在浏览器验收；Android 返回键由 Develata 在真机上确认）
 
 ## 工作摘要
 
@@ -44,7 +44,7 @@ Develata 试用时提出：短文章里阅读页底栏（上一未读 / 已读 /
 
 - 现象：装上本记录的测试版后，系统返回键正常；但“进入阅读页 → 点 R 回首页 → 再进阅读页 → 点左上角 ←”时，连点约 3 秒没有反应，之后才回到首页（录屏逐帧确认：第一次进阅读页时 ← 立即生效）。
 - 应用内的 ← 在 Android 上走的是与系统返回键相同的异步路径：先经 `document::eval` 采集阅读位置（最多 500ms）再后退，期间重复点击合并；桌面与 Web 上同一个按钮是同步后退的。排除了：正文过大（这篇 24 KB、没有内嵌图片）、重复 push（列表只有一个 `Link`）、刷新占住界面线程（多线程 tokio 运行时）、有代码替换路由（没有）。卡住的确切机制没有找到；应用的 tracing 写到标准输出，Android 上不进 logcat。
-- 修改：← 在所有平台上同步后退（`navigate_back`）。点击是 DOM 事件，`reading_position.js` 在捕获阶段、路由切换之前已记下位置，不需要再等一轮。系统返回键没有 DOM 事件，保留先采集再后退（`navigate_back_after_capture`，仅 Android）。待真机确认；若 ← 仍卡，说明原因不在这条路径，需用 `chrome://inspect` 连上 WebView 看。
+- 修改：← 在所有平台上同步后退（`navigate_back`）。点击是 DOM 事件，`reading_position.js` 在捕获阶段、路由切换之前已记下位置，不需要再等一轮。系统返回键没有 DOM 事件，保留先采集再后退（`navigate_back_after_capture`，仅 Android）。Develata 用 `7fd0db5` 的测试包在真机上确认已修好（2026-10-19）。
 
 ### 测试脚本
 
@@ -75,12 +75,12 @@ Windows（rustc 1.99.0，基准 `de0aad8`；日志在会话临时目录 `evidenc
 
 ### 手工验收
 
-- Android 真机：未执行。需要：各页逐页返回、阅读页先关图片、首页两次返回（5 秒内 / 超过 5 秒）、在首页点过目录后返回、退到后台再回来提示不残留。`MainActivity.kt` 只有在打 APK 时才编译，本次没有打 APK。
+- Android 真机（Develata，本地调试包 `io.github.develata.rssreader.v02test`，NDK 28.2）：系统返回键按设计工作（基于 `45c28c7` 的包）；阅读页 → 首页 → 阅读页后点 ← 卡住的问题，在 `7fd0db5` 的包上确认修好。逐项清单（`docs/testing/manual-regression.md`）里的其他项没有逐一记录结果。
 - 桌面实际使用：未执行（浏览器验收覆盖了同一套页面代码）。
 
 ## 结果
 
-- 阅读页改动可合并。Android 返回键代码完成，待真机验收后再标 `validated`。
+- 可合并：阅读页在浏览器验收，Android 返回键在真机上确认。
 
 ## 风险与后续事项
 
