@@ -63,7 +63,8 @@ impl Drop for Dir {
 struct Running(Vec<Child>);
 
 impl Running {
-    /// Waits until the first one's scratch file is being filled.
+    /// Waits until the first one's scratch file has content: writing began (whether the copy is
+    /// still running when the caller acts is not observed).
     fn until_copying(&mut self, dir: &Dir) {
         let started = Instant::now();
         while !dir.scratch_filling() {
@@ -157,9 +158,10 @@ async fn a_backup_killed_while_copying_is_cleaned_up_by_the_next() {
     assert_eq!(padding_rows(&target).await, 65_536);
 }
 
-/// Ctrl-C while the copy runs: the command cancels the backup, waits for it to stop and reports
-/// it cancelled, with nothing published and nothing left (review C5-R4-04). Unix only: a test
-/// cannot send Ctrl-C to one child process on Windows.
+/// Ctrl-C once the copy has begun writing: the command cancels the backup, waits for it to stop
+/// and reports it cancelled, with nothing published and nothing left (review C5-R4-04). With a 64
+/// MiB copy the signal comes while it runs; that is likely, not observed. Unix only: a test cannot
+/// send Ctrl-C to one child process on Windows.
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn ctrl_c_while_copying_cancels_the_backup() {
@@ -188,7 +190,12 @@ async fn two_processes_backing_up_one_target_publish_once() {
     let dir = Dir::new("two");
     large_library(&dir.data()).await;
     let target = dir.0.join("backup.sqlite3");
-    let outputs = Running(vec![start_backup(&dir, &target), start_backup(&dir, &target)]).finish();
+    // The guard exists before the first child, so a failed second start still reaps the first
+    // (review C5-R5-04).
+    let mut running = Running(Vec::new());
+    running.0.push(start_backup(&dir, &target));
+    running.0.push(start_backup(&dir, &target));
+    let outputs = running.finish();
     let errors: Vec<String> = outputs
         .iter()
         .filter(|output| !output.status.success())

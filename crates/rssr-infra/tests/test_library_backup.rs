@@ -276,7 +276,8 @@ async fn only_scratch_named_entries_of_the_scratch_directory_are_removed() {
 }
 
 /// The scratch directory's name holding a file, or a link to a directory: refused before anything
-/// is removed, and nothing is created. A link is not followed into what it points to.
+/// is removed (only the lock file has been created). A link is not followed into what it points
+/// to.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_scratch_directory_name_that_is_not_a_directory_is_refused() {
     let dir = Dir::new("scratch-kind");
@@ -336,6 +337,59 @@ async fn a_leftover_under_another_spelling_is_removed_only_for_the_same_target()
         !insensitive,
         "case-insensitive: {insensitive}, {:?}",
         dir.scratch_names()
+    );
+}
+
+/// A lock file that is there already, with content, is locked and left as it is: the protocol
+/// never writes to it.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_existing_lock_file_is_left_as_it_is() {
+    let dir = Dir::new("lock-kept");
+    let _source = library(&dir, 3, 0).await;
+    std::fs::write(dir.join("backup.sqlite3.lock"), b"someone's notes").expect("lock file");
+    backup_library(&dir.library(), &dir.join("backup.sqlite3"), options(), &BackupCancel::new())
+        .await
+        .expect("backup");
+    assert_eq!(std::fs::read(dir.join("backup.sqlite3.lock")).expect("lock"), b"someone's notes");
+}
+
+/// A lock file with another name (a hard link) is refused before it is opened: closing a second
+/// descriptor of a database's file would drop the locks SQLite holds on it in this process
+/// (review C5-R5-02). Unix only, where those locks are POSIX locks.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_lock_file_with_another_name_is_refused() {
+    let dir = Dir::new("lock-linked");
+    let _source = library(&dir, 3, 0).await;
+    std::fs::hard_link(dir.library(), dir.join("backup.sqlite3.lock")).expect("hard link");
+    let error = backup_library(
+        &dir.library(),
+        &dir.join("backup.sqlite3"),
+        options(),
+        &BackupCancel::new(),
+    )
+    .await
+    .expect_err("a lock file with another name is refused");
+    assert!(error.to_string().contains("硬链接"), "{error}");
+    assert_eq!(integrity(&dir.library()), "ok");
+    assert!(dir.scratch_names().is_empty(), "{:?}", dir.scratch_names());
+}
+
+/// A leftover that cannot be removed (here a directory under a scratch file's name) stops the
+/// backup before it creates a scratch file of its own, so failed attempts do not pile up copies.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_leftover_that_cannot_be_removed_stops_the_backup() {
+    let dir = Dir::new("stuck");
+    let _source = library(&dir, 3, 0).await;
+    let stuck = dir.join(&format!("backup.sqlite3.partial/partial-{NONCE}"));
+    std::fs::create_dir_all(&stuck).expect("a directory where a scratch file would be");
+    backup_library(&dir.library(), &dir.join("backup.sqlite3"), options(), &BackupCancel::new())
+        .await
+        .expect_err("the leftover cannot be removed");
+    assert!(!dir.join("backup.sqlite3").exists());
+    assert_eq!(
+        dir.scratch_names(),
+        ["backup.sqlite3.partial/", &format!("backup.sqlite3.partial/partial-{NONCE}")]
     );
 }
 
@@ -540,9 +594,10 @@ async fn limits_too_long_to_represent_are_none() {
     assert_eq!(integrity(&target), "ok");
 }
 
-/// Dropping the future of a backup whose scratch file is being filled cancels it: its thread stops
-/// on its own, removes its scratch file and directory, then releases the lock; nothing is
-/// published (review C5-R2-06, C5-R3-04).
+/// Dropping the future of a backup once its scratch file has content (writing began; whether the
+/// copy is still running then is not observed) cancels it: its thread stops on its own, removes
+/// its scratch file and directory, then releases the lock; nothing is published (review C5-R2-06,
+/// C5-R3-04).
 #[tokio::test(flavor = "multi_thread")]
 async fn a_dropped_backup_stops_and_leaves_nothing() {
     let dir = Dir::new("dropped");
@@ -590,7 +645,7 @@ async fn a_cancelled_backup_stops_before_it_reports_and_leaves_nothing() {
         tokio::spawn(async move { backup_library(&library, &target, options(), &cancel).await })
     };
     let started = std::time::Instant::now();
-    while dir.scratch_names().is_empty() {
+    while !dir.scratch_names().iter().any(|name| !name.ends_with('/')) {
         assert!(started.elapsed() < Duration::from_secs(30), "the copy never started");
         tokio::time::sleep(Duration::from_millis(1)).await;
     }

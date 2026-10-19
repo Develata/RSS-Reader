@@ -4,22 +4,35 @@
 //! processes are neither blocked nor seen half way) into a scratch file next to the target, and
 //! published under the target's name only if that name is still free. One thread does all of it,
 //! on a connection of its own, and owns the lock and the scratch file from start to end: nothing
-//! is released or removed while SQLite may still write. The protocol never changes the content of
-//! a file it did not create in this run: it creates files and directories only if missing,
-//! hard-links and unlinks names, and never writes to or truncates an existing file (review
-//! C5-R4-01, C5-R4-02).
+//! is released or removed while SQLite may still write. In the target's directory the protocol
+//! never changes the content of a file it did not create in this run: it creates files and
+//! directories only if missing, hard-links and unlinks names, and never writes to or truncates an
+//! existing file (review C5-R4-01, C5-R4-02). (The library itself is read through SQLite, which
+//! may checkpoint its WAL when the backup's connection closes; see Limits.)
+//!
+//! Precondition (decided 2026-10-19 after review C5-R5): the target's directory is under the sole
+//! control of the user running the backup, and holds no aliases made on purpose — no hard link,
+//! symbolic link or mount (a bind mount included) that makes a backup's lock file or scratch
+//! directory another name of some other file or directory. Within it, every name the protocol uses
+//! is the plain name it looks like. What the protocol checks beyond that (a lock file that is not a
+//! regular file or has other names, a scratch directory name that is not a directory) is refused
+//! as a safeguard, not a defence: it does not detect a bind mount, nor names replaced while it
+//! runs.
 //!
 //! 1. The library is opened only if it exists and is a library: no creation, no v0.1 import.
 //! 2. Backups of one target exclude each other through an advisory lock on `<target>.lock`
 //!    (`flock` / `LockFileEx`), waited for a bounded time. The lock file must be a regular file,
-//!    opened without following a link (and on Unix without blocking on a FIFO), and is never
-//!    written; it stays in place, since removing it would let a waiter lock a file the next backup
-//!    no longer sees.
+//!    on Unix with no other name (checked before it is opened: closing a second descriptor of a
+//!    database's file would drop the POSIX locks SQLite holds on it in this process, review
+//!    C5-R5-02), opened without following a link (and on Unix without blocking on a FIFO), and is
+//!    never written; it stays in place, since removing it would let a waiter lock a file the next
+//!    backup no longer sees.
 //! 3. Scratch files live in the directory `<target>.partial`, created when missing (owner-only on
 //!    Unix) and refused when that name is anything but a directory (a link included). Holding the
 //!    lock, the backup first removes the entries there named like scratch files: only a backup of
 //!    this target that died can have left them (a running one holds the lock), including one
-//!    killed after it published. Other entries stay. Then a target that exists is refused.
+//!    killed after it published. Other entries stay; the scan reads every entry and checks for
+//!    cancellation between them. Then a target that exists is refused.
 //! 4. The scratch file `partial-<32 hex digits>` is created there only if missing (`VACUUM INTO`
 //!    accepts an empty file), owner-only on Unix as the library is, filled, synced and checked to
 //!    be a library. SQLite's `-journal`, `-wal` and `-shm` files of it count as scratch files.
@@ -27,17 +40,17 @@
 //!    link to the target's name, which fails atomically if the name was taken meanwhile. A file
 //!    system without hard links is reported, never answered with a rename that could replace a
 //!    file. The scratch name is then removed, the scratch directory too if it is empty, and the
-//!    target's directory synced; a failure of those is logged, not reported, because the backup is
-//!    already in place.
+//!    target's directory synced; a failure of those is logged (a scratch directory that is not
+//!    empty is expected and kept quietly), not reported, because the backup is already in place.
 //!
 //! Names. A backup's file name must end in `.sqlite3` (see [`is_target_name`]). That keeps it off
 //! every name SQLite gives a database's companion files, where a backup would be taken as the
-//! database's journal or shared memory and overwritten, and off the protocol's own names. Two
-//! spellings of a target reach the same `<target>.lock` and the same `<target>.partial` exactly
-//! when they reach the same target, on any file system: the names share a directory and a stem and
-//! end in the same ASCII suffix, and file systems fold case and normalize character by character.
-//! So the lock held and the scratch directory cleaned always belong to one target (review
-//! C5-R2-02, C5-R3-02).
+//! database's journal or shared memory and overwritten, and off the protocol's own names. Under
+//! the precondition, two spellings of a target that the file system takes for one name (a
+//! case-insensitive file system) take `<target>.lock` and `<target>.partial` for one name too: the
+//! names share a directory and a stem and end in the same ASCII suffix, which case folding and
+//! normalization leave as it is. So the lock held and the scratch directory cleaned belong to one
+//! target (review C5-R2-02, C5-R3-02).
 //!
 //! Limits. The deadline applies to the copy statement only: SQLite's progress handler interrupts it
 //! at the next check once the deadline has passed or the backup was cancelled. The checks come
@@ -53,11 +66,9 @@
 //! statement has ended. While the copy reads its snapshot, other connections' writes collect in the
 //! library's `-wal` file, which can be recycled only after the copy ends.
 //!
-//! The protocol assumes that only the user running the backup can change the target's directory
-//! and the scratch directory: it does not defend against another writer replacing names there
-//! while it runs, and takes anything put into the scratch directory under a scratch file's name
-//! for a leftover. Each call runs on a thread of its own; the caller bounds how many run at once
-//! (the CLI starts one).
+//! Anything put into the scratch directory under a scratch file's name is taken for a leftover.
+//! Each call runs on a thread of its own; the caller bounds how many run at once (the CLI starts
+//! one).
 
 use std::fs::{File, OpenOptions, TryLockError};
 use std::hash::{BuildHasher, Hasher, RandomState};
@@ -160,7 +171,7 @@ fn run(
     let parent = check_target(target)?;
     let lock = lock(&sibling(target, ".lock"), options.lock_wait, cancel, target)?;
     let scratch_dir = ScratchDir::open(sibling(target, ".partial"))?;
-    scratch_dir.remove_leftovers()?;
+    scratch_dir.remove_leftovers(cancel, target)?;
     if target.symlink_metadata().is_ok() {
         return Err(exists(target));
     }
@@ -250,10 +261,14 @@ fn is_scratch_name(name: &str) -> bool {
 
 /// Waits up to `wait` for the advisory lock on `path`, which must be a regular file.
 fn lock(path: &Path, wait: Duration, cancel: &BackupCancel, target: &Path) -> StoreResult<File> {
-    if let Ok(metadata) = path.symlink_metadata()
-        && !metadata.is_file()
-    {
-        return Err(not_regular(path));
+    if let Ok(metadata) = path.symlink_metadata() {
+        if !metadata.is_file() {
+            return Err(not_regular(path));
+        }
+        #[cfg(unix)]
+        if std::os::unix::fs::MetadataExt::nlink(&metadata) > 1 {
+            return Err(invalid(format!("备份锁还有别的名字（硬链接）：{}", path.display())));
+        }
     }
     let mut options = OpenOptions::new();
     options.create(true).truncate(false).write(true);
@@ -317,8 +332,9 @@ impl ScratchDir {
 
     /// Removes the entries named like scratch files: only a backup of this target that died left
     /// them, since a running one holds the lock. Other entries stay.
-    fn remove_leftovers(&self) -> StoreResult<()> {
+    fn remove_leftovers(&self, cancel: &BackupCancel, target: &Path) -> StoreResult<()> {
         for entry in std::fs::read_dir(&self.path)? {
+            stop_if_cancelled(cancel, target)?;
             let entry = entry?;
             if !entry.file_name().to_str().is_some_and(is_scratch_name) {
                 continue;
@@ -335,7 +351,14 @@ impl ScratchDir {
 impl Drop for ScratchDir {
     fn drop(&mut self) {
         // Fails while anything is left in it, which then stays for the next backup to remove.
-        let _ = std::fs::remove_dir(&self.path);
+        match std::fs::remove_dir(&self.path) {
+            Err(error)
+                if !matches!(error.kind(), ErrorKind::DirectoryNotEmpty | ErrorKind::NotFound) =>
+            {
+                tracing::warn!(%error, path = %self.path.display(), "无法删除备份暂存目录");
+            }
+            _ => {}
+        }
     }
 }
 
