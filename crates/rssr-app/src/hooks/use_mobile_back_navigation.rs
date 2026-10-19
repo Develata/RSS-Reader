@@ -25,36 +25,14 @@ impl Drop for BackCaptureGuard {
 #[cfg(target_os = "android")]
 const EXIT_CONFIRM_WINDOW: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// The toolbar and native back key share history/fallback policy.
+/// The toolbar back button: the previous page, or `fallback_route` when there is none.
+///
+/// Synchronous on every platform. The click is a DOM event, and `reading_position.js` records the
+/// reading position in its capture phase before the route changes, so there is nothing to wait
+/// for. On Android the button used to wait for a further capture round trip like the system key;
+/// after returning to a reader through Home it then stayed unresponsive for seconds (the cause of
+/// that stall was not pinned down).
 pub(crate) fn navigate_back(navigator: Navigator, fallback_route: Option<AppRoute>) -> bool {
-    #[cfg(target_os = "android")]
-    {
-        if !navigator.can_go_back()
-            && !fallback_route
-                .as_ref()
-                .is_some_and(|target| history().current_route() != target.to_string())
-        {
-            return false;
-        }
-        if BACK_CAPTURE_PENDING.replace(true) {
-            return true;
-        }
-        let guard = BackCaptureGuard;
-        let route = history().current_route();
-        spawn(async move {
-            let _guard = guard;
-            crate::ui::reading_position::capture_current_position().await;
-            if history().current_route() == route {
-                finish_back_navigation(navigator, fallback_route);
-            }
-        });
-        true
-    }
-    #[cfg(not(target_os = "android"))]
-    finish_back_navigation(navigator, fallback_route)
-}
-
-fn finish_back_navigation(navigator: Navigator, fallback_route: Option<AppRoute>) -> bool {
     if navigator.can_go_back() {
         navigator.go_back();
         return true;
@@ -66,6 +44,33 @@ fn finish_back_navigation(navigator: Navigator, fallback_route: Option<AppRoute>
         return true;
     }
     false
+}
+
+/// The Android system back key. No DOM event records the reading position, so it is captured first
+/// (at most 500 ms); presses while waiting merge, and the request is dropped if the route changed
+/// meanwhile.
+#[cfg(target_os = "android")]
+fn navigate_back_after_capture(navigator: Navigator, fallback_route: Option<AppRoute>) -> bool {
+    if !navigator.can_go_back()
+        && !fallback_route
+            .as_ref()
+            .is_some_and(|target| history().current_route() != target.to_string())
+    {
+        return false;
+    }
+    if BACK_CAPTURE_PENDING.replace(true) {
+        return true;
+    }
+    let guard = BackCaptureGuard;
+    let route = history().current_route();
+    spawn(async move {
+        let _guard = guard;
+        crate::ui::reading_position::capture_current_position().await;
+        if history().current_route() == route {
+            navigate_back(navigator, fallback_route);
+        }
+    });
+    true
 }
 
 /// 页面上的 Android 系统返回键：回到上一页，没有上一页就去 `fallback_route`。
@@ -126,7 +131,7 @@ fn use_back_navigation(
                 return;
             }
             if fallback_route.is_some() {
-                navigate_back(navigator, fallback_route.clone());
+                navigate_back_after_capture(navigator, fallback_route.clone());
             } else if exit_hint() {
                 exit_hint.set(false);
                 android::move_task_to_back();
