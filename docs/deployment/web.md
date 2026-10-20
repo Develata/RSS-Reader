@@ -61,6 +61,34 @@ cargo run --locked -p rssr-web -- --print-password-hash '请换成自己的强�
 
 Compose 的端口发布默认不限制宿主监听地址。对外部署时应由防火墙或反向代理控制访问，并确认 HTTPS 转发和 cookie 设置与实际入口一致。`/healthz` 可用于健康检查。
 
+## Linux 二进制部署（不使用 Docker）
+
+Release 附件 `rssr-web-linux-x86_64.tar.gz` 包含 `rssr-web` 服务端、与之同版本的前端包 `public/`，以及 systemd 单元示例 [`rssr-web.service`](./rssr-web.service)。服务端与前端包必须来自同一个发布，不要用别的版本的 `RSS-Reader-web.tar.gz` 替换 `public/`。
+
+```bash
+sudo tar -C /opt -xzf rssr-web-linux-x86_64.tar.gz
+```
+
+```bash
+sudo useradd --system --home-dir /var/lib/rssr-web --shell /usr/sbin/nologin rssr
+```
+
+```bash
+/opt/rssr-web/rssr-web --print-password-hash '请换成自己的强密码'
+```
+
+把用户名和上一步输出的哈希写进 `/etc/rssr-web/env`（属主 root、权限 0600），内容为 `RSS_READER_WEB_USERNAME=…` 与 `RSS_READER_WEB_PASSWORD_HASH=…` 两行；systemd 的 `EnvironmentFile` 不展开 `$`，哈希无需加引号。然后安装单元并启动：
+
+```bash
+sudo cp /opt/rssr-web/rssr-web.service /etc/systemd/system/rssr-web.service
+```
+
+```bash
+sudo systemctl enable --now rssr-web
+```
+
+示例单元监听 `127.0.0.1:8080`，开启 `production` 与 `Secure` cookie，所以前面需要一个终止 HTTPS 的反向代理，并原样转发 `Host`（见上文）。文章库在 `/var/lib/rssr-web/library`，登录凭据在 `/var/lib/rssr-web/auth.json`；备份时停止服务后复制文章库目录。升级时停止服务，用新发布包整体替换 `/opt/rssr-web`，数据目录不动。
+
 ## 本地验证部署态
 
 如果需要在不运行 Docker 的情况下验证登录和 `/feed-proxy`，先构建 Web 包，再从同一工作区启动服务：

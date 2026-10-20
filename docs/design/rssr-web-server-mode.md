@@ -141,7 +141,7 @@
 
 ## 5. 分阶段
 
-进度：P0 已完成（`refactor/rssr-host`）；P1 已完成（`feat/rssr-web-server-api`）；P2 已完成（`feat/rssr-web-remote-ui`），见对应的 handoff。
+进度：P0 已完成（`refactor/rssr-host`）；P1 已完成（`feat/rssr-web-server-api`）；P2 已完成（`feat/rssr-web-remote-ui`）；P3 代码与文档已就绪，发布流水线待首次打 tag 时在 CI 上验证。各阶段见对应的 handoff。
 
 每阶段单独 PR，各自验证：
 

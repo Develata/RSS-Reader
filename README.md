@@ -27,6 +27,7 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
    | Linux x64 | `RSS-Reader-linux-x86_64.deb` | 在满足包内依赖的系统安装；数据写入当前用户的 XDG 数据目录 |
    | macOS Intel / Apple Silicon | `RSS-Reader-macos-x86_64.tar.gz` / `RSS-Reader-macos-aarch64.tar.gz` | 解压到可写目录，打开 `RSS-Reader.app` |
    | Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | 安装 APK；AAB 是应用商店产物，不能直接安装 |
+   | Linux x64 自托管服务端 | `rssr-web-linux-x86_64.tar.gz` | 与桌面版等价的 Web 服务：文章库在服务器的 SQLite，浏览器登录后使用；部署见 [Web 部署指南](./docs/deployment/web.md#linux-二进制部署不使用-docker)，也可使用同源的 Docker 镜像 |
    | Web | `RSS-Reader-web.tar.gz` | 静态站点包；需要受保护的登录和跨域 feed 代抓时使用 [Web 部署指南](./docs/deployment/web.md) |
 
 2. 打开应用，点顶栏的订阅图标（RSS 波纹）进入订阅页，输入 RSS / Atom 地址或网站首页并添加订阅。

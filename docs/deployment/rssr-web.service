@@ -1,0 +1,35 @@
+# rssr-web 的 systemd 单元示例（Linux 二进制部署，见 docs/deployment/web.md）。
+#
+# 假定：发布包解压到 /opt/rssr-web；已创建系统用户 rssr；HTTPS 由反向代理终止，并原样转发 Host。
+# 凭据放在 /etc/rssr-web/env（权限 0600，属主 root），至少包含：
+#   RSS_READER_WEB_USERNAME=…
+#   RSS_READER_WEB_PASSWORD_HASH=…   （用 `rssr-web --print-password-hash '密码'` 生成；EnvironmentFile 不做 $ 展开）
+[Unit]
+Description=RSS-Reader web server (rssr-web)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rssr
+Group=rssr
+ExecStart=/opt/rssr-web/rssr-web
+EnvironmentFile=/etc/rssr-web/env
+Environment=RSS_READER_WEB_BIND=127.0.0.1:8080
+Environment=RSS_READER_WEB_STATIC_DIR=/opt/rssr-web/public
+Environment=RSS_READER_WEB_ENV=production
+Environment=RSS_READER_WEB_SECURE_COOKIE=true
+# 文章库与登录凭据分开存放；两者都在 systemd 管理的状态目录下。
+Environment=RSS_READER_WEB_DATA_DIR=/var/lib/rssr-web/library
+Environment=RSS_READER_WEB_AUTH_STATE_FILE=/var/lib/rssr-web/auth.json
+StateDirectory=rssr-web
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
