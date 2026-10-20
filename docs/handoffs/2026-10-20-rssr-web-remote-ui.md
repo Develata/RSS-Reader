@@ -69,6 +69,7 @@ GitHub Pages 演示仍是本地模式（D1）。
 - 静态模式回归（`python -m http.server` 托管同一个包，地址用 `localhost:8077`，避免与 127.0.0.1 共享 cookie）：
   完成本地门禁初始化后进入 `/entries`，BrowserStore 的分片与提交头都已写入 `localStorage`，控制台无错误。
   测试数据已清除。
+- 会话在页面打开期间失效（换 `RSS_READER_WEB_SESSION_SECRET` 重启服务端，页面不刷新）：在页内跳到订阅页时，`feeds/snapshot` 返回 401，页面随即跳到 `/login?next=%2Ffeeds`，回跳路径保留。这验证的是 P2 新增的 `on_unauthorized` 路径，不是既有的 `/session-probe` 路径。
 - 阅读页里没有 `<math>`：MathML 功能在 `feat/reader-mathml` 上，不在本分支栈（基于 main）里，这是预期行为。
 
 ## 结果
@@ -77,12 +78,12 @@ GitHub Pages 演示仍是本地模式（D1）。
 
 ## 风险与后续事项
 
-- 会话过期后的整页跳转（401 → 登录页）只在契约测试里验证了回调会被调用，没有在浏览器里实际让会话过期。
+- 覆盖范围说明：`server_mode` 中"有门禁 cookie，但服务端没有接口（404 / HTML）→ 退回本地"这个分支，只由 `capabilities_probe_ignores_an_spa_fallback_page` 单测覆盖；浏览器里的静态模式回归走的是"没有门禁 cookie"分支。
 - 在同一主机的不同端口上，同时运行 rssr-web 和静态包时，两者共享门禁 cookie：静态包会被既有的
   `web_auth` 流程判为会话过期并跳转登录页。这是既有行为，本次未改；真实部署不会这样混用。
 - 多个浏览器同时操作时没有推送（D4），各端在下次查询时才看到变化。
-- release-ui runner 已为冒烟服务端放开内网 feed；`run_rssr_web_proxy_feed_smoke.sh` 只验证 `/feed-proxy`，
-  不受影响。
+- 会启动 rssr-web 并抓取 `127.0.0.1` 夹具 feed 的脚本，都已设置 `RSS_READER_WEB_ALLOW_PRIVATE_FEEDS=true`，并给出独立的 `RSS_READER_WEB_DATA_DIR`：release-ui runner、`run_rssr_web_browser_smoke.sh`、`run_rssr_web_browser_feed_smoke.sh`、`run_windows_chrome_visible_regression.sh`。这些脚本本次没有实际运行，只做了 `bash -n` 语法检查。`run_rssr_web_proxy_feed_smoke.sh` 只验证 `/feed-proxy`，不受影响。
+- `.dockerignore` 补上了 `.claude`、`.workbuddy`：本机 `.claude/worktrees` 里有其它会话的工作树（4.4 GB），会进入构建上下文，并在传输时被其它会话改动，导致 `context canceled`。
 - 下一步 P3：发布流水线新增 `rssr-web` Linux 二进制；`specs/001` 中"无服务端依赖"等条文的修订；
   Docker 镜像构建验证（P1 修复的 1.99 工具链，见 P1 交接）。
 
