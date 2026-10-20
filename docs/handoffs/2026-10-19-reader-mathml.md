@@ -6,7 +6,7 @@
 - 当前 HEAD：见 `git log feat/reader-mathml`
 - 相关 commit：`c31313b`（实现）、评审修复 commit（本记录同次提交）
 - 相关 tag / release：N/A
-- 状态：`validated`
+- 状态：`validated`（代码评审通过，待阈值校准与分支卫生处理后合并）
 
 ## 工作摘要
 
@@ -114,6 +114,10 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
   空公式遮挡同分支后面的有效公式 → 预计算“下一个非空 `<math>`”；文档“不再重复显示”过度概括 → 限定范围并写明
   原子例外；压力测试未断言副本文本消失、浏览器未覆盖新组合 → 补断言与浏览器用例。
 
+- Codex 第四轮评审 `7665f5c..e9881da`（只看本工作的提交）：**approve**。round-3 四条全部 RESOLVED；证明标记总在下一轮被
+  消费、兼任容器只改写一次、编辑仍严格有序互斥，`plan_edits` 时间 O(B + T)、额外空间 O(T + D + B)。唯一保留项是
+  执行结果只能由日志佐证（本机日志在会话 scratchpad，未入库）。
+
 ### 手工验收
 
 - 真实问题订阅源：未执行（等待 Develata 提供订阅源）
@@ -121,7 +125,7 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
 
 ## 结果
 
-- 自动化验证通过；Codex 第三轮 approve-with-fixes，其发现已在第四轮修复；阈值待用真实订阅源校准。
+- 自动化验证通过；Codex 第四轮 approve；阈值待用真实订阅源校准；WebKit 系与 Android WebView 未实机验证。
 - 用户影响：带 MathML 的正文重新打开即显示公式；位于公式之外、符合 KaTeX 双份结构的公式只显示 MathML 那份。
 
 ## 风险与后续事项
