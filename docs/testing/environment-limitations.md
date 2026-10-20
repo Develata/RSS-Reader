@@ -52,10 +52,10 @@
   - Console 可能出现跨域相关报错
 - 为什么不算代码回归：
   - 这是浏览器安全模型边界，不是本仓库业务逻辑独有问题
-  - 同样的 feed 在 `rssr-web` 同源代理模式下通常可成功导入或刷新
+  - 同样的 feed 在 `rssr-web` 服务端模式（服务端抓取）下通常可成功导入或刷新
 - 规避方式 / 复验方式：
   - Web smoke 优先使用已知开放 CORS 的 feed 源
-  - 需要验证跨源抓取时，优先通过 `rssr-web` 的同源代理模式复验
+  - 需要验证跨源抓取时，优先通过 `rssr-web` 服务端模式复验，或使用桌面端
 
 普通跨源 `<img>` 显示不必然要求 CORS。正文图片加载失败应分别检查响应、HTTPS 混合内容、防盗链和网络策略；不能由跨源 URL 直接推断 CORS 失败。
 
@@ -83,12 +83,12 @@
 
 复验时检查 Chrome/driver 版本、实际监听地址、端口占用、沙箱权限与代理环境，并在隔离 profile 下重试 `scripts/run_wasm_contract_harness.sh`。若需要独立 driver，只启动并清理本次进程。仍无法启动时记录完整日志，浏览器契约标为未运行；`cargo test ... --no-run` 只证明可编译。也可使用相同版本的 Linux CI 环境验证。
 
-### 5. Fake-IP DNS 与 feed 代理的 SSRF 防护
+### 5. Fake-IP DNS 与服务端抓取的 SSRF 防护
 
-- 受影响入口：`scripts/run_rssr_web_proxy_feed_smoke.sh`、部署壳 `/feed-proxy`。
-- 现象：本机网络把公共域名解析为 `198.18.0.0/15` 测试地址；代理返回 HTTP 400，提示禁止代理内网或本地地址。可用 `getent ahostsv4 <域名>` 核实实际解析结果。
-- 该网段被代理的现有地址检查明确拒绝；不能把此失败记为真实远端 feed 验收通过，也不应为了 smoke 放宽 SSRF 防护。
-- 复验：在不使用 Fake-IP DNS 的网络中运行相同脚本。登录、同源 fixture 添加/刷新可继续通过 `scripts/run_rssr_web_browser_feed_smoke.sh` 验证，但不替代真实远端代理链路。
+- 受影响入口：`rssr-web` 服务端模式对真实远端 feed 的添加 / 刷新。
+- 现象：本机网络把公共域名解析为 `198.18.0.0/15` 测试地址；服务端拒绝该地址，提示禁止访问内网或本地地址。可用 `getent ahostsv4 <域名>` 核实实际解析结果。
+- 该网段被服务端的出站地址检查明确拒绝；不能把此失败记为真实远端 feed 验收通过，也不应为了 smoke 放宽 SSRF 防护。
+- 复验：在不使用 Fake-IP DNS 的网络中重试。登录、同源 fixture 添加/刷新可继续通过 `scripts/run_rssr_web_browser_feed_smoke.sh` 验证，但不替代真实远端 feed 的服务端抓取。
 - 2026-09-26 的 WSL/Linux 复现与证据见 [发布准备交接](../handoffs/2026-09-26-push-and-release-readiness.md)。
 
 ## 与 handoff 的关系

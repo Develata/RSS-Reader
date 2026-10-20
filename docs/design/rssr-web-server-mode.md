@@ -110,7 +110,7 @@
   `Origin` 必须恰好一个、是规范的源（不含路径），scheme 也要一致：可信代理的 `X-Forwarded-Proto` 优先，
   否则开启 `Secure` cookie 时要求 https。
 - **出站请求是新的服务端风险。** 订阅抓取、订阅探测、图片本地化、WebDAV 都是服务器替用户请求
-  用户提供的地址。原生抓取目前不拦截内网地址，因为桌面需要访问局域网 feed；`/feed-proxy`
+  用户提供的地址。原生抓取目前不拦截内网地址，因为桌面需要访问局域网 feed；（已退役的）`/feed-proxy`
   有完整规则（解析后把 IP 钉死，任一解析结果落在内网就拒绝，防 DNS rebinding）。做法：在原生
   HTTP client 的构造处加可注入的出站地址策略。这个构造处就是 `feed_http_client`，在 5070d71
   修抓取超时时引入，目前还在 `feat/reader-mathml` 分支。服务端默认采用 `/feed-proxy` 的规则，
@@ -161,7 +161,19 @@
 - **D3** 文章库（`RSS_READER_WEB_DATA_DIR`）与登录凭据（`RSS_READER_WEB_AUTH_STATE_FILE`）分开存放。
 - **D4** 多端共享 `app_state` 与设置，后写覆盖。
 
-## 7. 与 2026-10-20 问题的关系
+## 7. 退役 `/feed-proxy`（2026-10-20，P2 之后的清理）
+
+服务端模式落地后，rssr-web 托管的页面由服务端抓取 feed，界面不再经过 `/feed-proxy`；静态包没有这个端点；
+GitHub Pages 演示关闭了全部在线 feed 操作。代理只剩"静态包放在一个同时转发 `/feed-proxy` 的反向代理后面"
+这种官方从未提供的部署，而它是与服务端出站策略重复的第二个"替用户访问 URL"的实现。因此一并退役：
+
+- 删除 `rssr-web` 的 `/feed-proxy`（及其不可信文档隔离、`x-rssr-final-url` 约定）。
+- 静态包只直连抓取，删除"先试同源代理、再直连"的回退与代理登录页 / SPA 外壳判别。
+- 删除代理冒烟脚本、隔离 harness 与对应 CI job，以及 release-UI runner 的 `proxy-feed` 步骤和 `--skip-external-feed`。
+
+此后 Web 只有两种形态：静态包（localStorage + 直连，受 CORS 限制）与 rssr-web（服务端模式）。
+
+## 8. 与 2026-10-20 问题的关系
 
 - 抓取超时修复（5070d71）在原生抓取路径上，服务端模式直接继承。
 - 大 feed 超出 localStorage 配额的问题，在服务端模式下不再存在；静态 Web 包（若按 D1 保留）

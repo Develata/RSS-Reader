@@ -45,14 +45,13 @@
 | 字号偏好、正文链接 / 长代码、Enter 订阅 | 自动化 | `scripts/run_static_web_small_viewport_smoke.sh` | P1 | 真实保存字号后手机 / 桌面生效，局部代码滚动，表单与刷新互不误触 |
 | Android 选择手柄、系统返回、图片缩放 | 实机待验 | Android 实机 + 本轮 handoff | P1 | Web touch emulation 不证明原生 WebView / 系统交互 |
 | `rssr-web` 登录 / 会话 / `/feeds` `/settings` 基础壳 | 自动化 | `bash scripts/run_release_ui_regression.sh --with-rssr-web` | P1 | 已覆盖登录、`/session-probe`、登出 |
-| `rssr-web` 代理链路 `/feed-proxy` 返回真实 XML | 固定 smoke | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_rssr_web_proxy_feed_smoke.sh` | P1 | 当前默认验证阮一峰 Atom |
 | 静态 Web 阅读页 多主题下的视觉细节 | 固定 smoke + 手工结论 | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_reader_theme_matrix.sh` + 查看 `target/static-web-reader-theme-matrix/<ts>/*.png` | P2 | 2026-04-10 基线已人工通过；后续发布仍需复看新产物 |
 | 静态 Web 小视口下的视觉细节 | 自动化 + 截图复核 | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_small_viewport_smoke.sh` + 查看 `target/static-web-small-viewport-smoke/<ts>/*.png` | P2 | 结构性回归由断言阻断；色彩、层次等主观视觉细节仍建议复看截图 |
 | `rssr-web` 浏览器态下真实添加订阅并完成首次刷新 | 固定 smoke | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_rssr_web_browser_feed_smoke.sh` | P2 | 现已用同源 helper + 本地 feed fixture 自动化 |
-| `rssr-web` 浏览器态下真实代理 feed 导入后的页面更新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 公开 selector 已稳定；真实远端源依赖 DNS、代理和站点策略，需单独留证 |
+| `rssr-web` 服务端模式下真实远端 feed 导入后的页面更新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 公开 selector 已稳定；真实远端源依赖 DNS、网络和站点策略，需单独留证 |
 | WebDAV 上传/下载 UI 实页回归 | 手工 | 发布前清单 + 浏览器手工 | P2 | 自动化更多停留在 lower-level gates |
 | 多主题下 `/entries` `/feeds` `/settings` 的视觉细节 | 手工 | 发布前清单 + 浏览器手工 | P2 | 内置主题契约已自动化，但视觉仍建议 spot check |
-| 真实远端 feed 首次刷新后的 列表 / 阅读页 浏览器态 | 手工 | 发布前清单 + 浏览器手工 | P2 | 受远端源波动和 CORS/代理形态影响 |
+| 真实远端 feed 首次刷新后的 列表 / 阅读页 浏览器态 | 手工 | 发布前清单 + 浏览器手工 | P2 | 受远端源波动和 CORS（静态 Web）/ 服务端模式形态影响 |
 | 小视口下 `rssr-web` 部署壳登录后路径 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` + 手工调视口 | P3 | 当前小视口 smoke 只固定了静态 Web |
 
 ## 当前结论
@@ -66,7 +65,6 @@ CI 执行关系、按 crate / theme / harness 的并发上限和失败汇总见[
 - 静态 Web 的 阅读页 多主题矩阵
 - 静态 Web 的小视口关键路径
 - `rssr-web` 的基础登录壳
-- `rssr-web` 的真实 `/feed-proxy` 代理链路
 
 所以现在的主要缺口，不再是“没有固定入口”，而是：
 
@@ -87,7 +85,6 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web --
 ```bash
 bash scripts/run_static_web_reader_theme_matrix.sh
 bash scripts/run_static_web_small_viewport_smoke.sh
-bash scripts/run_rssr_web_proxy_feed_smoke.sh
 bash scripts/run_rssr_web_browser_feed_smoke.sh
 ```
 

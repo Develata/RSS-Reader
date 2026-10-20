@@ -39,8 +39,6 @@ bash scripts/run_chrome_mcp_target.sh --restart
 build-once、summary 和退出码由 Rust 持有。执行 `--plan` 可只查看 JSON 计划。
 Windows 仍依赖 Git Bash 和既有阶段工具，不代表所有 smoke 已原生移植。
 行为基线、直接调用方式、信号边界与实测限制见 [release UI runner](release-ui-runner.md)。
-受外部 RSS 网络限制时可显式加 `--skip-external-feed`（需 full 或 fixed-smokes）；
-这只完成本地 fixture 部分验收，报告中的外部检查仍为 skipped，不能据此认定整套发布检查通过。
 
 ```bash
 bash scripts/run_release_ui_regression.sh --debug --port 8091
@@ -93,7 +91,6 @@ Reader 主题矩阵和部署壳浏览器 smoke 共用 `scripts/browser/capture_s
 
 - `bash scripts/run_static_web_reader_theme_matrix.sh --skip-build`
 - `bash scripts/run_static_web_small_viewport_smoke.sh --skip-build`
-- `bash scripts/run_rssr_web_proxy_feed_smoke.sh --skip-build`
 - `bash scripts/run_rssr_web_browser_feed_smoke.sh --skip-build`
 
 如果这组自动化没过，不进入后续手工回归。
@@ -133,14 +130,14 @@ bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
 用途：
 
 - 验证服务端登录门禁
-- 验证代理态 feed 导入
+- 验证服务端模式下的 feed 导入
 - 验证真实部署入口下的路由与页面
 
 建议覆盖：
 
 - `/`
 - 登录 / 登出
-- 至少 1 个需要代理才能导入的 feed
+- 至少 1 个浏览器直连会被 CORS 拒绝、需服务端模式才能导入的 feed
 
 当前统一脚本里已经补了最小部署壳 smoke：
 
@@ -153,13 +150,7 @@ bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
 - 确认已登录后 `/feeds` 和 `/settings` 返回 `200`
 - 确认 `/logout` 后回到 `/login`
 
-同源 fixture 的登录后添加与首刷已有自动化；真实远端代理 feed 和未覆盖的交互仍需补验。
-
-如果要先固定一条更窄的 deploy-shell 代理回归，优先用：
-
-```bash
-bash scripts/run_rssr_web_proxy_feed_smoke.sh
-```
+同源 fixture 的登录后添加与首刷已有自动化；真实远端 feed 和未覆盖的交互仍需补验。
 
 如果要快速起一个可登录的 `rssr-web` 浏览器回归环境，直接用：
 
@@ -176,7 +167,7 @@ bash scripts/run_rssr_web_browser_feed_smoke.sh
 交互环境 helper `run_rssr_web_browser_smoke.sh` 会给出：
 
 - 临时用户名 / 密码
-- 推荐代理 feed
+- 推荐 feed
 - `summary.md` 模板
 - 固定手工步骤依赖的 selector：
   - `data-field="feed-url-input"`
@@ -251,7 +242,7 @@ bash scripts/run_static_web_small_viewport_smoke.sh
 - 错误凭证有明确提示
 - 正确凭证可进入应用
 - 登出后会话被清除
-- 如果本次发布涉及订阅/刷新/代理行为，再按固定 selector 手工补一次：
+- 如果本次发布涉及订阅/刷新/服务端抓取行为，再按固定 selector 手工补一次：
   - 在 `/feeds` 填 `data-field="feed-url-input"`
   - 点击 `data-action="add-feed"`
   - 点击 `data-action="refresh-feed"`

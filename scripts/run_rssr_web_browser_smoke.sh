@@ -122,7 +122,7 @@ cat >"$summary_file" <<EOF
 - 新 feed 是否出现：
 - 首次刷新是否成功：
 - `/entries` 或 `/reader`：
-- 代理 feed：
+- CORS 受限 feed（服务端抓取）：
 - console：
 - 是否通过：
 

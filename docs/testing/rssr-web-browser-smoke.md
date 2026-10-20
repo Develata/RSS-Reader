@@ -91,7 +91,7 @@ bash scripts/run_rssr_web_browser_smoke.sh --feed-url https://example.com/feed.x
 - `feed-url-input / add-feed / refresh-feed / feed-entries` 结果
 - `/settings` 结果
 - `/logout` 结果
-- 代理 feed 结果
+- CORS 受限 feed（服务端抓取）结果
 - console 结果
 - 是否通过
 

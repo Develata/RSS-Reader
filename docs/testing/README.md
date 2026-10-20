@@ -26,7 +26,6 @@
 
 - [`rssr-web` 浏览器手工 Smoke](./rssr-web-browser-smoke.md)
 - [`rssr-web` 浏览器自动 Feed Smoke](./rssr-web-browser-feed-smoke.md)
-- [`rssr-web` 代理 Feed Smoke](./rssr-web-proxy-feed-smoke.md)
 - [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
 - [Static Web 阅读页 `/entries/:entry_id` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
 - [Static Web 小视口 Smoke](./static-web-small-viewport-smoke.md)
