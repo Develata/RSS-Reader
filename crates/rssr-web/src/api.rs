@@ -42,7 +42,7 @@ use rssr_api::{
         RemoteConfig, SetRead, SetStarred, routes,
     },
 };
-use rssr_application::{EntriesBootstrapInput, SettingsPatch};
+use rssr_application::{EntriesBootstrapInput, MAX_MESSAGE_BYTES, SettingsPatch, truncate_marked};
 use rssr_domain::{EntriesWorkspaceState, EntryQuery, MarkReadPreview};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -78,6 +78,7 @@ pub(crate) struct ApiState {
     polls: Arc<Semaphore>,
     localize_limit: Duration,
     receive_limit: Duration,
+    answer_limit: usize,
     jobs: Jobs,
 }
 
@@ -95,6 +96,7 @@ impl ApiState {
             polls: Arc::new(Semaphore::new(MAX_POLLS)),
             localize_limit,
             receive_limit: RECEIVE_LIMIT,
+            answer_limit: protocol::MAX_ANSWER_BYTES,
             jobs: Jobs::new(),
         }
     }
@@ -103,6 +105,13 @@ impl ApiState {
     #[cfg(test)]
     pub(crate) fn receiving_within(mut self, limit: Duration) -> Self {
         self.receive_limit = limit;
+        self
+    }
+
+    /// Test only: a smaller bound on the answers sent.
+    #[cfg(test)]
+    pub(crate) fn answering_within(mut self, limit: usize) -> Self {
+        self.answer_limit = limit;
         self
     }
 
@@ -203,9 +212,13 @@ pub(crate) async fn assign_request_id(mut request: Request, next: Next) -> Respo
 }
 
 /// An error answer under `/api`: the code's HTTP status, the error as JSON with the request's
-/// id, not cached. The log records the id and the code; never the message, which may quote a
-/// subscription's address with its credentials (review C3-R1 F05).
+/// id, not cached; its message shortened to [`MAX_MESSAGE_BYTES`], so the answer fits
+/// [`protocol::MAX_SMALL_ANSWER_BYTES`] (review C4A-R2-02). The log records the id and the code;
+/// never the message, which may quote a subscription's address with its credentials (review
+/// C3-R1 F05).
 pub(crate) fn failure(error: BackendError, id: Option<&RequestId>) -> Response {
+    let error =
+        BackendError { message: truncate_marked(error.message, MAX_MESSAGE_BYTES), ..error };
     let request_id = id.map_or("-", |id| &id.0);
     let code = error.code.as_str();
     match error.code {
@@ -255,10 +268,11 @@ fn internal() -> BackendError {
     BackendError::new(ErrorCode::Internal, "服务器内部错误")
 }
 
-/// What every handler has: the state and the request's id.
+/// What every handler has: the state, the request's id and whether it is a write.
 struct Ctx {
     state: ApiState,
     id: RequestId,
+    write: bool,
 }
 
 impl FromRequestParts<ApiState> for Ctx {
@@ -267,7 +281,7 @@ impl FromRequestParts<ApiState> for Ctx {
     async fn from_request_parts(parts: &mut Parts, state: &ApiState) -> Result<Self, Response> {
         // `assign_request_id` puts it there; a handler reached another way still gets an id.
         let id = parts.extensions.get::<RequestId>().cloned().unwrap_or_else(RequestId::new);
-        Ok(Self { state: state.clone(), id })
+        Ok(Self { state: state.clone(), id, write: !is_safe(&parts.method) })
     }
 }
 
@@ -401,6 +415,20 @@ impl Ctx {
         }
     }
 
+    /// A result over the answers' bound is not sent (review C4A-R2-02): a read says so; a write
+    /// has run, and the page cannot see what it changed.
+    fn too_large(&self) -> BackendError {
+        let mib = self.state.answer_limit / (1024 * 1024);
+        if self.write {
+            let message =
+                format!("操作已执行，但它的结果超过网页端能接收的 {mib} MiB，无法返回，请刷新查看");
+            BackendError::new(ErrorCode::OutcomeUnknown, message)
+        } else {
+            let message = format!("结果超过网页端能接收的 {mib} MiB，无法在网页端打开");
+            BackendError::new(ErrorCode::TooLarge, message)
+        }
+    }
+
     /// Runs `operation` in its own task holding `slots` until it ends, and answers its result.
     async fn run<T, F, Fut>(self, slots: Slots, operation: F) -> Response
     where
@@ -415,6 +443,9 @@ impl Ctx {
         });
         match task.await {
             Ok(Ok(value)) => match serde_json::to_vec(&value) {
+                Ok(body) if body.len() > self.state.answer_limit => {
+                    failure(self.too_large(), Some(&self.id))
+                }
                 Ok(body) => ([(header::CONTENT_TYPE, "application/json")], body).into_response(),
                 Err(error) => {
                     error!(request_id = %self.id.0, %error, "无法编码结果");

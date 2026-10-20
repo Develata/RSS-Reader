@@ -12,7 +12,7 @@ use std::{
     collections::HashMap,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -21,12 +21,13 @@ use reqwest::header::{COOKIE, HeaderMap, HeaderValue, ORIGIN};
 use rssr_api::{
     AddSubscriptionOutcome, Backend, BackendError, ErrorCode, RefreshAllExecutionOutcome,
     RefreshFeedExecutionOutcome,
-    protocol::{JobResult, JobStatus},
+    protocol::{JobResult, JobStatus, MAX_JOB_STATUS_BYTES, MAX_SMALL_ANSWER_BYTES},
 };
 use rssr_application::{
     ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome,
-    EntryFlagOutcome, FeedsSnapshotOutcome, OpmlImportOutcome, ReaderEntrySnapshot,
-    RemoteConfigPullOutcome, RemoteConfigPushOutcome, SettingsPatch, StartupTarget,
+    EntryFlagOutcome, FeedsSnapshotOutcome, MAX_MESSAGE_BYTES, OpmlImportOutcome,
+    ReaderEntrySnapshot, RemoteConfigPullOutcome, RemoteConfigPushOutcome, SettingsPatch,
+    StartupTarget, TRUNCATION_MARK,
 };
 use rssr_domain::{
     ConfigFingerprint, EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview,
@@ -573,6 +574,36 @@ async fn a_limit_falling_on_the_write_back_is_unknown_and_the_write_still_commit
     assert_eq!(observed.times("localize_entry_assets"), 1);
 }
 
+/// The server sends no answer over its bound (review C4A-R2-02): a read whose result is over it
+/// is `too_large`; a write whose result is over it has run, so it is `outcome_unknown`; an error
+/// with a long message keeps its code, the message shortened.
+#[tokio::test]
+async fn the_server_keeps_its_answers_within_the_bound() {
+    let feeds = FeedServer::start().await;
+    let served = library(&feeds, &["b.xml"]).await;
+    let id = entry_id(&served, "Rust tips").await;
+    let observed = Observed::new(served, None);
+    let api = ApiState::with(observed.clone(), TEST_BUILD, Duration::from_secs(60));
+    let server = Server::start_with(None, api.answering_within(16)).await;
+    let session = server.session().await;
+    let client = http_backend(&server, Some(&session), TEST_BUILD);
+
+    let error = client.export_config_json().await.unwrap_err();
+    assert_eq!(error.code, ErrorCode::TooLarge, "{error}");
+    let error = client.set_entry_read(id, true).await.unwrap_err();
+    assert_eq!(error.code, ErrorCode::OutcomeUnknown, "{error}");
+    let entry = observed.library.load_reader_entry(id).await.unwrap().entry.unwrap();
+    assert!(entry.is_read, "the write ran");
+
+    let fingerprint = observed.library.load_feeds_snapshot().await.unwrap().fingerprint;
+    let raw = format!(r#"{{"{}": 1}}"#, "x".repeat(70 * KIB));
+    let error = client.import_config_json(&raw, &fingerprint).await.unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidInput, "{}", error.code.as_str());
+    assert!(error.message.len() <= MAX_MESSAGE_BYTES, "{}", error.message.len());
+    assert!(error.message.ends_with(TRUNCATION_MARK), "shortened by the server");
+    assert_eq!(observed.times("import_config_json"), 1);
+}
+
 /// One answer of the scripted server.
 #[derive(Debug, Clone)]
 enum Reply {
@@ -582,13 +613,20 @@ enum Reply {
     Html(u16),
     /// The head and part of a JSON body, then the connection closes.
     Truncated(String),
-    /// The head and part of a JSON body, then nothing more for longer than the client waits.
+    /// The head and part of a JSON body; then nothing more until the client closes the
+    /// connection.
     StallBody(String),
     /// A complete JSON answer without a declared length: it ends where the connection closes.
     Unsized(u16, String),
+    /// The head and a JSON body without a declared length, which never ends: nothing more until
+    /// the client closes the connection.
+    Partial(u16, String),
+    /// A complete JSON answer compressed with gzip, of stored blocks: its declared (compressed)
+    /// length is longer than the JSON.
+    Gzip(String),
     /// The connection closes without an answer.
     Close,
-    /// No answer for longer than the client waits.
+    /// No answer until the client closes the connection.
     Stall,
 }
 
@@ -603,40 +641,51 @@ struct Seen {
 type Script = Arc<dyn Fn(&Seen, usize) -> Reply + Send + Sync>;
 
 /// A server that answers each request as `script` says, given the request and how many requests
-/// for the same path came before it; it keeps what it received.
+/// for the same path came before it; it keeps what it received. It never ends a stalled answer
+/// itself: only the client gives it up, which it counts.
 struct Scripted {
     base: Url,
     seen: Arc<Mutex<Vec<Seen>>>,
+    abandoned: Arc<AtomicUsize>,
 }
+
+/// Longer than any test waits: a call that ends sooner was ended by something else.
+const PATIENT: Duration = Duration::from_secs(30);
 
 impl Scripted {
     async fn start(script: impl Fn(&Seen, usize) -> Reply + Send + Sync + 'static) -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = Url::parse(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
         let seen = Arc::new(Mutex::new(Vec::new()));
+        let abandoned = Arc::new(AtomicUsize::new(0));
         let script: Script = Arc::new(script);
         let counts = Arc::new(Mutex::new(HashMap::<String, usize>::new()));
         {
-            let seen = Arc::clone(&seen);
+            let (seen, abandoned) = (Arc::clone(&seen), Arc::clone(&abandoned));
             tokio::spawn(async move {
                 while let Ok((stream, _)) = listener.accept().await {
-                    let (seen, script, counts) =
-                        (Arc::clone(&seen), Arc::clone(&script), Arc::clone(&counts));
-                    tokio::spawn(answer(stream, seen, script, counts));
+                    let server = Answering {
+                        seen: Arc::clone(&seen),
+                        abandoned: Arc::clone(&abandoned),
+                        script: Arc::clone(&script),
+                        counts: Arc::clone(&counts),
+                    };
+                    tokio::spawn(server.answer(stream));
                 }
             });
         }
-        Self { base, seen }
+        Self { base, seen, abandoned }
     }
 
+    /// A client that waits 500 ms for each answer and 10 ms between failed polls.
     fn client(&self) -> HttpBackend {
+        self.client_waiting(Duration::from_millis(500))
+    }
+
+    fn client_waiting(&self, wait: Duration) -> HttpBackend {
         let client = HttpBackend::native_client().no_proxy().build().unwrap();
         HttpBackend::new(self.base.clone(), TEST_BUILD, client)
-            .with_timeouts(Timeouts {
-                request: Duration::from_millis(500),
-                poll: Duration::from_millis(500),
-                localize: Duration::from_millis(500),
-            })
+            .with_timeouts(Timeouts { request: wait, poll: wait, localize: wait })
             .with_poll_backoff(vec![Duration::from_millis(10); 5])
     }
 
@@ -653,82 +702,150 @@ impl Scripted {
             .map(|seen| seen.csrf.clone())
             .collect()
     }
+
+    /// The stalled answers the client gave up (it closed their connections).
+    fn abandoned(&self) -> usize {
+        self.abandoned.load(Ordering::SeqCst)
+    }
 }
 
-async fn answer(
-    mut stream: tokio::net::TcpStream,
+/// What answering one connection needs.
+struct Answering {
     seen: Arc<Mutex<Vec<Seen>>>,
+    abandoned: Arc<AtomicUsize>,
     script: Script,
     counts: Arc<Mutex<HashMap<String, usize>>>,
-) {
-    let mut received = Vec::new();
-    let mut buffer = [0_u8; 4096];
-    let (head, body_start) = loop {
-        let count = stream.read(&mut buffer).await.unwrap_or(0);
-        if count == 0 {
+}
+
+impl Answering {
+    async fn answer(self, mut stream: tokio::net::TcpStream) {
+        let mut received = Vec::new();
+        let mut buffer = [0_u8; 4096];
+        let (head, body_start) = loop {
+            let count = stream.read(&mut buffer).await.unwrap_or(0);
+            if count == 0 {
+                return;
+            }
+            received.extend_from_slice(&buffer[..count]);
+            if let Some(end) = received.windows(4).position(|window| window == b"\r\n\r\n") {
+                break (String::from_utf8_lossy(&received[..end]).into_owned(), end + 4);
+            }
+        };
+        let header = |name: &str| {
+            head.lines().skip(1).find_map(|line| {
+                let (key, value) = line.split_once(':')?;
+                key.trim().eq_ignore_ascii_case(name).then(|| value.trim().to_owned())
+            })
+        };
+        let length = header("content-length").and_then(|value| value.parse::<usize>().ok());
+        while received.len() < body_start + length.unwrap_or(0) {
+            let count = stream.read(&mut buffer).await.unwrap_or(0);
+            if count == 0 {
+                break;
+            }
+            received.extend_from_slice(&buffer[..count]);
+        }
+        let mut request_line = head.lines().next().unwrap_or_default().split(' ');
+        let method = request_line.next().unwrap_or_default().to_owned();
+        let path = request_line.next().unwrap_or_default().to_owned();
+        let request = Seen { method, path, csrf: header(rssr_api::protocol::CSRF_HEADER) };
+        let route = request.path.split('?').next().unwrap_or_default().to_owned();
+        let index = {
+            let mut counts = self.counts.lock().unwrap();
+            let count = counts.entry(format!("{} {route}", request.method)).or_default();
+            *count += 1;
+            *count - 1
+        };
+        self.seen.lock().unwrap().push(request.clone());
+        let json = "application/json";
+        let (bytes, hold) = match (self.script)(&request, index) {
+            Reply::Json(status, body) => {
+                (written(status, json, &[], Some(body.len()), body), false)
+            }
+            Reply::Html(status) => {
+                let body = "<html><body>Bad gateway</body></html>".to_owned();
+                (written(status, "text/html", &[], Some(body.len()), body), false)
+            }
+            Reply::Truncated(body) => {
+                (written(200, json, &[], Some(body.len() + 100), body), false)
+            }
+            Reply::StallBody(body) => (written(200, json, &[], Some(body.len() + 100), body), true),
+            Reply::Unsized(status, body) => (written(status, json, &[], None, body), false),
+            Reply::Partial(status, body) => (written(status, json, &[], None, body), true),
+            Reply::Gzip(body) => {
+                let encoded = gzip_stored(body.as_bytes());
+                let gzip = [("Content-Encoding", "gzip")];
+                (written(200, json, &gzip, Some(encoded.len()), encoded), false)
+            }
+            Reply::Close => return,
+            Reply::Stall => (Vec::new(), true),
+        };
+        let _ = stream.write_all(&bytes).await;
+        if hold {
+            // Nothing more until the client closes the connection.
+            let _ = stream.flush().await;
+            while stream.read(&mut buffer).await.is_ok_and(|count| count > 0) {}
+            self.abandoned.fetch_add(1, Ordering::SeqCst);
             return;
         }
-        received.extend_from_slice(&buffer[..count]);
-        if let Some(end) = received.windows(4).position(|window| window == b"\r\n\r\n") {
-            break (String::from_utf8_lossy(&received[..end]).into_owned(), end + 4);
-        }
-    };
-    let header = |name: &str| {
-        head.lines().skip(1).find_map(|line| {
-            let (key, value) = line.split_once(':')?;
-            key.trim().eq_ignore_ascii_case(name).then(|| value.trim().to_owned())
-        })
-    };
-    let length = header("content-length").and_then(|value| value.parse::<usize>().ok());
-    while received.len() < body_start + length.unwrap_or(0) {
-        let count = stream.read(&mut buffer).await.unwrap_or(0);
-        if count == 0 {
-            break;
-        }
-        received.extend_from_slice(&buffer[..count]);
+        let _ = stream.shutdown().await;
     }
-    let mut request_line = head.lines().next().unwrap_or_default().split(' ');
-    let method = request_line.next().unwrap_or_default().to_owned();
-    let path = request_line.next().unwrap_or_default().to_owned();
-    let request = Seen { method, path, csrf: header(rssr_api::protocol::CSRF_HEADER) };
-    let route = request.path.split('?').next().unwrap_or_default().to_owned();
-    let index = {
-        let mut counts = counts.lock().unwrap();
-        let count = counts.entry(format!("{} {route}", request.method)).or_default();
-        *count += 1;
-        *count - 1
-    };
-    seen.lock().unwrap().push(request.clone());
-    let write = |status: u16, kind: &str, body: &str, declared: Option<usize>| {
-        let length = declared.map(|length| format!("Content-Length: {length}\r\n"));
-        let length = length.unwrap_or_default();
-        format!(
-            "HTTP/1.1 {status} X\r\nContent-Type: {kind}\r\n{length}Connection: close\r\n\r\n\
-             {body}"
-        )
-    };
-    let json = "application/json";
-    let (text, stall) = match script(&request, index) {
-        Reply::Json(status, body) => (write(status, json, &body, Some(body.len())), false),
-        Reply::Html(status) => {
-            let body = "<html><body>Bad gateway</body></html>";
-            (write(status, "text/html", body, Some(body.len())), false)
-        }
-        Reply::Truncated(body) => (write(200, json, &body, Some(body.len() + 100)), false),
-        Reply::StallBody(body) => (write(200, json, &body, Some(body.len() + 100)), true),
-        Reply::Unsized(status, body) => (write(status, json, &body, None), false),
-        Reply::Close => return,
-        Reply::Stall => {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            return;
-        }
-    };
-    let _ = stream.write_all(text.as_bytes()).await;
-    if stall {
-        let _ = stream.flush().await;
-        tokio::time::sleep(Duration::from_secs(5)).await;
+}
+
+/// An answer's bytes: the head (with `extra` headers and the declared length, if any) and `body`.
+fn written(
+    status: u16,
+    kind: &str,
+    extra: &[(&str, &str)],
+    declared: Option<usize>,
+    body: impl AsRef<[u8]>,
+) -> Vec<u8> {
+    let mut head = format!("HTTP/1.1 {status} X\r\nContent-Type: {kind}\r\nConnection: close\r\n");
+    for (name, value) in extra {
+        head.push_str(&format!("{name}: {value}\r\n"));
     }
-    let _ = stream.shutdown().await;
+    if let Some(length) = declared {
+        head.push_str(&format!("Content-Length: {length}\r\n"));
+    }
+    head.push_str("\r\n");
+    [head.as_bytes(), body.as_ref()].concat()
+}
+
+/// `body` as gzip of stored (uncompressed) DEFLATE blocks of up to 65 535 bytes, each with a
+/// 5-byte head, so the encoded length is longer than `body` (RFC 1951 3.2.4, RFC 1952 2.3).
+fn gzip_stored(body: &[u8]) -> Vec<u8> {
+    let mut encoded = vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 0xff];
+    let blocks: Vec<&[u8]> = body.chunks(usize::from(u16::MAX)).collect();
+    for (index, block) in blocks.iter().enumerate() {
+        let length = u16::try_from(block.len()).unwrap();
+        encoded.push(u8::from(index + 1 == blocks.len()));
+        encoded.extend_from_slice(&length.to_le_bytes());
+        encoded.extend_from_slice(&(!length).to_le_bytes());
+        encoded.extend_from_slice(block);
+    }
+    encoded.extend_from_slice(&crc32(body).to_le_bytes());
+    encoded.extend_from_slice(&u32::try_from(body.len()).unwrap().to_le_bytes());
+    encoded
+}
+
+/// CRC-32 as gzip uses it (RFC 1952 8).
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = !0_u32;
+    for byte in bytes {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            crc = if crc & 1 == 1 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
+        }
+    }
+    !crc
+}
+
+/// `call`, which must end by the client's own deadline (500 ms) or decision, well before the
+/// scripted server would end anything (it does not).
+async fn ended<T>(call: impl std::future::Future<Output = T>) -> T {
+    tokio::time::timeout(Duration::from_secs(5), call)
+        .await
+        .expect("the client ends the call itself, before the server would")
 }
 
 fn session_token(index: usize) -> Reply {
@@ -751,7 +868,8 @@ const OPENED: &str = "/api/v1/workspace/opened-feed/1";
 const SESSION: &str = "/api/v1/session";
 
 /// A write sent without a complete, parsable answer may have taken effect: `outcome_unknown`, and
-/// it is sent exactly once (phase C, "结果未知").
+/// it is sent exactly once (phase C, "结果未知"). A stalled answer is given up at the client's
+/// deadline: the server never ends it.
 #[tokio::test]
 async fn a_write_without_a_complete_answer_is_unknown_and_sent_once() {
     for reply in [
@@ -761,6 +879,7 @@ async fn a_write_without_a_complete_answer_is_unknown_and_sent_once() {
         Reply::StallBody("nu".to_owned()),
         Reply::Html(502),
         Reply::Json(200, "\"not what was asked\"".to_owned()),
+        Reply::Json(200, "{\"broken".to_owned()),
     ] {
         let server = Scripted::start({
             let reply = reply.clone();
@@ -770,7 +889,7 @@ async fn a_write_without_a_complete_answer_is_unknown_and_sent_once() {
             }
         })
         .await;
-        let error = server.client().remember_opened_feed(1).await.unwrap_err();
+        let error = ended(server.client().remember_opened_feed(1)).await.unwrap_err();
         assert_eq!(error.code, ErrorCode::OutcomeUnknown, "{reply:?}: {error}");
         assert_eq!(server.count("PUT", OPENED), 1, "{reply:?}: sent once");
     }
@@ -786,13 +905,14 @@ async fn a_read_without_an_answer_and_a_write_that_never_left_are_network_errors
         Reply::Truncated("{".to_owned()),
         Reply::StallBody("{".to_owned()),
         Reply::Html(502),
+        Reply::Json(200, "{\"broken".to_owned()),
     ] {
         let server = Scripted::start({
             let reply = reply.clone();
             move |_, _| reply.clone()
         })
         .await;
-        let error = server.client().load_settings().await.unwrap_err();
+        let error = ended(server.client().load_settings()).await.unwrap_err();
         assert_eq!(error.code, ErrorCode::Network, "{reply:?}: {error}");
     }
 
@@ -971,47 +1091,45 @@ async fn a_job_id_not_of_the_protocols_form_is_never_polled() {
     }
 }
 
-/// An answer longer than what it answers can be is not read, whether its length is declared or
-/// only found while reading: a read is then `network` (a token never read sends no write), a
-/// write `outcome_unknown`; a status that long is a failed poll; an error body that long is not
-/// this protocol's error. Within its limit the same answer is read (review C4A-02).
+/// An answer longer than the protocol's bound for it is given up before its end, whether its
+/// length is declared or not: with the length undeclared the body never ends and the client would
+/// wait 30 s for it, so ending at once shows it was given up early (review C4A-R2-04). A read is
+/// then `network` (a token never read sends no write), a write `outcome_unknown`; a status that
+/// long is a failed poll; an error answer that long is not this protocol's (a write's is
+/// `outcome_unknown`, sent once). An answer of exactly the bound is read, also when it comes
+/// compressed and its compressed length is over the bound (review C4A-R2-03).
 #[tokio::test]
-async fn answers_longer_than_their_limit_are_not_read() {
+async fn answers_longer_than_their_bound_are_given_up() {
+    let small = MAX_SMALL_ANSWER_BYTES;
+    let token = |index: usize, length: usize| {
+        padded(json!({ "csrf_token": format!("t{index}") }).to_string(), length)
+    };
     for declared in [true, false] {
-        let reply = move |status: u16, body: String| {
-            if declared { Reply::Json(status, body) } else { Reply::Unsized(status, body) }
+        let long = move |status: u16, body: String| {
+            if declared { Reply::Json(status, body) } else { Reply::Partial(status, body) }
         };
-        let token = |index: usize, length: usize| {
-            padded(json!({ "csrf_token": format!("t{index}") }).to_string(), length)
-        };
+        let case = format!("declared {declared}");
 
         let server = Scripted::start(move |seen, index| match seen.path.as_str() {
-            SESSION => reply(200, token(index, 100 * KIB)),
+            SESSION => long(200, token(index, small + 1)),
             _ => Reply::Json(200, "null".to_owned()),
         })
         .await;
-        let error = server.client().remember_opened_feed(1).await.unwrap_err();
-        assert_eq!(error.code, ErrorCode::Network, "declared {declared}: {error}");
-        assert_eq!(server.count("PUT", OPENED), 0, "declared {declared}");
-
-        let server = Scripted::start(move |seen, index| match seen.path.as_str() {
-            SESSION => reply(200, token(index, 32 * KIB)),
-            _ => Reply::Json(200, "null".to_owned()),
-        })
-        .await;
-        server.client().remember_opened_feed(1).await.unwrap();
+        let error = ended(server.client_waiting(PATIENT).remember_opened_feed(1)).await;
+        assert_eq!(error.unwrap_err().code, ErrorCode::Network, "{case}");
+        assert_eq!(server.count("PUT", OPENED), 0, "{case}");
 
         let server =
             Scripted::start(move |seen, index| match seen.path.split('?').next().unwrap() {
                 SESSION => session_token(index),
                 REFRESH_ALL => {
-                    reply(202, padded(json!({ "job_id": JOB_ID }).to_string(), 100 * KIB))
+                    long(202, padded(json!({ "job_id": JOB_ID }).to_string(), small + 1))
                 }
                 _ => status(&JobStatus::Running),
             })
             .await;
-        let error = server.client().refresh_all().await.unwrap_err();
-        assert_eq!(error.code, ErrorCode::OutcomeUnknown, "declared {declared}: {error}");
+        let error = ended(server.client_waiting(PATIENT).refresh_all()).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::OutcomeUnknown, "{case}: {error}");
         assert_eq!((server.count("POST", REFRESH_ALL), server.count("GET", POLL)), (1, 0));
 
         let running = serde_json::to_string(&JobStatus::Running).unwrap();
@@ -1019,44 +1137,98 @@ async fn answers_longer_than_their_limit_are_not_read() {
             Scripted::start(move |seen, index| match seen.path.split('?').next().unwrap() {
                 SESSION => session_token(index),
                 REFRESH_ALL => created(),
-                _ => reply(200, padded(running.clone(), 600 * KIB)),
+                _ => long(200, padded(running.clone(), MAX_JOB_STATUS_BYTES + 1)),
             })
             .await;
-        let error = server.client().refresh_all().await.unwrap_err();
-        assert_eq!(error.code, ErrorCode::OutcomeUnknown, "declared {declared}: {error}");
-        assert_eq!(server.count("GET", POLL), 6, "declared {declared}");
+        let error = ended(server.client_waiting(PATIENT).refresh_all()).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::OutcomeUnknown, "{case}: {error}");
+        assert_eq!(server.count("GET", POLL), 6, "{case}");
 
         let server =
-            Scripted::start(move |_, _| reply(503, padded(error_body("unavailable"), 100 * KIB)))
+            Scripted::start(move |_, _| long(503, padded(error_body("unavailable"), small + 1)))
                 .await;
-        let error = server.client().load_settings().await.unwrap_err();
-        assert_eq!(error.code, ErrorCode::Network, "declared {declared}: {error}");
-    }
-}
+        let error = ended(server.client_waiting(PATIENT).load_settings()).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::Network, "{case}: {error}");
 
-/// Giving up the wait (the page drops the call) during a poll or between polls sends no further
-/// poll, and the job is never started again (design "C4a" 3; review C4A-01).
-#[tokio::test]
-async fn a_wait_given_up_sends_nothing_more() {
-    for poll in [Reply::Close, Reply::Stall] {
-        let server = Scripted::start({
-            let poll = poll.clone();
-            move |seen, index| match seen.path.split('?').next().unwrap() {
-                SESSION => session_token(index),
-                REFRESH_ALL => created(),
-                _ => poll.clone(),
-            }
+        let server = Scripted::start(move |seen, index| match seen.path.as_str() {
+            SESSION => session_token(index),
+            _ => long(409, padded(error_body("conflict"), small + 1)),
         })
         .await;
-        let client = server.client().with_poll_backoff(vec![Duration::from_millis(300); 5]);
+        let error = ended(server.client_waiting(PATIENT).remember_opened_feed(1)).await;
+        assert_eq!(error.unwrap_err().code, ErrorCode::OutcomeUnknown, "{case}");
+        assert_eq!(server.count("PUT", OPENED), 1, "{case}: sent once");
+    }
+
+    for exact in ["declared", "undeclared", "compressed"] {
+        let server = Scripted::start(move |seen, index| match seen.path.as_str() {
+            SESSION => {
+                let body = token(index, MAX_SMALL_ANSWER_BYTES);
+                match exact {
+                    "declared" => Reply::Json(200, body),
+                    "undeclared" => Reply::Unsized(200, body),
+                    _ => Reply::Gzip(body),
+                }
+            }
+            _ => Reply::Json(200, "null".to_owned()),
+        })
+        .await;
+        ended(server.client().remember_opened_feed(1)).await.unwrap();
+    }
+    assert!(gzip_stored(&[b' '; MAX_SMALL_ANSWER_BYTES]).len() > MAX_SMALL_ANSWER_BYTES);
+    let server = Scripted::start(move |seen, index| match seen.path.as_str() {
+        SESSION => Reply::Gzip(token(index, MAX_SMALL_ANSWER_BYTES + 1)),
+        _ => Reply::Json(200, "null".to_owned()),
+    })
+    .await;
+    let error = ended(server.client().remember_opened_feed(1)).await.unwrap_err();
+    assert_eq!(error.code, ErrorCode::Network);
+}
+
+/// Giving up the wait (the page drops the call) while a poll is outstanding drops that request
+/// (the server sees its connection closed, and the client would have waited 30 s for it) and
+/// sends no other; giving it up while waiting between polls (the first failed at once, the next is
+/// due after 1 s) sends no further poll, where without giving up the next poll comes (design
+/// "C4a" 3; review C4A-01, C4A-R2-01).
+#[tokio::test]
+async fn a_wait_given_up_sends_nothing_more() {
+    let server = Scripted::start(|seen, index| match seen.path.split('?').next().unwrap() {
+        SESSION => session_token(index),
+        REFRESH_ALL => created(),
+        _ => Reply::Stall,
+    })
+    .await;
+    let client = server.client_waiting(PATIENT);
+    let waiting = tokio::spawn(async move { client.refresh_all().await });
+    until("the first poll", || server.count("GET", POLL) == 1).await;
+    assert_eq!(server.abandoned(), 0, "the poll is outstanding");
+    waiting.abort();
+    assert!(waiting.await.unwrap_err().is_cancelled());
+    until("the outstanding poll dropped", || server.abandoned() == 1).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!((server.count("POST", REFRESH_ALL), server.count("GET", POLL)), (1, 1));
+
+    for give_up in [true, false] {
+        let server = Scripted::start(|seen, index| match seen.path.split('?').next().unwrap() {
+            SESSION => session_token(index),
+            REFRESH_ALL => created(),
+            _ => Reply::Close,
+        })
+        .await;
+        let client = server.client().with_poll_backoff(vec![Duration::from_secs(1); 5]);
         let waiting = tokio::spawn(async move { client.refresh_all().await });
         until("the first poll", || server.count("GET", POLL) == 1).await;
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        waiting.abort();
-        assert!(waiting.await.unwrap_err().is_cancelled(), "{poll:?}");
-        // Unless given up, the next poll would come within 500 ms (poll limit) + 300 ms (wait).
-        tokio::time::sleep(Duration::from_millis(1500)).await;
-        let counts = (server.count("POST", REFRESH_ALL), server.count("GET", POLL));
-        assert_eq!(counts, (1, 1), "{poll:?}");
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(server.count("GET", POLL), 1, "waiting between polls");
+        if give_up {
+            waiting.abort();
+            assert!(waiting.await.unwrap_err().is_cancelled());
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            assert_eq!(server.count("GET", POLL), 1, "no poll after giving up");
+        } else {
+            until("the next poll", || server.count("GET", POLL) == 2).await;
+            waiting.abort();
+        }
+        assert_eq!(server.count("POST", REFRESH_ALL), 1);
     }
 }

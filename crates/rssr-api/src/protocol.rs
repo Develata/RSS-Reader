@@ -70,6 +70,14 @@ pub const MAX_IMPORT_BODY_BYTES: usize = 4 * 1024 * 1024;
 /// settings now stored, bounded by the settings' own bound (custom CSS of up to 64 KiB, up to six
 /// times longer escaped), so its status can be as long as a settings change.
 pub const MAX_JOB_STATUS_BYTES: usize = MAX_SETTINGS_BODY_BYTES;
+/// The longest answer the server sends and [`HttpBackend`](crate) reads: a reader entry may carry
+/// its images inline, an export every subscription. A longer result is not sent: a read answers
+/// `too_large`, a write (which has run) `outcome_unknown` (review C4A-R2-02).
+pub const MAX_ANSWER_BYTES: usize = 64 * 1024 * 1024;
+/// The session's token, a created job's id and every error answer at most: an error's message is
+/// at most [`rssr_application::MAX_MESSAGE_BYTES`] (the server shortens longer ones), up to six
+/// times longer escaped.
+pub const MAX_SMALL_ANSWER_BYTES: usize = 64 * 1024;
 
 /// Route patterns as the server registers them (`{name}` is a path parameter).
 pub mod routes {
@@ -325,6 +333,18 @@ mod tests {
 
     /// The largest statuses of every kind of job fit [`MAX_JOB_STATUS_BYTES`]: a configuration
     /// download with the largest legal custom CSS, and a refresh result at its bound.
+    /// The longest error answer the server sends fits [`MAX_SMALL_ANSWER_BYTES`]: a shortened
+    /// message of control characters, a request id and a reason.
+    #[test]
+    fn the_largest_error_answer_fits_its_bound() {
+        let message = "\u{1}".repeat(rssr_application::MAX_MESSAGE_BYTES);
+        let error = BackendError::new(crate::ErrorCode::OutcomeUnknown, message)
+            .with_request_id("0".repeat(64))
+            .with_reason(crate::ErrorCode::Unauthenticated);
+        let size = serde_json::to_vec(&error).unwrap().len();
+        assert!(size <= MAX_SMALL_ANSWER_BYTES, "{size}");
+    }
+
     #[test]
     fn the_largest_job_statuses_fit_their_bound() {
         let settings = rssr_domain::UserSettings {

@@ -17,8 +17,12 @@
 //! Background jobs are created, then polled until they end; a lost result is `outcome_unknown`.
 //! The client stopping its wait does not stop the job on the server.
 //!
-//! Answers are read up to a size that depends on what they answer (review C4A-02); a longer one
-//! is not read and counts as an answer that was not received.
+//! Answers are read up to the protocol's bound for what they answer (review C4A-02, C4A-R2-02:
+//! the server sends nothing longer); a longer one is not read further and counts as an answer
+//! that was not received. The bound is on the decoded bytes received so far: natively they come
+//! in small pieces; in the browser reqwest copies each piece the browser hands over before it is
+//! counted, so the memory used before a long answer is given up is the bound plus one such piece,
+//! whose size is the browser's (review C4A-R2-04).
 
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
@@ -27,7 +31,8 @@ use futures_util::StreamExt;
 use reqwest::{Method, header};
 use rssr_api::protocol::{
     self, AddSubscription, ImportConfigJson, ImportOpml, JobCreated, JobId, JobResult, JobStatus,
-    RemoteConfig, SetRead, SetStarred, routes,
+    MAX_ANSWER_BYTES, MAX_JOB_STATUS_BYTES, MAX_SMALL_ANSWER_BYTES, RemoteConfig, SetRead,
+    SetStarred, routes,
 };
 use rssr_api::{Backend, BackendError, ErrorCode, Result};
 use rssr_application::{
@@ -63,14 +68,6 @@ impl Default for Timeouts {
         }
     }
 }
-
-/// The longest successful answer read: a reader entry may carry its images inline.
-const MAX_ANSWER_BYTES: usize = 64 * 1024 * 1024;
-/// A job's status is bounded by the protocol.
-const MAX_POLL_ANSWER_BYTES: usize = protocol::MAX_JOB_STATUS_BYTES + 4 * 1024;
-/// The session's token, a created job's id and an error body of this protocol are small; a
-/// longer error body is not this protocol's answer.
-const MAX_SMALL_ANSWER_BYTES: usize = 64 * 1024;
 
 /// The waits after consecutive failed polls; one more failure after the last ends the wait
 /// (design review C4D-R2 R2-06).
@@ -271,6 +268,8 @@ impl HttpBackend {
         }
         let response = request.send().await.map_err(|error| send_failure(&error, effect))?;
         let status = response.status();
+        // An error answer is small (the server shortens its message); a longer one is not this
+        // protocol's.
         let limit = if status.is_success() { call.limit } else { MAX_SMALL_ANSWER_BYTES };
         let body = read_body(response, limit).await;
         if status.is_success() {
@@ -321,7 +320,7 @@ impl HttpBackend {
                 body: None,
                 effect: Effect::Read,
                 timeout: self.timeouts.poll,
-                limit: MAX_POLL_ANSWER_BYTES,
+                limit: MAX_JOB_STATUS_BYTES,
             };
             let polled = self
                 .send(call, None)
@@ -365,6 +364,10 @@ async fn read_body(
     response: reqwest::Response,
     limit: usize,
 ) -> std::result::Result<Vec<u8>, BodyFailure> {
+    // Natively the declared length is the body's own (a compressed answer, decoded on the way,
+    // has none); in the browser it is the encoded length while the body comes decoded, so it is
+    // not checked there (review C4A-R2-03).
+    #[cfg(not(target_arch = "wasm32"))]
     if response.content_length().is_some_and(|length| length > limit as u64) {
         return Err(BodyFailure::TooLong);
     }
