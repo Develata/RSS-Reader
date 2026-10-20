@@ -34,6 +34,11 @@ use crate::{
 
 /// 原生宿主：SQLite 索引库与正文库上的全部用例，加上刷新、自动刷新、正文图片本地化与
 /// WebDAV 配置交换。桌面、Android 与服务端共用；数据目录由调用方决定。
+///
+/// 生命周期前置条件：一个数据库在一个进程里只打开一个 `NativeHost`，并让它活到进程结束。
+/// 自动刷新与后台图片本地化是分离的 tokio 任务，各自持有宿主或仓储；目前没有关闭方法，
+/// 丢掉全部外部引用也不会停止它们。对同一数据库再次 `open` 会得到独立的启动标志与刷新单飞，
+/// 可能出现两套自动刷新循环。
 pub struct NativeHost {
     use_cases: AppUseCases,
     image_localization_worker: ImageLocalizationWorker,
@@ -565,7 +570,40 @@ mod tests {
     };
     use url::Url;
 
-    use super::{BodyAssetLocalizer, ImageLocalizationWorker};
+    use super::{BodyAssetLocalizer, ImageLocalizationWorker, NativeHost};
+
+    #[tokio::test]
+    async fn open_creates_and_migrates_both_databases_at_an_explicit_path() {
+        let dir = std::env::temp_dir().join(format!(
+            "rssr-host-open-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock after epoch")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp data dir");
+        let index_path = dir.join("rss-reader.db");
+
+        let host = NativeHost::open(NativeSqliteBackend::with_path(&index_path))
+            .await
+            .expect("open native host");
+        let settings = host.use_cases().settings_service.load().await.expect("load settings");
+        assert_eq!(settings, rssr_domain::UserSettings::default());
+        let _capabilities = host.host_capabilities();
+
+        assert!(index_path.is_file(), "index database must exist");
+        assert!(
+            std::fs::read_dir(&dir)
+                .expect("list data dir")
+                .filter_map(Result::ok)
+                .any(|entry| entry.file_name().to_string_lossy().contains("content")),
+            "content database must be created next to the index database"
+        );
+
+        drop(host);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[tokio::test]
     async fn localize_entry_on_demand_rewrites_current_entry_html() {

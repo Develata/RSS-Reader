@@ -97,6 +97,7 @@ For boundary-only changes:
 
 - `cargo fmt --all --check`
 - `cargo test --locked -p rssr-application`
+- `cargo test --locked -p rssr-host`
 - `cargo test --locked -p rssr-app`
 - `cargo test --locked -p rssr-cli`
 - `cargo check --workspace --locked`

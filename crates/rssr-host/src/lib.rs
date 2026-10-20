@@ -17,6 +17,17 @@ mod refresh_flight;
 
 pub use refresh_flight::RefreshFlight;
 
+/// 宿主能力 trait 的线程约束：原生端要求 `Send + Sync`，这样 `HostCapabilities` 才能作为
+/// 服务端的共享状态、被移进 `tokio::spawn`；wasm 端的实现持有浏览器对象，不要求。
+#[cfg(not(target_arch = "wasm32"))]
+pub trait PortBounds: Send + Sync {}
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: Send + Sync + ?Sized> PortBounds for T {}
+#[cfg(target_arch = "wasm32")]
+pub trait PortBounds {}
+#[cfg(target_arch = "wasm32")]
+impl<T: ?Sized> PortBounds for T {}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddSubscriptionOutcome {
     NeedsSelection { page_url: url::Url, candidates: Vec<rssr_application::FeedDiscoveryCandidate> },
@@ -51,13 +62,13 @@ pub struct HostCapabilities {
     pub remote_config: Arc<dyn RemoteConfigPort>,
 }
 
-pub trait AutoRefreshPort {
+pub trait AutoRefreshPort: PortBounds {
     fn ensure_started(&self);
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub trait RefreshPort {
+pub trait RefreshPort: PortBounds {
     async fn add_subscription(
         &self,
         raw_url: &str,
@@ -69,7 +80,7 @@ pub trait RefreshPort {
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub trait ReaderAssetPort {
+pub trait ReaderAssetPort: PortBounds {
     async fn localize_entry_assets(
         &self,
         entry_id: i64,
@@ -78,7 +89,7 @@ pub trait ReaderAssetPort {
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub trait RemoteConfigPort {
+pub trait RemoteConfigPort: PortBounds {
     async fn push(
         &self,
         endpoint: &str,
@@ -142,6 +153,13 @@ pub fn should_trigger_auto_refresh(
 #[cfg(test)]
 mod tests {
     use super::{auto_refresh_wait_duration, should_trigger_auto_refresh};
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn native_host_capabilities_can_be_shared_across_threads() {
+        fn assert_send_sync<T: Send + Sync + 'static>() {}
+        assert_send_sync::<super::HostCapabilities>();
+    }
     use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
     #[test]

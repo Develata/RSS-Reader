@@ -11,7 +11,7 @@
 ## 工作摘要
 
 按已确认的 `docs/design/rssr-web-server-mode.md` 第 5 节 P0，把宿主能力与原生宿主从 `rssr-app`
-抽成不依赖界面框架的 `rssr-host`，桌面与 Android 改为依赖它。行为不变；它是 P1 服务端复用同一宿主的前提。
+抽成不依赖界面框架的 `rssr-host`，桌面与 Android 改为依赖它。功能行为不变，日志有可观察的变化（见「结果」）；它是 P1 服务端复用同一宿主的前提。
 
 ## 影响范围
 
@@ -69,7 +69,8 @@
 
 ## 结果
 
-- P0 完成，可合并。行为不变。
+- P0 完成，可合并。刷新、单飞、自动刷新、图片本地化、初始化顺序与错误上下文不变。
+- 可观察的日志变化（有意为之）：原生宿主日志的 tracing target 从 `rssr_app::bootstrap::imp` 变为 `rssr_host::native`，一条消息从"初始化桌面端本地数据库"改为"初始化本地数据库"。桌面默认过滤器是全局 `info`，输出不受影响；只有自定义 `RUST_LOG=rssr_app=…` 这类按 target 过滤的配置会漏掉这些日志，此时需要加上 `rssr_host`。不恢复旧 target：共享宿主冒用 `rssr_app` 的模块路径，会给服务端日志打错标签。
 
 ## 风险与后续事项
 
@@ -81,3 +82,35 @@
 ## 给下一位 Agent 的备注
 
 - 入口：`crates/rssr-host/src/lib.rs`、`crates/rssr-host/src/native.rs`。
+
+## 交叉模型审查（codex-reviewer，2026-10-20）
+
+对 b0b3099 的审查结论：没有阻断项。逐条核实后的处理如下：
+
+- 日志 target 与消息变化：属实。不恢复旧 target，改为在「结果」中如实记录（见上）。
+- `HostCapabilities` 的四个 `Arc<dyn …Port>` 在原生端不是 `Send + Sync`，P1 的 axum 共享状态和
+  `tokio::spawn` 都用不了：属实，已修。新增 `PortBounds`，原生端等于 `Send + Sync`，wasm 端不加约束；
+  四个 trait 都以它为上界；新增编译期断言测试 `native_host_capabilities_can_be_shared_across_threads`。
+- 后台任务没有关闭方法，同一数据库重复 `open` 会出现两套自动刷新：属实，是既有的进程单例假设。
+  已在 `NativeHost` 文档注释中写明"一个数据库、一个进程、一个宿主"的前置条件；受控关闭留到 P1。
+- 检查清单漏掉迁出的测试：属实，`application-use-case-boundary-checklist.md` 已补
+  `cargo test --locked -p rssr-host`。
+- 缺少 `NativeHost::open` 的集成覆盖：已补 `open_creates_and_migrates_both_databases_at_an_explicit_path`，
+  覆盖显式路径打开、双库创建与迁移、用例可用。审查者没有 b0b3099 的构建证据，是因为证据只写在交接里、
+  没有随审查包提供；完整验证见上文，修复后又重跑了一次（见下）。
+- P1 的提醒：`NativeSqliteBackend::with_path` 不会创建父目录，服务端要先建好 `RSS_READER_WEB_DATA_DIR`；
+  出站策略需要通过新增的 `open_with_options` 一类入口注入，覆盖抓取、图片和 WebDAV 三条出站路径。
+
+### 修复后的验证
+
+- E: 剩余空间跌破磁盘闸的 10 GB 硬阈值，按 Develata 的选择执行了 `cargo clean --profile dev`，
+  删除 36.6 GiB。dry-run 确认不涉及 `target/audit-20261009`（那里有一个独立的 git worktree）。
+  之后为全量冷构建，统一用 `-j 2`。
+- `cargo fmt --all --check`：通过
+- `cargo clippy --workspace --all-targets --locked -j 2 -- -D warnings`：通过
+- `cargo test -p rssr-host --locked`：11 passed
+- `cargo test --workspace --locked -j 2`：exit 0。第一次运行因写入 `target/debug/.fingerprint` 时报
+  `os error 3` 而失败，原因未查明，可能是并发进程动了刚清空的目录；重跑通过。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`：通过
+- `cargo check -p rssr-app --target aarch64-linux-android --locked`（NDK 环境变量同上）：通过
+- 桌面启动冒烟（25 秒，由 timeout 结束）：日志同前，依次是 `rssr_host::native` 初始化、就绪、触发自动刷新。
