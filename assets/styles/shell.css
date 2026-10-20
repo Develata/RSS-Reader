@@ -162,7 +162,8 @@
 }
 [data-page="reader"] [data-slot="app-nav-brand"] { position: relative; }
 [data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="finished"]::after,
-[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="error"]::after {
+[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="error"]::after,
+[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="unknown"]::after {
   position: absolute;
   top: -2px;
   right: -2px;
@@ -179,6 +180,8 @@
 }
 [data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="finished"]::after { content: "✓"; }
 [data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="error"]::after { content: "!"; color: var(--danger); }
+/* A refresh whose outcome is unknown: neither done nor failed. */
+[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="unknown"]::after { content: "?"; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   [data-layout="app-nav-search"], [data-slot="app-nav-brand"] { animation: none; }
 }

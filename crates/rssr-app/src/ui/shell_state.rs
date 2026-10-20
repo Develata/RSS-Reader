@@ -147,6 +147,19 @@ mod tests {
         }
     }
 
+    /// Every way a refresh can end has its badge on the reader page, where the result's text is
+    /// only announced (review C4B-A-R2-01: an unknown outcome had none).
+    #[test]
+    fn every_finished_refresh_has_a_reader_badge() {
+        let stylesheet = include_str!("../../../../assets/styles/shell.css");
+        for tone in ["info", "error", crate::ui::failure::TONE_UNKNOWN] {
+            let phase =
+                ManualRefreshState::Finished { message: "结果".into(), tone: tone.into() }.phase();
+            let badge = format!("[data-refresh-state=\"{phase}\"]::after {{ content: ");
+            assert!(stylesheet.contains(&badge), "{tone}: no badge for {phase}");
+        }
+    }
+
     #[test]
     fn old_feedback_timeout_cannot_clear_a_new_refresh() {
         let mut state =
