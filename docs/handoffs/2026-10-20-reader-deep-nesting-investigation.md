@@ -6,7 +6,7 @@
 - 当前 HEAD：见本文件所在提交
 - 相关 commit：本文件（只含文档，无代码改动）
 - 相关 tag / release：N/A
-- 状态：`draft`（方案待 Develata 决定，未实现）
+- 状态：`validated`（Develata 已批准方案 4 + 降级 (b)；实现见 [2026-10-20-reader-parse-budget.md](./2026-10-20-reader-parse-budget.md)）
 
 ## 工作摘要
 

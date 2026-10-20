@@ -13,6 +13,8 @@ use super::live_display::{
     parse_html_tags,
 };
 use super::math;
+use super::parse_budget::fits_tree_building_budget;
+use super::plain_text::plain_text_paragraphs;
 
 /// 阅读页的消毒策略：基础策略加 MathML。只构建一次，`clean` 只需要共享引用。
 static READER_SANITIZER: LazyLock<ammonia::Builder<'static>> = LazyLock::new(|| {
@@ -97,10 +99,16 @@ pub fn looks_like_html_fragment(raw: &str) -> bool {
 /// 再交给 ammonia 消毒，最后在消毒结果上施加公式预算。归一化放在消毒之后的话，它依赖的
 /// 属性已经被消毒掉了；公式预算放在消毒之前的话，只能面对未经规范化的原始标记。
 ///
+/// 树构建成本超出预算（深层嵌套、错嵌格式化元素的重建放大等，见 [`super::parse_budget`]）的
+/// 正文不交给 ammonia，而是整体降级为转义后的纯文本段落；从不截取其中一部分按 HTML 显示。
+///
 /// 返回 `None` 表示消毒后没有任何可显示内容，调用方应回退到纯文本。
 pub fn sanitize_reader_html(raw: &str, base_url: Option<&Url>) -> Option<String> {
     let normalized =
         normalize_html_for_live_display(&replace_wordpress_emoji_images(raw), base_url);
+    if !fits_tree_building_budget(&normalized) {
+        return plain_text_paragraphs(&normalized);
+    }
     let sanitized = READER_SANITIZER.clean(&normalized).to_string();
     let constrained = match math::constrain_formulas(&sanitized) {
         Ok(None) => sanitized,

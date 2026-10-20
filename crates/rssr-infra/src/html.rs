@@ -10,6 +10,8 @@
 
 mod live_display;
 mod math;
+mod parse_budget;
+mod plain_text;
 mod reader;
 
 pub use live_display::normalize_html_for_live_display;
