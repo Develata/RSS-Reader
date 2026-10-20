@@ -4,7 +4,9 @@
 //! 超出树构建预算的正文整体降级为纯文本、越界的数值属性被删、输出大小有界。不对耗时做断言；计时放在默认忽略的
 //! `reader_html_stress_timings` 里，CI 的作业超时兜底防止卡死。
 
-use rssr_infra::html::{looks_like_html_fragment, sanitize_reader_html};
+use rssr_infra::html::{
+    looks_like_html_fragment, normalize_html_for_live_display, sanitize_reader_html,
+};
 
 fn sanitize(raw: &str) -> String {
     sanitize_reader_html(raw, None).unwrap_or_default()
@@ -199,6 +201,35 @@ fn every_superlinear_shape_degrades_to_bounded_plain_text() {
         assert!(output.len() <= input.len(), "{name}: {} bytes", output.len());
         assert!(output.contains('x'), "{name}");
     }
+}
+
+#[test]
+fn long_base_href_cannot_amplify_relative_images() {
+    // 评审反例：很长的 `<base href>` 乘以大量很短的相对地址，曾把 48 KB 展开成 16 MB。
+    let html = format!(
+        r#"<base href="https://e.test/{}/"><p>x</p>{}"#,
+        "a".repeat(16_384),
+        "<img src=x>".repeat(16_384)
+    );
+    assert_eq!(normalize_html_for_live_display(&html, None), html);
+    // ammonia 会给属性值补引号，输出略长于输入，但不随基地址放大。
+    let output = sanitize(&html);
+    assert!(output.len() <= 2 * html.len(), "{} bytes", output.len());
+
+    let srcset = format!(
+        r#"<base href="https://e.test/{}/"><picture><source srcset="{}"></picture>"#,
+        "a".repeat(16_384),
+        vec!["x"; 100_000].join(",")
+    );
+    assert_eq!(normalize_html_for_live_display(&srcset, None), srcset);
+}
+
+#[test]
+fn ampersand_runs_in_attributes_are_scanned_once() {
+    // 评审反例：一长串 `&` 共用末尾一个分号，曾逐个扫到底。
+    let html = format!(r#"<img title="{};" src="https://e.test/a.png">"#, "&".repeat(1_000_000));
+    let normalized = normalize_html_for_live_display(&html, None);
+    assert!(normalized.contains("https://e.test/a.png"));
 }
 
 #[test]

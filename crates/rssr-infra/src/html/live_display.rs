@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::BTreeMap;
 
 use url::Url;
@@ -245,14 +246,21 @@ impl ImageSlot {
     }
 }
 
+/// 把正文里的图片地址归一化成 WebView 能直接加载的绝对地址（懒加载属性提到 `src`，
+/// 相对地址按 `<base href>` 或 feed 地址展开）。
+///
+/// 展开相对地址会让输出变长：很长的 `<base href>` 乘上大量很短的相对地址，输出按平方放大。
+/// 解析出的地址总字节数受 [`UrlBudget`] 约束；一旦超出，整篇原样返回、不做任何改写，
+/// 而不是只改写前面一部分。
 pub fn normalize_html_for_live_display(html: &str, base_url: Option<&Url>) -> String {
     let tags = parse_html_tags(html);
     if tags.is_empty() {
         return html.to_string();
     }
 
+    let budget = UrlBudget::for_input(html.len());
     let document_base = resolve_document_base_url(&tags, base_url);
-    let mut rewrites = BTreeMap::new();
+    let mut rewrites = Vec::new();
 
     for (tag_index, tag) in tags.iter().enumerate() {
         if tag.is_end_tag {
@@ -260,19 +268,71 @@ pub fn normalize_html_for_live_display(html: &str, base_url: Option<&Url>) -> St
         }
 
         let replacement = match tag.name.as_str() {
-            "img" => normalize_img_tag_for_live_display(tag, document_base.as_ref(), base_url),
-            "source" => {
-                normalize_source_tag_for_live_display(tag, document_base.as_ref(), base_url)
+            "img" => {
+                normalize_img_tag_for_live_display(tag, document_base.as_ref(), base_url, &budget)
             }
+            "source" => normalize_source_tag_for_live_display(
+                tag,
+                document_base.as_ref(),
+                base_url,
+                &budget,
+            ),
             _ => None,
         };
+        if budget.exhausted() {
+            return html.to_string();
+        }
 
         if let Some(replacement) = replacement.filter(|replacement| replacement != &tag.raw) {
-            rewrites.insert(tag_index, replacement);
+            rewrites.push((tag_index, replacement));
         }
     }
 
     apply_tag_rewrites(html, &tags, rewrites)
+}
+
+/// 归一化时解析出的地址总字节数上限：输入长度的 2 倍加 1 MiB。正常正文里每个图片地址最多
+/// 展开一个 feed 地址那么长，远在上限之内；超出说明是在用短相对地址放大长的基地址。
+struct UrlBudget {
+    remaining: Cell<usize>,
+    exhausted: Cell<bool>,
+}
+
+impl UrlBudget {
+    const BASE_BYTES: usize = 1 << 20;
+    const BYTES_PER_INPUT_BYTE: usize = 2;
+
+    fn for_input(len: usize) -> Self {
+        let limit = Self::BASE_BYTES.saturating_add(Self::BYTES_PER_INPUT_BYTE.saturating_mul(len));
+        Self { remaining: Cell::new(limit), exhausted: Cell::new(false) }
+    }
+
+    fn exhausted(&self) -> bool {
+        self.exhausted.get()
+    }
+
+    /// 与 [`resolve_asset_url`] 相同，但按解析结果的长度扣预算；预算用完后一律返回 `None`。
+    fn resolve(
+        &self,
+        raw: &str,
+        document_base_url: Option<&Url>,
+        fallback_base_url: Option<&Url>,
+    ) -> Option<Url> {
+        if self.exhausted() {
+            return None;
+        }
+        let resolved = resolve_asset_url(raw, document_base_url, fallback_base_url)?;
+        match self.remaining.get().checked_sub(resolved.as_str().len()) {
+            Some(remaining) => {
+                self.remaining.set(remaining);
+                Some(resolved)
+            }
+            None => {
+                self.exhausted.set(true);
+                None
+            }
+        }
+    }
 }
 
 // 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
@@ -485,10 +545,11 @@ fn normalize_img_tag_for_live_display(
     tag: &HtmlTag,
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
+    budget: &UrlBudget,
 ) -> Option<String> {
     let mut changes = BTreeMap::new();
     let display_src = img_display_src(tag).and_then(|raw_candidate| {
-        resolve_asset_url(&raw_candidate, document_base_url, fallback_base_url)
+        budget.resolve(&raw_candidate, document_base_url, fallback_base_url)
     });
 
     if let Some(display_src) = display_src {
@@ -497,7 +558,7 @@ fn normalize_img_tag_for_live_display(
         changes.insert("data-srcset".to_string(), None);
         changes.insert("sizes".to_string(), None);
     } else if let Some(srcset) =
-        normalize_srcset_attribute(tag, document_base_url, fallback_base_url)
+        normalize_srcset_attribute(tag, document_base_url, fallback_base_url, budget)
     {
         changes.insert("srcset".to_string(), Some(srcset));
         if attribute_value(tag, "data-srcset").is_some() {
@@ -515,16 +576,19 @@ fn normalize_source_tag_for_live_display(
     tag: &HtmlTag,
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
+    budget: &UrlBudget,
 ) -> Option<String> {
     let mut changes = BTreeMap::new();
 
     if let Some(raw_src) = attribute_value(tag, "src")
-        && let Some(resolved) = resolve_asset_url(raw_src, document_base_url, fallback_base_url)
+        && let Some(resolved) = budget.resolve(raw_src, document_base_url, fallback_base_url)
     {
         changes.insert("src".to_string(), Some(resolved.to_string()));
     }
 
-    if let Some(srcset) = normalize_srcset_attribute(tag, document_base_url, fallback_base_url) {
+    if let Some(srcset) =
+        normalize_srcset_attribute(tag, document_base_url, fallback_base_url, budget)
+    {
         changes.insert("srcset".to_string(), Some(srcset));
         if attribute_value(tag, "data-srcset").is_some() {
             changes.insert("data-srcset".to_string(), None);
@@ -552,19 +616,23 @@ fn normalize_srcset_attribute(
     tag: &HtmlTag,
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
+    budget: &UrlBudget,
 ) -> Option<String> {
     attribute_value(tag, "data-srcset")
         .or_else(|| attribute_value(tag, "srcset"))
-        .and_then(|raw| normalize_srcset(raw, document_base_url, fallback_base_url))
+        .and_then(|raw| normalize_srcset(raw, document_base_url, fallback_base_url, budget))
 }
 
 fn normalize_srcset(
     raw: &str,
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
+    budget: &UrlBudget,
 ) -> Option<String> {
+    // 预算用完就停：同一个 srcset 里的成千上万个候选会各自展开一份基地址。
     let normalized = raw
         .split(',')
+        .take_while(|_| !budget.exhausted())
         .filter_map(|candidate| {
             let candidate = candidate.trim();
             if candidate.is_empty() {
@@ -575,8 +643,7 @@ fn normalize_srcset(
                 return Some(candidate.to_string());
             };
 
-            let Some(resolved) = resolve_asset_url(url, document_base_url, fallback_base_url)
-            else {
+            let Some(resolved) = budget.resolve(url, document_base_url, fallback_base_url) else {
                 return Some(candidate.to_string());
             };
 
@@ -676,7 +743,8 @@ fn rewrite_tag_for_localized_asset(
     rewrite_tag_attributes(tag, &changes)
 }
 
-fn apply_tag_rewrites(html: &str, tags: &[HtmlTag], rewrites: BTreeMap<usize, String>) -> String {
+/// `rewrites` 按标签下标升序排列（调用方按文档顺序收集）。
+fn apply_tag_rewrites(html: &str, tags: &[HtmlTag], rewrites: Vec<(usize, String)>) -> String {
     if rewrites.is_empty() {
         return html.to_string();
     }
@@ -770,9 +838,15 @@ fn decode_html_attribute_entities_once(raw: &str) -> String {
         let start = cursor + relative_start;
         output.push_str(&raw[cursor..start]);
 
-        let Some(relative_end) = raw[start + 1..].find(';') else {
-            output.push_str(&raw[start..]);
-            return output;
+        // 只在实体名可能的长度之内找分号：不限长的话，一长串 `&` 共用末尾同一个分号，
+        // 每个 `&` 都要扫到底，整体平方级。分号是单字节字符，找到的位置一定是字符边界。
+        let window_end = raw.len().min(start + 2 + MAX_ENTITY_NAME_BYTES);
+        let Some(relative_end) =
+            raw.as_bytes()[start + 1..window_end].iter().position(|&byte| byte == b';')
+        else {
+            output.push('&');
+            cursor = start + 1;
+            continue;
         };
 
         let end = start + 1 + relative_end;
@@ -789,6 +863,9 @@ fn decode_html_attribute_entities_once(raw: &str) -> String {
     output.push_str(&raw[cursor..]);
     output
 }
+
+/// 能解码的实体名（`amp`、`#x10FFFF`、带前导零的十进制等）的最大字节数。
+const MAX_ENTITY_NAME_BYTES: usize = 32;
 
 fn decode_html_entity(entity: &str) -> Option<char> {
     match entity {
@@ -844,10 +921,45 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        LocalizableImageDocument, normalize_html_for_live_display, normalize_image_content_type,
-        resolve_asset_url,
+        LocalizableImageDocument, decode_html_attribute_entities, normalize_html_for_live_display,
+        normalize_image_content_type, resolve_asset_url,
     };
     use url::Url;
+
+    #[test]
+    fn attribute_entities_decode_within_a_bounded_window() {
+        assert_eq!(decode_html_attribute_entities("a &amp; b &#x41;&#66;"), "a & b AB");
+        assert_eq!(decode_html_attribute_entities("&&amp;&lt;"), "&&<");
+        assert_eq!(decode_html_attribute_entities("&#0000000065;"), "A");
+        // 名字超过实体长度上限的不是实体，原样保留，后面的实体照常解码。
+        let long = format!("&{};&amp;", "x".repeat(40));
+        assert_eq!(decode_html_attribute_entities(&long), format!("&{};&", "x".repeat(40)));
+        // 多字节字符紧跟在 `&` 后面也不会切到字符中间。
+        assert_eq!(decode_html_attribute_entities("&数据;&amp;"), "&数据;&");
+    }
+
+    #[test]
+    fn url_expansion_over_budget_leaves_the_whole_body_unchanged() {
+        let base = format!("https://example.com/{}/", "a".repeat(64 * 1024));
+        let html = format!(r#"<base href="{base}"><p>x</p>{}"#, "<img src=x>".repeat(64));
+        let normalized = normalize_html_for_live_display(&html, None);
+        assert_eq!(normalized, html, "no partial rewrite");
+
+        // 同样的基地址，图片少时仍正常展开。
+        let html = format!(r#"<base href="{base}"><img src=x>"#);
+        let normalized = normalize_html_for_live_display(&html, None);
+        assert!(normalized.contains(&format!(r#"<img src="{base}x">"#)));
+    }
+
+    #[test]
+    fn srcset_candidates_share_the_url_budget() {
+        let base = format!("https://example.com/{}/", "a".repeat(64 * 1024));
+        let html = format!(
+            r#"<base href="{base}"><picture><source srcset="{}"></picture>"#,
+            vec!["x"; 64].join(",")
+        );
+        assert_eq!(normalize_html_for_live_display(&html, None), html);
+    }
 
     #[test]
     fn resolve_asset_url_uses_document_base_for_relative_paths() {
