@@ -143,6 +143,111 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// 每个端点都用一份合法入参走一遍分派：路由存在、入参可解析；需要数据或网络的端点允许
+    /// 以用例错误结束。新增端点而没有在这里给出入参，测试会失败。
+    #[tokio::test]
+    async fn every_endpoint_accepts_a_valid_input() {
+        use serde_json::json;
+
+        let (host, dir) = open_temp_host().await;
+        let services = HostServices::new(host.use_cases(), host.host_capabilities());
+        let query = serde_json::to_value(EntryQuery::default()).unwrap();
+        let unreachable_dav =
+            json!({"endpoint": "http://127.0.0.1:1/dav/", "remote_path": "c.json"});
+        let inputs = [
+            ("entries/preview_mark_read", query.clone()),
+            ("entries/mark_read_if_unchanged", json!({"query": query, "unread_entry_ids": []})),
+            (
+                "entries/bootstrap",
+                json!({"feed_id": null, "load_preferences": true, "load_feeds": true}),
+            ),
+            (
+                "entries/save_workspace_if_changed",
+                serde_json::to_value(rssr_domain::EntriesWorkspaceState::default()).unwrap(),
+            ),
+            ("entries/list", query.clone()),
+            ("entries/toggle_read", json!({"entry_id": 999, "currently_read": false})),
+            ("entries/toggle_starred", json!({"entry_id": 999, "currently_starred": false})),
+            ("shell/resolve_startup_target", json!(null)),
+            ("settings/load", json!(null)),
+            ("settings/save", serde_json::to_value(UserSettings::default()).unwrap()),
+            ("settings/push_remote_config", unreachable_dav.clone()),
+            ("settings/pull_remote_config", unreachable_dav),
+            ("reader/load_entry", json!(999)),
+            ("reader/toggle_read", json!({"entry_id": 999, "currently_read": false})),
+            ("reader/toggle_starred", json!({"entry_id": 999, "currently_starred": false})),
+            ("reader/localize_entry_assets", json!(999)),
+            ("feeds/snapshot", json!(null)),
+            ("feeds/add_subscription", json!({"raw_url": "not a url", "fallback_site_url": null})),
+            ("feeds/refresh_all", json!(null)),
+            ("feeds/refresh_feed", json!(999)),
+            ("feeds/remove", json!(999)),
+            ("feeds/export_config_json", json!(null)),
+            ("feeds/import_config_json", json!("{}")),
+            ("feeds/export_opml", json!(null)),
+            ("feeds/import_opml", json!("<opml version=\"2.0\"><body/></opml>")),
+        ];
+        for path in protocol::ENDPOINT_PATHS {
+            let (_, input) = inputs
+                .iter()
+                .find(|(candidate, _)| candidate == path)
+                .unwrap_or_else(|| panic!("no matrix input for endpoint {path}"));
+            let body = serde_json::to_vec(input).unwrap();
+            match dispatch(&services, path, &body).await {
+                Ok(_) | Err(DispatchError::Failed(_)) => {}
+                Err(DispatchError::UnknownEndpoint) => panic!("{path} is not routed"),
+                Err(DispatchError::BadRequest(error)) => {
+                    panic!("{path} rejected its input: {error}")
+                }
+            }
+        }
+
+        drop((services, host));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn write_endpoints_change_what_read_endpoints_return() {
+        let (host, dir) = open_temp_host().await;
+        let services = HostServices::new(host.use_cases(), host.host_capabilities());
+        async fn call<E: protocol::Endpoint>(
+            services: &HostServices,
+            input: &E::Input,
+        ) -> E::Output {
+            let body = serde_json::to_vec(input).unwrap();
+            let output = dispatch(services, E::PATH, &body)
+                .await
+                .unwrap_or_else(|error| panic!("{} failed: {error:?}", E::PATH));
+            serde_json::from_slice(&output).unwrap()
+        }
+
+        let settings = UserSettings { refresh_interval_minutes: 45, ..UserSettings::default() };
+        call::<protocol::SaveSettings>(&services, &settings).await;
+        assert_eq!(call::<protocol::LoadSettings>(&services, &()).await, settings);
+
+        let opml = r#"<?xml version="1.0"?><opml version="2.0"><head/><body><outline type="rss" text="Example" xmlUrl="https://example.invalid/feed.xml"/></body></opml>"#;
+        call::<protocol::ImportOpml>(&services, &opml.to_string()).await;
+        let snapshot = call::<protocol::LoadFeedsSnapshot>(&services, &()).await;
+        assert_eq!(snapshot.feed_count, 1);
+        let feed_id = snapshot.feeds[0].id;
+
+        let exported = call::<protocol::ExportConfigJson>(&services, &()).await;
+        call::<protocol::RemoveFeed>(&services, &feed_id).await;
+        assert_eq!(call::<protocol::LoadFeedsSnapshot>(&services, &()).await.feed_count, 0);
+        call::<protocol::ImportConfigJson>(&services, &exported).await;
+        assert_eq!(call::<protocol::LoadFeedsSnapshot>(&services, &()).await.feed_count, 1);
+
+        let workspace = rssr_domain::EntriesWorkspaceState {
+            show_archived: true,
+            ..rssr_domain::EntriesWorkspaceState::default()
+        };
+        assert!(call::<protocol::SaveWorkspaceIfChanged>(&services, &workspace).await);
+        assert!(!call::<protocol::SaveWorkspaceIfChanged>(&services, &workspace).await);
+
+        drop((services, host));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[tokio::test]
     async fn dispatch_separates_unknown_paths_bad_inputs_and_use_case_failures() {
         let (host, dir) = open_temp_host().await;

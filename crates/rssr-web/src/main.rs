@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
         "opening rssr-web library"
     );
     let services = open_library(&library_config).await?;
-    let api = api::router(api::ApiState { config: config.clone(), services });
+    let api = api::router(api::ApiState::new(config.clone(), services));
 
     let smoke_helpers = if smoke_helpers_enabled() {
         Router::new()

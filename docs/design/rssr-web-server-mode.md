@@ -96,13 +96,19 @@
 - 多客户端：`RefreshFlight` 是进程级单飞，已覆盖不同客户端同时刷新的情况。`app_state`
   （工作区、启动目标）与设置在各客户端之间共享，后写覆盖；单用户在手机和电脑之间切换时，
   这正是期望的行为。界面偏好（shell prefs）和阅读位置仍按浏览器保存。
-- 正文消毒、MathML 预算在服务端读取时执行，与桌面相同。
+- 正文消毒与 MathML 预算在**渲染端**执行，与桌面相同：`reader/load_entry` 返回仓储中的原始正文，
+  阅读页在渲染前调用 `rssr_infra::html::sanitize_reader_html`。线协议上的 HTML 一律视为不可信；
+  任何渲染它的客户端都必须先走同一消毒与预算，不能直接插入 DOM。（P1 审查时修正：此前写的是“服务端读取时执行”，与实现不符。）
 
 ### 4.4 安全
 
-- `/api/*` 挂在现有 `require_auth` 会话之后。Cookie 已是 `HttpOnly; SameSite=Lax`，生产环境
+- `/api/*` 在读取请求体之前由守卫检查会话（不经过会重定向的 `require_auth`）。Cookie 已是 `HttpOnly; SameSite=Lax`，生产环境
   强制 `Secure`。另加：API 只接受 `Content-Type: application/json` 的 POST（跨源需要预检，
   浏览器会拦截），并校验 `Origin` 与服务地址一致。未登录或会话过期时返回 401，界面跳转 `/login`。
+- 资源边界：同时在途的调用最多 32 个，准入许可随后台任务持有到完成，饱和时返回 503；
+  请求体上限 16 MiB，读取期限 30 秒，声明的 `Content-Length` 超限时在守卫阶段直接 413。
+  `Origin` 必须恰好一个、是规范的源（不含路径），scheme 也要一致：可信代理的 `X-Forwarded-Proto` 优先，
+  否则开启 `Secure` cookie 时要求 https。
 - **出站请求是新的服务端风险。** 订阅抓取、订阅探测、图片本地化、WebDAV 都是服务器替用户请求
   用户提供的地址。原生抓取目前不拦截内网地址，因为桌面需要访问局域网 feed；`/feed-proxy`
   有完整规则（解析后把 IP 钉死，任一解析结果落在内网就拒绝，防 DNS rebinding）。做法：在原生

@@ -1,4 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use axum::{
@@ -142,54 +142,9 @@ async fn resolve_validated_target(raw: &str) -> Result<(Url, SocketAddr), String
     Ok((url, first))
 }
 
+/// 与服务端模式的出站策略共用同一份地址规则。
 fn is_disallowed_proxy_ip(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(ip) => {
-            ip.octets()[0] == 0
-                || ip.octets()[0] >= 240
-                || ip.is_private()
-                || ip.is_loopback()
-                || ip.is_link_local()
-                || ip.is_broadcast()
-                || ip.is_unspecified()
-                || ip.is_multicast()
-                || is_documentation_ipv4(ip)
-                || is_shared_address_space_ipv4(ip)
-                || is_benchmark_ipv4(ip)
-                || ip == Ipv4Addr::new(169, 254, 169, 254)
-        }
-        IpAddr::V6(ip) => {
-            ip.is_loopback()
-                || ip.is_unspecified()
-                || ip.is_multicast()
-                || ip.is_unique_local()
-                || ip.is_unicast_link_local()
-                || is_documentation_ipv6(ip)
-                || ip.to_ipv4().is_some_and(|v4| is_disallowed_proxy_ip(IpAddr::V4(v4)))
-        }
-    }
-}
-
-fn is_documentation_ipv4(ip: Ipv4Addr) -> bool {
-    matches!(
-        (ip.octets()[0], ip.octets()[1], ip.octets()[2]),
-        (192, 0, 2) | (198, 51, 100) | (203, 0, 113)
-    )
-}
-
-fn is_shared_address_space_ipv4(ip: Ipv4Addr) -> bool {
-    let octets = ip.octets();
-    octets[0] == 100 && (64..=127).contains(&octets[1])
-}
-
-fn is_benchmark_ipv4(ip: Ipv4Addr) -> bool {
-    let octets = ip.octets();
-    octets[0] == 198 && (octets[1] == 18 || octets[1] == 19)
-}
-
-fn is_documentation_ipv6(ip: Ipv6Addr) -> bool {
-    let octets = ip.octets();
-    octets[0] == 0x20 && octets[1] == 0x01 && octets[2] == 0x0d && octets[3] == 0xb8
+    rssr_infra::outbound::is_disallowed_ip(ip)
 }
 
 /// 边下边累计字节数，一超过上限立刻放弃。先看 `Content-Length` 只能挡住诚实的上游，

@@ -118,3 +118,35 @@
 ## 给下一位 Agent 的备注
 
 - 入口：`crates/rssr-host/src/protocol.rs`（端点表）、`crates/rssr-web/src/api.rs`、`crates/rssr-web/src/library.rs`。
+
+## 交叉模型审查（codex-reviewer，2026-10-20，范围 c64b899..c4d7dd2）
+
+结论：1 个阻断项、6 个应修项、1 个待验证项。逐条核实后全部属实，处理如下：
+
+1. **阻断：Docker 构建器是 Rust 1.88。** P1 之后服务端会编译 `rssr-infra` 的原生代码，其中
+   `File::try_lock` 从 1.89 才稳定。已改为 `rust:1.99-bookworm`，与 CI 的 stable 和本机工具链一致。
+2. **会话检查发生在读完请求体之后**，匿名客户端可以让服务端缓冲 16 MiB。已把全部调用条件移到
+   `guard` 中间件，在读取请求体之前执行；声明的 `Content-Length` 超限时直接 413。请求体改为
+   `to_bytes` 限量读取，期限 30 秒，读取失败与超时都返回 JSON。`no-store` 改由外层中间件统一设置，
+   框架生成的 405 / 413 也带上。测试 `rejections_happen_before_the_body_is_read` 用原始 TCP 只发请求头、
+   不发请求体，断言 401 与 413 都会立即返回。
+3. **脱离请求的任务没有全局并发上限。** 已加进程级准入：信号量 32，许可移入后台任务并持有到完成，
+   饱和时返回 503。测试 `saturated_admission_returns_503_json`。
+4. **IPv6 分类不完整。** 已补充：NAT64 知名前缀（按嵌入的 IPv4 判断）、NAT64 本地前缀 `64:ff9b:1::/48`、
+   Teredo `2001::/32`、6to4 `2002::/16`（按嵌入的 IPv4 判断）、`2001:2::/48`、`3fff::/20`、`100::/64`、
+   `fec0::/10`，以及 IPv4 的 `192.0.0.0/24`。`/feed-proxy` 改为共用 `rssr_infra::outbound::is_disallowed_ip`，
+   同时修掉了参考实现原有的这些缺口。测试中包含公网 NAT64 / 6to4 应放行，以及 `3fff::/20` 边界外应放行的用例。
+5. **Origin 只比较主机与端口。** 已改为严格同源：恰好一个 `Origin`，必须是不含路径的规范源，scheme 也要一致。
+   开启信任时以 `X-Forwarded-Proto` 为准；否则开启 `Secure` cookie 时要求 https，都没有时接受 http 与 https。
+6. **数据目录没有私有权限。** 改为复用 `sqlite_native::create_private_dir`（由原 `create_local_data_dir`
+   改名并公开）：在 Unix 上新建目录为 0700。Docker 中的 `/app/data` 也设为 `chmod 700`。
+   `XDG_DATA_HOME` / `HOME` 只接受绝对路径，与桌面版一致。
+7. **设计文档写的是"服务端读取时消毒"，但实现不是这样。** 已按实现修正：消毒与 MathML 预算在渲染端执行，
+   协议上传的是原始正文，任何渲染端都必须先消毒。这一点是 P2 客户端必须遵守的约束。
+8. **待验证：端点覆盖。** 新增 `every_endpoint_accepts_a_valid_input`：逐个枚举 `ENDPOINT_PATHS`，
+   缺少入参就失败；另有 `write_endpoints_change_what_read_endpoints_return`，覆盖设置保存、OPML 导入、
+   配置包导出后删除再导入、工作区保存的副作用。客户端断开后后台刷新能否继续完成，仍然没有自动化测试。
+
+修复后的验证：fmt、clippy（`--workspace --all-targets`）、`cargo test --workspace` 全部通过
+（exit 0，44 个测试二进制）。wasm32 与 aarch64-android 检查通过。
+Docker 镜像构建的结果另行记录（见下）。

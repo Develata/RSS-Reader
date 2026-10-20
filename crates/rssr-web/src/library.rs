@@ -10,7 +10,10 @@ use rssr_host::{
     HostServices,
     native::{NativeHost, NativeHostOptions},
 };
-use rssr_infra::{db::sqlite_native::NativeSqliteBackend, outbound::OutboundPolicy};
+use rssr_infra::{
+    db::sqlite_native::{NativeSqliteBackend, create_private_dir},
+    outbound::OutboundPolicy,
+};
 
 const DATA_DIR_NAME: &str = "rss-reader-web";
 const INDEX_DATABASE_FILE: &str = "rss-reader.db";
@@ -36,11 +39,14 @@ pub(crate) fn load_library_config() -> Result<LibraryConfig> {
 }
 
 fn default_data_dir() -> Result<PathBuf> {
-    if let Some(dir) = env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty()) {
-        return Ok(PathBuf::from(dir).join(DATA_DIR_NAME));
+    // XDG 规范要求忽略相对路径，与桌面版 `sqlite_native` 的处理一致。
+    let absolute =
+        |name: &str| env::var_os(name).map(PathBuf::from).filter(|path| path.is_absolute());
+    if let Some(dir) = absolute("XDG_DATA_HOME") {
+        return Ok(dir.join(DATA_DIR_NAME));
     }
-    if let Some(home) = env::var_os("HOME").filter(|value| !value.is_empty()) {
-        return Ok(PathBuf::from(home).join(".local").join("share").join(DATA_DIR_NAME));
+    if let Some(home) = absolute("HOME") {
+        return Ok(home.join(".local").join("share").join(DATA_DIR_NAME));
     }
     bail!("无法确定文章库目录：请设置 RSS_READER_WEB_DATA_DIR")
 }
@@ -53,7 +59,8 @@ fn env_flag(name: &str) -> bool {
 ///
 /// 一个进程只调用一次：`NativeHost` 的后台任务活到进程结束（见其文档）。
 pub(crate) async fn open_library(config: &LibraryConfig) -> Result<HostServices> {
-    std::fs::create_dir_all(&config.data_dir)
+    // 与桌面数据目录相同：新建目录只对运行用户可读写，文章库里有订阅地址中的令牌与阅读记录。
+    create_private_dir(&config.data_dir)
         .with_context(|| format!("创建文章库目录失败：{}", config.data_dir.display()))?;
     let backend = NativeSqliteBackend::with_path(config.data_dir.join(INDEX_DATABASE_FILE));
     let host =
@@ -96,14 +103,21 @@ mod tests {
         assert_eq!(config.data_dir, PathBuf::from("/srv/rssr"));
         assert_eq!(config.outbound, OutboundPolicy::PublicOnly);
 
+        // XDG_DATA_HOME 必须是绝对路径才被采用；temp_dir 在各平台上都是绝对路径。
+        let xdg = std::env::temp_dir().join("rssr-xdg");
         unsafe {
             set("RSS_READER_WEB_ALLOW_PRIVATE_FEEDS", "true");
             remove("RSS_READER_WEB_DATA_DIR");
-            set("XDG_DATA_HOME", "/xdg");
+            std::env::set_var("XDG_DATA_HOME", &xdg);
         }
         let config = load_library_config().expect("config");
-        assert_eq!(config.data_dir, PathBuf::from("/xdg").join("rss-reader-web"));
+        assert_eq!(config.data_dir, xdg.join("rss-reader-web"));
         assert_eq!(config.outbound, OutboundPolicy::Unrestricted);
+
+        unsafe { set("XDG_DATA_HOME", "relative/xdg") }
+        if let Ok(config) = load_library_config() {
+            assert!(config.data_dir.is_absolute(), "a relative XDG_DATA_HOME must be ignored");
+        }
 
         for (name, value) in VARS.into_iter().zip(saved) {
             match value {

@@ -87,55 +87,73 @@ impl Resolve for PublicOnlyResolver {
     }
 }
 
-/// 不允许服务端访问的地址：内网、本机、链路本地、组播、文档与基准测试保留段、
-/// 运营商共享地址段，以及它们的 IPv4 映射 IPv6 形式。
+/// 不允许服务端访问的地址：内网、本机、链路本地、组播、文档与基准测试保留段、运营商共享地址段，
+/// 以及把这些 IPv4 地址嵌进 IPv6 的各种转换形式。
+///
+/// 转换前缀的处理：能解出嵌入 IPv4 的（IPv4 映射/兼容、NAT64 知名前缀 `64:ff9b::/96`、
+/// 6to4 `2002::/16`）按嵌入地址判断；无法安全判断或只供本地使用的（NAT64 本地前缀
+/// `64:ff9b:1::/48`、Teredo `2001::/32`）一律拒绝。
 pub fn is_disallowed_ip(ip: IpAddr) -> bool {
     match ip {
-        IpAddr::V4(ip) => {
-            ip.octets()[0] == 0
-                || ip.octets()[0] >= 240
-                || ip.is_private()
-                || ip.is_loopback()
-                || ip.is_link_local()
-                || ip.is_broadcast()
-                || ip.is_unspecified()
-                || ip.is_multicast()
-                || is_documentation_ipv4(ip)
-                || is_shared_address_space_ipv4(ip)
-                || is_benchmark_ipv4(ip)
-        }
-        IpAddr::V6(ip) => {
-            ip.is_loopback()
-                || ip.is_unspecified()
-                || ip.is_multicast()
-                || ip.is_unique_local()
-                || ip.is_unicast_link_local()
-                || is_documentation_ipv6(ip)
-                || ip.to_ipv4().is_some_and(|v4| is_disallowed_ip(IpAddr::V4(v4)))
-        }
+        IpAddr::V4(ip) => is_disallowed_ipv4(ip),
+        IpAddr::V6(ip) => is_disallowed_ipv6(ip),
     }
 }
 
-fn is_documentation_ipv4(ip: Ipv4Addr) -> bool {
-    matches!(
-        (ip.octets()[0], ip.octets()[1], ip.octets()[2]),
-        (192, 0, 2) | (198, 51, 100) | (203, 0, 113)
-    )
+fn is_disallowed_ipv4(ip: Ipv4Addr) -> bool {
+    let [a, b, c, _] = ip.octets();
+    a == 0
+        || a >= 240
+        || ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_broadcast()
+        || ip.is_multicast()
+        // 192.0.0.0/24 IETF 协议分配；192.0.2/24、198.51.100/24、203.0.113/24 文档。
+        || (a, b, c) == (192, 0, 0)
+        || matches!((a, b, c), (192, 0, 2) | (198, 51, 100) | (203, 0, 113))
+        // 100.64.0.0/10 运营商共享地址；198.18.0.0/15 基准测试。
+        || (a == 100 && (64..=127).contains(&b))
+        || (a == 198 && (b == 18 || b == 19))
 }
 
-fn is_shared_address_space_ipv4(ip: Ipv4Addr) -> bool {
-    let octets = ip.octets();
-    octets[0] == 100 && (64..=127).contains(&octets[1])
-}
-
-fn is_benchmark_ipv4(ip: Ipv4Addr) -> bool {
-    let octets = ip.octets();
-    octets[0] == 198 && (octets[1] == 18 || octets[1] == 19)
-}
-
-fn is_documentation_ipv6(ip: Ipv6Addr) -> bool {
-    let octets = ip.octets();
-    octets[0] == 0x20 && octets[1] == 0x01 && octets[2] == 0x0d && octets[3] == 0xb8
+fn is_disallowed_ipv6(ip: Ipv6Addr) -> bool {
+    let segments = ip.segments();
+    if ip.is_loopback()
+        || ip.is_unspecified()
+        || ip.is_multicast()
+        || ip.is_unique_local()
+        || ip.is_unicast_link_local()
+    {
+        return true;
+    }
+    // IPv4 映射（::ffff:a.b.c.d）与兼容（::a.b.c.d）形式。
+    if let Some(v4) = ip.to_ipv4() {
+        return is_disallowed_ipv4(v4);
+    }
+    let embedded_low = || Ipv4Addr::from(((segments[6] as u32) << 16) | segments[7] as u32);
+    match segments {
+        // NAT64 知名前缀 64:ff9b::/96：按嵌入的 IPv4 判断。
+        [0x64, 0xff9b, 0, 0, 0, 0, _, _] => is_disallowed_ipv4(embedded_low()),
+        // NAT64 本地前缀 64:ff9b:1::/48：映射规则由本地网络决定，无法判断。
+        [0x64, 0xff9b, 1, ..] => true,
+        // 丢弃前缀 100::/64。
+        [0x100, 0, 0, 0, ..] => true,
+        // Teredo 2001::/32：嵌入地址经过混淆，不尝试解码。
+        [0x2001, 0, ..] => true,
+        // 基准测试 2001:2::/48。
+        [0x2001, 2, 0, ..] => true,
+        // 文档 2001:db8::/32 与 3fff::/20。
+        [0x2001, 0xdb8, ..] => true,
+        [0x3fff, second, ..] if second & 0xf000 == 0 => true,
+        // 6to4 2002::/16：第 2、3 段是嵌入的 IPv4。
+        [0x2002, high, low, ..] => {
+            is_disallowed_ipv4(Ipv4Addr::from(((high as u32) << 16) | low as u32))
+        }
+        // 已废弃的站点本地地址 fec0::/10。
+        [first, ..] if first & 0xffc0 == 0xfec0 => true,
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -164,7 +182,31 @@ mod tests {
         ] {
             assert!(is_disallowed_ip(ip.parse::<IpAddr>().unwrap()), "{ip} must be disallowed");
         }
-        for ip in ["1.1.1.1", "93.184.216.34", "2606:4700:4700::1111"] {
+        for ip in [
+            // NAT64 local-use prefix, NAT64 well-known prefix embedding 10.0.0.1, 6to4 of 192.168.0.1,
+            // Teredo, benchmark, documentation, discard-only, site-local, IETF protocol block.
+            "64:ff9b:1::a00:1",
+            "64:ff9b::a00:1",
+            "2002:c0a8:1::1",
+            "2001::1",
+            "2001:2::1",
+            "3fff::1",
+            "100::1",
+            "fec0::1",
+            "192.0.0.8",
+        ] {
+            assert!(is_disallowed_ip(ip.parse::<IpAddr>().unwrap()), "{ip} must be disallowed");
+        }
+        for ip in [
+            "1.1.1.1",
+            "93.184.216.34",
+            "2606:4700:4700::1111",
+            // NAT64 of a public IPv4 and 6to4 of a public IPv4 stay reachable.
+            "64:ff9b::101:101",
+            "2002:101:101::1",
+            // Just outside the 3fff::/20 documentation block.
+            "3fff:1000::1",
+        ] {
             assert!(!is_disallowed_ip(ip.parse::<IpAddr>().unwrap()), "{ip} must be allowed");
         }
     }
