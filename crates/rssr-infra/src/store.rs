@@ -13,6 +13,8 @@ mod error;
 mod executor;
 mod feeds;
 mod files;
+/// Libraries for the browser regression (test tooling only).
+pub mod fixture;
 pub mod import;
 pub mod local;
 pub mod migrate;
