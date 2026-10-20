@@ -33,6 +33,8 @@ url.workspace = true
 urlencoding.workspace = true
 
 [dev-dependencies]
+# A backend that records what ran behind the real router (client_tests).
+async-trait.workspace = true
 # HTTP requests in the server's tests (the server itself fetches through rssr-infra).
 reqwest.workspace = true
 # The Web page's `HttpBackend`, run natively against the real router (phase C, C4a).

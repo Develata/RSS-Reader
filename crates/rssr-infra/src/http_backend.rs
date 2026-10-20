@@ -16,10 +16,14 @@
 //!
 //! Background jobs are created, then polled until they end; a lost result is `outcome_unknown`.
 //! The client stopping its wait does not stop the job on the server.
+//!
+//! Answers are read up to a size that depends on what they answer (review C4A-02); a longer one
+//! is not read and counts as an answer that was not received.
 
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
+use futures_util::StreamExt;
 use reqwest::{Method, header};
 use rssr_api::protocol::{
     self, AddSubscription, ImportConfigJson, ImportOpml, JobCreated, JobId, JobResult, JobStatus,
@@ -59,6 +63,15 @@ impl Default for Timeouts {
         }
     }
 }
+
+/// The longest successful answer read: a reader entry may carry its images inline.
+const MAX_ANSWER_BYTES: usize = 64 * 1024 * 1024;
+/// A job's status is bounded by the protocol.
+const MAX_POLL_ANSWER_BYTES: usize = protocol::MAX_JOB_STATUS_BYTES + 4 * 1024;
+/// The session's token, a created job's id and an error body of this protocol are small; a
+/// longer error body is not this protocol's answer.
+const MAX_SMALL_ANSWER_BYTES: usize = 64 * 1024;
+
 /// The waits after consecutive failed polls; one more failure after the last ends the wait
 /// (design review C4D-R2 R2-06).
 pub const POLL_BACKOFF: [Duration; 5] = [
@@ -85,6 +98,26 @@ pub struct HttpBackend {
 enum Effect {
     Read,
     Write,
+}
+
+/// One request to send.
+struct Call<'a> {
+    method: Method,
+    path: &'a str,
+    query: Option<(&'a str, String)>,
+    body: Option<Vec<u8>>,
+    effect: Effect,
+    timeout: Duration,
+    /// The longest successful answer read.
+    limit: usize,
+}
+
+/// Why an answer's body was not read.
+enum BodyFailure {
+    /// The connection ended or failed before the end.
+    Lost,
+    /// Longer than its limit.
+    TooLong,
 }
 
 impl HttpBackend {
@@ -114,6 +147,13 @@ impl HttpBackend {
         self
     }
 
+    /// Starts with `token` as the session's CSRF token instead of fetching one (tests start with
+    /// a stale one to see the refusal and the retry).
+    pub fn with_csrf_token(self, token: impl Into<String>) -> Self {
+        *self.csrf.lock().unwrap_or_else(PoisonError::into_inner) = Some(token.into());
+        self
+    }
+
     /// A native client as this backend needs it: it never retries a request on its own and
     /// never follows a redirect (the browser's `fetch` has neither of these knobs; the server
     /// answers `/api` without redirects).
@@ -129,9 +169,25 @@ impl HttpBackend {
         path: &str,
         query: Option<(&str, String)>,
     ) -> Result<T> {
-        let timeout = self.timeouts.request;
-        let bytes = self.send(Method::GET, path, query, None, None, Effect::Read, timeout).await?;
+        let bytes = self.send(self.read_call(path, query, MAX_ANSWER_BYTES), None).await?;
         decode(&bytes, Effect::Read)
+    }
+
+    fn read_call<'a>(
+        &self,
+        path: &'a str,
+        query: Option<(&'a str, String)>,
+        limit: usize,
+    ) -> Call<'a> {
+        Call {
+            method: Method::GET,
+            path,
+            query,
+            body: None,
+            effect: Effect::Read,
+            timeout: self.timeouts.request,
+            limit,
+        }
     }
 
     /// A structured read: its input as JSON in the query parameter `name`.
@@ -150,22 +206,21 @@ impl HttpBackend {
         path: &str,
         body: Option<Vec<u8>>,
         timeout: Duration,
+        limit: usize,
     ) -> Result<T> {
         let mut fetched_again = false;
         loop {
             let token = self.csrf_token().await?;
-            let sent = self
-                .send(
-                    method.clone(),
-                    path,
-                    None,
-                    body.clone(),
-                    Some(&token),
-                    Effect::Write,
-                    timeout,
-                )
-                .await;
-            match sent {
+            let call = Call {
+                method: method.clone(),
+                path,
+                query: None,
+                body: body.clone(),
+                effect: Effect::Write,
+                timeout,
+                limit,
+            };
+            match self.send(call, Some(&token)).await {
                 Err(error) if error.code == ErrorCode::CsrfMismatch && !fetched_again => {
                     // Refused before anything ran: fetch the token again and send once more.
                     fetched_again = true;
@@ -180,7 +235,8 @@ impl HttpBackend {
         if let Some(token) = self.csrf.lock().unwrap_or_else(PoisonError::into_inner).clone() {
             return Ok(token);
         }
-        let session: protocol::Session = self.read(routes::SESSION, None).await?;
+        let call = self.read_call(routes::SESSION, None, MAX_SMALL_ANSWER_BYTES);
+        let session: protocol::Session = decode(&self.send(call, None).await?, Effect::Read)?;
         *self.csrf.lock().unwrap_or_else(PoisonError::into_inner) =
             Some(session.csrf_token.clone());
         Ok(session.csrf_token)
@@ -194,44 +250,40 @@ impl HttpBackend {
     }
 
     /// Sends one request; the body of a success, or the error the answer means.
-    #[allow(clippy::too_many_arguments)]
-    async fn send(
-        &self,
-        method: Method,
-        path: &str,
-        query: Option<(&str, String)>,
-        body: Option<Vec<u8>>,
-        csrf: Option<&str>,
-        effect: Effect,
-        timeout: Duration,
-    ) -> Result<Vec<u8>> {
-        let url = self.base.join(path).map_err(|error| {
+    async fn send(&self, call: Call<'_>, csrf: Option<&str>) -> Result<Vec<u8>> {
+        let effect = call.effect;
+        let url = self.base.join(call.path).map_err(|error| {
             BackendError::new(ErrorCode::Internal, format!("接口地址无效：{error}"))
         })?;
         let mut request = self
             .client
-            .request(method, url)
-            .timeout(timeout)
+            .request(call.method, url)
+            .timeout(call.timeout)
             .header(protocol::BUILD_HEADER, &self.build_id);
-        if let Some((name, value)) = query {
+        if let Some((name, value)) = call.query {
             request = request.query(&[(name, value)]);
         }
         if let Some(token) = csrf {
             request = request.header(protocol::CSRF_HEADER, token);
         }
-        if let Some(body) = body {
+        if let Some(body) = call.body {
             request = request.header(header::CONTENT_TYPE, "application/json").body(body);
         }
         let response = request.send().await.map_err(|error| send_failure(&error, effect))?;
         let status = response.status();
-        let bytes = response.bytes().await.map_err(|_| lost(effect))?;
+        let limit = if status.is_success() { call.limit } else { MAX_SMALL_ANSWER_BYTES };
+        let body = read_body(response, limit).await;
         if status.is_success() {
-            return Ok(bytes.to_vec());
+            return body.map_err(|failure| match failure {
+                BodyFailure::Lost => lost(effect),
+                BodyFailure::TooLong => too_long(effect),
+            });
         }
-        match serde_json::from_slice::<BackendError>(&bytes) {
-            Ok(error) => Err(error),
-            // Not this protocol's answer (a proxy's error page): nothing says what happened.
-            Err(_) => Err(match effect {
+        match body.ok().and_then(|body| serde_json::from_slice::<BackendError>(&body).ok()) {
+            Some(error) => Err(error),
+            // Not this protocol's answer (a proxy's error page, an error cut off or too long):
+            // nothing says what happened.
+            None => Err(match effect {
                 Effect::Read => BackendError::new(
                     ErrorCode::Network,
                     format!("服务器没有给出本程序的回答（HTTP {status}），请稍后重试"),
@@ -243,9 +295,17 @@ impl HttpBackend {
 
     /// Starts a background job and waits until it ends.
     async fn run_job(&self, path: &str, body: Option<Vec<u8>>) -> Result<JobResult> {
-        let created: JobCreated =
-            self.write(Method::POST, path, body, self.timeouts.request).await?;
-        self.wait_for(&created.job_id).await
+        let created: JobCreated = self
+            .write(Method::POST, path, body, self.timeouts.request, MAX_SMALL_ANSWER_BYTES)
+            .await?;
+        // An id not of the protocol's form is no id: nothing to poll (review C4A-03).
+        let id = JobId::parse(&created.job_id.0).ok_or_else(|| {
+            BackendError::new(
+                ErrorCode::OutcomeUnknown,
+                "服务器没有给出有效的任务编号，这次操作的结果未知，请刷新查看",
+            )
+        })?;
+        self.wait_for(&id).await
     }
 
     /// Polls the job `id` until it ends (design "C4a" 3).
@@ -254,16 +314,17 @@ impl HttpBackend {
         let path = protocol::job(id);
         let mut failures = 0;
         loop {
+            let call = Call {
+                method: Method::GET,
+                path: &path,
+                query: Some(("wait_ms", wait_ms.clone())),
+                body: None,
+                effect: Effect::Read,
+                timeout: self.timeouts.poll,
+                limit: MAX_POLL_ANSWER_BYTES,
+            };
             let polled = self
-                .send(
-                    Method::GET,
-                    &path,
-                    Some(("wait_ms", wait_ms.clone())),
-                    None,
-                    None,
-                    Effect::Read,
-                    self.timeouts.poll,
-                )
+                .send(call, None)
                 .await
                 .and_then(|bytes| decode::<JobStatus>(&bytes, Effect::Read));
             match polled {
@@ -296,6 +357,34 @@ impl HttpBackend {
                 }
             }
         }
+    }
+}
+
+/// The body of `response`, read piece by piece and given up past `limit` bytes.
+async fn read_body(
+    response: reqwest::Response,
+    limit: usize,
+) -> std::result::Result<Vec<u8>, BodyFailure> {
+    if response.content_length().is_some_and(|length| length > limit as u64) {
+        return Err(BodyFailure::TooLong);
+    }
+    let mut body = Vec::new();
+    let mut chunks = response.bytes_stream();
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.map_err(|_| BodyFailure::Lost)?;
+        if body.len() + chunk.len() > limit {
+            return Err(BodyFailure::TooLong);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
+/// A successful answer too long to read.
+fn too_long(effect: Effect) -> BackendError {
+    match effect {
+        Effect::Read => BackendError::new(ErrorCode::Network, "服务器的回答过长，没有读取"),
+        Effect::Write => unknown(),
     }
 }
 
@@ -381,8 +470,14 @@ impl Backend for HttpBackend {
     }
 
     async fn update_settings(&self, patch: SettingsPatch) -> Result<UserSettings> {
-        self.write(Method::PATCH, routes::SETTINGS, Some(encode(&patch)?), self.timeouts.request)
-            .await
+        self.write(
+            Method::PATCH,
+            routes::SETTINGS,
+            Some(encode(&patch)?),
+            self.timeouts.request,
+            MAX_ANSWER_BYTES,
+        )
+        .await
     }
 
     /// The server runs the one periodic refresh (phase C, C5).
@@ -430,15 +525,28 @@ impl Backend for HttpBackend {
     }
 
     async fn remember_opened_feed(&self, feed_id: i64) -> Result<()> {
-        self.write(Method::PUT, &protocol::opened_feed(feed_id), None, self.timeouts.request).await
+        self.write(
+            Method::PUT,
+            &protocol::opened_feed(feed_id),
+            None,
+            self.timeouts.request,
+            MAX_ANSWER_BYTES,
+        )
+        .await
     }
 
     async fn save_entries_workspace_if_changed(
         &self,
         workspace: EntriesWorkspaceState,
     ) -> Result<bool> {
-        self.write(Method::PUT, routes::WORKSPACE, Some(encode(&workspace)?), self.timeouts.request)
-            .await
+        self.write(
+            Method::PUT,
+            routes::WORKSPACE,
+            Some(encode(&workspace)?),
+            self.timeouts.request,
+            MAX_ANSWER_BYTES,
+        )
+        .await
     }
 
     async fn list_entries(&self, query: &EntryQuery) -> Result<EntriesListOutcome> {
@@ -447,8 +555,14 @@ impl Backend for HttpBackend {
 
     async fn set_entry_read(&self, entry_id: i64, read: bool) -> Result<EntryFlagOutcome> {
         let body = encode(&SetRead { read })?;
-        self.write(Method::PUT, &protocol::entry_read(entry_id), Some(body), self.timeouts.request)
-            .await
+        self.write(
+            Method::PUT,
+            &protocol::entry_read(entry_id),
+            Some(body),
+            self.timeouts.request,
+            MAX_ANSWER_BYTES,
+        )
+        .await
     }
 
     async fn set_entry_starred(&self, entry_id: i64, starred: bool) -> Result<EntryFlagOutcome> {
@@ -458,6 +572,7 @@ impl Backend for HttpBackend {
             &protocol::entry_starred(entry_id),
             Some(body),
             self.timeouts.request,
+            MAX_ANSWER_BYTES,
         )
         .await
     }
@@ -467,8 +582,14 @@ impl Backend for HttpBackend {
     }
 
     async fn mark_read_if_unchanged(&self, preview: &MarkReadPreview) -> Result<MarkReadOutcome> {
-        self.write(Method::POST, routes::MARK_READ, Some(encode(preview)?), self.timeouts.request)
-            .await
+        self.write(
+            Method::POST,
+            routes::MARK_READ,
+            Some(encode(preview)?),
+            self.timeouts.request,
+            MAX_ANSWER_BYTES,
+        )
+        .await
     }
 
     async fn load_reader_entry(&self, entry_id: i64) -> Result<ReaderEntrySnapshot> {
@@ -476,8 +597,14 @@ impl Backend for HttpBackend {
     }
 
     async fn localize_entry_assets(&self, entry_id: i64) -> Result<bool> {
-        self.write(Method::POST, &protocol::entry_assets(entry_id), None, self.timeouts.localize)
-            .await
+        self.write(
+            Method::POST,
+            &protocol::entry_assets(entry_id),
+            None,
+            self.timeouts.localize,
+            MAX_ANSWER_BYTES,
+        )
+        .await
     }
 
     async fn load_feeds_snapshot(&self) -> Result<FeedsSnapshotOutcome> {
@@ -511,7 +638,14 @@ impl Backend for HttpBackend {
     }
 
     async fn remove_feed(&self, feed_id: i64) -> Result<()> {
-        self.write(Method::DELETE, &protocol::feed(feed_id), None, self.timeouts.request).await
+        self.write(
+            Method::DELETE,
+            &protocol::feed(feed_id),
+            None,
+            self.timeouts.request,
+            MAX_ANSWER_BYTES,
+        )
+        .await
     }
 
     async fn export_config_json(&self) -> Result<String> {
@@ -524,7 +658,14 @@ impl Backend for HttpBackend {
         expected: &ConfigFingerprint,
     ) -> Result<ConfigImportOutcome> {
         let body = encode(&ImportConfigJson { raw: raw.to_owned(), expected: expected.clone() })?;
-        self.write(Method::PUT, routes::CONFIG_JSON, Some(body), self.timeouts.request).await
+        self.write(
+            Method::PUT,
+            routes::CONFIG_JSON,
+            Some(body),
+            self.timeouts.request,
+            MAX_ANSWER_BYTES,
+        )
+        .await
     }
 
     async fn export_opml(&self) -> Result<String> {
@@ -533,6 +674,13 @@ impl Backend for HttpBackend {
 
     async fn import_opml(&self, raw: &str) -> Result<OpmlImportOutcome> {
         let body = encode(&ImportOpml { raw: raw.to_owned() })?;
-        self.write(Method::POST, routes::CONFIG_OPML, Some(body), self.timeouts.request).await
+        self.write(
+            Method::POST,
+            routes::CONFIG_OPML,
+            Some(body),
+            self.timeouts.request,
+            MAX_ANSWER_BYTES,
+        )
+        .await
     }
 }
