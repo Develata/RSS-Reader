@@ -28,7 +28,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --home-dir /app rssr \
-    && mkdir -p /app/auth \
+    && mkdir -p /app/auth /app/data \
     && chown -R rssr:rssr /app
 
 COPY --from=builder /app/rssr-web /usr/local/bin/rssr-web
@@ -36,6 +36,7 @@ COPY --from=builder /app/web-dist/public /app/public
 
 ENV RSS_READER_WEB_BIND=0.0.0.0:8080
 ENV RSS_READER_WEB_STATIC_DIR=/app/public
+ENV RSS_READER_WEB_DATA_DIR=/app/data
 
 USER rssr
 

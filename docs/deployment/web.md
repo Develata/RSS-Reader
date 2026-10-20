@@ -1,12 +1,16 @@
 # Web / Docker 部署
 
-`RSS-Reader-web.tar.gz` 是 Dioxus 静态站点包。浏览器直接请求 feed 时受目标站点 CORS 策略约束。需要登录门禁和同源 `/feed-proxy` 时，使用仓库里的 `rssr-web` 服务；它托管静态包、验证登录并代抓 feed，不参与桌面端、Android 或 CLI 的运行。Web 的订阅和阅读状态保存在访问者当前浏览器的 `localStorage`，容器卷只保存服务登录凭据，**不是文章库备份**。
+`RSS-Reader-web.tar.gz` 是 Dioxus 静态站点包。浏览器直接请求 feed 时受目标站点 CORS 策略约束。需要登录门禁和同源 `/feed-proxy` 时，使用仓库里的 `rssr-web` 服务；它托管静态包、验证登录并代抓 feed，不参与桌面端、Android 或 CLI 的运行。Web 的订阅和阅读状态保存在访问者当前浏览器的 `localStorage`，认证卷只保存服务登录凭据，**不是文章库备份**。
+
+**服务端模式（实施中）**：按 [rssr-web 服务端模式设计](../design/rssr-web-server-mode.md)，`rssr-web` 启动时会在 `RSS_READER_WEB_DATA_DIR`（Docker 中为 `/app/data` 卷）打开与桌面版相同的 SQLite 文章库，并在服务端运行自动刷新，同时对已登录会话提供 `/api/v1` 接口。浏览器界面接入这套接口的工作还没有完成；完成之前，界面仍按上一段所述使用 `localStorage`，数据卷里的文章库处于空闲状态。
 
 新版浏览器存储使用 Web Locks 协调多个标签页，需要支持该能力的浏览器和安全上下文：正式入口使用 HTTPS，本机 localhost / 127.0.0.1 可使用 HTTP；手机通过局域网 IP 访问普通 HTTP 不满足此条件。缺少能力会显示错误，不会退回可能覆盖数据的无锁写入。升级静态包后应重新加载所有旧标签页，避免混用两种存储协议；不会自动刷新正在阅读的页面。
 
 `/feed-proxy` 只代理公开的 HTTP(S) feed：本地和内网地址（包括 IPv4 映射的 IPv6 地址）会被拒绝；DNS 解析限时，重定向每跳重新校验目标。部署在内网的私有 feed 不能通过这个入口抓取。
 
 代理内容仍属于不可信数据。`rssr-web` 自身在上游响应上设置无例外的 CSP `sandbox`、`default-src 'none'`、`base-uri 'none'`、`form-action 'none'` 和 `X-Content-Type-Options: nosniff`。直接打开 HTML/SVG 等代理文档时，脚本和应用同源存储访问被隔离；这不依赖反向代理另加 CSP。原始 MIME/字符集、正文和最终 URL 继续供客户端读取，以保留 RSS/Atom 解码与 HTML 订阅发现。反向代理应保留这些响应头。
+
+服务端模式下，服务器替用户访问的所有地址（订阅探测、feed 刷新、正文图片本地化、WebDAV）默认遵守同样的规则：只访问公网地址，不使用环境代理。若确实要订阅部署在内网的 feed，可设置 `RSS_READER_WEB_ALLOW_PRIVATE_FEEDS=true` 显式放开；放开后，任何持有有效会话的人都能让服务器访问内网地址。
 
 此入口直接连接校验后固定的目标 IP，不继承 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 等环境代理，以免代理端再次解析主机名而绕过目标校验。部署环境需允许服务器直接访问公开 feed，并让 DNS 返回真实公网地址。若 DNS 返回 `198.18.0.0/15` 等 fake-IP 地址，请为该服务调整 DNS/网络配置；这些地址会被目标校验拒绝。
 
@@ -72,6 +76,7 @@ cargo run --locked -p rssr-web -- --print-password-hash '请换成自己的测�
 RSS_READER_WEB_BIND=127.0.0.1:8060 \
 RSS_READER_WEB_STATIC_DIR=target/web-e2e/public \
 RSS_READER_WEB_AUTH_STATE_FILE=target/web-e2e/auth.json \
+RSS_READER_WEB_DATA_DIR=target/web-e2e/data \
 RSS_READER_WEB_USERNAME=admin \
 RSS_READER_WEB_PASSWORD_HASH='<填入上一步哈希>' \
 RSS_READER_WEB_ENV=development \
@@ -83,6 +88,8 @@ cargo run --locked -p rssr-web
 ## 其他配置与构建
 
 [`docker-compose.yml`](../../docker-compose.yml) 是环境变量和健康检查的权威模板。可选项包括 `RSS_READER_WEB_SESSION_SECRET`（显式提供时至少 32 字符）、`RSS_READER_WEB_SESSION_TTL_HOURS`（默认 12）、`RSS_READER_IMAGE` 和 `RSS_READER_PORT`。`RSS_READER_WEB_PASSWORD_HASH`、`RSS_READER_WEB_PASSWORD` 二选一；如果两者都为空，只有已有认证状态文件包含哈希时才能启动。`RSS_READER_WEB_ENV` 默认为 `development`，正式部署应显式设置。
+
+`RSS_READER_WEB_DATA_DIR` 是服务端模式文章库所在目录（索引库 `rss-reader.db` 和与之同目录的正文库）；未设置时使用 `$XDG_DATA_HOME/rss-reader-web/`，否则为 `~/.local/share/rss-reader-web/`，都没有时启动失败。有意不与桌面版的 `rss-reader/` 目录共用。目录不存在时会自动创建，运行用户需要对它有写权限。备份时先停止服务，再复制整个目录。`RSS_READER_WEB_ALLOW_PRIVATE_FEEDS` 默认为 `false`，含义见上文。
 
 要从当前源码构建镜像：
 
