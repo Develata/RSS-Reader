@@ -250,6 +250,16 @@ fn escaping_growth_of_rewritten_tags_is_charged() {
 }
 
 #[test]
+fn dot_segment_urls_are_not_parsed() {
+    // 评审反例：长用户名 + 百万个 `../`，`url` 每处理一个 `..` 都要扫过整个 authority。
+    let url = format!("https://{}@e.test/{}", "a".repeat(1 << 20), "../".repeat(1 << 20));
+    let image = format!(r#"<img src="{url}">"#);
+    assert!(normalize_html_for_live_display(&image, None).len() <= 2 * image.len());
+    let base = format!(r#"<base href="{url}"><img src=x>"#);
+    assert!(normalize_html_for_live_display(&base, None).len() <= 2 * base.len());
+}
+
+#[test]
 fn ampersand_runs_in_attributes_are_scanned_once() {
     // 评审反例：一长串 `&` 共用末尾一个分号，曾逐个扫到底。
     let html = format!(r#"<img title="{};" src="https://e.test/a.png">"#, "&".repeat(1_000_000));

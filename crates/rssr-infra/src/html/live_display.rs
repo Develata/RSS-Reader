@@ -65,6 +65,11 @@ struct HtmlAttribute {
 }
 
 // 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+/// 每张本地化图片允许在正文里出现的 data URL 份数。
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_DATA_URL_COPIES: usize = 8;
+
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Default)]
 struct PictureFrame {
@@ -183,6 +188,31 @@ impl LocalizableImageDocument {
         }
     }
 
+    /// 本地化后的正文长度上限：原正文的 2 倍加 1 MiB，再加每张本地化图片 [`MAX_DATA_URL_COPIES`]
+    /// 份 data URL（`<picture>` 里一般只有两三个 `<source>`）。
+    fn localized_output_fits(&self, html: &str, localized: &BTreeMap<usize, String>) -> bool {
+        let mut growth = 0_usize;
+        let mut allowance = html.len().saturating_mul(2).saturating_add(1 << 20);
+        for (slot_index, data_url) in localized {
+            let Some(slot) = self.slots.get(*slot_index) else {
+                continue;
+            };
+            allowance =
+                allowance.saturating_add(data_url.len().saturating_mul(MAX_DATA_URL_COPIES));
+            for target in &slot.rewrite_targets {
+                let copies = match target.kind {
+                    ImageRewriteKind::Img => 1,
+                    ImageRewriteKind::Source => 2,
+                };
+                let tag = &self.tags[target.tag_index];
+                growth = growth
+                    .saturating_add(tag.raw.len())
+                    .saturating_add(data_url.len().saturating_mul(copies));
+            }
+        }
+        growth <= allowance
+    }
+
     pub(crate) fn has_image_markup(&self) -> bool {
         self.image_markup_count > 0
     }
@@ -199,8 +229,11 @@ impl LocalizableImageDocument {
         &self.slots
     }
 
+    /// 把本地化成功的图片换成 data URL。一个 `<picture>` 可以带任意多个 `<source>`，同一份 data URL
+    /// 会被写进每个目标（`<source>` 的 `src` 与 `srcset` 各一份），几百 KB 的正文配一张大图就能放大成
+    /// 几十 GB。改写前先按目标算出输出增长，超过上限就整篇保留未本地化的正文。
     pub(crate) fn rewrite_html(&self, html: &str, localized: &BTreeMap<usize, String>) -> String {
-        if localized.is_empty() {
+        if localized.is_empty() || !self.localized_output_fits(html, localized) {
             return html.to_string();
         }
 
@@ -724,16 +757,45 @@ fn parse_srcset_candidate(raw: &str) -> Option<(String, u32)> {
     Some((url, score))
 }
 
+/// 可解析地址的路径部分（`?`、`#` 之前）最多含多少个点（含 `%2e`）。`url` 2.5 处理每个 `..` 段时
+/// 会从序列化结果末尾反向找 `/`，在根路径上要扫过整个 authority；一个带长用户名、几百万个 `../`
+/// 的地址就能让一次解析平方级。正常图片地址的路径里只有个位数的点。
+const MAX_URL_PATH_DOTS: usize = 64;
+
 pub(crate) fn resolve_asset_url(
     raw: &str,
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
 ) -> Option<Url> {
+    if url_path_dots(raw) > MAX_URL_PATH_DOTS {
+        return None;
+    }
     Url::parse(raw)
         .ok()
         .or_else(|| document_base_url.and_then(|base| base.join(raw).ok()))
         .or_else(|| fallback_base_url.and_then(|base| base.join(raw).ok()))
         .filter(|resolved| matches!(resolved.scheme(), "http" | "https"))
+}
+
+/// `raw` 在第一个 `?` 或 `#` 之前的点数，`%2e` 按一个点计（`url` 把它当作点段处理）。
+fn url_path_dots(raw: &str) -> usize {
+    let path = raw.split(['?', '#']).next().unwrap_or_default();
+    let bytes = path.as_bytes();
+    let mut dots = 0_usize;
+    let mut index = 0_usize;
+    while index < bytes.len() {
+        if bytes[index] == b'.' {
+            dots += 1;
+        } else if bytes[index] == b'%'
+            && bytes.get(index + 1) == Some(&b'2')
+            && bytes.get(index + 2).is_some_and(|byte| byte.eq_ignore_ascii_case(&b'e'))
+        {
+            dots += 1;
+            index += 2;
+        }
+        index += 1;
+    }
+    dots
 }
 
 // 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
@@ -788,7 +850,8 @@ fn rewrite_tag_attributes(tag: &HtmlTag, changes: &BTreeMap<String, Option<Strin
 
     // 同名属性只保留第一个，与浏览器的解析结果一致；否则改写后的长地址会写进每一个重复的
     // `src`，几个字节的重复属性就能把输出放大成地址长度的倍数。
-    let mut seen = HashSet::new();
+    // 预先按属性个数分配：从空表逐个插入时，每次扩容都会重新哈希已有的（可能很长的）属性名。
+    let mut seen = HashSet::with_capacity(tag.attributes.len());
     for attribute in &tag.attributes {
         if !seen.insert(attribute.name.as_str()) {
             continue;
@@ -970,6 +1033,38 @@ mod tests {
         let html = format!(r#"<base href="{base}"><img src=x>"#);
         let normalized = normalize_html_for_live_display(&html, None);
         assert!(normalized.contains(&format!(r#"<img src="{base}x">"#)));
+    }
+
+    #[test]
+    fn urls_with_many_dot_segments_are_not_resolved() {
+        let base = Url::parse("https://example.com/a/b/").unwrap();
+        assert!(resolve_asset_url("../../c.png", Some(&base), None).is_some());
+        assert!(resolve_asset_url("/x.png?v=1.2.3", Some(&base), None).is_some());
+        let dots = format!("https://{}@e.test/{}", "a".repeat(1 << 16), "../".repeat(1 << 16));
+        assert!(resolve_asset_url(&dots, None, None).is_none());
+        let encoded = format!("{}c.png", "%2e%2E/".repeat(64));
+        assert!(resolve_asset_url(&encoded, Some(&base), None).is_none());
+        // 查询串里的点不算。
+        let query = format!("/c.png?{}", ".".repeat(1_000));
+        assert!(resolve_asset_url(&query, Some(&base), None).is_some());
+    }
+
+    #[test]
+    fn localized_rewrites_cannot_multiply_one_image_without_bound() {
+        let html = format!(
+            r#"<picture>{}<img src="https://e.test/a"></picture>"#,
+            r#"<source srcset="https://e.test/a">"#.repeat(2_000)
+        );
+        let document = LocalizableImageDocument::parse(&html, None, 1);
+        let data_url = format!("data:image/png;base64,{}", "A".repeat(1 << 20));
+        let localized = BTreeMap::from([(0, data_url.clone())]);
+        assert_eq!(document.rewrite_html(&html, &localized), html);
+
+        // 普通的 picture（两个 source）照常本地化。
+        let html = r#"<picture><source srcset="https://e.test/a"><source srcset="https://e.test/a"><img src="https://e.test/a"></picture>"#;
+        let document = LocalizableImageDocument::parse(html, None, 1);
+        let localized = BTreeMap::from([(0, data_url.clone())]);
+        assert_eq!(document.rewrite_html(html, &localized).matches(&data_url).count(), 5);
     }
 
     #[test]
