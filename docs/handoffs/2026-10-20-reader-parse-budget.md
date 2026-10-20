@@ -34,10 +34,14 @@ ammonia DOM 的成本；超出预算的正文整篇转成转义后的纯文本�
   - `elem_name` + `same_node` 调用（开放元素栈与格式化元素表上的逐个比较）；
   - `rcdom` 的线性操作：插到兄弟之前/从父节点摘下按父节点孩子数计（覆盖 foster parenting），
     `reparent_children` 按搬动数计，`add_attrs_if_missing` 按已有属性数计；
-  - Noah's Ark：每新建一个格式化元素，按表中项数 + 同名项 ×（1 + 属性数）× 64 计；表的内容用公开的
-    `TreeBuilder::trace_handles` 在块间精确清点（摊还到总工作量之内），两次清点之间按新建元素数放宽；
+  - Noah's Ark：每新建一个格式化元素，按表中项数 + 同名项 ×（1 + 属性数）× 64 + 同名项属性字节 × 排序轮数计；
+  - 块级包络（预付不经过 sink 的逐项扫描：adoption agency 按名字查格式化元素表、表格内文字缓存到下一个标签
+    才逐项重建）：每块按 token 数上界 2 ×（`<`、`&`、NUL 个数 + 1）乘 8 ×（格式化元素表上界 + 1），
+    表非空时再加开放元素栈上界；
+  - 表与栈的大小用公开的 `TreeBuilder::trace_handles` 在块间精确清点（摊还到总工作量之内），两次清点之间
+    按新建元素数放宽；
   - `selectedcontent`：ammonia 清洗时逐级向上找 `<select>`，按已建元素数计。
-- 预算：工作量 ≤ 2^20 + 16 × 字节；物化量（元素名 + 属性字节，每个元素至少 3）≤ 64 KiB + 2 × 字节；
+- 预算：工作量 ≤ 2^20 + 64 × 字节；物化量（元素名 + 属性字节，每个元素至少 3）≤ 64 KiB + 2 × 字节；
   开放元素栈与格式化元素表合计 ≤ 131072（容得下公式预算处理的 2 万层 KaTeX 包装；每块至多 8 个标签，
   超限前一块之内的扫描量不超过它的常数倍）。
 - 镜像树逐层析构（含 `<template>` 内容），深层嵌套不会递归爆栈。
@@ -51,25 +55,35 @@ ammonia DOM 的成本；超出预算的正文整篇转成转义后的纯文本�
 
 ### 标定（release，本机，临时 probe 未提交）
 
-- 418 篇真实正文（安装版内容库只读拷贝，9 个订阅）：0 篇被降级；工作量最高 1.9 / 字节（预算 16），
-  物化量最高 1.0 倍（预算 2）；计量总耗时 0.36 s（同批正文消毒总耗时约 2.1 s）。
+- 418 篇真实正文（安装版内容库只读拷贝，9 个订阅）：0 篇被降级；工作量最高 5.7 / 字节（预算 64，余量 11 倍），
+  物化量最高 1.0 倍（预算 2）；计量总耗时 0.51 s（同批正文消毒总耗时约 2.1 s）。
 - 被拦下的形状（规模放大后均降级）：嵌套/不闭合 `<div>`、`<ul><li>`、`<blockquote>`、`<span><div></span>` 错嵌、
   不同属性的嵌套 `<b>`（Noah's Ark）、`<div><b id=k></div>` 与 `<p><b id=k>x</p>` 重建放大、大属性重建、
-  `<table>` 下的 foster parenting、`selectedcontent`、`<html a=…>` 属性合并、`<span>`×400 后接大量 `</zz>`。
-- 预算内放行且保持线性：嵌套 `<span>`/MathML、平铺高亮 span（4.5 MB）、平铺段落、忘闭合 `<b>` 后每段重建
-  （27 字节段落约 7 / 字节，60 字节段落约 3 / 字节）。
+  `<table>` 下的 foster parenting、`selectedcontent`、`<html a=…>` 属性合并、`<span>`×400 后接大量 `</zz>`、
+  表格内缓存文字逐项重建、adoption agency 按名字查表、超长属性名的同名比较。
+- 预算内放行且保持线性：嵌套 `<span>`/MathML、嵌套表格、表格内普通文字、平铺高亮 span（4.5 MB）、平铺段落
+  （约 11 / 字节）、忘闭合 `<b>` 后每段重建（27 字节段落约 18 / 字节，60 字节段落约 8 / 字节）。
 
-### 自动化验证
+### 自动化验证（v4，本文件所在提交）
 
 - `cargo fmt --all --check`：通过
 - `cargo clippy -j 1 --workspace --all-targets --locked -- -D warnings`：通过
-- `cargo test -j 1 --workspace --locked`：390 通过、1 失败（`deeply_nested_katex_wrappers_are_planned_in_one_pass`，
-  开放句柄上限 32768 太低）；上限改为 131072 后重跑 `rssr-infra` 单元测试与 `test_reader_html_stress`（16 通过）、
-  `rssr-app` 阅读页测试：全部通过。
+- `cargo test -j 1 --workspace --locked`：426 通过，0 失败（含 `parse_budget` 9 个单元测试、
+  `test_reader_html_stress` 16 个契约测试）。
 - `cargo check -j 1 -p rssr-app --target wasm32-unknown-unknown --locked`：通过。
-- `reader_html_stress_timings`（release，机器负载偏高时测得，`plain 4 MiB` 113 ms，早先空闲时 61 ms）：
-  nested div 50k 7.2 s → 0.25 s；nested ul>li 50k 0.38 s；distinct b 50k 0.15 s；`<p><b id=k>x</p>` 50k 0.24 s
-  （均降级为纯文本）；nested span 50k、nested katex 20k 保持 HTML；平铺高亮 span 4.5 MB 1.4 s（含计量）。
+- `reader_html_stress_timings`（release）：本轮在机器高负载下测得，绝对值偏大（`plain 4 MiB` 354 ms，空闲时 61 ms），
+  只看相对关系：nested div 50k 0.24 s（改前空闲 7.2 s）、nested ul>li 50k 0.37 s、distinct b 50k 0.19 s、
+  `<p><b id=k>x</p>` 50k 0.31 s，均降级为纯文本；nested span 50k、nested katex 20k、各公式用例保持 HTML。
+  计量对大正文的额外开销见标定数据（平铺高亮 span 4.5 MB：计量 0.30 s，ammonia 0.37 s）。
+
+### 独立评审（Codex，gpt-6-astra，effort high）
+
+- 第 1 轮（树构建之外的整条链路）：6 个 BLOCKER + 1 个 SHOULD_FIX，全部实测复现。属于树构建/DOM 阶段的
+  foster parenting、Noah's Ark 属性乘数、`selectedcontent`、格式化深度过期四项在计量 v3 中修复；
+  其余三项（见下方后续事项）不在本次范围。
+- 第 2 轮（v3，commit 96c5e03）：3 个 BLOCKER，均为不经过 sink 的 html5ever 内部循环（表格文字跨块缓存、
+  adoption agency 按名字查表、按字节比较属性名），由块级包络与按字节计的 Noah's Ark 修复（v4），
+  三个反例的缩小版加入单元测试。
 
 ## 结果
 

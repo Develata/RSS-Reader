@@ -16,10 +16,15 @@
 //!   - `elem_name` + `same_node` 调用次数：开放元素栈与格式化元素表上的逐个比较都经过这两个方法。
 //!   - 镜像树上与 `rcdom` 相同的线性操作：查兄弟下标按父节点的孩子数计，`reparent_children`
 //!     按搬动的孩子数计，`add_attrs_if_missing` 按已有属性数计。
-//!   - 每新建一个格式化元素，按 Noah's Ark 比较的上界计：表里每一项一次廉价比较，同名项
-//!     还要克隆并排序两份属性表，乘 [`NOAHS_ARK_WEIGHT`]。表的内容用
-//!     [`TreeBuilder::trace_handles`] 在块之间精确清点，两次清点之间按新建元素数放宽，
-//!     所以不依赖任何树形状的推算。
+//!   - 每新建一个格式化元素，按 Noah's Ark 比较的上界计：表里每一项一次廉价比较；同名项
+//!     还要克隆并排序两份属性表（按属性个数乘 [`NOAHS_ARK_WEIGHT`]），再按字节比较属性名与值
+//!     （按属性字节数乘排序的比较轮数）。
+//!   - 块级包络：不经过 sink 的逐项查找（adoption agency 按名字查格式化元素表、表格内文字
+//!     缓存到下一个标签才逐项重建格式化元素）都是“每个 token 至多扫一遍表或栈”。每块按
+//!     token 个数的上界（`<`、`&`、NUL 个数）乘格式化元素表的上界预先计费；表非空时再乘开放
+//!     元素栈的上界。预付保证了缓存的 token 在后面某一块里集中处理时早已计过费。
+//!   - 表与栈的大小用 [`TreeBuilder::trace_handles`] 在块之间精确清点，两次清点之间按新建
+//!     元素数放宽，所以不依赖任何树形状的推算。
 //!   - `selectedcontent`：ammonia 清洗时对每个这样的元素逐级向上找 `<select>`，按已建元素数计。
 //! - 物化量：新建元素的名字与属性字节数之和，每个元素至少按 3 字节（最短的源码标签 `<b>`）计。
 //!   重建会反复克隆同一元素及其属性，这一项把元素个数和属性拷贝限制在输入的常数倍。
@@ -48,12 +53,15 @@ use html5ever::{
 /// 块里的标签越少，两次清点之间格式化元素表的放宽量越小。
 const CHUNK_BYTES: usize = 1024;
 const CHUNK_TAGS: usize = 8;
-/// 每字节正文允许的工作量。418 篇真实正文实测最高约 0.7 / 字节。
-const WORK_PER_BYTE: u64 = 16;
+/// 每字节正文允许的工作量。418 篇真实正文实测最高约 5.7 / 字节，忘闭合 `<b>` 后每段都重建
+/// 的长文（27 字节一段）约 18 / 字节。
+const WORK_PER_BYTE: u64 = 64;
 /// 与长度无关的基础工作量，让短正文不受每字节比例影响。
 const BASE_WORK: u64 = 1 << 20;
 /// 一次同名 Noah's Ark 比较相对一次 sink 调用的成本：要克隆并排序两份属性表。
 const NOAHS_ARK_WEIGHT: u64 = 64;
+/// 包络里每个 token 对格式化元素表的扫描次数上界：adoption agency 至多 8 轮，每轮按名字查一遍表。
+const ADOPTION_ROUNDS: u64 = 8;
 /// 物化量相对输入长度的倍数，以及与长度无关的余量。真实正文实测最高约 1.0 倍
 /// （本地化后的 data URL 图片几乎全是属性字节）。
 const MATERIALIZED_PER_BYTE: u64 = 2;
@@ -108,6 +116,7 @@ fn measure(html: &str, budget: Budget) -> Option<Rc<Meter>> {
     while !rest.is_empty() {
         let (chunk, tail) = rest.split_at(chunk_end(rest));
         parser.process(StrTendril::from_slice(chunk));
+        meter.charge_envelope(chunk);
         meter.census_if_due(&parser);
         if meter.exhausted() {
             return None;
@@ -147,13 +156,16 @@ struct FormattingBound {
     total: u64,
     count: [u64; FORMATTING_ELEMENTS.len()],
     attributes: [u64; FORMATTING_ELEMENTS.len()],
+    /// 同名项的属性字节比较代价之和，见 [`Node::compare_cost`]。
+    compare_cost: [u64; FORMATTING_ELEMENTS.len()],
 }
 
 impl FormattingBound {
-    fn add(&mut self, index: usize, attributes: u64) {
+    fn add(&mut self, index: usize, attributes: u64, compare_cost: u64) {
         self.total = self.total.saturating_add(1);
         self.count[index] = self.count[index].saturating_add(1);
         self.attributes[index] = self.attributes[index].saturating_add(attributes);
+        self.compare_cost[index] = self.compare_cost[index].saturating_add(compare_cost);
     }
 }
 
@@ -182,6 +194,22 @@ impl Meter {
             work_at_census: Cell::new(0),
             generation: Cell::new(0),
         }
+    }
+
+    /// 按这一块里 token 个数的上界预付不经过 sink 的逐项扫描。每个 token 至少以 `<`、`&`、
+    /// NUL 之一开头或紧跟其后的一段文字（树构建器至多再把开头的空白拆成一段），所以 token 数
+    /// 不超过它们个数的两倍加一。表与栈的上界在两次清点之间单调不减，处理完这一块后的值不小于
+    /// 块内任何时刻的值。
+    fn charge_envelope(&self, chunk: &str) {
+        let markers = chunk.bytes().filter(|byte| matches!(byte, b'<' | b'&' | 0)).count();
+        let tokens = (markers as u64).saturating_add(1).saturating_mul(2);
+        let formatting = self.formatting.borrow().total;
+        let mut per_token = ADOPTION_ROUNDS.saturating_mul(formatting.saturating_add(1));
+        if formatting > 0 {
+            // 表非空时，每个文字 token 重建前都要在栈里找表尾那一项。
+            per_token = per_token.saturating_add(self.open_handles.get());
+        }
+        add(&self.work, tokens.saturating_mul(per_token));
     }
 
     fn exhausted(&self) -> bool {
@@ -231,7 +259,8 @@ impl Tracer for Census {
         node.census.set(self.generation);
         add(&self.distinct, 1);
         if let Some(index) = node.formatting {
-            self.formatting.borrow_mut().add(index, u64::from(node.attributes.get()));
+            let attributes = u64::from(node.attributes.get());
+            self.formatting.borrow_mut().add(index, attributes, node.compare_cost);
         }
     }
 }
@@ -242,6 +271,9 @@ struct Node {
     is_text: bool,
     formatting: Option<usize>,
     attributes: Cell<u32>,
+    /// Noah's Ark 比较这个元素的属性表时按字节计的代价上界：排序约 log₂(n) 轮，每轮至多比较
+    /// 全部属性名与值的字节。
+    compare_cost: u64,
     census: Cell<u32>,
     parent: RefCell<Weak<Node>>,
     children: RefCell<Vec<Handle>>,
@@ -252,8 +284,15 @@ struct Node {
 type Handle = Rc<Node>;
 
 impl Node {
-    fn new(name: QualName, attributes: usize, flags: &ElementFlags) -> Handle {
-        Node::build(name, attributes, flags, false)
+    fn new(name: QualName, attrs: &[Attribute], flags: &ElementFlags) -> Handle {
+        let mut node = Node::build(name, attrs.len(), flags, false);
+        let bytes: usize = attrs.iter().map(|attr| attr.name.local.len() + attr.value.len()).sum();
+        let rounds = u64::from(attrs.len().saturating_add(1).ilog2()).saturating_add(1);
+        // 刚建出来只有这一个引用。
+        if let Some(node) = Rc::get_mut(&mut node) {
+            node.compare_cost = (bytes as u64).saturating_mul(rounds);
+        }
+        node
     }
 
     fn build(name: QualName, attributes: usize, flags: &ElementFlags, is_text: bool) -> Handle {
@@ -266,6 +305,7 @@ impl Node {
             is_text,
             formatting,
             attributes: Cell::new(u32::try_from(attributes).unwrap_or(u32::MAX)),
+            compare_cost: 0,
             census: Cell::new(0),
             parent: RefCell::new(Weak::new()),
             children: RefCell::new(Vec::new()),
@@ -374,15 +414,23 @@ impl TreeSink for MeteringSink {
         add(&meter.open_handles, 1);
         self.charge(1);
 
-        let node = Node::new(name, attrs.len(), &flags);
+        let node = Node::new(name, &attrs, &flags);
         if let Some(index) = node.formatting {
             let attributes = attrs.len() as u64;
             let mut bound = meter.formatting.borrow_mut();
-            let same_name = bound.count[index]
+            let clones = bound.count[index]
                 .saturating_mul(attributes.saturating_add(1))
                 .saturating_add(bound.attributes[index]);
-            self.charge(bound.total.saturating_add(NOAHS_ARK_WEIGHT.saturating_mul(same_name)));
-            bound.add(index, attributes);
+            let compared = bound.count[index]
+                .saturating_mul(node.compare_cost)
+                .saturating_add(bound.compare_cost[index]);
+            self.charge(
+                bound
+                    .total
+                    .saturating_add(NOAHS_ARK_WEIGHT.saturating_mul(clones))
+                    .saturating_add(compared),
+            );
+            bound.add(index, attributes, node.compare_cost);
         }
         if node.name.ns == ns!(html) && node.name.local.as_ref() == "selectedcontent" {
             self.charge(meter.created.get());
@@ -600,6 +648,24 @@ mod tests {
     }
 
     #[test]
+    fn unsinked_scans_are_prepaid_per_chunk() {
+        // 表格里的文字缓存到下一个标签才逐项重建格式化元素，每项都要扫过 2000 层栈。
+        let table_text =
+            format!("<b>{}<table>{}</table>", "<span>".repeat(2_000), "&amp;".repeat(20_000));
+        assert!(!fits_tree_building_budget(&table_text));
+
+        // adoption agency 按名字查遍格式化元素表，不经过 sink。
+        let distinct: String = (0..500).map(|i| format!("<b id=\"{i}\">")).collect();
+        let lookups = format!("{distinct}<div>{}x", "</u>".repeat(20_000));
+        assert!(!fits_tree_building_budget(&lookups));
+
+        // 同名比较按字节比较属性名，两个很长的属性名就足够让每次比较都很贵。
+        let prefix = "a".repeat(100_000);
+        let long_names = format!("<b {prefix}0 {prefix}1>{}</b>", "<b>x</b>".repeat(2_000));
+        assert!(!fits_tree_building_budget(&long_names));
+    }
+
+    #[test]
     fn open_handles_are_capped_and_released_iteratively() {
         assert!(fits_tree_building_budget(&nested("<span>", "</span>", 100_000)));
         assert!(!fits_tree_building_budget(&nested("<span>", "</span>", 140_000)));
@@ -609,8 +675,8 @@ mod tests {
     fn plain_text_materializes_almost_nothing() {
         let meter = measure(&"x".repeat(100_000), Budget::for_input(100_000)).unwrap();
         assert!(meter.materialized.get() < 64, "{}", meter.materialized.get());
-        // 每个块里的文字 token 只做常数次当前节点检查。
-        assert!(meter.work.get() < 2048, "{}", meter.work.get());
+        // 每块只有常数次当前节点检查与包络预付。
+        assert!(meter.work.get() < 4096, "{}", meter.work.get());
     }
 
     #[test]
