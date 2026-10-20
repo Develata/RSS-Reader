@@ -273,7 +273,9 @@ impl SettingsPageSession {
 
     /// A load's settings, unless the app applied settings from the library since the load was
     /// issued (`applied` was its count then): the page then shows those, without applying them
-    /// again.
+    /// again. They are a write's (an import, a download), which the load may predate, or the
+    /// shell's start read; either way nothing written is undone, and the next re-read brings
+    /// anything newer.
     fn apply_load(self, settings: UserSettings, applied: u64) {
         if self.theme.stored_count() == applied {
             self.apply_stored_settings(settings);

@@ -829,8 +829,25 @@ mod tests {
         assert_eq!(shell.settings_draft(), None, "the page was left");
     }
 
-    /// Two loads whose replies come back in the other order: only the later load's reply applies
-    /// (review C4B-B-01).
+    /// Two loads, their replies in either order: the later load's reply is what the page and the
+    /// app keep (review C4B-B-01). In order, the later reply is not mistaken for one overtaken by
+    /// the earlier one's application.
+    #[test]
+    fn loads_answering_in_order_keep_the_later_reply() {
+        let (mut dom, session, theme) = setup();
+        let (first, second) =
+            dom.in_scope(ScopeId::APP, || (start_load(session), start_load(session)));
+        let newer = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+        first.send(UserSettings::default()).expect("the earlier load");
+        dom.render_immediate_to_vec();
+        second.send(newer.clone()).expect("the later load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.page.draft(), newer);
+            assert_eq!(*theme.settings.peek(), newer);
+        });
+    }
+
     #[test]
     fn an_earlier_load_answering_last_does_not_replace_a_later_one() {
         let (mut dom, session, theme) = setup();
