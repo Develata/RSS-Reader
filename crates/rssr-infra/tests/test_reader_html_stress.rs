@@ -225,6 +225,31 @@ fn long_base_href_cannot_amplify_relative_images() {
 }
 
 #[test]
+fn duplicate_rewritten_attributes_are_written_once() {
+    // 评审反例：一个长地址被写进每一个重复的 `src`，16 KB 的标签可以展开成 GB 级。
+    let base = format!("https://e.test/{}/", "a".repeat(65_536));
+    let html = format!(r#"<base href="{base}"><img{}>"#, " src=x".repeat(16_384));
+    let normalized = normalize_html_for_live_display(&html, None);
+    assert_eq!(normalized.matches(&base).count(), 2, "base tag plus one src");
+    assert!(normalized.len() < html.len() + 2 * base.len());
+}
+
+#[test]
+fn long_base_file_names_are_charged_before_joining() {
+    // 评审反例：没有末尾斜杠的长基地址，每次相对解析都复制一遍再丢掉最后一段，输出却很短。
+    let base = url::Url::parse(&format!("https://e.test/{}", "a".repeat(1 << 20))).unwrap();
+    let html = "<img src=x>".repeat(100_000);
+    assert_eq!(normalize_html_for_live_display(&html, Some(&base)), html);
+}
+
+#[test]
+fn escaping_growth_of_rewritten_tags_is_charged() {
+    // 评审反例：单引号属性里的大量 `"` 重新转义成 `&quot;`，输出变成输入的 6 倍。
+    let html = format!("<img title='{}'>", "\"".repeat(1 << 20));
+    assert_eq!(normalize_html_for_live_display(&html, None), html);
+}
+
+#[test]
 fn ampersand_runs_in_attributes_are_scanned_once() {
     // 评审反例：一长串 `&` 共用末尾一个分号，曾逐个扫到底。
     let html = format!(r#"<img title="{};" src="https://e.test/a.png">"#, "&".repeat(1_000_000));

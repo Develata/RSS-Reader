@@ -1,5 +1,5 @@
 use std::cell::Cell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use url::Url;
 
@@ -204,37 +204,34 @@ impl LocalizableImageDocument {
             return html.to_string();
         }
 
-        let mut rewrites = BTreeMap::new();
+        // 按标签下标登记替换，再按文档顺序输出：一个 `<picture>` 可以带任意多个 `<source>` 目标，
+        // 有序映射会多出对数因子。
+        let mut replacements: Vec<Option<String>> = vec![None; self.tags.len()];
+        let mut any = false;
         for (slot_index, data_url) in localized {
             let Some(slot) = self.slots.get(*slot_index) else {
                 continue;
             };
             for target in &slot.rewrite_targets {
-                rewrites.insert(
-                    target.tag_index,
-                    rewrite_tag_for_localized_asset(
-                        &self.tags[target.tag_index],
-                        target.kind,
-                        data_url,
-                    ),
-                );
+                replacements[target.tag_index] = Some(rewrite_tag_for_localized_asset(
+                    &self.tags[target.tag_index],
+                    target.kind,
+                    data_url,
+                ));
+                any = true;
             }
         }
 
-        if rewrites.is_empty() {
+        if !any {
             return html.to_string();
         }
 
-        let mut output = String::with_capacity(html.len());
-        let mut cursor = 0_usize;
-        for (tag_index, replacement) in rewrites {
-            let tag = &self.tags[tag_index];
-            output.push_str(&html[cursor..tag.start]);
-            output.push_str(&replacement);
-            cursor = tag.end;
-        }
-        output.push_str(&html[cursor..]);
-        output
+        let rewrites = replacements
+            .into_iter()
+            .enumerate()
+            .filter_map(|(tag_index, replacement)| Some((tag_index, replacement?)))
+            .collect();
+        apply_tag_rewrites(html, &self.tags, rewrites)
     }
 }
 
@@ -249,9 +246,9 @@ impl ImageSlot {
 /// 把正文里的图片地址归一化成 WebView 能直接加载的绝对地址（懒加载属性提到 `src`，
 /// 相对地址按 `<base href>` 或 feed 地址展开）。
 ///
-/// 展开相对地址会让输出变长：很长的 `<base href>` 乘上大量很短的相对地址，输出按平方放大。
-/// 解析出的地址总字节数受 [`UrlBudget`] 约束；一旦超出，整篇原样返回、不做任何改写，
-/// 而不是只改写前面一部分。
+/// 展开相对地址会让输出变长：很长的 `<base href>` 乘上大量很短的相对地址，输出按平方放大；
+/// 每次相对地址解析还要复制一遍基地址。解析工作量与改写产生的字节数共同受 [`UrlBudget`]
+/// 约束；一旦超出，整篇原样返回、不做任何改写，而不是只改写前面一部分。
 pub fn normalize_html_for_live_display(html: &str, base_url: Option<&Url>) -> String {
     let tags = parse_html_tags(html);
     if tags.is_empty() {
@@ -284,6 +281,10 @@ pub fn normalize_html_for_live_display(html: &str, base_url: Option<&Url>) -> St
         }
 
         if let Some(replacement) = replacement.filter(|replacement| replacement != &tag.raw) {
+            // 改写后的标签要重新转义所有属性值，引号之类的字符会变长，一并计入预算。
+            if !budget.charge(replacement.len()) {
+                return html.to_string();
+            }
             rewrites.push((tag_index, replacement));
         }
     }
@@ -291,8 +292,10 @@ pub fn normalize_html_for_live_display(html: &str, base_url: Option<&Url>) -> St
     apply_tag_rewrites(html, &tags, rewrites)
 }
 
-/// 归一化时解析出的地址总字节数上限：输入长度的 2 倍加 1 MiB。正常正文里每个图片地址最多
-/// 展开一个 feed 地址那么长，远在上限之内；超出说明是在用短相对地址放大长的基地址。
+/// 归一化的工作量与产出上限：输入长度的 2 倍加 1 MiB。计入三项：每次解析地址前，原始地址与
+/// 可能用到的基地址的长度（`Url::join` 会复制基地址）；解析出的地址长度；改写后整个标签的长度。
+/// 正常正文里每个图片地址最多展开一个 feed 地址那么长，远在上限之内；超出说明是在用短相对地址
+/// 放大长的基地址，或用需要转义的字符放大标签。
 struct UrlBudget {
     remaining: Cell<usize>,
     exhausted: Cell<bool>,
@@ -311,27 +314,41 @@ impl UrlBudget {
         self.exhausted.get()
     }
 
-    /// 与 [`resolve_asset_url`] 相同，但按解析结果的长度扣预算；预算用完后一律返回 `None`。
+    /// 扣除 `bytes`；不够时标记用完并返回 `false`，之后的扣除一律失败。
+    fn charge(&self, bytes: usize) -> bool {
+        if self.exhausted() {
+            return false;
+        }
+        match self.remaining.get().checked_sub(bytes) {
+            Some(remaining) => {
+                self.remaining.set(remaining);
+                true
+            }
+            None => {
+                self.exhausted.set(true);
+                false
+            }
+        }
+    }
+
+    /// 与 [`resolve_asset_url`] 相同，但解析前先按原始地址与基地址的长度扣预算（解析的工作量），
+    /// 解析后再按结果长度扣；预算用完后一律返回 `None`。
     fn resolve(
         &self,
         raw: &str,
         document_base_url: Option<&Url>,
         fallback_base_url: Option<&Url>,
     ) -> Option<Url> {
-        if self.exhausted() {
+        let base_len = |base: Option<&Url>| base.map_or(0, |base| base.as_str().len());
+        let work = raw
+            .len()
+            .saturating_add(base_len(document_base_url))
+            .saturating_add(base_len(fallback_base_url));
+        if !self.charge(work) {
             return None;
         }
         let resolved = resolve_asset_url(raw, document_base_url, fallback_base_url)?;
-        match self.remaining.get().checked_sub(resolved.as_str().len()) {
-            Some(remaining) => {
-                self.remaining.set(remaining);
-                Some(resolved)
-            }
-            None => {
-                self.exhausted.set(true);
-                None
-            }
-        }
+        self.charge(resolved.as_str().len()).then_some(resolved)
     }
 }
 
@@ -769,21 +786,25 @@ fn rewrite_tag_attributes(tag: &HtmlTag, changes: &BTreeMap<String, Option<Strin
     let mut output = String::from("<");
     output.push_str(&tag.original_name);
 
-    let mut applied = BTreeMap::new();
+    // 同名属性只保留第一个，与浏览器的解析结果一致；否则改写后的长地址会写进每一个重复的
+    // `src`，几个字节的重复属性就能把输出放大成地址长度的倍数。
+    let mut seen = HashSet::new();
     for attribute in &tag.attributes {
+        if !seen.insert(attribute.name.as_str()) {
+            continue;
+        }
         let Some(change) = changes.get(&attribute.name) else {
             push_attribute(&mut output, &attribute.original_name, attribute.value.as_deref());
             continue;
         };
 
-        applied.insert(attribute.name.clone(), true);
         if let Some(value) = change {
             push_attribute(&mut output, &attribute.original_name, Some(value));
         }
     }
 
     for (name, value) in changes {
-        if applied.contains_key(name) {
+        if seen.contains(name.as_str()) {
             continue;
         }
         if let Some(value) = value {
