@@ -117,3 +117,14 @@ GitHub Pages 演示仍是本地模式（D1）。
 
 修复后的验证：fmt、clippy、`cargo test --workspace`（exit 0，44 个测试二进制）、wasm32、aarch64-android 全部通过；
 `rssr-web` API 测试共 12 个。
+
+## CI 修复（PR #30，`feed-proxy-isolation`）
+
+- 失败原因：这个 harness 的夹具服务端有登录和门禁 cookie，但没有 `/api/v1`。审查修复后，这种页面按设计会报
+  "确认服务端模式失败"，不再退回 BrowserStore，所以原流程等不到订阅卡片而超时。`lint-and-test` 只是汇总任务，
+  随之失败。
+- 修复（783f0e0）：harness 先断言"有门禁、没有接口 → 报错，并且不写 BrowserStore 提交头"，再删除门禁 cookie，
+  继续回归本地模式（BrowserStore + 同源 `/feed-proxy`）。浏览器经 `rssr-fixture.test` 映射到 127.0.0.1，
+  避开仅限 localhost 的本地登录；只把该源视为安全上下文，满足 Web Locks；不使用系统代理。
+- 本机验证：用 debug 包与 Windows Chrome 运行 `node scripts/browser/feed_proxy_isolation.mjs target/fpi-local`，
+  `pass: true`：10 个隔离用例全部通过，门禁断言为真，4 个真实 feed 夹具都完成了添加、经代理刷新与阅读。
