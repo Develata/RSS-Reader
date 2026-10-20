@@ -3,6 +3,7 @@ mod feed_http;
 mod feed_response;
 
 pub use body_asset_localizer::BodyAssetLocalizer;
+pub(crate) use feed_http::{FEED_TIMEOUTS, feed_http_client};
 pub use feed_http::{FetchClient, FetchRequest, FetchResult, HttpMetadata};
 
 // 正文 HTML 归一化本身与抓取无关，实现已移到不受平台门控的 `crate::html`；

@@ -31,8 +31,8 @@ impl SubscriptionProbePort for HttpSubscriptionProbe {
             bail!("订阅只支持 HTTP 或 HTTPS 地址。");
         }
         #[cfg(not(target_arch = "wasm32"))]
-        let response =
-            self.client.get(url.clone()).timeout(std::time::Duration::from_secs(30)).send().await?;
+        // 超时由原生组装时传入的 client 统一约束（见 `fetch::client::FEED_TIMEOUTS`）。
+        let response = self.client.get(url.clone()).send().await?;
         #[cfg(not(target_arch = "wasm32"))]
         let (response, final_url) = {
             let final_url = response.url().clone();
