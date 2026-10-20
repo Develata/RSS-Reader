@@ -78,7 +78,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.current_page = FIRST_PAGE_NUMBER;
         }
         EntriesPageIntent::PreferencesLoaded => {
-            if matches!(state.preferences_load, PreferencesLoadState::Unavailable(_)) {
+            if matches!(state.preferences_load, PreferencesLoadState::Unavailable { .. }) {
                 state.status = format!("共 {} 篇文章。", state.entries.len());
                 state.status_tone = "info".to_string();
             }
@@ -88,7 +88,8 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             let message = failure.message();
             state.status = message.clone();
             state.status_tone = failure.tone().to_string();
-            state.preferences_load = PreferencesLoadState::Unavailable(message);
+            state.preferences_load =
+                PreferencesLoadState::Unavailable { message, tone: failure.tone() };
         }
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = Arc::new(feeds),
         EntriesPageIntent::EntriesQueryStarted => state.query_in_flight = true,
@@ -99,9 +100,9 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.archived_count = archived_count;
             state.entries_truncated = truncated;
             let count = state.entries.len();
-            if let PreferencesLoadState::Unavailable(message) = &state.preferences_load {
+            if let PreferencesLoadState::Unavailable { message, tone } = &state.preferences_load {
                 state.status = format!("{message}；文章偏好暂不保存，共 {count} 篇文章。");
-                state.status_tone = "error".to_string();
+                state.status_tone = tone.to_string();
             } else {
                 state.status = format!("共 {count} 篇文章。");
                 state.status_tone = "info".to_string();

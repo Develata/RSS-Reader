@@ -37,6 +37,9 @@ pub(crate) struct ReaderPageState {
     pub(crate) status: String,
     pub(crate) status_tone: String,
     pub(crate) error: Option<String>,
+    /// The tone `error` is shown with: a missing entry or a failure is an error, an unknown
+    /// outcome is not (review C4B-A-R5-01).
+    pub(crate) error_tone: &'static str,
 }
 
 impl ReaderPageState {
@@ -59,6 +62,7 @@ impl ReaderPageState {
             status: String::new(),
             status_tone: "info".to_string(),
             error: None,
+            error_tone: "error",
         }
     }
 

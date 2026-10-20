@@ -63,6 +63,10 @@ impl ReaderPageFacade {
         self.snapshot.error.as_deref()
     }
 
+    pub(crate) fn error_tone(&self) -> &'static str {
+        self.snapshot.error_tone
+    }
+
     /// Whether the status is shown on screen (screen readers hear every status): an error, a
     /// failure or an outcome that may have happened; a plain result is only announced.
     pub(crate) fn status_shown(&self) -> bool {

@@ -146,6 +146,14 @@ async fn unreadable_preferences_are_unavailable() {
         assert!(state.preferences_load.can_load_entries(), "{}: the list may load", class.name);
         assert!(!state.preferences_load.is_loaded(), "{}: never saved over", class.name);
         status_is(&state.status, &state.status_tone, &class);
+        // The list that loads afterwards keeps the failure's tone (review C4B-A-R5-01).
+        let loaded = EntriesPageIntent::SetEntries {
+            entries: Vec::new(),
+            archived_count: 0,
+            truncated: false,
+        };
+        reduce_entries_page_intent(&mut state, loaded);
+        status_is(&state.status, &state.status_tone, &class);
     }
 }
 
@@ -253,6 +261,7 @@ async fn an_unreadable_entry_shows_the_failure() {
         }
         let error = state.error.as_deref().unwrap_or_default();
         assert!(error.contains(&class.error.message), "{}: {error}", class.name);
+        assert_eq!(state.error_tone, class.tone, "{}: shown with its tone", class.name);
     }
 }
 

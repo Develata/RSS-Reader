@@ -80,7 +80,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             }
             StatusBanner {
                 message: facade.error().unwrap_or_else(|| facade.status_message()).to_string(),
-                tone: (if facade.error().is_some() { "error" } else { facade.status_tone() }).to_string(),
+                tone: (if facade.error().is_some() { facade.error_tone() } else { facade.status_tone() }).to_string(),
                 announce: true,
                 visually_hidden: !facade.status_shown(),
             }

@@ -41,12 +41,14 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
                 return;
             }
             state.error = error;
+            state.error_tone = "error";
         }
         ReaderPageIntent::LoadFailed { entry_id, failure } => {
             if entry_id != state.current_entry_id {
                 return;
             }
             state.error = Some(failure.message());
+            state.error_tone = failure.tone();
         }
         ReaderPageIntent::Failed(failure) => {
             state.status = failure.message();

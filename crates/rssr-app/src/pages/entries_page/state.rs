@@ -20,8 +20,12 @@ pub(crate) enum PreferencesLoadState {
     Pending,
     Loaded,
     // Failed preferences may fall back for reading, but must never be saved over
-    // the persisted values that could not be read.
-    Unavailable(String),
+    // the persisted values that could not be read. The failure's message and tone stay with
+    // it (review C4B-A-R5-01).
+    Unavailable {
+        message: String,
+        tone: &'static str,
+    },
 }
 
 impl PreferencesLoadState {
