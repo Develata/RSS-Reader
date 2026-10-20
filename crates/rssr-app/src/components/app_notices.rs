@@ -10,8 +10,22 @@ use crate::theme::ThemeController;
 use crate::ui::{
     AppShellState, drafts,
     recovery::{APP_RECOVERY, AppRecovery},
-    shell_browser::{reload_page, sign_in_again},
+    shell_browser::{reload_page, sign_in_again, sleep},
 };
+
+/// Leaves with the settings draft kept (C4b item 4); returns false when it could not be kept. If
+/// the app is still running after the grace period, the departure was stopped: the draft is the
+/// live page's again (review C4B-B-R3-04).
+fn leave(shell: AppShellState, go: fn()) -> bool {
+    if !drafts::leave_keeping(shell.settings_draft().as_ref(), go) {
+        return false;
+    }
+    spawn(async {
+        sleep(drafts::DEPARTURE_GRACE).await;
+        drafts::departure_stopped();
+    });
+    true
+}
 
 #[component]
 pub fn AppNotices() -> Element {
@@ -20,9 +34,7 @@ pub fn AppNotices() -> Element {
     // Which way out could not keep the settings page's draft: the page stays (C4b item 4).
     let mut not_kept = use_signal(|| None::<AppRecovery>);
     use_effect(move || {
-        if APP_RECOVERY() == Some(AppRecovery::SignIn)
-            && !drafts::leave_keeping(shell.settings_draft().as_ref(), sign_in_again)
-        {
+        if APP_RECOVERY() == Some(AppRecovery::SignIn) && !leave(shell, sign_in_again) {
             not_kept.set(Some(AppRecovery::SignIn));
         }
     });
@@ -40,6 +52,15 @@ pub fn AppNotices() -> Element {
                 aside { "data-slot": "app-notice", "data-notice": "sign-in", role: "alert",
                     if kept {
                         StatusBanner { message: "登录已失效，请重新登录。".to_string(), tone: "error".to_string() }
+                        // The way to the sign-in page, should the navigation have been stopped.
+                        button { class: "button", "data-action": "sign-in",
+                            onclick: move |_| {
+                                if !leave(shell, sign_in_again) {
+                                    not_kept.set(Some(AppRecovery::SignIn));
+                                }
+                            },
+                            "去登录"
+                        }
                     } else {
                         StatusBanner {
                             message: "登录已失效；浏览器暂时无法保留设置草稿，因此没有离开本页。".to_string(),
@@ -59,7 +80,7 @@ pub fn AppNotices() -> Element {
                         }
                         button { class: "button", "data-action": "reload-page",
                             onclick: move |_| {
-                                if !drafts::leave_keeping(shell.settings_draft().as_ref(), reload_page) {
+                                if !leave(shell, reload_page) {
                                     not_kept.set(Some(AppRecovery::Reload));
                                 }
                             },

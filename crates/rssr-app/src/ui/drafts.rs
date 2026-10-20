@@ -66,6 +66,16 @@ thread_local! {
     static LEAVING: Cell<bool> = const { Cell::new(false) };
 }
 
+/// How long a departure may take before the page counts it as stopped (the user stopped the
+/// navigation, or it failed): the app is still running, so restoring a draft removes it again
+/// (review C4B-B-R3-04).
+pub(crate) const DEPARTURE_GRACE: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// The departure did not happen: the app is still running after [`DEPARTURE_GRACE`].
+pub(crate) fn departure_stopped() {
+    LEAVING.with(|leaving| leaving.set(false));
+}
+
 /// Leaves (`leave`: reload, go to the sign-in page) after keeping `draft`; stays, returning false,
 /// when it could not be kept. From then on nothing removes the stored draft.
 pub(crate) fn leave_keeping(draft: Option<&SettingsPatch>, leave: impl FnOnce()) -> bool {
@@ -212,5 +222,17 @@ mod tests {
         assert!(leave_keeping(Some(&dark()), || left = true));
         assert!(left);
         assert_eq!(take(), Some(dark()));
+    }
+
+    /// A departure that did not happen (the navigation was stopped) gives the draft back to the
+    /// live page: restoring it removes it again, so it is restored once (review C4B-B-R3-04).
+    #[test]
+    fn a_stopped_departure_restores_once_again() {
+        assert!(leave_keeping(Some(&dark()), || {}));
+        forget();
+        assert_eq!(peek(), Some(dark()), "kept while leaving");
+        super::departure_stopped();
+        forget();
+        assert_eq!(peek(), None, "the live page's again");
     }
 }

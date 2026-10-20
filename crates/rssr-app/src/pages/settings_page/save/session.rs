@@ -936,8 +936,8 @@ mod tests {
     /// The app leaves to sign in while the settings page opens with a restored draft: the notice
     /// (above the page) leaves first, before the page hands the draft to the shell; the draft
     /// stays stored for the page after the sign-in (review C4B-B-R2-01).
-    #[test]
-    fn a_draft_restored_as_the_app_leaves_to_sign_in_stays_stored() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_draft_restored_as_the_app_leaves_to_sign_in_stays_stored() {
         use crate::components::app_notices::AppNotices;
         use crate::ui::recovery::{APP_RECOVERY, AppRecovery};
 

@@ -106,6 +106,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.recovered_edits = None;
         }
         EntriesPageIntent::WorkspaceSaveUnknown => state.stored_workspace = None,
+        EntriesPageIntent::RecoveredEditsHandled => state.recovered_edits = None,
         EntriesPageIntent::WorkspaceSaveEnded => {
             state.workspace_saving = false;
             state.workspace_wanted = None;

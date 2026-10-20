@@ -37,6 +37,9 @@ pub(crate) struct ReaderPageState {
     /// earlier refresh's answer is dropped, since it may have read before the later one or before
     /// the write (C4b item 2; review C4B-B-01).
     pub(crate) reread_generation: u64,
+    /// A read-only refresh was asked for while the entry's load was on its way: it follows the
+    /// load (review C4B-B-R3-03).
+    pub(crate) reread_wanted: bool,
     pub(crate) asset_localization_requested: bool,
     pub(crate) status: String,
     pub(crate) status_tone: String,
@@ -63,6 +66,7 @@ impl ReaderPageState {
             is_starred: false,
             load_generation: 0,
             reread_generation: 0,
+            reread_wanted: false,
             asset_localization_requested: false,
             status: String::new(),
             status_tone: "info".to_string(),
@@ -101,5 +105,7 @@ impl ReaderPageState {
         self.is_starred = false;
         self.asset_localization_requested = false;
         self.error = None;
+        // A new load reads everything a pending refresh would.
+        self.reread_wanted = false;
     }
 }

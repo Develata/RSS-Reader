@@ -88,8 +88,9 @@ pub(crate) struct EntriesPageState {
     /// C4B-B-05). Reads never set it.
     pub(crate) workspace_wanted: Option<EntriesWorkspaceState>,
     /// Filters the user chose while the preferences could not be read, kept shown when a later
-    /// read recovers them. That read does not save them by itself; the user's next change does
-    /// (review C4B-B-R2-06).
+    /// read recovers them. That read does not save them by itself: the save effect's next firing
+    /// (the page becoming ready) skips them once; the user's changes after it are saved (reviews
+    /// C4B-B-R2-06, C4B-B-R3-01).
     pub(crate) recovered_edits: Option<EntriesWorkspaceState>,
 }
 

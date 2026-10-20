@@ -76,6 +76,7 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
             state.is_starred = is_starred;
             state.navigation_state = navigation_state;
         }
+        ReaderPageIntent::RereadWanted(wanted) => state.reread_wanted = wanted,
         ReaderPageIntent::RereadIssued => {
             state.reread_generation = state.reread_generation.wrapping_add(1);
         }

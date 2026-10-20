@@ -43,14 +43,35 @@ impl ReaderPageSession {
             self.state,
             super::intent::ReaderPageIntent::BeginLoading { entry_id: self.entry_id },
         );
-        self.spawn_result(load);
+        let generation = self.state.peek().load_generation;
+        spawn(async move {
+            let intents = load.await;
+            let Ok(current) = self.state.try_peek() else { return };
+            if current.current_entry_id != self.entry_id || current.load_generation != generation {
+                return;
+            }
+            drop(current);
+            for intent in intents.into_iter().filter_map(UiIntent::into_reader_page_intent) {
+                dispatch_reader_page_intent(self.state, intent);
+            }
+            // A refresh asked for while the load was on its way follows it (review
+            // C4B-B-R3-03).
+            if self.state.peek().reread_wanted {
+                dispatch_reader_page_intent(
+                    self.state,
+                    super::intent::ReaderPageIntent::RereadWanted(false),
+                );
+                self.reread();
+            }
+        });
     }
 
     /// The page's read-only refresh (C4b item 2): the entry's flags and neighbours, never its
     /// body (no `BeginLoading`: the content, the image localization asked for and the position
     /// stay). A failed load has nothing shown to keep: it is loaded again, as a read only — the
     /// image localization (a write) is not asked for; opening the entry again asks for it
-    /// (review C4B-B-02). While its load is on its way there is nothing to refresh.
+    /// (review C4B-B-02). While its load is on its way the refresh waits for it (review
+    /// C4B-B-R3-03).
     pub(crate) fn reread(self) {
         let state = self.state.peek();
         if state.current_entry_id != self.entry_id {
@@ -66,6 +87,11 @@ impl ReaderPageSession {
             return;
         }
         if !state.content_loaded {
+            drop(state);
+            dispatch_reader_page_intent(
+                self.state,
+                super::intent::ReaderPageIntent::RereadWanted(true),
+            );
             return;
         }
         drop(state);
@@ -445,6 +471,40 @@ mod tests {
             let state = session.snapshot();
             assert_eq!(state.load_generation, 2, "loaded again");
             assert!(state.asset_localization_requested, "a recovery load does not ask");
+        });
+    }
+
+    /// A refresh asked for while the entry's load is on its way is not lost: it follows the load
+    /// (review C4B-B-R3-03).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_reread_asked_for_during_a_load_follows_it() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let (sender, receiver) = oneshot::channel();
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = ReaderPageSession::new(1, Signal::new(ReaderPageState::new()));
+            session.spawn_load(async { receiver.await.expect("the load") });
+            session.reread();
+            session
+        });
+        dom.render_immediate_to_vec();
+        assert_eq!(backend.calls("load_reader_entry"), 0, "it waits for the load");
+        sender.send(loaded(1, "Current")).expect("deliver the load");
+        for _ in 0..50 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            if backend.calls("load_reader_entry") == 1 {
+                break;
+            }
+        }
+        assert_eq!(backend.calls("load_reader_entry"), 1, "the refresh followed the load");
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.snapshot().title, "Current", "the body stays");
+            assert!(!session.snapshot().reread_wanted);
         });
     }
 }

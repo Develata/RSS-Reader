@@ -39,6 +39,9 @@ pub(crate) enum EntriesPageIntent {
     /// A save of the preferences ended with an unknown outcome: what the library holds is not
     /// known until a read tells again.
     WorkspaceSaveUnknown,
+    /// The save effect fired once since a read recovered the user's filters: the recovery's
+    /// firing is handled (review C4B-B-R3-01).
+    RecoveredEditsHandled,
     /// A read of the preferences and subscriptions was issued / the latest one answered.
     BootstrapStarted,
     BootstrapFinished,
