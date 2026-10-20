@@ -1089,6 +1089,14 @@ mod tests {
         let html = r#"<img src="http://[">"#.repeat(65_536);
         let document = LocalizableImageDocument::parse(&html, Some(&web_base), 16);
         assert!(document.slots().is_empty());
+
+        // 预算耗尽是持续的：失败的尝试用完预算后，后面本可解析的图片也不再解析。
+        let web_base = Url::parse(&format!("https://e.test/{}", "a".repeat(1 << 18))).unwrap();
+        let html = r#"<img src="http://[">"#.repeat(3) + r#"<img src="ok.png">"#;
+        let document = LocalizableImageDocument::parse(&html, Some(&web_base), 1);
+        assert!(document.slots().is_empty());
+        let document = LocalizableImageDocument::parse(r#"<img src="ok.png">"#, Some(&web_base), 1);
+        assert_eq!(document.slots().len(), 1, "a single image still fits the budget");
     }
 
     #[test]
