@@ -30,6 +30,10 @@ pub(crate) struct AppShellState {
     reread_pending: Signal<bool>,
     /// The settings page is open: it re-reads the settings itself, the shell does not.
     settings_page_open: Signal<bool>,
+    /// A job's result whose page was left (C4b item 3), until dismissed or it times out.
+    job_notice: Signal<Option<JobNotice>>,
+    /// Bumped by every job notice: a timeout dismisses only its own.
+    job_notice_revision: Signal<u64>,
     /// Why the settings could not be read at start, until they are (C4b item 5).
     settings_failure: Signal<Option<UiFailure>>,
     /// Why the startup page could not be resolved, until dismissed: the startup page is replaced
@@ -76,6 +80,36 @@ impl AppShellState {
         });
     }
 
+    /// Asks every page to re-read at once: a job ended (success or failure may have committed
+    /// part of it, C4b item 3). Requests still waiting are covered by it.
+    pub(crate) fn reread_now(mut self) {
+        self.library_revision += 1;
+    }
+
+    /// Shows the result of a job whose page was left, above every page (C4b item 3). It goes like
+    /// the manual refresh's feedback: after 3 s, or 6 s for a failure or an unknown outcome,
+    /// unless dismissed or replaced before.
+    pub(crate) fn report_job(mut self, message: String, tone: String) {
+        let lasting = tone == "error" || tone == TONE_UNKNOWN;
+        self.job_notice.set(Some(JobNotice { message, tone }));
+        self.job_notice_revision += 1;
+        let shown = *self.job_notice_revision.peek();
+        self.spawn_in_shell(async move {
+            sleep(std::time::Duration::from_secs(if lasting { 6 } else { 3 })).await;
+            if *self.job_notice_revision.peek() == shown {
+                self.job_notice.set(None);
+            }
+        });
+    }
+
+    pub(crate) fn job_notice(self) -> Option<JobNotice> {
+        self.job_notice.read().clone()
+    }
+
+    pub(crate) fn dismiss_job_notice(mut self) {
+        self.job_notice.set(None);
+    }
+
     /// The settings page is open (`true`) or was closed: while it is open it re-reads the
     /// settings itself and applies them, so the shell does not read them a second time.
     pub(crate) fn set_settings_page_open(mut self, open: bool) {
@@ -102,7 +136,7 @@ impl AppShellState {
                 self.refresh.set(ManualRefreshState::Finished { message, tone });
                 // Failed batches can still have committed some subscriptions.
                 self.refresh_revision += 1;
-                self.library_revision += 1;
+                self.reread_now();
                 let completed_revision = *self.refresh_revision.peek();
                 spawn(async move {
                     wait_for_refresh_feedback(std::time::Duration::from_secs(if failed {
@@ -206,6 +240,13 @@ impl AppShellState {
     }
 }
 
+/// A job's result shown above every page (C4b item 3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct JobNotice {
+    pub(crate) message: String,
+    pub(crate) tone: String,
+}
+
 pub(crate) fn use_app_shell_state() -> AppShellState {
     AppShellState {
         entry_search: use_signal(initial_entry_search),
@@ -215,6 +256,8 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
         library_revision: use_signal(|| 0),
         reread_pending: use_signal(|| false),
         settings_page_open: use_signal(|| false),
+        job_notice: use_signal(|| None),
+        job_notice_revision: use_signal(|| 0),
         settings_failure: use_signal(|| None),
         startup_failure: use_signal(|| None),
         settings_loading: use_signal(|| false),

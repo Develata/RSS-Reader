@@ -89,24 +89,61 @@ impl FeedsPageSession {
                 });
             let single_refresh =
                 matches!(command, UiCommand::Feeds(FeedsCommand::RefreshFeed { .. }));
+            // Jobs (refreshing one subscription, adding one) are the app's: leaving the page does
+            // not stop the wait, and their end re-reads every page (C4b item 3).
+            let job = matches!(
+                command,
+                UiCommand::Feeds(FeedsCommand::RefreshFeed { .. } | FeedsCommand::AddFeed { .. })
+            );
             // 配置导入可能替换全局设置：任务交给 App 作用域，离开订阅页不会把它取消在
             // “已提交、未回执”的中途，新外观照样生效（审计 E1）。
             let shell_owned =
-                matches!(command, UiCommand::Feeds(FeedsCommand::ImportConfig { .. }));
+                job || matches!(command, UiCommand::Feeds(FeedsCommand::ImportConfig { .. }));
             let task = execute(command);
             let completion = async move {
                 let intents = task.await;
+                if job {
+                    self.shell.reread_now();
+                }
                 if generation.is_some_and(|generation| *self.query_generation.peek() != generation)
                 {
                     return;
                 }
-                for intent in intents.into_iter().filter_map(UiIntent::into_feeds_page_intent) {
-                    // 页面已卸载时只保留全局效果，页面自己的回执不再投递。
-                    if self.state.try_peek().is_err()
-                        && !matches!(intent, FeedsPageIntent::SettingsReplaced(_))
-                    {
-                        continue;
+                let intents: Vec<_> =
+                    intents.into_iter().filter_map(UiIntent::into_feeds_page_intent).collect();
+                // The results reach only the page that started the operation, this instance
+                // (its state); a page opened since has its own (R2-02). When it was left, only
+                // what concerns the whole app applies: the replaced settings, and the job's
+                // result as the shell's notice.
+                if self.state.try_peek().is_err() {
+                    let mut notice = None;
+                    for intent in intents {
+                        match intent {
+                            FeedsPageIntent::SettingsReplaced(settings) => {
+                                self.theme.store(settings)
+                            }
+                            FeedsPageIntent::SetStatus { message, tone } => {
+                                notice = Some((message, tone))
+                            }
+                            FeedsPageIntent::Failed(failure) => {
+                                notice = Some((failure.message(), failure.tone().to_string()))
+                            }
+                            FeedsPageIntent::FeedCandidates { .. } => {
+                                notice = Some((
+                                    "添加订阅：网页上有多个订阅地址，请回到订阅页重新添加并选择。"
+                                        .to_string(),
+                                    "info".to_string(),
+                                ))
+                            }
+                            _ => {}
+                        }
                     }
+                    if job && let Some((message, tone)) = notice {
+                        self.shell.report_job(message, tone);
+                    }
+                    return;
+                }
+                for intent in intents {
                     self.dispatch_intent(intent);
                 }
                 if single_refresh {
@@ -119,7 +156,13 @@ impl FeedsPageSession {
                         if failed { 6 } else { 3 },
                     ))
                     .await;
-                    self.dispatch_intent(FeedsPageIntent::ClearRefreshStatus { revision, message });
+                    // The wait is the app's too: the page may have been left meanwhile.
+                    if self.state.try_peek().is_ok() {
+                        self.dispatch_intent(FeedsPageIntent::ClearRefreshStatus {
+                            revision,
+                            message,
+                        });
+                    }
                 }
             };
             if shell_owned {
@@ -312,13 +355,14 @@ mod tests {
         let (sender, receiver) = oneshot::channel();
         let mut receiver = Some(receiver);
         session.dispatch_intent_with(FeedsPageIntent::AddFeedRequested, |command| {
-            let UiCommand::Feeds(FeedsCommand::AddFeed { raw_url, .. }) = command else {
+            let UiCommand::Feeds(FeedsCommand::AddFeed { raw_url, token, .. }) = command else {
                 panic!("expected subscription command")
             };
             assert_eq!(raw_url, expected_url);
             let receiver = receiver.take().expect("only one command per submission");
             async move {
                 vec![UiIntent::FeedsPage(FeedsPageIntent::AddFeedFinished {
+                    token,
                     saved: receiver.await.expect("controlled subscription completion"),
                 })]
             }
@@ -431,5 +475,107 @@ mod tests {
         assert_eq!(state.feed_count, 2);
         assert!(state.status.is_empty());
         assert_eq!(state.status_tone, "info");
+    }
+
+    /// Runs the app's tasks until `done` holds.
+    async fn run_until(dom: &mut VirtualDom, what: &str, mut done: impl FnMut() -> bool) {
+        for _ in 0..300 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            dom.render_immediate_to_vec();
+            if dom.in_scope(ScopeId::APP, &mut done) {
+                return;
+            }
+        }
+        panic!("{what}");
+    }
+
+    /// The app with the subscriptions page, a scripted backend, and the page's session.
+    fn app_with_jobs() -> (VirtualDom, UnmountProbe, AppShellState, FeedsPageSession, ScopeId) {
+        let mut dom = VirtualDom::new(app_with_unmountable_page);
+        dom.rebuild_in_place();
+        let (probe, shell) = dom.in_scope(ScopeId::APP, || (consume_context(), consume_context()));
+        let probe: UnmountProbe = probe;
+        let (session, scope) = probe.page.peek().expect("feeds page mounted");
+        (dom, probe, shell, session, scope)
+    }
+
+    /// A job started on the page goes on when the page is left (the wait is the app's): its end
+    /// re-reads every page, and its result is the shell's notice, not the gone page's
+    /// (C4b item 3).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_job_outlives_its_page() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+        let backend = Scripted::over_new_library();
+        let hold = backend.hold("refresh_feed");
+        let _host = test_host::install(backend.clone());
+        let (mut dom, probe, shell, session, scope) = app_with_jobs();
+        dom.in_scope(scope, || session.refresh_feed(1, "甲".into()));
+        run_until(&mut dom, "the job waits", || hold.waiting() == 1).await;
+
+        let mut show_page = probe.show_page;
+        dom.in_scope(ScopeId::APP, || show_page.set(false));
+        dom.render_immediate_to_vec();
+        assert!(session.state.try_peek().is_err(), "the page was left");
+
+        hold.release();
+        run_until(&mut dom, "the job's notice", || shell.job_notice().is_some()).await;
+        assert_eq!(hold.abandoned(), 0, "leaving the page did not stop the wait");
+        assert_eq!(backend.calls("refresh_feed"), 1);
+        dom.in_scope(ScopeId::APP, || assert_eq!(shell.library_revision(), 1, "pages re-read"));
+    }
+
+    /// A job that ends after its page was left and opened again does not touch the new page: its
+    /// draft, its gate and its status are its own (R2-02).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_job_ending_after_the_page_was_reopened_leaves_the_new_page_alone() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+        let backend = Scripted::over_new_library();
+        let hold = backend.hold("add_subscription");
+        let _host = test_host::install(backend.clone());
+        let (mut dom, probe, shell, first, scope) = app_with_jobs();
+        dom.in_scope(scope, || {
+            first.set_feed_url("https://a.example/feed.xml".into());
+            first.add_feed();
+        });
+        run_until(&mut dom, "the add waits", || hold.waiting() == 1).await;
+
+        let mut show_page = probe.show_page;
+        dom.in_scope(ScopeId::APP, || show_page.set(false));
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || show_page.set(true));
+        dom.render_immediate_to_vec();
+        let (second, scope) = probe.page.peek().expect("the page opened again");
+        assert_ne!(second.state, first.state, "a new page");
+        dom.in_scope(scope, || second.set_feed_url("https://b.example/feed.xml".into()));
+
+        hold.release();
+        run_until(&mut dom, "the add's notice", || shell.job_notice().is_some()).await;
+        dom.in_scope(scope, || {
+            let state = second.snapshot();
+            assert_eq!(state.feed_url, "https://b.example/feed.xml");
+            assert_eq!(state.adding_feed_url, None);
+            assert!(state.status.is_empty(), "{}", state.status);
+            assert!(state.feed_candidates.is_none());
+        });
+    }
+
+    /// Closing the app stops waiting for its jobs: the call is dropped (the server's job goes on;
+    /// the client's polling and backoff end with the call).
+    #[tokio::test(flavor = "current_thread")]
+    async fn closing_the_app_stops_waiting_for_its_jobs() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+        let backend = Scripted::over_new_library();
+        let hold = backend.hold("refresh_feed");
+        let _host = test_host::install(backend.clone());
+        let (mut dom, _probe, _shell, session, scope) = app_with_jobs();
+        dom.in_scope(scope, || session.refresh_feed(1, "甲".into()));
+        run_until(&mut dom, "the job waits", || hold.waiting() == 1).await;
+        drop(dom);
+        assert_eq!(hold.waiting(), 0);
+        assert_eq!(hold.abandoned(), 1);
     }
 }

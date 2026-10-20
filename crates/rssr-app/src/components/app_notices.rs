@@ -1,6 +1,7 @@
-//! Notices about the whole app above every page (phase C, C4b items 1 and 5): the session ended
-//! (the page goes to the sign-in page), the page is of another build than the server (reload it),
-//! or the settings could not be read at start (retry).
+//! Notices about the whole app above every page (phase C, C4b items 1, 3 and 5): the session
+//! ended (the page goes to the sign-in page), the page is of another build than the server
+//! (reload it), a job ended after its page was left, or the settings could not be read at start
+//! (retry).
 
 use dioxus::prelude::*;
 
@@ -24,6 +25,7 @@ pub fn AppNotices() -> Element {
     let recovery = APP_RECOVERY();
     let settings_failure = shell.settings_failure(theme);
     let startup_failure = shell.startup_failure();
+    let job_notice = shell.job_notice();
     let loading = shell.settings_loading();
 
     rsx! {
@@ -43,6 +45,13 @@ pub fn AppNotices() -> Element {
                 }
             },
             None => rsx! {},
+        }
+        if let Some(notice) = job_notice {
+            aside { "data-slot": "app-notice", "data-notice": "job",
+                StatusBanner { message: notice.message, tone: notice.tone, announce: true }
+                button { class: "button", "data-action": "dismiss-job-notice",
+                    onclick: move |_| shell.dismiss_job_notice(), "知道了" }
+            }
         }
         if let Some(failure) = startup_failure {
             aside { "data-slot": "app-notice", "data-notice": "startup-route", role: "alert",

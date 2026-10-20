@@ -3,26 +3,23 @@ StartupRouteResolved(StartupRouteSnapshot { route: EntriesPage })
 ## feeds snapshot, empty
 FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { feeds: [], feed_count: 0, entry_count: 0, fingerprint: ConfigFingerprint(<1>) })))
 ## add feed a
-FeedsPage(AddFeedFinished { saved: true })
+FeedsPage(AddFeedFinished { token: 1, saved: true })
 FeedsPage(SetStatus { message: "订阅已保存并完成首次刷新。", tone: "info" })
-FeedsPage(BumpReload)
 ## add feed b
-FeedsPage(AddFeedFinished { saved: true })
+FeedsPage(AddFeedFinished { token: 1, saved: true })
 FeedsPage(SetStatus { message: "订阅已保存并完成首次刷新。", tone: "info" })
-FeedsPage(BumpReload)
 ## add discovery page
-FeedsPage(FeedCandidates { page_url: Url { scheme: "http", cannot_be_a_base: false, username: "", password: None, host: Some(Ipv4(127.0.0.1)), port: Some(<port>), path: "/page.html", query: None, fragment: None }, candidates: [FeedDiscoveryCandidate { url: Url { scheme: "http", cannot_be_a_base: false, username: "", password: None, host: Some(Ipv4(127.0.0.1)), port: Some(<port>), path: "/a.xml", query: None, fragment: None }, title: Some("First") }, FeedDiscoveryCandidate { url: Url { scheme: "http", cannot_be_a_base: false, username: "", password: None, host: Some(Ipv4(127.0.0.1)), port: Some(<port>), path: "/b.xml", query: None, fragment: None }, title: Some("Second") }] })
-FeedsPage(AddFeedFinished { saved: false })
+FeedsPage(FeedCandidates { token: 1, page_url: Url { scheme: "http", cannot_be_a_base: false, username: "", password: None, host: Some(Ipv4(127.0.0.1)), port: Some(<port>), path: "/page.html", query: None, fragment: None }, candidates: [FeedDiscoveryCandidate { url: Url { scheme: "http", cannot_be_a_base: false, username: "", password: None, host: Some(Ipv4(127.0.0.1)), port: Some(<port>), path: "/a.xml", query: None, fragment: None }, title: Some("First") }, FeedDiscoveryCandidate { url: Url { scheme: "http", cannot_be_a_base: false, username: "", password: None, host: Some(Ipv4(127.0.0.1)), port: Some(<port>), path: "/b.xml", query: None, fragment: None }, title: Some("Second") }] })
+FeedsPage(AddFeedFinished { token: 1, saved: false })
 ## add failing feed
-FeedsPage(AddFeedFinished { saved: false })
+FeedsPage(AddFeedFinished { token: 1, saved: false })
 FeedsPage(Failed(UiFailure { action: "添加订阅", error: BackendError { code: Network, message: "订阅探测返回非成功状态: HTTP status server error (500 Internal Server Error)", request_id: None, reason: None } }))
 ## add duplicate feed a
-FeedsPage(AddFeedFinished { saved: false })
+FeedsPage(AddFeedFinished { token: 1, saved: false })
 FeedsPage(Failed(UiFailure { action: "添加订阅", error: BackendError { code: InvalidInput, message: "该地址已订阅：http://127.0.0.1:<port>/a.xml", request_id: None, reason: None } }))
 ## add feed with an image
-FeedsPage(AddFeedFinished { saved: true })
+FeedsPage(AddFeedFinished { token: 1, saved: true })
 FeedsPage(SetStatus { message: "订阅已保存并完成首次刷新。", tone: "info" })
-FeedsPage(BumpReload)
 ## feeds snapshot
 FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { feeds: [FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 3, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 3, entry_count: 5, fingerprint: ConfigFingerprint(<2>) })))
 ## entries bootstrap, all
@@ -89,7 +86,6 @@ ReaderPage(PatchEntryFlags { entry_id: 1, is_read: None, is_starred: Some(true) 
 ReaderPage(ApplyLoadedContent { entry_id: 5, content: ReaderPageLoadedContent { title: "Image one", body_text: "", body_html: Some("<p>Picture</p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==\">"), source: "Feed I", author: None, original_url: Some("https://example.invalid/i1"), published_at: "2026-04-05T10:00:00Z", navigation_state: EntryNavigation { previous_unread_entry_id: None, next_unread_entry_id: Some(1), previous_feed_entry_id: None, next_feed_entry_id: None }, is_read: true, is_starred: false } })
 ## refresh feed 1
 FeedsPage(SetStatus { message: "没有新文章：Feed A", tone: "info" })
-FeedsPage(BumpReload)
 ## manual refresh
 SetStatus { message: "没有新文章。", tone: "info" }
 ## export config
@@ -146,9 +142,8 @@ FeedsPage(PendingDeleteFeedSet(None))
 FeedsPage(SetStatus { message: "已删除订阅：Feed B", tone: "info" })
 FeedsPage(BumpReload)
 ## re-add feed b
-FeedsPage(AddFeedFinished { saved: true })
+FeedsPage(AddFeedFinished { token: 2, saved: true })
 FeedsPage(SetStatus { message: "订阅已保存并完成首次刷新。", tone: "info" })
-FeedsPage(BumpReload)
 ## list entries of feed 2 after re-adding
 EntriesPage(SetEntries { entries: [EntrySummary { id: 14, feed_id: 2, title: "Bravo one", feed_title: "Feed B", published_at: Some(2026-04-04T10:00:00Z), is_read: false, is_starred: false }], archived_count: 0, truncated: false })
 ## feeds snapshot, at the end

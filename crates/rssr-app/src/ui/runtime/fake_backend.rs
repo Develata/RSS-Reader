@@ -1,9 +1,11 @@
 //! A backend for the UI's tests (C4b): it answers like the library it wraps, except for the
 //! operations told to fail, which fail with the error they were given. The in-process library
 //! never produces the errors the page must recover from (`outcome_unknown`, `unauthenticated`,
-//! `build_mismatch`); this one does, on demand. It also counts the operations that ran.
+//! `build_mismatch`); this one does, on demand. It also counts the operations that ran, and holds
+//! the jobs told to wait (a job that is still running, C4b item 3).
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use rssr_api::{
@@ -25,11 +27,74 @@ pub(crate) struct Scripted {
     inner: Arc<dyn Backend + Send + Sync>,
     failures: Mutex<HashMap<&'static str, BackendError>>,
     ran: Mutex<Vec<&'static str>>,
+    holds: Mutex<HashMap<&'static str, Arc<Hold>>>,
+}
+
+/// A job held before it answers, until released. It knows whether a caller is waiting on it and
+/// whether a caller stopped waiting (its call was dropped).
+pub(crate) struct Hold {
+    gate: tokio::sync::Semaphore,
+    waiting: AtomicUsize,
+    abandoned: AtomicUsize,
+}
+
+impl Hold {
+    /// Lets one call through.
+    pub(crate) fn release(&self) {
+        self.gate.add_permits(1);
+    }
+
+    /// Calls waiting on it now.
+    pub(crate) fn waiting(&self) -> usize {
+        self.waiting.load(Ordering::SeqCst)
+    }
+
+    /// Calls dropped while they waited.
+    pub(crate) fn abandoned(&self) -> usize {
+        self.abandoned.load(Ordering::SeqCst)
+    }
 }
 
 impl Scripted {
     pub(crate) fn over(inner: Arc<dyn Backend + Send + Sync>) -> Arc<Self> {
-        Arc::new(Self { inner, failures: Mutex::default(), ran: Mutex::default() })
+        Arc::new(Self {
+            inner,
+            failures: Mutex::default(),
+            ran: Mutex::default(),
+            holds: Mutex::default(),
+        })
+    }
+
+    /// From now on `operation` waits before it answers, until released.
+    pub(crate) fn hold(&self, operation: &'static str) -> Arc<Hold> {
+        let hold = Arc::new(Hold {
+            gate: tokio::sync::Semaphore::new(0),
+            waiting: AtomicUsize::new(0),
+            abandoned: AtomicUsize::new(0),
+        });
+        self.holds.lock().unwrap().insert(operation, Arc::clone(&hold));
+        hold
+    }
+
+    /// Waits while `operation` is held.
+    async fn held(&self, operation: &'static str) {
+        let Some(hold) = self.holds.lock().unwrap().get(operation).cloned() else { return };
+        struct Waiting<'a> {
+            hold: &'a Hold,
+            answered: bool,
+        }
+        impl Drop for Waiting<'_> {
+            fn drop(&mut self) {
+                self.hold.waiting.fetch_sub(1, Ordering::SeqCst);
+                if !self.answered {
+                    self.hold.abandoned.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+        }
+        hold.waiting.fetch_add(1, Ordering::SeqCst);
+        let mut waiting = Waiting { hold: &hold, answered: false };
+        hold.gate.acquire().await.expect("never closed").forget();
+        waiting.answered = true;
     }
 
     /// Over a new, empty library in memory (opened on a thread of its own, so a test's runtime
@@ -100,6 +165,7 @@ impl Backend for Scripted {
         remote_path: &str,
     ) -> Result<RemoteConfigPushOutcome> {
         self.enter("push_remote_config")?;
+        self.held("push_remote_config").await;
         self.inner.push_remote_config(endpoint, remote_path).await
     }
 
@@ -109,6 +175,7 @@ impl Backend for Scripted {
         remote_path: &str,
     ) -> Result<RemoteConfigPullOutcome> {
         self.enter("pull_remote_config")?;
+        self.held("pull_remote_config").await;
         self.inner.pull_remote_config(endpoint, remote_path).await
     }
 
@@ -179,16 +246,19 @@ impl Backend for Scripted {
         fallback_site_url: Option<Url>,
     ) -> Result<AddSubscriptionOutcome> {
         self.enter("add_subscription")?;
+        self.held("add_subscription").await;
         self.inner.add_subscription(raw_url, fallback_site_url).await
     }
 
     async fn refresh_all(&self) -> Result<RefreshAllExecutionOutcome> {
         self.enter("refresh_all")?;
+        self.held("refresh_all").await;
         self.inner.refresh_all().await
     }
 
     async fn refresh_feed(&self, feed_id: i64) -> Result<RefreshFeedExecutionOutcome> {
         self.enter("refresh_feed")?;
+        self.held("refresh_feed").await;
         self.inner.refresh_feed(feed_id).await
     }
 

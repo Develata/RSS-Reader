@@ -251,6 +251,16 @@ impl SettingsPageSession {
         has_unsaved_edits
     }
 
+    /// Whether the page (this instance) is still open: its state is dropped with it.
+    pub(crate) fn is_open(self) -> bool {
+        self.status.try_peek().is_ok()
+    }
+
+    /// Applies settings the library stored to the app (its theme), with the page gone.
+    pub(crate) fn store_theme(self, settings: UserSettings) {
+        self.theme.store(settings);
+    }
+
     pub(crate) fn set_status(self, message: impl Into<String>, tone: impl Into<String>) {
         crate::status::set_status(self.status, self.status_tone, message, tone);
     }

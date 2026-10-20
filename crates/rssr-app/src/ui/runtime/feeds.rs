@@ -24,34 +24,31 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
                 ))]),
             }
         }
-        FeedsCommand::AddFeed { raw_url, fallback_site_url } => {
+        FeedsCommand::AddFeed { raw_url, fallback_site_url, token } => {
             let result =
                 async { backend().await?.add_subscription(&raw_url, fallback_site_url).await }
                     .await
                     .map_err(|error| UiFailure::new("添加订阅", error));
-            add_feed_result(result)
+            add_feed_result(token, result)
         }
         FeedsCommand::RefreshFeed { feed_id, feed_title } => {
             match async { backend().await?.refresh_feed(feed_id).await }.await {
-                Ok(outcome) => feeds_intents(vec![
-                    FeedsPageIntent::SetStatus {
-                        message: outcome.failure.as_ref().map_or_else(
-                            || {
-                                format!(
-                                    "{}：{feed_title}",
-                                    super::new_entries_message(outcome.inserted_count)
-                                )
-                            },
-                            |failure| format!("刷新订阅失败：{}", super::failure_line(failure)),
-                        ),
-                        tone: if outcome.failure.is_some() {
-                            "error".to_string()
-                        } else {
-                            "info".to_string()
+                Ok(outcome) => feeds_intents(vec![FeedsPageIntent::SetStatus {
+                    message: outcome.failure.as_ref().map_or_else(
+                        || {
+                            format!(
+                                "{}：{feed_title}",
+                                super::new_entries_message(outcome.inserted_count)
+                            )
                         },
+                        |failure| format!("刷新订阅失败：{}", super::failure_line(failure)),
+                    ),
+                    tone: if outcome.failure.is_some() {
+                        "error".to_string()
+                    } else {
+                        "info".to_string()
                     },
-                    FeedsPageIntent::BumpReload,
-                ]),
+                }]),
                 Err(error) => feeds_failed("刷新订阅", error),
             }
         }
@@ -173,12 +170,14 @@ fn opml_import_summary(outcome: &OpmlImportOutcome) -> String {
     format!("{} 个订阅", outcome.imported_feed_count)
 }
 
-fn add_feed_result(result: Result<AddSubscriptionOutcome, UiFailure>) -> Vec<UiIntent> {
+/// What adding led to. A job: the page (or the shell, when the page was left) re-reads what it
+/// shows when it ends, saved or not (C4b item 3).
+fn add_feed_result(token: u64, result: Result<AddSubscriptionOutcome, UiFailure>) -> Vec<UiIntent> {
     let result = match result {
         Ok(AddSubscriptionOutcome::NeedsSelection { page_url, candidates }) => {
             return feeds_intents(vec![
-                FeedsPageIntent::FeedCandidates { page_url, candidates },
-                FeedsPageIntent::AddFeedFinished { saved: false },
+                FeedsPageIntent::FeedCandidates { token, page_url, candidates },
+                FeedsPageIntent::AddFeedFinished { token, saved: false },
             ]);
         }
         result => result,
@@ -188,7 +187,7 @@ fn add_feed_result(result: Result<AddSubscriptionOutcome, UiFailure>) -> Vec<UiI
         // The draft stays: an unknown outcome keeps it too, the page reads again what it shows.
         Err(failure) => {
             return feeds_intents(vec![
-                FeedsPageIntent::AddFeedFinished { saved: false },
+                FeedsPageIntent::AddFeedFinished { token, saved: false },
                 FeedsPageIntent::Failed(failure),
             ]);
         }
@@ -201,22 +200,20 @@ fn add_feed_result(result: Result<AddSubscriptionOutcome, UiFailure>) -> Vec<UiI
             "error",
         ),
     };
-    let mut intents = vec![
-        FeedsPageIntent::AddFeedFinished { saved },
+    feeds_intents(vec![
+        FeedsPageIntent::AddFeedFinished { token, saved },
         FeedsPageIntent::SetStatus { message, tone: tone.to_string() },
-    ];
-    if saved {
-        intents.push(FeedsPageIntent::BumpReload);
-    }
-    feeds_intents(intents)
+    ])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Every outcome releases the gate of the add it answers (its token); none reloads the page
+    /// itself: the job's end re-reads every page through the shell (C4b item 3).
     #[test]
-    fn every_add_outcome_releases_gate_and_only_saved_subscriptions_reload() {
+    fn every_add_outcome_releases_its_gate_and_leaves_the_reload_to_the_shell() {
         for (result, expected_saved, expected_tone) in [
             (Ok(AddSubscriptionOutcome::SavedAndRefreshed), true, "info"),
             (
@@ -234,23 +231,21 @@ mod tests {
             ),
             (Err(crate::ui::failure::plain("invalid feed URL")), false, "error"),
         ] {
-            let intents = add_feed_result(result)
+            let intents = add_feed_result(9, result)
                 .into_iter()
                 .filter_map(UiIntent::into_feeds_page_intent)
                 .collect::<Vec<_>>();
-            assert!(
-                matches!(intents.first(), Some(FeedsPageIntent::AddFeedFinished { saved }) if *saved == expected_saved)
-            );
+            assert!(matches!(
+                intents.first(),
+                Some(FeedsPageIntent::AddFeedFinished { token: 9, saved }) if *saved == expected_saved
+            ));
             let tone = match &intents[1] {
                 FeedsPageIntent::SetStatus { tone, .. } => tone.clone(),
                 FeedsPageIntent::Failed(failure) => failure.tone().to_owned(),
                 other => panic!("{other:?}"),
             };
             assert_eq!(tone, expected_tone);
-            assert_eq!(
-                intents.iter().any(|intent| matches!(intent, FeedsPageIntent::BumpReload)),
-                expected_saved
-            );
+            assert!(!intents.iter().any(|intent| matches!(intent, FeedsPageIntent::BumpReload)));
         }
     }
 

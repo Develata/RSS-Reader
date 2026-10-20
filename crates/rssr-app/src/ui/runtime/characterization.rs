@@ -410,7 +410,8 @@ async fn ui_commands_produce_the_recorded_intents() {
         ("add duplicate feed a", "/a.xml"),
         ("add feed with an image", "/img.xml"),
     ] {
-        let command = FeedsCommand::AddFeed { raw_url: server.url(path), fallback_site_url: None };
+        let command =
+            FeedsCommand::AddFeed { raw_url: server.url(path), fallback_site_url: None, token: 1 };
         transcript.run(label, feeds(command)).await;
     }
     transcript.run("feeds snapshot", feeds(FeedsCommand::LoadSnapshot)).await;
@@ -700,7 +701,11 @@ async fn ui_commands_produce_the_recorded_intents() {
     transcript
         .run(
             "re-add feed b",
-            feeds(FeedsCommand::AddFeed { raw_url: server.url("/b.xml"), fallback_site_url: None }),
+            feeds(FeedsCommand::AddFeed {
+                raw_url: server.url("/b.xml"),
+                fallback_site_url: None,
+                token: 2,
+            }),
         )
         .await;
     transcript

@@ -17,8 +17,10 @@ pub(crate) fn reduce_feeds_page_intent(
     intent: FeedsPageIntent,
 ) -> Vec<UiCommand> {
     match intent {
-        FeedsPageIntent::FeedCandidates { page_url, candidates } => {
-            if state.adding_feed_url.as_deref() == Some(state.feed_url.as_str()) {
+        FeedsPageIntent::FeedCandidates { token, page_url, candidates } => {
+            if token == state.add_token
+                && state.adding_feed_url.as_deref() == Some(state.feed_url.as_str())
+            {
                 state.feed_candidates = Some((page_url, candidates));
                 state.status = "发现多个订阅，请选择一个地址。".into();
                 state.status_tone = "info".into();
@@ -40,9 +42,11 @@ pub(crate) fn reduce_feeds_page_intent(
             let Some(candidate) = candidates.get(index) else {
                 return Vec::new();
             };
+            state.add_token = state.add_token.wrapping_add(1);
             let command = FeedsCommand::AddFeed {
                 raw_url: candidate.url.to_string(),
                 fallback_site_url: Some(page_url.clone()),
+                token: state.add_token,
             };
             state.adding_feed_url = Some(state.feed_url.clone());
             state.feed_candidates = None;
@@ -78,12 +82,17 @@ pub(crate) fn reduce_feeds_page_intent(
             }
             clear_pending_confirmations(state);
             state.adding_feed_url = Some(state.feed_url.clone());
+            state.add_token = state.add_token.wrapping_add(1);
             vec![UiCommand::Feeds(FeedsCommand::AddFeed {
                 raw_url: state.feed_url.clone(),
                 fallback_site_url: None,
+                token: state.add_token,
             })]
         }
-        FeedsPageIntent::AddFeedFinished { saved } => {
+        FeedsPageIntent::AddFeedFinished { token, saved } => {
+            if token != state.add_token {
+                return Vec::new();
+            }
             // Adding includes the first network refresh. Keep a new address typed while
             // that request was running; only the successfully submitted draft is cleared.
             if let Some(submitted_url) = state.adding_feed_url.take()
@@ -409,5 +418,41 @@ mod tests {
         state.pending_delete_feed = Some(7);
         reduce_feeds_page_intent(&mut state, snapshot_of("C"));
         assert_eq!(state.pending_delete_feed, None);
+    }
+
+    /// An add's results apply to that add only: an older one's end or candidates do not release
+    /// the gate of the add now running (C4b item 3, R2-02).
+    #[test]
+    fn an_add_result_reaches_only_its_operation() {
+        let mut state = FeedsPageState::new();
+        state.feed_url = "https://example.com".into();
+        let commands = reduce_feeds_page_intent(&mut state, FeedsPageIntent::AddFeedRequested);
+        let [UiCommand::Feeds(FeedsCommand::AddFeed { token, .. })] = commands.as_slice() else {
+            panic!("{commands:?}")
+        };
+        let token = *token;
+        let older = token.wrapping_sub(1);
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::FeedCandidates {
+                token: older,
+                page_url: "https://example.com".parse().unwrap(),
+                candidates: Vec::new(),
+            },
+        );
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::AddFeedFinished { token: older, saved: true },
+        );
+        assert!(state.adding_feed_url.is_some(), "still adding");
+        assert!(state.feed_candidates.is_none());
+        assert_eq!(state.feed_url, "https://example.com");
+
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::AddFeedFinished { token, saved: true },
+        );
+        assert!(state.adding_feed_url.is_none());
+        assert!(state.feed_url.is_empty());
     }
 }

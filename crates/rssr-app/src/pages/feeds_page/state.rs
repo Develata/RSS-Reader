@@ -5,6 +5,8 @@ pub(crate) struct FeedsPageState {
     pub(crate) feed_candidates: Option<(url::Url, Vec<rssr_application::FeedDiscoveryCandidate>)>,
     pub(crate) feed_url: String,
     pub(crate) adding_feed_url: Option<String>,
+    /// The latest add's operation token: only its results apply (C4b item 3).
+    pub(crate) add_token: u64,
     pub(crate) config_text: String,
     pub(crate) opml_text: String,
     pub(crate) pending_config_import: bool,
@@ -26,6 +28,7 @@ impl FeedsPageState {
             feed_candidates: None,
             feed_url: String::new(),
             adding_feed_url: None,
+            add_token: 0,
             config_text: String::new(),
             opml_text: String::new(),
             pending_config_import: false,

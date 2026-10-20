@@ -115,6 +115,7 @@ async fn a_read_after_an_unknown_write_claims_no_success() {
     let write = UiCommand::Feeds(FeedsCommand::AddFeed {
         raw_url: feeds.feed_url.clone(),
         fallback_site_url: None,
+        token: feeds.add_token,
     });
     for command in [write, UiCommand::Feeds(FeedsCommand::LoadSnapshot)] {
         for intent in execute_ui_command(command).await {

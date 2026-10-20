@@ -13,6 +13,7 @@ pub(crate) struct FeedsPageSnapshot {
 #[derive(Debug, Clone)]
 pub(crate) enum FeedsPageIntent {
     FeedCandidates {
+        token: u64,
         page_url: url::Url,
         candidates: Vec<rssr_application::FeedDiscoveryCandidate>,
     },
@@ -28,7 +29,9 @@ pub(crate) enum FeedsPageIntent {
     ConfigTextChanged(String),
     OpmlTextChanged(String),
     AddFeedRequested,
+    /// The add `token` named ended (C4b item 3: only that operation's gate and draft).
     AddFeedFinished {
+        token: u64,
         saved: bool,
     },
     RefreshAllRequested,

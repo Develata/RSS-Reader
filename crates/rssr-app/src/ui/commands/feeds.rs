@@ -1,9 +1,11 @@
 #[derive(Debug, Clone)]
 pub(crate) enum FeedsCommand {
     LoadSnapshot,
+    /// `token`: the page's operation it answers (C4b item 3); its results carry it back.
     AddFeed {
         raw_url: String,
         fallback_site_url: Option<url::Url>,
+        token: u64,
     },
     RefreshFeed {
         feed_id: i64,
