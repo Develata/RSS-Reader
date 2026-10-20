@@ -6,7 +6,7 @@
 - 当前 HEAD：见 `git log feat/reader-mathml`
 - 相关 commit：`c31313b`（实现）、评审修复 commit（本记录同次提交）
 - 相关 tag / release：N/A
-- 状态：`validated`（代码评审通过，待阈值校准与分支卫生处理后合并）
+- 状态：`validated`（代码评审通过、真实订阅源已校准；合并前需处理分支卫生）
 
 ## 工作摘要
 
@@ -46,7 +46,8 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
   长度按 CSS 数字语法 + 每单位名义 em 折算，|值| ≤ 100em；百分比（≤ 1000%）只给 `linethickness`、
   `minsize`/`maxsize`，空白与偏移类（`mspace`、`mpadded`、`lspace`/`rspace`）不接受，因为 MathML 3 里
   `mpadded` 百分比是子内容的倍数、嵌套会成倍放大；无单位只接受 0（`minsize`/`maxsize` 另接受 ≤ 10 倍）；`scriptlevel` 只接受绝对值 0–7 与 `+n`（`-n` 会逐层累积放大字号）；
-  `mtd` 跨度与 `maction selection` 1–64；`mfenced` 的 `open`/`close`/`separators` 保留（≤ 32 字节，
+  `mtd` 跨度与 `maction selection` 1–64；`mtable`/`mtr`/`mtd` 的 `columnalign`/`rowalign` 按关键字列表、
+  `columnspacing`/`rowspacing` 按长度列表校验（≤ 64 项，长度不接受百分比；MathML Core 不渲染、WebKit 系渲染）；`mfenced` 的 `open`/`close`/`separators` 保留（≤ 32 字节，
   定界符决定区间含义）；枚举属性按关键字校验。
 - KaTeX：`span` 只保留 `katex`/`katex-mathml`/`katex-html` 三个 class；其它 class 被 ammonia 清成空
   `class=""`（无害）。
@@ -76,14 +77,14 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
 
 ### 自动化验证
 
-本机内存紧张（可用提交约 3 GB），全部以 `-j 1` 执行。以下为第四轮修复后的最终结果（前几轮的同组命令也全部通过）；在 `.claude/worktrees/reader-mathml` 中执行，`CARGO_TARGET_DIR` 指向主仓库 `target/`。
+本机内存紧张（可用提交约 3 GB），全部以 `-j 1` 执行。以下为真实订阅源校准后的最终结果（前几轮的同组命令也全部通过）；在 `.claude/worktrees/reader-mathml` 中执行，`CARGO_TARGET_DIR` 指向主仓库 `target/`。
 
 - `cargo fmt --all --check`：通过
 - `cargo clippy --workspace --all-targets --locked -j 1 -- -D warnings`：通过
-- `cargo test --workspace --locked -j 1`：通过，43 个测试套件合计 408 passed / 0 failed / 4 ignored（含分支上 `5070d71` 带入的测试，见风险一节）
+- `cargo test --workspace --locked -j 1`：通过，合计 409 passed / 0 failed / 5 ignored, 44 suites（含分支上 `5070d71` 带入的测试，见风险一节）
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked -j 1`：通过
 - `bash scripts/run_wasm_contract_harness.sh wasm_reader_html_contract_harness`（headless Chrome，
-  wasm-bindgen-test-runner 0.2.126，真实 chromedriver）：通过，6 passed；含嵌套 KaTeX 组合与超预算降级路径（`<code>` 在 HTML
+  wasm-bindgen-test-runner 0.2.126，真实 chromedriver）：通过，6 passed（校准后的最终代码再跑一次）；含嵌套 KaTeX 组合与超预算降级路径（`<code>` 在 HTML
   命名空间、文本保持字面值、首次解析后的序列化与消毒输出逐字相同）
 - 变异检查（首轮）：临时停用 `reader.css` 的 `math` 规则后，`long_formulas_do_not_widen_a_narrow_reader` 失败
   （390px 容器被撑到 1693px），恢复后通过
@@ -118,19 +119,37 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
   消费、兼任容器只改写一次、编辑仍严格有序互斥，`plan_edits` 时间 O(B + T)、额外空间 O(T + D + B)。唯一保留项是
   执行结果只能由日志佐证（本机日志在会话 scratchpad，未入库）。
 
+### 真实订阅源校准（2026-10-20）
+
+- 源：`https://develata.me/rss/daily-math.xml`（MathJax 生成的 MathML，无 KaTeX、无 annotation），14 期、2133 个公式。
+- 分布（Python 标准库一次性统计）：单公式元素 p50/p99/max = 6/64/97；深度 3/7/15；文本 5/70/130 B；每篇公式 ≤ 229、
+  元素 ≤ 2217。对照阈值 2048/64/16 KiB/4096/100,000，余量 4–126 倍，**阈值不需调整**（它们约束的是资源上限，
+  正常语料只用来确认兼容；KaTeX、LaTeXML 语料尚未测）。
+- 白名单缺口：`mtable` 的 `columnalign`/`columnspacing`/`rowspacing`（13 处，对齐环境）被删 → 已按上节放行；
+  其余被删的只有 `data-mjx-*`（MathJax 内部标记）与 `mtd id`，不影响显示。
+- 新增默认忽略的校准工具 `crates/rssr-infra/tests/test_reader_html_corpus.rs`：按 `FeedParser` 真实入库路径解析，
+  按阅读页正文选择逐条消毒。结果：**2133 → 2133，降级 0**，每期 4–8 ms（release）。`main` 上同一步输出 0 个公式。
+- Chromium（内置浏览器，375px 移动视口，阅读页外层结构 + `reader.css`）：14 期页面宽度都等于视口；无公式宽于容器；
+  94 个长公式在自身内横向滚动；全部在 MathML 命名空间，无危险节点。
+- `overflow-y: hidden` 裁切核查：几乎所有公式的字体行框比 MathML 盒子高约 0.7–0.8em（`scrollHeight > clientHeight`）。
+  取外伸最大的几个公式（叠在箭头上的 `i`/`π`/`t^{p−1}`、`D_λ^2`）放大对照截图，字形完整，未见裁切——外伸的是字体
+  行框而非墨迹。仅 Chromium；WebKit 未验证。
+- 首次测量时页面被撑宽，原因是测试页缺了阅读页外层 `[data-layout="reader-body"]` 的 `overflow-wrap: anywhere`，
+  一条长 URL 撑开页面；已让校准工具输出与阅读页一致的外层结构，复测正常。与公式无关。
+
 ### 手工验收
 
-- 真实问题订阅源：未执行（等待 Develata 提供订阅源）
+- 真实问题订阅源：已执行，见上节（解析 + 消毒 + Chromium 渲染；不是运行中客户端的端到端验收）
 - WebKit 系（macOS WKWebView、Linux WebKitGTK）与 Android WebView 实机：未执行
 
 ## 结果
 
-- 自动化验证通过；Codex 第四轮 approve；阈值待用真实订阅源校准；WebKit 系与 Android WebView 未实机验证。
+- 自动化验证通过；Codex 第四轮 approve；真实订阅源 2133 个公式全部保留、阈值无需调整；WebKit 系与 Android WebView 未实机验证。
 - 用户影响：带 MathML 的正文重新打开即显示公式；位于公式之外、符合 KaTeX 双份结构的公式只显示 MathML 那份。
 
 ## 风险与后续事项
 
-- 阈值待用问题订阅源、KaTeX 输出与 LaTeXML 测试样例校准。
+- 阈值已用问题订阅源确认够用；KaTeX 输出与 LaTeXML 测试样例尚未测。
 - 既有问题（与本次无关）：html5ever 对纯 `div` 深层嵌套有二次方作用域扫描，release 下 50,000 层
   （550 KB）消毒约 9.6 s、10,000 层约 0.21 s，远低于 8 MiB feed 上限即可触发；需单独决策。
 - WebKit 主干的 MathML UA 样式仍是 `display: block`，溢出与 `semantics` 表现未在 WebKit 上验证。

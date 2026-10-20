@@ -107,7 +107,11 @@ const TAG_ATTRIBUTES: &[(&str, &[&str])] = &[
     ("mpadded", &["width", "height", "depth", "lspace", "voffset"]),
     ("ms", &["mathvariant"]),
     ("mspace", &["width", "height", "depth"]),
-    ("mtd", &["columnspan", "rowspan"]),
+    // 对齐与间距：对齐环境（如 `align`）靠 `columnalign="right left"` 让等号对齐。MathML Core
+    // 不渲染它们，WebKit 系渲染。
+    ("mtable", &["columnalign", "rowalign", "columnspacing", "rowspacing"]),
+    ("mtd", &["columnspan", "rowspan", "columnalign", "rowalign"]),
+    ("mtr", &["columnalign", "rowalign"]),
     ("mtext", &["mathvariant"]),
     ("munder", &["accentunder"]),
     ("munderover", &["accent", "accentunder"]),
@@ -186,6 +190,8 @@ const MAX_TABLE_SPAN: u32 = 64;
 const MAX_TEXT_ATTRIBUTE_BYTES: usize = 4096;
 /// `mfenced` 定界符与分隔符列表的长度上限。
 const MAX_DELIMITER_BYTES: usize = 32;
+/// `mtable` 对齐、间距列表的项数上限（与表格跨度上限一致）。
+const MAX_TABLE_TOKENS: usize = 64;
 
 // 渲染预算。初始值是实验参数，按真实语料（问题订阅源、KaTeX 输出、LaTeXML 测试样例）的
 // 统计留出余量，再用压力输入在目标 WebView 上复核；校准记录见 docs/handoffs。
@@ -245,6 +251,15 @@ fn filter_attribute<'a>(element: &str, attribute: &str, value: &'a str) -> Optio
         "scriptlevel" => is_non_growing_script_level(value),
         "rowspan" | "columnspan" | "selection" => is_bounded_span(value),
         "open" | "close" | "separators" => value.len() <= MAX_DELIMITER_BYTES,
+        "columnalign" => {
+            is_token_list(value, |token| is_keyword(token, &["left", "center", "right"]))
+        }
+        "rowalign" => is_token_list(value, |token| {
+            is_keyword(token, &["top", "bottom", "center", "baseline", "axis"])
+        }),
+        "columnspacing" | "rowspacing" => {
+            is_token_list(value, |token| is_bounded_length(token, LengthRule::ABSOLUTE))
+        }
         "displaystyle" | "stretchy" | "symmetric" | "largeop" | "movablelimits" | "accent"
         | "accentunder" | "fence" | "separator" => is_keyword(value, &["true", "false"]),
         "display" => is_keyword(value, &["block", "inline"]),
@@ -356,6 +371,15 @@ fn is_non_growing_script_level(raw: &str) -> bool {
         && digits.len() <= 2
         && digits.bytes().all(|byte| byte.is_ascii_digit())
         && digits.parse::<u8>().is_ok_and(|level| level <= MAX_SCRIPT_LEVEL)
+}
+
+/// 空白分隔的取值列表（每列或每行一个），个数有上限，每项都要通过 `valid`。
+fn is_token_list(raw: &str, valid: impl Fn(&str) -> bool) -> bool {
+    let mut count = 0;
+    raw.split_ascii_whitespace().all(|token| {
+        count += 1;
+        count <= MAX_TABLE_TOKENS && valid(token)
+    }) && count > 0
 }
 
 fn is_bounded_span(raw: &str) -> bool {
@@ -850,6 +874,30 @@ mod tests {
         assert!(!is_bounded_length("1001%", LengthRule::PERCENT));
         assert!(!is_bounded_length("100%", LengthRule::ABSOLUTE));
         assert!(!is_bounded_length("2", LengthRule::PERCENT));
+    }
+
+    #[test]
+    fn table_alignment_and_spacing_lists_are_validated() {
+        assert_eq!(
+            filter_attribute("mtable", "columnalign", "right left"),
+            Some(Cow::Borrowed("right left"))
+        );
+        assert_eq!(filter_attribute("mtable", "columnalign", "right sideways"), None);
+        assert_eq!(filter_attribute("mtable", "columnalign", ""), None);
+        assert_eq!(
+            filter_attribute("mtd", "rowalign", "baseline"),
+            Some(Cow::Borrowed("baseline"))
+        );
+        assert_eq!(
+            filter_attribute("mtable", "rowspacing", ".2em 3pt"),
+            Some(Cow::Borrowed(".2em 3pt"))
+        );
+        assert_eq!(filter_attribute("mtable", "columnspacing", "0em 1e9em"), None);
+        assert_eq!(filter_attribute("mtable", "rowspacing", "50%"), None);
+        assert_eq!(
+            filter_attribute("mtable", "columnalign", &"left ".repeat(MAX_TABLE_TOKENS + 1)),
+            None
+        );
     }
 
     #[test]
