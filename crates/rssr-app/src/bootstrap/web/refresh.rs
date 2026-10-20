@@ -29,7 +29,7 @@ pub(super) fn ensure_auto_refresh_started(services: &Arc<AppServices>) {
             };
 
             let now = now_utc();
-            if super::super::should_trigger_auto_refresh(
+            if rssr_host::should_trigger_auto_refresh(
                 last_refresh_started_at,
                 settings.refresh_interval_minutes,
                 now,
@@ -44,7 +44,7 @@ pub(super) fn ensure_auto_refresh_started(services: &Arc<AppServices>) {
                 last_refresh_started_at = Some(now);
             }
 
-            let wait_for = super::super::auto_refresh_wait_duration(
+            let wait_for = rssr_host::auto_refresh_wait_duration(
                 last_refresh_started_at,
                 settings.refresh_interval_minutes,
                 now_utc(),

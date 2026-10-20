@@ -6,6 +6,7 @@ members = [
     "crates/rssr-application",
     "crates/rssr-domain",
     "crates/rssr-infra",
+    "crates/rssr-host",
 ]
 resolver = "2"
 

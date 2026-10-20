@@ -4,18 +4,18 @@ use std::{future::Future, sync::Mutex};
 
 use tokio::sync::watch;
 
-use super::RefreshAllExecutionOutcome;
+use crate::RefreshAllExecutionOutcome;
 
 type SharedResult = Result<RefreshAllExecutionOutcome, String>;
 type Receiver = watch::Receiver<Option<SharedResult>>;
 
 #[derive(Default)]
-pub(super) struct RefreshFlight {
+pub struct RefreshFlight {
     current: Mutex<Option<Receiver>>,
 }
 
 impl RefreshFlight {
-    pub(super) async fn run(
+    pub async fn run(
         &self,
         refresh: impl Future<Output = anyhow::Result<RefreshAllExecutionOutcome>>,
     ) -> anyhow::Result<RefreshAllExecutionOutcome> {

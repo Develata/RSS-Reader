@@ -43,14 +43,15 @@ dx bundle --platform web --package rssr-app --release --debug-symbols false --ou
 
 ## 架构
 
-六个 crate 组成分层架构，依赖方向严格向内（UI → application → domain；infra 实现 domain/application 定义的接口）：
+七个 crate 组成分层架构，依赖方向严格向内（UI → host → application → domain；infra 实现 domain/application 定义的接口）：
 
 - **`rssr-domain`** — 实体（`Feed`、`Entry`、`UserSettings`、`AppStateSnapshot`）、仓储 trait（`FeedRepository`、`EntryIndexRepository`、`EntryContentRepository` 等）、`DomainError`。无任何 I/O。
 - **`rssr-application`** — 用例服务（`RefreshService`、`ReaderService`、`EntriesListService`、`ImportExportService`、`SubscriptionWorkflow` 等）。`composition.rs` 中的 `AppUseCases::compose(AppCompositionInput)` 用端口 trait（`FeedRefreshSourcePort`、`RefreshStorePort`、`OpmlCodecPort`、`ClockPort`、`AppStatePort`）组装全部服务，平台无关。
 - **`rssr-infra`** — 端口适配器，按编译目标二选一（`lib.rs` 中 `#[cfg(not(target_arch = "wasm32"))]` 门控）：
   - **原生（桌面/Android）**：sqlx SQLite，**索引库与正文库是两个独立数据库**（迁移分别在 `migrations/` 与 `migrations_content/`）；reqwest 抓取 + `BodyAssetLocalizer` 正文图片本地化；feed-rs/quick-xml 解析；OPML 编解码；WebDAV 配置同步。入口 `compose_native_sqlite_use_cases(index_pool, content_pool)`。
   - **wasm32**：`application_adapters/browser/` 下的适配器共用 `BrowserStore`，通过 Web Locks 协调 `localStorage` 四片数据，以单一提交头发布；缓存按版本同步，刷新逐订阅持久化，仅正文记录变化时写正文片。`db`/`fetch`/`parser`/`config_sync` 模块在 wasm 上不编译。入口 `compose_browser_use_cases`。
-- **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 与 `bootstrap/web.rs` 按平台选择组装并暴露 host capabilities（刷新、剪贴板、图片本地化、远程配置）；`ui/` 分 shell / commands / runtime；`pages/` 通过 facade/session 派发命令，runtime 调用统一用例或 host capability。
+- **`rssr-host`** — 宿主能力（刷新、自动刷新、正文图片本地化、远程配置）的 trait、结果类型、自动刷新调度与 `RefreshFlight` 单飞，两个目标都编译；`native` 模块是不依赖界面框架的原生宿主 `NativeHost::open(NativeSqliteBackend)`（SQLite 双库 + 宿主能力），供桌面、Android 与后续的 `rssr-web` 服务端模式共用（`docs/design/rssr-web-server-mode.md`）。
+- **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 在默认数据目录上打开 `NativeHost`，`bootstrap/web.rs` 组装浏览器宿主，二者按平台暴露 host capabilities；`ui/` 分 shell / commands / runtime；`pages/` 通过 facade/session 派发命令，runtime 调用统一用例或 host capability。
 - **`rssr-cli`** — 复用同一 application 层的自动化入口。
 - **`rssr-web`** — 仅用于 Web 部署的薄 axum 服务：Argon2 登录、HttpOnly 会话 cookie、静态包托管 + SPA 回退、`/feed-proxy` 服务端代抓（绕过浏览器 CORS）。桌面端、CLI、本地开发都不依赖它。
 
