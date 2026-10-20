@@ -143,9 +143,15 @@ impl BrowserStateSeed {
         self.core.settings.custom_css = css;
     }
 
-    /// The subscriptions' ids and addresses.
+    /// The active subscriptions' ids and addresses (the ones the server refreshes; a seed may
+    /// keep a deleted subscription's entries).
     pub fn feed_urls(&self) -> Vec<(i64, String)> {
-        self.core.feeds.iter().map(|feed| (feed.id, feed.url.clone())).collect()
+        self.core
+            .feeds
+            .iter()
+            .filter(|feed| !feed.is_deleted)
+            .map(|feed| (feed.id, feed.url.clone()))
+            .collect()
     }
 }
 

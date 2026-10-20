@@ -10,7 +10,7 @@
 // unless a check arms more (new entries per round, a held request, an invalid body).
 
 import { spawn } from 'node:child_process';
-import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
@@ -27,7 +27,8 @@ function rss(title, items) {
 }
 
 /// The feeds the server fetches. Paths are `/<seed>/<feed id>.xml` for the fixture library's
-/// subscriptions and `/new/<name>.xml` for subscriptions a check adds.
+/// subscriptions and `/new/<name>.xml` for subscriptions a check adds; `/original/…` is a plain page
+/// for entries' original links (the page opens it in a new tab).
 export class FeedFixtureServer {
   constructor(logFile) {
     this.logFile = logFile;
@@ -35,6 +36,7 @@ export class FeedFixtureServer {
     this.rounds = new Map(); // seed -> rounds of new entries armed
     this.holds = []; // { match, waiting: [{ respond }] }
     this.invalid = new Set(); // paths answered once with an invalid body
+    this.titles = new Map(); // seed -> Map(feed id -> the seeded title)
   }
 
   async start() {
@@ -107,6 +109,11 @@ export class FeedFixtureServer {
       response.writeHead(200, headers).end('invalid RSS fixture');
       return;
     }
+    if (pathname.startsWith('/original/')) {
+      response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
+        .end('<!doctype html><meta charset="utf-8"><title>original</title><p>original fixture page</p>');
+      return;
+    }
     const added = pathname.match(/^\/new\/([^/]+)\.xml$/);
     if (added) {
       const name = decodeURIComponent(added[1]);
@@ -139,7 +146,9 @@ export class FeedFixtureServer {
         pubDate: 'Sat, 01 Aug 2026 00:00:00 GMT',
       });
     }
-    response.writeHead(200, { ...headers, ETag: tag }).end(rss(`Fixture feed ${feed}`, items));
+    // The seeded title: a refresh stores the channel's title, which must not replace it.
+    const title = this.titles.get(seed)?.get(feed) ?? `Fixture feed ${feed}`;
+    response.writeHead(200, { ...headers, ETag: tag }).end(rss(title, items));
   }
 }
 
@@ -166,15 +175,22 @@ export class RssrWebServer {
   }
 
   /// Restarts the server on a fresh library of `seed` (with the theme `preset` as custom CSS),
-  /// waits until its start-up refresh has fetched and stored every subscription, and returns a
-  /// session cookie (signed in through the login form's endpoint).
-  async useSeed(seed, { preset } = {}) {
+  /// waits until its start-up refresh has fetched and stored every active subscription, and
+  /// returns a session cookie (signed in through the login form's endpoint). `edit` changes a copy
+  /// of the seed first: it gets the four parsed files (`core`, `app_state`, `entry_flags`,
+  /// `entry_content`) and mutates them.
+  async useSeed(seed, { preset, edit } = {}) {
     const { options } = this;
     await this.stop();
     this.generation += 1;
     const dataDir = path.join(options.workDir, `data-${this.generation}-${seed}`);
     rmSync(dataDir, { recursive: true, force: true });
-    const args = ['--seeds', options.seedsDir, '--seed', seed, '--data-dir', dataDir,
+    const seedsDir = edit ? editedSeed(options.seedsDir, seed,
+      path.join(options.workDir, `seeds-${this.generation}`), edit) : options.seedsDir;
+    const core = readJson(path.join(seedsDir, `${seed.replace(/-/g, '_')}_core.json`));
+    options.feeds.titles.set(seed, new Map(core.feeds.filter((feed) => feed.title)
+      .map((feed) => [String(feed.id), feed.title])));
+    const args = ['--seeds', seedsDir, '--seed', seed, '--data-dir', dataDir,
       '--feed-base', options.feeds.base];
     const css = preset ? themeFile(options.themesDir, preset) : undefined;
     if (css) args.push('--custom-css', css);
@@ -239,6 +255,22 @@ export class RssrWebServer {
     if (!response.ok) throw new Error(`${method} ${pathname}: ${response.status}`);
     return response.json();
   }
+}
+
+const SEED_PARTS = ['core', 'app_state', 'entry_flags', 'entry_content'];
+
+/// Writes `seed` edited by `edit` into `dir` (fresh) and returns `dir`.
+function editedSeed(seedsDir, seed, dir, edit) {
+  const prefix = seed.replace(/-/g, '_');
+  const parts = Object.fromEntries(SEED_PARTS.map((part) =>
+    [part, readJson(path.join(seedsDir, `${prefix}_${part}.json`))]));
+  edit(parts);
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  for (const part of SEED_PARTS) {
+    writeFileSync(path.join(dir, `${prefix}_${part}.json`), JSON.stringify(parts[part], null, 2));
+  }
+  return dir;
 }
 
 const THEME_FILES = {
