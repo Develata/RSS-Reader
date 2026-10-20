@@ -26,8 +26,6 @@ pub(crate) struct AppShellState {
     /// (C4b item 2). A manual refresh's end bumps it at once; other triggers through
     /// [`AppShellState::request_reread`].
     library_revision: Signal<u64>,
-    /// A re-read was requested and is waiting out [`REREAD_WINDOW`].
-    reread_pending: Signal<bool>,
     /// The settings page is open: it re-reads the settings itself, the shell does not.
     settings_page_open: Signal<bool>,
     /// A job's result whose page was left (C4b item 3), until dismissed or it times out.
@@ -64,20 +62,15 @@ impl AppShellState {
         *self.library_revision.read()
     }
 
-    /// Asks every page to re-read what it shows (read-only). Requests within [`REREAD_WINDOW`]
-    /// make one re-read: the page becoming visible, the window gaining focus and the network
-    /// coming back often arrive together. A re-read issued meanwhile (a manual refresh ended)
-    /// covers them, and none follows.
+    /// Asks every page to re-read what it shows (read-only). A request waits [`REREAD_WINDOW`]
+    /// and re-reads only if no re-read was issued since it was made: requests arriving together
+    /// (the page becoming visible, the window gaining focus, the network coming back) make one,
+    /// and a re-read issued meanwhile (a manual refresh ended) covers them.
     pub(crate) fn request_reread(mut self) {
-        if *self.reread_pending.peek() {
-            return;
-        }
-        self.reread_pending.set(true);
-        let issued = *self.library_revision.peek();
+        let requested_at = *self.library_revision.peek();
         self.spawn_in_shell(async move {
             sleep(REREAD_WINDOW).await;
-            self.reread_pending.set(false);
-            if *self.library_revision.peek() == issued {
+            if *self.library_revision.peek() == requested_at {
                 self.library_revision += 1;
             }
         });
@@ -270,7 +263,6 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
         refresh: use_signal(ManualRefreshState::default),
         refresh_revision: use_signal(|| 0),
         library_revision: use_signal(|| 0),
-        reread_pending: use_signal(|| false),
         settings_page_open: use_signal(|| false),
         job_notice: use_signal(|| None),
         job_notice_revision: use_signal(|| 0),
