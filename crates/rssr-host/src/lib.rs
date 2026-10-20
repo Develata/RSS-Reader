@@ -13,9 +13,14 @@ use rssr_application::{RemoteConfigPullOutcome, RemoteConfigPushOutcome};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;
+pub mod protocol;
 mod refresh_flight;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod server;
+mod services;
 
 pub use refresh_flight::RefreshFlight;
+pub use services::HostServices;
 
 /// 宿主能力 trait 的线程约束：原生端要求 `Send + Sync`，这样 `HostCapabilities` 才能作为
 /// 服务端的共享状态、被移进 `tokio::spawn`；wasm 端的实现持有浏览器对象，不要求。
@@ -28,14 +33,14 @@ pub trait PortBounds {}
 #[cfg(target_arch = "wasm32")]
 impl<T: ?Sized> PortBounds for T {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AddSubscriptionOutcome {
     NeedsSelection { page_url: url::Url, candidates: Vec<rssr_application::FeedDiscoveryCandidate> },
     SavedAndRefreshed,
     SavedRefreshFailed { message: String },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RefreshAllExecutionOutcome {
     pub inserted_count: u64,
     pub total_count: usize,
@@ -43,7 +48,7 @@ pub struct RefreshAllExecutionOutcome {
     pub failure_message: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RefreshFeedExecutionOutcome {
     pub inserted_count: u64,
     pub failure_message: Option<String>,

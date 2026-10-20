@@ -13,6 +13,5 @@ mod imp;
 pub(crate) use imp::install_history_capture;
 pub use imp::{AppServices, ReaderNavigation};
 pub(crate) use rssr_host::{
-    AddSubscriptionOutcome, HostCapabilities, RefreshAllExecutionOutcome,
-    RefreshFeedExecutionOutcome,
+    AddSubscriptionOutcome, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome,
 };

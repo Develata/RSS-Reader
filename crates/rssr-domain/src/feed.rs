@@ -21,7 +21,7 @@ pub struct Feed {
     pub updated_at: OffsetDateTime,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FeedSummary {
     pub id: i64,
     pub title: String,

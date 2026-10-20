@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use rssr_domain::{ArchiveFilter, EntryIndexRepository, EntryQuery, EntrySummary};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EntriesListOutcome {
     pub entries: Vec<EntrySummary>,
     /// 因自动归档而被本次查询排除掉的条目数，用于提示「已归档 N 篇」。
@@ -12,24 +12,24 @@ pub struct EntriesListOutcome {
     pub archived_count: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ToggleEntryReadInput {
     pub entry_id: i64,
     pub currently_read: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ToggleEntryReadOutcome {
     pub is_read: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ToggleEntryStarredInput {
     pub entry_id: i64,
     pub currently_starred: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ToggleEntryStarredOutcome {
     pub is_starred: bool,
 }

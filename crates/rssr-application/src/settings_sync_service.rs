@@ -2,7 +2,7 @@ use rssr_domain::UserSettings;
 
 use crate::{ConfigImportOutcome, RemoteConfigPullOutcome, SettingsService};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum AppliedRemoteConfigOutcome {
     NotFound,
     Imported { import: ConfigImportOutcome, settings: UserSettings },

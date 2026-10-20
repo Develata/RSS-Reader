@@ -5,14 +5,14 @@ use rssr_domain::{EntriesWorkspaceState, FeedRepository, FeedSummary, UserSettin
 
 use crate::{AppStateService, SettingsService};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EntriesBootstrapInput {
     pub feed_id: Option<i64>,
     pub load_preferences: bool,
     pub load_feeds: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EntriesBootstrapOutcome {
     pub settings: Option<UserSettings>,
     pub workspace: Option<EntriesWorkspaceState>,

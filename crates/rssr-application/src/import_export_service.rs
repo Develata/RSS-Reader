@@ -54,7 +54,7 @@ impl ClockPort for SystemClock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ConfigImportOutcome {
     pub imported_feed_count: usize,
     pub removed_feed_count: usize,
@@ -71,12 +71,12 @@ impl ConfigImportOutcome {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct OpmlImportOutcome {
     pub imported_feed_count: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RemoteConfigPushOutcome {
     pub exported_feed_count: usize,
 }
