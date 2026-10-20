@@ -33,11 +33,13 @@ GitHub Pages 演示仍是本地模式（D1）。
 - **模式判定**（`server_mode::client`）：
   - 演示包，或没有门禁 cookie：本地模式。
   - 有门禁 cookie：探测 `/api/v1/capabilities`。只有返回 200 + `application/json` + `mode: "server"`
-    才进入服务端模式；404 或 HTML（还没有接口的旧版服务端、SPA 回退页）沿用本地模式。
-  - 网络错误直接报错，不悄悄退回 localStorage。
-  - 判定结果放在 `static tokio::sync::OnceCell<bool>`：成功后缓存，并发的首次调用合并成一次探测。
-- **远程调用**：`ApiClient::call::<Endpoint>` 带上协议头与 JSON 类型。收到 401 时调用
-  `web_auth::recover_from_expired_server_session`，整页跳回登录页。失败时用 `ApiError::into_anyhow`
+    才进入服务端模式，其它一切（网络、超时、5xx、HTML、格式不对）都是可重试的错误，不缓存、不退回本地存储。
+    （审查后修订：原先 404/HTML 会退回本地模式，现已去掉。）
+  - 整个判定（包括门禁检查）放在 `static tokio::sync::OnceCell<bool>`：成功后对整个页面固定，并发的首次调用
+    合并成一次探测。之后门禁 cookie 消失，也不会改变存储。
+- **远程调用**：`ApiClient::call::<Endpoint>` 带上协议头与 JSON 类型，期限 600 秒（能力探测为 15 秒）。
+  响应体按预算流式读取：成功响应 64 MiB、错误正文 1 MiB、能力信息 64 KiB。收到 401 时，只看状态行就调用
+  `web_auth::recover_from_expired_server_session` 整页跳回登录页，不读正文。失败时用 `ApiError::into_anyhow`
   还原错误链，界面看到的错误文案与本地调用一致。
 - **服务端模式下的自动刷新**由服务端常驻执行，`ensure_auto_refresh_started` 在远程模式下不做任何事。
 
@@ -90,3 +92,28 @@ GitHub Pages 演示仍是本地模式（D1）。
 ## 给下一位 Agent 的备注
 
 - 入口：`crates/rssr-host/src/client.rs`、`crates/rssr-app/src/ui/runtime/services.rs` 末尾的 `server_mode`。
+
+## 交叉模型审查（codex-reviewer，2026-10-20，范围 dbc8e73..a067b54）
+
+结论：2 个阻断项、3 个应修项、1 个待验证项。逐条核实后全部属实，处理如下：
+
+1. **阻断：门禁 cookie 消失后，页面会改用本地存储。** 原实现先检查门禁再读缓存，cookie 到期或在别的标签页登出后，
+   下一次命令就会装配 BrowserStore。已改为把整个判定（含门禁检查）放进 `OnceCell` 并对整个页面固定。
+   浏览器复验：登录后用 JS 删除 `rssr_web_gate`，再在页内跳到订阅页，仍然调用 `feeds/snapshot`，显示服务端的 77 篇，
+   `localStorage` 为空。
+2. **阻断：首次探测的 5xx / HTML / 损坏的 JSON 被缓存为本地模式。** `ApiClient::capabilities` 现在返回
+   `Result<Capabilities>`，除合法的服务端能力响应外一律报错，不缓存。"旧版服务端退回本地"的兼容已去掉，
+   理由见设计 §4.5。测试：`capabilities_probe_reports_a_server_error_instead_of_local_mode`（503）、
+   `capabilities_probe_ignores_an_spa_fallback_page`（HTML，现在断言为报错）。
+3. **没有超时。** 能力探测 15 秒，端点调用 600 秒。超时提示"操作可能仍在服务端执行"，不自动重试。
+4. **响应体先整个缓冲再解析。** 新增 `read_limited`：先按 `Content-Length` 提前拒绝，再流式累计；预算为能力信息 64 KiB、
+   错误正文 1 MiB、成功响应 64 MiB。测试 `oversized_responses_are_refused_before_buffering`。
+5. **401 的处理依赖读完正文。** 现在只看状态行就调用 `on_unauthorized`，并直接返回，不读正文。
+   测试 `unauthorized_is_handled_from_the_status_line_even_if_the_body_stalls`（服务端回 401 后正文停住，调用 5 秒内返回）。
+6. **待验证：覆盖不足。**
+   - 往返测试现在逐字比较远程与本地调用的错误链（`Display` 与 `{:#}`）。
+   - `server_mode` 的 wasm 逻辑仍然只有浏览器手工验收覆盖：本轮验了门禁消失；首次探测 503 之后恢复的场景，
+     只由客户端单测与 `OnceCell::get_or_try_init` 出错不缓存的语义支撑，没有在浏览器里实测。
+
+修复后的验证：fmt、clippy、`cargo test --workspace`（exit 0，44 个测试二进制）、wasm32、aarch64-android 全部通过；
+`rssr-web` API 测试共 12 个。

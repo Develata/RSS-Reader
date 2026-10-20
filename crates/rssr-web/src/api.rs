@@ -275,6 +275,8 @@ mod tests {
         client: reqwest::Client,
         data_dir: std::path::PathBuf,
         server: tokio::task::JoinHandle<()>,
+        /// 与服务端共用同一个文章库的进程内服务，用来比较远程与本地调用的结果。
+        local: rssr_host::HostServices,
     }
 
     impl TestServer {
@@ -299,6 +301,7 @@ mod tests {
             .expect("open library");
             let config = Arc::new(test_support::config());
             let cookie = test_support::session_cookie(&config);
+            let local = services.clone();
             let app: Router = router(ApiState::with_capacity(config, services, capacity));
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let base = format!("http://{}", listener.local_addr().unwrap());
@@ -307,7 +310,7 @@ mod tests {
             });
             // The machine may have HTTP(S)_PROXY set; local test traffic must not go through it.
             let client = reqwest::Client::builder().no_proxy().build().unwrap();
-            Self { base, cookie, client, data_dir, server }
+            Self { base, cookie, client, data_dir, server, local }
         }
 
         /// 带会话 cookie，但不带内容类型与协议头。
@@ -482,7 +485,7 @@ mod tests {
 
         let server = TestServer::start().await;
         let client = remote_backend(&server, true);
-        assert!(client.capabilities().await.unwrap().is_some());
+        client.capabilities().await.expect("server mode");
         let backend = Backend::Remote(RemoteServices::new(client));
 
         let settings = rssr_domain::UserSettings {
@@ -503,6 +506,13 @@ mod tests {
             .await
             .expect_err("PublicOnly refuses a loopback feed");
         assert!(format!("{error:#}").contains("内网或本地地址"), "unexpected error: {error:#}");
+        let local_error = server
+            .local
+            .add_subscription("http://127.0.0.1:1/feed.xml", None)
+            .await
+            .expect_err("the same call in process fails the same way");
+        assert_eq!(error.to_string(), local_error.to_string());
+        assert_eq!(format!("{error:#}"), format!("{local_error:#}"));
 
         server.stop();
     }
@@ -538,7 +548,87 @@ mod tests {
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let http = reqwest::Client::builder().no_proxy().build().unwrap();
         let client = rssr_host::client::ApiClient::new(http, base);
-        assert_eq!(client.capabilities().await.unwrap(), None);
+        assert!(client.capabilities().await.is_err(), "an SPA fallback page is not server mode");
+        server.abort();
+    }
+
+    /// 服务端暂时故障时，探测必须报错而不是给出“不是服务端”的结论，否则页面会改用本地存储。
+    #[tokio::test]
+    async fn capabilities_probe_reports_a_server_error_instead_of_local_mode() {
+        let app = Router::new().fallback(|| async {
+            (axum::http::StatusCode::SERVICE_UNAVAILABLE, "upstream unavailable")
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let error = rssr_host::client::ApiClient::new(http, base)
+            .capabilities()
+            .await
+            .expect_err("a 503 is an error, not a verdict");
+        assert!(format!("{error:#}").contains("503"), "unexpected error: {error:#}");
+        server.abort();
+    }
+
+    /// 只回状态行与响应头、正文停住的服务端。
+    async fn stalled_response_server(head: &'static str) -> (String, tokio::task::JoinHandle<()>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 8192];
+            let _ = socket.read(&mut request).await;
+            socket.write_all(head.as_bytes()).await.unwrap();
+            std::future::pending::<()>().await;
+        });
+        (base, server)
+    }
+
+    static STALLED_UNAUTHORIZED_SEEN: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+
+    fn mark_stalled_unauthorized() {
+        STALLED_UNAUTHORIZED_SEEN.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[tokio::test]
+    async fn unauthorized_is_handled_from_the_status_line_even_if_the_body_stalls() {
+        let (base, server) = stalled_response_server(
+            "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{",
+        )
+        .await;
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let client = rssr_host::client::ApiClient::new(http, base)
+            .on_unauthorized(mark_stalled_unauthorized);
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            client.call::<rssr_host::protocol::LoadSettings>(&()),
+        )
+        .await
+        .expect("a 401 must not wait for its body");
+        assert!(result.is_err());
+        assert!(STALLED_UNAUTHORIZED_SEEN.load(std::sync::atomic::Ordering::SeqCst));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn oversized_responses_are_refused_before_buffering() {
+        let (base, server) = stalled_response_server(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 900000000\r\n\r\n",
+        )
+        .await;
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let client = rssr_host::client::ApiClient::new(http, base);
+        let error = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            client.call::<rssr_host::protocol::LoadSettings>(&()),
+        )
+        .await
+        .expect("a declared oversized body must be refused without waiting")
+        .expect_err("oversized response");
+        assert!(format!("{error:#}").contains("上限"), "unexpected error: {error:#}");
         server.abort();
     }
 

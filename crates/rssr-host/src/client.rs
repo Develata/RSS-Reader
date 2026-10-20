@@ -1,7 +1,9 @@
 //! 服务端模式的远程调用：按 [`crate::protocol`] 的端点把 [`HostServices`] 的同一组方法发到 `rssr-web`。
 //!
 //! 两个目标都编译：浏览器端用它接入服务端，原生端用它做客户端与服务端之间的契约测试。
-use anyhow::{Context, Result, anyhow};
+use std::time::Duration;
+
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use reqwest::{StatusCode, header};
 use rssr_application::{
     AppliedRemoteConfigOutcome, ConfigImportOutcome, EntriesBootstrapInput,
@@ -41,29 +43,40 @@ impl ApiClient {
         self
     }
 
-    /// 探测服务端模式。传输失败返回错误；服务端可达但不是服务端模式（404、SPA 回退的 HTML、
-    /// 无法解析的 JSON、`mode` 不对）返回 `Ok(None)`。只看状态码会把静态托管的 SPA 回退误判为服务端。
-    pub async fn capabilities(&self) -> Result<Option<Capabilities>> {
+    /// 确认服务端模式。只有 200 + `application/json` + 可解析且 `mode` 为服务端的响应才算成功；
+    /// 其余一切（传输失败、超时、5xx、HTML、损坏的 JSON、其它模式）都是错误。调用方不得把错误
+    /// 当成"本地部署"：页面由 rssr-web 托管时，这些情况只说明服务端暂时不可用或部署不一致。
+    pub async fn capabilities(&self) -> Result<Capabilities> {
         let response = self
             .http
             .get(format!("{}{CAPABILITIES_PATH}", self.base))
+            .timeout(CAPABILITIES_TIMEOUT)
             .send()
             .await
             .context("连接服务端失败")?;
+        let status = response.status();
         let is_json = response
             .headers()
             .get(header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
             .is_some_and(|value| value.trim_start().starts_with("application/json"));
-        if response.status() != StatusCode::OK || !is_json {
-            return Ok(None);
+        if status != StatusCode::OK || !is_json {
+            bail!("服务端没有返回服务端模式信息（状态 {status}）");
         }
-        let bytes = response.bytes().await.context("读取服务端能力信息失败")?;
-        Ok(serde_json::from_slice::<Capabilities>(&bytes)
-            .ok()
-            .filter(|capabilities| capabilities.mode == Capabilities::SERVER_MODE))
+        let bytes = read_limited(response, MAX_CAPABILITIES_BYTES)
+            .await
+            .context("读取服务端能力信息失败")?;
+        let capabilities: Capabilities =
+            serde_json::from_slice(&bytes).context("服务端能力信息格式不正确")?;
+        ensure!(
+            capabilities.mode == Capabilities::SERVER_MODE,
+            "服务端报告的模式不是服务端模式：{}",
+            capabilities.mode
+        );
+        Ok(capabilities)
     }
 
+    /// 调用一个端点。超时只说明客户端不再等待，服务端任务可能仍在执行，所以不自动重试。
     pub async fn call<E: Endpoint>(&self, input: &E::Input) -> Result<E::Output> {
         let body = serde_json::to_vec(input).context("序列化请求失败")?;
         let response = self
@@ -71,25 +84,67 @@ impl ApiClient {
             .post(format!("{}{API_PREFIX}/{}", self.base, E::PATH))
             .header(header::CONTENT_TYPE, "application/json")
             .header(PROTOCOL_HEADER, PROTOCOL_VERSION.to_string())
+            .timeout(CALL_TIMEOUT)
             .body(body)
             .send()
             .await
-            .context("连接服务端失败")?;
+            .map_err(|error| {
+                if error.is_timeout() {
+                    anyhow!("等待服务端响应超时；操作可能仍在服务端执行，请稍后刷新查看结果")
+                } else {
+                    anyhow::Error::new(error).context("连接服务端失败")
+                }
+            })?;
         let status = response.status();
-        let bytes = response.bytes().await.context("读取服务端响应失败")?;
+        // 401 只看状态行就处理，也不再读正文：恢复登录不能依赖错误正文能读完，页面随即离开。
+        if status == StatusCode::UNAUTHORIZED {
+            if let Some(handler) = self.on_unauthorized {
+                handler();
+            }
+            bail!("未登录或会话已过期，请重新登录");
+        }
         if status.is_success() {
+            let bytes =
+                read_limited(response, MAX_RESPONSE_BYTES).await.context("读取服务端响应失败")?;
             return serde_json::from_slice(&bytes).context("服务端响应格式不正确");
         }
-        if status == StatusCode::UNAUTHORIZED
-            && let Some(handler) = self.on_unauthorized
-        {
-            handler();
-        }
-        Err(match serde_json::from_slice::<ApiError>(&bytes) {
-            Ok(error) => error.into_anyhow(),
-            Err(_) => anyhow!("服务端返回了意外的状态：{status}"),
+        let error = read_limited(response, MAX_ERROR_BYTES)
+            .await
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<ApiError>(&bytes).ok());
+        Err(match error {
+            Some(error) => error.into_anyhow(),
+            None => anyhow!("服务端返回了意外的状态：{status}"),
         })
     }
+}
+
+/// 能力信息只有一行 JSON。
+const MAX_CAPABILITIES_BYTES: usize = 64 * 1024;
+/// 错误正文是一条错误链。
+const MAX_ERROR_BYTES: usize = 1024 * 1024;
+/// 成功响应的上限。阅读页正文可能内嵌本地化后的图片（单篇最多约 18 MiB），留出余量。
+const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
+const CAPABILITIES_TIMEOUT: Duration = Duration::from_secs(15);
+/// 刷新全部订阅等操作可能持续数分钟；超过这个时长就不再等待。
+const CALL_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// 边读边累计，超过上限立即停止；`Content-Length` 只用于提前拒绝，不作为唯一依据。
+async fn read_limited(response: reqwest::Response, max_bytes: usize) -> Result<Vec<u8>> {
+    use futures_util::StreamExt;
+
+    ensure!(
+        response.content_length().is_none_or(|length| length <= max_bytes as u64),
+        "服务端响应超过 {max_bytes} 字节上限"
+    );
+    let mut bytes = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        ensure!(chunk.len() <= max_bytes - bytes.len(), "服务端响应超过 {max_bytes} 字节上限");
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
 }
 
 /// [`HostServices`] 的远程版本，方法与之一一对应。

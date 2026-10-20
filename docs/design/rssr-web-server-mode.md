@@ -120,7 +120,7 @@
 ### 4.5 浏览器端
 
 - `UiServices` 内部改为 `enum Backend { Local { … }, Remote(ApiClient) }`；桌面只编译 `Local`。
-- 模式探测（实现见 `rssr-app/src/ui/runtime/services.rs` 的 `server_mode`）：只在页面由 rssr-web 托管、存在门禁 cookie 时才请求 `/api/v1/capabilities`；静态托管不发探测。网络错误直接报错，不退回本地存储。响应必须是 `application/json` 且字段匹配才进入
+- 模式探测（实现见 `rssr-app/src/ui/runtime/services.rs` 的 `server_mode`）：只在页面由 rssr-web 托管、存在门禁 cookie 时才请求 `/api/v1/capabilities`；静态托管不发探测。此时只有合法的服务端能力响应才算成功；网络错误、超时、5xx、HTML、格式不对都是可重试的错误，不缓存，也不退回本地存储。rssr-web 总是携带同版本的前端包发布，不存在“有门禁但没有接口”的合法组合。判定成功后对整个页面固定：之后门禁 cookie 到期或被登出清除，只会让接口返回 401 并跳回登录页，不会改用另一套存储（P2 审查时修正）。响应必须是 `application/json` 且字段匹配才进入
   服务端模式。静态托管的 SPA 回退会对任意路径返回 200 HTML，不能只看状态码（`parse_feed` 的
   `looks_like_html_response_body` 是同一类教训）。
 - 服务端模式下不初始化 `BrowserStore`，不读写 localStorage 中的文章数据。feed 抓取在服务端

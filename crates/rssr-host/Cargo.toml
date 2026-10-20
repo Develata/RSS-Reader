@@ -9,7 +9,9 @@ authors.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 rssr-application = { path = "../rssr-application" }
-reqwest.workspace = true
+futures-util = "0.3"
+# `stream`: responses are read with a byte budget (`client::read_limited`).
+reqwest = { workspace = true, features = ["stream"] }
 rssr-domain = { path = "../rssr-domain" }
 serde.workspace = true
 serde_json.workspace = true

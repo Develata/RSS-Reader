@@ -228,31 +228,39 @@ impl FeedsPort {
     }
 }
 
-/// 服务端模式的判定。只在页面由 `rssr-web` 托管（有门禁 cookie）时探测 `/api/v1/capabilities`：
-/// 是服务端模式就走远程调用；返回 404 或 HTML（尚无接口的旧版服务端）就沿用浏览器本地存储；
-/// 网络错误直接报错，不悄悄退回本地存储，否则会把数据写进与服务端无关的 localStorage。
+/// 服务端模式的判定，对整个页面固定。
+///
+/// - 演示包、或页面不是由 `rssr-web` 托管（没有门禁 cookie）：本地模式。
+/// - 由 `rssr-web` 托管：必须确认 `/api/v1/capabilities` 是服务端模式。确认失败（网络、超时、5xx、
+///   HTML、格式不对）是可重试的错误，不缓存、更不退回本地存储，否则会把数据写进与服务端无关的
+///   localStorage。rssr-web 总是携带同版本的前端包发布，不存在"服务端没有接口"的合法组合。
+///
+/// 判定一旦成功就固定：之后门禁 cookie 到期或在别的标签页登出，都只会让接口返回 401 并跳回
+/// 登录页，不会让这个页面改用另一套存储。
 #[cfg(target_arch = "wasm32")]
 mod server_mode {
     use anyhow::{Context, Result};
     use rssr_host::client::ApiClient;
     use tokio::sync::OnceCell;
 
-    /// 判定结果只在成功后缓存，并发的首次调用合并成一次探测；页面生命周期内部署形态不会变化。
     static SERVER_MODE: OnceCell<bool> = OnceCell::const_new();
 
-    pub(super) async fn client() -> Result<Option<ApiClient>> {
-        if crate::demo::ENABLED || !crate::web_auth::server_gate_present() {
-            return Ok(None);
-        }
+    fn api_client() -> Result<ApiClient> {
         let origin = crate::web_auth::browser_origin().context("无法确定页面地址")?;
-        let client = ApiClient::new(reqwest::Client::new(), origin)
-            .on_unauthorized(crate::web_auth::recover_from_expired_server_session);
+        Ok(ApiClient::new(reqwest::Client::new(), origin)
+            .on_unauthorized(crate::web_auth::recover_from_expired_server_session))
+    }
+
+    pub(super) async fn client() -> Result<Option<ApiClient>> {
         let server_mode = *SERVER_MODE
             .get_or_try_init(|| async {
-                client.capabilities().await.map(|capabilities| capabilities.is_some())
+                if crate::demo::ENABLED || !crate::web_auth::server_gate_present() {
+                    return Ok::<_, anyhow::Error>(false);
+                }
+                api_client()?.capabilities().await.context("确认服务端模式失败，请稍后重试")?;
+                Ok(true)
             })
-            .await
-            .context("确认服务端模式失败")?;
-        Ok(server_mode.then_some(client))
+            .await?;
+        if server_mode { api_client().map(Some) } else { Ok(None) }
     }
 }
