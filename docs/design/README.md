@@ -14,7 +14,7 @@
 - [Web SPA 回归服务脚本](./web-spa-regression-server.md)
 - [前端命令与界面接口清单](./frontend-command-reference.md)
 - [主题作者选择器参考](./theme-author-selector-reference.md)
-- [rssr-web 服务端模式：与桌面 GUI 等价的自托管部署（草案，待确认）](./rssr-web-server-mode.md)
+- [rssr-web 服务端模式：与桌面 GUI 等价的自托管部署（已确认设计，实施中）](./rssr-web-server-mode.md)
 
 ## 先读哪一份
 
