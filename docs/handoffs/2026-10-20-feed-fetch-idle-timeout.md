@@ -3,8 +3,8 @@
 - 日期：2026-10-20
 - 作者 / Agent：Claude Code
 - 分支：feat/reader-mathml
-- 当前 HEAD：56ed155
-- 相关 commit：pending
+- 当前 HEAD：见 `git log feat/reader-mathml`
+- 相关 commit：`5070d71`（修复）
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -63,12 +63,13 @@
 
 ## 结果
 
-- 桌面端可添加并首刷该 feed；可合并。
+- 已验证：CLI 可添加并首刷该 feed；可合并。
+- 推断（桌面未实测）：桌面端与 CLI 共用 `compose_native_sqlite_use_cases` 的同一原生抓取路径，`rssr-app` 里没有包裹订阅抓取的外层超时（只有图片本地化和界面提示计时）。
 - 未在 Android 真机上复测；Android 走同一原生抓取代码。
 
 ## 风险与后续事项
 
-- 整体上限 120 秒意味着单个慢源最多占用一个刷新槽 2 分钟。
+- 整体上限 120 秒：数据库在 WAL 模式下刷新并发，一个涓流源最多占一个并发槽 2 分钟；非 WAL 时刷新退回串行，它会让整轮刷新最多多等 2 分钟。停住的连接仍在 30 秒空闲后失败。
 - Web 端未改：同一 feed 的正文 JSON 约 543 万 UTF-16 码元，超过 Chromium localStorage
   每源约 524 万码元的配额，加上写 `-next` 槽的写时复制，Web 端几乎必然写入失败。
   这一条是推断，未实测；要解决需改存储后端（如 IndexedDB），属于骨架级变更，需单独决策。
