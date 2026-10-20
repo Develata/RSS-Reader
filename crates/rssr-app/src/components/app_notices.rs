@@ -23,6 +23,7 @@ pub fn AppNotices() -> Element {
     });
     let recovery = APP_RECOVERY();
     let settings_failure = shell.settings_failure(theme);
+    let startup_failure = shell.startup_failure();
     let loading = shell.settings_loading();
 
     rsx! {
@@ -42,6 +43,16 @@ pub fn AppNotices() -> Element {
                 }
             },
             None => rsx! {},
+        }
+        if let Some(failure) = startup_failure {
+            aside { "data-slot": "app-notice", "data-notice": "startup-route", role: "alert",
+                StatusBanner {
+                    message: format!("{}（已打开全部文章）", failure.message()),
+                    tone: failure.tone().to_string(),
+                }
+                button { class: "button", "data-action": "dismiss-startup-failure",
+                    onclick: move |_| shell.dismiss_startup_failure(), "知道了" }
+            }
         }
         if let Some(failure) = settings_failure {
             aside { "data-slot": "app-notice", "data-notice": "settings-load", role: "alert",

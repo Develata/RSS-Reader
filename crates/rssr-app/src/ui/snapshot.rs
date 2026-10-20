@@ -60,13 +60,6 @@ impl UiIntent {
         }
     }
 
-    pub(crate) fn into_startup_route_resolved(self) -> Option<StartupRouteSnapshot> {
-        match self {
-            UiIntent::StartupRouteResolved(snapshot) => Some(snapshot),
-            _ => None,
-        }
-    }
-
     pub(crate) fn into_entries_page_intent(self) -> Option<EntriesPageIntent> {
         match self {
             UiIntent::EntriesPage(intent) => Some(intent),

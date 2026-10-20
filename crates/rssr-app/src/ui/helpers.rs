@@ -2,12 +2,6 @@ use dioxus::prelude::*;
 
 use super::{UiCommand, UiIntent, run_ui_command};
 
-pub(crate) async fn visit_ui_command(command: UiCommand, mut visit: impl FnMut(UiIntent)) {
-    for intent in run_ui_command(command).await {
-        visit(intent);
-    }
-}
-
 pub(crate) fn apply_projected_ui_intents<T>(
     intents: Vec<UiIntent>,
     project: fn(UiIntent) -> Option<T>,

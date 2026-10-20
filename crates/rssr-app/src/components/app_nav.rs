@@ -17,6 +17,11 @@ pub fn AppNav(on_back: Option<EventHandler<()>>) -> Element {
     } else {
         format!("Read / 首页；{}；在首页再次点击刷新全部订阅", refresh.label())
     };
+    let toggle_title = match (shell.is_collapsed(), refresh.label()) {
+        (true, "") => "向右展开导航".to_string(),
+        (true, label) => format!("向右展开导航；{label}"),
+        (false, _) => "向左收起导航".to_string(),
+    };
     let navigator = use_navigator();
 
     rsx! {
@@ -95,8 +100,11 @@ pub fn AppNav(on_back: Option<EventHandler<()>>) -> Element {
             button {
                 class: "icon-link-button", r#type: "button",
                 "data-action": "toggle-nav", "data-slot": "app-nav-toggle",
+                // While collapsed, the only thing left of the navigation: it shows the refresh's
+                // result as a badge, its title the result's text (review C4B-A-R3-01).
+                "data-refresh-state": refresh.phase(),
                 aria_label: if shell.is_collapsed() { "向右展开导航" } else { "向左收起导航" },
-                title: if shell.is_collapsed() { "向右展开导航" } else { "向左收起导航" },
+                title: toggle_title,
                 aria_expanded: !shell.is_collapsed(), aria_controls: "app-nav-content",
                 onclick: move |_| collapse_shell.toggle_collapsed(),
                 svg { width: "12", height: "20", view_box: "0 0 12 20", fill: "none", stroke: "currentColor", stroke_width: "1.8", stroke_linecap: "round", stroke_linejoin: "round", "aria-hidden": "true",

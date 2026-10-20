@@ -16,7 +16,7 @@ pub(crate) use self::{
     },
     helpers::{
         apply_projected_ui_intents, spawn_projected_ui_command, use_reactive_side_effect,
-        use_reactive_task, visit_ui_command,
+        use_reactive_task,
     },
     recovery::run_ui_command,
     runtime::execute_ui_command,

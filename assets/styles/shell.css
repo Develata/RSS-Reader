@@ -161,9 +161,15 @@
   animation: none;
 }
 [data-page="reader"] [data-slot="app-nav-brand"] { position: relative; }
+/* The refresh's result as a badge where its text is not shown: the reader's Home button, and the
+ * navigation's toggle while the navigation is collapsed (its other buttons are not rendered then).
+ * The toggle is positioned already. */
 [data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="finished"]::after,
 [data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="error"]::after,
-[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="unknown"]::after {
+[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="unknown"]::after,
+[data-layout="app-nav-shell"][data-state="collapsed"] [data-slot="app-nav-toggle"][data-refresh-state="finished"]::after,
+[data-layout="app-nav-shell"][data-state="collapsed"] [data-slot="app-nav-toggle"][data-refresh-state="error"]::after,
+[data-layout="app-nav-shell"][data-state="collapsed"] [data-slot="app-nav-toggle"][data-refresh-state="unknown"]::after {
   position: absolute;
   top: -2px;
   right: -2px;
@@ -178,10 +184,13 @@
   font-size: 0.7rem;
   line-height: 1;
 }
-[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="finished"]::after { content: "✓"; }
-[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="error"]::after { content: "!"; color: var(--danger); }
+[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="finished"]::after,
+[data-layout="app-nav-shell"][data-state="collapsed"] [data-slot="app-nav-toggle"][data-refresh-state="finished"]::after { content: "✓"; }
+[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="error"]::after,
+[data-layout="app-nav-shell"][data-state="collapsed"] [data-slot="app-nav-toggle"][data-refresh-state="error"]::after { content: "!"; color: var(--danger); }
 /* A refresh whose outcome is unknown: neither done nor failed. */
-[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="unknown"]::after { content: "?"; color: var(--muted); }
+[data-page="reader"] [data-slot="app-nav-brand"][data-refresh-state="unknown"]::after,
+[data-layout="app-nav-shell"][data-state="collapsed"] [data-slot="app-nav-toggle"][data-refresh-state="unknown"]::after { content: "?"; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   [data-layout="app-nav-search"], [data-slot="app-nav-brand"] { animation: none; }
 }

@@ -4,13 +4,13 @@ use dioxus_router::Navigator;
 
 use crate::{
     router::AppRoute,
-    status::set_status_error,
+    status::set_status,
     theme::ThemeController,
     ui::failure::{TONE_UNKNOWN, UiFailure},
     ui::shell_browser::wait_for_refresh_feedback,
     ui::shell_prefs::{initial_entry_search, remember_entry_search},
     ui::shell_state::{HomeAction, ManualRefreshState, NavMode, resolve_home_action},
-    ui::{ShellCommand, UiCommand, UiIntent, run_ui_command, visit_ui_command},
+    ui::{ShellCommand, UiCommand, UiIntent, run_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -21,6 +21,9 @@ pub(crate) struct AppShellState {
     refresh_revision: Signal<u64>,
     /// Why the settings could not be read at start, until they are (C4b item 5).
     settings_failure: Signal<Option<UiFailure>>,
+    /// Why the startup page could not be resolved, until dismissed: the startup page is replaced
+    /// at once, its own status with it (C4b item 5; review C4B-A-R3-03).
+    startup_failure: Signal<Option<UiFailure>>,
     settings_loading: Signal<bool>,
     owner: ScopeId,
 }
@@ -122,6 +125,19 @@ impl AppShellState {
         self.settings_failure.read().clone()
     }
 
+    /// Why the startup page could not be resolved (the app opened all entries instead).
+    pub(crate) fn startup_failure(self) -> Option<UiFailure> {
+        self.startup_failure.read().clone()
+    }
+
+    pub(crate) fn report_startup_failure(mut self, failure: UiFailure) {
+        self.startup_failure.set(Some(failure));
+    }
+
+    pub(crate) fn dismiss_startup_failure(mut self) {
+        self.startup_failure.set(None);
+    }
+
     pub(crate) fn settings_loading(self) -> bool {
         *self.settings_loading.read()
     }
@@ -146,6 +162,7 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
         refresh: use_signal(ManualRefreshState::default),
         refresh_revision: use_signal(|| 0),
         settings_failure: use_signal(|| None),
+        startup_failure: use_signal(|| None),
         settings_loading: use_signal(|| false),
         owner: current_scope_id(),
     }
@@ -235,26 +252,51 @@ pub(crate) fn use_authenticated_shell_bus(shell: AppShellState, theme: ThemeCont
 
 pub(crate) fn use_startup_route_bus(
     navigator: Navigator,
-    mut status: Signal<String>,
-    mut status_tone: Signal<String>,
+    status: Signal<String>,
+    status_tone: Signal<String>,
 ) {
+    let shell = use_context::<AppShellState>();
     use_resource(move || async move {
-        visit_ui_command(UiCommand::Shell(ShellCommand::ResolveStartupRoute), |intent| {
-            if let Some(snapshot) = intent.clone().into_startup_route_resolved() {
-                let _ = navigator.replace(snapshot.route);
-                return;
-            }
-            if let Some((message, tone)) = intent.into_status() {
-                if tone == "error" {
-                    set_status_error(status, status_tone, message);
-                } else {
-                    status_tone.set(tone);
-                    status.set(message);
-                }
-            }
-        })
-        .await;
+        shell
+            .resolve_startup(status, status_tone, move |route| {
+                let _ = navigator.replace(route);
+            })
+            .await;
     });
+}
+
+impl AppShellState {
+    /// Resolves where the app starts and goes there; a failure is kept for the notice above every
+    /// page, since the startup page goes away with the route (C4b item 5; review C4B-A-R3-03).
+    pub(crate) async fn resolve_startup(
+        self,
+        status: Signal<String>,
+        status_tone: Signal<String>,
+        navigate: impl FnOnce(AppRoute),
+    ) {
+        let intents = run_ui_command(UiCommand::Shell(ShellCommand::ResolveStartupRoute)).await;
+        let (route, failure) = startup_resolution(intents);
+        if let Some(failure) = failure {
+            set_status(status, status_tone, failure.message(), failure.tone());
+            self.report_startup_failure(failure);
+        }
+        if let Some(route) = route {
+            navigate(route);
+        }
+    }
+}
+
+/// Where the startup resolution goes, and why it failed if it did.
+fn startup_resolution(intents: Vec<UiIntent>) -> (Option<AppRoute>, Option<UiFailure>) {
+    let (mut route, mut failure) = (None, None);
+    for intent in intents {
+        match intent {
+            UiIntent::StartupRouteResolved(snapshot) => route = Some(snapshot.route),
+            UiIntent::Failed(failed) => failure = Some(failed),
+            _ => {}
+        }
+    }
+    (route, failure)
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -383,5 +425,45 @@ mod tests {
             assert_eq!(shell.settings_failure(theme), None);
         });
         assert_eq!(backend.calls("load_settings"), 1);
+    }
+
+    /// A failed startup resolution, of each class, goes to all entries and keeps its failure in
+    /// the shell for the notice above every page, until dismissed (review C4B-A-R3-03).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_failed_startup_resolution_outlives_the_startup_page() {
+        use crate::router::AppRoute;
+
+        for code in [ErrorCode::Network, ErrorCode::OutcomeUnknown, ErrorCode::Unauthenticated] {
+            let backend = Scripted::over_new_library();
+            backend.fail("resolve_startup_target", BackendError::new(code, "原因"));
+            let _host = test_host::install(backend.clone());
+            let mut dom = VirtualDom::new(harness);
+            dom.rebuild_in_place();
+            let (shell, _) = contexts(&dom);
+            settle(&mut dom, shell).await;
+            let went = dom.in_scope(ScopeId::APP, || {
+                let went = Signal::new(None);
+                let status = Signal::new(String::new());
+                let tone = Signal::new(String::new());
+                spawn(async move {
+                    let mut went = went;
+                    shell.resolve_startup(status, tone, move |route| went.set(Some(route))).await;
+                });
+                went
+            });
+            for _ in 0..200 {
+                let _ = tokio::time::timeout(Duration::from_millis(20), dom.wait_for_work()).await;
+                if dom.in_scope(ScopeId::APP, || went.peek().is_some()) {
+                    break;
+                }
+            }
+            dom.in_scope(ScopeId::APP, || {
+                assert_eq!(*went.peek(), Some(AppRoute::EntriesPage {}), "{code:?}");
+                let failure = shell.startup_failure().expect("kept for the notice");
+                assert_eq!(failure.error.code, code);
+                shell.dismiss_startup_failure();
+                assert_eq!(shell.startup_failure(), None);
+            });
+        }
     }
 }
