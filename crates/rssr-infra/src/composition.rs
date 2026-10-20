@@ -63,7 +63,7 @@ pub fn compose_native_sqlite_use_cases(
         settings_repository,
         app_state,
         subscription_probe: Arc::new(crate::subscription_probe::HttpSubscriptionProbe::new(
-            reqwest::Client::new(),
+            crate::fetch::client::feed_http_client(crate::fetch::client::FEED_TIMEOUTS),
         )),
         refresh_source: Arc::new(InfraFeedRefreshSource::new(
             FetchClient::new(),
