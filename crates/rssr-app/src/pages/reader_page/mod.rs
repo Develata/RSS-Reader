@@ -1,4 +1,4 @@
-mod facade;
+pub(crate) mod facade;
 mod image_viewer;
 pub(crate) mod intent;
 pub(crate) mod reducer;
@@ -82,7 +82,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 message: facade.error().unwrap_or_else(|| facade.status_message()).to_string(),
                 tone: (if facade.error().is_some() { "error" } else { facade.status_tone() }).to_string(),
                 announce: true,
-                visually_hidden: facade.error().is_none() && facade.status_tone() != "error",
+                visually_hidden: !facade.status_shown(),
             }
             if facade.error().is_none() {
                 div { class: "reader-body", "data-layout": "reader-body", "data-state": "{facade.body_state()}",

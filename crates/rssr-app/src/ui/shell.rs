@@ -220,8 +220,17 @@ pub(crate) fn use_app_nav_shell() -> AppNavShell {
 
 /// Loads the shell's settings once at start ([`AppShellState::load_settings`]). The Web page is
 /// served only after the server's login, so the page itself has no gate (phase C, C4a).
+///
+/// When the start failed and a page then applies settings from the library, the backend works
+/// again: the shell reads once more to complete its start (the periodic refresh starts with it;
+/// review C4B-A-03). The read does not undo the page's settings (`load_settings`'s ordering).
 pub(crate) fn use_authenticated_shell_bus(shell: AppShellState, theme: ThemeController) {
     use_hook(move || shell.load_settings(theme));
+    use_effect(move || {
+        if theme.has_stored() && shell.settings_failure.peek().is_some() {
+            shell.load_settings(theme);
+        }
+    });
 }
 
 pub(crate) fn use_startup_route_bus(
@@ -332,10 +341,27 @@ mod tests {
         settle(&mut dom, shell).await;
         dom.in_scope(ScopeId::APP, || {
             assert!(shell.settings_failure(theme).is_some());
-            theme.store(UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() });
+            assert_eq!(backend.calls("ensure_auto_refresh_started"), 1, "started regardless");
+        });
+        // The settings page saves (or reads) settings: they are the library's.
+        backend.heal("load_settings");
+        let patch =
+            rssr_application::SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() };
+        let stored = rssr_api::Backend::update_settings(&*backend, patch).await.unwrap();
+        dom.in_scope(ScopeId::APP, || {
+            theme.store(stored);
             assert_eq!(shell.settings_failure(theme), None);
         });
-        assert_eq!(backend.calls("load_settings"), 1);
+        // The page's settings show the backend works again: the shell completes its start; its
+        // read gives the library's settings, the ones the page applied.
+        dom.render_immediate_to_vec();
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
+            assert_eq!(shell.settings_failure.peek().clone(), None);
+        });
+        assert_eq!(backend.calls("load_settings"), 2);
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 2);
     }
 
     /// Settings a page applied while the shell's read was on its way are newer than what the

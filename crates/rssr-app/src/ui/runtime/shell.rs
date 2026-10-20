@@ -21,9 +21,10 @@ pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
         ShellCommand::LoadAuthenticatedShell => {
             let loaded = async {
                 let backend = backend().await?;
-                let settings = backend.load_settings().await?;
+                // Before the read: a failed settings read must not leave the periodic refresh
+                // unstarted (review C4B-A-03).
                 backend.ensure_auto_refresh_started();
-                Ok::<_, rssr_api::BackendError>(settings)
+                backend.load_settings().await
             }
             .await;
             match loaded {

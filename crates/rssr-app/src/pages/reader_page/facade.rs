@@ -63,6 +63,12 @@ impl ReaderPageFacade {
         self.snapshot.error.as_deref()
     }
 
+    /// Whether the status is shown on screen (screen readers hear every status): an error, a
+    /// failure or an outcome that may have happened; a plain result is only announced.
+    pub(crate) fn status_shown(&self) -> bool {
+        status_shown(&self.snapshot)
+    }
+
     pub(crate) fn is_read(&self) -> bool {
         self.snapshot.is_read
     }
@@ -130,4 +136,10 @@ impl ReaderPageFacade {
     pub(crate) fn toggle_starred(&self, via_shortcut: bool) {
         self.session.toggle_starred(via_shortcut);
     }
+}
+
+/// See [`ReaderPageFacade::status_shown`] (C4b item 1: an unknown outcome must be seen).
+pub(crate) fn status_shown(state: &super::state::ReaderPageState) -> bool {
+    let tone = state.status_tone.as_str();
+    state.error.is_some() || tone == "error" || tone == crate::ui::failure::TONE_UNKNOWN
 }

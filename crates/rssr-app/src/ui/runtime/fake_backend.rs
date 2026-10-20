@@ -85,6 +85,7 @@ impl Backend for Scripted {
     }
 
     fn ensure_auto_refresh_started(&self) {
+        self.ran.lock().unwrap().push("ensure_auto_refresh_started");
         self.inner.ensure_auto_refresh_started();
     }
 

@@ -18,7 +18,8 @@ use crate::pages::feeds_page::{
     intent::FeedsPageIntent, reducer::reduce_feeds_page_intent, state::FeedsPageState,
 };
 use crate::pages::reader_page::{
-    intent::ReaderPageIntent, reducer::reduce_reader_page_intent, state::ReaderPageState,
+    facade::status_shown as reader_status_shown, intent::ReaderPageIntent,
+    reducer::reduce_reader_page_intent, state::ReaderPageState,
 };
 use crate::ui::commands::{EntriesCommand, FeedsCommand, ReaderCommand, ShellCommand, UiCommand};
 use crate::ui::recovery::{AppRecovery, required};
@@ -282,5 +283,28 @@ async fn a_failed_manual_refresh_says_so() {
             .find_map(UiIntent::into_status)
             .expect("a status");
         status_is(&message, &tone, &class);
+    }
+}
+
+/// A flag change in the reader that fails is shown on screen with the class's tone, an unknown
+/// outcome too (review C4B-A-01: the reader showed only errors).
+#[tokio::test(flavor = "current_thread")]
+async fn a_failed_flag_change_in_the_reader_is_shown() {
+    for class in classes() {
+        let (_backend, _host) = failing("set_entry_starred", &class);
+        let mut state = ReaderPageState::new();
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 7 });
+        let command = UiCommand::Reader(ReaderCommand::SetStarred {
+            entry_id: 7,
+            starred: true,
+            via_shortcut: false,
+        });
+        for intent in run(command, &class).await {
+            if let Some(intent) = intent.into_reader_page_intent() {
+                reduce_reader_page_intent(&mut state, intent);
+            }
+        }
+        status_is(&state.status, &state.status_tone, &class);
+        assert!(reader_status_shown(&state), "{}: shown on screen", class.name);
     }
 }
