@@ -9,6 +9,7 @@ authors.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 rssr-application = { path = "../rssr-application" }
+reqwest.workspace = true
 rssr-domain = { path = "../rssr-domain" }
 serde.workspace = true
 serde_json.workspace = true

@@ -21,7 +21,7 @@
 
 ## 修改约束
 
-- Web 端是本地优先实现，当前真实持久化方案是 `localStorage` 序列化状态
+- 本目录只服务静态 Web 包的本地模式，持久化方案是 `localStorage` 序列化状态；由 `rssr-web` 托管时界面走 `rssr_host::client::Backend::Remote`，不会装配这里的宿主（见 `ui/runtime/services.rs` 的 `server_mode`）
 - 任何会影响用户数据的变更，都要优先考虑：
   - 状态损坏恢复
   - 导入坏数据时的降级路径

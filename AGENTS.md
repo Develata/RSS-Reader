@@ -55,7 +55,7 @@ specs/
 
 - 七个 crate：UI、CLI 和 Web 部署服务为入口；host 提供宿主能力与原生宿主 `NativeHost`，application 统一用例语义，domain 定义模型与端口，infra 实现平台适配。
 - 原生端使用 SQLite 索引库和正文库，迁移分别在 `migrations/`、`migrations_content/`。
-- Web 使用 infra 的 `BrowserStore`：`localStorage` 分片、版本化提交和 Web Locks 协调写入；不使用 SQLite。
+- 单独托管的静态 Web 包使用 infra 的 `BrowserStore`：`localStorage` 分片、版本化提交和 Web Locks 协调写入；由 `rssr-web` 托管时界面经 `/api/v1` 调用服务端的 `NativeHost`（SQLite），浏览器不持久化文章（`docs/design/rssr-web-server-mode.md`）。
 - 页面通过 facade/session 派发 `UiCommand`；runtime 调用 application 用例或 host capability，页面不直接执行 I/O。
 - 用户操作见 `docs/user-guide.md`，边界见 `docs/design/functional-design-philosophy.md`，UI 契约见 `docs/design/frontend-command-reference.md` 与 `docs/design/theme-author-selector-reference.md`。
 - 变更和验证证据见 `docs/handoffs/`，发布检查见 `docs/testing/release-ui-regression-checklist.md`；历史 spec 的完成勾选不能代替当前验证。

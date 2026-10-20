@@ -132,6 +132,17 @@ pub fn recover_from_expired_server_session() {
     browser::redirect_to_server_login();
 }
 
+/// 页面是否由 `rssr-web` 托管（登录后服务端会设置门禁 cookie）。
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn server_gate_present() -> bool {
+    browser::server_gate_present()
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn browser_origin() -> Option<String> {
+    browser::browser_origin()
+}
+
 #[cfg(target_arch = "wasm32")]
 pub fn local_auth_state() -> WebAuthState {
     let Some(credentials) = load_credentials() else {

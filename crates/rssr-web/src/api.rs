@@ -466,6 +466,82 @@ mod tests {
         (status, response.json().await.expect("error body is ApiError JSON"))
     }
 
+    fn remote_backend(server: &TestServer, with_session: bool) -> rssr_host::client::ApiClient {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if with_session {
+            headers.insert(reqwest::header::COOKIE, server.cookie.parse().unwrap());
+        }
+        let http = reqwest::Client::builder().no_proxy().default_headers(headers).build().unwrap();
+        rssr_host::client::ApiClient::new(http, server.base.clone())
+    }
+
+    /// 浏览器端将使用的远程后端，经真实的 `/api/v1` 往返：结果与错误链都和进程内调用一致。
+    #[tokio::test]
+    async fn remote_backend_round_trips_through_the_api() {
+        use rssr_host::client::{Backend, RemoteServices};
+
+        let server = TestServer::start().await;
+        let client = remote_backend(&server, true);
+        assert!(client.capabilities().await.unwrap().is_some());
+        let backend = Backend::Remote(RemoteServices::new(client));
+
+        let settings = rssr_domain::UserSettings {
+            refresh_interval_minutes: 45,
+            ..rssr_domain::UserSettings::default()
+        };
+        backend.save_settings(&settings).await.unwrap();
+        assert_eq!(backend.load_settings().await.unwrap(), settings);
+
+        let opml = r#"<?xml version="1.0"?><opml version="2.0"><head/><body><outline type="rss" text="Example" xmlUrl="https://example.invalid/feed.xml"/></body></opml>"#;
+        backend.import_opml(opml).await.unwrap();
+        assert_eq!(backend.load_feeds_snapshot().await.unwrap().feed_count, 1);
+        let listed = backend.list_entries(&rssr_domain::EntryQuery::default()).await.unwrap();
+        assert!(listed.entries.is_empty());
+
+        let error = backend
+            .add_subscription("http://127.0.0.1:1/feed.xml", None)
+            .await
+            .expect_err("PublicOnly refuses a loopback feed");
+        assert!(format!("{error:#}").contains("内网或本地地址"), "unexpected error: {error:#}");
+
+        server.stop();
+    }
+
+    static UNAUTHORIZED_SEEN: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+
+    fn mark_unauthorized() {
+        UNAUTHORIZED_SEEN.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[tokio::test]
+    async fn remote_backend_calls_the_unauthorized_handler_on_401() {
+        let server = TestServer::start().await;
+        let client = remote_backend(&server, false).on_unauthorized(mark_unauthorized);
+        let error = client
+            .call::<rssr_host::protocol::LoadSettings>(&())
+            .await
+            .expect_err("no session must fail");
+        assert!(error.to_string().contains("登录"), "unexpected error: {error:#}");
+        assert!(UNAUTHORIZED_SEEN.load(std::sync::atomic::Ordering::SeqCst));
+        server.stop();
+    }
+
+    /// 静态托管的 SPA 回退对任意路径返回 200 HTML，不能被当成服务端模式。
+    #[tokio::test]
+    async fn capabilities_probe_ignores_an_spa_fallback_page() {
+        let app = Router::new().fallback(|| async {
+            axum::response::Html("<!doctype html><title>RSS-Reader</title>")
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let client = rssr_host::client::ApiClient::new(http, base);
+        assert_eq!(client.capabilities().await.unwrap(), None);
+        server.abort();
+    }
+
     #[tokio::test]
     async fn capabilities_are_public_and_identify_server_mode() {
         let server = TestServer::start().await;

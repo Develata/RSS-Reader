@@ -7,21 +7,29 @@ use rssr_application::{
     ToggleReadOutcome, ToggleStarredInput, ToggleStarredOutcome,
 };
 use rssr_domain::{EntriesWorkspaceState, EntryQuery, UserSettings};
-use rssr_host::HostServices;
+use rssr_host::{HostServices, client::Backend};
 
 use crate::bootstrap::{
     AddSubscriptionOutcome, AppServices, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome,
 };
 
-/// 界面运行时的能力入口。各端口只是按页面分组的视图，实际实现都在 [`HostServices`]。
+/// 界面运行时的能力入口。各端口只是按页面分组的视图，实际实现是进程内的 [`HostServices`]，
+/// 或服务端模式下经 `/api/v1` 的远程调用（见 [`Backend`]）。
 pub(crate) struct UiServices {
-    services: HostServices,
+    services: Backend,
 }
 
 impl UiServices {
     pub(crate) async fn shared() -> Result<Self> {
+        #[cfg(target_arch = "wasm32")]
+        if let Some(client) = server_mode::client().await? {
+            return Ok(Self {
+                services: Backend::Remote(rssr_host::client::RemoteServices::new(client)),
+            });
+        }
         let host = AppServices::shared().await?;
-        Ok(Self { services: HostServices::new(host.use_cases(), host.host_capabilities()) })
+        let local = HostServices::new(host.use_cases(), host.host_capabilities());
+        Ok(Self { services: Backend::Local(Box::new(local)) })
     }
 
     pub(crate) fn entries(&self) -> EntriesPort {
@@ -47,7 +55,7 @@ impl UiServices {
 
 #[derive(Clone)]
 pub(crate) struct EntriesPort {
-    services: HostServices,
+    services: Backend,
 }
 
 impl EntriesPort {
@@ -99,7 +107,7 @@ impl EntriesPort {
 
 #[derive(Clone)]
 pub(crate) struct ShellPort {
-    services: HostServices,
+    services: Backend,
 }
 
 impl ShellPort {
@@ -118,7 +126,7 @@ impl ShellPort {
 
 #[derive(Clone)]
 pub(crate) struct SettingsPort {
-    services: HostServices,
+    services: Backend,
 }
 
 impl SettingsPort {
@@ -149,7 +157,7 @@ impl SettingsPort {
 
 #[derive(Clone)]
 pub(crate) struct ReaderPort {
-    services: HostServices,
+    services: Backend,
 }
 
 impl ReaderPort {
@@ -175,7 +183,7 @@ impl ReaderPort {
 
 #[derive(Clone)]
 pub(crate) struct FeedsPort {
-    services: HostServices,
+    services: Backend,
 }
 
 impl FeedsPort {
@@ -217,5 +225,34 @@ impl FeedsPort {
 
     pub(crate) async fn import_opml(&self, raw: &str) -> Result<OpmlImportOutcome> {
         self.services.import_opml(raw).await
+    }
+}
+
+/// 服务端模式的判定。只在页面由 `rssr-web` 托管（有门禁 cookie）时探测 `/api/v1/capabilities`：
+/// 是服务端模式就走远程调用；返回 404 或 HTML（尚无接口的旧版服务端）就沿用浏览器本地存储；
+/// 网络错误直接报错，不悄悄退回本地存储，否则会把数据写进与服务端无关的 localStorage。
+#[cfg(target_arch = "wasm32")]
+mod server_mode {
+    use anyhow::{Context, Result};
+    use rssr_host::client::ApiClient;
+    use tokio::sync::OnceCell;
+
+    /// 判定结果只在成功后缓存，并发的首次调用合并成一次探测；页面生命周期内部署形态不会变化。
+    static SERVER_MODE: OnceCell<bool> = OnceCell::const_new();
+
+    pub(super) async fn client() -> Result<Option<ApiClient>> {
+        if crate::demo::ENABLED || !crate::web_auth::server_gate_present() {
+            return Ok(None);
+        }
+        let origin = crate::web_auth::browser_origin().context("无法确定页面地址")?;
+        let client = ApiClient::new(reqwest::Client::new(), origin)
+            .on_unauthorized(crate::web_auth::recover_from_expired_server_session);
+        let server_mode = *SERVER_MODE
+            .get_or_try_init(|| async {
+                client.capabilities().await.map(|capabilities| capabilities.is_some())
+            })
+            .await
+            .context("确认服务端模式失败")?;
+        Ok(server_mode.then_some(client))
     }
 }

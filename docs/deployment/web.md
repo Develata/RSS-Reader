@@ -1,8 +1,8 @@
 # Web / Docker 部署
 
-`RSS-Reader-web.tar.gz` 是 Dioxus 静态站点包。浏览器直接请求 feed 时受目标站点 CORS 策略约束。需要登录门禁和同源 `/feed-proxy` 时，使用仓库里的 `rssr-web` 服务；它托管静态包、验证登录并代抓 feed，不参与桌面端、Android 或 CLI 的运行。Web 的订阅和阅读状态保存在访问者当前浏览器的 `localStorage`，认证卷只保存服务登录凭据，**不是文章库备份**。
+`RSS-Reader-web.tar.gz` 是 Dioxus 静态站点包。浏览器直接请求 feed 时受目标站点 CORS 策略约束。需要登录门禁和同源 `/feed-proxy` 时，使用仓库里的 `rssr-web` 服务；它托管静态包、验证登录并代抓 feed，不参与桌面端、Android 或 CLI 的运行。单独托管静态包（不经 `rssr-web`）时，订阅和阅读状态保存在访问者当前浏览器的 `localStorage`。
 
-**服务端模式（实施中）**：按 [rssr-web 服务端模式设计](../design/rssr-web-server-mode.md)，`rssr-web` 启动时会在 `RSS_READER_WEB_DATA_DIR`（Docker 中为 `/app/data` 卷）打开与桌面版相同的 SQLite 文章库，并在服务端运行自动刷新，同时对已登录会话提供 `/api/v1` 接口。浏览器界面接入这套接口的工作还没有完成；完成之前，界面仍按上一段所述使用 `localStorage`，数据卷里的文章库处于空闲状态。
+**服务端模式**：按 [rssr-web 服务端模式设计](../design/rssr-web-server-mode.md)，由 `rssr-web` 托管时，文章库在服务器上：启动时在 `RSS_READER_WEB_DATA_DIR`（Docker 中为 `/app/data` 卷）打开与桌面版相同的 SQLite 文章库，在服务端运行自动刷新（不依赖浏览器在线），浏览器界面登录后经 `/api/v1` 读写，不在 `localStorage` 保存文章。数据卷就是文章库，按桌面数据目录同样的方式备份；认证卷只保存登录凭据。任何浏览器登录后看到的都是同一个文章库（单用户）。从旧版升级时，旧数据仍在各个浏览器的 `localStorage` 里，不会自动迁移：在升级前用旧版界面导出配置包或 OPML，升级后导入，文章由服务端重新抓取。
 
 新版浏览器存储使用 Web Locks 协调多个标签页，需要支持该能力的浏览器和安全上下文：正式入口使用 HTTPS，本机 localhost / 127.0.0.1 可使用 HTTP；手机通过局域网 IP 访问普通 HTTP 不满足此条件。缺少能力会显示错误，不会退回可能覆盖数据的无锁写入。升级静态包后应重新加载所有旧标签页，避免混用两种存储协议；不会自动刷新正在阅读的页面。
 

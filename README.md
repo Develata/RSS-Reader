@@ -64,7 +64,7 @@ Reader 快捷键仅在阅读区获得焦点时生效：`M` 切换已读、`F` �
 
 ## 本地数据与边界
 
-Linux `/usr/bin` 安装版在 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`）保存数据；Windows、macOS 和 Linux 便携版仍在可执行文件同目录的 `RSS-Reader/` 保存数据。目录中包含 `rss-reader.db`（索引）、`rss-reader-content.db`（正文），还可能有 `shell-prefs.json`。SQLite 的 `-wal`、`-shm` 是正常附属文件；备份时先退出应用，再复制整个目录。旧版如曾以管理员身份在 `/usr/bin/RSS-Reader/` 产生数据，升级后不会自动迁移；请在应用退出后备份并由管理员将完整目录复制到新位置、改为当前用户所有。Android 使用应用沙箱内的本地 SQLite；卸载应用会清除本地数据，请先导出配置。Web 将状态序列化保存到当前浏览器的 `localStorage`，它与桌面数据库互不共享；清除站点数据也会清除本地文章库。
+Linux `/usr/bin` 安装版在 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`）保存数据；Windows、macOS 和 Linux 便携版仍在可执行文件同目录的 `RSS-Reader/` 保存数据。目录中包含 `rss-reader.db`（索引）、`rss-reader-content.db`（正文），还可能有 `shell-prefs.json`。SQLite 的 `-wal`、`-shm` 是正常附属文件；备份时先退出应用，再复制整个目录。旧版如曾以管理员身份在 `/usr/bin/RSS-Reader/` 产生数据，升级后不会自动迁移；请在应用退出后备份并由管理员将完整目录复制到新位置、改为当前用户所有。Android 使用应用沙箱内的本地 SQLite；卸载应用会清除本地数据，请先导出配置。单独托管的静态 Web 包将状态序列化保存到当前浏览器的 `localStorage`，它与桌面数据库互不共享，清除站点数据也会清除本地文章库；由 `rssr-web` 托管时文章库在服务器的 SQLite 里（见 [Web 部署指南](./docs/deployment/web.md)）。
 
 RSS-Reader 缓存 feed 提供的正文，不主动抓取原网站补全全文。桌面端和 Android 会尽量把正文图片本地化；Web 通常保留远端图片地址，能否显示还取决于站点防盗链、HTTPS 和网络策略。JSON / OPML / WebDAV 交换的是订阅与设置，**不是文章库、已读状态或收藏的跨设备同步**。直接运行静态 Web 包时，某些 feed 会因 CORS 无法刷新；`rssr-web` 提供带登录的同源 `/feed-proxy`，见 [Web 部署指南](./docs/deployment/web.md)。
 
