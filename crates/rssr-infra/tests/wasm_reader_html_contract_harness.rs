@@ -162,6 +162,24 @@ fn katex_output_shows_one_copy() {
 }
 
 #[wasm_bindgen_test]
+fn nested_katex_containers_show_one_copy_each() {
+    // 嵌在 MathML 分支里的容器、以及兼任容器的 MathML 分支，都只留 MathML 那份。
+    let result = render(concat!(
+        r#"<p><span class="katex"><span class="katex-mathml katex"><span class="katex-mathml">"#,
+        r#"<math><mi>a</mi></math></span><span class="katex-html">COPY_A</span></span>"#,
+        r#"<span class="katex-html">COPY_OUTER</span></span></p>"#,
+        r#"<p><span class="katex"><span class="katex-mathml"><span class="katex">"#,
+        r#"<span class="katex-mathml"><math><mi>b</mi></math></span><span class="katex-html">"#,
+        r#"COPY_B</span></span><math><mi>c</mi></math></span><span class="katex-html">"#,
+        r#"COPY_C</span></span></p>"#,
+    ));
+    assert_eq!(result["unsafe"], Value::Array(Vec::new()), "{result}");
+    assert_eq!(result["parsedVerbatim"], true, "{result}");
+    assert_eq!(result["maths"], 3, "{result}");
+    assert_eq!(result["text"], "abc", "{result}");
+}
+
+#[wasm_bindgen_test]
 fn long_formulas_do_not_widen_a_narrow_reader() {
     let long = "<mi>x</mi><mo>+</mo>".repeat(60);
     let result = render(&format!(

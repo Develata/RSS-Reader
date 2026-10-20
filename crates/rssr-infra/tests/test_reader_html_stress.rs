@@ -114,13 +114,14 @@ fn deeply_nested_katex_wrappers_are_planned_in_one_pass() {
     // 评审复核反例：KaTeX 容器逐层嵌在上一层的 MathML 分支里，查找分支内公式曾是平方级。
     let output = sanitize(&nested_katex(20_000));
     assert!(!output.contains("katex"));
+    assert!(!output.contains("HTML_COPY"), "every nested HTML copy is removed");
     assert_eq!(output.matches("<math>").count(), 1);
 }
 
 fn nested_katex(depth: usize) -> String {
     nested(
         r#"<span class="katex"><span class="katex-mathml">"#,
-        r#"</span><span class="katex-html">x</span></span>"#,
+        r#"</span><span class="katex-html">HTML_COPY</span></span>"#,
         depth,
         "<math><mi>x</mi></math>",
     )

@@ -553,16 +553,21 @@ impl<'a> SerializedDocument<'a> {
     ///
     /// - 最外层 `<math>` 是原子单位：判定预算后整个跳过，内部（包括集成点里的嵌套公式和
     ///   KaTeX 结构）不再处理。
-    /// - KaTeX 容器命中时，去掉容器和 MathML 分支起始标签上的识别 class，继续遍历 MathML 分支
-    ///   （其中的公式照常过预算），走到 HTML 副本时整段删除并跳过。嵌在 MathML 分支里的容器
-    ///   同样会被处理；它的 HTML 副本位置更靠前，用栈按后进先出匹配。
+    /// - KaTeX 容器命中时，去掉容器起始标签上的识别 class，并标记下一个标签（MathML 分支起始
+    ///   标签）也要去掉 class；继续逐个标签遍历 MathML 分支（其中的公式照常过预算），走到 HTML
+    ///   副本时整段删除并跳过。MathML 分支起始标签自己也照常参与容器识别（class 可以同时是
+    ///   `katex-mathml` 和 `katex`），命中时只产出一次改写。嵌在 MathML 分支里的容器同样会被
+    ///   处理；它的 HTML 副本位置更靠前，用栈按后进先出匹配。
     fn plan_edits(&self) -> Vec<Edit<'static>> {
         let next_formula = self.next_formula_starts();
         let mut edits = Vec::new();
         let mut budget = ArticleBudget::default();
         let mut pending_html_copies = Vec::new();
+        let mut strip_class_at = None;
         let mut index = 0;
         while index < self.tags.len() {
+            // MathML 分支起始标签紧跟在容器起始标签之后，所以标记只对下一个访问到的标签有效。
+            let strip_class = strip_class_at.take() == Some(index);
             if pending_html_copies.last() == Some(&index) {
                 pending_html_copies.pop();
                 edits.push(self.removal(index));
@@ -586,41 +591,39 @@ impl<'a> SerializedDocument<'a> {
 
             if let Some([mathml, html_copy]) = self.katex_pair(index, &next_formula) {
                 edits.push(self.without_class(index));
-                edits.push(self.without_class(mathml));
                 pending_html_copies.push(html_copy);
-                index = mathml + 1;
-                continue;
+                strip_class_at = Some(mathml);
+            } else if strip_class {
+                edits.push(self.without_class(index));
             }
             index += 1;
         }
         edits
     }
 
-    /// `next[i]` 是下标不小于 `i` 的第一个 `<math>` 起始标签，没有时为 `usize::MAX`。
+    /// `next[i]` 是下标不小于 `i`、且消毒后仍有元素子节点的第一个 `<math>` 起始标签，没有时为
+    /// `usize::MAX`。空公式不算，免得它遮住同一分支里后面的有效公式。
     fn next_formula_starts(&self) -> Vec<usize> {
         let mut next = vec![usize::MAX; self.tags.len() + 1];
         for index in (0..self.tags.len()).rev() {
             let tag = &self.tags[index];
-            next[index] = if tag.kind == TagKind::Start && tag.name == "math" {
-                index
-            } else {
-                next[index + 1]
-            };
+            let non_empty_formula = tag.kind == TagKind::Start
+                && tag.name == "math"
+                && self.tags[index + 1].kind != TagKind::End;
+            next[index] = if non_empty_formula { index } else { next[index + 1] };
         }
         next
     }
 
     /// KaTeX 双份输出：`span.katex` 恰好有两个元素子节点，依次是 `span.katex-mathml` 和
-    /// `span.katex-html`，子节点之间只有空白，且 MathML 分支里的第一个 `<math>` 消毒后仍有
-    /// 元素子节点。命中时返回两个分支的下标；任何别的形状都不处理。
+    /// `span.katex-html`，子节点之间只有空白，且 MathML 分支里至少有一个消毒后仍有元素子节点的
+    /// `<math>`。命中时返回两个分支的下标；任何别的形状都不处理。
     fn katex_pair(&self, index: usize, next_formula: &[usize]) -> Option<[usize; 2]> {
         if !self.is_span_with_class(index, KATEX_CLASS) {
             return None;
         }
         let [mathml, html_copy] = self.two_element_children(index)?;
-        let formula = next_formula[mathml + 1];
-        let has_formula =
-            formula < self.close[mathml] && self.tags[formula + 1].kind != TagKind::End;
+        let has_formula = next_formula[mathml + 1] < self.close[mathml];
         (self.is_span_with_class(mathml, KATEX_MATHML_CLASS)
             && self.is_span_with_class(html_copy, KATEX_HTML_CLASS)
             && has_formula)
@@ -1018,6 +1021,27 @@ mod tests {
             constrain_formulas(&html),
             Ok(Some(format!("<span><span><code>{FALLBACK_PLACEHOLDER}</code></span></span>")))
         );
+    }
+
+    #[test]
+    fn mathml_branch_that_is_also_a_container_is_deduped() {
+        // 评审第三轮反例：MathML 分支起始标签同时带 `katex`，自己也是一个完整容器。
+        let shared = format!(
+            "<span class=\"katex-mathml katex\"><span class=\"katex-mathml\">{}</span><span class=\"katex-html\">INNER_HTML</span></span>",
+            formula("<mi>y</mi>")
+        );
+        let html = format!(
+            "<span class=\"katex\">{shared}<span class=\"katex-html\">OUTER_HTML</span></span>"
+        );
+        let rewritten = constrain_formulas(&html).unwrap().unwrap();
+        assert_eq!(rewritten, "<span><span><span><math><mi>y</mi></math></span></span></span>");
+    }
+
+    #[test]
+    fn empty_formula_does_not_shadow_a_later_one_in_the_branch() {
+        let html = katex(&format!("<math></math>{}", formula("<mi>y</mi>")), "HTML_COPY");
+        let rewritten = constrain_formulas(&html).unwrap().unwrap();
+        assert_eq!(rewritten, "<span><span><math></math><math><mi>y</mi></math></span></span>");
     }
 
     #[test]

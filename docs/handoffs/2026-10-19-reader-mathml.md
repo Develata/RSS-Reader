@@ -61,10 +61,12 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
 - 编辑规划是对标签表的单遍遍历（`plan_edits`）：产出覆盖子树的编辑后立即跳过该子树，其余编辑只覆盖
   单个起始标签，所以编辑按构造有序、互不重叠，不排序、不做区间比较。最外层 `<math>` 是原子单位，判定预算后
   整个跳过，内部（含集成点里的嵌套公式与 KaTeX 结构）不再改写——保留的公式原样输出，不去重也不丢内容。
-- KaTeX 去重：`span.katex` 恰好两个元素子节点（`katex-mathml` 在前且其中第一个 `<math>` 有元素子节点，
-  `katex-html` 在后），其间只有空白时，去掉两个起始标签上的识别 class，继续遍历 MathML 分支（其中公式照常过
-  预算），走到 HTML 副本时整段删除；嵌在 MathML 分支里的容器同样处理（HTML 副本下标入栈，后进先出）。
-  “分支内第一个公式”用预计算的下一个 `<math>` 位置数组 O(1) 查询。其它形状原样保留。
+- KaTeX 去重：`span.katex` 恰好两个元素子节点（`katex-mathml` 在前且其中至少有一个仍有元素子节点的
+  `<math>`，`katex-html` 在后），其间只有空白时，去掉两个起始标签上的识别 class，继续逐个标签遍历 MathML
+  分支（其中公式照常过预算；分支起始标签自身也参与容器识别），走到 HTML 副本时整段删除；嵌在 MathML 分支里的
+  容器同样处理（HTML 副本下标入栈，后进先出）。“分支内有非空公式”用预计算的下一个非空 `<math>` 位置数组
+  O(1) 查询。其它形状原样保留。**已接受的例外**：保留下来的公式是原子单位，嵌在其集成点（如 `mtext`）里的
+  KaTeX 结构不改写，可能仍显示两份，但不丢内容。
 
 ### 样式
 
@@ -74,14 +76,14 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
 
 ### 自动化验证
 
-本机内存紧张（可用提交约 3 GB），全部以 `-j 1` 执行。以下为第三轮修复后的最终结果（前两轮的同组命令也全部通过）。
+本机内存紧张（可用提交约 3 GB），全部以 `-j 1` 执行。以下为第四轮修复后的最终结果（前几轮的同组命令也全部通过）；在 `.claude/worktrees/reader-mathml` 中执行，`CARGO_TARGET_DIR` 指向主仓库 `target/`。
 
 - `cargo fmt --all --check`：通过
 - `cargo clippy --workspace --all-targets --locked -j 1 -- -D warnings`：通过
-- `cargo test --workspace --locked -j 1`：通过，43 个测试套件合计 403 passed / 0 failed / 4 ignored（第三轮修复后）
+- `cargo test --workspace --locked -j 1`：通过，43 个测试套件合计 408 passed / 0 failed / 4 ignored（含分支上 `5070d71` 带入的测试，见风险一节）
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked -j 1`：通过
 - `bash scripts/run_wasm_contract_harness.sh wasm_reader_html_contract_harness`（headless Chrome，
-  wasm-bindgen-test-runner 0.2.126，真实 chromedriver）：通过，5 passed；含超预算降级路径（`<code>` 在 HTML
+  wasm-bindgen-test-runner 0.2.126，真实 chromedriver）：通过，6 passed；含嵌套 KaTeX 组合与超预算降级路径（`<code>` 在 HTML
   命名空间、文本保持字面值、首次解析后的序列化与消毒输出逐字相同）
 - 变异检查（首轮）：临时停用 `reader.css` 的 `math` 规则后，`long_formulas_do_not_widen_a_narrow_reader` 失败
   （390px 容器被撑到 1693px），恢复后通过
@@ -106,6 +108,12 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
   空白判断识别 `&nbsp;`；顺带接受 `linethickness` 的 `thin`/`medium`/`thick`。评审的两个组合反例与嵌套链
   反例均已加入回归。
 
+- Codex 第三轮评审 `bf90393..56ed155`：**approve-with-fixes，无 blocker**。证明编辑严格递增、互不重叠，`plan_edits`
+  为 O(B + T)、与嵌套深度无关；round-2 的 1、2、4 RESOLVED，3 PARTIALLY（公式内部的原子例外）。发现：
+  `index = mathml + 1` 跳过了兼任 KaTeX 容器的 MathML 分支节点 → 改为标记下一个标签去 class、该节点照常参与识别；
+  空公式遮挡同分支后面的有效公式 → 预计算“下一个非空 `<math>`”；文档“不再重复显示”过度概括 → 限定范围并写明
+  原子例外；压力测试未断言副本文本消失、浏览器未覆盖新组合 → 补断言与浏览器用例。
+
 ### 手工验收
 
 - 真实问题订阅源：未执行（等待 Develata 提供订阅源）
@@ -113,8 +121,8 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
 
 ## 结果
 
-- 自动化验证通过；第三轮修复待 Codex 复核；阈值待用真实订阅源校准。
-- 用户影响：带 MathML 的正文重新打开即显示公式；KaTeX 公式不再重复显示。
+- 自动化验证通过；Codex 第三轮 approve-with-fixes，其发现已在第四轮修复；阈值待用真实订阅源校准。
+- 用户影响：带 MathML 的正文重新打开即显示公式；位于公式之外、符合 KaTeX 双份结构的公式只显示 MathML 那份。
 
 ## 风险与后续事项
 
@@ -124,6 +132,9 @@ feed 正文里的 MathML 公式在阅读页被整段删除。原因是 ammonia �
 - WebKit 主干的 MathML UA 样式仍是 `display: block`，溢出与 `semantics` 表现未在 WebKit 上验证。
 - `overflow-y: hidden` 对特别高的公式是否会裁切，只在 Chromium 上目测了上标。
 - `mathvariant` 只有 `normal` 在 MathML Core 里有跨端保证。
+
+- 分支卫生：`feat/reader-mathml` 上 `56ed155` 之后有两个与本工作无关的提交 `5070d71`、`7665f5c`（fetch 空闲超时，
+  另一会话在共享检出中误提交到此分支；同内容已在 `feat/rssr-web-server-api` 上）。合并前需由 Develata 决定移出。
 
 ## 给下一位 Agent 的备注
 
