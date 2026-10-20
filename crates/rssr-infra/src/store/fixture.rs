@@ -158,6 +158,12 @@ fn parse<T: serde::de::DeserializeOwned>(part: &str, raw: &str) -> StoreResult<T
 }
 
 /// Writes `seed` into a new library in `data_dir`, which must not hold one yet.
+///
+/// The log is checkpointed into the main file and truncated before this returns, so a process
+/// that exits right after leaves a complete main file: the store's workers close their
+/// connections (running SQLite's close-time checkpoint) on threads nothing waits for, and a
+/// process exiting meanwhile can leave the main file mid-checkpoint, which the next open's
+/// identity probe refuses as corrupt (seen in 1 of 60 runs; filed as its own task).
 pub async fn write_library(data_dir: &Path, seed: &BrowserStateSeed) -> StoreResult<()> {
     let target = data_dir.join(super::local::LIBRARY_FILE);
     if target.exists() {
@@ -165,7 +171,17 @@ pub async fn write_library(data_dir: &Path, seed: &BrowserStateSeed) -> StoreRes
     }
     let opened = open_library_in(data_dir, StoreOptions::default()).await?;
     let seed = seed.clone();
-    opened.store.write(move |tx| insert(tx, &seed)).await
+    opened.store.write(move |tx| insert(tx, &seed)).await?;
+    drop(opened);
+    let conn = rusqlite::Connection::open(&target)?;
+    conn.busy_timeout(std::time::Duration::from_secs(10))?;
+    let busy: i64 = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| row.get(0))?;
+    if busy != 0 {
+        return Err(StoreError::Domain(rssr_domain::DomainError::Persistence(
+            "夹具资料库的日志未能写回主文件".to_owned(),
+        )));
+    }
+    Ok(())
 }
 
 fn insert(tx: &rusqlite::Transaction<'_>, seed: &BrowserStateSeed) -> StoreResult<()> {
