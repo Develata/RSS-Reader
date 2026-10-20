@@ -10,7 +10,6 @@ entries_headers="rssr-web-entries.headers"
 login_headers="rssr-web-login.headers"
 login_foreign_headers="rssr-web-login-foreign.headers"
 login_post_headers="rssr-web-login-post.headers"
-probe_headers="rssr-web-session-probe.headers"
 feeds_headers="rssr-web-feeds.headers"
 settings_headers="rssr-web-settings.headers"
 api_session_headers="rssr-web-api-session.headers"
@@ -78,12 +77,10 @@ grep -Eq "location: /feeds|Location: /feeds" "$log_dir/$login_post_headers"
 session_cookie="$(awk -F '\t' '$6 == "rssr_web_session" { sub(/\r$/, "", $7); print $7 }' "$log_dir/$cookie_jar")"
 [[ -n "$session_cookie" ]]
 
-curl -sS -b "$cookie_jar" -D "$probe_headers" -o /dev/null "${origin}/session-probe"
 curl -sS -b "$cookie_jar" -D "$feeds_headers" -o /dev/null "${origin}/feeds"
 curl -sS -b "$cookie_jar" -D "$settings_headers" -o /dev/null "${origin}/settings"
 curl -sS -b "$cookie_jar" -D "$api_session_headers" -o "$api_session_body" "${origin}/api/v1/session"
 
-grep -Eq "^HTTP/.* 204" "$log_dir/$probe_headers"
 grep -Eq "^HTTP/.* 200" "$log_dir/$feeds_headers"
 grep -Eq "^HTTP/.* 200" "$log_dir/$settings_headers"
 grep -Eq "^HTTP/.* 200" "$log_dir/$api_session_headers"
@@ -93,8 +90,8 @@ grep -q '"csrf_token"' "$log_dir/$api_session_body"
 
 # Control for the replay below: the extracted session cookie works on its own.
 curl -sS -H "Cookie: rssr_web_session=${session_cookie}" -D "$replay_headers" -o /dev/null \
-  "${origin}/session-probe"
-grep -Eq "^HTTP/.* 204" "$log_dir/$replay_headers"
+  "${origin}/feeds"
+grep -Eq "^HTTP/.* 200" "$log_dir/$replay_headers"
 
 # Logging out: GET shows the confirmation page with the session's CSRF token, POST revokes.
 curl -sS -b "$cookie_jar" -D "$logout_page_headers" -o "$logout_page" "${origin}/logout"
@@ -102,7 +99,7 @@ grep -Eq "^HTTP/.* 200" "$log_dir/$logout_page_headers"
 csrf="$(sed -n 's/.*name="csrf" value="\([^"]*\)".*/\1/p' "$log_dir/$logout_page")"
 [[ -n "$csrf" ]]
 
-# The jar keeps what the login set; the logout response must clear both cookies.
+# The jar keeps what the login set; the logout response must clear the session cookie.
 curl -sS \
   -b "$cookie_jar" \
   -D "$logout_headers" \
@@ -114,11 +111,10 @@ curl -sS \
 grep -Eq "^HTTP/.* 30[237]" "$log_dir/$logout_headers"
 grep -Eq "location: /login|Location: /login" "$log_dir/$logout_headers"
 grep -Eiq "^set-cookie: rssr_web_session=deleted;.*Max-Age=0" "$log_dir/$logout_headers"
-grep -Eiq "^set-cookie: rssr_web_gate=deleted;.*Max-Age=0" "$log_dir/$logout_headers"
 
 # The server revoked the session: replaying the old cookie is refused.
 curl -sS -H "Cookie: rssr_web_session=${session_cookie}" -D "$revoked_headers" -o /dev/null \
-  "${origin}/session-probe"
+  "${origin}/feeds"
 grep -Eq "^HTTP/.* 30[237]" "$log_dir/$revoked_headers"
 grep -Eq "(location|Location): /login\?error=session_expired" "$log_dir/$revoked_headers"
 
@@ -143,5 +139,5 @@ grep -Eq "^HTTP/.* 30[237]" "$log_dir/$relogin_headers"
 new_session_cookie="$(awk -F '\t' '$6 == "rssr_web_session" { sub(/\r$/, "", $7); print $7 }' "$log_dir/$relogin_jar")"
 [[ -n "$new_session_cookie" && "$new_session_cookie" != "$session_cookie" ]]
 curl -sS -H "Cookie: rssr_web_session=${new_session_cookie}" -D "$relogin_probe_headers" \
-  -o /dev/null "${origin}/session-probe"
-grep -Eq "^HTTP/.* 204" "$log_dir/$relogin_probe_headers"
+  -o /dev/null "${origin}/feeds"
+grep -Eq "^HTTP/.* 200" "$log_dir/$relogin_probe_headers"

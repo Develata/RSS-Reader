@@ -1,4 +1,4 @@
-//! Cookie：会话、门禁标记与已知设备标记。会话本身在认证库里（[`super::store`]）。
+//! Cookie：会话与已知设备标记。会话本身在认证库里（[`super::store`]）。
 
 use axum::http::{HeaderMap, header};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -9,8 +9,6 @@ use sha2::Sha256;
 use super::store::ABSOLUTE;
 
 pub(crate) const SESSION_COOKIE: &str = "rssr_web_session";
-/// 非 `HttpOnly` 的标记：网页端据此判断有服务器门禁（C4 换成 `HttpBackend` 后删除）。
-pub(crate) const GATE_COOKIE: &str = "rssr_web_gate";
 /// 登录成功过的浏览器所持有的“已知设备”标记，只发给 `/login`。
 pub(crate) const DEVICE_COOKIE: &str = "rssr_web_device";
 /// 浏览器允许的 Cookie 最长寿命约为 400 天（RFC 6265bis §5.5）。
@@ -73,14 +71,6 @@ pub(crate) fn logout_cookie_header(secure: bool) -> String {
         "{SESSION_COOKIE}=deleted; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{}",
         secure_attribute(secure)
     )
-}
-
-pub(crate) fn gate_cookie_header(secure: bool) -> String {
-    format!("{GATE_COOKIE}=1; Path=/; SameSite=Lax; Max-Age={ABSOLUTE}{}", secure_attribute(secure))
-}
-
-pub(crate) fn logout_gate_cookie_header(secure: bool) -> String {
-    format!("{GATE_COOKIE}=deleted; Path=/; SameSite=Lax; Max-Age=0{}", secure_attribute(secure))
 }
 
 pub(crate) fn extract_cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {

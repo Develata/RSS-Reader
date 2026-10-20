@@ -43,11 +43,7 @@ impl RefreshFlight {
             receiver
                 .wait_for(Option::is_some)
                 .await
-                .map_err(|_| BackendError {
-                    code: ErrorCode::Unavailable,
-                    message: "刷新任务已中断，请重试".to_string(),
-                    request_id: None,
-                })?
+                .map_err(|_| BackendError::new(ErrorCode::Unavailable, "刷新任务已中断，请重试"))?
                 .as_ref()
                 .expect("wait_for requires a completed result")
                 .clone()

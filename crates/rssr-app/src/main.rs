@@ -14,7 +14,6 @@ mod router;
 mod status;
 mod theme;
 mod ui;
-mod web_auth;
 
 #[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::EnvFilter;

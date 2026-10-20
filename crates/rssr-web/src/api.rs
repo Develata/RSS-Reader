@@ -209,7 +209,10 @@ pub(crate) fn failure(error: BackendError, id: Option<&RequestId>) -> Response {
     let request_id = id.map_or("-", |id| &id.0);
     let code = error.code.as_str();
     match error.code {
-        ErrorCode::Storage | ErrorCode::Internal | ErrorCode::Unavailable => {
+        ErrorCode::Storage
+        | ErrorCode::Internal
+        | ErrorCode::Unavailable
+        | ErrorCode::OutcomeUnknown => {
             warn!(request_id, code, "请求失败");
         }
         _ => info!(request_id, code, "请求被拒绝"),
@@ -506,10 +509,12 @@ async fn set_entry_starred(ctx: Ctx, path: PathParam, request: Request) -> Answe
         .await)
 }
 
-/// The reader's image localization, given up after the state's limit (`unavailable`). Giving up
-/// cancels the downloads, but the body is written once at the end, compare-and-set: when the
-/// limit falls on that write, it may still commit. The body is then either the original or the
-/// localized one, never a mixture, and the answer says the outcome is unknown (review C3-R1 F06).
+/// The reader's image localization, given up after the state's limit. Giving up cancels the
+/// downloads, but the body is written once at the end, compare-and-set: when the limit falls on
+/// that write, it may still commit. The body is then either the original or the localized one,
+/// never a mixture, and the answer is `outcome_unknown` (review C3-R1 F06; C4 design review
+/// C4D-R1 B1: a client must tell it from a refusal before anything ran, which stays
+/// `unavailable`).
 async fn localize_entry_assets(ctx: Ctx, path: PathParam, request: Request) -> Answer {
     let entry_id = ctx.path_id(path)?;
     let slots = ctx.admit()?;
@@ -521,7 +526,7 @@ async fn localize_entry_assets(ctx: Ctx, path: PathParam, request: Request) -> A
                 .await
                 .unwrap_or_else(|_| {
                     let message = "图片本地化超过时限，结果未知：请重新打开文章";
-                    Err(BackendError::new(ErrorCode::Unavailable, message))
+                    Err(BackendError::new(ErrorCode::OutcomeUnknown, message))
                 })
         })
         .await)

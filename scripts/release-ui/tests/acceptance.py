@@ -372,7 +372,7 @@ class Acceptance(unittest.TestCase):
         self.run_cli("--full", "--no-serve", "--release")
         trace = (self.root / "trace.txt").read_text(encoding="utf-8")
         names = [line.split("\t")[0] for line in trace.splitlines()]
-        self.assertEqual(names, ["wasm-check", "app-tests", "host-contracts", "web-tests", "browser-contracts", "web-bundle", "cargo-run", "web-auth", "reader-theme-matrix", "small-viewport", "proxy-feed", "browser-feed"])
+        self.assertEqual(names, ["wasm-check", "app-tests", "host-contracts", "web-tests", "browser-contracts", "web-bundle", "cargo-run", "web-auth", "reader-theme-matrix", "small-viewport", "browser-feed"])
         self.assertEqual(names.count("web-bundle"), 1)
         self.assertIn("中文 space", trace)
         self.assertIn("结果 logs", trace)
@@ -385,7 +385,7 @@ class Acceptance(unittest.TestCase):
             self.assertIn("fixture stderr:", output)
 
     def test_every_stage_failure_is_terminal_and_keeps_exit(self):
-        stages = ["wasm-check", "app-tests", "host-contracts", "web-tests", "browser-contracts", "web-bundle", "web-auth", "reader-theme-matrix", "small-viewport", "proxy-feed", "browser-feed"]
+        stages = ["wasm-check", "app-tests", "host-contracts", "web-tests", "browser-contracts", "web-bundle", "web-auth", "reader-theme-matrix", "small-viewport", "browser-feed"]
         for stage in stages:
             with self.subTest(stage=stage):
                 self.env["FAIL_STAGE"] = stage
@@ -413,18 +413,9 @@ class Acceptance(unittest.TestCase):
         self.assertEqual(self.stage("wasm-check")["status"], "skipped")
         self.assertNotIn("web-bundle", (self.root / "trace.txt").read_text(encoding="utf-8"))
 
-    def test_local_fixture_selection_does_not_pass_external_probe(self):
-        self.run_cli("--skip-external-feed", code=1)
-        self.env["FAIL_STAGE"] = "proxy-feed"
-        self.run_cli("--full", "--no-serve", "--skip-external-feed")
-        self.assertEqual(self.stage("proxy-feed")["status"], "skipped")
-        self.assertIsNone(self.stage("proxy-feed")["exit_code"])
-        self.assertEqual(self.stage("fixed-browser-feed")["status"], "passed")
-        self.assertEqual(self.report()["outcome"], "completed-with-skips")
-        self.assertIn("partial (external feed skipped)", (self.log / "summary.md").read_text(encoding="utf-8"))
-        self.assertNotIn("proxy-feed\t", (self.root / "trace.txt").read_text(encoding="utf-8"))
+    def test_fixed_browser_feed_failure_fails_the_run(self):
         self.env["FAIL_STAGE"] = "browser-feed"
-        self.run_cli("--full", "--no-serve", "--skip-external-feed", code=23)
+        self.run_cli("--full", "--no-serve", code=23)
         self.assertEqual(self.stage("fixed-browser-feed")["status"], "failed")
         self.assertEqual(self.report()["outcome"], "failed")
 
@@ -571,18 +562,18 @@ class Acceptance(unittest.TestCase):
         requests = self.auth_requests()
         self.assertEqual([(r["method"], r["path"]) for r in requests], [
             ("GET", "/healthz"), ("GET", "/login"), ("GET", "/entries"),
-            ("POST", "/login"), ("POST", "/login"), ("GET", "/session-probe"), ("GET", "/feeds"),
-            ("GET", "/settings"), ("GET", "/api/v1/session"), ("GET", "/session-probe"),
-            ("GET", "/logout"), ("POST", "/logout"), ("GET", "/session-probe"),
-            ("GET", "/api/v1/session"), ("POST", "/login"), ("GET", "/session-probe")])
+            ("POST", "/login"), ("POST", "/login"), ("GET", "/feeds"),
+            ("GET", "/settings"), ("GET", "/api/v1/session"), ("GET", "/feeds"),
+            ("GET", "/logout"), ("POST", "/logout"), ("GET", "/feeds"),
+            ("GET", "/api/v1/session"), ("POST", "/login"), ("GET", "/feeds")])
         self.assertEqual(requests[3]["origin"], "http://127.0.0.1:1")
         self.assertEqual(requests[4]["origin"], f"http://127.0.0.1:{port}")
         self.assertEqual(requests[4]["form"]["next"], ["/feeds"])
-        self.assertEqual(requests[9]["cookie"], "rssr_web_session=fixture-token-1")
-        self.assertEqual(requests[11]["form"], {"csrf": ["fixture-csrf-1"]})
-        self.assertEqual(requests[12]["cookie"], "rssr_web_session=fixture-token-1")
-        self.assertEqual(requests[13]["cookie"], "")
-        self.assertEqual(requests[15]["cookie"], "rssr_web_session=fixture-token-2")
+        self.assertEqual(requests[8]["cookie"], "rssr_web_session=fixture-token-1")
+        self.assertEqual(requests[10]["form"], {"csrf": ["fixture-csrf-1"]})
+        self.assertEqual(requests[11]["cookie"], "rssr_web_session=fixture-token-1")
+        self.assertEqual(requests[12]["cookie"], "")
+        self.assertEqual(requests[14]["cookie"], "rssr_web_session=fixture-token-2")
         self.assertEqual(self.report()["schema_version"], 1)
         self.no_auth_tree(port)
         self.assertIn("auth fixture listening", (self.log / "rssr-web.log").read_text())
@@ -605,11 +596,11 @@ class Acceptance(unittest.TestCase):
             self.env["BASH_ENV"] = startup.as_posix()
         self.run_cli("--web-auth-only", "--web-port", str(port))
         calls = trace.read_text(encoding="utf-8").splitlines()
-        # Readiness and all 15 requests must honor the selected caller curl.
-        self.assertGreaterEqual(len(calls), 16)
-        self.assertEqual(sum('"-D"' in line for line in calls), 15)
+        # Readiness and all 14 requests must honor the selected caller curl.
+        self.assertGreaterEqual(len(calls), 15)
+        self.assertEqual(sum('"-D"' in line for line in calls), 14)
         self.assertIn("rssr_web_session", (self.log / "rssr-web.cookies").read_text())
-        for name in ["login", "entries", "login-foreign", "login-post", "session-probe", "feeds",
+        for name in ["login", "entries", "login-foreign", "login-post", "feeds",
                      "settings", "api-session", "session-replay", "logout-page", "logout", "revoked",
                      "api-unauthenticated", "relogin", "relogin-probe"]:
             self.assertTrue((self.log / f"rssr-web-{name}.headers").is_file())

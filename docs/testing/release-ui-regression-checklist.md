@@ -39,8 +39,6 @@ bash scripts/run_chrome_mcp_target.sh --restart
 build-once、summary 和退出码由 Rust 持有。执行 `--plan` 可只查看 JSON 计划。
 Windows 仍依赖 Git Bash 和既有阶段工具，不代表所有 smoke 已原生移植。
 行为基线、直接调用方式、信号边界与实测限制见 [release UI runner](release-ui-runner.md)。
-受外部 RSS 网络限制时可显式加 `--skip-external-feed`（需 full 或 fixed-smokes）；
-这只完成本地 fixture 部分验收，报告中的外部检查仍为 skipped，不能据此认定整套发布检查通过。
 
 ```bash
 bash scripts/run_release_ui_regression.sh --debug --port 8091
@@ -58,7 +56,7 @@ bash scripts/run_release_ui_regression.sh --no-serve
 bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
 ```
 
-如果要一次性把 browser / wasm contract harness 和 4 条固定 smoke 也串进来：
+如果要一次性把 browser / wasm contract harness 和 3 条固定 smoke 也串进来：
 
 ```bash
 bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web --with-browser-contracts --with-fixed-smokes
@@ -93,7 +91,6 @@ Reader 主题矩阵和部署壳浏览器 smoke 共用 `scripts/browser/capture_s
 
 - `bash scripts/run_static_web_reader_theme_matrix.sh --skip-build`
 - `bash scripts/run_static_web_small_viewport_smoke.sh --skip-build`
-- `bash scripts/run_rssr_web_proxy_feed_smoke.sh --skip-build`
 - `bash scripts/run_rssr_web_browser_feed_smoke.sh --skip-build`
 
 如果这组自动化没过，不进入后续手工回归。
@@ -156,12 +153,6 @@ bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
 - 确认退出后重放旧会话 cookie 被拒绝（服务器已吊销会话）
 
 同源 fixture 的登录后添加与首刷已有自动化；真实远端代理 feed 和未覆盖的交互仍需补验。
-
-如果要先固定一条更窄的 deploy-shell 代理回归，优先用：
-
-```bash
-bash scripts/run_rssr_web_proxy_feed_smoke.sh
-```
 
 如果要快速起一个可登录的 `rssr-web` 浏览器回归环境，直接用：
 

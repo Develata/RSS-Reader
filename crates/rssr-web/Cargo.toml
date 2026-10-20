@@ -15,7 +15,6 @@ base64.workspace = true
 clap.workspace = true
 hmac.workspace = true
 rand_core.workspace = true
-reqwest.workspace = true
 rssr-api = { path = "../rssr-api" }
 rssr-application = { path = "../rssr-application" }
 rssr-domain = { path = "../rssr-domain" }
@@ -34,6 +33,10 @@ url.workspace = true
 urlencoding.workspace = true
 
 [dev-dependencies]
+# HTTP requests in the server's tests (the server itself fetches through rssr-infra).
+reqwest.workspace = true
+# The Web page's `HttpBackend`, run natively against the real router (phase C, C4a).
+rssr-infra = { path = "../rssr-infra", features = ["http-backend"] }
 # Paused time for the background jobs' tests (retention, poll waits).
 tokio = { workspace = true, features = ["test-util"] }
 

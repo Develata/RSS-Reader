@@ -15,7 +15,7 @@ use {
     rssr_application::SystemClock,
 };
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "browser-store"))]
 use {
     crate::application_adapters::browser::{
         adapters::{
@@ -94,7 +94,7 @@ fn compose_library_with_sources(
     LibraryComposition { use_cases, entries }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "browser-store"))]
 pub fn compose_browser_use_cases(
     state: BrowserStore,
     client: reqwest::Client,

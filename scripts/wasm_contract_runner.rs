@@ -101,11 +101,15 @@ fn cargo_command(harnesses: &[OsString], runner: &[OsString]) -> io::Result<Comm
         .collect::<io::Result<Vec<_>>>()?;
     let configuration = format!("target.wasm32-unknown-unknown.runner = [{}]", runner.join(", "));
     let mut command = Command::new("cargo");
+    // The harnesses test the library kept in the browser, which only `browser-store` builds
+    // (phase C, C4a); Cargo refuses the harnesses without it.
     command.args([
         "test",
         "--locked",
         "-p",
         "rssr-infra",
+        "--features",
+        "browser-store",
         "--target",
         "wasm32-unknown-unknown",
         "--config",
@@ -357,12 +361,14 @@ mod tests {
         let command = cargo_command(&["first".into(), "second".into()], &runner).unwrap();
         let arguments: Vec<_> = command.get_args().collect();
         assert_eq!(
-            &arguments[..7],
+            &arguments[..9],
             [
                 "test",
                 "--locked",
                 "-p",
                 "rssr-infra",
+                "--features",
+                "browser-store",
                 "--target",
                 "wasm32-unknown-unknown",
                 "--config"
@@ -370,10 +376,10 @@ mod tests {
             .map(OsStr::new)
         );
         assert_eq!(
-            arguments[7],
+            arguments[9],
             "target.wasm32-unknown-unknown.runner = [\"/中文 空格/\\\"runner\", \"--artifact\"]"
         );
-        assert_eq!(&arguments[8..], ["--test", "first", "--test", "second"].map(OsStr::new));
+        assert_eq!(&arguments[10..], ["--test", "first", "--test", "second"].map(OsStr::new));
         for invalid in [
             vec![],
             vec!["--artifact".into(), "".into()],

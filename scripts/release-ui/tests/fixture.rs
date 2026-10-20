@@ -93,7 +93,6 @@ fn main() {
             "run_rssr_web_auth_smoke.sh" | "run_rssr_web_auth_assertions.sh" => "web-auth",
             "run_static_web_reader_theme_matrix.sh" => "reader-theme-matrix",
             "run_static_web_small_viewport_smoke.sh" => "small-viewport",
-            "run_rssr_web_proxy_feed_smoke.sh" => "proxy-feed",
             "run_rssr_web_browser_feed_smoke.sh" => "browser-feed",
             "run_web_spa_regression_server.sh" => "spa",
             _ => panic!("unexpected arguments: {args:?}"),

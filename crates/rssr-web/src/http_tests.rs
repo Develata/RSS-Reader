@@ -150,7 +150,7 @@ async fn writes_need_exactly_a_trusted_origin() {
         assert!(session.contains(attribute), "{session}");
     }
     assert!(!session.contains("Secure"), "plain http on loopback: {session}");
-    assert!(set_cookie(&response, "rssr_web_gate").unwrap().contains("Max-Age=15552000"));
+    assert!(set_cookie(&response, "rssr_web_gate").is_none(), "no page-readable gate cookie (C4)");
 
     let localhost = format!("http://localhost:{port}");
     let response = server.login_from(Some(&localhost), "secret123").await;
@@ -270,9 +270,7 @@ async fn logout_confirms_then_revokes_the_session() {
 
     let response = logout(&server.base, &[("csrf", &csrf)]).await.unwrap();
     assert_eq!((response.status(), location(&response)), (StatusCode::SEE_OTHER, "/login"));
-    for name in ["rssr_web_session", "rssr_web_gate"] {
-        assert!(set_cookie(&response, name).unwrap().contains("Max-Age=0"), "{name}");
-    }
+    assert!(set_cookie(&response, "rssr_web_session").unwrap().contains("Max-Age=0"));
     let replayed = server.get("/api/v1/session", Some(&session)).await;
     assert_eq!(replayed.status(), StatusCode::UNAUTHORIZED);
     let replayed = server.get("/entries", Some(&session)).await;
@@ -343,9 +341,42 @@ async fn a_public_origin_is_the_only_trusted_one() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
     let response = server.login_from(Some("https://reader.example"), "secret123").await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    for name in ["rssr_web_session", "rssr_web_gate", "rssr_web_device"] {
+    for name in ["rssr_web_session", "rssr_web_device"] {
         assert!(set_cookie(&response, name).unwrap().contains("; Secure"), "{name}");
     }
+}
+
+/// The server no longer fetches feeds for the page (C4): `/feed-proxy` is an unknown path. After
+/// login it is a 404 (with the app's shell, as any unknown path) and nothing is requested upstream;
+/// without a session it redirects to the login page like any page. `/session-probe` is gone the
+/// same way.
+#[tokio::test]
+async fn the_feed_proxy_and_the_session_probe_are_gone() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let server = Server::start(None).await;
+    let upstream = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_address = upstream.local_addr().unwrap();
+    let connections = Arc::new(AtomicUsize::new(0));
+    {
+        let connections = Arc::clone(&connections);
+        tokio::spawn(async move {
+            while upstream.accept().await.is_ok() {
+                connections.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+    }
+    let path = format!("/feed-proxy?url=http://{upstream_address}/feed.xml");
+
+    let anonymous = server.get(&path, None).await;
+    assert_eq!(anonymous.status(), StatusCode::SEE_OTHER);
+    assert!(location(&anonymous).starts_with("/login"), "{}", location(&anonymous));
+
+    let session = server.session().await;
+    assert_eq!(server.get(&path, Some(&session)).await.status(), StatusCode::NOT_FOUND);
+    assert_eq!(server.get("/session-probe", Some(&session)).await.status(), StatusCode::NOT_FOUND);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(connections.load(Ordering::SeqCst), 0, "nothing requested upstream");
 }
 
 /// Session checks are bounded: with every slot taken, requests that carry a session cookie are

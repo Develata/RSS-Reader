@@ -32,6 +32,11 @@ pub enum ErrorCode {
     /// A job's status is gone: it finished long ago, results were evicted, or the server
     /// restarted. Read the affected state again.
     StatusUnavailable,
+    /// A write may or may not have taken effect: the client sent it and got no complete answer,
+    /// or the server could not confirm it (an image localization cut off by its time limit while
+    /// it wrote). Read the affected state again; never send the write again on its own (phase C,
+    /// "结果未知").
+    OutcomeUnknown,
 }
 
 impl ErrorCode {
@@ -51,6 +56,7 @@ impl ErrorCode {
             Self::BuildMismatch => "build_mismatch",
             Self::TooLarge => "too_large",
             Self::StatusUnavailable => "status_unavailable",
+            Self::OutcomeUnknown => "outcome_unknown",
         }
     }
 
@@ -67,6 +73,7 @@ impl ErrorCode {
             Self::Storage | Self::Internal => 500,
             Self::Network => 502,
             Self::Unavailable => 503,
+            Self::OutcomeUnknown => 504,
         }
     }
 }
@@ -86,7 +93,8 @@ impl From<ErrorKind> for ErrorCode {
 }
 
 /// A failed operation as the user interface sees it. Its `Display` is the message. On the wire:
-/// `{ "code": "...", "message": "...", "request_id": null | "..." }`.
+/// `{ "code": "...", "message": "...", "request_id": null | "..." }`, plus `"reason": "..."` when
+/// there is one.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BackendError {
     pub code: ErrorCode,
@@ -94,6 +102,11 @@ pub struct BackendError {
     pub message: String,
     /// Matches the server's log entry; `None` for an in-process backend.
     pub request_id: Option<String>,
+    /// Why the outcome is unknown, when that matters to the user interface: only on
+    /// [`ErrorCode::OutcomeUnknown`], and only [`ErrorCode::Unauthenticated`] so far (the session
+    /// ended after the server accepted a job, so the page must also sign in again).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<ErrorCode>,
 }
 
 impl fmt::Display for BackendError {
@@ -107,7 +120,13 @@ impl std::error::Error for BackendError {}
 impl BackendError {
     /// An error of the protocol itself (not of a use case), for the user.
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
-        Self { code, message: message.into(), request_id: None }
+        Self { code, message: message.into(), request_id: None, reason: None }
+    }
+
+    /// The same error, with the reason its outcome is unknown.
+    pub fn with_reason(mut self, reason: ErrorCode) -> Self {
+        self.reason = Some(reason);
+        self
     }
 
     /// The same error, matched to the server's log entry `request_id`.
@@ -122,7 +141,7 @@ impl BackendError {
 impl From<anyhow::Error> for BackendError {
     fn from(error: anyhow::Error) -> Self {
         let public = classify(&error);
-        Self { code: public.kind.into(), message: public.message, request_id: None }
+        Self { code: public.kind.into(), message: public.message, request_id: None, reason: None }
     }
 }
 
@@ -149,11 +168,7 @@ mod tests {
 
     #[test]
     fn the_wire_form_is_code_message_and_request_id() {
-        let error = BackendError {
-            code: ErrorCode::Conflict,
-            message: "配置已被修改".into(),
-            request_id: None,
-        };
+        let error = BackendError::new(ErrorCode::Conflict, "配置已被修改");
         let encoded = serde_json::to_value(&error).unwrap();
         assert_eq!(
             encoded,
@@ -174,6 +189,7 @@ mod tests {
             ErrorCode::BuildMismatch,
             ErrorCode::TooLarge,
             ErrorCode::StatusUnavailable,
+            ErrorCode::OutcomeUnknown,
         ] {
             assert_eq!(serde_json::to_value(code).unwrap(), json!(code.as_str()));
             assert!((400..600).contains(&code.http_status()), "{code:?}");
@@ -182,5 +198,12 @@ mod tests {
             BackendError::new(ErrorCode::BuildMismatch, "请重新加载页面").with_request_id("r9");
         assert_eq!(error.request_id.as_deref(), Some("r9"));
         assert_eq!(error.code.http_status(), 409);
+
+        // A reason appears only when there is one, and reads back.
+        let error = BackendError::new(ErrorCode::OutcomeUnknown, "结果未知")
+            .with_reason(ErrorCode::Unauthenticated);
+        let encoded = serde_json::to_value(&error).unwrap();
+        assert_eq!(encoded["reason"], "unauthenticated");
+        assert_eq!(serde_json::from_value::<BackendError>(encoded).unwrap(), error);
     }
 }

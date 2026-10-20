@@ -20,7 +20,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
     routing::{any, get},
 };
-use rssr_api::{BackendError, ErrorCode};
+use rssr_api::{BackendError, ErrorCode, protocol};
 use serde::Deserialize;
 use subtle::ConstantTimeEq;
 use time::OffsetDateTime;
@@ -473,17 +473,13 @@ pub(crate) async fn handle_logout(
     logged_out_response(state.secure())
 }
 
-pub(crate) async fn session_probe() -> impl IntoResponse {
-    StatusCode::NO_CONTENT
-}
-
 /// 本会话的 CSRF 令牌，由 [`require_api_session`] 放进请求扩展。
 #[derive(Clone)]
 struct SessionCsrf(String);
 
 /// `GET /api/v1/session`：页面由此取得本会话的 CSRF 令牌。不缓存，不带任何跨源头。
 async fn api_session(Extension(SessionCsrf(csrf)): Extension<SessionCsrf>) -> Response {
-    no_store(Json(serde_json::json!({ "csrf_token": csrf })).into_response())
+    no_store(Json(protocol::Session { csrf_token: csrf }).into_response())
 }
 
 async fn api_not_found(request: Request) -> Response {

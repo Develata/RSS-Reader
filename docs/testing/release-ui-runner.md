@@ -28,6 +28,10 @@ LAPTOP-H6JEOCF0 / Git Bash 检查；下表来自源码，不冒充整套实测�
 failed/interrupted，后续未运行阶段为 blocked，显式未选择的阶段为 skipped；
 不把进程退出 0 或 SPA 启动写作人工验收通过。
 
+v0.2 C4a 起 `rssr-web` 不再提供 `/feed-proxy`：`proxy-feed` 阶段、`--skip-external-feed`
+选项以及随之而来的 `partial` 分组状态和 `completed-with-skips` 总体状态已移除；固定 smoke
+为 reader 五主题、小视口、browser feed 三项。上表与下面带日期的证据章节是当时的记录，不随之改写。
+
 ## 实现选择
 
 独立 `scripts/release-ui/Cargo.toml` 不增加产品 workspace 成员，也不引入产品依赖。
@@ -48,9 +52,6 @@ OS 关闭最后一个句柄时也回收其后代。每个阶段有自己的 Job 
 # 原有接口继续使用；首次会构建独立 CLI，以后 Cargo 复用缓存。
 bash scripts/run_release_ui_regression.sh --release --full --no-serve
 bash scripts/run_release_ui_regression.sh --full --plan
-
-# 环境限制外部 RSS 时，只验既有本地 fixture；报告明确是部分验收。
-bash scripts/run_release_ui_regression.sh --release --full --skip-external-feed --no-serve
 
 # 独立构建与验证，不改变根 Cargo.lock 或产品 workspace。
 cargo build --manifest-path scripts/release-ui/Cargo.toml --locked --target-dir target/release-ui-runner
@@ -100,11 +101,6 @@ Git Bash，避免选中 system32 的 WSL 入口。已有 `RSSR_BASH` 不被 laun
 $env:RSSR_WASM_BINDGEN_TEST_RUNNER = Join-Path (Get-Location) 'target/release-ui-tools/wasm-bindgen-0.2.126/bin/wasm-bindgen-test-runner.exe'
 ```
 
-`--skip-external-feed` 只在 `--full` / `--with-fixed-smokes` 下有效，只排除既有外部
-proxy-feed smoke。原有本地同源 feed fixture 的添加、刷新、阅读流程仍会执行。
-这不覆盖外部代理可达性；代理安全逻辑仍由现有本地 HTTP fixture / SSRF 单元测试验证。
-默认 full 保持执行外部检查，外部失败仍终止后续阶段并返回真实非零码。
-
 `--repo-root` 默认是构建时工具源码所在仓库；复制二进制到别处时显式指定。
 `--log-dir` 的相对路径以仓库为基准，支持空格和中文。新增默认目录名为
 `target/release-ui-regression/<Unix毫秒>-<PID>`，避免秒级目录碰撞。
@@ -120,8 +116,6 @@ proxy-feed smoke。原有本地同源 feed fixture 的添加、刷新、阅读�
   只保存一个 Rust 阶段列表，分组状态从该列表计算。
 - `skipped` 只表示用户未选择；失败后后续阶段为 `blocked`；正常复用构建为 `reused`。
   `completed` 仅表示选中的命令执行完毕，不表示手工验收完成。
-- 显式 `--skip-external-feed` 将 proxy-feed 标成 `skipped`，固定组为
-  `partial (external feed skipped)`，总体为 `completed-with-skips`；其余阶段失败仍返回非零码。
 - SPA 经 HTTP 就绪探测后为 `serving`，始终需要人工检查；提前退出（包括退出 0）失败。
   端口占用在启动阶段前被拒绝，不关闭占用者。
 - 捕获的 Unix SIGINT/SIGTERM 分别计划返回 130/143；本机 Windows Ctrl+C/Ctrl+Break

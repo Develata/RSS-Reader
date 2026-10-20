@@ -2,7 +2,7 @@
 pub(crate) const ENABLED: bool = cfg!(all(target_arch = "wasm32", feature = "pages-demo"));
 pub(crate) const NOTICE: &str = "公开静态演示：首次使用载入合成样例，操作保存在当前浏览器。GitHub Pages 没有 feed 代理；受浏览器 CORS 限制，本演示已禁用添加订阅、手动/自动刷新和远端配置同步。阅读、搜索、收藏与主题设置可用。";
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "pages-demo"))]
 pub(crate) fn require_network() -> anyhow::Result<()> {
     if ENABLED {
         return Err(rssr_domain::DomainError::Network(

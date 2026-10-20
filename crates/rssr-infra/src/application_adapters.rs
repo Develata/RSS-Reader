@@ -1,4 +1,4 @@
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "browser-store"))]
 pub mod browser;
 #[cfg(not(target_arch = "wasm32"))]
 mod non_refresh;

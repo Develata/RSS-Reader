@@ -3,9 +3,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 
-use super::session::{
-    gate_cookie_header, logout_cookie_header, logout_gate_cookie_header, session_cookie_header,
-};
+use super::session::{logout_cookie_header, session_cookie_header};
 
 pub(super) fn login_redirect(next: &str, error: Option<&str>) -> Response {
     let encoded_next = urlencoding::encode(next);
@@ -28,15 +26,13 @@ pub(super) fn successful_login_response(
         response.headers_mut().append(header::SET_COOKIE, device_cookie);
     }
     append_cookie(&mut response, session_cookie_header(token, secure));
-    append_cookie(&mut response, gate_cookie_header(secure));
     response
 }
 
-/// 退出登录后回到登录页，清掉会话与门禁 cookie（已知设备标记保留）。
+/// 退出登录后回到登录页，清掉会话 cookie（已知设备标记保留）。
 pub(super) fn logged_out_response(secure: bool) -> Response {
     let mut response = Redirect::to("/login").into_response();
     append_cookie(&mut response, logout_cookie_header(secure));
-    append_cookie(&mut response, logout_gate_cookie_header(secure));
     response
 }
 

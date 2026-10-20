@@ -1,4 +1,11 @@
+// The build identifier the Web page sends with its writes (`build-support/build_id.rs`): the server
+// refuses writes from a page of another build (phase C, C4a).
+include!("../../build-support/build_id.rs");
+
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|arch| arch == "wasm32") {
+        emit_build_id();
+    }
     println!("cargo:rerun-if-env-changed=RELEASE_TAG");
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();

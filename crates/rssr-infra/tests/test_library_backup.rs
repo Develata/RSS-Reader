@@ -1,3 +1,4 @@
+#![cfg(not(target_arch = "wasm32"))]
 //! Backups of a library file (phase C5): whole transactions while another store writes, a target
 //! never replaced, one winner among backups of one target, only scratch-named entries of the
 //! target's scratch directory removed (including after a backup killed once it had published, and

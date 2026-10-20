@@ -3,9 +3,10 @@ mod api;
 mod api_tests;
 mod auth;
 #[cfg(test)]
+mod client_tests;
+#[cfg(test)]
 mod http_tests;
 mod jobs;
-mod proxy;
 
 use std::{
     io::{IsTerminal, Write},
@@ -37,9 +38,8 @@ use crate::{
     api::ApiState,
     auth::{
         AppState, AuthStore, generate_password_hash, load_config, make_library_private, open_store,
-        prepare_data_dir, session_probe, with_auth,
+        prepare_data_dir, with_auth,
     },
-    proxy::feed_proxy,
 };
 
 const FAVICON_ICO: &[u8] = include_bytes!("../../../icons/icon.ico");
@@ -49,7 +49,7 @@ const SHUTDOWN_GRACE: Duration = Duration::from_secs(4);
 const END_RUN_BUDGET: Duration = Duration::from_secs(3);
 const RUNTIME_SHUTDOWN: Duration = Duration::from_secs(1);
 
-/// RSS-Reader 的 Web 服务：登录保护、阅读器接口、静态包托管与 feed 代抓。
+/// RSS-Reader 的 Web 服务：登录保护、阅读器接口与静态包托管。
 #[derive(Parser)]
 struct Cli {
     /// 数据目录：资料库 library.sqlite3、出站策略 outbound.json 与认证库 auth.sqlite3 在这里。
@@ -219,7 +219,8 @@ async fn shutdown_signal() {
     }
 }
 
-/// 全部路由：应用页面、阅读器接口（[`api`]）、静态包与 `/feed-proxy` 要求登录（[`with_auth`]）。
+/// 全部路由：应用页面、阅读器接口（[`api`]）与静态包要求登录（[`with_auth`]）。服务器自己抓
+/// feed，不再为浏览器代抓：`/feed-proxy` 与其他未知路径一样，登录后得到 404（C4）。
 fn app(state: AppState, api: ApiState) -> Router {
     let static_dir = state.config.static_dir.clone();
     let protected = Router::new()
@@ -229,8 +230,6 @@ fn app(state: AppState, api: ApiState) -> Router {
         .route("/feeds", get(serve_app_shell))
         .route("/feeds/{feed_id}/entries", get(serve_app_shell))
         .route("/settings", get(serve_app_shell))
-        .route("/session-probe", get(session_probe))
-        .route("/feed-proxy", get(feed_proxy))
         .fallback_service(
             ServeDir::new(&static_dir)
                 .not_found_service(ServeFile::new(static_dir.join("index.html"))),

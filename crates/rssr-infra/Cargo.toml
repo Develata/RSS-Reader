@@ -5,6 +5,15 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[features]
+# The library kept in the browser (localStorage) with the use cases running in the page: only the
+# Pages demo enables it (rssr-app's `pages-demo`). The formal Web build talks to the server instead
+# and must not contain it (phase C, C4; `rssr-api/tests/dependency_graph.rs`).
+browser-store = []
+# `HttpBackend`, the `Backend` over the server's `/api/v1`: the formal Web page uses it, and the
+# server's tests run it natively against the real router.
+http-backend = ["dep:gloo-timers"]
+
 [dependencies]
 ammonia.workspace = true
 html5ever = "0.39"
@@ -44,6 +53,8 @@ rusqlite = { workspace = true, features = ["backup", "cache", "functions", "hook
 libc = "0.2"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+# The waits between polls of a background job (`http-backend`).
+gloo-timers = { version = "0.3", features = ["futures"], optional = true }
 js-sys = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "stream"] }
 uuid = { version = "1", features = ["js", "v4"] }
@@ -53,6 +64,19 @@ web-sys = { version = "0.3", features = ["Location", "Storage", "Window"] }
 
 [dev-dependencies]
 rssr-application = { path = "../rssr-application" }
+
+# The browser storage contract harnesses (run in a browser by scripts/run_wasm_contract_harness.sh).
+[[test]]
+name = "wasm_config_exchange_contract_harness"
+required-features = ["browser-store"]
+
+[[test]]
+name = "wasm_refresh_contract_harness"
+required-features = ["browser-store"]
+
+[[test]]
+name = "wasm_subscription_contract_harness"
+required-features = ["browser-store"]
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"

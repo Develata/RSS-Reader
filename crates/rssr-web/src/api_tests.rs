@@ -40,8 +40,8 @@ use crate::{
 };
 
 /// Local feeds and images, and a WebDAV store that keeps what is put.
-struct FeedServer {
-    base: String,
+pub(crate) struct FeedServer {
+    pub(crate) base: String,
 }
 
 type DavFiles = Arc<Mutex<HashMap<String, String>>>;
@@ -67,7 +67,7 @@ fn webdav(files: DavFiles) -> axum::routing::MethodRouter {
 }
 
 impl FeedServer {
-    async fn start() -> Self {
+    pub(crate) async fn start() -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let feed = |document: String| {
@@ -125,7 +125,7 @@ impl FeedServer {
         Self { base }
     }
 
-    fn url(&self, path: &str) -> String {
+    pub(crate) fn url(&self, path: &str) -> String {
         format!("{}/{path}", self.base)
     }
 }
@@ -157,10 +157,10 @@ fn item(guid: &str, title: &str, day: u32, content: &str) -> String {
     )
 }
 
-type Library = LocalBackend<NativeHost>;
+pub(crate) type Library = LocalBackend<NativeHost>;
 
 /// A library subscribed to `paths`, one after the other (entry ids follow the order).
-async fn library(feeds: &FeedServer, paths: &[&str]) -> Library {
+pub(crate) async fn library(feeds: &FeedServer, paths: &[&str]) -> Library {
     let backend = native_local_backend(LibraryStore::open_in_memory().await.unwrap());
     for path in paths {
         let outcome = backend.add_subscription(&feeds.url(path), None).await.unwrap();
@@ -174,7 +174,7 @@ async fn library(feeds: &FeedServer, paths: &[&str]) -> Library {
 
 /// Waits until the refresh's background image localization has rewritten the entry titled
 /// `title`, so both libraries are compared at rest.
-async fn localized(library: &Library, title: &str) {
+pub(crate) async fn localized(library: &Library, title: &str) {
     let id = entry_id(library, title).await;
     for _ in 0..200 {
         let snapshot = library.load_reader_entry(id).await.unwrap();
@@ -186,7 +186,7 @@ async fn localized(library: &Library, title: &str) {
     panic!("the background localization of {title} did not finish");
 }
 
-async fn entry_id(library: &Library, title: &str) -> i64 {
+pub(crate) async fn entry_id(library: &Library, title: &str) -> i64 {
     let entries = library.list_entries(&EntryQuery::default()).await.unwrap().entries;
     entries.iter().find(|entry| entry.title == title).unwrap().id
 }
@@ -347,7 +347,7 @@ fn with_json(route: &str, name: &str, value: &impl serde::Serialize) -> String {
 }
 
 /// Times written by the operations themselves differ between the two libraries.
-fn at_rest(mut value: Value) -> Value {
+pub(crate) fn at_rest(mut value: Value) -> Value {
     fn walk(value: &mut Value) {
         match value {
             Value::Object(fields) => {
@@ -705,7 +705,9 @@ async fn unknown_routes_and_methods_answer_json() {
     assert_eq!(error_of(no_token).await.1, "csrf_mismatch");
 }
 
-/// The reader's image localization is given up at the time limit; the body is unchanged.
+/// The reader's image localization is given up at the time limit, answering `outcome_unknown`
+/// (the write-back could have fallen on the limit; here it had not started, so the body is
+/// unchanged; C4 design review C4D-R1 B1).
 #[tokio::test]
 async fn a_slow_localization_is_given_up() {
     let feeds = FeedServer::start().await;
@@ -719,7 +721,7 @@ async fn a_slow_localization_is_given_up() {
     let response =
         client.send(Method::POST, &protocol::entry_assets(id), None, Some(TEST_BUILD)).await;
     let (status, code, _) = client.error(response).await;
-    assert_eq!((status, code.as_str()), (StatusCode::SERVICE_UNAVAILABLE, "unavailable"));
+    assert_eq!((status, code.as_str()), (StatusCode::GATEWAY_TIMEOUT, "outcome_unknown"));
     assert!(started.elapsed() < Duration::from_secs(5), "{:?}", started.elapsed());
     assert_eq!(client.get(&protocol::entry(id)).await, before);
 }

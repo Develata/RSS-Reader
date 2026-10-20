@@ -1,5 +1,6 @@
 //! Dependency-graph gates of the v0.2 design (`docs/design/v0.2-architecture.md`, 阶段与门禁):
-//! the Web build links no SQLite, and the protocol crate depends on no infrastructure.
+//! the Web build links no SQLite and, outside the Pages demo, no library kept in the browser; the
+//! protocol crate depends on no infrastructure.
 
 use std::path::Path;
 use std::process::Command;
@@ -36,6 +37,39 @@ fn the_web_build_links_no_sqlite() {
     // The check can fail: the build for this host does link SQLite.
     let native = cargo_tree(&["-p", "rssr-app", "-i", "libsqlite3-sys", "--prefix", "none"]);
     assert!(packages(&native).contains(&"rssr-app"), "{native}");
+}
+
+/// The features resolved for `rssr-infra` in the wasm32 build of `rssr-app` with `extra` options.
+fn infra_features_of_the_web_build(extra: &[&str]) -> Vec<String> {
+    let mut args = vec![
+        "-p",
+        "rssr-app",
+        "--target",
+        "wasm32-unknown-unknown",
+        "--prefix",
+        "none",
+        "--format",
+        "{p} | {f}",
+    ];
+    args.extend_from_slice(extra);
+    let tree = cargo_tree(&args);
+    let line = tree.lines().find(|line| line.starts_with("rssr-infra ")).expect("rssr-infra");
+    let features = line.split_once(" | ").map_or("", |(_, features)| features);
+    features.split(',').filter(|feature| !feature.is_empty()).map(str::to_owned).collect()
+}
+
+/// The formal Web build talks to the server: it has `http-backend` and not the library kept in
+/// the browser (`browser-store`); the Pages demo has both (phase C, C4a). This shows what is
+/// built; which backend starts is shown by the page's start-up code and the browser regression.
+#[test]
+fn the_formal_web_build_has_no_browser_store() {
+    let formal = infra_features_of_the_web_build(&[]);
+    assert!(formal.iter().any(|feature| feature == "http-backend"), "{formal:?}");
+    assert!(!formal.iter().any(|feature| feature == "browser-store"), "{formal:?}");
+    let demo = infra_features_of_the_web_build(&["--features", "pages-demo"]);
+    for feature in ["http-backend", "browser-store"] {
+        assert!(demo.iter().any(|present| present == feature), "{feature}: {demo:?}");
+    }
 }
 
 #[test]

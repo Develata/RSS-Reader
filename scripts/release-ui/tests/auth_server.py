@@ -85,7 +85,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.reply_json(401, {"code": "unauthenticated", "message": "fixture"})
             else:
                 self.reply_json(200, {"csrf_token": csrf})
-        elif self.path in ["/session-probe", "/feeds", "/settings", "/logout"]:
+        elif self.path in ["/feeds", "/settings", "/logout"]:
             if csrf is None:
                 error = "error=session_expired&" if was_revoked or token else ""
                 self.reply(302, [("Location", f"/login?{error}next=%2F")])
@@ -97,7 +97,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                            f'<form method="post" action="/logout"><input type="hidden" '
                            f'name="csrf" value="{csrf}"></form>'.encode())
             else:
-                self.reply(204 if self.path == "/session-probe" else 200)
+                self.reply(200)
         else:
             self.reply(404)
 
@@ -121,8 +121,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 del live[token]
                 revoked.add(token)
             self.reply(303, [("Location", "/login"),
-                             ("Set-Cookie", "rssr_web_session=deleted; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"),
-                             ("Set-Cookie", "rssr_web_gate=deleted; Path=/; SameSite=Lax; Max-Age=0")])
+                             ("Set-Cookie", "rssr_web_session=deleted; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")])
             return
         if self.path != "/login" or form != {
             "username": ["smoke"], "password": ["smoke-pass-123"], "next": ["/feeds"]}:
@@ -135,7 +134,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.reply(303, [
             ("Location", "/wrong" if os.environ.get("AUTH_BAD_REDIRECT") else "/feeds"),
             ("Set-Cookie", f"rssr_web_session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=15552000"),
-            ("Set-Cookie", "rssr_web_gate=1; Path=/; SameSite=Lax; Max-Age=15552000"),
         ])
 
 

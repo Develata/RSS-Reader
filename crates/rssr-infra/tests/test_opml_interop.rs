@@ -1,3 +1,6 @@
+// On wasm the OPML codec exists only with the library kept in the browser (`browser-store`).
+#![cfg(any(not(target_arch = "wasm32"), feature = "browser-store"))]
+
 use rssr_domain::{ConfigFeed, OpmlFeed};
 use rssr_infra::opml::OpmlCodec;
 

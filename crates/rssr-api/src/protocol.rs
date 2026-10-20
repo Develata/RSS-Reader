@@ -137,6 +137,13 @@ pub fn job(job_id: &JobId) -> String {
     format!("{API_PREFIX}/jobs/{}", job_id.0)
 }
 
+/// `GET routes::SESSION`: the session's CSRF token, which every write after login carries in
+/// [`CSRF_HEADER`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Session {
+    pub csrf_token: String,
+}
+
 /// The query of a structured read: `?query=<JSON>` (the entry list, the mark-read preview) or
 /// `?input=<JSON>` (the entry page's bootstrap).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -395,11 +402,7 @@ mod tests {
         );
         assert_eq!(serde_json::from_value::<JobStatus>(encoded).unwrap(), done);
         let failed = JobStatus::Failed {
-            error: BackendError {
-                code: ErrorCode::Network,
-                message: "无法连接".into(),
-                request_id: Some("r1".into()),
-            },
+            error: BackendError::new(ErrorCode::Network, "无法连接").with_request_id("r1"),
         };
         let encoded = serde_json::to_value(&failed).unwrap();
         assert_eq!(encoded["error"]["code"], "network");
