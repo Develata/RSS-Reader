@@ -31,6 +31,9 @@ pub(crate) enum EntriesPageIntent {
     PreferencesRereadFailed(UiFailure),
     /// The browsing preferences were saved.
     WorkspaceSaved(EntriesWorkspaceState),
+    /// A read of the preferences and subscriptions was issued / the latest one answered.
+    BootstrapStarted,
+    BootstrapFinished,
     SetFeeds(Vec<FeedSummary>),
     /// 列表查询已发出 / 最新一代查询的结果已落地（成功或失败）。
     EntriesQueryStarted,

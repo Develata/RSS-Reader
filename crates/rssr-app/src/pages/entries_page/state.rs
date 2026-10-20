@@ -79,6 +79,8 @@ pub(crate) struct EntriesPageState {
     /// The status is a write's failure or unknown outcome: a list read does not replace it
     /// (C4b item 2: what is read again only updates what is shown).
     pub(crate) status_kept: bool,
+    /// A read of the preferences and subscriptions (the start's or a re-read) is on its way.
+    pub(crate) bootstrap_in_flight: bool,
 }
 
 /// 见 [`EntriesPageState::query_clock_trigger`]。
@@ -127,6 +129,7 @@ impl EntriesPageState {
             requery_revision: 0,
             stored_workspace: None,
             status_kept: false,
+            bootstrap_in_flight: false,
         }
     }
 

@@ -97,6 +97,8 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             reduce_entries_page_intent(state, intent);
         }
         EntriesPageIntent::WorkspaceSaved(workspace) => state.stored_workspace = Some(workspace),
+        EntriesPageIntent::BootstrapStarted => state.bootstrap_in_flight = true,
+        EntriesPageIntent::BootstrapFinished => state.bootstrap_in_flight = false,
         EntriesPageIntent::PreferencesLoaded => {
             if matches!(state.preferences_load, PreferencesLoadState::Unavailable { .. }) {
                 state.status = format!("共 {} 篇文章。", state.entries.len());

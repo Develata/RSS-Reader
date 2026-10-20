@@ -90,11 +90,13 @@ impl EntriesPageSession {
             *generation = generation.wrapping_add(1);
             *generation
         });
+        self.dispatch(EntriesPageIntent::BootstrapStarted);
         spawn(async move {
             let intents = bootstrap.await;
             if *self.bootstrap_generation.peek() != generation {
                 return;
             }
+            self.dispatch(EntriesPageIntent::BootstrapFinished);
             for intent in intents.into_iter().filter_map(UiIntent::into_entries_page_intent) {
                 self.dispatch(intent);
             }
@@ -244,11 +246,19 @@ impl EntriesPageSession {
         }
         let supersedes_query = matches!(intent, EntriesPageIntent::PatchEntryFlags { .. })
             && self.state.peek().query_in_flight;
+        // A read of the preferences still on its way when a save of them landed may have read the
+        // store before the save: its answer would put the saved filters back. A new read
+        // replaces it (C4b item 2, R2-03).
+        let supersedes_reread = matches!(intent, EntriesPageIntent::WorkspaceSaved(_))
+            && self.state.peek().bootstrap_in_flight;
         dispatch_entries_page_intent(self.state, intent);
         if supersedes_query {
             // 写入成功时还在途的查询可能读的是写入前的存储：丢弃它的结果，由 reducer 递增的
             // requery_revision 触发的新查询接替（审计 A3）。
             self.query_generation.with_mut(|generation| *generation = generation.wrapping_add(1));
+        }
+        if supersedes_reread {
+            self.reread();
         }
     }
 
@@ -754,5 +764,68 @@ mod tests {
             save(&changed);
         });
         assert_eq!(backend.calls("save_entries_workspace_if_changed"), 1, "as saved");
+    }
+
+    /// A re-read issued before a save of the preferences landed may have read the store before
+    /// the save: its answer does not put the saved filters back. A new read replaces it, and the
+    /// page keeps what was saved (C4b item 2, R2-03; advisor's trace).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_reread_issued_before_a_save_landed_does_not_undo_it() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let before = EntriesWorkspaceState::default();
+        let saved = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..before.clone() };
+        let (sender, receiver) = oneshot::channel::<Vec<UiIntent>>();
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = EntriesPageSession::new(
+                None,
+                Signal::new(EntriesPageState::new(true)),
+                Signal::new(0),
+                Signal::new(0),
+            );
+            session.dispatch(EntriesPageIntent::ApplyLoadedWorkspaceState(before.clone()));
+            session.dispatch(EntriesPageIntent::PreferencesLoaded);
+            // A focus: the re-read reads the store before the save below.
+            session.spawn_bootstrap(async { receiver.await.expect("the early re-read") });
+            session.dispatch(EntriesPageIntent::SetReadFilter(ReadFilter::UnreadOnly));
+            session.save_browsing_preferences_with(
+                true,
+                saved.grouping_mode,
+                saved.show_archived,
+                saved.read_filter,
+                saved.starred_filter,
+                saved.selected_feed_urls.clone(),
+            );
+            session
+        });
+        for _ in 0..100 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            if backend.calls("bootstrap_entries") == 1
+                && !dom.in_scope(ScopeId::APP, || session.snapshot().bootstrap_in_flight)
+            {
+                break;
+            }
+        }
+        assert_eq!(backend.calls("save_entries_workspace_if_changed"), 1);
+        assert_eq!(backend.calls("bootstrap_entries"), 1, "a new read after the save");
+
+        // The early re-read answers with what it read before the save.
+        sender
+            .send(vec![UiIntent::EntriesPage(EntriesPageIntent::PreferencesReread {
+                settings: UserSettings::default(),
+                workspace: before,
+            })])
+            .expect("deliver");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            let state = session.snapshot();
+            assert_eq!(state.read_filter, ReadFilter::UnreadOnly, "the saved filter stays");
+            assert_eq!(state.stored_workspace, Some(saved));
+        });
     }
 }
