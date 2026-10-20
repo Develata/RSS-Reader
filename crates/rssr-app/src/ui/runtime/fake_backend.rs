@@ -28,6 +28,8 @@ pub(crate) struct Scripted {
     failures: Mutex<HashMap<&'static str, BackendError>>,
     ran: Mutex<Vec<&'static str>>,
     holds: Mutex<HashMap<&'static str, Arc<Hold>>>,
+    /// Failures for the next call only, answered after its hold.
+    once: Mutex<HashMap<&'static str, BackendError>>,
 }
 
 /// A job held before it answers, until released. It knows whether a caller is waiting on it and
@@ -62,6 +64,7 @@ impl Scripted {
             failures: Mutex::default(),
             ran: Mutex::default(),
             holds: Mutex::default(),
+            once: Mutex::default(),
         })
     }
 
@@ -76,8 +79,22 @@ impl Scripted {
         hold
     }
 
-    /// Waits while `operation` is held.
-    async fn held(&self, operation: &'static str) {
+    /// The next call of `operation` (a job, or another held operation) fails with `error` after
+    /// its hold: it was already on its way when the failure was decided.
+    pub(crate) fn fail_once(&self, operation: &'static str, error: BackendError) {
+        self.once.lock().unwrap().insert(operation, error);
+    }
+
+    /// Waits while `operation` is held, then answers a one-shot failure if one was set.
+    async fn held(&self, operation: &'static str) -> Result<()> {
+        self.wait_while_held(operation).await;
+        match self.once.lock().unwrap().remove(operation) {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+
+    async fn wait_while_held(&self, operation: &'static str) {
         let Some(hold) = self.holds.lock().unwrap().get(operation).cloned() else { return };
         struct Waiting<'a> {
             hold: &'a Hold,
@@ -141,7 +158,7 @@ impl Scripted {
 impl Backend for Scripted {
     async fn load_settings(&self) -> Result<UserSettings> {
         self.enter("load_settings")?;
-        self.held("load_settings").await;
+        self.held("load_settings").await?;
         self.inner.load_settings().await
     }
 
@@ -166,7 +183,7 @@ impl Backend for Scripted {
         remote_path: &str,
     ) -> Result<RemoteConfigPushOutcome> {
         self.enter("push_remote_config")?;
-        self.held("push_remote_config").await;
+        self.held("push_remote_config").await?;
         self.inner.push_remote_config(endpoint, remote_path).await
     }
 
@@ -176,7 +193,7 @@ impl Backend for Scripted {
         remote_path: &str,
     ) -> Result<RemoteConfigPullOutcome> {
         self.enter("pull_remote_config")?;
-        self.held("pull_remote_config").await;
+        self.held("pull_remote_config").await?;
         self.inner.pull_remote_config(endpoint, remote_path).await
     }
 
@@ -198,7 +215,7 @@ impl Backend for Scripted {
         workspace: EntriesWorkspaceState,
     ) -> Result<bool> {
         self.enter("save_entries_workspace_if_changed")?;
-        self.held("save_entries_workspace_if_changed").await;
+        self.held("save_entries_workspace_if_changed").await?;
         self.inner.save_entries_workspace_if_changed(workspace).await
     }
 
@@ -248,19 +265,19 @@ impl Backend for Scripted {
         fallback_site_url: Option<Url>,
     ) -> Result<AddSubscriptionOutcome> {
         self.enter("add_subscription")?;
-        self.held("add_subscription").await;
+        self.held("add_subscription").await?;
         self.inner.add_subscription(raw_url, fallback_site_url).await
     }
 
     async fn refresh_all(&self) -> Result<RefreshAllExecutionOutcome> {
         self.enter("refresh_all")?;
-        self.held("refresh_all").await;
+        self.held("refresh_all").await?;
         self.inner.refresh_all().await
     }
 
     async fn refresh_feed(&self, feed_id: i64) -> Result<RefreshFeedExecutionOutcome> {
         self.enter("refresh_feed")?;
-        self.held("refresh_feed").await;
+        self.held("refresh_feed").await?;
         self.inner.refresh_feed(feed_id).await
     }
 

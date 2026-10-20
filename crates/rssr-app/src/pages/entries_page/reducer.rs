@@ -103,7 +103,9 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         EntriesPageIntent::WorkspaceSaveStarted => {
             state.workspace_saving = true;
             state.workspace_wanted = None;
+            state.recovered_edits = None;
         }
+        EntriesPageIntent::WorkspaceSaveUnknown => state.stored_workspace = None,
         EntriesPageIntent::WorkspaceSaveEnded => {
             state.workspace_saving = false;
             state.workspace_wanted = None;
@@ -237,9 +239,13 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
 
 /// The read-only refresh's preferences (C4b item 2). The settings (page size, archive months)
 /// always apply. The browsing preferences apply only where the page shows what the library held
-/// (nothing of its own unsaved), and without going back to the first page; the page then saves
+/// and the user has nothing pending (no save on its way, no choice waiting for one, no recovered
+/// filters; review C4B-B-R2-03), without going back to the first page; the page then saves
 /// nothing, since they are the stored ones. A read that replaced the start's, or one after the
-/// start's failed while the page still shows the fallback, counts as the start's read.
+/// start's failed while the page still shows the fallback, counts as the start's read. One after
+/// the start's failed while the user chose filters makes the page ready, keeps those filters and
+/// does not save them by itself (review C4B-B-R2-06). One after a save's unknown outcome learns
+/// what the library holds, without applying it (review C4B-B-R2-04).
 fn reread_preferences(
     state: &mut EntriesPageState,
     settings: rssr_domain::UserSettings,
@@ -258,8 +264,23 @@ fn reread_preferences(
         reduce_entries_page_intent(state, EntriesPageIntent::PreferencesLoaded);
         return;
     }
-    let unsaved = state.stored_workspace.as_ref() != Some(&state.workspace());
-    if state.preferences_load.is_loaded() && !unsaved {
+    if !state.preferences_load.is_loaded() {
+        state.recovered_edits = Some(state.workspace());
+        state.stored_workspace = Some(workspace);
+        reduce_entries_page_intent(state, EntriesPageIntent::PreferencesLoaded);
+        return;
+    }
+    let pending = state.workspace_saving
+        || state.workspace_wanted.is_some()
+        || state.recovered_edits.is_some();
+    if state.stored_workspace.is_none() {
+        if !pending {
+            state.stored_workspace = Some(workspace);
+        }
+        return;
+    }
+    let unsaved = pending || state.stored_workspace.as_ref() != Some(&state.workspace());
+    if !unsaved {
         state.read_filter = workspace.read_filter;
         state.starred_filter = workspace.starred_filter;
         state.selected_feed_urls = workspace.selected_feed_urls.clone();
@@ -588,8 +609,10 @@ mod tests {
             EntriesPageIntent::SetReadFilter(ReadFilter::ReadOnly),
         );
         reread(&mut chosen, ReadFilter::UnreadOnly, 3);
-        assert!(!chosen.preferences_load.is_loaded(), "still never saved over");
-        assert_eq!(chosen.read_filter, ReadFilter::ReadOnly);
+        assert!(chosen.preferences_load.is_loaded(), "ready again (review C4B-B-R2-06)");
+        assert_eq!(chosen.read_filter, ReadFilter::ReadOnly, "the user's filters stay");
+        assert_eq!(chosen.stored_workspace, Some(workspace(ReadFilter::UnreadOnly)));
+        assert_eq!(chosen.recovered_edits, Some(chosen.workspace()), "not saved by the read");
         assert_eq!(chosen.entries_page_size, 3);
     }
 

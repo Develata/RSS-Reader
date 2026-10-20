@@ -900,4 +900,66 @@ mod tests {
         assert_eq!(shell.settings_draft(), Some(kept), "the shell has it");
         assert_eq!(crate::ui::drafts::peek(), None, "then it leaves the storage");
     }
+
+    /// A load answered during a save is held; a later load issued meanwhile supersedes it: when
+    /// the save fails, the held reply is not applied, and the later reply is (review
+    /// C4B-B-R2-02).
+    #[test]
+    fn a_held_reply_superseded_by_a_later_load_is_dropped() {
+        let (mut dom, session, theme) = setup();
+        let (save, first) = dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.list_density = ListDensity::Compact);
+            (start_save(session), start_load(session))
+        });
+        first.send(UserSettings::default()).expect("the earlier load, held");
+        dom.render_immediate_to_vec();
+        let second = dom.in_scope(ScopeId::APP, || start_load(session));
+        save.send(false).expect("the save fails");
+        dom.render_immediate_to_vec();
+        let newer = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+        second.send(newer.clone()).expect("the later load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(*theme.settings.peek(), newer);
+            assert_eq!(session.page.draft().theme, ThemeMode::Dark);
+            assert_eq!(session.page.draft().list_density, ListDensity::Compact, "the edit stays");
+        });
+    }
+
+    #[component]
+    fn LeavingSettingsPage() -> Element {
+        let theme = use_context::<ThemeController>();
+        let _page = SettingsPageSession::new(theme);
+        rsx! {}
+    }
+
+    /// The app leaves to sign in while the settings page opens with a restored draft: the notice
+    /// (above the page) leaves first, before the page hands the draft to the shell; the draft
+    /// stays stored for the page after the sign-in (review C4B-B-R2-01).
+    #[test]
+    fn a_draft_restored_as_the_app_leaves_to_sign_in_stays_stored() {
+        use crate::components::app_notices::AppNotices;
+        use crate::ui::recovery::{APP_RECOVERY, AppRecovery};
+
+        fn app() -> Element {
+            let shell = crate::ui::use_app_shell_state();
+            let theme = crate::theme::use_theme_controller();
+            use_context_provider(|| shell);
+            use_context_provider(|| theme);
+            use_hook(|| *APP_RECOVERY.write() = Some(AppRecovery::SignIn));
+            rsx! {
+                AppNotices {}
+                LeavingSettingsPage {}
+            }
+        }
+
+        let kept = SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() };
+        crate::ui::drafts::keep(Some(&kept)).expect("kept");
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
+        dom.render_immediate_to_vec();
+        let shell = dom.in_scope(ScopeId::APP, consume_context::<AppShellState>);
+        assert_eq!(shell.settings_draft(), Some(kept.clone()), "the page handed it over");
+        assert_eq!(crate::ui::drafts::peek(), Some(kept), "still stored for after the sign-in");
+    }
 }

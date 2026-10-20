@@ -74,7 +74,8 @@ pub(crate) struct EntriesPageState {
     pub(crate) requery_revision: u64,
     /// The browsing preferences the library holds, as far as the page knows: read at start, or
     /// saved by it. The page saves only what differs from them, so a read (at start or again)
-    /// never writes (C4b item 2).
+    /// never writes (C4b item 2). `None` before the first read, and after a save whose outcome is
+    /// unknown until a read tells again (review C4B-B-R2-04).
     pub(crate) stored_workspace: Option<EntriesWorkspaceState>,
     /// The status is a write's failure or unknown outcome: a list read does not replace it
     /// (C4b item 2: what is read again only updates what is shown).
@@ -86,6 +87,10 @@ pub(crate) struct EntriesPageState {
     /// The user's latest choice made while a save was on its way, saved after it (review
     /// C4B-B-05). Reads never set it.
     pub(crate) workspace_wanted: Option<EntriesWorkspaceState>,
+    /// Filters the user chose while the preferences could not be read, kept shown when a later
+    /// read recovers them. That read does not save them by itself; the user's next change does
+    /// (review C4B-B-R2-06).
+    pub(crate) recovered_edits: Option<EntriesWorkspaceState>,
 }
 
 /// 见 [`EntriesPageState::query_clock_trigger`]。
@@ -137,6 +142,7 @@ impl EntriesPageState {
             bootstrap_in_flight: false,
             workspace_saving: false,
             workspace_wanted: None,
+            recovered_edits: None,
         }
     }
 

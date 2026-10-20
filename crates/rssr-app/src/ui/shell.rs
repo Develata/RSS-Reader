@@ -176,18 +176,23 @@ impl AppShellState {
     /// page reads them, a configuration import replaces them); a read issued before such an
     /// application does not overwrite it (C4b items 2 and 5; design review C4D-R2 R2-03, R2-04).
     pub(crate) fn load_settings(self, theme: ThemeController) {
-        let command = if *self.auto_refresh_started.peek() {
+        self.read_settings(theme, self.settings_read_command());
+    }
+
+    /// Only a read once the start got to the backend and started the periodic refresh; the start
+    /// itself until then, on every path (retry, recovery, re-read; review C4B-B-R2-05).
+    fn settings_read_command(self) -> ShellCommand {
+        if *self.auto_refresh_started.peek() {
             ShellCommand::LoadSettings
         } else {
             ShellCommand::LoadAuthenticatedShell
-        };
-        self.read_settings(theme, command);
+        }
     }
 
     /// Reads the settings again after a re-read failed (the notice's retry), whether or not the
     /// settings page is open.
     pub(crate) fn retry_settings_read(self, theme: ThemeController) {
-        self.read_settings(theme, ShellCommand::LoadSettings);
+        self.read_settings(theme, self.settings_read_command());
     }
 
     /// The shell's read-only refresh: the settings again, applied like the start's (the same
@@ -197,7 +202,7 @@ impl AppShellState {
         if *self.settings_page_open.peek() {
             return;
         }
-        self.read_settings(theme, ShellCommand::LoadSettings);
+        self.read_settings(theme, self.settings_read_command());
     }
 
     fn read_settings(mut self, theme: ThemeController, command: ShellCommand) {
@@ -856,5 +861,32 @@ mod tests {
             let _ = tokio::time::timeout(Duration::from_millis(20), dom.wait_for_work()).await;
             dom.render_immediate_to_vec();
         }
+    }
+
+    /// The start could not open the backend, so the periodic refresh did not start; a later
+    /// re-read that works completes the start, whatever path it takes (review C4B-B-R2-05).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_reread_completes_a_start_that_never_reached_the_backend() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        test_host::fail_open(Some(BackendError::new(ErrorCode::Network, "打不开")));
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        assert!(dom.in_scope(ScopeId::APP, || shell.settings_failure(theme)).is_some());
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 0);
+
+        test_host::fail_open(None);
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "the re-read", || backend.calls("load_settings") == 1).await;
+        settle(&mut dom, shell).await;
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 1, "the start completed");
+        dom.in_scope(ScopeId::APP, || assert_eq!(shell.settings_failure(theme), None));
+
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "a later re-read", || backend.calls("load_settings") == 2).await;
+        settle(&mut dom, shell).await;
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 1, "and only once");
     }
 }

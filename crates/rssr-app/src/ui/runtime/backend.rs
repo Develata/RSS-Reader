@@ -11,6 +11,10 @@ use crate::bootstrap::AppServices;
 /// The backend of this process. Failing to open it is classified like any backend error.
 pub(crate) async fn backend() -> Result<Arc<dyn Backend>, BackendError> {
     #[cfg(test)]
+    if let Some(error) = test_host::open_failure() {
+        return Err(error);
+    }
+    #[cfg(test)]
     if let Some(backend) = test_host::current() {
         return Ok(backend);
     }
@@ -29,14 +33,24 @@ pub(crate) mod test_host {
     use std::cell::RefCell;
     use std::sync::Arc;
 
-    use rssr_api::Backend;
+    use rssr_api::{Backend, BackendError};
 
     thread_local! {
         static HOST: RefCell<Option<Arc<dyn Backend>>> = const { RefCell::new(None) };
+        static OPEN_FAILURE: RefCell<Option<BackendError>> = const { RefCell::new(None) };
     }
 
     pub(crate) fn current() -> Option<Arc<dyn Backend>> {
         HOST.with(|host| host.borrow().clone())
+    }
+
+    /// Opening the backend fails with `error` (`None`: it opens again).
+    pub(crate) fn fail_open(error: Option<BackendError>) {
+        OPEN_FAILURE.with(|failure| *failure.borrow_mut() = error);
+    }
+
+    pub(super) fn open_failure() -> Option<BackendError> {
+        OPEN_FAILURE.with(|failure| failure.borrow().clone())
     }
 
     /// Installs `host` until the returned guard is dropped.

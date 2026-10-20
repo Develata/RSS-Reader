@@ -36,6 +36,9 @@ pub(crate) enum EntriesPageIntent {
     WorkspaceSaveEnded,
     /// The user chose these preferences while a save was on its way.
     WorkspaceWanted(EntriesWorkspaceState),
+    /// A save of the preferences ended with an unknown outcome: what the library holds is not
+    /// known until a read tells again.
+    WorkspaceSaveUnknown,
     /// A read of the preferences and subscriptions was issued / the latest one answered.
     BootstrapStarted,
     BootstrapFinished,

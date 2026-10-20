@@ -76,9 +76,9 @@ struct Writes {
     /// predate it, so its reply is discarded.
     stored: u64,
     /// A load answered while a write was in flight, with the app's count of applied settings when
-    /// it was issued. It waits for the write: dropped if the write stores settings, applied if it
-    /// stores nothing (it failed, or the remote had none).
-    held_load: Option<(UserSettings, u64)>,
+    /// it was issued and its read generation. It waits for the write: dropped if the write stores
+    /// settings or a later load was issued meanwhile (review C4B-B-R2-02), applied if not.
+    held_load: Option<(UserSettings, u64, u64)>,
     /// Loads issued: only the latest one's reply applies, whatever order the replies come in
     /// (C4b item 2; review C4B-B-01).
     reads: u64,
@@ -191,7 +191,9 @@ impl SettingsPageSession {
             writes.in_flight = false;
             writes.held_load.take()
         };
-        if let Some((settings, applied)) = held_load {
+        if let Some((settings, applied, read)) = held_load
+            && read == self.writes.peek().reads
+        {
             self.apply_load(settings, applied);
         }
     }
@@ -255,7 +257,7 @@ impl SettingsPageSession {
             apply_projected_ui_intents(intents, UiIntent::into_settings_page_intent, |intent| {
                 match intent {
                     SettingsPageIntent::SettingsLoaded(settings) => {
-                        self.receive_load(settings, applied)
+                        self.receive_load(settings, applied, read)
                     }
                     status => self.dispatch(status),
                 }
@@ -263,9 +265,9 @@ impl SettingsPageSession {
         });
     }
 
-    fn receive_load(mut self, settings: UserSettings, applied: u64) {
+    fn receive_load(mut self, settings: UserSettings, applied: u64, read: u64) {
         if self.writes.peek().in_flight {
-            self.writes.write().held_load = Some((settings, applied));
+            self.writes.write().held_load = Some((settings, applied, read));
         } else {
             self.apply_load(settings, applied);
         }

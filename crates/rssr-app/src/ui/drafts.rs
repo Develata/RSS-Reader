@@ -9,6 +9,8 @@
 //! Only the edits, not the whole settings: a draft restored over settings changed elsewhere
 //! changes only what the user edited.
 
+use std::cell::Cell;
+
 use rssr_application::SettingsPatch;
 use serde::{Deserialize, Serialize};
 
@@ -50,17 +52,27 @@ pub(crate) fn peek() -> Option<SettingsPatch> {
 }
 
 /// Removes the kept draft: the page has it (and the shell keeps it from now on), so it is
-/// restored once.
+/// restored once. Not once the page is leaving: what is stored then is for the page that comes
+/// next, and the navigation may still be on its way (review C4B-B-R2-01).
 pub(crate) fn forget() {
+    if LEAVING.with(Cell::get) {
+        return;
+    }
     platform::remove(KEY);
 }
 
+thread_local! {
+    /// The page started to leave (reload, sign-in) with its draft kept.
+    static LEAVING: Cell<bool> = const { Cell::new(false) };
+}
+
 /// Leaves (`leave`: reload, go to the sign-in page) after keeping `draft`; stays, returning false,
-/// when it could not be kept.
+/// when it could not be kept. From then on nothing removes the stored draft.
 pub(crate) fn leave_keeping(draft: Option<&SettingsPatch>, leave: impl FnOnce()) -> bool {
     if keep(draft).is_err() {
         return false;
     }
+    LEAVING.with(|leaving| leaving.set(true));
     leave();
     true
 }
