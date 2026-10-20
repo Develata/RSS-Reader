@@ -16,4 +16,6 @@ pub mod subscription_probe;
 pub mod html;
 pub mod opml;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod outbound;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod parser;

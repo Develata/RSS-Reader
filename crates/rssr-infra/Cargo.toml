@@ -31,6 +31,8 @@ url.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "stream", "rustls-tls"] }
+# `net`: the server-side outbound policy resolves host names itself (`outbound.rs`).
+tokio = { workspace = true, features = ["net"] }
 sqlx = { version = "0.8", default-features = false, features = ["macros", "migrate", "runtime-tokio-rustls", "sqlite", "time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

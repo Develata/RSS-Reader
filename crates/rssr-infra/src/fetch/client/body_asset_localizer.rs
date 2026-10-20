@@ -6,13 +6,17 @@ use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::Semaphore;
 use url::Url;
 
-use crate::html::{LocalizableImageDocument, normalize_html_for_live_display};
+use crate::{
+    html::{LocalizableImageDocument, normalize_html_for_live_display},
+    outbound::OutboundPolicy,
+};
 
 #[derive(Debug, Clone)]
 pub struct BodyAssetLocalizer {
     inner: reqwest::Client,
     image_request_slots: Arc<Semaphore>,
     budget: LocalizationBudget,
+    outbound: OutboundPolicy,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -64,25 +68,32 @@ impl BodyAssetLocalizer {
     };
 
     pub fn new() -> Self {
-        Self::with_budget(Self::BACKGROUND_BUDGET)
+        Self::with_budget(Self::BACKGROUND_BUDGET, OutboundPolicy::Unrestricted)
     }
 
     pub fn for_reader_entry() -> Self {
-        Self::with_budget(Self::READER_BUDGET)
+        Self::with_budget(Self::READER_BUDGET, OutboundPolicy::Unrestricted)
     }
 
-    fn with_budget(budget: LocalizationBudget) -> Self {
+    /// 同一份预算，换成按 `outbound` 限制图片地址的客户端。
+    pub fn with_outbound(self, outbound: OutboundPolicy) -> Self {
+        Self::with_budget(self.budget, outbound)
+    }
+
+    fn with_budget(budget: LocalizationBudget, outbound: OutboundPolicy) -> Self {
         Self {
-            inner: reqwest::Client::builder()
+            inner: outbound
+                .configure(reqwest::Client::builder())
                 .connect_timeout(Duration::from_secs(3))
                 // reqwest otherwise replaces our Referer with the previous image URL,
                 // including its query, on every redirect.
                 .referer(false)
-                .redirect(redirect::Policy::custom(|attempt| {
-                    if !attempt
-                        .previous()
-                        .last()
-                        .is_some_and(|previous| image_redirect_allowed(previous, attempt.url()))
+                .redirect(redirect::Policy::custom(move |attempt| {
+                    if !outbound.redirect_allowed(attempt.url())
+                        || !attempt
+                            .previous()
+                            .last()
+                            .is_some_and(|previous| image_redirect_allowed(previous, attempt.url()))
                     {
                         return attempt.error("unsafe image redirect");
                     }
@@ -92,6 +103,7 @@ impl BodyAssetLocalizer {
                 .expect("build image client with safe redirect policy"),
             image_request_slots: Arc::new(Semaphore::new(budget.max_concurrent_image_requests)),
             budget,
+            outbound,
         }
     }
 
@@ -127,6 +139,9 @@ impl BodyAssetLocalizer {
         referer: Option<&Url>,
         max_bytes: usize,
     ) -> Result<(String, usize), FetchImageError> {
+        self.outbound
+            .check_url(url)
+            .map_err(|error| FetchImageError::Request(error.to_string()))?;
         let mut request = self
             .inner
             .get(url.clone())

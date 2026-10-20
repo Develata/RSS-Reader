@@ -13,7 +13,7 @@ use rssr_application::{
 };
 use rssr_infra::{
     application_adapters::cleanup_pending_entry_content,
-    composition::compose_native_sqlite_use_cases,
+    composition::compose_native_sqlite_use_cases_with_outbound,
     config_sync::webdav::WebDavConfigSync,
     db::{
         entry_repository::{
@@ -23,6 +23,7 @@ use rssr_infra::{
         storage_backend::StorageBackend,
     },
     fetch::BodyAssetLocalizer,
+    outbound::OutboundPolicy,
 };
 use time::OffsetDateTime;
 
@@ -49,6 +50,14 @@ pub struct NativeHost {
     /// 不能假定 WAL 启用成功：`PRAGMA journal_mode=WAL` 在不支持共享内存的文件系统上
     /// 会静默留在回滚日志模式，而那种模式下并发写者只能互相干等、还会阻塞读。
     refresh_concurrency: usize,
+    outbound: OutboundPolicy,
+}
+
+/// 打开宿主时由调用方决定的选项。默认值就是桌面行为。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NativeHostOptions {
+    /// 订阅探测、feed 抓取、正文图片本地化与 WebDAV 的目标地址策略。
+    pub outbound: OutboundPolicy,
 }
 
 #[derive(Clone)]
@@ -84,6 +93,14 @@ impl NativeHost {
     /// 连接并迁移 `native_backend` 指向的两个数据库，清理待回收正文，按实际 journal 模式
     /// 决定刷新并发度。
     pub async fn open(native_backend: NativeSqliteBackend) -> anyhow::Result<Arc<Self>> {
+        Self::open_with_options(native_backend, NativeHostOptions::default()).await
+    }
+
+    pub async fn open_with_options(
+        native_backend: NativeSqliteBackend,
+        options: NativeHostOptions,
+    ) -> anyhow::Result<Arc<Self>> {
+        let NativeHostOptions { outbound } = options;
         tracing::info!(
             backend = native_backend.label(),
             database = %native_backend.database_label(),
@@ -122,18 +139,21 @@ impl NativeHost {
         };
         tracing::info!(journal_mode = %journal_mode, refresh_concurrency, "本地数据库就绪");
 
-        let composition = compose_native_sqlite_use_cases(index_pool, content_pool);
+        let composition =
+            compose_native_sqlite_use_cases_with_outbound(index_pool, content_pool, outbound);
 
         Ok(Arc::new(Self {
             use_cases: composition.use_cases,
             image_localization_worker: ImageLocalizationWorker {
                 entry_repository: composition.entry_repository,
-                background_asset_localizer: BodyAssetLocalizer::new(),
-                reader_asset_localizer: BodyAssetLocalizer::for_reader_entry(),
+                background_asset_localizer: BodyAssetLocalizer::new().with_outbound(outbound),
+                reader_asset_localizer: BodyAssetLocalizer::for_reader_entry()
+                    .with_outbound(outbound),
             },
             auto_refresh_started: AtomicBool::new(false),
             refresh_flight: crate::RefreshFlight::default(),
             refresh_concurrency,
+            outbound,
         }))
     }
 
@@ -338,7 +358,7 @@ impl RemoteConfigPort for RemoteConfigCapability {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<RemoteConfigPushOutcome> {
-        let remote = WebDavConfigSync::new(endpoint, remote_path)?;
+        let remote = WebDavConfigSync::with_outbound(endpoint, remote_path, self.host.outbound)?;
         self.host.use_cases.import_export_service.push_remote_config(&remote).await
     }
 
@@ -347,7 +367,7 @@ impl RemoteConfigPort for RemoteConfigCapability {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<RemoteConfigPullOutcome> {
-        let remote = WebDavConfigSync::new(endpoint, remote_path)?;
+        let remote = WebDavConfigSync::with_outbound(endpoint, remote_path, self.host.outbound)?;
         self.host.use_cases.import_export_service.pull_remote_config(&remote).await
     }
 }

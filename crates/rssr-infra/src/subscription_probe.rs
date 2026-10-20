@@ -15,11 +15,27 @@ pub const MAX_SUBSCRIPTION_BYTES: usize = crate::feed_body::MAX_FEED_RESPONSE_BY
 #[derive(Clone)]
 pub struct HttpSubscriptionProbe {
     client: reqwest::Client,
+    /// 首跳的 IP 字面量检查；域名与重定向由 `client` 自身按同一策略检查。
+    #[cfg(not(target_arch = "wasm32"))]
+    outbound: crate::outbound::OutboundPolicy,
 }
 
 impl HttpSubscriptionProbe {
     pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            #[cfg(not(target_arch = "wasm32"))]
+            outbound: crate::outbound::OutboundPolicy::Unrestricted,
+        }
+    }
+
+    /// `client` 必须按同一个 `outbound` 构建（见 `fetch::client::feed_http_client`）。
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn with_outbound(
+        client: reqwest::Client,
+        outbound: crate::outbound::OutboundPolicy,
+    ) -> Self {
+        Self { client, outbound }
     }
 }
 
@@ -30,6 +46,8 @@ impl SubscriptionProbePort for HttpSubscriptionProbe {
         if !matches!(url.scheme(), "http" | "https") {
             bail!("订阅只支持 HTTP 或 HTTPS 地址。");
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        self.outbound.check_url(url)?;
         #[cfg(not(target_arch = "wasm32"))]
         // 超时由原生组装时传入的 client 统一约束（见 `fetch::client::FEED_TIMEOUTS`）。
         let response = self.client.get(url.clone()).send().await?;

@@ -45,6 +45,20 @@ pub fn compose_native_sqlite_use_cases(
     index_pool: SqlitePool,
     content_pool: SqlitePool,
 ) -> NativeSqliteComposition {
+    compose_native_sqlite_use_cases_with_outbound(
+        index_pool,
+        content_pool,
+        crate::outbound::OutboundPolicy::Unrestricted,
+    )
+}
+
+/// 同 [`compose_native_sqlite_use_cases`]，订阅探测与 feed 抓取按 `outbound` 限制目标地址。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn compose_native_sqlite_use_cases_with_outbound(
+    index_pool: SqlitePool,
+    content_pool: SqlitePool,
+    outbound: crate::outbound::OutboundPolicy,
+) -> NativeSqliteComposition {
     let feed_repository = Arc::new(SqliteFeedRepository::new(index_pool.clone()));
     let entry_repository = Arc::new(SqliteEntryRepository::new_with_content_pool(
         index_pool.clone(),
@@ -62,11 +76,17 @@ pub fn compose_native_sqlite_use_cases(
         entry_content_repository: entry_repository.clone(),
         settings_repository,
         app_state,
-        subscription_probe: Arc::new(crate::subscription_probe::HttpSubscriptionProbe::new(
-            crate::fetch::client::feed_http_client(crate::fetch::client::FEED_TIMEOUTS),
-        )),
+        subscription_probe: Arc::new(
+            crate::subscription_probe::HttpSubscriptionProbe::with_outbound(
+                crate::fetch::client::feed_http_client(
+                    crate::fetch::client::FEED_TIMEOUTS,
+                    outbound,
+                ),
+                outbound,
+            ),
+        ),
         refresh_source: Arc::new(InfraFeedRefreshSource::new(
-            FetchClient::new(),
+            FetchClient::with_outbound(outbound),
             FeedParser::new(),
         )),
         refresh_store: Arc::new(SqliteRefreshStore::new(

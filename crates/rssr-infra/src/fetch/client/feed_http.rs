@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use anyhow::Context;
-use reqwest::header;
+use reqwest::{header, redirect};
 
-use crate::feed_body::read_feed_text;
+use crate::{feed_body::read_feed_text, outbound::OutboundPolicy};
 
 use super::feed_response::{
     FeedResponseStatus, classify_feed_response_status, http_metadata_from_headers,
@@ -28,18 +28,33 @@ pub(crate) const FEED_TIMEOUTS: FeedTimeouts = FeedTimeouts {
 };
 
 /// 订阅抓取与订阅探测共用的原生 HTTP client。
-pub(crate) fn feed_http_client(timeouts: FeedTimeouts) -> reqwest::Client {
-    reqwest::Client::builder()
+///
+/// 重定向沿用 reqwest 默认的 10 跳上限，另外每一跳都按 `outbound` 检查目标地址。
+/// 构建失败只可能来自 TLS 后端初始化，此时 `reqwest::Client::new()` 同样会 panic；
+/// 这里不退回默认 client，否则会悄悄丢掉出站策略。
+pub(crate) fn feed_http_client(
+    timeouts: FeedTimeouts,
+    outbound: OutboundPolicy,
+) -> reqwest::Client {
+    outbound
+        .configure(reqwest::Client::builder())
         .connect_timeout(timeouts.connect)
         .read_timeout(timeouts.read_idle)
         .timeout(timeouts.total)
+        .redirect(redirect::Policy::custom(move |attempt| {
+            if !outbound.redirect_allowed(attempt.url()) {
+                return attempt.error("feed redirect target is not allowed by the outbound policy");
+            }
+            redirect::Policy::limited(10).redirect(attempt)
+        }))
         .build()
-        .unwrap_or_else(|_| reqwest::Client::new())
+        .expect("build feed HTTP client")
 }
 
 #[derive(Debug, Clone)]
 pub struct FetchClient {
     inner: reqwest::Client,
+    outbound: OutboundPolicy,
 }
 
 impl Default for FetchClient {
@@ -69,14 +84,22 @@ pub enum FetchResult {
 
 impl FetchClient {
     pub fn new() -> Self {
-        Self::with_timeouts(FEED_TIMEOUTS)
+        Self::with_outbound(OutboundPolicy::Unrestricted)
     }
 
-    pub(crate) fn with_timeouts(timeouts: FeedTimeouts) -> Self {
-        Self { inner: feed_http_client(timeouts) }
+    pub fn with_outbound(outbound: OutboundPolicy) -> Self {
+        Self::with_options(FEED_TIMEOUTS, outbound)
+    }
+
+    pub(crate) fn with_options(timeouts: FeedTimeouts, outbound: OutboundPolicy) -> Self {
+        Self { inner: feed_http_client(timeouts, outbound), outbound }
     }
 
     pub async fn fetch(&self, request: &FetchRequest) -> anyhow::Result<FetchResult> {
+        // 解析失败的地址交给 reqwest 报错，与原先一致。
+        if let Ok(url) = url::Url::parse(&request.url) {
+            self.outbound.check_url(&url)?;
+        }
         let mut builder = self.inner.get(&request.url).header(
             header::ACCEPT,
             "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
@@ -113,6 +136,7 @@ mod tests {
     };
 
     use super::{FeedTimeouts, FetchClient, FetchRequest, FetchResult};
+    use crate::outbound::OutboundPolicy;
 
     const TIMEOUTS: FeedTimeouts = FeedTimeouts {
         connect: Duration::from_secs(1),
@@ -153,7 +177,7 @@ mod tests {
     }
 
     async fn fetch(url: String) -> anyhow::Result<FetchResult> {
-        FetchClient::with_timeouts(TIMEOUTS)
+        FetchClient::with_options(TIMEOUTS, OutboundPolicy::Unrestricted)
             .fetch(&FetchRequest { url, etag: None, last_modified: None })
             .await
     }
@@ -187,7 +211,7 @@ mod tests {
         let timeouts = FeedTimeouts { total: Duration::from_millis(800), ..TIMEOUTS };
         let (url, server) = trickle_server(None, b"x", None, Duration::from_millis(100)).await;
         let started = Instant::now();
-        let result = FetchClient::with_timeouts(timeouts)
+        let result = FetchClient::with_options(timeouts, OutboundPolicy::Unrestricted)
             .fetch(&FetchRequest { url, etag: None, last_modified: None })
             .await;
         server.abort();
@@ -195,5 +219,17 @@ mod tests {
         assert!(result.is_err());
         assert!(started.elapsed() >= timeouts.total);
         assert!(started.elapsed() < timeouts.total * 3, "took {:?}", started.elapsed());
+    }
+
+    #[tokio::test]
+    async fn public_only_policy_refuses_a_loopback_feed_before_connecting() {
+        let (url, server) = trickle_server(Some(1), b"x", Some(1), Duration::ZERO).await;
+        let result = FetchClient::with_options(TIMEOUTS, OutboundPolicy::PublicOnly)
+            .fetch(&FetchRequest { url, etag: None, last_modified: None })
+            .await;
+        server.abort();
+
+        let error = result.expect_err("loopback feed must be refused");
+        assert!(format!("{error:#}").contains("内网或本地地址"), "unexpected error: {error:#}");
     }
 }
