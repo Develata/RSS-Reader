@@ -246,6 +246,7 @@ pub fn remove_stale_scratch(target: &Path) {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::sync::atomic::AtomicU64;
     use std::time::Duration;
 
     use super::*;
@@ -296,8 +297,15 @@ mod tests {
     /// Real checkpoints (phase A gate): while another connection keeps growing the library in
     /// WAL mode, checkpointing it into the main file and shrinking it again (`VACUUM`), every
     /// probe accepts it. The simulated case above shows why a probe can meet a checkpoint midway.
+    ///
+    /// Probing goes on until the writer has checkpointed 64 times and shrunk the library once
+    /// (the `VACUUM` after the 64th), however long that takes: a fixed 1.5 s window was too short
+    /// on a loaded machine (48 and 58 checkpoints with the other tests running alongside,
+    /// 2026-10-20). The time limit only stops a writer that makes no progress.
     #[test]
     fn probes_accept_a_library_while_it_is_checkpointed() {
+        /// Past the 64th checkpoint and the `VACUUM` that follows it.
+        const CHECKPOINTS: u64 = 65;
         let dir = temp_dir("checkpoint");
         let target = dir.join("library.sqlite3");
         {
@@ -306,8 +314,9 @@ mod tests {
         }
         let probe = probe_uri(&target).unwrap();
         let stop = Arc::new(AtomicBool::new(false));
+        let done = Arc::new(AtomicU64::new(0));
         let writer = {
-            let (target, stop) = (target.clone(), Arc::clone(&stop));
+            let (target, stop, done) = (target.clone(), Arc::clone(&stop), Arc::clone(&done));
             std::thread::spawn(move || {
                 let conn = Connection::open(&target).unwrap();
                 conn.pragma_update(None, "journal_mode", "WAL").unwrap();
@@ -322,6 +331,7 @@ mod tests {
                         conn.execute_batch("DELETE FROM stress; VACUUM;").unwrap();
                         conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(())).unwrap();
                     }
+                    done.store(checkpoints, Ordering::Relaxed);
                 }
                 checkpoints
             })
@@ -329,13 +339,22 @@ mod tests {
 
         let started = Instant::now();
         let mut probes = 0u64;
-        while started.elapsed() < Duration::from_millis(1500) {
+        // A writer that stopped (a panic) ends the probing; its join below reports why.
+        while done.load(Ordering::Relaxed) < CHECKPOINTS && !writer.is_finished() {
+            assert!(
+                started.elapsed() < Duration::from_secs(60),
+                "{} checkpoints in 60 s, {probes} probes",
+                done.load(Ordering::Relaxed)
+            );
             check_library(&probe).expect("a library being checkpointed is still a library");
             probes += 1;
         }
         stop.store(true, Ordering::Relaxed);
         let checkpoints = writer.join().unwrap();
-        assert!(checkpoints >= 64 && probes > 0, "{checkpoints} checkpoints, {probes} probes");
+        assert!(
+            checkpoints >= CHECKPOINTS && probes > 0,
+            "{checkpoints} checkpoints, {probes} probes"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
