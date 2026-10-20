@@ -257,6 +257,11 @@ fn dot_segment_urls_are_not_parsed() {
     assert!(normalize_html_for_live_display(&image, None).len() <= 2 * image.len());
     let base = format!(r#"<base href="{url}"><img src=x>"#);
     assert!(normalize_html_for_live_display(&base, None).len() <= 2 * base.len());
+
+    // 解析器删掉 TAB/LF/CR 之后，拆开的 `%2\ne%2\ne/` 也是一个 `..` 段。
+    let split = format!("https://{}@e.test/{}", "a".repeat(1 << 19), "%2\ne%2\ne/".repeat(1 << 19));
+    let image = format!(r#"<img src="{split}">"#);
+    assert!(normalize_html_for_live_display(&image, None).len() <= 2 * image.len());
 }
 
 #[test]

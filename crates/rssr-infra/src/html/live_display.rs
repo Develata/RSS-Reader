@@ -65,9 +65,10 @@ struct HtmlAttribute {
 }
 
 // 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
-/// 每张本地化图片允许在正文里出现的 data URL 份数。
+/// 每张本地化图片允许在正文里出现的 data URL 份数：`<img>` 一份，每个 `<source>` 两份（`src` 与
+/// `srcset`），足够七个 `<source>` 加一个 `<img>` 的 `<picture>`。
 #[cfg(not(target_arch = "wasm32"))]
-const MAX_DATA_URL_COPIES: usize = 8;
+const MAX_DATA_URL_COPIES: usize = 16;
 
 // 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
 #[cfg(not(target_arch = "wasm32"))]
@@ -89,6 +90,8 @@ impl LocalizableImageDocument {
     ) -> LocalizableImageDocument {
         let tags = parse_html_tags(html);
         let document_base = resolve_document_base_url(&tags, base_url);
+        // 解析失败不占图片名额，失败的尝试也要计入解析工作量，否则可以无限次重复。
+        let budget = UrlBudget::for_input(html.len());
         let mut slots = Vec::new();
         let mut image_markup_count = 0_usize;
         let mut unresolved_slot_count = 0_usize;
@@ -107,7 +110,7 @@ impl LocalizableImageDocument {
 
                     match candidate {
                         Some(raw_source) if slots.len() < max_images => {
-                            match resolve_asset_url(&raw_source, document_base.as_ref(), base_url) {
+                            match budget.resolve(&raw_source, document_base.as_ref(), base_url) {
                                 Some(resolved_url) => {
                                     let mut rewrite_targets = frame
                                         .source_tag_indices
@@ -155,11 +158,8 @@ impl LocalizableImageDocument {
                         image_markup_count += 1;
                         match img_candidate(tag) {
                             Some(raw_source) if slots.len() < max_images => {
-                                match resolve_asset_url(
-                                    &raw_source,
-                                    document_base.as_ref(),
-                                    base_url,
-                                ) {
+                                match budget.resolve(&raw_source, document_base.as_ref(), base_url)
+                                {
                                     Some(resolved_url) => slots.push(ImageSlot {
                                         resolved_url,
                                         rewrite_targets: vec![ImageRewriteTarget {
@@ -188,29 +188,20 @@ impl LocalizableImageDocument {
         }
     }
 
-    /// 本地化后的正文长度上限：原正文的 2 倍加 1 MiB，再加每张本地化图片 [`MAX_DATA_URL_COPIES`]
-    /// 份 data URL（`<picture>` 里一般只有两三个 `<source>`）。
-    fn localized_output_fits(&self, html: &str, localized: &BTreeMap<usize, String>) -> bool {
-        let mut growth = 0_usize;
-        let mut allowance = html.len().saturating_mul(2).saturating_add(1 << 20);
+    /// 本地化后替换标签的总字节数上限；溢出时返回 `None`（调用方按超限处理）。
+    fn localized_output_allowance(
+        &self,
+        html: &str,
+        localized: &BTreeMap<usize, String>,
+    ) -> Option<usize> {
+        let mut allowance = html.len().checked_mul(2)?.checked_add(1 << 20)?;
         for (slot_index, data_url) in localized {
-            let Some(slot) = self.slots.get(*slot_index) else {
-                continue;
-            };
-            allowance =
-                allowance.saturating_add(data_url.len().saturating_mul(MAX_DATA_URL_COPIES));
-            for target in &slot.rewrite_targets {
-                let copies = match target.kind {
-                    ImageRewriteKind::Img => 1,
-                    ImageRewriteKind::Source => 2,
-                };
-                let tag = &self.tags[target.tag_index];
-                growth = growth
-                    .saturating_add(tag.raw.len())
-                    .saturating_add(data_url.len().saturating_mul(copies));
+            if self.slots.get(*slot_index).is_some() {
+                let copies = data_url.len().checked_mul(MAX_DATA_URL_COPIES)?;
+                allowance = allowance.checked_add(copies)?;
             }
         }
-        growth <= allowance
+        Some(allowance)
     }
 
     pub(crate) fn has_image_markup(&self) -> bool {
@@ -233,24 +224,36 @@ impl LocalizableImageDocument {
     /// 会被写进每个目标（`<source>` 的 `src` 与 `srcset` 各一份），几百 KB 的正文配一张大图就能放大成
     /// 几十 GB。改写前先按目标算出输出增长，超过上限就整篇保留未本地化的正文。
     pub(crate) fn rewrite_html(&self, html: &str, localized: &BTreeMap<usize, String>) -> String {
-        if localized.is_empty() || !self.localized_output_fits(html, localized) {
+        if localized.is_empty() {
             return html.to_string();
         }
+
+        // 输出上限：原正文的 2 倍加 1 MiB，再加每张本地化图片 [`MAX_DATA_URL_COPIES`] 份 data URL。
+        // 逐个替换按实际序列化长度（含属性重新转义）累计，超限立即放弃，最多多建一个标签。
+        let Some(allowance) = self.localized_output_allowance(html, localized) else {
+            return html.to_string();
+        };
 
         // 按标签下标登记替换，再按文档顺序输出：一个 `<picture>` 可以带任意多个 `<source>` 目标，
         // 有序映射会多出对数因子。
         let mut replacements: Vec<Option<String>> = vec![None; self.tags.len()];
+        let mut written = 0_usize;
         let mut any = false;
         for (slot_index, data_url) in localized {
             let Some(slot) = self.slots.get(*slot_index) else {
                 continue;
             };
             for target in &slot.rewrite_targets {
-                replacements[target.tag_index] = Some(rewrite_tag_for_localized_asset(
+                let replacement = rewrite_tag_for_localized_asset(
                     &self.tags[target.tag_index],
                     target.kind,
                     data_url,
-                ));
+                );
+                match written.checked_add(replacement.len()) {
+                    Some(total) if total <= allowance => written = total,
+                    _ => return html.to_string(),
+                }
+                replacements[target.tag_index] = Some(replacement);
                 any = true;
             }
         }
@@ -770,30 +773,48 @@ pub(crate) fn resolve_asset_url(
     if url_path_dots(raw) > MAX_URL_PATH_DOTS {
         return None;
     }
+    // 结果只接受 http/https：非 http 的基地址（feed 里的文章链接不限 scheme）拼出来的地址也会被
+    // 丢掉，不必先付一遍复制它的代价。
     Url::parse(raw)
         .ok()
-        .or_else(|| document_base_url.and_then(|base| base.join(raw).ok()))
-        .or_else(|| fallback_base_url.and_then(|base| base.join(raw).ok()))
-        .filter(|resolved| matches!(resolved.scheme(), "http" | "https"))
+        .or_else(|| web_base(document_base_url).and_then(|base| base.join(raw).ok()))
+        .or_else(|| web_base(fallback_base_url).and_then(|base| base.join(raw).ok()))
+        .filter(is_web_url)
+}
+
+fn is_web_url(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https")
+}
+
+fn web_base(base: Option<&Url>) -> Option<&Url> {
+    base.filter(|base| is_web_url(base))
 }
 
 /// `raw` 在第一个 `?` 或 `#` 之前的点数，`%2e` 按一个点计（`url` 把它当作点段处理）。
+/// 与 URL 解析器一样先忽略 TAB、LF、CR：解析器会删掉它们，`%2\ne` 在它眼里就是 `%2e`。
+/// 这里数的是所有点（包括主机名与文件名里的），比真正的点段多，只会多拒绝、不会漏。
 fn url_path_dots(raw: &str) -> usize {
-    let path = raw.split(['?', '#']).next().unwrap_or_default();
-    let bytes = path.as_bytes();
     let mut dots = 0_usize;
-    let mut index = 0_usize;
-    while index < bytes.len() {
-        if bytes[index] == b'.' {
-            dots += 1;
-        } else if bytes[index] == b'%'
-            && bytes.get(index + 1) == Some(&b'2')
-            && bytes.get(index + 2).is_some_and(|byte| byte.eq_ignore_ascii_case(&b'e'))
-        {
-            dots += 1;
-            index += 2;
+    // 已经读到的 `%2e` 前缀长度：0 无，1 读到 `%`，2 读到 `%2`。
+    let mut encoded = 0_u8;
+    for byte in raw.bytes().filter(|byte| !matches!(byte, b'\t' | b'\n' | b'\r')) {
+        if matches!(byte, b'?' | b'#') {
+            break;
         }
-        index += 1;
+        encoded = match (encoded, byte) {
+            (1, b'2') => 2,
+            (2, b'e' | b'E') => {
+                dots += 1;
+                0
+            }
+            (_, b'%') => 1,
+            _ => {
+                if byte == b'.' {
+                    dots += 1;
+                }
+                0
+            }
+        };
     }
     dots
 }
@@ -1044,9 +1065,30 @@ mod tests {
         assert!(resolve_asset_url(&dots, None, None).is_none());
         let encoded = format!("{}c.png", "%2e%2E/".repeat(64));
         assert!(resolve_asset_url(&encoded, Some(&base), None).is_none());
+        // 解析器会删掉 TAB/LF/CR，拆开的 `%2\ne` 仍是一个点。
+        let split = format!("{}c.png", "%2\ne%2\ne/".repeat(64));
+        assert!(resolve_asset_url(&split, Some(&base), None).is_none());
+        // 非 http 的基地址不参与拼接。
+        let file_base = Url::parse("file:///tmp/").unwrap();
+        assert!(resolve_asset_url("x.png", Some(&file_base), None).is_none());
         // 查询串里的点不算。
         let query = format!("/c.png?{}", ".".repeat(1_000));
         assert!(resolve_asset_url(&query, Some(&base), None).is_some());
+    }
+
+    #[test]
+    fn failed_localizer_resolutions_are_charged() {
+        // 评审反例：解析失败不占图片名额；巨大的非 http 基地址曾被每个相对地址复制一遍。
+        let file_base = Url::parse(&format!("file:///{}", "a".repeat(1 << 20))).unwrap();
+        let html = "<img src=x>".repeat(65_536);
+        let document = LocalizableImageDocument::parse(&html, Some(&file_base), 16);
+        assert!(document.slots().is_empty());
+
+        // http 基地址同样受解析工作量约束：成功的名额用完前，失败的尝试也会耗尽预算。
+        let web_base = Url::parse(&format!("https://e.test/{}", "a".repeat(1 << 20))).unwrap();
+        let html = r#"<img src="http://[">"#.repeat(65_536);
+        let document = LocalizableImageDocument::parse(&html, Some(&web_base), 16);
+        assert!(document.slots().is_empty());
     }
 
     #[test]
@@ -1059,6 +1101,12 @@ mod tests {
         let data_url = format!("data:image/png;base64,{}", "A".repeat(1 << 20));
         let localized = BTreeMap::from([(0, data_url.clone())]);
         assert_eq!(document.rewrite_html(&html, &localized), html);
+
+        // 属性重新转义让标签变长，也算进上限。
+        let html = format!(r#"<img src="https://e.test/i" title='{}'>"#, "\"".repeat(1 << 20));
+        let document = LocalizableImageDocument::parse(&html, None, 1);
+        let small = BTreeMap::from([(0, "data:image/png;base64,AAAA".to_string())]);
+        assert_eq!(document.rewrite_html(&html, &small), html);
 
         // 普通的 picture（两个 source）照常本地化。
         let html = r#"<picture><source srcset="https://e.test/a"><source srcset="https://e.test/a"><img src="https://e.test/a"></picture>"#;
