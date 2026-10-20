@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 use crate::components::status_banner::StatusBanner;
 use crate::theme::ThemeController;
 use crate::ui::{
-    AppShellState,
+    AppShellState, drafts,
     recovery::{APP_RECOVERY, AppRecovery},
     shell_browser::{reload_page, sign_in_again},
 };
@@ -17,12 +17,17 @@ use crate::ui::{
 pub fn AppNotices() -> Element {
     let shell = use_context::<AppShellState>();
     let theme = use_context::<ThemeController>();
+    // Which way out could not keep the settings page's draft: the page stays (C4b item 4).
+    let mut not_kept = use_signal(|| None::<AppRecovery>);
     use_effect(move || {
-        if APP_RECOVERY() == Some(AppRecovery::SignIn) {
-            sign_in_again();
+        if APP_RECOVERY() == Some(AppRecovery::SignIn)
+            && !drafts::leave_keeping(shell.settings_draft().as_ref(), sign_in_again)
+        {
+            not_kept.set(Some(AppRecovery::SignIn));
         }
     });
     let recovery = APP_RECOVERY();
+    let kept = not_kept() != recovery || recovery.is_none();
     let settings_failure = shell.settings_failure(theme);
     let startup_failure = shell.startup_failure();
     let job_notice = shell.job_notice();
@@ -32,16 +37,41 @@ pub fn AppNotices() -> Element {
         match recovery {
             Some(AppRecovery::SignIn) => rsx! {
                 aside { "data-slot": "app-notice", "data-notice": "sign-in", role: "alert",
-                    StatusBanner { message: "登录已失效，请重新登录。".to_string(), tone: "error".to_string() }
+                    if kept {
+                        StatusBanner { message: "登录已失效，请重新登录。".to_string(), tone: "error".to_string() }
+                    } else {
+                        StatusBanner {
+                            message: "登录已失效；浏览器暂时无法保留设置草稿，因此没有离开本页。".to_string(),
+                            tone: "error".to_string(),
+                        }
+                        button { class: "button", "data-action": "sign-in-anyway",
+                            onclick: move |_| sign_in_again(), "仍然去登录（草稿会丢失）" }
+                    }
                 }
             },
             Some(AppRecovery::Reload) => rsx! {
                 aside { "data-slot": "app-notice", "data-notice": "reload", role: "alert",
-                    StatusBanner {
-                        message: "页面版本与服务器不一致，需要重新加载页面。".to_string(),
-                        tone: "error".to_string(),
+                    if kept {
+                        StatusBanner {
+                            message: "页面版本与服务器不一致，需要重新加载页面。".to_string(),
+                            tone: "error".to_string(),
+                        }
+                        button { class: "button", "data-action": "reload-page",
+                            onclick: move |_| {
+                                if !drafts::leave_keeping(shell.settings_draft().as_ref(), reload_page) {
+                                    not_kept.set(Some(AppRecovery::Reload));
+                                }
+                            },
+                            "重新加载"
+                        }
+                    } else {
+                        StatusBanner {
+                            message: "页面版本与服务器不一致；浏览器暂时无法保留设置草稿，因此没有重新加载。".to_string(),
+                            tone: "error".to_string(),
+                        }
+                        button { class: "button", "data-action": "reload-anyway",
+                            onclick: move |_| reload_page(), "仍然重新加载（草稿会丢失）" }
                     }
-                    button { class: "button", "data-action": "reload-page", onclick: move |_| reload_page(), "重新加载" }
                 }
             },
             None => rsx! {},

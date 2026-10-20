@@ -34,6 +34,9 @@ pub(crate) struct AppShellState {
     job_notice: Signal<Option<JobNotice>>,
     /// Bumped by every job notice: a timeout dismisses only its own.
     job_notice_revision: Signal<u64>,
+    /// The open settings page's edits not stored yet, kept before the page is reloaded or leaves
+    /// to sign in (C4b item 4).
+    settings_draft: Signal<Option<rssr_application::SettingsPatch>>,
     /// Why the settings could not be read at start, until they are (C4b item 5).
     settings_failure: Signal<Option<UiFailure>>,
     /// Why the startup page could not be resolved, until dismissed: the startup page is replaced
@@ -114,6 +117,19 @@ impl AppShellState {
     /// settings itself and applies them, so the shell does not read them a second time.
     pub(crate) fn set_settings_page_open(mut self, open: bool) {
         self.settings_page_open.set(open);
+        if !open {
+            self.settings_draft.set(None);
+        }
+    }
+
+    /// The settings page's edits not stored yet (`None`: none), as they change (C4b item 4).
+    pub(crate) fn set_settings_draft(mut self, draft: Option<rssr_application::SettingsPatch>) {
+        self.settings_draft.set(draft);
+    }
+
+    /// The draft to keep before the page leaves (not reactive).
+    pub(crate) fn settings_draft(self) -> Option<rssr_application::SettingsPatch> {
+        self.settings_draft.peek().clone()
     }
 
     /// All manual refresh triggers use this synchronous gate and the App-owned task.
@@ -258,6 +274,7 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
         settings_page_open: use_signal(|| false),
         job_notice: use_signal(|| None),
         job_notice_revision: use_signal(|| 0),
+        settings_draft: use_signal(|| None),
         settings_failure: use_signal(|| None),
         startup_failure: use_signal(|| None),
         settings_loading: use_signal(|| false),

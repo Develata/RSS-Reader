@@ -7,7 +7,10 @@ use rssr_domain::UserSettings;
 use super::{browser::open_repository_url, intent::SettingsPageIntent, themes::detect_preset_key};
 use crate::{
     theme::ThemeController,
-    ui::{SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, run_ui_command},
+    ui::{
+        AppShellState, SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, drafts,
+        run_ui_command,
+    },
 };
 
 /// The settings page shows the stored settings with the user's edits on top (B2-D4).
@@ -28,6 +31,9 @@ pub(crate) struct SettingsPageSession {
     preset_choice: Signal<String>,
     status: Signal<String>,
     status_tone: Signal<String>,
+    /// The app's shell, which keeps the edits not stored yet across a reload or a sign-in
+    /// (C4b item 4); none in tests of the page alone.
+    shell: Option<AppShellState>,
 }
 
 /// The user's edits that are not stored yet.
@@ -49,6 +55,15 @@ impl Edits {
         self.pending.custom_css.is_some()
             || self.submitted.as_ref().is_some_and(|patch| patch.custom_css.is_some())
     }
+
+    /// All of them: the ones a save in flight sent, then the ones made since (C4b item 4).
+    fn unsaved(&self) -> Option<SettingsPatch> {
+        let all = match &self.submitted {
+            Some(submitted) => submitted.clone().followed_by(self.pending.clone()),
+            None => self.pending.clone(),
+        };
+        (!all.is_empty()).then_some(all)
+    }
 }
 
 /// The page's writes (saves, pulls) as its loads see them.
@@ -66,16 +81,38 @@ struct Writes {
 }
 
 impl SettingsPageSession {
+    /// A draft kept before a reload or a sign-in is taken once and becomes the pending edits,
+    /// over the settings the page then reads; it is not saved by itself (C4b item 4).
     pub(crate) fn new(theme: ThemeController) -> Self {
         let stored = use_signal(|| theme.settings.peek().clone());
-        let edits = use_signal(Edits::default);
-        let draft = use_signal(|| stored.peek().clone());
+        let edits =
+            use_signal(|| Edits { submitted: None, pending: drafts::take().unwrap_or_default() });
+        let restored = !edits.peek().pending.is_empty();
+        let draft = use_signal(|| edits.peek().over(&stored.peek()));
         let writes = use_signal(Writes::default);
-        let preset_choice = use_signal(|| detect_preset_key(&stored.peek().custom_css).to_string());
-        let status = use_signal(String::new);
+        let preset_choice = use_signal(|| detect_preset_key(&draft.peek().custom_css).to_string());
+        let status = use_signal(|| {
+            if restored {
+                "已恢复重新加载前未保存的设置修改，尚未保存。".to_string()
+            } else {
+                String::new()
+            }
+        });
         let status_tone = use_signal(|| "info".to_string());
+        let shell = try_consume_context::<AppShellState>();
 
-        Self { theme, stored, edits, draft, writes, preset_choice, status, status_tone }
+        let session =
+            Self { theme, stored, edits, draft, writes, preset_choice, status, status_tone, shell };
+        // A restored draft is the shell's to keep too, at once.
+        use_effect(move || session.publish_draft());
+        session
+    }
+
+    /// Tells the shell the edits not stored yet, after every change of them (C4b item 4).
+    fn publish_draft(self) {
+        if let Some(shell) = self.shell {
+            shell.set_settings_draft(self.edits.peek().unsaved());
+        }
     }
 
     /// What the form shows (a reactive read).
@@ -95,6 +132,7 @@ impl SettingsPageSession {
             edits.pending = std::mem::take(&mut edits.pending).followed_by(changed);
         });
         self.draft.set(next);
+        self.publish_draft();
     }
 
     /// The edits a save would send.
@@ -104,18 +142,25 @@ impl SettingsPageSession {
 
     /// Hands the pending edits to a save; call after [`Self::begin_write`] succeeded.
     pub(crate) fn submit_edits(mut self) -> SettingsPatch {
-        let mut edits = self.edits.write();
-        let submitted = std::mem::take(&mut edits.pending);
-        edits.submitted = Some(submitted.clone());
+        let submitted = {
+            let mut edits = self.edits.write();
+            let submitted = std::mem::take(&mut edits.pending);
+            edits.submitted = Some(submitted.clone());
+            submitted
+        };
+        self.publish_draft();
         submitted
     }
 
     /// The save failed: what it sent is an edit again, under the ones made since.
     pub(crate) fn restore_submitted_edits(mut self) {
-        let mut edits = self.edits.write();
-        if let Some(submitted) = edits.submitted.take() {
-            edits.pending = submitted.followed_by(std::mem::take(&mut edits.pending));
+        {
+            let mut edits = self.edits.write();
+            if let Some(submitted) = edits.submitted.take() {
+                edits.pending = submitted.followed_by(std::mem::take(&mut edits.pending));
+            }
         }
+        self.publish_draft();
     }
 
     /// Starts a write whose reply may carry the stored settings (a save, a pull). Returns false,
@@ -240,6 +285,7 @@ impl SettingsPageSession {
     ) -> bool {
         self.note_stored();
         self.edits.write().submitted = None;
+        self.publish_draft();
         let draft = self.edits.peek().over(&settings);
         if self.preset_choice.peek().as_str() == submitted_preset {
             self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());

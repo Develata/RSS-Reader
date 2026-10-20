@@ -1,4 +1,5 @@
 mod commands;
+pub(crate) mod drafts;
 pub(crate) mod failure;
 mod helpers;
 pub(crate) mod reading_position;

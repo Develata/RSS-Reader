@@ -124,6 +124,7 @@ mod tests {
 
     use super::*;
     use crate::theme::ThemeController;
+    use crate::ui::AppShellState;
     use rssr_application::SettingsPatch;
     use rssr_domain::{ListDensity, ThemeMode, UserSettings};
     use tokio::sync::oneshot;
@@ -709,5 +710,121 @@ mod tests {
                 SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() }
             );
         });
+    }
+
+    /// The page with the app's shell, which keeps its draft (C4b item 4).
+    fn shell_harness() -> Element {
+        let shell = crate::ui::use_app_shell_state();
+        let theme = crate::theme::use_theme_controller();
+        use_context_provider(|| shell);
+        use_context_provider(|| theme);
+        let page = SettingsPageSession::new(theme);
+        let state = use_signal(SettingsPageSaveState::new);
+        use_context_provider(|| SettingsPageSaveSession::new(state, page));
+        rsx! {}
+    }
+
+    /// A draft kept before a reload is taken once when the page opens: it is the pending edits
+    /// over the settings the page reads, shown, and not saved by itself (C4b item 4).
+    #[test]
+    fn a_kept_draft_is_restored_once_over_the_read_settings_and_not_saved() {
+        let kept = SettingsPatch {
+            list_density: Some(ListDensity::Compact),
+            custom_css: Some("body { color: blue; }".into()),
+            ..Default::default()
+        };
+        crate::ui::drafts::keep(Some(&kept)).expect("kept");
+        let (mut dom, session, theme) = setup();
+        assert_eq!(crate::ui::drafts::take(), None, "taken once");
+        let load = dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.page.pending_edits(), kept);
+            assert_eq!(session.page.draft().list_density, ListDensity::Compact);
+            assert_eq!(session.page.status(), "已恢复重新加载前未保存的设置修改，尚未保存。");
+            start_load(session)
+        });
+        load.send(customized()).expect("deliver the load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(*theme.settings.peek(), customized(), "the store's settings");
+            assert_eq!(session.page.draft(), kept.applied(&customized()), "the draft over them");
+            assert_eq!(session.page.pending_edits(), kept, "still to be saved");
+            assert!(!session.snapshot().pending_save, "not saved by itself");
+        });
+    }
+
+    /// The draft the shell keeps holds every edit not stored: during a save, what it sent and
+    /// what was edited since; after the save fails because the session ended (the page then
+    /// leaves to sign in), the same. A stored save leaves only the later edits; leaving the page
+    /// leaves none (C4b item 4; advisor's case of the failing write being the save).
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_kept_draft_holds_a_save_that_failed_because_the_session_ended() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+        use rssr_api::{BackendError, ErrorCode};
+
+        let backend = Scripted::over_new_library();
+        backend.fail("update_settings", BackendError::new(ErrorCode::Unauthenticated, "未登录"));
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(shell_harness);
+        dom.rebuild_in_place();
+        let (session, shell) = dom.in_scope(ScopeId::APP, || {
+            (consume_context::<SettingsPageSaveSession>(), consume_context::<AppShellState>())
+        });
+        let (sender, receiver) = oneshot::channel::<()>();
+        dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+            session.save_with("设置已保存。".into(), |command| async move {
+                receiver.await.expect("let the save answer");
+                crate::ui::run_ui_command(UiCommand::Settings(command)).await
+            });
+            session.page.edit(|draft| draft.list_density = ListDensity::Compact);
+        });
+        let both = SettingsPatch {
+            theme: Some(ThemeMode::Dark),
+            list_density: Some(ListDensity::Compact),
+            ..Default::default()
+        };
+        assert_eq!(shell.settings_draft(), Some(both.clone()), "in flight");
+
+        sender.send(()).expect("answer");
+        for _ in 0..100 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            dom.render_immediate_to_vec();
+            if !dom.in_scope(ScopeId::APP, || session.snapshot().pending_save) {
+                break;
+            }
+        }
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(
+                *crate::ui::recovery::APP_RECOVERY.peek(),
+                Some(crate::ui::recovery::AppRecovery::SignIn)
+            );
+        });
+        assert_eq!(shell.settings_draft(), Some(both.clone()), "after the failure");
+        crate::ui::drafts::keep(shell.settings_draft().as_ref()).expect("kept");
+        assert_eq!(crate::ui::drafts::take(), Some(both));
+
+        backend.heal("update_settings");
+        dom.in_scope(ScopeId::APP, || {
+            session.save_with("设置已保存。".into(), |command| {
+                crate::ui::run_ui_command(UiCommand::Settings(command))
+            });
+            session.page.edit(|draft| draft.reader_font_scale = 1.5);
+        });
+        for _ in 0..100 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            dom.render_immediate_to_vec();
+            if !dom.in_scope(ScopeId::APP, || session.snapshot().pending_save) {
+                break;
+            }
+        }
+        assert_eq!(
+            shell.settings_draft(),
+            Some(SettingsPatch { reader_font_scale: Some(1.5), ..Default::default() }),
+            "the stored edits are no longer a draft"
+        );
+        dom.in_scope(ScopeId::APP, || shell.set_settings_page_open(false));
+        assert_eq!(shell.settings_draft(), None, "the page was left");
     }
 }
