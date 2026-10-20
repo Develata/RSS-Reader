@@ -3,6 +3,7 @@ use rssr_domain::{
 };
 
 use super::state::EntryGroupingMode;
+use crate::ui::failure::UiFailure;
 
 #[derive(Debug, Clone)]
 pub(crate) enum EntriesPageIntent {
@@ -12,12 +13,14 @@ pub(crate) enum EntriesPageIntent {
     CancelBulk,
     BulkPreview(rssr_domain::MarkReadPreview),
     BulkApplied(u64),
-    BulkFailed(String),
+    /// The preview or the confirmed write failed; an unknown outcome also drops the preview
+    /// (the write may have applied).
+    BulkFailed(UiFailure),
 
     ApplyLoadedSettings(UserSettings),
     ApplyLoadedWorkspaceState(EntriesWorkspaceState),
     PreferencesLoaded,
-    PreferencesUnavailable(String),
+    PreferencesUnavailable(UiFailure),
     SetFeeds(Vec<FeedSummary>),
     /// 列表查询已发出 / 最新一代查询的结果已落地（成功或失败）。
     EntriesQueryStarted,
@@ -37,6 +40,8 @@ pub(crate) enum EntriesPageIntent {
         message: String,
         tone: String,
     },
+    /// A backend call failed (C4b item 1).
+    Failed(UiFailure),
     SetGroupingMode(EntryGroupingMode),
     SetShowArchived(bool),
     SetReadFilter(ReadFilter),
@@ -47,4 +52,16 @@ pub(crate) enum EntriesPageIntent {
     GoToNextPage,
     GoToPreviousPage,
     SetControlsHidden(bool),
+}
+
+impl EntriesPageIntent {
+    /// The backend failure this intent carries.
+    pub(crate) fn failure(&self) -> Option<&UiFailure> {
+        match self {
+            Self::BulkFailed(failure)
+            | Self::PreferencesUnavailable(failure)
+            | Self::Failed(failure) => Some(failure),
+            _ => None,
+        }
+    }
 }

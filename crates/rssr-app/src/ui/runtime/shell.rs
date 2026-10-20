@@ -2,6 +2,7 @@ use crate::{
     router::AppRoute,
     ui::{
         commands::ShellCommand,
+        failure::UiFailure,
         runtime::backend::backend,
         snapshot::{AuthenticatedShellSnapshot, StartupRouteSnapshot, UiIntent},
     },
@@ -10,57 +11,50 @@ use rssr_application::StartupTarget;
 
 pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
     match command {
-        ShellCommand::ManualRefresh => match backend().await {
-            Ok(services) => match services.refresh_all().await {
-                Ok(outcome) => vec![UiIntent::SetStatus {
-                    message: refresh_message(&outcome),
-                    tone: if outcome.failed_count == 0 { "info" } else { "error" }.to_string(),
-                }],
-                Err(err) => status_error(format!("刷新失败：{err}")),
-            },
-            Err(err) => status_error(format!("初始化应用失败：{err}")),
+        ShellCommand::ManualRefresh => match async { backend().await?.refresh_all().await }.await {
+            Ok(outcome) => vec![UiIntent::SetStatus {
+                message: refresh_message(&outcome),
+                tone: if outcome.failed_count == 0 { "info" } else { "error" }.to_string(),
+            }],
+            Err(error) => vec![UiIntent::Failed(UiFailure::new("刷新", error))],
         },
-        ShellCommand::LoadAuthenticatedShell => match backend().await {
-            Ok(services) => {
-                let shell = &services;
-                let settings = match shell.load_settings().await {
-                    Ok(settings) => settings,
-                    Err(err) => return status_error(format!("读取设置失败：{err}")),
-                };
-                shell.ensure_auto_refresh_started();
-                vec![UiIntent::AuthenticatedShellLoaded(AuthenticatedShellSnapshot { settings })]
+        ShellCommand::LoadAuthenticatedShell => {
+            let loaded = async {
+                let backend = backend().await?;
+                let settings = backend.load_settings().await?;
+                backend.ensure_auto_refresh_started();
+                Ok::<_, rssr_api::BackendError>(settings)
             }
-            Err(err) => status_error(format!("初始化应用失败：{err}")),
-        },
-        ShellCommand::ResolveStartupRoute => match backend().await {
-            Ok(services) => {
-                let shell = &services;
-                let target = match shell.resolve_startup_target().await {
-                    Ok(target) => target,
-                    Err(err) => return resolve_with_fallback(format!("解析启动页面失败：{err}")),
-                };
-
-                let route = match target {
-                    StartupTarget::AllEntries => AppRoute::EntriesPage {},
-                    StartupTarget::FeedEntries { feed_id } => AppRoute::FeedEntriesPage { feed_id },
-                };
-
-                vec![UiIntent::StartupRouteResolved(StartupRouteSnapshot { route })]
+            .await;
+            match loaded {
+                Ok(settings) => {
+                    vec![UiIntent::AuthenticatedShellLoaded(AuthenticatedShellSnapshot {
+                        settings,
+                    })]
+                }
+                Err(error) => vec![UiIntent::Failed(UiFailure::new("读取设置", error))],
             }
-            Err(err) => resolve_with_fallback(format!("初始化应用失败：{err}")),
-        },
+        }
+        ShellCommand::ResolveStartupRoute => {
+            match async { backend().await?.resolve_startup_target().await }.await {
+                Ok(target) => {
+                    let route = match target {
+                        StartupTarget::AllEntries => AppRoute::EntriesPage {},
+                        StartupTarget::FeedEntries { feed_id } => {
+                            AppRoute::FeedEntriesPage { feed_id }
+                        }
+                    };
+                    vec![UiIntent::StartupRouteResolved(StartupRouteSnapshot { route })]
+                }
+                Err(error) => vec![
+                    UiIntent::Failed(UiFailure::new("解析启动页面", error)),
+                    UiIntent::StartupRouteResolved(StartupRouteSnapshot {
+                        route: AppRoute::EntriesPage {},
+                    }),
+                ],
+            }
+        }
     }
-}
-
-fn status_error(message: impl Into<String>) -> Vec<UiIntent> {
-    vec![UiIntent::SetStatus { message: message.into(), tone: "error".to_string() }]
-}
-
-fn resolve_with_fallback(message: impl Into<String>) -> Vec<UiIntent> {
-    vec![
-        UiIntent::SetStatus { message: message.into(), tone: "error".to_string() },
-        UiIntent::StartupRouteResolved(StartupRouteSnapshot { route: AppRoute::EntriesPage {} }),
-    ]
 }
 
 fn refresh_message(outcome: &rssr_application::RefreshAllExecutionOutcome) -> String {

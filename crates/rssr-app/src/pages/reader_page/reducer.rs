@@ -42,6 +42,16 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
             }
             state.error = error;
         }
+        ReaderPageIntent::LoadFailed { entry_id, failure } => {
+            if entry_id != state.current_entry_id {
+                return;
+            }
+            state.error = Some(failure.message());
+        }
+        ReaderPageIntent::Failed(failure) => {
+            state.status = failure.message();
+            state.status_tone = failure.tone().to_string();
+        }
         ReaderPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
             // 与 ApplyLoadedContent / SetError 同样的归属校验：快速翻页时先发出的切换请求
             // 可能在换文章之后才落地，那时这条结果属于上一篇，必须丢弃。

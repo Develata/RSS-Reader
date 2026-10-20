@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use rssr_api::Backend;
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::UserSettings;
 use rssr_infra::{
     local_backend::{LocalBackend, NativeHost, native_local_backend},
     store::{LibraryStore, local::open_local_library},
@@ -41,10 +40,6 @@ impl AppServices {
     /// local library.
     pub(crate) fn over(store: LibraryStore) -> Arc<Self> {
         Arc::new(Self { backend: Arc::new(native_local_backend(store)) })
-    }
-
-    pub fn default_settings() -> UserSettings {
-        UserSettings::default()
     }
 
     pub(crate) fn backend(&self) -> Arc<dyn Backend> {

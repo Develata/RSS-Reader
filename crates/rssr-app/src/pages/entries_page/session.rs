@@ -6,7 +6,7 @@ use super::{
     intent::EntriesPageIntent, reducer::dispatch_entries_page_intent, state::EntriesPageState,
 };
 use crate::ui::{
-    EntriesCommand, UiCommand, UiIntent, execute_ui_command, remember_entry_controls_hidden,
+    EntriesCommand, UiCommand, UiIntent, remember_entry_controls_hidden, run_ui_command,
     spawn_projected_ui_command,
 };
 use rssr_domain::EntryQuery;
@@ -38,7 +38,7 @@ impl EntriesPageSession {
         self.dispatch(EntriesPageIntent::BeginBulk { writing });
         let generation = self.state.peek().bulk_generation;
         spawn(async move {
-            let intents = execute_ui_command(UiCommand::Entries(command)).await;
+            let intents = run_ui_command(UiCommand::Entries(command)).await;
             if self.state.peek().bulk_generation != generation {
                 return;
             }
@@ -78,7 +78,7 @@ impl EntriesPageSession {
     }
 
     pub(crate) fn bootstrap(self) {
-        self.spawn_bootstrap(execute_ui_command(self.bootstrap_command()));
+        self.spawn_bootstrap(run_ui_command(self.bootstrap_command()));
     }
 
     fn spawn_bootstrap(mut self, bootstrap: impl Future<Output = Vec<UiIntent>> + 'static) {
@@ -119,7 +119,7 @@ impl EntriesPageSession {
             .then(|| crate::ui::reading_position::remembered_page(&key))
             .flatten();
         self.spawn_entries_query_with_return(
-            execute_ui_command(UiCommand::Entries(EntriesCommand::LoadEntries { query })),
+            run_ui_command(UiCommand::Entries(EntriesCommand::LoadEntries { query })),
             return_page,
         );
     }
@@ -526,8 +526,9 @@ mod tests {
                 Signal::new(0),
                 Signal::new(0),
             );
-            session
-                .dispatch(EntriesPageIntent::PreferencesUnavailable("broken preferences".into()));
+            session.dispatch(EntriesPageIntent::PreferencesUnavailable(crate::ui::failure::plain(
+                "broken preferences",
+            )));
             assert!(!session.can_save_browsing_preferences(true));
             assert!(matches!(
                 session.bootstrap_command(),
@@ -634,7 +635,9 @@ mod tests {
     #[test]
     fn older_bootstrap_failure_cannot_downgrade_loaded_preferences() {
         complete_older_bootstrap_after_latest(vec![UiIntent::EntriesPage(
-            EntriesPageIntent::PreferencesUnavailable("old bootstrap failed".into()),
+            EntriesPageIntent::PreferencesUnavailable(crate::ui::failure::plain(
+                "old bootstrap failed",
+            )),
         )]);
     }
 

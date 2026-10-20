@@ -1,8 +1,12 @@
-mod backend;
+pub(crate) mod backend;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod characterization;
 mod entries;
 mod entry_flags;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod failure_classes;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+pub(crate) mod fake_backend;
 mod feeds;
 mod reader;
 mod settings;

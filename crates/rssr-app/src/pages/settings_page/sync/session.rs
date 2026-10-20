@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use super::state::SettingsPageSyncState;
 use crate::ui::{
-    SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, execute_ui_command,
+    SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, run_ui_command,
     spawn_projected_ui_command,
 };
 use crate::{pages::settings_page::session::SettingsPageSession, status::set_status_info};
@@ -74,7 +74,7 @@ impl SettingsPageSyncSession {
             remote_path: snapshot.remote_path,
         });
         spawn(async move {
-            let intents = execute_ui_command(command).await;
+            let intents = run_ui_command(command).await;
             apply_projected_ui_intents(intents, UiIntent::into_settings_page_intent, |intent| {
                 page.dispatch(intent);
             });

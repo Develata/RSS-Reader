@@ -2,22 +2,20 @@ use rssr_application::RemoteConfigPullOutcome;
 
 use crate::{
     pages::settings_page::intent::SettingsPageIntent,
-    ui::{commands::SettingsCommand, runtime::backend::backend, snapshot::UiIntent},
+    ui::{
+        commands::SettingsCommand, failure::UiFailure, runtime::backend::backend,
+        snapshot::UiIntent,
+    },
 };
 
 pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
     match command {
-        SettingsCommand::Load => match backend().await {
-            Ok(services) => match services.load_settings().await {
-                Ok(settings) => {
-                    settings_intents(vec![SettingsPageIntent::SettingsLoaded(settings)])
-                }
-                Err(err) => settings_status_error(format!("读取设置失败：{err}")),
-            },
-            Err(err) => settings_status_error(format!("初始化应用失败：{err}")),
+        SettingsCommand::Load => match async { backend().await?.load_settings().await }.await {
+            Ok(settings) => settings_intents(vec![SettingsPageIntent::SettingsLoaded(settings)]),
+            Err(error) => settings_failed("读取设置", error),
         },
-        SettingsCommand::UpdateSettings { patch, success_message } => match backend().await {
-            Ok(services) => match services.update_settings(patch).await {
+        SettingsCommand::UpdateSettings { patch, success_message } => {
+            match async { backend().await?.update_settings(patch).await }.await {
                 Ok(settings) => settings_intents(vec![
                     SettingsPageIntent::SettingsLoaded(settings),
                     SettingsPageIntent::SetStatus {
@@ -25,12 +23,13 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
                         tone: "info".to_string(),
                     },
                 ]),
-                Err(err) => settings_status_error(format!("保存设置失败：{err}")),
-            },
-            Err(err) => settings_status_error(format!("初始化应用失败：{err}")),
-        },
-        SettingsCommand::PushConfig { endpoint, remote_path } => match backend().await {
-            Ok(services) => match services.push_remote_config(&endpoint, &remote_path).await {
+                Err(error) => settings_failed("保存设置", error),
+            }
+        }
+        SettingsCommand::PushConfig { endpoint, remote_path } => {
+            let pushed =
+                async { backend().await?.push_remote_config(&endpoint, &remote_path).await }.await;
+            match pushed {
                 Ok(outcome) => settings_intents(vec![SettingsPageIntent::SetStatus {
                     message: format!(
                         "配置已上传到 WebDAV：{} 个订阅。",
@@ -38,12 +37,13 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
                     ),
                     tone: "info".to_string(),
                 }]),
-                Err(err) => settings_status_error(format!("上传配置失败：{err}")),
-            },
-            Err(err) => settings_status_error(format!("初始化应用失败：{err}")),
-        },
-        SettingsCommand::PullConfig { endpoint, remote_path } => match backend().await {
-            Ok(services) => match services.pull_remote_config(&endpoint, &remote_path).await {
+                Err(error) => settings_failed("上传配置", error),
+            }
+        }
+        SettingsCommand::PullConfig { endpoint, remote_path } => {
+            let pulled =
+                async { backend().await?.pull_remote_config(&endpoint, &remote_path).await }.await;
+            match pulled {
                 Ok(RemoteConfigPullOutcome { import: Some(import) }) => settings_intents(vec![
                     SettingsPageIntent::SettingsLoaded(import.settings.clone()),
                     SettingsPageIntent::SetStatus {
@@ -60,10 +60,9 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
                         tone: "info".to_string(),
                     }])
                 }
-                Err(err) => settings_status_error(format!("下载配置失败：{err}")),
-            },
-            Err(err) => settings_status_error(format!("初始化应用失败：{err}")),
-        },
+                Err(error) => settings_failed("下载配置", error),
+            }
+        }
     }
 }
 
@@ -71,9 +70,6 @@ fn settings_intents(intents: Vec<SettingsPageIntent>) -> Vec<UiIntent> {
     intents.into_iter().map(UiIntent::SettingsPage).collect()
 }
 
-fn settings_status_error(message: impl Into<String>) -> Vec<UiIntent> {
-    settings_intents(vec![SettingsPageIntent::SetStatus {
-        message: message.into(),
-        tone: "error".to_string(),
-    }])
+fn settings_failed(action: &'static str, error: rssr_api::BackendError) -> Vec<UiIntent> {
+    vec![UiIntent::Failed(UiFailure::new(action, error))]
 }

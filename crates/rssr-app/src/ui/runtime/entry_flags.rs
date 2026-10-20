@@ -9,6 +9,16 @@ pub(super) enum Flag {
     Starred,
 }
 
+impl Flag {
+    /// What changing it is called in a failure's message.
+    pub(super) fn action(self) -> &'static str {
+        match self {
+            Self::Read => "更改已读状态",
+            Self::Starred => "更改收藏状态",
+        }
+    }
+}
+
 /// A missing entry is shown like a failure (the reader announces other results only to screen
 /// readers): the request could not take effect, though nothing is wrong.
 pub(super) fn flag_tone(outcome: EntryFlagOutcome) -> &'static str {

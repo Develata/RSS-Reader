@@ -154,9 +154,9 @@ pub(crate) fn reduce_feeds_page_intent(
                     state.feeds = snapshot.feeds;
                     state.fingerprint = Some(snapshot.fingerprint);
                 }
-                Err(err) => {
-                    state.status = err;
-                    state.status_tone = "error".to_string();
+                Err(failure) => {
+                    state.status = failure.message();
+                    state.status_tone = failure.tone().to_string();
                 }
             }
             Vec::new()
@@ -182,6 +182,12 @@ pub(crate) fn reduce_feeds_page_intent(
             state.status_revision = state.status_revision.wrapping_add(1);
             state.status = message;
             state.status_tone = tone;
+            Vec::new()
+        }
+        FeedsPageIntent::Failed(failure) => {
+            state.status_revision = state.status_revision.wrapping_add(1);
+            state.status = failure.message();
+            state.status_tone = failure.tone().to_string();
             Vec::new()
         }
         FeedsPageIntent::BumpReload => {

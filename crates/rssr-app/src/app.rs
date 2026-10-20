@@ -1,10 +1,9 @@
 use dioxus::prelude::*;
 
 use crate::{
-    bootstrap::AppServices,
-    components::status_banner::StatusBanner,
+    components::{app_notices::AppNotices, status_banner::StatusBanner},
     router::RoutableApp,
-    theme::{ThemeController, density_state, theme_class},
+    theme::{density_state, theme_class, use_theme_controller},
     ui::{use_app_shell_state, use_authenticated_shell_bus},
 };
 
@@ -27,12 +26,13 @@ const APP_STYLESHEET: &str = concat!(
 #[allow(non_snake_case)]
 pub fn App() -> Element {
     crate::ui::reading_position::use_reading_positions();
-    let settings = use_signal(AppServices::default_settings);
+    let theme = use_theme_controller();
+    let settings = theme.settings;
     let shell = use_app_shell_state();
-    use_context_provider(|| ThemeController { settings });
+    use_context_provider(|| theme);
     use_context_provider(|| shell);
 
-    use_authenticated_shell_bus(settings);
+    use_authenticated_shell_bus(shell, theme);
 
     // 每次 `settings()` 都会克隆一整份 UserSettings（含完整 custom_css 文本），只读一次后面复用。
     let current_settings = settings();
@@ -59,6 +59,7 @@ pub fn App() -> Element {
                     }
                 }
             }
+            AppNotices {}
             RoutableApp {}
         }
     }

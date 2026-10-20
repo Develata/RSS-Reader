@@ -1,4 +1,5 @@
 use super::state::ReaderPageLoadedContent;
+use crate::ui::failure::UiFailure;
 
 #[derive(Debug, Clone)]
 pub(crate) enum ReaderPageIntent {
@@ -20,6 +21,13 @@ pub(crate) enum ReaderPageIntent {
         entry_id: i64,
         error: Option<String>,
     },
+    /// Reading the entry failed (C4b item 1); shown like [`Self::SetError`].
+    LoadFailed {
+        entry_id: i64,
+        failure: UiFailure,
+    },
+    /// A backend call failed (C4b item 1).
+    Failed(UiFailure),
     /// 只回写被切换的标记，不重载整篇文章。
     ///
     /// 切换已读/收藏此前走 `BumpReload`，而 `begin_loading` 会清空标题、正文、来源、发布时间
@@ -30,4 +38,14 @@ pub(crate) enum ReaderPageIntent {
         is_read: Option<bool>,
         is_starred: Option<bool>,
     },
+}
+
+impl ReaderPageIntent {
+    /// The backend failure this intent carries.
+    pub(crate) fn failure(&self) -> Option<&UiFailure> {
+        match self {
+            Self::LoadFailed { failure, .. } | Self::Failed(failure) => Some(failure),
+            _ => None,
+        }
+    }
 }

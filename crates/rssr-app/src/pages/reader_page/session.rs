@@ -3,7 +3,7 @@ use std::future::Future;
 use dioxus::prelude::*;
 
 use crate::bootstrap::ReaderNavigation;
-use crate::ui::{ReaderCommand, UiCommand, UiIntent, execute_ui_command};
+use crate::ui::{ReaderCommand, UiCommand, UiIntent, run_ui_command};
 
 use super::{reducer::dispatch_reader_page_intent, state::ReaderPageState};
 
@@ -31,7 +31,7 @@ impl ReaderPageSession {
     }
 
     pub(crate) fn load(self) {
-        self.spawn_load(execute_ui_command(UiCommand::Reader(ReaderCommand::LoadEntry {
+        self.spawn_load(run_ui_command(UiCommand::Reader(ReaderCommand::LoadEntry {
             entry_id: self.entry_id,
         })));
     }
@@ -78,7 +78,7 @@ impl ReaderPageSession {
     }
 
     fn spawn_ui_command(self, command: UiCommand) {
-        self.spawn_result(execute_ui_command(command));
+        self.spawn_result(run_ui_command(command));
     }
 
     fn spawn_result(self, result: impl Future<Output = Vec<UiIntent>> + 'static) {

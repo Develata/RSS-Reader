@@ -331,6 +331,24 @@
   border-color: var(--status-success-border);
 }
 
+/* An outcome that may have happened: neither an error nor a success. */
+.status-banner[data-state="unknown"] {
+  background: var(--status-info-bg);
+  border-style: dashed;
+}
+
+/* App-wide notices above every page: the message, then its one action. */
+[data-slot="app-notice"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+}
+
+[data-slot="app-notice"] > .status-banner {
+  flex: 1 1 18rem;
+}
+
 .text-input {
   width: 100%;
   padding: 14px 16px;

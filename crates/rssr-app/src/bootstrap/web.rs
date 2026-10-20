@@ -17,7 +17,6 @@ pub(crate) fn install_history_capture() {
 
 use rssr_api::Backend;
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::UserSettings;
 use tokio::sync::OnceCell;
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
@@ -33,10 +32,6 @@ impl AppServices {
             .get_or_try_init(|| async { Ok(Arc::new(Self { backend: open_backend().await? })) })
             .await
             .map(Arc::clone)
-    }
-
-    pub fn default_settings() -> UserSettings {
-        UserSettings::default()
     }
 
     pub(crate) fn backend(&self) -> Arc<dyn Backend> {

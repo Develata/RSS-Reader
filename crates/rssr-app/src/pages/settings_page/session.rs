@@ -6,9 +6,8 @@ use rssr_domain::UserSettings;
 
 use super::{browser::open_repository_url, intent::SettingsPageIntent, themes::detect_preset_key};
 use crate::{
-    status::{set_status_error, set_status_info},
     theme::ThemeController,
-    ui::{SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, execute_ui_command},
+    ui::{SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, run_ui_command},
 };
 
 /// The settings page shows the stored settings with the user's edits on top (B2-D4).
@@ -170,7 +169,7 @@ impl SettingsPageSession {
     }
 
     pub(crate) fn load(self) {
-        self.load_with(|command| execute_ui_command(UiCommand::Settings(command)));
+        self.load_with(|command| run_ui_command(UiCommand::Settings(command)));
     }
 
     /// Reads the stored settings. A write that stores settings after the load was issued
@@ -213,6 +212,9 @@ impl SettingsPageSession {
                 self.apply_stored_settings(settings);
             }
             SettingsPageIntent::SetStatus { message, tone } => self.set_status(message, tone),
+            SettingsPageIntent::Failed(failure) => {
+                self.set_status(failure.message(), failure.tone())
+            }
         }
     }
 
@@ -225,7 +227,7 @@ impl SettingsPageSession {
         }
         self.draft.set(draft);
         self.stored.set(settings.clone());
-        self.theme.settings.set(settings);
+        self.theme.store(settings);
     }
 
     /// A save stored `settings`: its edits are done, the ones made since stay on top. The preset
@@ -245,18 +247,12 @@ impl SettingsPageSession {
         let has_unsaved_edits = !self.edits.peek().pending.is_empty();
         self.draft.set(draft);
         self.stored.set(settings.clone());
-        self.theme.settings.set(settings);
+        self.theme.store(settings);
         has_unsaved_edits
     }
 
     pub(crate) fn set_status(self, message: impl Into<String>, tone: impl Into<String>) {
-        let message = message.into();
-        let tone = tone.into();
-        if tone == "error" {
-            set_status_error(self.status, self.status_tone, message);
-        } else {
-            set_status_info(self.status, self.status_tone, message);
-        }
+        crate::status::set_status(self.status, self.status_tone, message, tone);
     }
 
     pub(crate) fn open_repository(self) {

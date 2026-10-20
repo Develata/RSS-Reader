@@ -1,15 +1,16 @@
 use dioxus::core::{Runtime, current_scope_id};
 use dioxus::prelude::*;
 use dioxus_router::Navigator;
-use rssr_domain::UserSettings;
 
 use crate::{
     router::AppRoute,
     status::set_status_error,
+    theme::ThemeController,
+    ui::failure::UiFailure,
     ui::shell_browser::wait_for_refresh_feedback,
     ui::shell_prefs::{initial_entry_search, remember_entry_search},
     ui::shell_state::{HomeAction, ManualRefreshState, NavMode, resolve_home_action},
-    ui::{ShellCommand, UiCommand, UiIntent, collect_projected_ui_command, visit_ui_command},
+    ui::{ShellCommand, UiCommand, UiIntent, run_ui_command, visit_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -18,6 +19,9 @@ pub(crate) struct AppShellState {
     nav_mode: Signal<NavMode>,
     refresh: Signal<ManualRefreshState>,
     refresh_revision: Signal<u64>,
+    /// Why the settings could not be read at start, until they are (C4b item 5).
+    settings_failure: Signal<Option<UiFailure>>,
+    settings_loading: Signal<bool>,
     owner: ScopeId,
 }
 
@@ -47,13 +51,13 @@ impl AppShellState {
         Runtime::current().in_scope(self.owner, || {
             spawn(async move {
                 let intents =
-                    crate::ui::execute_ui_command(UiCommand::Shell(ShellCommand::ManualRefresh))
-                        .await;
+                    crate::ui::run_ui_command(UiCommand::Shell(ShellCommand::ManualRefresh)).await;
                 let mut failed = true;
                 let mut completed = false;
                 for intent in intents {
                     if let Some((message, tone)) = intent.into_status() {
-                        failed = tone == "error";
+                        // An unknown outcome stays as long as a failure.
+                        failed = tone != "info";
                         completed = true;
                         self.refresh.set(ManualRefreshState::Finished { message, failed });
                     }
@@ -82,6 +86,50 @@ impl AppShellState {
         });
     }
 
+    /// Reads the settings the shell applies (at start, and again on retry). The failure stays
+    /// shown until settings from the library are applied, by this read or by a page (the settings
+    /// page reads them, a configuration import replaces them); a read issued before such an
+    /// application does not overwrite it (C4b items 2 and 5; design review C4D-R2 R2-03, R2-04).
+    pub(crate) fn load_settings(mut self, theme: ThemeController) {
+        if *self.settings_loading.peek() {
+            return;
+        }
+        self.settings_loading.set(true);
+        let issued = theme.stored_count();
+        Runtime::current().in_scope(self.owner, || {
+            spawn(async move {
+                let intents =
+                    run_ui_command(UiCommand::Shell(ShellCommand::LoadAuthenticatedShell)).await;
+                self.settings_loading.set(false);
+                for intent in intents {
+                    match intent {
+                        UiIntent::AuthenticatedShellLoaded(snapshot)
+                            if theme.stored_count() == issued =>
+                        {
+                            theme.store(snapshot.settings);
+                        }
+                        UiIntent::Failed(failure) if theme.stored_count() == 0 => {
+                            self.settings_failure.set(Some(failure));
+                        }
+                        _ => {}
+                    }
+                }
+                if theme.stored_count() > 0 {
+                    self.settings_failure.set(None);
+                }
+            });
+        });
+    }
+
+    /// Why the settings could not be read, while they have not been.
+    pub(crate) fn settings_failure(self) -> Option<UiFailure> {
+        self.settings_failure.read().clone()
+    }
+
+    pub(crate) fn settings_loading(self) -> bool {
+        *self.settings_loading.read()
+    }
+
     pub(crate) fn submit_search(self, navigator: Navigator) {
         navigator.push(AppRoute::EntriesPage {});
     }
@@ -101,6 +149,8 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
         nav_mode: use_signal(NavMode::default),
         refresh: use_signal(ManualRefreshState::default),
         refresh_revision: use_signal(|| 0),
+        settings_failure: use_signal(|| None),
+        settings_loading: use_signal(|| false),
         owner: current_scope_id(),
     }
 }
@@ -172,19 +222,10 @@ pub(crate) fn use_app_nav_shell() -> AppNavShell {
     }
 }
 
-/// Loads the shell's settings once. The Web page is served only after the server's login, so the
-/// page itself has no gate (phase C, C4a).
-pub(crate) fn use_authenticated_shell_bus(mut settings: Signal<UserSettings>) {
-    use_resource(move || async move {
-        for snapshot in collect_projected_ui_command(
-            UiCommand::Shell(ShellCommand::LoadAuthenticatedShell),
-            UiIntent::into_authenticated_shell_loaded,
-        )
-        .await
-        {
-            settings.set(snapshot.settings);
-        }
-    });
+/// Loads the shell's settings once at start ([`AppShellState::load_settings`]). The Web page is
+/// served only after the server's login, so the page itself has no gate (phase C, C4a).
+pub(crate) fn use_authenticated_shell_bus(shell: AppShellState, theme: ThemeController) {
+    use_hook(move || shell.load_settings(theme));
 }
 
 pub(crate) fn use_startup_route_bus(
@@ -209,4 +250,96 @@ pub(crate) fn use_startup_route_bus(
         })
         .await;
     });
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use std::time::Duration;
+
+    use dioxus::prelude::*;
+    use rssr_api::{BackendError, ErrorCode};
+    use rssr_domain::{ThemeMode, UserSettings};
+
+    use super::{AppShellState, use_app_shell_state, use_authenticated_shell_bus};
+    use crate::theme::{ThemeController, use_theme_controller};
+    use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+    fn harness() -> Element {
+        let theme = use_theme_controller();
+        let shell = use_app_shell_state();
+        use_context_provider(|| theme);
+        use_context_provider(|| shell);
+        use_authenticated_shell_bus(shell, theme);
+        rsx! {}
+    }
+
+    fn contexts(dom: &VirtualDom) -> (AppShellState, ThemeController) {
+        dom.in_scope(ScopeId::APP, || (consume_context(), consume_context()))
+    }
+
+    /// Runs the app's tasks until the shell's settings read has ended.
+    async fn settle(dom: &mut VirtualDom, shell: AppShellState) {
+        for _ in 0..200 {
+            let _ = tokio::time::timeout(Duration::from_millis(20), dom.wait_for_work()).await;
+            dom.render_immediate_to_vec();
+            if !dom.in_scope(ScopeId::APP, || shell.settings_loading()) {
+                return;
+            }
+        }
+        panic!("the settings read did not end");
+    }
+
+    /// Settings that cannot be read at start are a visible failure, not silent defaults; it stays
+    /// until settings are read, and a retry that reads them clears it (C4b item 5).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_failed_settings_read_stays_until_settings_are_read() {
+        let backend = Scripted::over_new_library();
+        backend.fail("load_settings", BackendError::new(ErrorCode::Network, "网络中断"));
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            let failure = shell.settings_failure().expect("a visible failure");
+            assert_eq!(failure.message(), "读取设置失败：网络中断");
+            assert_eq!(theme.stored_count(), 0, "no settings applied");
+        });
+
+        dom.in_scope(ScopeId::APP, || shell.load_settings(theme));
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert!(shell.settings_failure().is_some(), "a failed retry keeps it");
+        });
+
+        backend.heal("load_settings");
+        dom.in_scope(ScopeId::APP, || shell.load_settings(theme));
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(shell.settings_failure(), None);
+            assert_eq!(theme.stored_count(), 1);
+        });
+        assert_eq!(backend.calls("load_settings"), 3);
+    }
+
+    /// Settings a page applied while the shell's read was on its way are newer than what the
+    /// read returns: the read does not undo them, and the failure is gone (design review C4D-R2
+    /// R2-03, R2-04).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_read_issued_before_a_page_applied_settings_does_not_undo_them() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        let saved = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+        dom.in_scope(ScopeId::APP, || theme.store(saved.clone()));
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().theme, ThemeMode::Dark, "the page's settings stay");
+            assert_eq!(theme.stored_count(), 1, "the read was not applied");
+            assert_eq!(shell.settings_failure(), None);
+        });
+        assert_eq!(backend.calls("load_settings"), 1);
+    }
 }

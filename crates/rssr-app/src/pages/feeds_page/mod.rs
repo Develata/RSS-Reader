@@ -1,9 +1,9 @@
 mod facade;
 pub(crate) mod intent;
-mod reducer;
+pub(crate) mod reducer;
 mod sections;
 mod session;
-mod state;
+pub(crate) mod state;
 
 use dioxus::prelude::*;
 

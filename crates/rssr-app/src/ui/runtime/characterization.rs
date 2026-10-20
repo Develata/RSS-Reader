@@ -392,7 +392,7 @@ async fn ui_commands_produce_the_recorded_intents() {
     let server = Server::start();
     let mut transcript =
         Transcript { port: server.port, text: String::new(), fingerprints: Vec::new() };
-    let _host = test_host::install(library());
+    let _host = test_host::install(library().backend());
 
     let feeds = |command| UiCommand::Feeds(command);
     let entries = |command| UiCommand::Entries(command);
@@ -711,7 +711,7 @@ async fn ui_commands_produce_the_recorded_intents() {
     // A library without subscriptions: starting the shell also starts the auto-refresh loop,
     // which then has nothing to fetch.
     drop(_host);
-    let _empty = test_host::install(library());
+    let _empty = test_host::install(library().backend());
     transcript.run("authenticated shell", shell(ShellCommand::LoadAuthenticatedShell)).await;
 
     if std::env::var("RSSR_UPDATE_UI_TRANSCRIPT").as_deref() == Ok("1") {

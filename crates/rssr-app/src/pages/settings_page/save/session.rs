@@ -9,7 +9,7 @@ use crate::{
         intent::SettingsPageIntent, session::SettingsPageSession, themes::validate_custom_css,
     },
     status::{set_status_error, set_status_info},
-    ui::{SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, execute_ui_command},
+    ui::{SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, run_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -33,7 +33,7 @@ impl SettingsPageSaveSession {
 
     pub(crate) fn save_with_message(self, success_message: impl Into<String>) {
         self.save_with(success_message.into(), |command| {
-            execute_ui_command(UiCommand::Settings(command))
+            run_ui_command(UiCommand::Settings(command))
         });
     }
 
@@ -88,6 +88,7 @@ impl SettingsPageSaveSession {
             state.with_mut(|state| state.pending_save = false);
             let mut saved_settings = None;
             let mut status_message = String::new();
+            let mut failure_tone = "error";
             apply_projected_ui_intents(intents, UiIntent::into_settings_page_intent, |intent| {
                 match intent {
                     SettingsPageIntent::SettingsLoaded(settings) => {
@@ -95,6 +96,10 @@ impl SettingsPageSaveSession {
                     }
                     SettingsPageIntent::SetStatus { message, .. } => {
                         status_message = message;
+                    }
+                    SettingsPageIntent::Failed(failure) => {
+                        status_message = failure.message();
+                        failure_tone = failure.tone();
                     }
                 }
             });
@@ -106,7 +111,7 @@ impl SettingsPageSaveSession {
             } else {
                 self.page.restore_submitted_edits();
                 status_message.push_str(" 草稿已保留，可修改后重试。");
-                set_status_error(status, status_tone, status_message);
+                crate::status::set_status(status, status_tone, status_message, failure_tone);
             }
             self.page.end_write();
         });
@@ -124,7 +129,7 @@ mod tests {
     use tokio::sync::oneshot;
 
     fn harness() -> Element {
-        let theme = ThemeController { settings: use_signal(UserSettings::default) };
+        let theme = crate::theme::use_theme_controller();
         let page = SettingsPageSession::new(theme);
         let state = use_signal(SettingsPageSaveState::new);
         use_context_provider(|| SettingsPageSaveSession::new(state, page));
@@ -211,6 +216,55 @@ mod tests {
             assert_eq!(theme.settings.peek().theme, ThemeMode::Light);
             assert!(!session.page.status().contains("尚未保存"));
         });
+    }
+
+    /// A save that fails, of any class, through the real runtime: the draft stays, the save ends,
+    /// the status has the class's tone (an unknown outcome is not called a failure) and says the
+    /// draft was kept (C4b item 1).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_failed_save_keeps_the_draft_whatever_the_class() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+        use rssr_api::{BackendError, ErrorCode};
+
+        let classes = [
+            (BackendError::new(ErrorCode::Network, "网络中断"), "error", true),
+            (BackendError::new(ErrorCode::OutcomeUnknown, "结果未知"), "unknown", false),
+            (BackendError::new(ErrorCode::Unauthenticated, "未登录"), "error", true),
+            (BackendError::new(ErrorCode::BuildMismatch, "版本不一致"), "error", true),
+        ];
+        for (error, tone, called_failed) in classes {
+            let backend = Scripted::over_new_library();
+            backend.fail("update_settings", error.clone());
+            let _host = test_host::install(backend.clone());
+            let (mut dom, session, theme) = setup();
+            dom.in_scope(ScopeId::APP, || {
+                session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+                session.save_with("设置已保存。".into(), |command| {
+                    crate::ui::execute_ui_command(UiCommand::Settings(command))
+                });
+            });
+            for _ in 0..200 {
+                let wait = dom.wait_for_work();
+                let _ = tokio::time::timeout(std::time::Duration::from_millis(20), wait).await;
+                dom.render_immediate_to_vec();
+                if !dom.in_scope(ScopeId::APP, || session.snapshot().pending_save) {
+                    break;
+                }
+            }
+            dom.in_scope(ScopeId::APP, || {
+                let status = session.page.status();
+                assert!(!session.snapshot().pending_save, "{}: the save ended", error.message);
+                assert_eq!(session.page.draft().theme, ThemeMode::Dark, "{}", error.message);
+                assert_eq!(theme.settings.peek().theme, UserSettings::default().theme);
+                assert_eq!(session.page.status_tone(), tone, "{}", error.message);
+                assert!(
+                    status.contains(&error.message) && status.contains("草稿已保留"),
+                    "{status}"
+                );
+                assert_eq!(status.contains("失败"), called_failed, "{status}");
+            });
+            assert_eq!(backend.calls("update_settings"), 1);
+        }
     }
 
     #[test]

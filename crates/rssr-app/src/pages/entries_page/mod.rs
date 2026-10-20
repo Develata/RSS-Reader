@@ -11,9 +11,9 @@ mod groups;
 pub(crate) mod intent;
 mod presenter;
 mod pull_refresh;
-mod reducer;
+pub(crate) mod reducer;
 mod session;
-mod state;
+pub(crate) mod state;
 
 use dioxus::prelude::*;
 

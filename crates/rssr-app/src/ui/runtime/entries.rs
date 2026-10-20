@@ -1,7 +1,9 @@
 use super::entry_flags::{Flag, flag_message, flag_tone};
 use crate::{
     pages::entries_page::intent::EntriesPageIntent,
-    ui::{commands::EntriesCommand, runtime::backend::backend, snapshot::UiIntent},
+    ui::{
+        commands::EntriesCommand, failure::UiFailure, runtime::backend::backend, snapshot::UiIntent,
+    },
 };
 use rssr_application::{EntriesBootstrapInput, EntriesBootstrapOutcome, EntryFlagOutcome};
 use rssr_domain::EntriesWorkspaceState;
@@ -12,7 +14,7 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
             let result = async { backend().await?.preview_mark_read(&query).await }.await;
             vec![UiIntent::EntriesPage(match result {
                 Ok(preview) => EntriesPageIntent::BulkPreview(preview),
-                Err(error) => EntriesPageIntent::BulkFailed(error.to_string()),
+                Err(error) => EntriesPageIntent::BulkFailed(UiFailure::new("预览批量已读", error)),
             })]
         }
         EntriesCommand::ConfirmMarkRead { preview } => {
@@ -24,32 +26,27 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                 Ok(rssr_domain::MarkReadOutcome::SelectionChanged { preview }) => {
                     EntriesPageIntent::BulkPreview(preview)
                 }
-                Err(error) => EntriesPageIntent::BulkFailed(error.to_string()),
+                Err(error) => EntriesPageIntent::BulkFailed(UiFailure::new("批量标为已读", error)),
             })]
         }
 
-        EntriesCommand::Bootstrap { load_preferences, load_feeds } => match backend().await {
-            Ok(services) => {
-                match services
-                    .bootstrap_entries(EntriesBootstrapInput { load_preferences, load_feeds })
-                    .await
-                {
-                    Ok(outcome) => bootstrap_intents(outcome, load_preferences),
-                    Err(err) => {
-                        bootstrap_error(format!("加载文章页初始状态失败：{err}"), load_preferences)
-                    }
+        EntriesCommand::Bootstrap { load_preferences, load_feeds } => {
+            let input = EntriesBootstrapInput { load_preferences, load_feeds };
+            match async { backend().await?.bootstrap_entries(input).await }.await {
+                Ok(outcome) => bootstrap_intents(outcome, load_preferences),
+                Err(error) => {
+                    bootstrap_error(UiFailure::new("加载文章页初始状态", error), load_preferences)
                 }
             }
-            Err(err) => bootstrap_error(format!("初始化应用失败：{err}"), load_preferences),
-        },
+        }
         EntriesCommand::RememberOpenedFeed { feed_id } => {
             match async { backend().await?.remember_opened_feed(feed_id).await }.await {
                 Ok(()) => Vec::new(),
-                Err(err) => entries_status_error(format!("记住上次打开的订阅失败：{err}")),
+                Err(error) => entries_failed("记住上次打开的订阅", error),
             }
         }
-        EntriesCommand::LoadEntries { query } => match backend().await {
-            Ok(services) => match services.list_entries(&query).await {
+        EntriesCommand::LoadEntries { query } => {
+            match async { backend().await?.list_entries(&query).await }.await {
                 Ok(outcome) => {
                     vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries {
                         entries: outcome
@@ -65,10 +62,9 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                         truncated: outcome.truncated,
                     })]
                 }
-                Err(err) => entries_status_error(format!("{err}")),
-            },
-            Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
-        },
+                Err(error) => entries_failed("读取文章列表", error),
+            }
+        }
         EntriesCommand::SetRead { entry_id, entry_title, read } => {
             let result = async { backend().await?.set_entry_read(entry_id, read).await }.await;
             entry_flag_intents(Flag::Read, entry_id, &entry_title, result)
@@ -84,22 +80,19 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
             read_filter,
             starred_filter,
             selected_feed_urls,
-        } => match backend().await {
-            Ok(services) => {
-                let next = EntriesWorkspaceState {
-                    grouping_mode,
-                    show_archived,
-                    read_filter,
-                    starred_filter,
-                    selected_feed_urls,
-                };
-                match services.save_entries_workspace_if_changed(next).await {
-                    Ok(true) | Ok(false) => Vec::new(),
-                    Err(err) => entries_status_error(format!("保存文章页偏好失败：{err}")),
-                }
+        } => {
+            let next = EntriesWorkspaceState {
+                grouping_mode,
+                show_archived,
+                read_filter,
+                starred_filter,
+                selected_feed_urls,
+            };
+            match async { backend().await?.save_entries_workspace_if_changed(next).await }.await {
+                Ok(true) | Ok(false) => Vec::new(),
+                Err(error) => entries_failed("保存文章页偏好", error),
             }
-            Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
-        },
+        }
     }
 }
 
@@ -122,11 +115,11 @@ fn bootstrap_intents(outcome: EntriesBootstrapOutcome, load_preferences: bool) -
     entries_intents(intents)
 }
 
-fn bootstrap_error(message: String, load_preferences: bool) -> Vec<UiIntent> {
+fn bootstrap_error(failure: UiFailure, load_preferences: bool) -> Vec<UiIntent> {
     if load_preferences {
-        entries_intents(vec![EntriesPageIntent::PreferencesUnavailable(message)])
+        entries_intents(vec![EntriesPageIntent::PreferencesUnavailable(failure)])
     } else {
-        entries_status_error(message)
+        vec![UiIntent::Failed(failure)]
     }
 }
 
@@ -134,11 +127,8 @@ fn entries_intents(intents: Vec<EntriesPageIntent>) -> Vec<UiIntent> {
     intents.into_iter().map(UiIntent::EntriesPage).collect()
 }
 
-fn entries_status_error(message: impl Into<String>) -> Vec<UiIntent> {
-    entries_intents(vec![EntriesPageIntent::SetStatus {
-        message: message.into(),
-        tone: "error".to_string(),
-    }])
+fn entries_failed(action: &'static str, error: rssr_api::BackendError) -> Vec<UiIntent> {
+    vec![UiIntent::Failed(UiFailure::new(action, error))]
 }
 
 /// The status and, when the entry still exists, the flag patch for a list card.
@@ -150,7 +140,7 @@ fn entry_flag_intents(
 ) -> Vec<UiIntent> {
     let outcome = match result {
         Ok(outcome) => outcome,
-        Err(err) => return entries_status_error(format!("{err}")),
+        Err(error) => return entries_failed(flag.action(), error),
     };
     let mut intents = vec![EntriesPageIntent::SetStatus {
         message: flag_message(flag, &format!("《{entry_title}》"), outcome),
@@ -206,12 +196,13 @@ mod tests {
     #[test]
     fn bootstrap_failures_release_initial_query_gate_without_marking_preferences_loaded() {
         assert!(matches!(
-            bootstrap_error("read failed".into(), true).as_slice(),
+            bootstrap_error(crate::ui::failure::plain("read failed"), true).as_slice(),
             [UiIntent::EntriesPage(EntriesPageIntent::PreferencesUnavailable(_))]
         ));
         assert!(matches!(
-            bootstrap_error("refresh summaries failed".into(), false).as_slice(),
-            [UiIntent::EntriesPage(EntriesPageIntent::SetStatus { .. })]
+            bootstrap_error(crate::ui::failure::plain("refresh summaries failed"), false)
+                .as_slice(),
+            [UiIntent::Failed(_)]
         ));
     }
 }

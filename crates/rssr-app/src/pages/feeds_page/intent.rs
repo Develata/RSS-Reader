@@ -1,5 +1,7 @@
 use rssr_domain::FeedSummary;
 
+use crate::ui::failure::UiFailure;
+
 #[derive(Debug, Clone)]
 pub(crate) struct FeedsPageSnapshot {
     pub(crate) feeds: Vec<FeedSummary>,
@@ -42,7 +44,7 @@ pub(crate) enum FeedsPageIntent {
     ImportConfigRequested,
     ExportOpmlRequested,
     ImportOpmlRequested,
-    SnapshotLoaded(Result<FeedsPageSnapshot, String>),
+    SnapshotLoaded(Result<FeedsPageSnapshot, UiFailure>),
     ConfigTextExported(String),
     OpmlTextExported(String),
     PendingConfigImportSet(bool),
@@ -51,7 +53,19 @@ pub(crate) enum FeedsPageIntent {
         message: String,
         tone: String,
     },
+    /// A backend call failed (C4b item 1).
+    Failed(UiFailure),
     BumpReload,
     /// 配置包替换了持久化设置；由 session 写入全局 `ThemeController`，订阅页状态不变。
     SettingsReplaced(rssr_domain::UserSettings),
+}
+
+impl FeedsPageIntent {
+    /// The backend failure this intent carries.
+    pub(crate) fn failure(&self) -> Option<&UiFailure> {
+        match self {
+            Self::SnapshotLoaded(Err(failure)) | Self::Failed(failure) => Some(failure),
+            _ => None,
+        }
+    }
 }

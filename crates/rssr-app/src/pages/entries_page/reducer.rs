@@ -52,11 +52,16 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.status = format!("已将 {count} 篇文章标为已读。");
             state.status_tone = "success".into();
         }
-        EntriesPageIntent::BulkFailed(message) => {
+        EntriesPageIntent::BulkFailed(failure) => {
             state.bulk_busy = false;
             state.bulk_writing = false;
-            state.status = message;
-            state.status_tone = "error".into();
+            if failure.is_unknown() {
+                // The confirmed write may have applied: the preview no longer says what is
+                // unread (C4b item 1).
+                state.bulk_preview = None;
+            }
+            state.status = failure.message();
+            state.status_tone = failure.tone().into();
         }
 
         EntriesPageIntent::ApplyLoadedSettings(settings) => {
@@ -79,9 +84,10 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             }
             state.preferences_load = PreferencesLoadState::Loaded;
         }
-        EntriesPageIntent::PreferencesUnavailable(message) => {
+        EntriesPageIntent::PreferencesUnavailable(failure) => {
+            let message = failure.message();
             state.status = message.clone();
-            state.status_tone = "error".to_string();
+            state.status_tone = failure.tone().to_string();
             state.preferences_load = PreferencesLoadState::Unavailable(message);
         }
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = Arc::new(feeds),
@@ -122,6 +128,10 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         EntriesPageIntent::SetStatus { message, tone } => {
             state.status = message;
             state.status_tone = tone;
+        }
+        EntriesPageIntent::Failed(failure) => {
+            state.status = failure.message();
+            state.status_tone = failure.tone().to_string();
         }
         EntriesPageIntent::SetGroupingMode(grouping_mode) => {
             state.grouping_mode = grouping_mode;

@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use super::{intent::FeedsPageIntent, reducer::dispatch_feeds_page_intent, state::FeedsPageState};
 use crate::{
     theme::ThemeController,
-    ui::{AppShellState, FeedsCommand, ShellCommand, UiCommand, UiIntent, execute_ui_command},
+    ui::{AppShellState, FeedsCommand, ShellCommand, UiCommand, UiIntent, run_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -59,7 +59,7 @@ impl FeedsPageSession {
     }
 
     pub(super) fn dispatch_intent(self, intent: FeedsPageIntent) {
-        self.dispatch_intent_with(intent, execute_ui_command);
+        self.dispatch_intent_with(intent, run_ui_command);
     }
 
     fn dispatch_intent_with<F: Future<Output = Vec<UiIntent>> + 'static>(
@@ -69,7 +69,7 @@ impl FeedsPageSession {
     ) {
         if let FeedsPageIntent::SettingsReplaced(settings) = intent {
             // 主题、自定义 CSS、密度与字号由全局设置驱动，导入后立即生效，不必等设置页或重启。
-            self.theme.settings.set(settings);
+            self.theme.store(settings);
             return;
         }
         let commands = dispatch_feeds_page_intent(self.state, intent);
@@ -111,7 +111,7 @@ impl FeedsPageSession {
                 }
                 if single_refresh {
                     let (revision, message, failed) = self.state.with(|state| {
-                        (state.status_revision, state.status.clone(), state.status_tone == "error")
+                        (state.status_revision, state.status.clone(), state.status_tone != "info")
                     });
                     crate::ui::wait_for_refresh_feedback(std::time::Duration::from_secs(
                         if failed { 6 } else { 3 },
@@ -175,7 +175,7 @@ mod tests {
     fn harness() -> Element {
         let shell = use_app_shell_state();
         let state = use_signal(FeedsPageState::new);
-        let theme = ThemeController { settings: use_signal(UserSettings::default) };
+        let theme = crate::theme::use_theme_controller();
         let generation = use_signal(|| 0);
         use_context_provider(|| theme);
         use_context_provider(|| FeedsPageSession::new(state, shell, theme, generation));
@@ -197,7 +197,7 @@ mod tests {
 
     fn app_with_unmountable_page() -> Element {
         let shell = use_app_shell_state();
-        let theme = ThemeController { settings: use_signal(UserSettings::default) };
+        let theme = crate::theme::use_theme_controller();
         let show_page = use_signal(|| true);
         let page = use_signal(|| None);
         use_context_provider(|| shell);
@@ -424,7 +424,7 @@ mod tests {
     #[test]
     fn older_feed_snapshot_error_cannot_replace_latest_status() {
         let state = older_snapshot_after_latest(vec![UiIntent::FeedsPage(
-            FeedsPageIntent::SnapshotLoaded(Err("older read failed".into())),
+            FeedsPageIntent::SnapshotLoaded(Err(crate::ui::failure::plain("older read failed"))),
         )]);
         assert_eq!(state.feed_count, 2);
         assert!(state.status.is_empty());
