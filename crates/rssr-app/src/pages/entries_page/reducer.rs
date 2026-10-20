@@ -23,9 +23,10 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.bulk_writing = writing;
         }
         EntriesPageIntent::CancelBulk => {
-            // Dispatched when the filters or the search change: a kept status was about the
-            // list shown before.
+            // Dispatched when the filters or the search change: a kept status, or a bulk
+            // mark-read's notice, was about the list shown before.
             state.status_kept = false;
+            state.bulk_notice = None;
             state.bulk_preview = None;
             if !state.bulk_writing {
                 state.bulk_generation = state.bulk_generation.wrapping_add(1);
@@ -45,6 +46,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             };
             state.status_tone = "info".into();
             state.status_kept = false;
+            state.bulk_notice = None;
             state.bulk_preview = Some(preview);
         }
         EntriesPageIntent::BulkApplied(count) => {
@@ -68,6 +70,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.status = failure.message();
             state.status_tone = failure.tone().into();
             state.status_kept = true;
+            state.bulk_notice = None;
         }
 
         EntriesPageIntent::ApplyLoadedSettings(settings) => {
@@ -97,6 +100,15 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             reduce_entries_page_intent(state, intent);
         }
         EntriesPageIntent::WorkspaceSaved(workspace) => state.stored_workspace = Some(workspace),
+        EntriesPageIntent::WorkspaceSaveStarted => {
+            state.workspace_saving = true;
+            state.workspace_wanted = None;
+        }
+        EntriesPageIntent::WorkspaceSaveEnded => {
+            state.workspace_saving = false;
+            state.workspace_wanted = None;
+        }
+        EntriesPageIntent::WorkspaceWanted(workspace) => state.workspace_wanted = Some(workspace),
         EntriesPageIntent::BootstrapStarted => state.bootstrap_in_flight = true,
         EntriesPageIntent::BootstrapFinished => state.bootstrap_in_flight = false,
         EntriesPageIntent::PreferencesLoaded => {
@@ -142,7 +154,11 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
                 state.status = format!("共 {count} 篇文章。");
                 state.status_tone = "info".to_string();
             }
-            if let Some(message) = state.bulk_notice.take() {
+            // The bulk mark-read's own notice, unless a later status replaced it (review
+            // C4B-B-04).
+            if !state.status_kept
+                && let Some(message) = state.bulk_notice.take()
+            {
                 state.status = message;
                 state.status_tone = "success".into();
             }
@@ -165,11 +181,13 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.status = message;
             state.status_tone = tone;
             state.status_kept = false;
+            state.bulk_notice = None;
         }
         EntriesPageIntent::Failed(failure) => {
             state.status = failure.message();
             state.status_tone = failure.tone().to_string();
             state.status_kept = true;
+            state.bulk_notice = None;
         }
         EntriesPageIntent::ReadFailed(failure) => {
             state.status = failure.message();
@@ -668,5 +686,28 @@ mod tests {
         );
         assert!(state.bulk_preview.is_none());
         assert_eq!(state.status, "文章列表已变化，请重新确认批量已读范围。");
+    }
+
+    /// A bulk mark-read's notice waiting for the list read does not replace a later write's
+    /// unknown outcome (review C4B-B-04).
+    #[test]
+    fn a_later_unknown_outcome_outlasts_a_bulk_notice() {
+        let unknown = crate::ui::failure::UiFailure::new(
+            "更改收藏状态",
+            rssr_api::BackendError::new(rssr_api::ErrorCode::OutcomeUnknown, "结果未知"),
+        );
+        let mut state = loaded_page(ReadFilter::All);
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::BulkApplied(2));
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::Failed(unknown.clone()));
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::SetEntries {
+                entries: vec![entry(1, true)],
+                archived_count: 0,
+                truncated: false,
+            },
+        );
+        assert_eq!(state.status, unknown.message());
+        assert_eq!(state.status_tone, unknown.tone());
     }
 }

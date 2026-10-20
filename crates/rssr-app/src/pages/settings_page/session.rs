@@ -75,18 +75,23 @@ struct Writes {
     /// Writes whose reply carried the stored settings. A load issued before one of them may
     /// predate it, so its reply is discarded.
     stored: u64,
-    /// A load answered while a write was in flight. It waits for the write: dropped if the write
-    /// stores settings, applied if it stores nothing (it failed, or the remote had none).
-    held_load: Option<UserSettings>,
+    /// A load answered while a write was in flight, with the app's count of applied settings when
+    /// it was issued. It waits for the write: dropped if the write stores settings, applied if it
+    /// stores nothing (it failed, or the remote had none).
+    held_load: Option<(UserSettings, u64)>,
+    /// Loads issued: only the latest one's reply applies, whatever order the replies come in
+    /// (C4b item 2; review C4B-B-01).
+    reads: u64,
 }
 
 impl SettingsPageSession {
-    /// A draft kept before a reload or a sign-in is taken once and becomes the pending edits,
-    /// over the settings the page then reads; it is not saved by itself (C4b item 4).
+    /// A draft kept before a reload or a sign-in becomes the pending edits, over the settings the
+    /// page then reads; it is not saved by itself (C4b item 4). It leaves the storage only once
+    /// the shell has it (review C4B-B-09).
     pub(crate) fn new(theme: ThemeController) -> Self {
         let stored = use_signal(|| theme.settings.peek().clone());
         let edits =
-            use_signal(|| Edits { submitted: None, pending: drafts::take().unwrap_or_default() });
+            use_signal(|| Edits { submitted: None, pending: drafts::peek().unwrap_or_default() });
         let restored = !edits.peek().pending.is_empty();
         let draft = use_signal(|| edits.peek().over(&stored.peek()));
         let writes = use_signal(Writes::default);
@@ -103,8 +108,13 @@ impl SettingsPageSession {
 
         let session =
             Self { theme, stored, edits, draft, writes, preset_choice, status, status_tone, shell };
-        // A restored draft is the shell's to keep too, at once.
-        use_effect(move || session.publish_draft());
+        // A restored draft is the shell's to keep from now on; then it leaves the storage.
+        use_effect(move || {
+            session.publish_draft();
+            if restored {
+                drafts::forget();
+            }
+        });
         session
     }
 
@@ -181,8 +191,8 @@ impl SettingsPageSession {
             writes.in_flight = false;
             writes.held_load.take()
         };
-        if let Some(settings) = held_load {
-            self.apply_stored_settings(settings);
+        if let Some((settings, applied)) = held_load {
+            self.apply_load(settings, applied);
         }
     }
 
@@ -217,34 +227,58 @@ impl SettingsPageSession {
         self.load_with(|command| run_ui_command(UiCommand::Settings(command)));
     }
 
-    /// Reads the stored settings. A write that stores settings after the load was issued
+    /// Reads the stored settings. Only the latest load's reply applies (an earlier one may have
+    /// read before it). A write of the page that stores settings after the load was issued
     /// supersedes it: the read may predate the write, so the whole reply is discarded. A reply
-    /// that arrives while a write is in flight waits for the write to end.
+    /// that arrives while a write is in flight waits for the write to end. Settings the app
+    /// applied from the library after the load was issued (an import or a download that ended
+    /// after its page was left, the shell's start) are not older than the read: the page takes
+    /// them instead (C4b item 2, R2-03; reviews C4B-B-01, C4B-B-03).
     pub(super) fn load_with<F: Future<Output = Vec<UiIntent>> + 'static>(
-        self,
+        mut self,
         execute: impl FnOnce(SettingsCommand) -> F,
     ) {
-        let issued = self.writes.peek().stored;
+        let (issued, read) = {
+            let mut writes = self.writes.write();
+            writes.reads = writes.reads.wrapping_add(1);
+            (writes.stored, writes.reads)
+        };
+        let applied = self.theme.stored_count();
         let loading = execute(SettingsCommand::Load);
         spawn(async move {
             let intents = loading.await;
-            if self.writes.peek().stored != issued {
+            let writes = self.writes.peek();
+            if writes.stored != issued || writes.reads != read {
                 return;
             }
+            drop(writes);
             apply_projected_ui_intents(intents, UiIntent::into_settings_page_intent, |intent| {
                 match intent {
-                    SettingsPageIntent::SettingsLoaded(settings) => self.receive_load(settings),
+                    SettingsPageIntent::SettingsLoaded(settings) => {
+                        self.receive_load(settings, applied)
+                    }
                     status => self.dispatch(status),
                 }
             });
         });
     }
 
-    fn receive_load(mut self, settings: UserSettings) {
+    fn receive_load(mut self, settings: UserSettings, applied: u64) {
         if self.writes.peek().in_flight {
-            self.writes.write().held_load = Some(settings);
+            self.writes.write().held_load = Some((settings, applied));
         } else {
+            self.apply_load(settings, applied);
+        }
+    }
+
+    /// A load's settings, unless the app applied settings from the library since the load was
+    /// issued (`applied` was its count then): the page then shows those, without applying them
+    /// again.
+    fn apply_load(self, settings: UserSettings, applied: u64) {
+        if self.theme.stored_count() == applied {
             self.apply_stored_settings(settings);
+        } else {
+            self.show_stored_settings(self.theme.settings.peek().clone());
         }
     }
 
@@ -265,14 +299,19 @@ impl SettingsPageSession {
 
     /// Settings that were read or pulled are the stored ones; the edits stay on top. The preset
     /// follows the stored CSS unless the CSS is edited.
-    fn apply_stored_settings(mut self, settings: UserSettings) {
+    fn apply_stored_settings(self, settings: UserSettings) {
+        self.show_stored_settings(settings.clone());
+        self.theme.store(settings);
+    }
+
+    /// The page's view of the stored settings, with the edits on top.
+    fn show_stored_settings(mut self, settings: UserSettings) {
         let draft = self.edits.peek().over(&settings);
         if !self.edits.peek().edit_custom_css() {
             self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
         }
         self.draft.set(draft);
-        self.stored.set(settings.clone());
-        self.theme.store(settings);
+        self.stored.set(settings);
     }
 
     /// A save stored `settings`: its edits are done, the ones made since stay on top. The preset

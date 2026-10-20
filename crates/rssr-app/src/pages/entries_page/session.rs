@@ -190,26 +190,51 @@ impl EntriesPageSession {
         if !self.can_save_browsing_preferences(preferences_loaded) {
             return;
         }
-        // Only what the user changed: preferences that were read (at start or again) are the
-        // library's already, and a read never writes (C4b item 2).
-        let next = rssr_domain::EntriesWorkspaceState {
-            grouping_mode,
-            show_archived,
-            read_filter,
-            starred_filter,
-            selected_feed_urls: selected_feed_urls.clone(),
-        };
-        if self.state.peek().stored_workspace.as_ref() == Some(&next) {
-            return;
-        }
-
-        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::SaveBrowsingPreferences {
+        self.save_workspace(rssr_domain::EntriesWorkspaceState {
             grouping_mode,
             show_archived,
             read_filter,
             starred_filter,
             selected_feed_urls,
-        }));
+        });
+    }
+
+    /// Saves the browsing preferences the user chose, one save at a time. Only what differs from
+    /// the stored ones is sent: preferences that were read (at start or again) are the library's
+    /// already, and a read never writes (C4b item 2). A choice made while a save is on its way
+    /// waits for it, then is saved if it still differs, so the last choice is the one kept
+    /// (review C4B-B-05).
+    fn save_workspace(self, next: rssr_domain::EntriesWorkspaceState) {
+        let state = self.state.peek();
+        if state.workspace_saving {
+            drop(state);
+            self.dispatch(EntriesPageIntent::WorkspaceWanted(next));
+            return;
+        }
+        if state.stored_workspace.as_ref() == Some(&next) {
+            return;
+        }
+        drop(state);
+        self.dispatch(EntriesPageIntent::WorkspaceSaveStarted);
+        let command = UiCommand::Entries(EntriesCommand::SaveBrowsingPreferences {
+            grouping_mode: next.grouping_mode,
+            show_archived: next.show_archived,
+            read_filter: next.read_filter,
+            starred_filter: next.starred_filter,
+            selected_feed_urls: next.selected_feed_urls,
+        });
+        spawn(async move {
+            let intents = run_ui_command(command).await;
+            for intent in intents.into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                self.dispatch(intent);
+            }
+            // Saved or not, the save ended; a choice made meanwhile goes next.
+            let wanted = self.state.peek().workspace_wanted.clone();
+            self.dispatch(EntriesPageIntent::WorkspaceSaveEnded);
+            if let Some(wanted) = wanted {
+                self.save_workspace(wanted);
+            }
+        });
     }
 
     fn can_save_browsing_preferences(self, preferences_loaded: bool) -> bool {
@@ -827,5 +852,79 @@ mod tests {
             assert_eq!(state.read_filter, ReadFilter::UnreadOnly, "the saved filter stays");
             assert_eq!(state.stored_workspace, Some(saved));
         });
+    }
+
+    /// A choice made while a save of the preferences is on its way is saved after it, even when
+    /// it goes back to what was stored before: the last choice is the one kept (review
+    /// C4B-B-05).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_choice_made_during_a_save_is_saved_after_it() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+        let backend = Scripted::over_new_library();
+        let hold = backend.hold("save_entries_workspace_if_changed");
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let first = EntriesWorkspaceState::default();
+        let second = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..first.clone() };
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = EntriesPageSession::new(
+                None,
+                Signal::new(EntriesPageState::new(true)),
+                Signal::new(0),
+                Signal::new(0),
+            );
+            session.dispatch(EntriesPageIntent::ApplyLoadedWorkspaceState(first.clone()));
+            session.dispatch(EntriesPageIntent::PreferencesLoaded);
+            session
+        });
+        let save = |workspace: &EntriesWorkspaceState| {
+            dom.in_scope(ScopeId::APP, || {
+                session.save_browsing_preferences_with(
+                    true,
+                    workspace.grouping_mode,
+                    workspace.show_archived,
+                    workspace.read_filter,
+                    workspace.starred_filter,
+                    workspace.selected_feed_urls.clone(),
+                )
+            })
+        };
+        save(&second);
+        save(&first);
+        for _ in 0..100 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            if hold.waiting() == 1 {
+                break;
+            }
+        }
+        assert_eq!(backend.calls("save_entries_workspace_if_changed"), 1, "one at a time");
+        for _ in 0..2 {
+            hold.release();
+        }
+        for _ in 0..100 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            if dom.in_scope(ScopeId::APP, || {
+                let state = session.snapshot();
+                !state.workspace_saving && backend.calls("save_entries_workspace_if_changed") == 2
+            }) {
+                break;
+            }
+        }
+        assert_eq!(backend.calls("save_entries_workspace_if_changed"), 2);
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.snapshot().stored_workspace, Some(first.clone()), "the last choice");
+        });
+        let stored = rssr_api::Backend::bootstrap_entries(
+            &*backend,
+            rssr_application::EntriesBootstrapInput { load_preferences: true, load_feeds: false },
+        )
+        .await
+        .expect("read")
+        .workspace;
+        assert_eq!(stored, Some(first), "the library has it");
     }
 }

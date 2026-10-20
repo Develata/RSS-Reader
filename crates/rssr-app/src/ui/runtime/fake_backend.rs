@@ -141,6 +141,7 @@ impl Scripted {
 impl Backend for Scripted {
     async fn load_settings(&self) -> Result<UserSettings> {
         self.enter("load_settings")?;
+        self.held("load_settings").await;
         self.inner.load_settings().await
     }
 
@@ -197,6 +198,7 @@ impl Backend for Scripted {
         workspace: EntriesWorkspaceState,
     ) -> Result<bool> {
         self.enter("save_entries_workspace_if_changed")?;
+        self.held("save_entries_workspace_if_changed").await;
         self.inner.save_entries_workspace_if_changed(workspace).await
     }
 

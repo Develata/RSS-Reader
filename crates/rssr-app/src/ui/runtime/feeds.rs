@@ -142,21 +142,17 @@ fn import_config_result(result: ConfigImportResult) -> Vec<UiIntent> {
     let (message, tone) = match result {
         ConfigImportResult::Imported(outcome) => {
             let summary = super::config_import_summary(&outcome);
-            intents.push(FeedsPageIntent::BumpReload);
             // 配置包可以替换外观设置：替换提交的设置随结果返回，交给全局主题立即生效。
             if outcome.settings_updated {
                 intents.push(FeedsPageIntent::SettingsReplaced(outcome.settings));
             }
             (format!("配置包已导入：{summary}。"), "info")
         }
-        ConfigImportResult::Conflict => {
-            intents.push(FeedsPageIntent::BumpReload);
-            (
-                "订阅或设置在本页载入后已被修改，配置包未导入；已重新载入，请确认后再导入。"
-                    .to_string(),
-                "error",
-            )
-        }
+        ConfigImportResult::Conflict => (
+            "订阅或设置在本页载入后已被修改，配置包未导入；已重新载入，请确认后再导入。"
+                .to_string(),
+            "error",
+        ),
         ConfigImportResult::Failed(failure) => {
             intents.push(FeedsPageIntent::Failed(failure));
             return feeds_intents(intents);
@@ -250,7 +246,8 @@ mod tests {
     }
 
     /// The committed settings from the outcome go to the shell when they changed; a conflict
-    /// reloads the page and says so; other failures leave the page as it is.
+    /// says so. None reloads the page itself: the import's end re-reads every page through the
+    /// shell (review C4B-B-03).
     #[test]
     fn config_import_hands_replaced_settings_to_the_shell() {
         let replaced = rssr_domain::UserSettings {
@@ -263,16 +260,11 @@ mod tests {
             settings_updated,
             settings: replaced.clone(),
         };
-        for (result, expected_settings, expected_tone, reloads) in [
-            (ConfigImportResult::Imported(outcome(true)), Some(&replaced), "info", true),
-            (ConfigImportResult::Imported(outcome(false)), None, "info", true),
-            (ConfigImportResult::Conflict, None, "error", true),
-            (
-                ConfigImportResult::Failed(crate::ui::failure::plain("bad json")),
-                None,
-                "error",
-                false,
-            ),
+        for (result, expected_settings, expected_tone) in [
+            (ConfigImportResult::Imported(outcome(true)), Some(&replaced), "info"),
+            (ConfigImportResult::Imported(outcome(false)), None, "info"),
+            (ConfigImportResult::Conflict, None, "error"),
+            (ConfigImportResult::Failed(crate::ui::failure::plain("bad json")), None, "error"),
         ] {
             let intents = import_config_result(result)
                 .into_iter()
@@ -290,10 +282,7 @@ mod tests {
                 other => panic!("{other:?}"),
             };
             assert_eq!(tone, expected_tone);
-            assert_eq!(
-                intents.iter().any(|intent| matches!(intent, FeedsPageIntent::BumpReload)),
-                reloads
-            );
+            assert!(!intents.iter().any(|intent| matches!(intent, FeedsPageIntent::BumpReload)));
         }
     }
 }

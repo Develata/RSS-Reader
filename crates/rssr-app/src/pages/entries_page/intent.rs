@@ -31,6 +31,11 @@ pub(crate) enum EntriesPageIntent {
     PreferencesRereadFailed(UiFailure),
     /// The browsing preferences were saved.
     WorkspaceSaved(EntriesWorkspaceState),
+    /// A save of the browsing preferences was sent / ended (saved or not).
+    WorkspaceSaveStarted,
+    WorkspaceSaveEnded,
+    /// The user chose these preferences while a save was on its way.
+    WorkspaceWanted(EntriesWorkspaceState),
     /// A read of the preferences and subscriptions was issued / the latest one answered.
     BootstrapStarted,
     BootstrapFinished,

@@ -29,6 +29,7 @@ pub fn AppNotices() -> Element {
     let recovery = APP_RECOVERY();
     let kept = not_kept() != recovery || recovery.is_none();
     let settings_failure = shell.settings_failure(theme);
+    let reread_failure = shell.settings_reread_failure(theme);
     let startup_failure = shell.startup_failure();
     let job_notice = shell.job_notice();
     let loading = shell.settings_loading();
@@ -91,6 +92,16 @@ pub fn AppNotices() -> Element {
                 }
                 button { class: "button", "data-action": "dismiss-startup-failure",
                     onclick: move |_| shell.dismiss_startup_failure(), "知道了" }
+            }
+        }
+        if let Some(failure) = reread_failure {
+            aside { "data-slot": "app-notice", "data-notice": "settings-reread", role: "alert",
+                StatusBanner {
+                    message: format!("{}（显示的是之前读到的设置）", failure.message()),
+                    tone: failure.tone().to_string(),
+                }
+                button { class: "button", "data-action": "retry-settings-reread", disabled: loading, aria_busy: loading,
+                    onclick: move |_| shell.retry_settings_read(theme), "重试" }
             }
         }
         if let Some(failure) = settings_failure {

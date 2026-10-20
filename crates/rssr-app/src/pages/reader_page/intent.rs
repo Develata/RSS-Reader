@@ -40,6 +40,8 @@ pub(crate) enum ReaderPageIntent {
     RereadMissing {
         entry_id: i64,
     },
+    /// A read-only refresh was issued: earlier ones are superseded (review C4B-B-01).
+    RereadIssued,
     /// 只回写被切换的标记，不重载整篇文章。
     ///
     /// 切换已读/收藏此前走 `BumpReload`，而 `begin_loading` 会清空标题、正文、来源、发布时间

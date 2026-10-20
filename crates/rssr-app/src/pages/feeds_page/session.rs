@@ -102,7 +102,9 @@ impl FeedsPageSession {
             let task = execute(command);
             let completion = async move {
                 let intents = task.await;
-                if job {
+                // Every page re-reads what the job or the import may have changed, including a
+                // settings page opened meanwhile (review C4B-B-03).
+                if shell_owned {
                     self.shell.reread_now();
                 }
                 if generation.is_some_and(|generation| *self.query_generation.peek() != generation)
@@ -138,7 +140,7 @@ impl FeedsPageSession {
                             _ => {}
                         }
                     }
-                    if job && let Some((message, tone)) = notice {
+                    if let Some((message, tone)) = notice {
                         self.shell.report_job(message, tone);
                     }
                     return;
@@ -271,8 +273,8 @@ mod tests {
 
     /// 导入已提交、结果还没返回时离开订阅页：任务不被取消，新外观照样生效，
     /// 已卸载页面的回执被丢弃而不是写进已释放的状态（独立评审的反例）。
-    #[test]
-    fn config_import_still_applies_settings_after_leaving_the_page() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn config_import_still_applies_settings_after_leaving_the_page() {
         let mut dom = VirtualDom::new(app_with_unmountable_page);
         dom.rebuild_in_place();
         let probe = dom.in_scope(ScopeId::APP, consume_context::<UnmountProbe>);
@@ -348,6 +350,9 @@ mod tests {
             let theme = consume_context::<ThemeController>();
             assert_eq!(*theme.settings.peek(), replaced);
             assert!(!session.snapshot().pending_config_import);
+            // Every page re-reads what the import changed, a settings page opened meanwhile
+            // too (review C4B-B-03).
+            assert_eq!(session.shell.library_revision(), 1);
         });
     }
 

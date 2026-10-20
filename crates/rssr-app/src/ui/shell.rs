@@ -41,6 +41,15 @@ pub(crate) struct AppShellState {
     /// at once, its own status with it (C4b item 5; review C4B-A-R3-03).
     startup_failure: Signal<Option<UiFailure>>,
     settings_loading: Signal<bool>,
+    /// The start got to the backend and started the periodic refresh: later reads of the
+    /// settings (retry, recovery, re-read) only read (review C4B-B-07).
+    auto_refresh_started: Signal<bool>,
+    /// A read of the settings was asked for while one was on its way: one more follows it, so
+    /// the request is not lost (review C4B-B-06).
+    settings_reread_wanted: Signal<bool>,
+    /// A read of the settings failed after settings were applied, with the app's count of applied
+    /// settings then: shown until settings are applied again (review C4B-B-08).
+    settings_reread_failure: Signal<Option<(UiFailure, u64)>>,
     owner: ScopeId,
 }
 
@@ -167,7 +176,18 @@ impl AppShellState {
     /// page reads them, a configuration import replaces them); a read issued before such an
     /// application does not overwrite it (C4b items 2 and 5; design review C4D-R2 R2-03, R2-04).
     pub(crate) fn load_settings(self, theme: ThemeController) {
-        self.read_settings(theme, ShellCommand::LoadAuthenticatedShell);
+        let command = if *self.auto_refresh_started.peek() {
+            ShellCommand::LoadSettings
+        } else {
+            ShellCommand::LoadAuthenticatedShell
+        };
+        self.read_settings(theme, command);
+    }
+
+    /// Reads the settings again after a re-read failed (the notice's retry), whether or not the
+    /// settings page is open.
+    pub(crate) fn retry_settings_read(self, theme: ThemeController) {
+        self.read_settings(theme, ShellCommand::LoadSettings);
     }
 
     /// The shell's read-only refresh: the settings again, applied like the start's (the same
@@ -182,6 +202,9 @@ impl AppShellState {
 
     fn read_settings(mut self, theme: ThemeController, command: ShellCommand) {
         if *self.settings_loading.peek() {
+            // Kept for after the read on its way, which may have read before what this request
+            // is about (review C4B-B-06).
+            self.settings_reread_wanted.set(true);
             return;
         }
         self.settings_loading.set(true);
@@ -192,22 +215,40 @@ impl AppShellState {
                 self.settings_loading.set(false);
                 for intent in intents {
                     match intent {
-                        UiIntent::AuthenticatedShellLoaded(snapshot)
-                            if theme.stored_count() == issued =>
-                        {
-                            theme.store(snapshot.settings);
+                        UiIntent::AutoRefreshStarted => self.auto_refresh_started.set(true),
+                        UiIntent::AuthenticatedShellLoaded(snapshot) => {
+                            // The read worked: an earlier re-read's failure is over. Its settings
+                            // apply unless settings were applied since it was issued.
+                            self.settings_reread_failure.set(None);
+                            if theme.stored_count() == issued {
+                                theme.store(snapshot.settings);
+                            }
                         }
-                        UiIntent::Failed(failure) if theme.stored_count() == 0 => {
-                            self.settings_failure.set(Some(failure));
-                        }
+                        UiIntent::Failed(failure) => match theme.stored_count() {
+                            0 => self.settings_failure.set(Some(failure)),
+                            applied => self.settings_reread_failure.set(Some((failure, applied))),
+                        },
                         _ => {}
                     }
                 }
                 if theme.stored_count() > 0 {
                     self.settings_failure.set(None);
                 }
+                if *self.settings_reread_wanted.peek() {
+                    self.settings_reread_wanted.set(false);
+                    self.reread_settings(theme);
+                }
             });
         });
+    }
+
+    /// Why reading the settings again failed, while no settings were applied since: the app
+    /// keeps showing the ones it had (review C4B-B-08; reactive).
+    pub(crate) fn settings_reread_failure(self, theme: ThemeController) -> Option<UiFailure> {
+        let failure = self.settings_reread_failure.read().clone();
+        failure
+            .filter(|(_, applied)| theme.stored_revision() == *applied)
+            .map(|(failure, _)| failure)
     }
 
     /// Why the settings could not be read, while they have not been: settings applied from the
@@ -270,6 +311,9 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
         settings_failure: use_signal(|| None),
         startup_failure: use_signal(|| None),
         settings_loading: use_signal(|| false),
+        auto_refresh_started: use_signal(|| false),
+        settings_reread_wanted: use_signal(|| false),
+        settings_reread_failure: use_signal(|| None),
         owner: current_scope_id(),
     }
 }
@@ -345,8 +389,9 @@ pub(crate) fn use_app_nav_shell() -> AppNavShell {
 /// served only after the server's login, so the page itself has no gate (phase C, C4a).
 ///
 /// When the start failed and a page then applies settings from the library, the backend works
-/// again: the shell reads once more to complete its start (the periodic refresh starts with it;
-/// review C4B-A-03). The read does not undo the page's settings (`load_settings`'s ordering).
+/// again: the shell reads once more to complete its start (review C4B-A-03); the periodic refresh
+/// starts with the start's read whenever it got to the backend, and is not started again
+/// (review C4B-B-07). The read does not undo the page's settings (`load_settings`'s ordering).
 pub(crate) fn use_authenticated_shell_bus(shell: AppShellState, theme: ThemeController) {
     use_hook(move || shell.load_settings(theme));
     use_effect(move || {
@@ -541,7 +586,7 @@ mod tests {
             assert_eq!(shell.settings_failure.peek().clone(), None);
         });
         assert_eq!(backend.calls("load_settings"), 2);
-        assert_eq!(backend.calls("ensure_auto_refresh_started"), 2);
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 1, "started once (C4B-B-07)");
     }
 
     /// Settings a page applied while the shell's read was on its way are newer than what the
@@ -745,6 +790,71 @@ mod tests {
             dom.in_scope(ScopeId::APP, || {
                 assert_eq!(*shell.library_revision.peek(), rereads, "{code:?}");
             });
+        }
+    }
+
+    /// A re-read asked for while the shell's settings read is on its way is not lost: one more
+    /// read follows it (review C4B-B-06).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_reread_asked_for_during_a_read_follows_it() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, _) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        let hold = backend.hold("load_settings");
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "the re-read waits", || hold.waiting() == 1).await;
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        past_the_window_while(&mut dom).await;
+        assert_eq!(backend.calls("load_settings"), 2, "one read on its way");
+        hold.release();
+        run_until(&mut dom, "the follow-up read", || backend.calls("load_settings") == 3).await;
+        hold.release();
+        settle(&mut dom, shell).await;
+    }
+
+    /// Reading the settings again can fail after settings were applied: the failure is shown
+    /// (the app keeps the settings it had) until settings are applied again (review C4B-B-08).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_failed_settings_reread_is_shown_until_settings_are_applied() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        backend.fail("load_settings", BackendError::new(ErrorCode::Network, "网络中断"));
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "the failed re-read", || backend.calls("load_settings") == 2).await;
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            let failure = shell.settings_reread_failure(theme).expect("shown");
+            assert_eq!(failure.message(), "读取设置失败：网络中断");
+            assert_eq!(shell.settings_failure(theme), None, "not the start's failure");
+            // A page applies settings from the library: the failure is over.
+            theme.store(UserSettings::default());
+            assert_eq!(shell.settings_reread_failure(theme), None);
+        });
+
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "another failed re-read", || backend.calls("load_settings") == 3).await;
+        settle(&mut dom, shell).await;
+        assert!(dom.in_scope(ScopeId::APP, || shell.settings_reread_failure(theme)).is_some());
+        backend.heal("load_settings");
+        dom.in_scope(ScopeId::APP, || shell.retry_settings_read(theme));
+        run_until(&mut dom, "the retry", || backend.calls("load_settings") == 4).await;
+        settle(&mut dom, shell).await;
+        assert_eq!(dom.in_scope(ScopeId::APP, || shell.settings_reread_failure(theme)), None);
+    }
+
+    /// Runs the app's tasks for the re-read window without waiting for reads to end.
+    async fn past_the_window_while(dom: &mut VirtualDom) {
+        let until = tokio::time::Instant::now() + super::REREAD_WINDOW * 2;
+        while tokio::time::Instant::now() < until {
+            let _ = tokio::time::timeout(Duration::from_millis(20), dom.wait_for_work()).await;
+            dom.render_immediate_to_vec();
         }
     }
 }

@@ -735,7 +735,8 @@ mod tests {
         };
         crate::ui::drafts::keep(Some(&kept)).expect("kept");
         let (mut dom, session, theme) = setup();
-        assert_eq!(crate::ui::drafts::take(), None, "taken once");
+        dom.render_immediate_to_vec();
+        assert_eq!(crate::ui::drafts::peek(), None, "taken once");
         let load = dom.in_scope(ScopeId::APP, || {
             assert_eq!(session.page.pending_edits(), kept);
             assert_eq!(session.page.draft().list_density, ListDensity::Compact);
@@ -802,7 +803,7 @@ mod tests {
         });
         assert_eq!(shell.settings_draft(), Some(both.clone()), "after the failure");
         crate::ui::drafts::keep(shell.settings_draft().as_ref()).expect("kept");
-        assert_eq!(crate::ui::drafts::take(), Some(both));
+        assert_eq!(crate::ui::drafts::peek(), Some(both));
 
         backend.heal("update_settings");
         dom.in_scope(ScopeId::APP, || {
@@ -826,5 +827,60 @@ mod tests {
         );
         dom.in_scope(ScopeId::APP, || shell.set_settings_page_open(false));
         assert_eq!(shell.settings_draft(), None, "the page was left");
+    }
+
+    /// Two loads whose replies come back in the other order: only the later load's reply applies
+    /// (review C4B-B-01).
+    #[test]
+    fn an_earlier_load_answering_last_does_not_replace_a_later_one() {
+        let (mut dom, session, theme) = setup();
+        let (first, second) =
+            dom.in_scope(ScopeId::APP, || (start_load(session), start_load(session)));
+        let newer = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+        second.send(newer.clone()).expect("the later load");
+        dom.render_immediate_to_vec();
+        first.send(UserSettings::default()).expect("the earlier load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.page.draft(), newer);
+            assert_eq!(*theme.settings.peek(), newer);
+        });
+    }
+
+    /// Settings the app applied from the library while a load was on its way (an import that
+    /// ended after its page was left) are not undone by the load's older reply: the page shows
+    /// them, and the app keeps them (review C4B-B-03).
+    #[test]
+    fn a_load_issued_before_an_import_applied_does_not_undo_it() {
+        let (mut dom, session, theme) = setup();
+        let load = dom.in_scope(ScopeId::APP, || start_load(session));
+        let imported = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+        dom.in_scope(ScopeId::APP, || theme.store(imported.clone()));
+        load.send(UserSettings::default()).expect("the load read before the import");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(*theme.settings.peek(), imported, "the app keeps the import's");
+            assert_eq!(session.page.draft(), imported, "the page shows them");
+            assert_eq!(theme.stored_count(), 1, "not applied again");
+        });
+    }
+
+    /// A restored draft stays stored until the page has handed it to the shell: leaving before
+    /// that (a sign-in raised in the same pass) keeps it for the next page (review C4B-B-09).
+    #[test]
+    fn a_restored_draft_stays_stored_until_the_shell_has_it() {
+        let kept = SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() };
+        crate::ui::drafts::keep(Some(&kept)).expect("kept");
+        let mut dom = VirtualDom::new(shell_harness);
+        dom.rebuild_in_place();
+        let shell = dom.in_scope(ScopeId::APP, consume_context::<AppShellState>);
+        // Mounted, its effects not run yet: not handed over. Leaving now keeps nothing new, and
+        // the stored draft stays.
+        assert_eq!(shell.settings_draft(), None, "not handed over yet");
+        crate::ui::drafts::keep(shell.settings_draft().as_ref()).expect("nothing to keep");
+        assert_eq!(crate::ui::drafts::peek(), Some(kept.clone()), "still stored");
+        dom.render_immediate_to_vec();
+        assert_eq!(shell.settings_draft(), Some(kept), "the shell has it");
+        assert_eq!(crate::ui::drafts::peek(), None, "then it leaves the storage");
     }
 }

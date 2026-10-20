@@ -81,6 +81,11 @@ pub(crate) struct EntriesPageState {
     pub(crate) status_kept: bool,
     /// A read of the preferences and subscriptions (the start's or a re-read) is on its way.
     pub(crate) bootstrap_in_flight: bool,
+    /// A save of the browsing preferences is on its way: saves go one at a time.
+    pub(crate) workspace_saving: bool,
+    /// The user's latest choice made while a save was on its way, saved after it (review
+    /// C4B-B-05). Reads never set it.
+    pub(crate) workspace_wanted: Option<EntriesWorkspaceState>,
 }
 
 /// 见 [`EntriesPageState::query_clock_trigger`]。
@@ -130,6 +135,8 @@ impl EntriesPageState {
             stored_workspace: None,
             status_kept: false,
             bootstrap_in_flight: false,
+            workspace_saving: false,
+            workspace_wanted: None,
         }
     }
 

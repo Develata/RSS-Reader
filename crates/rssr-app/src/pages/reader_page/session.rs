@@ -48,8 +48,9 @@ impl ReaderPageSession {
 
     /// The page's read-only refresh (C4b item 2): the entry's flags and neighbours, never its
     /// body (no `BeginLoading`: the content, the image localization asked for and the position
-    /// stay). A failed load has nothing shown to keep: it is loaded again. While its load is on
-    /// its way there is nothing to refresh.
+    /// stay). A failed load has nothing shown to keep: it is loaded again, as a read only — the
+    /// image localization (a write) is not asked for; opening the entry again asks for it
+    /// (review C4B-B-02). While its load is on its way there is nothing to refresh.
     pub(crate) fn reread(self) {
         let state = self.state.peek();
         if state.current_entry_id != self.entry_id {
@@ -58,6 +59,10 @@ impl ReaderPageSession {
         if state.error.is_some() {
             drop(state);
             self.load();
+            dispatch_reader_page_intent(
+                self.state,
+                super::intent::ReaderPageIntent::SetAssetLocalizationRequested,
+            );
             return;
         }
         if !state.content_loaded {
@@ -69,9 +74,11 @@ impl ReaderPageSession {
         })));
     }
 
-    /// Applies a read-only refresh's answer unless the page moved on: another load, or a flag
-    /// change applied after it was issued (it may have read the flags before the write).
+    /// Applies a read-only refresh's answer unless the page moved on: another load, a later
+    /// refresh, or a flag change applied after it was issued (it may have read the flags before
+    /// the write).
     fn spawn_reread(self, reread: impl Future<Output = Vec<UiIntent>> + 'static) {
+        dispatch_reader_page_intent(self.state, super::intent::ReaderPageIntent::RereadIssued);
         let (load, flags) = {
             let state = self.state.peek();
             (state.load_generation, state.reread_generation)
@@ -390,5 +397,54 @@ mod tests {
             }
         }
         assert_eq!(backend.calls("load_reader_entry"), 1);
+    }
+
+    /// Two read-only refreshes whose answers come back in the other order: the earlier one's
+    /// answer does not replace the later one's (review C4B-B-01).
+    #[test]
+    fn an_earlier_reread_answering_last_does_not_replace_a_later_one() {
+        let (mut dom, session) = opened();
+        let (first, first_answer) = oneshot::channel();
+        let (second, second_answer) = oneshot::channel();
+        dom.in_scope(ScopeId::APP, || {
+            session.spawn_reread(async { first_answer.await.expect("the earlier reread") });
+            session.spawn_reread(async { second_answer.await.expect("the later reread") });
+        });
+        second.send(reread_answer(true, Some(5))).expect("the later answer");
+        dom.render_immediate_to_vec();
+        first.send(reread_answer(false, None)).expect("the earlier answer");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            let state = session.snapshot();
+            assert!(state.is_read);
+            assert_eq!(state.navigation_state.next_unread_entry_id, Some(5));
+        });
+    }
+
+    /// Loading a failed entry again for a read-only refresh does not ask for its image
+    /// localization (a write); opening an entry does (review C4B-B-02).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_recovery_load_does_not_ask_for_the_image_localization() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        dom.in_scope(ScopeId::APP, || {
+            let session = ReaderPageSession::new(1, Signal::new(ReaderPageState::new()));
+            session.load();
+            assert!(!session.snapshot().asset_localization_requested, "an opened entry asks");
+            dispatch_reader_page_intent(
+                session.state,
+                ReaderPageIntent::SetError {
+                    entry_id: 1, error: Some("读取文章失败".into())
+                },
+            );
+            session.reread();
+            let state = session.snapshot();
+            assert_eq!(state.load_generation, 2, "loaded again");
+            assert!(state.asset_localization_requested, "a recovery load does not ask");
+        });
     }
 }

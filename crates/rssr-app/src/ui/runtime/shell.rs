@@ -19,22 +19,27 @@ pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
             Err(error) => vec![UiIntent::Failed(UiFailure::new("刷新", error))],
         },
         ShellCommand::LoadAuthenticatedShell => {
+            let mut started = false;
             let loaded = async {
                 let backend = backend().await?;
                 // Before the read: a failed settings read must not leave the periodic refresh
                 // unstarted (review C4B-A-03).
                 backend.ensure_auto_refresh_started();
+                started = true;
                 backend.load_settings().await
             }
             .await;
-            match loaded {
-                Ok(settings) => {
-                    vec![UiIntent::AuthenticatedShellLoaded(AuthenticatedShellSnapshot {
-                        settings,
-                    })]
-                }
-                Err(error) => vec![UiIntent::Failed(UiFailure::new("读取设置", error))],
+            let mut intents = Vec::new();
+            if started {
+                intents.push(UiIntent::AutoRefreshStarted);
             }
+            intents.push(match loaded {
+                Ok(settings) => {
+                    UiIntent::AuthenticatedShellLoaded(AuthenticatedShellSnapshot { settings })
+                }
+                Err(error) => UiIntent::Failed(UiFailure::new("读取设置", error)),
+            });
+            intents
         }
         ShellCommand::LoadSettings => {
             match async { backend().await?.load_settings().await }.await {

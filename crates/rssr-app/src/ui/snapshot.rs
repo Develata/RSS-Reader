@@ -20,6 +20,9 @@ pub(crate) struct StartupRouteSnapshot {
 #[derive(Debug, Clone)]
 pub(crate) enum UiIntent {
     AuthenticatedShellLoaded(AuthenticatedShellSnapshot),
+    /// The shell's start got to the backend and started its periodic refresh: later reads of the
+    /// settings only read (review C4B-B-07).
+    AutoRefreshStarted,
     StartupRouteResolved(StartupRouteSnapshot),
     EntriesPage(EntriesPageIntent),
     FeedsPage(FeedsPageIntent),
@@ -55,6 +58,7 @@ impl UiIntent {
             UiIntent::ReaderPage(intent) => intent.failure(),
             UiIntent::SettingsPage(intent) => intent.failure(),
             UiIntent::AuthenticatedShellLoaded(_)
+            | UiIntent::AutoRefreshStarted
             | UiIntent::StartupRouteResolved(_)
             | UiIntent::SetStatus { .. } => None,
         }
@@ -69,6 +73,7 @@ impl UiIntent {
             UiIntent::Failed(failure) => Some(EntriesPageIntent::Failed(failure)),
             UiIntent::Unshown(_) => None,
             UiIntent::AuthenticatedShellLoaded(_)
+            | UiIntent::AutoRefreshStarted
             | UiIntent::StartupRouteResolved(_)
             | UiIntent::FeedsPage(_)
             | UiIntent::ReaderPage(_)
@@ -85,6 +90,7 @@ impl UiIntent {
             UiIntent::Failed(failure) => Some(ReaderPageIntent::Failed(failure)),
             UiIntent::Unshown(_) => None,
             UiIntent::AuthenticatedShellLoaded(_)
+            | UiIntent::AutoRefreshStarted
             | UiIntent::StartupRouteResolved(_)
             | UiIntent::EntriesPage(_)
             | UiIntent::FeedsPage(_)
@@ -101,6 +107,7 @@ impl UiIntent {
             UiIntent::Failed(failure) => Some(FeedsPageIntent::Failed(failure)),
             UiIntent::Unshown(_) => None,
             UiIntent::AuthenticatedShellLoaded(_)
+            | UiIntent::AutoRefreshStarted
             | UiIntent::StartupRouteResolved(_)
             | UiIntent::EntriesPage(_)
             | UiIntent::ReaderPage(_)
@@ -117,6 +124,7 @@ impl UiIntent {
             UiIntent::Failed(failure) => Some(SettingsPageIntent::Failed(failure)),
             UiIntent::Unshown(_) => None,
             UiIntent::AuthenticatedShellLoaded(_)
+            | UiIntent::AutoRefreshStarted
             | UiIntent::StartupRouteResolved(_)
             | UiIntent::EntriesPage(_)
             | UiIntent::FeedsPage(_)

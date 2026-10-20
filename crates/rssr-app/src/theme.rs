@@ -26,6 +26,12 @@ impl ThemeController {
         *self.stored.peek()
     }
 
+    /// How many times settings from the library were applied (reactive: a component reading it
+    /// follows).
+    pub fn stored_revision(self) -> u64 {
+        *self.stored.read()
+    }
+
     /// Whether settings from the library were applied (reactive: a component reading it
     /// follows).
     pub fn has_stored(self) -> bool {

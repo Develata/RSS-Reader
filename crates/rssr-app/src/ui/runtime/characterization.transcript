@@ -103,14 +103,12 @@ Failed(UiFailure { action: "导入 OPML", error: BackendError { code: InvalidInp
 FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { feeds: [FeedSummary { id: 4, title: "Extra", url: "http://127.0.0.1:<port>/extra.xml", unread_count: 0, entry_count: 0, last_fetched_at: None, last_success_at: None, fetch_error: None }, FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 1, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 4, entry_count: 5, fingerprint: ConfigFingerprint(<3>) })))
 ## import config
 FeedsPage(PendingConfigImportSet(false))
-FeedsPage(BumpReload)
 FeedsPage(SetStatus { message: "配置包已导入：导入 3 个订阅，清理 1 个缺失订阅，设置未变化。", tone: "info" })
 ## import config, broken
 FeedsPage(PendingConfigImportSet(false))
 FeedsPage(Failed(UiFailure { action: "导入配置包", error: BackendError { code: InvalidInput, message: "配置包不是有效的 JSON：EOF while parsing an object at line 1 column 1", request_id: None, reason: None } }))
 ## import config from a stale page
 FeedsPage(PendingConfigImportSet(false))
-FeedsPage(BumpReload)
 FeedsPage(SetStatus { message: "订阅或设置在本页载入后已被修改，配置包未导入；已重新载入，请确认后再导入。", tone: "error" })
 ## settings load
 SettingsPage(SettingsLoaded(UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" }))
@@ -125,7 +123,6 @@ Failed(UiFailure { action: "保存设置", error: BackendError { code: InvalidIn
 FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { feeds: [FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 1, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 3, entry_count: 5, fingerprint: ConfigFingerprint(<4>) })))
 ## import config with other settings
 FeedsPage(PendingConfigImportSet(false))
-FeedsPage(BumpReload)
 FeedsPage(SettingsReplaced(UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" }))
 FeedsPage(SetStatus { message: "配置包已导入：导入 3 个订阅，清理 0 个缺失订阅，设置已更新。", tone: "info" })
 ## push config
@@ -149,6 +146,7 @@ EntriesPage(SetEntries { entries: [EntrySummary { id: 14, feed_id: 2, title: "Br
 ## feeds snapshot, at the end
 FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { feeds: [FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 1, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 3, entry_count: 5, fingerprint: ConfigFingerprint(<5>) })))
 ## authenticated shell
+AutoRefreshStarted
 AuthenticatedShellLoaded(AuthenticatedShellSnapshot { settings: UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" } })
 ## shell settings again
 AuthenticatedShellLoaded(AuthenticatedShellSnapshot { settings: UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" } })

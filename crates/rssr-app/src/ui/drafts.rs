@@ -2,8 +2,9 @@
 //! is reloaded (its build differs from the server's) or leaves for the sign-in page, the edits
 //! not stored yet (the ones a save in flight sent, then the ones made since) are kept in this
 //! tab's `sessionStorage`, with a version. The settings page that opens next takes them once:
-//! they are its pending edits over the settings it reads, never saved by themselves. When the
-//! browser cannot keep them, the page does not leave.
+//! they are its pending edits over the settings it reads, never saved by themselves. They stay
+//! stored until the page has handed them to the shell, so a sign-in or reload before that keeps
+//! them (review C4B-B-09). When the browser cannot keep them, the page does not leave.
 //!
 //! Only the edits, not the whole settings: a draft restored over settings changed elsewhere
 //! changes only what the user edited.
@@ -34,12 +35,24 @@ pub(crate) fn keep(draft: Option<&SettingsPatch>) -> Result<(), NotKept> {
     platform::write(KEY, &stored).map_err(|_| NotKept)
 }
 
-/// Takes the kept draft, if any: it is removed at once, so it is restored once. A draft that
-/// cannot be read, or of another version, is dropped.
-pub(crate) fn take() -> Option<SettingsPatch> {
-    let raw = platform::take(KEY)?;
-    let stored: Stored = serde_json::from_str(&raw).ok()?;
-    (stored.version == VERSION && !stored.edits.is_empty()).then_some(stored.edits)
+/// The kept draft, if any, left stored until [`forget`]. A draft that cannot be read, or of
+/// another version, is dropped.
+pub(crate) fn peek() -> Option<SettingsPatch> {
+    let raw = platform::read(KEY)?;
+    let edits = serde_json::from_str::<Stored>(&raw)
+        .ok()
+        .filter(|stored| stored.version == VERSION && !stored.edits.is_empty())
+        .map(|stored| stored.edits);
+    if edits.is_none() {
+        forget();
+    }
+    edits
+}
+
+/// Removes the kept draft: the page has it (and the shell keeps it from now on), so it is
+/// restored once.
+pub(crate) fn forget() {
+    platform::remove(KEY);
 }
 
 /// Leaves (`leave`: reload, go to the sign-in page) after keeping `draft`; stays, returning false,
@@ -62,11 +75,14 @@ mod platform {
         storage()?.set_item(key, value).map_err(|_| ())
     }
 
-    pub(super) fn take(key: &str) -> Option<String> {
-        let storage = storage().ok()?;
-        let value = storage.get_item(key).ok().flatten();
-        let _ = storage.remove_item(key);
-        value
+    pub(super) fn read(key: &str) -> Option<String> {
+        storage().ok()?.get_item(key).ok().flatten()
+    }
+
+    pub(super) fn remove(key: &str) {
+        if let Ok(storage) = storage() {
+            let _ = storage.remove_item(key);
+        }
     }
 }
 
@@ -77,9 +93,11 @@ mod platform {
         Ok(())
     }
 
-    pub(super) fn take(_key: &str) -> Option<String> {
+    pub(super) fn read(_key: &str) -> Option<String> {
         None
     }
+
+    pub(super) fn remove(_key: &str) {}
 }
 
 /// The tests' tab: a storage per test thread that can be made to refuse writes.
@@ -101,18 +119,17 @@ pub(crate) mod platform {
         Ok(())
     }
 
-    pub(super) fn take(key: &str) -> Option<String> {
-        STORAGE.with(|storage| storage.borrow_mut().remove(key))
+    pub(super) fn read(key: &str) -> Option<String> {
+        STORAGE.with(|storage| storage.borrow().get(key).cloned())
+    }
+
+    pub(super) fn remove(key: &str) {
+        STORAGE.with(|storage| storage.borrow_mut().remove(key));
     }
 
     /// Makes writes fail (a full or blocked storage), or work again.
     pub(crate) fn refuse_writes(refusing: bool) {
         REFUSING.with(|refuse| *refuse.borrow_mut() = refusing);
-    }
-
-    /// What is stored under `key`, without taking it.
-    pub(crate) fn stored(key: &str) -> Option<String> {
-        STORAGE.with(|storage| storage.borrow().get(key).cloned())
     }
 
     /// Stores `value` under `key` as an earlier page would have.
@@ -126,7 +143,14 @@ mod tests {
     use rssr_application::SettingsPatch;
     use rssr_domain::ThemeMode;
 
-    use super::{KEY, NotKept, keep, leave_keeping, platform, take};
+    use super::{KEY, NotKept, forget, keep, leave_keeping, peek, platform};
+
+    /// What the next settings page restores: the draft, then gone.
+    fn take() -> Option<SettingsPatch> {
+        let draft = peek();
+        forget();
+        draft
+    }
 
     fn dark() -> SettingsPatch {
         SettingsPatch {
@@ -141,10 +165,12 @@ mod tests {
     fn a_kept_draft_is_restored_once() {
         assert_eq!(keep(None), Ok(()));
         assert_eq!(keep(Some(&SettingsPatch::default())), Ok(()));
-        assert_eq!(platform::stored(KEY), None);
+        assert_eq!(platform::read(KEY), None);
 
         keep(Some(&dark())).expect("kept");
-        assert!(platform::stored(KEY).is_some_and(|raw| raw.contains("\"version\":1")));
+        assert!(platform::read(KEY).is_some_and(|raw| raw.contains("\"version\":1")));
+        assert_eq!(peek(), Some(dark()), "read");
+        assert_eq!(peek(), Some(dark()), "still there until forgotten");
         assert_eq!(take(), Some(dark()));
         assert_eq!(take(), None, "once");
     }
@@ -153,10 +179,10 @@ mod tests {
     #[test]
     fn a_draft_of_another_version_is_dropped() {
         platform::put(KEY, r#"{"version":2,"edits":{"theme":"dark"}}"#);
-        assert_eq!(take(), None);
-        assert_eq!(platform::stored(KEY), None);
+        assert_eq!(peek(), None);
+        assert_eq!(platform::read(KEY), None, "dropped");
         platform::put(KEY, "{");
-        assert_eq!(take(), None);
+        assert_eq!(peek(), None);
     }
 
     /// When the browser cannot keep the draft the page does not leave; when it can, it leaves.
