@@ -58,4 +58,16 @@
 
 ## Docker 镜像构建（P1 阻断项的验证）
 
-- 待补。
+- 构建：`git archive --format=tar dbc8e73 | docker build --progress=plain -t rssr-web:p1-review -`
+  （从提交树构建，避开本机 `.claude/worktrees` 混入构建上下文；`.dockerignore` 已在 a067b54 补上）。
+  基础镜像 `rust:1.99-bookworm` 解析并拉取成功；第 6 步 `dx bundle` 用时 899 秒，
+  第 7 步 `cargo build -p rssr-web --release` 用时 154 秒，构建 exit 0。在 1.88 上无法编译的原生依赖
+  （`File::try_lock`）现在能编译通过。
+- 运行：`docker run -p 127.0.0.1:18081:8080`，传入临时用户名、密码与 `RSS_READER_WEB_AUTH_STATE_FILE=/app/auth/auth.json`。
+  - `/healthz` 返回 `ok`；`/api/v1/capabilities` 返回 `{"protocol":1,"mode":"server"}`。
+  - 容器内 `id` 为 `uid=999(rssr)`，`/app/data` 权限 `drwx------`，SQLite 双库已创建。
+  - 日志：`opening rssr-web library data_dir=/app/data outbound=PublicOnly`。
+  - 容器已删除；镜像 `rssr-web:p1-review` 保留在本机，可随时删除。
+- 注意：在 Git Bash 里 `docker run -e …=/app/…` 需要 `MSYS_NO_PATHCONV=1`，否则路径会被改写成 Windows 路径，
+  容器启动失败。这是本机 shell 的问题，与镜像无关。
+- 镜像对应 dbc8e73 的源码，不含 P2 的改动。P2 只改了浏览器端与 `rssr-host::client`，服务端镜像的构建链路没有变化。
