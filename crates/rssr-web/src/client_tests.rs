@@ -595,13 +595,17 @@ async fn the_server_keeps_its_answers_within_the_bound() {
     let entry = observed.library.load_reader_entry(id).await.unwrap().entry.unwrap();
     assert!(entry.is_read, "the write ran");
 
+    // A message over 1 KiB is shortened; one that would make the error answer longer than the
+    // client reads (64 KiB) keeps its code because of that.
     let fingerprint = observed.library.load_feeds_snapshot().await.unwrap().fingerprint;
-    let raw = format!(r#"{{"{}": 1}}"#, "x".repeat(70 * KIB));
-    let error = client.import_config_json(&raw, &fingerprint).await.unwrap_err();
-    assert_eq!(error.code, ErrorCode::InvalidInput, "{}", error.code.as_str());
-    assert!(error.message.len() <= MAX_MESSAGE_BYTES, "{}", error.message.len());
-    assert!(error.message.ends_with(TRUNCATION_MARK), "shortened by the server");
-    assert_eq!(observed.times("import_config_json"), 1);
+    for field in [2 * KIB, 70 * KIB] {
+        let raw = format!(r#"{{"{}": 1}}"#, "x".repeat(field));
+        let error = client.import_config_json(&raw, &fingerprint).await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidInput, "{field}: {}", error.code.as_str());
+        assert!(error.message.len() <= MAX_MESSAGE_BYTES, "{field}: {}", error.message.len());
+        assert!(error.message.ends_with(TRUNCATION_MARK), "{field}: shortened by the server");
+    }
+    assert_eq!(observed.times("import_config_json"), 2);
 }
 
 /// One answer of the scripted server.
@@ -1185,13 +1189,12 @@ async fn answers_longer_than_their_bound_are_given_up() {
     assert_eq!(error.code, ErrorCode::Network);
 }
 
-/// Giving up the wait (the page drops the call) while a poll is outstanding drops that request
-/// (the server sees its connection closed, and the client would have waited 30 s for it) and
-/// sends no other; giving it up while waiting between polls (the first failed at once, the next is
-/// due after 1 s) sends no further poll, where without giving up the next poll comes (design
-/// "C4a" 3; review C4A-01, C4A-R2-01).
+/// Giving up the wait (the page drops the call) while a poll is outstanding drops that request:
+/// the server sees its connection closed (the client would have waited 30 s for it), and no other
+/// request follows (design "C4a" 3; review C4A-01, C4A-R2-01). Giving it up between polls is
+/// `rssr_infra::http_backend`'s own test, which sees the wait begin (review C4A-R3-01).
 #[tokio::test]
-async fn a_wait_given_up_sends_nothing_more() {
+async fn a_wait_given_up_during_a_poll_sends_nothing_more() {
     let server = Scripted::start(|seen, index| match seen.path.split('?').next().unwrap() {
         SESSION => session_token(index),
         REFRESH_ALL => created(),
@@ -1207,28 +1210,4 @@ async fn a_wait_given_up_sends_nothing_more() {
     until("the outstanding poll dropped", || server.abandoned() == 1).await;
     tokio::time::sleep(Duration::from_millis(500)).await;
     assert_eq!((server.count("POST", REFRESH_ALL), server.count("GET", POLL)), (1, 1));
-
-    for give_up in [true, false] {
-        let server = Scripted::start(|seen, index| match seen.path.split('?').next().unwrap() {
-            SESSION => session_token(index),
-            REFRESH_ALL => created(),
-            _ => Reply::Close,
-        })
-        .await;
-        let client = server.client().with_poll_backoff(vec![Duration::from_secs(1); 5]);
-        let waiting = tokio::spawn(async move { client.refresh_all().await });
-        until("the first poll", || server.count("GET", POLL) == 1).await;
-        tokio::time::sleep(Duration::from_millis(300)).await;
-        assert_eq!(server.count("GET", POLL), 1, "waiting between polls");
-        if give_up {
-            waiting.abort();
-            assert!(waiting.await.unwrap_err().is_cancelled());
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            assert_eq!(server.count("GET", POLL), 1, "no poll after giving up");
-        } else {
-            until("the next poll", || server.count("GET", POLL) == 2).await;
-            waiting.abort();
-        }
-        assert_eq!(server.count("POST", REFRESH_ALL), 1);
-    }
 }

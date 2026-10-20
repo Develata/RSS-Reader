@@ -85,4 +85,5 @@ wasm-bindgen-test = "0.3"
 libc = "0.2"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+# `io-util`: the scripted server of `http_backend`'s tests.
+tokio = { workspace = true, features = ["rt-multi-thread", "io-util"] }

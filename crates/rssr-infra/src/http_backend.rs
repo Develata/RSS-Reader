@@ -19,10 +19,10 @@
 //!
 //! Answers are read up to the protocol's bound for what they answer (review C4A-02, C4A-R2-02:
 //! the server sends nothing longer); a longer one is not read further and counts as an answer
-//! that was not received. The bound is on the decoded bytes received so far: natively they come
-//! in small pieces; in the browser reqwest copies each piece the browser hands over before it is
-//! counted, so the memory used before a long answer is given up is the bound plus one such piece,
-//! whose size is the browser's (review C4A-R2-04).
+//! that was not received. What is bounded is the length of the decoded bytes kept so far, not
+//! memory: in the browser reqwest copies each piece the browser hands over (of a size the browser
+//! chooses) before it is counted, and neither those pieces, the browser's own buffers nor the
+//! spare capacity of the kept bytes are within the bound (review C4A-R2-04, C4A-R3-02).
 
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
@@ -455,7 +455,46 @@ fn wrong_kind() -> BackendError {
 
 #[cfg(not(target_arch = "wasm32"))]
 async fn sleep(wait: Duration) {
+    #[cfg(test)]
+    if let Some(gate) = backoff_gate::current() {
+        gate.entered.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        gate.release.notified().await;
+        return;
+    }
     tokio::time::sleep(wait).await;
+}
+
+/// Test only: the waits between polls of this thread's backends wait on a gate instead of the
+/// clock and count their starts, so a test sees a wait begin (review C4A-R3-01).
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod backoff_gate {
+    use std::cell::RefCell;
+    use std::sync::{Arc, atomic::AtomicUsize};
+
+    use tokio::sync::Notify;
+
+    #[derive(Default)]
+    pub(super) struct Gate {
+        /// Waits begun.
+        pub(super) entered: AtomicUsize,
+        /// Ends a wait (one `notify_one` each).
+        pub(super) release: Notify,
+    }
+
+    thread_local! {
+        static GATE: RefCell<Option<Arc<Gate>>> = const { RefCell::new(None) };
+    }
+
+    /// A new gate for this thread's waits from now on.
+    pub(super) fn install() -> Arc<Gate> {
+        let gate = Arc::new(Gate::default());
+        GATE.with(|current| *current.borrow_mut() = Some(Arc::clone(&gate)));
+        gate
+    }
+
+    pub(super) fn current() -> Option<Arc<Gate>> {
+        GATE.with(|current| current.borrow().clone())
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -685,5 +724,103 @@ impl Backend for HttpBackend {
             MAX_ANSWER_BYTES,
         )
         .await
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering::SeqCst},
+    };
+    use std::time::Duration;
+
+    use rssr_api::Backend;
+    use rssr_api::protocol::routes;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use url::Url;
+
+    use super::{HttpBackend, backoff_gate};
+
+    /// A server that gives a session token, creates a job and answers every poll `unavailable`
+    /// (a failed poll), counting the polls.
+    async fn failing_polls() -> (Url, Arc<AtomicUsize>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = Url::parse(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
+        let polls = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&polls);
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                let polls = Arc::clone(&counted);
+                tokio::spawn(async move {
+                    let mut head = Vec::new();
+                    let mut buffer = [0_u8; 1024];
+                    while !head.windows(4).any(|window| window == b"\r\n\r\n") {
+                        let count = stream.read(&mut buffer).await.unwrap_or(0);
+                        if count == 0 {
+                            return;
+                        }
+                        head.extend_from_slice(&buffer[..count]);
+                    }
+                    let head = String::from_utf8_lossy(&head).into_owned();
+                    let path = head.split(' ').nth(1).unwrap_or_default();
+                    let (status, body) = if path == routes::SESSION {
+                        (200, r#"{"csrf_token":"t"}"#.to_owned())
+                    } else if path == routes::JOB_REFRESH_ALL {
+                        (202, r#"{"job_id":"0123456789abcdef0123456789abcdef"}"#.to_owned())
+                    } else {
+                        polls.fetch_add(1, SeqCst);
+                        (503, r#"{"code":"unavailable","message":"busy","request_id":null}"#.into())
+                    };
+                    let answer = format!(
+                        "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\n\
+                         Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = stream.write_all(answer.as_bytes()).await;
+                    let _ = stream.shutdown().await;
+                });
+            }
+        });
+        (base, polls)
+    }
+
+    async fn until(what: &str, done: impl Fn() -> bool) {
+        for _ in 0..1000 {
+            if done() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("{what} did not happen");
+    }
+
+    /// Giving up the wait (dropping the call) once its wait between polls has begun — the gate
+    /// sees it begin, and it does not end by itself — sends no further poll, even when the wait is
+    /// then let end; the same wait not given up polls again when it ends (review C4A-R3-01).
+    #[tokio::test]
+    async fn a_wait_given_up_between_polls_polls_no_more() {
+        for give_up in [true, false] {
+            let (base, polls) = failing_polls().await;
+            let gate = backoff_gate::install();
+            let client = HttpBackend::native_client().no_proxy().build().unwrap();
+            let client = HttpBackend::new(base, "build", client);
+            let waiting = tokio::spawn(async move { client.refresh_all().await });
+            until("the wait after the first poll", || gate.entered.load(SeqCst) >= 1).await;
+            assert_eq!(polls.load(SeqCst), 1);
+            if give_up {
+                waiting.abort();
+                assert!(waiting.await.unwrap_err().is_cancelled());
+                gate.release.notify_one();
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                let seen = (polls.load(SeqCst), gate.entered.load(SeqCst));
+                assert_eq!(seen, (1, 1), "nothing after giving up");
+            } else {
+                gate.release.notify_one();
+                until("the next poll", || polls.load(SeqCst) == 2).await;
+                until("the next wait", || gate.entered.load(SeqCst) == 2).await;
+                waiting.abort();
+            }
+        }
     }
 }
