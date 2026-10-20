@@ -6,14 +6,16 @@
 - 当前 HEAD：见本文件所在提交
 - 相关 commit：本文件所在提交
 - 相关 tag / release：N/A
-- 状态：`draft`（第 3 轮独立评审未通过，方向待 Develata 决定）
+- 状态：`validated`（Develata 选择方向 A：按纵深防御合入，写明剩余风险）
 
 ## 工作摘要
 
 按 [调查记录](./2026-10-20-reader-deep-nesting-investigation.md) 中 Develata 批准的方案实现：
 `sanitize_reader_html` 在交给 ammonia 之前，用 html5ever 自己按小块预解析一遍正文并计量树构建与
 ammonia DOM 的成本；超出预算的正文整篇转成转义后的纯文本段落，仍以 `Some(html)` 返回，公开签名不变，
-从不截取一部分按 HTML 显示。50k 层嵌套 `<div>` 从 7.2 s 降到约 0.1 s。
+从不截取一部分按 HTML 显示。50k 层嵌套 `<div>` 从 7.2 s 降到约 0.25 s。三轮独立评审之后确认：从 sink 外部
+计量 html5ever 0.39 给不出可证明的上界，按 Develata 的决定以纵深防御合入（v5），剩余风险写在下文与模块文档里，
+根因提交上游。
 
 ## 影响范围
 
@@ -31,12 +33,13 @@ ammonia DOM 的成本；超出预算的正文整篇转成转义后的纯文本�
 
 - 与 ammonia 相同的片段上下文（`<div>`）；每块不超过 1 KiB 且不超过 8 个 `<`，块间检查预算，超限立即停止。
 - sink 按 ammonia `rcdom` 的结构维护只有骨架的镜像树，计量：
-  - `elem_name` + `same_node` 调用（开放元素栈与格式化元素表上的逐个比较）；
+  - `elem_name` + `same_node` 调用（开放元素栈与格式化元素表上的逐个比较）；外来元素名另按每 8 字节 1 计
+    （外来内容结束标签按字节比较名字）；
   - `rcdom` 的线性操作：插到兄弟之前/从父节点摘下按父节点孩子数计（覆盖 foster parenting），
     `reparent_children` 按搬动数计，`add_attrs_if_missing` 按已有属性数计；
   - Noah's Ark：每新建一个格式化元素，按表中项数 + 同名项 ×（1 + 属性数）× 64 + 同名项属性字节 × 排序轮数计；
   - 块级包络（预付不经过 sink 的逐项扫描：adoption agency 按名字查格式化元素表、表格内文字缓存到下一个标签
-    才逐项重建）：每块按 token 数上界 2 ×（`<`、`&`、NUL 个数 + 1）乘 8 ×（格式化元素表上界 + 1），
+    才逐项重建）：每块按 token 数上界 2 ×（`<`、`&`、LF、CR、NUL 个数 + 1）乘 8 ×（格式化元素表上界 + 1），
     表非空时再加开放元素栈上界；
   - 表与栈的大小用公开的 `TreeBuilder::trace_handles` 在块间精确清点（摊还到总工作量之内），两次清点之间
     按新建元素数放宽；
@@ -55,16 +58,19 @@ ammonia DOM 的成本；超出预算的正文整篇转成转义后的纯文本�
 
 ### 标定（release，本机，临时 probe 未提交）
 
-- 418 篇真实正文（安装版内容库只读拷贝，9 个订阅）：0 篇被降级；工作量最高 5.7 / 字节（预算 64，余量 11 倍），
-  物化量最高 1.0 倍（预算 2）；计量总耗时 0.51 s（同批正文消毒总耗时约 2.1 s）。
+- 418 篇真实正文（安装版内容库只读拷贝，9 个订阅）：0 篇被降级；工作量最高 6.4 / 字节（预算 64，余量 10 倍），
+  物化量最高 1.0 倍（预算 2）；计量总耗时 0.57 s（同批正文消毒总耗时约 2.1 s）。
 - 被拦下的形状（规模放大后均降级）：嵌套/不闭合 `<div>`、`<ul><li>`、`<blockquote>`、`<span><div></span>` 错嵌、
   不同属性的嵌套 `<b>`（Noah's Ark）、`<div><b id=k></div>` 与 `<p><b id=k>x</p>` 重建放大、大属性重建、
   `<table>` 下的 foster parenting、`selectedcontent`、`<html a=…>` 属性合并、`<span>`×400 后接大量 `</zz>`、
-  表格内缓存文字逐项重建、adoption agency 按名字查表、超长属性名的同名比较。
+  表格内缓存文字逐项重建、adoption agency 按名字查表、超长属性名的同名比较、外来内容里长元素名的结束标签。
 - 预算内放行且保持线性：嵌套 `<span>`/MathML、嵌套表格、表格内普通文字、平铺高亮 span（4.5 MB）、平铺段落
-  （约 11 / 字节）、忘闭合 `<b>` 后每段重建（27 字节段落约 18 / 字节，60 字节段落约 8 / 字节）。
+  （约 11 / 字节）、带缩进换行的表格与正文（约 12 / 8 每字节）、忘闭合 `<b>` 后每段重建（27 字节段落约 18 / 字节，
+  60 字节段落约 8 / 字节）。
 
-### 自动化验证（v4，本文件所在提交）
+### 自动化验证
+
+v5（本文件所在提交）的结果见下方“v5 验证”；以下为 v4（f035b66）：
 
 - `cargo fmt --all --check`：通过
 - `cargo clippy -j 1 --workspace --all-targets --locked -- -D warnings`：通过
@@ -75,6 +81,15 @@ ammonia DOM 的成本；超出预算的正文整篇转成转义后的纯文本�
   只看相对关系：nested div 50k 0.24 s（改前空闲 7.2 s）、nested ul>li 50k 0.37 s、distinct b 50k 0.19 s、
   `<p><b id=k>x</p>` 50k 0.31 s，均降级为纯文本；nested span 50k、nested katex 20k、各公式用例保持 HTML。
   计量对大正文的额外开销见标定数据（平铺高亮 span 4.5 MB：计量 0.30 s，ammonia 0.37 s）。
+
+### v5 验证（本文件所在提交）
+
+- `cargo fmt --all --check`、`cargo clippy -j 1 --workspace --all-targets --locked -- -D warnings`：通过。
+- `cargo test -j 1 --workspace --locked`：427 通过，0 失败（`parse_budget` 10 个单元测试，含外来长元素名与按行切分的表格文字）。
+- `cargo check -j 1 -p rssr-app --target wasm32-unknown-unknown --locked`：通过。
+- `reader_html_stress_timings`（release，机器较空闲，`plain 4 MiB` 71 ms）：nested div 50k 0.18 s（改前 7.2 s）、
+  nested ul>li 50k 0.30 s、distinct b 50k 0.13 s、`<p><b id=k>x</p>` 50k 0.19 s，均降级；nested span 50k 0.17 s、
+  nested katex 20k 0.46 s 保持 HTML；平铺高亮 span 4.5 MB 1.08 s。
 
 ### 独立评审（Codex，gpt-6-astra，effort high）
 
@@ -92,30 +107,30 @@ ammonia DOM 的成本；超出预算的正文整篇转成转义后的纯文本�
   - 表格文字按 LF 切分 token、包络未计：缩小规模下**未复现**（约 25 ms 即降级）。
   - 长属性标签在长格式化表之后才比较：缩小规模下**未复现超线性**；按推算最坏约 1 s 后拒绝。
 - 结论：从 sink 外部计量 html5ever 0.39 无法给出可证明的上界（Marker 对 sink 与 `trace_handles` 都不可见），
-  继续逐项打补丁不收敛。v4 停在这里，等方向决定。
+  继续逐项打补丁不收敛。Develata 选择方向 A：v5 只补外来元素名按长度计费、LF/CR 计入 token 上界两项并重新标定，
+  第 3 轮的 Marker 问题作为已知剩余风险。
 
 ## 结果
 
-- 待 Develata 决定方向（见下）。v4 相对 main 严格更好：所有自然出现的超线性形状与前两轮评审反例都被拦下，
-  418 篇真实正文零误降级；剩余的是专门针对 html5ever 内部构造的输入。
-- 方向选项：
-  - A：按纵深防御合入 v4，在本文件与设计文档写明“对已知形状有界，不是证明”，把 Marker 不可见、树构建没有
-    工作量预算两点作为 html5ever 上游议题提交。可选再补两项小修（外来元素名按长度计费、LF/CR 计入 token 上界，
-    需重新标定）。
-  - B：`[patch.crates-io]` 一个带操作计数器的 html5ever 0.39 分支，预算放进解析器内部，与 ammonia 共用；
-    精确，但在消毒器安全路径上维护分叉，打破依赖锁定惯例。属骨架变更。
-  - C：隔离执行加墙钟上限（wasm 可终止的 Web Worker；原生需子进程，线程无法强杀）。覆盖未知路径（含分词器、
-    `normalize`），但不确定、平台代码进入 host capability 层，改动最大。
+- 按纵深防御合入：所有自然出现的超线性形状与三轮评审中可修的反例都被拦下，418 篇真实正文零误降级。
+  “对已知形状有界，不是证明”已写入模块文档与 `docs/design/functional-design-philosophy.md`。
+- 上游：[servo/html5ever#801](https://github.com/servo/html5ever/issues/801)（Marker 残留让格式化结束标签
+  按表长扫描，附只依赖 html5ever + rcdom 的复现）；在 [servo/html5ever#289](https://github.com/servo/html5ever/issues/289)
+  请求树构建工作量预算或中止钩子。分词器属性去重已有 servo/html5ever#796。
 
 ## 风险与后续事项
 
+- 已知剩余风险（可绕过或拒绝前耗时较长）：
+  - Marker 残留（`<template><object></template>`、`<div><object></div>` 重复后接大量 `</b>`）：放行且平方，
+    1.8 MB 约 6 s 计量 + 5 s ammonia。根因在 html5ever（#801）。
+  - 包络与 Noah's Ark 按块事后结算：一个块内或一个很长的标签内的超量要等它处理完才发现（推算最坏约 1 s 级）。
 - 已知保守偏差：同一格式化标签大量不闭合（约 125 个以上的 `<font size=2>`）会被降级，尽管 html5ever 处理它是线性的。
 - 计量额外开销：大正文约增加 15%–60% 的消毒时间（性能优先级最低，换取有界）。
 - 独立评审（Codex）指出的、不在树构建阶段的超线性路径，本次不处理，另开任务：
   1. `normalize_html_for_live_display`：`<base href>` 很长时，每个相对图片地址都展开成完整地址，输出按平方放大
      （48 KB → 16 MB，已复现）；该函数也用于原生端刷新时的图片本地化。
-  2. html5ever 分词器对同一标签内的属性去重是平方级（160 KB、2 万属性的单个标签约 1.6 s，已复现），
-     计量与纯文本降级都要经过分词器，所以本预算挡不住；需要上游修复或在分词前另设属性数上界。
+  2. html5ever 分词器对同一标签内的属性去重是平方级（160 KB、2 万属性的单个标签约 1.6 s，已复现；
+     上游 servo/html5ever#796），计量与纯文本降级都要经过分词器，所以本预算挡不住。
   3. `live_display.rs` 的属性实体解码对每个 `&` 向后找 `;`，无效时只前进一字节，平方级（已复现，40 KB 约 55 ms，按平方增长）。
 
 ## 给下一位 Agent 的备注

@@ -21,7 +21,7 @@
 //!     （按属性字节数乘排序的比较轮数）。
 //!   - 块级包络：不经过 sink 的逐项查找（adoption agency 按名字查格式化元素表、表格内文字
 //!     缓存到下一个标签才逐项重建格式化元素）都是“每个 token 至多扫一遍表或栈”。每块按
-//!     token 个数的上界（`<`、`&`、NUL 个数）乘格式化元素表的上界预先计费；表非空时再乘开放
+//!     token 个数的上界（`<`、`&`、LF、CR、NUL 个数）乘格式化元素表的上界预先计费；表非空时再乘开放
 //!     元素栈的上界。预付保证了缓存的 token 在后面某一块里集中处理时早已计过费。
 //!   - 表与栈的大小用 [`TreeBuilder::trace_handles`] 在块之间精确清点，两次清点之间按新建
 //!     元素数放宽，所以不依赖任何树形状的推算。
@@ -34,7 +34,17 @@
 //! 外来内容（MathML/SVG）里的深层嵌套不触发作用域扫描，html5ever 处理起来是线性的，过深的
 //! 公式由公式预算单独降级，不该连累整篇正文；所以这里不按深度本身计费。
 //!
-//! 不覆盖：html5ever 分词器对同一标签内属性的去重是平方级的，与树构建无关，另行处理。
+//! 这是纵深防御，不是证明。sink 只能看到 html5ever 经由它做的工作，从外部计量给不出可证明的
+//! 上界。已知仍可绕过或在拒绝前耗时较长的输入：
+//!
+//! - 活动格式化元素表里的 Marker 既不经过 sink 也不出现在 `trace_handles` 里；
+//!   `<template><object></template>` 之类的重复可留下任意多个 Marker，之后每个格式化结束标签都
+//!   要跨过它们（实测 1.8 MB 约 6 s 计量 + 5 s ammonia，按平方增长）。
+//! - 包络与 Noah's Ark 按块事后结算，一个块内或一个很长的标签内的超量要等它处理完才发现。
+//! - 树构建以外的阶段：分词器对同一标签内属性的去重是平方级的；`normalize_html_for_live_display`
+//!   的 `<base>` 地址展开与属性实体解码也各有超线性路径。
+//!
+//! 根本解决在上游：给树构建器加工作量预算，或让这些查找不再线性。
 //!
 //! [`TreeBuilder::trace_handles`]: html5ever::tree_builder::TreeBuilder::trace_handles
 
@@ -62,6 +72,8 @@ const BASE_WORK: u64 = 1 << 20;
 const NOAHS_ARK_WEIGHT: u64 = 64;
 /// 包络里每个 token 对格式化元素表的扫描次数上界：adoption agency 至多 8 轮，每轮按名字查一遍表。
 const ADOPTION_ROUNDS: u64 = 8;
+/// 外来元素名按字节比较时，多少字节折合一次 sink 调用。
+const FOREIGN_NAME_BYTES_PER_UNIT: usize = 8;
 /// 物化量相对输入长度的倍数，以及与长度无关的余量。真实正文实测最高约 1.0 倍
 /// （本地化后的 data URL 图片几乎全是属性字节）。
 const MATERIALIZED_PER_BYTE: u64 = 2;
@@ -197,11 +209,12 @@ impl Meter {
     }
 
     /// 按这一块里 token 个数的上界预付不经过 sink 的逐项扫描。每个 token 至少以 `<`、`&`、
-    /// NUL 之一开头或紧跟其后的一段文字（树构建器至多再把开头的空白拆成一段），所以 token 数
+    /// 换行（分词器在 LF/CR 处切分文字）、NUL 之一开头或紧跟其后的一段文字（树构建器至多再把开头的空白拆成一段），所以 token 数
     /// 不超过它们个数的两倍加一。表与栈的上界在两次清点之间单调不减，处理完这一块后的值不小于
     /// 块内任何时刻的值。
     fn charge_envelope(&self, chunk: &str) {
-        let markers = chunk.bytes().filter(|byte| matches!(byte, b'<' | b'&' | 0)).count();
+        let markers =
+            chunk.bytes().filter(|byte| matches!(byte, b'<' | b'&' | b'\n' | b'\r' | 0)).count();
         let tokens = (markers as u64).saturating_add(1).saturating_mul(2);
         let formatting = self.formatting.borrow().total;
         let mut per_token = ADOPTION_ROUNDS.saturating_mul(formatting.saturating_add(1));
@@ -400,7 +413,10 @@ impl TreeSink for MeteringSink {
     }
 
     fn elem_name<'a>(&'a self, target: &'a Handle) -> &'a QualName {
-        self.charge(1);
+        // HTML 元素名按 atom 比较；外来内容的结束标签按字节、不区分大小写地比较元素名，
+        // 名字越长每次比较越贵。
+        let foreign_bytes = if target.name.ns == ns!(html) { 0 } else { target.name.local.len() };
+        self.charge(1 + (foreign_bytes / FOREIGN_NAME_BYTES_PER_UNIT) as u64);
         &target.name
     }
 
@@ -663,6 +679,22 @@ mod tests {
         let prefix = "a".repeat(100_000);
         let long_names = format!("<b {prefix}0 {prefix}1>{}</b>", "<b>x</b>".repeat(2_000));
         assert!(!fits_tree_building_budget(&long_names));
+    }
+
+    #[test]
+    fn long_foreign_names_and_line_breaks_are_metered() {
+        // 外来内容里不匹配的结束标签逐层按字节比较长元素名。
+        let long = |last: char| format!("{}{last}", "a".repeat(206));
+        let foreign = format!(
+            "<svg>{}{}",
+            format!("<{}>", long('x')).repeat(2_000),
+            format!("</{}>", long('y')).repeat(2_000)
+        );
+        assert!(!fits_tree_building_budget(&foreign));
+
+        // 表格里按行切开的文字缓存到 `</table>` 才逐项在 4000 层栈里找格式化元素。
+        let lines = format!("<b>{}<table>{}</table>", "<span>".repeat(4_000), "x\n".repeat(20_000));
+        assert!(!fits_tree_building_budget(&lines));
     }
 
     #[test]
