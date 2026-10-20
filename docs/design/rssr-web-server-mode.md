@@ -74,8 +74,9 @@
 ### 4.2 线协议
 
 - `POST /api/v1/<端口>/<方法>`：请求体是方法入参的 JSON，响应体是 Outcome 的 JSON。
-- 错误统一为 `{ "message": "…" }`。经检查，`rssr-app` 没有任何 `downcast` / `is::<>`，
-  界面不按错误类型分支，所以只传消息即可，客户端再包成 `anyhow::Error`。
+- 错误统一为 `{ "messages": ["…", …] }`（`rssr_host::protocol::ApiError`），按错误链排列，最外层上下文在前。
+  经检查，`rssr-app` 没有任何 `downcast` / `is::<>`，界面不按错误类型分支，所以只传文本即可；客户端用
+  `ApiError::into_anyhow` 还原成 `anyhow::Error`，`Display` 与 `{:#}` 都和服务端一致。
 - 序列化：给 `UiServices` 触及的 application / domain 类型加 `Serialize` / `Deserialize`。
   目前只有 `EntriesWorkspaceState`、`UserSettings` 有 serde；需要补的包括 `EntriesBootstrapOutcome`、
   `EntriesListOutcome`、`FeedsSnapshotOutcome`、`ReaderEntrySnapshot`、`MarkReadPreview`、
@@ -133,6 +134,8 @@
   的边界一致。
 
 ## 5. 分阶段
+
+进度：P0 已完成（`refactor/rssr-host`）；P1 已完成（`feat/rssr-web-server-api`），见对应的 handoff。
 
 每阶段单独 PR，各自验证：
 

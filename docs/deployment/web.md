@@ -49,7 +49,7 @@ RSS_READER_WEB_AUTH_STATE_FILE=/app/auth/auth.json
 RSS_READER_WEB_TRUST_PROXY_HEADERS=false
 ```
 
-`production` 要求 `Secure` cookie。`RSS_READER_WEB_TRUST_PROXY_HEADERS` 仅在可信反向代理正确覆盖转发头时启用；默认保持 `false`。密码哈希可在源码工作区生成：
+`production` 要求 `Secure` cookie。`RSS_READER_WEB_TRUST_PROXY_HEADERS` 仅在可信反向代理正确覆盖转发头时启用；默认保持 `false`。服务端模式的 `/api/v1` 会拒绝 `Origin` 与服务地址不一致的请求，所以反向代理必须原样转发 `Host`（如 nginx 的 `proxy_set_header Host $host;`），或者设置 `X-Forwarded-Host` 并开启 `RSS_READER_WEB_TRUST_PROXY_HEADERS`；否则浏览器的接口调用会收到 403，而登录页和静态页面看起来一切正常。密码哈希可在源码工作区生成：
 
 ```bash
 cargo run --locked -p rssr-web -- --print-password-hash '请换成自己的强密码'

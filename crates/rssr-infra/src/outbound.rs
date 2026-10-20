@@ -54,21 +54,27 @@ impl OutboundPolicy {
     pub(crate) fn configure(self, builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
         match self {
             Self::Unrestricted => builder,
-            Self::PublicOnly => builder.no_proxy().dns_resolver(Arc::new(PublicOnlyResolver)),
+            Self::PublicOnly => builder
+                .no_proxy()
+                .dns_resolver(Arc::new(PublicOnlyResolver { disallowed: is_disallowed_ip })),
         }
     }
 }
 
-struct PublicOnlyResolver;
+struct PublicOnlyResolver {
+    /// 生产中恒为 [`is_disallowed_ip`]；测试换成放行回环地址，以便走通成功路径。
+    disallowed: fn(IpAddr) -> bool,
+}
 
 impl Resolve for PublicOnlyResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let host = name.as_str().to_owned();
+        let disallowed = self.disallowed;
         Box::pin(async move {
             // 端口占位为 0，客户端会换成请求的实际端口。
             let addrs: Vec<SocketAddr> =
                 tokio::net::lookup_host((host.as_str(), 0)).await?.collect();
-            if let Some(addr) = addrs.iter().find(|addr| is_disallowed_ip(addr.ip())) {
+            if let Some(addr) = addrs.iter().find(|addr| disallowed(addr.ip())) {
                 return Err(std::io::Error::other(format!(
                     "出于安全原因，服务端不访问内网或本地地址（{host} 解析为 {}）。",
                     addr.ip()
@@ -138,7 +144,7 @@ mod tests {
 
     use url::Url;
 
-    use super::{OutboundPolicy, is_disallowed_ip};
+    use super::{OutboundPolicy, PublicOnlyResolver, is_disallowed_ip};
 
     #[test]
     fn disallowed_ip_covers_private_loopback_and_mapped_forms() {
@@ -174,6 +180,40 @@ mod tests {
         }
         let local = Url::parse("http://127.0.0.1/").unwrap();
         assert!(OutboundPolicy::Unrestricted.check_url(&local).is_ok());
+    }
+
+    /// 走通解析器的成功路径：解析结果的端口占位 0 必须被换成请求的端口。
+    #[tokio::test]
+    async fn resolver_success_path_connects_to_the_requested_port() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0; 1024];
+            let _ = socket.read(&mut request).await.unwrap();
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .await
+                .unwrap();
+        });
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .dns_resolver(std::sync::Arc::new(PublicOnlyResolver { disallowed: |_| false }))
+            .build()
+            .unwrap();
+
+        let body = client
+            .get(format!("http://localhost:{port}/"))
+            .send()
+            .await
+            .expect("resolved request must reach the listener")
+            .text()
+            .await
+            .unwrap();
+        assert_eq!(body, "ok");
+        server.await.unwrap();
     }
 
     #[tokio::test]

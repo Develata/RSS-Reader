@@ -243,6 +243,48 @@ mod tests {
         }
     }
 
+    #[test]
+    fn origin_check_covers_default_ports_and_trusted_forwarded_host() {
+        use axum::http::{HeaderMap, HeaderValue};
+
+        fn headers(pairs: &[(&'static str, &'static str)]) -> HeaderMap {
+            let mut map = HeaderMap::new();
+            for (name, value) in pairs {
+                map.append(*name, HeaderValue::from_static(value));
+            }
+            map
+        }
+        let direct = test_support::config();
+        let mut behind_proxy = test_support::config();
+        behind_proxy.trust_proxy_headers = true;
+
+        assert!(super::origin_matches_host(&direct, &headers(&[("host", "example.com")])));
+        assert!(super::origin_matches_host(
+            &direct,
+            &headers(&[("host", "example.com"), ("origin", "https://example.com")])
+        ));
+        assert!(super::origin_matches_host(
+            &direct,
+            &headers(&[("host", "example.com:443"), ("origin", "https://example.com")])
+        ));
+        assert!(!super::origin_matches_host(
+            &direct,
+            &headers(&[("host", "example.com:8443"), ("origin", "https://example.com")])
+        ));
+        assert!(!super::origin_matches_host(
+            &direct,
+            &headers(&[("host", "example.com"), ("origin", "null")])
+        ));
+        // A reverse proxy that rewrites Host: only a trusted X-Forwarded-Host can restore it.
+        let proxied = [
+            ("host", "127.0.0.1:8080"),
+            ("x-forwarded-host", "example.com"),
+            ("origin", "https://example.com"),
+        ];
+        assert!(!super::origin_matches_host(&direct, &headers(&proxied)));
+        assert!(super::origin_matches_host(&behind_proxy, &headers(&proxied)));
+    }
+
     async fn error_of(response: reqwest::Response) -> (StatusCode, ApiError) {
         let status = response.status();
         (status, response.json().await.expect("error body is ApiError JSON"))

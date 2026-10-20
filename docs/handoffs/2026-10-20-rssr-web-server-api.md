@@ -72,9 +72,9 @@
 - `cargo fmt --all --check`：通过
 - `cargo clippy --workspace --all-targets --locked -j 2 -- -D warnings`：通过
 - `cargo test --workspace --locked -j 2`：exit 0，44 个测试二进制全部通过，0 失败。新增的测试：
-  - 出站策略：`outbound` 模块 3 个，`feed_http` 1 个，`tests/test_outbound_policy.rs` 2 个（图片、WebDAV）
+  - 出站策略：`outbound` 模块 4 个（含解析器成功路径），`feed_http` 1 个，`tests/test_outbound_policy.rs` 2 个（图片、WebDAV）
   - `rssr-host`：协议 2 个，分派 2 个（真实 `NativeHost` + 临时目录）
-  - `rssr-web`：API 3 个（真实 axum 服务 + 临时文章库，覆盖鉴权、各类拒绝和类型化结果），配置 1 个
+  - `rssr-web`：API 4 个（真实 axum 服务 + 临时文章库，覆盖鉴权、各类拒绝和类型化结果；另有 Origin/Host 三分支单测），配置 1 个
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`：通过
 - `cargo check -p rssr-app --target aarch64-linux-android --locked`（NDK 环境变量见 rssr-host 交接）：通过
 - `cargo check --manifest-path scripts/release-ui/Cargo.toml --locked`：通过
@@ -91,8 +91,10 @@
   - 设置 `RSS_READER_WEB_ALLOW_PRIVATE_FEEDS=true` 重启后，同一 feed 添加成功（`SavedAndRefreshed`，36.7 秒）。
     `feeds/snapshot` 显示 77 篇文章，正文库约 5.7 MB；`reader/load_entry` 返回 200，正文包含 MathML。
     今天 Web 端 localStorage 装不下的这个 feed，在服务端模式下可以正常使用。
-- 未验证：Docker 镜像构建（本机没有构建）；在 fake-IP 之外的真实公网 DNS 环境下 `PublicOnly` 的放行路径
-  （单元测试只覆盖了拒绝路径与公网 IP 字面量的放行）。
+- `PublicOnly` 解析器的放行路径由单元测试 `resolver_success_path_connects_to_the_requested_port` 验证：测试注入放行回环地址的判定，
+  通过解析器把 `localhost` 解析到本地监听端口，请求成功。这证明解析器返回的端口占位 0 会被换成请求端口；
+  真实环境下只是判定函数不同。
+- 未验证：Docker 镜像构建（本机没有构建）；真实公网 DNS 环境下 `PublicOnly` 的端到端放行（本机 DNS 是 fake-IP）。
 
 ## 结果
 
@@ -105,6 +107,11 @@
 - 本机这类 fake-IP 环境下，`PublicOnly` 会拒绝所有 feed。部署方需要提供真实 DNS，或显式放开。
 - 多个浏览器同时操作时 `app_state` 后写覆盖（D4），也没有推送：别的浏览器要等下次查询才看到变化。
 - 5070d71 以 cherry-pick 形式进入本分支（c64b899），以后合并 `feat/reader-mathml` 时，同样的改动会以等价提交出现。
+- P2 接入界面后，release-ui runner 与代理 feed 冒烟用的 `127.0.0.1` 夹具 feed 会被 `PublicOnly` 按设计拒绝，
+  这些运行需要设置 `RSS_READER_WEB_ALLOW_PRIVATE_FEEDS=true`。
+- 反向代理必须原样转发 `Host`，或设置 `X-Forwarded-Host` 并开启信任，否则 `/api/v1` 返回 403（已写入 `web.md`，
+  `origin_check_covers_default_ports_and_trusted_forwarded_host` 覆盖三个分支）。
+- `AGENTS.md:57`（"Web … 不使用 SQLite"）对 rssr-web 已不再准确，按设计在 P3 修订。
 - 下一步 P2：wasm 端新增 `Backend::Remote`，按 `/api/v1/capabilities` 探测模式（要校验 JSON，不能只看状态码），
   收到 401 时跳转登录页；静态包仍使用 `BrowserStore`（D1）。
 
