@@ -538,6 +538,11 @@ async fn ui_commands_produce_the_recorded_intents() {
 
     transcript.run("reader load", reader(ReaderCommand::LoadEntry { entry_id: 1 })).await;
     transcript.run("reader load missing", reader(ReaderCommand::LoadEntry { entry_id: 999 })).await;
+    transcript.run("reader reread", reader(ReaderCommand::RereadEntry { entry_id: 1 })).await;
+    transcript
+        .run("reader reread missing", reader(ReaderCommand::RereadEntry { entry_id: 999 }))
+        .await;
+    transcript.run("entries reread", entries(EntriesCommand::Reread)).await;
     transcript
         .run(
             "reader toggle read",
@@ -713,6 +718,7 @@ async fn ui_commands_produce_the_recorded_intents() {
     drop(_host);
     let _empty = test_host::install(library().backend());
     transcript.run("authenticated shell", shell(ShellCommand::LoadAuthenticatedShell)).await;
+    transcript.run("shell settings again", shell(ShellCommand::LoadSettings)).await;
 
     if std::env::var("RSSR_UPDATE_UI_TRANSCRIPT").as_deref() == Ok("1") {
         std::fs::write(TRANSCRIPT, &transcript.text).expect("write transcript");

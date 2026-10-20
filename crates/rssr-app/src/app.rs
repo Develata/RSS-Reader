@@ -4,7 +4,7 @@ use crate::{
     components::{app_notices::AppNotices, status_banner::StatusBanner},
     router::RoutableApp,
     theme::{density_state, theme_class, use_theme_controller},
-    ui::{use_app_shell_state, use_authenticated_shell_bus},
+    ui::{use_app_shell_state, use_authenticated_shell_bus, use_reread_triggers},
 };
 
 pub(crate) const APP_NAME: &str = "RSS-Reader";
@@ -33,6 +33,7 @@ pub fn App() -> Element {
     use_context_provider(|| shell);
 
     use_authenticated_shell_bus(shell, theme);
+    use_reread_triggers(shell);
 
     // 每次 `settings()` 都会克隆一整份 UserSettings（含完整 custom_css 文本），只读一次后面复用。
     let current_settings = settings();

@@ -22,7 +22,7 @@ pub(crate) use self::{
     runtime::execute_ui_command,
     shell::{
         AppShellState, use_app_nav_shell, use_app_shell_state, use_authenticated_shell_bus,
-        use_startup_route_bus,
+        use_reread_triggers, use_startup_route_bus,
     },
     shell_browser::wait_for_refresh_feedback,
     shell_prefs::{initial_entry_controls_hidden, remember_entry_controls_hidden},

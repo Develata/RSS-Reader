@@ -72,12 +72,19 @@ pub(crate) struct EntriesPageState {
     pub(crate) query_in_flight: bool,
     /// 在途查询被写入作废时递增，页面据此重新发出列表查询（审计 A3）。
     pub(crate) requery_revision: u64,
+    /// The browsing preferences the library holds, as far as the page knows: read at start, or
+    /// saved by it. The page saves only what differs from them, so a read (at start or again)
+    /// never writes (C4b item 2).
+    pub(crate) stored_workspace: Option<EntriesWorkspaceState>,
+    /// The status is a write's failure or unknown outcome: a list read does not replace it
+    /// (C4b item 2: what is read again only updates what is shown).
+    pub(crate) status_kept: bool,
 }
 
 /// 见 [`EntriesPageState::query_clock_trigger`]。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct QueryClockTrigger {
-    refresh_revision: u64,
+    library_revision: u64,
     bulk_revision: u64,
     feed_id: Option<i64>,
     search_title: Option<String>,
@@ -118,6 +125,19 @@ impl EntriesPageState {
             preferences_load: PreferencesLoadState::Pending,
             query_in_flight: false,
             requery_revision: 0,
+            stored_workspace: None,
+            status_kept: false,
+        }
+    }
+
+    /// The browsing preferences the page shows.
+    pub(crate) fn workspace(&self) -> EntriesWorkspaceState {
+        EntriesWorkspaceState {
+            grouping_mode: grouping_mode_preference(self.grouping_mode),
+            show_archived: self.show_archived,
+            read_filter: self.read_filter,
+            starred_filter: self.starred_filter,
+            selected_feed_urls: self.selected_feed_urls.clone(),
         }
     }
 
@@ -151,16 +171,16 @@ impl EntriesPageState {
         }
     }
 
-    /// 归档时钟的采样触发条件（审计 A4）：查询条件变化、批量已读或手动刷新完成时重新采样；
-    /// 状态提示、查询结果这类不改变查询条件的状态变化不触发。
+    /// 归档时钟的采样触发条件（审计 A4）：查询条件变化、批量已读或只读刷新（含手动刷新完成）时
+    /// 重新采样；状态提示、查询结果这类不改变查询条件的状态变化不触发。
     pub(crate) fn query_clock_trigger(
         &self,
         feed_id: Option<i64>,
         search_title: Option<String>,
-        refresh_revision: u64,
+        library_revision: u64,
     ) -> QueryClockTrigger {
         QueryClockTrigger {
-            refresh_revision,
+            library_revision,
             bulk_revision: self.bulk_revision,
             feed_id,
             search_title,

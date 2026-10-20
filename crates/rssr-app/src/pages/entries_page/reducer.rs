@@ -23,6 +23,9 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.bulk_writing = writing;
         }
         EntriesPageIntent::CancelBulk => {
+            // Dispatched when the filters or the search change: a kept status was about the
+            // list shown before.
+            state.status_kept = false;
             state.bulk_preview = None;
             if !state.bulk_writing {
                 state.bulk_generation = state.bulk_generation.wrapping_add(1);
@@ -41,6 +44,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
                 "请确认批量已读范围。".into()
             };
             state.status_tone = "info".into();
+            state.status_kept = false;
             state.bulk_preview = Some(preview);
         }
         EntriesPageIntent::BulkApplied(count) => {
@@ -51,6 +55,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.bulk_notice = Some(format!("已将 {count} 篇文章标为已读。"));
             state.status = format!("已将 {count} 篇文章标为已读。");
             state.status_tone = "success".into();
+            state.status_kept = false;
         }
         EntriesPageIntent::BulkFailed(failure) => {
             state.bulk_busy = false;
@@ -62,6 +67,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             }
             state.status = failure.message();
             state.status_tone = failure.tone().into();
+            state.status_kept = true;
         }
 
         EntriesPageIntent::ApplyLoadedSettings(settings) => {
@@ -72,11 +78,25 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         EntriesPageIntent::ApplyLoadedWorkspaceState(workspace) => {
             state.read_filter = workspace.read_filter;
             state.starred_filter = workspace.starred_filter;
-            state.selected_feed_urls = workspace.selected_feed_urls;
+            state.selected_feed_urls = workspace.selected_feed_urls.clone();
             state.show_archived = workspace.show_archived;
             state.grouping_mode = entry_grouping_mode_from_preference(workspace.grouping_mode);
             state.current_page = FIRST_PAGE_NUMBER;
+            state.stored_workspace = Some(workspace);
         }
+        EntriesPageIntent::PreferencesReread { settings, workspace } => {
+            reread_preferences(state, settings, workspace);
+        }
+        EntriesPageIntent::PreferencesRereadFailed(failure) => {
+            let intent = if matches!(state.preferences_load, PreferencesLoadState::Pending) {
+                // It replaced the start's read: the list must not wait for it any longer.
+                EntriesPageIntent::PreferencesUnavailable(failure)
+            } else {
+                EntriesPageIntent::ReadFailed(failure)
+            };
+            reduce_entries_page_intent(state, intent);
+        }
+        EntriesPageIntent::WorkspaceSaved(workspace) => state.stored_workspace = Some(workspace),
         EntriesPageIntent::PreferencesLoaded => {
             if matches!(state.preferences_load, PreferencesLoadState::Unavailable { .. }) {
                 state.status = format!("共 {} 篇文章。", state.entries.len());
@@ -90,17 +110,30 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.status_tone = failure.tone().to_string();
             state.preferences_load =
                 PreferencesLoadState::Unavailable { message, tone: failure.tone() };
+            state.status_kept = false;
         }
         EntriesPageIntent::SetFeeds(feeds) => state.feeds = Arc::new(feeds),
         EntriesPageIntent::EntriesQueryStarted => state.query_in_flight = true,
         EntriesPageIntent::EntriesQueryFinished => state.query_in_flight = false,
         EntriesPageIntent::SetEntries { entries, archived_count, truncated } => {
+            let changed = state.entries.len() != entries.len()
+                || state.entries.iter().zip(&entries).any(|(shown, read)| **shown != *read);
             state.entries_loaded = true;
             state.entries = Arc::new(entries.into_iter().map(Arc::new).collect());
             state.archived_count = archived_count;
             state.entries_truncated = truncated;
             let count = state.entries.len();
-            if let PreferencesLoadState::Unavailable { message, tone } = &state.preferences_load {
+            if changed && state.bulk_preview.is_some() && !state.bulk_writing {
+                // The preview was of the list before: the mark-read asks again (C4b item 2).
+                state.bulk_preview = None;
+                state.status = "文章列表已变化，请重新确认批量已读范围。".into();
+                state.status_tone = "info".into();
+                state.status_kept = false;
+            } else if state.status_kept || state.bulk_preview.is_some() {
+                // A write's failure, or the preview's question, stays over the list read.
+            } else if let PreferencesLoadState::Unavailable { message, tone } =
+                &state.preferences_load
+            {
                 state.status = format!("{message}；文章偏好暂不保存，共 {count} 篇文章。");
                 state.status_tone = tone.to_string();
             } else {
@@ -129,10 +162,17 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         EntriesPageIntent::SetStatus { message, tone } => {
             state.status = message;
             state.status_tone = tone;
+            state.status_kept = false;
         }
         EntriesPageIntent::Failed(failure) => {
             state.status = failure.message();
             state.status_tone = failure.tone().to_string();
+            state.status_kept = true;
+        }
+        EntriesPageIntent::ReadFailed(failure) => {
+            state.status = failure.message();
+            state.status_tone = failure.tone().to_string();
+            state.status_kept = false;
         }
         EntriesPageIntent::SetGroupingMode(grouping_mode) => {
             state.grouping_mode = grouping_mode;
@@ -172,6 +212,41 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             state.current_page = state.current_page.saturating_sub(1).max(FIRST_PAGE_NUMBER);
         }
         EntriesPageIntent::SetControlsHidden(hidden) => state.controls_hidden = hidden,
+    }
+}
+
+/// The read-only refresh's preferences (C4b item 2). The settings (page size, archive months)
+/// always apply. The browsing preferences apply only where the page shows what the library held
+/// (nothing of its own unsaved), and without going back to the first page; the page then saves
+/// nothing, since they are the stored ones. A read that replaced the start's, or one after the
+/// start's failed while the page still shows the fallback, counts as the start's read.
+fn reread_preferences(
+    state: &mut EntriesPageState,
+    settings: rssr_domain::UserSettings,
+    workspace: rssr_domain::EntriesWorkspaceState,
+) {
+    let first = match &state.preferences_load {
+        PreferencesLoadState::Pending => true,
+        PreferencesLoadState::Unavailable { .. } => {
+            state.workspace() == rssr_domain::EntriesWorkspaceState::default()
+        }
+        PreferencesLoadState::Loaded => false,
+    };
+    reduce_entries_page_intent(state, EntriesPageIntent::ApplyLoadedSettings(settings));
+    if first {
+        reduce_entries_page_intent(state, EntriesPageIntent::ApplyLoadedWorkspaceState(workspace));
+        reduce_entries_page_intent(state, EntriesPageIntent::PreferencesLoaded);
+        return;
+    }
+    let unsaved = state.stored_workspace.as_ref() != Some(&state.workspace());
+    if state.preferences_load.is_loaded() && !unsaved {
+        state.read_filter = workspace.read_filter;
+        state.starred_filter = workspace.starred_filter;
+        state.selected_feed_urls = workspace.selected_feed_urls.clone();
+        state.show_archived = workspace.show_archived;
+        state.grouping_mode = entry_grouping_mode_from_preference(workspace.grouping_mode);
+        state.stored_workspace = Some(workspace);
+        clamp_current_page(state);
     }
 }
 
@@ -402,5 +477,194 @@ mod tests {
         state.entries = vec![Arc::new(entry(3, false))].into();
         reduce_entries_page_intent(&mut state, patch(3, Some(true), None));
         assert_eq!(state.requery_revision, 2, "a listed entry is patched in place");
+    }
+
+    fn workspace(read_filter: ReadFilter) -> rssr_domain::EntriesWorkspaceState {
+        rssr_domain::EntriesWorkspaceState { read_filter, ..Default::default() }
+    }
+
+    fn settings(entries_page_size: u32) -> rssr_domain::UserSettings {
+        rssr_domain::UserSettings { entries_page_size, ..Default::default() }
+    }
+
+    /// A page whose preferences were read at start: `stored` filters, two entries a page.
+    fn loaded_page(stored: ReadFilter) -> EntriesPageState {
+        let mut state = EntriesPageState::new(true);
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::ApplyLoadedSettings(settings(2)));
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::ApplyLoadedWorkspaceState(workspace(stored)),
+        );
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::PreferencesLoaded);
+        state.entries = (1..=6).map(|id| Arc::new(entry(id, false))).collect::<Vec<_>>().into();
+        state.current_page = 2;
+        state
+    }
+
+    fn reread(state: &mut EntriesPageState, read_filter: ReadFilter, page_size: u32) {
+        reduce_entries_page_intent(
+            state,
+            EntriesPageIntent::PreferencesReread {
+                settings: settings(page_size),
+                workspace: workspace(read_filter),
+            },
+        );
+    }
+
+    /// The read-only refresh applies the settings, and preferences changed elsewhere where the
+    /// page has none of its own unsaved, without going back to the first page; they are then the
+    /// stored ones, so the page saves nothing (C4b item 2).
+    #[test]
+    fn a_reread_applies_settings_and_preferences_the_page_has_not_changed() {
+        let mut state = loaded_page(ReadFilter::All);
+        reread(&mut state, ReadFilter::UnreadOnly, 3);
+        assert_eq!(state.entries_page_size, 3);
+        assert_eq!(state.read_filter, ReadFilter::UnreadOnly);
+        assert_eq!(state.stored_workspace, Some(state.workspace()));
+        assert_eq!(state.current_page, 2, "the page stays");
+        assert!(state.preferences_load.is_loaded());
+    }
+
+    /// Preferences the user changed and that are not saved yet stay; the settings still apply.
+    #[test]
+    fn a_reread_keeps_preferences_the_page_has_not_saved() {
+        let mut state = loaded_page(ReadFilter::All);
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::SetReadFilter(ReadFilter::ReadOnly),
+        );
+        reread(&mut state, ReadFilter::UnreadOnly, 3);
+        assert_eq!(state.read_filter, ReadFilter::ReadOnly);
+        assert_eq!(state.stored_workspace, Some(workspace(ReadFilter::All)));
+        assert_eq!(state.entries_page_size, 3);
+    }
+
+    /// A read-only refresh that superseded the start's read is the start's read; one after the
+    /// start's failed is too while the page shows the fallback, not once the user chose filters.
+    #[test]
+    fn a_reread_completes_a_start_that_did_not_read_the_preferences() {
+        let mut pending = EntriesPageState::new(true);
+        reread(&mut pending, ReadFilter::UnreadOnly, 3);
+        assert!(pending.preferences_load.is_loaded());
+        assert_eq!(pending.read_filter, ReadFilter::UnreadOnly);
+        assert_eq!(pending.stored_workspace, Some(workspace(ReadFilter::UnreadOnly)));
+
+        let unavailable = |state: &mut EntriesPageState| {
+            reduce_entries_page_intent(
+                state,
+                EntriesPageIntent::PreferencesUnavailable(crate::ui::failure::plain("读不到")),
+            );
+        };
+        let mut fallback = EntriesPageState::new(true);
+        unavailable(&mut fallback);
+        reread(&mut fallback, ReadFilter::UnreadOnly, 3);
+        assert!(fallback.preferences_load.is_loaded());
+        assert_eq!(fallback.read_filter, ReadFilter::UnreadOnly);
+
+        let mut chosen = EntriesPageState::new(true);
+        unavailable(&mut chosen);
+        reduce_entries_page_intent(
+            &mut chosen,
+            EntriesPageIntent::SetReadFilter(ReadFilter::ReadOnly),
+        );
+        reread(&mut chosen, ReadFilter::UnreadOnly, 3);
+        assert!(!chosen.preferences_load.is_loaded(), "still never saved over");
+        assert_eq!(chosen.read_filter, ReadFilter::ReadOnly);
+        assert_eq!(chosen.entries_page_size, 3);
+    }
+
+    /// A failed read-only refresh releases a start it superseded; otherwise it is a read's
+    /// failure, which the next read replaces.
+    #[test]
+    fn a_failed_reread_is_a_read_failure() {
+        let failure = || crate::ui::failure::plain("读不到");
+        let mut pending = EntriesPageState::new(true);
+        reduce_entries_page_intent(
+            &mut pending,
+            EntriesPageIntent::PreferencesRereadFailed(failure()),
+        );
+        assert!(pending.preferences_load.can_load_entries(), "the list does not wait");
+        assert!(!pending.preferences_load.is_loaded());
+
+        let mut loaded = loaded_page(ReadFilter::All);
+        reduce_entries_page_intent(
+            &mut loaded,
+            EntriesPageIntent::PreferencesRereadFailed(failure()),
+        );
+        assert!(loaded.preferences_load.is_loaded());
+        assert_eq!(loaded.status_tone, "error");
+        reduce_entries_page_intent(
+            &mut loaded,
+            EntriesPageIntent::SetEntries {
+                entries: vec![entry(1, false)],
+                archived_count: 0,
+                truncated: false,
+            },
+        );
+        assert_eq!(loaded.status, "共 1 篇文章。");
+    }
+
+    /// A write's failure or unknown outcome stays over the list read again (it only updates what
+    /// is shown); the filters changing, or another status, replace it (C4b item 2).
+    #[test]
+    fn a_writes_failure_stays_over_a_list_read() {
+        let unknown = crate::ui::failure::UiFailure::new(
+            "更改已读状态",
+            rssr_api::BackendError::new(rssr_api::ErrorCode::OutcomeUnknown, "结果未知"),
+        );
+        let list = || EntriesPageIntent::SetEntries {
+            entries: vec![entry(1, true)],
+            archived_count: 0,
+            truncated: false,
+        };
+        let mut state = loaded_page(ReadFilter::All);
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::Failed(unknown.clone()));
+        reduce_entries_page_intent(&mut state, list());
+        assert_eq!(state.status, unknown.message());
+        assert_eq!(state.status_tone, unknown.tone());
+
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::CancelBulk);
+        reduce_entries_page_intent(&mut state, list());
+        assert_eq!(state.status, "共 1 篇文章。");
+
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::BulkFailed(unknown.clone()));
+        reduce_entries_page_intent(&mut state, list());
+        assert_eq!(state.status, unknown.message(), "a bulk write's too");
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::SetStatus { message: "已收藏。".into(), tone: "info".into() },
+        );
+        reduce_entries_page_intent(&mut state, list());
+        assert_eq!(state.status, "共 1 篇文章。");
+    }
+
+    /// A bulk mark-read waiting for confirmation is dropped when the list read again differs
+    /// (it was a preview of the list before); an unchanged list keeps it and its question.
+    #[test]
+    fn a_changed_list_drops_a_waiting_mark_read() {
+        let preview = rssr_domain::MarkReadPreview {
+            query: rssr_domain::EntryQuery::default(),
+            unread_entry_ids: vec![1, 2],
+        };
+        let mut state = loaded_page(ReadFilter::All);
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::BulkPreview(preview));
+        let shown: Vec<_> = state.entries.iter().map(|entry| (**entry).clone()).collect();
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::SetEntries { entries: shown, archived_count: 0, truncated: false },
+        );
+        assert!(state.bulk_preview.is_some());
+        assert_eq!(state.status, "请确认批量已读范围。");
+
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::SetEntries {
+                entries: vec![entry(1, false)],
+                archived_count: 0,
+                truncated: false,
+            },
+        );
+        assert!(state.bulk_preview.is_none());
+        assert_eq!(state.status, "文章列表已变化，请重新确认批量已读范围。");
     }
 }

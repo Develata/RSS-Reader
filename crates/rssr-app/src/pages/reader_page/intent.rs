@@ -28,6 +28,18 @@ pub(crate) enum ReaderPageIntent {
     },
     /// A backend call failed (C4b item 1).
     Failed(UiFailure),
+    /// The read-only refresh's answer (C4b item 2): the flags and the neighbours. The body, the
+    /// title and what the page did with them (image localization, position) stay.
+    ApplyReread {
+        entry_id: i64,
+        is_read: bool,
+        is_starred: bool,
+        navigation_state: crate::bootstrap::ReaderNavigation,
+    },
+    /// The read-only refresh found the entry gone; what is shown stays readable.
+    RereadMissing {
+        entry_id: i64,
+    },
     /// 只回写被切换的标记，不重载整篇文章。
     ///
     /// 切换已读/收藏此前走 `BumpReload`，而 `begin_loading` 会清空标题、正文、来源、发布时间

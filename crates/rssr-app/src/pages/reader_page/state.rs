@@ -33,6 +33,9 @@ pub(crate) struct ReaderPageState {
     pub(crate) is_starred: bool,
     /// 每次加载递增：A → B → A 后，第一次 A 的结果也必须视为过期。
     pub(crate) load_generation: u64,
+    /// Bumped by every flag change the page applies: a read-only refresh issued before it may
+    /// have read the flags before the write, so its answer is dropped (C4b item 2).
+    pub(crate) reread_generation: u64,
     pub(crate) asset_localization_requested: bool,
     pub(crate) status: String,
     pub(crate) status_tone: String,
@@ -58,6 +61,7 @@ impl ReaderPageState {
             is_read: false,
             is_starred: false,
             load_generation: 0,
+            reread_generation: 0,
             asset_localization_requested: false,
             status: String::new(),
             status_tone: "info".to_string(),

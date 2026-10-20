@@ -36,6 +36,9 @@ pub(crate) fn required(intents: &[UiIntent]) -> Option<AppRecovery> {
 /// Runs `command` and raises what its failures ask of the whole app. Every UI command goes
 /// through here; [`execute_ui_command`] itself stays free of the app's state (its tests run
 /// without one).
+///
+/// An unknown outcome may have changed the library: the pages re-read what they show (C4b
+/// item 2), through the shell when there is one.
 pub(crate) async fn run_ui_command(command: UiCommand) -> Vec<UiIntent> {
     let intents = execute_ui_command(command).await;
     if let Some(next) = required(&intents) {
@@ -43,6 +46,11 @@ pub(crate) async fn run_ui_command(command: UiCommand) -> Vec<UiIntent> {
         if current.is_none_or(|current| next > current) {
             *APP_RECOVERY.write() = Some(next);
         }
+    }
+    if intents.iter().filter_map(UiIntent::failure).any(|failure| failure.is_unknown())
+        && let Some(shell) = try_consume_context::<super::AppShellState>()
+    {
+        shell.request_reread();
     }
     intents
 }

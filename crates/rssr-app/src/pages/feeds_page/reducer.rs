@@ -149,6 +149,20 @@ pub(crate) fn reduce_feeds_page_intent(
         FeedsPageIntent::SnapshotLoaded(result) => {
             match result {
                 Ok(snapshot) => {
+                    // A confirmation was asked against the configuration shown; it changed, so
+                    // the destructive step asks again (C4b item 2).
+                    let changed = state
+                        .fingerprint
+                        .as_ref()
+                        .is_some_and(|shown| *shown != snapshot.fingerprint);
+                    if changed
+                        && (state.pending_config_import || state.pending_delete_feed.is_some())
+                    {
+                        clear_pending_confirmations(state);
+                        state.status_revision = state.status_revision.wrapping_add(1);
+                        state.status = "订阅或设置已变化，请重新确认。".to_string();
+                        state.status_tone = "info".to_string();
+                    }
                     state.feed_count = snapshot.feed_count;
                     state.entry_count = snapshot.entry_count;
                     state.feeds = snapshot.feeds;
@@ -354,5 +368,46 @@ mod tests {
         assert!(effects.is_empty());
         assert_eq!(state.pending_delete_feed, None);
         assert!(state.pending_config_import);
+    }
+
+    fn snapshot_of(title: &str) -> FeedsPageIntent {
+        let feed = rssr_domain::FingerprintFeed {
+            id: 7,
+            url: "https://example.com/feed.xml",
+            generation: 1,
+            custom_title: Some(title),
+            folder: None,
+        };
+        FeedsPageIntent::SnapshotLoaded(Ok(crate::pages::feeds_page::intent::FeedsPageSnapshot {
+            feeds: Vec::new(),
+            feed_count: 1,
+            entry_count: 0,
+            fingerprint: rssr_domain::ConfigFingerprint::compute(
+                vec![feed],
+                &rssr_domain::UserSettings::default(),
+            ),
+        }))
+    }
+
+    /// A confirmation asked against the configuration shown is dropped when a read shows it
+    /// changed (another browser, a job): the destructive step asks again (C4b item 2). The same
+    /// configuration read again keeps it; the first read has nothing to compare.
+    #[test]
+    fn a_changed_configuration_drops_waiting_confirmations() {
+        let mut state = FeedsPageState::new();
+        state.pending_config_import = true;
+        reduce_feeds_page_intent(&mut state, snapshot_of("A"));
+        assert!(state.pending_config_import, "the first read");
+
+        reduce_feeds_page_intent(&mut state, snapshot_of("A"));
+        assert!(state.pending_config_import, "unchanged");
+
+        reduce_feeds_page_intent(&mut state, snapshot_of("B"));
+        assert!(!state.pending_config_import);
+        assert_eq!(state.status, "订阅或设置已变化，请重新确认。");
+
+        state.pending_delete_feed = Some(7);
+        reduce_feeds_page_intent(&mut state, snapshot_of("C"));
+        assert_eq!(state.pending_delete_feed, None);
     }
 }

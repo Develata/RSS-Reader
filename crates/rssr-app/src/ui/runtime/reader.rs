@@ -65,6 +65,20 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
             }
             intents
         }
+        ReaderCommand::RereadEntry { entry_id } => {
+            match async { backend().await?.load_reader_entry(entry_id).await }.await {
+                Ok(snapshot) => reader_intents(vec![match snapshot.entry {
+                    Some(entry) => ReaderPageIntent::ApplyReread {
+                        entry_id,
+                        is_read: entry.is_read,
+                        is_starred: entry.is_starred,
+                        navigation_state: snapshot.navigation,
+                    },
+                    None => ReaderPageIntent::RereadMissing { entry_id },
+                }]),
+                Err(error) => vec![UiIntent::Failed(UiFailure::new("重新读取文章", error))],
+            }
+        }
         ReaderCommand::LocalizeEntryAssets { entry_id } => {
             match async { backend().await?.localize_entry_assets(entry_id).await }.await {
                 // 缓存写回供下次打开使用。即使仍在同一篇，也不替换正在阅读的 HTML：

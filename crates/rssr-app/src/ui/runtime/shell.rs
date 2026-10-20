@@ -36,6 +36,16 @@ pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
                 Err(error) => vec![UiIntent::Failed(UiFailure::new("读取设置", error))],
             }
         }
+        ShellCommand::LoadSettings => {
+            match async { backend().await?.load_settings().await }.await {
+                Ok(settings) => {
+                    vec![UiIntent::AuthenticatedShellLoaded(AuthenticatedShellSnapshot {
+                        settings,
+                    })]
+                }
+                Err(error) => vec![UiIntent::Failed(UiFailure::new("读取设置", error))],
+            }
+        }
         ShellCommand::ResolveStartupRoute => {
             match async { backend().await?.resolve_startup_target().await }.await {
                 Ok(target) => {

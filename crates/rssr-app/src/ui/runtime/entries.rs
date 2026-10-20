@@ -39,6 +39,15 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                 }
             }
         }
+        EntriesCommand::Reread => {
+            let input = EntriesBootstrapInput { load_preferences: true, load_feeds: true };
+            match async { backend().await?.bootstrap_entries(input).await }.await {
+                Ok(outcome) => reread_intents(outcome),
+                Err(error) => entries_intents(vec![EntriesPageIntent::PreferencesRereadFailed(
+                    UiFailure::new("重新读取文章页", error),
+                )]),
+            }
+        }
         EntriesCommand::RememberOpenedFeed { feed_id } => {
             match async { backend().await?.remember_opened_feed(feed_id).await }.await {
                 Ok(()) => Vec::new(),
@@ -62,7 +71,10 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                         truncated: outcome.truncated,
                     })]
                 }
-                Err(error) => entries_failed("读取文章列表", error),
+                Err(error) => entries_intents(vec![EntriesPageIntent::ReadFailed(UiFailure::new(
+                    "读取文章列表",
+                    error,
+                ))]),
             }
         }
         EntriesCommand::SetRead { entry_id, entry_title, read } => {
@@ -88,8 +100,11 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                 starred_filter,
                 selected_feed_urls,
             };
+            let saved = next.clone();
             match async { backend().await?.save_entries_workspace_if_changed(next).await }.await {
-                Ok(true) | Ok(false) => Vec::new(),
+                Ok(true) | Ok(false) => {
+                    entries_intents(vec![EntriesPageIntent::WorkspaceSaved(saved)])
+                }
                 Err(error) => entries_failed("保存文章页偏好", error),
             }
         }
@@ -119,8 +134,21 @@ fn bootstrap_error(failure: UiFailure, load_preferences: bool) -> Vec<UiIntent> 
     if load_preferences {
         entries_intents(vec![EntriesPageIntent::PreferencesUnavailable(failure)])
     } else {
-        vec![UiIntent::Failed(failure)]
+        entries_intents(vec![EntriesPageIntent::ReadFailed(failure)])
     }
+}
+
+/// The read-only refresh's reply: the preferences for the reducer to weigh, and the
+/// subscriptions (C4b item 2).
+fn reread_intents(outcome: EntriesBootstrapOutcome) -> Vec<UiIntent> {
+    let mut intents = Vec::new();
+    if let (Some(settings), Some(workspace)) = (outcome.settings, outcome.workspace) {
+        intents.push(EntriesPageIntent::PreferencesReread { settings, workspace });
+    }
+    if let Some(feeds) = outcome.feeds {
+        intents.push(EntriesPageIntent::SetFeeds(feeds));
+    }
+    entries_intents(intents)
 }
 
 fn entries_intents(intents: Vec<EntriesPageIntent>) -> Vec<UiIntent> {
@@ -202,7 +230,7 @@ mod tests {
         assert!(matches!(
             bootstrap_error(crate::ui::failure::plain("refresh summaries failed"), false)
                 .as_slice(),
-            [UiIntent::Failed(_)]
+            [UiIntent::EntriesPage(EntriesPageIntent::ReadFailed(_))]
         ));
     }
 }

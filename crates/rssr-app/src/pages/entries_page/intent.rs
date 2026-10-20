@@ -21,6 +21,16 @@ pub(crate) enum EntriesPageIntent {
     ApplyLoadedWorkspaceState(EntriesWorkspaceState),
     PreferencesLoaded,
     PreferencesUnavailable(UiFailure),
+    /// The read-only refresh's preferences (C4b item 2): the settings apply; the browsing
+    /// preferences only where the page has none of its own unsaved.
+    PreferencesReread {
+        settings: UserSettings,
+        workspace: EntriesWorkspaceState,
+    },
+    /// The read-only refresh's read failed.
+    PreferencesRereadFailed(UiFailure),
+    /// The browsing preferences were saved.
+    WorkspaceSaved(EntriesWorkspaceState),
     SetFeeds(Vec<FeedSummary>),
     /// 列表查询已发出 / 最新一代查询的结果已落地（成功或失败）。
     EntriesQueryStarted,
@@ -40,8 +50,10 @@ pub(crate) enum EntriesPageIntent {
         message: String,
         tone: String,
     },
-    /// A backend call failed (C4b item 1).
+    /// A backend call failed (C4b item 1): a write's failure, kept over later list reads.
     Failed(UiFailure),
+    /// A read failed (the list, the subscriptions): the next read replaces it.
+    ReadFailed(UiFailure),
     SetGroupingMode(EntryGroupingMode),
     SetShowArchived(bool),
     SetReadFilter(ReadFilter),
@@ -60,7 +72,9 @@ impl EntriesPageIntent {
         match self {
             Self::BulkFailed(failure)
             | Self::PreferencesUnavailable(failure)
-            | Self::Failed(failure) => Some(failure),
+            | Self::PreferencesRereadFailed(failure)
+            | Self::Failed(failure)
+            | Self::ReadFailed(failure) => Some(failure),
             _ => None,
         }
     }

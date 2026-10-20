@@ -13,6 +13,8 @@ pub(crate) enum EntriesCommand {
         load_preferences: bool,
         load_feeds: bool,
     },
+    /// The page's read-only refresh (C4b item 2): its preferences and subscriptions again.
+    Reread,
     LoadEntries {
         query: EntryQuery,
     },

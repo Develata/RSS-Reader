@@ -9,6 +9,8 @@ mod failure_classes;
 pub(crate) mod fake_backend;
 mod feeds;
 mod reader;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod reread;
 mod settings;
 mod shell;
 

@@ -48,7 +48,9 @@ EntriesPage(PatchEntryFlags { entry_id: 1, is_read: Some(true), is_starred: None
 ## set read on a missing entry
 EntriesPage(SetStatus { message: "《Gone》已不存在，可能已被刷新清理或订阅已删除。", tone: "error" })
 ## save browsing preferences
+EntriesPage(WorkspaceSaved(EntriesWorkspaceState { grouping_mode: Source, show_archived: true, read_filter: UnreadOnly, starred_filter: All, selected_feed_urls: ["http://127.0.0.1:<port>/a.xml"] }))
 ## save the same browsing preferences
+EntriesPage(WorkspaceSaved(EntriesWorkspaceState { grouping_mode: Source, show_archived: true, read_filter: UnreadOnly, starred_filter: All, selected_feed_urls: ["http://127.0.0.1:<port>/a.xml"] }))
 ## entries bootstrap after saving preferences
 EntriesPage(ApplyLoadedSettings(UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" }))
 EntriesPage(ApplyLoadedWorkspaceState(EntriesWorkspaceState { grouping_mode: Source, show_archived: true, read_filter: UnreadOnly, starred_filter: All, selected_feed_urls: ["http://127.0.0.1:<port>/a.xml"] }))
@@ -63,6 +65,13 @@ EntriesPage(BulkPreview(MarkReadPreview { query: EntryQuery { feed_id: None, rea
 ReaderPage(ApplyLoadedContent { entry_id: 1, content: ReaderPageLoadedContent { title: "Alpha one", body_text: "", body_html: Some("<p>Body of Alpha one</p>"), source: "Feed A", author: None, original_url: Some("https://example.invalid/a1"), published_at: "2026-04-01T10:00:00Z", navigation_state: EntryNavigation { previous_unread_entry_id: None, next_unread_entry_id: None, previous_feed_entry_id: Some(2), next_feed_entry_id: None }, is_read: true, is_starred: false } })
 ## reader load missing
 ReaderPage(SetError { entry_id: 999, error: Some("文章不存在") })
+## reader reread
+ReaderPage(ApplyReread { entry_id: 1, is_read: true, is_starred: false, navigation_state: EntryNavigation { previous_unread_entry_id: None, next_unread_entry_id: None, previous_feed_entry_id: Some(2), next_feed_entry_id: None } })
+## reader reread missing
+ReaderPage(RereadMissing { entry_id: 999 })
+## entries reread
+EntriesPage(PreferencesReread { settings: UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" }, workspace: EntriesWorkspaceState { grouping_mode: Source, show_archived: true, read_filter: UnreadOnly, starred_filter: All, selected_feed_urls: ["http://127.0.0.1:<port>/a.xml"] } })
+EntriesPage(SetFeeds([FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 0, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }]))
 ## reader toggle read
 ReaderPage(SetStatus { message: "已将当前文章标记为未读。", tone: "info" })
 ReaderPage(PatchEntryFlags { entry_id: 1, is_read: Some(false), is_starred: None })
@@ -145,4 +154,6 @@ EntriesPage(SetEntries { entries: [EntrySummary { id: 14, feed_id: 2, title: "Br
 ## feeds snapshot, at the end
 FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { feeds: [FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 1, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 0, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 3, entry_count: 5, fingerprint: ConfigFingerprint(<5>) })))
 ## authenticated shell
+AuthenticatedShellLoaded(AuthenticatedShellSnapshot { settings: UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" } })
+## shell settings again
 AuthenticatedShellLoaded(AuthenticatedShellSnapshot { settings: UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" } })

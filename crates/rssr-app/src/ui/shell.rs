@@ -1,3 +1,5 @@
+use std::{cell::Cell, rc::Rc};
+
 use dioxus::core::{Runtime, current_scope_id};
 use dioxus::prelude::*;
 use dioxus_router::Navigator;
@@ -7,7 +9,7 @@ use crate::{
     status::set_status,
     theme::ThemeController,
     ui::failure::{TONE_UNKNOWN, UiFailure},
-    ui::shell_browser::wait_for_refresh_feedback,
+    ui::shell_browser::{sleep, wait_for_refresh_feedback},
     ui::shell_prefs::{initial_entry_search, remember_entry_search},
     ui::shell_state::{HomeAction, ManualRefreshState, NavMode, resolve_home_action},
     ui::{ShellCommand, UiCommand, UiIntent, run_ui_command},
@@ -18,7 +20,16 @@ pub(crate) struct AppShellState {
     entry_search: Signal<String>,
     nav_mode: Signal<NavMode>,
     refresh: Signal<ManualRefreshState>,
+    /// Manual refreshes finished; their feedback is dismissed only while no later one finished.
     refresh_revision: Signal<u64>,
+    /// Bumped when what the pages show may be stale: each page then re-reads it, read-only
+    /// (C4b item 2). A manual refresh's end bumps it at once; other triggers through
+    /// [`AppShellState::request_reread`].
+    library_revision: Signal<u64>,
+    /// A re-read was requested and is waiting out [`REREAD_WINDOW`].
+    reread_pending: Signal<bool>,
+    /// The settings page is open: it re-reads the settings itself, the shell does not.
+    settings_page_open: Signal<bool>,
     /// Why the settings could not be read at start, until they are (C4b item 5).
     settings_failure: Signal<Option<UiFailure>>,
     /// Why the startup page could not be resolved, until dismissed: the startup page is replaced
@@ -41,8 +52,34 @@ impl AppShellState {
     pub(crate) fn refresh_state(self) -> ManualRefreshState {
         self.refresh.read().clone()
     }
-    pub(crate) fn refresh_revision(self) -> u64 {
-        *self.refresh_revision.read()
+    /// What the pages subscribe to for their read-only refresh (C4b item 2).
+    pub(crate) fn library_revision(self) -> u64 {
+        *self.library_revision.read()
+    }
+
+    /// Asks every page to re-read what it shows (read-only). Requests within [`REREAD_WINDOW`]
+    /// make one re-read: the page becoming visible, the window gaining focus and the network
+    /// coming back often arrive together. A re-read issued meanwhile (a manual refresh ended)
+    /// covers them, and none follows.
+    pub(crate) fn request_reread(mut self) {
+        if *self.reread_pending.peek() {
+            return;
+        }
+        self.reread_pending.set(true);
+        let issued = *self.library_revision.peek();
+        self.spawn_in_shell(async move {
+            sleep(REREAD_WINDOW).await;
+            self.reread_pending.set(false);
+            if *self.library_revision.peek() == issued {
+                self.library_revision += 1;
+            }
+        });
+    }
+
+    /// The settings page is open (`true`) or was closed: while it is open it re-reads the
+    /// settings itself and applies them, so the shell does not read them a second time.
+    pub(crate) fn set_settings_page_open(mut self, open: bool) {
+        self.settings_page_open.set(open);
     }
 
     /// All manual refresh triggers use this synchronous gate and the App-owned task.
@@ -65,6 +102,7 @@ impl AppShellState {
                 self.refresh.set(ManualRefreshState::Finished { message, tone });
                 // Failed batches can still have committed some subscriptions.
                 self.refresh_revision += 1;
+                self.library_revision += 1;
                 let completed_revision = *self.refresh_revision.peek();
                 spawn(async move {
                     wait_for_refresh_feedback(std::time::Duration::from_secs(if failed {
@@ -85,7 +123,21 @@ impl AppShellState {
     /// shown until settings from the library are applied, by this read or by a page (the settings
     /// page reads them, a configuration import replaces them); a read issued before such an
     /// application does not overwrite it (C4b items 2 and 5; design review C4D-R2 R2-03, R2-04).
-    pub(crate) fn load_settings(mut self, theme: ThemeController) {
+    pub(crate) fn load_settings(self, theme: ThemeController) {
+        self.read_settings(theme, ShellCommand::LoadAuthenticatedShell);
+    }
+
+    /// The shell's read-only refresh: the settings again, applied like the start's (the same
+    /// ordering against settings a page applied meanwhile), unless the settings page is open and
+    /// reads them itself (C4b item 2).
+    pub(crate) fn reread_settings(self, theme: ThemeController) {
+        if *self.settings_page_open.peek() {
+            return;
+        }
+        self.read_settings(theme, ShellCommand::LoadSettings);
+    }
+
+    fn read_settings(mut self, theme: ThemeController, command: ShellCommand) {
         if *self.settings_loading.peek() {
             return;
         }
@@ -93,8 +145,7 @@ impl AppShellState {
         let issued = theme.stored_count();
         Runtime::current().in_scope(self.owner, || {
             spawn(async move {
-                let intents =
-                    run_ui_command(UiCommand::Shell(ShellCommand::LoadAuthenticatedShell)).await;
+                let intents = run_ui_command(UiCommand::Shell(command)).await;
                 self.settings_loading.set(false);
                 for intent in intents {
                     match intent {
@@ -161,6 +212,9 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
         nav_mode: use_signal(NavMode::default),
         refresh: use_signal(ManualRefreshState::default),
         refresh_revision: use_signal(|| 0),
+        library_revision: use_signal(|| 0),
+        reread_pending: use_signal(|| false),
+        settings_page_open: use_signal(|| false),
         settings_failure: use_signal(|| None),
         startup_failure: use_signal(|| None),
         settings_loading: use_signal(|| false),
@@ -246,6 +300,38 @@ pub(crate) fn use_authenticated_shell_bus(shell: AppShellState, theme: ThemeCont
     use_effect(move || {
         if theme.has_stored() && shell.settings_failure.peek().is_some() {
             shell.load_settings(theme);
+        }
+    });
+    // The shell's read-only refresh: on every bump after the start (C4b item 2).
+    use_effect(move || {
+        if shell.library_revision() > 0 {
+            shell.reread_settings(theme);
+        }
+    });
+}
+
+/// How long the shell gathers re-read requests into one (C4b item 2).
+pub(crate) const REREAD_WINDOW: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// The page re-reads what it shows when it becomes visible again, the window gains focus or the
+/// network comes back (C4b item 2). The page's listeners only name the event; each one is a
+/// request to the shell, inside the App's scope, which gathers them. The listeners go with the App.
+pub(crate) fn use_reread_triggers(shell: AppShellState) {
+    let bridge = use_hook(|| Rc::new(Cell::new(None::<document::Eval>)));
+    let cleanup = Rc::clone(&bridge);
+    use_drop(move || {
+        if let Some(eval) = cleanup.get() {
+            let _ = eval.send(());
+        }
+    });
+    use_future(move || {
+        let bridge = Rc::clone(&bridge);
+        async move {
+            let mut eval = document::eval(include_str!("reread_triggers.js"));
+            bridge.set(Some(eval));
+            while eval.recv::<String>().await.is_ok() {
+                shell.request_reread();
+            }
         }
     });
 }
@@ -474,6 +560,138 @@ mod tests {
                 assert_eq!(failure.error, error);
                 shell.dismiss_startup_failure();
                 assert_eq!(shell.startup_failure(), None);
+            });
+        }
+    }
+
+    /// Runs the app's tasks until `done` holds.
+    async fn run_until(dom: &mut VirtualDom, what: &str, mut done: impl FnMut() -> bool) {
+        for _ in 0..300 {
+            let _ = tokio::time::timeout(Duration::from_millis(20), dom.wait_for_work()).await;
+            dom.render_immediate_to_vec();
+            if dom.in_scope(ScopeId::APP, &mut done) {
+                return;
+            }
+        }
+        panic!("{what}");
+    }
+
+    /// Lets the re-read window pass with the app running, then the reads it started end.
+    async fn past_the_window(dom: &mut VirtualDom, shell: AppShellState) {
+        let until = tokio::time::Instant::now() + super::REREAD_WINDOW * 2;
+        while tokio::time::Instant::now() < until {
+            let _ = tokio::time::timeout(Duration::from_millis(20), dom.wait_for_work()).await;
+            dom.render_immediate_to_vec();
+        }
+        settle(dom, shell).await;
+    }
+
+    /// Re-read requests arriving together (visible, focus, online) make one re-read: one bump of
+    /// the library revision, and the shell reads its settings once more, starting nothing
+    /// (C4b item 2).
+    #[tokio::test(flavor = "current_thread")]
+    async fn rereads_requested_together_read_once() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        assert_eq!(backend.calls("load_settings"), 1);
+
+        dom.in_scope(ScopeId::APP, || {
+            for _ in 0..3 {
+                shell.request_reread();
+            }
+        });
+        run_until(&mut dom, "the re-read", || backend.calls("load_settings") == 2).await;
+        past_the_window(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(*shell.library_revision.peek(), 1, "one re-read");
+            assert_eq!(theme.stored_count(), 2, "its settings applied");
+        });
+        assert_eq!(backend.calls("load_settings"), 2);
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 1, "nothing started again");
+
+        // Later requests make another.
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "the second re-read", || backend.calls("load_settings") == 3).await;
+        dom.in_scope(ScopeId::APP, || assert_eq!(*shell.library_revision.peek(), 2));
+    }
+
+    /// While the settings page is open it reads the settings itself: the shell does not read them
+    /// a second time for the same re-read.
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_shell_leaves_the_settings_to_an_open_settings_page() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, _) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            shell.set_settings_page_open(true);
+            shell.request_reread();
+        });
+        run_until(&mut dom, "the bump", || *shell.library_revision.peek() == 1).await;
+        past_the_window(&mut dom, shell).await;
+        assert_eq!(backend.calls("load_settings"), 1);
+    }
+
+    /// A manual refresh that ends within the window re-reads already: the requests waiting are
+    /// covered by it, and no second re-read follows.
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_manual_refresh_ending_in_the_window_covers_the_requests() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, _) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            shell.request_reread();
+            shell.manual_refresh();
+        });
+        run_until(&mut dom, "the refresh", || *shell.library_revision.peek() == 1).await;
+        past_the_window(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || assert_eq!(*shell.library_revision.peek(), 1));
+        assert_eq!(backend.calls("refresh_all"), 1);
+        assert_eq!(backend.calls("load_settings"), 2, "the start and one re-read");
+    }
+
+    /// A command whose outcome is unknown may have changed the library: the pages re-read
+    /// (C4b item 2). A plain failure asks for nothing.
+    #[tokio::test(flavor = "current_thread")]
+    async fn an_unknown_outcome_asks_for_a_reread() {
+        use crate::ui::commands::{SettingsCommand, UiCommand};
+
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, _) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        let save = || {
+            UiCommand::Settings(SettingsCommand::UpdateSettings {
+                patch: rssr_application::SettingsPatch::default(),
+                success_message: String::new(),
+            })
+        };
+        for (code, rereads) in [(ErrorCode::Network, 0), (ErrorCode::OutcomeUnknown, 1)] {
+            backend.fail("update_settings", BackendError::new(code, "原因"));
+            let done = dom.in_scope(ScopeId::APP, || {
+                let mut done = Signal::new(false);
+                let command = save();
+                spawn(async move {
+                    crate::ui::run_ui_command(command).await;
+                    done.set(true);
+                });
+                done
+            });
+            run_until(&mut dom, "the save", || *done.peek()).await;
+            past_the_window(&mut dom, shell).await;
+            dom.in_scope(ScopeId::APP, || {
+                assert_eq!(*shell.library_revision.peek(), rereads, "{code:?}");
             });
         }
     }

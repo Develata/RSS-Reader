@@ -101,6 +101,21 @@ impl EntriesPageSession {
         });
     }
 
+    /// The page's read-only refresh (C4b item 2): the preferences and subscriptions again,
+    /// superseding a start's read still on its way (the reducer then takes it as the start's).
+    pub(crate) fn reread(self) {
+        self.spawn_bootstrap(run_ui_command(UiCommand::Entries(EntriesCommand::Reread)));
+    }
+
+    /// The first run reads the page's start; later ones are its read-only refresh.
+    pub(crate) fn bootstrap_or_reread(self) {
+        if *self.bootstrap_generation.peek() == 0 {
+            self.bootstrap();
+        } else {
+            self.reread();
+        }
+    }
+
     fn bootstrap_command(self) -> UiCommand {
         // Reading readiness must not subscribe the bootstrap effect to its own
         // completion and start a second feed-summary query.
@@ -171,6 +186,18 @@ impl EntriesPageSession {
         selected_feed_urls: Vec<String>,
     ) {
         if !self.can_save_browsing_preferences(preferences_loaded) {
+            return;
+        }
+        // Only what the user changed: preferences that were read (at start or again) are the
+        // library's already, and a read never writes (C4b item 2).
+        let next = rssr_domain::EntriesWorkspaceState {
+            grouping_mode,
+            show_archived,
+            read_filter,
+            starred_filter,
+            selected_feed_urls: selected_feed_urls.clone(),
+        };
+        if self.state.peek().stored_workspace.as_ref() == Some(&next) {
             return;
         }
 
@@ -671,5 +698,61 @@ mod tests {
             assert_eq!(state.feeds[0].id, 7);
             assert_eq!(state.entries[0].id, 2);
         });
+    }
+
+    /// The browsing preferences are saved only when they differ from the stored ones: the values
+    /// a read applied (at start or again) are not written back, and neither are ones just saved
+    /// (C4b item 2: a read-only refresh writes nothing).
+    #[tokio::test(flavor = "current_thread")]
+    async fn only_preferences_the_user_changed_are_saved() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let stored = EntriesWorkspaceState::default();
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = EntriesPageSession::new(
+                None,
+                Signal::new(EntriesPageState::new(true)),
+                Signal::new(0),
+                Signal::new(0),
+            );
+            session.dispatch(EntriesPageIntent::ApplyLoadedWorkspaceState(stored.clone()));
+            session.dispatch(EntriesPageIntent::PreferencesLoaded);
+            session
+        });
+        let save = |workspace: &EntriesWorkspaceState| {
+            session.save_browsing_preferences_with(
+                true,
+                workspace.grouping_mode,
+                workspace.show_archived,
+                workspace.read_filter,
+                workspace.starred_filter,
+                workspace.selected_feed_urls.clone(),
+            )
+        };
+        dom.in_scope(ScopeId::APP, || save(&stored));
+        assert_eq!(backend.calls("save_entries_workspace_if_changed"), 0, "as read");
+
+        let changed =
+            EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..stored.clone() };
+        dom.in_scope(ScopeId::APP, || save(&changed));
+        for _ in 0..100 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            if dom.in_scope(ScopeId::APP, || session.snapshot().stored_workspace)
+                == Some(changed.clone())
+            {
+                break;
+            }
+        }
+        assert_eq!(backend.calls("save_entries_workspace_if_changed"), 1);
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.snapshot().stored_workspace, Some(changed.clone()));
+            save(&changed);
+        });
+        assert_eq!(backend.calls("save_entries_workspace_if_changed"), 1, "as saved");
     }
 }

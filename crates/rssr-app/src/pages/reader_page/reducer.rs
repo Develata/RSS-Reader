@@ -66,6 +66,23 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
             if let Some(is_starred) = is_starred {
                 state.is_starred = is_starred;
             }
+            state.reread_generation = state.reread_generation.wrapping_add(1);
+        }
+        ReaderPageIntent::ApplyReread { entry_id, is_read, is_starred, navigation_state } => {
+            if entry_id != state.current_entry_id || !state.content_loaded {
+                return;
+            }
+            state.is_read = is_read;
+            state.is_starred = is_starred;
+            state.navigation_state = navigation_state;
+        }
+        ReaderPageIntent::RereadMissing { entry_id } => {
+            if entry_id != state.current_entry_id {
+                return;
+            }
+            state.status =
+                "这篇文章已不在资料库中（可能已被清理或订阅已删除），正文仍可阅读。".into();
+            state.status_tone = "error".into();
         }
     }
 }

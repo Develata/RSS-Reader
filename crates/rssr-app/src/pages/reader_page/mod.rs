@@ -14,7 +14,7 @@ use crate::{
     hooks::use_mobile_back_navigation::{navigate_back, use_mobile_back_navigation_with_dismiss},
     hooks::use_reader_shortcuts::use_reader_shortcuts,
     router::AppRoute,
-    ui::{use_reactive_side_effect, use_reactive_task},
+    ui::{AppShellState, use_reactive_side_effect, use_reactive_task},
 };
 
 pub(crate) use self::session::ReaderPageSession;
@@ -196,6 +196,14 @@ fn use_reader_page_workspace(entry_id: i64) -> ReaderPageFacade {
     use_reader_shortcuts(session);
     use_reactive_task(entry_id, move |_| {
         session.load();
+    });
+    // The read-only refresh, on every bump after the page opened (C4b item 2).
+    let library_revision = use_context::<AppShellState>().library_revision();
+    let opened_at = use_hook(|| library_revision);
+    use_reactive_task(library_revision, move |revision| {
+        if revision != opened_at {
+            session.reread();
+        }
     });
 
     let snapshot = session.snapshot();

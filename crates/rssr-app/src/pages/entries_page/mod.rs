@@ -225,7 +225,8 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         // `presenter_input()` 会克隆整份投影；`with` 直接借用（`from_input` 是纯函数）。
         presenter_input.with(|input| Arc::new(EntriesPagePresenter::from_input(input)))
     });
-    let refresh_revision = ui.refresh_revision();
+    // The page's read-only refresh follows the shell's (C4b item 2).
+    let library_revision = ui.library_revision();
     let entry_search = ui.entry_search();
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
     let preferences_loaded = state_snapshot.preferences_load.is_loaded();
@@ -240,7 +241,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     // 归档分界的“现在”只在挂载、手动刷新完成与查询条件变化时采样；状态提示、查询结果这类
     // 普通重渲染不读时钟，否则 `EntryQuery` 每跨一秒就变化并重发查询（审计 A4）。
     let query_now = use_sampled_clock(
-        state_snapshot.query_clock_trigger(feed_id, query_search.clone(), refresh_revision),
+        state_snapshot.query_clock_trigger(feed_id, query_search.clone(), library_revision),
         current_time_utc,
     );
     let facade = EntriesPageFacade::new(
@@ -274,7 +275,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         }
     });
 
-    use_reactive_task((feed_id, refresh_revision), move |_| session.bootstrap());
+    use_reactive_task((feed_id, library_revision), move |_| session.bootstrap_or_reread());
     // Once per opened subscription, not per refresh.
     use_reactive_task(feed_id, move |feed_id| {
         if let Some(feed_id) = feed_id {
@@ -287,7 +288,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
             feed_id,
             entries_ready,
             entry_query.clone(),
-            refresh_revision,
+            library_revision,
             bulk_revision,
             requery_revision,
         ),
