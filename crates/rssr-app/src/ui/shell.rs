@@ -427,15 +427,26 @@ mod tests {
         assert_eq!(backend.calls("load_settings"), 1);
     }
 
-    /// A failed startup resolution, of each class, goes to all entries and keeps its failure in
-    /// the shell for the notice above every page, until dismissed (review C4B-A-R3-03).
+    /// `resolve_startup` with a failed resolution, of each class: it goes to all entries and the
+    /// shell (not the startup page) keeps the failure until dismissed (review C4B-A-R3-03). It
+    /// does not mount the startup page or render the notice: that the notice stays after the
+    /// route is replaced is the browser acceptance's (C4c; review C4B-A-R4-01).
     #[tokio::test(flavor = "current_thread")]
-    async fn a_failed_startup_resolution_outlives_the_startup_page() {
+    async fn a_failed_startup_resolution_is_kept_by_the_shell() {
         use crate::router::AppRoute;
 
-        for code in [ErrorCode::Network, ErrorCode::OutcomeUnknown, ErrorCode::Unauthenticated] {
+        let errors = [
+            BackendError::new(ErrorCode::Network, "原因"),
+            BackendError::new(ErrorCode::OutcomeUnknown, "原因"),
+            BackendError::new(ErrorCode::OutcomeUnknown, "原因")
+                .with_reason(ErrorCode::Unauthenticated),
+            BackendError::new(ErrorCode::Unauthenticated, "原因"),
+            BackendError::new(ErrorCode::BuildMismatch, "原因"),
+        ];
+        for error in errors {
+            let code = (error.code, error.reason);
             let backend = Scripted::over_new_library();
-            backend.fail("resolve_startup_target", BackendError::new(code, "原因"));
+            backend.fail("resolve_startup_target", error.clone());
             let _host = test_host::install(backend.clone());
             let mut dom = VirtualDom::new(harness);
             dom.rebuild_in_place();
@@ -460,7 +471,7 @@ mod tests {
             dom.in_scope(ScopeId::APP, || {
                 assert_eq!(*went.peek(), Some(AppRoute::EntriesPage {}), "{code:?}");
                 let failure = shell.startup_failure().expect("kept for the notice");
-                assert_eq!(failure.error.code, code);
+                assert_eq!(failure.error, error);
                 shell.dismiss_startup_failure();
                 assert_eq!(shell.startup_failure(), None);
             });
