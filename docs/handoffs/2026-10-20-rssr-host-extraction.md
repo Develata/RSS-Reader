@@ -32,7 +32,7 @@
 
 - `lib.rs`：宿主能力 trait（`AutoRefreshPort`、`RefreshPort`、`ReaderAssetPort`、`RemoteConfigPort`）、
   `HostCapabilities`、各 `*Outcome`、自动刷新调度函数，可见性由 `pub(crate)` 改为 `pub`。两个目标都编译。
-- `native.rs`（由 `rssr-app/src/bootstrap/native.rs` 经 `git mv` 而来）：`AppServices` 改名为
+- `native.rs`（由 `rssr-app/src/bootstrap/native.rs` 经 `git mv` 移来；原路径在同一提交里换成了新的薄包装，所以提交记录为新增而非重命名，`git log --follow` 追不到旧历史）：`AppServices` 改名为
   `NativeHost`，进程级 `OnceCell` 与 `from_default_location()` 移出，改为
   `NativeHost::open(NativeSqliteBackend) -> Arc<NativeHost>`，由调用方决定数据目录。
   其余刷新、单飞、自动刷新、图片本地化、WebDAV 逻辑原样搬移；日志文案"初始化桌面端本地数据库"
@@ -75,7 +75,7 @@
 
 - 发现一处既有问题，本次未修：WAL 降级警告的字符串字面量里夹着一段多余空格
   （`native.rs` 中"…文件系统），<空格>刷新退回串行…"），只影响日志文案。
-- 下一步 P1：在 `rssr-web` 中用 `NativeHost::open` 打开 `RSS_READER_WEB_DATA_DIR`，并实现 `/api/v1`。
+- 下一步 P1：在 `rssr-web` 中用 `NativeHost::open(NativeSqliteBackend::with_path(<RSS_READER_WEB_DATA_DIR>/rss-reader.db))` 打开文章库（正文库路径由 `with_path` 自动派生），并实现 `/api/v1`。
   P1 依赖 5070d71（抓取超时、`feed_http_client`），该提交还在 `feat/reader-mathml`，开工前需要先合入 main。
 
 ## 给下一位 Agent 的备注
