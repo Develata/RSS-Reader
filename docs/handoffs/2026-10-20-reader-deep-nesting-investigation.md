@@ -60,11 +60,12 @@
   `html5ever = "0.39"`，即便合并也要等 html5ever 发版 + ammonia 跟进。#289（2017，open）是同类总议题。
 - 浏览器参照：Blink `kMaximumHTMLParserDOMTreeDepth = 512`、WebKit `defaultMaximumHTMLParserDOMTreeDepth = 512`，
   超过后挂到祖先下（展平），所以深于 512 的正文在所有目标 WebView 里本来就不会按原样渲染；
-  但这个上限只决定挂载位置，不限制开放元素栈，浏览器自身对深层 innerHTML 仍是平方。
+  这个上限只决定挂载位置，不限制开放元素栈。
 
 ### 推断（未单独实测）
 
 - wasm 上同一输入的耗时应是原生的数倍（未测量倍数），UI 线程卡顿更长。
+- 浏览器自身对深层 `innerHTML` 也是平方（据 servo/html5ever#788 中 mithun-wrkr 的评论：Chrome 154 上 20k 层约 0.7 s、80k 层约 12 s；本次未复测）。
 - 真实数据只覆盖 9 个订阅，深度结论的代表性有限；但 512 处浏览器展平是一条独立的上界证据。
 
 ## 方案对比
@@ -119,6 +120,9 @@
 - 未修复前：恶意或损坏的 feed 可以让打开某篇文章卡住数秒到数分钟，放大形状可能导致内存耗尽。
 - 线性部分（数 MB 正文数百 ms）是既有成本，不在本次范围。
 - 实现时应把放大形状、Noah's Ark 形状、`<ul><li>` 形状加入 `test_reader_html_stress.rs`，断言“降级为纯文本、输出有界”。
+- 方案 4 的覆盖性目前是论证而非实测：“新建元素深度之和”依赖计数 sink 通过 `append`/`append_before_sibling`/`reparent_children`
+  正确维护深度。标定 α 之前，必须先让 probe 里每个形状（尤其 distinct-id `<b>` 与 `<div><b id=k></div>` 放大）
+  跑过计量器并确认都会触发；若深度信号不可靠，以开放元素数硬上限兜底。
 
 ## 给下一位 Agent 的备注
 
