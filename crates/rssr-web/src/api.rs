@@ -285,9 +285,13 @@ mod tests {
         }
 
         async fn start_with_capacity(capacity: usize) -> Self {
+            // 进程号 + 进程内计数器：并行启动的测试即使拿到同一个时间戳，目录也不会相同。
+            static NEXT_DIR: std::sync::atomic::AtomicUsize =
+                std::sync::atomic::AtomicUsize::new(0);
             let data_dir = std::env::temp_dir().join(format!(
-                "rssr-web-api-{}-{}",
+                "rssr-web-api-{}-{}-{}",
                 std::process::id(),
+                NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .expect("clock after epoch")

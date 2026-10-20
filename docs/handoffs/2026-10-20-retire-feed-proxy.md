@@ -67,3 +67,14 @@ Develata 确认退役 `/feed-proxy`。服务端模式落地后，rssr-web 托管
 ## 给下一位 Agent 的备注
 
 - 入口：`crates/rssr-infra/src/application_adapters/browser/feed.rs`、设计文档第 7 节。
+
+## CI 修复（PR #31，`native-module (rssr-web)`）
+
+- 现象：`api::tests::endpoints_return_typed_json_and_typed_errors` 在 `TestServer::start` 打开文章库时报
+  `database is locked`（`连接本地索引数据库失败`）。测试在约 7 秒内就失败，而 `busy_timeout` 是 30 秒，
+  说明 SQLite 没进入等待就直接返回了 BUSY。这符合另一个连接同时操作同一个库文件、出现锁升级冲突的情形。
+- 推断原因（日志无法直接证实）：测试的临时目录名只由进程号和纳秒时间戳组成，并行启动的测试可能拿到相同的值，
+  于是两个测试共用了同一个库。这是间歇性问题，#30 上同一测试曾经通过。
+- 修复：把本组新增的三处测试（`rssr-web` 的 API 测试、`rssr-host` 的分派测试与 `NativeHost::open` 测试）
+  的目录名改为"进程号 + 进程内原子计数器 + 时间戳"。本机连续 3 轮 `cargo test -p rssr-web -p rssr-host` 全部通过。
+- 未改：`rssr-infra`、`rssr-cli` 测试里既有的同类命名（早于本组改动），留作后续统一。
