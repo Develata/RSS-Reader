@@ -22,7 +22,7 @@ pub fn AppNotices() -> Element {
         }
     });
     let recovery = APP_RECOVERY();
-    let settings_failure = shell.settings_failure();
+    let settings_failure = shell.settings_failure(theme);
     let loading = shell.settings_loading();
 
     rsx! {

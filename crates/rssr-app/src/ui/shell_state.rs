@@ -51,7 +51,8 @@ pub(crate) enum ManualRefreshState {
     Refreshing,
     Finished {
         message: String,
-        failed: bool,
+        /// `info`, `error`, or `unknown` for an outcome that may have happened.
+        tone: String,
     },
 }
 
@@ -93,7 +94,8 @@ impl ManualRefreshState {
         match self {
             Self::Idle => "idle",
             Self::Refreshing => "refreshing",
-            Self::Finished { failed: true, .. } => "error",
+            Self::Finished { tone, .. } if tone == "error" => "error",
+            Self::Finished { tone, .. } if tone == crate::ui::failure::TONE_UNKNOWN => "unknown",
             Self::Finished { .. } => "finished",
         }
     }
@@ -138,8 +140,8 @@ mod tests {
         for _ in 0..10 {
             assert!(!state.begin());
         }
-        for failed in [false, true] {
-            state = ManualRefreshState::Finished { message: "result".into(), failed };
+        for tone in ["info", "error", "unknown"] {
+            state = ManualRefreshState::Finished { message: "result".into(), tone: tone.into() };
             assert!(state.begin());
             assert!(!state.begin());
         }
@@ -147,12 +149,13 @@ mod tests {
 
     #[test]
     fn old_feedback_timeout_cannot_clear_a_new_refresh() {
-        let mut state = ManualRefreshState::Finished { message: "完成".into(), failed: false };
+        let mut state =
+            ManualRefreshState::Finished { message: "完成".into(), tone: "info".into() };
         assert!(!state.dismiss_if_current(2, 1));
         assert!(matches!(state, ManualRefreshState::Finished { .. }));
         assert!(state.begin());
         assert!(!state.dismiss_if_current(1, 1));
-        state = ManualRefreshState::Finished { message: "新结果".into(), failed: false };
+        state = ManualRefreshState::Finished { message: "新结果".into(), tone: "info".into() };
         assert!(!state.dismiss_if_current(2, 1));
         assert!(state.dismiss_if_current(2, 2));
         assert_eq!(state, ManualRefreshState::Idle);

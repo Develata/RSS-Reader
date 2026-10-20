@@ -8,7 +8,8 @@ use dioxus::prelude::*;
 use super::failure::Recovery;
 use super::{UiCommand, UiIntent, execute_ui_command};
 
-/// The app's recovery, once raised; signing in again outranks reloading.
+/// The app's recovery, once raised; signing in again outranks reloading. It is never cleared:
+/// the page leaves (to sign in) or is reloaded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum AppRecovery {
     /// The page is of another build than the server.

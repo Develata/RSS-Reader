@@ -6,7 +6,7 @@ use crate::{
     router::AppRoute,
     status::set_status_error,
     theme::ThemeController,
-    ui::failure::UiFailure,
+    ui::failure::{TONE_UNKNOWN, UiFailure},
     ui::shell_browser::wait_for_refresh_feedback,
     ui::shell_prefs::{initial_entry_search, remember_entry_search},
     ui::shell_state::{HomeAction, ManualRefreshState, NavMode, resolve_home_action},
@@ -52,22 +52,14 @@ impl AppShellState {
             spawn(async move {
                 let intents =
                     crate::ui::run_ui_command(UiCommand::Shell(ShellCommand::ManualRefresh)).await;
-                let mut failed = true;
-                let mut completed = false;
-                for intent in intents {
-                    if let Some((message, tone)) = intent.into_status() {
-                        // An unknown outcome stays as long as a failure.
-                        failed = tone != "info";
-                        completed = true;
-                        self.refresh.set(ManualRefreshState::Finished { message, failed });
-                    }
-                }
-                if !completed {
-                    self.refresh.set(ManualRefreshState::Finished {
-                        message: "刷新未返回结果。".to_string(),
-                        failed,
-                    });
-                }
+                let (message, tone) = intents
+                    .into_iter()
+                    .rev()
+                    .find_map(UiIntent::into_status)
+                    .unwrap_or_else(|| ("刷新未返回结果。".to_string(), "error".to_string()));
+                // A failure, or an outcome that may have happened, stays longer.
+                let failed = tone == "error" || tone == TONE_UNKNOWN;
+                self.refresh.set(ManualRefreshState::Finished { message, tone });
                 // Failed batches can still have committed some subscriptions.
                 self.refresh_revision += 1;
                 let completed_revision = *self.refresh_revision.peek();
@@ -121,8 +113,12 @@ impl AppShellState {
         });
     }
 
-    /// Why the settings could not be read, while they have not been.
-    pub(crate) fn settings_failure(self) -> Option<UiFailure> {
+    /// Why the settings could not be read, while they have not been: settings applied from the
+    /// library by any page end it, not only this read (design review C4D-R2 R2-04).
+    pub(crate) fn settings_failure(self, theme: ThemeController) -> Option<UiFailure> {
+        if theme.has_stored() {
+            return None;
+        }
         self.settings_failure.read().clone()
     }
 
@@ -301,7 +297,7 @@ mod tests {
         let (shell, theme) = contexts(&dom);
         settle(&mut dom, shell).await;
         dom.in_scope(ScopeId::APP, || {
-            let failure = shell.settings_failure().expect("a visible failure");
+            let failure = shell.settings_failure(theme).expect("a visible failure");
             assert_eq!(failure.message(), "读取设置失败：网络中断");
             assert_eq!(theme.stored_count(), 0, "no settings applied");
         });
@@ -309,17 +305,37 @@ mod tests {
         dom.in_scope(ScopeId::APP, || shell.load_settings(theme));
         settle(&mut dom, shell).await;
         dom.in_scope(ScopeId::APP, || {
-            assert!(shell.settings_failure().is_some(), "a failed retry keeps it");
+            assert!(shell.settings_failure(theme).is_some(), "a failed retry keeps it");
         });
 
         backend.heal("load_settings");
         dom.in_scope(ScopeId::APP, || shell.load_settings(theme));
         settle(&mut dom, shell).await;
         dom.in_scope(ScopeId::APP, || {
-            assert_eq!(shell.settings_failure(), None);
+            assert_eq!(shell.settings_failure(theme), None);
             assert_eq!(theme.stored_count(), 1);
         });
         assert_eq!(backend.calls("load_settings"), 3);
+    }
+
+    /// After a failed start, settings a page applies from the library (the settings page read
+    /// them, an import replaced them) end the failure as well, with no retry (design review
+    /// C4D-R2 R2-04).
+    #[tokio::test(flavor = "current_thread")]
+    async fn settings_a_page_applies_after_a_failed_start_end_the_failure() {
+        let backend = Scripted::over_new_library();
+        backend.fail("load_settings", BackendError::new(ErrorCode::Network, "网络中断"));
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert!(shell.settings_failure(theme).is_some());
+            theme.store(UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() });
+            assert_eq!(shell.settings_failure(theme), None);
+        });
+        assert_eq!(backend.calls("load_settings"), 1);
     }
 
     /// Settings a page applied while the shell's read was on its way are newer than what the
@@ -338,7 +354,7 @@ mod tests {
         dom.in_scope(ScopeId::APP, || {
             assert_eq!(theme.settings.peek().theme, ThemeMode::Dark, "the page's settings stay");
             assert_eq!(theme.stored_count(), 1, "the read was not applied");
-            assert_eq!(shell.settings_failure(), None);
+            assert_eq!(shell.settings_failure(theme), None);
         });
         assert_eq!(backend.calls("load_settings"), 1);
     }

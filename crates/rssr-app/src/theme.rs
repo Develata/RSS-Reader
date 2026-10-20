@@ -25,6 +25,12 @@ impl ThemeController {
     pub fn stored_count(self) -> u64 {
         *self.stored.peek()
     }
+
+    /// Whether settings from the library were applied (reactive: a component reading it
+    /// follows).
+    pub fn has_stored(self) -> bool {
+        *self.stored.read() > 0
+    }
 }
 
 pub fn theme_class(mode: rssr_domain::ThemeMode) -> &'static str {

@@ -111,7 +111,9 @@ impl FeedsPageSession {
                 }
                 if single_refresh {
                     let (revision, message, failed) = self.state.with(|state| {
-                        (state.status_revision, state.status.clone(), state.status_tone != "info")
+                        let tone = state.status_tone.as_str();
+                        let lasting = tone == "error" || tone == crate::ui::failure::TONE_UNKNOWN;
+                        (state.status_revision, state.status.clone(), lasting)
                     });
                     crate::ui::wait_for_refresh_feedback(std::time::Duration::from_secs(
                         if failed { 6 } else { 3 },
