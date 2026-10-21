@@ -22,16 +22,19 @@ use feed_quick_xml::reader::Reader;
 /// `u16`，这里远在溢出之前截住。
 const MAX_XML_DEPTH: usize = 1024;
 
-/// 同时在作用域内的命名空间声明数上限：feed-rs 解析每个元素名都要扫一遍这些绑定。
+/// 同时在作用域内的命名空间绑定数上限（含 NsReader 预置的 `xml`、`xmlns` 两个）：feed-rs 解析
+/// 每个元素名都要扫一遍这些绑定。
 const MAX_NAMESPACE_BINDINGS: usize = 256;
 
 /// 命名空间声明原始值（未反转义）的最大字节数：feed-rs 对每个带前缀的元素都会重新解码它。
 const MAX_NAMESPACE_VALUE_BYTES: usize = 256;
 
-/// 每个标签的属性处理代价按平方计费，总和不超过输入长度的这个倍数加上 [`BUDGET_SLACK`]：
-/// 规整的标签（见 [`check_xml`] 里的说明）按属性个数的平方，不规整的按整个标签长度的平方。
+/// 每个标签的属性判重代价，总和不超过输入长度的这个倍数加上 [`BUDGET_SLACK`]。
+///
+/// 规整的标签（见 [`check_xml`] 里的说明）有 n 个属性、属性名共 K 字节时按 n·(n + K) 计：
 /// quick-xml 判重用的哈希表种子固定，攻击者可以挑出哈希低位相同的属性名，让每次插入都扫过
-/// 同一串满桶；这个代价不超过属性个数的平方，与哈希种子无关。
+/// 同一串满桶（合计不超过 n²）；完整哈希相同时还要与前面每个属性名逐字节比较（每次不超过
+/// K）。两项都与哈希种子无关。不规整的标签按整个标签长度的平方计。
 const ATTRIBUTE_COST_PER_BYTE: u64 = 16;
 
 /// 基地址克隆与拼接的总量上限：总和不超过输入长度的这个倍数加上 [`BUDGET_SLACK`]。
@@ -128,7 +131,7 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                     return Err(FeedStructureViolation::TooDeep);
                 }
                 let parent = open.last();
-                let mut bindings = parent.map_or(0, |parent| parent.bindings);
+                let mut bindings = parent.map_or(2, |parent| parent.bindings);
                 let mut base_bytes = parent.map_or(0, |parent| parent.base_bytes);
                 // 与 NsReader 一样不做重复检查地遍历（它会把重复的命名空间声明都压进绑定表）。
                 // 没有错误、也没有重复键时，feed-rs 带重复检查的遍历每一步都通过检查，得到的
@@ -137,12 +140,14 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                 let mut seen = HashSet::new();
                 let mut irregular = false;
                 let mut attributes = 0_u64;
+                let mut key_bytes = 0_u64;
                 for attribute in start.attributes().with_checks(false) {
                     let Ok(attribute) = attribute else {
                         irregular = true;
                         continue;
                     };
                     attributes += 1;
+                    key_bytes += attribute.key.as_ref().len() as u64;
                     irregular |= !seen.insert(attribute.key.as_ref().to_vec());
                     let key = attribute.key.as_ref();
                     if key == b"xmlns" || key.starts_with(b"xmlns:") {
@@ -158,8 +163,12 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                 }
                 // 不规整时，feed-rs 在这个标签上切出的属性名与出错次数都不超过标签长度，判重的
                 // 哈希探测与线性回查合计不超过长度的平方。
-                let scale = if irregular { start.len() as u64 } else { attributes };
-                attribute_cost = attribute_cost.saturating_add(scale.saturating_mul(scale));
+                let cost = if irregular {
+                    (start.len() as u64).saturating_pow(2)
+                } else {
+                    attributes.saturating_mul(attributes.saturating_add(key_bytes))
+                };
+                attribute_cost = attribute_cost.saturating_add(cost);
                 if attribute_cost > attribute_budget {
                     return Err(FeedStructureViolation::BadAttributes);
                 }
@@ -212,6 +221,18 @@ mod tests {
             "</x>".repeat(300)
         );
         assert_eq!(check_feed_structure(&many), Err(FeedStructureViolation::TooManyNamespaces));
+        // NsReader 预置 `xml`、`xmlns` 两个绑定，同一元素上最多再声明 254 个。
+        let flat = |count: usize| {
+            format!(
+                r#"<rss version="2.0"{}><channel/></rss>"#,
+                (0..count).map(|i| format!(r#" xmlns:p{i}="urn:x""#)).collect::<String>()
+            )
+        };
+        assert_eq!(check_feed_structure(&flat(254)), Ok(()));
+        assert_eq!(
+            check_feed_structure(&flat(255)),
+            Err(FeedStructureViolation::TooManyNamespaces)
+        );
         // 重复的命名空间声明也会进 feed-rs 的绑定表。
         let repeated = format!(
             "<feed>{}{}</feed>",
@@ -246,6 +267,12 @@ mod tests {
             (0..2_000).map(|i| format!(r#" x{i}="""#)).collect::<String>()
         );
         assert_eq!(check_feed_structure(&many), Err(FeedStructureViolation::BadAttributes));
+        // 完整哈希相同时逐字节比较属性名：属性不多但名字很长也要计。
+        let long_names = format!(
+            r#"<rss version="2.0"{}><channel/></rss>"#,
+            (0..100).map(|i| format!(r#" {}{i}="""#, "k".repeat(3_000))).collect::<String>()
+        );
+        assert_eq!(check_feed_structure(&long_names), Err(FeedStructureViolation::BadAttributes));
         // 少量重复或写错的属性仍然容忍。
         let sloppy = r#"<rss version="2.0" version="2.0"><channel><item><title>t</title><enclosure url="https://e.test/a.mp3" length=1 type="audio/mpeg"/></item></channel></rss>"#;
         assert_eq!(check_feed_structure(sloppy), Ok(()));
