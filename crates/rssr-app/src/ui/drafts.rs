@@ -74,17 +74,25 @@ thread_local! {
 /// The settings page's edits not stored yet changed (`None`: saved, none, or the page closed).
 /// Once this page is leaving, the stored draft follows them: the navigation may land later with
 /// the latest edits, and edits saved or dropped are not restored afterwards. Before that, nothing
-/// to do. Best effort: the departure went ahead with the draft kept at the time.
-pub(crate) fn follow(draft: Option<&SettingsPatch>) {
+/// to do.
+///
+/// When the latest edits cannot be kept, the page does not leave, as when the first ones could
+/// not (C4b item 4; review C4C2-R2-01): the departure is stopped (`window.stop()`, which also
+/// cancels this page's requests in flight; they end as a lost answer does, failed or unknown),
+/// the stored draft, now stale, goes, and the caller is told.
+pub(crate) fn follow(draft: Option<&SettingsPatch>) -> Result<(), NotKept> {
     if !LEAVING.with(Cell::get) {
-        return;
+        return Ok(());
     }
-    match draft.filter(|edits| !edits.is_empty()) {
-        Some(_) => {
-            let _ = keep(draft);
-        }
-        None => platform::remove(KEY),
+    if draft.is_none_or(SettingsPatch::is_empty) {
+        platform::remove(KEY);
+        return Ok(());
     }
+    keep(draft).inspect_err(|_| {
+        platform::stop();
+        LEAVING.with(|leaving| leaving.set(false));
+        platform::remove(KEY);
+    })
 }
 
 /// Leaves (`leave`: reload, go to the sign-in page) after keeping `draft`; stays, returning false,
@@ -117,6 +125,13 @@ mod platform {
             let _ = storage.remove_item(key);
         }
     }
+
+    /// Stops the navigation under way (and this document's loading).
+    pub(super) fn stop() {
+        if let Some(window) = web_sys::window() {
+            let _ = window.stop();
+        }
+    }
 }
 
 /// Elsewhere the page is never reloaded and has no sign-in page to go to: nothing to keep.
@@ -131,6 +146,8 @@ mod platform {
     }
 
     pub(super) fn remove(_key: &str) {}
+
+    pub(super) fn stop() {}
 }
 
 /// The tests' tab: a storage per test thread that can be made to refuse writes.
@@ -142,6 +159,7 @@ pub(crate) mod platform {
     thread_local! {
         static STORAGE: RefCell<HashMap<String, String>> = RefCell::default();
         static REFUSING: RefCell<bool> = const { RefCell::new(false) };
+        static STOPPED: RefCell<bool> = const { RefCell::new(false) };
     }
 
     pub(super) fn write(key: &str, value: &str) -> Result<(), ()> {
@@ -158,6 +176,15 @@ pub(crate) mod platform {
 
     pub(super) fn remove(key: &str) {
         STORAGE.with(|storage| storage.borrow_mut().remove(key));
+    }
+
+    pub(super) fn stop() {
+        STOPPED.with(|stopped| *stopped.borrow_mut() = true);
+    }
+
+    /// Whether the departure was stopped.
+    pub(crate) fn stopped() -> bool {
+        STOPPED.with(|stopped| *stopped.borrow())
     }
 
     /// Makes writes fail (a full or blocked storage), or work again.
@@ -189,14 +216,14 @@ mod tests {
     /// (whose changes the stored draft follows), then has it forgotten.
     fn open_settings() -> Option<SettingsPatch> {
         let draft = peek();
-        follow(draft.as_ref());
+        follow(draft.as_ref()).expect("kept");
         forget();
         draft
     }
 
     /// The settings page closed (or its edits saved): the shell has no edits any more.
     fn close_settings() {
-        follow(None);
+        follow(None).expect("nothing to keep");
     }
 
     /// The page that comes after a navigation landed: this tab's storage, a fresh app.
@@ -286,7 +313,7 @@ mod tests {
         assert!(leave_keeping(Some(&dark()), || {}));
         let more =
             SettingsPatch { list_density: Some(rssr_domain::ListDensity::Compact), ..dark() };
-        follow(Some(&more));
+        follow(Some(&more)).expect("kept");
         assert_eq!(stored(), Some(more.clone()), "follows the edits");
         next_document();
         assert_eq!(open_settings(), Some(more), "the latest edits, once");
@@ -298,17 +325,34 @@ mod tests {
     #[test]
     fn edits_saved_during_a_departure_are_not_restored_later() {
         assert!(leave_keeping(Some(&dark()), || {}));
-        follow(None);
+        follow(None).expect("nothing to keep");
         assert_eq!(stored(), None, "saved: gone");
         next_document();
         assert_eq!(open_settings(), None);
+    }
+
+    /// Later edits that cannot be kept while the page leaves: the page does not leave, as when the
+    /// first ones could not (review C4C2-R2-01). The departure is stopped, the stale draft goes and
+    /// nothing follows any more.
+    #[test]
+    fn later_edits_that_cannot_be_kept_stop_the_departure() {
+        assert!(leave_keeping(Some(&dark()), || {}));
+        let more =
+            SettingsPatch { list_density: Some(rssr_domain::ListDensity::Compact), ..dark() };
+        platform::refuse_writes(true);
+        assert_eq!(follow(Some(&more)), Err(NotKept));
+        assert!(platform::stopped(), "the navigation stopped");
+        assert_eq!(stored(), None, "the stale draft went");
+        platform::refuse_writes(false);
+        assert_eq!(follow(Some(&more)), Ok(()));
+        assert_eq!(stored(), None, "the page stays: nothing follows");
     }
 
     /// Before the page leaves, the settings page's edits are not stored, and a restored draft goes
     /// as the page takes it.
     #[test]
     fn edits_are_stored_only_once_the_page_leaves() {
-        follow(Some(&dark()));
+        follow(Some(&dark())).expect("not leaving");
         assert_eq!(stored(), None, "not leaving");
         keep(Some(&dark())).expect("kept");
         assert_eq!(open_settings(), Some(dark()));

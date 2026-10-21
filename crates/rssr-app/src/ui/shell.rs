@@ -9,6 +9,7 @@ use crate::{
     status::set_status,
     theme::ThemeController,
     ui::failure::{TONE_UNKNOWN, UiFailure},
+    ui::recovery::{APP_RECOVERY, DRAFT_NOT_KEPT},
     ui::shell_browser::{sleep, wait_for_refresh_feedback},
     ui::shell_prefs::{initial_entry_search, remember_entry_search},
     ui::shell_state::{HomeAction, ManualRefreshState, NavMode, resolve_home_action},
@@ -125,9 +126,12 @@ impl AppShellState {
     }
 
     /// The settings page's edits not stored yet (`None`: none), as they change (C4b item 4). Once
-    /// the page is leaving, the kept draft follows them (review C4C2-02).
+    /// the page is leaving, the kept draft follows them (review C4C2-02); when it cannot, the page
+    /// stays and says so (review C4C2-R2-01).
     pub(crate) fn set_settings_draft(mut self, draft: Option<rssr_application::SettingsPatch>) {
-        crate::ui::drafts::follow(draft.as_ref());
+        if crate::ui::drafts::follow(draft.as_ref()).is_err() {
+            *DRAFT_NOT_KEPT.write() = *APP_RECOVERY.peek();
+        }
         self.settings_draft.set(draft);
     }
 

@@ -20,6 +20,11 @@ pub(crate) enum AppRecovery {
 
 pub(crate) static APP_RECOVERY: GlobalSignal<Option<AppRecovery>> = Signal::global(|| None);
 
+/// The way out that could not keep the settings page's draft: the page stays and says so (C4b
+/// item 4), whether that showed as it was about to leave or as the draft followed later edits
+/// (review C4C2-R2-01).
+pub(crate) static DRAFT_NOT_KEPT: GlobalSignal<Option<AppRecovery>> = Signal::global(|| None);
+
 /// What `intents` ask of the whole app, if anything.
 pub(crate) fn required(intents: &[UiIntent]) -> Option<AppRecovery> {
     intents

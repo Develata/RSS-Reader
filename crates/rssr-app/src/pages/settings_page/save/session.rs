@@ -974,4 +974,44 @@ mod tests {
         shell.set_settings_page_open(false);
         assert_eq!(crate::ui::drafts::peek(), None, "gone with the page");
     }
+
+    /// Later edits that cannot be kept while the app leaves to sign in: the departure stops and
+    /// the notice says the draft could not be kept, as when the first edits could not (C4b item
+    /// 4; review C4C2-R2-01).
+    #[tokio::test(flavor = "current_thread")]
+    async fn later_edits_that_cannot_be_kept_keep_the_app_here() {
+        use crate::components::app_notices::AppNotices;
+        use crate::ui::recovery::{APP_RECOVERY, AppRecovery, DRAFT_NOT_KEPT};
+
+        fn app() -> Element {
+            let shell = crate::ui::use_app_shell_state();
+            let theme = crate::theme::use_theme_controller();
+            use_context_provider(|| shell);
+            use_context_provider(|| theme);
+            use_hook(|| *APP_RECOVERY.write() = Some(AppRecovery::SignIn));
+            rsx! {
+                AppNotices {}
+                LeavingSettingsPage {}
+            }
+        }
+
+        let kept = SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() };
+        crate::ui::drafts::keep(Some(&kept)).expect("kept");
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
+        dom.render_immediate_to_vec();
+        let shell = dom.in_scope(ScopeId::APP, consume_context::<AppShellState>);
+        assert_eq!(dom.in_scope(ScopeId::APP, || *DRAFT_NOT_KEPT.peek()), None, "left, kept");
+
+        crate::ui::drafts::platform::refuse_writes(true);
+        let more = SettingsPatch { list_density: Some(ListDensity::Compact), ..kept };
+        dom.in_scope(ScopeId::APP, || shell.set_settings_draft(Some(more)));
+        assert!(crate::ui::drafts::platform::stopped(), "the departure stopped");
+        assert_eq!(crate::ui::drafts::peek(), None, "the stale draft went");
+        assert_eq!(
+            dom.in_scope(ScopeId::APP, || *DRAFT_NOT_KEPT.peek()),
+            Some(AppRecovery::SignIn),
+            "the notice says the draft could not be kept"
+        );
+    }
 }

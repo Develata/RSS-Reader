@@ -9,7 +9,7 @@ use crate::components::status_banner::StatusBanner;
 use crate::theme::ThemeController;
 use crate::ui::{
     AppShellState, drafts,
-    recovery::{APP_RECOVERY, AppRecovery},
+    recovery::{APP_RECOVERY, AppRecovery, DRAFT_NOT_KEPT},
     shell_browser::{reload_page, sign_in_again},
 };
 
@@ -24,15 +24,14 @@ fn leave(shell: AppShellState, go: fn()) -> bool {
 pub fn AppNotices() -> Element {
     let shell = use_context::<AppShellState>();
     let theme = use_context::<ThemeController>();
-    // Which way out could not keep the settings page's draft: the page stays (C4b item 4).
-    let mut not_kept = use_signal(|| None::<AppRecovery>);
     use_effect(move || {
         if APP_RECOVERY() == Some(AppRecovery::SignIn) && !leave(shell, sign_in_again) {
-            not_kept.set(Some(AppRecovery::SignIn));
+            *DRAFT_NOT_KEPT.write() = Some(AppRecovery::SignIn);
         }
     });
     let recovery = APP_RECOVERY();
-    let kept = not_kept() != recovery || recovery.is_none();
+    // Which way out could not keep the settings page's draft: the page stays (C4b item 4).
+    let kept = DRAFT_NOT_KEPT() != recovery || recovery.is_none();
     let settings_failure = shell.settings_failure(theme);
     let reread_failure = shell.settings_reread_failure(theme);
     let startup_failure = shell.startup_failure();
@@ -49,7 +48,7 @@ pub fn AppNotices() -> Element {
                         button { class: "button", "data-action": "sign-in",
                             onclick: move |_| {
                                 if !leave(shell, sign_in_again) {
-                                    not_kept.set(Some(AppRecovery::SignIn));
+                                    *DRAFT_NOT_KEPT.write() = Some(AppRecovery::SignIn);
                                 }
                             },
                             "去登录"
@@ -74,7 +73,7 @@ pub fn AppNotices() -> Element {
                         button { class: "button", "data-action": "reload-page",
                             onclick: move |_| {
                                 if !leave(shell, reload_page) {
-                                    not_kept.set(Some(AppRecovery::Reload));
+                                    *DRAFT_NOT_KEPT.write() = Some(AppRecovery::Reload);
                                 }
                             },
                             "重新加载"
