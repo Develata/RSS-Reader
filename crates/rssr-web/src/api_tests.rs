@@ -825,8 +825,10 @@ async fn jobs_follow_the_protocol() {
 async fn a_new_data_directory_is_created_before_anything_is_written() {
     let scratch = crate::auth::test_support::ScratchDir::new("fresh");
     let data_dir = scratch.path().join("not").join("yet");
-    let backend = crate::open_backend(&data_dir).await.expect("starts on a new directory");
+    let (backend, library) =
+        crate::open_backend(&data_dir).await.expect("starts on a new directory");
     drop(backend);
+    library.close().await.expect("closed");
     for file in ["outbound.json", rssr_infra::store::local::LIBRARY_FILE] {
         assert!(data_dir.join(file).is_file(), "{file}");
     }

@@ -19,6 +19,22 @@ fn open_failure(error: rssr_infra::store::StoreError) -> anyhow::Error {
 /// This process's backend: the use cases over the local library.
 pub struct AppServices {
     backend: Arc<LocalBackend<NativeHost>>,
+    /// The library under the backend, closed as the desktop app exits.
+    #[cfg_attr(target_os = "android", allow(dead_code))]
+    store: LibraryStore,
+}
+
+/// Closes this process's library, if it was opened, and waits for its connections to close (the
+/// last one checkpoints the log into the main file). The desktop app calls it as its event loop
+/// ends; the process exits right after, without dropping anything. Android has no such moment:
+/// the system ends the process.
+#[cfg(not(target_os = "android"))]
+pub fn close_local_library() {
+    if let Some(services) = APP_SERVICES.get()
+        && let Err(error) = services.store.close_blocking()
+    {
+        tracing::warn!(%error, "关闭资料库失败");
+    }
 }
 
 impl AppServices {
@@ -39,7 +55,7 @@ impl AppServices {
     /// The services over an opened library; [`Self::shared`] builds the process-wide one over the
     /// local library.
     pub(crate) fn over(store: LibraryStore) -> Arc<Self> {
-        Arc::new(Self { backend: Arc::new(native_local_backend(store)) })
+        Arc::new(Self { backend: Arc::new(native_local_backend(store.clone())), store })
     }
 
     pub(crate) fn backend(&self) -> Arc<dyn Backend> {

@@ -13,7 +13,7 @@ use rssr_infra::{
     config_sync::webdav::WebDavConfigSync,
     outbound::{self, OutboundPolicy},
     store::{
-        StoreOptions,
+        LibraryStore, StoreOptions,
         backup::{BackupCancel, BackupOptions, backup_library},
         local::{self, open_library_in},
     },
@@ -209,7 +209,13 @@ async fn main() -> anyhow::Result<()> {
         command => command,
     };
     let services = CliServices::new(cli.data_dir).await?;
+    let result = run(&services, command).await;
+    services.close().await;
+    result
+}
 
+/// Runs a command other than `backup` on the opened library.
+async fn run(services: &CliServices, command: Command) -> anyhow::Result<()> {
     match command {
         Command::MarkRead(args) => {
             use rssr_domain::{
@@ -340,6 +346,8 @@ struct CliServices {
     /// The data directory's outbound policy (`outbound.json`): a server's directory makes the CLI
     /// public-only too.
     policy: OutboundPolicy,
+    /// The library under the use cases, closed before the CLI exits ([`CliServices::close`]).
+    store: LibraryStore,
 }
 
 /// `backup`: copies the data directory's library file as it is. It needs no outbound policy or
@@ -382,6 +390,14 @@ async fn backup(data_dir: Option<PathBuf>, args: BackupArgs) -> anyhow::Result<(
     Ok(())
 }
 
+/// A library that cannot be closed cleanly is reported, not made the command's result: what the
+/// command wrote is committed, and SQLite recovers the log on the next open.
+async fn close_library(store: &LibraryStore) {
+    if let Err(error) = store.close().await {
+        tracing::warn!(%error, "关闭资料库失败");
+    }
+}
+
 fn resolve_data_dir(data_dir: Option<PathBuf>) -> anyhow::Result<PathBuf> {
     match data_dir {
         Some(dir) => Ok(dir),
@@ -402,8 +418,22 @@ impl CliServices {
         if let Some(imported) = &opened.imported {
             tracing::info!(?imported, "已从 v0.1 数据导入资料库");
         }
-        let use_cases = compose_library_use_cases_with(opened.store, &policy)?.use_cases;
-        Ok(Self { use_cases, policy })
+        let store = opened.store;
+        let use_cases = match compose_library_use_cases_with(store.clone(), &policy) {
+            Ok(composition) => composition.use_cases,
+            Err(error) => {
+                close_library(&store).await;
+                return Err(error);
+            }
+        };
+        Ok(Self { use_cases, policy, store })
+    }
+
+    /// Closes the library and waits for its connections to close, on every path before the CLI
+    /// exits: the last one checkpoints the log into the main file, and a process that ended during
+    /// that would leave the main file part-written (`LibraryStore::close`).
+    async fn close(self) {
+        close_library(&self.store).await;
     }
 
     async fn list_feeds(&self) -> anyhow::Result<Vec<Feed>> {

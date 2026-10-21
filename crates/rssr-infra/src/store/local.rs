@@ -149,7 +149,11 @@ pub async fn open_library_in(data_dir: &Path, options: StoreOptions) -> StoreRes
         && let Some(source) = V01Library::find(&data_dir)?
     {
         let target = path.clone();
-        match on_thread(move |gave_up| import::import_unless(&source, &target, gave_up)).await {
+        match on_thread("rssr-library-import", move |gave_up| {
+            import::import_unless(&source, &target, gave_up)
+        })
+        .await
+        {
             Ok(outcome) => imported = Some(outcome),
             // Another program sharing the directory imported the same library first.
             Err(StoreError::LibraryExists(_)) => {}

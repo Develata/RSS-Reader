@@ -64,6 +64,31 @@ fn opml_output_can_be_imported_without_filtering_logs() {
     success(workspace.run(&["import-opml", file.to_str().expect("UTF-8 path")]));
 }
 
+/// The CLI closes the library before it exits, after a command that succeeded and after one that
+/// failed: the log is written back into the main file and removed, so the process never ends in
+/// the middle of that (which would leave the main file part-written).
+#[test]
+fn the_library_is_closed_before_the_cli_exits() {
+    let workspace = Workspace::new();
+    let library = workspace.0.join("数据 dir").join("library.sqlite3");
+    let side_files = || {
+        ["-wal", "-shm"]
+            .into_iter()
+            .filter(|suffix| {
+                let mut name = library.as_os_str().to_os_string();
+                name.push(suffix);
+                PathBuf::from(name).exists()
+            })
+            .collect::<Vec<_>>()
+    };
+    success(workspace.run(&["show-settings"]));
+    assert!(library.is_file());
+    assert_eq!(side_files(), Vec::<&str>::new(), "after a command that succeeded");
+    let failed = workspace.run(&["import-config", "missing-config-file.json"]);
+    assert!(!failed.status.success());
+    assert_eq!(side_files(), Vec::<&str>::new(), "after a command that failed");
+}
+
 #[test]
 fn failed_command_leaves_stdout_empty_and_exits_nonzero() {
     let workspace = Workspace::new();

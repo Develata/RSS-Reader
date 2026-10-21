@@ -31,6 +31,8 @@ pub enum StoreError {
     ConnectionTimeout,
     #[error("数据库任务异常结束")]
     TaskFailed,
+    #[error("资料库已关闭")]
+    Closed,
     #[error("文件操作失败：{0}")]
     Io(#[from] std::io::Error),
     #[error(transparent)]

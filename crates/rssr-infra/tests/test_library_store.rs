@@ -120,6 +120,73 @@ async fn file_library_is_created_in_wal_mode_and_reopens() {
     assert_eq!(feed_count(&reopened).await, 1);
 }
 
+fn side_file(library: &std::path::Path, suffix: &str) -> PathBuf {
+    let mut name = library.as_os_str().to_os_string();
+    name.push(suffix);
+    PathBuf::from(name)
+}
+
+/// Closing, through any handle, lets the running task and the one queued behind it finish, refuses
+/// tasks submitted afterwards, and returns only once every connection is closed: the last one has
+/// checkpointed the log into the main file and removed it, so a process that exits right after
+/// leaves a complete library.
+#[tokio::test(flavor = "multi_thread")]
+async fn closing_finishes_queued_tasks_and_waits_for_every_connection() {
+    let _watchdog = Watchdog::arm(Duration::from_secs(60));
+    let dir = TempDir::new("close");
+    // The queued task must not reach its start time while close waits.
+    let options = StoreOptions { admission_wait: Duration::from_secs(10), ..quick() };
+    let store = LibraryStore::open_with(dir.library(), options).await.unwrap();
+    insert_feed(&store, "https://a.test").await.unwrap();
+    let wal = side_file(&dir.library(), "-wal");
+    assert!(wal.exists(), "an open library has its log");
+
+    let (release, occupying) = occupy_writer(&store).await;
+    let behind = store.clone();
+    let mut queued =
+        std::pin::pin!(async move { insert_feed(&behind, "https://queued.test").await });
+    submit_and_look_away(queued.as_mut());
+    let closing = {
+        let store = store.clone();
+        tokio::spawn(async move { store.close().await })
+    };
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!closing.is_finished(), "close waits for the running task and the queued one");
+    assert!(matches!(insert_feed(&store, "https://late.test").await, Err(StoreError::Closed)));
+    assert!(matches!(store.read(|_| Ok(())).await, Err(StoreError::Closed)));
+
+    release.send(()).unwrap();
+    occupying.await.unwrap().expect("the running task ends normally");
+    queued.await.expect("the queued task still runs");
+    tokio::time::timeout(Duration::from_secs(10), closing)
+        .await
+        .expect("close returns once the workers have ended")
+        .unwrap()
+        .expect("every connection closed");
+    assert!(!wal.exists(), "the log was written back and removed before close returned");
+    assert!(!side_file(&dir.library(), "-shm").exists());
+    store.close().await.expect("closing again");
+
+    let reopened = LibraryStore::open(dir.library()).await.unwrap();
+    assert_eq!(feed_count(&reopened).await, 2);
+}
+
+/// A connection SQLite refuses to close (here a task leaked a statement) is reported by `close`
+/// rather than passed off as a clean close.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_connection_that_cannot_be_closed_is_reported() {
+    let store = LibraryStore::open_in_memory().await.unwrap();
+    store
+        .write(|tx| {
+            std::mem::forget(tx.prepare("SELECT 1")?);
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let closed = store.close().await;
+    assert!(matches!(closed, Err(StoreError::Busy(_))), "{closed:?}");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn write_commits_on_ok_and_rolls_back_on_error() {
     let store = LibraryStore::open_in_memory().await.unwrap();

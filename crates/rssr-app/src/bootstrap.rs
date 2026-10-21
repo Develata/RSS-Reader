@@ -9,6 +9,8 @@ mod imp;
 #[path = "bootstrap/web.rs"]
 mod imp;
 
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+pub(crate) use imp::close_local_library;
 #[cfg(target_arch = "wasm32")]
 pub(crate) use imp::install_history_capture;
 pub use imp::{AppServices, ReaderNavigation};

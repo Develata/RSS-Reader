@@ -40,6 +40,14 @@
 //! before anything could write to it. Switching to WAL and the migration share one budget of
 //! [`connection::BUSY_TIMEOUT`]; checking the file and opening the connections are local file
 //! operations outside it.
+//!
+//! Closing ([`LibraryStore::close`]) stops every queue for every handle: tasks already queued
+//! still run, later ones fail as [`StoreError::Closed`], and each worker closes its connection
+//! after its last task. The last connection to the file to close checkpoints the log into the
+//! main file and removes the log. A process that ends during that checkpoint leaves the main file
+//! part-written: SQLite recovers it from the log, but the identity probe reads the main file
+//! alone. So programs wait for `close` before they exit; dropping the store only lets the workers
+//! end on threads nothing waits for.
 
 use std::cell::RefCell;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -192,6 +200,15 @@ impl Slot {
             tracing::warn!("资料库连接无法恢复空闲状态，已丢弃，下一个任务会重新打开");
         }
     }
+
+    /// Closes the connection, if there is one; a connection SQLite refuses to close is reported
+    /// (and dropped, which tries once more).
+    fn close(&mut self) -> StoreResult<()> {
+        match self.connection.take() {
+            Some(connection) => connection.close().map_err(|(_, error)| error.into()),
+            None => Ok(()),
+        }
+    }
 }
 
 type Job = Box<dyn FnOnce(&mut Slot) + Send>;
@@ -241,21 +258,31 @@ impl Pending {
 /// `capacity` small task cells (a cancelled task's closure is dropped when it is cancelled; its
 /// cell leaves when a worker takes it).
 struct Queue {
-    sender: mpsc::Sender<Arc<Pending>>,
+    /// `None` once the store is closed: nothing more is queued.
+    sender: Mutex<Option<mpsc::Sender<Arc<Pending>>>>,
     room: Arc<Semaphore>,
+    /// The workers, until [`Queue::wait_for_workers`] has waited for them.
+    workers: Mutex<Vec<std::thread::JoinHandle<StoreResult<()>>>>,
 }
 
 impl Queue {
     fn start(slots: Vec<Slot>, capacity: usize) -> StoreResult<Self> {
         let (sender, receiver) = mpsc::channel::<Arc<Pending>>();
         let receiver = Arc::new(Mutex::new(receiver));
+        let mut workers = Vec::with_capacity(slots.len());
         for slot in slots {
             let receiver = Arc::clone(&receiver);
-            std::thread::Builder::new()
-                .name("rssr-library".to_owned())
-                .spawn(move || serve(&receiver, slot))?;
+            workers.push(
+                std::thread::Builder::new()
+                    .name("rssr-library".to_owned())
+                    .spawn(move || serve(&receiver, slot))?,
+            );
         }
-        Ok(Self { sender, room: Arc::new(Semaphore::new(capacity.max(1))) })
+        Ok(Self {
+            sender: Mutex::new(Some(sender)),
+            room: Arc::new(Semaphore::new(capacity.max(1))),
+            workers: Mutex::new(workers),
+        })
     }
 
     /// Waits for room until the task's start time, then queues it.
@@ -266,19 +293,42 @@ impl Queue {
             .map_err(|_| StoreError::ConnectionTimeout)?
             .map_err(|_| StoreError::TaskFailed)?;
         *pending.room.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(room);
-        self.sender.send(pending).map_err(|_| StoreError::TaskFailed)
+        match self.sender.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref() {
+            Some(sender) => sender.send(pending).map_err(|_| StoreError::TaskFailed),
+            None => Err(StoreError::Closed),
+        }
+    }
+
+    /// Queues nothing more (a task still waiting for room is refused once it gets some): tasks
+    /// already queued still run, and each worker ends after the last of them.
+    fn stop(&self) {
+        drop(self.sender.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take());
+    }
+
+    /// Blocks until every worker has ended and closed its connection, and returns the first
+    /// failure to close one. A concurrent caller waits for this wait to end, then returns `Ok`.
+    fn wait_for_workers(&self) -> StoreResult<()> {
+        let mut workers = self.workers.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut result = Ok(());
+        for worker in workers.drain(..) {
+            let closed = worker.join().unwrap_or(Err(StoreError::TaskFailed));
+            if result.is_ok() {
+                result = closed;
+            }
+        }
+        result
     }
 }
 
-/// Worker loop: runs tasks one at a time until the store is dropped. A task that becomes running
-/// only after the time it could start until is cancelled instead; a panicking task is contained
-/// here (its caller sees `TaskFailed`).
-fn serve(receiver: &Mutex<mpsc::Receiver<Arc<Pending>>>, mut slot: Slot) {
+/// Worker loop: runs tasks one at a time until the store is closed or dropped, then closes its
+/// connection. A task that becomes running only after the time it could start until is cancelled
+/// instead; a panicking task is contained here (its caller sees `TaskFailed`).
+fn serve(receiver: &Mutex<mpsc::Receiver<Arc<Pending>>>, mut slot: Slot) -> StoreResult<()> {
     loop {
         let pending = match receiver.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).recv()
         {
             Ok(pending) => pending,
-            Err(_) => return,
+            Err(_) => return slot.close(),
         };
         drop(pending.room.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take());
         // Cancelled while queued: its closure is already gone.
@@ -299,8 +349,9 @@ fn serve(receiver: &Mutex<mpsc::Receiver<Arc<Pending>>>, mut slot: Slot) {
     }
 }
 
-/// Handle to one library database. Cheap to clone; the workers stop when the last handle is
-/// dropped, after the queued tasks.
+/// Handle to one library database. Cheap to clone; the workers stop after the queued tasks when
+/// the store is closed ([`Self::close`]) or its last handle is dropped. Only `close` waits for
+/// them to close their connections, so programs call it before they exit.
 #[derive(Clone)]
 pub struct LibraryStore {
     inner: Arc<Inner>,
@@ -311,6 +362,16 @@ struct Inner {
     readers: Option<Queue>,
     journal_mode: String,
     options: StoreOptions,
+}
+
+impl Inner {
+    /// Stops every queue first, so no queue takes tasks while another is waited for, then waits
+    /// for all of them (even after a failure).
+    fn close(&self) -> StoreResult<()> {
+        let queues = || std::iter::once(&self.writer).chain(self.readers.as_ref());
+        queues().for_each(Queue::stop);
+        queues().map(Queue::wait_for_workers).fold(Ok(()), StoreResult::and)
+    }
 }
 
 /// Cancels the task when the caller's future is dropped before the task ended.
@@ -331,6 +392,7 @@ impl Drop for CancelOnDrop {
 /// `body` sees a flag that is set once the caller has gone away, so that it does not start (or
 /// keep waiting to start) work nobody waits for.
 pub(super) async fn on_thread<R: Send + 'static>(
+    name: &str,
     body: impl FnOnce(&AtomicBool) -> StoreResult<R> + Send + 'static,
 ) -> StoreResult<R> {
     struct GiveUpOnDrop(Arc<AtomicBool>);
@@ -342,7 +404,7 @@ pub(super) async fn on_thread<R: Send + 'static>(
     let gave_up = Arc::new(AtomicBool::new(false));
     let _give_up = GiveUpOnDrop(Arc::clone(&gave_up));
     let (reply, receive) = oneshot::channel();
-    std::thread::Builder::new().name("rssr-library-open".to_owned()).spawn(move || {
+    std::thread::Builder::new().name(name.to_owned()).spawn(move || {
         let _ = reply.send(body(&gave_up));
     })?;
     receive.await.map_err(|_| StoreError::TaskFailed)?
@@ -381,13 +443,14 @@ impl LibraryStore {
 
     pub async fn open_with(path: impl AsRef<Path>, options: StoreOptions) -> StoreResult<Self> {
         let path = path.as_ref().to_path_buf();
-        on_thread(move |gave_up| Self::open_file(&path, options, gave_up)).await
+        on_thread("rssr-library-open", move |gave_up| Self::open_file(&path, options, gave_up))
+            .await
     }
 
     /// A private in-memory library on a single connection (tests, throwaway use).
     pub async fn open_in_memory() -> StoreResult<Self> {
         let options = StoreOptions { readers: 0, ..StoreOptions::default() };
-        on_thread(move |_| {
+        on_thread("rssr-library-open", move |_| {
             let mut writer = open_connection(None, Role::Writer)?;
             let context = TaskContext {
                 state: Arc::new(AtomicU8::new(RUNNING)),
@@ -451,6 +514,26 @@ impl LibraryStore {
     /// Journal mode in effect: `wal` for a file library unless the file system refused it.
     pub fn journal_mode(&self) -> &str {
         &self.inner.journal_mode
+    }
+
+    /// Closes the library for every handle and returns once each of its connections is closed.
+    /// The last connection to the file checkpoints the log into it and removes the log, so a
+    /// process that exits afterwards leaves a complete main file.
+    ///
+    /// Tasks already queued still run, each within its own admission time and deadline; tasks
+    /// submitted afterwards, through any handle, fail as [`StoreError::Closed`]. The result is the
+    /// first failure to close a connection. Closing again (or concurrently) returns once the
+    /// first close has waited for the workers.
+    pub async fn close(&self) -> StoreResult<()> {
+        let inner = Arc::clone(&self.inner);
+        on_thread("rssr-library-close", move |_| inner.close()).await
+    }
+
+    /// [`Self::close`] on the calling thread, for callers that cannot await (the desktop app's
+    /// event loop as it ends). Never call it from inside a store task: its worker would wait for
+    /// itself.
+    pub fn close_blocking(&self) -> StoreResult<()> {
+        self.inner.close()
     }
 
     /// Runs `task` in a read transaction (one snapshot for all its statements).
@@ -591,7 +674,11 @@ mod tests {
     #[tokio::test]
     async fn a_queue_holds_at_most_its_capacity_until_a_worker_takes_tasks() {
         let (sender, receiver) = mpsc::channel();
-        let queue = Queue { sender, room: Arc::new(Semaphore::new(2)) };
+        let queue = Queue {
+            sender: Mutex::new(Some(sender)),
+            room: Arc::new(Semaphore::new(2)),
+            workers: Mutex::new(Vec::new()),
+        };
         let soon = || Instant::now() + Duration::from_millis(200);
         for _ in 0..2 {
             let queued = pending(soon());
