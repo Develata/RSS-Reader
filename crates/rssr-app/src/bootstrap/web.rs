@@ -37,7 +37,7 @@ use self::{
     },
     refresh::ensure_auto_refresh_started as start_auto_refresh,
 };
-use super::{
+use rssr_host::{
     AddSubscriptionOutcome, AutoRefreshPort, HostCapabilities, ReaderAssetLocalizationOutcome,
     ReaderAssetPort, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome, RefreshPort,
     RemoteConfigPort,
@@ -49,7 +49,7 @@ pub struct AppServices {
     client: reqwest::Client,
     use_cases: AppUseCases,
     auto_refresh_started: AtomicBool,
-    refresh_flight: super::refresh_flight::RefreshFlight,
+    refresh_flight: rssr_host::RefreshFlight,
 }
 
 #[derive(Clone)]
@@ -95,7 +95,7 @@ impl AppServices {
                     client,
                     use_cases,
                     auto_refresh_started: AtomicBool::new(false),
-                    refresh_flight: super::refresh_flight::RefreshFlight::default(),
+                    refresh_flight: rssr_host::RefreshFlight::default(),
                 }))
             })
             .await

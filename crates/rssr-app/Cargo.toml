@@ -17,6 +17,7 @@ base64.workspace = true
 dioxus-router.workspace = true
 rssr-application = { path = "../rssr-application" }
 rssr-domain = { path = "../rssr-domain" }
+rssr-host = { path = "../rssr-host" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

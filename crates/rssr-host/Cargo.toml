@@ -1,0 +1,24 @@
+[package]
+name = "rssr-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+rssr-application = { path = "../rssr-application" }
+time.workspace = true
+tokio.workspace = true
+url.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rssr-infra = { path = "../rssr-infra" }
+# `rt`: the native host spawns auto-refresh and image-localization tasks.
+tokio = { workspace = true, features = ["rt"] }
+tracing.workspace = true
+
+[dev-dependencies]
+rssr-domain = { path = "../rssr-domain" }
+tokio = { workspace = true, features = ["macros", "rt"] }

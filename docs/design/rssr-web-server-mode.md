@@ -1,6 +1,6 @@
 # rssr-web 服务端模式：与桌面 GUI 等价的自托管部署
 
-- 状态：**草案，待确认**（2026-10-20）
+- 状态：**已确认**（2026-10-20 起草；同日 Develata 确认方向与 D1–D4，按建议执行）
 - 范围：`rssr-web`、`rssr-app` 的宿主层与 Web 启动、`rssr-infra` 原生出站策略、发布流水线
 - 不改：domain / application 的用例语义、桌面与 Android 的存储
 
@@ -145,13 +145,12 @@
 4. **P3 发布与文档**：发布流水线新增 Linux 二进制，Docker 增加数据卷，修订第 2 节列出的条文，
    编写迁移说明。
 
-## 6. 需要你决定
+## 6. 已确认的决策（2026-10-20）
 
-- **D1 静态 Web 包与 GitHub Pages 演示是否保留 `BrowserStore` 模式。** 建议保留：Pages 演示依赖它，
-  代价是 `Backend` 多一个分支。不保留的话，静态包和 Pages 演示要下线或改写。
-- **D2 服务端是否默认拦截内网 feed。** 建议默认拦截，用环境变量放开。
-- **D3 文章库与登录凭据是否分开存放。** 建议分开（理由见 4.6）。
-- **D4 多端共享 `app_state` 和设置，后写覆盖。** 建议接受。
+- **D1** 保留静态 Web 包与 GitHub Pages 演示的 `BrowserStore` 模式。
+- **D2** 服务端默认拦截内网 feed，用 `RSS_READER_WEB_ALLOW_PRIVATE_FEEDS=true` 显式放开。
+- **D3** 文章库（`RSS_READER_WEB_DATA_DIR`）与登录凭据（`RSS_READER_WEB_AUTH_STATE_FILE`）分开存放。
+- **D4** 多端共享 `app_state` 与设置，后写覆盖。
 
 ## 7. 与 2026-10-20 问题的关系
 
