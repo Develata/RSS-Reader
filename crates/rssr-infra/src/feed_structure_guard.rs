@@ -28,9 +28,11 @@ const MAX_NAMESPACE_BINDINGS: usize = 256;
 /// 命名空间声明原始值（未反转义）的最大字节数：feed-rs 对每个带前缀的元素都会重新解码它。
 const MAX_NAMESPACE_VALUE_BYTES: usize = 256;
 
-/// 属性不规整的标签（见 [`check_xml`] 里的说明）按整个标签长度的平方计费，总和不超过输入长度
-/// 的这个倍数加上 [`BUDGET_SLACK`]。
-const IRREGULAR_TAG_COST_PER_BYTE: u64 = 16;
+/// 每个标签的属性处理代价按平方计费，总和不超过输入长度的这个倍数加上 [`BUDGET_SLACK`]：
+/// 规整的标签（见 [`check_xml`] 里的说明）按属性个数的平方，不规整的按整个标签长度的平方。
+/// quick-xml 判重用的哈希表种子固定，攻击者可以挑出哈希低位相同的属性名，让每次插入都扫过
+/// 同一串满桶；这个代价不超过属性个数的平方，与哈希种子无关。
+const ATTRIBUTE_COST_PER_BYTE: u64 = 16;
 
 /// 基地址克隆与拼接的总量上限：总和不超过输入长度的这个倍数加上 [`BUDGET_SLACK`]。
 ///
@@ -95,9 +97,9 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
     let budget =
         |per_byte: u64| BUDGET_SLACK.saturating_add(per_byte.saturating_mul(raw.len() as u64));
     let base_copy_budget = budget(BASE_COPY_PER_BYTE);
-    let irregular_budget = budget(IRREGULAR_TAG_COST_PER_BYTE);
+    let attribute_budget = budget(ATTRIBUTE_COST_PER_BYTE);
     let mut base_copies = 0_u64;
-    let mut irregular_cost = 0_u64;
+    let mut attribute_cost = 0_u64;
     let mut open: Vec<OpenElement> = Vec::new();
     let mut buf = Vec::new();
 
@@ -134,11 +136,13 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                 // 对齐，按“不规整”整体计费。
                 let mut seen = HashSet::new();
                 let mut irregular = false;
+                let mut attributes = 0_u64;
                 for attribute in start.attributes().with_checks(false) {
                     let Ok(attribute) = attribute else {
                         irregular = true;
                         continue;
                     };
+                    attributes += 1;
                     irregular |= !seen.insert(attribute.key.as_ref().to_vec());
                     let key = attribute.key.as_ref();
                     if key == b"xmlns" || key.starts_with(b"xmlns:") {
@@ -152,18 +156,17 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                         base_bytes = base_bytes.saturating_add(attribute.value.len());
                     }
                 }
-                if irregular {
-                    // feed-rs 在这个标签上切出的属性名与出错次数都不超过标签长度，重复检查的
-                    // 线性回查合计不超过长度的平方。
-                    let tag = start.len() as u64;
-                    irregular_cost = irregular_cost.saturating_add(tag.saturating_mul(tag));
-                    if irregular_cost > irregular_budget {
-                        return Err(FeedStructureViolation::BadAttributes);
-                    }
-                    // 它可能切出这里没看到的 `xml:base`：只要标签里有这几个字节，就按整个标签计。
-                    if contains(start, b"xml:base") {
-                        base_bytes = base_bytes.saturating_add(start.len());
-                    }
+                // 不规整时，feed-rs 在这个标签上切出的属性名与出错次数都不超过标签长度，判重的
+                // 哈希探测与线性回查合计不超过长度的平方。
+                let scale = if irregular { start.len() as u64 } else { attributes };
+                attribute_cost = attribute_cost.saturating_add(scale.saturating_mul(scale));
+                if attribute_cost > attribute_budget {
+                    return Err(FeedStructureViolation::BadAttributes);
+                }
+                // 不规整时 feed-rs 可能切出这里没看到的 `xml:base`：只要标签里有这几个字节，就按
+                // 整个标签计。
+                if irregular && contains(start, b"xml:base") {
+                    base_bytes = base_bytes.saturating_add(start.len());
                 }
                 base_copies = base_copies.saturating_add(base_bytes as u64);
                 if base_copies > base_copy_budget {
@@ -236,6 +239,13 @@ mod tests {
             " b='0'".repeat(2_000)
         );
         assert_eq!(check_feed_structure(&recovery), Err(FeedStructureViolation::BadAttributes));
+        // 规整的标签按属性个数计：判重哈希表的种子固定，挑出哈希低位相同的属性名就能让插入
+        // 退化成平方级（这里只测计费，名字本身没有挑）。
+        let many = format!(
+            r#"<rss version="2.0"{}><channel/></rss>"#,
+            (0..2_000).map(|i| format!(r#" x{i}="""#)).collect::<String>()
+        );
+        assert_eq!(check_feed_structure(&many), Err(FeedStructureViolation::BadAttributes));
         // 少量重复或写错的属性仍然容忍。
         let sloppy = r#"<rss version="2.0" version="2.0"><channel><item><title>t</title><enclosure url="https://e.test/a.mp3" length=1 type="audio/mpeg"/></item></channel></rss>"#;
         assert_eq!(check_feed_structure(sloppy), Ok(()));
