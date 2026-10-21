@@ -35,10 +35,15 @@
 ## 关键变更
 
 - **feed 扫描**（`check_feed_urls`）：与 feed-rs 相同的判定（前 8 KiB 里第一个 `<` 或 `{`）、相同的 quick-xml
-  读取配置、相同的文本/CDATA/实体合并与属性反转义。只检查 feed-rs 会当作地址解析的位置：`link`/`icon`/`logo`/`url`
-  元素的文本，`href`/`url`/`src`/`uri` 属性，`xml:base`（沿元素路径累计不超过 512 字节）；JSON Feed 检查所有以 `url`
-  结尾的键。越界就整个 feed 拒绝（错误“拒绝解析 feed：…”，与解析失败同样处理），不做部分解析。正文里的省略号等不受影响。
-  格式本身不对时不在这里报错，交给 feed-rs（同样的读法，会在同一处失败）。
+  分词配置、相同的文本/CDATA/实体合并与属性反转义；不做命名空间解析（那本身就是要防的平方级路径），自己数绑定。
+  - 结构：嵌套 ≤ 1024 层（quick-xml 的 `u16` 深度计数远未溢出）、同时在作用域内的命名空间声明 ≤ 256、
+    单个元素的属性错误（重复等）≤ 16——这三项同时挡住 feed-rs 自身的命名空间解析与重复属性回查的平方级。
+  - 地址：只检查 feed-rs 会当作地址解析的位置：`link`/`icon`/`logo`/`url` 元素的文本，`href`/`url`/`src`/`uri`
+    属性，`xml:base`（基地址长度按百分号编码 3 倍估算，绝对地址重新计、相对地址与上级累加，不超过 512 字节）；
+    JSON Feed 只检查 feed-rs 读取的 `home_page_url`、`feed_url`、条目 `url`/`external_url`、附件 `url`，
+    无法整体解析的 JSON 直接拒绝（否则深层扩展字段可以让检查失效而 feed-rs 照常解析）。
+  - 越界就整个 feed 拒绝（错误“拒绝解析 feed：…”，与解析失败同样处理），不做部分解析；正文省略号等不受影响。
+    XML 格式本身不对时不在这里报错，交给 feed-rs（同一个分词器，会在同一处失败）。
 - **共享预检**：上述各入口统一走 `parse_untrusted_url`/`join_untrusted_url`；`join` 时基地址也计入 8 KiB 上限。
 
 ## 验证与验收
@@ -50,7 +55,10 @@
   （4 MB 点段链接、1 MB `xml:base` × 1000 条目、JSON 点段在解析前被拒，debug 下合计 0.24 s；普通 feed 解析结果不变）；
   订阅发现的数量上限与 `<base href>` 预检。
 - `cargo fmt --all --check`、`cargo clippy -j 1 --workspace --all-targets --locked -- -D warnings`：通过。
-- `cargo test -j 1 --workspace --locked`：451 通过，0 失败。
+- `cargo test -j 1 --workspace --locked`：452 通过，0 失败（第 1 轮评审修复后重跑；真实 feed 复测仍是 23 个照常、0 误拒）。
+- 独立评审（Codex）第 1 轮：4 个 BLOCKER（JSON 深度绕过、命名空间解析平方级、重复属性平方级、深度计数溢出）+
+  2 个 SHOULD_FIX（`xml:base` 长度模型、JSON 键后缀过宽），已按上文修复并加单元测试。XML 侧仍只按本地名判断元素与属性，
+  比 feed-rs 按命名空间区分宽，属于多检查的一侧。
 - `cargo check -j 1 -p rssr-app --target wasm32-unknown-unknown --locked`：通过。
 
 ## 结果
