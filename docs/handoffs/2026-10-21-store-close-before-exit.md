@@ -4,7 +4,7 @@
 - 作者 / Agent：Claude Code（Opus），与 Develata
 - 分支：`v0.2-architecture`（工作树 `target/audit-20261009/worktree`）
 - 当前 HEAD：见提交记录（修改基于 `2397e55`）
-- 相关 commit：`2c5c268`（`fix(store): close the library and wait for its connections before exiting`）、`afd4339`（`fix(store): know a library left mid-checkpoint by its application id`）；本记录另行提交
+- 相关 commit：`2c5c268`（`fix(store): close the library and wait for its connections before exiting`）、`afd4339`（`fix(store): know a library left mid-checkpoint by its application id`）、`a8b7693`（`refactor(store): drop the probe's corruption retry`）；本记录另行提交
 - 相关 tag / release：N/A
 - 状态：`validated`（两部分；第二部分由 Develata 2026-10-21 确认采用 C）
 
@@ -57,9 +57,9 @@ C 的依据：SQLite 的 `lockBtree`（捆绑源码 `sqlite3.c` 第 76541 行）
 
 实现（`afd4339`）：
 
-- `files::read_application_id` 打开探测连接后设 `PRAGMA writable_schema = ON`（连接只读且 immutable，这个标志改不了任何东西）。`check_library` 与 `SETTLE` 的文档注释改写；`SETTLE` 重试保留，但已没有能构造出的状态走到它（见风险）。
-- `a_probe_that_meets_a_checkpoint_waits_for_it` 改为 `a_probe_knows_a_library_left_mid_checkpoint`：主文件少最后一页时立即（不到 `SETTLE`）认作资料库，文件不变、不建任何旁边的文件；同样少一页但应用 id 是别的程序的，仍按“不是资料库”拒绝。
-- 新增 `a_library_left_mid_checkpoint_opens_and_recovers_from_its_log`：用存储写 20 行、保存日志、关闭，再造出“少最后一页 + 日志”；`LibraryStore::open` 在 2 秒内成功、20 行齐全，关闭后日志已写回、文件长度复原、`integrity_check` 为 ok。同一个短文件不带日志时被拒绝为 `Corrupt`，文件不变，不留 `-wal`/`-shm`。
+- `files::read_application_id` 打开探测连接后设 `PRAGMA writable_schema = ON`（连接只读且 immutable，这个标志改不了任何东西）。`check_library` 的文档注释改写。随后经 Develata 同意删除 `SETTLE` 的 2 秒重试（`a8b7693`）：探测只读第 1 页文件头，SQLite 读应用 id 前检查的字段在新旧第 1 页里都一样，超前的页数又被读过去，已没有能构造出的状态走到重试；探测报损坏时立即按损坏拒绝。
+- `a_probe_that_meets_a_checkpoint_waits_for_it` 改为 `a_probe_knows_a_library_left_mid_checkpoint`：主文件少最后一页时认作资料库，文件不变、不建任何旁边的文件；同样少一页但应用 id 是别的程序的，仍按“不是资料库”拒绝。
+- 新增 `a_library_left_mid_checkpoint_opens_and_recovers_from_its_log`：用存储写 20 行、保存日志、关闭，再造出“少最后一页 + 日志”；`LibraryStore::open` 成功、20 行齐全，关闭后日志已写回、文件长度复原、`integrity_check` 为 ok。同一个短文件不带日志时被拒绝为 `Corrupt`，文件不变，不留 `-wal`/`-shm`。
 - 如果编译 SQLite 时默认打开了 `SQLITE_DBCONFIG_DEFENSIVE`，`writable_schema` 无效，这两个测试会失败，而不是静默退回旧行为。
 
 ## 验证与验收
@@ -100,6 +100,12 @@ C 的依据：SQLite 的 `lockBtree`（捆绑源码 `sqlite3.c` 第 76541 行）
   - 变异 M8（去掉 `writable_schema`）：两个新测试都在自己的断言上失败（“still a library”与“opens”，都得到 `Corrupt`）。
   - 端到端（WSL，脚本 `scratchpad/wslsmoke/web_recover.sh`）：用不关闭资料库的 `rssr-web`（M7）造出 3 个真实的检查点中途的库（主文件 2039808 / 950272 / 1646592 字节，日志 24934272 字节）；修复后的 `rssr-web` 3/3 正常启动、没有“打开资料库失败”，停止后主文件 24858624 字节、3000 行、`integrity_check` 为 ok。
 
+- 删除重试（`a8b7693`）：
+  - Windows：fmt、`clippy -p rssr-infra` 通过；`files::tests::probes_accept_a_library_while_it_is_checkpointed`（另一连接反复写入、检查点、`VACUUM` 时不停探测）单独连跑 5 次再 3 次都通过；`--lib` 113 passed；`--test 'test_library_*'` 27 个程序 173 passed / 0 failed；`--test test_library_store` 28 passed。
+  - WSL：同一压力测试连跑 5 次通过；`--test 'test_library_*'` 175 passed / 0 failed / 2 ignored；`--lib store::` 24 passed。
+  - 对照：同时去掉 `writable_schema` 与重试，压力测试在 Windows 3/3、WSL 5/5 失败（“a library being checkpointed is still a library”，`Corrupt`）。也就是说重试过去只覆盖探测撞上进行中的检查点这一种情况，现在由 `writable_schema` 处理。
+  - 过程中的失误：做对照时用 `git checkout -- files.rs` 还原，把当时还没提交的删除重试一并还原掉了；随后重新应用同一份改动，在这份树上重跑上面的 Windows 检查后才提交。
+
 ### 手工验收
 
 - 桌面端关窗后的文件状态：未执行（`LoopDestroyed` 钩子只经编译与代码阅读确认；dioxus-desktop 0.7.9 的 `launch.rs` 先调用自定义处理函数，再处理 `LoopDestroyed`）。
@@ -112,7 +118,7 @@ C 的依据：SQLite 的 `lockBtree`（捆绑源码 `sqlite3.c` 第 76541 行）
 
 - `close` 会等已排队的任务；最坏情况受准入时限（默认 30 秒）与运行期限（写 60 秒）约束。`rssr-web` 只等 3 秒，超时后进程退出仍可能截断检查点；桌面端不设上限（窗口已经关闭）。
 - 探测不再识别“文件比文件头短”，这件事交给写连接：日志丢失的截断文件仍被拒绝为损坏，但拒绝发生在写连接第一次读取时（此前 `remove_stale_scratch` 已在旁边建了惰性的 `.create-lock`，身份已确认）。
-- `SETTLE` 的 2 秒重试已没有能构造出的状态走到（探测只读第 1 页文件头，其余字段新旧一致），所以也没有测试覆盖；按变异检查的惯例它是可删的冗余，保留只出于保守，是否删除由 Develata 决定。
+- 探测不再重试：如果将来出现别的、会让无锁读取暂时报损坏的情况，打开会立即失败（报“数据库文件已损坏”），而不是先等 2 秒。现有的压力测试覆盖了检查点与 `VACUUM`。
 - CLI 被 Ctrl-C 中断时不关闭资料库（与之前相同）。
 
 ## 给下一位 Agent 的备注
