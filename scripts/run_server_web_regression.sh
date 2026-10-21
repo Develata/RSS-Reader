@@ -8,6 +8,10 @@
 #                 the theme
 #   theme-matrix  the reader in every theme
 #   feed-smoke    a first run: add a subscription through the form, refresh it, read its entry
+#   acceptance    the browser acceptance of the server mode (scripts/browser/rssr_server_acceptance.mjs:
+#                 reverse proxy, cookies, CSRF, unknown outcomes, jobs, rereads, drafts, build
+#                 mismatch, reader body, start-up failures); --long adds the scenarios that wait
+#                 30 s or more
 #
 # The page and the server must come from one build (the server refuses writes from another build;
 # the harness checks the ids before the first check). Unless given, the bundle is built with dx
@@ -31,12 +35,13 @@ node_bin="${NODE_BIN:-node}"
 viewport="360,800"
 preset=""
 directory_only="false"
+long="false"
 server_bin=""
 fixture_bin=""
 static_dir=""
 
 usage() {
-  echo "Usage: $0 [--suite regression|theme-matrix|feed-smoke] [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--chrome-bin BIN] [--viewport WIDTH,HEIGHT] [--preset PRESET] [--directory-only] [--server-bin BIN] [--fixture-bin BIN] [--static-dir DIR]" >&2
+  echo "Usage: $0 [--suite regression|theme-matrix|feed-smoke|acceptance] [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--chrome-bin BIN] [--viewport WIDTH,HEIGHT] [--preset PRESET] [--directory-only] [--long] [--server-bin BIN] [--fixture-bin BIN] [--static-dir DIR]" >&2
   exit 1
 }
 
@@ -52,6 +57,7 @@ while [[ $# -gt 0 ]]; do
     --viewport) viewport="${2:?missing viewport value}"; shift 2 ;;
     --preset) preset="${2:?missing preset value}"; shift 2 ;;
     --directory-only) directory_only="true"; shift ;;
+    --long) long="true"; shift ;;
     --server-bin) server_bin="${2:?missing server bin value}"; shift 2 ;;
     --fixture-bin) fixture_bin="${2:?missing fixture bin value}"; shift 2 ;;
     --static-dir) static_dir="${2:?missing static dir value}"; shift 2 ;;
@@ -60,11 +66,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$suite" in
-  regression|theme-matrix|feed-smoke) ;;
+  regression|theme-matrix|feed-smoke|acceptance) ;;
   *) echo "Unknown suite '${suite}'" >&2; usage ;;
 esac
 if [[ "$suite" != regression && ( -n "$preset" || "$directory_only" == true ) ]]; then
   echo "--preset and --directory-only apply to the regression suite only" >&2
+  exit 1
+fi
+if [[ "$suite" != acceptance && "$long" == true ]]; then
+  echo "--long applies to the acceptance suite only" >&2
   exit 1
 fi
 if [[ ! "$viewport" =~ ^([0-9]+),([0-9]+)$ ]]; then
@@ -245,18 +255,22 @@ if [[ "$cdp_ready" != "true" ]]; then
   exit 1
 fi
 
+driver="scripts/browser/rssr_small_viewport_assertions.mjs"
 driver_args=(
-  --suite "$suite"
   --cdp-base "http://127.0.0.1:${cdp_port}"
   --server-bin "$server_bin"
   --fixture-bin "$fixture_bin"
   --static-dir "$static_dir"
   --artifact-dir "$log_dir"
   --port "$port"
-  --width "$viewport_width"
-  --height "$viewport_height"
-  --dpr 3
 )
+if [[ "$suite" == acceptance ]]; then
+  # Its own driver, at a desktop viewport of its own.
+  driver="scripts/browser/rssr_server_acceptance.mjs"
+  if [[ "$long" == true ]]; then driver_args+=(--long); fi
+else
+  driver_args+=(--suite "$suite" --width "$viewport_width" --height "$viewport_height" --dpr 3)
+fi
 if [[ "$suite" == regression ]]; then
   driver_args+=(--preset "$preset" --directory-only "$directory_only")
 fi
@@ -271,11 +285,14 @@ case "$suite" in
   feed-smoke)
     artifacts="browser-feed-smoke 的 HTML 与 PNG"
     ;;
+  acceptance)
+    artifacts="每个场景的结果与检查（assertions.json；--long：${long}）；失败场景的页面 HTML、PNG 与 API 请求记录（<场景>-traffic.txt）"
+    ;;
 esac
 
 result="失败"
 status=0
-"$node_bin" scripts/browser/rssr_small_viewport_assertions.mjs "${driver_args[@]}" || status=$?
+"$node_bin" "$driver" "${driver_args[@]}" || status=$?
 if [[ "$status" == 0 ]]; then
   result="通过"
 fi

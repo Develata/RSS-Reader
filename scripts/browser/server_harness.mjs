@@ -194,8 +194,10 @@ export class RssrWebServer {
   /// returns a session cookie (signed in through the login form's endpoint). `edit` changes a copy
   /// of the seed first: it gets the four parsed files (`core`, `app_state`, `entry_flags`,
   /// `entry_content`) and mutates them. Without a seed (`null`) the server starts on an empty data
-  /// directory and creates the library itself, as on a first run.
-  async useSeed(seed, { preset, edit } = {}) {
+  /// directory and creates the library itself, as on a first run. `env` adds to the server's
+  /// environment (e.g. `RSS_READER_WEB_PUBLIC_ORIGIN` behind a reverse proxy; the server then
+  /// trusts only that origin, and the harness signs in with it).
+  async useSeed(seed, { preset, edit, env: extra = {} } = {}) {
     const { options } = this;
     await this.stop();
     this.generation += 1;
@@ -234,7 +236,8 @@ export class RssrWebServer {
       RUST_LOG: process.env.RUST_LOG ? `${process.env.RUST_LOG},rssr_web=info` : 'info',
       NO_PROXY: '127.0.0.1,localhost',
       no_proxy: '127.0.0.1,localhost',
-    });
+    }, extra);
+    this.origin = extra.RSS_READER_WEB_PUBLIC_ORIGIN ?? this.base;
     const child = spawn(options.serverBin, [], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     const write = (chunk) => {
@@ -291,7 +294,7 @@ export class RssrWebServer {
       method: 'POST',
       redirect: 'manual',
       signal: AbortSignal.timeout(REQUEST_MS),
-      headers: { Origin: this.base, 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { Origin: this.origin ?? this.base, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ username, password, next }).toString(),
     });
     const cookie = response.headers.getSetCookie().map((line) => line.split(';')[0])
@@ -421,18 +424,76 @@ function run(program, args) {
 }
 
 /// Sets up both servers for a run. `workDir` is created fresh.
+/// A minimal reverse proxy in front of `rssr-web`, as a deployment puts one (phase C, C4c-2): each
+/// request forwarded as it came (method, path, headers: `Origin` and `Cookie` included), each
+/// answer passed back as it came (`Set-Cookie` included), no time limit (job long polls). The
+/// page reaches it as `http://localhost:<port>` (a host of its own, so its cookies are its own:
+/// cookies are per host, not per port). `redirect(method, path)`, when set and true for a
+/// request, answers it with `302 /login` instead of forwarding it — what a proxy must not do to
+/// the API.
+export class ReverseProxy {
+  constructor(targetPort, logFile) {
+    this.targetPort = targetPort;
+    this.logFile = logFile;
+    this.requests = [];
+    this.redirect = null;
+  }
+
+  async start() {
+    this.server = http.createServer((request, response) => this.handle(request, response));
+    await new Promise((resolve) => this.server.listen(0, '127.0.0.1', resolve));
+    this.port = this.server.address().port;
+    this.origin = `http://localhost:${this.port}`;
+    return this;
+  }
+
+  handle(request, response) {
+    const { method, url, headers } = request;
+    const seen = { method, path: new URL(url, this.origin).pathname, origin: headers.origin ?? null };
+    this.requests.push(seen);
+    appendFileSync(this.logFile, `${new Date().toISOString()} [proxy] ${method} ${url} origin=${seen.origin ?? '-'}\n`);
+    if (this.redirect?.(method, seen.path)) {
+      seen.redirected = true;
+      response.writeHead(302, { Location: '/login' }).end();
+      return;
+    }
+    const upstream = http.request({ host: '127.0.0.1', port: this.targetPort, method, path: url, headers },
+      (answer) => {
+        response.writeHead(answer.statusCode, answer.headers);
+        answer.pipe(response);
+      });
+    upstream.on('error', () => {
+      if (!response.headersSent) response.writeHead(502).end();
+      else response.destroy();
+    });
+    request.pipe(upstream);
+  }
+
+  close() {
+    this.server?.closeAllConnections?.();
+    this.server?.close();
+  }
+}
+
 export async function startHarness(options) {
   rmSync(options.workDir, { recursive: true, force: true });
   mkdirSync(options.workDir, { recursive: true });
   const feeds = new FeedFixtureServer(path.join(options.artifactDir, 'feed-fixture.log'));
   await feeds.start();
   const server = new RssrWebServer({ ...options, feeds, logFile: path.join(options.artifactDir, 'server.log') });
+  let proxy;
   return {
     feeds,
     server,
+    /// The reverse proxy in front of the server (started once, on first use).
+    async proxy() {
+      proxy ??= await new ReverseProxy(options.port, path.join(options.artifactDir, 'server.log')).start();
+      return proxy;
+    },
     async close() {
       await server.stop();
       feeds.close();
+      proxy?.close();
     },
   };
 }

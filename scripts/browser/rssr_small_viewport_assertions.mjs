@@ -11,10 +11,10 @@ import {
   newPage,
   selectorExists,
   sleep,
-  submitLoginForm,
   waitFor,
 } from './cdp_session.mjs';
-import { startHarness, waitUntil, watchPageBuild } from './server_harness.mjs';
+import { startHarness, waitUntil } from './server_harness.mjs';
+import { ServerPage, VISIBLE, capturePage, fillField, key, pointerClick, textShown } from './server_page.mjs';
 
 function parseOptions(argv) {
   const options = new Map();
@@ -54,9 +54,8 @@ const base = `http://127.0.0.1:${serverOptions.port}`;
 // reads of the server's state), and whether the page signed in through the form yet.
 let harness;
 let session;
-let signedInThroughForm = false;
-// The build ids the page sent the server (web mode): verified on every seed.
-let pageBuild;
+// The page on the harness's server (web mode): seeds, signs in, checks the build.
+let serverPage;
 const width = Number.parseInt(cli.get('--width') ?? process.env.VIEWPORT_WIDTH ?? '360', 10);
 const height = Number.parseInt(cli.get('--height') ?? process.env.VIEWPORT_HEIGHT ?? '800', 10);
 const deviceScaleFactor = Number.parseFloat(
@@ -208,22 +207,8 @@ async function dispatchTouchScroll(client, point, scrollDeltaY) {
 /// the login form; afterwards it gets the harness's session cookie for the new server's session
 /// store.
 async function seedAndNavigate(client, seed, nextPath, marker, themePreset = preset, { edit } = {}) {
-  // No page stays open on the server being replaced: its requests would fail (and log errors).
-  await navigate(client, 'about:blank');
-  pageBuild.reset();
-  ({ cookie: session } = await harness.server.useSeed(seed, { preset: themePreset, edit }));
-  if (!signedInThroughForm) {
-    await navigate(client, `${base}/login?next=${encodeURIComponent(nextPath)}`);
-    await submitLoginForm(client, serverOptions.username, serverOptions.password);
-    signedInThroughForm = true;
-  } else {
-    const [name, value] = session.split('=');
-    await client.send('Network.setCookie', { name, value, url: base, httpOnly: true, sameSite: 'Lax' });
-    await navigate(client, `${base}${nextPath}`);
-  }
-  await selectorExists(client, marker, 30000);
-  await sleep(300);
-  pageBuild.verify();
+  await serverPage.seed(seed, nextPath, marker, { preset: themePreset, edit });
+  session = serverPage.cookie;
 }
 
 async function ensureEntryControlsOpen(client) {
@@ -238,14 +223,7 @@ async function ensureEntryControlsOpen(client) {
 }
 
 async function captureArtifact(client, name) {
-  const html = await evaluate(client, 'document.documentElement.outerHTML');
-  await writeFile(path.join(artifactDir, `${name}.html`), html, 'utf8');
-  const screenshot = await client.send('Page.captureScreenshot', {
-    format: 'png',
-    fromSurface: true,
-    captureBeyondViewport: false,
-  });
-  await writeFile(path.join(artifactDir, `${name}.png`), screenshot.data, 'base64');
+  await capturePage(client, artifactDir, name);
 }
 
 async function commonPageEvidence(client) {
@@ -961,12 +939,6 @@ async function checkDirectoryLabels(client, label) {
     return {width:rail.clientWidth, scrollWidth:rail.scrollWidth, clipped};
   })()`);
   assertThat(label + ' names and counts remain readable', evidence.scrollWidth <= evidence.width + 1 && evidence.clipped.length === 0, evidence);
-}
-
-async function key(client, key, code, modifiers = 0) {
-  const windowsVirtualKeyCode = ({Escape:27, Enter:13, Tab:9, Backspace:8, PageDown:34, ArrowLeft:37, ArrowRight:39})[key] ?? key.toUpperCase().charCodeAt(0);
-  await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, modifiers, windowsVirtualKeyCode, ...(key === 'Enter' ? {text:'\r', unmodifiedText:'\r'} : {}) });
-  await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers, windowsVirtualKeyCode });
 }
 
 // Exercise browser hit testing as well as the Dioxus handler. Do not auto-scroll:
@@ -1772,42 +1744,7 @@ async function checkNarrowSidebarSearch(client) {
 // time); seeds that used to be edited in browser storage are now edited before the library is
 // built (`useSeed`'s `edit`).
 
-/// A trusted mouse click at the element's centre (focuses it, as a person's click does).
-async function pointerClick(client, selector) {
-  const point = await evaluate(client, `(() => {
-    const element = document.querySelector(${JSON.stringify(selector)});
-    if (!element) throw new Error('Missing click target: ' + ${JSON.stringify(selector)});
-    element.scrollIntoView({block:'nearest', inline:'nearest'});
-    const rect = element.getBoundingClientRect();
-    return {x: rect.left + rect.width / 2, y: rect.top + rect.height / 2};
-  })()`);
-  await client.send('Input.dispatchMouseEvent', {type:'mousePressed', button:'left', buttons:1, clickCount:1, ...point});
-  await client.send('Input.dispatchMouseEvent', {type:'mouseReleased', button:'left', buttons:0, clickCount:1, ...point});
-}
-
-/// Replaces a text field's value as typing does (select all, then insert or delete).
-async function fillField(client, selector, text) {
-  await evaluate(client, `(() => { const field = document.querySelector(${JSON.stringify(selector)}); field.focus(); field.select(); })()`);
-  if (text) await client.send('Input.insertText', {text});
-  else await key(client, 'Backspace', 'Backspace');
-}
-
-/// Visible as Playwright's `waitFor` has it: a non-empty box, and not hidden by `visibility` (on
-/// the element or an ancestor; `checkVisibility` also covers `display: none` and
-/// `content-visibility`). A page expression taking the element.
-const VISIBLE = `(element => { const box = element.getBoundingClientRect();
-  return box.width > 0 && box.height > 0 && element.checkVisibility({visibilityProperty: true}); })`;
-
-/// Waits until the element that carries `text` as its whole text is visible: the innermost such
-/// element (no child of it has the same text), so a visible ancestor cannot stand in for a hidden
-/// one.
-async function textShown(client, text, selector = 'body *') {
-  const wanted = JSON.stringify(text);
-  await waitFor(client, `[...document.querySelectorAll(${JSON.stringify(selector)})].some(element =>
-    element.textContent.trim() === ${wanted} &&
-    ![...element.children].some(child => child.textContent.trim() === ${wanted}) && ${VISIBLE}(element))`);
-}
-
+// Shared interactions and waits (pointerClick, fillField, textShown, VISIBLE) live in server_page.mjs.
 const pathname = client => evaluate(client, 'location.pathname');
 // The page's own preferences in this browser (the search text, hidden list controls) outlive a
 // seed; these checks start, as they did in fresh browser contexts, without them.
@@ -2239,7 +2176,10 @@ async function run() {
     await client.send('Page.enable');
     await client.send('Runtime.enable');
     await client.send('Log.enable');
-    if (harness) pageBuild = await watchPageBuild(client, base, harness.server);
+    if (harness) {
+      serverPage = await new ServerPage({ client, harness, base,
+        username: serverOptions.username, password: serverOptions.password }).start();
+    }
     const directoryEnvironment = {
       native: Boolean(nativeTarget), assertThat, consoleErrors,
       setViewport: (w, h, mobile, dpr) => setViewport(client, w, h, mobile, dpr),

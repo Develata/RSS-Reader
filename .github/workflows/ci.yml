@@ -285,6 +285,8 @@ jobs:
           if [[ "$PRESET" == default ]]; then
             bash scripts/run_server_web_regression.sh "${args[@]}" --suite theme-matrix --log-dir "target/ci-ui/$PRESET-theme-matrix"
             bash scripts/run_server_web_regression.sh "${args[@]}" --suite feed-smoke --log-dir "target/ci-ui/$PRESET-feed-smoke"
+            # 服务端模式的浏览器验收（等待 30 秒以上的场景只在本地以 --long 运行）。
+            bash scripts/run_server_web_regression.sh "${args[@]}" --suite acceptance --log-dir "target/ci-ui/$PRESET-acceptance"
           fi
       - name: Preserve UI evidence even on failure
         if: always()
