@@ -1,16 +1,16 @@
-# 资料库：程序退出前关闭并等待连接（检查点被截断的问题）
+# 资料库：程序退出前关闭并等待连接；身份探测认出检查点中途的主文件
 
 - 日期：2026-10-21
 - 作者 / Agent：Claude Code（Opus），与 Develata
 - 分支：`v0.2-architecture`（工作树 `target/audit-20261009/worktree`）
 - 当前 HEAD：见提交记录（修改基于 `2397e55`）
-- 相关 commit：`2c5c268`（`fix(store): close the library and wait for its connections before exiting`）；本记录另行提交
+- 相关 commit：`2c5c268`（`fix(store): close the library and wait for its connections before exiting`）、`afd4339`（`fix(store): know a library left mid-checkpoint by its application id`）；本记录另行提交
 - 相关 tag / release：N/A
-- 状态：`validated`（第一部分）；第二部分（身份探测）待 Develata 确认
+- 状态：`validated`（两部分；第二部分由 Develata 2026-10-21 确认采用 C）
 
 ## 工作摘要
 
-2026-10-20 构建 C4c 浏览器回归时发现：`examples/browser_fixture_library` 运行 60 次，有 3 次 `library.sqlite3` 停在 94208 字节（应为 98304，日志完整），其中 1 次身份探测报“数据库文件已损坏”，`rssr-web` 拒绝启动。原因确认如下，并完成第一部分修复：资料库有了显式的 `close`，CLI、`rssr-web`、桌面端与夹具工具在退出前都调用它并等待。第二部分（身份探测是否区分“检查点中途的主文件 + 有效日志”与真正的损坏）属于存储边界变更，下面给出分析与建议，等 Develata 确认后再改。
+2026-10-20 构建 C4c 浏览器回归时发现：`examples/browser_fixture_library` 运行 60 次，有 3 次 `library.sqlite3` 停在 94208 字节（应为 98304，日志完整），其中 1 次身份探测报“数据库文件已损坏”，`rssr-web` 拒绝启动。原因确认如下，并完成第一部分修复：资料库有了显式的 `close`，CLI、`rssr-web`、桌面端与夹具工具在退出前都调用它并等待。第二部分（身份探测是否区分“检查点中途的主文件 + 有效日志”与真正的损坏）属于存储边界变更，先做分析与原型实测，Develata 确认采用 C 后实现：探测连接设 `writable_schema`，检查点中途的主文件按应用 id 认作资料库，其余交给 SQLite 用日志恢复。
 
 ## 原因（已确认）
 
@@ -22,7 +22,7 @@
 
 ## 影响范围
 
-- 模块：`crates/rssr-infra/src/store/`（`executor.rs`、`error.rs`、`local.rs`、`fixture.rs`、`AGENTS.md`）、`crates/rssr-cli/src/main.rs`、`crates/rssr-web/src/main.rs`、`crates/rssr-app/src/{main.rs,bootstrap.rs,bootstrap/native.rs}`；测试 `test_library_store.rs`、`test_stdout_contract.rs`、`rssr-web` 的 `api_tests.rs`；文档 `docs/design/v0.2-architecture.md`。
+- 模块：`crates/rssr-infra/src/store/`（`executor.rs`、`error.rs`、`local.rs`、`fixture.rs`、`AGENTS.md`）、`crates/rssr-cli/src/main.rs`、`crates/rssr-web/src/main.rs`、`crates/rssr-app/src/{main.rs,bootstrap.rs,bootstrap/native.rs}`；测试 `test_library_store.rs`、`test_stdout_contract.rs`、`rssr-web` 的 `api_tests.rs`；文档 `docs/design/v0.2-architecture.md`；第二部分：`crates/rssr-infra/src/store/files.rs` 及其单元测试。
 - 平台：原生（桌面 / CLI / 服务器）。Android 没有退出时机（系统结束进程），不变。Web 页面无关。
 - 额外影响：`StoreError` 新增 `Closed`（“资料库已关闭”），映射为 `DomainError::Persistence`。
 
@@ -41,7 +41,7 @@
 - 桌面端：`Config::with_custom_event_handler` 在 `Event::LoopDestroyed`（事件循环的最后一个事件，之后 dioxus 即 `process::exit`）调用 `bootstrap::close_local_library()`，它对已打开的资料库 `close_blocking`。Android 不编译这段。
 - 夹具（`store::fixture::write_library`）：去掉“丢弃句柄后另开连接做 `wal_checkpoint(TRUNCATE)`”的变通，改为写完后 `close`（写入失败也关闭）。
 
-## 第二部分：身份探测（待确认，未修改）
+## 第二部分：身份探测（Develata 确认采用 C，已实现）
 
 第一部分只覆盖正常退出。进程被 `SIGKILL`（Docker 停止超过 10 秒、OOM）、崩溃、断电、Android 系统结束进程，或者提交时的自动检查点被打断，主文件同样会停在写回中途；SQLite 自己能恢复，而今天的探测会让共用数据目录的所有程序都拒绝这个库，直到有人用普通 SQLite 打开它。候选做法与实测（Windows 与 WSL，同一份原型）：
 
@@ -55,7 +55,12 @@
 
 C 的依据：SQLite 的 `lockBtree`（捆绑源码 `sqlite3.c` 第 76541 行）在 `writable_schema` 打开时不再把“文件头页数 > 文件页数”当损坏，而用文件实际页数；探测只读第 1 页文件头。应用 id（偏移 68）建库时写入、之后不变，检查点写回的第 1 页无论新旧都带着它，所以检查点中途的主文件仍能确认身份。外部库与非数据库文件的结果不变（实测：外部 WAL 库应用 id 为 0，按“不是资料库”拒绝；垃圾文件、只有魔数的文件仍是 `NotADatabase`）。C 放弃的只是探测对“文件比文件头短”的判断，这件事交给写连接：有日志时 SQLite 恢复，没有日志（真截断的文件）时写连接打开即报损坏、拒绝打开，在 Windows 与 Linux 上都不建 `-wal`/`-shm`（实测裸写连接；`open_file` 在探测通过后还会经 `remove_stale_scratch` 建惰性的 `.create-lock`，此时身份已确认）。两种候选对“无日志的截断文件”最终都拒绝，差别只在拒绝发生在哪一步、以及是否在身份确认之前改动旁边的文件；若希望探测本身继续识别截断，那是“维持现状”，不是 A。
 
-建议：采用 C。改动只在 `files.rs`：探测连接打开后设 `writable_schema`，更新 `check_library` 与 `SETTLE` 的文档注释（`SETTLE` 重试保留，不再是检查点中途的主要依靠）；`a_probe_that_meets_a_checkpoint_waits_for_it` 改为断言“主文件少一页 + 日志”被接受，新增确定性测试：同一状态下 `LibraryStore::open` 成功、行数齐全；“少一页、无日志”被拒绝为损坏且不建文件；再在 WSL 上跑 `test_library_*`。如果编译 SQLite 时打开了 `SQLITE_DBCONFIG_DEFENSIVE` 默认值，`writable_schema` 无效，新测试会失败而不是静默退回旧行为。
+实现（`afd4339`）：
+
+- `files::read_application_id` 打开探测连接后设 `PRAGMA writable_schema = ON`（连接只读且 immutable，这个标志改不了任何东西）。`check_library` 与 `SETTLE` 的文档注释改写；`SETTLE` 重试保留，但已没有能构造出的状态走到它（见风险）。
+- `a_probe_that_meets_a_checkpoint_waits_for_it` 改为 `a_probe_knows_a_library_left_mid_checkpoint`：主文件少最后一页时立即（不到 `SETTLE`）认作资料库，文件不变、不建任何旁边的文件；同样少一页但应用 id 是别的程序的，仍按“不是资料库”拒绝。
+- 新增 `a_library_left_mid_checkpoint_opens_and_recovers_from_its_log`：用存储写 20 行、保存日志、关闭，再造出“少最后一页 + 日志”；`LibraryStore::open` 在 2 秒内成功、20 行齐全，关闭后日志已写回、文件长度复原、`integrity_check` 为 ok。同一个短文件不带日志时被拒绝为 `Corrupt`，文件不变，不留 `-wal`/`-shm`。
+- 如果编译 SQLite 时默认打开了 `SQLITE_DBCONFIG_DEFENSIVE`，`writable_schema` 无效，这两个测试会失败，而不是静默退回旧行为。
 
 ## 验证与验收
 
@@ -89,22 +94,28 @@ C 的依据：SQLite 的 `lockBtree`（捆绑源码 `sqlite3.c` 第 76541 行）
   - M6 夹具只丢弃不关闭：`every_seed_becomes_a_library` 在“the log is written back”失败。
   - M7 `rssr-web` 正常停止时不关闭资料库：新数据目录的冒烟 3/3 仍通过（存活，原因见上）；大日志冒烟 3/3 失败：主文件停在 98304 / 266240 / 483328 字节，24934272 字节的日志原样留着，`immutable=1` 探测报“database disk image is malformed”——也就是 2026-10-20 的现象在 `rssr-web` 上的确定性复现。
 
+- 第二部分（提交 `afd4339` 前后）：
+  - Windows：`cargo fmt --all --check`、`cargo clippy -p rssr-infra --all-targets --locked -j 2 -- -D warnings` 通过；`cargo test -p rssr-infra --test 'test_library_*'`：27 个测试程序，173 passed / 0 failed / 1 ignored；`cargo test -p rssr-infra --lib`：113 passed。
+  - WSL：`--test 'test_library_*'`：27 个测试程序，175 passed / 0 failed / 2 ignored；`--lib store::`：24 passed。
+  - 变异 M8（去掉 `writable_schema`）：两个新测试都在自己的断言上失败（“still a library”与“opens”，都得到 `Corrupt`）。
+  - 端到端（WSL，脚本 `scratchpad/wslsmoke/web_recover.sh`）：用不关闭资料库的 `rssr-web`（M7）造出 3 个真实的检查点中途的库（主文件 2039808 / 950272 / 1646592 字节，日志 24934272 字节）；修复后的 `rssr-web` 3/3 正常启动、没有“打开资料库失败”，停止后主文件 24858624 字节、3000 行、`integrity_check` 为 ok。
+
 ### 手工验收
 
 - 桌面端关窗后的文件状态：未执行（`LoopDestroyed` 钩子只经编译与代码阅读确认；dioxus-desktop 0.7.9 的 `launch.rs` 先调用自定义处理函数，再处理 `LoopDestroyed`）。
 
 ## 结果
 
-- 第一部分可合并：正常退出的程序不再截断关闭时的检查点。
-- 第二部分待 Develata 在 C / A / 维持现状之间确认。
+- 可合并：正常退出的程序不再截断关闭时的检查点；被截断的（强杀、崩溃、断电、Android 系统结束进程、自动检查点被打断）也不再让共用数据目录的程序拒绝资料库，SQLite 在下次打开时用日志恢复。
 
 ## 风险与后续事项
 
 - `close` 会等已排队的任务；最坏情况受准入时限（默认 30 秒）与运行期限（写 60 秒）约束。`rssr-web` 只等 3 秒，超时后进程退出仍可能截断检查点；桌面端不设上限（窗口已经关闭）。
-- 强杀、崩溃、断电、Android 系统结束进程、自动检查点被打断：第一部分管不到，需第二部分。
+- 探测不再识别“文件比文件头短”，这件事交给写连接：日志丢失的截断文件仍被拒绝为损坏，但拒绝发生在写连接第一次读取时（此前 `remove_stale_scratch` 已在旁边建了惰性的 `.create-lock`，身份已确认）。
+- `SETTLE` 的 2 秒重试已没有能构造出的状态走到（探测只读第 1 页文件头，其余字段新旧一致），所以也没有测试覆盖；按变异检查的惯例它是可删的冗余，保留只出于保守，是否删除由 Develata 决定。
 - CLI 被 Ctrl-C 中断时不关闭资料库（与之前相同）。
 
 ## 给下一位 Agent 的备注
 
 - 入口：`crates/rssr-infra/src/store/executor.rs` 模块注释的“Closing”一段、`LibraryStore::close`；`crates/rssr-infra/src/store/files.rs` 的 `check_library`。
-- 原型测试（第二部分的实测）在会话暂存目录 `scratchpad/proto/zz_probe_prototype.rs`，没有提交；采用 C 时其中的状态构造可直接改写成 `files.rs` 的单元测试。
+- 原型测试（第二部分的候选对比）在会话暂存目录 `scratchpad/proto/zz_probe_prototype.rs`，没有提交；它的状态构造已改写进上面两个测试。
