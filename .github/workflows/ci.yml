@@ -217,11 +217,27 @@ jobs:
           dx bundle --platform web --package rssr-app --release --locked --debug-symbols false --out-dir target/web-dist
           test -s target/dx/rssr-app/release/web/public/index.html
 
+      # 页面与服务器出自同一次检出，构建标识（dev-<commit>）一致；服务器拒绝其它构建页面的写请求。
+      - name: Build the server and the fixture tool for UI jobs
+        run: |
+          cargo build --release --locked -p rssr-web
+          cargo build --release --locked -p rssr-infra --example browser_fixture_library
+
       - name: Share the exact Web build with UI jobs
         uses: actions/upload-artifact@v7
         with:
           name: ci-web-public
           path: target/dx/rssr-app/release/web/public/
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Share the server of the same build with UI jobs
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-web-server
+          path: |
+            target/release/rssr-web
+            target/release/examples/browser_fixture_library
           if-no-files-found: error
           retention-days: 3
 
@@ -246,26 +262,41 @@ jobs:
         with:
           name: ci-web-public
           path: target/dx/rssr-app/release/web/public/
+      - uses: actions/download-artifact@v8
+        with:
+          name: ci-web-server
+          path: target/ci-server/
       - name: Setup Chrome for Testing
         uses: ./.github/actions/setup-browser-tests
         with:
           with-driver: 'false'
+      # 页面对真实 rssr-web（每个夹具重启在新资料库上，见 scripts/browser/server_harness.mjs）。
       - name: Real UI assertions at mobile and desktop viewports
         run: |
-          args=(--release --skip-build --chrome-bin "$HOME/.local/bin/google-chrome" --log-dir "target/ci-ui/$PRESET")
-          if [[ "$PRESET" != default ]]; then args+=(--preset "$PRESET"); fi
-          bash scripts/run_static_web_small_viewport_smoke.sh "${args[@]}"
+          # Artifacts do not keep the executable bit.
+          chmod +x target/ci-server/rssr-web target/ci-server/examples/browser_fixture_library
+          args=(--release --chrome-bin "$HOME/.local/bin/google-chrome"
+            --server-bin target/ci-server/rssr-web
+            --fixture-bin target/ci-server/examples/browser_fixture_library
+            --static-dir target/dx/rssr-app/release/web/public)
+          preset_args=()
+          if [[ "$PRESET" != default ]]; then preset_args=(--preset "$PRESET"); fi
+          bash scripts/run_server_web_regression.sh "${args[@]}" "${preset_args[@]}" --log-dir "target/ci-ui/$PRESET"
+          if [[ "$PRESET" == default ]]; then
+            bash scripts/run_server_web_regression.sh "${args[@]}" --suite theme-matrix --log-dir "target/ci-ui/$PRESET-theme-matrix"
+            bash scripts/run_server_web_regression.sh "${args[@]}" --suite feed-smoke --log-dir "target/ci-ui/$PRESET-feed-smoke"
+          fi
       - name: Preserve UI evidence even on failure
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: ci-ui-${{ matrix.preset }}
           path: |
-            target/ci-ui/${{ matrix.preset }}/*.json
-            target/ci-ui/${{ matrix.preset }}/*.md
-            target/ci-ui/${{ matrix.preset }}/*.log
-            target/ci-ui/${{ matrix.preset }}/*.png
-            target/ci-ui/${{ matrix.preset }}/*.html
+            target/ci-ui/${{ matrix.preset }}*/*.json
+            target/ci-ui/${{ matrix.preset }}*/*.md
+            target/ci-ui/${{ matrix.preset }}*/*.log
+            target/ci-ui/${{ matrix.preset }}*/*.png
+            target/ci-ui/${{ matrix.preset }}*/*.html
           retention-days: 7
 
   wasm-contract-build:

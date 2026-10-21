@@ -37,6 +37,18 @@ def free_port():
         return probe.getsockname()[1]
 
 
+def smoke_port():
+    """A free port the browser smokes accept: their DevTools port, 10000 higher, must exist."""
+    for port in range(20000 + os.getpid() % 30000, 55534):
+        with socket.socket() as probe:
+            try:
+                probe.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    raise RuntimeError("no free smoke port")
+
+
 def alive(pid):
     if WINDOWS:
         kernel = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -81,7 +93,7 @@ class Acceptance(unittest.TestCase):
         self.root = RUN / (self._testMethodName + " 中文 space")
         self.root.mkdir()
         (self.root / "scripts").mkdir()
-        (self.root / "scripts/run_web_spa_regression_server.sh").touch()
+        (self.root / "scripts/run_server_web_regression.sh").touch()
         tools = self.root / "tools"
         tools.mkdir()
         for name in ["cargo", "dx", "bash", "curl"]:
@@ -172,7 +184,7 @@ class Acceptance(unittest.TestCase):
             probe.bind(("127.0.0.1", port))
 
     def test_parameters_and_plan_have_no_side_effects(self):
-        for args in [["--port"], ["--web-port"], ["--log-dir"], ["--what"], ["--port", "0"], ["--port", "65536"], ["--full", "--port", "55525"]]:
+        for args in [["--port"], ["--web-port"], ["--log-dir"], ["--what"], ["--port", "0"], ["--port", "65536"], ["--full", "--port", "55525"], ["--with-fixed-smokes", "--web-port", "55525"], ["--with-rssr-web", "--web-port", "55535"], ["--no-serve"]]:
             self.run_cli(*args, code=1)
         self.run_cli("--help")
         plan = json.loads(self.run_cli("--plan", "--full", "--release", "--debug").stdout)
@@ -191,7 +203,7 @@ class Acceptance(unittest.TestCase):
             self.env.update(BASH_ENV=startup.as_posix(), FIXTURE_TOOLS=str(self.root / "tools"))
         (self.root / "scripts/run_wasm_contract_harness.sh").write_text(
             'set -eu\nuname > selected-tool.txt\n', encoding="utf-8")
-        self.run_cli("--skip-automated", "--with-browser-contracts", "--no-serve")
+        self.run_cli("--skip-automated", "--with-browser-contracts")
         self.assertEqual((self.root / "selected-tool.txt").read_text().strip(), "caller-selected-uname")
 
     @unittest.skipIf(WINDOWS, "alternate Bash executable identity is checked on Unix")
@@ -201,12 +213,12 @@ class Acceptance(unittest.TestCase):
         self.env["RSSR_BASH"] = str(chosen)
         (self.root / "scripts/run_wasm_contract_harness.sh").write_text(
             'printf "%s" "$BASH" > selected-shell.txt\n', encoding="utf-8")
-        self.run_cli("--skip-automated", "--with-browser-contracts", "--no-serve")
+        self.run_cli("--skip-automated", "--with-browser-contracts")
         self.assertEqual((self.root / "selected-shell.txt").read_text(), str(chosen))
 
     def test_unread_stdout_does_not_block_cancellation(self):
         self.env.update(HOLD_STAGE="wasm-check", FIXTURE_PORT=str(free_port()), NOISY="1")
-        proc = self.start("--full", "--no-serve", unread=True)
+        proc = self.start("--full", unread=True)
         self.until(lambda: (self.root / "noise-ready").exists(), proc)
         time.sleep(.2)  # Give the supervisor time to fill the unread stdout pipe.
         started = time.monotonic()
@@ -229,24 +241,24 @@ class Acceptance(unittest.TestCase):
         git("-c", "user.name=CLI fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture")
         expected = git("rev-parse", "HEAD")
         git("pack-refs", "--all")
-        self.run_cli("--skip-automated", "--no-serve")
+        self.run_cli("--skip-automated")
         self.assertEqual(self.report()["commit"], expected)
         linked = self.root / "linked 中文 worktree"
         git("worktree", "add", "--detach", str(linked), "HEAD")
         self.assertTrue((linked / ".git").is_file())
-        self.run_cli("--repo-root", str(linked), "--skip-automated", "--no-serve")
+        self.run_cli("--repo-root", str(linked), "--skip-automated")
         self.assertEqual(self.report()["commit"], expected)
         git("worktree", "remove", str(linked))
         git("init", "--separate-git-dir", str(self.root / "git storage"))
         self.assertTrue((self.root / ".git").is_file())
-        self.run_cli("--skip-automated", "--no-serve")
+        self.run_cli("--skip-automated")
         self.assertEqual(self.report()["commit"], expected)
 
     def test_git_probe_cancellation_owns_descendants(self):
         (self.root / ".git").touch()
         shutil.copy2(FIXTURE, self.root / "tools" / ("git" + SUFFIX))
         self.env.update(HOLD_STAGE="git-revision", FIXTURE_PORT=str(free_port()))
-        proc = self.start("--no-serve")
+        proc = self.start()
         self.until(lambda: (self.root / "tree-ready").exists(), proc)
         if WINDOWS:
             console_event(proc.pid, 0)
@@ -369,7 +381,7 @@ class Acceptance(unittest.TestCase):
         self.assertEqual(failed.stdout, b"", "failed Cargo build must not execute a cached plan")
 
     def test_full_order_and_build_once_unicode_paths(self):
-        self.run_cli("--full", "--no-serve", "--release")
+        self.run_cli("--full", "--release")
         trace = (self.root / "trace.txt").read_text(encoding="utf-8")
         names = [line.split("\t")[0] for line in trace.splitlines()]
         self.assertEqual(names, ["wasm-check", "app-tests", "host-contracts", "web-tests", "browser-contracts", "web-bundle", "cargo-run", "web-auth", "reader-theme-matrix", "small-viewport", "browser-feed"])
@@ -377,7 +389,6 @@ class Acceptance(unittest.TestCase):
         self.assertIn("中文 space", trace)
         self.assertIn("结果 logs", trace)
         self.assertIn("--release", trace)
-        self.assertEqual(self.stage("spa")["status"], "skipped")
         self.assertEqual(self.stage("web-browser-feed")["status"], "skipped")
         for log in ["automated-gates.log", "browser-contracts.log", "fixed-smokes.log"]:
             output = (self.log / log).read_text()
@@ -389,7 +400,7 @@ class Acceptance(unittest.TestCase):
         for stage in stages:
             with self.subTest(stage=stage):
                 self.env["FAIL_STAGE"] = stage
-                self.run_cli("--full", "--no-serve", code=23)
+                self.run_cli("--full", code=23)
                 report = self.report()
                 self.assertEqual(report["outcome"], "failed")
                 self.assertEqual(report["exit_code"], 23)
@@ -399,32 +410,32 @@ class Acceptance(unittest.TestCase):
                 self.assertTrue(all(s["status"] in ["blocked", "skipped"] for s in report["steps"][index+1:]))
                 self.assertFalse(any(s["status"] == "pending" for s in report["steps"]))
         self.env["FAIL_STAGE"] = "browser-feed"
-        self.run_cli("--with-rssr-web", "--no-serve", code=23)
+        self.run_cli("--with-rssr-web", code=23)
         self.assertEqual(self.stage("web-browser-feed")["status"], "failed")
 
     def test_skip_semantics_and_missing_bundle(self):
-        self.run_cli("--skip-automated", "--skip-build", "--no-serve")
+        self.run_cli("--skip-automated", "--skip-build")
         self.assertTrue(all(s["status"] == "skipped" for s in self.report()["steps"]))
-        self.run_cli("--skip-automated", "--skip-build", "--with-fixed-smokes", "--no-serve", code=1)
+        self.run_cli("--skip-automated", "--skip-build", "--with-fixed-smokes", code=1)
         self.assertEqual(self.stage("web-bundle")["status"], "failed")
         self.bundle()
-        self.run_cli("--skip-automated", "--skip-build", "--with-fixed-smokes", "--no-serve")
+        self.run_cli("--skip-automated", "--skip-build", "--with-fixed-smokes")
         self.assertEqual(self.stage("web-bundle")["status"], "reused")
         self.assertEqual(self.stage("wasm-check")["status"], "skipped")
         self.assertNotIn("web-bundle", (self.root / "trace.txt").read_text(encoding="utf-8"))
 
     def test_fixed_browser_feed_failure_fails_the_run(self):
         self.env["FAIL_STAGE"] = "browser-feed"
-        self.run_cli("--full", "--no-serve", code=23)
+        self.run_cli("--full", code=23)
         self.assertEqual(self.stage("fixed-browser-feed")["status"], "failed")
         self.assertEqual(self.report()["outcome"], "failed")
 
     def test_missing_build_output_and_spawn_error(self):
         self.env["MISSING_BUNDLE"] = "1"
-        self.run_cli("--skip-automated", "--with-fixed-smokes", "--no-serve", code=1)
+        self.run_cli("--skip-automated", "--with-fixed-smokes", code=1)
         self.assertEqual(self.stage("web-bundle")["status"], "failed")
         self.env["RSSR_BASH"] = str(self.root / "missing-bash")
-        self.run_cli("--skip-automated", "--with-browser-contracts", "--no-serve", code=1)
+        self.run_cli("--skip-automated", "--with-browser-contracts", code=1)
         self.assertEqual(self.stage("browser-contracts")["status"], "failed")
 
     def test_owned_descendants_after_success_and_failure(self):
@@ -433,7 +444,7 @@ class Acceptance(unittest.TestCase):
             self.env["FAIL_STAGE"] = fail
             for name in ["branch.pid", "leaf.pid", "tree-ready"]:
                 (self.root / name).unlink(missing_ok=True)
-            self.run_cli("--no-serve", code=23 if fail else 0)
+            self.run_cli(code=23 if fail else 0)
             self.no_tree()
 
     def test_cancellation_and_forced_termination(self):
@@ -444,7 +455,7 @@ class Acceptance(unittest.TestCase):
                 self.env.update(HOLD_STAGE="wasm-check", FIXTURE_PORT=str(free_port()))
                 for name in ["branch.pid", "leaf.pid", "tree-ready"]:
                     (self.root / name).unlink(missing_ok=True)
-                proc = self.start("--full", "--no-serve")
+                proc = self.start("--full")
                 self.until(lambda: (self.root / "tree-ready").exists(), proc)
                 if WINDOWS and event == "terminate":
                     proc.terminate()
@@ -466,70 +477,44 @@ class Acceptance(unittest.TestCase):
                     self.assertEqual(self.stage("app-tests")["status"], "blocked")
                 self.no_tree()
 
-    def test_spa_early_exit_and_port_conflict(self):
+    def test_smoke_early_exit_and_port_conflict(self):
         self.bundle()
-        self.env["FAIL_STAGE"] = "spa"
-        self.run_cli("--skip-automated", "--skip-build", "--port", str(free_port()), code=23)
-        self.assertEqual(self.stage("spa")["status"], "failed")
-        with socket.socket() as listener:
-            listener.bind(("127.0.0.1", 0))
-            listener.listen()
-            port = listener.getsockname()[1]
-            with self.assertRaises(AssertionError):
-                self.assert_port_free(port)
-            self.run_cli("--skip-automated", "--skip-build", "--port", str(port), code=1)
-            self.assertIn("unavailable", self.stage("spa")["detail"])
-            self.assertEqual(listener.getsockname()[1], port)
-
-    def test_spa_readiness_and_cancel(self):
-        self.bundle()
-        port = free_port()
-        self.env.update(HOLD_STAGE="spa", FIXTURE_PORT=str(port))
-        proc = self.start("--skip-automated", "--skip-build", "--port", str(port))
-        self.until(lambda: self.stage("spa")["status"] == "serving", proc)
-        self.assertEqual(self.report()["outcome"], "running")
-        if WINDOWS:
-            console_event(proc.pid, 1)
-        else:
-            proc.send_signal(signal.SIGTERM)
-        self.assertEqual(proc.wait(timeout=8), 130 if WINDOWS else 143)
-        self.assertEqual(self.stage("spa")["status"], "interrupted")
-        self.no_tree()
+        self.env["FAIL_STAGE"] = "reader-theme-matrix"
+        self.run_cli("--skip-automated", "--skip-build", "--with-fixed-smokes", code=23)
+        self.assertEqual(self.stage("reader-theme-matrix")["status"], "failed")
+        self.env.pop("FAIL_STAGE")
+        # Fixed smokes validate --port <= 55524, so stay below the ephemeral range.
+        base = 20000 + os.getpid() % 10000
+        for stage, offset in [("reader-theme-matrix", 10), ("small-viewport", 11 + 10000)]:
+            with self.subTest(stage=stage), socket.socket() as listener:
+                # The smoke port, and the DevTools port the wrapper derives from it, must be free.
+                listener.bind(("127.0.0.1", base + offset))
+                listener.listen()
+                with self.assertRaises(AssertionError):
+                    self.assert_port_free(base + offset)
+                self.run_cli("--skip-automated", "--skip-build", "--with-fixed-smokes", "--port", str(base), code=1)
+                self.assertIn("unavailable", self.stage(stage)["detail"])
+                self.assertEqual(listener.getsockname()[1], base + offset)
 
     def real_scripts(self):
         self.env["RSSR_BASH"] = ARGS.bash
-        for name in ["run_web_spa_regression_server.sh", "run_rssr_web_auth_smoke.sh", "run_rssr_web_auth_assertions.sh"]:
+        for name in ["run_rssr_web_auth_smoke.sh", "run_rssr_web_auth_assertions.sh"]:
             shutil.copy2(ROOT / "scripts" / name, self.root / "scripts" / name)
         (self.root / "tools" / ("curl" + SUFFIX)).unlink()
         self.bundle()
-        (self.root / "target/dx/rssr-app/debug/web/public/index.html").write_text("real SPA fixture", encoding="utf-8")
+        (self.root / "target/dx/rssr-app/debug/web/public/index.html").write_text("real bundle fixture", encoding="utf-8")
 
     def test_real_auth_service_early_exit_and_conflict(self):
         self.real_scripts()
         self.env["FAIL_STAGE"] = "cargo-run"
-        self.run_cli("--skip-automated", "--skip-build", "--no-serve", "--with-rssr-web", "--web-port", str(free_port()), code=1)
+        self.run_cli("--skip-automated", "--skip-build", "--with-rssr-web", "--web-port", str(smoke_port()), code=1)
         self.assertEqual(self.stage("web-auth")["status"], "failed")
         self.assertIn("exited before readiness", (self.log / "rssr-web-auth-smoke.log").read_text(encoding="utf-8"))
         with socket.socket() as listener:
-            listener.bind(("127.0.0.1", 0))
+            listener.bind(("127.0.0.1", smoke_port()))
             listener.listen()
-            self.run_cli("--skip-automated", "--skip-build", "--no-serve", "--with-rssr-web", "--web-port", str(listener.getsockname()[1]), code=1)
+            self.run_cli("--skip-automated", "--skip-build", "--with-rssr-web", "--web-port", str(listener.getsockname()[1]), code=1)
             self.assertIn("unavailable", self.stage("web-auth")["detail"])
-
-    def test_real_spa_with_bash_python_and_cancel(self):
-        self.real_scripts()
-        port = free_port()
-        proc = self.start("--skip-automated", "--skip-build", "--port", str(port))
-        self.until(lambda: self.stage("spa")["status"] == "serving", proc)
-        stage_pid = self.stage("spa")["pid"]
-        if WINDOWS:
-            console_event(proc.pid, 0)
-        else:
-            proc.send_signal(signal.SIGINT)
-        self.assertEqual(proc.wait(timeout=8), 130)
-        self.assertEqual(self.stage("spa")["status"], "interrupted")
-        self.until(lambda: not alive(stage_pid))
-        self.assert_port_free(port)
 
     def auth_fixture(self):
         self.real_scripts()

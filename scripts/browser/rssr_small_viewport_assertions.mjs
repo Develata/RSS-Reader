@@ -70,7 +70,10 @@ if (suite !== 'regression' && (cli.has('--native-target') || cli.get('--director
 }
 if (suite === 'theme-matrix' && preset) throw new Error('--suite theme-matrix runs every theme; --preset does not apply');
 // Native mode attaches only to an explicitly selected, already running Dioxus
-// WebView with an isolated, pre-seeded SQLite fixture supplied by the caller.
+// WebView with an isolated, pre-seeded SQLite fixture supplied by the caller
+// (the fixture tool writes one: `cargo run -p rssr-infra --example
+// browser_fixture_library -- --seeds tests/fixtures/browser_state --seed
+// directory-contract --data-dir <the app's data directory> --feed-base <url>`).
 const nativeTarget = cli.get('--native-target');
 const directoryOnly = cli.get('--directory-only') === 'true';
 if (cli.has('--native-target') && !nativeTarget.trim()) {
