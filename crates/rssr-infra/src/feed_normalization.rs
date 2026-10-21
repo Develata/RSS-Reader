@@ -63,9 +63,9 @@ pub fn parse_feed_xml(raw: &str, warn_on_missing_content: bool) -> anyhow::Resul
     // distinguish a source-provided GUID from that fallback; guessing by "looks like a hash"
     // incorrectly discards legitimate hexadecimal GUIDs. Keep missing IDs empty here and let
     // our normalization choose the URL/title+timestamp fallback explicitly.
-    // 会被 feed-rs 当作地址解析的字符串先过一遍上限：超线性的代价都发生在 feed-rs 内部，
-    // 解析完再看已经来不及。越界的 feed 整个拒绝，不做部分解析。
-    crate::feed_url_guard::check_feed_urls(raw)
+    // feed-rs 与 quick-xml 随结构放大的代价（命名空间、重复属性、xml:base 克隆）发生在解析内部，
+    // 先按结构上限预检；越界的 feed 整个拒绝，不做部分解析。
+    crate::feed_structure_guard::check_feed_structure(raw)
         .map_err(|violation| anyhow::anyhow!("拒绝解析 feed：{violation}"))?;
     let parser = feed_rs::parser::Builder::new().id_generator(|_, _, _| String::new()).build();
     let feed = parser.parse(raw.as_bytes()).context("解析 RSS/Atom feed 失败")?;

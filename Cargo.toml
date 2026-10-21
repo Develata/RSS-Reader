@@ -7,6 +7,8 @@ members = [
     "crates/rssr-domain",
     "crates/rssr-infra",
 ]
+# 本地打补丁的依赖副本，不是工作区成员（不跑它的 lint 与测试）。
+exclude = ["vendor/url"]
 resolver = "2"
 
 [workspace.package]
@@ -49,3 +51,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = { version = "2", features = ["serde"] }
 urlencoding = "2"
 webbrowser = "1"
+
+# `url` 2.5.8 处理 `..` 段时会反扫整个 authority，长用户名加大量 `../` 的地址解析是平方级。
+# 本地副本只改了 `Parser::last_slash_can_be_removed` 一处，说明与移除条件见 vendor/url/PATCH.md。
+[patch.crates-io]
+url = { path = "vendor/url" }

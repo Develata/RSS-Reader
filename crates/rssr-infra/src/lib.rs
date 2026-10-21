@@ -9,7 +9,7 @@ pub mod config_sync;
 pub mod db;
 mod feed_body;
 mod feed_normalization;
-mod feed_url_guard;
+mod feed_structure_guard;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod fetch;
 pub mod subscription_probe;

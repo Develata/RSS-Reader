@@ -76,6 +76,18 @@ mod tests {
     }
 
     #[test]
+    fn dot_segments_parse_in_linear_time() {
+        // 依赖 vendor/url 的补丁：原版 `url` 2.5.8 在根路径上处理每个 `..` 都反扫整个
+        // authority，这个输入在 debug 下要几十秒（release 约 4 s）；打过补丁不到 1 s。
+        // 补丁丢失时这个测试会明显变慢。
+        let n = 1 << 18;
+        let raw = format!("https://{}@e.test/{}", "a".repeat(n), "../".repeat(n));
+        let url = Url::parse(&raw).unwrap();
+        assert_eq!(url.path(), "/");
+        assert_eq!(url.username().len(), n);
+    }
+
+    #[test]
     fn ordinary_urls_parse_and_abusive_ones_do_not() {
         assert!(parse_untrusted_url("https://example.com/feed.xml").is_some());
         let base = Url::parse("https://example.com/a/b/").unwrap();

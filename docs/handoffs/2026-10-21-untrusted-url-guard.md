@@ -1,4 +1,4 @@
-# 不受信 URL 的解析上限：共享预检与 feed 解析前的地址扫描
+# 不受信 URL 的解析上限：`url` 根上修复、feed 结构预检与自有入口预检
 
 - 日期：2026-10-21
 - 作者 / Agent：Claude Code (Opus 5.5)
@@ -6,89 +6,81 @@
 - 当前 HEAD：见本文件所在提交
 - 相关 commit：本文件所在提交
 - 相关 tag / release：N/A
-- 状态：`draft`（feed 预检第 3 轮独立评审未通过，方向待 Develata 决定；本项目自有入口的预检已稳定）
+- 状态：`validated`（独立评审结果见下）
 
 ## 工作摘要
 
 `url` 2.5.8 处理每个 `..` 段时从序列化结果末尾反向找 `/`，在根路径上要扫过整个 authority；带长用户名、大量
-`../` 的地址解析是平方级（本机：规模翻倍耗时约 10 倍）。另外 feed-rs 会把 `xml:base` 克隆进每个元素，长基地址乘
-条目数也是平方级（1 MB 基地址 × 1000 条目约 9 s）。两者都发生在刷新时、本项目代码之前，阅读页的图片归一化已有点数
-上限，其余入口没有。按 Develata 选定的方案：共享预检 + feed-rs 之前的地址扫描 + 上游议题草稿（提交前给 Develata 看）。
+`../` 的地址解析是平方级（本机：规模翻倍耗时约 4–10 倍）。feed-rs 解析文章链接、重定向、本项目自己的各个入口都会
+走到这里。另外 feed-rs 把 `xml:base` 克隆进每个元素（1 MB 基地址 × 2000 条目约 9 s），quick-xml 的命名空间解析
+与重复属性检查也随结构放大。
+
+最初的方案是在 feed-rs 之前复刻它的读法、扫描会被当作地址的字符串，三轮独立评审每轮都找到新的读法分叉（未绑定前缀的
+回退、吞错后继续解析、解码器时机、原始与反转义值），不收敛。Develata 选定方案 B：
+
+1. **在根上修 `url`**：`vendor/url` 是 crates.io 的 `url` 2.5.8 原样副本，只改 `Parser::last_slash_can_be_removed`
+   一个函数（反向查找限制在路径内，结果不变），经 `[patch.crates-io]` 接入，工作区 `exclude` 掉。说明与移除条件见
+   `vendor/url/PATCH.md`。
+2. **feed 结构预检**（`feed_structure_guard.rs`）：只在字节层面数结构上限，不解码文本、不判断哪些字符串是地址。
+3. **自有入口预检**（`rssr-domain::url_guard`）：本项目自己把远端字符串交给 `url` 的地方统一限长与限点数，作为纵深防御。
+4. 上游议题草稿（`docs/upstream-drafts/`），提交前给 Develata 看。
 
 ## 影响范围
 
-- `crates/rssr-domain/src/url_guard.rs`（新）：`url_path_dots`、`untrusted_url_is_parseable`、
-  `parse_untrusted_url`、`join_untrusted_url`；上限 64 个点（`?`/`#` 之前，含 `%2e`，忽略 TAB/LF/CR）、8 KiB。
-- `crates/rssr-domain/src/validation.rs`：`parse_feed_url`（配置导入、OPML、WebDAV 拉取、添加订阅）先预检，
-  错误信息不再回显超长原文。
-- `crates/rssr-infra/src/feed_url_guard.rs`（新）+ `feed_normalization.rs`：feed-rs 解析前的扫描。
-- `crates/rssr-infra/src/feed_normalization.rs`：条目与站点链接改用 `parse_untrusted_url`。
-- `crates/rssr-infra/src/subscription_probe/html.rs`：`<base href>` 与 `<link rel=alternate>` 改用
-  `join_untrusted_url`，页面声明的订阅地址最多采纳 64 个。
+- `Cargo.toml`：`[patch.crates-io] url = { path = "vendor/url" }`，`workspace.exclude = ["vendor/url"]`；
+  `Cargo.lock` 里 `url` 不再指向 registry。
+- `vendor/url/`（新）：`url` 2.5.8 副本 + `PATCH.md`。
+- `crates/rssr-domain/src/url_guard.rs`（新）：`url_path_dots`、`untrusted_url_is_parseable`、`parse_untrusted_url`、
+  `join_untrusted_url`（上限 64 个点、8 KiB；`join` 时基地址也计入长度），以及确认补丁生效的 canary 测试。
+- `crates/rssr-domain/src/validation.rs`：`parse_feed_url`（配置导入、OPML、WebDAV 拉取、添加订阅）先预检。
+- `crates/rssr-infra/src/feed_structure_guard.rs`（新）+ `feed_normalization.rs`：feed-rs 解析前的结构预检；
+  条目与站点链接改用 `parse_untrusted_url`。
+- `crates/rssr-infra/src/subscription_probe/html.rs`：`<base href>` 与 `<link rel=alternate>` 走 `join_untrusted_url`，
+  页面声明的订阅地址最多采纳 64 个。
 - `crates/rssr-application/src/subscription_discovery.rs`：用户输入的订阅地址先预检。
-- `crates/rssr-web/src/proxy.rs` + `Cargo.toml`：代理的 `?url=` 与重定向 `Location` 先预检
-  （`rssr-web` 新增对纯领域 crate `rssr-domain` 的依赖）。
+- `crates/rssr-web/src/proxy.rs` + `Cargo.toml`：代理的 `?url=` 与重定向 `Location` 先预检（新增对纯领域 crate
+  `rssr-domain` 的依赖）。
 - `crates/rssr-infra/src/html/live_display.rs`：改用共享的 `url_path_dots`。
-- `crates/rssr-infra/Cargo.toml`：新增 `feed-quick-xml`（即 feed-rs 用的 quick-xml 0.41.0，同版本同特性，
-  Cargo 合并为同一份，`Cargo.lock` 只多两行依赖引用）。
+- `crates/rssr-infra/Cargo.toml`：新增 `feed-quick-xml`（即 feed-rs 用的 quick-xml 0.41.0，同版本同特性，合并为同一份）。
 
 ## 关键变更
 
-- **feed 扫描**（`check_feed_urls`）：与 feed-rs 相同的判定（前 8 KiB 里第一个 `<` 或 `{`）、相同的 quick-xml
-  分词配置、相同的文本/CDATA/实体合并与属性反转义；不做命名空间解析（那本身就是要防的平方级路径），自己数绑定。
-  - 结构：嵌套 ≤ 1024 层（quick-xml 的 `u16` 深度计数远未溢出）、同时在作用域内的命名空间声明 ≤ 256
-    （与 NsReader 一样不做重复检查地计数）、命名空间值 ≤ 256 字节（feed-rs 对每个带前缀的元素都会重新解码它）、
-    单个元素的属性错误（重复等，自己用哈希集合判重）≤ 16。这些同时挡住 feed-rs 自身的命名空间解析与重复属性回查的
-    超线性。文档中途的 XML 声明（会切换解码器、与 feed-rs 分叉）与无法解码的文本一律拒绝。
-  - 地址：只检查 feed-rs 会当作地址解析的位置：`link`/`icon`/`logo`/`url` 元素的文本，`href`/`url`/`src`/`uri`
-    属性（不带前缀，与 feed-rs 的属性名匹配一致），带前缀的元素只在前缀绑定到 Atom/RSS 命名空间时检查；
-    `xml:base` 按 feed-rs 的语义真实解析、拼接出基地址栈（原值先过点数与 512 字节检查，所以这一步解析有界），
-    拼出的基地址序列化后不超过 512 字节、点数不超过上限；JSON Feed 只检查 feed-rs 读取的 `home_page_url`、`feed_url`、
-    条目 `url`/`external_url`、附件 `url`，无法整体解析的 JSON 直接拒绝（否则深层扩展字段可以让检查失效而 feed-rs
-    照常解析），根、条目、附件必须是对象（serde 也接受按字段顺序写成数组的结构体）。
-  - 越界就整个 feed 拒绝（错误“拒绝解析 feed：…”，与解析失败同样处理），不做部分解析；正文省略号等不受影响。
-    XML 格式本身不对时不在这里报错，交给 feed-rs（同一个分词器，会在同一处失败）。
-- **共享预检**：上述各入口统一走 `parse_untrusted_url`/`join_untrusted_url`；`join` 时基地址也计入 8 KiB 上限。
+- **结构预检**：与 feed-rs 相同的 XML/JSON 判定（前 8 KiB 里第一个 `<` 或 `{`，JSON 直接放行）与相同的分词配置；
+  不做命名空间解析（那正是要防的路径），对 quick-xml 的读取错误能继续就继续（与 feed-rs 吞错后继续读一致）。上限：
+  嵌套 ≤ 1024 层；作用域内命名空间声明 ≤ 256 个（像 NsReader 一样连重复声明一起数）、原始值 ≤ 256 字节；单个元素的
+  属性错误（自己用哈希集合判重）≤ 16；作用域内 `xml:base` 原始字节和 ≤ 256（ASCII scheme 开头的绝对地址重新计），
+  并且每个元素按当前基地址字节数累计的克隆总量 ≤ 16 × 输入长度 + 1 MiB。所有计数都取“可能发生”的最大值（重复的、
+  正文子树里的 `xml:base` 也计），只会多拒绝、不会漏；越界就整个 feed 拒绝（“拒绝解析 feed：…”）。
 
 ## 验证与验收
 
+- `vendor/url` 与 registry 原版只差一个 hunk；在隔离副本上跑 `url` 自带的测试：66 个单元测试 + WPT URL 测试数据全部通过。
+- 点段复现（release，n = 65536，262 KB 输入）：原版 252 ms，补丁后 2.4 ms，与短 authority 的对照组同级，线性。
+- canary：`rssr-domain` 的 `dot_segments_parse_in_linear_time`（256 Ki 个 `../`）debug 下 0.13 s；补丁丢失时要几十秒。
 - 真实 feed（26 个：本机订阅 16 个 + 10 个常见公开 feed，含 Atom `xml:base`、JSON Feed、1.2 MB 大 feed）：feed-rs 能解析的
-  23 个全部照常解析，0 个被误拒；另 3 个 feed-rs 本身就解析失败。扫描开销每个 feed 毫秒级。
-- 新增测试：`rssr-domain` 预检单元测试；`feed_url_guard` 单元测试（普通 RSS/Atom/JSON 通过；链接文本、属性、字符引用、
-  CDATA 拆分、`%2\ne` 拆分、长/叠加 `xml:base`、JSON url 字段被拒）；`tests/test_feed_url_guard.rs` 压力契约
-  （4 MB 点段链接、1 MB `xml:base` × 1000 条目、JSON 点段在解析前被拒，debug 下合计 0.24 s；普通 feed 解析结果不变）；
-  订阅发现的数量上限与 `<base href>` 预检。
-- `cargo fmt --all --check`、`cargo clippy -j 1 --workspace --all-targets --locked -- -D warnings`：通过。
-- `cargo test -j 1 --workspace --locked`：452 通过，0 失败（第 1 轮评审修复后重跑；真实 feed 复测仍是 23 个照常、0 误拒）。
-- 独立评审（Codex）第 1 轮：4 个 BLOCKER（JSON 深度绕过、命名空间解析平方级、重复属性平方级、深度计数溢出）+
-  2 个 SHOULD_FIX（`xml:base` 长度模型、JSON 键后缀过宽），已按上文修复并加单元测试。
-- 第 2 轮：3 个 BLOCKER（JSON 顺序数组结构体绕过、文档中途 XML 声明切换解码器、长命名空间值反复解码）+
-  4 个 SHOULD_FIX（`xml:base` 3 倍估算不可靠、JSON `Value` 的对数因子、未知命名空间的 `link` 误拒、重复命名空间声明漏计），
-  除 JSON 对数因子外均已修复并加单元测试；修复后 453 个测试通过，真实 feed 复测 0 误拒。
-- `cargo check -j 1 -p rssr-app --target wasm32-unknown-unknown --locked`：通过。
+  23 个全部照常解析，0 误拒；3 个 feed-rs 本身就解析失败。
+- 压力契约 `tests/test_feed_structure_guard.rs`：4 MB 点段链接 feed 照常解析（地址超 8 KiB 不进入条目）、1 MB `xml:base`
+  × 1000 条目、32000 层命名空间、1 MiB 命名空间值 × 10 万元素、3.2 万重复属性都在解析前被拒，debug 下合计 0.91 s。
+- `cargo fmt --all --check`、`cargo clippy -j 1 --workspace --all-targets --locked -- -D warnings`：通过（`vendor/url` 不是
+  工作区成员，不参与 fmt/clippy/test，内容与 registry 原版逐字一致，只差补丁那一处）。
+- `cargo test -j 1 --workspace --locked`：452 通过，0 失败。
+- `cargo check -j 1 -p rssr-app --target wasm32-unknown-unknown --locked`：通过（wasm 构建同样使用补丁后的 `url`）。
 
-- 第 3 轮（539884a）：3 个 BLOCKER，全部是预检与 feed-rs 实际读法的分叉——未绑定/清空的前缀在 feed-rs 里回退为
-  RSS 命名空间（`<x:link>` 仍被当作链接）、预检在错误处返回成功而 feed-rs 吞掉同类错误继续解析（重复 `xml:base`、
-  描述子树里的 `xml:base`、非法字符引用）、命名空间长度按反转义后计而 feed-rs 反复解码原始值；另 3 个 SHOULD_FIX
-  （默认命名空间下的 prose `link` 误拒、所有解码失败一律拒绝造成 Shift_JIS 等 feed 兼容回退、JSON 作者继承的复制放大）。
-- 结论：与 html5ever 解析预算同样的模式——从外部复刻依赖的确切读法，每一轮都有新的分叉，不收敛。
+## 独立评审（Codex，gpt-6-astra，effort high）
+
+- 地址扫描方案（1fd6421 → 539884a）共 3 轮，未通过；每轮都是预检与 feed-rs 读法的新分叉，记录在 git 历史的本文件旧版。
+- 方案 B（本提交）：见下方记录。
 
 ## 结果
 
-- 本项目自有入口（`url_guard` 共享预检：feed 链接归一化、订阅输入、配置/OPML/WebDAV 导入、订阅发现、Web 代理）可合并，
-  这些是自己的调用，不存在复刻分叉。
-- feed-rs 之前的预检（`feed_url_guard`）对已知形状有效、真实 feed 0 误拒，但不是可证明的上界；方向待定：
-  - A：保留为纵深防御，修第 3 轮里便宜的几项（错误一律拒绝或保守继续、按原始值限制命名空间长度、未绑定前缀按 RSS 处理），
-    写明剩余风险，提交上游议题。
-  - B：`[patch.crates-io]` 修 `url` 的一个函数（把反向查找限制在路径内，草稿见 `docs/upstream-drafts/`），从根上消除所有入口
-    （feed-rs 内部、reqwest 重定向、本项目）的点段平方级；预检收缩为结构上限（`xml:base`、深度、命名空间、重复属性）。
-  - C：按此前搁置的计划用自有、有界的 feed 解析器替换 feed-rs（另开任务）。
+- 可合并（随方案 B 的独立评审结论）。正常 feed、订阅与导入不受影响；只拒绝结构异常的 feed 与超长/点段过多的输入。
 
 ## 风险与后续事项
 
-- 重定向 `Location` 在 reqwest/tower-http 内部解析，本项目只能管代理自己的一次 `join`；单个头的大小受 HTTP 头上限约束。
+- `vendor/url` 是一个需要跟进的本地补丁：`url` 有安全更新时要同步；上游修复发布后按 `PATCH.md` 移除。
 - `url`/IDNA 在任意 Unicode 主机名上的最坏复杂度未证明。
-- JSON Feed 预检构造完整的 `serde_json::Value`（对象是 `BTreeMap`），大量带长公共前缀的键有对数因子，未改成流式。
-- 仍直接解析的、输入可信度较高的位置：WebDAV 端点与远程路径（用户设置）、Web 端 `x-rssr-final-url`（本项目代理生成）、
+- JSON Feed 不做结构预检：feed-rs 会把顶层作者克隆进每个缺作者的条目、并线性去重作者，巨大的作者名或大量不同作者仍有
+  放大（feed-rs 的既有行为，待上游）。
+- 仍直接解析、输入可信度较高的位置：WebDAV 端点与远程路径（用户设置）、Web 端 `x-rssr-final-url`（本项目代理生成）、
   数据库/BrowserStore 里已序列化的地址（写入时已过预检）。
-- 上游：rust-url（点段反扫）与 feed-rs（`xml:base` 克隆放大）的议题草稿已写好，等 Develata 确认后提交。
+- 上游：rust-url（点段反扫）与 feed-rs（`xml:base` 克隆放大）议题草稿在 `docs/upstream-drafts/`，等 Develata 确认后提交。
