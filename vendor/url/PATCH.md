@@ -33,4 +33,4 @@ and noted that the dot-segment work is now linear by amortization.
 ## Removal
 
 Drop the `[patch.crates-io]` entry, the `exclude`, and this directory once an upstream `url` release contains an
-equivalent fix. Issue draft: `docs/upstream-drafts/rust-url-dot-segments.md`.
+equivalent fix. Upstream issue: https://github.com/servo/rust-url/issues/1163 (draft kept in `docs/upstream-drafts/rust-url-dot-segments.md`).

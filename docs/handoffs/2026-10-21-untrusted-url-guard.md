@@ -100,4 +100,5 @@
   放大（feed-rs 的既有行为，待上游）。
 - 仍直接解析、输入可信度较高的位置：WebDAV 端点与远程路径（用户设置）、Web 端 `x-rssr-final-url`（本项目代理生成）、
   数据库/BrowserStore 里已序列化的地址（写入时已过预检）。
-- 上游：rust-url（点段反扫）与 feed-rs（`xml:base` 克隆放大）议题草稿在 `docs/upstream-drafts/`，等 Develata 确认后提交。
+- 上游：经 Develata 确认已提交 servo/rust-url#1163（点段反扫）与 feed-rs/feed-rs#301（`xml:base` 克隆放大），草稿保留在
+  `docs/upstream-drafts/`；#1163 修复发布后按 `vendor/url/PATCH.md` 移除补丁。

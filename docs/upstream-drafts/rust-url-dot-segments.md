@@ -1,3 +1,4 @@
+**Filed:** servo/rust-url#1163 (2026-10-21)
 **Repo:** servo/rust-url
 **Title:** Parsing is quadratic in the number of `..` segments when the authority is long (`last_slash_can_be_removed` scans the whole serialization)
 

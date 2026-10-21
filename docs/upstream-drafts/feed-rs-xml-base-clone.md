@@ -1,3 +1,4 @@
+**Filed:** feed-rs/feed-rs#301 (2026-10-21)
 **Repo:** feed-rs/feed-rs
 **Title:** A long `xml:base` is cloned into every element, so parse time grows with base length × element count
 
@@ -59,4 +60,4 @@ The input grows by only about 10% across the four rows, while parse time grows t
 
 Share the base instead of cloning it per element, for example by keeping `Rc<Url>` (or `Arc<Url>`) on the `base_uris` stack and in `Element::xml_base`. That makes each element O(1) regardless of base length. Separately, every link is resolved with `Url::join` against that base, which copies the base once per link. Sharing the base doesn't remove that cost, so it may be worth documenting or capping the base length.
 
-Related: link and URL attributes are passed to `url::Url::parse`/`join`, which is quadratic in the number of `..` segments for inputs with a long authority (reported upstream as servo/rust-url#TBD). That one is best fixed in `url` itself; we carry a local patch for it.
+Related: link and URL attributes are passed to `url::Url::parse`/`join`, which is quadratic in the number of `..` segments for inputs with a long authority (reported upstream as servo/rust-url#1163). That one is best fixed in `url` itself; we carry a local patch for it.
