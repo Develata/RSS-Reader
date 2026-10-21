@@ -96,27 +96,28 @@ const ignoredConsoleErrors = [];
 const nativeMeasurements = [];
 let nativeEvidence;
 
-// Requests a check fails on purpose (path fragments): the browser logs their failure.
-const provokedFailures = new Set();
+// The requests a check failed on purpose (Network request ids): the browser logs their failure.
+const provokedRequests = new Set();
 
 function recordConsoleError(error) {
   if (error.text?.includes("/_dioxus?build_id=") && error.text?.includes('WebSocket connection')) {
     ignoredConsoleErrors.push({ ...error, reason: 'debug bundle live-reload endpoint is absent on rssr-web' });
     return;
   }
-  const provoked = [...provokedFailures].find((part) => error.url?.includes(part) || error.text?.includes(part));
-  if (provoked) {
-    ignoredConsoleErrors.push({ ...error, reason: `failure provoked by the check (${provoked})` });
+  if (error.networkRequestId && provokedRequests.has(error.networkRequestId)) {
+    ignoredConsoleErrors.push({ ...error, reason: 'a request the check failed on purpose' });
     return;
   }
   consoleErrors.push(error);
 }
 
 /// Fails the page's requests whose URL matches `pattern` (a CDP URL pattern) while `body` runs:
-/// with `answer` (status and protocol error body) or, without it, as a network failure.
-async function withFailedRequests(client, pattern, fragment, answer, body) {
-  provokedFailures.add(fragment);
-  const detach = client.on('Fetch.requestPaused', ({ requestId }) => {
+/// with `answer` (status and protocol error body) or, without it, as a network failure. Only the
+/// log entries of exactly those requests are ignored (by their Network request id; the Network
+/// domain is on in web mode): any other failure, of the same path included, still counts.
+async function withFailedRequests(client, pattern, answer, body) {
+  const detach = client.on('Fetch.requestPaused', ({ requestId, networkId }) => {
+    if (networkId) provokedRequests.add(networkId);
     const reply = answer
       ? client.send('Fetch.fulfillRequest', { requestId, responseCode: answer.status,
         responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
@@ -209,6 +210,7 @@ async function dispatchTouchScroll(client, point, scrollDeltaY) {
 async function seedAndNavigate(client, seed, nextPath, marker, themePreset = preset, { edit } = {}) {
   // No page stays open on the server being replaced: its requests would fail (and log errors).
   await navigate(client, 'about:blank');
+  pageBuild.reset();
   ({ cookie: session } = await harness.server.useSeed(seed, { preset: themePreset, edit }));
   if (!signedInThroughForm) {
     await navigate(client, `${base}/login?next=${encodeURIComponent(nextPath)}`);
@@ -721,7 +723,7 @@ async function checkEntriesInitialization(client) {
 
   // The first read fails (a network failure): the failure shows, the list still loads, and no
   // empty-library claim is made (formerly a failing browser storage).
-  await withFailedRequests(client, '*/api/v1/entries/bootstrap*', '/api/v1/entries/bootstrap', null, async () => {
+  await withFailedRequests(client, '*/api/v1/entries/bootstrap*', null, async () => {
     await navigate(client, `${base}/entries`);
     await selectorExists(client, '[data-layout="entries-main"] > [role="status"][data-state="error"]');
     await selectorExists(client, '[data-slot="entry-card-title"]');
@@ -848,7 +850,7 @@ async function checkPrimaryWorkflow(client) {
       result.sameBody && result.sameStatus && Math.abs(result.after-result.before)<=1 &&
       Math.abs(result.afterScroll-result.beforeScroll)<=1 && result.message && result.hidden && result.polite, result);
   }
-  await withFailedRequests(client, '*/api/v1/entries/2/read*', '/api/v1/entries/2/read',
+  await withFailedRequests(client, '*/api/v1/entries/2/read*',
     { status: 503, error: { code: 'unavailable', message: '服务器繁忙（测试）' } }, async () => {
       await tapSelector(client, '[data-action="mark-read"]');
       await selectorExists(client, '[data-page="reader"] [data-layout="status-banner"][data-state="error"]');
@@ -1790,14 +1792,20 @@ async function fillField(client, selector, text) {
   else await key(client, 'Backspace', 'Backspace');
 }
 
-/// Waits until a visible element's whole text is `text` (visible as Playwright's `waitFor` has it:
-/// a non-empty box and not `visibility: hidden`).
+/// Visible as Playwright's `waitFor` has it: a non-empty box, and not hidden by `visibility` (on
+/// the element or an ancestor; `checkVisibility` also covers `display: none` and
+/// `content-visibility`). A page expression taking the element.
+const VISIBLE = `(element => { const box = element.getBoundingClientRect();
+  return box.width > 0 && box.height > 0 && element.checkVisibility({visibilityProperty: true}); })`;
+
+/// Waits until the element that carries `text` as its whole text is visible: the innermost such
+/// element (no child of it has the same text), so a visible ancestor cannot stand in for a hidden
+/// one.
 async function textShown(client, text, selector = 'body *') {
-  await waitFor(client, `[...document.querySelectorAll(${JSON.stringify(selector)})].some(element => {
-    if (element.textContent.trim() !== ${JSON.stringify(text)}) return false;
-    const box = element.getBoundingClientRect();
-    return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
-  })`);
+  const wanted = JSON.stringify(text);
+  await waitFor(client, `[...document.querySelectorAll(${JSON.stringify(selector)})].some(element =>
+    element.textContent.trim() === ${wanted} &&
+    ![...element.children].some(child => child.textContent.trim() === ${wanted}) && ${VISIBLE}(element))`);
 }
 
 const pathname = client => evaluate(client, 'location.pathname');
@@ -1977,7 +1985,8 @@ async function checkReadingPosition(client) {
 async function checkReaderMetadataAndTime(client) {
   const feeds = harness.feeds;
   const long = '长来源LongUnbrokenSource'.repeat(25);
-  const sourceCount = `document.querySelector('[data-slot="entry-filters-source-unread-count"]')?.textContent.trim()`;
+  // The unread count of the first source, while it is visible (null otherwise).
+  const sourceCount = `(count => count && ${VISIBLE}(count) ? count.textContent.trim() : null)(document.querySelector('[data-slot="entry-filters-source-unread-count"]'))`;
   const fits = () => evaluate(client, 'document.documentElement.scrollWidth <= innerWidth');
   const meta = () => evaluate(client, `[...document.querySelectorAll('[data-slot="reader-meta"]')].map(element => element.textContent)`);
   await forgetShellPreferences(client);
@@ -2041,7 +2050,7 @@ async function checkReaderMetadataAndTime(client) {
     assertThat('marking unread in the list updates the count; search and archive filters do not change it',
       searched === '· 1' && archived === '· 1', {searched, archived});
     // A flag write the server refuses (formerly a failing browser storage): the counts stay.
-    await withFailedRequests(client, '*/api/v1/entries/2/read*', '/api/v1/entries/2/read',
+    await withFailedRequests(client, '*/api/v1/entries/2/read*',
       {status: 503, error: {code: 'unavailable', message: '服务器繁忙（测试）'}}, async () => {
         await evaluate(client, `[...document.querySelectorAll('[data-action="mark-read"]')].find(button => button.textContent.includes('标已读')).click()`);
         await selectorExists(client, '[data-state="error"]');
@@ -2099,7 +2108,7 @@ async function checkReaderMetadataAndTime(client) {
       await textShown(client, 'Demo Entry Two', '[data-slot="reader-title"]');
       await textShown(client, `发布时间：${full}`);
       await pointerClick(client, '[data-action="activate-home"]');
-      await selectorExists(client, '[data-slot="entry-card-meta"]');
+      await waitFor(client, `(meta => !!meta && ${VISIBLE}(meta))(document.querySelector('[data-slot="entry-card-meta"]'))`);
       const dates = await evaluate(client, `({cards: [...document.querySelectorAll('[data-slot="entry-card-meta"]')].map(element => element.textContent),
         groups: [...document.querySelectorAll('[data-slot="entry-group-title"]')].map(element => element.textContent)})`);
       assertThat(`card and date group agree: ${timezoneId}, ${full}, UTC fallback=${fail}`,
@@ -2119,7 +2128,9 @@ async function checkReaderMetadataAndTime(client) {
 /// The original link opens a separate tab without an opener; the reader stays.
 async function checkOpenOriginal(client) {
   const before = await evaluate(client, 'location.href');
-  const listTargets = async () => (await (await fetch(`${cdpBase}/json/list`)).json());
+  // Bounded, the body included (the signal covers reading it).
+  const listTargets = async () =>
+    (await (await fetch(`${cdpBase}/json/list`, {signal: AbortSignal.timeout(5000)})).json());
   const known = new Set((await listTargets()).map(target => target.id));
   await pointerClick(client, '[data-action="open-original"]');
   let opened;
@@ -2136,7 +2147,7 @@ async function checkOpenOriginal(client) {
       opener && await evaluate(client, 'location.href') === before, {opener});
   } finally {
     popup.close();
-    await fetch(`${cdpBase}/json/close/${opened.id}`).catch(() => {});
+    await fetch(`${cdpBase}/json/close/${opened.id}`, {signal: AbortSignal.timeout(5000)}).catch(() => {});
   }
 }
 
@@ -2220,7 +2231,8 @@ async function run() {
     });
     client.on('Log.entryAdded', ({ entry }) => {
       if (entry?.level === 'error') {
-        recordConsoleError({ type: 'log.error', text: entry.text, source: entry.source, url: entry.url });
+        recordConsoleError({ type: 'log.error', text: entry.text, source: entry.source, url: entry.url,
+          networkRequestId: entry.networkRequestId });
       }
     });
 

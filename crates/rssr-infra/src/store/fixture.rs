@@ -143,16 +143,28 @@ impl BrowserStateSeed {
         self.core.settings.custom_css = css;
     }
 
-    /// The active subscriptions' ids and addresses (the ones the server refreshes; a seed may
-    /// keep a deleted subscription's entries).
-    pub fn feed_urls(&self) -> Vec<(i64, String)> {
+    /// The active subscriptions (the ones the server refreshes; a seed may keep a deleted
+    /// subscription's entries).
+    pub fn active_feeds(&self) -> Vec<ActiveFeed> {
         self.core
             .feeds
             .iter()
             .filter(|feed| !feed.is_deleted)
-            .map(|feed| (feed.id, feed.url.clone()))
+            .map(|feed| ActiveFeed {
+                id: feed.id,
+                url: feed.url.clone(),
+                last_fetched_at: feed.last_fetched_at,
+            })
             .collect()
     }
+}
+
+/// An active subscription of a seed, as written: a refresh of the library changes its fetch time.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ActiveFeed {
+    pub id: i64,
+    pub url: String,
+    pub last_fetched_at: Option<OffsetDateTime>,
 }
 
 fn parse<T: serde::de::DeserializeOwned>(part: &str, raw: &str) -> StoreResult<T> {

@@ -251,15 +251,16 @@ export class RssrWebServer {
     });
     this.buildId = await startedBuild(() => output);
     const cookie = await this.signIn('/entries');
-    // The start-up refresh of this server: every active subscription fetched by it (counts were
-    // reset before it started) and a fetch time of this run stored. Seeds may carry a fetch time
-    // in the future (2099), so a time alone does not show that the refresh happened.
+    // The start-up refresh of this server, finished: every active subscription fetched by it
+    // (counts were reset before it started) and its result stored, which replaces the seeded
+    // fetch time (`fetched_at_ms`, as the fixture tool wrote it) with one of this run. A time alone
+    // shows nothing: a seed may carry any time, recent or in the future (2099).
     await waitUntil(`start-up refresh of ${seed}`, 30000, async () => {
       const snapshot = await this.api('GET', '/api/v1/feeds', cookie);
-      return feeds.every(({ id, url }) => {
+      return feeds.every(({ id, url, fetched_at_ms: seeded }) => {
         const feed = snapshot.feeds.find((candidate) => candidate.id === id);
         const fetchedAt = Date.parse(feed?.last_fetched_at ?? '');
-        return options.feeds.count(new URL(url).pathname) > 0
+        return options.feeds.count(new URL(url).pathname) > 0 && fetchedAt !== seeded
           && fetchedAt >= startedAt - 1000 && fetchedAt <= Date.now() + 1000;
       });
     });
@@ -309,7 +310,8 @@ async function startedBuild(output) {
 /// The page must come from the server's build: the server refuses writes from another build, which
 /// would fail a check's writes with a misleading message. The page sends its build id with every
 /// request to the server (`x-rssr-build`); this watches them (CDP Network domain on `client`) and
-/// `verify()` throws unless every one carried exactly the server's id, and at least one was seen.
+/// `verify()` throws unless every one since `reset()` (before each page load) carried exactly the
+/// server's id, and at least one was seen.
 export async function watchPageBuild(client, base, server) {
   const seen = new Set();
   client.on('Network.requestWillBeSent', ({ request }) => {
@@ -319,9 +321,12 @@ export async function watchPageBuild(client, base, server) {
   });
   await client.send('Network.enable');
   return {
+    reset() {
+      seen.clear();
+    },
     verify() {
       const others = [...seen].filter((id) => id !== server.buildId);
-      if (seen.size === 0) throw new Error('the page made no request to the server yet');
+      if (seen.size === 0) throw new Error('this page made no request to the server');
       if (others.length) {
         throw new Error(`the page is from build ${others.join(', ')}, the server from ${server.buildId}: ` +
           'build both from one checkout (or with the same RSSR_BUILD_ID)');

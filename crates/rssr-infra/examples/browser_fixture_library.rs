@@ -9,17 +9,43 @@
 //!
 //! The data directory must be new or empty (nothing is written otherwise). Without `--seed` only
 //! the policy is written: the server creates an empty library on its first start, as on a first
-//! run. Prints the active subscriptions as JSON (`{"feeds":[{"id":1,"url":"…"}]}`) for the
-//! harness, which waits for the server's start-up refresh to fetch each of them.
+//! run. Prints the active subscriptions as JSON
+//! (`{"feeds":[{"id":1,"url":"…","fetched_at_ms":4070908800000}]}`, the seeded fetch time in Unix
+//! milliseconds or null) for the harness, which waits until the server's start-up refresh has
+//! fetched each of them and stored a new fetch time.
 
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use rssr_infra::store::fixture::{BrowserStateSeed, write_library};
 
-/// Public only, except the loopback host the feed fixture server runs on (test data only).
-const POLICY: &str =
-    "{\n  \"mode\": \"public_only\",\n  \"allow\": [\"127.0.0.1/32\"],\n  \"deny\": []\n}\n";
+/// Only the loopback host the feed fixture server runs on (test data only): `public_only` with
+/// 127.0.0.1 allowed, and every other address denied (`deny` wins over the public addresses
+/// `public_only` would allow).
+fn policy() -> String {
+    let deny: Vec<String> = all_but_loopback().into_iter().chain(["::/0".to_owned()]).collect();
+    serde_json::to_string_pretty(&serde_json::json!({
+        "mode": "public_only",
+        "allow": ["127.0.0.1/32"],
+        "deny": deny,
+    }))
+    .expect("a JSON value serializes")
+        + "\n"
+}
+
+/// The IPv4 networks that together hold every address except 127.0.0.1: for each prefix length
+/// `p` in 1..=32, the addresses that agree with 127.0.0.1 on the first `p - 1` bits and differ in
+/// bit `p`. They are disjoint and their union is everything else.
+fn all_but_loopback() -> Vec<String> {
+    let loopback = u32::from(std::net::Ipv4Addr::LOCALHOST);
+    (1..=32u32)
+        .map(|prefix| {
+            let shift = 32 - prefix;
+            let network = (loopback ^ (1 << shift)) & (u32::MAX << shift);
+            format!("{}/{prefix}", std::net::Ipv4Addr::from(network))
+        })
+        .collect()
+}
 
 struct Options {
     data_dir: PathBuf,
@@ -77,7 +103,7 @@ fn write_policy(data_dir: &std::path::Path) -> Result<()> {
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     let mut file = options.open(&path).with_context(|| format!("create {}", path.display()))?;
-    std::io::Write::write_all(&mut file, POLICY.as_bytes())?;
+    std::io::Write::write_all(&mut file, policy().as_bytes())?;
     Ok(())
 }
 
@@ -96,9 +122,13 @@ async fn main() -> Result<()> {
     if let Some(seed) = &seed {
         write_library(&options.data_dir, seed).await.context("write the library")?;
         feeds = seed
-            .feed_urls()
+            .active_feeds()
             .into_iter()
-            .map(|(id, url)| serde_json::json!({ "id": id, "url": url }))
+            .map(|feed| {
+                let fetched_at_ms =
+                    feed.last_fetched_at.map(|at| (at.unix_timestamp_nanos() / 1_000_000) as i64);
+                serde_json::json!({ "id": feed.id, "url": feed.url, "fetched_at_ms": fetched_at_ms })
+            })
             .collect();
     }
     println!("{}", serde_json::json!({ "feeds": feeds }));
