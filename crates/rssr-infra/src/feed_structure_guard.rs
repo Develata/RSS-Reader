@@ -68,8 +68,11 @@ pub(crate) fn check_feed_structure(raw: &str) -> Result<(), FeedStructureViolati
 struct OpenElement {
     /// 自身与祖先声明的命名空间数。
     bindings: usize,
-    /// 当前作用域内 `xml:base` 原始字节数之和。
+    /// feed-rs 在这个元素上使用的基地址长度上界（按原始字节估算）。
     base_bytes: usize,
+    /// 最近一个绝对 `xml:base` 原始值的字节数：以 `/` 开头的相对值替换路径、保留它的
+    /// scheme 与 authority，长度不超过它加上自身。
+    absolute_bytes: usize,
 }
 
 /// `xml:base` 原始值是否以 scheme 开头（绝对地址替换上级基地址，不与它拼接）。只认纯 ASCII
@@ -100,7 +103,15 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
 
     loop {
         let position = reader.buffer_position();
-        let event = match reader.read_event_into(&mut buf) {
+        let read = reader.read_event_into(&mut buf);
+        // 这里按原始字节找 `xml:base`、`xmlns`；一旦解码器换成 UTF-16 之类与 ASCII 不兼容的
+        // 编码（编码声明，或 quick-xml 按开头字节自动识别，后者不产生声明事件），feed-rs 会按
+        // 那种编码解码属性名，字节层面就看不见了。正文已经是 UTF-8 字符串，这样的编码本来就
+        // 不对，quick-xml 也要求不带转码时遇到它就停止处理。所以每读一次都检查。
+        if !reader.decoder().encoding().is_ascii_compatible() {
+            return Err(FeedStructureViolation::IncompatibleEncoding);
+        }
+        let event = match read {
             Ok(event) => event,
             // feed-rs 吞掉部分错误后会继续读，这里也继续；读不动了就交给 feed-rs。
             Err(_) if reader.buffer_position() > position => {
@@ -110,19 +121,15 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
             Err(_) => return Ok(()),
         };
         match event {
-            // 这里按原始字节找 `xml:base`、`xmlns`；声明成 UTF-16 之类与 ASCII 不兼容的编码后，
-            // feed-rs 会按那种编码解码属性名，字节层面就看不见了。正文已经是 UTF-8 字符串，
-            // 这样的声明本来就不对，quick-xml 也要求不带转码时遇到它就停止处理。
-            Event::Decl(_) if !reader.decoder().encoding().is_ascii_compatible() => {
-                return Err(FeedStructureViolation::IncompatibleEncoding);
-            }
             Event::Start(ref start) => {
                 if open.len() >= MAX_XML_DEPTH {
                     return Err(FeedStructureViolation::TooDeep);
                 }
                 let parent = open.last();
                 let mut bindings = parent.map_or(0, |parent| parent.bindings);
-                let mut base_bytes = parent.map_or(0, |parent| parent.base_bytes);
+                let parent_base_bytes = parent.map_or(0, |parent| parent.base_bytes);
+                let mut base_bytes = parent_base_bytes;
+                let mut absolute_bytes = parent.map_or(0, |parent| parent.absolute_bytes);
                 // 与 NsReader 一样不做重复检查地遍历（它会把重复的命名空间声明都压进绑定表），
                 // 重复自己判断。
                 let mut seen = HashSet::new();
@@ -159,17 +166,23 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                         has_base = true;
                         let value = attribute.value.as_ref();
                         base_bytes = if starts_with_scheme(value) {
+                            absolute_bytes = value.len();
                             value.len()
+                        } else if value.starts_with(b"/") && !value.starts_with(b"//") {
+                            absolute_bytes.saturating_add(value.len())
                         } else {
                             base_bytes.saturating_add(value.len())
                         };
                     }
                 }
-                base_copies = base_copies.saturating_add(base_bytes as u64);
+                // 有的处理器（RSS `image` 下的 `url`/`link`）用父元素的基地址解析子元素的文本，
+                // 所以按父子两者中较大的计。
+                let charged = base_bytes.max(parent_base_bytes);
+                base_copies = base_copies.saturating_add(charged as u64);
                 if base_copies > base_copy_budget {
                     return Err(FeedStructureViolation::XmlBaseTooLarge);
                 }
-                open.push(OpenElement { bindings, base_bytes });
+                open.push(OpenElement { bindings, base_bytes, absolute_bytes });
             }
             Event::End(_) => {
                 open.pop();
@@ -252,6 +265,38 @@ mod tests {
     }
 
     #[test]
+    fn child_bases_do_not_hide_the_parent_base() {
+        // RSS `image` 下的 `link` 用父元素 `image` 的基地址解析，子元素自己的 xml:base 不能把计费
+        // 降下来。
+        let image = format!(
+            r#"<rss version="2.0"><channel><image xml:base="https://e.test/{}/"><url xml:base="x:y">https://e.test/logo.png</url>{}</image></channel></rss>"#,
+            "a".repeat(1 << 20),
+            r#"<link xml:base="x:y">p</link>"#.repeat(20_000)
+        );
+        assert_eq!(check_feed_structure(&image), Err(FeedStructureViolation::XmlBaseTooLarge));
+    }
+
+    #[test]
+    fn root_relative_bases_replace_the_path() {
+        // 以 `/` 开头的相对基地址替换路径，不随层数累加。
+        let base = format!("/{}/", "p".repeat(90));
+        let articles: String = (0..200)
+            .map(|_| {
+                format!(
+                    "<entry><content type=\"xhtml\">{}{}{}</content></entry>",
+                    format!(r#"<div xml:base="{base}">"#).repeat(12),
+                    "<span>word</span>".repeat(50),
+                    "</div>".repeat(12)
+                )
+            })
+            .collect();
+        let feed = format!(
+            r#"<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://e.test/">{articles}</feed>"#
+        );
+        assert_eq!(check_feed_structure(&feed), Ok(()));
+    }
+
+    #[test]
     fn ordinary_xml_base_chains_pass() {
         // 正常长度的相对基地址链，即使按原始字节累加也远在复制总量之内。
         let chain = format!(
@@ -277,6 +322,22 @@ mod tests {
         );
         assert_eq!(
             check_feed_structure(&midway),
+            Err(FeedStructureViolation::IncompatibleEncoding)
+        );
+        // 没有声明、靠开头字节 `00 3C 00 3F` 自动识别成 UTF-16BE 的也一样。
+        let utf16be = |text: &str| -> String {
+            text.encode_utf16().flat_map(u16::to_be_bytes).map(char::from).collect()
+        };
+        let detected = format!(
+            "\0<{} {}=\"{}\">{}</{}>",
+            utf16be("?:feed"),
+            utf16be("xml:base"),
+            utf16be("https://e.test/"),
+            format!("<{}/>", utf16be("entry")).repeat(10),
+            utf16be("?:feed")
+        );
+        assert_eq!(
+            check_feed_structure(&detected),
             Err(FeedStructureViolation::IncompatibleEncoding)
         );
         let declared = r#"<?xml version="1.0" encoding="UTF-16"?><rss version="2.0"></rss>"#;
