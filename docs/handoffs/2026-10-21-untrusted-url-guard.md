@@ -77,7 +77,8 @@
 - canary：`rssr-domain` 的 `dot_segments_parse_in_linear_time`（4 MB、1 Mi 个 `../`，另起线程、60 s 上限）debug 下约
   0.5 s；变异检查：恢复原版 `parser.rs` 后该测试在 60 s 时明确失败，再恢复补丁。
 - 真实 feed（26 个：本机订阅 16 个 + 10 个常见公开 feed，含 Atom `xml:base`、JSON Feed、1.2 MB 大 feed）：feed-rs 能解析的
-  23 个全部照常解析，0 误拒；3 个 feed-rs 本身就解析失败。
+  23 个全部照常解析，0 误拒；3 个 feed-rs 本身就解析失败。语料没有入库（含本机订阅内容），只在本次会话的临时目录，
+  这是作者自测结果，Codex 没有重放。
 - 压力契约 `tests/test_feed_structure_guard.rs`：4 MB 点段链接 feed 照常解析（地址超 8 KiB 不进入条目）、1 MB `xml:base`
   × 1000 条目、32000 层命名空间、1 MiB 命名空间值 × 10 万元素、3.2 万重复属性都在解析前被拒，debug 下合计 0.91 s。
 - `cargo fmt --all --check`、`cargo clippy -j 1 --workspace --all-targets --locked -- -D warnings`：通过（`vendor/url` 不是
@@ -133,14 +134,20 @@
     254 个声明通过、255 个被拒）。
   - 语料 0 误拒、全套 456 通过；变异检查：去掉属性名字节项、预置绑定改回 0，各自恰好让对应测试失败。
   - 兼容边界补充：单个标签约 1000～4000 个属性（随输入长度）或每项 200 个属性重复几十次的 feed 会被拒。
+- 方案 B 第 7 轮（08c5668）：ACCEPT_WITH_NITS，无 BLOCKER。确认 n·(n + K) 在核对过的实现上是确定性上界（前 32 个键的
+  线性比较、哈希计算 O(K)、桶探测与扩容 O(n²)、完整哈希命中回查 O(n·K)），254/255 绑定边界与长名测试的计费算术
+  独立复算一致，深度、命名空间、xml:base、编码各项未发现绕过。两条 nit 已记录：升级复核清单加入标准库哈希表实现
+  （见“结果”）；真实语料结论是作者自测、未经独立重放（见“验证与验收”）。
 
 ## 结果
 
-- `url` 补丁已经评审确认；结构预检是纵深防御，第 6 轮问题已修复，待 Codex 第 7 轮确认。真实 feed 语料 0 误拒，但计费
+- `url` 补丁已经评审确认；结构预检是纵深防御，第 7 轮 Codex 判 ACCEPT_WITH_NITS（无 BLOCKER）。真实 feed 语料 0 误拒，但计费
   是保守上界，已知会误拒的合法形状：多层重复写长绝对基地址（如三层 321 字节）配大量微小 XHTML 元素；带重复或写错
   属性、又有数 KB 长属性值的标签；单个标签上数百个以上属性。超长/点段过多的地址按设计拒绝。
-- 预检仍依赖的依赖行为（升级 feed-rs/quick-xml 时要重新核对）：前 8 KiB 的 XML/JSON 判定、Reader 分词配置、成功
-  Start/End 的作用域推进、ASCII 兼容编码下按原始字节识别属性名、带检查与不带检查遍历在无错误无重复时一致。
+- 预检仍依赖的依赖行为（升级 feed-rs、quick-xml 或 Rust 工具链时要重新核对）：前 8 KiB 的 XML/JSON 判定、Reader
+  分词配置、成功 Start/End 的作用域推进、ASCII 兼容编码下按原始字节识别属性名、带检查与不带检查遍历在无错误无重复时
+  一致，以及属性判重的代价上界——quick-xml 0.41.0 用的是标准库 `HashSet<u64>`（`DefaultHasher::new()` 固定种子），
+  核对时的标准库实现是 hashbrown 0.17.1（rustc 1.97.0 / 1.99.0），`Cargo.lock` 锁不住这一层。
 
 ## 风险与后续事项
 
