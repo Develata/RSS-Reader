@@ -284,10 +284,15 @@ define('unknown-write-then-reread', {}, async (s) => {
   await seedDemo('/entries', ENTRIES);
   // The write runs on the server; its answer is lost.
   await main.faults.add({ match: request('PUT', '/api/v1/entries/2/read'), action: 'failResponse', times: 1 });
+  await main.traffic.settled();
+  // The reread must come from the unknown outcome itself, not from a focus event: a trusted click
+  // can focus the window (a reread trigger), so the button is clicked from the page's script.
+  await evaluate(main.client, `window.__acceptanceFocus = 0; addEventListener('focus', () => window.__acceptanceFocus++)`);
   const mark = main.traffic.mark();
-  await pointerClick(main.client, `${card(2)} [data-action="mark-read"]`);
+  await clickSelector(main.client, `${card(2)} [data-action="mark-read"]`);
   await waitBanner(main, BANNER.entries, 'unknown', '更改已读状态');
   await main.traffic.settled();
+  s.check('no reread trigger fired meanwhile', await evaluate(main.client, 'window.__acceptanceFocus') === 0);
   s.check('the write was sent once (no automatic resend)', main.traffic.count(mark, 'PUT', '/api/v1/entries/2/read') === 1, main.traffic.log(mark));
   s.check('it ran on the server', (await entry(2)).is_read === true);
   const afterWrite = main.traffic.since(mark).findIndex((r) => r.method === 'PUT');
