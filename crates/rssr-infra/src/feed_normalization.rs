@@ -1,5 +1,6 @@
 use anyhow::Context;
 use feed_rs::model::{Entry as FeedRsEntry, Feed as FeedRsFeed, Text};
+use rssr_domain::parse_untrusted_url;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
@@ -62,6 +63,10 @@ pub fn parse_feed_xml(raw: &str, warn_on_missing_content: bool) -> anyhow::Resul
     // distinguish a source-provided GUID from that fallback; guessing by "looks like a hash"
     // incorrectly discards legitimate hexadecimal GUIDs. Keep missing IDs empty here and let
     // our normalization choose the URL/title+timestamp fallback explicitly.
+    // 会被 feed-rs 当作地址解析的字符串先过一遍上限：超线性的代价都发生在 feed-rs 内部，
+    // 解析完再看已经来不及。越界的 feed 整个拒绝，不做部分解析。
+    crate::feed_url_guard::check_feed_urls(raw)
+        .map_err(|violation| anyhow::anyhow!("拒绝解析 feed：{violation}"))?;
     let parser = feed_rs::parser::Builder::new().id_generator(|_, _, _| String::new()).build();
     let feed = parser.parse(raw.as_bytes()).context("解析 RSS/Atom feed 失败")?;
     normalize_feed(feed, warn_on_missing_content)
@@ -79,7 +84,7 @@ pub fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>)
 
 fn normalize_feed(feed: FeedRsFeed, warn_on_missing_content: bool) -> anyhow::Result<ParsedFeed> {
     let title = text_value(feed.title.as_ref());
-    let site_url = feed.links.first().and_then(|link| Url::parse(link.href.as_str()).ok());
+    let site_url = feed.links.first().and_then(|link| parse_untrusted_url(&link.href));
     let description = feed.description.as_ref().map(text_content);
     let mut entries = Vec::with_capacity(feed.entries.len());
     let mut warnings = MissingContentWarningAggregation::default();
@@ -103,7 +108,7 @@ fn normalize_entry(
     warnings: &mut MissingContentWarningAggregation,
 ) -> anyhow::Result<Option<ParsedEntry>> {
     let title = text_value(entry.title.as_ref()).unwrap_or_else(|| "Untitled entry".to_string());
-    let url = entry.links.first().and_then(|link| Url::parse(link.href.as_str()).ok());
+    let url = entry.links.first().and_then(|link| parse_untrusted_url(&link.href));
     let author = entry.authors.first().map(|author| author.name.clone());
     let summary = entry.summary.as_ref().map(text_content);
     let content_html = entry.content.as_ref().and_then(|content| content.body.clone());

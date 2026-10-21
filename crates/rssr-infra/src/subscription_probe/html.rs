@@ -5,6 +5,9 @@ use rssr_application::FeedDiscoveryCandidate;
 use std::cell::RefCell;
 use url::Url;
 
+/// 一个页面里最多采纳的 `<link rel="alternate">` 订阅声明数。
+const MAX_DISCOVERED_LINKS: usize = 64;
+
 #[derive(Default)]
 struct Head {
     finished: bool,
@@ -66,7 +69,10 @@ impl TokenSink for Sink {
             })
             && let Some(href) = attr("href")
         {
-            head.links.push((href, attr("title")));
+            // 页面头部声明的订阅地址最多看这么多个：每个都要相对基地址拼接一次。
+            if head.links.len() < MAX_DISCOVERED_LINKS {
+                head.links.push((href, attr("title")));
+            }
         }
         // 正文开始的普通元素结束隐式 head，脚本内容交给 tokenizer 原生 raw-text 状态。
         if matches!(name, "script" | "style" | "title" | "noscript") {
@@ -95,13 +101,13 @@ pub(super) fn discover(page_url: &Url, body: &str) -> Vec<FeedDiscoveryCandidate
     let head = tokenizer.sink.0.into_inner();
     let base = head
         .base
-        .and_then(|href| page_url.join(href.trim()).ok())
+        .and_then(|href| rssr_domain::join_untrusted_url(page_url, href.trim()))
         .filter(|u| matches!(u.scheme(), "http" | "https"))
         .unwrap_or_else(|| page_url.clone());
     let mut result = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for (href, title) in head.links {
-        if let Ok(url) = base.join(href.trim())
+        if let Some(url) = rssr_domain::join_untrusted_url(&base, href.trim())
             && matches!(url.scheme(), "http" | "https")
         {
             let url = rssr_domain::normalize_feed_url(&url);
@@ -114,4 +120,32 @@ pub(super) fn discover(page_url: &Url, body: &str) -> Vec<FeedDiscoveryCandidate
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use url::Url;
+
+    use super::{MAX_DISCOVERED_LINKS, discover};
+
+    #[test]
+    fn declared_feed_links_are_capped_and_base_href_is_guarded() {
+        let page = Url::parse("https://e.test/blog/").unwrap();
+        let links: String = (0..200)
+            .map(|i| {
+                format!(r#"<link rel="alternate" type="application/rss+xml" href="/f{i}.xml">"#)
+            })
+            .collect();
+        let html = format!("<html><head>{links}</head><body></body></html>");
+        assert_eq!(discover(&page, &html).len(), MAX_DISCOVERED_LINKS);
+
+        // 点段过多的 `<base href>` 不参与拼接，退回页面地址。
+        let base = format!("https://{}@e.test/{}", "a".repeat(1 << 12), "../".repeat(1 << 12));
+        let html = format!(
+            r#"<html><head><base href="{base}"><link rel="alternate" type="application/atom+xml" href="feed.xml"></head></html>"#
+        );
+        let found = discover(&page, &html);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].url.as_str(), "https://e.test/blog/feed.xml");
+    }
 }

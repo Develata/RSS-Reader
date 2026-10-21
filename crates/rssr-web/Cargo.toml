@@ -15,6 +15,7 @@ clap.workspace = true
 hmac.workspace = true
 rand_core.workspace = true
 reqwest.workspace = true
+rssr-domain = { path = "../rssr-domain" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

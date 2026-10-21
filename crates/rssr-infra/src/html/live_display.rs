@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
 
+use rssr_domain::{MAX_URL_PATH_DOTS, url_path_dots};
 use url::Url;
 
 const IMG_LAZY_SOURCE_ATTRIBUTES: &[&str] =
@@ -760,11 +761,8 @@ fn parse_srcset_candidate(raw: &str) -> Option<(String, u32)> {
     Some((url, score))
 }
 
-/// 可解析地址的路径部分（`?`、`#` 之前）最多含多少个点（含 `%2e`）。`url` 2.5 处理每个 `..` 段时
-/// 会从序列化结果末尾反向找 `/`，在根路径上要扫过整个 authority；一个带长用户名、几百万个 `../`
-/// 的地址就能让一次解析平方级。正常图片地址的路径里只有个位数的点。
-const MAX_URL_PATH_DOTS: usize = 64;
-
+/// 点数上限见 [`rssr_domain::MAX_URL_PATH_DOTS`]：`url` 处理每个 `..` 段都要反向扫描一遍，
+/// 在根路径上会扫过整个 authority，点数不设限就是平方级。
 pub(crate) fn resolve_asset_url(
     raw: &str,
     document_base_url: Option<&Url>,
@@ -788,35 +786,6 @@ fn is_web_url(url: &Url) -> bool {
 
 fn web_base(base: Option<&Url>) -> Option<&Url> {
     base.filter(|base| is_web_url(base))
-}
-
-/// `raw` 在第一个 `?` 或 `#` 之前的点数，`%2e` 按一个点计（`url` 把它当作点段处理）。
-/// 与 URL 解析器一样先忽略 TAB、LF、CR：解析器会删掉它们，`%2\ne` 在它眼里就是 `%2e`。
-/// 这里数的是所有点（包括主机名与文件名里的），比真正的点段多，只会多拒绝、不会漏。
-fn url_path_dots(raw: &str) -> usize {
-    let mut dots = 0_usize;
-    // 已经读到的 `%2e` 前缀长度：0 无，1 读到 `%`，2 读到 `%2`。
-    let mut encoded = 0_u8;
-    for byte in raw.bytes().filter(|byte| !matches!(byte, b'\t' | b'\n' | b'\r')) {
-        if matches!(byte, b'?' | b'#') {
-            break;
-        }
-        encoded = match (encoded, byte) {
-            (1, b'2') => 2,
-            (2, b'e' | b'E') => {
-                dots += 1;
-                0
-            }
-            (_, b'%') => 1,
-            _ => {
-                if byte == b'.' {
-                    dots += 1;
-                }
-                0
-            }
-        };
-    }
-    dots
 }
 
 // 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。

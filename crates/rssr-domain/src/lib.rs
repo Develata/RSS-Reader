@@ -6,6 +6,7 @@ pub mod entry;
 pub mod feed;
 pub mod repository;
 pub mod settings;
+pub mod url_guard;
 pub mod validation;
 
 pub use app_state::{AppStateSnapshot, EntriesWorkspaceState, EntryGroupingPreference};
@@ -22,6 +23,10 @@ pub use repository::{
 pub use settings::{
     ConfigFeed, ConfigPackage, DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ARCHIVE_AFTER_MONTHS,
     MAX_ENTRIES_PAGE_SIZE, MAX_REFRESH_INTERVAL_MINUTES, StartupView, ThemeMode, UserSettings,
+};
+pub use url_guard::{
+    MAX_UNTRUSTED_URL_BYTES, MAX_URL_PATH_DOTS, join_untrusted_url, parse_untrusted_url,
+    untrusted_url_is_parseable, url_path_dots,
 };
 pub use validation::{
     CONFIG_PACKAGE_VERSION, parse_and_normalize_feed_url, parse_feed_url, validate_config_package,

@@ -45,7 +45,9 @@ impl PreparedSubscription {
 
 impl SubscriptionWorkflow {
     pub async fn prepare_subscription(&self, raw_url: &str) -> Result<PrepareSubscriptionOutcome> {
-        let url = normalize_feed_url(&Url::parse(raw_url.trim()).context("订阅 URL 不合法")?);
+        let url = normalize_feed_url(
+            &rssr_domain::parse_untrusted_url(raw_url.trim()).context("订阅 URL 不合法")?,
+        );
         if !matches!(url.scheme(), "http" | "https") {
             bail!("订阅只支持 HTTP 或 HTTPS 地址。");
         }

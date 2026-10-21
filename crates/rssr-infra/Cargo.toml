@@ -8,6 +8,9 @@ authors.workspace = true
 [dependencies]
 ammonia.workspace = true
 html5ever = "0.39"
+# 与 feed-rs 用同一个 quick-xml（版本与特性都一致，Cargo 合并成同一份），
+# 让 feed 地址预检与 feed-rs 的读法逐字一致。feed-rs 升级 quick-xml 时这里跟着改。
+feed-quick-xml = { package = "quick-xml", version = "0.41.0", features = ["encoding"] }
 encoding_rs = "0.8"
 futures-util = "0.3"
 anyhow.workspace = true

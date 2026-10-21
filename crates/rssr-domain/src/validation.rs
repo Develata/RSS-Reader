@@ -149,6 +149,11 @@ pub fn validate_config_package(package: &ConfigPackage) -> crate::Result<()> {
 
 /// 解析并归一化一个 feed URL，失败时给出带原始输入的错误。
 pub fn parse_feed_url(raw: &str) -> crate::Result<Url> {
+    // 配置导入、OPML、WebDAV 拉取都会走到这里，地址来自外部文件。超长或点段过多的地址先拒绝，
+    // 错误信息也不回显整段原文。
+    if !crate::url_guard::untrusted_url_is_parseable(raw) {
+        return Err(invalid(format!("feed URL 过长或包含过多的点段（{} 字节）", raw.len())));
+    }
     let url =
         Url::parse(raw).map_err(|error| invalid(format!("无效的 feed URL：{raw}（{error}）")))?;
     if !matches!(url.scheme(), "http" | "https") {

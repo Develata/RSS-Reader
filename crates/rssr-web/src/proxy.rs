@@ -75,7 +75,8 @@ async fn build_proxy_response(response: reqwest::Response) -> Response {
 }
 
 fn parse_proxy_feed_url(raw: &str) -> Result<Url, String> {
-    let url = Url::parse(raw).map_err(|_| "feed URL 不合法。".to_string())?;
+    let url =
+        rssr_domain::parse_untrusted_url(raw).ok_or_else(|| "feed URL 不合法。".to_string())?;
     if !matches!(url.scheme(), "http" | "https") {
         return Err("只允许代理 http/https feed URL。".to_string());
     }
@@ -262,9 +263,8 @@ async fn fetch_proxied_feed(
         };
         let location =
             location.to_str().map_err(|_| "feed 代理收到无法解析的重定向地址。".to_string())?;
-        let redirected = current_url
-            .join(location)
-            .map_err(|_| "feed 代理收到非法的重定向地址。".to_string())?;
+        let redirected = rssr_domain::join_untrusted_url(&current_url, location)
+            .ok_or_else(|| "feed 代理收到非法的重定向地址。".to_string())?;
         let (next_url, next_addr) = resolve_validated_target(redirected.as_str()).await?;
         current_url = next_url;
         current_addr = next_addr;
