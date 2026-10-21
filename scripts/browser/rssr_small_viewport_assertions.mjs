@@ -61,6 +61,14 @@ const deviceScaleFactor = Number.parseFloat(
   cli.get('--dpr') ?? process.env.DEVICE_SCALE_FACTOR ?? '3',
 );
 const preset = cli.get('--preset') ?? process.env.THEME_PRESET ?? '';
+// `regression` (the default), `theme-matrix` (the reader in every theme) or `feed-smoke` (a first
+// run adding and reading a subscription).
+const suite = cli.get('--suite') ?? 'regression';
+if (!['regression', 'theme-matrix', 'feed-smoke'].includes(suite)) throw new Error(`unknown suite ${suite}`);
+if (suite !== 'regression' && (cli.has('--native-target') || cli.get('--directory-only') === 'true' || cli.has('--directory-perf'))) {
+  throw new Error(`--suite ${suite} runs on the server only, without directory options`);
+}
+if (suite === 'theme-matrix' && preset) throw new Error('--suite theme-matrix runs every theme; --preset does not apply');
 // Native mode attaches only to an explicitly selected, already running Dioxus
 // WebView with an isolated, pre-seeded SQLite fixture supplied by the caller.
 const nativeTarget = cli.get('--native-target');
@@ -2121,9 +2129,68 @@ async function checkOpenOriginal(client) {
   }
 }
 
+// --- Suites besides the regression: the reader in every theme, and the first-run feed smoke.
+
+const THEME_MATRIX = [
+  // [preset, the theme's mark in the page (its accent colour)]
+  ['', ''],
+  ['atlas-sidebar', '#b24c3d'],
+  ['newsprint', '#8f3f2b'],
+  ['amethyst-glass', '#8b5cf6'],
+  ['midnight-ledger', '#53c0bb'],
+];
+
+async function checkReaderThemeMatrix(client) {
+  for (const [theme, mark] of THEME_MATRIX) {
+    const slug = theme || 'default';
+    await seedAndNavigate(client, 'reader-demo', '/entries/2',
+      '[data-page="reader"][data-position-ready="true"] [data-slot^="reader-body-"]', theme);
+    await captureArtifact(client, slug);
+    const page = await evaluate(client, `(() => {
+      const html = document.documentElement.outerHTML;
+      return {reader: !!document.querySelector('[data-page="reader"] [data-layout="reader-page"], [data-page="reader"][data-layout="reader-page"]'),
+        title: document.querySelector('[data-slot="reader-title"]')?.textContent.trim(),
+        customCss: !!document.getElementById('user-custom-css'),
+        mark: ${JSON.stringify(mark)} === '' || html.includes(${JSON.stringify(mark)})};
+    })()`);
+    assertThat(`theme ${slug}: the reader shows the entry ${theme ? 'with the theme' : 'without custom CSS'}`,
+      page.reader && page.title === 'Demo Entry Two' && page.customCss === Boolean(theme) && page.mark, page);
+  }
+}
+
+/// A first run: the server creates the library; the page adds a subscription through the form,
+/// refreshes it and opens its entries.
+async function checkFeedSmoke(client) {
+  const name = 'smoke-feed';
+  const feedUrl = `${harness.feeds.base}/new/${name}.xml`;
+  const card = `[...document.querySelectorAll('li[data-layout="feed-card"]')].find(card => card.textContent.includes(${JSON.stringify(`Added fixture ${name}`)}))`;
+  await seedAndNavigate(client, null, '/feeds', '[data-page="feeds"] [data-field="feed-url-input"]', '');
+  await evaluate(client, `document.querySelector('[data-field="feed-url-input"]').focus()`);
+  await client.send('Input.insertText', {text: feedUrl});
+  await clickSelector(client, '[data-action="add-feed"]');
+  await waitFor(client, `!!${card}`, 90000);
+  const before = await evaluate(client, `${card}.dataset.lastFetchedAt`);
+  await evaluate(client, `${card}.querySelector('[data-action="refresh-feed"]').click()`);
+  await waitFor(client, `(() => { const card = ${card};
+    if (card.dataset.refreshState === 'failed') throw new Error('refresh failed: ' + card.dataset.fetchError);
+    return card.dataset.refreshState === 'success' && BigInt(card.dataset.lastFetchedAt || '0') > BigInt(${JSON.stringify(before || '0')});
+  })()`, 90000);
+  assertThat('the added subscription was fetched when added and when refreshed',
+    harness.feeds.count(`/new/${name}.xml`) === 2, {fetches: harness.feeds.count(`/new/${name}.xml`)});
+  await evaluate(client, `${card}.querySelector('[data-nav="feed-entries"]').click()`);
+  await selectorExists(client, '[data-page="entries"][data-entry-scope="feed"]', 90000);
+  await textShown(client, `Added fixture entry ${name}`, '[data-slot="entry-card-title"]');
+  await captureArtifact(client, 'browser-feed-smoke');
+  assertThat('a first run adds, refreshes and reads a subscription', true);
+}
+
 async function run() {
   await mkdir(artifactDir, { recursive: true });
   let client;
+  // An interrupted run still stops the server it started.
+  for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+    process.once(signal, () => { (harness?.close() ?? Promise.resolve()).finally(() => process.exit(code)); });
+  }
   try {
     if (!nativeTarget) harness = await startHarness(serverOptions);
     const page = nativeTarget ? await nativePage() : await newPage('about:blank', cdpBase);
@@ -2166,6 +2233,12 @@ async function run() {
       await checkDirectoryContracts(client, directoryEnvironment);
     } else if (nativeTarget) {
       await checkNativeWindow(client, page);
+    } else if (suite === 'theme-matrix') {
+      await setViewport(client, width, height, true, deviceScaleFactor);
+      await checkReaderThemeMatrix(client);
+    } else if (suite === 'feed-smoke') {
+      await setViewport(client, width, height, true, deviceScaleFactor);
+      await checkFeedSmoke(client);
     } else {
       await setViewport(client, width, height, true, deviceScaleFactor);
 

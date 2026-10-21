@@ -37,6 +37,7 @@ export class FeedFixtureServer {
     this.holds = []; // { match, waiting: [{ respond }] }
     this.invalid = new Set(); // paths answered once with an invalid body
     this.titles = new Map(); // seed -> Map(feed id -> the seeded title)
+    this.addedAt = new Map(); // added feed name -> publication date of its entry
   }
 
   async start() {
@@ -117,11 +118,13 @@ export class FeedFixtureServer {
     const added = pathname.match(/^\/new\/([^/]+)\.xml$/);
     if (added) {
       const name = decodeURIComponent(added[1]);
+      // Dated when it is first served (then kept), so the entry is never in the archive.
+      if (!this.addedAt.has(name)) this.addedAt.set(name, new Date().toUTCString());
       response.writeHead(200, headers).end(rss(`Added fixture ${name}`, [{
         title: `Added fixture entry ${name}`,
         link: `https://example.com/added/${name}`,
         guid: `added-${name}`,
-        pubDate: 'Sat, 01 Aug 2026 00:00:00 GMT',
+        pubDate: this.addedAt.get(name),
       }]));
       return;
     }
@@ -178,26 +181,31 @@ export class RssrWebServer {
   /// waits until its start-up refresh has fetched and stored every active subscription, and
   /// returns a session cookie (signed in through the login form's endpoint). `edit` changes a copy
   /// of the seed first: it gets the four parsed files (`core`, `app_state`, `entry_flags`,
-  /// `entry_content`) and mutates them.
+  /// `entry_content`) and mutates them. Without a seed (`null`) the server starts on an empty data
+  /// directory and creates the library itself, as on a first run.
   async useSeed(seed, { preset, edit } = {}) {
     const { options } = this;
     await this.stop();
     this.generation += 1;
-    const dataDir = path.join(options.workDir, `data-${this.generation}-${seed}`);
+    const dataDir = path.join(options.workDir, `data-${this.generation}-${seed ?? 'empty'}`);
     rmSync(dataDir, { recursive: true, force: true });
-    const seedsDir = edit ? editedSeed(options.seedsDir, seed,
-      path.join(options.workDir, `seeds-${this.generation}`), edit) : options.seedsDir;
-    const core = readJson(path.join(seedsDir, `${seed.replace(/-/g, '_')}_core.json`));
-    options.feeds.titles.set(seed, new Map(core.feeds.filter((feed) => feed.title)
-      .map((feed) => [String(feed.id), feed.title])));
-    const args = ['--seeds', seedsDir, '--seed', seed, '--data-dir', dataDir,
-      '--feed-base', options.feeds.base];
-    const css = preset ? themeFile(options.themesDir, preset) : undefined;
-    if (css) args.push('--custom-css', css);
+    const args = ['--data-dir', dataDir];
+    if (seed) {
+      const seedsDir = edit ? editedSeed(options.seedsDir, seed,
+        path.join(options.workDir, `seeds-${this.generation}`), edit) : options.seedsDir;
+      const core = readJson(path.join(seedsDir, `${seed.replace(/-/g, '_')}_core.json`));
+      options.feeds.titles.set(seed, new Map(core.feeds.filter((feed) => feed.title)
+        .map((feed) => [String(feed.id), feed.title])));
+      args.push('--seeds', seedsDir, '--seed', seed, '--feed-base', options.feeds.base);
+      const css = preset ? themeFile(options.themesDir, preset) : undefined;
+      if (css) args.push('--custom-css', css);
+    } else if (preset || edit) {
+      throw new Error('an empty library has no preset or edits');
+    }
     const prepared = await run(options.fixtureBin, args);
     const feeds = JSON.parse(prepared.stdout).feeds;
     options.feeds.resetCounts();
-    this.log(`seed ${seed}${preset ? ` (${preset})` : ''} in ${dataDir}`);
+    this.log(`seed ${seed ?? '(empty library)'}${preset ? ` (${preset})` : ''} in ${dataDir}`);
 
     const startedAt = Date.now();
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
@@ -213,7 +221,11 @@ export class RssrWebServer {
       no_proxy: '127.0.0.1,localhost',
     });
     const child = spawn(options.serverBin, [], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-    const write = (chunk) => appendFileSync(options.logFile, chunk);
+    let output = '';
+    const write = (chunk) => {
+      appendFileSync(options.logFile, chunk);
+      output += chunk;
+    };
     child.stdout.on('data', write);
     child.stderr.on('data', write);
     this.child = child;
@@ -221,6 +233,10 @@ export class RssrWebServer {
       if (child.exitCode !== null) throw new Error(`rssr-web exited with ${child.exitCode}`);
       return (await fetch(`${this.base}/healthz`).catch(() => null))?.ok === true;
     });
+    if (!this.buildChecked) {
+      await verifyBuild(() => output, options.staticDir);
+      this.buildChecked = true;
+    }
     const cookie = await this.signIn('/entries');
     // The start-up refresh: every subscription fetched and its result stored.
     await waitUntil(`start-up refresh of ${seed}`, 30000, async () => {
@@ -254,6 +270,28 @@ export class RssrWebServer {
     const response = await fetch(`${this.base}${pathname}`, { method, headers: { Cookie: cookie } });
     if (!response.ok) throw new Error(`${method} ${pathname}: ${response.status}`);
     return response.json();
+  }
+}
+
+/// The page must come from the server's build: the server refuses writes from another build, which
+/// would fail the regression's writes with a misleading message. The server logs its build id at
+/// start; the page's id is compiled into the wasm module its entry script loads.
+async function verifyBuild(output, staticDir) {
+  // Strip terminal colours before reading `build="…"` from the start-up line.
+  const startLine = () => output().replace(/\x1b\[[0-9;]*m/g, '').match(/starting rssr-web on \S+ build="([^"]+)"/);
+  await waitUntil('the build id in the server output', 10000, async () => startLine() !== null);
+  const server = startLine()[1];
+  const index = readFileSync(path.join(staticDir, 'index.html'), 'utf8');
+  const script = index.match(/<script[^>]+src="\/(?:\.\/)?([^"]+\.js)"/)?.[1];
+  if (!script) throw new Error(`no entry script in ${staticDir}/index.html`);
+  // The module the script starts (`module_or_path`), not wasm-bindgen's unused default name.
+  const module = readFileSync(path.join(staticDir, script), 'utf8')
+    .match(/module_or_path:"\/(?:\.\/)?([^"]+\.wasm)"/)?.[1];
+  if (!module) throw new Error(`no wasm module started by ${script}`);
+  const wasm = readFileSync(path.join(staticDir, module));
+  if (!wasm.includes(Buffer.from(server))) {
+    throw new Error(`the page (${module}) is not from the server's build ${server}: build both from one ` +
+      'checkout (or with the same RSSR_BUILD_ID)');
   }
 }
 

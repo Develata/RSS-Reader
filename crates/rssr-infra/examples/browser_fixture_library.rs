@@ -3,13 +3,14 @@
 //! server, and an outbound policy that lets the server reach that loopback server only.
 //!
 //! ```text
-//! browser_fixture_library --seeds <dir> --seed <name> --data-dir <dir> --feed-base <url>
-//!     [--custom-css <file>]
+//! browser_fixture_library --data-dir <dir> [--seeds <dir> --seed <name> --feed-base <url>
+//!     [--custom-css <file>]]
 //! ```
 //!
-//! The data directory must not hold a library yet. Prints the subscriptions as JSON
-//! (`{"feeds":[{"id":1,"url":"…"}]}`) for the harness, which waits for the server's start-up
-//! refresh to fetch each of them.
+//! The data directory must not hold a library yet. Without `--seed` only the policy is written:
+//! the server creates an empty library on its first start, as on a first run. Prints the active
+//! subscriptions as JSON (`{"feeds":[{"id":1,"url":"…"}]}`) for the harness, which waits for the
+//! server's start-up refresh to fetch each of them.
 
 use std::path::PathBuf;
 
@@ -21,9 +22,14 @@ const POLICY: &str =
     "{\n  \"mode\": \"public_only\",\n  \"allow\": [\"127.0.0.1/32\"],\n  \"deny\": []\n}\n";
 
 struct Options {
+    data_dir: PathBuf,
+    library: Option<Library>,
+}
+
+/// The library to write: a seed, its subscriptions served from `feed_base`.
+struct Library {
     seeds: PathBuf,
     seed: String,
-    data_dir: PathBuf,
     feed_base: String,
     custom_css: Option<PathBuf>,
 }
@@ -43,13 +49,20 @@ fn options() -> Result<Options> {
             other => bail!("unknown option {other}"),
         }
     }
-    Ok(Options {
-        seeds: seeds.context("--seeds is required")?,
-        seed: seed.context("--seed is required")?,
-        data_dir: data_dir.context("--data-dir is required")?,
-        feed_base: feed_base.context("--feed-base is required")?,
+    let data_dir = data_dir.context("--data-dir is required")?;
+    let Some(seed) = seed else {
+        if seeds.is_some() || feed_base.is_some() || custom_css.is_some() {
+            bail!("--seeds, --feed-base and --custom-css need --seed");
+        }
+        return Ok(Options { data_dir, library: None });
+    };
+    let library = Library {
+        seeds: seeds.context("--seeds is required with --seed")?,
+        seed,
+        feed_base: feed_base.context("--feed-base is required with --seed")?,
         custom_css,
-    })
+    };
+    Ok(Options { data_dir, library: Some(library) })
 }
 
 /// Seeds are named with dashes (`home-reader`), their files with underscores (`home_reader_*`).
@@ -71,22 +84,30 @@ fn write_policy(data_dir: &std::path::Path) -> Result<()> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let options = options()?;
-    let mut seed = BrowserStateSeed::read(&options.seeds, &file_prefix(&options.seed))
-        .with_context(|| format!("read seed {}", options.seed))?;
-    seed.serve_feeds_from(&options.feed_base, &options.seed);
-    if let Some(css) = &options.custom_css {
+    let seed = options.library.as_ref().map(read_seed).transpose()?;
+    std::fs::create_dir_all(&options.data_dir)?;
+    write_policy(&options.data_dir)?;
+    let mut feeds = Vec::new();
+    if let Some(seed) = &seed {
+        write_library(&options.data_dir, seed).await.context("write the library")?;
+        feeds = seed
+            .feed_urls()
+            .into_iter()
+            .map(|(id, url)| serde_json::json!({ "id": id, "url": url }))
+            .collect();
+    }
+    println!("{}", serde_json::json!({ "feeds": feeds }));
+    Ok(())
+}
+
+fn read_seed(library: &Library) -> Result<BrowserStateSeed> {
+    let mut seed = BrowserStateSeed::read(&library.seeds, &file_prefix(&library.seed))
+        .with_context(|| format!("read seed {}", library.seed))?;
+    seed.serve_feeds_from(&library.feed_base, &library.seed);
+    if let Some(css) = &library.custom_css {
         seed.set_custom_css(
             std::fs::read_to_string(css).with_context(|| format!("read {}", css.display()))?,
         );
     }
-    std::fs::create_dir_all(&options.data_dir)?;
-    write_policy(&options.data_dir)?;
-    write_library(&options.data_dir, &seed).await.context("write the library")?;
-    let feeds: Vec<_> = seed
-        .feed_urls()
-        .into_iter()
-        .map(|(id, url)| serde_json::json!({ "id": id, "url": url }))
-        .collect();
-    println!("{}", serde_json::json!({ "feeds": feeds }));
-    Ok(())
+    Ok(seed)
 }
