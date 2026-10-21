@@ -170,6 +170,9 @@ const banner = (page, selector) => evaluate(page.client, `(banner => banner && {
 const waitBanner = (page, selector, tone, part, timeoutMs = 20000) => waitFor(page.client,
   `(banner => !!banner && banner.dataset.state === ${JSON.stringify(tone)} && banner.textContent.includes(${JSON.stringify(part)}))(document.querySelector(${JSON.stringify(selector)}))`, timeoutMs);
 
+/// Whether the element `selector` names is rendered (computed visibility and a box).
+const shown = (page, selector) => evaluate(page.client, `(element => !!element && ${VISIBLE}(element))(document.querySelector(${JSON.stringify(selector)}))`);
+
 /// Chooses `value` in a select as a person does (change event).
 const chooseScript = (field, value) => `(() => {
   const select = document.querySelector('[data-field="${field}"]');
@@ -758,6 +761,40 @@ define('slow-departure-lands-late', { long: true }, async (s) => {
   main.server.signedInThroughForm = false;
 });
 
+define('later-edit-not-kept-stays', {}, async (s) => {
+  await seedDemo('/settings', SETTINGS);
+  await choose(main, 'theme-mode', 'dark');
+  // Once the departure has kept the draft, the browser refuses the next write and the page is
+  // edited (by its own timer: DevTools waits while the navigation is on its way). The page must not
+  // leave with the older draft (review C4C2-R2-01).
+  await evaluate(main.client, `(() => { const wait = setInterval(() => {
+    if (!sessionStorage.getItem('rssr.settings-draft')) return;
+    clearInterval(wait);
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (this === window.sessionStorage) throw new DOMException('acceptance: storage full', 'QuotaExceededError');
+      return setItem.call(this, key, value);
+    };
+    setTimeout(() => ${chooseScript('list-density', 'compact')}, 500);
+  }, 50); })()`);
+  const navigation = await leaveToSignIn(s, 'hold');
+  await sleep(4000);
+  // Were the departure still under way, letting it go would leave for the sign-in page.
+  await navigation.release();
+  await sleep(1500);
+  s.check('the page stayed: same document, still on the settings page', await sameDocument(main)
+    && (await location(main)) === '/settings');
+  s.check('with the edits in the form, the stale draft no longer stored',
+    (await fieldValue(main, 'theme-mode')) === 'dark' && (await fieldValue(main, 'list-density')) === 'compact'
+      && (await draft(main)) === null, await draft(main));
+  const notice = '[data-slot="app-notice"][data-notice="sign-in"]';
+  s.check('the notice says the draft could not be kept, offering to sign in anyway', await evaluate(main.client,
+    `(n => n?.textContent.includes('浏览器暂时无法保留设置草稿'))(document.querySelector('${notice}'))`)
+    && await shown(main, notice) && await shown(main, '[data-action="sign-in-anyway"]'));
+  // The session ended: the next seed signs in through the form again.
+  main.server.signedInThroughForm = false;
+});
+
 // --- V1: reader -----------------------------------------------------------------------------------
 
 define('reader-recovers-without-localizing', {}, async (s) => {
@@ -828,7 +865,7 @@ define('settings-read-fails-at-start', {}, async (s) => {
   await navigate(main.client, `${base}/entries`);
   const notice = '[data-slot="app-notice"][data-notice="settings-load"]';
   await waitFor(main.client, `(n => n?.textContent.includes('读取设置失败') && n.textContent.includes('暂用默认外观'))(document.querySelector('${notice}'))`);
-  s.check('the start-up failure is shown, with a retry', await evaluate(main.client, `!!document.querySelector('[data-action="retry-settings-load"]')`));
+  s.check('the start-up failure is shown, with a retry (rendered)', await shown(main, notice) && await shown(main, '[data-action="retry-settings-load"]'));
   const mark = main.traffic.mark();
   await clickSelector(main.client, '[data-nav="settings"]');
   await selectorExists(main.client, SETTINGS);
@@ -838,9 +875,10 @@ define('settings-read-fails-at-start', {}, async (s) => {
   await main.faults.add({ match: request('GET', '/api/v1/settings'), action: 'fail', times: 1 });
   await navigate(main.client, `${base}/entries`);
   await selectorExists(main.client, '[data-action="retry-settings-load"]');
-  await clickSelector(main.client, '[data-action="retry-settings-load"]');
+  s.check('shown again, with its retry (rendered)', await shown(main, notice) && await shown(main, '[data-action="retry-settings-load"]'));
+  await pointerClick(main.client, '[data-action="retry-settings-load"]');
   await waitFor(main.client, `!document.querySelector('${notice}')`);
-  s.check('the retry recovers it too', true);
+  s.check('the retry, clicked, recovers it too', true);
 });
 
 define('startup-target-fails', {}, async (s) => {
@@ -851,10 +889,11 @@ define('startup-target-fails', {}, async (s) => {
   await waitFor(main.client, `(n => n?.textContent.includes('解析启动页面失败') && n.textContent.includes('已打开全部文章'))(document.querySelector('${notice}'))`);
   await waitUntil('the redirect to all entries', 10000, async () => (await location(main)) === '/entries');
   await sleep(7000);
-  s.check('the notice stays after the redirect (no timer)', await evaluate(main.client, `!!document.querySelector('${notice}')`));
-  await clickSelector(main.client, '[data-action="dismiss-startup-failure"]');
+  s.check('the notice stays after the redirect (no timer), rendered with its dismiss button',
+    await shown(main, notice) && await shown(main, '[data-action="dismiss-startup-failure"]'));
+  await pointerClick(main.client, '[data-action="dismiss-startup-failure"]');
   await waitFor(main.client, `!document.querySelector('${notice}')`);
-  s.check('and can be dismissed', true);
+  s.check('and can be dismissed with a click', true);
 });
 
 // --- R2-07: failures and unknown outcomes are visible -------------------------------------------
@@ -997,20 +1036,40 @@ define('background-tab-time-limit', { long: true }, async (s) => {
 
 // --- Run --------------------------------------------------------------------------------------------
 
-/// Whether `error` is the network log entry of an answer `expected` describes.
+/// The browser's own network log entry (not an exception or `console.error`), from the page's
+/// origin when it names a URL.
+const networkEntry = (error) => error.type === 'log.error' && error.source === 'network';
+const sameOrigin = (url, page) => {
+  try {
+    return new URL(url).host === new URL(page).host;
+  } catch {
+    return false;
+  }
+};
+
+/// The debug bundle's live-reload socket to the page's own server (rssr-web has no such endpoint).
+function liveReload(error) {
+  const socket = /^WebSocket connection to '([^']+)' failed/.exec(error.text ?? '')?.[1];
+  if (!socket) return false;
+  const url = new URL(socket);
+  return url.pathname === '/_dioxus' && url.searchParams.has('build_id') && sameOrigin(socket, error.page);
+}
+
+/// Whether `error` is the network log entry of an answer `expected` describes, from the page's own
+/// origin.
 function expectedAnswer(error, { status, path }) {
-  if (error.type !== 'log.error' || error.source !== 'network' || !error.url) return false;
+  if (!error.url || !sameOrigin(error.url, error.page)) return false;
   if (!error.text?.includes(`the server responded with a status of ${status} `)) return false;
   const pathname = new URL(error.url).pathname;
   return path instanceof RegExp ? path.test(pathname) : pathname === path;
 }
 
-/// Why a console error is part of the scenario, or undefined when it is a failure.
+/// Why a console error is part of the scenario, or undefined when it is a failure. Only the
+/// browser's network log entries can be (review C4C2-R2-02).
 function ignoredBecause(scenario, provoked, error) {
-  if (error.text?.includes('/_dioxus?build_id=') && error.text?.includes('WebSocket')) {
-    return 'debug bundle live-reload endpoint is absent on rssr-web';
-  }
-  if (error.type === 'log.error' && error.networkRequestId && provoked.has(error.networkRequestId)) {
+  if (!networkEntry(error)) return undefined;
+  if (liveReload(error)) return 'debug bundle live-reload endpoint is absent on rssr-web';
+  if (error.networkRequestId && provoked.has(error.networkRequestId)) {
     return 'a request the scenario failed on purpose';
   }
   const expected = scenario.expected.find((answer) => expectedAnswer(error, answer));
@@ -1034,14 +1093,15 @@ async function run() {
   const unknown = (only ?? []).filter((name) => !scenarios.some((scenario) => scenario.name === name));
   if (unknown.length) throw new Error(`--only: no such scenario: ${unknown.join(', ')}`);
   await mkdir(artifactDir, { recursive: true });
-  harness = await startHarness(serverOptions);
-  for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
-    process.once(signal, () => { harness.close().finally(() => process.exit(code)); });
-  }
   let failed = false;
-  // A failure outside any scenario (the browser, the harness): the run did not happen as asked.
+  // A failure outside any scenario (the harness, the browser, the clean-up): the run did not
+  // happen as asked (reviews C4C2-10, C4C2-R2-03).
   let runError;
   try {
+    harness = await startHarness(serverOptions);
+    for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+      process.once(signal, () => { harness.close().finally(() => process.exit(code)); });
+    }
     const version = await (await fetch(`${cdpBase}/json/version`, { signal: AbortSignal.timeout(10000) })).json();
     browser = connect(version.webSocketDebuggerUrl);
     main = await openPage(base);
@@ -1083,14 +1143,18 @@ async function run() {
     }
   } catch (error) {
     runError = error.stack ?? String(error);
-    throw error;
-  } finally {
-    await writeFile(path.join(artifactDir, 'assertions.json'), JSON.stringify({
-      status: failed || runError ? 'fail' : 'pass', long, error: runError, scenarios: results }, null, 2), 'utf8');
-    await main?.close();
-    browser?.close();
-    await harness.close();
   }
+  for (const step of [() => main?.close(), () => browser?.close(), () => harness?.close()]) {
+    try {
+      await step();
+    } catch (error) {
+      runError ??= `clean-up: ${error.stack ?? error}`;
+    }
+  }
+  // Written last and every time, over any record an earlier run left.
+  await writeFile(path.join(artifactDir, 'assertions.json'), JSON.stringify({
+    status: failed || runError ? 'fail' : 'pass', long, error: runError, scenarios: results }, null, 2), 'utf8');
+  if (runError) throw new Error(`acceptance did not run as asked: ${runError}`);
   if (failed) throw new Error('acceptance failed; see assertions.json');
 }
 
