@@ -53,9 +53,11 @@ pub(crate) fn peek() -> Option<SettingsPatch> {
 
 /// Removes the kept draft: the page has it (and the shell keeps it from now on), so it is
 /// restored once. Not once the page is leaving: what is stored then is for the page that comes
-/// next, and the navigation may still be on its way (review C4B-B-R2-01).
+/// next, and the navigation may still be on its way (review C4B-B-R2-01); should the departure
+/// turn out stopped, the draft goes then ([`departure_stopped`]).
 pub(crate) fn forget() {
     if LEAVING.with(Cell::get) {
+        TAKEN_WHILE_LEAVING.with(|taken| taken.set(true));
         return;
     }
     platform::remove(KEY);
@@ -64,6 +66,8 @@ pub(crate) fn forget() {
 thread_local! {
     /// The page started to leave (reload, sign-in) with its draft kept.
     static LEAVING: Cell<bool> = const { Cell::new(false) };
+    /// A page of this app took the kept draft while it was leaving.
+    static TAKEN_WHILE_LEAVING: Cell<bool> = const { Cell::new(false) };
 }
 
 /// How long a departure may take before the page counts it as stopped (the user stopped the
@@ -71,9 +75,15 @@ thread_local! {
 /// (review C4B-B-R3-04).
 pub(crate) const DEPARTURE_GRACE: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// The departure did not happen: the app is still running after [`DEPARTURE_GRACE`].
+/// The departure did not happen: the app is still running after [`DEPARTURE_GRACE`]. A draft a
+/// page of this app took meanwhile is that page's now: the stored one goes, so it is not restored
+/// a second time (found by the C4c browser acceptance). One nobody took stays for the next
+/// settings page.
 pub(crate) fn departure_stopped() {
     LEAVING.with(|leaving| leaving.set(false));
+    if TAKEN_WHILE_LEAVING.with(|taken| taken.replace(false)) {
+        platform::remove(KEY);
+    }
 }
 
 /// Leaves (`leave`: reload, go to the sign-in page) after keeping `draft`; stays, returning false,
@@ -83,6 +93,7 @@ pub(crate) fn leave_keeping(draft: Option<&SettingsPatch>, leave: impl FnOnce())
         return false;
     }
     LEAVING.with(|leaving| leaving.set(true));
+    TAKEN_WHILE_LEAVING.with(|taken| taken.set(false));
     leave();
     true
 }
@@ -222,6 +233,18 @@ mod tests {
         assert!(leave_keeping(Some(&dark()), || left = true));
         assert!(left);
         assert_eq!(take(), Some(dark()));
+    }
+
+    /// A draft a page restored while the departure was under way (it was then stopped) is not
+    /// restored again once the departure counts as stopped: that page has it (found by the C4c
+    /// browser acceptance: settings opened within the grace period, then again after it).
+    #[test]
+    fn a_draft_restored_during_a_stopped_departure_is_not_restored_again() {
+        assert!(leave_keeping(Some(&dark()), || {}));
+        assert_eq!(take(), Some(dark()), "restored while leaving");
+        assert_eq!(peek(), Some(dark()), "still stored: the navigation may be on its way");
+        super::departure_stopped();
+        assert_eq!(take(), None, "not restored a second time");
     }
 
     /// A departure that did not happen (the navigation was stopped) gives the draft back to the
