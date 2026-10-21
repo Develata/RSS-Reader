@@ -47,29 +47,39 @@
 
 - **结构预检**：与 feed-rs 相同的 XML/JSON 判定（前 8 KiB 里第一个 `<` 或 `{`，JSON 直接放行）与相同的分词配置；
   不做命名空间解析（那正是要防的路径），对 quick-xml 的读取错误能继续就继续（与 feed-rs 吞错后继续读一致）。上限：
-  嵌套 ≤ 1024 层；作用域内命名空间声明 ≤ 256 个（像 NsReader 一样连重复声明一起数）、原始值 ≤ 256 字节；单个元素的
-  属性错误（自己用哈希集合判重）≤ 16；作用域内 `xml:base` 原始字节和 ≤ 256（ASCII scheme 开头的绝对地址重新计），
-  并且每个元素按当前基地址字节数累计的克隆总量 ≤ 16 × 输入长度 + 1 MiB。所有计数都取“可能发生”的最大值（重复的、
-  正文子树里的 `xml:base` 也计），只会多拒绝、不会漏；越界就整个 feed 拒绝（“拒绝解析 feed：…”）。
+  - 嵌套 ≤ 1024 层；
+  - 作用域内命名空间声明 ≤ 256 个（像 NsReader 一样连重复声明一起数）、原始值 ≤ 256 字节；
+  - 单个元素的属性错误（自己用哈希集合判重）≤ 16，重复的 `xml:base` 直接拒绝（feed-rs 只用第一个）；
+  - 基地址克隆总量：每个元素按作用域内 `xml:base` 原始字节和计（ASCII scheme 开头的绝对地址重新计），总和 ≤
+    16 × 输入长度 + 1 MiB；百分号编码等让真实基地址最多长一个常数倍，所以真实复制量仍是输入长度的常数倍；
+  - 声明了与 ASCII 不兼容的编码（如 UTF-16）就拒绝：预检按原始字节识别属性，feed-rs 却会按那种编码解码属性名；
+    正文已经是 UTF-8 字符串，这种声明本来就不对。
+  计数取“可能发生”的最大值，只会多拒绝、不会漏；越界就整个 feed 拒绝（“拒绝解析 feed：…”）。
 
 ## 验证与验收
 
 - `vendor/url` 与 registry 原版只差一个 hunk；在隔离副本上跑 `url` 自带的测试：66 个单元测试 + WPT URL 测试数据全部通过。
 - 点段复现（release，n = 65536，262 KB 输入）：原版 252 ms，补丁后 2.4 ms，与短 authority 的对照组同级，线性。
-- canary：`rssr-domain` 的 `dot_segments_parse_in_linear_time`（256 Ki 个 `../`）debug 下 0.13 s；补丁丢失时要几十秒。
+- canary：`rssr-domain` 的 `dot_segments_parse_in_linear_time`（4 MB、1 Mi 个 `../`，另起线程、60 s 上限）debug 下约
+  0.5 s；变异检查：恢复原版 `parser.rs` 后该测试在 60 s 时明确失败，再恢复补丁。
 - 真实 feed（26 个：本机订阅 16 个 + 10 个常见公开 feed，含 Atom `xml:base`、JSON Feed、1.2 MB 大 feed）：feed-rs 能解析的
   23 个全部照常解析，0 误拒；3 个 feed-rs 本身就解析失败。
 - 压力契约 `tests/test_feed_structure_guard.rs`：4 MB 点段链接 feed 照常解析（地址超 8 KiB 不进入条目）、1 MB `xml:base`
   × 1000 条目、32000 层命名空间、1 MiB 命名空间值 × 10 万元素、3.2 万重复属性都在解析前被拒，debug 下合计 0.91 s。
 - `cargo fmt --all --check`、`cargo clippy -j 1 --workspace --all-targets --locked -- -D warnings`：通过（`vendor/url` 不是
   工作区成员，不参与 fmt/clippy/test，内容与 registry 原版逐字一致，只差补丁那一处）。
-- `cargo test -j 1 --workspace --locked`：452 通过，0 失败。
+- `cargo test -j 1 --workspace --locked`：455 通过，0 失败（第 4 轮修复后重跑；真实 feed 复测仍是 23 个照常、0 误拒）。
 - `cargo check -j 1 -p rssr-app --target wasm32-unknown-unknown --locked`：通过（wasm 构建同样使用补丁后的 `url`）。
 
 ## 独立评审（Codex，gpt-6-astra，effort high）
 
 - 地址扫描方案（1fd6421 → 539884a）共 3 轮，未通过；每轮都是预检与 feed-rs 读法的新分叉，记录在 git 历史的本文件旧版。
-- 方案 B（本提交）：见下方记录。
+- 方案 B 第 1 轮（fbf2c50）：`url` 补丁判定对所有可达调用等价、修复有效（点段处理按摊还线性）；结构预检 3 个 BLOCKER
+  （文档中途 UTF-16 声明让字节层面看不见 `xml:base`、重复 `xml:base` 重置计数、256 字节原始值不是序列化长度上界）+
+  2 个 SHOULD_FIX（相对路径替换链按原始字节累加误拒、canary 不能在补丁丢失时明确失败）。已修复：拒绝与 ASCII
+  不兼容的编码声明、拒绝重复 `xml:base`、去掉单元素的原始字节上限只保留复制总量（真实长度与原始值只差常数倍）、
+  canary 改为线程 + 60 s 超时并做了变异检查。另一个 NICE_TO_HAVE（`path_segments_mut().extend` 在 `file:` 上的平方级）
+  本项目没有调用，未处理。
 
 ## 结果
 

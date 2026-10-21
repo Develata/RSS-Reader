@@ -32,13 +32,11 @@ const MAX_NAMESPACE_VALUE_BYTES: usize = 256;
 /// 少量容错保持兼容，多了就是在制造平方级。
 const MAX_ATTRIBUTE_ERRORS: usize = 16;
 
-/// 作用域内所有 `xml:base` 原始值的字节数之和上限（遇到带 scheme 的绝对地址从它重新算）。
-/// 正常 feed 的基地址是站点地址，几十字节。
-const MAX_XML_BASE_BYTES: usize = 256;
-
-/// 基地址克隆与拼接的总量：每个元素按当前作用域内 `xml:base` 原始字节数计，总和不超过
-/// 输入长度的这个倍数加上 [`BASE_COPY_SLACK`]。百分号编码与 IDNA 让实际基地址最多变长几倍，
-/// 所以真实复制量仍是输入长度的常数倍。
+/// 基地址克隆与拼接的总量：每个元素按当前作用域内 `xml:base` 原始字节数之和计（遇到 ASCII
+/// scheme 开头的绝对地址从它重新算；路径替换等让真实基地址更短的情况不细分，只会多算），
+/// 总和不超过输入长度的这个倍数加上 [`BASE_COPY_SLACK`]。百分号编码与 IDNA 让实际基地址比
+/// 原始值最多长一个常数倍（百分号编码每字节至多 3 倍），所以 feed-rs 的真实复制量仍是输入
+/// 长度的常数倍。正常 feed 的基地址是站点地址，几十字节，离这个上限很远。
 const BASE_COPY_PER_BYTE: u64 = 16;
 const BASE_COPY_SLACK: u64 = 1 << 20;
 
@@ -50,8 +48,10 @@ pub(crate) enum FeedStructureViolation {
     TooManyNamespaces,
     #[error("feed 中有元素带大量重复或格式错误的属性")]
     BadAttributes,
-    #[error("feed 的 xml:base 过长或作用范围过大")]
+    #[error("feed 的 xml:base 过长、重复或作用范围过大")]
     XmlBaseTooLarge,
+    #[error("feed 声明了与 ASCII 不兼容的编码")]
+    IncompatibleEncoding,
 }
 
 /// 检查 XML feed 的结构上限；JSON 或其它内容直接放行。
@@ -110,6 +110,12 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
             Err(_) => return Ok(()),
         };
         match event {
+            // 这里按原始字节找 `xml:base`、`xmlns`；声明成 UTF-16 之类与 ASCII 不兼容的编码后，
+            // feed-rs 会按那种编码解码属性名，字节层面就看不见了。正文已经是 UTF-8 字符串，
+            // 这样的声明本来就不对，quick-xml 也要求不带转码时遇到它就停止处理。
+            Event::Decl(_) if !reader.decoder().encoding().is_ascii_compatible() => {
+                return Err(FeedStructureViolation::IncompatibleEncoding);
+            }
             Event::Start(ref start) => {
                 if open.len() >= MAX_XML_DEPTH {
                     return Err(FeedStructureViolation::TooDeep);
@@ -121,6 +127,7 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                 // 重复自己判断。
                 let mut seen = HashSet::new();
                 let mut attribute_errors = 0_usize;
+                let mut has_base = false;
                 for attribute in start.attributes().with_checks(false) {
                     let attribute = match attribute {
                         Ok(attribute) if seen.insert(attribute.key.as_ref().to_vec()) => attribute,
@@ -144,15 +151,18 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                             return Err(FeedStructureViolation::TooManyNamespaces);
                         }
                     } else if key == b"xml:base" {
+                        // feed-rs 只采用第一个（重复的属性被它丢弃）；后面的重复值不能用来
+                        // 重新计算，直接拒绝。
+                        if has_base {
+                            return Err(FeedStructureViolation::XmlBaseTooLarge);
+                        }
+                        has_base = true;
                         let value = attribute.value.as_ref();
                         base_bytes = if starts_with_scheme(value) {
                             value.len()
                         } else {
                             base_bytes.saturating_add(value.len())
                         };
-                        if base_bytes > MAX_XML_BASE_BYTES {
-                            return Err(FeedStructureViolation::XmlBaseTooLarge);
-                        }
                     }
                 }
                 base_copies = base_copies.saturating_add(base_bytes as u64);
@@ -222,19 +232,6 @@ mod tests {
 
     #[test]
     fn large_xml_base_is_rejected() {
-        let long = format!(
-            r#"<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://e.test/{}/"></feed>"#,
-            "a".repeat(300)
-        );
-        assert_eq!(check_feed_structure(&long), Err(FeedStructureViolation::XmlBaseTooLarge));
-        // 相对 xml:base 逐层累加，重复属性、正文子树里的也计。
-        let stacked = format!(
-            r#"<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://e.test/">{}{}</feed>"#,
-            r#"<x xml:base="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/">"#
-                .repeat(5),
-            "</x>".repeat(5)
-        );
-        assert_eq!(check_feed_structure(&stacked), Err(FeedStructureViolation::XmlBaseTooLarge));
         // 每个元素都要克隆一份基地址：基地址不长，但元素极多时总量超限。
         let base = format!("https://e.test/{}/", "a".repeat(200));
         let copies = format!(
@@ -242,5 +239,52 @@ mod tests {
             "<a/>".repeat(20_000)
         );
         assert_eq!(check_feed_structure(&copies), Err(FeedStructureViolation::XmlBaseTooLarge));
+        // 很长的基地址配很多元素。
+        let long = format!(
+            r#"<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://e.test/{}/">{}</feed>"#,
+            "a".repeat(1 << 20),
+            "<entry/>".repeat(100)
+        );
+        assert_eq!(check_feed_structure(&long), Err(FeedStructureViolation::XmlBaseTooLarge));
+        // 重复的 xml:base：feed-rs 用第一个，不能拿后面的值重新计算。
+        let duplicate = r#"<rss version="2.0" xml:base="https://e.test/"><channel xml:base="a/" xml:base="x:y"></channel></rss>"#;
+        assert_eq!(check_feed_structure(duplicate), Err(FeedStructureViolation::XmlBaseTooLarge));
+    }
+
+    #[test]
+    fn ordinary_xml_base_chains_pass() {
+        // 正常长度的相对基地址链，即使按原始字节累加也远在复制总量之内。
+        let chain = format!(
+            r#"<rss version="2.0" xml:base="https://e.test/{}/"><channel xml:base="/{}/"><item xml:base="/{}/"><link>p</link></item></channel></rss>"#,
+            "a".repeat(90),
+            "b".repeat(90),
+            "c".repeat(90)
+        );
+        assert_eq!(check_feed_structure(&chain), Ok(()));
+    }
+
+    #[test]
+    fn ascii_incompatible_encoding_declarations_are_rejected() {
+        // 文档中途的 UTF-16 声明会让 feed-rs 按 UTF-16 解码属性名，字节层面看不见 `xml:base`。
+        let utf16 = |text: &str| -> String {
+            text.encode_utf16().flat_map(u16::to_le_bytes).map(char::from).collect()
+        };
+        let midway = format!(
+            r#"<rss version="2.0"><channel><?xml version="1.0" encoding="UTF-16LE"?><{} {}="{}"></channel></rss>"#,
+            utf16("item"),
+            utf16("xml:base"),
+            utf16("https://e.test/")
+        );
+        assert_eq!(
+            check_feed_structure(&midway),
+            Err(FeedStructureViolation::IncompatibleEncoding)
+        );
+        let declared = r#"<?xml version="1.0" encoding="UTF-16"?><rss version="2.0"></rss>"#;
+        assert_eq!(
+            check_feed_structure(declared),
+            Err(FeedStructureViolation::IncompatibleEncoding)
+        );
+        let latin1 = r#"<?xml version="1.0" encoding="ISO-8859-1"?><rss version="2.0"></rss>"#;
+        assert_eq!(check_feed_structure(latin1), Ok(()));
     }
 }

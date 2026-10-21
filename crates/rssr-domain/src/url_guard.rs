@@ -78,13 +78,20 @@ mod tests {
     #[test]
     fn dot_segments_parse_in_linear_time() {
         // 依赖 vendor/url 的补丁：原版 `url` 2.5.8 在根路径上处理每个 `..` 都反扫整个
-        // authority，这个输入在 debug 下要几十秒（release 约 4 s）；打过补丁不到 1 s。
-        // 补丁丢失时这个测试会明显变慢。
-        let n = 1 << 18;
+        // authority。这个 4 MB 输入打过补丁后 debug 下约 1 s；原版是 Θ(n²)，要数小时。
+        // 时间上限放得很宽，只为把“补丁丢了”变成 60 s 内明确的失败，而不是一直卡到 CI 超时；
+        // 解析放在另一个线程里，超时的那个线程随测试进程退出。
+        let n = 1 << 20;
         let raw = format!("https://{}@e.test/{}", "a".repeat(n), "../".repeat(n));
-        let url = Url::parse(&raw).unwrap();
-        assert_eq!(url.path(), "/");
-        assert_eq!(url.username().len(), n);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender
+                .send(Url::parse(&raw).map(|url| (url.path().to_string(), url.username().len())));
+        });
+        let parsed = receiver
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("dot-segment parsing took over 60 s; is the vendor/url patch still applied?");
+        assert_eq!(parsed.unwrap(), ("/".to_string(), n));
     }
 
     #[test]
