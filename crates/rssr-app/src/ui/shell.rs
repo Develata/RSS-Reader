@@ -120,12 +120,14 @@ impl AppShellState {
     pub(crate) fn set_settings_page_open(mut self, open: bool) {
         self.settings_page_open.set(open);
         if !open {
-            self.settings_draft.set(None);
+            self.set_settings_draft(None);
         }
     }
 
-    /// The settings page's edits not stored yet (`None`: none), as they change (C4b item 4).
+    /// The settings page's edits not stored yet (`None`: none), as they change (C4b item 4). Once
+    /// the page is leaving, the kept draft follows them (review C4C2-02).
     pub(crate) fn set_settings_draft(mut self, draft: Option<rssr_application::SettingsPatch>) {
+        crate::ui::drafts::follow(draft.as_ref());
         self.settings_draft.set(draft);
     }
 

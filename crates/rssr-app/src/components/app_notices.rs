@@ -10,21 +10,14 @@ use crate::theme::ThemeController;
 use crate::ui::{
     AppShellState, drafts,
     recovery::{APP_RECOVERY, AppRecovery},
-    shell_browser::{reload_page, sign_in_again, sleep},
+    shell_browser::{reload_page, sign_in_again},
 };
 
-/// Leaves with the settings draft kept (C4b item 4); returns false when it could not be kept. If
-/// the app is still running after the grace period, the departure was stopped: the draft is the
-/// live page's again (review C4B-B-R3-04).
+/// Leaves with the settings draft kept (C4b item 4); returns false when it could not be kept.
+/// Should the navigation be stopped, the app runs on and the stored draft follows the settings
+/// page's edits (`drafts::follow`).
 fn leave(shell: AppShellState, go: fn()) -> bool {
-    if !drafts::leave_keeping(shell.settings_draft().as_ref(), go) {
-        return false;
-    }
-    spawn(async {
-        sleep(drafts::DEPARTURE_GRACE).await;
-        drafts::departure_stopped();
-    });
-    true
+    drafts::leave_keeping(shell.settings_draft().as_ref(), go)
 }
 
 #[component]

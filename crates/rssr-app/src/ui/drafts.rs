@@ -6,6 +6,11 @@
 //! stored until the page has handed them to the shell, so a sign-in or reload before that keeps
 //! them (review C4B-B-09). When the browser cannot keep them, the page does not leave.
 //!
+//! Once a page has started to leave, the navigation may land at any time, or never (the user
+//! stopped it; nothing tells the page which). So from then on the stored draft follows the
+//! settings page's edits ([`follow`]): what lands is the latest edits, and once they are saved or
+//! the settings page is closed nothing stale is left to restore (review C4C2-01, C4C2-02).
+//!
 //! Only the edits, not the whole settings: a draft restored over settings changed elsewhere
 //! changes only what the user edited.
 
@@ -46,54 +51,49 @@ pub(crate) fn peek() -> Option<SettingsPatch> {
         .filter(|stored| stored.version == VERSION && !stored.edits.is_empty())
         .map(|stored| stored.edits);
     if edits.is_none() {
-        forget();
+        platform::remove(KEY);
     }
     edits
 }
 
-/// Removes the kept draft: the page has it (and the shell keeps it from now on), so it is
-/// restored once. Not once the page is leaving: what is stored then is for the page that comes
-/// next, and the navigation may still be on its way (review C4B-B-R2-01); should the departure
-/// turn out stopped, the draft goes then ([`departure_stopped`]).
+/// The page has the kept draft (and the shell keeps it from now on): it goes, so it is restored
+/// once. Once this page is leaving the stored draft is the page's edits as they follow
+/// ([`follow`]), so it stays: the navigation may still land (review C4B-B-R2-01).
 pub(crate) fn forget() {
-    if LEAVING.with(Cell::get) {
-        TAKEN_WHILE_LEAVING.with(|taken| taken.set(true));
-        return;
-    }
-    platform::remove(KEY);
-}
-
-thread_local! {
-    /// The page started to leave (reload, sign-in) with its draft kept.
-    static LEAVING: Cell<bool> = const { Cell::new(false) };
-    /// A page of this app took the kept draft while it was leaving.
-    static TAKEN_WHILE_LEAVING: Cell<bool> = const { Cell::new(false) };
-}
-
-/// How long a departure may take before the page counts it as stopped (the user stopped the
-/// navigation, or it failed): the app is still running, so restoring a draft removes it again
-/// (review C4B-B-R3-04).
-pub(crate) const DEPARTURE_GRACE: std::time::Duration = std::time::Duration::from_secs(30);
-
-/// The departure did not happen: the app is still running after [`DEPARTURE_GRACE`]. A draft a
-/// page of this app took meanwhile is that page's now: the stored one goes, so it is not restored
-/// a second time (found by the C4c browser acceptance). One nobody took stays for the next
-/// settings page.
-pub(crate) fn departure_stopped() {
-    LEAVING.with(|leaving| leaving.set(false));
-    if TAKEN_WHILE_LEAVING.with(|taken| taken.replace(false)) {
+    if !LEAVING.with(Cell::get) {
         platform::remove(KEY);
     }
 }
 
+thread_local! {
+    /// This page started to leave (reload, sign-in) with its draft kept. It stays set: a stopped
+    /// navigation tells the page nothing (no event, no time limit that proves it).
+    static LEAVING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// The settings page's edits not stored yet changed (`None`: saved, none, or the page closed).
+/// Once this page is leaving, the stored draft follows them: the navigation may land later with
+/// the latest edits, and edits saved or dropped are not restored afterwards. Before that, nothing
+/// to do. Best effort: the departure went ahead with the draft kept at the time.
+pub(crate) fn follow(draft: Option<&SettingsPatch>) {
+    if !LEAVING.with(Cell::get) {
+        return;
+    }
+    match draft.filter(|edits| !edits.is_empty()) {
+        Some(_) => {
+            let _ = keep(draft);
+        }
+        None => platform::remove(KEY),
+    }
+}
+
 /// Leaves (`leave`: reload, go to the sign-in page) after keeping `draft`; stays, returning false,
-/// when it could not be kept. From then on nothing removes the stored draft.
+/// when it could not be kept. From then on the stored draft follows the settings page's edits.
 pub(crate) fn leave_keeping(draft: Option<&SettingsPatch>, leave: impl FnOnce()) -> bool {
     if keep(draft).is_err() {
         return false;
     }
     LEAVING.with(|leaving| leaving.set(true));
-    TAKEN_WHILE_LEAVING.with(|taken| taken.set(false));
     leave();
     true
 }
@@ -176,13 +176,38 @@ mod tests {
     use rssr_application::SettingsPatch;
     use rssr_domain::ThemeMode;
 
-    use super::{KEY, NotKept, forget, keep, leave_keeping, peek, platform};
+    use super::{KEY, LEAVING, NotKept, follow, forget, keep, leave_keeping, peek, platform};
 
     /// What the next settings page restores: the draft, then gone.
     fn take() -> Option<SettingsPatch> {
         let draft = peek();
         forget();
         draft
+    }
+
+    /// A settings page opening as the app's does: it reads the kept draft, hands it to the shell
+    /// (whose changes the stored draft follows), then has it forgotten.
+    fn open_settings() -> Option<SettingsPatch> {
+        let draft = peek();
+        follow(draft.as_ref());
+        forget();
+        draft
+    }
+
+    /// The settings page closed (or its edits saved): the shell has no edits any more.
+    fn close_settings() {
+        follow(None);
+    }
+
+    /// The page that comes after a navigation landed: this tab's storage, a fresh app.
+    fn next_document() {
+        LEAVING.with(|leaving| leaving.set(false));
+    }
+
+    fn stored() -> Option<SettingsPatch> {
+        platform::read(KEY)
+            .and_then(|raw| serde_json::from_str::<super::Stored>(&raw).ok())
+            .map(|stored| stored.edits)
     }
 
     fn dark() -> SettingsPatch {
@@ -235,27 +260,58 @@ mod tests {
         assert_eq!(take(), Some(dark()));
     }
 
-    /// A draft a page restored while the departure was under way (it was then stopped) is not
-    /// restored again once the departure counts as stopped: that page has it (found by the C4c
-    /// browser acceptance: settings opened within the grace period, then again after it).
+    /// A draft waiting for the next settings page while the app leaves from another page, the
+    /// navigation then stopped: the settings page opened later restores it once, however soon or
+    /// late, and opening it again restores nothing (review C4C2-01, and the C4c acceptance's
+    /// finding before it).
     #[test]
-    fn a_draft_restored_during_a_stopped_departure_is_not_restored_again() {
-        assert!(leave_keeping(Some(&dark()), || {}));
-        assert_eq!(take(), Some(dark()), "restored while leaving");
-        assert_eq!(peek(), Some(dark()), "still stored: the navigation may be on its way");
-        super::departure_stopped();
-        assert_eq!(take(), None, "not restored a second time");
+    fn a_draft_restored_after_a_stopped_departure_is_restored_once() {
+        keep(Some(&dark())).expect("kept by an earlier page");
+        next_document();
+        assert!(leave_keeping(None, || {}), "leaves from another page");
+        assert_eq!(stored(), Some(dark()), "still waiting for a settings page");
+        assert_eq!(open_settings(), Some(dark()), "restored");
+        assert_eq!(stored(), Some(dark()), "stored: the navigation may still land");
+        close_settings();
+        assert_eq!(open_settings(), None, "not restored a second time");
+        next_document();
+        assert_eq!(open_settings(), None, "nor by a later page");
     }
 
-    /// A departure that did not happen (the navigation was stopped) gives the draft back to the
-    /// live page: restoring it removes it again, so it is restored once (review C4B-B-R3-04).
+    /// While the page is leaving, the stored draft follows the settings page's edits: a
+    /// navigation that lands late (no time limit proves it stopped) brings the latest edits
+    /// (review C4C2-02).
     #[test]
-    fn a_stopped_departure_restores_once_again() {
+    fn a_departure_that_lands_late_restores_the_latest_edits() {
         assert!(leave_keeping(Some(&dark()), || {}));
-        forget();
-        assert_eq!(peek(), Some(dark()), "kept while leaving");
-        super::departure_stopped();
-        forget();
-        assert_eq!(peek(), None, "the live page's again");
+        let more =
+            SettingsPatch { list_density: Some(rssr_domain::ListDensity::Compact), ..dark() };
+        follow(Some(&more));
+        assert_eq!(stored(), Some(more.clone()), "follows the edits");
+        next_document();
+        assert_eq!(open_settings(), Some(more), "the latest edits, once");
+        assert_eq!(stored(), None);
+    }
+
+    /// Edits saved (or dropped with the settings page) while the page is leaving are not
+    /// restored later: nothing stale is left stored (review C4B-B-R3-04 without a time limit).
+    #[test]
+    fn edits_saved_during_a_departure_are_not_restored_later() {
+        assert!(leave_keeping(Some(&dark()), || {}));
+        follow(None);
+        assert_eq!(stored(), None, "saved: gone");
+        next_document();
+        assert_eq!(open_settings(), None);
+    }
+
+    /// Before the page leaves, the settings page's edits are not stored, and a restored draft goes
+    /// as the page takes it.
+    #[test]
+    fn edits_are_stored_only_once_the_page_leaves() {
+        follow(Some(&dark()));
+        assert_eq!(stored(), None, "not leaving");
+        keep(Some(&dark())).expect("kept");
+        assert_eq!(open_settings(), Some(dark()));
+        assert_eq!(stored(), None, "restored once");
     }
 }
