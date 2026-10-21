@@ -249,14 +249,28 @@ export class RssrWebServer {
       return (await fetch(`${this.base}/healthz`, { signal: AbortSignal.timeout(REQUEST_MS) })
         .catch(() => null))?.ok === true;
     });
+    // A server that dies from here on (it has happened: an allocation failed under memory
+    // pressure) is reported as such, not as the failed request it causes.
+    const alive = () => {
+      if (exited(child)) {
+        throw new Error(`rssr-web exited (${child.exitCode ?? child.signalCode}) while preparing ` +
+          `${seed ?? 'the empty library'}; see server.log`);
+      }
+    };
     this.buildId = await startedBuild(() => output);
-    const cookie = await this.signIn('/entries');
+    const cookie = await this.signIn('/entries').catch(async (error) => {
+      // The refused connection can arrive before the exit event: give that a moment.
+      if (!exited(child)) await Promise.race([new Promise((resolve) => child.once('exit', resolve)), sleep(2000)]);
+      alive();
+      throw error;
+    });
     // The start-up refresh of this server, finished: every active subscription fetched by it
     // (counts were reset before it started) and its result stored, which replaces the seeded
     // fetch time (`fetched_at`, as the fixture tool wrote it) with one of this run. A time alone
     // shows nothing: a seed may carry any time, recent or in the future (2099). The change is
     // judged at full precision; the window, at the milliseconds `Date` has.
     await waitUntil(`start-up refresh of ${seed}`, 30000, async () => {
+      alive();
       const snapshot = await this.api('GET', '/api/v1/feeds', cookie);
       return feeds.every(({ id, url, fetched_at: seeded }) => {
         const stored = snapshot.feeds.find((candidate) => candidate.id === id)?.last_fetched_at;
