@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode, header, redirect};
 use url::Url;
 
+use crate::outbound::OutboundPolicy;
+
 const WEBDAV_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const WEBDAV_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// 远端配置包是一个 JSON 文件，正常只有几十 KB；设个上限避免被超大响应拖垮。
@@ -34,15 +36,27 @@ impl WebDavConfigSync {
     /// 之所以走 URL 而不是新增配置项：端点本身是设置页的会话内状态，既不写盘也不进配置包，
     /// 把密码放在这里不会被 `export_config` 导出，也不会被推到远端。
     pub fn new(endpoint: impl AsRef<str>, remote_path: impl Into<String>) -> Result<Self> {
+        Self::with_outbound(endpoint, remote_path, OutboundPolicy::Unrestricted)
+    }
+
+    /// 同 [`Self::new`]，并按 `outbound` 限制端点地址。重定向必须保持端点的 origin，
+    /// 所以只需检查端点本身；域名解析由客户端的解析器按同一策略检查。
+    pub fn with_outbound(
+        endpoint: impl AsRef<str>,
+        remote_path: impl Into<String>,
+        outbound: OutboundPolicy,
+    ) -> Result<Self> {
         let mut endpoint = Url::parse(endpoint.as_ref()).context("无效的 WebDAV endpoint")?;
         anyhow::ensure!(
             matches!(endpoint.scheme(), "http" | "https"),
             "WebDAV endpoint 必须使用 HTTP(S)"
         );
+        outbound.check_url(&endpoint)?;
         let credentials = take_url_credentials(&mut endpoint);
 
         Ok(Self {
-            client: Client::builder()
+            client: outbound
+                .configure(Client::builder())
                 .timeout(WEBDAV_REQUEST_TIMEOUT)
                 .connect_timeout(WEBDAV_CONNECT_TIMEOUT)
                 .referer(false)

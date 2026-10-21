@@ -140,6 +140,50 @@ pub(crate) fn issue_smoke_auth_cookie_headers(
     Ok((session_cookie_header(&token, config), gate_cookie_header(config)))
 }
 
+/// 请求是否带有效会话。供不应重定向到登录页的接口（`/api/*`）自行决定如何拒绝。
+pub(crate) fn request_has_valid_session(config: &AuthConfig, headers: &HeaderMap) -> bool {
+    extract_cookie(headers, SESSION_COOKIE).is_some_and(|value| session_is_valid(config, value))
+}
+
+/// 其它模块的测试共用的认证配置与会话 cookie。
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::path::PathBuf;
+
+    use time::{Duration, OffsetDateTime};
+
+    use super::{
+        AuthConfig, SESSION_COOKIE, build_session_token,
+        config::{LoginRateLimit, PasswordPolicy},
+        generate_password_hash,
+    };
+
+    pub(crate) fn config() -> AuthConfig {
+        AuthConfig {
+            bind_addr: "127.0.0.1:8039".parse().unwrap(),
+            static_dir: PathBuf::from("/tmp"),
+            username: "demo".to_string(),
+            password_policy: PasswordPolicy::Argon2Hash(
+                generate_password_hash("secret123").expect("sample hash"),
+            ),
+            session_secret: b"01234567890123456789012345678901".to_vec(),
+            secure_cookie: false,
+            trust_proxy_headers: false,
+            session_ttl: Duration::hours(12),
+            login_rate_limit: LoginRateLimit {
+                max_failures: 5,
+                window: Duration::minutes(15),
+                block_for: Duration::minutes(15),
+            },
+        }
+    }
+
+    pub(crate) fn session_cookie(config: &AuthConfig) -> String {
+        let expires_at = OffsetDateTime::now_utc().unix_timestamp() + 3600;
+        format!("{SESSION_COOKIE}={}", build_session_token(config, expires_at).expect("token"))
+    }
+}
+
 pub(crate) async fn require_auth(
     State(state): State<AppState>,
     request: Request,
@@ -178,7 +222,7 @@ fn sanitize_next(next: Option<&str>) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::fs;
 
     use super::*;
     use crate::auth::config::{LoginRateLimit, PasswordPolicy, verify_password_hash};
@@ -198,23 +242,7 @@ mod tests {
     }
 
     fn sample_config() -> AuthConfig {
-        AuthConfig {
-            bind_addr: "127.0.0.1:8039".parse().unwrap(),
-            static_dir: PathBuf::from("/tmp"),
-            username: "demo".to_string(),
-            password_policy: PasswordPolicy::Argon2Hash(
-                generate_password_hash("secret123").expect("sample hash"),
-            ),
-            session_secret: b"01234567890123456789012345678901".to_vec(),
-            secure_cookie: false,
-            trust_proxy_headers: false,
-            session_ttl: Duration::hours(12),
-            login_rate_limit: LoginRateLimit {
-                max_failures: 5,
-                window: Duration::minutes(15),
-                block_for: Duration::minutes(15),
-            },
-        }
+        super::test_support::config()
     }
 
     #[test]

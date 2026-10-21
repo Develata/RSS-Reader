@@ -4,7 +4,7 @@ use url::Url;
 
 use crate::{FeedRefreshUpdate, SubscriptionWorkflow};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FeedDiscoveryCandidate {
     pub url: Url,
     pub title: Option<String>,

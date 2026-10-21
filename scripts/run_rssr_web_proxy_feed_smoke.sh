@@ -63,6 +63,7 @@ mkdir -p "$log_dir"
 
 public_dir="target/dx/rssr-app/${profile}/web/public"
 auth_state_file="$log_dir/rssr-web-auth.json"
+data_dir="$log_dir/rssr-web-data"
 server_log="$log_dir/rssr-web.log"
 summary_file="$log_dir/summary.md"
 cookie_jar="$log_dir/rssr-web.cookies"
@@ -110,6 +111,7 @@ RSS_READER_WEB_USERNAME="$username" \
 RSS_READER_WEB_PASSWORD="$password" \
 RSS_READER_WEB_SESSION_SECRET="$session_secret" \
 RSS_READER_WEB_AUTH_STATE_FILE="$auth_state_file" \
+RSS_READER_WEB_DATA_DIR="$data_dir" \
 cargo run -p rssr-web >"$server_log" 2>&1 &
 server_pid=$!
 

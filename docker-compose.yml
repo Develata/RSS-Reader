@@ -11,10 +11,13 @@ services:
       RSS_READER_WEB_SECURE_COOKIE: ${RSS_READER_WEB_SECURE_COOKIE:-false}
       RSS_READER_WEB_TRUST_PROXY_HEADERS: ${RSS_READER_WEB_TRUST_PROXY_HEADERS:-false}
       RSS_READER_WEB_SESSION_TTL_HOURS: ${RSS_READER_WEB_SESSION_TTL_HOURS:-12}
+      RSS_READER_WEB_DATA_DIR: ${RSS_READER_WEB_DATA_DIR:-/app/data}
+      RSS_READER_WEB_ALLOW_PRIVATE_FEEDS: ${RSS_READER_WEB_ALLOW_PRIVATE_FEEDS:-false}
     ports:
       - "${RSS_READER_PORT:-8039}:8080"
     volumes:
       - rss-reader-auth:/app/auth
+      - rss-reader-data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
@@ -25,3 +28,4 @@ services:
 
 volumes:
   rss-reader-auth:
+  rss-reader-data:

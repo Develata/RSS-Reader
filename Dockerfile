@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM rust:1.88-bookworm AS builder
+FROM rust:1.99-bookworm AS builder
 
 RUN rustup target add wasm32-unknown-unknown
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
@@ -28,14 +28,16 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --home-dir /app rssr \
-    && mkdir -p /app/auth \
-    && chown -R rssr:rssr /app
+    && mkdir -p /app/auth /app/data \
+    && chown -R rssr:rssr /app \
+    && chmod 700 /app/data
 
 COPY --from=builder /app/rssr-web /usr/local/bin/rssr-web
 COPY --from=builder /app/web-dist/public /app/public
 
 ENV RSS_READER_WEB_BIND=0.0.0.0:8080
 ENV RSS_READER_WEB_STATIC_DIR=/app/public
+ENV RSS_READER_WEB_DATA_DIR=/app/data
 
 USER rssr
 

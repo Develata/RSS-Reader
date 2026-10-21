@@ -74,8 +74,9 @@
 ### 4.2 线协议
 
 - `POST /api/v1/<端口>/<方法>`：请求体是方法入参的 JSON，响应体是 Outcome 的 JSON。
-- 错误统一为 `{ "message": "…" }`。经检查，`rssr-app` 没有任何 `downcast` / `is::<>`，
-  界面不按错误类型分支，所以只传消息即可，客户端再包成 `anyhow::Error`。
+- 错误统一为 `{ "messages": ["…", …] }`（`rssr_host::protocol::ApiError`），按错误链排列，最外层上下文在前。
+  经检查，`rssr-app` 没有任何 `downcast` / `is::<>`，界面不按错误类型分支，所以只传文本即可；客户端用
+  `ApiError::into_anyhow` 还原成 `anyhow::Error`，`Display` 与 `{:#}` 都和服务端一致。
 - 序列化：给 `UiServices` 触及的 application / domain 类型加 `Serialize` / `Deserialize`。
   目前只有 `EntriesWorkspaceState`、`UserSettings` 有 serde；需要补的包括 `EntriesBootstrapOutcome`、
   `EntriesListOutcome`、`FeedsSnapshotOutcome`、`ReaderEntrySnapshot`、`MarkReadPreview`、
@@ -95,13 +96,19 @@
 - 多客户端：`RefreshFlight` 是进程级单飞，已覆盖不同客户端同时刷新的情况。`app_state`
   （工作区、启动目标）与设置在各客户端之间共享，后写覆盖；单用户在手机和电脑之间切换时，
   这正是期望的行为。界面偏好（shell prefs）和阅读位置仍按浏览器保存。
-- 正文消毒、MathML 预算在服务端读取时执行，与桌面相同。
+- 正文消毒与 MathML 预算在**渲染端**执行，与桌面相同：`reader/load_entry` 返回仓储中的原始正文，
+  阅读页在渲染前调用 `rssr_infra::html::sanitize_reader_html`。线协议上的 HTML 一律视为不可信；
+  任何渲染它的客户端都必须先走同一消毒与预算，不能直接插入 DOM。（P1 审查时修正：此前写的是“服务端读取时执行”，与实现不符。）
 
 ### 4.4 安全
 
-- `/api/*` 挂在现有 `require_auth` 会话之后。Cookie 已是 `HttpOnly; SameSite=Lax`，生产环境
+- `/api/*` 在读取请求体之前由守卫检查会话（不经过会重定向的 `require_auth`）。Cookie 已是 `HttpOnly; SameSite=Lax`，生产环境
   强制 `Secure`。另加：API 只接受 `Content-Type: application/json` 的 POST（跨源需要预检，
   浏览器会拦截），并校验 `Origin` 与服务地址一致。未登录或会话过期时返回 401，界面跳转 `/login`。
+- 资源边界：同时在途的调用最多 32 个，准入许可随后台任务持有到完成，饱和时返回 503；
+  请求体上限 16 MiB，读取期限 30 秒，声明的 `Content-Length` 超限时在守卫阶段直接 413。
+  `Origin` 必须恰好一个、是规范的源（不含路径），scheme 也要一致：可信代理的 `X-Forwarded-Proto` 优先，
+  否则开启 `Secure` cookie 时要求 https。
 - **出站请求是新的服务端风险。** 订阅抓取、订阅探测、图片本地化、WebDAV 都是服务器替用户请求
   用户提供的地址。原生抓取目前不拦截内网地址，因为桌面需要访问局域网 feed；`/feed-proxy`
   有完整规则（解析后把 IP 钉死，任一解析结果落在内网就拒绝，防 DNS rebinding）。做法：在原生
@@ -133,6 +140,8 @@
   的边界一致。
 
 ## 5. 分阶段
+
+进度：P0 已完成（`refactor/rssr-host`）；P1 已完成（`feat/rssr-web-server-api`），见对应的 handoff。
 
 每阶段单独 PR，各自验证：
 

@@ -1,4 +1,6 @@
+mod api;
 mod auth;
+mod library;
 mod proxy;
 mod smoke;
 
@@ -24,6 +26,7 @@ use crate::{
         AppState, generate_password_hash, handle_login, handle_logout, load_config, require_auth,
         session_probe, show_login,
     },
+    library::{load_library_config, open_library},
     proxy::feed_proxy,
     smoke::{browser_feed_smoke, feed_fixture, smoke_helpers_enabled},
 };
@@ -55,6 +58,15 @@ async fn main() -> Result<()> {
         config.static_dir.display()
     );
 
+    let library_config = load_library_config()?;
+    info!(
+        data_dir = %library_config.data_dir.display(),
+        outbound = ?library_config.outbound,
+        "opening rssr-web library"
+    );
+    let services = open_library(&library_config).await?;
+    let api = api::router(api::ApiState::new(config.clone(), services));
+
     let smoke_helpers = if smoke_helpers_enabled() {
         Router::new()
             .route("/__codex/browser-feed-smoke", get(browser_feed_smoke))
@@ -85,6 +97,7 @@ async fn main() -> Result<()> {
         .route("/healthz", get(healthz))
         .route("/favicon.ico", get(favicon))
         .merge(smoke_helpers)
+        .merge(api)
         .merge(protected)
         .with_state(app_state);
 

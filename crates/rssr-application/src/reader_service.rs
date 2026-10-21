@@ -5,31 +5,31 @@ use rssr_domain::{
     Entry, EntryContentRepository, EntryIndexRepository, EntryNavigation, FeedRepository,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReaderEntrySnapshot {
     pub entry: Option<Entry>,
     pub navigation: EntryNavigation,
     pub feed_title: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ToggleReadInput {
     pub entry_id: i64,
     pub currently_read: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ToggleReadOutcome {
     pub is_read: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ToggleStarredInput {
     pub entry_id: i64,
     pub currently_starred: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ToggleStarredOutcome {
     pub is_starred: bool,
 }

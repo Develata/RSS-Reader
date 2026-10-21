@@ -4,7 +4,7 @@ use rssr_domain::{FeedRepository, StartupView};
 
 use crate::{AppStateService, SettingsService};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum StartupTarget {
     AllEntries,
     FeedEntries { feed_id: i64 },

@@ -15,6 +15,8 @@ clap.workspace = true
 hmac.workspace = true
 rand_core.workspace = true
 reqwest.workspace = true
+rssr-host = { path = "../rssr-host" }
+rssr-infra = { path = "../rssr-infra" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -25,3 +27,6 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
 urlencoding.workspace = true
+
+[dev-dependencies]
+rssr-domain = { path = "../rssr-domain" }

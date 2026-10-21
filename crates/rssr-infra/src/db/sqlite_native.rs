@@ -165,11 +165,12 @@ pub fn local_data_dir() -> anyhow::Result<PathBuf> {
 /// 创建目录时限制新目录的权限；已有目录及其权限不作更改。
 pub fn ensure_local_data_dir() -> anyhow::Result<PathBuf> {
     let dir = local_data_dir()?;
-    create_local_data_dir(&dir)?;
+    create_private_dir(&dir)?;
     Ok(dir)
 }
 
-fn create_local_data_dir(dir: &Path) -> anyhow::Result<()> {
+/// 递归创建目录；在 Unix 上新建的各级目录权限为 0700。已有目录及其权限不作更改。
+pub fn create_private_dir(dir: &Path) -> anyhow::Result<()> {
     #[cfg(unix)]
     let result = {
         use std::os::unix::fs::DirBuilderExt;
@@ -300,7 +301,7 @@ fn append_content_suffix(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     #[cfg(unix)]
-    use super::create_local_data_dir;
+    use super::create_private_dir;
     use super::{
         NativeSqliteBackend, append_content_suffix, content_database_path,
         local_data_dir_in_base_dir,
@@ -354,10 +355,10 @@ mod tests {
             .as_nanos();
         let base = std::env::temp_dir().join(format!("rssr-目录 {nonce}"));
         let data_dir = base.join("nested/rss-reader");
-        create_local_data_dir(&data_dir).unwrap();
+        create_private_dir(&data_dir).unwrap();
         assert_eq!(std::fs::metadata(&data_dir).unwrap().permissions().mode() & 0o777, 0o700);
         std::fs::set_permissions(&data_dir, std::fs::Permissions::from_mode(0o750)).unwrap();
-        create_local_data_dir(&data_dir).unwrap();
+        create_private_dir(&data_dir).unwrap();
         assert_eq!(std::fs::metadata(&data_dir).unwrap().permissions().mode() & 0o777, 0o750);
         std::fs::remove_dir_all(base).unwrap();
     }
@@ -518,7 +519,7 @@ mod tests {
             Some(base.as_os_str()),
         )
         .unwrap();
-        create_local_data_dir(&dir).unwrap();
+        create_private_dir(&dir).unwrap();
         let backend = NativeSqliteBackend::with_path(dir.join("rss-reader.db"));
         let index = backend.connect().await.unwrap();
         backend.migrate(&index).await.unwrap();

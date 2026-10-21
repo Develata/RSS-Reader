@@ -50,10 +50,10 @@ dx bundle --platform web --package rssr-app --release --debug-symbols false --ou
 - **`rssr-infra`** — 端口适配器，按编译目标二选一（`lib.rs` 中 `#[cfg(not(target_arch = "wasm32"))]` 门控）：
   - **原生（桌面/Android）**：sqlx SQLite，**索引库与正文库是两个独立数据库**（迁移分别在 `migrations/` 与 `migrations_content/`）；reqwest 抓取 + `BodyAssetLocalizer` 正文图片本地化；feed-rs/quick-xml 解析；OPML 编解码；WebDAV 配置同步。入口 `compose_native_sqlite_use_cases(index_pool, content_pool)`。
   - **wasm32**：`application_adapters/browser/` 下的适配器共用 `BrowserStore`，通过 Web Locks 协调 `localStorage` 四片数据，以单一提交头发布；缓存按版本同步，刷新逐订阅持久化，仅正文记录变化时写正文片。`db`/`fetch`/`parser`/`config_sync` 模块在 wasm 上不编译。入口 `compose_browser_use_cases`。
-- **`rssr-host`** — 宿主能力（刷新、自动刷新、正文图片本地化、远程配置）的 trait、结果类型、自动刷新调度与 `RefreshFlight` 单飞，两个目标都编译；`native` 模块是不依赖界面框架的原生宿主 `NativeHost::open(NativeSqliteBackend)`（SQLite 双库 + 宿主能力），供桌面、Android 与后续的 `rssr-web` 服务端模式共用（`docs/design/rssr-web-server-mode.md`）。
+- **`rssr-host`** — 宿主能力（刷新、自动刷新、正文图片本地化、远程配置）的 trait、结果类型、自动刷新调度与 `RefreshFlight` 单飞，两个目标都编译；`native` 模块是不依赖界面框架的原生宿主 `NativeHost::open(NativeSqliteBackend)`（SQLite 双库 + 宿主能力），供桌面、Android 与 `rssr-web` 服务端模式共用（`docs/design/rssr-web-server-mode.md`）；`NativeHostOptions` 选择出站策略（`rssr_infra::outbound`，服务端默认只访问公网）。`HostServices` 是界面运行时全部能力的 UI 无关实现（`rssr-app` 的 `UiServices` 端口委托给它）；`protocol` 定义服务端模式的端点（路径 + 输入输出类型 + 协议版本），`server` 负责分派。
 - **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 在默认数据目录上打开 `NativeHost`，`bootstrap/web.rs` 组装浏览器宿主，二者按平台暴露 host capabilities；`ui/` 分 shell / commands / runtime；`pages/` 通过 facade/session 派发命令，runtime 调用统一用例或 host capability。
 - **`rssr-cli`** — 复用同一 application 层的自动化入口。
-- **`rssr-web`** — 仅用于 Web 部署的薄 axum 服务：Argon2 登录、HttpOnly 会话 cookie、静态包托管 + SPA 回退、`/feed-proxy` 服务端代抓（绕过浏览器 CORS）。桌面端、CLI、本地开发都不依赖它。
+- **`rssr-web`** — Web 部署的 axum 服务：Argon2 登录、HttpOnly 会话 cookie、静态包托管 + SPA 回退、`/feed-proxy` 服务端代抓（绕过浏览器 CORS）；服务端模式（实施中）在 `RSS_READER_WEB_DATA_DIR` 打开与桌面相同的 `NativeHost`，经 `/api/v1` 提供 `HostServices`（会话 + JSON + 协议头 + 同源校验，调用在独立任务里执行）。桌面端、CLI 都不依赖它。
 
 关键约束：**平台差异只允许存在于 infra / adapter / host capability 层**，application/domain 的语义必须跨平台统一。UI 组件里禁止直接写 SQL、HTTP 或 feed/OPML/JSON 解析。
 

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use rssr_domain::{FeedRepository, FeedSummary};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FeedsSnapshotOutcome {
     pub feeds: Vec<FeedSummary>,
     pub feed_count: usize,

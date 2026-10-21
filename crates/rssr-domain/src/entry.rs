@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use time::{Date, Month, OffsetDateTime, PrimitiveDateTime, UtcOffset};
 use url::Url;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Entry {
     pub id: i64,
     pub feed_id: i64,
@@ -89,7 +89,7 @@ impl EntryRecord {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EntrySummary {
     pub id: i64,
     pub feed_id: i64,
@@ -100,7 +100,7 @@ pub struct EntrySummary {
     pub is_starred: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct EntryNavigation {
     pub previous_unread_entry_id: Option<i64>,
     pub next_unread_entry_id: Option<i64>,
@@ -131,7 +131,7 @@ pub enum StarredFilter {
 /// 归档只看 `published_at`：没有发布时间的条目永远不算归档（与 [`is_entry_archived`] 一致）。
 /// 这个筛选此前是在页面层对全量结果做的内存过滤，意味着每次查询都要把已归档的文章也一并
 /// 读出来再丢掉；放进查询后由存储层直接筛掉，两个平台共用同一套语义。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ArchiveFilter {
     /// 不施加归档约束。
     #[default]
@@ -152,7 +152,7 @@ impl ArchiveFilter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct EntryQuery {
     pub feed_id: Option<i64>,
     pub read_filter: ReadFilter,
@@ -297,12 +297,12 @@ mod tests {
 }
 
 /// 冻结筛选条件与完整未读集合；分页限制在预览时清除。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct MarkReadPreview {
     pub query: EntryQuery,
     pub unread_entry_ids: Vec<i64>,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum MarkReadOutcome {
     Applied { changed_count: u64 },
     SelectionChanged { preview: MarkReadPreview },
