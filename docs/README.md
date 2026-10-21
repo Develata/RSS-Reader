@@ -10,7 +10,7 @@
 
 如果你要部署或开发，按任务进入：
 
-- 部署带登录和 `/feed-proxy` 的 Web 版：[Web / Docker 部署](./deployment/web.md)。
+- 部署带登录的 `rssr-web`（服务端模式）：[Web / Docker 部署](./deployment/web.md)。
 - 查询订阅、阅读、主题和备份细节：[使用指南](./user-guide.md)。
 - 构建 Android 或了解实机验收缺口：[Android 构建与验收状态](./roadmaps/android-release-roadmap.md)。
 - 修改业务或 UI：[功能设计哲学](./design/functional-design-philosophy.md)、[前端命令与界面接口清单](./design/frontend-command-reference.md)。

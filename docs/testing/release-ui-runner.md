@@ -18,7 +18,7 @@ LAPTOP-H6JEOCF0 / Git Bash 检查；下表来自源码，不冒充整套实测�
 | bundle | 首个部署 smoke / fixed smoke / SPA 之前构建一次；后续同 profile 复用；skip-build 仍检查 public 目录 |
 | 部署 smoke | 拒绝已有监听；启动 cargo rssr-web；健康检查、登录重定向、cookie 会话、feeds/settings、登出；失败时清理 |
 | 部署 browser smoke | with-rssr-web 且无 fixed-smokes 时执行，端口 web-port + 1 |
-| fixed smokes | reader 五主题 (port + 10) → 小视口 (port + 11，CDP 再 + 10000) → proxy feed (web-port + 10) → browser feed (web-port + 11) |
+| fixed smokes | reader 五主题 (port + 10) → 小视口 (port + 11，CDP 再 + 10000) → browser feed (web-port + 11) |
 | SPA | 复用 bundle，调用 `run_web_spa_regression_server.sh`，终端常驻以便手工检查 |
 | 产物 | summary.md、automated-gates.log、browser-contracts.log、rssr-web.log、rssr-web-browser-feed-smoke.log、fixed-smokes.log，四个固定 smoke 子目录 |
 | 失败 | set -e / pipefail 传递命令失败；不会继续后续阶段；summary 可能仍为 pending，SPA 正常运行也保留 pending |
@@ -48,9 +48,6 @@ OS 关闭最后一个句柄时也回收其后代。每个阶段有自己的 Job 
 # 原有接口继续使用；首次会构建独立 CLI，以后 Cargo 复用缓存。
 bash scripts/run_release_ui_regression.sh --release --full --no-serve
 bash scripts/run_release_ui_regression.sh --full --plan
-
-# 环境限制外部 RSS 时，只验既有本地 fixture；报告明确是部分验收。
-bash scripts/run_release_ui_regression.sh --release --full --skip-external-feed --no-serve
 
 # 独立构建与验证，不改变根 Cargo.lock 或产品 workspace。
 cargo build --manifest-path scripts/release-ui/Cargo.toml --locked --target-dir target/release-ui-runner
@@ -100,11 +97,6 @@ Git Bash，避免选中 system32 的 WSL 入口。已有 `RSSR_BASH` 不被 laun
 $env:RSSR_WASM_BINDGEN_TEST_RUNNER = Join-Path (Get-Location) 'target/release-ui-tools/wasm-bindgen-0.2.126/bin/wasm-bindgen-test-runner.exe'
 ```
 
-`--skip-external-feed` 只在 `--full` / `--with-fixed-smokes` 下有效，只排除既有外部
-proxy-feed smoke。原有本地同源 feed fixture 的添加、刷新、阅读流程仍会执行。
-这不覆盖外部代理可达性；代理安全逻辑仍由现有本地 HTTP fixture / SSRF 单元测试验证。
-默认 full 保持执行外部检查，外部失败仍终止后续阶段并返回真实非零码。
-
 `--repo-root` 默认是构建时工具源码所在仓库；复制二进制到别处时显式指定。
 `--log-dir` 的相对路径以仓库为基准，支持空格和中文。新增默认目录名为
 `target/release-ui-regression/<Unix毫秒>-<PID>`，避免秒级目录碰撞。
@@ -120,8 +112,6 @@ proxy-feed smoke。原有本地同源 feed fixture 的添加、刷新、阅读�
   只保存一个 Rust 阶段列表，分组状态从该列表计算。
 - `skipped` 只表示用户未选择；失败后后续阶段为 `blocked`；正常复用构建为 `reused`。
   `completed` 仅表示选中的命令执行完毕，不表示手工验收完成。
-- 显式 `--skip-external-feed` 将 proxy-feed 标成 `skipped`，固定组为
-  `partial (external feed skipped)`，总体为 `completed-with-skips`；其余阶段失败仍返回非零码。
 - SPA 经 HTTP 就绪探测后为 `serving`，始终需要人工检查；提前退出（包括退出 0）失败。
   端口占用在启动阶段前被拒绝，不关闭占用者。
 - 捕获的 Unix SIGINT/SIGTERM 分别计划返回 130/143；本机 Windows Ctrl+C/Ctrl+Break
@@ -153,10 +143,10 @@ Chrome 154.0.8037.93，Python 3.14.7。仓库根目录保持 `E:/gitclone/RSS-Re
 - 原 Bash 自动门禁实跑通过，其他组 skipped，10.50 秒；新 CLI 相同四条自动门禁也通过。
 - 新 CLI 从当前源码构建的一轮 aggregate（自动门禁 + rssr-web + fixed，未选择 browser contracts
   和 SPA）耗时 159.45 秒，**最终退出 1**。Web bundle 只构建一次，登录 smoke、五主题 Reader、
-  小视口 278 项通过；proxy-feed 失败，fixed-browser-feed 正确 blocked。
-- 后续 `--release --full --skip-external-feed --no-serve` 的实际聚合耗时 167.87 秒，
-  exit 0 / `completed-with-skips`。自动门禁、51 项 wasm 契约、一次 Web 构建、登录、五主题、
-  278 项小视口与既有同源 browser feed 流程通过；proxy-feed 明确 skipped，固定组为 partial。
+  小视口 278 项通过；外部代理 smoke 失败，fixed-browser-feed 正确 blocked。
+- 后续跳过外部 feed 的一轮聚合耗时 167.87 秒，exit 0，外部代理 smoke 明确 skipped、固定组为 partial。
+  自动门禁、51 项 wasm 契约、一次 Web 构建、登录、五主题、278 项小视口与既有同源 browser feed
+  流程通过。外部代理 smoke 与该跳过选项已随 `/feed-proxy` 于 2026-10-20 退役删除。
   日志 `target/release-ui-validation/aggregate-local/`。阶段 PID 均已退出，七个端口可重绑。
 - 真实阻塞：既有默认 feed `www.ruanyifeng.com` 本机 DNS 返回 `198.18.1.2` / `2001:2::f3`，
   rssr-web 原有安全规则拒绝并返回 400。离开受限 token 的只读核对仍返回这些地址，HTTPS HEAD

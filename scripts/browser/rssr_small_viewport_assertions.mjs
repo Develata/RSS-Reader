@@ -668,7 +668,6 @@ async function checkPrimaryWorkflow(client) {
       responseHeaders:[{name:'Access-Control-Allow-Origin',value:'*'}]}));
   });
   await client.send('Fetch.enable', {patterns:[
-    {urlPattern:`${staticBase}/feed-proxy?*`,requestStage:'Request'},
     {urlPattern:'https://example.com/feed.xml*',requestStage:'Request'},
   ]});
   try {

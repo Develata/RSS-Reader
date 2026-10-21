@@ -1,7 +1,6 @@
 mod api;
 mod auth;
 mod library;
-mod proxy;
 mod smoke;
 
 use std::{collections::HashMap, sync::Arc};
@@ -27,7 +26,6 @@ use crate::{
         session_probe, show_login,
     },
     library::{load_library_config, open_library},
-    proxy::feed_proxy,
     smoke::{browser_feed_smoke, feed_fixture, smoke_helpers_enabled},
 };
 
@@ -84,7 +82,6 @@ async fn main() -> Result<()> {
         .route("/feeds/{feed_id}/entries", get(serve_app_shell))
         .route("/settings", get(serve_app_shell))
         .route("/session-probe", get(session_probe))
-        .route("/feed-proxy", get(feed_proxy))
         .fallback_service(
             ServeDir::new(config.static_dir.clone())
                 .not_found_service(ServeFile::new(config.static_dir.join("index.html"))),

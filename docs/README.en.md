@@ -56,7 +56,7 @@ Web requires HTTPS (localhost is allowed) and Web Locks support. New-version tab
 
 A separately extracted Linux CLI remains portable and uses its own executable-adjacent database by default. To manage the installed desktop app's database, pass the global `--database-url` option pointing to the installed data directory's `rss-reader.db`.
 
-The reader caches the body provided by the feed; it does not fetch the source page to reconstruct full text. Desktop and Android attempt to localize body images. Direct browser builds can be blocked by feed CORS policies; the login-protected `rssr-web` host offers a same-origin `/feed-proxy`. JSON, OPML, and WebDAV exchange subscriptions and settings, **not** article bodies, read history, or favorites across devices. See the [Web deployment guide](./deployment/web.md).
+The reader caches the body provided by the feed; it does not fetch the source page to reconstruct full text. Desktop and Android attempt to localize body images. The static web bundle fetches feeds directly from the browser and can be blocked by feed CORS policies; the login-protected `rssr-web` host runs in server mode, where the server fetches feeds itself (or use the desktop app). JSON, OPML, and WebDAV exchange subscriptions and settings, **not** article bodies, read history, or favorites across devices. See the [Web deployment guide](./deployment/web.md).
 
 The product stays focused on subscriptions, reading, basic settings, and basic configuration exchange. See the [functional design philosophy](./design/functional-design-philosophy.md).
 
@@ -85,7 +85,7 @@ The [mainline validation matrix](./testing/mainline-validation-matrix.md) explai
 ## More documentation
 
 - [Detailed user guide](./user-guide.md) (Chinese): subscriptions, reading, themes, WebDAV, and backups.
-- [Web / Docker deployment](./deployment/web.md): GHCR, Compose, login, and `/feed-proxy`.
+- [Web / Docker deployment](./deployment/web.md): GHCR, Compose, login, and server mode.
 - [Android build and acceptance status](./roadmaps/android-release-roadmap.md).
 - [Design](./design/README.md), [testing](./testing/README.md), and [contributing](../CONTRIBUTING.md).
 - [MIT License](../LICENSE).

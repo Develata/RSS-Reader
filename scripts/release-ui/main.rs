@@ -30,7 +30,6 @@ enum State {
     Failed,
     Interrupted,
     Blocked,
-    Partial,
 }
 impl State {
     fn label(self) -> &'static str {
@@ -44,7 +43,6 @@ impl State {
             Self::Failed => "failed",
             Self::Interrupted => "interrupted",
             Self::Blocked => "blocked",
-            Self::Partial => "partial (external feed skipped)",
         }
     }
 }
@@ -71,7 +69,6 @@ struct Report {
     log_dir: PathBuf,
     outcome: &'static str,
     exit_code: Option<i32>,
-    external_feed_skipped: bool,
     steps: Vec<ResultStep>,
 }
 
@@ -90,9 +87,6 @@ impl Report {
             if states.contains(&priority) {
                 return priority;
             }
-        }
-        if group == "fixed" && self.external_feed_skipped {
-            return State::Partial;
         }
         if states.iter().all(|s| *s == State::Skipped) {
             State::Skipped
@@ -139,7 +133,7 @@ impl Report {
                 stage.detail.replace(['\n', '\r', '|'], " ")
             ));
         }
-        summary.push_str("\n## 日志与产物\n\n- rssr-web 服务日志：rssr-web.log\n- 固定 smoke 目录：static-web-reader-theme-matrix / static-web-small-viewport-smoke / rssr-web-proxy-feed-smoke / rssr-web-browser-feed-smoke\n\n## 结果记录补充\n\n- 执行环境：\n- env-limited 项：\n- host / sqlite contract harness：\n- wasm / browser contract harness：\n- /entries：\n- /feeds：\n- /settings：\n- /reader/{entry_id}：\n- 静态 reader seed smoke：\n- 默认主题：\n- Atlas Sidebar：\n- Newsprint：\n- Amethyst Glass：\n- Midnight Ledger：\n- 是否允许发布（需手工结论）：\n");
+        summary.push_str("\n## 日志与产物\n\n- rssr-web 服务日志：rssr-web.log\n- 固定 smoke 目录：static-web-reader-theme-matrix / static-web-small-viewport-smoke / rssr-web-browser-feed-smoke\n\n## 结果记录补充\n\n- 执行环境：\n- env-limited 项：\n- host / sqlite contract harness：\n- wasm / browser contract harness：\n- /entries：\n- /feeds：\n- /settings：\n- /reader/{entry_id}：\n- 静态 reader seed smoke：\n- 默认主题：\n- Atlas Sidebar：\n- Newsprint：\n- Amethyst Glass：\n- Midnight Ledger：\n- 是否允许发布（需手工结论）：\n");
         fs::write(self.log_dir.join("summary.md"), summary)
     }
 }
@@ -399,7 +393,6 @@ fn run(options: Options, console: &Console) -> io::Result<i32> {
         log_dir,
         outcome: "running",
         exit_code: None,
-        external_feed_skipped: options.skip_external_feed,
         steps: steps
             .into_iter()
             .map(|step| ResultStep {
@@ -407,9 +400,7 @@ fn run(options: Options, console: &Console) -> io::Result<i32> {
                 exit_code: None,
                 duration_ms: 0,
                 pid: None,
-                detail: if step.name == "proxy-feed" && options.skip_external_feed {
-                    "external availability not tested (--skip-external-feed); local browser feed fixture remains enabled".into()
-                } else { String::new() },
+                detail: String::new(),
                 step,
             })
             .collect(),
@@ -488,13 +479,7 @@ fn run(options: Options, console: &Console) -> io::Result<i32> {
     }
     if code == 0 {
         code = cancelled.load(Ordering::SeqCst) as i32;
-        report.outcome = if code != 0 {
-            "interrupted"
-        } else if options.skip_external_feed {
-            "completed-with-skips"
-        } else {
-            "completed"
-        };
+        report.outcome = if code != 0 { "interrupted" } else { "completed" };
     }
     report.exit_code = Some(code);
     report.write()?;

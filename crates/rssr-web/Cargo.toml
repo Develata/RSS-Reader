@@ -14,7 +14,6 @@ base64.workspace = true
 clap.workspace = true
 hmac.workspace = true
 rand_core.workspace = true
-reqwest.workspace = true
 rssr-host = { path = "../rssr-host" }
 rssr-infra = { path = "../rssr-infra" }
 serde.workspace = true
@@ -29,4 +28,6 @@ url.workspace = true
 urlencoding.workspace = true
 
 [dev-dependencies]
+# Client side of the /api/v1 contract tests.
+reqwest.workspace = true
 rssr-domain = { path = "../rssr-domain" }

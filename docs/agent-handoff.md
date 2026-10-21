@@ -45,7 +45,7 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 - 自动刷新
 - 自动归档
 - JSON / OPML / WebDAV 配置交换
-- Web 部署态登录保护与 feed 代理
+- Web 部署态登录保护与服务端模式（服务端抓取 feed）
 - Android Debug APK 构建链路
 - Windows / macOS / Linux / Web / Docker 发布 workflow
 
@@ -68,7 +68,7 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
   - SQLite、抓取、解析、OPML、配置交换基础设施
 - `crates/rssr-web`
   - Web 部署态服务端包装层
-  - 登录、会话、feed 代理、静态资源托管
+  - 登录、会话、服务端模式 API（`/api/v1`，服务端抓取 feed）、静态资源托管
 - `crates/rssr-cli`
   - CLI 入口
 
@@ -158,7 +158,7 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 - 登录页
 - 会话 cookie
 - 登录限速
-- feed 代理
+- 服务端模式（经 `/api/v1` 由服务端抓取 feed）
 - 静态资源托管
 
 它不是阅读器核心领域逻辑的归宿。
@@ -166,9 +166,9 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 ### 3. Web 与纯静态 Web 有边界差异
 
 - `dx serve --platform web --package rssr-app`
-  - 受浏览器 CORS 限制
+  - 受浏览器 CORS 限制（只做浏览器直连，无代理回退）
 - `rssr-web` / Docker 部署态
-  - 有服务端 `/feed-proxy`
+  - 服务端模式：由服务端抓取 feed，不受浏览器 CORS 限制
   - 能支持更多受限 feed 源
 
 不要把“纯浏览器 Web 能否读某些 feed”当成解析器格式问题。

@@ -20,9 +20,9 @@
 - 浏览器刷新：真实 localStorage 发布、正文/索引的一致性与失败恢复、多实例写入协调；具体边界以当前 harness 的断言为准。
 - 订阅：新增、URL 规范化/去重、删除后的文章与 last-opened 状态清理。
 - 配置：JSON / OPML 交换、远端 push/pull 结果、订阅成员变化后的状态清理；配置不承载文章库。
-- source 分类：有效 XML、HTML/login shell、损坏 XML、304、非成功状态及代理/直连 fallback 的分类。请求顺序的纯函数测试与 store-side 持久化测试各守自己的边界。
+- source 分类：有效 XML、HTML/login shell、损坏 XML、304、非成功状态的分类。请求顺序的纯函数测试与 store-side 持久化测试各守自己的边界。
 
-真实网络、CORS 和部署态 `/feed-proxy` 仍需 [代理 smoke](./rssr-web-proxy-feed-smoke.md) 与 [浏览器 feed smoke](./rssr-web-browser-feed-smoke.md)。同源 fixture 通过不能证明远端站点策略正常；`--no-run` 通过也不能证明浏览器契约通过。
+真实网络与 CORS 仍需浏览器手工验证；服务端模式的添加与首刷链路见 [浏览器 feed smoke](./rssr-web-browser-feed-smoke.md)。同源 fixture 通过不能证明远端站点策略正常；`--no-run` 通过也不能证明浏览器契约通过。
 
 ## 执行
 

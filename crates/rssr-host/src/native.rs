@@ -594,9 +594,12 @@ mod tests {
 
     #[tokio::test]
     async fn open_creates_and_migrates_both_databases_at_an_explicit_path() {
+        // 进程号 + 进程内计数器：并行启动的测试即使拿到同一个时间戳，目录也不会相同。
+        static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "rssr-host-open-{}-{}",
+            "rssr-host-open-{}-{}-{}",
             std::process::id(),
+            NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .expect("clock after epoch")

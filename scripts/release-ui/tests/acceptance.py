@@ -372,7 +372,7 @@ class Acceptance(unittest.TestCase):
         self.run_cli("--full", "--no-serve", "--release")
         trace = (self.root / "trace.txt").read_text(encoding="utf-8")
         names = [line.split("\t")[0] for line in trace.splitlines()]
-        self.assertEqual(names, ["wasm-check", "app-tests", "host-contracts", "web-tests", "browser-contracts", "web-bundle", "cargo-run", "web-auth", "reader-theme-matrix", "small-viewport", "proxy-feed", "browser-feed"])
+        self.assertEqual(names, ["wasm-check", "app-tests", "host-contracts", "web-tests", "browser-contracts", "web-bundle", "cargo-run", "web-auth", "reader-theme-matrix", "small-viewport", "browser-feed"])
         self.assertEqual(names.count("web-bundle"), 1)
         self.assertIn("中文 space", trace)
         self.assertIn("结果 logs", trace)
@@ -385,7 +385,7 @@ class Acceptance(unittest.TestCase):
             self.assertIn("fixture stderr:", output)
 
     def test_every_stage_failure_is_terminal_and_keeps_exit(self):
-        stages = ["wasm-check", "app-tests", "host-contracts", "web-tests", "browser-contracts", "web-bundle", "web-auth", "reader-theme-matrix", "small-viewport", "proxy-feed", "browser-feed"]
+        stages = ["wasm-check", "app-tests", "host-contracts", "web-tests", "browser-contracts", "web-bundle", "web-auth", "reader-theme-matrix", "small-viewport", "browser-feed"]
         for stage in stages:
             with self.subTest(stage=stage):
                 self.env["FAIL_STAGE"] = stage
@@ -412,21 +412,6 @@ class Acceptance(unittest.TestCase):
         self.assertEqual(self.stage("web-bundle")["status"], "reused")
         self.assertEqual(self.stage("wasm-check")["status"], "skipped")
         self.assertNotIn("web-bundle", (self.root / "trace.txt").read_text(encoding="utf-8"))
-
-    def test_local_fixture_selection_does_not_pass_external_probe(self):
-        self.run_cli("--skip-external-feed", code=1)
-        self.env["FAIL_STAGE"] = "proxy-feed"
-        self.run_cli("--full", "--no-serve", "--skip-external-feed")
-        self.assertEqual(self.stage("proxy-feed")["status"], "skipped")
-        self.assertIsNone(self.stage("proxy-feed")["exit_code"])
-        self.assertEqual(self.stage("fixed-browser-feed")["status"], "passed")
-        self.assertEqual(self.report()["outcome"], "completed-with-skips")
-        self.assertIn("partial (external feed skipped)", (self.log / "summary.md").read_text(encoding="utf-8"))
-        self.assertNotIn("proxy-feed\t", (self.root / "trace.txt").read_text(encoding="utf-8"))
-        self.env["FAIL_STAGE"] = "browser-feed"
-        self.run_cli("--full", "--no-serve", "--skip-external-feed", code=23)
-        self.assertEqual(self.stage("fixed-browser-feed")["status"], "failed")
-        self.assertEqual(self.report()["outcome"], "failed")
 
     def test_missing_build_output_and_spawn_error(self):
         self.env["MISSING_BUNDLE"] = "1"

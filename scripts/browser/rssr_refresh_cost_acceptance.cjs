@@ -18,10 +18,12 @@ const artifacts = process.env.ARTIFACT_DIR || 'target/refresh-cost/browser';
         page.on('pageerror', error => errors.push(error.message));
       });
       let mode = 'original';
-      await context.route('**/feed-proxy?**', route => {
+      // The static bundle fetches feeds directly; refresh requests carry the `_rssr_fetch` marker.
+      await context.route(url => url.searchParams.has('_rssr_fetch'), route => {
         const body = mode === 'oversized' ? 'x'.repeat(8 * 1024 * 1024 + 1)
           : `<rss version="2.0"><channel><title>Refresh fixture</title><description>Feed</description><item><guid>refresh-cost-entry</guid><title>Refresh cost article</title><description>Body ${mode}</description></item></channel></rss>`;
-        return route.fulfill({ status: 200, contentType: 'application/rss+xml; charset=utf-8', body });
+        return route.fulfill({ status: 200, contentType: 'application/rss+xml; charset=utf-8',
+          headers: { 'Access-Control-Allow-Origin': '*' }, body });
       });
       const page = await context.newPage();
       await page.goto(`${base}/__codex/setup-local-auth?seed=reader-demo&next=/feeds`);

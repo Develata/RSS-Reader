@@ -39,7 +39,6 @@
 | `native-module` / 6 crates | `cargo clippy --locked -p <crate> --all-targets -- -D warnings`；`cargo test --locked -p <crate>`（含 doc tests）；CLI help | 4 / 每模块 35 分钟 |
 | `web-smoke` | wasm target Clippy（`-D warnings`，覆盖 rssr-app 及路径依赖的 `cfg(wasm32)` 分支）、Dioxus 0.7.9 release bundle，上传实际 public 包 | 40 分钟 |
 | `web-ui` / default + 4 builtin themes | 下载同一次 Web 构建，既有 small viewport smoke 的 360×800 / 1280×800、真实请求、输入、选择、图片与设置验收 | 3 / 每主题 15 分钟 |
-| `feed-proxy-isolation` | 下载同一次 Web 构建；真实登录和生产代理响应构造路径的无害文档隔离、存储隔离及 RSS/Atom/HTML 发现兼容性 CDP 验收 | 独立运行，15 分钟 |
 | `wasm-contract-build` | 一个锁定依赖的 Cargo 调用准备全部 harness，上传精确产物；预热 wasm-bindgen 工具缓存 | 35 分钟 |
 | `wasm-browser-contract` / 3 harnesses | 下载同一批产物，分别运行 refresh / subscription / config exchange 浏览器契约，不再运行 Cargo | 3 / 每 harness 15 分钟 |
 | `android-smoke` | 锁定 NDK / ARM64 check、bundle、APK 资源 / ABI / version 断言；`~/.gradle` 按 dx 版本与 Android 输入缓存 | 50 分钟 |
@@ -106,7 +105,6 @@ Cargo JSON / TOML 事实解析、GitHub `needs` JSON 摘要仍使用短 Python �
 | refresh | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_feed_refresh_flow`；`cargo test -p rssr-infra --test test_application_refresh_store_adapter`；`bash scripts/run_wasm_refresh_contract_harness.sh` | 是 | 中 | single / all 都可完成；成功、失败、not modified 语义正确；browser refresh store target/commit 语义正确；不产生异常重复写入 |
 | CLI refresh 参数 | `cargo test --locked -p rssr-cli --test test_stdout_contract` | 否 | 低 | `--all` / `--feed-id` 恰选其一；无目标或双目标在打开数据库前以非零码退出 |
 | Linux `.deb` 安装 | `bash scripts/test_prepare_linux_deb.sh`；release job 中 `dpkg-deb -f ... Depends`、普通用户 Xvfb 双启动 | 是 | 高 | 拒绝输入文件的路径别名/硬链接/符号链接及目录作为输出；tag 版本、运行时依赖字段、用户 XDG 路径、两个数据库与重启后数据复用均成立；本地工具测试不能替代新 tag 的安装验收 |
-| Web feed 代理边界 | `cargo test --locked -p rssr-web proxy::tests`；`bash scripts/run_rssr_web_proxy_feed_smoke.sh` | 是 | 中 | 本地 / 内网 / IPv4 映射 IPv6 地址拒绝；隔离子进程设置环境代理后仍直连固定 IP；DNS 有上限且重定向逐跳重新验证 |
 | Web 登录回跳 | `cargo test --locked -p rssr-web auth::tests` | 否 | 低 | 回跳限定同源路径；拒绝会被浏览器归一化为外站地址的反斜杠/控制字符，输出可用作 Location header |
 | SQLite 路径与内存库分类 | `cargo test --locked -p rssr-infra --lib db::` | 否 | 低 | 内存 URI 的查询参数正确解码；文件名中的 `mode=memory` 不改变文件库分类，索引/正文文件分离并启用 WAL；显式文件路径不当作 URL 解析 |
 | config/exchange | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_config_package_codec`；`cargo test -p rssr-infra --test test_config_package_io`；`cargo test -p rssr-infra --test test_opml_interop`；`cargo test -p rssr-infra --test test_config_exchange_contract_harness`；`bash scripts/run_wasm_config_exchange_contract_harness.sh` | 是 | 中 | JSON / OPML roundtrip 可用；损坏或非法配置被拒绝；导入后订阅与设置恢复符合预期；browser persisted-state 与 sqlite contract 保持一致 |

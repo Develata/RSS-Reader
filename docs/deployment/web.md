@@ -1,18 +1,19 @@
 # Web / Docker 部署
 
-`RSS-Reader-web.tar.gz` 是 Dioxus 静态站点包。浏览器直接请求 feed 时受目标站点 CORS 策略约束。需要登录门禁和同源 `/feed-proxy` 时，使用仓库里的 `rssr-web` 服务；它托管静态包、验证登录并代抓 feed，不参与桌面端、Android 或 CLI 的运行。单独托管静态包（不经 `rssr-web`）时，订阅和阅读状态保存在访问者当前浏览器的 `localStorage`。
+Web 有两种形态：
+
+- **静态包** `RSS-Reader-web.tar.gz`：任意静态服务器托管，订阅和阅读状态保存在访问者当前浏览器的 `localStorage`，浏览器直接请求 feed，因而受目标站点 CORS 策略约束，没有代理回退。不允许跨源访问的 feed 在这里无法刷新，请改用桌面版或下面的 `rssr-web`。
+- **`rssr-web`**：带登录门禁的服务端，文章库在服务器上，由服务端抓取 feed（不受浏览器 CORS 限制）。它不参与桌面端、Android 或 CLI 的运行。
+
+（`rssr-web` 早期提供的同源代抓端点 `/feed-proxy` 已于 2026-10-20 随服务端模式落地而退役。）
 
 **服务端模式**：按 [rssr-web 服务端模式设计](../design/rssr-web-server-mode.md)，由 `rssr-web` 托管时，文章库在服务器上：启动时在 `RSS_READER_WEB_DATA_DIR`（Docker 中为 `/app/data` 卷）打开与桌面版相同的 SQLite 文章库，在服务端运行自动刷新（不依赖浏览器在线），浏览器界面登录后经 `/api/v1` 读写，不在 `localStorage` 保存文章。数据卷就是文章库，按桌面数据目录同样的方式备份；认证卷只保存登录凭据。任何浏览器登录后看到的都是同一个文章库（单用户）。从旧版升级时，旧数据仍在各个浏览器的 `localStorage` 里，不会自动迁移：在升级前用旧版界面导出配置包或 OPML，升级后导入，文章由服务端重新抓取。
 
 新版浏览器存储使用 Web Locks 协调多个标签页，需要支持该能力的浏览器和安全上下文：正式入口使用 HTTPS，本机 localhost / 127.0.0.1 可使用 HTTP；手机通过局域网 IP 访问普通 HTTP 不满足此条件。缺少能力会显示错误，不会退回可能覆盖数据的无锁写入。升级静态包后应重新加载所有旧标签页，避免混用两种存储协议；不会自动刷新正在阅读的页面。
 
-`/feed-proxy` 只代理公开的 HTTP(S) feed：本地和内网地址（包括 IPv4 映射的 IPv6 地址）会被拒绝；DNS 解析限时，重定向每跳重新校验目标。部署在内网的私有 feed 不能通过这个入口抓取。
+服务器替用户访问的所有地址（订阅探测、feed 刷新、正文图片本地化、WebDAV）默认只访问公网地址：本地和内网地址（包括 IPv4 映射、NAT64、6to4 等嵌入形式）会被拒绝，域名的任一解析结果落在内网即整体拒绝，重定向每跳重新校验，不使用环境代理。若确实要订阅部署在内网的 feed，可设置 `RSS_READER_WEB_ALLOW_PRIVATE_FEEDS=true` 显式放开；放开后，任何持有有效会话的人都能让服务器访问内网地址。
 
-代理内容仍属于不可信数据。`rssr-web` 自身在上游响应上设置无例外的 CSP `sandbox`、`default-src 'none'`、`base-uri 'none'`、`form-action 'none'` 和 `X-Content-Type-Options: nosniff`。直接打开 HTML/SVG 等代理文档时，脚本和应用同源存储访问被隔离；这不依赖反向代理另加 CSP。原始 MIME/字符集、正文和最终 URL 继续供客户端读取，以保留 RSS/Atom 解码与 HTML 订阅发现。反向代理应保留这些响应头。
-
-服务端模式下，服务器替用户访问的所有地址（订阅探测、feed 刷新、正文图片本地化、WebDAV）默认遵守同样的规则：只访问公网地址，不使用环境代理。若确实要订阅部署在内网的 feed，可设置 `RSS_READER_WEB_ALLOW_PRIVATE_FEEDS=true` 显式放开；放开后，任何持有有效会话的人都能让服务器访问内网地址。
-
-此入口直接连接校验后固定的目标 IP，不继承 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 等环境代理，以免代理端再次解析主机名而绕过目标校验。部署环境需允许服务器直接访问公开 feed，并让 DNS 返回真实公网地址。若 DNS 返回 `198.18.0.0/15` 等 fake-IP 地址，请为该服务调整 DNS/网络配置；这些地址会被目标校验拒绝。
+服务端直接连接校验过的地址，不继承 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 等环境代理，以免代理端再次解析主机名而绕过目标校验。部署环境需允许服务器直接访问公开 feed，并让 DNS 返回真实公网地址。若 DNS 返回 `198.18.0.0/15` 等 fake-IP 地址，请为该服务调整 DNS/网络配置；这些地址会被目标校验拒绝。
 
 ## 使用已发布镜像
 
@@ -91,7 +92,7 @@ sudo systemctl enable --now rssr-web
 
 ## 本地验证部署态
 
-如果需要在不运行 Docker 的情况下验证登录和 `/feed-proxy`，先构建 Web 包，再从同一工作区启动服务：
+如果需要在不运行 Docker 的情况下验证登录和服务端模式，先构建 Web 包，再从同一工作区启动服务：
 
 ```bash
 dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e
@@ -111,7 +112,7 @@ RSS_READER_WEB_ENV=development \
 cargo run --locked -p rssr-web
 ```
 
-访问 `http://127.0.0.1:8060/login`；要验收真实代理 feed，使用仓库已有的 [`rssr-web` 代理 Feed Smoke](../testing/rssr-web-proxy-feed-smoke.md)。静态 Web 包的成功构建不证明远端 feed 在直接浏览器模式下都能抓取。
+访问 `http://127.0.0.1:8060/login`。自动化验收可用 [`rssr-web` 浏览器自动 Feed Smoke](../testing/rssr-web-browser-feed-smoke.md)；它添加的是本机夹具 feed，需要 `RSS_READER_WEB_ALLOW_PRIVATE_FEEDS=true`（脚本已设置）。静态 Web 包的成功构建不证明远端 feed 在直接浏览器模式下都能抓取。
 
 ## 其他配置与构建
 

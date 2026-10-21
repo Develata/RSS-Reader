@@ -31,9 +31,6 @@ pub struct Options {
     pub with_fixed_smokes: bool,
     #[arg(long)]
     pub full: bool,
-    /// Run deterministic local feed fixtures; exclude the external proxy probe explicitly.
-    #[arg(long)]
-    pub skip_external_feed: bool,
     #[arg(long)]
     pub no_serve: bool,
     #[arg(long, value_parser = nonempty_path)]
@@ -69,9 +66,6 @@ impl Options {
         if self.release { "release" } else { "debug" }
     }
     pub fn validate(&self) -> Result<(), String> {
-        if self.skip_external_feed && !self.full && !self.with_fixed_smokes {
-            return Err("--skip-external-feed requires --full or --with-fixed-smokes".into());
-        }
         if self.full || self.with_fixed_smokes {
             if self.port > 55524 {
                 return Err("--port must be <= 55524 with fixed smokes (small viewport uses port + 11 + 10000)".into());
@@ -230,12 +224,6 @@ pub fn build(options: &Options) -> Vec<Step> {
             "static-web-small-viewport-smoke",
         ),
         (
-            "proxy-feed",
-            "run_rssr_web_proxy_feed_smoke",
-            options.web_port.saturating_add(10),
-            "rssr-web-proxy-feed-smoke",
-        ),
-        (
             "fixed-browser-feed",
             "run_rssr_web_browser_feed_smoke",
             options.web_port.saturating_add(11),
@@ -245,7 +233,7 @@ pub fn build(options: &Options) -> Vec<Step> {
         add(
             name,
             "fixed",
-            fixed && !(name == "proxy-feed" && options.skip_external_feed),
+            fixed,
             "bash",
             smoke(script, port, directory),
             "fixed-smokes.log",
@@ -350,21 +338,9 @@ mod tests {
                 "web-auth",
                 "reader-theme-matrix",
                 "small-viewport",
-                "proxy-feed",
                 "fixed-browser-feed",
                 "spa"
             ]
         );
-    }
-
-    #[test]
-    fn external_probe_is_only_excluded_by_explicit_selection() {
-        assert!(opts(&["--skip-external-feed"]).validate().is_err());
-        let options = opts(&["--full", "--skip-external-feed", "--no-serve"]);
-        assert!(options.validate().is_ok());
-        let steps = build(&options);
-        assert!(!steps.iter().find(|s| s.name == "proxy-feed").unwrap().enabled);
-        assert!(steps.iter().find(|s| s.name == "fixed-browser-feed").unwrap().enabled);
-        assert!(build(&opts(&["--full"])).iter().find(|s| s.name == "proxy-feed").unwrap().enabled);
     }
 }
