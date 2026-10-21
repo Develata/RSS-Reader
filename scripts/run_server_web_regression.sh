@@ -297,13 +297,19 @@ if [[ "$status" == 0 ]]; then
   result="通过"
 fi
 
+# The acceptance sets its own viewport (a desktop window); the other suites use the one above.
+viewport_line="${viewport_width}×${viewport_height} @ DPR 3"
+if [[ "$suite" == acceptance ]]; then
+  viewport_line="1280×800 @ DPR 1（验收自己的视口）"
+fi
+
 cat >"$summary_file" <<EOF
 # Web 页面 × rssr-web 回归（${suite}）
 
 - 日期：$(date '+%Y-%m-%d %H:%M:%S %z')
 - commit：$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 - profile：${profile}
-- viewport：${viewport_width}×${viewport_height} @ DPR 3
+- viewport：${viewport_line}
 - preset：${preset:-default}
 - directory-only：${directory_only}
 - 页面：${static_dir}

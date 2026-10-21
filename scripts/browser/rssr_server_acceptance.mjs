@@ -89,7 +89,7 @@ async function openPage(origin) {
     if (event.type === 'error') record({ type: 'console.error', text: event.args?.map((arg) => arg.value ?? arg.description).join(' ') });
   });
   client.on('Log.entryAdded', ({ entry }) => {
-    if (entry?.level === 'error') record({ type: 'log.error', text: entry.text, url: entry.url, networkRequestId: entry.networkRequestId, page: origin });
+    if (entry?.level === 'error') record({ type: 'log.error', source: entry.source, text: entry.text, url: entry.url, networkRequestId: entry.networkRequestId, page: origin });
   });
   await client.send('Page.enable');
   await client.send('Runtime.enable');
@@ -116,9 +116,12 @@ class Scenario {
     return Boolean(ok);
   }
 
-  /// Console errors matching `pattern` are part of the scenario (e.g. the 401 of an ended session).
-  expectConsole(pattern) {
-    this.expected.push(pattern);
+  /// A failed network request the scenario causes itself (e.g. the 401s of an ended session): the
+  /// browser's network log entry for an answer of `status` to a request for `path` (a string or a
+  /// RegExp on the URL's path). Nothing else (exceptions, `console.error`) can be expected (review
+  /// C4C2-06).
+  expectConsole({ status, path }) {
+    this.expected.push({ status, path });
   }
 
   async open(origin) {
@@ -168,12 +171,13 @@ const waitBanner = (page, selector, tone, part, timeoutMs = 20000) => waitFor(pa
   `(banner => !!banner && banner.dataset.state === ${JSON.stringify(tone)} && banner.textContent.includes(${JSON.stringify(part)}))(document.querySelector(${JSON.stringify(selector)}))`, timeoutMs);
 
 /// Chooses `value` in a select as a person does (change event).
-const choose = (page, field, value) => evaluate(page.client, `(() => {
+const chooseScript = (field, value) => `(() => {
   const select = document.querySelector('[data-field="${field}"]');
   select.value = ${JSON.stringify(value)};
   select.dispatchEvent(new Event('input', {bubbles: true}));
   select.dispatchEvent(new Event('change', {bubbles: true}));
-})()`);
+})()`;
+const choose = (page, field, value) => evaluate(page.client, chooseScript(field, value));
 const fieldValue = (page, field) => evaluate(page.client, `document.querySelector('[data-field="${field}"]')?.value`);
 const draft = (page) => evaluate(page.client, `sessionStorage.getItem('rssr.settings-draft')`);
 const RESTORED = '已恢复重新加载前未保存的设置修改，尚未保存。';
@@ -241,7 +245,7 @@ define('proxy-origin-cookie-csrf', {}, async (s) => {
   const cookie = await harness.server.signIn('/entries');
   const [name, value] = cookie.split('=');
   await page.client.send('Network.setCookie', { name, value, url: proxy.origin, httpOnly: true, sameSite: 'Lax' });
-  s.expectConsole(/403/);
+  s.expectConsole({ status: 403, path: '/api/v1/entries/2/read' });
   mark = page.traffic.mark();
   await pointerClick(page.client, '[data-action="mark-read"]');
   await waitFor(page.client, `document.querySelector('[data-action="mark-read"]')?.dataset.state === 'unread'`);
@@ -258,7 +262,7 @@ define('proxy-redirects-api', {}, async (s) => {
   // A proxy that redirects API writes (it must not): the browser follows to an HTML page; the page
   // cannot know whether the write ran.
   proxy.redirect = (method, pathname) => method === 'PUT' && pathname === '/api/v1/entries/2/read';
-  s.expectConsole(/405 \(Method Not Allowed\)/); // the follow-up PUT to /login
+  s.expectConsole({ status: 405, path: '/login' }); // the follow-up PUT to /login
   const mark = page.traffic.mark();
   const forwarded = proxy.requests.length;
   await pointerClick(page.client, '[data-action="mark-read"]');
@@ -375,13 +379,19 @@ define('reload-loses-the-job', {}, async (s) => {
   s.onCleanup(() => held.release());
   await clickSelector(main.client, '[data-action="activate-home"]');
   await waitUntil('the held refresh', 15000, async () => held.waiting() === 1);
+  // Counted from before the reload, by document: whatever the new one asks for at its start
+  // counts too (review C4C2-08).
+  const mark = main.traffic.mark();
   await navigate(main.client, `${base}/entries`);
   await selectorExists(main.client, ENTRIES);
-  const mark = main.traffic.mark();
+  const { frameTree } = await main.client.send('Page.getFrameTree');
+  const reloaded = frameTree.frame.loaderId;
   held.release();
   await sleep(1500);
   await main.traffic.settled();
-  s.check('after a reload the job is not followed (its id is gone)', main.traffic.count(mark, 'GET', LONG_POLL) === 0, main.traffic.log(mark));
+  const jobs = main.traffic.since(mark).filter((r) => r.loaderId === reloaded && r.path.startsWith('/api/v1/jobs'));
+  s.check('after a reload the job is not followed (its id is gone): the new document asks nothing of jobs',
+    jobs.length === 0 && main.traffic.since(mark).some((r) => r.loaderId === reloaded), main.traffic.log(mark));
   const status = await evaluate(main.client, `(o => ({state: o.dataset.state, text: o.textContent}))(document.querySelector('[data-slot="manual-refresh-status"]'))`);
   s.check('and no result is claimed for it', status.state === 'idle' && !status.text.includes('新增'), status);
   await triggerFocus(main);
@@ -401,17 +411,29 @@ define('job-ends-after-the-page-was-left', {}, async (s) => {
   await selectorExists(main.client, ENTRIES);
   await clickSelector(main.client, '[data-nav="feeds"]');
   await selectorExists(main.client, FEEDS);
-  const typed = 'https://example.com/typed-meanwhile.xml';
+  // The new page starts its own add, held too: its in-progress state is not the old job's to end
+  // (review C4C2-07).
+  const second = harness.feeds.hold((pathname) => pathname === '/new/second-add.xml');
+  s.onCleanup(() => second.release());
+  const typed = `${harness.feeds.base}/new/second-add.xml`;
   await evaluate(main.client, `document.querySelector('[data-field="feed-url-input"]').focus()`);
   await main.client.send('Input.insertText', { text: typed });
+  await clickSelector(main.client, '[data-action="add-feed"]');
+  await waitUntil('the held second fetch', 15000, async () => second.waiting() === 1);
+  const form = async () => evaluate(main.client, `(() => { const button = document.querySelector('[data-action="add-feed"]');
+    return {input: document.querySelector('[data-field="feed-url-input"]').value, disabled: button.disabled,
+      busy: button.getAttribute('aria-busy'), label: button.textContent.trim()}; })()`);
+  const before = await form();
   held.release();
   await waitFor(main.client, `(n => n?.textContent.includes('订阅已保存并完成首次刷新'))(document.querySelector('[data-slot="app-notice"][data-notice="job"]'))`);
-  const form = await evaluate(main.client, `(() => { const button = document.querySelector('[data-action="add-feed"]');
-    return {input: document.querySelector('[data-field="feed-url-input"]').value, disabled: button.disabled, label: button.textContent.trim()}; })()`);
-  s.check('the old page\'s job did not touch the new page\'s input or its add button',
-    form.input === typed && !form.disabled && form.label === '添加订阅', form);
   await textShown(main.client, 'Added fixture left-page');
-  s.check('the new subscription shows', true);
+  const after = await form();
+  s.check("the old page's job ended without touching the new page's add in progress (input, busy button)",
+    before.disabled && before.label === '正在添加…' && JSON.stringify(after) === JSON.stringify(before), { before, after });
+  second.release();
+  await textShown(main.client, 'Added fixture second-add');
+  const done = await form();
+  s.check('the new add ends with its own result', !done.disabled && done.label === '添加订阅', done);
 });
 
 define('page-gone-stops-polling', {}, async (s) => {
@@ -445,12 +467,19 @@ async function checkReread(s, page, label, mark, reads) {
 
 /// A write by another session (the harness's), straight to the server: what another browser or
 /// device does meanwhile.
-async function elsewhereSetRead(id, read) {
+async function elsewhereWrite(method, pathname, body) {
   const { csrf_token: csrf } = await state('/api/v1/session');
-  const answer = await fetch(`${base}/api/v1/entries/${id}/read`, { method: 'PUT', signal: AbortSignal.timeout(10000),
+  const answer = await fetch(`${base}${pathname}`, { method, signal: AbortSignal.timeout(10000),
     headers: { Cookie: harnessCookie, Origin: base, 'Content-Type': 'application/json', 'x-rssr-csrf': csrf,
-      'x-rssr-build': harness.server.buildId }, body: JSON.stringify({ read }) });
+      'x-rssr-build': harness.server.buildId }, body: JSON.stringify(body) });
   if (!answer.ok) throw new Error(`the other session's write: ${answer.status}`);
+}
+const elsewhereSetRead = (id, read) => elsewhereWrite('PUT', `/api/v1/entries/${id}/read`, { read });
+
+/// The stored list preferences (answered with the list page's first read).
+async function storedWorkspace() {
+  const input = encodeURIComponent(JSON.stringify({ load_preferences: true, load_feeds: false }));
+  return (await state(`/api/v1/entries/bootstrap?input=${input}`)).workspace;
 }
 
 define('reread-triggers', {}, async (s) => {
@@ -495,6 +524,23 @@ define('reread-triggers', {}, async (s) => {
   await main.client.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   await checkReread(s, main, '/entries: offline and online again', mark, ['/api/v1/entries/bootstrap', '/api/v1/entries']);
   s.check('/entries: back online, the page has the change', (await cardMeta(main, 2)).includes('已读'), await cardMeta(main, 2));
+  // A list preference changed by another session (only unread): the reread brings it to the page,
+  // whose preference-saving effect sees the filter change; it must not write it back (review
+  // C4C2-03). The list is read again for the new filter, so reads are not counted here.
+  await main.traffic.settled();
+  await elsewhereWrite('PUT', '/api/v1/workspace', { ...(await storedWorkspace()), read_filter: 'unread_only' });
+  mark = main.traffic.mark();
+  await triggerAll(main);
+  // The page takes the preference: it lists again with it (the filter controls are folded away
+  // at this width), and entry 2, read, leaves the list.
+  await waitUntil('the list read with the new filter', 10000, async () => main.traffic.since(mark)
+    .some((r) => r.path === '/api/v1/entries' && decodeURIComponent(r.query).includes('"read_filter":"unread_only"')));
+  await waitFor(main.client, `!document.querySelector('${card(2)}')`);
+  await main.traffic.settled();
+  s.check("/entries: another session's list preference shows and filters the list (entry 2, read, gone)", true);
+  s.check('/entries: the preference read is not written back', main.traffic.writes(mark).length === 0
+    && main.traffic.count(mark, 'GET', '/api/v1/entries/bootstrap') === 1, main.traffic.log(mark));
+  s.check("/entries: the stored preference is the other session's", (await storedWorkspace()).read_filter === 'unread_only');
 });
 
 define('two-browsers', {}, async (s) => {
@@ -524,7 +570,6 @@ define('build-mismatch-keeps-edits', {}, async (s) => {
   await choose(main, 'theme-mode', 'dark');
   await fillField(main.client, '[data-field="custom-css"]', ':root { --acceptance-mark: #123456; }');
   const stale = await staleBuild(main);
-  s.expectConsole(/409/);
   await clickSelector(main.client, '[data-action="save-settings"]');
   await waitFor(main.client, `(n => n && ${VISIBLE}(n) && n.textContent.includes('页面版本与服务器不一致'))(document.querySelector('[data-slot="app-notice"][data-notice="reload"]'))`);
   await waitBanner(main, BANNER.settings, 'error', '草稿已保留');
@@ -573,7 +618,6 @@ define('draft-storage-unavailable', {}, async (s) => {
   await markDocument(main);
   await choose(main, 'theme-mode', 'dark');
   await staleBuild(main);
-  s.expectConsole(/409/);
   await clickSelector(main.client, '[data-action="save-settings"]');
   await selectorExists(main.client, '[data-action="reload-page"]');
   await clickSelector(main.client, '[data-action="reload-page"]');
@@ -591,7 +635,7 @@ define('restored-draft-then-sign-in', {}, async (s) => {
   await selectorExists(main.client, SETTINGS);
   await textShown(main.client, RESTORED);
   // The session ends right then: the next read is refused and the page goes to sign in.
-  s.expectConsole(/401/);
+  s.expectConsole({ status: 401, path: '/api/v1/settings' });
   await main.client.send('Network.clearBrowserCookies');
   await triggerFocus(main);
   await waitUntil('the sign-in page', 20000, async () => (await location(main).catch(() => '')) === '/login');
@@ -611,25 +655,28 @@ define('restored-draft-then-sign-in', {}, async (s) => {
   main.server.signedInThroughForm = false;
 });
 
-/// A departure to the sign-in page that does not happen (the navigation answered 204, as when it
-/// is stopped): the draft is kept and the app runs on. Returns once the app has stayed.
-async function stoppedDeparture(s) {
-  await seedDemo('/settings', SETTINGS);
+/// Ends the session: the next read is refused and the app leaves for the sign-in page. The
+/// navigation is answered 204 as when the user stops it (`stop`: the app runs on, signed in again
+/// as before), or held until the returned rule is released (`hold`: it lands late).
+async function leaveToSignIn(s, how) {
   await markDocument(main);
-  await choose(main, 'theme-mode', 'dark');
   await main.faults.addPattern({ urlPattern: '*/login?next=*', resourceType: 'Document', requestStage: 'Request' });
-  await main.faults.add({ match: request('GET', '/login'), action: 'fulfill', status: 204, contentType: 'text/html', times: 1 });
-  s.expectConsole(/401/);
+  const rule = await main.faults.add(how === 'stop'
+    ? { match: request('GET', '/login'), action: 'fulfill', status: 204, contentType: 'text/html', times: 1 }
+    : { match: request('GET', '/login'), action: 'hold', times: 1 });
+  s.onCleanup(() => rule.remove());
+  s.expectConsole({ status: 401, path: /^\/api\/v1\// });
   const cookie = main.server.cookie;
   await main.client.send('Network.clearBrowserCookies');
   await triggerFocus(main);
-  await waitUntil('the stored draft', 20000, async () => (await draft(main)) !== null);
-  await sleep(1000);
-  s.check('the stopped departure leaves the app running with the draft kept', await sameDocument(main)
-    && (await location(main)) === '/settings', await draft(main));
-  const [name, value] = cookie.split('=');
-  await main.client.send('Network.setCookie', { name, value, url: base, httpOnly: true, sameSite: 'Lax' });
-  return Date.now();
+  await waitUntil('the navigation to the sign-in page', 20000, async () => rule.hits() === 1);
+  if (how === 'stop') {
+    await sleep(1000);
+    const [name, value] = cookie.split('=');
+    await main.client.send('Network.setCookie', { name, value, url: base, httpOnly: true, sameSite: 'Lax' });
+    s.check('the stopped departure leaves the app running', await sameDocument(main));
+  }
+  return rule;
 }
 
 /// Opens the settings page again inside the app (not a reload) and says whether it restored.
@@ -642,18 +689,73 @@ async function reopenSettings() {
   return evaluate(main.client, `document.body.textContent.includes(${JSON.stringify(RESTORED)})`);
 }
 
-define('stopped-departure-reopened-soon', { long: true }, async (s) => {
-  const stoppedAt = await stoppedDeparture(s);
-  s.check('settings reopened within the grace period: restored', await reopenSettings());
-  await sleep(Math.max(0, stoppedAt + 31000 - Date.now()));
-  s.check('reopened after the grace period: not restored a second time', !(await reopenSettings()), await draft(main));
+const keptEdits = async (page) => JSON.parse(await draft(page) ?? 'null')?.edits ?? null;
+
+define('stopped-departure-restores-once', {}, async (s) => {
+  await seedDemo('/entries', ENTRIES);
+  // A draft kept by an earlier page, waiting for the next settings page; the app leaves from the
+  // list, the navigation is stopped.
+  await evaluate(main.client, `sessionStorage.setItem('rssr.settings-draft', JSON.stringify({version: 1, edits: {theme: 'dark'}}))`);
+  await leaveToSignIn(s, 'stop');
+  await clickSelector(main.client, '[data-nav="settings"]');
+  await selectorExists(main.client, SETTINGS);
+  await textShown(main.client, RESTORED);
+  s.check('the settings page opened after the stopped departure restores the draft',
+    (await fieldValue(main, 'theme-mode')) === 'dark' && (await keptEdits(main))?.theme === 'dark', await draft(main));
+  s.check('reopened at once: not restored a second time', !(await reopenSettings()), await draft(main));
+  s.check('the settings page closed, nothing is left stored', (await draft(main)) === null, await draft(main));
+  await navigate(main.client, `${base}/settings`);
+  await selectorExists(main.client, SETTINGS);
+  await sleep(800);
+  s.check('nor after a reload', !(await evaluate(main.client, `document.body.textContent.includes(${JSON.stringify(RESTORED)})`)));
 });
 
-define('stopped-departure-reopened-later', { long: true }, async (s) => {
-  const stoppedAt = await stoppedDeparture(s);
-  await sleep(Math.max(0, stoppedAt + 31000 - Date.now()));
-  s.check('settings reopened after the grace period: restored', await reopenSettings());
-  s.check('reopened once more: not restored again', !(await reopenSettings()), await draft(main));
+define('stopped-departure-then-saved', {}, async (s) => {
+  await seedDemo('/settings', SETTINGS);
+  await choose(main, 'theme-mode', 'dark');
+  await leaveToSignIn(s, 'stop');
+  s.check('the draft is kept as the app leaves', (await keptEdits(main))?.theme === 'dark', await draft(main));
+  await choose(main, 'list-density', 'compact');
+  await waitUntil('the kept draft following the edit', 5000, async () => (await keptEdits(main))?.list_density === 'compact');
+  s.check('the kept draft follows the edits made after the departure', true);
+  await clickSelector(main.client, '[data-action="save-settings"]');
+  await waitUntil('the save', 10000, async () => (await state('/api/v1/settings')).list_density === 'compact');
+  await waitUntil('the kept draft gone', 5000, async () => (await draft(main)) === null);
+  s.check('saved: nothing stale is left stored', true);
+  await navigate(main.client, `${base}/settings`);
+  await selectorExists(main.client, SETTINGS);
+  await sleep(800);
+  s.check('a later reload restores nothing; the saved settings show',
+    !(await evaluate(main.client, `document.body.textContent.includes(${JSON.stringify(RESTORED)})`))
+      && (await fieldValue(main, 'theme-mode')) === 'dark' && (await fieldValue(main, 'list-density')) === 'compact');
+});
+
+define('slow-departure-lands-late', { long: true }, async (s) => {
+  await seedDemo('/settings', SETTINGS);
+  await choose(main, 'theme-mode', 'dark');
+  // While a navigation is on its way, Chrome holds DevTools commands to the page until it ends;
+  // the page is still in use, so its own timer makes an edit once the departure has kept the
+  // draft (only the draft following the edits can bring it along).
+  await evaluate(main.client, `(() => { const wait = setInterval(() => {
+    if (!sessionStorage.getItem('rssr.settings-draft')) return;
+    clearInterval(wait);
+    setTimeout(() => ${chooseScript('list-density', 'compact')}, 1000);
+  }, 50); })()`);
+  const left = Date.now();
+  const navigation = await leaveToSignIn(s, 'hold');
+  await sleep(Math.max(0, left + 35000 - Date.now()));
+  await navigation.release();
+  await waitUntil('the sign-in page', 20000, async () => (await location(main).catch(() => '')) === '/login');
+  await evaluate(main.client, `(() => { const form = document.querySelector('form[action="/login"]');
+    form.querySelector('[name="username"]').value = ${JSON.stringify(serverOptions.username)};
+    form.querySelector('[name="password"]').value = ${JSON.stringify(serverOptions.password)};
+    form.submit(); })()`);
+  await selectorExists(main.client, SETTINGS, 30000);
+  await textShown(main.client, RESTORED);
+  s.check('the late navigation restores the latest edits after signing in',
+    (await fieldValue(main, 'theme-mode')) === 'dark' && (await fieldValue(main, 'list-density')) === 'compact');
+  // The page's cookie is new: the next seed signs in through the form again.
+  main.server.signedInThroughForm = false;
 });
 
 // --- V1: reader -----------------------------------------------------------------------------------
@@ -757,58 +859,82 @@ define('startup-target-fails', {}, async (s) => {
 
 // --- R2-07: failures and unknown outcomes are visible -------------------------------------------
 
+/// Waits for a page's status banner to show `tone` with `part`, then checks that it is rendered
+/// (computed visibility and a box), not only present (review C4C2-04).
+async function bannerShown(s, label, page, selector, tone, part) {
+  await waitBanner(page, selector, tone, part);
+  const shown = await banner(page, selector);
+  s.check(`${label}: shown (${tone})`, shown?.visible === true, shown);
+}
+
+/// The refresh badge a button draws (`::after`): its symbol, rendered, on a rendered button.
+const badge = (page, selector) => evaluate(page.client, `(button => {
+  if (!button) return null;
+  const after = getComputedStyle(button, '::after');
+  return { state: button.dataset.refreshState, content: after.content, display: after.display,
+    visibility: after.visibility, buttonVisible: ${VISIBLE}(button) };
+})(document.querySelector(${JSON.stringify(selector)}))`);
+const badgeShows = (shown, symbol) => shown?.content === `"${symbol}"` && shown.display !== 'none'
+  && shown.visibility === 'visible' && shown.buttonVisible === true;
+
 define('failures-and-unknowns-visible', {}, async (s) => {
   await seedDemo('/entries', ENTRIES);
-  await main.faults.add({ match: request('PUT', '/api/v1/entries/2/read'), action: 'fulfill', status: 503, body: busy('服务器繁忙（测试）'), times: 1 });
+  const failed = { action: 'fulfill', status: 503, body: busy('服务器繁忙（测试）'), times: 1 };
+  const lost = { action: 'fail', times: 1 };
+  // Entries: a failed write, then one whose outcome is unknown.
+  await main.faults.add({ match: request('PUT', '/api/v1/entries/2/read'), ...failed });
   await pointerClick(main.client, `${card(2)} [data-action="mark-read"]`);
-  await waitBanner(main, BANNER.entries, 'error', '更改已读状态失败：服务器繁忙（测试）');
-  s.check('entries: a failed write', (await banner(main, BANNER.entries)).visible);
-  // Feeds: an add whose outcome is unknown keeps the address.
+  await bannerShown(s, 'entries', main, BANNER.entries, 'error', '更改已读状态失败：服务器繁忙（测试）');
+  await main.faults.add({ match: request('PUT', '/api/v1/entries/2/read'), ...lost });
+  await pointerClick(main.client, `${card(2)} [data-action="mark-read"]`);
+  await bannerShown(s, 'entries', main, BANNER.entries, 'unknown', '更改已读状态');
+  // Feeds: an add whose outcome is unknown keeps the address; then one that failed.
   await clickSelector(main.client, '[data-nav="feeds"]');
   await selectorExists(main.client, FEEDS);
-  await main.faults.add({ match: request('POST', '/api/v1/jobs/add-subscription'), action: 'fail', times: 1 });
+  await main.faults.add({ match: request('POST', '/api/v1/jobs/add-subscription'), ...lost });
   const address = `${harness.feeds.base}/new/unknown-add.xml`;
   await evaluate(main.client, `document.querySelector('[data-field="feed-url-input"]').focus()`);
   await main.client.send('Input.insertText', { text: address });
   await clickSelector(main.client, '[data-action="add-feed"]');
-  await waitBanner(main, BANNER.feeds, 'unknown', '添加订阅');
+  await bannerShown(s, 'feeds', main, BANNER.feeds, 'unknown', '添加订阅');
   s.check('feeds: an unknown add, the address kept', (await fieldValue(main, 'feed-url-input')) === address);
+  await main.faults.add({ match: request('POST', '/api/v1/jobs/add-subscription'), ...failed });
+  await clickSelector(main.client, '[data-action="add-feed"]');
+  await bannerShown(s, 'feeds', main, BANNER.feeds, 'error', '服务器繁忙（测试）');
   // Settings: unknown, then failed.
   await clickSelector(main.client, '[data-nav="settings"]');
   await selectorExists(main.client, SETTINGS);
   await choose(main, 'theme-mode', 'dark');
-  await main.faults.add({ match: request('PATCH', '/api/v1/settings'), action: 'fail', times: 1 });
+  await main.faults.add({ match: request('PATCH', '/api/v1/settings'), ...lost });
   await clickSelector(main.client, '[data-action="save-settings"]');
-  await waitBanner(main, BANNER.settings, 'unknown', '草稿已保留');
-  await main.faults.add({ match: request('PATCH', '/api/v1/settings'), action: 'fulfill', status: 503, body: busy('服务器繁忙（测试）'), times: 1 });
+  await bannerShown(s, 'settings', main, BANNER.settings, 'unknown', '草稿已保留');
+  await main.faults.add({ match: request('PATCH', '/api/v1/settings'), ...failed });
   await clickSelector(main.client, '[data-action="save-settings"]');
-  await waitBanner(main, BANNER.settings, 'error', '保存设置失败：服务器繁忙（测试）');
-  s.check('settings: unknown, then failed', true);
-  // Reader: an unknown write is shown (info statuses stay hidden there).
+  await bannerShown(s, 'settings', main, BANNER.settings, 'error', '保存设置失败：服务器繁忙（测试）');
+  // Reader: an unknown write, then a failed one (info statuses stay hidden there).
   await navigate(main.client, `${base}/entries/2`);
   await selectorExists(main.client, READER);
-  await main.faults.add({ match: request('PUT', '/api/v1/entries/2/read'), action: 'fail', times: 1 });
+  await main.faults.add({ match: request('PUT', '/api/v1/entries/2/read'), ...lost });
   await pointerClick(main.client, '[data-action="mark-read"]');
-  await waitBanner(main, BANNER.reader, 'unknown', '结果未知');
-  s.check('reader: an unknown write is visible', (await banner(main, BANNER.reader)).visible);
-  // The manual refresh's result marked on the reader's Home button and on the collapsed toggle.
-  for (const [tone, rule] of [
-    ['unknown', { action: 'fail' }],
-    ['error', { action: 'fulfill', status: 503, body: busy('服务器繁忙（测试）') }],
-  ]) {
+  await bannerShown(s, 'reader', main, BANNER.reader, 'unknown', '结果未知');
+  await main.faults.add({ match: request('PUT', '/api/v1/entries/2/read'), ...failed });
+  await pointerClick(main.client, '[data-action="mark-read"]');
+  await bannerShown(s, 'reader', main, BANNER.reader, 'error', '服务器繁忙（测试）');
+  // The manual refresh's result drawn on the reader's Home button and on the collapsed toggle.
+  for (const [tone, symbol, rule] of [['unknown', '?', lost], ['error', '!', failed]]) {
     await navigate(main.client, `${base}/entries`);
     await selectorExists(main.client, ENTRIES);
-    await main.faults.add({ match: request('POST', '/api/v1/jobs/refresh-all'), times: 1, ...rule });
+    await main.faults.add({ match: request('POST', '/api/v1/jobs/refresh-all'), ...rule });
     await clickSelector(main.client, '[data-action="activate-home"]');
     await waitFor(main.client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === '${tone}'`);
     await clickSelector(main.client, `${card(2)} [data-slot="entry-card-title"]`);
     await selectorExists(main.client, '[data-page="reader"]');
-    s.check(`the reader's Home button marks a refresh ended ${tone}`,
-      await evaluate(main.client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState`) === tone);
+    const home = await badge(main, '[data-action="activate-home"]');
+    s.check(`the reader's Home button shows "${symbol}" for a refresh ended ${tone}`, home?.state === tone && badgeShows(home, symbol), home);
     await clickSelector(main.client, '[data-action="toggle-nav"]');
     await waitFor(main.client, `document.querySelector('[data-layout="app-nav-shell"]').dataset.state === 'collapsed'`);
-    s.check(`the collapsed navigation marks it too (${tone})`,
-      await evaluate(main.client, `document.querySelector('[data-action="toggle-nav"]').dataset.refreshState`) === tone);
+    const toggle = await badge(main, '[data-action="toggle-nav"]');
+    s.check(`the collapsed navigation's toggle shows "${symbol}" too`, toggle?.state === tone && badgeShows(toggle, symbol), toggle);
     await clickSelector(main.client, '[data-action="toggle-nav"]');
   }
 });
@@ -871,16 +997,24 @@ define('background-tab-time-limit', { long: true }, async (s) => {
 
 // --- Run --------------------------------------------------------------------------------------------
 
+/// Whether `error` is the network log entry of an answer `expected` describes.
+function expectedAnswer(error, { status, path }) {
+  if (error.type !== 'log.error' || error.source !== 'network' || !error.url) return false;
+  if (!error.text?.includes(`the server responded with a status of ${status} `)) return false;
+  const pathname = new URL(error.url).pathname;
+  return path instanceof RegExp ? path.test(pathname) : pathname === path;
+}
+
 /// Why a console error is part of the scenario, or undefined when it is a failure.
 function ignoredBecause(scenario, provoked, error) {
   if (error.text?.includes('/_dioxus?build_id=') && error.text?.includes('WebSocket')) {
     return 'debug bundle live-reload endpoint is absent on rssr-web';
   }
-  if (error.networkRequestId && provoked.has(error.networkRequestId)) {
+  if (error.type === 'log.error' && error.networkRequestId && provoked.has(error.networkRequestId)) {
     return 'a request the scenario failed on purpose';
   }
-  const pattern = scenario.expected.find((expected) => expected.test(error.text ?? ''));
-  return pattern && `expected by the scenario: ${pattern}`;
+  const expected = scenario.expected.find((answer) => expectedAnswer(error, answer));
+  return expected && `expected by the scenario: ${expected.status} for ${expected.path}`;
 }
 
 /// The scenario's console errors, split into failures and the ignored ones with their reasons.
@@ -897,12 +1031,16 @@ function sortConsole(scenario, pages) {
 }
 
 async function run() {
+  const unknown = (only ?? []).filter((name) => !scenarios.some((scenario) => scenario.name === name));
+  if (unknown.length) throw new Error(`--only: no such scenario: ${unknown.join(', ')}`);
   await mkdir(artifactDir, { recursive: true });
   harness = await startHarness(serverOptions);
   for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
     process.once(signal, () => { harness.close().finally(() => process.exit(code)); });
   }
   let failed = false;
+  // A failure outside any scenario (the browser, the harness): the run did not happen as asked.
+  let runError;
   try {
     const version = await (await fetch(`${cdpBase}/json/version`, { signal: AbortSignal.timeout(10000) })).json();
     browser = connect(version.webSocketDebuggerUrl);
@@ -943,9 +1081,12 @@ async function run() {
       await main.client.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }).catch(() => {});
       await activate(main.target.id).catch(() => {});
     }
+  } catch (error) {
+    runError = error.stack ?? String(error);
+    throw error;
   } finally {
     await writeFile(path.join(artifactDir, 'assertions.json'), JSON.stringify({
-      status: failed ? 'fail' : 'pass', long, scenarios: results }, null, 2), 'utf8');
+      status: failed || runError ? 'fail' : 'pass', long, error: runError, scenarios: results }, null, 2), 'utf8');
     await main?.close();
     browser?.close();
     await harness.close();

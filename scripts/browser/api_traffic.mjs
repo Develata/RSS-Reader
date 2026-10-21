@@ -23,11 +23,18 @@ export class ApiTraffic {
     this.client = client;
     this.entries = [];
     this.byId = new Map();
+    // When a request (job long polls aside) last started or ended.
+    this.lastActivity = Date.now();
+  }
+
+  /// A request (job long polls aside) started or ended now.
+  touch(entry) {
+    if (!LONG_POLL.test(entry.path)) this.lastActivity = Date.now();
   }
 
   async start() {
     const { client } = this;
-    client.on('Network.requestWillBeSent', ({ requestId, request, redirectResponse }) => {
+    client.on('Network.requestWillBeSent', ({ requestId, loaderId, request, redirectResponse }) => {
       if (!isApi(request.url) && !this.byId.has(requestId)) return;
       const known = this.byId.get(requestId);
       if (known && redirectResponse) {
@@ -36,10 +43,12 @@ export class ApiTraffic {
         return;
       }
       const url = new URL(request.url);
-      const entry = { id: requestId, method: request.method, path: url.pathname, query: url.search,
+      // `loaderId`: the document that made the request (a reload starts another).
+      const entry = { id: requestId, loaderId, method: request.method, path: url.pathname, query: url.search,
         origin: url.origin, at: Date.now(), done: false, redirects: [] };
       this.entries.push(entry);
       this.byId.set(requestId, entry);
+      this.touch(entry);
     });
     client.on('Network.responseReceived', ({ requestId, response }) => {
       const entry = this.byId.get(requestId);
@@ -47,11 +56,15 @@ export class ApiTraffic {
     });
     client.on('Network.loadingFinished', ({ requestId }) => {
       const entry = this.byId.get(requestId);
-      if (entry) entry.done = true;
+      if (!entry) return;
+      entry.done = true;
+      this.touch(entry);
     });
     client.on('Network.loadingFailed', ({ requestId, errorText, canceled }) => {
       const entry = this.byId.get(requestId);
-      if (entry) Object.assign(entry, { done: true, failed: errorText ?? 'failed', canceled });
+      if (!entry) return;
+      Object.assign(entry, { done: true, failed: errorText ?? 'failed', canceled });
+      this.touch(entry);
     });
     await client.send('Network.enable');
     return this;
@@ -84,16 +97,15 @@ export class ApiTraffic {
       + `${entry.redirects.length ? ` redirected ${entry.redirects.map((r) => r.status).join(',')}` : ''}`);
   }
 
-  /// Waits until the page has settled: past the reread triggers' 200 ms window, and no request
-  /// in flight (job long polls aside) for `quietMs`.
+  /// Waits until the page has settled: past the reread triggers' 200 ms window, no request in
+  /// flight and none started or ended (job long polls aside) for `quietMs` (review C4C2-05: a
+  /// request between two looks counts too).
   async settled({ quietMs = 600, timeoutMs = 20000 } = {}) {
     await sleep(250);
     const deadline = Date.now() + timeoutMs;
-    let quietSince = Date.now();
     while (Date.now() < deadline) {
       const busy = this.entries.some((entry) => !entry.done && !LONG_POLL.test(entry.path));
-      if (busy) quietSince = Date.now();
-      else if (Date.now() - quietSince >= quietMs) return;
+      if (!busy && Date.now() - this.lastActivity >= quietMs) return;
       await sleep(50);
     }
     const open = this.entries.filter((entry) => !entry.done && !LONG_POLL.test(entry.path));
@@ -107,8 +119,9 @@ export class ApiTraffic {
 /// `contentType`, `headers`), `hold` (until released), `headers` (`rewrite(headers)` → headers sent
 /// instead), or `failResponse` (the server answered, the page gets a network failure: a committed
 /// write whose answer was lost). The first rule with uses left applies; other requests continue.
-/// Requests a rule failed or answered are recorded (`provoked`, Network request ids) so the console
-/// errors they cause can be told from real ones.
+/// Requests a rule failed, answered or sent astray (`headers`) are recorded (`provoked`, Network
+/// request ids) so the console errors they cause can be told from real ones; a held request only
+/// when it is released as failed.
 export class ApiInterceptor {
   constructor(client) {
     this.client = client;
@@ -169,7 +182,7 @@ export class ApiInterceptor {
       return;
     }
     rule.used += 1;
-    if (networkId) this.provoked.add(networkId);
+    if (networkId && rule.action !== 'hold') this.provoked.add(networkId);
     switch (rule.action) {
       case 'fail':
       case 'failResponse':
@@ -184,7 +197,7 @@ export class ApiInterceptor {
         });
         break;
       case 'hold':
-        rule.held.push({ requestId });
+        rule.held.push({ requestId, networkId });
         break;
       case 'headers': {
         // `headers` replaces the whole list: start from the request's own.
@@ -202,18 +215,21 @@ export class ApiInterceptor {
   /// Lets held requests go on (`continue`) or fail them (`fail`). A request the page already gave
   /// up on (its time limit) cannot be continued any more: that is ignored.
   async release(rule, how) {
-    for (const { requestId } of rule.held.splice(0)) {
+    for (const { requestId, networkId } of rule.held.splice(0)) {
+      if (how === 'fail' && networkId) this.provoked.add(networkId);
       const method = how === 'fail' ? 'Fetch.failRequest' : 'Fetch.continueRequest';
       await this.client.send(method, { requestId, ...(how === 'fail' ? { errorReason: 'Failed' } : {}) })
         .catch(() => {});
     }
   }
 
-  /// Releases every hold and drops every rule and extra pattern (between scenarios).
+  /// Releases every hold and drops every rule, extra pattern and provoked request (between
+  /// scenarios, once their console errors are sorted).
   async reset() {
     for (const rule of this.rules) await this.release(rule, 'continue');
     this.rules = [];
     this.extraPatterns = [];
+    this.provoked.clear();
     await this.enable();
   }
 }

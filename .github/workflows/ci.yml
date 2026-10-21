@@ -299,6 +299,7 @@ jobs:
             target/ci-ui/${{ matrix.preset }}*/*.log
             target/ci-ui/${{ matrix.preset }}*/*.png
             target/ci-ui/${{ matrix.preset }}*/*.html
+            target/ci-ui/${{ matrix.preset }}*/*-traffic.txt
           retention-days: 7
 
   wasm-contract-build:
