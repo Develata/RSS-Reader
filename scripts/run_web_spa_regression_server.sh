@@ -87,6 +87,7 @@ BROWSER_STATE_SEEDS = {
     "mobile-ui-short": "mobile_ui_short",
     "home-reader": "mobile_ui_overflow",
     "directory-contract": "directory_contract",
+    "directory-scroll": "directory_scroll",
 }
 
 
@@ -179,7 +180,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(400, f"Unknown browser state seed: {seed}")
                 return
             core_state, app_state, entry_flags, entry_content = loaded_seed
-            if seed.startswith("mobile-ui-") or seed in ("home-reader", "directory-contract"):
+            if seed.startswith("mobile-ui-") or seed in ("home-reader", "directory-contract", "directory-scroll"):
                 feed_url = f"http://127.0.0.1:{port}{MOBILE_UI_FEED_PATH}?seed={seed}"
                 for feed in core_state.get("feeds", []):
                     feed["url"] = feed_url + f"&feed={feed['id']}"
@@ -249,7 +250,7 @@ class SpaFallbackHandler(http.server.SimpleHTTPRequestHandler):
     def _mobile_ui_feed(self):
         seed = parse_qs(urlparse(self.path).query).get("seed", ["mobile-ui-overflow"])[0]
         feed_id = parse_qs(urlparse(self.path).query).get("feed", ["1"])[0]
-        if seed == "directory-contract":
+        if seed in ("directory-contract", "directory-scroll"):
             # Startup refresh is unconditional, regardless of fixture timestamps.
             # Keep it local and unchanged; do not inject extra entries or titles.
             self.send_response(304)
