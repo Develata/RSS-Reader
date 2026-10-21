@@ -2,6 +2,7 @@ use std::{
     fs,
     path::PathBuf,
     process::{Command, Output},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -9,10 +10,14 @@ struct Workspace(PathBuf);
 
 impl Workspace {
     fn new() -> Self {
+        // Tests on parallel threads of one process can read the same clock value (2026-10-20,
+        // Windows: `AlreadyExists`); the sequence keeps their workspaces apart.
+        static NEXT: AtomicU64 = AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
-            "rssr-cli-输出 contract-{}-{}",
+            "rssr-cli-输出 contract-{}-{}-{}",
             std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos()
+            SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&path).expect("create isolated workspace");
         Self(path)
