@@ -203,9 +203,7 @@ async fn a_library_left_mid_checkpoint_opens_and_recovers_from_its_log() {
 
     std::fs::write(dir.library(), short).unwrap();
     std::fs::write(side_file(&dir.library(), "-wal"), &log).unwrap();
-    let started = Instant::now();
     let reopened = LibraryStore::open(dir.library()).await.expect("opens");
-    assert!(started.elapsed() < Duration::from_secs(2), "no waiting for a corrupt-looking file");
     assert_eq!(feed_count(&reopened).await, 20);
     reopened.close().await.unwrap();
     assert!(!side_file(&dir.library(), "-wal").exists(), "the log was written back");

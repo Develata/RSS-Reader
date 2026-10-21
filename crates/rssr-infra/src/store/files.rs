@@ -42,11 +42,6 @@ pub fn probe_uri(path: &Path) -> StoreResult<String> {
     sqlite_uri(path, "mode=ro&immutable=1")
 }
 
-/// How long a probe that SQLite reports as corrupt is retried before the open is refused. No known
-/// state of a library reaches it since the probe reads past a short main file (see
-/// [`check_library`]); it stays as a mitigation for a lock-free read meeting a write.
-const SETTLE: Duration = Duration::from_secs(2);
-
 /// Whether the existing, non-empty file behind `probe` (from [`probe_uri`]) is a library.
 ///
 /// The application id is read through SQLite with `immutable=1`: nothing is written, no `-wal` or
@@ -65,23 +60,18 @@ const SETTLE: Duration = Duration::from_secs(2);
 /// file is sound is then the writer's to find: SQLite recovers it from the log, and without a log
 /// the writer's first read reports the corruption and the open is refused.
 ///
-/// A probe SQLite still reports as corrupt is retried for [`SETTLE`], then reported as corruption,
-/// which refuses the open without writing. A file whose format is not SQLite's is refused at once
-/// as not a library.
+/// The probe reads page 1's header alone: the fields SQLite checks before the application id are
+/// the same in every version of page 1, and a page count ahead of the file is read past, so a read
+/// that meets a write needs no retry. A probe SQLite still reports as corrupt refuses the open as
+/// corruption, without writing; a file whose format is not SQLite's is refused as not a library.
 pub fn check_library(probe: &str) -> StoreResult<()> {
-    let until = Instant::now() + SETTLE;
-    loop {
-        match read_application_id(probe) {
-            Ok(application_id) if application_id == migrate::APPLICATION_ID => return Ok(()),
-            Ok(_) => return Err(StoreError::NotALibrary),
-            Err(error) => match error.sqlite_error_code() {
-                Some(ErrorCode::DatabaseCorrupt) if Instant::now() < until => {
-                    std::thread::sleep(Duration::from_millis(20));
-                }
-                Some(ErrorCode::NotADatabase) => return Err(StoreError::NotALibrary),
-                _ => return Err(error.into()),
-            },
+    match read_application_id(probe) {
+        Ok(application_id) if application_id == migrate::APPLICATION_ID => Ok(()),
+        Ok(_) => Err(StoreError::NotALibrary),
+        Err(error) if error.sqlite_error_code() == Some(ErrorCode::NotADatabase) => {
+            Err(StoreError::NotALibrary)
         }
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -272,7 +262,7 @@ mod tests {
 
     /// A library whose page 1 counts more pages than the file has (simulated by cutting off the
     /// last page, as a checkpoint growing the file leaves it midway or when its process ends) is
-    /// known by its application id at once, without retrying, and without touching any file.
+    /// known by its application id, without touching any file.
     #[test]
     fn a_probe_knows_a_library_left_mid_checkpoint() {
         let dir = temp_dir("mid-checkpoint");
@@ -289,9 +279,7 @@ mod tests {
         let short = &complete[..complete.len() - page];
         std::fs::write(&target, short).unwrap();
 
-        let started = Instant::now();
         check_library(&probe).expect("still a library");
-        assert!(started.elapsed() < SETTLE, "accepted at once, not after retrying");
         assert_eq!(std::fs::read(&target).unwrap(), short, "the file is untouched");
         let names: Vec<_> =
             std::fs::read_dir(&dir).unwrap().map(|entry| entry.unwrap().file_name()).collect();
@@ -307,7 +295,7 @@ mod tests {
 
     /// Real checkpoints (phase A gate): while another connection keeps growing the library in
     /// WAL mode, checkpointing it into the main file and shrinking it again (`VACUUM`), every
-    /// probe accepts it. The simulated case above shows why a probe can meet a checkpoint midway.
+    /// probe accepts it, with no retry. The simulated case above is a checkpoint met midway.
     ///
     /// Probing goes on until the writer has checkpointed 64 times and shrunk the library once
     /// (the `VACUUM` after the 64th), however long that takes: a fixed 1.5 s window was too short
