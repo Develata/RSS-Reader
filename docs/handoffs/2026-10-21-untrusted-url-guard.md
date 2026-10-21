@@ -36,12 +36,16 @@
 
 - **feed 扫描**（`check_feed_urls`）：与 feed-rs 相同的判定（前 8 KiB 里第一个 `<` 或 `{`）、相同的 quick-xml
   分词配置、相同的文本/CDATA/实体合并与属性反转义；不做命名空间解析（那本身就是要防的平方级路径），自己数绑定。
-  - 结构：嵌套 ≤ 1024 层（quick-xml 的 `u16` 深度计数远未溢出）、同时在作用域内的命名空间声明 ≤ 256、
-    单个元素的属性错误（重复等）≤ 16——这三项同时挡住 feed-rs 自身的命名空间解析与重复属性回查的平方级。
+  - 结构：嵌套 ≤ 1024 层（quick-xml 的 `u16` 深度计数远未溢出）、同时在作用域内的命名空间声明 ≤ 256
+    （与 NsReader 一样不做重复检查地计数）、命名空间值 ≤ 256 字节（feed-rs 对每个带前缀的元素都会重新解码它）、
+    单个元素的属性错误（重复等，自己用哈希集合判重）≤ 16。这些同时挡住 feed-rs 自身的命名空间解析与重复属性回查的
+    超线性。文档中途的 XML 声明（会切换解码器、与 feed-rs 分叉）与无法解码的文本一律拒绝。
   - 地址：只检查 feed-rs 会当作地址解析的位置：`link`/`icon`/`logo`/`url` 元素的文本，`href`/`url`/`src`/`uri`
-    属性，`xml:base`（基地址长度按百分号编码 3 倍估算，绝对地址重新计、相对地址与上级累加，不超过 512 字节）；
-    JSON Feed 只检查 feed-rs 读取的 `home_page_url`、`feed_url`、条目 `url`/`external_url`、附件 `url`，
-    无法整体解析的 JSON 直接拒绝（否则深层扩展字段可以让检查失效而 feed-rs 照常解析）。
+    属性（不带前缀，与 feed-rs 的属性名匹配一致），带前缀的元素只在前缀绑定到 Atom/RSS 命名空间时检查；
+    `xml:base` 按 feed-rs 的语义真实解析、拼接出基地址栈（原值先过点数与 512 字节检查，所以这一步解析有界），
+    拼出的基地址序列化后不超过 512 字节、点数不超过上限；JSON Feed 只检查 feed-rs 读取的 `home_page_url`、`feed_url`、
+    条目 `url`/`external_url`、附件 `url`，无法整体解析的 JSON 直接拒绝（否则深层扩展字段可以让检查失效而 feed-rs
+    照常解析），根、条目、附件必须是对象（serde 也接受按字段顺序写成数组的结构体）。
   - 越界就整个 feed 拒绝（错误“拒绝解析 feed：…”，与解析失败同样处理），不做部分解析；正文省略号等不受影响。
     XML 格式本身不对时不在这里报错，交给 feed-rs（同一个分词器，会在同一处失败）。
 - **共享预检**：上述各入口统一走 `parse_untrusted_url`/`join_untrusted_url`；`join` 时基地址也计入 8 KiB 上限。
@@ -57,8 +61,10 @@
 - `cargo fmt --all --check`、`cargo clippy -j 1 --workspace --all-targets --locked -- -D warnings`：通过。
 - `cargo test -j 1 --workspace --locked`：452 通过，0 失败（第 1 轮评审修复后重跑；真实 feed 复测仍是 23 个照常、0 误拒）。
 - 独立评审（Codex）第 1 轮：4 个 BLOCKER（JSON 深度绕过、命名空间解析平方级、重复属性平方级、深度计数溢出）+
-  2 个 SHOULD_FIX（`xml:base` 长度模型、JSON 键后缀过宽），已按上文修复并加单元测试。XML 侧仍只按本地名判断元素与属性，
-  比 feed-rs 按命名空间区分宽，属于多检查的一侧。
+  2 个 SHOULD_FIX（`xml:base` 长度模型、JSON 键后缀过宽），已按上文修复并加单元测试。
+- 第 2 轮：3 个 BLOCKER（JSON 顺序数组结构体绕过、文档中途 XML 声明切换解码器、长命名空间值反复解码）+
+  4 个 SHOULD_FIX（`xml:base` 3 倍估算不可靠、JSON `Value` 的对数因子、未知命名空间的 `link` 误拒、重复命名空间声明漏计），
+  除 JSON 对数因子外均已修复并加单元测试；修复后 453 个测试通过，真实 feed 复测 0 误拒。
 - `cargo check -j 1 -p rssr-app --target wasm32-unknown-unknown --locked`：通过。
 
 ## 结果
@@ -69,4 +75,7 @@
 
 - 重定向 `Location` 在 reqwest/tower-http 内部解析，本项目只能管代理自己的一次 `join`；单个头的大小受 HTTP 头上限约束。
 - `url`/IDNA 在任意 Unicode 主机名上的最坏复杂度未证明。
+- JSON Feed 预检构造完整的 `serde_json::Value`（对象是 `BTreeMap`），大量带长公共前缀的键有对数因子，未改成流式。
+- 仍直接解析的、输入可信度较高的位置：WebDAV 端点与远程路径（用户设置）、Web 端 `x-rssr-final-url`（本项目代理生成）、
+  数据库/BrowserStore 里已序列化的地址（写入时已过预检）。
 - 上游：rust-url（点段反扫）与 feed-rs（`xml:base` 克隆放大）的议题草稿已写好，等 Develata 确认后提交。
