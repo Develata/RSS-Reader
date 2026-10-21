@@ -68,8 +68,16 @@ export class FeedFixtureServer {
   /// From now on every fetch of a subscription of `seed` answers the entries of all rounds armed
   /// so far: one new entry per subscription and round. Fetches within a round agree, so the
   /// number of new entries does not depend on how the server's concurrent fetches interleave.
+  /// Rounds belong to one library: a new library of the seed starts without them (`newLibrary`).
   nextRound(seed) {
     this.rounds.set(seed, (this.rounds.get(seed) ?? 0) + 1);
+  }
+
+  /// A new library of `seed` is about to be served: its subscriptions answer the seed's entity
+  /// tags again (no rounds). Holds and an armed `failNext` stay: arming one before a new library
+  /// holds or fails that library's start-up fetch.
+  newLibrary(seed) {
+    this.rounds.delete(seed);
   }
 
   /// Holds requests whose path `match`es until `release()`; returns the hold.
@@ -107,6 +115,7 @@ export class FeedFixtureServer {
     if (response.writableEnded) return;
     const headers = { 'Content-Type': 'application/rss+xml; charset=utf-8', 'Cache-Control': 'no-store' };
     if (this.invalid.delete(pathname)) {
+      this.log(`  ${pathname} -> 200 invalid body`);
       response.writeHead(200, headers).end('invalid RSS fixture');
       return;
     }
@@ -137,6 +146,7 @@ export class FeedFixtureServer {
     const rounds = this.rounds.get(seed) ?? 0;
     const tag = `"${seed}-${feed}${rounds ? `-r${rounds}` : ''}"`;
     if (request.headers['if-none-match'] === tag) {
+      this.log(`  ${pathname} -> 304`);
       response.writeHead(304, { ETag: tag }).end();
       return;
     }
@@ -151,6 +161,7 @@ export class FeedFixtureServer {
     }
     // The seeded title: a refresh stores the channel's title, which must not replace it.
     const title = this.titles.get(seed)?.get(feed) ?? `Fixture feed ${feed}`;
+    this.log(`  ${pathname} -> 200 ${items.length} entries`);
     response.writeHead(200, { ...headers, ETag: tag }).end(rss(title, items));
   }
 }
@@ -170,11 +181,12 @@ export class RssrWebServer {
   async stop() {
     const child = this.child;
     this.child = undefined;
-    if (!child || child.exitCode !== null) return;
-    await new Promise((resolve) => {
-      child.once('exit', resolve);
-      child.kill();
-    });
+    if (!child || exited(child)) return;
+    const gone = new Promise((resolve) => child.once('exit', resolve));
+    child.kill();
+    const timer = setTimeout(() => child.kill('SIGKILL'), 10000);
+    await gone;
+    clearTimeout(timer);
   }
 
   /// Restarts the server on a fresh library of `seed` (with the theme `preset` as custom CSS),
@@ -191,6 +203,7 @@ export class RssrWebServer {
     rmSync(dataDir, { recursive: true, force: true });
     const args = ['--data-dir', dataDir];
     if (seed) {
+      options.feeds.newLibrary(seed);
       const seedsDir = edit ? editedSeed(options.seedsDir, seed,
         path.join(options.workDir, `seeds-${this.generation}`), edit) : options.seedsDir;
       const core = readJson(path.join(seedsDir, `${seed.replace(/-/g, '_')}_core.json`));
@@ -217,6 +230,8 @@ export class RssrWebServer {
       RSS_READER_WEB_USERNAME: options.username,
       RSS_READER_WEB_PASSWORD: options.password,
       RSSR_DATA_DIR: dataDir,
+      // The harness reads the build id from the server's start-up line (rssr_web, info).
+      RUST_LOG: process.env.RUST_LOG ? `${process.env.RUST_LOG},rssr_web=info` : 'info',
       NO_PROXY: '127.0.0.1,localhost',
       no_proxy: '127.0.0.1,localhost',
     });
@@ -230,20 +245,22 @@ export class RssrWebServer {
     child.stderr.on('data', write);
     this.child = child;
     await waitUntil(`rssr-web on ${this.base}`, 30000, async () => {
-      if (child.exitCode !== null) throw new Error(`rssr-web exited with ${child.exitCode}`);
-      return (await fetch(`${this.base}/healthz`).catch(() => null))?.ok === true;
+      if (exited(child)) throw new Error(`rssr-web exited (${child.exitCode ?? child.signalCode})`);
+      return (await fetch(`${this.base}/healthz`, { signal: AbortSignal.timeout(REQUEST_MS) })
+        .catch(() => null))?.ok === true;
     });
-    if (!this.buildChecked) {
-      await verifyBuild(() => output, options.staticDir);
-      this.buildChecked = true;
-    }
+    this.buildId = await startedBuild(() => output);
     const cookie = await this.signIn('/entries');
-    // The start-up refresh: every subscription fetched and its result stored.
+    // The start-up refresh of this server: every active subscription fetched by it (counts were
+    // reset before it started) and a fetch time of this run stored. Seeds may carry a fetch time
+    // in the future (2099), so a time alone does not show that the refresh happened.
     await waitUntil(`start-up refresh of ${seed}`, 30000, async () => {
       const snapshot = await this.api('GET', '/api/v1/feeds', cookie);
-      return feeds.every(({ id }) => {
+      return feeds.every(({ id, url }) => {
         const feed = snapshot.feeds.find((candidate) => candidate.id === id);
-        return feed?.last_fetched_at && Date.parse(feed.last_fetched_at) >= startedAt - 1000;
+        const fetchedAt = Date.parse(feed?.last_fetched_at ?? '');
+        return options.feeds.count(new URL(url).pathname) > 0
+          && fetchedAt >= startedAt - 1000 && fetchedAt <= Date.now() + 1000;
       });
     });
     options.feeds.resetCounts();
@@ -256,6 +273,7 @@ export class RssrWebServer {
     const response = await fetch(`${this.base}/login`, {
       method: 'POST',
       redirect: 'manual',
+      signal: AbortSignal.timeout(REQUEST_MS),
       headers: { Origin: this.base, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ username, password, next }).toString(),
     });
@@ -267,33 +285,49 @@ export class RssrWebServer {
 
   /// A read of the server's API with `cookie` (the harness's own view of the library).
   async api(method, pathname, cookie) {
-    const response = await fetch(`${this.base}${pathname}`, { method, headers: { Cookie: cookie } });
+    // The signal also bounds reading the body.
+    const response = await fetch(`${this.base}${pathname}`,
+      { method, headers: { Cookie: cookie }, signal: AbortSignal.timeout(REQUEST_MS) });
     if (!response.ok) throw new Error(`${method} ${pathname}: ${response.status}`);
     return response.json();
   }
 }
 
-/// The page must come from the server's build: the server refuses writes from another build, which
-/// would fail the regression's writes with a misleading message. The server logs its build id at
-/// start; the page's id is compiled into the wasm module its entry script loads.
-async function verifyBuild(output, staticDir) {
-  // Strip terminal colours before reading `build="…"` from the start-up line.
+/// A bound on each request the harness makes, its body included (`waitUntil` checks its deadline
+/// only between checks).
+const REQUEST_MS = 10000;
+
+const exited = (child) => child.exitCode !== null || child.signalCode !== null;
+
+/// The server's build id, from its start-up line (terminal colours stripped).
+async function startedBuild(output) {
   const startLine = () => output().replace(/\x1b\[[0-9;]*m/g, '').match(/starting rssr-web on \S+ build="([^"]+)"/);
   await waitUntil('the build id in the server output', 10000, async () => startLine() !== null);
-  const server = startLine()[1];
-  const index = readFileSync(path.join(staticDir, 'index.html'), 'utf8');
-  const script = index.match(/<script[^>]+src="\/(?:\.\/)?([^"]+\.js)"/)?.[1];
-  if (!script) throw new Error(`no entry script in ${staticDir}/index.html`);
-  // The module the script starts (`module_or_path`; minified in release bundles, spaced in debug
-  // ones), not wasm-bindgen's unused default name.
-  const module = readFileSync(path.join(staticDir, script), 'utf8')
-    .match(/module_or_path:\s*"\/(?:\.\/)?([^"]+\.wasm)"/)?.[1];
-  if (!module) throw new Error(`no wasm module started by ${script}`);
-  const wasm = readFileSync(path.join(staticDir, module));
-  if (!wasm.includes(Buffer.from(server))) {
-    throw new Error(`the page (${module}) is not from the server's build ${server}: build both from one ` +
-      'checkout (or with the same RSSR_BUILD_ID)');
-  }
+  return startLine()[1];
+}
+
+/// The page must come from the server's build: the server refuses writes from another build, which
+/// would fail a check's writes with a misleading message. The page sends its build id with every
+/// request to the server (`x-rssr-build`); this watches them (CDP Network domain on `client`) and
+/// `verify()` throws unless every one carried exactly the server's id, and at least one was seen.
+export async function watchPageBuild(client, base, server) {
+  const seen = new Set();
+  client.on('Network.requestWillBeSent', ({ request }) => {
+    if (!request.url.startsWith(`${base}/api/`)) return;
+    const header = Object.entries(request.headers).find(([name]) => name.toLowerCase() === 'x-rssr-build');
+    seen.add(header?.[1] ?? '(none)');
+  });
+  await client.send('Network.enable');
+  return {
+    verify() {
+      const others = [...seen].filter((id) => id !== server.buildId);
+      if (seen.size === 0) throw new Error('the page made no request to the server yet');
+      if (others.length) {
+        throw new Error(`the page is from build ${others.join(', ')}, the server from ${server.buildId}: ` +
+          'build both from one checkout (or with the same RSSR_BUILD_ID)');
+      }
+    },
+  };
 }
 
 const SEED_PARTS = ['core', 'app_state', 'entry_flags', 'entry_content'];
@@ -349,8 +383,9 @@ function run(program, args) {
     child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.on('error', reject);
-    child.on('exit', (code) => (code === 0 ? resolve({ stdout, stderr })
-      : reject(new Error(`${program} ${args.join(' ')} failed (${code}): ${stderr}`))));
+    // `close`, not `exit`: output may still be unread when the process exits.
+    child.on('close', (code, signal) => (code === 0 ? resolve({ stdout, stderr })
+      : reject(new Error(`${program} ${args.join(' ')} failed (${code ?? signal}): ${stderr}`))));
   });
 }
 

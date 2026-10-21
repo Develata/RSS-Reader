@@ -14,7 +14,7 @@ import {
   submitLoginForm,
   waitFor,
 } from './cdp_session.mjs';
-import { startHarness, waitUntil } from './server_harness.mjs';
+import { startHarness, waitUntil, watchPageBuild } from './server_harness.mjs';
 
 function parseOptions(argv) {
   const options = new Map();
@@ -55,6 +55,8 @@ const base = `http://127.0.0.1:${serverOptions.port}`;
 let harness;
 let session;
 let signedInThroughForm = false;
+// The build ids the page sent the server (web mode): verified on every seed.
+let pageBuild;
 const width = Number.parseInt(cli.get('--width') ?? process.env.VIEWPORT_WIDTH ?? '360', 10);
 const height = Number.parseInt(cli.get('--height') ?? process.env.VIEWPORT_HEIGHT ?? '800', 10);
 const deviceScaleFactor = Number.parseFloat(
@@ -219,6 +221,7 @@ async function seedAndNavigate(client, seed, nextPath, marker, themePreset = pre
   }
   await selectorExists(client, marker, 30000);
   await sleep(300);
+  pageBuild.verify();
 }
 
 async function ensureEntryControlsOpen(client) {
@@ -1787,9 +1790,14 @@ async function fillField(client, selector, text) {
   else await key(client, 'Backspace', 'Backspace');
 }
 
-/// Waits until an element's whole text is `text`.
+/// Waits until a visible element's whole text is `text` (visible as Playwright's `waitFor` has it:
+/// a non-empty box and not `visibility: hidden`).
 async function textShown(client, text, selector = 'body *') {
-  await waitFor(client, `[...document.querySelectorAll(${JSON.stringify(selector)})].some(element => element.textContent.trim() === ${JSON.stringify(text)})`);
+  await waitFor(client, `[...document.querySelectorAll(${JSON.stringify(selector)})].some(element => {
+    if (element.textContent.trim() !== ${JSON.stringify(text)}) return false;
+    const box = element.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
+  })`);
 }
 
 const pathname = client => evaluate(client, 'location.pathname');
@@ -2219,6 +2227,7 @@ async function run() {
     await client.send('Page.enable');
     await client.send('Runtime.enable');
     await client.send('Log.enable');
+    if (harness) pageBuild = await watchPageBuild(client, base, harness.server);
     const directoryEnvironment = {
       native: Boolean(nativeTarget), assertThat, consoleErrors,
       setViewport: (w, h, mobile, dpr) => setViewport(client, w, h, mobile, dpr),

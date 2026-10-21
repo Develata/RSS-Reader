@@ -7,10 +7,10 @@
 //!     [--custom-css <file>]]
 //! ```
 //!
-//! The data directory must not hold a library yet. Without `--seed` only the policy is written:
-//! the server creates an empty library on its first start, as on a first run. Prints the active
-//! subscriptions as JSON (`{"feeds":[{"id":1,"url":"…"}]}`) for the harness, which waits for the
-//! server's start-up refresh to fetch each of them.
+//! The data directory must be new or empty (nothing is written otherwise). Without `--seed` only
+//! the policy is written: the server creates an empty library on its first start, as on a first
+//! run. Prints the active subscriptions as JSON (`{"feeds":[{"id":1,"url":"…"}]}`) for the
+//! harness, which waits for the server's start-up refresh to fetch each of them.
 
 use std::path::PathBuf;
 
@@ -85,7 +85,12 @@ fn write_policy(data_dir: &std::path::Path) -> Result<()> {
 async fn main() -> Result<()> {
     let options = options()?;
     let seed = options.library.as_ref().map(read_seed).transpose()?;
+    // Only a new test data directory: never a policy or a library written into a directory that
+    // already holds something (a user's data directory given by mistake stays unchanged).
     std::fs::create_dir_all(&options.data_dir)?;
+    if std::fs::read_dir(&options.data_dir)?.next().is_some() {
+        bail!("{} is not empty; give a new data directory", options.data_dir.display());
+    }
     write_policy(&options.data_dir)?;
     let mut feeds = Vec::new();
     if let Some(seed) = &seed {
