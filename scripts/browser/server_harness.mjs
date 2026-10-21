@@ -253,14 +253,16 @@ export class RssrWebServer {
     const cookie = await this.signIn('/entries');
     // The start-up refresh of this server, finished: every active subscription fetched by it
     // (counts were reset before it started) and its result stored, which replaces the seeded
-    // fetch time (`fetched_at_ms`, as the fixture tool wrote it) with one of this run. A time alone
-    // shows nothing: a seed may carry any time, recent or in the future (2099).
+    // fetch time (`fetched_at`, as the fixture tool wrote it) with one of this run. A time alone
+    // shows nothing: a seed may carry any time, recent or in the future (2099). The change is
+    // judged at full precision; the window, at the milliseconds `Date` has.
     await waitUntil(`start-up refresh of ${seed}`, 30000, async () => {
       const snapshot = await this.api('GET', '/api/v1/feeds', cookie);
-      return feeds.every(({ id, url, fetched_at_ms: seeded }) => {
-        const feed = snapshot.feeds.find((candidate) => candidate.id === id);
-        const fetchedAt = Date.parse(feed?.last_fetched_at ?? '');
-        return options.feeds.count(new URL(url).pathname) > 0 && fetchedAt !== seeded
+      return feeds.every(({ id, url, fetched_at: seeded }) => {
+        const stored = snapshot.feeds.find((candidate) => candidate.id === id)?.last_fetched_at;
+        const changed = epochNanos(stored) !== null && epochNanos(stored) !== epochNanos(seeded);
+        const fetchedAt = Date.parse(stored ?? '');
+        return options.feeds.count(new URL(url).pathname) > 0 && changed
           && fetchedAt >= startedAt - 1000 && fetchedAt <= Date.now() + 1000;
       });
     });
@@ -292,6 +294,16 @@ export class RssrWebServer {
     if (!response.ok) throw new Error(`${method} ${pathname}: ${response.status}`);
     return response.json();
   }
+}
+
+/// An RFC 3339 time as nanoseconds since the epoch (a BigInt: `Date` keeps milliseconds only), or
+/// null.
+export function epochNanos(text) {
+  const parts = text?.match(/^(.+T\d\d:\d\d:\d\d)(\.\d+)?(Z|[+-]\d\d:\d\d)$/i);
+  const seconds = parts ? Date.parse(`${parts[1]}${parts[3]}`) : NaN;
+  if (Number.isNaN(seconds)) return null;
+  const fraction = (parts[2] ?? '.').slice(1).padEnd(9, '0').slice(0, 9);
+  return BigInt(seconds) * 1000000n + BigInt(fraction);
 }
 
 /// A bound on each request the harness makes, its body included (`waitUntil` checks its deadline

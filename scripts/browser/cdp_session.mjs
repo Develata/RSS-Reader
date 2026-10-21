@@ -10,8 +10,10 @@ export async function newPage(
   url = 'about:blank',
   cdpBase = process.env.CDP_BASE ?? 'http://127.0.0.1:9225',
 ) {
+  // Bounded, reading the body included (the signal covers it).
   const response = await fetch(`${cdpBase}/json/new?${encodeURIComponent(url)}`, {
     method: 'PUT',
+    signal: AbortSignal.timeout(10000),
   });
   if (!response.ok) {
     throw new Error(`newPage failed ${response.status}: ${await response.text()}`);

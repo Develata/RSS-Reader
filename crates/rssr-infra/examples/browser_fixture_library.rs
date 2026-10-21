@@ -10,14 +10,16 @@
 //! The data directory must be new or empty (nothing is written otherwise). Without `--seed` only
 //! the policy is written: the server creates an empty library on its first start, as on a first
 //! run. Prints the active subscriptions as JSON
-//! (`{"feeds":[{"id":1,"url":"…","fetched_at_ms":4070908800000}]}`, the seeded fetch time in Unix
-//! milliseconds or null) for the harness, which waits until the server's start-up refresh has
-//! fetched each of them and stored a new fetch time.
+//! (`{"feeds":[{"id":1,"url":"…","fetched_at":"2099-01-01T00:00:00Z"}]}`, the seeded fetch time
+//! in RFC 3339 at full precision, as the server's API answers it, or null) for the harness, which
+//! waits until the server's start-up refresh has fetched each of them and stored a new fetch
+//! time.
 
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use rssr_infra::store::fixture::{BrowserStateSeed, write_library};
+use time::format_description::well_known::Rfc3339;
 
 /// Only the loopback host the feed fixture server runs on (test data only): `public_only` with
 /// 127.0.0.1 allowed, and every other address denied (`deny` wins over the public addresses
@@ -121,15 +123,12 @@ async fn main() -> Result<()> {
     let mut feeds = Vec::new();
     if let Some(seed) = &seed {
         write_library(&options.data_dir, seed).await.context("write the library")?;
-        feeds = seed
-            .active_feeds()
-            .into_iter()
-            .map(|feed| {
-                let fetched_at_ms =
-                    feed.last_fetched_at.map(|at| (at.unix_timestamp_nanos() / 1_000_000) as i64);
-                serde_json::json!({ "id": feed.id, "url": feed.url, "fetched_at_ms": fetched_at_ms })
-            })
-            .collect();
+        for feed in seed.active_feeds() {
+            let fetched_at = feed.last_fetched_at.map(|at| at.format(&Rfc3339)).transpose()?;
+            feeds.push(
+                serde_json::json!({ "id": feed.id, "url": feed.url, "fetched_at": fetched_at }),
+            );
+        }
     }
     println!("{}", serde_json::json!({ "feeds": feeds }));
     Ok(())
