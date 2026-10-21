@@ -76,7 +76,8 @@ try {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
   await evaluate(client, `document.querySelector('[data-action="add-feed"]').click()`);
-  await waitFor(`!document.querySelector('[data-action="add-feed"]').disabled && (${feedError})?.startsWith('静态演示已禁用此网络操作')`);
+  // Since C4b a failure names its action first: "添加订阅失败：静态演示已禁用此网络操作…".
+  await waitFor(`!document.querySelector('[data-action="add-feed"]').disabled && (${feedError})?.startsWith('添加订阅失败：静态演示已禁用此网络操作')`);
   assert.equal(await evaluate(client, `document.querySelectorAll('[data-layout="feed-card"]').length`), 1);
   assert.deepEqual(network, [], 'demo must not fetch feeds or auto-refresh');
   assert.deepEqual(failures, [], 'bundle assets and runtime must load without errors');
