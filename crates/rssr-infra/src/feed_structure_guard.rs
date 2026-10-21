@@ -28,21 +28,25 @@ const MAX_NAMESPACE_BINDINGS: usize = 256;
 /// 命名空间声明原始值（未反转义）的最大字节数：feed-rs 对每个带前缀的元素都会重新解码它。
 const MAX_NAMESPACE_VALUE_BYTES: usize = 256;
 
-/// 一个元素上允许的属性错误（重复、格式不对）个数。重复属性在 quick-xml 里要线性回查，
-/// 少量容错保持兼容，多了就是在制造平方级。
-const MAX_ATTRIBUTE_ERRORS: usize = 16;
+/// 属性不规整的标签（见 [`check_xml`] 里的说明）按整个标签长度的平方计费，总和不超过输入长度
+/// 的这个倍数加上 [`BUDGET_SLACK`]。
+const IRREGULAR_TAG_COST_PER_BYTE: u64 = 16;
 
-/// 基地址克隆与拼接的总量上限：总和不超过输入长度的这个倍数加上 [`BASE_COPY_SLACK`]。
+/// 基地址克隆与拼接的总量上限：总和不超过输入长度的这个倍数加上 [`BUDGET_SLACK`]。
 ///
-/// 每个元素的计费是它自己和所有打开的祖先上全部 `xml:base` 原始值的字节数之和（重复的也计；
-/// 带属性错误、又含 `xml:base` 字节的标签按整个标签长度计），从不因为绝对地址、`/` 开头的
-/// 路径替换或值解码失败而重置。这样它只依赖“feed-rs 用的基地址只能由这些值逐层得出”，
-/// 不复刻 feed-rs 与 `url` 怎样解析、丢弃或替换它们：绝对地址的长度不超过自身，相对地址拼接后
-/// 不超过上级加自身，丢弃时沿用上级，都被这个和覆盖（RSS `image` 下的子元素用父元素的基地址，
-/// 父元素的和也不超过子元素的）。解码成 UTF-8、百分号编码与 IDNA 只让真实长度变长一个常数倍，
-/// 所以 feed-rs 的真实复制量仍是输入长度的常数倍。正常 feed 的基地址是站点地址，几十字节。
-const BASE_COPY_PER_BYTE: u64 = 16;
-const BASE_COPY_SLACK: u64 = 1 << 20;
+/// 每个元素的计费是它自己和所有打开的祖先上全部 `xml:base` 原始值的字节数之和（属性不规整、
+/// 又含 `xml:base` 字节的标签按整个标签长度计），从不因为绝对地址、`/` 开头的路径替换或值解码
+/// 失败而重置。这样它只依赖“feed-rs 用的基地址只能由这些值逐层得出”，不复刻 feed-rs 与 `url`
+/// 怎样解析、丢弃或替换它们：绝对地址的长度不超过自身，相对地址拼接后不超过上级加自身，丢弃时
+/// 沿用上级，都被这个和覆盖（RSS `image` 下的子元素用父元素的基地址，父元素的和也不超过子元素
+/// 的）。解码成 UTF-8、百分号编码与 IDNA 只让真实长度变长一个常数倍，所以 feed-rs 的真实复制量
+/// 仍是输入长度的常数倍。
+///
+/// 这个和会多算：几层都写同一个绝对地址时按几倍计，Atom XHTML 正文里的元素 feed-rs 并不逐个
+/// 克隆基地址也照样计。倍数取 64，让 feed、entry、content 三层各带一个约 200 字节的绝对地址、
+/// 正文是几千个单元格的表格这类内容仍能通过。
+const BASE_COPY_PER_BYTE: u64 = 64;
+const BUDGET_SLACK: u64 = 1 << 20;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub(crate) enum FeedStructureViolation {
@@ -88,9 +92,12 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
     config.trim_markup_names_in_closing_tags = true;
     config.trim_text(false);
 
-    let base_copy_budget =
-        BASE_COPY_SLACK.saturating_add(BASE_COPY_PER_BYTE.saturating_mul(raw.len() as u64));
+    let budget =
+        |per_byte: u64| BUDGET_SLACK.saturating_add(per_byte.saturating_mul(raw.len() as u64));
+    let base_copy_budget = budget(BASE_COPY_PER_BYTE);
+    let irregular_budget = budget(IRREGULAR_TAG_COST_PER_BYTE);
     let mut base_copies = 0_u64;
+    let mut irregular_cost = 0_u64;
     let mut open: Vec<OpenElement> = Vec::new();
     let mut buf = Vec::new();
 
@@ -121,24 +128,18 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                 let parent = open.last();
                 let mut bindings = parent.map_or(0, |parent| parent.bindings);
                 let mut base_bytes = parent.map_or(0, |parent| parent.base_bytes);
-                // 与 NsReader 一样不做重复检查地遍历（它会把重复的命名空间声明都压进绑定表），
-                // 重复自己判断。
+                // 与 NsReader 一样不做重复检查地遍历（它会把重复的命名空间声明都压进绑定表）。
+                // 没有错误、也没有重复键时，feed-rs 带重复检查的遍历每一步都通过检查，得到的
+                // 属性与这里逐个相同。一旦出现错误或重复，两者出错后的恢复位置可能不同，不去
+                // 对齐，按“不规整”整体计费。
                 let mut seen = HashSet::new();
-                let mut attribute_errors = 0_usize;
+                let mut irregular = false;
                 for attribute in start.attributes().with_checks(false) {
-                    let attribute = match attribute {
-                        Ok(attribute) if seen.insert(attribute.key.as_ref().to_vec()) => attribute,
-                        duplicate_or_error => {
-                            attribute_errors += 1;
-                            if attribute_errors > MAX_ATTRIBUTE_ERRORS {
-                                return Err(FeedStructureViolation::BadAttributes);
-                            }
-                            match duplicate_or_error {
-                                Ok(attribute) => attribute,
-                                Err(_) => continue,
-                            }
-                        }
+                    let Ok(attribute) = attribute else {
+                        irregular = true;
+                        continue;
                     };
+                    irregular |= !seen.insert(attribute.key.as_ref().to_vec());
                     let key = attribute.key.as_ref();
                     if key == b"xmlns" || key.starts_with(b"xmlns:") {
                         bindings += 1;
@@ -151,10 +152,18 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                         base_bytes = base_bytes.saturating_add(attribute.value.len());
                     }
                 }
-                // 属性写错时这里与 feed-rs 的切分可能不同（它带重复检查、按声明的编码解码），
-                // 不去对齐：只要标签里出现 `xml:base` 字节，就按整个标签计。
-                if attribute_errors > 0 && contains(start, b"xml:base") {
-                    base_bytes = base_bytes.saturating_add(start.len());
+                if irregular {
+                    // feed-rs 在这个标签上切出的属性名与出错次数都不超过标签长度，重复检查的
+                    // 线性回查合计不超过长度的平方。
+                    let tag = start.len() as u64;
+                    irregular_cost = irregular_cost.saturating_add(tag.saturating_mul(tag));
+                    if irregular_cost > irregular_budget {
+                        return Err(FeedStructureViolation::BadAttributes);
+                    }
+                    // 它可能切出这里没看到的 `xml:base`：只要标签里有这几个字节，就按整个标签计。
+                    if contains(start, b"xml:base") {
+                        base_bytes = base_bytes.saturating_add(start.len());
+                    }
                 }
                 base_copies = base_copies.saturating_add(base_bytes as u64);
                 if base_copies > base_copy_budget {
@@ -216,15 +225,38 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_attributes_are_rejected() {
+    fn irregular_attributes_are_bounded() {
         let duplicates = format!("<feed a=\"\"{}></feed>", r#" a="""#.repeat(1_000));
         assert_eq!(check_feed_structure(&duplicates), Err(FeedStructureViolation::BadAttributes));
+        // 不带检查的遍历只看到一次重复（第二个 `a` 的值很长）；feed-rs 带检查遍历时从重复处
+        // 恢复到引号里面，再切出上千个重复的 `b`，每个都线性回查前面上千个属性。
+        let recovery = format!(
+            r#"<rss version="2.0"{} a="" a="{} "><channel/></rss>"#,
+            (0..2_000).map(|i| format!(r#" x{i}="""#)).collect::<String>(),
+            " b='0'".repeat(2_000)
+        );
+        assert_eq!(check_feed_structure(&recovery), Err(FeedStructureViolation::BadAttributes));
+        // 少量重复或写错的属性仍然容忍。
+        let sloppy = r#"<rss version="2.0" version="2.0"><channel><item><title>t</title><enclosure url="https://e.test/a.mp3" length=1 type="audio/mpeg"/></item></channel></rss>"#;
+        assert_eq!(check_feed_structure(sloppy), Ok(()));
+    }
+
+    #[test]
+    fn hidden_xml_base_in_irregular_tags_is_charged() {
+        // 不带检查的遍历只看到两个 `a`；feed-rs 从重复处恢复后切出一个有效的 `xml:base`，
+        // 下面每个元素都克隆它。
+        let hidden = format!(
+            r#"<rss version="2.0" a="" a=" xml:base='https://e.test/{}/' "><channel>{}</channel></rss>"#,
+            "a".repeat(900),
+            "<a/>".repeat(20_000)
+        );
+        assert_eq!(check_feed_structure(&hidden), Err(FeedStructureViolation::XmlBaseTooLarge));
     }
 
     #[test]
     fn large_xml_base_is_rejected() {
         // 每个元素都要克隆一份基地址：基地址不长，但元素极多时总量超限。
-        let base = format!("https://e.test/{}/", "a".repeat(200));
+        let base = format!("https://e.test/{}/", "a".repeat(400));
         let copies = format!(
             r#"<feed xmlns="http://www.w3.org/2005/Atom" xml:base="{base}">{}</feed>"#,
             "<a/>".repeat(20_000)
@@ -297,6 +329,13 @@ mod tests {
             r#"<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://e.test/">{articles}</feed>"#
         );
         assert_eq!(check_feed_structure(&feed), Ok(()));
+        // feed、entry、content 三层写同一个约 200 字节的绝对地址，正文是 4000 个单元格的表格。
+        let base = format!("https://e.test/{}", "p".repeat(186));
+        let rows = format!("<tr>{}</tr>", "<td>1</td>".repeat(20)).repeat(200);
+        let table = format!(
+            r#"<feed xmlns="http://www.w3.org/2005/Atom" xml:base="{base}"><id>f</id><title>t</title><updated>2026-10-21T00:00:00Z</updated><author><name>a</name></author><entry xml:base="{base}"><id>e</id><title>x</title><updated>2026-10-21T00:00:00Z</updated><content type="xhtml" xml:base="{base}"><div xmlns="http://www.w3.org/1999/xhtml"><table>{rows}</table></div></content></entry></feed>"#
+        );
+        assert_eq!(check_feed_structure(&table), Ok(()));
     }
 
     #[test]
