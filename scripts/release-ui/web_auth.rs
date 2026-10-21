@@ -27,7 +27,9 @@ pub fn spawn(root: &Path, profile: &str, port: u16, logs: &Path) -> io::Result<O
         .env("RSS_READER_WEB_SESSION_SECRET", "release-ui-regression-session-secret-0123456789")
         .env("RSS_READER_WEB_AUTH_STATE_FILE", logs.join("rssr-web-auth.json"))
         // Keep the server-mode library inside this run's logs instead of the user's home.
-        .env("RSS_READER_WEB_DATA_DIR", logs.join("rssr-web-data"));
+        .env("RSS_READER_WEB_DATA_DIR", logs.join("rssr-web-data"))
+        // Server mode fetches feeds on the server; the smokes use 127.0.0.1 fixture feeds.
+        .env("RSS_READER_WEB_ALLOW_PRIVATE_FEEDS", "true");
     OwnedProcess::spawn(command, &log)
 }
 

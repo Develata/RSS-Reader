@@ -1,4 +1,6 @@
 target
+.claude
+.workbuddy
 .git
 .github
 .env

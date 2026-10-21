@@ -473,6 +473,51 @@ jobs:
           tar -tzf release-assets/RSS-Reader-web.tar.gz | grep '^public/index.html$'
           tar -tzf release-assets/RSS-Reader-web.tar.gz | grep -E '^public/assets/rssr-app_bg-.*\.wasm$'
 
+      # 服务端模式的 rssr-web 与它托管的前端包必须同版本发布，所以在同一个 job 里打包。
+      - name: Build rssr-web server
+        run: cargo build --locked --release -p rssr-web
+
+      - name: Archive rssr-web server
+        run: |
+          rm -rf target/rssr-web-dist
+          mkdir -p target/rssr-web-dist/rssr-web
+          cp target/release/rssr-web target/rssr-web-dist/rssr-web/rssr-web
+          cp -R target/web-dist/public target/rssr-web-dist/rssr-web/public
+          cp docs/deployment/rssr-web.service target/rssr-web-dist/rssr-web/rssr-web.service
+          tar -C target/rssr-web-dist -czf release-assets/rssr-web-linux-x86_64.tar.gz rssr-web
+
+      - name: Smoke-check rssr-web server artifact
+        run: |
+          tar -tzf release-assets/rssr-web-linux-x86_64.tar.gz | grep '^rssr-web/rssr-web$'
+          tar -tzf release-assets/rssr-web-linux-x86_64.tar.gz | grep '^rssr-web/public/index.html$'
+          tar -tzf release-assets/rssr-web-linux-x86_64.tar.gz | grep '^rssr-web/rssr-web.service$'
+          temp_dir="$(mktemp -d)"
+          server_pid=""
+          cleanup() {
+            if [[ -n "$server_pid" ]]; then kill "$server_pid" 2>/dev/null || true; fi
+            rm -rf -- "$temp_dir"
+          }
+          trap cleanup EXIT
+          tar -xzf release-assets/rssr-web-linux-x86_64.tar.gz -C "$temp_dir"
+          RSS_READER_WEB_BIND=127.0.0.1:18080 \
+          RSS_READER_WEB_STATIC_DIR="$temp_dir/rssr-web/public" \
+          RSS_READER_WEB_DATA_DIR="$temp_dir/library" \
+          RSS_READER_WEB_AUTH_STATE_FILE="$temp_dir/auth.json" \
+          RSS_READER_WEB_USERNAME=release-smoke \
+          RSS_READER_WEB_PASSWORD=release-smoke-password \
+          "$temp_dir/rssr-web/rssr-web" >"$temp_dir/server.log" 2>&1 &
+          server_pid=$!
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/healthz
+          capabilities="$(curl -fsS http://127.0.0.1:18080/api/v1/capabilities)"
+          echo "$capabilities"
+          test "$capabilities" = '{"protocol":1,"mode":"server"}'
+          test -f "$temp_dir/library/rss-reader.db" || { cat "$temp_dir/server.log"; exit 1; }
+          test "$(stat -c '%a' "$temp_dir/library")" = 700
+
       - name: Upload web artifact
         uses: actions/upload-artifact@v7
         with:

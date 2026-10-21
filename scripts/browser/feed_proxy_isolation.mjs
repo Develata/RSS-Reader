@@ -7,6 +7,7 @@ import path from 'node:path';
 import { connect, evaluate, navigate, newPage, sleep, waitFor } from './cdp_session.mjs';
 
 const output = path.resolve(process.argv[2] ?? 'target/feed-proxy-isolation');
+const FIXTURE_HOST = 'rssr-fixture.test';
 const vulnerable = process.argv.includes('--expect-vulnerable');
 const publicDir = process.env.RSSR_PROXY_TEST_PUBLIC_DIR;
 assert(publicDir, 'Set RSSR_PROXY_TEST_PUBLIC_DIR to the real rssr-app web bundle');
@@ -54,19 +55,25 @@ async function main() {
     'proxy::isolation_tests::browser_fixture_server', '--', '--exact', '--ignored', '--nocapture'], env, 'pipe');
   server.stdout.on('data', data => { serverLog += data; });
   server.stderr.on('data', data => { serverLog += data; });
-  const base = await poll(() => {
+  const serverBase = await poll(() => {
     if (server.launchError) throw server.launchError;
     if (server.exitCode !== null) throw new Error(`Fixture server exited: ${serverLog}`);
     return serverLog.match(/RSSR_PROXY_TEST_URL=(http:\/\/127\.0\.0\.1:\d+)/)?.[1];
   }, 'fixture server');
+  // The browser reaches the fixture through a non-loopback name (mapped to 127.0.0.1 below):
+  // the app's localhost-only local login would otherwise block the local-mode segment.
+  const base = serverBase.replace('127.0.0.1', FIXTURE_HOST);
   report.base = base;
-  const proxy = name => `${base}/feed-proxy?url=${encodeURIComponent(`https://fixture.example.invalid/${name}`)}`;
-  const unauthenticated = await fetch(proxy('html'), { redirect: 'manual' });
+  const proxy = (name, origin = base) => `${origin}/feed-proxy?url=${encodeURIComponent(`https://fixture.example.invalid/${name}`)}`;
+  const unauthenticated = await fetch(proxy('html', serverBase), { redirect: 'manual' });
   assert.equal(unauthenticated.status, 303, 'production authentication must protect the fixture route');
 
   const browser = launch(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new',
     '--disable-gpu', '--disable-dev-shm-usage', '--disable-background-networking',
     '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0',
+    `--host-resolver-rules=MAP ${FIXTURE_HOST} 127.0.0.1`, '--no-proxy-server',
+    // BrowserStore needs Web Locks, i.e. a secure context; treat only this fixture origin as one.
+    `--unsafely-treat-insecure-origin-as-secure=${base}`,
     `--user-data-dir=${profile}`, 'about:blank']);
   browser.stderr.on('data', data => { browserLog += data; });
   const port = await poll(async () => {
@@ -162,6 +169,17 @@ async function main() {
   const localStatus = await evaluate(client, `fetch('/feed-proxy?url=http://127.0.0.1/private').then(r=>r.status)`);
   assert.equal(localStatus, 400, 'production local-target rejection');
 
+  // Server-mode contract (rssr-web server mode, P2): a page hosted by rssr-web (gate cookie present)
+  // whose server has no /api/v1 must report the failure and must not fall back to BrowserStore.
+  await navigate(client, `${base}/feeds`);
+  await waitFor(client, `document.body.textContent.includes('确认服务端模式失败')`, 60000);
+  assert.equal(await evaluate(client, `localStorage.getItem('rssr-web-commit-v1')`), null,
+    'a gated page without /api/v1 must not open BrowserStore');
+  report.gatedPageRefusesLocalFallback = true;
+
+  // Local mode (BrowserStore + same-origin /feed-proxy) still ships for statically hosted bundles.
+  // Without the gate cookie the page takes that path; the HttpOnly session still authorizes /feed-proxy.
+  await evaluate(client, `document.cookie = 'rssr_web_gate=; Max-Age=0; path=/'`);
   // The unchanged production WASM bundle exercises real subscription/discovery/refresh parsing.
   await navigate(client, `${base}/feeds`);
   await waitFor(client, `document.querySelector('[data-field="feed-url-input"]') !== null`, 60000);

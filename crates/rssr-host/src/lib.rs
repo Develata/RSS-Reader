@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use rssr_application::{RemoteConfigPullOutcome, RemoteConfigPushOutcome};
 
+pub mod client;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;
 pub mod protocol;

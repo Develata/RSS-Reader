@@ -137,6 +137,8 @@ RSS_READER_WEB_USERNAME="$username" \
 RSS_READER_WEB_PASSWORD="$password" \
 RSS_READER_WEB_SESSION_SECRET="$session_secret" \
 RSS_READER_WEB_AUTH_STATE_FILE="$auth_state_file" \
+RSS_READER_WEB_DATA_DIR="$log_dir/rssr-web-data" \
+RSS_READER_WEB_ALLOW_PRIVATE_FEEDS="true" \
 cargo run -p rssr-web 2>&1 | tee "$log_file" &
 server_pid=$!
 

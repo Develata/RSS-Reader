@@ -12,6 +12,8 @@
   - 刷新订阅
   - 进入订阅文章页
 
+自 rssr-web 服务端模式（2026-10-20，P2）起，rssr-web 托管下的界面经 `/api/v1` 由服务端抓取 feed，不再经浏览器与 `/feed-proxy`。夹具 feed 在 `127.0.0.1` 上，脚本因此设置 `RSS_READER_WEB_ALLOW_PRIVATE_FEEDS=true`，并把服务端文章库放在本次日志目录（`RSS_READER_WEB_DATA_DIR`）。这条 smoke 现在验证的是服务端模式的添加与首次刷新链路。
+
 ## 脚本
 
 - [run_rssr_web_browser_feed_smoke.sh](../../scripts/run_rssr_web_browser_feed_smoke.sh)
