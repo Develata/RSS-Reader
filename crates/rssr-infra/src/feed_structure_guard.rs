@@ -32,11 +32,15 @@ const MAX_NAMESPACE_VALUE_BYTES: usize = 256;
 /// 少量容错保持兼容，多了就是在制造平方级。
 const MAX_ATTRIBUTE_ERRORS: usize = 16;
 
-/// 基地址克隆与拼接的总量：每个元素按当前作用域内 `xml:base` 原始字节数之和计（遇到 ASCII
-/// scheme 开头的绝对地址从它重新算；路径替换等让真实基地址更短的情况不细分，只会多算），
-/// 总和不超过输入长度的这个倍数加上 [`BASE_COPY_SLACK`]。百分号编码与 IDNA 让实际基地址比
-/// 原始值最多长一个常数倍（百分号编码每字节至多 3 倍），所以 feed-rs 的真实复制量仍是输入
-/// 长度的常数倍。正常 feed 的基地址是站点地址，几十字节，离这个上限很远。
+/// 基地址克隆与拼接的总量上限：总和不超过输入长度的这个倍数加上 [`BASE_COPY_SLACK`]。
+///
+/// 每个元素的计费是它自己和所有打开的祖先上全部 `xml:base` 原始值的字节数之和（重复的也计；
+/// 带属性错误、又含 `xml:base` 字节的标签按整个标签长度计），从不因为绝对地址、`/` 开头的
+/// 路径替换或值解码失败而重置。这样它只依赖“feed-rs 用的基地址只能由这些值逐层得出”，
+/// 不复刻 feed-rs 与 `url` 怎样解析、丢弃或替换它们：绝对地址的长度不超过自身，相对地址拼接后
+/// 不超过上级加自身，丢弃时沿用上级，都被这个和覆盖（RSS `image` 下的子元素用父元素的基地址，
+/// 父元素的和也不超过子元素的）。解码成 UTF-8、百分号编码与 IDNA 只让真实长度变长一个常数倍，
+/// 所以 feed-rs 的真实复制量仍是输入长度的常数倍。正常 feed 的基地址是站点地址，几十字节。
 const BASE_COPY_PER_BYTE: u64 = 16;
 const BASE_COPY_SLACK: u64 = 1 << 20;
 
@@ -68,23 +72,12 @@ pub(crate) fn check_feed_structure(raw: &str) -> Result<(), FeedStructureViolati
 struct OpenElement {
     /// 自身与祖先声明的命名空间数。
     bindings: usize,
-    /// feed-rs 在这个元素上使用的基地址长度上界（按原始字节估算）。
+    /// 自身与祖先上全部 `xml:base` 原始值的字节数之和，见 [`BASE_COPY_PER_BYTE`]。
     base_bytes: usize,
-    /// 最近一个绝对 `xml:base` 原始值的字节数：以 `/` 开头的相对值替换路径、保留它的
-    /// scheme 与 authority，长度不超过它加上自身。
-    absolute_bytes: usize,
 }
 
-/// `xml:base` 原始值是否以 scheme 开头（绝对地址替换上级基地址，不与它拼接）。只认纯 ASCII
-/// 的写法；用实体或控制字符拼出来的 scheme 会被当作相对地址累加，只会多算。
-fn starts_with_scheme(value: &[u8]) -> bool {
-    let Some((first, rest)) = value.split_first() else {
-        return false;
-    };
-    first.is_ascii_alphabetic()
-        && rest.iter().position(|byte| *byte == b':').is_some_and(|colon| {
-            rest[..colon].iter().all(|byte| byte.is_ascii_alphanumeric() || b"+-.".contains(byte))
-        })
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack.windows(needle.len()).any(|window| window == needle)
 }
 
 fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
@@ -127,14 +120,11 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                 }
                 let parent = open.last();
                 let mut bindings = parent.map_or(0, |parent| parent.bindings);
-                let parent_base_bytes = parent.map_or(0, |parent| parent.base_bytes);
-                let mut base_bytes = parent_base_bytes;
-                let mut absolute_bytes = parent.map_or(0, |parent| parent.absolute_bytes);
+                let mut base_bytes = parent.map_or(0, |parent| parent.base_bytes);
                 // 与 NsReader 一样不做重复检查地遍历（它会把重复的命名空间声明都压进绑定表），
                 // 重复自己判断。
                 let mut seen = HashSet::new();
                 let mut attribute_errors = 0_usize;
-                let mut has_base = false;
                 for attribute in start.attributes().with_checks(false) {
                     let attribute = match attribute {
                         Ok(attribute) if seen.insert(attribute.key.as_ref().to_vec()) => attribute,
@@ -158,31 +148,19 @@ fn check_xml(raw: &str) -> Result<(), FeedStructureViolation> {
                             return Err(FeedStructureViolation::TooManyNamespaces);
                         }
                     } else if key == b"xml:base" {
-                        // feed-rs 只采用第一个（重复的属性被它丢弃）；后面的重复值不能用来
-                        // 重新计算，直接拒绝。
-                        if has_base {
-                            return Err(FeedStructureViolation::XmlBaseTooLarge);
-                        }
-                        has_base = true;
-                        let value = attribute.value.as_ref();
-                        base_bytes = if starts_with_scheme(value) {
-                            absolute_bytes = value.len();
-                            value.len()
-                        } else if value.starts_with(b"/") && !value.starts_with(b"//") {
-                            absolute_bytes.saturating_add(value.len())
-                        } else {
-                            base_bytes.saturating_add(value.len())
-                        };
+                        base_bytes = base_bytes.saturating_add(attribute.value.len());
                     }
                 }
-                // 有的处理器（RSS `image` 下的 `url`/`link`）用父元素的基地址解析子元素的文本，
-                // 所以按父子两者中较大的计。
-                let charged = base_bytes.max(parent_base_bytes);
-                base_copies = base_copies.saturating_add(charged as u64);
+                // 属性写错时这里与 feed-rs 的切分可能不同（它带重复检查、按声明的编码解码），
+                // 不去对齐：只要标签里出现 `xml:base` 字节，就按整个标签计。
+                if attribute_errors > 0 && contains(start, b"xml:base") {
+                    base_bytes = base_bytes.saturating_add(start.len());
+                }
+                base_copies = base_copies.saturating_add(base_bytes as u64);
                 if base_copies > base_copy_budget {
                     return Err(FeedStructureViolation::XmlBaseTooLarge);
                 }
-                open.push(OpenElement { bindings, base_bytes, absolute_bytes });
+                open.push(OpenElement { bindings, base_bytes });
             }
             Event::End(_) => {
                 open.pop();
@@ -259,34 +237,59 @@ mod tests {
             "<entry/>".repeat(100)
         );
         assert_eq!(check_feed_structure(&long), Err(FeedStructureViolation::XmlBaseTooLarge));
-        // 重复的 xml:base：feed-rs 用第一个，不能拿后面的值重新计算。
-        let duplicate = r#"<rss version="2.0" xml:base="https://e.test/"><channel xml:base="a/" xml:base="x:y"></channel></rss>"#;
-        assert_eq!(check_feed_structure(duplicate), Err(FeedStructureViolation::XmlBaseTooLarge));
+    }
+
+    /// 根元素上一个长基地址，`channel` 写成 `channel_tag`，其下 2 万个链接。子元素上的值无论
+    /// 是绝对地址、`/` 开头、重复还是解码失败，都不能把计费降下来。
+    fn long_base_under(channel_tag: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="Shift_JIS"?><rss version="2.0" xml:base="https://e.test/{}/">{channel_tag}<image xml:base="/">{}</image></channel></rss>"#,
+            "a".repeat(1 << 16),
+            "<link>p</link>".repeat(20_000)
+        )
     }
 
     #[test]
-    fn child_bases_do_not_hide_the_parent_base() {
-        // RSS `image` 下的 `link` 用父元素 `image` 的基地址解析，子元素自己的 xml:base 不能把计费
-        // 降下来。
-        let image = format!(
-            r#"<rss version="2.0"><channel><image xml:base="https://e.test/{}/"><url xml:base="x:y">https://e.test/logo.png</url>{}</image></channel></rss>"#,
-            "a".repeat(1 << 20),
-            r#"<link xml:base="x:y">p</link>"#.repeat(20_000)
+    fn child_bases_never_lower_the_charge() {
+        let cases = [
+            // RSS `image` 下的 `link` 用父元素的基地址；子元素自己的绝对地址不能把计费降下来。
+            r#"<channel xml:base="x:y">"#,
+            // `//` 换了 authority，后面 `/` 开头的值保留的是新的 authority。
+            r#"<channel xml:base="//b@e.test/">"#,
+            // 第一个值没加引号被丢掉，feed-rs 也把第二个当作重复丢掉，继续用上级的基地址。
+            r#"<channel xml:base=x xml:base="x:y">"#,
+            // 按 Shift_JIS 解码失败的值被 feed-rs 丢掉，继续用上级的基地址。
+            r#"<channel xml:base="x:Ж">"#,
+        ];
+        for channel in cases {
+            assert_eq!(
+                check_feed_structure(&long_base_under(channel)),
+                Err(FeedStructureViolation::XmlBaseTooLarge),
+                "{channel}"
+            );
+        }
+        // 对照：同样的结构，根元素上的基地址很短。
+        let short =
+            long_base_under(r#"<channel xml:base="x:y">"#).replace(&"a".repeat(1 << 16), "a");
+        assert_eq!(check_feed_structure(&short), Ok(()));
+    }
+
+    #[test]
+    fn ordinary_xml_base_chains_pass() {
+        // 正常长度的相对基地址链：即使逐层累加、从不重置，也远在复制总量之内。
+        let chain = format!(
+            r#"<rss version="2.0" xml:base="https://e.test/{}/"><channel xml:base="/{}/"><item xml:base="https://e.test/{}/"><link>p</link></item></channel></rss>"#,
+            "a".repeat(90),
+            "b".repeat(90),
+            "c".repeat(90)
         );
-        assert_eq!(check_feed_structure(&image), Err(FeedStructureViolation::XmlBaseTooLarge));
-    }
-
-    #[test]
-    fn root_relative_bases_replace_the_path() {
-        // 以 `/` 开头的相对基地址替换路径，不随层数累加。
-        let base = format!("/{}/", "p".repeat(90));
-        let articles: String = (0..200)
-            .map(|_| {
+        assert_eq!(check_feed_structure(&chain), Ok(()));
+        // Atom 的 feed、entry、content 各带一个基地址，XHTML 正文由大量很小的元素组成。
+        let articles: String = (0..2_000)
+            .map(|i| {
                 format!(
-                    "<entry><content type=\"xhtml\">{}{}{}</content></entry>",
-                    format!(r#"<div xml:base="{base}">"#).repeat(12),
-                    "<span>word</span>".repeat(50),
-                    "</div>".repeat(12)
+                    r#"<entry xml:base="https://e.test/2026/10/{i}/"><content type="xhtml" xml:base="/2026/10/{i}/assets/"><div>{}</div></content></entry>"#,
+                    "<span>word</span><br/>".repeat(50),
                 )
             })
             .collect();
@@ -294,18 +297,6 @@ mod tests {
             r#"<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://e.test/">{articles}</feed>"#
         );
         assert_eq!(check_feed_structure(&feed), Ok(()));
-    }
-
-    #[test]
-    fn ordinary_xml_base_chains_pass() {
-        // 正常长度的相对基地址链，即使按原始字节累加也远在复制总量之内。
-        let chain = format!(
-            r#"<rss version="2.0" xml:base="https://e.test/{}/"><channel xml:base="/{}/"><item xml:base="/{}/"><link>p</link></item></channel></rss>"#,
-            "a".repeat(90),
-            "b".repeat(90),
-            "c".repeat(90)
-        );
-        assert_eq!(check_feed_structure(&chain), Ok(()));
     }
 
     #[test]
