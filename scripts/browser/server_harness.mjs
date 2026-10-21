@@ -284,9 +284,10 @@ async function verifyBuild(output, staticDir) {
   const index = readFileSync(path.join(staticDir, 'index.html'), 'utf8');
   const script = index.match(/<script[^>]+src="\/(?:\.\/)?([^"]+\.js)"/)?.[1];
   if (!script) throw new Error(`no entry script in ${staticDir}/index.html`);
-  // The module the script starts (`module_or_path`), not wasm-bindgen's unused default name.
+  // The module the script starts (`module_or_path`; minified in release bundles, spaced in debug
+  // ones), not wasm-bindgen's unused default name.
   const module = readFileSync(path.join(staticDir, script), 'utf8')
-    .match(/module_or_path:"\/(?:\.\/)?([^"]+\.wasm)"/)?.[1];
+    .match(/module_or_path:\s*"\/(?:\.\/)?([^"]+\.wasm)"/)?.[1];
   if (!module) throw new Error(`no wasm module started by ${script}`);
   const wasm = readFileSync(path.join(staticDir, module));
   if (!wasm.includes(Buffer.from(server))) {
