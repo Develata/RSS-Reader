@@ -531,8 +531,8 @@ define('reread-triggers', {}, async (s) => {
   await elsewhereWrite('PUT', '/api/v1/workspace', { ...(await storedWorkspace()), read_filter: 'unread_only' });
   mark = main.traffic.mark();
   await triggerAll(main);
-  // The page takes the preference: it lists again with it (the filter controls are folded away
-  // at this width), and entry 2, read, leaves the list.
+  // The page takes the preference: it lists again with it (the list's controls are folded, so the
+  // filter controls are not rendered), and entry 2, read, leaves the list.
   await waitUntil('the list read with the new filter', 10000, async () => main.traffic.since(mark)
     .some((r) => r.path === '/api/v1/entries' && decodeURIComponent(r.query).includes('"read_filter":"unread_only"')));
   await waitFor(main.client, `!document.querySelector('${card(2)}')`);
