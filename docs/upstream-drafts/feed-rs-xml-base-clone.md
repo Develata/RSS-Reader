@@ -5,7 +5,7 @@
 
 `ElementSource::xml_base_fetch` returns `state.base_uris.last().map(|(_, uri)| uri.clone())`, and every yielded `Element` gets its own clone of the current base `Url`. A feed with a long `xml:base` on the root element and many child elements therefore copies the base once per element. A 1 MiB `xml:base` with 2,000 entries takes about 9 s to parse, against 13 ms with a short base.
 
-We parse untrusted feeds in an RSS reader, where this shows up as a refresh that can be stalled by a single feed. We now reject feeds whose cumulative `xml:base` exceeds 512 bytes before calling feed-rs. A fix in the library would be better for everyone.
+We parse untrusted feeds in an RSS reader, where this shows up as a refresh that can be stalled by a single feed. We now pre-scan the raw XML before calling feed-rs and reject feeds whose total base copying (in-scope `xml:base` bytes summed over elements) exceeds a constant multiple of the input size. That pre-scan has to mirror feed-rs's scoping rules, which is fragile; a fix in the library would be better for everyone.
 
 ## Reproduction
 
@@ -59,4 +59,4 @@ The input grows by only about 10% across the four rows, while parse time grows t
 
 Share the base instead of cloning it per element, for example by keeping `Rc<Url>` (or `Arc<Url>`) on the `base_uris` stack and in `Element::xml_base`. That makes each element O(1) regardless of base length. Separately, every link is resolved with `Url::join` against that base, which copies the base once per link. Sharing the base doesn't remove that cost, so it may be worth documenting or capping the base length.
 
-Related: link and URL attributes are passed to `url::Url::parse`/`join`, which is quadratic in the number of `..` segments for inputs with a long authority (reported upstream as servo/rust-url#TBD). Callers that parse untrusted feeds currently need to pre-filter for that.
+Related: link and URL attributes are passed to `url::Url::parse`/`join`, which is quadratic in the number of `..` segments for inputs with a long authority (reported upstream as servo/rust-url#TBD). That one is best fixed in `url` itself; we carry a local patch for it.

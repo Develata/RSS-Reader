@@ -5,7 +5,7 @@
 
 Each `..` path segment calls `last_slash_can_be_removed`. That function runs `rfind('/')` over the entire serialization so far, not just the path. When the path is already at the root, there is no `/` after the authority, so every `..` rescans the whole scheme, userinfo and host. An input with a long userinfo (or host) followed by many `..` segments therefore parses in Θ(len(authority) × number of `..`). That is quadratic in the input length, while the output stays short.
 
-We hit this while hardening an RSS reader that parses untrusted feed links with `url` (directly and through `feed-rs`). A 4 MB feed item link of this shape kept a refresh busy for minutes. We currently carry the one-function change suggested below as a `[patch.crates-io]` on 2.5.8. It passes the crate's unit tests and the WPT URL test data, and turns the repro below linear (n=65536: 252 ms → 2.4 ms).
+We hit this while hardening an RSS reader that parses untrusted feed links with `url` (directly and through `feed-rs`). Extrapolating the timings below, a single 4 MB feed link of this shape would keep a refresh busy for about a minute. We currently carry the one-function change suggested below as a `[patch.crates-io]` on 2.5.8. It passes the crate's unit tests and the WPT URL test data, and turns the repro below linear (n=65536: 252 ms → 2.4 ms).
 
 ## Reproduction
 
