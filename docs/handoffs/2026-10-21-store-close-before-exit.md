@@ -14,7 +14,7 @@
 
 ## 原因（已确认）
 
-- 代码阅读：`store/executor.rs` 的工作线程用 `std::thread::Builder` 启动、句柄被丢弃；最后一个 `LibraryStore` 句柄释放后，各线程在 `recv` 出错时返回，连接随 `Slot` 在这些线程上释放，没有人等它们。捆绑的 SQLite 3.53.2 中，`sqlite3PagerClose` → `sqlite3WalClose`：拿到数据库文件的排他锁（即本进程最后一个连接）就做一次 PASSIVE 检查点，把日志页按页号升序写回主文件，成功后删除 `-wal`/`-shm`。进程在这期间从 `main` 返回会终止这些线程，主文件停在写回中途：第 1 页已经记着更多页数，文件还没长到那么长。
+- 代码阅读：`store/executor.rs` 的工作线程用 `std::thread::Builder` 启动、句柄被丢弃；最后一个 `LibraryStore` 句柄释放后，各线程在 `recv` 出错时返回，连接随 `Slot` 在这些线程上释放，没有人等它们。捆绑的 SQLite 3.53.2 中，`sqlite3PagerClose` → `sqlite3WalClose`：拿到数据库文件的排他锁（普通的回滚模式锁，只有所有进程里的最后一个连接拿得到；CLI 在 `rssr-web` 运行时关闭不会写回）就做一次 PASSIVE 检查点，把日志页按页号升序写回主文件，成功后删除 `-wal`/`-shm`。进程在这期间从 `main` 返回会终止这些线程，主文件停在写回中途：第 1 页已经记着更多页数，文件还没长到那么长。
 - `files::check_library` 只读主文件（`immutable=1`，设计如此），SQLite 在 `lockBtree` 里发现“文件头页数 > 文件页数”即报 `SQLITE_CORRUPT`；探测重试 2 秒（`SETTLE`）后按损坏拒绝打开。普通方式打开同一文件时 SQLite 用日志恢复，完全正常。
 - 确定性复现（临时原型测试，未提交，Windows 与 WSL 结果一致）：建一个 WAL 库（关闭自动检查点）写入 20 行、日志把文件撑大，保存日志；完整检查点后取主文件；再造出“主文件少最后一页 + 原日志”。今天的探测：`DatabaseCorrupt`；`LibraryStore::open`：约 2.02 秒后 `Corrupt`；普通读写打开：`integrity_check` 为 ok、20 行齐全，日志写回后被删除。
 - 进程级确定性复现（WSL）：给库留下约 24.9 MB 未写回的日志，启动 `rssr-web` 后 `kill -TERM`。去掉正常停止时的关闭（变异 M7），3/3 次主文件停在写回中途、日志原样留着、探测报“database disk image is malformed”；有关闭时 3/3 完整。
@@ -48,12 +48,12 @@
 | 做法 | 检查点中途 + 日志 | 检查点中途、无日志 | 旁边的文件 | 与 `files.rs` 的理由 |
 | --- | --- | --- | --- | --- |
 | 现状：`immutable=1` | 损坏，拒绝 | 损坏，拒绝 | 不动 | — |
-| C：同一探测连接加 `PRAGMA writable_schema = ON` | 读到应用 id，接受 | 读到应用 id，接受；随后写连接的 `journal_mode = WAL` 报损坏，打开失败，不建任何文件 | 不建、不改 | 仍是 `immutable=1` 只读、经 SQLite 自己的文件句柄，理由都保留 |
+| C：同一探测连接加 `PRAGMA writable_schema = ON` | 读到应用 id，接受 | 读到应用 id，接受；随后写连接的 `journal_mode = WAL` 报损坏，打开失败，不建 `-wal`/`-shm`（身份已确认后的 `remove_stale_scratch` 会照常建 `.create-lock`） | 不建、不改 | 仍是 `immutable=1` 只读、经 SQLite 自己的文件句柄，理由都保留 |
 | A：损坏时退回 `mode=ro`（非 immutable）+ `NO_CKPT_ON_CLOSE` | 接受 | 损坏 | 新建或改写 `-shm`（32 KB）；无日志时还建空 `-wal` | 在确认身份之前改动旁边的文件，违背“不建、不改 `-wal`/`-shm`” |
 | A2：`mode=ro&readonly_shm=1` | Windows 接受但建空 `-shm`；Linux 无 `-shm` 时 `CANTOPEN` | Windows 损坏，Linux `CANTOPEN`；都建空 `-wal` | 会建文件 | 同上，且依赖 `-shm` 是否存在、平台行为不同 |
 | B：自己读 100 字节文件头 | 接受 | 接受 | 不动 | 另开文件描述符再关闭会丢掉本进程在该文件上的 POSIX 锁；要安全就得经 SQLite 的文件句柄做 FFI（`unsafe`） |
 
-C 的依据：SQLite 的 `lockBtree` 在 `writable_schema` 打开时不再把“文件头页数 > 文件页数”当损坏，而用文件实际页数；探测只读第 1 页文件头。应用 id（偏移 68）建库时写入、之后不变，检查点写回的第 1 页无论新旧都带着它，所以检查点中途的主文件仍能确认身份。外部库与非数据库文件的结果不变（实测：外部 WAL 库应用 id 为 0，按“不是资料库”拒绝；垃圾文件、只有魔数的文件仍是 `NotADatabase`）。C 放弃的只是探测对“文件比文件头短”的判断，这件事交给写连接：有日志时 SQLite 恢复，没有日志（真截断的文件）时写连接打开即报损坏、拒绝打开，且在 Windows 与 Linux 上都不建旁边的文件（实测）。
+C 的依据：SQLite 的 `lockBtree`（捆绑源码 `sqlite3.c` 第 76541 行）在 `writable_schema` 打开时不再把“文件头页数 > 文件页数”当损坏，而用文件实际页数；探测只读第 1 页文件头。应用 id（偏移 68）建库时写入、之后不变，检查点写回的第 1 页无论新旧都带着它，所以检查点中途的主文件仍能确认身份。外部库与非数据库文件的结果不变（实测：外部 WAL 库应用 id 为 0，按“不是资料库”拒绝；垃圾文件、只有魔数的文件仍是 `NotADatabase`）。C 放弃的只是探测对“文件比文件头短”的判断，这件事交给写连接：有日志时 SQLite 恢复，没有日志（真截断的文件）时写连接打开即报损坏、拒绝打开，在 Windows 与 Linux 上都不建 `-wal`/`-shm`（实测裸写连接；`open_file` 在探测通过后还会经 `remove_stale_scratch` 建惰性的 `.create-lock`，此时身份已确认）。两种候选对“无日志的截断文件”最终都拒绝，差别只在拒绝发生在哪一步、以及是否在身份确认之前改动旁边的文件；若希望探测本身继续识别截断，那是“维持现状”，不是 A。
 
 建议：采用 C。改动只在 `files.rs`：探测连接打开后设 `writable_schema`，更新 `check_library` 与 `SETTLE` 的文档注释（`SETTLE` 重试保留，不再是检查点中途的主要依靠）；`a_probe_that_meets_a_checkpoint_waits_for_it` 改为断言“主文件少一页 + 日志”被接受，新增确定性测试：同一状态下 `LibraryStore::open` 成功、行数齐全；“少一页、无日志”被拒绝为损坏且不建文件；再在 WSL 上跑 `test_library_*`。如果编译 SQLite 时打开了 `SQLITE_DBCONFIG_DEFENSIVE` 默认值，`writable_schema` 无效，新测试会失败而不是静默退回旧行为。
 
