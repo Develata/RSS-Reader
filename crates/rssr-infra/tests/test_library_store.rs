@@ -171,6 +171,62 @@ async fn closing_finishes_queued_tasks_and_waits_for_every_connection() {
     assert_eq!(feed_count(&reopened).await, 2);
 }
 
+/// A library its process left mid-checkpoint (a crash, a kill, a power loss while the log was
+/// being written back: page 1 already counts a page the file does not have) opens, and SQLite
+/// recovers it from the log; the identity probe no longer refuses it as corrupt. Without its log
+/// the same file is refused as corrupt by the writer's first read, untouched and with no `-wal`
+/// or `-shm` left beside it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_library_left_mid_checkpoint_opens_and_recovers_from_its_log() {
+    let dir = TempDir::new("mid-checkpoint");
+    let store = LibraryStore::open_with(dir.library(), quick()).await.unwrap();
+    store
+        .write(|tx| {
+            for i in 0..20 {
+                tx.execute(
+                    "INSERT INTO feeds (url, description, created_at, updated_at)
+                     VALUES (?1, ?2, 't', 't')",
+                    (format!("https://f{i}.test"), "x".repeat(3000)),
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let log = std::fs::read(side_file(&dir.library(), "-wal")).unwrap();
+    store.close().await.unwrap();
+    let complete = std::fs::read(dir.library()).unwrap();
+    let page = 4096;
+    let short = &complete[..complete.len() - page];
+    // The log is what makes the file longer: its last page is not in the main file yet.
+    assert!(log.len() > page);
+
+    std::fs::write(dir.library(), short).unwrap();
+    std::fs::write(side_file(&dir.library(), "-wal"), &log).unwrap();
+    let started = Instant::now();
+    let reopened = LibraryStore::open(dir.library()).await.expect("opens");
+    assert!(started.elapsed() < Duration::from_secs(2), "no waiting for a corrupt-looking file");
+    assert_eq!(feed_count(&reopened).await, 20);
+    reopened.close().await.unwrap();
+    assert!(!side_file(&dir.library(), "-wal").exists(), "the log was written back");
+    assert_eq!(std::fs::metadata(dir.library()).unwrap().len(), complete.len() as u64);
+    let check = rusqlite::Connection::open(dir.library()).unwrap();
+    let integrity: String =
+        check.query_row("PRAGMA integrity_check", [], |row| row.get(0)).unwrap();
+    assert_eq!(integrity, "ok");
+    drop(check);
+
+    let bare = TempDir::new("mid-checkpoint-no-log");
+    std::fs::create_dir_all(bare.library().parent().unwrap()).unwrap();
+    std::fs::write(bare.library(), short).unwrap();
+    let refused = LibraryStore::open(bare.library()).await;
+    assert!(matches!(refused, Err(StoreError::Corrupt(_))), "{:?}", refused.err());
+    for suffix in ["-wal", "-shm"] {
+        assert!(!side_file(&bare.library(), suffix).exists(), "{suffix}");
+    }
+    assert_eq!(std::fs::read(bare.library()).unwrap(), short, "the file is untouched");
+}
+
 /// A connection SQLite refuses to close (here a task leaked a statement) is reported by `close`
 /// rather than passed off as a clean close.
 #[tokio::test(flavor = "multi_thread")]

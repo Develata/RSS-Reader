@@ -42,8 +42,9 @@ pub fn probe_uri(path: &Path) -> StoreResult<String> {
     sqlite_uri(path, "mode=ro&immutable=1")
 }
 
-/// How long a probe that looks corrupt is retried: a checkpoint by another process can be caught
-/// midway, with page 1 already counting pages the file does not have yet.
+/// How long a probe that SQLite reports as corrupt is retried before the open is refused. No known
+/// state of a library reaches it since the probe reads past a short main file (see
+/// [`check_library`]); it stays as a mitigation for a lock-free read meeting a write.
 const SETTLE: Duration = Duration::from_secs(2);
 
 /// Whether the existing, non-empty file behind `probe` (from [`probe_uri`]) is a library.
@@ -55,10 +56,18 @@ const SETTLE: Duration = Duration::from_secs(2);
 /// [`CreationLock::publish`]), and its application id never changes, so the main file alone
 /// decides; anything else is not a library.
 ///
-/// Without locks the read can meet a checkpoint in progress, which SQLite reports as corruption;
-/// that is retried for [`SETTLE`] (a mitigation: nothing bounds a checkpoint's duration), then
-/// reported as corruption, which refuses the open without writing. A file whose format is not
-/// SQLite's is refused at once as not a library.
+/// A checkpoint writes the log back into the main file in page order, page 1 first, so one in
+/// progress, or one cut off when its process ended (a crash, a kill, a power loss), leaves page 1
+/// counting pages the file does not have yet. SQLite reports that as corruption unless
+/// `writable_schema` is set, in which case it takes the file's own length; the probe sets it, so
+/// such a file is still known by its application id (the same in every version of page 1). The
+/// connection is read-only and immutable, so the flag can change nothing. Whether the rest of the
+/// file is sound is then the writer's to find: SQLite recovers it from the log, and without a log
+/// the writer's first read reports the corruption and the open is refused.
+///
+/// A probe SQLite still reports as corrupt is retried for [`SETTLE`], then reported as corruption,
+/// which refuses the open without writing. A file whose format is not SQLite's is refused at once
+/// as not a library.
 pub fn check_library(probe: &str) -> StoreResult<()> {
     let until = Instant::now() + SETTLE;
     loop {
@@ -77,13 +86,15 @@ pub fn check_library(probe: &str) -> StoreResult<()> {
 }
 
 fn read_application_id(probe: &str) -> rusqlite::Result<i32> {
-    Connection::open_with_flags(
+    let connection = Connection::open_with_flags(
         probe,
         OpenFlags::SQLITE_OPEN_READ_ONLY
             | OpenFlags::SQLITE_OPEN_URI
             | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?
-    .query_row("PRAGMA application_id", [], |row| row.get(0))
+    )?;
+    // Page 1 may count pages a checkpoint has not written yet (see `check_library`).
+    connection.pragma_update(None, "writable_schema", true)?;
+    connection.query_row("PRAGMA application_id", [], |row| row.get(0))
 }
 
 /// `<name>.<suffix>` next to `path`.
@@ -259,12 +270,12 @@ mod tests {
         dir
     }
 
-    /// A library caught with page 1 counting more pages than the file has (simulated by cutting
-    /// off the last page, as a checkpoint growing the file would show it) is accepted once the
-    /// file catches up, and reported as corrupt if it never does.
+    /// A library whose page 1 counts more pages than the file has (simulated by cutting off the
+    /// last page, as a checkpoint growing the file leaves it midway or when its process ends) is
+    /// known by its application id at once, without retrying, and without touching any file.
     #[test]
-    fn a_probe_that_meets_a_checkpoint_waits_for_it() {
-        let dir = temp_dir("settle");
+    fn a_probe_knows_a_library_left_mid_checkpoint() {
+        let dir = temp_dir("mid-checkpoint");
         let target = dir.join("library.sqlite3");
         {
             let mut conn = Connection::open(&target).unwrap();
@@ -275,22 +286,22 @@ mod tests {
         let complete = std::fs::read(&target).unwrap();
         let page = 4096;
         assert!(complete.len() > page);
-        std::fs::write(&target, &complete[..complete.len() - page]).unwrap();
+        let short = &complete[..complete.len() - page];
+        std::fs::write(&target, short).unwrap();
 
-        let finisher = {
-            let (target, complete) = (target.clone(), complete.clone());
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(300));
-                std::fs::write(&target, &complete).unwrap();
-            })
-        };
-        check_library(&probe).expect("accepted once the file is complete");
-        finisher.join().unwrap();
-
-        std::fs::write(&target, &complete[..complete.len() - page]).unwrap();
         let started = Instant::now();
-        assert!(matches!(check_library(&probe), Err(StoreError::Corrupt(_))));
-        assert!(started.elapsed() >= SETTLE);
+        check_library(&probe).expect("still a library");
+        assert!(started.elapsed() < SETTLE, "accepted at once, not after retrying");
+        assert_eq!(std::fs::read(&target).unwrap(), short, "the file is untouched");
+        let names: Vec<_> =
+            std::fs::read_dir(&dir).unwrap().map(|entry| entry.unwrap().file_name()).collect();
+        assert_eq!(names, ["library.sqlite3"], "no side file was created");
+
+        // Not a library: another application's id is still refused.
+        let mut foreign = complete.clone();
+        foreign[68..72].copy_from_slice(&0x1234_5678_u32.to_be_bytes());
+        std::fs::write(&target, &foreign[..foreign.len() - page]).unwrap();
+        assert!(matches!(check_library(&probe), Err(StoreError::NotALibrary)));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
