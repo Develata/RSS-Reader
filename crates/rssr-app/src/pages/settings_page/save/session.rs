@@ -960,6 +960,18 @@ mod tests {
         dom.render_immediate_to_vec();
         let shell = dom.in_scope(ScopeId::APP, consume_context::<AppShellState>);
         assert_eq!(shell.settings_draft(), Some(kept.clone()), "the page handed it over");
-        assert_eq!(crate::ui::drafts::peek(), Some(kept), "still stored for after the sign-in");
+        assert_eq!(
+            crate::ui::drafts::peek(),
+            Some(kept.clone()),
+            "still stored for after the sign-in"
+        );
+
+        // The navigation may land at any time: the stored draft follows the page's edits, and
+        // goes with the page (review C4C2-01, C4C2-02).
+        let more = SettingsPatch { list_density: Some(ListDensity::Compact), ..kept };
+        shell.set_settings_draft(Some(more.clone()));
+        assert_eq!(crate::ui::drafts::peek(), Some(more), "follows the edits");
+        shell.set_settings_page_open(false);
+        assert_eq!(crate::ui::drafts::peek(), None, "gone with the page");
     }
 }
