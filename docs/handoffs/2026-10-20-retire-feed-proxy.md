@@ -53,7 +53,8 @@ Develata 确认退役 `/feed-proxy`。服务端模式落地后，rssr-web 托管
 ### 手工验收
 
 - 未在浏览器里手工复验静态包的直连刷新。`wasm_refresh_contract_harness` 覆盖了浏览器端刷新路径。
-- `rssr_refresh_cost_acceptance.cjs` 与小视口脚本本次没有运行（需要 Playwright / CDP 的完整环境）。
+- 小视口冒烟（2026-10-21 补跑）：`bash scripts/run_static_web_small_viewport_smoke.sh --debug --port 18131`，用本分支新构建的 debug 包与 Windows Chrome。`status: pass`，278 项断言全部通过，控制台错误为 0；其中包括去掉代理拦截后的"阅读导航 + 自动刷新拦截"流程。
+- `rssr_refresh_cost_acceptance.cjs` 本次没有运行（需要 Playwright）。
 
 ## 结果
 
