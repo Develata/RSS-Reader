@@ -68,7 +68,7 @@
   × 1000 条目、32000 层命名空间、1 MiB 命名空间值 × 10 万元素、3.2 万重复属性都在解析前被拒，debug 下合计 0.91 s。
 - `cargo fmt --all --check`、`cargo clippy -j 1 --workspace --all-targets --locked -- -D warnings`：通过（`vendor/url` 不是
   工作区成员，不参与 fmt/clippy/test，内容与 registry 原版逐字一致，只差补丁那一处）。
-- `cargo test -j 1 --workspace --locked`：455 通过，0 失败（第 4 轮修复后重跑；真实 feed 复测仍是 23 个照常、0 误拒）。
+- `cargo test -j 1 --workspace --locked`：454 通过，0 失败（第 4 轮修复后重跑；真实 feed 复测仍是 23 个照常、0 误拒）。
 - `cargo check -j 1 -p rssr-app --target wasm32-unknown-unknown --locked`：通过（wasm 构建同样使用补丁后的 `url`）。
 
 ## 独立评审（Codex，gpt-6-astra，effort high）
