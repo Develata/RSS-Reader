@@ -871,13 +871,29 @@ define('background-tab-time-limit', { long: true }, async (s) => {
 
 // --- Run --------------------------------------------------------------------------------------------
 
-function unexpectedConsole(scenario, pages) {
+/// Why a console error is part of the scenario, or undefined when it is a failure.
+function ignoredBecause(scenario, provoked, error) {
+  if (error.text?.includes('/_dioxus?build_id=') && error.text?.includes('WebSocket')) {
+    return 'debug bundle live-reload endpoint is absent on rssr-web';
+  }
+  if (error.networkRequestId && provoked.has(error.networkRequestId)) {
+    return 'a request the scenario failed on purpose';
+  }
+  const pattern = scenario.expected.find((expected) => expected.test(error.text ?? ''));
+  return pattern && `expected by the scenario: ${pattern}`;
+}
+
+/// The scenario's console errors, split into failures and the ignored ones with their reasons.
+function sortConsole(scenario, pages) {
   const provoked = new Set(pages.flatMap((page) => [...page.faults.provoked]));
-  return scenario.console.filter((error) => {
-    if (error.text?.includes('/_dioxus?build_id=') && error.text?.includes('WebSocket')) return false;
-    if (error.networkRequestId && provoked.has(error.networkRequestId)) return false;
-    return !scenario.expected.some((pattern) => pattern.test(error.text ?? ''));
-  });
+  const unexpected = [];
+  const ignored = [];
+  for (const error of scenario.console) {
+    const reason = ignoredBecause(scenario, provoked, error);
+    if (reason) ignored.push({ ...error, reason });
+    else unexpected.push(error);
+  }
+  return { unexpected, ignored };
 }
 
 async function run() {
@@ -907,7 +923,7 @@ async function run() {
         error = caught.stack ?? String(caught);
       }
       const pages = [main, ...s.pages];
-      const unexpected = unexpectedConsole(s, pages);
+      const { unexpected, ignored } = sortConsole(s, pages);
       const ok = !error && s.checks.every((check) => check.ok) && unexpected.length === 0;
       if (!ok) {
         failed = true;
@@ -918,7 +934,7 @@ async function run() {
         }
       }
       results.push({ name: scenario.name, status: ok ? 'pass' : 'fail', seconds: Math.round((Date.now() - started) / 1000),
-        error, checks: s.checks, unexpectedConsole: unexpected, ignoredConsole: s.console.length - unexpected.length });
+        error, checks: s.checks, unexpectedConsole: unexpected, ignoredConsole: ignored });
       process.stdout.write(`${ok ? 'pass' : 'FAIL'} ${scenario.name} (${Math.round((Date.now() - started) / 1000)} s)\n`);
       current = undefined;
       for (const cleanup of s.cleanups.reverse()) await Promise.resolve(cleanup()).catch(() => {});
