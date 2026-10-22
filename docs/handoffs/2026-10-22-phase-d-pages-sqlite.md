@@ -3,8 +3,8 @@
 - 日期：2026-10-22
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
-- 当前 HEAD：`9b70455`
-- 相关 commit：`9b70455`（阶段 D 核心）；公式修复见同日 reader-mathml-integration 交接
+- 当前 HEAD：`576cba4`
+- 相关 commit：`9b70455`（阶段 D）、`c2e2278`（公式与预算）、`576cba4`（CI 工具链）；最终证据随本记录提交
 - 相关 tag / release：未创建；最终须等待用户点头
 - 状态：`draft`
 
@@ -87,4 +87,32 @@
 - CI 的 `web-smoke` 和 `wasm-contract-build` 都因 `cc-rs: failed to find tool "llvm-ar"` 失败；runner 为 Ubuntu 26.04，原生 Clang 编译已进行到归档阶段，不能据此称为业务测试失败。
 - 修正：新增共用 `setup-wasm-c-toolchain` action，解析 Clang 的真实路径，使用同一安装目录的 `llvm-ar`，先实际编译与归档一个 wasm32 C 对象，再导出 Cargo 的 CC/AR 路径；CI 的两个构建 job 与 Pages 共用。
 - 本机 WSL Debian 同样没有未带版本号的 `llvm-ar` 命令，但 `/usr/lib/llvm-19/bin/llvm-ar` 存在；直接执行 action 的完整脚本通过，探针输出全部写在本 worktree 的 E 盘路径。actionlint 与 diff 检查通过。
-- 工具链修正 commit: pending；后续远端结果另补。
+- 工具链修正已提交并推送 `576cba4`；远端实际采用 `/usr/lib/llvm-21/bin/llvm-ar`。
+
+## 最终候选远端结果（576cba4）
+
+| 验证 | 结果 | 证据 |
+|---|---|---|
+| 完整 CI，`acceptance_long=true` | **35 / 35 jobs 成功**；14 个 WASM targets、7 crate 原生检查、Android smoke、5 个主题与两端 release-ui runner | [39864068134](https://github.com/Develata/RSS-Reader/actions/runs/39864068134) |
+| 服务器长场景 | **27 / 27 场景成功**；原三个超时场景 `build-mismatch-keeps-edits`、`restored-draft-then-sign-in`、`reader-recovers-without-localizing` 均为 3 秒 | default UI job `120124304752` |
+| Pages | fresh RSS 抓取、release 构建、6 篇正文 / 公式保真、内存重置、子路径及禁用在线操作均通过；**公网部署 skipped** | [39864073043](https://github.com/Develata/RSS-Reader/actions/runs/39864073043) |
+| 四平台 Web 包 / Docker | **7 / 7 jobs 成功**，Linux / Windows / macOS Intel / macOS ARM 实际启动服务包，容器实际包检查通过；未发布 | [39864123959](https://github.com/Develata/RSS-Reader/actions/runs/39864123959) |
+
+- 精确 source SHA：`576cba434274b4b686480455db2f7f2811bd107a`。相对于 `c2e2278`，只有 CI 配套归档器选择与交接记录变化，产品源码不变。
+- Pages 本次从指定两个源重新抓取，2026-10-22 22:20:28 UTC 写出 356,387 bytes 快照；不是把仓库旧快照当新抓取。
+- 运行、27 个场景及 artifact ID / GitHub digest 见 [verification.json](../testing/evidence/2026-10-22-phase-d/verification.json)。digest 是 GitHub 报告值；未声称本机下载并独立复算 ZIP。
+- 源码工作树在本节记录前 clean；没有 tag、Release 或镜像发布。
+
+## 分支清理与主干整合预检
+
+- 本任务已批准的两处 debug 编译缓存共清理约 **55.1 GiB**；重新编译后 E 盘可用约 **46.4 GiB**。本机后续编译输出均在 E 盘，WSL Debian VHD 也位于 E 盘。
+- 已核对其他 worktree 与合并状态；未删除其他 worktree、未合并未审核功能分支，也未修改根检出的任务外改动。单独删除分支指针对空间帮助有限，主要占用是各 worktree 的编译缓存。
+- 刷新 `origin/main` 后为 `d9ebe35`，与候选左右差异 27 / 343 个提交；`git merge-tree --write-tree --name-only HEAD origin/main` 返回 1、**65 个冲突路径**。报告：`target/handoff/candidate-576cba4/main-merge-preview.txt`。这是预检，没有开始工作树合并。
+- 主干的旧 host / sqlx 路径与已批准的 v0.2 Backend / 统一 SQL 路径发生职责、删除和改名冲突；需要按 v0.2 契约逐项对齐，不能把它作为普通磁盘清理直接合并。候选核心语义仍在 application/domain，平台差异仍限于 infra/backend/host capability。
+
+## 剩余门禁与交接
+
+- 最终独立复审方式仍待用户选择；具体复审包已写在 `target/handoff/2026-10-22-final-cd-review.md`，含精确候选、范围、接受的风险和验证证据。
+- 实际公网 Pages 子路径尚未部署验收；本地及 CI 静态服务器通过不能替代它。
+- 主干整合方案与后续 Pages 部署需处理上述架构分叉；尚不可宣布全部发布门禁关闭。
+- 保持用户要求：达到可打 tag 后再等点头，本次未打 tag。

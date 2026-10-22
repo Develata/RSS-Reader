@@ -3,10 +3,10 @@
 - 日期：2026-10-22
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
-- 当前 HEAD：`9b70455`
+- 当前 HEAD：`576cba4`
 - 相关 commit：`c2e2278`
 - 相关 tag / release：未创建，等待最终验收与用户确认
-- 状态：`draft`
+- 状态：`validated`（实现与本地 / 远端验证；独立最终评审另列）
 
 ## 工作摘要
 
@@ -39,7 +39,7 @@
 - `cargo test --workspace --locked`：861 passed / 0 failed / 3 ignored；这是补充 URL 属性预算测试之前的完整基线。补充后定向压力测试 24 / 24 通过，最终完整回归由远端 CI 再跑。日志 `mathml-workspace-tests.log`。
 - workspace 全 targets Clippy、正式 Web wasm Clippy、infra memory-store/http-backend wasm tests Clippy 均通过；release-ui runner 3 项测试通过。
 - Dioxus release Pages 包在 `/RSS-Reader` 完成真实 Chrome 验收：597 个 MathML 全部保留且具有 MathML 布局，144 张公式图片全部加载；重载重置和禁用在线操作通过。
-- 最终远端长验收、Pages 和四平台 Web 包 / Docker：待推送后执行。
+- 最终远端 `576cba4`：完整 CI 35 / 35 jobs，长验收 27 / 27，正文 WASM 契约 6 / 6；Pages 构建验收通过（部署跳过）；四平台 Web 包与 Docker 7 / 7。见 [阶段 D 最终记录](./2026-10-22-phase-d-pages-sqlite.md#最终候选远端结果576cba4)。
 
 ### 手工验收
 
@@ -50,7 +50,7 @@
 
 ## 结果
 
-已提交并推送 `c2e2278`。本地验收通过；远端最终候选、实际公网 Pages 与独立评审仍未齐备，不能宣布可打 tag。
+已提交并推送 `c2e2278`。本地验收通过；实际公网 Pages 与独立评审仍未齐备，不能宣布可打 tag。
 
 ## 风险与后续事项
 
