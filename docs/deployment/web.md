@@ -10,6 +10,33 @@
 
 正式部署使用 HTTPS；本机开发可用回环 HTTP。正式 Web 不依赖 Web Locks 保存资料库；该限制仅适用于仍使用 BrowserStore 的 Pages 演示。正式 Web 不再离线可读。
 
+## 服务与页面发布包
+
+v0.2 发布流程按宿主平台打包同一次构建的服务和页面：
+
+| 平台 | 包名 |
+| --- | --- |
+| Linux x86_64 | `rssr-web-linux-x86_64.tar.gz` |
+| Windows x86_64 | `rssr-web-windows-x86_64.zip` |
+| macOS Intel | `rssr-web-macos-x86_64.tar.gz` |
+| macOS Apple Silicon | `rssr-web-macos-aarch64.tar.gz` |
+
+每个包包含 `rssr-web`（Windows 为 `.exe`）、`public/` 和记录构建标识及文件 SHA-256 的 `build.json`。先解压整个包，在包目录里启动服务，不能只替换页面或只复制程序。v0.2 不再发布单独的 `RSS-Reader-web.tar.gz`；Pages 演示仍独立构建与部署。这里描述的是分支中的发布流程，实际可下载版本以 Release 为准。
+
+Linux / macOS 本机示例（Windows 可在 PowerShell 中设置同名 `$env:` 变量后运行 `.\rssr-web.exe`）：
+
+```bash
+export RSSR_DATA_DIR="$HOME/.local/share/rss-reader-server"
+export RSS_READER_WEB_STATIC_DIR="$PWD/public"
+export RSS_READER_WEB_BIND=127.0.0.1:8039
+export RSS_READER_WEB_PUBLIC_ORIGIN=http://localhost:8039
+export RSS_READER_WEB_USERNAME=admin
+export RSS_READER_WEB_PASSWORD='请替换为自己的强密码'
+./rssr-web
+```
+
+[Web packages workflow](../../.github/workflows/web-packages.yml) 从一个固定 source SHA 生成统一 `RSSR_BUILD_ID=git-<完整 SHA>`；四个平台均检查解压包并实际启动服务。Linux 在 Debian bookworm 中构建，镜像直接复制这份受测包与同次构建的 CLI，不再次编译。发布流程在容器验收之后推送同一受测镜像；分支上的 Docker 手动验证不推送镜像。检查入口和实际完成情况见 [C6 验证](../testing/web-distribution.md)。
+
 ## 使用已发布镜像
 
 仓库根目录的 [`docker-compose.yml`](../../docker-compose.yml) 直接拉取 `ghcr.io/develata/rss-reader:latest`，默认映射宿主端口 `8039` 到容器 `8080`，并挂载数据卷 `/data`。在克隆的仓库中创建仅供本机使用的 `.env`：
@@ -63,7 +90,7 @@ RSS_READER_WEB_PASSWORD_HASH=请填入Argon2哈希
 RSS_READER_WEB_TRUST_PROXY_HEADERS=false
 ```
 
-页面和服务器必须来自同一构建；服务器会拒绝构建标识不匹配的写请求。发布镜像的标识注入与旧页面对新服务器的验收属于 C6，本文不宣称它们已完成。
+页面和服务器必须来自同一构建；服务器会拒绝构建标识不匹配的写请求。镜像和发布包均注入明确的构建标识；旧页面对新服务的验证结果以 [C6 记录](../handoffs/2026-10-22-c6-web-distribution.md) 为准。
 
 `production` 要求 `RSS_READER_WEB_PUBLIC_ORIGIN` 是 https 地址，cookie 随之带 `Secure`。反向代理要原样转发浏览器的 `Origin`、`Cookie`、`X-RSSR-Build`、`X-RSSR-CSRF` 请求头和 `Set-Cookie` 响应头。页面与 `/api/v1` 使用同一 origin；不要重定向 `/api` 写请求，也不要把 API 的 JSON 错误改成登录 HTML。`RSS_READER_WEB_TRUST_PROXY_HEADERS` 仅在可信反向代理正确覆盖转发头时启用；默认保持 `false`。
 
@@ -158,8 +185,13 @@ bash scripts/run_release_ui_regression.sh --with-fixed-smokes
 要从当前源码构建镜像：
 
 ```bash
+export RSSR_BUILD_ID="git-$(git rev-parse HEAD)"
 docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 ```
+
+源码构建必须显式提供 `RSSR_BUILD_ID`，且不能为 `dev-unknown`；同一值交给页面和服务的构建脚本。未提交的产品修改需要使用不同的明确标识，不能沿用旧提交标识冒充同一产物。容器内以默认的 `rssr` 用户执行 `docker compose exec rss-reader rssr-cli show-settings`；也可明确指定 `docker compose exec --user rssr rss-reader rssr-cli ...`。新卷和资料库必须属于该用户；已有数据不要通过换用户或放宽权限规避检查。
+
+网络专用 NAT64 前缀可能处在普通全局 IPv6 地址中，应用不能仅从地址识别其转换目标。如果部署网络会把该前缀映射到内网 IPv4，必须在出口防火墙阻断，或在 `outbound.json` 的 `deny` 中列明该前缀；不能只依赖 `public_only` 推断其安全。
 
 仓库的 `.dockerignore` 会排除 `.env` 和 `.env.*`，避免把本地认证变量随 `COPY . .` 放进镜像；其他私有文件也应放在构建上下文之外。
 

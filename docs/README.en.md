@@ -17,6 +17,8 @@ RSS-Reader is a local-first RSS reader built with Rust and Dioxus. Desktop, Web,
 
 Implementation notes below describe the v0.2 development branch, not a published v0.2 release; the asset table retains its historical v0.1.22 verification.
 
+The v0.2 release workflow packages the server and its matching page together for Linux x86_64, Windows x86_64, and macOS x86_64 / aarch64 as `rssr-web-<platform>.tar.gz` (Windows: `.zip`). See the [deployment guide](./deployment/web.md); the standalone Pages demo remains separate.
+
 [Latest release](https://github.com/Develata/RSS-Reader/releases/latest) · [Release notes](https://github.com/Develata/RSS-Reader/releases) · [中文](../README.md) · [Documentation](./README.md) · [Issues](https://github.com/Develata/RSS-Reader/issues)
 
 ## Get started

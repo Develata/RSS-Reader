@@ -436,49 +436,23 @@ jobs:
           if-no-files-found: error
 
   build-web:
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ env.RELEASE_REF }}
+    uses: ./.github/workflows/web-packages.yml
+    with:
+      source_ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+      release_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      all_platforms: true
 
-      - name: Cleanup runner
-        uses: ./.github/actions/cleanup-github-runner
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Setup Dioxus CLI
-        uses: ./.github/actions/setup-dioxus-cli
-        with:
-          version: ${{ env.DIOXUS_CLI_VERSION }}
-
-      - name: Build web bundle
-        run: dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
-
-      - name: Archive web bundle
-        run: |
-          mkdir -p release-assets
-          tar -C target/web-dist -czf release-assets/RSS-Reader-web.tar.gz public
-
-      - name: Smoke-check web artifact
-        run: |
-          tar -tzf release-assets/RSS-Reader-web.tar.gz | grep '^public/index.html$'
-          tar -tzf release-assets/RSS-Reader-web.tar.gz | grep -E '^public/assets/rssr-app_bg-.*\.wasm$'
-
-      - name: Upload web artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-web
-          path: release-assets/*
-          if-no-files-found: error
+  build-container:
+    needs: build-web
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yml
+    with:
+      use_existing_package: true
+      source_sha: ${{ needs.build-web.outputs.source_sha }}
+      build_id: ${{ needs.build-web.outputs.build_id }}
+      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 
   build-macos:
     runs-on: macos-latest
@@ -578,6 +552,7 @@ jobs:
       - build-linux
       - build-macos
       - build-web
+      - build-container
     steps:
       - name: Download release artifacts
         uses: actions/download-artifact@v8

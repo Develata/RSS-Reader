@@ -9,5 +9,7 @@ dist
 public
 *.db
 *.sqlite
+*.sqlite3
+*.sqlite3-*
 *.log
 docs/回归手动测试.md

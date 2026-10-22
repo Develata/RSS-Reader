@@ -25,6 +25,7 @@
 ### Web / 浏览器 smoke
 
 - [服务器模式浏览器回归（统一入口）](./server-web-regression.md)：regression、theme-matrix、feed-smoke、acceptance；长验收加 `--long`。
+- [Web 服务包与容器验收](./web-distribution.md)：四平台服务包、真实旧页面、镜像复用与旧认证卷迁移。
 
 - [`rssr-web` 浏览器手工 Smoke](./rssr-web-browser-smoke.md)
 - [`rssr-web` 浏览器自动 Feed Smoke](./rssr-web-browser-feed-smoke.md)

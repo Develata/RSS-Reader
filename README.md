@@ -15,7 +15,7 @@ _Web 版实际界面；订阅与文章使用演示数据。_
 
 RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把订阅、刷新、筛选和阅读放在一条简短的使用路径上；桌面、Web、Android 和 CLI 复用同一套核心能力。桌面与 Android 的资料库留在设备上；自托管 Web 的资料库保存在服务器上，各浏览器登录后访问同一份数据。独立资料库之间可以通过 JSON、OPML 或可选的 WebDAV 交换配置。
 
-本文的实现说明对应 v0.2 开发分支；下方已发布附件表保留 v0.1.22 的历史核对，不能据此认定 v0.2 已发布。
+本文的实现说明对应 v0.2 开发分支；下方已发布附件表保留 v0.1.22 的历史核对，不能据此认定 v0.2 已发布。 v0.2 的 Web 发布流程改为四个平台的 `rssr-web-<平台>` 服务与页面合包，见 [部署说明](./docs/deployment/web.md#服务与页面发布包)。
 
 [下载最新版本](https://github.com/Develata/RSS-Reader/releases/latest) · [发布说明](https://github.com/Develata/RSS-Reader/releases) · [English](./docs/README.en.md) · [文档](./docs/README.md) · [报告问题](https://github.com/Develata/RSS-Reader/issues)
 

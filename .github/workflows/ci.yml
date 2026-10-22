@@ -107,6 +107,8 @@ jobs:
         run: bash scripts/test_prepare_linux_deb.sh
       - name: Check macOS bundle metadata adapter
         run: python3 scripts/test_prepare_macos_bundle.py
+      - name: Check Web package integrity and extraction
+        run: python3 scripts/test_package_web.py
 
   release-ui-runner:
     runs-on: ${{ matrix.os }}
