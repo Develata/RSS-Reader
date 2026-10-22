@@ -35,6 +35,8 @@ export RSS_READER_WEB_PASSWORD='请替换为自己的强密码'
 ./rssr-web
 ```
 
+数据目录使用真实路径，认证库拒绝沿符号链接打开文件。macOS 的 `/var`、`/tmp` 是系统别名；临时运行可先创建目录，再用 `cd <目录> && pwd -P` 得到真实路径后设置 `RSSR_DATA_DIR`。
+
 [Web packages workflow](../../.github/workflows/web-packages.yml) 从一个固定 source SHA 生成统一 `RSSR_BUILD_ID=git-<完整 SHA>`；四个平台均检查解压包并实际启动服务。Linux 在 Debian bookworm 中构建，镜像直接复制这份受测包与同次构建的 CLI，不再次编译。发布流程在容器验收之后推送同一受测镜像；分支上的 Docker 手动验证不推送镜像。检查入口和实际完成情况见 [C6 验证](../testing/web-distribution.md)。
 
 ## 使用已发布镜像

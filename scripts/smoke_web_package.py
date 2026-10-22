@@ -119,7 +119,10 @@ def main():
     metadata = verify(root)
     browser_checks = []
     with tempfile.TemporaryDirectory(prefix='rssr-web-smoke-') as directory:
-        with server(root, Path(directory) / 'data', args.logs / 'server.log') as origin:
+        # macOS temp paths use /var -> /private/var. Auth SQLite intentionally opens
+        # with NOFOLLOW, so pass the real path of this owned test directory.
+        scratch = Path(directory).resolve()
+        with server(root, scratch / 'data', args.logs / 'server.log') as origin:
             check_api(origin, metadata['build_id'])
             if args.chrome:
                 browser_smoke(args.chrome, origin, metadata['build_id'], 'matching', args.logs)
@@ -130,7 +133,7 @@ def main():
             old = args.old_package.resolve()
             old_id = verify(old)['build_id']
             assert old_id != metadata['build_id'], 'old page must have a different compiled identifier'
-            with server(root, Path(directory) / 'old-data', args.logs / 'old-page-server.log', public=old / 'public') as origin:
+            with server(root, scratch / 'old-data', args.logs / 'old-page-server.log', public=old / 'public') as origin:
                 browser_smoke(args.chrome, origin, old_id, 'old-page', args.logs)
                 browser_checks.append('actual older page is rejected and shows recovery without a write')
     (args.logs / 'result.json').write_text(json.dumps({
