@@ -15,6 +15,8 @@
 
 `acceptance` 默认跳过等待 30 秒以上的场景；`--long` 纳入全部场景。C4c-2 R2 对应 24 个常规场景、3 个长场景；实际数量和成败以本次 `assertions.json` 为准。`--only a,b` 只由 `rssr_server_acceptance.mjs` 驱动接受，Shell 入口不转发它。
 
+GitHub `CI` 的 push / PR 使用常规验收；手动 `Run workflow` 可勾选 `acceptance_long`，在默认主题 job 中运行完整 `--long` 验收。页面、服务器与夹具工具复用同次检出的构建产物，结果保存在 `ci-ui-default` artifact 的 `default-acceptance/` 中。其他主题仍只跑各自的 regression，见 [CI 矩阵](./mainline-validation-matrix.md#github-ci-并发矩阵)。
+
 ## 构建与隔离
 
 ```bash

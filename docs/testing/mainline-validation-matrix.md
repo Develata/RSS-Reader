@@ -36,12 +36,13 @@
 | --- | --- | --- |
 | `workspace`、`format` | 生成完整模块列表；`cargo fmt --all --check` | 独立运行，各 10 分钟 |
 | `test-tools` | actionlint 1.7.12（官方校验和验证下载）；std-only Rust wasm runner 的 rustfmt、Clippy、单测及子进程隔离；Linux `.deb` 版本与动态库依赖元数据适配测试 | 独立运行，10 分钟 |
+| `release-ui-runner` / Ubuntu + Windows | 独立 CLI 的 fmt、Clippy、单测与黑盒编排验收；用真实 workspace 的 Cargo metadata 核对计划引用的 package / test target | 2 / 每平台 10 分钟 |
 | `native-module` / 7 crates | `cargo clippy --locked -p <crate> --all-targets -- -D warnings`；`cargo test --locked -p <crate>`（含 doc tests）；CLI help | 4 / 每模块 35 分钟 |
-| `web-smoke` | wasm target Clippy（`-D warnings`，覆盖 rssr-app 及路径依赖的 `cfg(wasm32)` 分支）、Dioxus 0.7.9 release bundle，同次构建服务器与夹具工具，上传 `ci-web-public` / `ci-web-server` | 40 分钟 |
-| `web-ui` / default + 4 builtin themes | 下载同次页面/服务器/夹具工具，每主题运行 `regression`；默认主题另跑 `theme-matrix`、`feed-smoke`、不带 `--long` 的 `acceptance` | 3 / 每主题 15 分钟 |
+| `web-smoke` | 四组 wasm Clippy（全部 `-D warnings`）：app 正式 Web、app `pages-demo`、infra 无额外 feature、infra `browser-store,http-backend --tests`；Dioxus 0.7.9 正式 Web release bundle，同次构建服务器与夹具工具，上传 `ci-web-public` / `ci-web-server` | 40 分钟 |
+| `web-ui` / default + 4 builtin themes | 下载同次页面/服务器/夹具工具，每主题运行 `regression`；默认主题另跑 `theme-matrix`、`feed-smoke`、`acceptance`。push / PR 默认短验收；手动 `acceptance_long=true` 纳入全部长场景 | 3 / 每主题 15 分钟 |
 | `wasm-contract-build` | 一个锁定依赖的 Cargo 调用准备全部 harness，上传精确产物；预热 wasm-bindgen 工具缓存 | 35 分钟 |
 | `wasm-browser-contract` / 3 harnesses | 下载同一批产物，分别运行 refresh / subscription / config exchange 浏览器契约，不再运行 Cargo | 3 / 每 harness 15 分钟 |
-| `android-smoke` | 锁定 NDK / ARM64 check、bundle、APK 资源 / ABI / version 断言；`~/.gradle` 按 dx 版本与 Android 输入缓存 | 50 分钟 |
+| `android-smoke` | 锁定 NDK / ARM64 app + CLI check、app bundle、APK 资源 / ABI / version 断言；`~/.gradle` 按 dx 版本与 Android 输入缓存 | 50 分钟 |
 | `lint-and-test` | 汇总所有 jobs，只有全部 success 才通过；失败、取消、意外跳过均拒绝 | 5 分钟 |
 
 ```mermaid
@@ -59,6 +60,7 @@ flowchart LR
 ```
 
 - 同一 PR / ref 的旧 CI run 会被新 run 取消；不同 PR 不共用 concurrency group。每个 matrix 使用 `fail-fast: false`，保留其他模块的完整结果。
+- 在 Actions 的 `CI` → `Run workflow` 勾选 `acceptance_long`，默认主题的服务端验收会追加 `--long`（C4c-2 R2 为 27 场景；未勾选为 24 场景）。其余主题和套件不受影响；结果以对应 artifact 的 `assertions.json` 为准。此选项只控制测试，不触发发布。
 - 上表上限是各 matrix 的上限，不是整个 workflow 的全局配额；实际并发还取决于 GitHub runner 配额。
 - Rust cache 按 native crate / Web / Android / wasm 构建职责区分，只有 UI crate 安装 GTK / WebKit。UI job 不重复编译 Web 或服务器，wasm job 不重复编译契约；不上传浏览器 profile。Web / wasm 包保留 3 天，UI 断言 / 日志 / 截图保留 7 天。
 - wasm-bindgen / Dioxus 工具在独立安装目录按 OS / 架构 / 精确版本缓存，命中后仍核对实际版本；不覆盖全局 Cargo 安装登记。wasm 构建 job 先预热工具缓存，后续三个 job 通常直接恢复，缓存不可用时仍允许安装。Chrome 按解析出的精确版本缓存，只有 wasm job 安装匹配的 ChromeDriver；CDP UI job 只用 Chrome。冷缓存、artifact 传输和远端缓存服务耗时仍需真实 run 测量，编译次数减少不等于已证明总耗时同比下降。

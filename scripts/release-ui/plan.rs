@@ -232,6 +232,52 @@ mod tests {
     fn opts(args: &[&str]) -> Options {
         Options::try_parse_from(std::iter::once("release-ui").chain(args.iter().copied())).unwrap()
     }
+
+    // Fake CLI tools verify orchestration, but cannot detect renamed product test targets.
+    #[test]
+    fn planned_cargo_tests_exist_in_workspace() {
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
+        let output = std::process::Command::new(env!("CARGO"))
+            .args(["metadata", "--locked", "--no-deps", "--format-version", "1", "--manifest-path"])
+            .arg(manifest)
+            .output()
+            .expect("read product workspace metadata with Cargo");
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        let metadata: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let packages = metadata["packages"].as_array().unwrap();
+        let members = metadata["workspace_members"].as_array().unwrap();
+        for step in build(&opts(&["--full"]))
+            .into_iter()
+            .filter(|step| step.enabled && step.program == "cargo")
+        {
+            let package_name = &step
+                .args
+                .windows(2)
+                .find(|arg| arg[0] == "-p" || arg[0] == "--package")
+                .expect("planned Cargo step must select a package")[1];
+            let package = packages
+                .iter()
+                .find(|package| {
+                    package["name"] == *package_name && members.contains(&package["id"])
+                })
+                .unwrap_or_else(|| {
+                    panic!("{}: missing workspace package {package_name}", step.name)
+                });
+            for target_name in
+                step.args.windows(2).filter(|arg| arg[0] == "--test").map(|arg| &arg[1])
+            {
+                assert!(
+                    package["targets"].as_array().unwrap().iter().any(|target| {
+                        target["name"] == *target_name
+                            && target["kind"].as_array().unwrap().iter().any(|kind| kind == "test")
+                    }),
+                    "{}: {package_name} has no test target {target_name}",
+                    step.name
+                );
+            }
+        }
+    }
+
     #[test]
     fn argument_contract() {
         assert_eq!(opts(&[]).profile(), "debug");

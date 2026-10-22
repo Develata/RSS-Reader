@@ -6,6 +6,11 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+    inputs:
+      acceptance_long:
+        description: Include the server acceptance scenarios that wait 30 seconds or more
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -207,10 +212,18 @@ jobs:
         with:
           version: ${{ env.DIOXUS_CLI_VERSION }}
 
-      # 原生模块 job 的 clippy 看不到 cfg(target_arch = "wasm32") 分支；
-      # 这里对 wasm 目标跑 clippy（覆盖 rssr-app 及其路径依赖），成本与 cargo check 相当。
-      - name: Wasm target Clippy
+      # 分别检查正式 Web、静态演示和 infra feature 组合；原生 job 看不到 wasm 分支。
+      - name: Formal Web Clippy
         run: cargo clippy --locked -p rssr-app --target wasm32-unknown-unknown -- -D warnings
+
+      - name: Pages demo Clippy
+        run: cargo clippy --locked -p rssr-app --target wasm32-unknown-unknown --features pages-demo -- -D warnings
+
+      - name: Wasm infra Clippy without adapters
+        run: cargo clippy --locked -p rssr-infra --target wasm32-unknown-unknown -- -D warnings
+
+      - name: Wasm infra adapter and test Clippy
+        run: cargo clippy --locked -p rssr-infra --target wasm32-unknown-unknown --features browser-store,http-backend --tests -- -D warnings
 
       - name: Web bundle smoke
         run: |
@@ -252,6 +265,7 @@ jobs:
         preset: [default, atlas-sidebar, newsprint, amethyst-glass, midnight-ledger]
     env:
       PRESET: ${{ matrix.preset }}
+      ACCEPTANCE_LONG: ${{ inputs.acceptance_long && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -285,8 +299,10 @@ jobs:
           if [[ "$PRESET" == default ]]; then
             bash scripts/run_server_web_regression.sh "${args[@]}" --suite theme-matrix --log-dir "target/ci-ui/$PRESET-theme-matrix"
             bash scripts/run_server_web_regression.sh "${args[@]}" --suite feed-smoke --log-dir "target/ci-ui/$PRESET-feed-smoke"
-            # 服务端模式的浏览器验收（等待 30 秒以上的场景只在本地以 --long 运行）。
-            bash scripts/run_server_web_regression.sh "${args[@]}" --suite acceptance --log-dir "target/ci-ui/$PRESET-acceptance"
+            # 常规 CI 跑短场景；手动运行可选择纳入等待 30 秒以上的长场景。
+            acceptance_args=()
+            if [[ "$ACCEPTANCE_LONG" == true ]]; then acceptance_args=(--long); fi
+            bash scripts/run_server_web_regression.sh "${args[@]}" --suite acceptance "${acceptance_args[@]}" --log-dir "target/ci-ui/$PRESET-acceptance"
           fi
       - name: Preserve UI evidence even on failure
         if: always()
@@ -450,8 +466,8 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-dx${{ env.DIOXUS_CLI_VERSION }}-
 
-      - name: Android target smoke check
-        run: cargo check --locked -p rssr-app --target aarch64-linux-android
+      - name: Android app and CLI target smoke check
+        run: cargo check --locked -p rssr-app -p rssr-cli --target aarch64-linux-android
 
       - name: Android bundle smoke
         run: |
