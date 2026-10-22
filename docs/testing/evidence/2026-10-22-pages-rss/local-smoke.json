@@ -1,0 +1,29 @@
+{
+  "status": "pass",
+  "fetched_at": "2026-10-22 20:19:41.8132114 +00:00:00",
+  "feeds": 2,
+  "articles": 6,
+  "sourceHashes": [
+    {
+      "url": "https://develata.me/rss/daily-math.xml",
+      "sha256": "a62b97881cecabb0492ca40f9d0844f133ea5681ef2a02b829550fd289fcbc01"
+    },
+    {
+      "url": "https://terrytao.wordpress.com/feed/",
+      "sha256": "e6050c9c95456dbb3d8f8c1bbdc495764835f91075fe0212fbe3cfb86e2421f8"
+    }
+  ],
+  "externalImages": [],
+  "source_commit": "57407d8d838d0a417c8b59f31545722ead310e7c",
+  "snapshot_sha256": "50c1339647cfcf79d78c3b04b8c72c7207989f9073a7d4e013725ed478493d29",
+  "snapshot_bytes": 356385,
+  "environment": {
+    "dx": "0.7.9",
+    "chrome": "156.0.8078.47",
+    "node": "22",
+    "container": "rssr-ci-timeouts:chrome156",
+    "build_id": "pages-rss-20261022",
+    "base_path": "/RSS-Reader"
+  },
+  "scope": "Local browser test of real RSS seed, reader, routes, persistence and denied feed operations; no public deployment or full formula visual acceptance."
+}

@@ -4,9 +4,9 @@
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
 - 当前 HEAD（实现前）：`ddf4837`
-- 相关 commit：pending
+- 相关 commit：`57407d8`（实现，已推送）；本记录及验证证据收尾随文档提交
 - 相关 tag / release：N/A
-- 状态：`validated`（本地通过，分支 CI 待运行；未部署）
+- 状态：`validated`（本地及远端 Pages CI 首次通过；未部署）
 
 ## 工作摘要
 
@@ -39,11 +39,14 @@
 - 固定 dx 0.7.9：`dx build --platform web --package rssr-app --release --locked --features pages-demo --base-path /RSS-Reader --debug-symbols false` 通过，构建标识 `pages-rss-20261022`。
 - Docker Ubuntu 24.04 / Chrome 156.0.8078.47 / Node 22：`PAGES_BASE_PATH=/RSS-Reader bash scripts/test_pages.sh` 通过。真实阅读器、404 深链接、子路径导航、收藏重载、两个来源与 6 篇条目/原文、添加及刷新被拒全部通过；未发出跨源请求，`externalImages` 为空。
 - `cargo fmt --all --check`、`actionlint .github/workflows/pages.yml`、`node --check scripts/browser/pages_smoke.mjs`、`git diff --check`：通过。
-- 本地构建与浏览器原始证据：`target/handoff/pages-feeds/`（ignored）；可追溯快照本身入库。
+- 本地构建与浏览器原始证据：`target/handoff/pages-feeds/`（ignored）；可追溯快照与[本地浏览器结果](../testing/evidence/2026-10-22-pages-rss/local-smoke.json)入库。
+- 远端 `gh workflow run pages.yml --repo Develata/RSS-Reader --ref v0.2-architecture`：[run 39849066793](https://github.com/Develata/RSS-Reader/actions/runs/39849066793)，source `57407d8d838d0a417c8b59f31545722ead310e7c`，attempt 1，结论 success。`build` job `120070068973` 成功；`deploy` job `120071622632` 按分支条件 skipped。
+- 远端日志确认测试 2/2、真实抓取 2 个源/6 篇、dx 构建与 `/RSS-Reader` 子路径浏览器验收通过。CI 抓取时刻为 `2026-10-22 20:29:00.573087312 +00:00:00`，生成快照 356387 bytes，与本地快照是不同的一次抓取，未冒充同一字节产物。
+- 快照 artifact `12455693988`（`pages-rss-snapshot-39849066793-1`），GitHub 报告 ZIP SHA-256 `edc28a4597b58185f31ebd786b67ea705556f345a7ff0b4edcb226243d4b1e1d`，保留至 2026-10-29；未在本机下载复核 ZIP。固定运行、job、抓取哈希与日志摘录见 [CI 证据](../testing/evidence/2026-10-22-pages-rss/ci-verification.json)。
 
 ## 结果
 
-预抓取、打包与本地真实浏览器路径完成。公开 Pages 尚未部署；没有创建版本 tag 或 Release。分支 CI 结果在完成后补入。
+预抓取、打包与本地/远端真实浏览器路径完成，实现已推送 `v0.2-architecture`。公开 Pages 尚未部署；没有创建版本 tag 或 Release。本次收尾只补文档与证据，不改变已验证的程序。
 
 ## 风险与后续事项
 
