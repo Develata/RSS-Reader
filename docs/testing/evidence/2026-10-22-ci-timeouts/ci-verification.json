@@ -1,0 +1,195 @@
+{
+  "date": "2026-10-22",
+  "original_failure": {
+    "run": 39816994053,
+    "job": 119959031736,
+    "source": "129996af85798c07c623255be88e18a5706426d1",
+    "scenarios_passed": 24,
+    "scenarios_total": 27,
+    "request_loader_identity_available": false
+  },
+  "driver_fix_verification": {
+    "run": 39828331412,
+    "source": "3cddffa9a01573a94edefb503adb1838697e39cb",
+    "jobs_passed": 22,
+    "jobs_total": 24,
+    "failed_jobs": [
+      "native-module (rssr-app): APT mirror-list download timeout",
+      "lint-and-test: aggregate gate"
+    ],
+    "browser_job": 119998680316,
+    "browser_scenarios_passed": 27,
+    "browser_scenarios_total": 27,
+    "driver_tests_passed": 10,
+    "artifacts": [
+      {
+        "id": 12448201835,
+        "name": "ci-ui-default",
+        "digest_reported_by_github": "sha256:ddff6b8d9f785e172078b4a77af9cd34362a546b14a98ad820bb4a015c9c65c7",
+        "source": "3cddffa9a01573a94edefb503adb1838697e39cb",
+        "locally_downloaded": false
+      }
+    ]
+  },
+  "final_verification": {
+    "url": "https://github.com/Develata/RSS-Reader/actions/runs/39830409992",
+    "run": 39830409992,
+    "source": "9e2c8ecb660a82b5ca7507c4e47eba4409330a8b",
+    "attempt": 1,
+    "status": "completed",
+    "conclusion": "success",
+    "started_at": "2026-10-22T18:20:10Z",
+    "jobs": [
+      {
+        "id": 120004758126,
+        "name": "web-smoke",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004758454,
+        "name": "workspace",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004758502,
+        "name": "test-tools",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004758510,
+        "name": "release-ui-runner (windows-latest)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004758540,
+        "name": "release-ui-runner (ubuntu-latest)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004758569,
+        "name": "android-smoke",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004758641,
+        "name": "format",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004833169,
+        "name": "native-module (rssr-infra)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004833170,
+        "name": "native-module (rssr-web)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004833184,
+        "name": "wasm-contract-build",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004833188,
+        "name": "native-module (rssr-domain)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004833204,
+        "name": "native-module (rssr-cli)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004833256,
+        "name": "native-module (rssr-application)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004833300,
+        "name": "native-module (rssr-api)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120004833442,
+        "name": "native-module (rssr-app)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120005186403,
+        "name": "wasm-browser-contract (wasm_refresh_contract_harness)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120005186626,
+        "name": "wasm-browser-contract (wasm_subscription_contract_harness)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120005186711,
+        "name": "wasm-browser-contract (wasm_config_exchange_contract_harness)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120006092192,
+        "name": "web-ui (atlas-sidebar)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120006092365,
+        "name": "web-ui (default)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120006092390,
+        "name": "web-ui (amethyst-glass)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120006092465,
+        "name": "web-ui (midnight-ledger)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120006092766,
+        "name": "web-ui (newsprint)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120009785453,
+        "name": "lint-and-test",
+        "conclusion": "success"
+      }
+    ],
+    "browser_job": 120006092365,
+    "browser_scenarios_passed": 27,
+    "browser_scenarios_total": 27,
+    "original_case_seconds": {
+      "reader-recovers-without-localizing": 3,
+      "settings-read-fails-at-start": 3,
+      "http-backend-only": 2
+    },
+    "artifacts": [
+      {
+        "id": 12449351902,
+        "name": "ci-ui-default",
+        "digest_reported_by_github": "sha256:3b6da0e801a7c39f1e7acfd7287f724260e3c19cefe881eeb1edb17be72fbf0a",
+        "source": "9e2c8ecb660a82b5ca7507c4e47eba4409330a8b",
+        "locally_downloaded": false
+      }
+    ],
+    "native_app": {
+      "job": 120004833442,
+      "unit_passed": 201,
+      "unit_failed": 0,
+      "unit_ignored": 1,
+      "package_download": "76.3 MB in 32 s",
+      "mirror_file_verified": "/etc/apt/apt-mirrors.txt"
+    }
+  },
+  "boundaries": [
+    "The original three timeouts have no request/loader ids, so individual attribution remains unproven.",
+    "Local reproductions used rebuilt binaries, not the original CI artifacts.",
+    "GitHub artifact digests are reported metadata; those ZIPs were not downloaded or hashed locally."
+  ]
+}

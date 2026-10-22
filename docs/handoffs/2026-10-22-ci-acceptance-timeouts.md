@@ -3,10 +3,10 @@
 - 日期：2026-10-22
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
-- 当前 HEAD：`3cddffa9a01573a94edefb503adb1838697e39cb`（修复与复验源码）
-- 相关 commit：`3cddffa`；APT 镜像列表修复与验证回填 commit: pending
+- 当前 HEAD：`9e2c8ecb660a82b5ca7507c4e47eba4409330a8b`（最终复验源码；随后只回填验证记录）
+- 相关 commit：`3cddffa`（驱动）、`9e2c8ec`（APT 镜像列表）；均已推送。
 - 相关 tag / release：无
-- 状态：`validated`（本地通过；远端完整 CI 复验进行中）
+- 状态：`validated`（本地验收及最终远端完整 CI 均通过）
 
 ## 工作摘要
 
@@ -58,12 +58,14 @@ CI 改为覆盖 `sources.list`、`sources.list.d/*.list`、`*.sources` 和该镜
 - 修复后 Linux release 页面 + release 服务器的完整 `--long`：27/27 场景、108 检查、0 意外控制台错误。报告 `target/handoff/evidence-ci-timeouts/linux156-fixed-full-1/assertions.json`，SHA-256 `c00b9ce6c567c316553885490921b2ec790bb6f8aeeb2438af8c6f7aaccc0534`。
 - 修复后远端 CI：[run 39828331412](https://github.com/Develata/RSS-Reader/actions/runs/39828331412)，source `3cddffa9a01573a94edefb503adb1838697e39cb`，`acceptance_long=true`：浏览器长验收首次 27/27，原三个场景耗时分别 3、2、2 秒；`test-tools` 10/10。全局 22/24 成功，另两项为上述 APT 安装及汇总 gate，不把全局结果记为通过。
 - 默认主题 job `119998680316` 的完整日志已留存；artifact `12448201835` 的 GitHub 报告 SHA-256 为 `ddff6b8d9f785e172078b4a77af9cd34362a546b14a98ad820bb4a015c9c65c7`，未声称本机校验此 ZIP。
-- APT 修复后的远端完整 CI：pending。
+- APT 修复后的 [CI run 39830409992](https://github.com/Develata/RSS-Reader/actions/runs/39830409992)：source `9e2c8ecb660a82b5ca7507c4e47eba4409330a8b`，`acceptance_long=true`，首次运行 **24/24 jobs 成功**，浏览器长验收 **27/27**。原三个场景分别 3、3、2 秒。`rssr-app` 主测试 201 passed / 0 failed / 1 ignored，Clippy 通过；APT 日志明确处理 `/etc/apt/apt-mirrors.txt`，76.3 MB 包下载用时 32 秒。
+- 最终默认主题 job `120006092365` 完整日志已核对；artifact `12449351902`，GitHub 报告 SHA-256 `3b6da0e801a7c39f1e7acfd7287f724260e3c19cefe881eeb1edb17be72fbf0a`。各 job、来源与产物元数据见 [远端验证记录](../testing/evidence/2026-10-22-ci-timeouts/ci-verification.json)，两次修复后的 CI 均未重跑 job 来替换首轮结果。
 
 ## 结果与风险
 
 - 已定位可复现的驱动缺陷；原始三个超时缺少身份信息，逐条归因仍有证据缺口。
 - 不声称覆盖嵌套 frame 的 BFCache 生命周期；本应用的 API 来自主文档，其它 loader 采用保守等待。
+- 独立 HTTP 页面的真实 BFCache 请求验证不替代应用草稿在 BFCache 往返中的完整恢复验收。
 - 本机未重复应用原生/wasm 测试，远端完整 CI 的实际结果记录于上节；未做独立外部评审。
 - 自动审批拒绝将原 CI 构建 artifact 下载到本机，理由为需要批准但当前审批策略为 Never；没有换通道重试该下载。本地复现用当前未改产品源码构建的产物，显式构建标识 `c6-package-a13a1e5` 两端一致，不冒充原 CI 二进制。原失败日志及先前已留存的 artifact 可读。
 - 已核对 `git diff 129996a 3cddffa -- crates Cargo.toml Cargo.lock assets Dioxus.toml build-support` 为空；不能因此把不同机器、工具版本和构建模式的产物视为逐字节相同。
