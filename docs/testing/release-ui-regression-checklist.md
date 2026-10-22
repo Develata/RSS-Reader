@@ -9,7 +9,7 @@
 - 它明确要求同时覆盖：
   - 路由与基本交互
   - 主题与 CSS 契约
-  - Web 两种入口
+  - 正式 Web 与 Pages 演示两种构建
   - 关键持久化与配置交换
 
 如果想先看“哪些已经被固定覆盖、哪些仍要手工补”，先读：
@@ -29,7 +29,7 @@ bash scripts/run_chrome_mcp_target.sh --restart
 - 准备打版本 tag 前
 - UI shell / bus / facade 有结构变更后
 - 主题系统或语义接口有收口后
-- Web 入口、登录门禁、静态构建回归路径有变更后
+- Web 入口、服务器登录与浏览器回归路径有变更后
 
 ## 发布前最小自动化门禁
 
@@ -44,10 +44,10 @@ Windows 仍依赖 Git Bash 和既有阶段工具，不代表所有 smoke 已原�
 bash scripts/run_release_ui_regression.sh --debug --port 8091
 ```
 
-如果只想先跑自动化门禁、不启动静态 Web 服务：
+默认仅运行自动化门禁并退出；不再常驻静态服务：
 
 ```bash
-bash scripts/run_release_ui_regression.sh --no-serve
+bash scripts/run_release_ui_regression.sh
 ```
 
 如果还想把 `rssr-web` 部署壳的最小 smoke 一起串进来：
@@ -74,7 +74,7 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --full
 
 - `cargo check --locked -p rssr-app --target wasm32-unknown-unknown`
 - `cargo test --locked -p rssr-app`（包含 builtin theme 契约，不重复单跑）
-- `cargo test --locked -p rssr-infra --test test_refresh_contract_harness --test test_subscription_contract_harness --test test_config_exchange_contract_harness`
+- `cargo test --locked -p rssr-infra --test test_library_refresh_contract_harness --test test_library_subscription_contract_harness --test test_library_config_exchange_contract_harness`
 - `cargo test --locked -p rssr-web`
 
 如果启用 `--with-browser-contracts`，还会补：
@@ -83,99 +83,36 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --full
 
 三个原有单模块脚本入口继续保留。统一入口通过 std-only Rust runner 与 Cargo 的 target runner 机制执行精确产物，每个浏览器运行使用独立临时配置和 profile；不再按 mtime 寻找 wasm 或覆盖 crate 中的 `webdriver.json`。本地一个 Cargo 构建多个 harness 后串行运行浏览器；CI 先通过 `--prepare` 构建一次，再在独立 runner 通过 `--prebuilt` 按模块并发，准备产物成功不等于契约通过。详见 [主线矩阵](mainline-validation-matrix.md)。
 
-同一次发布预检最多构建一次相同 profile 的 Web 包，后续固定 smoke 和静态服务器复用它；该标记不跨进程持久化。`--skip-build` 仍由调用者明确选择。部署壳 smoke 拒绝已占用端口，并确认本次启动的进程存活；HTTP 请求有超时，探测或断言失败也会清理本次服务。静态 SPA 入口使用 exec，让调用方持有的 PID 就是服务进程。
+同一次发布预检最多构建一次相同 profile 的 Web 包，后续固定 smoke 复用它；该标记不跨进程持久化。`--skip-build` 仍由调用者明确选择。部署壳 smoke 拒绝已占用端口，并确认本次启动的进程存活；HTTP 请求有超时，探测或断言失败也会清理本次服务。不再启动独立静态 SPA 服务。
 
-Reader 主题矩阵和部署壳浏览器 smoke 共用 `scripts/browser/capture_smoke_page.mjs`，通过现有 CDP 工具等待实际页面就绪，再从同一次加载保存 DOM 与截图。它们不以固定虚拟时间预算代替 Web Locks / 异步加载完成；默认总等待 45 秒，退出时停止本次 Chrome 并删除独立临时 profile。运行时可用 Node.js 22+ 或 `NODE_BIN=bun`，Chrome 通过 `CHROME_BIN` 选择。
+主题矩阵、小视口与 feed smoke 共用真实服务器和 SQLite 夹具工具；驱动经 CDP 等页面就绪，保存同次加载的 DOM 与截图。Node.js 22+ 与 Chrome 的路径可用 `NODE_BIN`、`CHROME_BIN` 指定；隔离、构建标识与控制台规则见 [统一入口](./server-web-regression.md)。
 
 如果启用 `--with-fixed-smokes`，还会补：
 
-- `bash scripts/run_static_web_reader_theme_matrix.sh --skip-build`
-- `bash scripts/run_static_web_small_viewport_smoke.sh --skip-build`
-- `bash scripts/run_rssr_web_browser_feed_smoke.sh --skip-build`
+- `bash scripts/run_server_web_regression.sh --suite theme-matrix --skip-build`
+- `bash scripts/run_server_web_regression.sh --suite regression --skip-build`
+- `bash scripts/run_server_web_regression.sh --suite feed-smoke --skip-build`
 
 如果这组自动化没过，不进入后续手工回归。
 
 ## 发布前 Web 路径
 
-至少覆盖两条入口：
-
-### 1. 纯静态 Web + SPA fallback
-
-用途：
-
-- 验证 `rssr-app` 的默认 web 形态
-- 验证本地浏览器门禁
-- 验证主题、语义 DOM、页面结构
-
-入口：
+### 1. 正式 Web（服务器资料库）
 
 ```bash
-bash scripts/run_release_ui_regression.sh --debug --port 8091
+bash scripts/run_server_web_regression.sh --suite regression
+bash scripts/run_server_web_regression.sh --suite acceptance --long
 ```
 
-如果要把真实阅读页也固定纳入这轮预检，静态 Web 阶段直接补：
+页面、服务器与夹具工具必须来自同一版本。后者覆盖认证/CSRF、只读刷新、结果未知、任务、草稿与启动错误；聚合入口 `--full` 不自动包含长验收，需要单独运行。固定套件与 CI 五主题矩阵也不替代人工视觉检查。
 
-```text
-http://127.0.0.1:8091/__codex/setup-local-auth?username=smoke&password=smoke-pass-123&seed=reader-demo&next=/entries/2
-```
+认证层至少核对：未登录页面跳转 `/login`，未登录 API 返回 JSON 401；真实登录后 `/feeds`、`/settings`、`/api/v1/session` 可读；跨来源提交拒绝；`/logout` 先确认，退出后重放 cookie 拒绝。正式 Web 没有本地浏览器口令或旧会话探测接口。
 
-如果只想单独启动现成构建产物，也可以继续直接执行：
+手工检查用 `bash scripts/run_rssr_web_browser_smoke.sh`。在 `/feeds` 输入 `data-field="feed-url-input"`，点击 `add-feed`、`refresh-feed`，再经 `data-nav="feed-entries"` 打开文章。真实远端 feed 单独记录服务器网络与出站规则；本地 feed smoke 不能证明它可达。
 
-```bash
-bash scripts/run_web_spa_regression_server.sh --debug --skip-build --port 8091
-```
+### 2. Pages 静态演示
 
-### 2. `rssr-web` 部署壳
-
-用途：
-
-- 验证服务端登录门禁
-- 验证代理态 feed 导入
-- 验证真实部署入口下的路由与页面
-
-建议覆盖：
-
-- `/`
-- 登录 / 登出
-- 至少 1 个需要代理才能导入的 feed
-
-当前统一脚本里已经补了最小部署壳 smoke：
-
-- 启动 `rssr-web`
-- 探活 `/healthz`
-- 确认 `/login` 正常
-- 确认未登录访问 `/entries` 会重定向到 `/login`
-- 用临时凭据完成一次真实登录
-- 确认已登录后 `/session-probe` 返回 `204`
-- 确认来自其他来源（同一主机的其他端口）的登录提交返回 `403`
-- 确认已登录后 `/feeds`、`/settings` 与 `/api/v1/session` 返回 `200`
-- 确认 `GET /logout` 是带 CSRF 令牌的确认页，带 `Origin` 与令牌的 `POST /logout` 回到 `/login`
-- 确认退出后重放旧会话 cookie 被拒绝（服务器已吊销会话）
-
-同源 fixture 的登录后添加与首刷已有自动化；真实远端代理 feed 和未覆盖的交互仍需补验。
-
-如果要快速起一个可登录的 `rssr-web` 浏览器回归环境，直接用：
-
-```bash
-bash scripts/run_rssr_web_browser_smoke.sh
-```
-
-如果要把部署壳下“登录后添加订阅并完成首次刷新”直接固定成自动化，优先用：
-
-```bash
-bash scripts/run_rssr_web_browser_feed_smoke.sh
-```
-
-交互环境 helper `run_rssr_web_browser_smoke.sh` 会给出：
-
-- 临时用户名 / 密码
-- 推荐代理 feed
-- `summary.md` 模板
-- 固定手工步骤依赖的 selector：
-  - `data-field="feed-url-input"`
-  - `data-action="add-feed"`
-  - `data-action="refresh-feed"`
-  - `data-nav="feed-entries"`
+按 [Pages 构建与验收](../deployment/github-pages.md) 使用 `pages-demo` 与 `scripts/test_pages.sh`。该构建仍用 BrowserStore 保存演示状态，禁用在线订阅、WebDAV 和自动刷新；不能复用正式 Web 的产物或把演示测试当作服务器 API 验收。
 
 ## 页面与主题矩阵
 
@@ -197,7 +134,7 @@ bash scripts/run_rssr_web_browser_feed_smoke.sh
 如果要把多主题阅读页 回归固定化，直接用：
 
 ```bash
-bash scripts/run_static_web_reader_theme_matrix.sh
+bash scripts/run_server_web_regression.sh --suite theme-matrix
 ```
 
 ## 核心检查项
@@ -210,45 +147,15 @@ bash scripts/run_static_web_reader_theme_matrix.sh
 - 浏览器刷新后仍能回到当前页
 - 无白屏、无死循环、无不可恢复卡死
 
-### 2. 本地 Web 门禁 / 服务端门禁
+### 2. 服务器登录与恢复
 
-静态 Web：
-
-- 首次进入需初始化本地用户名和密码
-- 初始化后可进入应用
-- 后续重新打开时，登录表单和状态提示正常
-
-如果要固定一条可复用的静态 Web 浏览器态入口，直接用：
-
-```bash
-bash scripts/run_static_web_browser_smoke.sh
-```
-
-如果要把真实阅读页 `/entries/{entry_id}` 也纳入固定回归，可以用 demo seed：
-
-```bash
-bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2
-```
-
-当前 `reader-demo` seed 已经实测可进入真实阅读页，不再是只写门禁状态的占位 helper。
-
-如果要补一轮固定的小视口关键路径，可以用：
-
-```bash
-bash scripts/run_static_web_small_viewport_smoke.sh
-```
-
-`rssr-web`：
-
-- 未登录访问会进入登录页
-- 错误凭证有明确提示
-- 正确凭证可进入应用
-- 登出后会话被清除
-- 如果本次发布涉及订阅/刷新/代理行为，再按固定 selector 手工补一次：
-  - 在 `/feeds` 填 `data-field="feed-url-input"`
-  - 点击 `data-action="add-feed"`
-  - 点击 `data-action="refresh-feed"`
-  - 确认 `data-nav="feed-entries"` 可进入对应文章页
+- 未登录页面进入 `/login`；错误凭据有提示，正确凭据进入应用。
+- 退出后会话失效；已有页面操作需重新登录时保留可恢复的设置草稿。
+- 版本不匹配提示重新加载；CSS 与设置草稿恢复后仍需手动保存。
+- 写请求结果未知时看得见，不显示成功、不自动重发；重新读取只更新显示。
+- 浏览器不能保留草稿时停留并提示；强制离开的按钮明确说明草稿会丢失。
+- 服务器不可用时显示读取失败，不把旧浏览器文章库作为离线后备。
+- Pages 演示直接进入样例，不显示本地口令设置流程。
 
 ### 3. 订阅页
 
@@ -324,7 +231,7 @@ bash scripts/run_static_web_small_viewport_smoke.sh
 如果要把这条回归固定化，优先用：
 
 ```bash
-bash scripts/run_static_web_reader_theme_matrix.sh
+bash scripts/run_server_web_regression.sh --suite theme-matrix
 ```
 
 ## 语义接口检查
@@ -353,7 +260,7 @@ bash scripts/run_static_web_reader_theme_matrix.sh
 如果要把小视口检查固定化，优先用：
 
 ```bash
-bash scripts/run_static_web_small_viewport_smoke.sh
+bash scripts/run_server_web_regression.sh --suite regression
 ```
 
 移动端重点看：
@@ -381,7 +288,7 @@ bash scripts/run_static_web_small_viewport_smoke.sh
 - commit
 - 执行环境
 - 自动化门禁结果
-- 静态 Web 结果
+- 正式 Web 与 Pages 演示的各自结果
 - `rssr-web` 结果
 - 主题矩阵结果
 - env-limited 项

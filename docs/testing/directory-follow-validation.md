@@ -1,5 +1,7 @@
 # Rust 目录状态：交互与性能验证
 
+> 版本范围（2026-10-22 补注）：下文为 2026-10-03 的历史契约/测量，旧脚本与双库命令只用于原提交复现。v0.2 当前回归与原生夹具入口见 [服务器浏览器回归](./server-web-regression.md)；历史结果不改写。
+
 日期：2026-10-03。对应 draft PR19 的首次实施记录，源码为 `dbe51a3` / `9d1a4bf`。现行产品规则见[目录设计](../design/entries-directory-follow.md)，首次工程状态见[交接](../handoffs/2026-10-03-directory-follow-rust.md)。本记录与[旧基线](./directory-regression-baseline.md)分开保存。
 
 **校正说明：** 后续复核确认已读操作的来源未读数刷新会误重置手动目录状态；首次用例只检查活动位置，没有覆盖该状态回归。另外，旧性能工具的监听阶段、监听顺序及 rAF 条件轮询会造成计时偏差，Web 两版构建来源也不同。因此撤回原先“代理时延未见退化”和“一帧收益”的比较结论；下文原始数据仅作历史测量记录。修复与校正后的证据见[本轮验证](./directory-review-validation.md)与[本轮交接](../handoffs/2026-10-03-directory-review-correction.md)。

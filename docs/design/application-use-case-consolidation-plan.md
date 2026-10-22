@@ -273,7 +273,7 @@ semantic is stable enough to justify its own use case.
 - Durable settings: `SettingsRepository`
 - App workspace state and last-opened feed: `AppStateRepository` through `AppStateService`
 - Config exchange payload: `ImportExportService` and config package v2 schema
-- Browser persistence: infra `BrowserStore`, four logical shards with versioned commits published under Web Locks. Legacy keys such as `rssr-web-app-state-v2` are migration input, not a direct-write API.
+- Web adapters (C4c, 2026-10-22): formal Web uses infra `HttpBackend` and the server library. Only the Pages demo retains `BrowserStore`, four logical shards with versioned commits published under Web Locks. Its legacy keys such as `rssr-web-app-state-v2` are migration input, not a direct-write API.
 
 No UI cache, CLI state, browser helper seed, or smoke fixture may become a parallel truth source.
 

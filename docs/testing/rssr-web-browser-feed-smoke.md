@@ -1,83 +1,16 @@
 # `rssr-web` 浏览器自动 Feed Smoke
 
-这份说明服务于 `rssr-web` 部署壳下，真实浏览器态的“登录后添加订阅并完成首次刷新”自动化回归。
-
-它和 [rssr-web 浏览器手工 Smoke](./rssr-web-browser-smoke.md) 的区别是：
-
-- 手工 smoke 依赖人工登录、输入 feed、点击刷新
-- 这条 smoke 用同源 helper 自动完成：
-  - 建立登录态
-  - 打开 `/feeds`
-  - 添加固定 feed fixture
-  - 刷新订阅
-  - 进入订阅文章页
-
-## 脚本
-
-- [run_rssr_web_browser_feed_smoke.sh](../../scripts/run_rssr_web_browser_feed_smoke.sh)
-
-## 最短用法
+2026-10-22 核对 v0.2 C4c。使用真实页面、服务器与全新资料库，经真实登录表单添加固定本地订阅、刷新并进入订阅文章列表。
 
 ```bash
-bash scripts/run_rssr_web_browser_feed_smoke.sh
+bash scripts/run_server_web_regression.sh --suite feed-smoke
+bash scripts/run_server_web_regression.sh --suite feed-smoke --release --port 18089
 ```
 
-默认行为：
+页面、服务器和夹具工具由同一检出构建。feed fixture 是独立、无需登录的本地 HTTP 服务，服务器出站规则只放行它所在的 `127.0.0.1`；浏览器不直接抓取 feed，不使用静态注入 helper。`--skip-build` 仅复用页面，提交或源码变化后须重新构建。
 
-- 构建 `rssr-app` web bundle
-- 用 `scripts/prepare_rssr_web_feed_smoke.sh` 复制一份 bundle，在 `/__smoke/` 下放入冒烟页与当前日期的 feed fixture（普通静态文件；`rssr-web` 没有测试专用路由）
-- 以这份目录和临时数据目录启动 `rssr-web`
-- 打开 `http://127.0.0.1:<port>/login?next=/__smoke/browser-feed-smoke.html`，经真实登录表单登录（同源提交，带 `Origin`）
-- 冒烟页自动完成：
-  - 在 `/feeds` 添加 `http://127.0.0.1:<port>/__smoke/feed-fixture.xml`
-  - 点击 `refresh-feed`
-  - 点击 `feed-entries`
-- 产出：
-  - `browser-feed-smoke.html`
-  - `browser-feed-smoke.png`
-  - `chrome.log`
-  - `summary.md`
+成功条件由 [`rssr_small_viewport_assertions.mjs`](../../scripts/browser/rssr_small_viewport_assertions.mjs) 的 `feed-smoke` 套件定义：订阅已添加、刷新完成、对应文章列表包含夹具文章。结果以本次 `assertions.json` 的检查与控制台条目为准。
 
-## 常用参数
+产物默认在 `target/server-web-regression/feed-smoke/<timestamp>/`：页面 HTML/PNG、`assertions.json`、`summary.md`、构建/Chrome/服务器/feed 日志。退出码必须为 0，意外控制台错误必须为零。
 
-```bash
-bash scripts/run_rssr_web_browser_feed_smoke.sh --skip-build
-bash scripts/run_rssr_web_browser_feed_smoke.sh --port 18089
-bash scripts/run_rssr_web_browser_feed_smoke.sh --release
-```
-
-## 固定通过条件
-
-- DOM 中有：
-  - `data-smoke="rssr-web-browser-feed-smoke"`
-  - `data-result="pass"`
-- 自动添加的 feed 标题为：
-  - `Codex Smoke Feed`
-- 自动进入的订阅文章页中包含：
-  - `Codex Smoke Entry`
-
-## 覆盖边界
-
-这条 smoke 使用同源 `__smoke/feed-fixture.xml`，主要验证：
-
-- 登录后的 browser UI 自动流程
-- browser refresh source -> store -> UI 的成功路径
-- feed card 诊断属性与 entries page 跳转
-
-它不验证真实外部站点的 network / CORS failure。
-
-冒烟页在 iframe 所属的 window 中构造输入事件，避免跨 realm 的模拟事件被 Web renderer 当作空输入。fixture 使用当前 UTC 日期，防止固定历史日期随时间进入默认归档窗口而造成误报；文章 GUID 仍固定，重复刷新继续验证同一篇文章。
-
-真实外部 feed 与 `/feed-proxy` 部署壳链路由 [`rssr-web` 代理 Feed Smoke](./rssr-web-proxy-feed-smoke.md) 覆盖。纯静态 Web 的 CORS 限制归入 [环境限制索引](./environment-limitations.md)。
-
-## 结果记录
-
-脚本会生成：
-
-- `target/rssr-web-browser-feed-smoke/<timestamp>/summary.md`
-
-建议补：
-
-- 最终路径
-- 是否通过
-- 是否需要再补手工真实远端 feed 验证
+本地夹具只验证登录、页面到 API、服务器抓取和资料库存储的流程；不证明真实外部源的 DNS、出站策略或站点响应正常。真实远端源另按 [手工 Smoke](./rssr-web-browser-smoke.md) 留证。完整恢复验收用 `--suite acceptance --long`，见 [统一说明](./server-web-regression.md)。

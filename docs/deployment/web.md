@@ -1,14 +1,14 @@
 # Web / Docker 部署
 
-`RSS-Reader-web.tar.gz` 是 Dioxus 静态站点包。浏览器直接请求 feed 时受目标站点 CORS 策略约束。需要登录门禁和同源 `/feed-proxy` 时，使用仓库里的 `rssr-web` 服务；它托管静态包、验证登录并代抓 feed，不参与桌面端、Android 或 CLI 的运行。Web 的订阅和阅读状态保存在访问者当前浏览器的 `localStorage`。服务器的数据目录（容器内 `/data`）保存认证库 `auth.sqlite3`（登录凭据与会话），以及服务器端的资料库 `library.sqlite3` 与出站策略 `outbound.json`（没有时以默认的服务器策略写入）。资料库供服务器接口 `/api/v1` 使用（v0.2 阶段 C）；网页改用服务器之前它是空的，**不是网页数据的备份**。
+本文说明 v0.2 开发分支的服务器模式，不代表这套部署已发布。正式 Web 页面由匹配构建的 `rssr-web` 托管，经同源 `/api/v1` 使用服务器上的 `LocalBackend`。单独托管正式 Web 静态文件不能提供可用的阅读器；仅 [Pages 演示](./github-pages.md) 可独立静态托管。
 
-新版浏览器存储使用 Web Locks 协调多个标签页，需要支持该能力的浏览器和安全上下文：正式入口使用 HTTPS，本机 localhost / 127.0.0.1 可使用 HTTP；手机通过局域网 IP 访问普通 HTTP 不满足此条件。缺少能力会显示错误，不会退回可能覆盖数据的无锁写入。升级静态包后应重新加载所有旧标签页，避免混用两种存储协议；不会自动刷新正在阅读的页面。
+服务器的数据目录（容器内 `/data`）保存 `library.sqlite3`（订阅、文章、正文、已读/收藏与设置）、`auth.sqlite3`（凭据与会话）和 `outbound.json`（出站策略）。多个浏览器与同数据目录的 CLI 直接访问同一资料库；浏览器不保存文章副本。浏览器仍可保存设备偏好，以及重新加载或登录前的本标签页草稿（`sessionStorage`）。
 
-`/feed-proxy` 只代理公开的 HTTP(S) feed：本地和内网地址（包括 IPv4 映射的 IPv6 地址）会被拒绝；DNS 解析限时，重定向每跳重新校验目标。部署在内网的私有 feed 不能通过这个入口抓取。
+订阅发现、抓取、自动刷新、WebDAV 与图片本地化由服务器完成。默认出站策略为 `public_only`，私有地址等例外通过 `outbound.json` 显式配置；规则与拒绝优先级见 [阶段 C 出站策略](../design/v0.2-phase-c-plan.md#c1-出站访问策略infra)。受限制的客户端直接连接校验后固定的 IP，不继承环境 HTTP 代理；DNS、重定向各跳与远端可达性仍需在实际部署环境核对。不要为通过测试而放宽出站规则。
 
-代理内容仍属于不可信数据。`rssr-web` 自身在上游响应上设置无例外的 CSP `sandbox`、`default-src 'none'`、`base-uri 'none'`、`form-action 'none'` 和 `X-Content-Type-Options: nosniff`。直接打开 HTML/SVG 等代理文档时，脚本和应用同源存储访问被隔离；这不依赖反向代理另加 CSP。原始 MIME/字符集、正文和最终 URL 继续供客户端读取，以保留 RSS/Atom 解码与 HTML 订阅发现。反向代理应保留这些响应头。
+`/feed-proxy`、`/session-probe` 与本地浏览器口令门禁已在 C4a（2026-10-20）退役。已登录访问旧 feed 代理路径返回 404，不再转发上游文档。阅读正文的清洗与隔离由当前阅读器实现及浏览器验收覆盖。
 
-此入口直接连接校验后固定的目标 IP，不继承 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 等环境代理，以免代理端再次解析主机名而绕过目标校验。部署环境需允许服务器直接访问公开 feed，并让 DNS 返回真实公网地址。若 DNS 返回 `198.18.0.0/15` 等 fake-IP 地址，请为该服务调整 DNS/网络配置；这些地址会被目标校验拒绝。
+正式部署使用 HTTPS；本机开发可用回环 HTTP。正式 Web 不依赖 Web Locks 保存资料库；该限制仅适用于仍使用 BrowserStore 的 Pages 演示。正式 Web 不再离线可读。
 
 ## 使用已发布镜像
 
@@ -37,7 +37,7 @@ docker compose up -d
 printf '%s\n' '新的强密码' | docker compose exec -T rss-reader rssr-web passwd
 ```
 
-`latest` 指向最近一次镜像发布，与当前 `main` 不一定相同；需要固定版本时设置 `RSS_READER_IMAGE=ghcr.io/develata/rss-reader:<tag>`。下载包及镜像的实际版本以对应 [Release](https://github.com/Develata/RSS-Reader/releases) 为准。
+`latest` 与当前开发分支不一定相同；本文未核验远端镜像是否已包含 v0.2，需要固定版本时设置 `RSS_READER_IMAGE=ghcr.io/develata/rss-reader:<tag>`。下载包及镜像的实际版本以对应 [Release](https://github.com/Develata/RSS-Reader/releases) 为准。
 
 ## 会话与退出登录
 
@@ -63,7 +63,9 @@ RSS_READER_WEB_PASSWORD_HASH=请填入Argon2哈希
 RSS_READER_WEB_TRUST_PROXY_HEADERS=false
 ```
 
-`production` 要求 `RSS_READER_WEB_PUBLIC_ORIGIN` 是 https 地址，cookie 随之带 `Secure`。反向代理要原样转发浏览器的 `Origin`、`Cookie` 请求头和 `Set-Cookie` 响应头。`RSS_READER_WEB_TRUST_PROXY_HEADERS` 仅在可信反向代理正确覆盖转发头时启用；默认保持 `false`。
+页面和服务器必须来自同一构建；服务器会拒绝构建标识不匹配的写请求。发布镜像的标识注入与旧页面对新服务器的验收属于 C6，本文不宣称它们已完成。
+
+`production` 要求 `RSS_READER_WEB_PUBLIC_ORIGIN` 是 https 地址，cookie 随之带 `Secure`。反向代理要原样转发浏览器的 `Origin`、`Cookie`、`X-RSSR-Build`、`X-RSSR-CSRF` 请求头和 `Set-Cookie` 响应头。页面与 `/api/v1` 使用同一 origin；不要重定向 `/api` 写请求，也不要把 API 的 JSON 错误改成登录 HTML。`RSS_READER_WEB_TRUST_PROXY_HEADERS` 仅在可信反向代理正确覆盖转发头时启用；默认保持 `false`。
 
 登录失败按客户端分别计数，连续失败达到上限（默认 15 分钟内 5 次）后，该客户端在一段时间内（默认 15 分钟）不能再尝试：
 
@@ -121,6 +123,8 @@ rssr-cli --data-dir /data backup /data/backups/library-2026-10-19.sqlite3
 
 ## 从 v0.1 升级
 
+- **文章不迁移：**旧版 Web 的浏览器文章库、已读与收藏不会导入服务器。升级前在旧版导出 JSON 配置或 OPML，新版登录后导入，再由服务器刷新；feed 已不再提供的旧文章可能无法重新取得。新版不删除旧浏览器数据，但也不读取它作为后备；需要旧文章时先保留旧站点数据。
+- **不再离线可读：**正式 Web 需要服务器在线，离线或服务器不可用时显示读取失败；Pages 演示的浏览器样例库是另一种构建。
 - 凭据相关的环境变量不用改。新增必填的 `RSS_READER_WEB_PUBLIC_ORIGIN`，以及数据卷 `/data`（仓库的 Compose 文件已包含）。
 - 没有设置 `RSS_READER_WEB_PASSWORD_HASH` / `RSS_READER_WEB_PASSWORD` 时，首次启动从旧认证状态文件取凭据：`RSS_READER_WEB_AUTH_STATE_FILE`（Compose 默认 `/app/auth/auth.json`），未设置时为 `$HOME/.rssr-web-auth.json`。服务只读取其中的密码哈希，不修改这个文件。
 - 认证库建立成功之前，保持旧认证卷 `/app/auth` 挂载；之后可以移除。
@@ -129,26 +133,23 @@ rssr-cli --data-dir /data backup /data/backups/library-2026-10-19.sqlite3
 
 ## 本地验证部署态
 
-如果需要在不运行 Docker 的情况下验证登录和 `/feed-proxy`，先构建 Web 包，再从同一工作区启动服务：
+正式 Web 开发使用同源服务。下面的手工入口从同一源码构建页面与服务器，用临时资料库和仓库测试凭据启动服务，打印登录地址：
 
 ```bash
-dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e
-cargo run --locked -p rssr-web -- --print-password-hash '请换成自己的测试密码'
+bash scripts/run_rssr_web_browser_smoke.sh --port 18081
 ```
 
-将第二条命令的输出放入 `RSS_READER_WEB_PASSWORD_HASH`，然后用一个临时数据目录启动：
+自动化验证使用独立资料库与本地 feed 服务器：
 
 ```bash
-RSS_READER_WEB_BIND=127.0.0.1:8060 \
-RSS_READER_WEB_STATIC_DIR=target/web-e2e/public \
-RSSR_DATA_DIR=target/web-e2e/data \
-RSS_READER_WEB_USERNAME=admin \
-RSS_READER_WEB_PASSWORD_HASH='<填入上一步哈希>' \
-RSS_READER_WEB_ENV=development \
-cargo run --locked -p rssr-web
+bash scripts/run_server_web_regression.sh --suite feed-smoke
+bash scripts/run_server_web_regression.sh --suite acceptance --long
+bash scripts/run_release_ui_regression.sh --with-fixed-smokes
 ```
 
-访问 `http://127.0.0.1:8060/login`；要验收真实代理 feed，使用仓库已有的 [`rssr-web` 代理 Feed Smoke](../testing/rssr-web-proxy-feed-smoke.md)。静态 Web 包的成功构建不证明远端 feed 在直接浏览器模式下都能抓取。
+需要自行启动时，先 `dx build --platform web --package rssr-app --locked`，再设置 `RSS_READER_WEB_STATIC_DIR=target/dx/rssr-app/debug/web/public`、独立 `RSSR_DATA_DIR`、开发用凭据和回环监听地址，运行 `cargo run --locked -p rssr-web`。构建期间保持源码版本相同；若显式设置 `RSSR_BUILD_ID`，页面和服务器必须使用同一个值。`dx serve` 本身不提供服务器 API，不能作为正式 Web 的完整开发入口。
+
+`--skip-build` 只跳过页面构建；入口仍会构建服务器与夹具工具。提交或改源码后应重新构建页面，避免旧页面与新服务器的标识不匹配。套件、控制台记录与产物说明见 [服务器浏览器回归](../testing/server-web-regression.md)。本地夹具通过不证明真实外部 feed 可达。
 
 ## 其他配置与构建
 

@@ -1,16 +1,16 @@
 # Contract harness：当前基线与维护
 
-原重建计划已完成；保留文件名以兼容引用。当前入口核对于 2026-09-30，历史重建过程可从 Git 历史追溯。
+原重建计划已完成；保留文件名以兼容引用。当前入口核对于 2026-10-22，历史重建过程可从 Git 历史追溯。
 
 ## 范围与分层
 
-三组 harness 验证同一 application 契约在 SQLite/native 和 browser adapter 上的行为。两种 target 分开执行，不为测试统一形状把 wasm adapter 编入 native，也不复制一套临时存储模型。
+三组 harness 验证同一 application 契约在 SQLite/native 和 browser adapter 上的行为。BrowserStore 由 `browser-store` feature 门控，runner 自动开启；这条适配路径仅供 Pages 演示，正式 Web 的 HttpBackend 另用服务器契约和浏览器验收。两种 target 分开执行，不为测试统一形状把 wasm adapter 编入 native，也不复制一套临时存储模型。
 
 | 语义 | Native 测试 target | 浏览器测试 target |
 | --- | --- | --- |
-| 刷新 | `test_refresh_contract_harness` | `wasm_refresh_contract_harness` |
-| 订阅生命周期 | `test_subscription_contract_harness` | `wasm_subscription_contract_harness` |
-| 配置交换 | `test_config_exchange_contract_harness` | `wasm_config_exchange_contract_harness` |
+| 刷新 | `test_library_refresh_contract_harness` | `wasm_refresh_contract_harness` |
+| 订阅生命周期 | `test_library_subscription_contract_harness` | `wasm_subscription_contract_harness` |
+| 配置交换 | `test_library_config_exchange_contract_harness` | `wasm_config_exchange_contract_harness` |
 
 测试位于 `crates/rssr-infra/tests/`，以 `RefreshService`、`SubscriptionWorkflow`、`ImportExportService` 为应用入口。Native fixture 使用真实 SQLite 仓储与迁移；browser fixture 使用 infra 的 `BrowserStore` 和浏览器仓储，隔离与存储辅助代码见 `tests/support/browser_storage.rs`（相对于 rssr-infra）。远程配置传输可使用内存 fake；页面、session、DOM selector 不属于这些测试的契约。
 
@@ -22,12 +22,12 @@
 - 配置：JSON / OPML 交换、远端 push/pull 结果、订阅成员变化后的状态清理；配置不承载文章库。
 - source 分类：有效 XML、HTML/login shell、损坏 XML、304、非成功状态及代理/直连 fallback 的分类。请求顺序的纯函数测试与 store-side 持久化测试各守自己的边界。
 
-真实网络、CORS 和部署态 `/feed-proxy` 仍需 [代理 smoke](./rssr-web-proxy-feed-smoke.md) 与 [浏览器 feed smoke](./rssr-web-browser-feed-smoke.md)。同源 fixture 通过不能证明远端站点策略正常；`--no-run` 通过也不能证明浏览器契约通过。
+正式 Web 的登录与服务器抓取链路用 [浏览器 feed smoke](./rssr-web-browser-feed-smoke.md)，恢复与多浏览器行为用 [服务器验收](./server-web-regression.md)。本地 fixture 通过不能证明真实远端网络或出站策略正常；`--no-run` 通过也不能证明浏览器契约通过。
 
 ## 执行
 
 ```bash
-cargo test --locked -p rssr-infra --test test_refresh_contract_harness --test test_subscription_contract_harness --test test_config_exchange_contract_harness
+cargo test --locked -p rssr-infra --test test_library_refresh_contract_harness --test test_library_subscription_contract_harness --test test_library_config_exchange_contract_harness
 bash scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness wasm_subscription_contract_harness wasm_config_exchange_contract_harness
 ```
 

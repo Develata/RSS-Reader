@@ -4,13 +4,13 @@
 - 作者 / Agent：Codex
 - 分支：v0.2-architecture
 - 当前 HEAD：本轮开始于 `b417653`；完整验证提交 `6c8c95c`
-- 相关 commit：runner 修复 `6c8c95c`；本次验证记录随本提交；C4c-3 commit: pending
+- 相关 commit：runner 修复 `6c8c95c`；C4c-2 验证记录 `9a37d14`；C4c-3 文档随本提交（提交号见 Git 日志与最终报告）
 - 相关 tag / release：N/A
-- 状态：`draft`（C4c-2 补验通过；C4c-3 待文档检查与提交；独立评审待进行）
+- 状态：`validated`（本轮验证与文档检查通过；独立评审待进行，不等于可发布）
 
 ## 工作摘要
 
-承接 `target/handoff/2026-10-21-c4c2-finish-c4c3.md`。R2-01 的原生与浏览器变异均被行为断言捕获；Windows / WSL 完整验证在独立干净检出通过。核对文档命令时修正 release UI runner 的三个已改名目标。C4c-3 文档已编写，待最终检查与提交。本轮不运行独立评审，停在 C6 之前。
+承接 `target/handoff/2026-10-21-c4c2-finish-c4c3.md`。R2-01 的原生与浏览器变异均被行为断言捕获；Windows / WSL 完整验证在独立干净检出通过。核对文档命令时修正 release UI runner 的三个已改名目标。C4c-3 现行文档已更新并通过检查。本轮不运行独立评审，停在 C6 之前。
 
 ## 影响范围
 
@@ -27,7 +27,12 @@
 
 ### C4c-3 文档
 
-已编写，待最终检查与提交后补充文件清单与结果。
+- `AGENTS.md`、`CLAUDE.md`、Web bootstrap 的 `AGENTS.md`、中英 README 与文档索引：正式 Web 使用 HttpBackend / 同源 API / 服务器单库；Pages 演示仍使用 BrowserStore，禁用在线订阅、WebDAV 与自动刷新。
+- 用户指南与两份部署文档：补齐草稿、结果未知、只读恢复、设备偏好与资料库边界、旧 Web 文章/已读/收藏不迁移、不再离线可读、匹配构建与反向代理说明。没有把未发布分支描述为已上线镜像。
+- 新增 `docs/testing/server-web-regression.md`，统一四套件、真实登录与 SQLite 夹具、build id、控制台证据、Windows Git Bash 与原生夹具边界。其它 testing 入口、矩阵和手工清单改用当前命令，修正已改名的 native 测试目标。
+- 更新功能设计哲学、facade / 用例说明、Web 回归服务说明与阶段 C 计划；明确无持久化演示是阶段 D 目标，不改现有设计边界。
+- specs quickstart 更新当前命令；历史 plan 增加版本提示。两份 directory 基线只加历史说明；release UI runner 保留原历史迁移证据，在前面新增当前入口。其它历史 handoff / evidence 原样保留。
+- 完整文件列表见忽略目录的最终报告；全部属于本轮服务器模式说明与 C4C1-10。
 
 ## 验证与验收
 
@@ -84,13 +89,21 @@ acceptance 的被忽略条目均为浏览器网络日志；预期回答的 URL�
 
 首轮失败与重试日志保留在 `target/handoff/evidence-c4c2-r2-final/` 根目录及 `browser-retry-1/`；本轮通过结果仅取 `verified-6c8c95c/`，不覆盖旧失败记录。
 
+### C4c-3 文档检查
+
+- `cargo fmt --all --check`、`git diff --check`：exit 0。
+- `python -X utf8 target/handoff/scripts/c4c3-doc-audit.py`：exit 0；检查当前改动文档的本地链接/锚点，并用 `cargo metadata --no-deps --locked --format-version 1` 核对显式 test target。数量与结果见 `target/handoff/evidence-c4c3/doc-audit.json`。
+- `python -X utf8 target/handoff/scripts/audit-retired-references.py`：exit 0；内部 rg 扫描整个工作树，现行引用错误为零。逐项区分历史 handoff / evidence、带日期的基线、计划的 2026-10-15 调查与 runner 历史段落；两个代码命中是断言拒绝退役参数的负向测试。完整模式、退出码与分类见 `deleted-reference-audit.json` / `deleted-script-references.txt`。
+- 本机使用现有 `C:/Users/QQ/scoop/apps/miniconda3/current/python.exe`，没有安装工具。仓库未发现另有文档专用门禁，因此使用忽略目录中的本地检查脚本；没有访问网络或声称远端 URL 已检查。
+- 最终提交只增加 Markdown 文档，不改变 `6c8c95c` 上已验证的产品、runner、浏览器驱动或依赖。
+
 ### 手工验收
 
 没有人工操作页面、人工截图视觉验收或 Android/macOS 实机验收。也没有重跑 Pages 演示浏览器契约、原生目录 `--native-target` 或公网 feed；本轮 wasm 编译与本地服务器夹具不能代替这些验收。
 
 ## 结果
 
-C4c-2 第二轮修复的变异与干净检出验证已补齐。独立评审仍待后续；本记录不授予合并或发布结论。C4c-3 文档 commit: pending。
+C4c-2 第二轮修复的变异与干净检出验证已补齐。独立评审仍待后续；本记录不授予合并或发布结论。C4c-3 文档已完成，记录随文档提交；最终 worktree clean，忽略的 target 证据保留。
 
 ## 风险与后续事项
 
@@ -102,5 +115,5 @@ C4c-2 第二轮修复的变异与干净检出验证已补齐。独立评审仍�
 ## 给下一位 Agent 的备注
 
 - 原 C4 记录：[2026-10-19-v0.2-phase-c4.md](./2026-10-19-v0.2-phase-c4.md)。本轮只补实际结果，不重写旧失败事实。
-- 忽略目录中的详细报告：`target/handoff/report-c4c2-c4c3.md`（最终提交后生成），包含提交、变更文件、实际命令/退出码及证据路径。
+- 忽略目录中的详细报告：`target/handoff/report-c4c2-c4c3.md`（含最终提交号），包含提交、变更文件、实际命令/退出码及证据路径。
 - `target/handoff/` 被 Git 忽略；换机器交接时须另行复制证据和脚本，Git 提交只包含实现与文档。

@@ -1,4 +1,36 @@
-# Release UI runner 行为基线与迁移
+# Release UI runner：当前入口与历史迁移
+
+## 当前契约（2026-10-22，v0.2 C4c）
+
+```bash
+# 默认自动门禁，完成后退出
+bash scripts/run_release_ui_regression.sh
+# 自动门禁、认证、浏览器存储契约、三个固定服务器套件
+bash scripts/run_release_ui_regression.sh --full
+# 正式 Web 长验收单独执行
+bash scripts/run_server_web_regression.sh --suite acceptance --long
+# 只输出计划
+bash scripts/run_release_ui_regression.sh --full --plan
+```
+
+固定组使用 `run_server_web_regression.sh` 的 theme-matrix（port + 10）、regression（port + 11）、feed-smoke（web-port + 11）。`--with-rssr-web` 开认证 smoke；未选固定组时另跑 feed-smoke（web-port + 1）。`--skip-automated` 跳过 Rust 门禁，`--skip-build` 只复用页面，服务器和夹具仍会构建。页面与服务器必须同一构建。没有常驻 SPA 阶段，结束后退出；旧的静态服务/代理阶段选项已删除。
+
+Windows 显式选择 Git Bash（`RSSR_BASH` 或 `--bash`），保持 Cargo、dx、Node 和 Chrome 对子进程可用。`--full` 不包括 acceptance，也不覆盖 CI 四个非默认主题的全页面回归。固定端口要求 port 与 web-port 均不超过 55524，以容纳 CDP 派生端口。
+
+`summary.json` / `summary.md` 记录每阶段状态与退出码；skipped 不等于通过，failed/interrupted/blocked 表示失败、中断或未运行。`completed` 仅说明选中的命令结束，不代表人工验收。构建与日志规则见 [服务器浏览器回归](./server-web-regression.md)。
+
+独立 runner 校验：
+
+```bash
+cargo fmt --manifest-path scripts/release-ui/Cargo.toml --check
+cargo clippy --manifest-path scripts/release-ui/Cargo.toml --all-targets --locked --target-dir target/release-ui-runner -- -D warnings
+cargo test --manifest-path scripts/release-ui/Cargo.toml --locked --target-dir target/release-ui-runner
+python -X utf8 scripts/release-ui/tests/acceptance.py --bash "$BASH"
+```
+
+## 历史迁移记录（2026-10-03 至 2026-10-06）
+
+下文保留当时的契约、旧命令和实测结果，只供原提交复现；当前操作以上一节为准，不把历史失败或跳过改写成通过。
 
 基线：`f1984c04f2a2875faaa9e175d746417ae80ebcf6` 的
 `scripts/run_release_ui_regression.sh`，409 行。2026-10-03 在 Windows

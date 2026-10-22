@@ -26,7 +26,7 @@
 
 说明：
 
-- 如果 `cargo test --workspace` 只剩 `test_webdav_local_roundtrip` 在受限环境中失败，不应直接判定为功能回归；先查 [环境限制索引](./environment-limitations.md)
+- 若本地 WebDAV 用例失败，先核对本次日志是否为端口绑定权限问题，再查 [环境限制索引](./environment-limitations.md)
 
 ## GitHub CI 并发矩阵
 
@@ -36,10 +36,9 @@
 | --- | --- | --- |
 | `workspace`、`format` | 生成完整模块列表；`cargo fmt --all --check` | 独立运行，各 10 分钟 |
 | `test-tools` | actionlint 1.7.12（官方校验和验证下载）；std-only Rust wasm runner 的 rustfmt、Clippy、单测及子进程隔离；Linux `.deb` 版本与动态库依赖元数据适配测试 | 独立运行，10 分钟 |
-| `native-module` / 6 crates | `cargo clippy --locked -p <crate> --all-targets -- -D warnings`；`cargo test --locked -p <crate>`（含 doc tests）；CLI help | 4 / 每模块 35 分钟 |
-| `web-smoke` | wasm target Clippy（`-D warnings`，覆盖 rssr-app 及路径依赖的 `cfg(wasm32)` 分支）、Dioxus 0.7.9 release bundle，上传实际 public 包 | 40 分钟 |
-| `web-ui` / default + 4 builtin themes | 下载同一次 Web 构建，既有 small viewport smoke 的 360×800 / 1280×800、真实请求、输入、选择、图片与设置验收 | 3 / 每主题 15 分钟 |
-| `feed-proxy-isolation` | 下载同一次 Web 构建；真实登录和生产代理响应构造路径的无害文档隔离、存储隔离及 RSS/Atom/HTML 发现兼容性 CDP 验收 | 独立运行，15 分钟 |
+| `native-module` / 7 crates | `cargo clippy --locked -p <crate> --all-targets -- -D warnings`；`cargo test --locked -p <crate>`（含 doc tests）；CLI help | 4 / 每模块 35 分钟 |
+| `web-smoke` | wasm target Clippy（`-D warnings`，覆盖 rssr-app 及路径依赖的 `cfg(wasm32)` 分支）、Dioxus 0.7.9 release bundle，同次构建服务器与夹具工具，上传 `ci-web-public` / `ci-web-server` | 40 分钟 |
+| `web-ui` / default + 4 builtin themes | 下载同次页面/服务器/夹具工具，每主题运行 `regression`；默认主题另跑 `theme-matrix`、`feed-smoke`、不带 `--long` 的 `acceptance` | 3 / 每主题 15 分钟 |
 | `wasm-contract-build` | 一个锁定依赖的 Cargo 调用准备全部 harness，上传精确产物；预热 wasm-bindgen 工具缓存 | 35 分钟 |
 | `wasm-browser-contract` / 3 harnesses | 下载同一批产物，分别运行 refresh / subscription / config exchange 浏览器契约，不再运行 Cargo | 3 / 每 harness 15 分钟 |
 | `android-smoke` | 锁定 NDK / ARM64 check、bundle、APK 资源 / ABI / version 断言；`~/.gradle` 按 dx 版本与 Android 输入缓存 | 50 分钟 |
@@ -47,7 +46,7 @@
 
 ```mermaid
 flowchart LR
-  W[Cargo workspace] --> N[Native modules × 6]
+  W[Cargo workspace] --> N[Native modules × 7]
   B[Web build once] --> U[UI themes × 5]
   F[Format] --> G[lint-and-test gate]
   T[Rust acceptance runner] --> G
@@ -61,7 +60,7 @@ flowchart LR
 
 - 同一 PR / ref 的旧 CI run 会被新 run 取消；不同 PR 不共用 concurrency group。每个 matrix 使用 `fail-fast: false`，保留其他模块的完整结果。
 - 上表上限是各 matrix 的上限，不是整个 workflow 的全局配额；实际并发还取决于 GitHub runner 配额。
-- Rust cache 按 native crate / Web / Android / wasm 构建职责区分，只有 UI crate 安装 GTK / WebKit。UI job 不重复编译 Web，wasm job 不重复编译契约；不上传浏览器 profile。Web / wasm 包保留 3 天，UI 断言 / 日志 / 截图保留 7 天。
+- Rust cache 按 native crate / Web / Android / wasm 构建职责区分，只有 UI crate 安装 GTK / WebKit。UI job 不重复编译 Web 或服务器，wasm job 不重复编译契约；不上传浏览器 profile。Web / wasm 包保留 3 天，UI 断言 / 日志 / 截图保留 7 天。
 - wasm-bindgen / Dioxus 工具在独立安装目录按 OS / 架构 / 精确版本缓存，命中后仍核对实际版本；不覆盖全局 Cargo 安装登记。wasm 构建 job 先预热工具缓存，后续三个 job 通常直接恢复，缓存不可用时仍允许安装。Chrome 按解析出的精确版本缓存，只有 wasm job 安装匹配的 ChromeDriver；CDP UI job 只用 Chrome。冷缓存、artifact 传输和远端缓存服务耗时仍需真实 run 测量，编译次数减少不等于已证明总耗时同比下降。
 - 保留原 `lint-and-test` 检查名作为最终汇总，不自动修改仓库 branch protection / 发布权限。新增工作流配置仍需提交后由真实 GitHub run 验证，不能把本地检查视为已部署 CI。
 - 并发语义参考 [GitHub matrix](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/run-job-variations) 与 [workflow concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)。
@@ -102,19 +101,19 @@ Cargo JSON / TOML 事实解析、GitHub `needs` JSON 摘要仍使用短 Python �
 
 | 能力项 | 自动化入口 | 是否需要手工 smoke | 是否受环境限制 | 通过标准 |
 |---|---|---|---|---|
-| add/remove | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_application_refresh_store_adapter`；`cargo test -p rssr-infra --test test_subscription_contract_harness`；`bash scripts/run_wasm_subscription_contract_harness.sh`；`cargo check -p rssr-cli` | 是 | 中 | URL 可添加；删除后列表与 app state 保持一致；browser persisted-state 与 sqlite contract 保持一致；无异常报错 |
-| refresh | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_feed_refresh_flow`；`cargo test -p rssr-infra --test test_application_refresh_store_adapter`；`bash scripts/run_wasm_refresh_contract_harness.sh` | 是 | 中 | single / all 都可完成；成功、失败、not modified 语义正确；browser refresh store target/commit 语义正确；不产生异常重复写入 |
+| add/remove | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_library_application_refresh_store_adapter`；`cargo test -p rssr-infra --test test_library_subscription_contract_harness`；`bash scripts/run_wasm_subscription_contract_harness.sh`；`cargo check -p rssr-cli` | 是 | 中 | URL 可添加；删除后列表与 app state 保持一致；browser persisted-state 与 sqlite contract 保持一致；无异常报错 |
+| refresh | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_library_feed_refresh_flow`；`cargo test -p rssr-infra --test test_library_application_refresh_store_adapter`；`bash scripts/run_wasm_refresh_contract_harness.sh` | 是 | 中 | single / all 都可完成；成功、失败、not modified 语义正确；browser refresh store target/commit 语义正确；不产生异常重复写入 |
 | CLI refresh 参数 | `cargo test --locked -p rssr-cli --test test_stdout_contract` | 否 | 低 | `--all` / `--feed-id` 恰选其一；无目标或双目标在打开数据库前以非零码退出 |
 | Linux `.deb` 安装 | `bash scripts/test_prepare_linux_deb.sh`；release job 中 `dpkg-deb -f ... Depends`、普通用户 Xvfb 双启动 | 是 | 高 | 拒绝输入文件的路径别名/硬链接/符号链接及目录作为输出；tag 版本、运行时依赖字段、用户 XDG 路径、两个数据库与重启后数据复用均成立；本地工具测试不能替代新 tag 的安装验收 |
-| Web feed 代理边界 | `cargo test --locked -p rssr-web proxy::tests`；`bash scripts/run_rssr_web_proxy_feed_smoke.sh` | 是 | 中 | 本地 / 内网 / IPv4 映射 IPv6 地址拒绝；隔离子进程设置环境代理后仍直连固定 IP；DNS 有上限且重定向逐跳重新验证 |
+| 服务器出站与旧接口退役 | `cargo test --locked -p rssr-infra --test test_outbound_policy --test test_native_outbound_requests`；`cargo test --locked -p rssr-web the_feed_proxy_and_the_session_probe_are_gone`；服务器 `feed-smoke` | 是 | 中 | 出站策略、DNS/重定向与代理环境边界；已登录旧代理地址返回 404 且无上游请求；公网另验 |
 | Web 登录回跳 | `cargo test --locked -p rssr-web auth::tests` | 否 | 低 | 回跳限定同源路径；拒绝会被浏览器归一化为外站地址的反斜杠/控制字符，输出可用作 Location header |
-| SQLite 路径与内存库分类 | `cargo test --locked -p rssr-infra --lib db::` | 否 | 低 | 内存 URI 的查询参数正确解码；文件名中的 `mode=memory` 不改变文件库分类，索引/正文文件分离并启用 WAL；显式文件路径不当作 URL 解析 |
-| config/exchange | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_config_package_codec`；`cargo test -p rssr-infra --test test_config_package_io`；`cargo test -p rssr-infra --test test_opml_interop`；`cargo test -p rssr-infra --test test_config_exchange_contract_harness`；`bash scripts/run_wasm_config_exchange_contract_harness.sh` | 是 | 中 | JSON / OPML roundtrip 可用；损坏或非法配置被拒绝；导入后订阅与设置恢复符合预期；browser persisted-state 与 sqlite contract 保持一致 |
+| SQLite 单资料库 | `cargo test --locked -p rssr-infra --test test_library_store --test test_library_persistence_atomicity` | 否 | 低 | 真实 `library.sqlite3` 的建库、事务与失败恢复；旧库升级另验 |
+| config/exchange | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_config_package_codec`；`cargo test -p rssr-infra --test test_library_config_package_io`；`cargo test -p rssr-infra --test test_opml_interop`；`cargo test -p rssr-infra --test test_library_config_exchange_contract_harness`；`bash scripts/run_wasm_config_exchange_contract_harness.sh` | 是 | 中 | JSON / OPML roundtrip 可用；损坏或非法配置被拒绝；导入后订阅与设置恢复符合预期；browser persisted-state 与 sqlite contract 保持一致 |
 | reader rendering | `cargo test -p rssr-app`；`cargo check -p rssr-app --target wasm32-unknown-unknown` | 是 | 中 | 阅读页优先展示完整 HTML；HTML-like fallback 不再被原样显示标签；内容经过清洗 |
 | web startup | `cargo check -p rssr-app --target wasm32-unknown-unknown`；`cargo test -p rssr-web` | 是 | 中 | 首屏可交互；无黑屏、无页面无响应；主要路由切换正常；Console 无新的 panic / 死循环 |
 | paste/input | `rssr-app` Feeds session 测试；既有 small viewport smoke 的真实键盘输入 / Enter / pending 场景 | 是 | 中 | 新增订阅可聚焦、提交；重复提交去重、期间新输入保留；原生粘贴及平台输入法继续实机补查 |
-| settings save | `cargo test -p rssr-infra --test test_settings_repository`；`cargo test -p rssr-infra --test test_config_package_codec` | 是 | 低 | 非法边界值被拒绝；合法值可保存并持久化；刷新或重启后仍保持 |
-| remote pull cleanup | `cargo test -p rssr-infra --test test_webdav_local_roundtrip`；`cargo test -p rssr-infra --test test_config_package_io` | 是 | 高 | 远端删除的 feed 会从本地移除；相关 entries 与 app state 被清理 |
+| settings save | `cargo test -p rssr-infra --test test_library_settings_repository`；`cargo test -p rssr-infra --test test_config_package_codec` | 是 | 低 | 非法边界值被拒绝；合法值可保存并持久化；刷新或重启后仍保持 |
+| remote pull cleanup | `cargo test -p rssr-infra --test test_library_webdav_local_roundtrip`；`cargo test -p rssr-infra --test test_library_config_package_io` | 是 | 高 | 远端删除的 feed 会从本地移除；相关 entries 与 app state 被清理 |
 
 ## 推荐的主线验证顺序
 
@@ -162,3 +161,5 @@ Cargo JSON / TOML 事实解析、GitHub `needs` JSON 摘要仍使用短 Python �
 - [手工回归测试清单](./manual-regression.md)
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
 - [最近交接记录](../handoffs/README.md)
+
+正式 Web 不保存浏览器文章库；wasm 存储契约仅验证演示适配器。正式 Web 长验收用 `bash scripts/run_server_web_regression.sh --suite acceptance --long`；本地结果不等于 Ubuntu CI 已运行。见 [统一入口](./server-web-regression.md)。

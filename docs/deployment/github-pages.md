@@ -1,6 +1,6 @@
 # GitHub Pages：真实 Dioxus Web 静态演示
 
-基线：`dbe68e11fdbf93769bfa876831113a17928108ab`（main / v0.1.20 发布记录）。
+实现核对：2026-10-22，v0.2 C4c。此页仅说明 `pages-demo` 静态演示；正式 Web 的同源 API 与服务器资料库见 [Web 部署](./web.md)。阶段 D 的无持久化演示尚未实施，当前演示操作仍存入浏览器。
 
 ## 一次性仓库配置
 
@@ -47,7 +47,7 @@ release 的路由前缀来自编译配置；改 base path 必须重新构建，�
 
 `pages-demo` 为默认关闭的构建 feature，仅 wasm32 生效。构建直接运行同一个 App，
 在原有 app shell 内显示一条公开静态演示说明。演示没有服务端账户和访问控制，
-不生成测试密码；该 feature 下跳过本地浏览器门禁，方便 localhost 验收。
+不生成测试密码；本地浏览器口令门禁已删除，演示直接进入。
 常规 Web / rssr-web / desktop / Android 构建不启用它。
 
 首次初始化复用 `tests/fixtures/browser_state/reader_demo_{core,app_state,entry_flags,entry_content}.json`，
@@ -60,8 +60,8 @@ release 的路由前缀来自编译配置；改 base path 必须重新构建，�
 下一次进入保留这个空库，不会自动重试覆盖。需要重新体验样例时可使用全新浏览器配置。
 
 注意：当前 BrowserStore 的 localStorage key 按 **origin** 共享，URL 子路径并不提供隔离。
-本补丁保留这个既有存储约定，不清空已有数据；同一 `develata.github.io` origin 下
-其他 RSS-Reader 构建也会读到这些 key。若需要相互隔离，应采用独立 origin。
+当前演示保留这个既有存储约定，不清空已有数据；同一 `develata.github.io` origin 下
+其他使用 BrowserStore 的旧版或演示构建也会读到这些 key，正式 Web 不读取这份资料库。若需要相互隔离，应采用独立 origin。
 公开部署只提供静态样例资源，不上传访问者 localStorage。
 
 | 能力 | Pages 演示行为 |

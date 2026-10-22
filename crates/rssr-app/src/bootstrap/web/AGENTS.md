@@ -1,24 +1,26 @@
 # Web Bootstrap 模块说明
 
-本目录负责 `rssr-app` 在纯 Web / `rssr-web` 部署态下的运行时装配。
+本目录负责 `rssr-app` 的正式 Web 与 `pages-demo` 演示构建的运行时装配（2026-10-22 核对）。
 
 ## 职责边界
 
 - `../web.rs`
-  - 组装 infra 浏览器适配器与 application 用例，建好 `LocalBackend<WebHost>`；`WebHost` 只提供浏览器的差异（`spawn_local`、gloo 计时器、浏览器时钟、远端配置的 `fetch` 存储、演示站的网络与自动刷新开关）
-- 添加订阅、刷新编排、`RefreshFlight` 与自动刷新循环在 `rssr_infra::local_backend`，与原生端共用；不要在此重建。
-- 浏览器状态、仓储查询、feed 拉取解析和 OPML 编解码已位于 `rssr-infra/src/application_adapters/browser/`；不要在此重建平行实现。
+  - 正式构建选择 `rssr_infra::http_backend::HttpBackend`，以页面 origin、构建标识与客户端访问同源 `/api/v1`；资料库和自动刷新由服务器负责。
+  - 仅 `pages-demo` 组装浏览器适配器与 application 用例，建好 `LocalBackend<WebHost>`；`WebHost` 提供 `spawn_local`、gloo 计时器与浏览器时钟，并禁止网络和自动刷新。
+- 添加订阅、刷新编排、`RefreshFlight` 与自动刷新循环在 `rssr_infra::local_backend`，由原生/服务器共用；不要在此重建。
+- 演示所用的浏览器存储与适配器位于 `rssr-infra/src/application_adapters/browser/`，由 `browser-store` feature 门控；正式 Web 不编译这条路径。
 
 ## 不应在这里做的事
 
 - 不在这里渲染 UI
 - 不在这里写桌面端 / Android 专用逻辑
 - 不在这里引入原生 SQLite（`rssr_infra::store`）路径
-- 不把 `rssr-web` 的服务端认证/代理职责混进来
+- 不把 `rssr-web` 的服务端认证、订阅抓取或资料库职责混进来；旧 feed 代理与本地浏览器口令门禁已退役
 
 ## 修改约束
 
-- Web 端是本地优先实现，当前真实持久化方案是 `localStorage` 序列化状态
+- 正式 Web 不保存浏览器文章库，不支持离线回退；设备偏好与跨重新加载的 `sessionStorage` 草稿不等于资料库。
+- 仅演示继续使用 BrowserStore / `localStorage`；以下存储规则适用于这条适配路径。
 - 任何会影响用户数据的变更，都要优先考虑：
   - 状态损坏恢复
   - 导入坏数据时的降级路径
@@ -36,7 +38,9 @@
 ## 变更后建议检查
 
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`
-- 存储/端口变化运行相关 wasm 浏览器契约测试，入口见 `scripts/run_wasm_contract_harness.sh`。
+- `cargo check -p rssr-app --target wasm32-unknown-unknown --features pages-demo --locked`
+- 正式 Web：`bash scripts/run_server_web_regression.sh --suite acceptance --long`；页面与服务器必须同一构建。
+- 演示存储/端口变化运行相关 wasm 浏览器契约测试，入口见 `scripts/run_wasm_contract_harness.sh`（自动启用 `browser-store`）；演示页面另用 `scripts/test_pages.sh`。
 - 关键改动涉及状态时：
   - 登录后的 `/entries`
   - 配置导入导出

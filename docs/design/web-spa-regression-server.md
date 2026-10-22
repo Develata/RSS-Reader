@@ -1,113 +1,27 @@
-# Web SPA 回归服务脚本
+# Web 回归服务：服务器模式
 
-## 用途
+2026-10-22 更新；保留旧文件名以兼容引用。正式 Web 已改用同源 `/api/v1`，由 `rssr-web` 提供认证、资料库与静态页面的 SPA 回退。旧 Python 静态服务、本地口令与浏览器文章库注入 helper 已退役。
 
-- 为 `rssr-app` 的 web 构建提供一个本地静态服务入口。
-- 对未知路径自动回退到 `index.html`，避免直接访问 `/feeds`、`/settings`、`/entries` 时落到 404。
-- 给 Chrome MCP、本地浏览器回归和 CSS 完全分离检查提供固定入口。
-- 给同源本地 Web auth helper 提供承载入口：
-  - `/__codex/setup-local-auth`
-
-如果需要把发布前自动化门禁和静态 Web 回归串成一条命令，优先执行：
+## 当前入口
 
 ```bash
-bash scripts/run_release_ui_regression.sh --debug --port 8091
+# 自动回归：新资料库、独立 feed 服务、真实登录、结束后清理自己的进程
+bash scripts/run_server_web_regression.sh --suite regression
+bash scripts/run_server_web_regression.sh --suite acceptance --long
+
+# 发布前聚合门禁与三个固定套件；结束后退出
+bash scripts/run_release_ui_regression.sh --with-fixed-smokes
+
+# 手工检查：打印临时凭据与地址，服务保持运行供浏览器访问
+bash scripts/run_rssr_web_browser_smoke.sh
 ```
 
-这条脚本会先跑 `rssr-app / rssr-infra / rssr-web` 的发布前 UI 自动化门禁，再进入这里的 SPA fallback 服务。
+构建标识、fixture、参数与日志契约见 [服务器浏览器回归](../testing/server-web-regression.md)。每次正式 Web 构建都需要匹配的服务器；`dx serve` 自身不提供 `/api/v1`。仅 Pages 演示可用 `dx serve --platform web --package rssr-app --features pages-demo --locked` 独立运行，见 [Pages 边界](../deployment/github-pages.md)。
 
-如果还想同时串上 `rssr-web` 的最小部署壳 smoke，可以加：
+## 手工路径
 
-```bash
-bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web
-```
+1. 用隔离资料库启动服务，打开 `/login` 并输入本轮测试凭据。
+2. 检查 `/entries`、`/feeds`、`/settings`，添加订阅后打开真实文章。
+3. 检查登录、退出、重新加载、主题与页面错误；结果写入本轮 handoff。
 
-对应日志和结果模板会落在：
-
-- `target/release-ui-regression/<timestamp>/automated-gates.log`
-- `target/release-ui-regression/<timestamp>/rssr-web.log`
-- `target/release-ui-regression/<timestamp>/summary.md`
-
-如果只想做静态 Web 的真实浏览器态 smoke，优先用：
-
-```bash
-bash scripts/run_static_web_browser_smoke.sh
-```
-
-如果需要用户可见的 Windows 原生 Chrome 窗口，而不是 WSLg/Linux Chrome 或 headless Chrome，使用：
-
-```bash
-bash scripts/run_windows_chrome_visible_regression.sh --skip-build
-```
-
-这条路径会通过 PowerShell 启动 Windows Chrome，再用 Windows Node/CDP 执行 repo 内的浏览器 runner。它和 Chrome MCP 不是同一条控制链路，适合验证用户能实际看到的浏览器窗口。
-
-如果要稳定进入真实阅读页，也可以直接用 demo seed：
-
-```bash
-bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2
-```
-
-## 脚本
-
-- [run_web_spa_regression_server.sh](../../scripts/run_web_spa_regression_server.sh)
-- [run_windows_chrome_visible_regression.sh](../../scripts/run_windows_chrome_visible_regression.sh)
-- [rssr_visible_regression.mjs](../../scripts/browser/rssr_visible_regression.mjs)
-
-## 用法
-
-```bash
-bash scripts/run_web_spa_regression_server.sh
-```
-
-默认行为：
-- 构建 `rssr-app` web bundle
-- 读取 `target/dx/rssr-app/debug/web/public`
-- 在 `http://127.0.0.1:8091` 提供带 SPA fallback 的静态服务
-
-可选参数：
-
-```bash
-bash scripts/run_web_spa_regression_server.sh --port 8092
-bash scripts/run_web_spa_regression_server.sh --skip-build
-bash scripts/run_web_spa_regression_server.sh --debug
-bash scripts/run_web_spa_regression_server.sh --release
-```
-
-说明：
-
-- 当前 `dx build --locked --platform web --package rssr-app` 默认产出 `debug/web/public`
-- 如果要检查 release 构建，应显式使用 `--release`
-
-## 推荐回归路径
-
-1. 启动脚本
-2. 打开 `http://127.0.0.1:8091/`
-3. 在浏览器内完成本地 Web 初始化登录
-4. 通过应用内部导航检查：
-   - `/entries`
-   - `/feeds`
-   - `/settings`
-
-## 备注
-
-- 服务仅监听 loopback，shell 使用 exec 交给 Python 服务，调用方持有的 PID 即服务 PID。
-- helper 会覆盖该 origin 的测试数据，只使用独立浏览器 profile，不在日常文章库上播种。
-- 这个脚本只解决本地静态构建回归的 SPA fallback 问题。
-- 它不是 `dx serve` 的替代品。
-- 如果要检查热更新或 dev server 行为，仍然应使用 `dx serve`。
-- 同源 helper `/__codex/setup-local-auth` 现在支持：
-  - 只初始化本地 Web 门禁
-  - 或加 `seed=reader-demo` 额外写入最小浏览器状态，稳定进入 `/entries/2`
-  - 或加 `preset=atlas-sidebar|newsprint|amethyst-glass|midnight-ledger`，把内置主题 CSS 一起播种进浏览器状态
-  - helper 现在在服务端预先计算 auth config / session token，再由前端同步写入 storage
-  - 这样 headless 截图不会再卡在 “Preparing local web auth...” 的过渡页
-- 另外还提供：
-  - `/__codex/dump-browser-state`
-  - 用于直接查看当前 origin 下：
-    - auth config / session 是否存在
-    - `rssr-web-state-v1`
-    - `rssr-web-app-state-v2`
-    - `rssr-web-entry-flags-v1`
-    - 正文分片与版本化提交头；新版活跃分片由提交头确定，上述 legacy key 不保证是最新数据
-- 播种会清理该测试 origin 的旧提交，dump 按提交头读取活跃片段；Playwright 测试可复用 `scripts/browser/storage_helpers.cjs` 修改测试数据。调试不能绕过 Web Locks 在运行中直接改 legacy key，迁移行为应通过专用 fixture 验证。
+不要在日常资料库或已有浏览器 profile 中播种测试数据。自动测试的 SQLite 夹具通过 `browser_fixture_library` 写入全新目录，不能用旧浏览器 storage key 替代服务器数据。

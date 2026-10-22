@@ -17,8 +17,10 @@ cargo run -p rssr-app --locked
 # CLI
 cargo run -p rssr-cli --locked -- --help
 
-# Web 端开发（需 rustup target add wasm32-unknown-unknown 和 dioxus-cli 0.7.9）
-dx serve --platform web --package rssr-app --locked
+# 正式 Web 同源开发（需 wasm32-unknown-unknown 和 dioxus-cli 0.7.9）
+bash scripts/run_rssr_web_browser_smoke.sh
+# 静态演示另用 --features pages-demo
+dx serve --platform web --package rssr-app --features pages-demo --locked
 
 # 提交前验证（与 CI 一致）
 cargo fmt --all --check
@@ -36,9 +38,10 @@ cargo test -p rssr-application --locked <test_name>
 bash scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness
 # 其余：wasm_subscription_contract_harness / wasm_config_exchange_contract_harness
 
-# Web 部署态验证（登录 + /feed-proxy，用于 CORS 受限源）
-dx bundle --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-e2e --locked
-# 然后按 docs/deployment/web.md 设置 RSS_READER_WEB_* 环境变量启动 rssr-web
+# 正式 Web 浏览器回归（真实服务器、隔离夹具、同一构建）
+bash scripts/run_server_web_regression.sh --suite acceptance --long
+bash scripts/run_release_ui_regression.sh --with-fixed-smokes
+# 同源开发与升级边界见 docs/deployment/web.md
 ```
 
 ## 架构
@@ -49,11 +52,12 @@ dx bundle --platform web --package rssr-app --release --debug-symbols false --ou
 - **`rssr-application`** — 用例服务（`RefreshService`、`ReaderService`、`EntriesListService`、`ImportExportService`、`SubscriptionWorkflow` 等）。`composition.rs` 中的 `AppUseCases::compose(AppCompositionInput)` 用端口 trait（`FeedRefreshSourcePort`、`RefreshStorePort`、`OpmlCodecPort`、`ClockPort`、`AppStatePort`、原子写端口与 `LibraryQueryPort`）组装全部服务，平台无关。界面的一次读取需要多条查询时走 `LibraryQueryPort`（`library_queries.rs`），由存储在一个读快照内回答。
 - **`rssr-infra`** — 端口适配器，按编译目标二选一（`lib.rs` 中 `#[cfg(not(target_arch = "wasm32"))]` 门控）：
   - **原生（桌面/Android/CLI）**：`store` 模块，rusqlite 单库 `library.sqlite3`（索引、正文、设置、刷新序号；基线 schema 在 `store/migrations/`，根目录 `migrations/` 与 `migrations_content/` 冻结为 v0.1.x 历史，只供 `store::import` 单向导入旧库）；reqwest 抓取 + `BodyAssetLocalizer` 正文图片本地化；feed-rs/quick-xml 解析；OPML 编解码；WebDAV 配置同步。入口 `store::local::open_local_library()`（首次打开时导入同一数据目录中的 v0.1.x 库）+ `compose_library_use_cases(store)`。
-  - **wasm32**：`application_adapters/browser/` 下的适配器共用 `BrowserStore`，通过 Web Locks 协调 `localStorage` 四片数据，以单一提交头发布；缓存按版本同步，刷新逐订阅持久化，仅正文记录变化时写正文片。`store`/`fetch`/`parser`/`config_sync` 模块在 wasm 上不编译。入口 `compose_browser_use_cases`。
+  - **wasm32 正式 Web**：`http-backend` feature 下的 `HttpBackend` 经同源 `/api/v1` 调用服务器；不编译 `browser-store` 或 SQLite。
+  - **wasm32 演示（`pages-demo`）**：`application_adapters/browser/` 下的适配器共用 `BrowserStore`，通过 Web Locks 协调 `localStorage` 四片数据，以单一提交头发布；缓存按版本同步，刷新逐订阅持久化，仅正文记录变化时写正文片。`store`/`fetch`/`parser`/`config_sync` 模块在 wasm 上不编译。入口 `compose_browser_use_cases`。
 - **`rssr-api`** — 界面与用例之间的 `Backend` 接口（界面的全部操作；阶段 C 的 `HttpBackend` 与本机 `LocalBackend` 都实现它），只依赖 application / domain；依赖图门禁见 `crates/rssr-api/tests/dependency_graph.rs`（Web 构建不含 SQLite）。
-- **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 与 `bootstrap/web.rs` 按平台建好 `LocalBackend`（infra 的 `local_backend`：共享的添加订阅、刷新编排、`RefreshFlight` 与自动刷新循环；平台差异在 `LocalHost`：原生 `NativeHost` 含图片本地化与 WebDAV，Web 的 `WebHost` 在 `bootstrap/web.rs`）；`ui/` 分 shell / commands / runtime；`pages/` 通过 facade/session 派发命令，runtime 只经 `Arc<dyn Backend>` 调用。界面接缝的特征测试：`ui/runtime/characterization.rs`。
+- **`rssr-app`** — Dioxus UI。`bootstrap/native.rs` 建好 `LocalBackend`；`bootstrap/web.rs` 的正式构建选择 `HttpBackend`，只有 `pages-demo` 选择浏览器 `LocalBackend<WebHost>`。infra 的 `local_backend` 共用添加订阅、刷新编排与自动刷新，差异在 `LocalHost`；演示宿主禁止网络与自动刷新。`ui/` 分 shell / commands / runtime；`pages/` 通过 facade/session 派发命令，runtime 只经 `Arc<dyn Backend>` 调用。界面接缝的特征测试：`ui/runtime/characterization.rs`。
 - **`rssr-cli`** — 复用同一 application 层的自动化入口。
-- **`rssr-web`** — 仅用于 Web 部署的薄 axum 服务：Argon2 登录与服务器保存的会话（数据目录 `RSSR_DATA_DIR` 里的 `auth.sqlite3`）、写请求的 Origin / CSRF 校验、阅读器接口 `/api/v1`（`api` 模块：同一数据目录里 `library.sqlite3` 上的 `LocalBackend`，线上形式见 `rssr-api::protocol`；写请求要求构建标识一致，标识由 `build-support/build_id.rs` 在构建时计算）、静态包托管 + SPA 回退、`/feed-proxy` 服务端代抓（绕过浏览器 CORS）。子命令 `passwd`、`sessions revoke-all`。桌面端、CLI、本地开发都不依赖它。
+- **`rssr-web`** — 仅用于 Web 部署的薄 axum 服务：Argon2 登录与服务器保存的会话（数据目录 `RSSR_DATA_DIR` 里的 `auth.sqlite3`）、写请求的 Origin / CSRF 校验、阅读器接口 `/api/v1`（`api` 模块：同一数据目录里 `library.sqlite3` 上的 `LocalBackend`，线上形式见 `rssr-api::protocol`；写请求要求构建标识一致，标识由 `build-support/build_id.rs` 在构建时计算）、静态包托管 + SPA 回退；订阅抓取、自动刷新、WebDAV 与图片本地化经服务器的 `LocalBackend` 执行。旧 feed 代理与浏览器口令门禁已退役。子命令 `passwd`、`sessions revoke-all`。桌面端与 CLI 不依赖这个 HTTP 服务；正式 Web 的本地开发也需要同源服务器。
 
 关键约束：**平台差异只允许存在于 infra / adapter / host capability 层**，application/domain 的语义必须跨平台统一。UI 组件里禁止直接写 SQL、HTTP 或 feed/OPML/JSON 解析。
 
@@ -69,8 +73,8 @@ dx bundle --platform web --package rssr-app --release --debug-symbols false --ou
 
 ## 平台差异提醒
 
-- Web 端受浏览器 CORS 限制：部分 feed 桌面端可刷、Web 直连失败，需经 `rssr-web` 的 `/feed-proxy` 验证。
-- Web 端持久化是 `localStorage` 序列化状态，不是 SQLite；不要把两套语义混写（v0.2 阶段 D 前的现状）。
+- 正式 Web 的资料库在服务器 `library.sqlite3`；浏览器经 `HttpBackend` 访问同源 API，不直连 feed。浏览器只保留设备偏好与 `sessionStorage` 草稿。旧 Web 文章不迁移，正式 Web 不再离线可读。
+- 仅 `pages-demo` 在阶段 D 前仍使用 `BrowserStore` / `localStorage` / Web Locks；在线订阅、WebDAV、自动刷新禁用。正式与演示构建分别验证。
 - Android 本地打包需在 `dx bundle` 后运行 `python3 scripts/prepare_android_bundle.py`，再用生成的 Gradle 工程出 APK。发布流水线额外传 `--release-tag`，把 tag 转成 `versionCode` / `versionName`（`Cargo.toml` 版本号长期停在 0.1.0，不能作为版本来源）。
 - Android 发布产物的断言只认资源名（`aapt2 dump resources` 里的 `mipmap/rssr_launcher`），不认文件路径：release 会跑 `optimizeReleaseResources` 压缩资源路径，按路径断言的写法只在 debug 上成立。
 
