@@ -20,6 +20,7 @@
 ## 构建与路由
 
 ```bash
+cargo run --locked -p rssr-infra --example pages_snapshot
 dx build --platform web --package rssr-app --release --locked \
   --features pages-demo --base-path /RSS-Reader --debug-symbols false
 python3 scripts/prepare_pages.py target/dx/rssr-app/release/web/public
@@ -50,8 +51,20 @@ release 的路由前缀来自编译配置；改 base path 必须重新构建，�
 不生成测试密码；本地浏览器口令门禁已删除，演示直接进入。
 常规 Web / rssr-web / desktop / Android 构建不启用它。
 
-首次初始化复用 `tests/fixtures/browser_state/reader_demo_{core,app_state,entry_flags,entry_content}.json`，
-四份样例由 Rust `include_str!` 编入 WASM，并用真实持久化类型反序列化。
+首次初始化使用 `assets/pages-demo/snapshot.json` 的真实 RSS 文章快照，
+由 Rust `include_str!` 编入 WASM，并通过既有条目合并逻辑写入演示资料库。
+`assets/pages-demo/sources.json` 指定两个公开源：Develata 每日数学最近 5 篇、
+Terence Tao 博客最近 1 篇。保留 RSS 提供的标题、作者、发布时间、正文与原文链接。
+测试用的合成 `reader_demo_*` 夹具继续供固定回归使用，不再作为 Pages 的展示内容。
+
+Pages workflow 在构建前运行 Rust `pages_snapshot`，复用产品的 RSS/Atom 解析器。
+它在 CI 主机抓取源，不要求源允许浏览器 CORS；单个请求总超时 40 秒，最多 3 次跳转，
+每份 RSS 及最终快照分别不超过 2 MiB。按发布时间选取少量正文，按源条目标识去重；
+任一源失败、没有可读条目或超过上限则构建失败，不发布半份数据，也不悄悄使用旧快照。
+快照记录抓取时间、原始 RSS 的 SHA-256 与最终地址，并作为 7 天 workflow artifact 保留。
+没有定时刷新任务；运行一次 Pages 构建才更新一次内容。仓库保留已抓取快照，
+本地离线构建可跳过上述 `cargo run`。手动刷新快照后需重新编译 WASM。
+
 在 `BrowserStore::open_with_initial_state` 中，判断存储是否全新和 seed 发布使用
 同一个 Web Lock，发布走既有 copy-on-write slices 与 commit key。
 已有 commit、legacy slice 或 staging slice 都不会被 seed 覆盖。
@@ -62,7 +75,7 @@ release 的路由前缀来自编译配置；改 base path 必须重新构建，�
 注意：当前 BrowserStore 的 localStorage key 按 **origin** 共享，URL 子路径并不提供隔离。
 当前演示保留这个既有存储约定，不清空已有数据；同一 `develata.github.io` origin 下
 其他使用 BrowserStore 的旧版或演示构建也会读到这些 key，正式 Web 不读取这份资料库。若需要相互隔离，应采用独立 origin。
-公开部署只提供静态样例资源，不上传访问者 localStorage。
+公开部署只提供预先抓取的文章资源，不上传访问者 localStorage。
 
 | 能力 | Pages 演示行为 |
 | --- | --- |
@@ -82,6 +95,8 @@ CORS 是浏览器对跨源请求的限制，Pages 无法通过静态文件为第
 workflow 在发布前运行 `scripts/test_pages.sh`：使用临时 Chrome profile 和一个模拟
 Pages HTTP 404 行为的静态 server，检查真实阅读器挂载、JS/WASM 加载、子路径路由、
 收藏切换后重载不被 seed 覆盖、手动刷新被明确阻断以及未产生跨源 feed 请求。
+还检查真实文章正文、两个来源名称，以及全部文章和原文链接确实进入演示资料库。
+正文外部图片按浏览器 `Image` 类型单独记录，不计作 feed 请求；同源资源或其他跨源请求失败仍会失败。
 这个 server 不包含任何认证或 seed 注入 helper，因此能发现生产入口漏初始化的问题。
 验收使用 OS 分配的端口和独立 Chrome profile，支持同机并行；失败保留日志、网络错误与截图，
 CI 上传到 `pages-smoke-<run_id>-<attempt>`（保留三天）。本地可设置 `PAGES_PUBLIC_DIR`
@@ -99,7 +114,7 @@ bash scripts/run_wasm_contract_harness.sh wasm_subscription_contract_harness
 
 页面、CSS、路由、交互状态与持久化仍来自 rssr-app 的同一份源代码。
 后续修改阅读器、主题或移动布局时，Pages 自动编译同一个提交并运行实际 bundle 验收。
-仅部署配置、合成初始数据和宿主网络能力有所区别；没有第二套 DOM/CSS/模拟交互需要同步。
+仅部署配置、预抓取初始数据和宿主网络能力有所区别；没有第二套 DOM/CSS/模拟交互需要同步。
 
 ## 实现依据
 

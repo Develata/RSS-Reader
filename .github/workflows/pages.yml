@@ -76,10 +76,14 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           base="$CONFIGURED_BASE"
-          if [[ "$EVENT_NAME" == pull_request ]]; then
+          if [[ "$EVENT_NAME" == pull_request || "$GITHUB_REF" != refs/heads/main ]]; then
             base="/${REPOSITORY#*/}"
           fi
           echo "PAGES_BASE_PATH=$base" >> "$GITHUB_ENV"
+      - name: Prepare real RSS article snapshot
+        run: |
+          cargo test --locked -p rssr-infra --example pages_snapshot
+          cargo run --locked -p rssr-infra --example pages_snapshot
       - name: Build the real Dioxus app
         run: |
           dx build --platform web --package rssr-app --release --locked \
@@ -92,8 +96,15 @@ jobs:
       - uses: ./.github/actions/setup-browser-tests
         with:
           with-driver: 'false'
-      - name: Check subpath, direct entry, persistence and network downgrade
+      - name: Check real RSS content, subpath, persistence and network downgrade
         run: bash scripts/test_pages.sh
+      - name: Preserve the RSS snapshot used by this build
+        uses: actions/upload-artifact@v7
+        with:
+          name: pages-rss-snapshot-${{ github.run_id }}-${{ github.run_attempt }}
+          path: assets/pages-demo/snapshot.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Preserve smoke diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v7

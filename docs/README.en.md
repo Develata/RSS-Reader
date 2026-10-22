@@ -60,6 +60,8 @@ Formal Web uses the same-origin `/api/v1` through `HttpBackend`; feed fetching a
 
 **Upgrading from the old Web build:** browser articles, read flags and favorites are not migrated. Export a JSON configuration or OPML in the old version, import it after signing in to the new server, then fetch feeds again. Formal Web is no longer an offline reader and does not fall back to the old browser library. Preserve old site data if you still need those articles. Only the [Pages demo](./deployment/github-pages.md) continues to use `localStorage` and Web Locks; feed operations, WebDAV and automatic refresh are disabled there.
 
+The Pages demo preloads real RSS articles from Develata's Daily Math and Terence Tao's blog. Its CI fetches a small snapshot before building, retaining the original article links; visitors do not fetch or refresh feeds. Existing browser data is preserved.
+
 A separately extracted Linux CLI remains portable and uses its own executable-adjacent data directory by default. To manage the installed desktop app's library, pass the global `--data-dir` option (or set `RSSR_DATA_DIR`) to the installed data directory.
 
 The reader caches the body provided by the feed; it does not fetch the source page to reconstruct full text. Desktop, Android and the server attempt to localize body images. Formal Web sends reader operations to its own server; it does not fetch feeds directly from the browser. The old feed proxy endpoint has been retired. JSON, OPML, and WebDAV exchange subscriptions and settings, **not** article bodies, read history, or favorites across devices. See the [Web deployment guide](./deployment/web.md).
