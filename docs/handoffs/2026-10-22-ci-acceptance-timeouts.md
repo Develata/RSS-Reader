@@ -3,10 +3,10 @@
 - 日期：2026-10-22
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
-- 当前 HEAD：`2b09f16`
-- 相关 commit：pending
+- 当前 HEAD：`3cddffa9a01573a94edefb503adb1838697e39cb`（修复与复验源码）
+- 相关 commit：`3cddffa`；APT 镜像列表修复与验证回填 commit: pending
 - 相关 tag / release：无
-- 状态：`validated`（本地通过；远端复验待执行）
+- 状态：`validated`（本地通过；远端完整 CI 复验进行中）
 
 ## 工作摘要
 
@@ -41,6 +41,12 @@
 - 当前文档仍等真实结束事件；200 响应头不算完成；20 秒时限、600 ms 连续静默及请求开始/结束时重置静默的规则不变。
 - 错误文字和失败 JSON 记录当前 loader、在途 request ID；CI 加入驱动回归测试。
 
+### 修复后 CI 另外发现的 APT 超时
+
+`39828331412` 的浏览器验收首次即通过；其 `native-module (rssr-app)` job `119997621852` 在系统依赖安装步骤超时，汇总 gate 因此失败。这是另一种原因：Ubuntu 26.04 runner 的 APT 输出 `file:/etc/apt/apt-mirrors.txt Mirrorlist`，镜像列表仍含 Azure 地址。已有改写仅覆盖两个 sources 文件，未改镜像列表，下载仍在 `azure.archive.ubuntu.com` 连续等待，10 分钟后步骤终止；编译与应用测试未开始。
+
+CI 改为覆盖 `sources.list`、`sources.list.d/*.list`、`*.sources` 和该镜像列表，只替换同一 Ubuntu archive 的 Azure 主机地址，不改 suite、架构、签名或其它软件源。日志增加被处理的文件名。隔离 Linux fixture 验证旧脚本保留 Azure 地址并退出 1，新脚本消除该地址且保留 `mirror+file`、suite 和 Microsoft 来源，退出 0；actionlint 通过。
+
 ## 验证与验收
 
 - 修复前，Linux Chrome 156 上三个原场景连续 5 轮通过；60 次设置读取最长 69 ms。完整原驱动 `--long` 也通过 27/27。这些结果说明单纯重跑不足以确认根因。
@@ -50,14 +56,17 @@
 - 三项隔离 mutation 均被测试拒绝：恢复跨全部文档等待；把 200 响应头当作完成；取消请求事件对静默窗口的重置。
 - `actionlint .github/workflows/ci.yml`、`git diff --check`：通过。
 - 修复后 Linux release 页面 + release 服务器的完整 `--long`：27/27 场景、108 检查、0 意外控制台错误。报告 `target/handoff/evidence-ci-timeouts/linux156-fixed-full-1/assertions.json`，SHA-256 `c00b9ce6c567c316553885490921b2ec790bb6f8aeeb2438af8c6f7aaccc0534`。
-- 修复后远端 CI：pending。
+- 修复后远端 CI：[run 39828331412](https://github.com/Develata/RSS-Reader/actions/runs/39828331412)，source `3cddffa9a01573a94edefb503adb1838697e39cb`，`acceptance_long=true`：浏览器长验收首次 27/27，原三个场景耗时分别 3、2、2 秒；`test-tools` 10/10。全局 22/24 成功，另两项为上述 APT 安装及汇总 gate，不把全局结果记为通过。
+- 默认主题 job `119998680316` 的完整日志已留存；artifact `12448201835` 的 GitHub 报告 SHA-256 为 `ddff6b8d9f785e172078b4a77af9cd34362a546b14a98ad820bb4a015c9c65c7`，未声称本机校验此 ZIP。
+- APT 修复后的远端完整 CI：pending。
 
 ## 结果与风险
 
 - 已定位可复现的驱动缺陷；原始三个超时缺少身份信息，逐条归因仍有证据缺口。
 - 不声称覆盖嵌套 frame 的 BFCache 生命周期；本应用的 API 来自主文档，其它 loader 采用保守等待。
-- 本轮只验证驱动修改，没有重做应用原生/wasm 测试或独立外部评审。
+- 本机未重复应用原生/wasm 测试，远端完整 CI 的实际结果记录于上节；未做独立外部评审。
 - 自动审批拒绝将原 CI 构建 artifact 下载到本机，理由为需要批准但当前审批策略为 Never；没有换通道重试该下载。本地复现用当前未改产品源码构建的产物，显式构建标识 `c6-package-a13a1e5` 两端一致，不冒充原 CI 二进制。原失败日志及先前已留存的 artifact 可读。
+- 已核对 `git diff 129996a 3cddffa -- crates Cargo.toml Cargo.lock assets Dioxus.toml build-support` 为空；不能因此把不同机器、工具版本和构建模式的产物视为逐字节相同。
 
 ## 给下一位 Agent 的备注
 

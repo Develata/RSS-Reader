@@ -166,9 +166,12 @@ jobs:
         run: |
           # The hosted runner's Azure mirror repeatedly stalled package downloads.
           # Keep the same Ubuntu suites and packages, using the official main archive.
-          for source in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+          # mirror+file sources choose their download host from apt-mirrors.txt as well.
+          for source in /etc/apt/sources.list /etc/apt/sources.list.d/*.list \
+            /etc/apt/sources.list.d/*.sources /etc/apt/apt-mirrors.txt; do
             if [[ -f "$source" ]]; then
               sudo sed -i 's|https\?://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"
+              printf 'Checked Ubuntu mirror selection in %s\n' "$source"
             fi
           done
           apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
