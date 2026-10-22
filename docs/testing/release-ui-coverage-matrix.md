@@ -18,7 +18,7 @@
 | 反向代理同源 cookie、Origin、CSRF | `--suite acceptance` | 自动化，本地代理夹具 |
 | 结果未知、零自动重发、只读刷新合并、跨浏览器可见性 | `--suite acceptance` | 自动化，检查实际 API 请求与可见状态 |
 | 草稿/CSS、恢复后编辑、存储失败、停止离开、构建不匹配 | `--suite acceptance --long` | 自动化；本标签页 sessionStorage，不自动保存 |
-| 长任务、后台标签时限、页面切换与重载 | `--suite acceptance --long` | 自动化；CI 不含三个长场景 |
+| 长任务、后台标签时限、页面切换与重载 | `--suite acceptance --long` | 自动化；常规 CI 跳过三个长场景，手动 CI 可启用 `acceptance_long` |
 | 启动失败、状态提示可见、恶意正文不执行脚本 | `--suite acceptance` | 自动化；不代替辅助技术实机检查 |
 | 乱序列表、Reader 旧结果、Settings 保存中的编辑 | app session/runtime 测试 | 自动化，受控任务完成顺序 |
 | SQLite 刷新原子性、失败重试 | `test_library_application_refresh_store_adapter`、`test_library_persistence_atomicity` | 自动化，真实资料库 |

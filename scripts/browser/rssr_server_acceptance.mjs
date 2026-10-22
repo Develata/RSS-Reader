@@ -1041,7 +1041,8 @@ define('background-tab-time-limit', { long: true }, async (s) => {
 const networkEntry = (error) => error.type === 'log.error' && error.source === 'network';
 const sameOrigin = (url, page) => {
   try {
-    return new URL(url).host === new URL(page).host;
+    const target = new URL(url);
+    return ['http:', 'https:'].includes(target.protocol) && target.origin === new URL(page).origin;
   } catch {
     return false;
   }
@@ -1051,8 +1052,15 @@ const sameOrigin = (url, page) => {
 function liveReload(error) {
   const socket = /^WebSocket connection to '([^']+)' failed/.exec(error.text ?? '')?.[1];
   if (!socket) return false;
-  const url = new URL(socket);
-  return url.pathname === '/_dioxus' && url.searchParams.has('build_id') && sameOrigin(socket, error.page);
+  try {
+    const url = new URL(socket);
+    const protocol = { 'ws:': 'http:', 'wss:': 'https:' }[url.protocol];
+    if (!protocol) return false;
+    url.protocol = protocol;
+    return url.pathname === '/_dioxus' && url.searchParams.has('build_id') && sameOrigin(url.href, error.page);
+  } catch {
+    return false;
+  }
 }
 
 /// Whether `error` is the network log entry of an answer `expected` describes, from the page's own
@@ -1069,6 +1077,7 @@ function expectedAnswer(error, { status, path }) {
 function ignoredBecause(scenario, provoked, error) {
   if (!networkEntry(error)) return undefined;
   if (liveReload(error)) return 'debug bundle live-reload endpoint is absent on rssr-web';
+  if (error.url && !sameOrigin(error.url, error.page)) return undefined;
   if (error.networkRequestId && provoked.has(error.networkRequestId)) {
     return 'a request the scenario failed on purpose';
   }
@@ -1135,11 +1144,17 @@ async function run() {
         error, checks: s.checks, unexpectedConsole: unexpected, ignoredConsole: ignored });
       process.stdout.write(`${ok ? 'pass' : 'FAIL'} ${scenario.name} (${Math.round((Date.now() - started) / 1000)} s)\n`);
       current = undefined;
-      for (const cleanup of s.cleanups.reverse()) await Promise.resolve(cleanup()).catch(() => {});
-      for (const page of s.pages) await page.close();
-      await main.faults.reset();
-      await main.client.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }).catch(() => {});
-      await activate(main.target.id).catch(() => {});
+      const cleanups = [...s.cleanups.reverse(), ...s.pages.map((page) => () => page.close()),
+        () => main.faults.reset(),
+        () => main.client.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }),
+        () => activate(main.target.id)];
+      for (const cleanup of cleanups) {
+        try {
+          await cleanup();
+        } catch (error) {
+          runError ??= `${scenario.name} clean-up: ${error.stack ?? error}`;
+        }
+      }
     }
   } catch (error) {
     runError = error.stack ?? String(error);
