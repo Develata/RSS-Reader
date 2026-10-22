@@ -23,6 +23,8 @@ export class ApiTraffic {
     this.client = client;
     this.entries = [];
     this.byId = new Map();
+    this.mainLoaderId = undefined;
+    this.mainLoaders = new Set();
     // When a request (job long polls aside) last started or ended.
     this.lastActivity = Date.now();
   }
@@ -34,6 +36,18 @@ export class ApiTraffic {
 
   async start() {
     const { client } = this;
+    let navigations = 0;
+    const mainDocument = (frame) => {
+      if (frame.parentId || !frame.loaderId) return;
+      this.mainLoaderId = frame.loaderId;
+      this.mainLoaders.add(frame.loaderId);
+      this.lastActivity = Date.now();
+      navigations += 1;
+    };
+    // Chrome can freeze an old document in BFCache before its pending fetch emits a terminal
+    // Network event. Keep that request in the history, but do not wait for it on another
+    // document. A BFCache restore reactivates the same loader, including its pending requests.
+    client.on('Page.frameNavigated', ({ frame }) => mainDocument(frame));
     client.on('Network.requestWillBeSent', ({ requestId, loaderId, request, redirectResponse }) => {
       if (!isApi(request.url) && !this.byId.has(requestId)) return;
       const known = this.byId.get(requestId);
@@ -66,8 +80,20 @@ export class ApiTraffic {
       Object.assign(entry, { done: true, failed: errorText ?? 'failed', canceled });
       this.touch(entry);
     });
+    await client.send('Page.enable');
+    const before = navigations;
+    const { frameTree } = await client.send('Page.getFrameTree');
+    // Do not overwrite a navigation received while the initial snapshot was on its way.
+    if (navigations === before) mainDocument(frameTree.frame);
     await client.send('Network.enable');
     return this;
+  }
+
+  /// Only a known former main document is excluded. Unknown loaders (including workers and
+  /// subframes) remain conservative: their requests must still end. History/counts are unchanged.
+  inFlight() {
+    return this.entries.filter((entry) => !entry.done && !LONG_POLL.test(entry.path)
+      && (!this.mainLoaders.has(entry.loaderId) || entry.loaderId === this.mainLoaderId));
   }
 
   /// A position in the record; `since(mark)` lists what came after.
@@ -98,18 +124,19 @@ export class ApiTraffic {
   }
 
   /// Waits until the page has settled: past the reread triggers' 200 ms window, no request in
-  /// flight and none started or ended (job long polls aside) for `quietMs` (review C4C2-05: a
-  /// request between two looks counts too).
+  /// flight for this document and none started or ended (job long polls aside) for `quietMs`
+  /// (review C4C2-05: a request between two looks counts too). A response status is not an end.
   async settled({ quietMs = 600, timeoutMs = 20000 } = {}) {
     await sleep(250);
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const busy = this.entries.some((entry) => !entry.done && !LONG_POLL.test(entry.path));
+      const busy = this.inFlight().length > 0;
       if (!busy && Date.now() - this.lastActivity >= quietMs) return;
       await sleep(50);
     }
-    const open = this.entries.filter((entry) => !entry.done && !LONG_POLL.test(entry.path));
-    throw new Error(`the page did not settle: ${open.map((entry) => `${entry.method} ${entry.path}`).join(', ')}`);
+    const open = this.inFlight();
+    throw new Error(`the page did not settle (document ${this.mainLoaderId ?? 'unknown'}): `
+      + open.map((entry) => `${entry.method} ${entry.path} [request ${entry.id}, loader ${entry.loaderId}]`).join(', '));
   }
 }
 

@@ -78,8 +78,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - name: Check browser acceptance error reporting
-        run: node --test scripts/browser/server_acceptance.test.mjs
+      - name: Check browser traffic tracking and acceptance error reporting
+        run: node --test scripts/browser/api_traffic.test.mjs scripts/browser/server_acceptance.test.mjs
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt

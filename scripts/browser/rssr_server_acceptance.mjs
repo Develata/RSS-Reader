@@ -1142,7 +1142,9 @@ async function run() {
           // A status alone cannot explain why settled() still sees an in-flight request.
           const frame = await page.client.send('Page.getFrameTree').catch(() => null);
           await writeFile(path.join(artifactDir, `${name}-traffic.json`),
-            JSON.stringify({ frame, entries: page.traffic.entries }, null, 2), 'utf8').catch(() => {});
+            JSON.stringify({ frame, mainLoaderId: page.traffic.mainLoaderId,
+              inFlightRequestIds: page.traffic.inFlight().map(entry => entry.id),
+              entries: page.traffic.entries }, null, 2), 'utf8').catch(() => {});
         }
       }
       results.push({ name: scenario.name, status: ok ? 'pass' : 'fail', seconds: Math.round((Date.now() - started) / 1000),

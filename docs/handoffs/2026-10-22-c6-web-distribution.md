@@ -82,7 +82,7 @@ C6 的实现与分支验收完成，已推送 `v0.2-architecture`。最终结果
 - 跨平台服务启动验收不能代替 GUI 实机验收；正式发布和 GHCR 推送路径未执行。
 - 本轮镜像实测为 `packaged` target；本地源码 Docker `source-built` target 仅完成接线检查，未重新执行完整源码构建。
 - 外部独立评审、真实公网 HTTPS / NAT64 出口、实际用户卷迁移仍是后续边界。
-- 常规 CI 首次网络收尾超时的根因尚未确定；重跑通过和诊断补充分别记录，保留首次失败证据。
+- 常规 CI 首次网络收尾超时已继续调查，复现并修复驱动跨文档等待缺陷；[后续交接](2026-10-22-ci-acceptance-timeouts.md)记录 BFCache 时序、修复验证及原始三次缺请求身份的归因边界。首次失败证据保留。
 - Linux/macOS runner 选择核对了 [GitHub 官方镜像列表](https://github.com/actions/runner-images/blob/main/README.md)，未用 ARM 上的编译成功冒充 Intel 实际运行。
 
 ## 给下一位 Agent 的备注
