@@ -299,10 +299,10 @@ impl Queue {
         }
     }
 
-    /// Queues nothing more (a task still waiting for room is refused once it gets some): tasks
-    /// already queued still run, and each worker ends after the last of them.
-    fn stop(&self) {
-        drop(self.sender.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take());
+    /// Queues nothing more (a task still waiting for room is refused once it gets some). Keeping
+    /// the returned sender alive lets queued tasks finish without closing their connections yet.
+    fn stop(&self) -> Option<mpsc::Sender<Arc<Pending>>> {
+        self.sender.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take()
     }
 
     /// Blocks until every worker has ended and closed its connection, and returns the first
@@ -365,12 +365,21 @@ struct Inner {
 }
 
 impl Inner {
-    /// Stops every queue first, so no queue takes tasks while another is waited for, then waits
-    /// for all of them (even after a failure).
+    /// Stops admission to every queue, then closes the readers before the writer. SQLite can
+    /// skip the final checkpoint and WAL cleanup if connections close concurrently and still
+    /// hold each other's locks. Keeping the writer alive gives it an uncontested final close.
     fn close(&self) -> StoreResult<()> {
-        let queues = || std::iter::once(&self.writer).chain(self.readers.as_ref());
-        queues().for_each(Queue::stop);
-        queues().map(Queue::wait_for_workers).fold(Ok(()), StoreResult::and)
+        let writer = self.writer.stop();
+        let readers_closed = match &self.readers {
+            Some(readers) => {
+                drop(readers.stop());
+                readers.wait_for_workers()
+            }
+            None => Ok(()),
+        };
+        // Always close and join the writer, including when a reader failed to close.
+        drop(writer);
+        readers_closed.and(self.writer.wait_for_workers())
     }
 }
 

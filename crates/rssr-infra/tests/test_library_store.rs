@@ -171,6 +171,55 @@ async fn closing_finishes_queued_tasks_and_waits_for_every_connection() {
     assert_eq!(feed_count(&reopened).await, 2);
 }
 
+/// Async and blocking callers may close the same library at once; both must wait for readers
+/// and leave a checkpointed main file even when the writer has no work left.
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_closes_wait_for_running_reads() {
+    let _watchdog = Watchdog::arm(Duration::from_secs(60));
+    let dir = TempDir::new("concurrent-close");
+    let options = StoreOptions { read_deadline: Duration::from_secs(20), ..quick() };
+    let store = LibraryStore::open_with(dir.library(), options).await.unwrap();
+    insert_feed(&store, "https://a.test").await.unwrap();
+    let (started, signal) = mpsc::channel();
+    let (release, held) = mpsc::channel();
+    let reading = {
+        let store = store.clone();
+        tokio::spawn(async move {
+            store
+                .read(move |conn| {
+                    let count: i64 =
+                        conn.query_row("SELECT count(*) FROM feeds", [], |r| r.get(0))?;
+                    started.send(()).unwrap();
+                    held.recv_timeout(Duration::from_secs(10)).unwrap();
+                    Ok(count)
+                })
+                .await
+        })
+    };
+    wait_for(signal).await;
+    let closing = {
+        let store = store.clone();
+        tokio::spawn(async move { store.close().await })
+    };
+    let blocking_close = {
+        let store = store.clone();
+        tokio::task::spawn_blocking(move || store.close_blocking())
+    };
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!closing.is_finished());
+    assert!(!blocking_close.is_finished());
+    assert!(matches!(store.read(|_| Ok(())).await, Err(StoreError::Closed)));
+    assert!(matches!(insert_feed(&store, "https://late.test").await, Err(StoreError::Closed)));
+
+    release.send(()).unwrap();
+    assert_eq!(reading.await.unwrap().unwrap(), 1);
+    for close in [closing, blocking_close] {
+        tokio::time::timeout(Duration::from_secs(10), close).await.unwrap().unwrap().unwrap();
+    }
+    assert!(!side_file(&dir.library(), "-wal").exists());
+    assert!(!side_file(&dir.library(), "-shm").exists());
+}
+
 /// A library its process left mid-checkpoint (a crash, a kill, a power loss while the log was
 /// being written back: page 1 already counts a page the file does not have) opens, and SQLite
 /// recovers it from the log; the identity probe no longer refuses it as corrupt. Without its log
