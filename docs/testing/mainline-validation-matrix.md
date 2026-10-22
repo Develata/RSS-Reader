@@ -62,6 +62,7 @@ flowchart LR
 - 同一 PR / ref 的旧 CI run 会被新 run 取消；不同 PR 不共用 concurrency group。每个 matrix 使用 `fail-fast: false`，保留其他模块的完整结果。
 - 在 Actions 的 `CI` → `Run workflow` 勾选 `acceptance_long`，默认主题的服务端验收会追加 `--long`（C4c-2 R2 为 27 场景；未勾选为 24 场景）。其余主题和套件不受影响；结果以对应 artifact 的 `assertions.json` 为准。此选项只控制测试，不触发发布。
 - 上表上限是各 matrix 的上限，不是整个 workflow 的全局配额；实际并发还取决于 GitHub runner 配额。
+- `rssr-app` 的系统库安装使用同一 Ubuntu 发行版的官方主镜像，下载设连接超时与重试，安装步骤上限为 10 分钟；整个 native job 仍为 35 分钟。下载失败须按日志区分，不记作 Rust 测试失败。
 - Rust cache 按 native crate / Web / Android / wasm 构建职责区分，只有 UI crate 安装 GTK / WebKit。UI job 不重复编译 Web 或服务器，wasm job 不重复编译契约；不上传浏览器 profile。Web / wasm 包保留 3 天，UI 断言 / 日志 / 截图保留 7 天。
 - wasm-bindgen / Dioxus 工具在独立安装目录按 OS / 架构 / 精确版本缓存，命中后仍核对实际版本；不覆盖全局 Cargo 安装登记。wasm 构建 job 先预热工具缓存，后续三个 job 通常直接恢复，缓存不可用时仍允许安装。Chrome 按解析出的精确版本缓存，只有 wasm job 安装匹配的 ChromeDriver；CDP UI job 只用 Chrome。冷缓存、artifact 传输和远端缓存服务耗时仍需真实 run 测量，编译次数减少不等于已证明总耗时同比下降。
 - 保留原 `lint-and-test` 检查名作为最终汇总，不自动修改仓库 branch protection / 发布权限。新增工作流配置仍需提交后由真实 GitHub run 验证，不能把本地检查视为已部署 CI。
