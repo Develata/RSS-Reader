@@ -155,9 +155,18 @@ jobs:
 
       - name: Install system dependencies
         if: matrix.package == 'rssr-app'
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          # The hosted runner's Azure mirror repeatedly stalled package downloads.
+          # Keep the same Ubuntu suites and packages, using the official main archive.
+          for source in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed -i 's|https\?://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"
+            fi
+          done
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y \
             pkg-config \
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
