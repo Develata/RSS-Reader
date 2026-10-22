@@ -78,11 +78,11 @@ jobs:
         with:
           version: ${{ env.DIOXUS_CLI_VERSION }}
       - name: Build one page for all service packages
-        run: dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
+        run: dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir "$RUNNER_TEMP/rssr-distribution/web-dist"
       - uses: actions/upload-artifact@v7
         with:
           name: web-package-public
-          path: target/web-dist/public/
+          path: ${{ runner.temp }}/rssr-distribution/web-dist/public/
           if-no-files-found: error
 
   linux:
@@ -108,29 +108,29 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: web-package-public
-          path: target/web-dist/public
+          path: ${{ runner.temp }}/rssr-distribution/web-dist/public
       - name: Build the Linux service and CLI for the shared page
         run: |
           cargo build --locked --release -p rssr-web -p rssr-cli
-          python3 scripts/package_web.py create --binary target/release/rssr-web --public target/web-dist/public --build-id "$RSSR_BUILD_ID" --output target/web-package/rssr-web-linux-x86_64.tar.gz
+          python3 scripts/package_web.py create --binary target/release/rssr-web --public "$RUNNER_TEMP/rssr-distribution/web-dist/public" --build-id "$RSSR_BUILD_ID" --output "$RUNNER_TEMP/rssr-distribution/web-package/rssr-web-linux-x86_64.tar.gz"
           # The image consumes this exact CLI and the archived service/page; no second build.
-          mkdir -p target/web-package/image
-          cp target/release/rssr-cli target/web-package/image/rssr-cli
-          (cd target/web-package/image && sha256sum rssr-cli > cli.sha256)
+          mkdir -p "$RUNNER_TEMP/rssr-distribution/web-package/image"
+          cp target/release/rssr-cli "$RUNNER_TEMP/rssr-distribution/web-package/image/rssr-cli"
+          (cd "$RUNNER_TEMP/rssr-distribution/web-package/image" && sha256sum rssr-cli > cli.sha256)
       - name: Verify the extracted Linux distribution
         run: |
-          python3 scripts/package_web.py unpack target/web-package/rssr-web-linux-x86_64.tar.gz target/web-verify
-          python3 scripts/smoke_web_package.py target/web-verify --logs target/web-package-check
+          python3 scripts/package_web.py unpack "$RUNNER_TEMP/rssr-distribution/web-package/rssr-web-linux-x86_64.tar.gz" "$RUNNER_TEMP/rssr-distribution/web-verify"
+          python3 scripts/smoke_web_package.py "$RUNNER_TEMP/rssr-distribution/web-verify" --logs "$RUNNER_TEMP/rssr-distribution/web-package-check"
       - uses: actions/upload-artifact@v7
         with:
           name: web-package-linux-x86_64
-          path: target/web-package/
+          path: ${{ runner.temp }}/rssr-distribution/web-package/
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: web-package-check-linux-x86_64
-          path: target/web-package-check/
+          path: ${{ runner.temp }}/rssr-distribution/web-package-check/
           if-no-files-found: ignore
 
   native:
@@ -177,23 +177,23 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: web-package-public
-          path: target/web-dist/public
+          path: ${{ runner.temp }}/rssr-distribution/web-dist/public
       - name: Build and archive the matching service and page
         run: |
           cargo build --locked --release --target ${{ matrix.target }} -p rssr-web
-          python scripts/package_web.py create --binary target/${{ matrix.target }}/release/rssr-web${{ matrix.exe }} --public target/web-dist/public --build-id "$RSSR_BUILD_ID" --output "target/web-package/$PACKAGE_FILE"
+          python scripts/package_web.py create --binary target/${{ matrix.target }}/release/rssr-web${{ matrix.exe }} --public "$RUNNER_TEMP/rssr-distribution/web-dist/public" --build-id "$RSSR_BUILD_ID" --output "$RUNNER_TEMP/rssr-distribution/web-package/$PACKAGE_FILE"
       - name: Verify the extracted native distribution
         run: |
-          python scripts/package_web.py unpack "target/web-package/$PACKAGE_FILE" target/web-verify
-          python scripts/smoke_web_package.py target/web-verify --logs target/web-package-check
+          python scripts/package_web.py unpack "$RUNNER_TEMP/rssr-distribution/web-package/$PACKAGE_FILE" "$RUNNER_TEMP/rssr-distribution/web-verify"
+          python scripts/smoke_web_package.py "$RUNNER_TEMP/rssr-distribution/web-verify" --logs "$RUNNER_TEMP/rssr-distribution/web-package-check"
       - uses: actions/upload-artifact@v7
         with:
           name: web-package-${{ matrix.platform }}
-          path: target/web-package/
+          path: ${{ runner.temp }}/rssr-distribution/web-package/
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: web-package-check-${{ matrix.platform }}
-          path: target/web-package-check/
+          path: ${{ runner.temp }}/rssr-distribution/web-package-check/
           if-no-files-found: ignore

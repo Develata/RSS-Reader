@@ -38,6 +38,7 @@
 - 四平台远端 release 包和容器卷验证：待补。本地为 debug 包，不能代替远端 release artifact。
 - 首次 Docker 手动运行 `39816937457`：Linux 在安装工具阶段失败，官方 Dioxus 0.7.9 二进制需要 `GLIBC_2.39`，bookworm 不满足；未到产品编译。修复为在宿主 runner 构建一份公共页面，四个平台下载相同页面；Linux 服务/CLI 仍在 bookworm 编译，统一 source SHA / build id 不变。
 - 同次 macOS ARM 的服务/页面编译与包校验完成，但启动临时新库时 SQLite 返回 `SQLITE_CANTOPEN_SYMLINK`（1550）：Python 临时目录为 `/var/folders/...`，macOS 的 `/var` 是系统符号链接。测试改为对自己创建的临时目录 `resolve()` 后再传入；保持产品的 `SQLITE_OPEN_NOFOLLOW` 与属主检查。部署文档补充真实路径说明。
+- run `39818454019` 的 Linux / Windows 命中 Cargo 缓存后，恢复了旧 `target/web-verify`，解压器按约定拒绝覆盖已有目录。将页面输出、打包、解压与报告移到 runner 临时目录，保留拒绝覆盖检查，不让验证目录参与 Cargo 缓存。
 - 本机启动 Docker Desktop 被自动审批拦截：提示启动应用需批准，当前策略不允许申请批准。未改用其他方式绕过；容器验收安排在不发布镜像的远端分支工作流。
 - 本地证据：`target/handoff/evidence-c6/`。
 
