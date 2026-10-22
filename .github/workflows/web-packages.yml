@@ -57,8 +57,36 @@ jobs:
               output.write('release_tag=' + tag + '\n')
           PY
 
-  linux:
+  page:
     needs: source
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RSSR_BUILD_ID: ${{ needs.source.outputs.build_id }}
+      RELEASE_TAG: ${{ needs.source.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: web-package-page
+      - uses: ./.github/actions/setup-dioxus-cli
+        with:
+          version: ${{ env.DIOXUS_CLI_VERSION }}
+      - name: Build one page for all service packages
+        run: dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-package-public
+          path: target/web-dist/public/
+          if-no-files-found: error
+
+  linux:
+    needs: [source, page]
     runs-on: ubuntu-latest
     # Build against the image's Debian baseline, not a newer hosted runner's glibc.
     container: rust:1.99-bookworm
@@ -74,17 +102,16 @@ jobs:
         run: |
           apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 update
           apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y --no-install-recommends python3 pkg-config libssl-dev
-          rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           key: web-package-bookworm
-      - uses: ./.github/actions/setup-dioxus-cli
+      - uses: actions/download-artifact@v8
         with:
-          version: ${{ env.DIOXUS_CLI_VERSION }}
-      - name: Build the Linux service, CLI and page together
+          name: web-package-public
+          path: target/web-dist/public
+      - name: Build the Linux service and CLI for the shared page
         run: |
           cargo build --locked --release -p rssr-web -p rssr-cli
-          dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
           python3 scripts/package_web.py create --binary target/release/rssr-web --public target/web-dist/public --build-id "$RSSR_BUILD_ID" --output target/web-package/rssr-web-linux-x86_64.tar.gz
           # The image consumes this exact CLI and the archived service/page; no second build.
           mkdir -p target/web-package/image
@@ -108,7 +135,7 @@ jobs:
 
   native:
     if: inputs.all_platforms
-    needs: source
+    needs: [source, page]
     strategy:
       fail-fast: false
       matrix:
@@ -140,20 +167,20 @@ jobs:
           ref: ${{ needs.source.outputs.sha }}
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown,${{ matrix.target }}
+          targets: ${{ matrix.target }}
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
       - uses: Swatinem/rust-cache@v2
         with:
           key: web-package-${{ matrix.target }}
-      - uses: ./.github/actions/setup-dioxus-cli
+      - uses: actions/download-artifact@v8
         with:
-          version: ${{ env.DIOXUS_CLI_VERSION }}
+          name: web-package-public
+          path: target/web-dist/public
       - name: Build and archive the matching service and page
         run: |
           cargo build --locked --release --target ${{ matrix.target }} -p rssr-web
-          dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
           python scripts/package_web.py create --binary target/${{ matrix.target }}/release/rssr-web${{ matrix.exe }} --public target/web-dist/public --build-id "$RSSR_BUILD_ID" --output "target/web-package/$PACKAGE_FILE"
       - name: Verify the extracted native distribution
         run: |

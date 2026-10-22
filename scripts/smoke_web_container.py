@@ -96,6 +96,7 @@ def main():
         docker('restart', '--time', '15', fresh)
         wait(origin)
         assert request('/api/v1/session')[0] == 200, 'graceful restart lost the session'
+        assert json.loads(request('/api/v1/settings')[1])['theme'] == 'light', 'restart lost the CLI write'
         checks.append('graceful restart retains session and data')
 
         legacy = volume('legacy-auth')

@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
 - 当前 HEAD（实现前）：`a13a1e5`
-- 相关 commit：commit: pending
+- 相关 commit：`129996a`（初始实现）；后续验证修复 commit: pending
 - 相关 tag / release：N/A
 - 状态：`draft`（实现与本地检查已进行，远端容器/平台验证待运行）
 
@@ -35,6 +35,7 @@
 - Python / JS 语法与四个 workflow 的 actionlint 通过。
 - Windows 真实 Chrome 新旧页面检查通过：新包 `c6-package-a13a1e5` 的页面发送自身编译标识并保存成功；旧包 `c4c-round3-e8853b6` 的实际页面连接新服务时，发送旧标识、收到 409、显示可见的重新加载提示，且未修改资料库。证据 `real-pages/result.json` 与两个 `*-browser.json`。
 - 四平台远端 release 包和容器卷验证：待补。本地为 debug 包，不能代替远端 release artifact。
+- 首次 Docker 手动运行 `39816937457`：Linux 在安装工具阶段失败，官方 Dioxus 0.7.9 二进制需要 `GLIBC_2.39`，bookworm 不满足；未到产品编译。修复为在宿主 runner 构建一份公共页面，四个平台下载相同页面；Linux 服务/CLI 仍在 bookworm 编译，统一 source SHA / build id 不变。
 - 本机启动 Docker Desktop 被自动审批拦截：提示启动应用需批准，当前策略不允许申请批准。未改用其他方式绕过；容器验收安排在不发布镜像的远端分支工作流。
 - 本地证据：`target/handoff/evidence-c6/`。
 
