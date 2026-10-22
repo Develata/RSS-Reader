@@ -88,3 +88,13 @@ C6 的实现与分支验收完成，已推送 `v0.2-architecture`。最终结果
 ## 给下一位 Agent 的备注
 
 旧 `28859c2` 复审包不包含本轮修复或 C6。后续引用准确 source SHA、workflow run、artifact 哈希及平台；不要把本地 debug 包称为最终 release artifact。
+
+## 2026-10-22 正式发版条件核对
+
+- 核对对象：本地与远端 `v0.2-architecture` 均为 `b03d4094dfdf429c9a640d8c0cc54c934e60a86f`，工作树干净。本节是同日交接追加，随本记录提交；未更改产品或 workflow。
+- GitHub API 再次确认 [CI 39830409992](https://github.com/Develata/RSS-Reader/actions/runs/39830409992) 首次运行成功，24/24 jobs 成功，源码为 `9e2c8ecb660a82b5ca7507c4e47eba4409330a8b`；该源码到 `b03d409` 只有交接与验证证据文档变化。
+- GitHub Releases 与 tag refs 查询：最新公开版为 `v0.1.23`，尚无 `v0.2*` tag。没有创建 tag、Release 或推送镜像，也没有为本次文档核对重新构建产物。
+- [已确认架构](../design/v0.2-architecture.md) 要求完成阶段 A–D 后统一发布 `v0.2.0`。阶段 D 尚未完成：`crates/rssr-app/Cargo.toml` 的 `pages-demo` 仍启用 `rssr-infra/browser-store`，三个旧 wasm harness 仍以该 feature 为前提。演示切换到内存 SQLite、迁移语义测试并删除旧存储/harness，以及实际 Pages 子路径、下载量/启动时间/内存/主线程阻塞与禁网验收，均不能由 C6 服务包验收代替。
+- [阶段 C 计划](../design/v0.2-phase-c-plan.md) 仍保留最终独立评审门禁。用户已授权的 C4c 逐项复核完成，不代表 C6 后的阶段 C 最终独立评审已完成。
+- `.github/workflows/release.yml` 明确以 tag 注入发布版本；workspace 的 `0.1.0` 是现有约定，不单独列为发版阻挡。
+- 结论：C6 实现与分支验收完成；整个 `v0.2.0` 尚不满足原定发布条件。下一步完成阶段 D、收齐阶段评审与发布前验收证据，再固定最终发布提交。旧版本已接受的验收缺项不能自动视为本版本的豁免。
