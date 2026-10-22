@@ -1,5 +1,7 @@
-use std::collections::BTreeMap;
+use std::cell::Cell;
+use std::collections::{BTreeMap, HashSet};
 
+use super::url_guard::{MAX_URL_PATH_DOTS, url_path_dots};
 use url::Url;
 
 const IMG_LAZY_SOURCE_ATTRIBUTES: &[&str] =
@@ -64,6 +66,12 @@ struct HtmlAttribute {
 }
 
 // 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
+/// 每张本地化图片允许在正文里出现的 data URL 份数：`<img>` 一份，每个 `<source>` 两份（`src` 与
+/// `srcset`），足够七个 `<source>` 加一个 `<img>` 的 `<picture>`。
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_DATA_URL_COPIES: usize = 16;
+
+// 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Default)]
 struct PictureFrame {
@@ -83,6 +91,8 @@ impl LocalizableImageDocument {
     ) -> LocalizableImageDocument {
         let tags = parse_html_tags(html);
         let document_base = resolve_document_base_url(&tags, base_url);
+        // 解析失败不占图片名额，失败的尝试也要计入解析工作量，否则可以无限次重复。
+        let budget = UrlBudget::for_input(html.len());
         let mut slots = Vec::new();
         let mut image_markup_count = 0_usize;
         let mut unresolved_slot_count = 0_usize;
@@ -101,7 +111,7 @@ impl LocalizableImageDocument {
 
                     match candidate {
                         Some(raw_source) if slots.len() < max_images => {
-                            match resolve_asset_url(&raw_source, document_base.as_ref(), base_url) {
+                            match budget.resolve(&raw_source, document_base.as_ref(), base_url) {
                                 Some(resolved_url) => {
                                     let mut rewrite_targets = frame
                                         .source_tag_indices
@@ -149,11 +159,8 @@ impl LocalizableImageDocument {
                         image_markup_count += 1;
                         match img_candidate(tag) {
                             Some(raw_source) if slots.len() < max_images => {
-                                match resolve_asset_url(
-                                    &raw_source,
-                                    document_base.as_ref(),
-                                    base_url,
-                                ) {
+                                match budget.resolve(&raw_source, document_base.as_ref(), base_url)
+                                {
                                     Some(resolved_url) => slots.push(ImageSlot {
                                         resolved_url,
                                         rewrite_targets: vec![ImageRewriteTarget {
@@ -182,6 +189,22 @@ impl LocalizableImageDocument {
         }
     }
 
+    /// 本地化后替换标签的总字节数上限；溢出时返回 `None`（调用方按超限处理）。
+    fn localized_output_allowance(
+        &self,
+        html: &str,
+        localized: &BTreeMap<usize, String>,
+    ) -> Option<usize> {
+        let mut allowance = html.len().checked_mul(2)?.checked_add(1 << 20)?;
+        for (slot_index, data_url) in localized {
+            if self.slots.get(*slot_index).is_some() {
+                let copies = data_url.len().checked_mul(MAX_DATA_URL_COPIES)?;
+                allowance = allowance.checked_add(copies)?;
+            }
+        }
+        Some(allowance)
+    }
+
     pub(crate) fn has_image_markup(&self) -> bool {
         self.image_markup_count > 0
     }
@@ -198,42 +221,54 @@ impl LocalizableImageDocument {
         &self.slots
     }
 
+    /// 把本地化成功的图片换成 data URL。一个 `<picture>` 可以带任意多个 `<source>`，同一份 data URL
+    /// 会被写进每个目标（`<source>` 的 `src` 与 `srcset` 各一份），几百 KB 的正文配一张大图就能放大成
+    /// 几十 GB。改写前先按目标算出输出增长，超过上限就整篇保留未本地化的正文。
     pub(crate) fn rewrite_html(&self, html: &str, localized: &BTreeMap<usize, String>) -> String {
         if localized.is_empty() {
             return html.to_string();
         }
 
-        let mut rewrites = BTreeMap::new();
+        // 输出上限：原正文的 2 倍加 1 MiB，再加每张本地化图片 [`MAX_DATA_URL_COPIES`] 份 data URL。
+        // 逐个替换按实际序列化长度（含属性重新转义）累计，超限立即放弃，最多多建一个标签。
+        let Some(allowance) = self.localized_output_allowance(html, localized) else {
+            return html.to_string();
+        };
+
+        // 按标签下标登记替换，再按文档顺序输出：一个 `<picture>` 可以带任意多个 `<source>` 目标，
+        // 有序映射会多出对数因子。
+        let mut replacements: Vec<Option<String>> = vec![None; self.tags.len()];
+        let mut written = 0_usize;
+        let mut any = false;
         for (slot_index, data_url) in localized {
             let Some(slot) = self.slots.get(*slot_index) else {
                 continue;
             };
             for target in &slot.rewrite_targets {
-                rewrites.insert(
-                    target.tag_index,
-                    rewrite_tag_for_localized_asset(
-                        &self.tags[target.tag_index],
-                        target.kind,
-                        data_url,
-                    ),
+                let replacement = rewrite_tag_for_localized_asset(
+                    &self.tags[target.tag_index],
+                    target.kind,
+                    data_url,
                 );
+                match written.checked_add(replacement.len()) {
+                    Some(total) if total <= allowance => written = total,
+                    _ => return html.to_string(),
+                }
+                replacements[target.tag_index] = Some(replacement);
+                any = true;
             }
         }
 
-        if rewrites.is_empty() {
+        if !any {
             return html.to_string();
         }
 
-        let mut output = String::with_capacity(html.len());
-        let mut cursor = 0_usize;
-        for (tag_index, replacement) in rewrites {
-            let tag = &self.tags[tag_index];
-            output.push_str(&html[cursor..tag.start]);
-            output.push_str(&replacement);
-            cursor = tag.end;
-        }
-        output.push_str(&html[cursor..]);
-        output
+        let rewrites = replacements
+            .into_iter()
+            .enumerate()
+            .filter_map(|(tag_index, replacement)| Some((tag_index, replacement?)))
+            .collect();
+        apply_tag_rewrites(html, &self.tags, rewrites)
     }
 }
 
@@ -245,14 +280,21 @@ impl ImageSlot {
     }
 }
 
+/// 把正文里的图片地址归一化成 WebView 能直接加载的绝对地址（懒加载属性提到 `src`，
+/// 相对地址按 `<base href>` 或 feed 地址展开）。
+///
+/// 展开相对地址会让输出变长：很长的 `<base href>` 乘上大量很短的相对地址，输出按平方放大；
+/// 每次相对地址解析还要复制一遍基地址。解析工作量与改写产生的字节数共同受 [`UrlBudget`]
+/// 约束；一旦超出，整篇原样返回、不做任何改写，而不是只改写前面一部分。
 pub fn normalize_html_for_live_display(html: &str, base_url: Option<&Url>) -> String {
     let tags = parse_html_tags(html);
     if tags.is_empty() {
         return html.to_string();
     }
 
+    let budget = UrlBudget::for_input(html.len());
     let document_base = resolve_document_base_url(&tags, base_url);
-    let mut rewrites = BTreeMap::new();
+    let mut rewrites = Vec::new();
 
     for (tag_index, tag) in tags.iter().enumerate() {
         if tag.is_end_tag {
@@ -260,19 +302,91 @@ pub fn normalize_html_for_live_display(html: &str, base_url: Option<&Url>) -> St
         }
 
         let replacement = match tag.name.as_str() {
-            "img" => normalize_img_tag_for_live_display(tag, document_base.as_ref(), base_url),
-            "source" => {
-                normalize_source_tag_for_live_display(tag, document_base.as_ref(), base_url)
+            "img" => {
+                normalize_img_tag_for_live_display(tag, document_base.as_ref(), base_url, &budget)
             }
+            "source" => normalize_source_tag_for_live_display(
+                tag,
+                document_base.as_ref(),
+                base_url,
+                &budget,
+            ),
             _ => None,
         };
+        if budget.exhausted() {
+            return html.to_string();
+        }
 
         if let Some(replacement) = replacement.filter(|replacement| replacement != &tag.raw) {
-            rewrites.insert(tag_index, replacement);
+            // 改写后的标签要重新转义所有属性值，引号之类的字符会变长，一并计入预算。
+            if !budget.charge(replacement.len()) {
+                return html.to_string();
+            }
+            rewrites.push((tag_index, replacement));
         }
     }
 
     apply_tag_rewrites(html, &tags, rewrites)
+}
+
+/// 归一化的工作量与产出上限：输入长度的 2 倍加 1 MiB。计入三项：每次解析地址前，原始地址与
+/// 可能用到的基地址的长度（`Url::join` 会复制基地址）；解析出的地址长度；改写后整个标签的长度。
+/// 正常正文里每个图片地址最多展开一个 feed 地址那么长，远在上限之内；超出说明是在用短相对地址
+/// 放大长的基地址，或用需要转义的字符放大标签。
+struct UrlBudget {
+    remaining: Cell<usize>,
+    exhausted: Cell<bool>,
+}
+
+impl UrlBudget {
+    const BASE_BYTES: usize = 1 << 20;
+    const BYTES_PER_INPUT_BYTE: usize = 2;
+
+    fn for_input(len: usize) -> Self {
+        let limit = Self::BASE_BYTES.saturating_add(Self::BYTES_PER_INPUT_BYTE.saturating_mul(len));
+        Self { remaining: Cell::new(limit), exhausted: Cell::new(false) }
+    }
+
+    fn exhausted(&self) -> bool {
+        self.exhausted.get()
+    }
+
+    /// 扣除 `bytes`；不够时标记用完并返回 `false`，之后的扣除一律失败。
+    fn charge(&self, bytes: usize) -> bool {
+        if self.exhausted() {
+            return false;
+        }
+        match self.remaining.get().checked_sub(bytes) {
+            Some(remaining) => {
+                self.remaining.set(remaining);
+                true
+            }
+            None => {
+                self.exhausted.set(true);
+                false
+            }
+        }
+    }
+
+    /// 与 [`resolve_asset_url`] 相同，但解析前先按原始地址与基地址的长度扣预算（解析的工作量），
+    /// 解析后再按结果长度扣；预算用完后一律返回 `None`。
+    fn resolve(
+        &self,
+        raw: &str,
+        document_base_url: Option<&Url>,
+        fallback_base_url: Option<&Url>,
+    ) -> Option<Url> {
+        let base_len = |base: Option<&Url>| base.map_or(0, |base| base.as_str().len());
+        let work = raw
+            .len()
+            .saturating_add(base_len(document_base_url))
+            .saturating_add(base_len(fallback_base_url));
+        if !self.charge(work) {
+            return None;
+        }
+        let resolved = resolve_asset_url(raw, document_base_url, fallback_base_url)?;
+        self.charge(resolved.as_str().len()).then_some(resolved)
+    }
 }
 
 // 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
@@ -485,10 +599,11 @@ fn normalize_img_tag_for_live_display(
     tag: &HtmlTag,
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
+    budget: &UrlBudget,
 ) -> Option<String> {
     let mut changes = BTreeMap::new();
     let display_src = img_display_src(tag).and_then(|raw_candidate| {
-        resolve_asset_url(&raw_candidate, document_base_url, fallback_base_url)
+        budget.resolve(&raw_candidate, document_base_url, fallback_base_url)
     });
 
     if let Some(display_src) = display_src {
@@ -497,7 +612,7 @@ fn normalize_img_tag_for_live_display(
         changes.insert("data-srcset".to_string(), None);
         changes.insert("sizes".to_string(), None);
     } else if let Some(srcset) =
-        normalize_srcset_attribute(tag, document_base_url, fallback_base_url)
+        normalize_srcset_attribute(tag, document_base_url, fallback_base_url, budget)
     {
         changes.insert("srcset".to_string(), Some(srcset));
         if attribute_value(tag, "data-srcset").is_some() {
@@ -515,16 +630,19 @@ fn normalize_source_tag_for_live_display(
     tag: &HtmlTag,
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
+    budget: &UrlBudget,
 ) -> Option<String> {
     let mut changes = BTreeMap::new();
 
     if let Some(raw_src) = attribute_value(tag, "src")
-        && let Some(resolved) = resolve_asset_url(raw_src, document_base_url, fallback_base_url)
+        && let Some(resolved) = budget.resolve(raw_src, document_base_url, fallback_base_url)
     {
         changes.insert("src".to_string(), Some(resolved.to_string()));
     }
 
-    if let Some(srcset) = normalize_srcset_attribute(tag, document_base_url, fallback_base_url) {
+    if let Some(srcset) =
+        normalize_srcset_attribute(tag, document_base_url, fallback_base_url, budget)
+    {
         changes.insert("srcset".to_string(), Some(srcset));
         if attribute_value(tag, "data-srcset").is_some() {
             changes.insert("data-srcset".to_string(), None);
@@ -552,22 +670,26 @@ fn normalize_srcset_attribute(
     tag: &HtmlTag,
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
+    budget: &UrlBudget,
 ) -> Option<String> {
     attribute_value(tag, "data-srcset")
         .or_else(|| attribute_value(tag, "srcset"))
-        .and_then(|raw| normalize_srcset(raw, document_base_url, fallback_base_url))
+        .and_then(|raw| normalize_srcset(raw, document_base_url, fallback_base_url, budget))
 }
 
 fn normalize_srcset(
     raw: &str,
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
+    budget: &UrlBudget,
 ) -> Option<String> {
     // 浏览器会丢弃描述符无效的候选，归一化后的 srcset 同样不再保留它们。
     let normalized = srcset_candidates(raw)
+        .take_while(|_| !budget.exhausted())
         .filter(|candidate| srcset_descriptor_score(&candidate.descriptors).is_some())
         .map(|candidate| {
-            let url = resolve_asset_url(candidate.url, document_base_url, fallback_base_url)
+            let url = budget
+                .resolve(candidate.url, document_base_url, fallback_base_url)
                 .map_or_else(|| candidate.url.to_string(), |resolved| resolved.to_string());
             candidate.with_url(&url)
         })
@@ -766,16 +888,31 @@ fn is_floating_point_number(value: &str) -> bool {
     }
 }
 
+/// 点数上限见 [`MAX_URL_PATH_DOTS`]：`url` 处理每个 `..` 段都要反向扫描一遍，
+/// 在根路径上会扫过整个 authority，点数不设限就是平方级。
 pub(crate) fn resolve_asset_url(
     raw: &str,
     document_base_url: Option<&Url>,
     fallback_base_url: Option<&Url>,
 ) -> Option<Url> {
+    if url_path_dots(raw) > MAX_URL_PATH_DOTS {
+        return None;
+    }
+    // 结果只接受 http/https：非 http 的基地址（feed 里的文章链接不限 scheme）拼出来的地址也会被
+    // 丢掉，不必先付一遍复制它的代价。
     Url::parse(raw)
         .ok()
-        .or_else(|| document_base_url.and_then(|base| base.join(raw).ok()))
-        .or_else(|| fallback_base_url.and_then(|base| base.join(raw).ok()))
-        .filter(|resolved| matches!(resolved.scheme(), "http" | "https"))
+        .or_else(|| web_base(document_base_url).and_then(|base| base.join(raw).ok()))
+        .or_else(|| web_base(fallback_base_url).and_then(|base| base.join(raw).ok()))
+        .filter(is_web_url)
+}
+
+fn is_web_url(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https")
+}
+
+fn web_base(base: Option<&Url>) -> Option<&Url> {
+    base.filter(|base| is_web_url(base))
 }
 
 // 仅正文图片本地化（原生端）使用；Web 端不做本地化，门控掉避免在 wasm 构建里变成死代码。
@@ -802,7 +939,8 @@ fn rewrite_tag_for_localized_asset(
     rewrite_tag_attributes(tag, &changes)
 }
 
-fn apply_tag_rewrites(html: &str, tags: &[HtmlTag], rewrites: BTreeMap<usize, String>) -> String {
+/// `rewrites` 按标签下标升序排列（调用方按文档顺序收集）。
+fn apply_tag_rewrites(html: &str, tags: &[HtmlTag], rewrites: Vec<(usize, String)>) -> String {
     if rewrites.is_empty() {
         return html.to_string();
     }
@@ -827,21 +965,26 @@ fn rewrite_tag_attributes(tag: &HtmlTag, changes: &BTreeMap<String, Option<Strin
     let mut output = String::from("<");
     output.push_str(&tag.original_name);
 
-    let mut applied = BTreeMap::new();
+    // 同名属性只保留第一个，与浏览器的解析结果一致；否则改写后的长地址会写进每一个重复的
+    // `src`，几个字节的重复属性就能把输出放大成地址长度的倍数。
+    // 预先按属性个数分配：从空表逐个插入时，每次扩容都会重新哈希已有的（可能很长的）属性名。
+    let mut seen = HashSet::with_capacity(tag.attributes.len());
     for attribute in &tag.attributes {
+        if !seen.insert(attribute.name.as_str()) {
+            continue;
+        }
         let Some(change) = changes.get(&attribute.name) else {
             push_attribute(&mut output, &attribute.original_name, attribute.value.as_deref());
             continue;
         };
 
-        applied.insert(attribute.name.clone(), true);
         if let Some(value) = change {
             push_attribute(&mut output, &attribute.original_name, Some(value));
         }
     }
 
     for (name, value) in changes {
-        if applied.contains_key(name) {
+        if seen.contains(name.as_str()) {
             continue;
         }
         if let Some(value) = value {
@@ -896,9 +1039,15 @@ fn decode_html_attribute_entities_once(raw: &str) -> String {
         let start = cursor + relative_start;
         output.push_str(&raw[cursor..start]);
 
-        let Some(relative_end) = raw[start + 1..].find(';') else {
-            output.push_str(&raw[start..]);
-            return output;
+        // 只在实体名可能的长度之内找分号：不限长的话，一长串 `&` 共用末尾同一个分号，
+        // 每个 `&` 都要扫到底，整体平方级。分号是单字节字符，找到的位置一定是字符边界。
+        let window_end = raw.len().min(start + 2 + MAX_ENTITY_NAME_BYTES);
+        let Some(relative_end) =
+            raw.as_bytes()[start + 1..window_end].iter().position(|&byte| byte == b';')
+        else {
+            output.push('&');
+            cursor = start + 1;
+            continue;
         };
 
         let end = start + 1 + relative_end;
@@ -915,6 +1064,9 @@ fn decode_html_attribute_entities_once(raw: &str) -> String {
     output.push_str(&raw[cursor..]);
     output
 }
+
+/// 能解码的实体名（`amp`、`#x10FFFF`、带前导零的十进制等）的最大字节数。
+const MAX_ENTITY_NAME_BYTES: usize = 32;
 
 fn decode_html_entity(entity: &str) -> Option<char> {
     match entity {
@@ -970,10 +1122,112 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        LocalizableImageDocument, normalize_html_for_live_display, normalize_image_content_type,
-        resolve_asset_url, srcset_candidates,
+        LocalizableImageDocument, decode_html_attribute_entities, normalize_html_for_live_display,
+        normalize_image_content_type, resolve_asset_url, srcset_candidates,
     };
     use url::Url;
+
+    #[test]
+    fn attribute_entities_decode_within_a_bounded_window() {
+        assert_eq!(decode_html_attribute_entities("a &amp; b &#x41;&#66;"), "a & b AB");
+        assert_eq!(decode_html_attribute_entities("&&amp;&lt;"), "&&<");
+        assert_eq!(decode_html_attribute_entities("&#0000000065;"), "A");
+        // 名字超过实体长度上限的不是实体，原样保留，后面的实体照常解码。
+        let long = format!("&{};&amp;", "x".repeat(40));
+        assert_eq!(decode_html_attribute_entities(&long), format!("&{};&", "x".repeat(40)));
+        // 多字节字符紧跟在 `&` 后面也不会切到字符中间。
+        assert_eq!(decode_html_attribute_entities("&数据;&amp;"), "&数据;&");
+    }
+
+    #[test]
+    fn url_expansion_over_budget_leaves_the_whole_body_unchanged() {
+        let base = format!("https://example.com/{}/", "a".repeat(64 * 1024));
+        let html = format!(r#"<base href="{base}"><p>x</p>{}"#, "<img src=x>".repeat(64));
+        let normalized = normalize_html_for_live_display(&html, None);
+        assert_eq!(normalized, html, "no partial rewrite");
+
+        // 同样的基地址，图片少时仍正常展开。
+        let html = format!(r#"<base href="{base}"><img src=x>"#);
+        let normalized = normalize_html_for_live_display(&html, None);
+        assert!(normalized.contains(&format!(r#"<img src="{base}x">"#)));
+    }
+
+    #[test]
+    fn urls_with_many_dot_segments_are_not_resolved() {
+        let base = Url::parse("https://example.com/a/b/").unwrap();
+        assert!(resolve_asset_url("../../c.png", Some(&base), None).is_some());
+        assert!(resolve_asset_url("/x.png?v=1.2.3", Some(&base), None).is_some());
+        let dots = format!("https://{}@e.test/{}", "a".repeat(1 << 16), "../".repeat(1 << 16));
+        assert!(resolve_asset_url(&dots, None, None).is_none());
+        let encoded = format!("{}c.png", "%2e%2E/".repeat(64));
+        assert!(resolve_asset_url(&encoded, Some(&base), None).is_none());
+        // 解析器会删掉 TAB/LF/CR，拆开的 `%2\ne` 仍是一个点。
+        let split = format!("{}c.png", "%2\ne%2\ne/".repeat(64));
+        assert!(resolve_asset_url(&split, Some(&base), None).is_none());
+        // 非 http 的基地址不参与拼接。
+        let file_base = Url::parse("file:///tmp/").unwrap();
+        assert!(resolve_asset_url("x.png", Some(&file_base), None).is_none());
+        // 查询串里的点不算。
+        let query = format!("/c.png?{}", ".".repeat(1_000));
+        assert!(resolve_asset_url(&query, Some(&base), None).is_some());
+    }
+
+    #[test]
+    fn failed_localizer_resolutions_are_charged() {
+        // 评审反例：解析失败不占图片名额；巨大的非 http 基地址曾被每个相对地址复制一遍。
+        let file_base = Url::parse(&format!("file:///{}", "a".repeat(1 << 20))).unwrap();
+        let html = "<img src=x>".repeat(65_536);
+        let document = LocalizableImageDocument::parse(&html, Some(&file_base), 16);
+        assert!(document.slots().is_empty());
+
+        // http 基地址同样受解析工作量约束：成功的名额用完前，失败的尝试也会耗尽预算。
+        let web_base = Url::parse(&format!("https://e.test/{}", "a".repeat(1 << 20))).unwrap();
+        let html = r#"<img src="http://[">"#.repeat(65_536);
+        let document = LocalizableImageDocument::parse(&html, Some(&web_base), 16);
+        assert!(document.slots().is_empty());
+
+        // 预算耗尽是持续的：失败的尝试用完预算后，后面本可解析的图片也不再解析。
+        let web_base = Url::parse(&format!("https://e.test/{}", "a".repeat(1 << 18))).unwrap();
+        let html = r#"<img src="http://[">"#.repeat(3) + r#"<img src="ok.png">"#;
+        let document = LocalizableImageDocument::parse(&html, Some(&web_base), 1);
+        assert!(document.slots().is_empty());
+        let document = LocalizableImageDocument::parse(r#"<img src="ok.png">"#, Some(&web_base), 1);
+        assert_eq!(document.slots().len(), 1, "a single image still fits the budget");
+    }
+
+    #[test]
+    fn localized_rewrites_cannot_multiply_one_image_without_bound() {
+        let html = format!(
+            r#"<picture>{}<img src="https://e.test/a"></picture>"#,
+            r#"<source srcset="https://e.test/a">"#.repeat(2_000)
+        );
+        let document = LocalizableImageDocument::parse(&html, None, 1);
+        let data_url = format!("data:image/png;base64,{}", "A".repeat(1 << 20));
+        let localized = BTreeMap::from([(0, data_url.clone())]);
+        assert_eq!(document.rewrite_html(&html, &localized), html);
+
+        // 属性重新转义让标签变长，也算进上限。
+        let html = format!(r#"<img src="https://e.test/i" title='{}'>"#, "\"".repeat(1 << 20));
+        let document = LocalizableImageDocument::parse(&html, None, 1);
+        let small = BTreeMap::from([(0, "data:image/png;base64,AAAA".to_string())]);
+        assert_eq!(document.rewrite_html(&html, &small), html);
+
+        // 普通的 picture（两个 source）照常本地化。
+        let html = r#"<picture><source srcset="https://e.test/a"><source srcset="https://e.test/a"><img src="https://e.test/a"></picture>"#;
+        let document = LocalizableImageDocument::parse(html, None, 1);
+        let localized = BTreeMap::from([(0, data_url.clone())]);
+        assert_eq!(document.rewrite_html(html, &localized).matches(&data_url).count(), 5);
+    }
+
+    #[test]
+    fn srcset_candidates_share_the_url_budget() {
+        let base = format!("https://example.com/{}/", "a".repeat(64 * 1024));
+        let html = format!(
+            r#"<base href="{base}"><picture><source srcset="{}"></picture>"#,
+            vec!["x"; 64].join(", ")
+        );
+        assert_eq!(normalize_html_for_live_display(&html, None), html);
+    }
 
     /// `(srcset, [(URL, 描述符)])`
     type SrcsetCase<'a> = (&'a str, &'a [(&'a str, &'a [&'a str])]);

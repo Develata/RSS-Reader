@@ -20,6 +20,7 @@ wasm-contracts = [
     "test_library_unicode_title_search",
     "test_library_refresh_tickets",
     "wasm_memory_store",
+    "wasm_reader_html_contract_harness",
     "test_opml_interop",
 ]
 
@@ -82,6 +83,7 @@ wasm-bindgen-futures = "0.4"
 rssr-application = { path = "../rssr-application" }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen = "0.2"
 wasm-bindgen-test = "0.3"
 
 [target.'cfg(unix)'.dev-dependencies]

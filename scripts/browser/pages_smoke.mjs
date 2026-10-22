@@ -17,6 +17,7 @@ const network = [];
 const externalImages = new Map();
 const requests = new Map();
 const transfers = [];
+const articleRendering = [];
 client.on('Network.loadingFinished', ({ requestId, encodedDataLength }) => {
   const request = requests.get(requestId);
   if (request) transfers.push({ ...request, encodedDataLength });
@@ -132,6 +133,29 @@ try {
     await waitFor(`!!document.querySelector('[data-slot="reader-body-html"]')`);
     assert.equal(await evaluate(client, `document.querySelector('[data-action="open-original"]').href`), entry.url);
     assert.ok(await evaluate(client, `document.querySelector('[data-slot="reader-body-html"]').textContent.trim().length > 100`));
+    await evaluate(client, `Promise.race([
+      Promise.all([...document.querySelectorAll('[data-slot="reader-body-html"] img')].map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
+        img.addEventListener('load', resolve, {once:true}); img.addEventListener('error', resolve, {once:true});
+      }))), new Promise(resolve => setTimeout(resolve, 5000))
+    ]).then(() => true)`);
+    const rendering = await evaluate(client, `({
+      title: document.querySelector('[data-slot="reader-title"]').textContent,
+      math: document.querySelectorAll('[data-slot="reader-body-html"] math').length,
+      mathLayout: [...document.querySelectorAll('[data-slot="reader-body-html"] math')].map(math => ({
+        namespace: math.namespaceURI, width: math.getBoundingClientRect().width,
+        height: math.getBoundingClientRect().height
+      })),
+      images: [...document.querySelectorAll('[data-slot="reader-body-html"] img')].map(img => ({
+        src: img.currentSrc || img.src, alt: img.alt, complete: img.complete,
+        naturalWidth: img.naturalWidth, width: img.getBoundingClientRect().width,
+        formula: img.classList.contains('latex')
+      }))
+    })`);
+    articleRendering.push(rendering);
+    const raw = entry.content_html ?? '';
+    assert.equal(rendering.math, (raw.match(/<math(?:\s|\/?>)/g) ?? []).length, `${entry.title}: every MathML formula survives`);
+    assert.ok(rendering.mathLayout.every(math => math.namespace === 'http://www.w3.org/1998/Math/MathML' && math.width > 0 && math.height > 0), `${entry.title}: formulas have MathML layout`);
+    assert.equal(rendering.images.filter(img => img.formula).length, (raw.match(/class="latex"/g) ?? []).length, `${entry.title}: formula images survive`);
     if (process.env.PAGES_SMOKE_LOG_DIR && (index === 0 || index === entries.length - 1)) {
       await evaluate(client, 'document.fonts.ready.then(() => true)');
       const { data } = await client.send('Page.captureScreenshot');
@@ -146,14 +170,14 @@ try {
   assert.deepEqual(network, [], 'demo must not fetch feeds or auto-refresh');
   assert.deepEqual(failures, [], 'bundle assets and runtime must load without errors');
   const result = { status: 'pass', fetched_at: snapshot.fetched_at, feeds: snapshot.feeds.length, articles: entries.length,
-    storage: 'memory-sqlite', reloadResets: true, startup, heap, transfers,
+    storage: 'memory-sqlite', reloadResets: true, startup, heap, transfers, articleRendering,
     sourceHashes: snapshot.feeds.map(({ source, sha256 }) => ({ url: source.url, sha256 })), externalImages: [...externalImages.values()] };
   if (process.env.PAGES_SMOKE_LOG_DIR) await writeFile(join(process.env.PAGES_SMOKE_LOG_DIR, 'result.json'), JSON.stringify(result, null, 2));
   console.log(`Pages smoke passed: ${result.feeds} real feeds, ${result.articles} articles, reader, 404 deep link, prefix, reload reset, blocked add/refresh`);
 } catch (error) {
   const logDir = process.env.PAGES_SMOKE_LOG_DIR;
   if (logDir) {
-    await writeFile(join(logDir, 'failure.json'), JSON.stringify({ error: String(error), failures, network, externalImages: [...externalImages.values()] }, null, 2));
+    await writeFile(join(logDir, 'failure.json'), JSON.stringify({ error: String(error), failures, network, articleRendering, externalImages: [...externalImages.values()] }, null, 2));
     try {
       const { data } = await client.send('Page.captureScreenshot');
       await writeFile(join(logDir, 'failure.png'), Buffer.from(data, 'base64'));

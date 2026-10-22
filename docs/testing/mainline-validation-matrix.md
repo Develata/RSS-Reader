@@ -41,7 +41,7 @@
 | `web-smoke` | 四组 wasm Clippy（全部 `-D warnings`）：app 正式 Web、app `pages-demo`、infra 无额外 feature、infra `memory-store,http-backend --tests`；Dioxus 0.7.9 正式 Web release bundle，同次构建服务器与夹具工具，上传 `ci-web-public` / `ci-web-server` | 40 分钟 |
 | `web-ui` / default + 4 builtin themes | 下载同次页面/服务器/夹具工具，每主题运行 `regression`；默认主题另跑 `theme-matrix`、`feed-smoke`、`acceptance`。push / PR 默认短验收；手动 `acceptance_long=true` 纳入全部长场景 | 3 / 每主题 15 分钟 |
 | `wasm-contract-build` | 一个锁定依赖的 Cargo 调用准备全部 harness，上传精确产物；预热 wasm-bindgen 工具缓存 | 35 分钟 |
-| `wasm-browser-contract` / 13 targets | 下载同一批产物，运行共享 SQL 契约与 WASM 执行器案例，不再运行 Cargo | 3 / 每 target 15 分钟 |
+| `wasm-browser-contract` / 14 targets | 下载同一批产物，运行共享 SQL、WASM 执行器与正文重解析契约，不再运行 Cargo | 3 / 每 target 15 分钟 |
 | `android-smoke` | 锁定 NDK / ARM64 app + CLI check、app bundle、APK 资源 / ABI / version 断言；`~/.gradle` 按 dx 版本与 Android 输入缓存 | 50 分钟 |
 | `lint-and-test` | 汇总所有 jobs，只有全部 success 才通过；失败、取消、意外跳过均拒绝 | 5 分钟 |
 
@@ -54,7 +54,7 @@ flowchart LR
   N --> G
   U --> G
   W --> CB[Wasm build once]
-  CB --> C[Wasm contracts × 13]
+  CB --> C[Wasm contracts × 14]
   C --> G
   A[Android smoke] --> G
 ```

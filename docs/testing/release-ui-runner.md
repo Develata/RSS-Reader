@@ -19,7 +19,7 @@ Windows 显式选择 Git Bash（`RSSR_BASH` 或 `--bash`），保持 Cargo、dx�
 
 `summary.json` / `summary.md` 记录每阶段状态与退出码；skipped 不等于通过，failed/interrupted/blocked 表示失败、中断或未运行。`completed` 仅说明选中的命令结束，不代表人工验收。构建与日志规则见 [服务器浏览器回归](./server-web-regression.md)。
 
-`--with-browser-contracts` / `--full` 运行 13 个共享 SQL 与内存执行器 targets；旧三个浏览器存储 harness 已退役。逐项语义对应见 [阶段 D 迁移表](./phase-d-browser-contract-migration.md)。
+`--with-browser-contracts` / `--full` 运行 14 个共享 SQL、内存执行器与正文 targets；旧三个浏览器存储 harness 已退役。逐项语义对应见 [阶段 D 迁移表](./phase-d-browser-contract-migration.md)。
 
 独立 runner 校验：
 

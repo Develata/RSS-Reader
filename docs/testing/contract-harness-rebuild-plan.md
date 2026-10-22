@@ -6,7 +6,7 @@
 
 原生与 Pages 用同一份 SQL 仓储、迁移器和测试源码。测试通过 `cfg_attr` 分别在 native Tokio 和真实 Chrome 的 wasm-bindgen-test 中运行；浏览器构建由 `memory-store` 启用。正式 Web 的 HttpBackend 另用服务器契约及真实 UI 验收。
 
-`crates/rssr-infra/Cargo.toml` 的 `package.metadata.rssr.wasm-contracts` 列出完整浏览器矩阵：订阅、配置交换、刷新、I/P/D 序号、查询与导航、Unicode 搜索、设置、原子性、OPML 和执行器。各 target 在两端同名；`wasm_memory_store` 只测浏览器执行器。
+`crates/rssr-infra/Cargo.toml` 的 `package.metadata.rssr.wasm-contracts` 列出完整浏览器矩阵：订阅、配置交换、刷新、I/P/D 序号、查询与导航、Unicode 搜索、设置、原子性、OPML、执行器和正文重解析。各 target 在两端同名；`wasm_memory_store` 只测浏览器执行器；`wasm_reader_html_contract_harness` 验证 MathML 命名空间、重解析安全与窄屏布局。
 
 旧三个 harness、BrowserStore 与 Web Locks/localStorage 存储层已删除。69 项旧测试的迁移或退役理由见 [逐项对照](phase-d-browser-contract-migration.md)。旧存储配额、双槽、缓存 epoch 不属于 SQLite 的契约，不报告为“迁移通过”。
 

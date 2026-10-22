@@ -34,7 +34,7 @@ cargo test -p rssr-infra --test test_library_entry_state_and_search --locked
 # 按名称过滤单元测试
 cargo test -p rssr-application --locked <test_name>
 
-# wasm 浏览器契约（13 个共享 SQL / 执行器 targets；列表见 infra package.metadata.rssr.wasm-contracts）
+# wasm 浏览器契约（14 个共享 SQL / 执行器 / 正文 targets；列表见 infra package.metadata.rssr.wasm-contracts）
 # 需要锁文件匹配的 wasm-bindgen-cli（当前 0.2.128）、clang / llvm-ar 和 Chrome for Testing
 bash scripts/run_wasm_contract_harness.sh test_library_refresh_contract_harness wasm_memory_store
 

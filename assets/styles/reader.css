@@ -63,6 +63,13 @@
   max-width: 100%;
 }
 
+/* Native MathML keeps its own inline/block behavior and cannot widen the reader. */
+[data-slot="reader-body-html"] math {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 [data-slot="reader-body-html"] a {
   color: var(--accent-strong);
   text-decoration: underline;

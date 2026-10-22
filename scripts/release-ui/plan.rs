@@ -164,7 +164,7 @@ pub fn build(options: &Options) -> Vec<Step> {
         browser,
         "bash",
         words(
-            "scripts/run_wasm_contract_harness.sh test_library_refresh_contract_harness test_library_subscription_contract_harness test_library_config_exchange_contract_harness test_library_contracts test_library_entry_state_and_search test_library_queries test_library_refresh_tickets test_library_persistence_atomicity test_library_application_refresh_store_adapter test_library_settings_repository test_library_unicode_title_search test_opml_interop wasm_memory_store",
+            "scripts/run_wasm_contract_harness.sh test_library_refresh_contract_harness test_library_subscription_contract_harness test_library_config_exchange_contract_harness test_library_contracts test_library_entry_state_and_search test_library_queries test_library_refresh_tickets test_library_persistence_atomicity test_library_application_refresh_store_adapter test_library_settings_repository test_library_unicode_title_search test_opml_interop wasm_memory_store wasm_reader_html_contract_harness",
         ),
         "browser-contracts.log",
         None,

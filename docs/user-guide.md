@@ -84,6 +84,10 @@ Linux `/usr/bin` 安装版的数据目录是 `$XDG_DATA_HOME/rss-reader/`，未�
 
 正式 Web 不要求 Web Locks 来保存资料库；本地存储仅用于设备偏好或临时草稿。`pages-demo` 演示将预抓取 RSS 载入内存 SQLite，资料库操作重新加载即重置，设备偏好单独保存；旧浏览器文章库不读取、不清除，在线订阅、WebDAV 和自动刷新禁用。详见 [Pages 边界](./deployment/github-pages.md)。
 
+## 数学公式与复杂正文
+
+阅读页保留正文中的 MathML 展示公式；KaTeX 同时提供 MathML 和 HTML 时只显示一份。超宽公式可横向滚动，WordPress 的 LaTeX 图片仍需原站可访问。单个公式过深、过大或文章公式总量超限时，优先显示其 TeX / 文字说明；没有可用说明时显示占位提示。异常 HTML 超出解析预算时整篇显示为纯文本，资料库保存的原始正文不变。
+
 ## 其他平台说明
 
 单独解压的 Linux CLI 仍按便携版规则使用自身旁边的数据目录；若要操作 `.deb` 桌面端的数据，请用全局 `--data-dir`（或环境变量 `RSSR_DATA_DIR`）明确指向上述数据目录，避免误以为两个不同目录中的库会自动合并。
