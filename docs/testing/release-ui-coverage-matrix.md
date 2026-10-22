@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | app wasm 构建、单元测试、内置主题契约 | `bash scripts/run_release_ui_regression.sh` | 自动化；不等于页面已验收 |
 | 原生共享用例契约 | 三个 `test_library_*_contract_harness`；聚合门禁 | 自动化，真实 SQLite |
-| 演示的 BrowserStore 契约 | `bash scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness wasm_subscription_contract_harness wasm_config_exchange_contract_harness` | 自动化，独立浏览器；不能替代 HttpBackend |
+| 原生 / 演示共享 SQL 契约 | `bash scripts/run_wasm_contract_harness.sh test_library_refresh_contract_harness test_library_subscription_contract_harness test_library_config_exchange_contract_harness` | 自动化，独立浏览器；不能替代 HttpBackend |
 | 服务器 API、认证、HttpBackend | `cargo test --locked -p rssr-web` | 自动化，含真实路由与故障注入 |
 | 正式 Web 内部路由、列表、订阅、设置、阅读页 | `bash scripts/run_server_web_regression.sh --suite regression` | 自动化，真实登录与 SQLite 夹具 |
 | 手机/桌面几何、导航、搜索、触控、分页、图片、键盘与文字选择 | `regression`，用 `--preset` 选择主题 | 自动化 + 截图复核；WebView2 / Android 另验 |

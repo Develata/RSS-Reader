@@ -1,7 +1,10 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 
 //! The library's `LibraryQueryPort`: what each aggregate read returns. That all parts come from
 //! one snapshot is the store's read transaction (`test_library_store::a_read_task_sees_one_snapshot`).
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "support/library.rs"]
 mod library;
@@ -12,7 +15,7 @@ use rssr_domain::{
     AppStateRepository, ArchiveFilter, EntryIndexRepository, EntryQuery, FeedRepository,
     SettingsRepository, StartupView, UserSettings,
 };
-use time::{Duration, OffsetDateTime};
+use time::Duration;
 
 async fn remember(library: &Library, feed_id: i64) {
     library
@@ -22,11 +25,88 @@ async fn remember(library: &Library, feed_id: i64) {
         .expect("save last opened feed");
 }
 
-#[tokio::test]
+/// Migrated from the browser harness: missing dates, tied dates and default unread flags must
+/// give reader navigation exactly the same ordering as the list. SQL foreign keys rule out
+/// orphan feeds; deleted feeds cover the excluded entries here.
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn navigation_matches_list_order_with_missing_dates_ties_and_deleted_feeds() {
+    use rssr_domain::EntryNavigation;
+    let library = Library::memory().await;
+    for id in 1..=4 {
+        library.add_feed(&format!("https://example.com/{id}")).await;
+    }
+    library.exec("WITH RECURSIVE seq(id) AS (VALUES(1) UNION ALL SELECT id+1 FROM seq WHERE id<128)
+        INSERT INTO entries(id, feed_id, external_id, dedup_key, title, title_search,
+                            published_at, first_seen_at, created_at, updated_at, is_read)
+        SELECT id, id%4+1, CAST(id AS TEXT), CAST(id AS TEXT), 'Entry', 'entry',
+               CASE WHEN id%3<>0 THEN strftime('%Y-%m-%dT%H:%M:%SZ', (id*17%13)*3600, 'unixepoch') END,
+               strftime('%Y-%m-%dT%H:%M:%SZ', (id*17%13)*3600, 'unixepoch'),
+               strftime('%Y-%m-%dT%H:%M:%SZ', (id*17%13)*3600, 'unixepoch'),
+               '1970-01-01T00:00:00Z', id%5=0 FROM seq;
+        UPDATE feeds SET is_deleted=1 WHERE id IN (3,4)").await;
+    let ordered = library.entries.list_entries(&EntryQuery::default()).await.unwrap();
+    assert_eq!(ordered.len(), 64);
+    for id in 0..=129 {
+        let expected = ordered
+            .iter()
+            .position(|entry| entry.id == id)
+            .map(|index| {
+                let current = &ordered[index];
+                let before = &ordered[..index];
+                let after = &ordered[index + 1..];
+                EntryNavigation {
+                    previous_unread_entry_id: before
+                        .iter()
+                        .rev()
+                        .find(|entry| !entry.is_read)
+                        .map(|entry| entry.id),
+                    next_unread_entry_id: after
+                        .iter()
+                        .find(|entry| !entry.is_read)
+                        .map(|entry| entry.id),
+                    previous_feed_entry_id: before
+                        .iter()
+                        .rev()
+                        .find(|entry| entry.feed_id == current.feed_id)
+                        .map(|entry| entry.id),
+                    next_feed_entry_id: after
+                        .iter()
+                        .find(|entry| entry.feed_id == current.feed_id)
+                        .map(|entry| entry.id),
+                }
+            })
+            .unwrap_or_default();
+        assert_eq!(library.entries.reader_navigation(id).await.unwrap(), expected, "entry {id}");
+    }
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn app_state_narrow_updates_do_not_lose_each_other() {
+    use rssr_application::AppStateService;
+    use rssr_domain::EntriesWorkspaceState;
+    use std::sync::Arc;
+    let library = Library::memory().await;
+    let service = AppStateService::new(Arc::new(library.app_state.clone()));
+    let workspace = EntriesWorkspaceState { show_archived: true, ..Default::default() };
+    let (feed, entries) = futures_util::join!(
+        service.save_last_opened_feed_id(Some(7)),
+        service.save_entries_workspace(workspace.clone()),
+    );
+    feed.unwrap();
+    entries.unwrap();
+    let snapshot = library.app_state.load().await.unwrap();
+    assert_eq!(snapshot.last_opened_feed_id, Some(7));
+    assert_eq!(snapshot.entries_workspace, workspace);
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn entries_page_counts_with_the_second_query() {
     let library = Library::memory().await;
     let feed = library.add_feed("https://example.com/feed.xml").await;
-    let now = OffsetDateTime::now_utc();
+    let now = rssr_infra::platform_clock::now_utc();
     library
         .seed(
             feed.id,
@@ -55,11 +135,12 @@ async fn entries_page_counts_with_the_second_query() {
     assert_eq!(uncounted.counted, None);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn reader_snapshot_has_the_record_body_neighbours_and_active_feed() {
     let library = Library::memory().await;
     let feed = library.add_feed("https://example.com/feed.xml").await;
-    let now = OffsetDateTime::now_utc();
+    let now = rssr_infra::platform_clock::now_utc();
     let mut body = published("a", "A", Some(now));
     body.content_html = Some("<p>A</p>".into());
     library.seed(feed.id, vec![body, published("b", "B", Some(now - Duration::hours(1)))]).await;
@@ -78,7 +159,8 @@ async fn reader_snapshot_has_the_record_body_neighbours_and_active_feed() {
     assert!(library.queries.reader_snapshot(older + 100).await.expect("read").is_none());
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn startup_state_keeps_only_an_active_last_opened_subscription() {
     let library = Library::memory().await;
     let feed = library.add_feed("https://example.com/feed.xml").await;
@@ -95,7 +177,8 @@ async fn startup_state_keeps_only_an_active_last_opened_subscription() {
     assert_eq!(state.last_opened_feed_id, None);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn entries_start_reads_only_what_is_asked() {
     let library = Library::memory().await;
     library.add_feed("https://example.com/feed.xml").await;
@@ -109,7 +192,8 @@ async fn entries_start_reads_only_what_is_asked() {
     assert_eq!(all.feeds.map(|feeds| feeds.len()), Some(1));
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn config_snapshot_has_the_active_subscriptions_and_settings() {
     let library = Library::memory().await;
     let kept = library.add_feed("https://example.com/kept.xml").await;

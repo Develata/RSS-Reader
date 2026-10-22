@@ -88,13 +88,6 @@ impl HttpSubscriptionProbe {
             let final_url = response.url().clone();
             (response, final_url)
         };
-        #[cfg(target_arch = "wasm32")]
-        let (response, final_url) =
-            crate::application_adapters::browser::feed::web_fetch_subscription_response(
-                &self.client,
-                url.as_str(),
-            )
-            .await?;
         let response = response
             .error_for_status()
             .map_err(reqwest::Error::without_url)

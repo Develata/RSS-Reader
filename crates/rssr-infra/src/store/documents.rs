@@ -101,7 +101,8 @@ impl SettingsRepository for LibrarySettings {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl SettingsUpdatePort for LibrarySettings {
     async fn update_settings(&self, patch: SettingsPatch) -> Result<UserSettings> {
         // As a domain error, so an invalid patch keeps its kind and text in the chain.

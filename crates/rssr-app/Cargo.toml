@@ -8,8 +8,8 @@ build = "build.rs"
 
 [features]
 # Public, offline demonstration of the real Web app; never enabled by default. It keeps its library
-# in the browser (rssr-infra's `browser-store`); the formal Web build talks to the server instead.
-pages-demo = ["rssr-infra/browser-store"]
+# in a private memory SQLite library; the formal Web build talks to the server instead.
+pages-demo = ["rssr-infra/memory-store"]
 
 [dependencies]
 anyhow.workspace = true

@@ -32,7 +32,7 @@
 - [旧静态入口的迁移说明](./static-web-browser-smoke.md)
 - [Web 阅读页 `/entries/:entry_id` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
 - [Web 小视口 Smoke](./static-web-small-viewport-smoke.md)
-- 正式 Web 多浏览器可见性、只读刷新与草稿：统一入口的 `acceptance`；BrowserStore 存储契约只用于演示适配器。
+- 正式 Web 多浏览器可见性、只读刷新与草稿：统一入口的 `acceptance`；原生与演示共用 SQL 契约，浏览器执行器另验。
 - [Chrome MCP 目标浏览器](./chrome-mcp-target.md)
 
 ### 重构 / 约束

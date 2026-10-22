@@ -25,13 +25,13 @@ fn packages(tree: &str) -> Vec<&str> {
 
 #[test]
 fn the_web_build_links_no_sqlite() {
-    for crate_name in ["libsqlite3-sys", "rusqlite"] {
-        let path =
-            cargo_tree(&["-p", "rssr-app", "--target", "wasm32-unknown-unknown", "-i", crate_name]);
+    let tree =
+        cargo_tree(&["-p", "rssr-app", "--target", "wasm32-unknown-unknown", "--prefix", "none"]);
+    let names = packages(&tree);
+    for crate_name in ["libsqlite3-sys", "rusqlite", "sqlite-wasm-rs"] {
         assert!(
-            path.trim().is_empty(),
-            "the wasm32 build of rssr-app reaches {crate_name}:
-{path}"
+            !names.contains(&crate_name),
+            "the wasm32 build of rssr-app reaches {crate_name}:\n{tree}"
         );
     }
     // The check can fail: the build for this host does link SQLite.
@@ -59,17 +59,30 @@ fn infra_features_of_the_web_build(extra: &[&str]) -> Vec<String> {
 }
 
 /// The formal Web build talks to the server: it has `http-backend` and not the library kept in
-/// the browser (`browser-store`); the Pages demo has both (phase C, C4a). This shows what is
+/// page (`memory-store`); the Pages demo links SQLite through its WASM backend (phase D). This shows what is
 /// built; which backend starts is shown by the page's start-up code and the browser regression.
 #[test]
-fn the_formal_web_build_has_no_browser_store() {
+fn only_pages_links_the_memory_sqlite_store() {
     let formal = infra_features_of_the_web_build(&[]);
     assert!(formal.iter().any(|feature| feature == "http-backend"), "{formal:?}");
-    assert!(!formal.iter().any(|feature| feature == "browser-store"), "{formal:?}");
+    assert!(!formal.iter().any(|feature| feature == "memory-store"), "{formal:?}");
     let demo = infra_features_of_the_web_build(&["--features", "pages-demo"]);
-    for feature in ["http-backend", "browser-store"] {
+    for feature in ["http-backend", "memory-store"] {
         assert!(demo.iter().any(|present| present == feature), "{feature}: {demo:?}");
     }
+    let demo = cargo_tree(&[
+        "-p",
+        "rssr-app",
+        "--target",
+        "wasm32-unknown-unknown",
+        "--features",
+        "pages-demo",
+        "--prefix",
+        "none",
+    ]);
+    let names = packages(&demo);
+    assert!(names.contains(&"rusqlite") && names.contains(&"sqlite-wasm-rs"), "{demo}");
+    assert!(!names.contains(&"libsqlite3-sys"), "Pages must use the WASM backend: {demo}");
 }
 
 #[test]
@@ -77,9 +90,16 @@ fn the_api_crate_depends_on_no_infrastructure() {
     let tree = cargo_tree(&["-p", "rssr-api", "--target", "all", "--prefix", "none"]);
     let packages = packages(&tree);
     assert!(packages.contains(&"rssr-application"), "{tree}");
-    for forbidden in
-        ["rssr-infra", "rssr-app", "rusqlite", "libsqlite3-sys", "reqwest", "dioxus", "axum"]
-    {
+    for forbidden in [
+        "rssr-infra",
+        "rssr-app",
+        "rusqlite",
+        "libsqlite3-sys",
+        "sqlite-wasm-rs",
+        "reqwest",
+        "dioxus",
+        "axum",
+    ] {
         assert!(
             !packages.contains(&forbidden),
             "rssr-api depends on {forbidden}:

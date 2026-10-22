@@ -1,14 +1,19 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 
 //! Persistent refresh tickets (docs/design/v0.2-architecture.md, 存储): refreshes of one
 //! subscription from different processes sharing a library never overwrite a newer result with
 //! an older one. Two `LibraryStore` handles on one file stand in for two processes.
 
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
 #[path = "support/library.rs"]
 mod library;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
@@ -19,10 +24,14 @@ use rssr_application::{
     RefreshService, RefreshStorePort, RefreshTarget, RefreshTicket, SubscriptionActivationPort,
 };
 use rssr_domain::{EntryIndexRepository, EntryQuery, Feed, FeedRepository};
-use rssr_infra::store::{LibraryRefreshStore, LibraryStore};
+use rssr_infra::store::LibraryRefreshStore;
+#[cfg(not(target_arch = "wasm32"))]
+use rssr_infra::store::LibraryStore;
 
+#[cfg(not(target_arch = "wasm32"))]
 struct TempDir(PathBuf);
 
+#[cfg(not(target_arch = "wasm32"))]
 impl TempDir {
     fn new(label: &str) -> Self {
         let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
@@ -32,6 +41,7 @@ impl TempDir {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for TempDir {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
@@ -39,6 +49,7 @@ impl Drop for TempDir {
 }
 
 /// Two "processes" on one library file, with one subscription.
+#[cfg(not(target_arch = "wasm32"))]
 async fn two_processes(label: &str) -> (TempDir, Library, Library, Feed) {
     let dir = TempDir::new(label);
     let path = dir.0.join("library.sqlite3");
@@ -46,6 +57,16 @@ async fn two_processes(label: &str) -> (TempDir, Library, Library, Feed) {
     let b = Library::over(LibraryStore::open(&path).await.unwrap());
     let feed = a.add_feed("https://example.com/feed.xml").await;
     (dir, a, b, feed)
+}
+
+// The same ordering cases use two port sets over the page's single connection. Native
+// still verifies two independent store instances sharing a real file.
+#[cfg(target_arch = "wasm32")]
+async fn two_processes(_label: &str) -> ((), Library, Library, Feed) {
+    let first = Library::memory().await;
+    let second = Library::over(first.store.clone());
+    let feed = first.add_feed("https://example.com/feed.xml").await;
+    ((), first, second, feed)
 }
 
 fn metadata(etag: &str) -> RefreshHttpMetadata {
@@ -103,7 +124,8 @@ async fn entry_titles(library: &Library) -> Vec<String> {
     titles
 }
 
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn tickets_are_issued_in_fetch_start_order_with_the_published_baseline() {
     let (_dir, a, b, feed) = two_processes("order").await;
     let first = begin(&a, feed.id).await;
@@ -117,7 +139,8 @@ async fn tickets_are_issued_in_fetch_start_order_with_the_published_baseline() {
 }
 
 /// A response fetched by a refresh that started earlier does not replace a newer publication.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn a_late_fetched_feed_is_superseded_by_a_newer_publication() {
     let (_dir, a, b, feed) = two_processes("late-200").await;
     let older = begin(&a, feed.id).await;
@@ -134,7 +157,8 @@ async fn a_late_fetched_feed_is_superseded_by_a_newer_publication() {
 
 /// A 304 confirms the version whose validators were sent; after a newer publication it confirms
 /// nothing and is discarded.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn a_304_for_an_older_version_is_discarded() {
     let (_dir, a, b, feed) = two_processes("stale-304").await;
     let initial = begin(&a, feed.id).await;
@@ -153,7 +177,8 @@ async fn a_304_for_an_older_version_is_discarded() {
 }
 
 /// A 304 that confirms the published version is recorded and becomes the published ticket.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn a_304_for_the_published_version_is_recorded() {
     let (_dir, a, _b, feed) = two_processes("current-304").await;
     let initial = begin(&a, feed.id).await;
@@ -170,7 +195,8 @@ async fn a_304_for_the_published_version_is_recorded() {
 }
 
 /// An older failure arriving after a newer success is not recorded over it.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn a_stale_failure_does_not_hide_a_newer_success() {
     let (_dir, a, b, feed) = two_processes("stale-failure").await;
     let older = begin(&a, feed.id).await;
@@ -185,7 +211,8 @@ async fn a_stale_failure_does_not_hide_a_newer_success() {
 
 /// An older success arriving after a newer failure publishes its content and validators, but the
 /// newer failure stays the current diagnosis.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn an_older_success_after_a_newer_failure_keeps_the_newer_diagnosis() {
     let (_dir, a, b, feed) = two_processes("success-after-failure").await;
     let older = begin(&a, feed.id).await;
@@ -203,7 +230,8 @@ async fn an_older_success_after_a_newer_failure_keeps_the_newer_diagnosis() {
     assert_eq!(tickets(&a, feed.id).await, (2, 1, 2));
 }
 
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn committing_one_ticket_twice_is_superseded_the_second_time() {
     let (_dir, a, _b, feed) = two_processes("duplicate").await;
     let target = begin(&a, feed.id).await;
@@ -214,11 +242,12 @@ async fn committing_one_ticket_twice_is_superseded_the_second_time() {
 
 /// A commit must answer a ticketed request: one without a ticket (a target from `list_targets`)
 /// is refused and writes nothing, and `get_target` hands out ticketed targets.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn a_commit_without_a_ticket_is_refused() {
     let (_dir, a, _b, feed) = two_processes("untracked").await;
     let listed = a.refresh.list_targets().await.unwrap().remove(0);
-    assert_eq!(listed.ticket, RefreshTicket::UNTRACKED);
+    assert_eq!(listed.ticket, RefreshTicket::UNISSUED);
     for commit in [
         fetched("Untracked", "etag-u", &["u"]),
         RefreshCommit::NotModified { metadata: metadata("etag-u") },
@@ -238,7 +267,8 @@ async fn a_commit_without_a_ticket_is_refused() {
 /// A failure that stored its response's validators does not let a later 304 (which omits them)
 /// bind those validators to content they never described: the 304 completes its validators from
 /// the request it answers.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn a_304_after_a_failure_keeps_the_validators_of_the_published_version() {
     let (_dir, a, b, feed) = two_processes("failure-then-304").await;
     let initial = begin(&a, feed.id).await;
@@ -273,7 +303,8 @@ async fn a_304_after_a_failure_keeps_the_validators_of_the_published_version() {
 
 /// An older failure overtaken by a newer success is reported as not modified by the refresh
 /// service, not as a failure.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn the_refresh_service_reports_a_superseded_failure_as_not_modified() {
     let (_dir, a, b, feed) = two_processes("service-failure").await;
     let service = RefreshService::new(
@@ -292,10 +323,15 @@ async fn the_refresh_service_reports_a_superseded_failure_as_not_modified() {
 
 /// In one process, a refresh whose write failed after the subscription was added does not make
 /// the add flow drop its prepared fetch: the persistent tickets decide, and they accept it.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn a_prepared_fetch_survives_a_failed_refresh_in_the_same_process() {
+    #[cfg(not(target_arch = "wasm32"))]
     let dir = TempDir::new("prepared-after-failure");
+    #[cfg(not(target_arch = "wasm32"))]
     let library = Library::over(LibraryStore::open(dir.0.join("library.sqlite3")).await.unwrap());
+    #[cfg(target_arch = "wasm32")]
+    let library = Library::memory().await;
     let activated = library
         .mutations
         .activate_subscription(library::subscription("https://example.com/new.xml"))
@@ -312,7 +348,6 @@ async fn a_prepared_fetch_survives_a_failed_refresh_in_the_same_process() {
         }),
         store,
     );
-    let prepared_ticket = service.prepared_update_ticket();
     // The background refresh fetches, but its write fails.
     library
         .exec(
@@ -336,7 +371,7 @@ async fn a_prepared_fetch_survives_a_failed_refresh_in_the_same_process() {
     let FeedRefreshSourceOutput::Updated(update) = service_update("prepared") else {
         unreachable!()
     };
-    let outcome = service.apply_prepared_update(prepared, update, prepared_ticket).await;
+    let outcome = service.apply_prepared_update(prepared, update).await;
     assert!(
         matches!(outcome.result, RefreshFeedResult::Updated { inserted_count: 1, .. }),
         "{outcome:?}"
@@ -348,12 +383,73 @@ async fn a_prepared_fetch_survives_a_failed_refresh_in_the_same_process() {
 
 /// The add flow's prepared fetch takes its ticket at activation, so a refresh that starts later
 /// and publishes first wins.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn a_prepared_response_cannot_overwrite_a_commit_whose_caller_was_cancelled() {
+    let library = Library::memory().await;
+    let activated = library
+        .mutations
+        .activate_subscription(library::subscription("https://example.com/lost-ack"))
+        .await
+        .unwrap();
+    let prepared = RefreshTarget {
+        feed_id: activated.feed.id,
+        generation: activated.generation,
+        url: activated.feed.url.clone(),
+        etag: None,
+        last_modified: None,
+        ticket: activated.ticket,
+    };
+    let later = begin(&library, activated.feed.id).await;
+    let committed = tokio::sync::Notify::new();
+    let caller = async {
+        library.refresh.commit(&later, fetched("Later", "etag-l", &["later"])).await.unwrap();
+        committed.notify_one();
+        // The caller disappears after publication, before using its success result.
+        std::future::pending::<()>().await;
+    };
+    match futures_util::future::select(Box::pin(caller), Box::pin(committed.notified())).await {
+        futures_util::future::Either::Right(((), abandoned)) => drop(abandoned),
+        _ => panic!("the caller must wait after publication"),
+    }
+    let service = RefreshService::new(
+        Arc::new(RacingSource {
+            other: Library::over(library.store.clone()),
+            feed_id: activated.feed.id,
+            output: service_update("unused"),
+            race: false,
+        }),
+        Arc::new(library.refresh.clone()),
+    );
+    let FeedRefreshSourceOutput::Updated(update) = service_update("prepared") else {
+        unreachable!()
+    };
+    let outcome = service.apply_prepared_update(prepared, update).await;
+    assert!(matches!(outcome.result, RefreshFeedResult::NotModified), "{outcome:?}");
+    assert_eq!(entry_titles(&library).await, ["later"]);
+}
+
+/// Activation and later publication are ordered across independent native stores (one
+/// page connection on WASM).
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn the_prepared_fetch_at_activation_loses_to_a_later_refresh() {
+    #[cfg(not(target_arch = "wasm32"))]
     let dir = TempDir::new("prepared");
-    let path = dir.0.join("library.sqlite3");
-    let a = Library::over(LibraryStore::open(&path).await.unwrap());
-    let b = Library::over(LibraryStore::open(&path).await.unwrap());
+    #[cfg(not(target_arch = "wasm32"))]
+    let (a, b) = {
+        let path = dir.0.join("library.sqlite3");
+        (
+            Library::over(LibraryStore::open(&path).await.unwrap()),
+            Library::over(LibraryStore::open(&path).await.unwrap()),
+        )
+    };
+    #[cfg(target_arch = "wasm32")]
+    let (a, b) = {
+        let a = Library::memory().await;
+        let b = Library::over(a.store.clone());
+        (a, b)
+    };
     let activated = a
         .mutations
         .activate_subscription(library::subscription("https://example.com/new.xml"))
@@ -375,7 +471,8 @@ async fn the_prepared_fetch_at_activation_loses_to_a_later_refresh() {
 }
 
 /// A refresh that was started for a subscription that is removed and added again gets no target.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn begin_refresh_requires_the_expected_generation() {
     let (_dir, a, _b, feed) = two_processes("generation").await;
     assert!(a.refresh.begin_refresh(feed.id, Some(1)).await.unwrap().is_none());
@@ -393,7 +490,8 @@ struct RacingSource {
     race: bool,
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl FeedRefreshSourcePort for RacingSource {
     async fn refresh(&self, _target: &RefreshTarget) -> Result<FeedRefreshSourceOutput> {
         if self.race {
@@ -421,7 +519,8 @@ fn service_update(key: &str) -> FeedRefreshSourceOutput {
 
 /// The refresh service begins every refresh with a ticket; a response overtaken by another
 /// process's publication is reported as not modified, with nothing stored or localized.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn the_refresh_service_takes_a_ticket_and_reports_a_superseded_response() {
     let (_dir, a, b, feed) = two_processes("service").await;
     let store: Arc<dyn RefreshStorePort> = Arc::new(LibraryRefreshStore::new(a.store.clone()));
@@ -456,8 +555,10 @@ async fn the_refresh_service_takes_a_ticket_and_reports_a_superseded_response() 
 
 /// Cost of the write transaction that issues a ticket, on a file library (run explicitly:
 /// `cargo test --release --test test_library_refresh_tickets -- --ignored --nocapture`).
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[ignore = "measurement"]
+#[cfg(not(target_arch = "wasm32"))]
 async fn measure_ticket_issuing() {
     let (_dir, a, _b, feed) = two_processes("measure").await;
     // Read on the writer: that connection issues the tickets (readers may differ).
@@ -489,7 +590,8 @@ fn fetched_last_modified(title: &str, last_modified: &str, keys: &[&str]) -> Ref
 }
 
 /// The `Last-Modified` counterpart of `a_304_after_a_failure_keeps_the_validators_of_the_published_version`.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn a_304_after_a_failure_keeps_the_last_modified_of_the_published_version() {
     let (_dir, a, b, feed) = two_processes("failure-then-304-lm").await;
     let initial = begin(&a, feed.id).await;
@@ -514,7 +616,8 @@ async fn a_304_after_a_failure_keeps_the_last_modified_of_the_published_version(
 }
 
 /// A 304 or a failure committed twice with one ticket is recorded once.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn a_304_or_a_failure_committed_twice_is_superseded_the_second_time() {
     let (_dir, a, _b, feed) = two_processes("duplicate-304-failure").await;
     let initial = begin(&a, feed.id).await;
@@ -536,7 +639,8 @@ async fn a_304_or_a_failure_committed_twice_is_superseded_the_second_time() {
 
 /// A refresh started before the subscription was removed and added again writes nothing into the
 /// new subscription, whatever it reports.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn a_refresh_from_before_a_removal_and_re_add_writes_nothing() {
     let (_dir, a, b, feed) = two_processes("re-add").await;
     let initial = begin(&a, feed.id).await;
@@ -567,19 +671,17 @@ async fn a_refresh_from_before_a_removal_and_re_add_writes_nothing() {
 }
 
 /// Refreshes started at once from two processes get distinct tickets, in one sequence.
-#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn concurrent_refreshes_get_distinct_tickets() {
     let (_dir, a, b, feed) = two_processes("concurrent-issue").await;
     let (a, b) = (Arc::new(a), Arc::new(b));
     let mut tasks = Vec::new();
     for index in 0..40 {
         let library = Arc::clone(if index % 2 == 0 { &a } else { &b });
-        tasks.push(tokio::spawn(async move { begin(&library, feed.id).await.ticket.issued }));
+        tasks.push(async move { begin(&library, feed.id).await.ticket.issued });
     }
-    let mut issued = Vec::new();
-    for task in tasks {
-        issued.push(task.await.unwrap());
-    }
+    let mut issued = futures_util::future::join_all(tasks).await;
     issued.sort_unstable();
     assert_eq!(issued, (1..=40).collect::<Vec<i64>>());
     assert_eq!(tickets(&a, feed.id).await, (40, 0, 0));

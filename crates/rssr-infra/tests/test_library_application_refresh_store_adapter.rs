@@ -1,8 +1,11 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 
 //! The refresh store contract, run against the v0.2 library store (ported from
 //! `test_application_refresh_store_adapter.rs`). The content-change and insert-count cases of
 //! that file already run in `test_library_contracts.rs`.
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "support/library.rs"]
 mod library;
@@ -21,7 +24,8 @@ use rssr_domain::{
 use time::OffsetDateTime;
 use url::Url;
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn library_refresh_store_persists_updated_feed_metadata_entries_and_fetch_state() {
     let library = Library::memory().await;
     let feed = library
@@ -106,7 +110,8 @@ async fn library_refresh_store_persists_updated_feed_metadata_entries_and_fetch_
     assert_eq!(entry.updated_at_source, Some(OffsetDateTime::UNIX_EPOCH));
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn library_refresh_store_forces_full_fetch_when_feed_has_no_entries() {
     let library = Library::memory().await;
     let feed = library
@@ -164,7 +169,8 @@ struct ConditionalSource {
     update: FeedRefreshUpdate,
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl FeedRefreshSourcePort for ConditionalSource {
     async fn refresh(&self, target: &RefreshTarget) -> anyhow::Result<FeedRefreshSourceOutput> {
         // Model a server that correctly returns 304 for either matching validator. Recovery
@@ -291,17 +297,20 @@ async fn check_retry_after_failed_write(table: &str) {
     ));
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn library_refresh_retries_content_after_write_failure_instead_of_accepting_304() {
     check_retry_after_failed_write("entry_contents").await;
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn library_refresh_retries_index_after_write_failure_instead_of_accepting_304() {
     check_retry_after_failed_write("entries").await;
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn old_library_refresh_generation_cannot_commit_after_delete_and_same_url_readd() {
     let library = Library::memory().await;
     let feeds = &library.feeds;

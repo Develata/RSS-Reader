@@ -1,4 +1,4 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 
 //! 标题搜索在原生端按 Unicode 小写比较，与浏览器端（同一个 `rssr_domain::title_contains`）
 //! 匹配到同样的文章（审计 D6）。v0.2 资料库版，原 `test_unicode_title_search`。
@@ -7,6 +7,9 @@
 //! 过期值触发器与 ASCII 退路）：迁移 0008 之前写入的条目回填、旧版本程序只改 `title` 的触发器、
 //! 从迁移 0007 升级并回填、回填中途失败后续补。它们背后的不变量「每个标题行的搜索列都等于
 //! `fold_for_search(title)`」由 `every_written_title_has_its_folded_search_column` 覆盖。
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "support/library.rs"]
 mod library;
@@ -89,7 +92,8 @@ async fn folded_column(library: &Library, dedup_key: &str) -> Option<String> {
     library.text(format!("SELECT title_search FROM entries WHERE dedup_key = '{dedup_key}'")).await
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn native_title_search_matches_the_shared_unicode_rule() {
     let titles = sample_titles();
     let (library, _) = seeded(&titles).await;
@@ -107,7 +111,8 @@ async fn native_title_search_matches_the_shared_unicode_rule() {
 /// Replaces the backfill tests: with no legacy rows, the invariant that remains is that every
 /// written row (here across 1_201 entries, the span of the old backfill batches) carries
 /// `fold_for_search(title)` and is found by Unicode search.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn every_written_title_has_its_folded_search_column() {
     let titles: Vec<String> = (0..1_201).map(|index| format!("ÜBER Nummer {index}")).collect();
     let (library, _) = seeded(&titles).await;
@@ -134,7 +139,8 @@ async fn every_written_title_has_its_folded_search_column() {
 }
 
 /// 同一条目的标题更新后，搜索用标题跟着更新；只改大小写时也一样（独立评审）。
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn title_updates_keep_the_folded_column_current() {
     let (library, feed_id) = seeded(&["École de Paris".to_string()]).await;
 

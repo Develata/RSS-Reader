@@ -27,6 +27,34 @@ pub struct ParsedEntry {
     pub updated_at_source: Option<OffsetDateTime>,
 }
 
+impl From<ParsedFeed> for rssr_application::ParsedFeedUpdate {
+    fn from(feed: ParsedFeed) -> Self {
+        Self {
+            title: feed.title,
+            site_url: feed.site_url,
+            description: feed.description,
+            entries: feed.entries.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<ParsedEntry> for rssr_application::ParsedEntryData {
+    fn from(entry: ParsedEntry) -> Self {
+        Self {
+            external_id: entry.external_id,
+            dedup_key: entry.dedup_key,
+            url: entry.url,
+            title: entry.title,
+            author: entry.author,
+            summary: entry.summary,
+            content_html: entry.content_html,
+            content_text: entry.content_text,
+            published_at: entry.published_at,
+            updated_at_source: entry.updated_at_source,
+        }
+    }
+}
+
 /// Feed parses of the native services at once: refresh (`application_adapters::refresh`) and the
 /// subscription probe take a slot around the parse. A parse runs to its end without yielding, and
 /// its model may approach [`crate::feed_structure::MAX_FEED_MODEL_BYTES`]; refresh fetches several

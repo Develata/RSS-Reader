@@ -1,4 +1,4 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 
 //! Atomicity of removal, reactivation, configuration replacement and late refresh writes,
 //! against the v0.2 library store (ports of `test_persistence_atomicity.rs`).
@@ -7,6 +7,9 @@
 //! transaction), so the v0.1.x cross-database content GC queue has no counterpart. The tests
 //! that only exercised that queue are not ported; the invariant behind them is: removal and
 //! configuration replacement are all-or-nothing and never leave a body without its entry.
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "support/library.rs"]
 mod library;
@@ -66,7 +69,8 @@ async fn orphan_body_count(library: &Library) -> i64 {
         .await
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn activation_port_captures_generation_and_rejects_active_duplicate() {
     let library = Library::memory().await;
     let subscription = subscription("https://example.com/activation.xml", "Activation");
@@ -87,7 +91,8 @@ async fn activation_port_captures_generation_and_rejects_active_duplicate() {
     assert_eq!(reactivated.generation, 1);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn active_subscription_lookup_normalizes_url_and_ignores_tombstones() {
     let library = Library::memory().await;
     let feed = add_feed(&library, "https://example.com/feed.xml").await;
@@ -100,7 +105,8 @@ async fn active_subscription_lookup_normalizes_url_and_ignores_tombstones() {
 
 /// Adapted for intentional difference 1: the old test asserted that the content GC queue rolled
 /// back with the failed purge; the bodies of the entries are what must survive here.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn index_delete_failure_rolls_back_tombstone_and_entries() {
     let library = Library::memory().await;
     let feed = add_feed(&library, "https://example.com/original.xml").await;
@@ -128,7 +134,8 @@ async fn index_delete_failure_rolls_back_tombstone_and_entries() {
 /// hidden with its bodies queued for a later retry. Now the bodies go with the entries in the
 /// same transaction, so a failing body delete fails the whole removal and nothing is half done;
 /// once the fault is gone the removal succeeds and no body is left.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn content_cleanup_failure_does_not_expose_half_deleted_subscription() {
     let library = Library::memory().await;
     let feed = add_feed(&library, "https://example.com/content-cleanup.xml").await;
@@ -161,7 +168,8 @@ async fn content_cleanup_failure_does_not_expose_half_deleted_subscription() {
 /// Invariant behind `orphan_cleanup_removes_failed_purge_content_after_reactivation`: whatever
 /// happened to an earlier purge, reactivating the subscription finds none of its old entries or
 /// bodies (there is no orphan to collect), and the old work is fenced out by the generation.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn reactivation_after_purge_starts_without_old_entries_or_bodies() {
     let library = Library::memory().await;
     let feed = add_feed(&library, "https://example.com/reactivated-orphan.xml").await;
@@ -191,7 +199,8 @@ async fn reactivation_after_purge_starts_without_old_entries_or_bodies() {
     assert_eq!(body_count(&library).await, 0);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn orphan_cleanup_preserves_non_purge_deleted_feed_content() {
     let library = Library::memory().await;
     let feed = add_feed(&library, "https://example.com/keep-content.xml").await;
@@ -204,7 +213,8 @@ async fn orphan_cleanup_preserves_non_purge_deleted_feed_content() {
     assert_eq!(orphan_body_count(&library).await, 0);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn config_replacement_failure_rolls_back_every_library_change() {
     let library = Library::memory().await;
     let original = add_feed(&library, "https://example.com/original.xml").await;
@@ -254,7 +264,8 @@ async fn config_replacement_failure_rolls_back_every_library_change() {
 /// the cleanup queued. Now replacement is one transaction including the bodies: a failing body
 /// delete leaves the previous configuration entirely in place, and after the fault is gone the
 /// replacement removes the feed, its entries and its bodies together.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn config_replacement_removes_bodies_with_entries_or_changes_nothing() {
     let library = Library::memory().await;
     let feed = add_feed(&library, "https://example.com/config-purge.xml").await;
@@ -303,7 +314,8 @@ async fn config_replacement_removes_bodies_with_entries_or_changes_nothing() {
     assert_eq!(library.settings.load().await.unwrap(), changed_settings);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn config_replacement_derives_removals_from_locked_current_state() {
     let library = Library::memory().await;
     let retained = add_feed(&library, "https://example.com/retained.xml").await;
@@ -334,7 +346,8 @@ async fn config_replacement_derives_removals_from_locked_current_state() {
 
 /// The old test called `update_feed_metadata` on the feed repository; metadata now only changes
 /// through a refresh commit, which carries the target (and its generation) the work started for.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn deleted_feed_rejects_late_metadata_update() {
     let library = Library::memory().await;
     let feed = add_feed(&library, "https://example.com/metadata-race.xml").await;
@@ -374,7 +387,8 @@ async fn deleted_feed_rejects_late_metadata_update() {
 
 /// The old test called `upsert_entries_with_outcome` directly; entries now only arrive through a
 /// refresh commit.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn deleted_feed_rejects_late_index_upsert() {
     let library = Library::memory().await;
     let feed = add_feed(&library, "https://example.com/race.xml").await;
@@ -393,7 +407,8 @@ async fn deleted_feed_rejects_late_index_upsert() {
 }
 
 /// 读不懂的应用状态（例如新版本写入的字段）不能让删除订阅整体失败（审计 A5）。
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn unreadable_app_state_does_not_block_subscription_removal() {
     let library = Library::memory().await;
     let feed = library
@@ -421,7 +436,8 @@ async fn unreadable_app_state_does_not_block_subscription_removal() {
 
 /// Only unreadable app-state JSON is skipped; a failing read of the app state fails the removal,
 /// which then changes nothing.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn an_app_state_read_failure_rolls_the_removal_back() {
     let library = Library::memory().await;
     let feed = add_feed(&library, "https://example.com/state-read.xml").await;
@@ -437,7 +453,8 @@ async fn an_app_state_read_failure_rolls_the_removal_back() {
 
 /// A time that RFC 3339 cannot represent fails the refresh commit as a whole: nothing of it is
 /// stored, the library stays readable and the last success does not advance.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn an_unstorable_entry_time_fails_the_whole_commit() {
     use rssr_domain::{EntryIndexRepository, EntryQuery};
     use time::{Date, Month, PrimitiveDateTime, Time};

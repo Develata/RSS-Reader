@@ -10,4 +10,4 @@ bash scripts/run_rssr_web_browser_smoke.sh
 
 经真实 `/login` 登录，检查 `/entries`、`/feeds`、`/settings`，添加订阅后再打开实际存在的 `/entries/:entry_id`。操作与结果模板见 [服务器手工 Smoke](./rssr-web-browser-smoke.md)。
 
-自动化使用 [服务器浏览器回归](./server-web-regression.md)，每个场景有独立 SQLite 夹具资料库，不写浏览器文章库或口令。Pages 静态演示另用 `scripts/test_pages.sh`，见 [Pages 说明](../deployment/github-pages.md)；它仍使用 BrowserStore，但禁用在线订阅、WebDAV 与自动刷新。
+自动化使用 [服务器浏览器回归](./server-web-regression.md)，每个场景有独立 SQLite 夹具资料库，不写浏览器文章库或口令。Pages 静态演示另用 `scripts/test_pages.sh`，见 [Pages 说明](../deployment/github-pages.md)；它使用内存 SQLite、重载重置，并禁用在线订阅、WebDAV 与自动刷新。

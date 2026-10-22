@@ -65,6 +65,7 @@ pub fn configure(connection: &Connection, role: Role) -> StoreResult<()> {
 /// Switches a file database to WAL and returns the journal mode that is actually in effect:
 /// SQLite reports the mode it kept instead of failing, for example on file systems without
 /// shared memory (network shares, some sync folders).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn enable_wal(connection: &Connection) -> StoreResult<String> {
     let mode: String = connection.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
     Ok(mode.to_ascii_lowercase())

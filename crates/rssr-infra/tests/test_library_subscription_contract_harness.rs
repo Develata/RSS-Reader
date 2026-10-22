@@ -1,8 +1,11 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 
 //! The subscription contract run against the v0.2 library store (ports of
 //! `test_subscription_contract_harness.rs`; the custom-title case lives in
 //! `test_library_contracts.rs`).
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "support/library.rs"]
 mod library;
@@ -22,7 +25,8 @@ use url::Url;
 
 struct UnusedRefreshSource;
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl rssr_application::SubscriptionProbePort for UnusedRefreshSource {
     async fn probe(&self, url: &Url) -> Result<rssr_application::SubscriptionProbeOutcome> {
         Ok(rssr_application::SubscriptionProbeOutcome::Feed {
@@ -40,7 +44,8 @@ impl rssr_application::SubscriptionProbePort for UnusedRefreshSource {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl FeedRefreshSourcePort for UnusedRefreshSource {
     async fn refresh(
         &self,
@@ -117,7 +122,8 @@ fn sample_entry(index: usize) -> ParsedEntryData {
     }
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn subscription_contract_add_normalizes_and_deduplicates_urls() {
     let fixture = build_fixture().await;
 
@@ -151,7 +157,8 @@ async fn subscription_contract_add_normalizes_and_deduplicates_urls() {
     assert_eq!(feeds[0].folder.as_deref(), Some("Inbox"));
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn subscription_contract_remove_purges_entries_soft_deletes_feed_and_clears_matching_state() {
     let fixture = build_fixture().await;
     let library = &fixture.library;
@@ -192,7 +199,8 @@ async fn subscription_contract_remove_purges_entries_soft_deletes_feed_and_clear
     assert_eq!(library.scalar("SELECT COUNT(*) FROM entry_contents").await, 0);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn subscription_contract_remove_preserves_other_last_opened_feed() {
     let fixture = build_fixture().await;
     let library = &fixture.library;

@@ -8,7 +8,7 @@
 
 `/feed-proxy`、`/session-probe` 与本地浏览器口令门禁已在 C4a（2026-10-20）退役。已登录访问旧 feed 代理路径返回 404，不再转发上游文档。阅读正文的清洗与隔离由当前阅读器实现及浏览器验收覆盖。
 
-正式部署使用 HTTPS；本机开发可用回环 HTTP。正式 Web 不依赖 Web Locks 保存资料库；该限制仅适用于仍使用 BrowserStore 的 Pages 演示。正式 Web 不再离线可读。
+正式部署使用 HTTPS；本机开发可用回环 HTTP。正式 Web 与 Pages 均不依赖 Web Locks；Pages 使用独立内存 SQLite。正式 Web 不再离线可读。
 
 ## 服务与页面发布包
 

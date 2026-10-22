@@ -48,7 +48,7 @@ debug 包会尝试连接服务器未提供的热重载 WebSocket；驱动单独�
 
 结构断言和截图不等于人工视觉、辅助技术或 Android/macOS 实机验收。本地 feed 不证明公网可达；本地 Windows 结果不证明 Ubuntu CI 已运行。发布标识注入与旧页面对新服务器的发布验收属于 C6。
 
-Pages 演示是独立构建，继续使用浏览器存储并禁用在线订阅与 WebDAV；用 [`test_pages.sh`](../../scripts/test_pages.sh) 验收，见 [Pages 部署](../deployment/github-pages.md)。三个 wasm BrowserStore 契约 harness 也不替代正式 Web 的 HttpBackend 验收。
+Pages 演示是独立构建，使用内存 SQLite、重载重置并禁用在线订阅与 WebDAV；用 [`test_pages.sh`](../../scripts/test_pages.sh) 验收，见 [Pages 部署](../deployment/github-pages.md)。共享 SQL 浏览器契约 也不替代正式 Web 的 HttpBackend 验收。
 
 ## 手工页面与原生夹具
 

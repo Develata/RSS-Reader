@@ -989,12 +989,18 @@ async fn opening_again_keeps_this_process_file_locks() {
 #[tokio::test(flavor = "multi_thread")]
 async fn bundled_sqlite_has_the_wal_reset_fix() {
     let store = LibraryStore::open_in_memory().await.unwrap();
-    let version: String = store
-        .read(|conn| Ok(conn.query_row("SELECT sqlite_version()", [], |row| row.get(0))?))
+    let (version, source_id): (String, String) = store
+        .read(|conn| {
+            Ok(conn.query_row("SELECT sqlite_version(), sqlite_source_id()", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?)
+        })
         .await
         .unwrap();
     let parts: Vec<u32> = version.split('.').map(|part| part.parse().unwrap()).collect();
     assert!(parts >= vec![3, 51, 3], "SQLite {version} is below the project baseline 3.51.3");
+    println!("sqlite_version={version} sqlite_source_id={source_id}");
+    store.close().await.unwrap();
 }
 
 /// A real full disk (phase A gate): a refresh that cannot be written fails as a storage error and

@@ -1,7 +1,10 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 
 //! Entry flags, filters, title search and bulk mark-read against the v0.2 library store
 //! (port of `test_entry_state_and_search`).
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "support/library.rs"]
 mod library;
@@ -73,7 +76,8 @@ async fn named_feed(library: &Library, url: &str, title: Option<&str>) -> rssr_d
         .expect("create feed")
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn entry_repository_updates_state_and_supports_search() {
     let library = Library::memory().await;
     let feed = named_feed(&library, "https://example.com/feed.xml", Some("Example Feed")).await;
@@ -143,7 +147,8 @@ async fn entry_repository_updates_state_and_supports_search() {
 
 /// 归档筛选下沉到存储层后的契约：
 /// 未归档集合与已归档计数必须互补，且没有 `published_at` 的条目永远算未归档。
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn entry_repository_applies_archive_filter_in_query() {
     let library = Library::memory().await;
     let feed =
@@ -204,7 +209,8 @@ async fn entry_repository_applies_archive_filter_in_query() {
 
 /// The old `upsert_entries_and_resolve_contents` handed back the ids a batch got; the library
 /// has no such call, so the ids come from the list and the record (`get_entry_record`).
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn entry_repository_resolves_content_after_batch_upsert() {
     let library = Library::memory().await;
     let feed =
@@ -253,7 +259,8 @@ async fn entry_repository_resolves_content_after_batch_upsert() {
     assert_eq!(stored.content_text.as_deref(), Some("Body 2"));
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn unread_summaries_are_global_idempotent_and_unchanged_on_failure() {
     let library = Library::memory().await;
     let feeds = Arc::new(library.feeds.clone());
@@ -289,7 +296,8 @@ async fn unread_summaries_are_global_idempotent_and_unchanged_on_failure() {
 
 /// Flags are set to target values: a repeat writes nothing and keeps the original time;
 /// unsetting clears it.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn repeated_flag_requests_keep_the_original_time() {
     let library = Library::memory().await;
     let feed = named_feed(&library, "https://example.com/feed.xml", None).await;
@@ -319,7 +327,8 @@ async fn repeated_flag_requests_keep_the_original_time() {
 
 /// 标题搜索是字面量匹配：`%`、`_`、`\` 不能作为 LIKE 通配符扩大命中集合。
 /// 列表、计数与批量已读预览共用同一筛选，三者必须一致（浏览器端为字面 contains）。
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn search_title_treats_like_wildcards_as_literals() {
     let library = Library::memory().await;
     let feed = named_feed(&library, "https://example.com/wildcards.xml", None).await;

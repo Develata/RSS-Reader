@@ -69,29 +69,7 @@ use super::{files, migrate};
 /// SQLite calls the progress handler every this many VM instructions.
 const PROGRESS_OPS: i32 = 1_000;
 
-#[derive(Debug, Clone)]
-pub struct StoreOptions {
-    /// Reader workers for a file library; an in-memory library uses its one worker.
-    pub readers: usize,
-    /// How long a task may wait for room in the queue and in the queue before it starts.
-    pub admission_wait: Duration,
-    /// Tasks a queue holds before a worker takes them; further tasks wait for room.
-    pub queue_capacity: usize,
-    pub read_deadline: Duration,
-    pub write_deadline: Duration,
-}
-
-impl Default for StoreOptions {
-    fn default() -> Self {
-        Self {
-            readers: 4,
-            admission_wait: Duration::from_secs(30),
-            queue_capacity: 256,
-            read_deadline: Duration::from_secs(30),
-            write_deadline: Duration::from_secs(60),
-        }
-    }
-}
+pub use super::options::StoreOptions;
 
 const QUEUED: u8 = 0;
 const RUNNING: u8 = 1;

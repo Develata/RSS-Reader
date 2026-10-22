@@ -118,8 +118,8 @@ impl SubscriptionWorkflow {
         prepared: crate::PreparedSubscription,
     ) -> Result<AddSubscriptionLifecycleOutcome> {
         input.subscription.url = prepared.url.to_string();
-        // 激活之后订阅就对后台刷新可见；序号必须在此之前领取，之后开始的刷新才算更新。
-        let ticket = self.refresh_service.prepared_update_ticket();
+        // Activation publishes the subscription and issues the prepared response's ticket
+        // atomically, before another refresh can start for this generation.
         let activated = self
             .feed_service
             .activate_subscription_with_site(
@@ -138,7 +138,7 @@ impl SubscriptionWorkflow {
             ticket: activated.ticket,
         };
         let first_refresh = if input.refresh_after_add {
-            Some(self.refresh_service.apply_prepared_update(target, prepared.update, ticket).await)
+            Some(self.refresh_service.apply_prepared_update(target, prepared.update).await)
         } else {
             None
         };

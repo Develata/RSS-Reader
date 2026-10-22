@@ -1,11 +1,11 @@
 # Release UI runner：当前入口与历史迁移
 
-## 当前契约（2026-10-22，v0.2 C4c）
+## 当前契约（2026-10-22，v0.2 阶段 D）
 
 ```bash
 # 默认自动门禁，完成后退出
 bash scripts/run_release_ui_regression.sh
-# 自动门禁、认证、浏览器存储契约、三个固定服务器套件
+# 自动门禁、认证、共享 SQL 浏览器契约、三个固定服务器套件
 bash scripts/run_release_ui_regression.sh --full
 # 正式 Web 长验收单独执行
 bash scripts/run_server_web_regression.sh --suite acceptance --long
@@ -19,6 +19,8 @@ Windows 显式选择 Git Bash（`RSSR_BASH` 或 `--bash`），保持 Cargo、dx�
 
 `summary.json` / `summary.md` 记录每阶段状态与退出码；skipped 不等于通过，failed/interrupted/blocked 表示失败、中断或未运行。`completed` 仅说明选中的命令结束，不代表人工验收。构建与日志规则见 [服务器浏览器回归](./server-web-regression.md)。
 
+`--with-browser-contracts` / `--full` 运行 13 个共享 SQL 与内存执行器 targets；旧三个浏览器存储 harness 已退役。逐项语义对应见 [阶段 D 迁移表](./phase-d-browser-contract-migration.md)。
+
 独立 runner 校验：
 
 ```bash
@@ -27,6 +29,8 @@ cargo clippy --manifest-path scripts/release-ui/Cargo.toml --all-targets --locke
 cargo test --manifest-path scripts/release-ui/Cargo.toml --locked --target-dir target/release-ui-runner
 python -X utf8 scripts/release-ui/tests/acceptance.py --bash "$BASH"
 ```
+
+Windows 深层 worktree 若在真实构建场景遇到 MSVC `LNK1104`，先核对输出路径长度；可用 `--artifacts-root E:/rssr-qa/release-ui` 缩短测试目录。每次仍建立独立目录并保留日志，中文和空格路径案例继续执行，不因此跳过编译器配置验收。
 
 ## 历史迁移记录（2026-10-03 至 2026-10-06）
 

@@ -1,6 +1,6 @@
 //! The Web page's backend, chosen once at start: the formal Web build talks to the server that
 //! served the page (`HttpBackend` over `/api/v1`, phase C, C4a); the Pages demo keeps its library
-//! in the browser and runs the use cases in the page (`LocalBackend`, until phase D).
+//! in memory and runs the same SQL repositories in the page (`LocalBackend`).
 
 use std::sync::Arc;
 
@@ -59,7 +59,7 @@ async fn open_backend() -> anyhow::Result<Arc<dyn Backend + Send + Sync>> {
     demo_host::open().await
 }
 
-/// The Pages demo: the use cases over the browser's storage, with no network and no periodic
+/// The Pages demo: the use cases over a private memory SQLite library, with no network and no periodic
 /// refresh.
 #[cfg(feature = "pages-demo")]
 mod demo_host {
@@ -67,35 +67,19 @@ mod demo_host {
     use std::time::Duration;
 
     use rssr_api::Backend;
-    use rssr_application::{ClockPort, RefreshAllInput, RemoteConfigStore};
-    use rssr_infra::application_adapters::browser::{
-        adapters::BrowserRemoteConfigStore, now_utc, state::BrowserStore,
-    };
-    use rssr_infra::composition::compose_browser_use_cases;
+    use rssr_application::{RefreshAllInput, RemoteConfigStore};
+    use rssr_infra::composition::compose_offline_library_use_cases;
     use rssr_infra::local_backend::{LocalBackend, LocalHost, LocalTask};
+    use rssr_infra::platform_clock::now_utc;
     use time::OffsetDateTime;
 
     pub(super) async fn open() -> anyhow::Result<Arc<dyn Backend + Send + Sync>> {
-        let state = BrowserStore::open_with_initial_state(crate::demo::initial_state()?).await?;
-        let client = reqwest::Client::new();
-        let use_cases = compose_browser_use_cases(state, client.clone(), Arc::new(BrowserClock));
-        Ok(Arc::new(LocalBackend::new(use_cases, WebHost { client })))
+        let store = crate::demo::open_library().await?;
+        let composition = compose_offline_library_use_cases(store);
+        Ok(Arc::new(LocalBackend::new(composition.use_cases, WebHost)))
     }
 
-    /// The browser: `spawn_local`, timers, its clock, `fetch` for configuration exchange; no image
-    /// localization, no network, no periodic refresh.
-    struct WebHost {
-        client: reqwest::Client,
-    }
-
-    #[derive(Clone)]
-    struct BrowserClock;
-
-    impl ClockPort for BrowserClock {
-        fn now_utc(&self) -> OffsetDateTime {
-            now_utc()
-        }
-    }
+    struct WebHost;
 
     #[async_trait::async_trait(?Send)]
     impl LocalHost for WebHost {
@@ -125,10 +109,10 @@ mod demo_host {
 
         fn remote_config_store(
             &self,
-            endpoint: &str,
-            remote_path: &str,
+            _endpoint: &str,
+            _remote_path: &str,
         ) -> anyhow::Result<Box<dyn RemoteConfigStore>> {
-            Ok(Box::new(BrowserRemoteConfigStore::new(self.client.clone(), endpoint, remote_path)))
+            Err(rssr_domain::DomainError::Network("静态演示已禁用远端配置同步。".into()).into())
         }
     }
 }

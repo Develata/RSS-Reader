@@ -156,7 +156,7 @@ RSS-Reader 的交付形态应长期保持：
   - macOS
 - Web GUI
   - 自托管的服务器端阅读器：资料库在服务器上，登录后在任何设备上使用完整功能
-  - GitHub Pages 演示站：浏览器内运行、载入样例，只用于展示；不保存操作是阶段 D 的目标，当前 C4c 仍用 BrowserStore 保存演示状态，在线订阅与 WebDAV 禁用
+  - GitHub Pages 演示站：预载构建时抓取的真实 RSS，共享 SQL 仓储运行在单连接内存 SQLite 中；资料库操作重载即重置，在线订阅、WebDAV 与自动刷新禁用
 - Mobile GUI
   - 当前以 Android 作为首个稳定落地点
 - CLI

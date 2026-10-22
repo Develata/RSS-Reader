@@ -1,12 +1,12 @@
 use anyhow::Result;
 use rssr_application::{
-    FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate, ParsedEntryData,
-    ParsedFeedUpdate, RefreshFailure, RefreshHttpMetadata, RefreshTarget,
+    FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate, RefreshFailure,
+    RefreshHttpMetadata, RefreshTarget,
 };
 
 use crate::{
     fetch::{FetchClient, FetchRequest, FetchResult},
-    parser::{FeedParser, ParsedEntry, ParsedFeed},
+    parser::FeedParser,
 };
 
 #[derive(Clone, Default)]
@@ -52,7 +52,7 @@ impl FeedRefreshSourcePort for InfraFeedRefreshSource {
                 match self.parser.parse(&body) {
                     Ok(parsed) => Ok(FeedRefreshSourceOutput::Updated(FeedRefreshUpdate {
                         metadata: map_http_metadata(metadata),
-                        feed: map_parsed_feed(parsed),
+                        feed: parsed.into(),
                     })),
                     Err(error) => Ok(FeedRefreshSourceOutput::Failed(RefreshFailure::parse(
                         format!("解析订阅失败: {error}"),
@@ -66,28 +66,4 @@ impl FeedRefreshSourcePort for InfraFeedRefreshSource {
 
 fn map_http_metadata(metadata: crate::fetch::HttpMetadata) -> RefreshHttpMetadata {
     RefreshHttpMetadata { etag: metadata.etag, last_modified: metadata.last_modified }
-}
-
-fn map_parsed_feed(parsed: ParsedFeed) -> ParsedFeedUpdate {
-    ParsedFeedUpdate {
-        title: parsed.title,
-        site_url: parsed.site_url,
-        description: parsed.description,
-        entries: parsed.entries.into_iter().map(map_parsed_entry).collect(),
-    }
-}
-
-fn map_parsed_entry(entry: ParsedEntry) -> ParsedEntryData {
-    ParsedEntryData {
-        external_id: entry.external_id,
-        dedup_key: entry.dedup_key,
-        url: entry.url,
-        title: entry.title,
-        author: entry.author,
-        summary: entry.summary,
-        content_html: entry.content_html,
-        content_text: entry.content_text,
-        published_at: entry.published_at,
-        updated_at_source: entry.updated_at_source,
-    }
 }

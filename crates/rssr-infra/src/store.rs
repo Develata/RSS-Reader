@@ -4,21 +4,31 @@
 //! `connection`, `migrate` and `error` are target-neutral so the Pages demo can reuse them on
 //! wasm32; `executor` owns native connections. Native-only until phase D.
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod backup;
 mod codec;
 mod connection;
 mod documents;
 mod entries;
 mod error;
+#[cfg(not(target_arch = "wasm32"))]
+mod executor;
+#[cfg(target_arch = "wasm32")]
+#[path = "store/wasm_executor.rs"]
 mod executor;
 mod feeds;
+#[cfg(not(target_arch = "wasm32"))]
 mod files;
 /// Libraries for the browser regression (test tooling only).
+#[cfg(not(target_arch = "wasm32"))]
 pub mod fixture;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod import;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod local;
 pub mod migrate;
 mod mutations;
+mod options;
 mod queries;
 mod refresh;
 

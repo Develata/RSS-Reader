@@ -1,10 +1,13 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 
 //! The configuration-exchange contract run against the v0.2 library store (ports of
 //! `test_config_exchange_contract_harness.rs`).
 //!
 //! Every case runs through the shipping path: the library's one-transaction
 //! `ConfigReplacementPort` (the application has no other way to replace a configuration).
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "support/library.rs"]
 mod library;
@@ -31,7 +34,8 @@ struct MemoryRemoteConfigStore {
     payload: Mutex<Option<String>>,
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl RemoteConfigStore for MemoryRemoteConfigStore {
     async fn upload_config(&self, raw: &str) -> anyhow::Result<()> {
         *self.payload.lock().expect("lock payload") = Some(raw.to_string());
@@ -54,10 +58,49 @@ async fn build_fixture() -> Fixture {
         Arc::new(library.feeds.clone()),
         Arc::new(library.queries.clone()),
         Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
-        Arc::new(rssr_application::SystemClock),
+        Arc::new(rssr_infra::platform_clock::PlatformClock),
         Arc::new(library.mutations.clone()),
     );
     Fixture { service, library }
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn opml_keeps_chosen_names_apart_from_source_titles_and_rejects_outside_body() {
+    let fixture = build_fixture().await;
+    fixture
+        .library
+        .feeds
+        .upsert_subscription(&NewFeedSubscription {
+            source_title: Some("Feed 1".into()),
+            ..named("https://example.com/feed.xml", "Initial", None)
+        })
+        .await
+        .unwrap();
+    fixture.service.import_opml(r#"<opml version="2.0"><body>
+        <outline text="工作资讯" title="Example News" type="rss" xmlUrl="https://example.com/feed.xml"/>
+        </body></opml>"#).await.unwrap();
+    let feeds = fixture.library.feeds.list_feeds().await.unwrap();
+    assert_eq!(feeds[0].title.as_deref(), Some("工作资讯"));
+    assert_eq!(feeds[0].source_title.as_deref(), Some("Feed 1"));
+    let exported = fixture.service.export_opml().await.unwrap();
+    assert!(
+        exported.contains(
+            r#"text="工作资讯" title="Feed 1" type="rss" xmlUrl="https://example.com/feed.xml""#
+        ),
+        "{exported}"
+    );
+    assert!(
+        fixture
+            .service
+            .import_opml(
+                r#"<opml version="2.0"><head/><body></body>
+        <outline text="New" type="rss" xmlUrl="https://new.example/feed"/></opml>"#
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(fixture.library.feeds.list_feeds().await.unwrap(), feeds);
 }
 
 async fn set_last_opened(library: &Library, feed_id: i64) {
@@ -148,7 +191,8 @@ async fn json_roundtrip_restores_feeds_and_settings() {
     );
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn config_exchange_contract_json_roundtrip_restores_feeds_and_settings() {
     json_roundtrip_restores_feeds_and_settings().await;
 }
@@ -208,12 +252,14 @@ async fn import_cleans_removed_feed_entries_and_last_opened_state() {
     assert_eq!(deleted_flag.await, 1);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn config_exchange_contract_import_cleans_removed_feed_entries_and_last_opened_state() {
     import_cleans_removed_feed_entries_and_last_opened_state().await;
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn config_exchange_contract_opml_import_upserts_normalized_feeds() {
     let fixture = build_fixture().await;
 
@@ -269,12 +315,14 @@ async fn remote_push_and_pull_roundtrip() {
     assert_eq!(import_fixture.library.settings.load().await.expect("load settings"), settings);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn config_exchange_contract_remote_push_and_pull_roundtrip() {
     remote_push_and_pull_roundtrip().await;
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn opml_import_rejects_truncation_without_persisting_prefix() {
     let fixture = build_fixture().await;
     fixture
@@ -289,7 +337,8 @@ async fn opml_import_rejects_truncation_without_persisting_prefix() {
     assert!(fixture.library.feeds.list_feeds().await.unwrap().is_empty());
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn opml_import_rejects_unsupported_scheme_before_any_write() {
     let fixture = build_fixture().await;
     let error = fixture
@@ -307,7 +356,8 @@ async fn opml_import_rejects_unsupported_scheme_before_any_write() {
     assert!(fixture.library.feeds.list_feeds().await.unwrap().is_empty());
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn opml_batch_database_failure_rolls_back_earlier_feed() {
     let fixture = build_fixture().await;
     fixture
@@ -336,7 +386,8 @@ async fn opml_batch_database_failure_rolls_back_earlier_feed() {
     assert!(fixture.library.feeds.list_feeds().await.unwrap().is_empty());
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn opml_import_rejects_material_before_root_without_persisting() {
     let fixture = build_fixture().await;
     fixture
@@ -352,7 +403,8 @@ async fn opml_import_rejects_material_before_root_without_persisting() {
     assert!(fixture.library.feeds.list_feeds().await.unwrap().is_empty());
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn opml_import_rejects_material_after_root_without_persisting() {
     let fixture = build_fixture().await;
     fixture

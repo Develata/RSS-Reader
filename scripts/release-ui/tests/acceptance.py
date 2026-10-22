@@ -23,9 +23,11 @@ SUFFIX = ".exe" if WINDOWS else ""
 parser = argparse.ArgumentParser()
 parser.add_argument("--binary", type=Path, default=ROOT / "target/release-ui-runner/debug" / ("release-ui" + SUFFIX))
 parser.add_argument("--bash", default=os.environ.get("RSSR_BASH", "bash"))
+parser.add_argument("--artifacts-root", type=Path,
+                    help="Parent for isolated test runs; use a short path on Windows for MSVC")
 ARGS, remaining = parser.parse_known_args()
 BINARY = ARGS.binary.resolve()
-RUN = ROOT / "target/release-ui-acceptance" / str(time.time_ns())
+RUN = (ARGS.artifacts_root or ROOT / "target/release-ui-acceptance").resolve() / str(time.time_ns())
 RUN.mkdir(parents=True)
 FIXTURE = RUN / ("fixture" + SUFFIX)
 subprocess.run(["rustc", "--edition=2024", str(Path(__file__).with_name("fixture.rs")), "-o", str(FIXTURE)], check=True)

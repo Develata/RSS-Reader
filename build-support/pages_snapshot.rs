@@ -1,8 +1,5 @@
 //! Build-time RSS snapshot shared by the native preparation tool and the Pages demo.
 //! This data format is independent of the demo's current storage adapter.
-#[cfg(target_arch = "wasm32")]
-use rssr_infra::application_adapters::browser::feed::ParsedFeed;
-#[cfg(not(target_arch = "wasm32"))]
 use rssr_infra::parser::ParsedFeed;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;

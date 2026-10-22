@@ -79,7 +79,7 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --full
 
 如果启用 `--with-browser-contracts`，还会补：
 
-- `bash scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness wasm_subscription_contract_harness wasm_config_exchange_contract_harness`
+- `bash scripts/run_wasm_contract_harness.sh test_library_refresh_contract_harness test_library_subscription_contract_harness test_library_config_exchange_contract_harness`
 
 三个原有单模块脚本入口继续保留。统一入口通过 std-only Rust runner 与 Cargo 的 target runner 机制执行精确产物，每个浏览器运行使用独立临时配置和 profile；不再按 mtime 寻找 wasm 或覆盖 crate 中的 `webdriver.json`。本地一个 Cargo 构建多个 harness 后串行运行浏览器；CI 先通过 `--prepare` 构建一次，再在独立 runner 通过 `--prebuilt` 按模块并发，准备产物成功不等于契约通过。详见 [主线矩阵](mainline-validation-matrix.md)。
 
@@ -112,7 +112,7 @@ bash scripts/run_server_web_regression.sh --suite acceptance --long
 
 ### 2. Pages 静态演示
 
-按 [Pages 构建与验收](../deployment/github-pages.md) 使用 `pages-demo` 与 `scripts/test_pages.sh`。该构建仍用 BrowserStore 保存演示状态，禁用在线订阅、WebDAV 和自动刷新；不能复用正式 Web 的产物或把演示测试当作服务器 API 验收。
+按 [Pages 构建与验收](../deployment/github-pages.md) 使用 `pages-demo` 与 `scripts/test_pages.sh`。该构建使用内存 SQLite，资料库操作重载即重置，禁用在线订阅、WebDAV 和自动刷新；不能复用正式 Web 的产物或把演示测试当作服务器 API 验收。
 
 ## 页面与主题矩阵
 

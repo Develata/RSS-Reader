@@ -1,7 +1,10 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 
 //! The refresh contract, run against the v0.2 library store (ported from
 //! `test_refresh_contract_harness.rs`).
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "support/library.rs"]
 mod library;
@@ -19,12 +22,29 @@ use rssr_domain::{EntryIndexRepository, EntryQuery, FeedRepository};
 use time::OffsetDateTime;
 use url::Url;
 
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn refresh_targets_include_only_active_normalized_feeds() {
+    use rssr_application::RefreshStorePort;
+    let library = Library::memory().await;
+    let active = library.add_feed("https://example.com:443/feed.xml#fragment").await;
+    let removed = library.add_feed("https://example.com/removed.xml").await;
+    library.feeds.set_deleted(removed.id, true).await.unwrap();
+    let targets = library.refresh.list_targets().await.unwrap();
+    assert_eq!(targets.len(), 1);
+    assert_eq!(targets[0].feed_id, active.id);
+    assert_eq!(targets[0].url.as_str(), "https://example.com/feed.xml");
+    assert!(library.refresh.get_target(removed.id).await.unwrap().is_none());
+    assert!(library.refresh.get_target(999).await.unwrap().is_none());
+}
+
 #[derive(Clone)]
 struct ScriptedSource {
     outputs: Arc<Mutex<Vec<FeedRefreshSourceOutput>>>,
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl FeedRefreshSourcePort for ScriptedSource {
     async fn refresh(&self, _target: &RefreshTarget) -> Result<FeedRefreshSourceOutput> {
         let mut outputs = self.outputs.lock().expect("lock outputs");
@@ -91,7 +111,8 @@ fn updated_output(feed_title: &str, entries: Vec<ParsedEntryData>) -> FeedRefres
     })
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn refresh_contract_persists_updated_feed_and_entries() {
     let fixture = build_library_fixture(
         &["https://example.com/feed.xml"],
@@ -130,7 +151,8 @@ async fn refresh_contract_persists_updated_feed_and_entries() {
     assert_eq!(entries[0].title, "Entry 1");
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn refresh_contract_records_not_modified_without_creating_entries() {
     let fixture = build_library_fixture(
         &["https://example.com/feed.xml"],
@@ -163,7 +185,8 @@ async fn refresh_contract_records_not_modified_without_creating_entries() {
     assert!(entries.is_empty());
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn refresh_contract_records_failure_message_and_fetch_timestamp() {
     let fixture = build_library_fixture(
         &["https://example.com/feed.xml"],
@@ -212,7 +235,8 @@ async fn refresh_contract_records_failure_message_and_fetch_timestamp() {
     assert_eq!(shown().await.as_deref(), Some("上次刷新失败"));
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn refresh_contract_refresh_all_aggregates_outcomes_in_target_order() {
     let fixture = build_library_fixture(
         &["https://example.com/feed-1.xml", "https://example.com/feed-2.xml"],
@@ -259,7 +283,8 @@ async fn refresh_contract_refresh_all_aggregates_outcomes_in_target_order() {
 /// RFC 9110 §15.4.5：304 不要求重发 `Last-Modified`；200 会带 ETag 时 304 必须带 ETag，
 /// 但仍有服务器省略，保留它属于兼容处理。丢掉某个校验器就失去相应的条件请求能力，
 /// 全部丢失时下一轮刷新退化为无条件全量抓取。
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn refresh_contract_not_modified_keeps_validators_the_server_did_not_resend() {
     let fixture = build_library_fixture(
         &["https://example.com/feed.xml"],

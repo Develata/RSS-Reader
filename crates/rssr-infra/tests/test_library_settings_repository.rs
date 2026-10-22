@@ -1,7 +1,10 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 
 //! The settings repository against the v0.2 library store (ports of
 //! `test_settings_repository.rs`).
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "support/library.rs"]
 mod library;
@@ -10,7 +13,8 @@ use library::Library;
 use rssr_application::{SettingsPatch, SettingsUpdatePort};
 use rssr_domain::{ListDensity, SettingsRepository, StartupView, ThemeMode, UserSettings};
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn settings_repository_persists_and_loads_settings() {
     let library = Library::memory().await;
     let settings = UserSettings {
@@ -30,7 +34,8 @@ async fn settings_repository_persists_and_loads_settings() {
     assert_eq!(loaded, settings);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn settings_repository_loads_legacy_settings_without_custom_css() {
     let library = Library::memory().await;
 
@@ -57,7 +62,8 @@ async fn settings_repository_loads_legacy_settings_without_custom_css() {
 /// A patch is merged in the write: only its fields change, a no-op writes nothing, an invalid
 /// patch leaves the stored settings as they were, and stored CSS from before the check does not
 /// block an unrelated field.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn settings_updates_merge_in_one_write() {
     let library = Library::memory().await;
     let stored = UserSettings { custom_css: "a { color: red;".into(), ..UserSettings::default() };

@@ -1,9 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{
-        Arc, PoisonError, Weak,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, PoisonError, Weak},
 };
 
 use anyhow::{Context, Result};
@@ -25,7 +22,7 @@ pub struct RefreshTarget {
     pub url: Url,
     pub etag: Option<String>,
     pub last_modified: Option<String>,
-    /// Persistent refresh ticket; [`RefreshTicket::UNTRACKED`] for stores without tickets.
+    /// A store-issued ticket, or [`RefreshTicket::UNISSUED`] in a target list before fetching.
     pub ticket: RefreshTicket,
 }
 
@@ -48,9 +45,9 @@ pub struct RefreshTicket {
 }
 
 impl RefreshTicket {
-    /// No ticket: for stores without persistent tickets (the browser store), ordered by the
-    /// in-process sequence instead; a store that tracks tickets refuses commits carrying it.
-    pub const UNTRACKED: Self = Self { issued: 0, baseline: 0 };
+    /// A listed target before a refresh starts. Stores refuse commits carrying this value;
+    /// activation and `begin_refresh` issue a ticket in their write transaction.
+    pub const UNISSUED: Self = Self { issued: 0, baseline: 0 };
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -398,7 +395,9 @@ pub trait RefreshStorePort: Send + Sync {
     /// when the subscription is gone or no longer in `expected_generation`. Called right before
     /// the fetch, so ticket order is fetch-start order.
     ///
-    /// The default issues no ticket (stores that do not share their data across processes).
+    /// The default delegates to a store whose `get_target` already issues tickets. Stores
+    /// with a separate read-only lookup override it to issue here. A production target returned
+    /// from either path must carry an issued ticket.
     async fn begin_refresh(
         &self,
         feed_id: i64,
@@ -418,8 +417,8 @@ pub trait RefreshStorePort: Send + Sync {
     /// 打开一个写入批次：批次期间的 [`RefreshStorePort::commit`] 只需保证改动对后续读取可见，
     /// 真正的落盘可以推迟到 [`RefreshStorePort::end_batch`]。
     ///
-    /// 默认空实现。目前两端都用默认实现：SQLite 每次 `commit` 就已经落盘；浏览器端
-    /// （`BrowserRefreshStore`）也逐订阅持久化，代价是每个订阅重写一次整片索引（审计 D2）。
+    /// 默认空实现。当前全部宿主共用 SQLite，每次 `commit` 就已提交；Pages 的内存库
+    /// 立即对本页后续查询可见，原生文件库按连接的持久化设置提交。
     /// 想把整轮写入合并成一次的存储才需要实现它。
     ///
     /// **不变量**：批次一旦打开，必须以 `end_batch` 或 `abort_batch` 收尾。
@@ -464,23 +463,12 @@ impl Drop for RefreshBatchGuard<'_> {
     }
 }
 
-/// 同一订阅的刷新逐个进行（审计 A1）。
-///
-/// 单源刷新、全量刷新、添加订阅的首刷与自动刷新都经过 [`RefreshService`]；抓取与提交
-/// 都在该订阅的锁内完成，于是后开始的抓取一定后提交，先发出却后返回的旧响应不会再覆盖
-/// 新响应，两次提交的多个写入步骤也不会交错。不同订阅之间互不等待。
-///
-/// 添加订阅的首刷用的是激活之前就抓好的结果，锁管不到它的“开始时间”：每次抓取开始时
-/// 领取一个单调序号，记下每个订阅最后落库内容的序号，预抓取结果只在没有更新的刷新落库时
-/// 才写入。
-///
-/// 只协调同一进程内的刷新：CLI 与图形界面同时刷新同一个数据库、或 Web 端多个标签页，
-/// 仍可能交错。锁表只留弱引用；序号表每个订阅一个整数。
+/// Serializes overlapping work for one subscription within this process. Other subscriptions
+/// do not wait. Correctness across processes and for prepared responses is decided entirely
+/// by the store's I/P/D tickets; this lock never spans a database transaction over a fetch.
 #[derive(Default)]
 struct FeedRefreshLocks {
     locks: std::sync::Mutex<HashMap<i64, Weak<tokio::sync::Mutex<()>>>>,
-    next_fetch: AtomicU64,
-    committed_fetch: std::sync::Mutex<HashMap<i64, u64>>,
 }
 
 impl FeedRefreshLocks {
@@ -494,28 +482,7 @@ impl FeedRefreshLocks {
         locks.insert(feed_id, Arc::downgrade(&lock));
         lock
     }
-
-    fn begin_fetch(&self) -> u64 {
-        self.next_fetch.fetch_add(1, Ordering::SeqCst) + 1
-    }
-
-    /// 调用方持有该订阅的锁。
-    fn superseded(&self, feed_id: i64, fetch: u64) -> bool {
-        let committed = self.committed_fetch.lock().unwrap_or_else(PoisonError::into_inner);
-        committed.get(&feed_id).is_some_and(|&latest| latest > fetch)
-    }
-
-    /// 调用方持有该订阅的锁。
-    fn record_commit(&self, feed_id: i64, fetch: u64) {
-        let mut committed = self.committed_fetch.lock().unwrap_or_else(PoisonError::into_inner);
-        let latest = committed.entry(feed_id).or_default();
-        *latest = (*latest).max(fetch);
-    }
 }
-
-/// 预抓取结果的序号，必须在订阅对刷新可见（激活）之前领取。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PreparedUpdateTicket(u64);
 
 #[derive(Clone)]
 pub struct RefreshService {
@@ -529,11 +496,6 @@ impl RefreshService {
         Self { source, store, feed_locks: Arc::default() }
     }
 
-    /// 在激活订阅之前调用：此后开始的刷新都比预抓取结果新。
-    pub fn prepared_update_ticket(&self) -> PreparedUpdateTicket {
-        PreparedUpdateTicket(self.feed_locks.begin_fetch())
-    }
-
     /// 复用添加订阅时已获取的 feed，首次入库不再发起第二次请求。
     ///
     /// 订阅激活后、首刷拿到锁之前，后台刷新可能已经把更新的内容落库；那时预抓取的结果
@@ -544,22 +506,10 @@ impl RefreshService {
         &self,
         target: RefreshTarget,
         update: FeedRefreshUpdate,
-        ticket: PreparedUpdateTicket,
     ) -> RefreshFeedOutcome {
         let lock = self.feed_locks.lock_for(target.feed_id);
         let _serialized = lock.lock().await;
-        // A target with a persistent ticket is ordered by the store; the in-process sequence only
-        // serves stores without tickets.
-        if target.ticket == RefreshTicket::UNTRACKED {
-            if self.feed_locks.superseded(target.feed_id, ticket.0) {
-                return RefreshFeedOutcome {
-                    feed_id: target.feed_id,
-                    url: target.url.to_string(),
-                    result: RefreshFeedResult::NotModified,
-                };
-            }
-            self.feed_locks.record_commit(target.feed_id, ticket.0);
-        }
+        // Activation already issued this prepared response's ticket in the same transaction.
         let (feed_id, url) = (target.feed_id, target.url.to_string());
         match self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await {
             Ok(outcome) => outcome,
@@ -742,23 +692,12 @@ impl RefreshService {
 
     /// 调用方必须持有该订阅的刷新锁。
     async fn fetch_and_apply(&self, target: RefreshTarget) -> Result<RefreshFeedOutcome> {
-        let fetch = self.feed_locks.begin_fetch();
         let source_output = match self.source.refresh(&target).await {
             Ok(output) => output,
             Err(error) => {
                 FeedRefreshSourceOutput::Failed(RefreshFailure::fetch(error.to_string(), None))
             }
         };
-        // 失败的抓取没有带来内容，不能让预抓取的结果因此作废。带来内容的落库在开始前就登记
-        // 序号，不论成功、失败还是被取消：SQLite 适配器分几步提交（索引、正文、抓取状态），
-        // 中途出错或被丢弃时前面的步骤可能已经落库。宁可让更早的预抓取结果作废（下次刷新会
-        // 补上），也不让它覆盖可能已经写入的更新内容（独立评审）。调用方持有该订阅的锁，
-        // 预抓取结果的检查与这里的登记不会交错。
-        if target.ticket == RefreshTicket::UNTRACKED
-            && !matches!(source_output, FeedRefreshSourceOutput::Failed(_))
-        {
-            self.feed_locks.record_commit(target.feed_id, fetch);
-        }
         self.apply_source_output(target, source_output).await
     }
 
@@ -1479,174 +1418,9 @@ mod tests {
         assert_eq!(committed, [2, 1, 1]);
     }
 
-    fn update_titled(title: &str) -> FeedRefreshUpdate {
-        FeedRefreshUpdate {
-            metadata: RefreshHttpMetadata::default(),
-            feed: ParsedFeedUpdate {
-                title: Some(title.to_string()),
-                site_url: None,
-                description: None,
-                entries: Vec::new(),
-            },
-        }
-    }
-
-    fn committed_titles(store: &StoreStub) -> Vec<String> {
-        store
-            .commits
-            .lock()
-            .expect("lock commits")
-            .iter()
-            .filter_map(|(_, commit)| match commit {
-                RefreshCommit::Updated { update } => update.feed.title.clone(),
-                _ => None,
-            })
-            .collect()
-    }
-
-    /// 订阅激活后，后台刷新抢先落库了更新的内容：预抓取的旧结果不能再覆盖它（独立评审）。
-    /// 失败的刷新没有带来内容，不会让预抓取结果作废。
-    #[tokio::test]
-    async fn a_prepared_update_never_overwrites_a_later_refresh() {
-        for (later_refresh, expected) in [
-            (FeedRefreshSourceOutput::Updated(update_titled("V2 newer")), vec!["V2 newer"]),
-            (
-                FeedRefreshSourceOutput::Failed(RefreshFailure::fetch("offline", None)),
-                vec!["V1 prepared"],
-            ),
-        ] {
-            let store = Arc::new(StoreStub {
-                targets: vec![sample_target(1, "https://example.com/1.xml")],
-                commits: Mutex::new(Vec::new()),
-            });
-            let service = RefreshService::new(
-                Arc::new(SourceStub { outputs: Mutex::new(vec![later_refresh]) }),
-                store.clone(),
-            );
-            let ticket = service.prepared_update_ticket();
-            // 激活之后、首刷之前，后台刷新先完成。
-            service.refresh_feed(1).await.expect("background refresh");
-            let first = service
-                .apply_prepared_update(
-                    sample_target(1, "https://example.com/1.xml"),
-                    update_titled("V1 prepared"),
-                    ticket,
-                )
-                .await;
-
-            assert_eq!(committed_titles(&store), expected);
-            assert!(first.is_success());
-        }
-    }
-
-    /// 第一次写入 `Updated` 时的意外：`Stall` 写入后不再返回（调用方此时被取消，内容已经
-    /// 落库）；`FailAfterWrite` 写入后报错（像 SQLite 适配器分步提交时后面一步失败）；
-    /// `FailBeforeWrite` 什么也没写就报错。
-    #[derive(Clone, Copy)]
-    enum Interruption {
-        Stall,
-        FailAfterWrite,
-        FailBeforeWrite,
-    }
-
-    struct InterruptingStore {
-        inner: StoreStub,
-        next_update: Mutex<Option<Interruption>>,
-        stalled: tokio::sync::Notify,
-    }
-
-    #[async_trait::async_trait]
-    impl RefreshStorePort for InterruptingStore {
-        async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
-            self.inner.list_targets().await
-        }
-
-        async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
-            self.inner.get_target(feed_id).await
-        }
-
-        async fn commit(
-            &self,
-            target: &RefreshTarget,
-            commit: RefreshCommit,
-        ) -> Result<crate::RefreshCommitOutcome> {
-            let interruption = match commit {
-                RefreshCommit::Updated { .. } => self.next_update.lock().expect("lock").take(),
-                _ => None,
-            };
-            match interruption {
-                Some(Interruption::FailBeforeWrite) => anyhow::bail!("database is locked"),
-                Some(Interruption::FailAfterWrite) => {
-                    self.inner.commit(target, commit).await?;
-                    anyhow::bail!("failed to store the fetch state")
-                }
-                Some(Interruption::Stall) => {
-                    self.inner.commit(target, commit).await?;
-                    self.stalled.notify_one();
-                    std::future::pending().await
-                }
-                None => self.inner.commit(target, commit).await,
-            }
-        }
-    }
-
-    /// 刷新的落库被取消（例如发起它的界面关闭）或中途报错时，无法确定写进去了多少，按已
-    /// 写入处理：更早领取序号的预抓取结果不再写入。代价是落库其实什么也没写时，预抓取的
-    /// 首刷结果也被放弃，要等下一次刷新（独立评审）。
-    #[tokio::test]
-    async fn a_refresh_interrupted_while_committing_still_supersedes_an_older_prepared_update() {
-        for (interruption, expected) in [
-            (Interruption::Stall, vec!["V2 newer"]),
-            (Interruption::FailAfterWrite, vec!["V2 newer"]),
-            (Interruption::FailBeforeWrite, vec![]),
-        ] {
-            let store = Arc::new(InterruptingStore {
-                inner: StoreStub {
-                    targets: vec![sample_target(1, "https://example.com/1.xml")],
-                    commits: Mutex::new(Vec::new()),
-                },
-                next_update: Mutex::new(Some(interruption)),
-                stalled: tokio::sync::Notify::new(),
-            });
-            let service = RefreshService::new(
-                Arc::new(SourceStub {
-                    outputs: Mutex::new(vec![FeedRefreshSourceOutput::Updated(update_titled(
-                        "V2 newer",
-                    ))]),
-                }),
-                store.clone(),
-            );
-            let ticket = service.prepared_update_ticket();
-            let refresh = tokio::spawn({
-                let service = service.clone();
-                async move { service.refresh_feed(1).await }
-            });
-            match interruption {
-                Interruption::Stall => {
-                    within("the commit to be written", store.stalled.notified()).await;
-                    refresh.abort();
-                    let cancelled = within("the refresh to stop", refresh).await;
-                    assert!(cancelled.expect_err("the refresh was cancelled").is_cancelled());
-                }
-                Interruption::FailAfterWrite | Interruption::FailBeforeWrite => {
-                    let finished = within("the refresh to fail", refresh).await;
-                    assert!(finished.expect("join refresh").is_err());
-                }
-            }
-
-            within(
-                "the prepared update",
-                service.apply_prepared_update(
-                    sample_target(1, "https://example.com/1.xml"),
-                    update_titled("V1 prepared"),
-                    ticket,
-                ),
-            )
-            .await;
-
-            assert_eq!(committed_titles(&store.inner), expected);
-        }
-    }
+    // Prepared-response ordering and lost acknowledgements are tested against the actual
+    // SQL store in test_library_refresh_tickets on native and WASM. The obsolete in-process
+    // sequence stubs intentionally no longer define a second publication rule.
 
     /// `refresh_all` 的目标列表是锁外快照：等锁之后要用存储里最新的校验器发请求；期间被
     /// 删除或重新订阅的订阅不在这一轮刷新（独立评审）。

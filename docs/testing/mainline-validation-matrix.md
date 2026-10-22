@@ -30,7 +30,7 @@
 
 ## GitHub CI 并发矩阵
 
-[ci.yml](../../.github/workflows/ci.yml) 每次 main push / PR（或手动触发）均覆盖所有 workspace crate。模块列表及 `rssr-infra` 的 `wasm_*_contract_harness` 列表直接来自锁定依赖的 `cargo metadata`，wasm-bindgen 工具版本读取 `Cargo.lock`，不再手工维护第二份列表 / 版本。没有额外的路径选测规则；避免共享代码或新 crate 被遗漏。业务依赖方向仍由 Cargo 决定，独立 runner 只拆分验收执行。
+[ci.yml](../../.github/workflows/ci.yml) 每次 main push / PR（或手动触发）均覆盖所有 workspace crate。模块列表来自锁定依赖的 `cargo metadata`；浏览器契约列表来自 `rssr-infra` 的 `package.metadata.rssr.wasm-contracts`，并核对每个 test target 存在。wasm-bindgen 版本读取 `Cargo.lock`。没有额外路径选测；业务依赖方向由 Cargo 决定，独立 runner 只拆分验收执行。
 
 | Job / matrix | 自动验收 | 并发上限 / 超时 |
 | --- | --- | --- |
@@ -38,10 +38,10 @@
 | `test-tools` | actionlint 1.7.12（官方校验和验证下载）；std-only Rust wasm runner 的 rustfmt、Clippy、单测及子进程隔离；Linux `.deb` 版本与动态库依赖元数据适配测试 | 独立运行，10 分钟 |
 | `release-ui-runner` / Ubuntu + Windows | 独立 CLI 的 fmt、Clippy、单测与黑盒编排验收；用真实 workspace 的 Cargo metadata 核对计划引用的 package / test target | 2 / 每平台 10 分钟 |
 | `native-module` / 7 crates | `cargo clippy --locked -p <crate> --all-targets -- -D warnings`；`cargo test --locked -p <crate>`（含 doc tests）；CLI help | 4 / 每模块 35 分钟 |
-| `web-smoke` | 四组 wasm Clippy（全部 `-D warnings`）：app 正式 Web、app `pages-demo`、infra 无额外 feature、infra `browser-store,http-backend --tests`；Dioxus 0.7.9 正式 Web release bundle，同次构建服务器与夹具工具，上传 `ci-web-public` / `ci-web-server` | 40 分钟 |
+| `web-smoke` | 四组 wasm Clippy（全部 `-D warnings`）：app 正式 Web、app `pages-demo`、infra 无额外 feature、infra `memory-store,http-backend --tests`；Dioxus 0.7.9 正式 Web release bundle，同次构建服务器与夹具工具，上传 `ci-web-public` / `ci-web-server` | 40 分钟 |
 | `web-ui` / default + 4 builtin themes | 下载同次页面/服务器/夹具工具，每主题运行 `regression`；默认主题另跑 `theme-matrix`、`feed-smoke`、`acceptance`。push / PR 默认短验收；手动 `acceptance_long=true` 纳入全部长场景 | 3 / 每主题 15 分钟 |
 | `wasm-contract-build` | 一个锁定依赖的 Cargo 调用准备全部 harness，上传精确产物；预热 wasm-bindgen 工具缓存 | 35 分钟 |
-| `wasm-browser-contract` / 3 harnesses | 下载同一批产物，分别运行 refresh / subscription / config exchange 浏览器契约，不再运行 Cargo | 3 / 每 harness 15 分钟 |
+| `wasm-browser-contract` / 13 targets | 下载同一批产物，运行共享 SQL 契约与 WASM 执行器案例，不再运行 Cargo | 3 / 每 target 15 分钟 |
 | `android-smoke` | 锁定 NDK / ARM64 app + CLI check、app bundle、APK 资源 / ABI / version 断言；`~/.gradle` 按 dx 版本与 Android 输入缓存 | 50 分钟 |
 | `lint-and-test` | 汇总所有 jobs，只有全部 success 才通过；失败、取消、意外跳过均拒绝 | 5 分钟 |
 
@@ -54,7 +54,7 @@ flowchart LR
   N --> G
   U --> G
   W --> CB[Wasm build once]
-  CB --> C[Wasm contracts × 3]
+  CB --> C[Wasm contracts × 13]
   C --> G
   A[Android smoke] --> G
 ```
@@ -104,14 +104,14 @@ Cargo JSON / TOML 事实解析、GitHub `needs` JSON 摘要仍使用短 Python �
 
 | 能力项 | 自动化入口 | 是否需要手工 smoke | 是否受环境限制 | 通过标准 |
 |---|---|---|---|---|
-| add/remove | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_library_application_refresh_store_adapter`；`cargo test -p rssr-infra --test test_library_subscription_contract_harness`；`bash scripts/run_wasm_subscription_contract_harness.sh`；`cargo check -p rssr-cli` | 是 | 中 | URL 可添加；删除后列表与 app state 保持一致；browser persisted-state 与 sqlite contract 保持一致；无异常报错 |
-| refresh | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_library_feed_refresh_flow`；`cargo test -p rssr-infra --test test_library_application_refresh_store_adapter`；`bash scripts/run_wasm_refresh_contract_harness.sh` | 是 | 中 | single / all 都可完成；成功、失败、not modified 语义正确；browser refresh store target/commit 语义正确；不产生异常重复写入 |
+| add/remove | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_library_application_refresh_store_adapter`；`cargo test -p rssr-infra --test test_library_subscription_contract_harness`；`bash scripts/run_wasm_subscription_contract_harness.sh`；`cargo check -p rssr-cli` | 是 | 中 | URL 可添加；删除后列表与 app state 保持一致；native 与 wasm 共享 SQL 契约一致；无异常报错 |
+| refresh | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_library_feed_refresh_flow`；`cargo test -p rssr-infra --test test_library_application_refresh_store_adapter`；`bash scripts/run_wasm_refresh_contract_harness.sh` | 是 | 中 | single / all 都可完成；成功、失败、not modified 语义正确；两端 SQL target/commit 语义正确；不产生异常重复写入 |
 | CLI refresh 参数 | `cargo test --locked -p rssr-cli --test test_stdout_contract` | 否 | 低 | `--all` / `--feed-id` 恰选其一；无目标或双目标在打开数据库前以非零码退出 |
 | Linux `.deb` 安装 | `bash scripts/test_prepare_linux_deb.sh`；release job 中 `dpkg-deb -f ... Depends`、普通用户 Xvfb 双启动 | 是 | 高 | 拒绝输入文件的路径别名/硬链接/符号链接及目录作为输出；tag 版本、运行时依赖字段、用户 XDG 路径、两个数据库与重启后数据复用均成立；本地工具测试不能替代新 tag 的安装验收 |
 | 服务器出站与旧接口退役 | `cargo test --locked -p rssr-infra --test test_outbound_policy --test test_native_outbound_requests`；`cargo test --locked -p rssr-web the_feed_proxy_and_the_session_probe_are_gone`；服务器 `feed-smoke` | 是 | 中 | 出站策略、DNS/重定向与代理环境边界；已登录旧代理地址返回 404 且无上游请求；公网另验 |
 | Web 登录回跳 | `cargo test --locked -p rssr-web auth::tests` | 否 | 低 | 回跳限定同源路径；拒绝会被浏览器归一化为外站地址的反斜杠/控制字符，输出可用作 Location header |
 | SQLite 单资料库 | `cargo test --locked -p rssr-infra --test test_library_store --test test_library_persistence_atomicity` | 否 | 低 | 真实 `library.sqlite3` 的建库、事务与失败恢复；旧库升级另验 |
-| config/exchange | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_config_package_codec`；`cargo test -p rssr-infra --test test_library_config_package_io`；`cargo test -p rssr-infra --test test_opml_interop`；`cargo test -p rssr-infra --test test_library_config_exchange_contract_harness`；`bash scripts/run_wasm_config_exchange_contract_harness.sh` | 是 | 中 | JSON / OPML roundtrip 可用；损坏或非法配置被拒绝；导入后订阅与设置恢复符合预期；browser persisted-state 与 sqlite contract 保持一致 |
+| config/exchange | `cargo test -p rssr-application`；`cargo test -p rssr-infra --test test_config_package_codec`；`cargo test -p rssr-infra --test test_library_config_package_io`；`cargo test -p rssr-infra --test test_opml_interop`；`cargo test -p rssr-infra --test test_library_config_exchange_contract_harness`；`bash scripts/run_wasm_config_exchange_contract_harness.sh` | 是 | 中 | JSON / OPML roundtrip 可用；损坏或非法配置被拒绝；导入后订阅与设置恢复符合预期；native 与 wasm 共享 SQL 契约一致 |
 | reader rendering | `cargo test -p rssr-app`；`cargo check -p rssr-app --target wasm32-unknown-unknown` | 是 | 中 | 阅读页优先展示完整 HTML；HTML-like fallback 不再被原样显示标签；内容经过清洗 |
 | web startup | `cargo check -p rssr-app --target wasm32-unknown-unknown`；`cargo test -p rssr-web` | 是 | 中 | 首屏可交互；无黑屏、无页面无响应；主要路由切换正常；Console 无新的 panic / 死循环 |
 | paste/input | `rssr-app` Feeds session 测试；既有 small viewport smoke 的真实键盘输入 / Enter / pending 场景 | 是 | 中 | 新增订阅可聚焦、提交；重复提交去重、期间新输入保留；原生粘贴及平台输入法继续实机补查 |

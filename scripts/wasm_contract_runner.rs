@@ -101,15 +101,14 @@ fn cargo_command(harnesses: &[OsString], runner: &[OsString]) -> io::Result<Comm
         .collect::<io::Result<Vec<_>>>()?;
     let configuration = format!("target.wasm32-unknown-unknown.runner = [{}]", runner.join(", "));
     let mut command = Command::new("cargo");
-    // The harnesses test the library kept in the browser, which only `browser-store` builds
-    // (phase C, C4a); Cargo refuses the harnesses without it.
+    // Shared SQL repositories on the page thread (phase D); formal Web excludes this feature.
     command.args([
         "test",
         "--locked",
         "-p",
         "rssr-infra",
         "--features",
-        "browser-store",
+        "memory-store",
         "--target",
         "wasm32-unknown-unknown",
         "--config",
@@ -368,7 +367,7 @@ mod tests {
                 "-p",
                 "rssr-infra",
                 "--features",
-                "browser-store",
+                "memory-store",
                 "--target",
                 "wasm32-unknown-unknown",
                 "--config"

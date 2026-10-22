@@ -11,7 +11,7 @@ use url::Url;
 use super::error::{StoreError, StoreResult};
 
 pub fn now() -> String {
-    format_time(OffsetDateTime::now_utc()).expect("the current time is RFC 3339 formattable")
+    format_time(crate::platform_clock::now_utc()).expect("the current time is RFC 3339 formattable")
 }
 
 /// RFC 3339 has four-digit years; a time outside 0000-9999 cannot be stored and fails the

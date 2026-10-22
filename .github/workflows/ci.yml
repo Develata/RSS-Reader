@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+env:
+  CC_wasm32_unknown_unknown: clang
+  AR_wasm32_unknown_unknown: llvm-ar
+
 defaults:
   run:
     shell: bash
@@ -45,9 +49,9 @@ jobs:
           members = set(metadata['workspace_members'])
           packages = sorted(p['name'] for p in metadata['packages'] if p['id'] in members)
           infra = next(p for p in metadata['packages'] if p['name'] == 'rssr-infra')
-          harnesses = sorted(t['name'] for t in infra['targets']
-                            if 'test' in t['kind'] and t['name'].startswith('wasm_')
-                            and t['name'].endswith('_contract_harness'))
+          harnesses = sorted(infra['metadata']['rssr']['wasm-contracts'])
+          targets = {t['name'] for t in infra['targets'] if 'test' in t['kind']}
+          assert set(harnesses) <= targets, 'unknown shared SQL test target'
           with open('Cargo.lock', 'rb') as source:
               versions = {p['version'] for p in tomllib.load(source)['package']
                           if p['name'] == 'wasm-bindgen'}
@@ -242,7 +246,7 @@ jobs:
         run: cargo clippy --locked -p rssr-infra --target wasm32-unknown-unknown -- -D warnings
 
       - name: Wasm infra adapter and test Clippy
-        run: cargo clippy --locked -p rssr-infra --target wasm32-unknown-unknown --features browser-store,http-backend --tests -- -D warnings
+        run: cargo clippy --locked -p rssr-infra --target wasm32-unknown-unknown --features memory-store,http-backend --tests -- -D warnings
 
       - name: Web bundle smoke
         run: |

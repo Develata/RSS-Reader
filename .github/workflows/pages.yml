@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+env:
+  CC_wasm32_unknown_unknown: clang
+  AR_wasm32_unknown_unknown: llvm-ar
+
 jobs:
   build:
     concurrency:
@@ -96,7 +100,7 @@ jobs:
       - uses: ./.github/actions/setup-browser-tests
         with:
           with-driver: 'false'
-      - name: Check real RSS content, subpath, persistence and network downgrade
+      - name: Check RSS content, memory reset, subpath, performance and network policy
         run: bash scripts/test_pages.sh
       - name: Preserve the RSS snapshot used by this build
         uses: actions/upload-artifact@v7
@@ -105,14 +109,14 @@ jobs:
           path: assets/pages-demo/snapshot.json
           if-no-files-found: error
           retention-days: 7
-      - name: Preserve smoke diagnostics on failure
-        if: failure()
+      - name: Preserve Pages acceptance and performance evidence
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: pages-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: target/pages-smoke/
           if-no-files-found: ignore
-          retention-days: 3
+          retention-days: 7
       - name: Validate Pages hidden-file manifest
         run: |
           python3 - <<'PYTHON'

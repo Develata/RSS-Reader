@@ -82,7 +82,7 @@ Linux `/usr/bin` 安装版的数据目录是 `$XDG_DATA_HOME/rss-reader/`，未�
 
 **从旧版 Web 升级到服务器模式：**旧浏览器库中的文章、已读和收藏不迁移。升级前在旧版导出 JSON 配置或 OPML，登录新版后导入订阅与设置，并重新刷新订阅。旧文章是否还能重新抓到取决于 feed 当前提供的内容；新版不会读取旧库作为离线后备。正式 Web 不再离线可读，需要服务器在线。保留旧文章前不要清除旧站点数据。
 
-正式 Web 不要求 Web Locks 来保存资料库；本地存储仅用于设备偏好或临时草稿。仅 `pages-demo` 演示保留 BrowserStore、`localStorage` 和 Web Locks，演示操作会保留在该 origin 的浏览器存储里，清除站点数据会删除演示状态；在线订阅、WebDAV 和自动刷新被禁用。详见 [Pages 边界](./deployment/github-pages.md)。
+正式 Web 不要求 Web Locks 来保存资料库；本地存储仅用于设备偏好或临时草稿。`pages-demo` 演示将预抓取 RSS 载入内存 SQLite，资料库操作重新加载即重置，设备偏好单独保存；旧浏览器文章库不读取、不清除，在线订阅、WebDAV 和自动刷新禁用。详见 [Pages 边界](./deployment/github-pages.md)。
 
 ## 其他平台说明
 

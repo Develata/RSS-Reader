@@ -111,7 +111,7 @@ pub(crate) fn issue_ticket(conn: &Connection, feed_id: i64) -> StoreResult<Refre
 
 /// The commit's ticket; a commit without one is refused (see the module documentation).
 fn commit_ticket(target: &RefreshTarget) -> StoreResult<RefreshTicket> {
-    if target.ticket == RefreshTicket::UNTRACKED {
+    if target.ticket == RefreshTicket::UNISSUED {
         return Err(DomainError::InvalidInput(
             "刷新提交缺少序号：目标必须来自 begin_refresh 或订阅激活".to_owned(),
         )

@@ -1,7 +1,9 @@
-#![cfg(not(target_arch = "wasm32"))]
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 
-//! The shared port contracts, run against the v0.2 library store (the same cases run against
-//! the v0.1.x SQLite repositories and the browser store).
+//! Shared port contracts against the same v0.2 SQL repositories on native and browser SQLite.
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "support/archive_boundary_cases.rs"]
 mod archive_boundary_cases;
@@ -21,7 +23,127 @@ mod refresh_count_cases;
 use library::Library;
 use rssr_domain::{EntryIndexRepository, EntryQuery, FeedRepository, MarkReadOutcome};
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn offline_composition_refuses_network_even_through_direct_use_cases() {
+    use rssr_application::{ErrorKind, classify};
+    let library = Library::memory().await;
+    let feed = library.add_feed("https://example.com/stored.xml").await;
+    let cases =
+        rssr_infra::composition::compose_offline_library_use_cases(library.store.clone()).use_cases;
+    let error = cases
+        .subscription_workflow
+        .prepare_subscription("https://example.com/new.xml")
+        .await
+        .unwrap_err();
+    assert_eq!(classify(&error).kind, ErrorKind::Network);
+    let outcome = cases.refresh_service.refresh_feed(feed.id).await.unwrap();
+    assert!(matches!(
+        outcome.result,
+        rssr_application::RefreshFeedResult::Failed { kind: ErrorKind::Network, .. }
+    ));
+    assert_eq!(library.feeds.list_feeds().await.unwrap().len(), 1);
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn concurrent_handles_preserve_other_entries_and_other_flag_bits() {
+    let library = Library::memory().await;
+    let other = Library::over(library.store.clone());
+    let (first, second) = futures_util::join!(
+        library.add_feed("https://example.com/first"),
+        other.add_feed("https://example.com/second"),
+    );
+    assert_ne!(first.id, second.id);
+    let (one, two) = futures_util::join!(
+        library.seed(first.id, vec![library::entry("first")]),
+        other.seed(second.id, vec![library::entry("second")]),
+    );
+    assert_eq!((one, two), (1, 1));
+    let entries = library.entries.list_entries(&EntryQuery::default()).await.unwrap();
+    let (one, two) = (entries[0].id, entries[1].id);
+    let (read, star, other_read) = futures_util::join!(
+        library.entries.set_read(one, true),
+        other.entries.set_starred(one, true),
+        other.entries.set_read(two, true),
+    );
+    read.unwrap();
+    star.unwrap();
+    other_read.unwrap();
+    let stored = library.entries.get_entry_record(one).await.unwrap().unwrap();
+    assert!(stored.is_read && stored.is_starred);
+    assert!(library.entries.get_entry_record(two).await.unwrap().unwrap().is_read);
+    assert_eq!(library.entries.count_entries(&EntryQuery::default()).await.unwrap(), 2);
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn listing_and_flag_writes_do_not_need_article_bodies() {
+    let library = Library::memory().await;
+    let feed = library.add_feed("https://example.com/body-independent").await;
+    library.seed(feed.id, vec![library::entry("first")]).await;
+    library.exec("DROP TABLE entry_contents").await;
+    assert_eq!(library.entries.list_entries(&EntryQuery::default()).await.unwrap().len(), 1);
+    library.entries.set_read(1, true).await.unwrap();
+    library.entries.set_starred(1, true).await.unwrap();
+    assert_eq!(library.feeds.list_summaries().await.unwrap()[0].unread_count, 0);
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn committed_refreshes_survive_batch_boundaries() {
+    use rssr_application::RefreshStorePort;
+    let library = Library::memory().await;
+    let feed = library.add_feed("https://example.com/batch").await;
+    library.refresh.begin_batch().await.unwrap();
+    library.seed(feed.id, vec![library::entry("a")]).await;
+    assert_eq!(library.entries.count_entries(&EntryQuery::default()).await.unwrap(), 1);
+    library.refresh.begin_batch().await.unwrap();
+    library.refresh.abort_batch();
+    assert_eq!(library.entries.count_entries(&EntryQuery::default()).await.unwrap(), 1);
+    library.seed(feed.id, vec![library::entry("b")]).await;
+    library.refresh.end_batch().await.unwrap();
+    library.refresh.abort_batch();
+    library.refresh.begin_batch().await.unwrap();
+    library.refresh.end_batch().await.unwrap();
+    assert_eq!(library.entries.count_entries(&EntryQuery::default()).await.unwrap(), 2);
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn metadata_only_refreshes_do_not_rewrite_flags_or_bodies() {
+    use rssr_application::{RefreshCommit, RefreshFailure, RefreshHttpMetadata, RefreshStorePort};
+    let library = Library::memory().await;
+    let feed = library.add_feed("https://example.com/metadata").await;
+    library
+        .seed(
+            feed.id,
+            vec![rssr_application::ParsedEntryData {
+                content_html: Some("<p>body</p>".into()),
+                ..library::entry("a")
+            }],
+        )
+        .await;
+    library.entries.set_read(1, true).await.unwrap();
+    library.entries.set_starred(1, true).await.unwrap();
+    library.exec("CREATE TRIGGER reject_body BEFORE UPDATE ON entry_contents BEGIN SELECT RAISE(FAIL,'body rewritten'); END;
+        CREATE TRIGGER reject_flags BEFORE UPDATE OF is_read, is_starred, read_at, starred_at ON entries BEGIN SELECT RAISE(FAIL,'flags rewritten'); END;").await;
+    for commit in [
+        RefreshCommit::NotModified {
+            metadata: RefreshHttpMetadata { etag: Some("unchanged".into()), last_modified: None },
+        },
+        RefreshCommit::Failed { failure: RefreshFailure::fetch("offline", None) },
+    ] {
+        let target = library.refresh.get_target(feed.id).await.unwrap().unwrap();
+        library.refresh.commit(&target, commit).await.unwrap();
+    }
+    let entry = library.entries.get_entry(1).await.unwrap().unwrap();
+    assert!(entry.is_read && entry.is_starred);
+    assert_eq!(entry.content_html.as_deref(), Some("<p>body</p>"));
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn chosen_names_stay_apart_from_source_titles() {
     let library = Library::memory().await;
     feed_title_cases::verify_custom_titles(&feed_title_cases::Ports {
@@ -36,7 +158,8 @@ async fn chosen_names_stay_apart_from_source_titles() {
     .await;
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn fractional_published_times_are_archived_by_their_value() {
     let library = Library::memory().await;
     let feed = library.add_feed("https://example.com/archive-boundary.xml").await;
@@ -48,7 +171,8 @@ async fn fractional_published_times_are_archived_by_their_value() {
     .await;
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn refresh_rewrites_only_changed_bodies() {
     let library = Library::memory().await;
     let feed = library.add_feed("https://example.com/content.xml").await;
@@ -88,7 +212,8 @@ async fn refresh_rewrites_only_changed_bodies() {
     .expect("an unchanged body is not rewritten");
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn counts_only_real_inserts_including_same_batch_duplicates() {
     let library = Library::memory().await;
     let feed = library.add_feed("https://example.com/count").await;
@@ -97,7 +222,8 @@ async fn counts_only_real_inserts_including_same_batch_duplicates() {
 }
 
 /// Titles in lists are cut by the shared rule, in the query; the reader keeps the whole title.
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn titles_in_lists_are_bounded() {
     use listed_title_cases::{bound_entry_title, long_entry_title, long_feed_title, nul_title};
     use rssr_domain::listed_title;
@@ -153,7 +279,8 @@ async fn titles_in_lists_are_bounded() {
     assert_eq!(record.title, long_entry_title(), "the reader keeps the whole title");
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn bulk_read_refuses_a_selection_over_its_bound() {
     let library = Library::memory().await;
     let feed = library.add_feed("https://example.com/many").await;
@@ -164,7 +291,8 @@ async fn bulk_read_refuses_a_selection_over_its_bound() {
     bulk_read_cases::verify_selection_bound(&library.entries, toggle).await;
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn bulk_read_scope_confirmation_atomic_failure_and_zero() {
     let library = Library::memory().await;
     let entries = &library.entries;
@@ -224,7 +352,8 @@ async fn bulk_read_scope_confirmation_atomic_failure_and_zero() {
 }
 
 /// A scope larger than SQLite's parameter limit keeps working (one JSON parameter).
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn entry_query_accepts_more_feed_ids_than_the_parameter_limit() {
     let library = Library::memory().await;
     let feed = library.add_feed("https://example.com/selected").await;
@@ -241,7 +370,9 @@ async fn entry_query_accepts_more_feed_ids_than_the_parameter_limit() {
     );
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg(not(target_arch = "wasm32"))]
 async fn bulk_read_large_dataset_measurement() {
     let library = Library::memory().await;
     library

@@ -31,8 +31,7 @@ pub struct ActivatedSubscription {
     pub feed: Feed,
     pub generation: i64,
     /// Ticket for the response fetched before activation (the add flow's prepared fetch),
-    /// issued in the activation transaction; [`crate::RefreshTicket::UNTRACKED`] for stores
-    /// without tickets.
+    /// issued in the activation transaction together with the subscription generation.
     pub ticket: crate::RefreshTicket,
 }
 

@@ -1,10 +1,14 @@
-// On wasm the OPML codec exists only with the library kept in the browser (`browser-store`).
-#![cfg(any(not(target_arch = "wasm32"), feature = "browser-store"))]
+// On wasm the OPML codec exists only with the shared memory library (`memory-store`).
+#![cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
+
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 use rssr_domain::{ConfigFeed, OpmlFeed};
 use rssr_infra::opml::OpmlCodec;
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn opml_roundtrip_preserves_titles_and_folders() {
     let codec = OpmlCodec::new();
     let feeds = vec![
@@ -34,7 +38,8 @@ fn opml_roundtrip_preserves_titles_and_folders() {
     assert_eq!(decoded, expected);
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn opml_import_ignores_outlines_without_xml_url() {
     let codec = OpmlCodec::new();
     let opml = r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -65,7 +70,8 @@ fn outlines(body: &str) -> String {
 
 /// OPML 2.0：`text` 是显示的名称（其他阅读器里改过的名称在这里），`title` 来自订阅源。导入
 /// 取 `text`，空白时退回 `title`；分组也一样（审计 B6）。
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn opml_import_prefers_text_and_falls_back_to_title() {
     let decoded = OpmlCodec::new()
         .decode(&outlines(
@@ -92,7 +98,8 @@ fn opml_import_prefers_text_and_falls_back_to_title() {
 }
 
 /// 名称就是名称，不与订阅地址比较：用户把名称设成地址也照样保留（独立评审）。
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn opml_import_keeps_a_name_even_when_it_equals_the_feed_url() {
     let decoded = OpmlCodec::new()
         .decode(&outlines(
@@ -105,7 +112,8 @@ fn opml_import_keeps_a_name_even_when_it_equals_the_feed_url() {
 
 /// 导出：`text` 写显示名称，`title` 只在知道源标题时写，不拿显示名称冒充；两个名称都没有时
 /// `text` 是空串（OPML 2.0 要求有 `text`），再导入时没有名称。文档带 `<head>`。
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn opml_export_writes_the_display_name_and_only_a_known_source_title() {
     let codec = OpmlCodec::new();
     let encoded = codec
@@ -147,7 +155,8 @@ fn opml_export_writes_the_display_name_and_only_a_known_source_title() {
 /// 属性里的制表、换行、回车写成字符引用（否则其他 XML 解析器会把它们变成空格），XML 1.0 不
 /// 允许的字符去掉，导出的文件始终是合法 XML。只看输出的原文：本 codec 自己读回时不做属性值
 /// 规范化，往返测不出这个问题（独立评审）。
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn opml_export_escapes_whitespace_and_drops_characters_xml_forbids() {
     let encoded = OpmlCodec::new()
         .encode(&[OpmlFeed {
@@ -177,7 +186,8 @@ fn opml_export_escapes_whitespace_and_drops_characters_xml_forbids() {
 
 /// 订阅出现在 <body> 外、或任何元素的属性写坏时整体拒绝，不导入其中一部分（独立评审：原先
 /// <body> 外的订阅被静默忽略，却报告导入成功）。
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn opml_import_rejects_outlines_outside_the_body_and_broken_attributes() {
     let codec = OpmlCodec::new();
     for raw in [

@@ -130,7 +130,8 @@ impl LibraryMutations {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl SubscriptionActivationPort for LibraryMutations {
     async fn activate_subscription(
         &self,
@@ -151,7 +152,8 @@ impl SubscriptionActivationPort for LibraryMutations {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl SubscriptionRemovalPort for LibraryMutations {
     async fn remove_subscription(&self, feed_id: i64, purge_entries: bool) -> Result<()> {
         self.store
@@ -162,7 +164,8 @@ impl SubscriptionRemovalPort for LibraryMutations {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl ConfigReplacementPort for LibraryMutations {
     async fn replace_config(
         &self,
