@@ -558,6 +558,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: release-assets
+          pattern: '!*.dockerbuild'
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
