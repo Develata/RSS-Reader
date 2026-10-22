@@ -12,10 +12,6 @@ on:
 permissions:
   contents: read
 
-env:
-  CC_wasm32_unknown_unknown: clang
-  AR_wasm32_unknown_unknown: llvm-ar
-
 jobs:
   build:
     concurrency:
@@ -28,6 +24,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-wasm-c-toolchain
       - uses: ./.github/actions/cleanup-github-runner
       - uses: dtolnay/rust-toolchain@stable
         with:

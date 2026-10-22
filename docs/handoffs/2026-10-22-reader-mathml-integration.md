@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
 - 当前 HEAD：`9b70455`
-- 相关 commit：pending
+- 相关 commit：`c2e2278`
 - 相关 tag / release：未创建，等待最终验收与用户确认
 - 状态：`draft`
 
@@ -50,7 +50,7 @@
 
 ## 结果
 
-commit: pending。本地验收通过；远端最终候选、实际公网 Pages 与独立评审仍未齐备，不能宣布可打 tag。
+已提交并推送 `c2e2278`。本地验收通过；远端最终候选、实际公网 Pages 与独立评审仍未齐备，不能宣布可打 tag。
 
 ## 风险与后续事项
 

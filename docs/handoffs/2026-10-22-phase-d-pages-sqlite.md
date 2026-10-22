@@ -80,3 +80,11 @@
 - 设计入口：`docs/design/v0.2-architecture.md`，存储节与阶段门禁。
 - RSS 快照沿用 `assets/pages-demo/`，不得将真实内容替换为合成样例来通过验收。
 - 已有阶段 C 证据见 `2026-10-22-c4c-round3-closure.md`、`2026-10-22-c6-web-distribution.md`、`2026-10-22-ci-acceptance-timeouts.md`；新候选须重新验证。
+
+## 首轮远端候选与工具链修正
+
+- `c2e2278` 已推送；CI `39863471290`（long）、Pages `39863477970`、四平台 Web 包 / Docker `39863485165` 已触发，不发布。
+- CI 的 `web-smoke` 和 `wasm-contract-build` 都因 `cc-rs: failed to find tool "llvm-ar"` 失败；runner 为 Ubuntu 26.04，原生 Clang 编译已进行到归档阶段，不能据此称为业务测试失败。
+- 修正：新增共用 `setup-wasm-c-toolchain` action，解析 Clang 的真实路径，使用同一安装目录的 `llvm-ar`，先实际编译与归档一个 wasm32 C 对象，再导出 Cargo 的 CC/AR 路径；CI 的两个构建 job 与 Pages 共用。
+- 本机 WSL Debian 同样没有未带版本号的 `llvm-ar` 命令，但 `/usr/lib/llvm-19/bin/llvm-ar` 存在；直接执行 action 的完整脚本通过，探针输出全部写在本 worktree 的 E 盘路径。actionlint 与 diff 检查通过。
+- 工具链修正 commit: pending；后续远端结果另补。
