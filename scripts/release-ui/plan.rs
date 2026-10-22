@@ -144,7 +144,7 @@ pub fn build(options: &Options) -> Vec<Step> {
         !options.skip_automated,
         "cargo",
         words(
-            "test --locked -p rssr-infra --test test_refresh_contract_harness --test test_subscription_contract_harness --test test_config_exchange_contract_harness",
+            "test --locked -p rssr-infra --test test_library_refresh_contract_harness --test test_library_subscription_contract_harness --test test_library_config_exchange_contract_harness",
         ),
         "automated-gates.log",
         None,
