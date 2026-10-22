@@ -222,7 +222,7 @@ fn normalise(text: &str, port: u16) -> String {
 
 /// A time at the start of `bytes` and its length: `YYYY-MM-DD`, a space or `T`, `H:MM` or `HH:MM`,
 /// optional `:SS` and fraction, then an offset (`Z`, `+hh:mm`, ` +hh:mm:ss` as `time` prints it,
-/// ` UTC+hh:mm` as the reader shows it). Only text that is a valid instant counts.
+/// ` UTC` or ` UTC+hh:mm` as the reader shows it). Only text that is a valid instant counts.
 fn timestamp_at(bytes: &[u8]) -> Option<(usize, time::OffsetDateTime)> {
     let digit = |index: usize| bytes.get(index).is_some_and(u8::is_ascii_digit);
     let at = |index: usize, byte: u8| bytes.get(index) == Some(&byte);
@@ -286,10 +286,12 @@ fn timestamp_at(bytes: &[u8]) -> Option<(usize, time::OffsetDateTime)> {
         && let Some(found) = offset_at(end + 1)
     {
         found
-    } else if bytes.get(end..end + 4) == Some(b" UTC")
-        && let Some(found) = offset_at(end + 4)
-    {
-        found
+    } else if bytes.get(end..end + 4) == Some(b" UTC") {
+        if matches!(bytes.get(end + 4), Some(b'+' | b'-')) {
+            offset_at(end + 4)?
+        } else {
+            (end + 4, 0)
+        }
     } else {
         return None;
     };
@@ -312,6 +314,26 @@ fn timestamp_at(bytes: &[u8]) -> Option<(usize, time::OffsetDateTime)> {
 
 fn digits_at(bytes: &[u8], from: usize, count: usize) -> bool {
     bytes.get(from..from + count).is_some_and(|slice| slice.iter().all(u8::is_ascii_digit))
+}
+
+#[test]
+fn timestamps_are_normalised_in_utc_and_offset_time_zones() {
+    for timestamp in [
+        "2026-04-01T10:00:00Z",
+        "2026-04-01 10:00 UTC",
+        "2026-04-01 18:00 UTC+08:00",
+        "2026-04-01 06:00 UTC-04:00",
+        "2026-04-01 15:30 UTC+05:30",
+        "2026-04-01 10:00:00.0 +00:00:00",
+    ] {
+        assert_eq!(
+            normalise(&format!("发布时间：\"{timestamp}\""), 1234),
+            "发布时间：\"2026-04-01T10:00:00Z\""
+        );
+    }
+    for invalid in ["2026-04-31 10:00 UTC", "2026-04-01 10:00 UTC+invalid"] {
+        assert_eq!(normalise(invalid, 1234), invalid);
+    }
 }
 
 struct Transcript {
