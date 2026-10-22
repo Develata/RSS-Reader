@@ -3,8 +3,8 @@
 - 日期：2026-10-22
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
-- 当前 HEAD：`576cba4`
-- 相关 commit：`9b70455`（阶段 D）、`c2e2278`（公式与预算）、`576cba4`（CI 工具链）；最终证据随本记录提交
+- 验证源码 HEAD：`576cba4`；其后仅更新交接记录
+- 相关 commit：`9b70455`（阶段 D）、`c2e2278`（公式与预算）、`576cba4`（CI 工具链）、`03add33`（最终证据）；记录勘误随本次文档提交
 - 相关 tag / release：未创建；最终须等待用户点头
 - 状态：`draft`
 
@@ -27,7 +27,7 @@
 2. Pages 以同一 composition、仓储端口载入 RSS 快照；重载重置，在线抓取与远端同步禁用。
 3. 将旧 harness 的产品语义迁到两端共用的 SQL 测试，建立逐项映射；仅存储实现特有的 Web Locks / localStorage 配额案例随实现退役。
 4. 删除旧浏览器存储及三个旧 harness，更新依赖图与 CI。
-5. 实测 Pages 子路径、下载量、启动、内存、主线程阻塞和网络禁用；完整回归并评审，准备发布候选。
+5. 实测本地 / CI Pages 子路径、下载量、启动、内存、主线程阻塞和网络禁用；完成候选回归并准备独立评审包，公网部署验收与独立评审尚未完成。
 
 补充细节：
 
@@ -50,7 +50,7 @@
 - 四组 WASM Clippy（app 正式 / Pages、infra 默认 / memory-store+http-backend tests）全部通过。actionlint、Rust 格式与 diff whitespace 检查通过；wasm runner 6 个单元测试、release-ui Clippy 与 3 个单元测试通过。
 - 最终 Pages 构建成功，Chrome smoke 再次通过（`target/handoff/phase-d-pages-final/run.6YHRFd/result.json`）：启动约 926 ms、线性内存 4,718,592 bytes、WASM 4,805,719 bytes、long tasks 155/59/50/89 ms。补中文字体、固定 1280×900 后的目视记录在 `target/handoff/phase-d-pages-visual/run.ToPvJs/`；截图发现公式缺失，见下节。
 - release-ui 黑盒首轮 26 个测试中两个真实编译场景的六个子场景因 MSVC 输出路径达到 265 字符而失败，另有两个平台限定跳过。新增 `--artifacts-root`，保留中文/空格目录场景；在 `E:/rssr-qa/phase-d` 定向重跑这两个测试全部通过，原日志与新日志均保留。没有把路径失败记成产品通过。
-- 待执行/记录：干净检出 CI、最终服务包/容器复验、数学正文问题修复后的完整内容验收。
+- 后续完成的干净检出 CI、最终服务包/容器复验与数学正文验收见下方最终候选记录；公网部署仍待验收。
 
 ### 验证期间的磁盘与环境处理
 
@@ -63,11 +63,11 @@
 
 - 尚未完成实际公网 Pages 部署与最终独立评审；本地子路径/自动浏览器结果不代替这些门禁。
 - 目视验收发现真实内容缺陷：每日数学第一篇的 120 个原始 MathML 公式被当前 ammonia 策略删除；陶哲轩文章使用 144 张 LaTeX 图片；补上图片加载等待后全部 144 张正常加载，先前截图过早。原始 RSS 快照包含这些内容，存储转换没有删它们；现有“正文长度 > 100”断言不足以覆盖公式保真。
-- `feat/reader-mathml` 有经四轮评审的 MathML 保留方案以及后续解析预算工作；该分支同时包含旧架构与其他安全变更，不能直接用旧文件覆盖当前安全策略。下一步在现有 infra 正文链路内按契约接入，保留当前 `data:` URL 限制；不改存储或后端分层。
+- `feat/reader-mathml` 有经四轮评审的 MathML 保留方案以及后续解析预算工作；该分支同时包含旧架构与其他安全变更，不能直接用旧文件覆盖当前安全策略。已在 `c2e2278` 按现有 infra 正文契约适配，保留当前 `data:` URL 限制；详见 [公式整合记录](./2026-10-22-reader-mathml-integration.md)。
 
 ## 结果
 
-阶段 D 核心已提交 `9b70455`；最终候选验收与独立评审仍在进行，尚不可打 tag。
+阶段 D 核心已提交 `9b70455`，候选 `576cba4` 的远端自动验收通过；独立评审与实际公网 Pages 验收未完成，尚不可打 tag。
 
 ## 风险与后续事项
 
@@ -94,7 +94,7 @@
 | 验证 | 结果 | 证据 |
 |---|---|---|
 | 完整 CI，`acceptance_long=true` | **35 / 35 jobs 成功**；14 个 WASM targets、7 crate 原生检查、Android smoke、5 个主题与两端 release-ui runner | [39864068134](https://github.com/Develata/RSS-Reader/actions/runs/39864068134) |
-| 服务器长场景 | **27 / 27 场景成功**；原三个超时场景 `build-mismatch-keeps-edits`、`restored-draft-then-sign-in`、`reader-recovers-without-localizing` 均为 3 秒 | default UI job `120124304752` |
+| 服务器长场景 | **27 / 27 场景成功**；原三个超时场景 `reader-recovers-without-localizing`、`settings-read-fails-at-start`、`http-backend-only` 分别为 3、3、2 秒 | default UI job `120124304752` |
 | Pages | fresh RSS 抓取、release 构建、6 篇正文 / 公式保真、内存重置、子路径及禁用在线操作均通过；**公网部署 skipped** | [39864073043](https://github.com/Develata/RSS-Reader/actions/runs/39864073043) |
 | 四平台 Web 包 / Docker | **7 / 7 jobs 成功**，Linux / Windows / macOS Intel / macOS ARM 实际启动服务包，容器实际包检查通过；未发布 | [39864123959](https://github.com/Develata/RSS-Reader/actions/runs/39864123959) |
 
@@ -102,6 +102,7 @@
 - Pages 本次从指定两个源重新抓取，2026-10-22 22:20:28 UTC 写出 356,387 bytes 快照；不是把仓库旧快照当新抓取。
 - 运行、27 个场景及 artifact ID / GitHub digest 见 [verification.json](../testing/evidence/2026-10-22-phase-d/verification.json)。digest 是 GitHub 报告值；未声称本机下载并独立复算 ZIP。
 - 源码工作树在本节记录前 clean；没有 tag、Release 或镜像发布。
+- 记录勘误：按超时调查原始场景名与 `verification.json` 的最终日志逐项核对，修正上表误列的场景名；27 / 27 的结果不变。这里只更新文档，没有重复触发 CI。
 
 ## 分支清理与主干整合预检
 
