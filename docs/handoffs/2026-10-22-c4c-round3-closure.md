@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
 - 当前 HEAD（本轮提交前）：`e8853b62c93551cd720705b6e235eb852b2f395a`
-- 相关 commit：本记录随 `fix(test): close C4c review error-reporting gaps` 同一提交归档；原固定审阅快照 `28859c2`。
+- 相关 commit：`a13a1e5`（复核修复）；远端失败诊断与结果补记随本记录提交；原固定审阅快照 `28859c2`。
 - 相关 tag / release：N/A
 - 状态：`validated`（本轮复核与修复复验通过，不等于独立评审或发布）
 
@@ -36,6 +36,15 @@
 - 本轮证据在 `target/handoff/evidence-c4c-round3/`。原 24/24 CI 仍指 `509ea35` 的 run `39785231034`，不冒充包含本轮驱动修改的远端结果。
 - 未重跑产品全量 Rust / WSL / 变异压力测试；代码未变，原结果及其受测版本已在复核报告中区分。
 
+### 后续远端复验（C6 期间）
+
+- source `129996af85798c07c623255be88e18a5706426d1` 的 [CI run 39816994053](https://github.com/Develata/RSS-Reader/actions/runs/39816994053)，显式 `acceptance_long=true`，最终 24/24 jobs 成功。
+- 首次默认主题长验收有 3 项失败：`reader-recovers-without-localizing`、`settings-read-fails-at-start`、`http-backend-only` 均在 `ApiTraffic.settled()` 等待 `GET /api/v1/settings` 完成时超时。该次报告 24/27，意外控制台错误为零；没有将它解释为产品已修复或放宽等待条件。
+- 三个场景在本机定向回放全部通过；远端只重跑失败 job 及汇总 gate，第二次完整长验收 27/27，通过日志逐项核对。超时根因尚未确定，留作驱动稳定性跟进。
+- 新增失败时的 `*-traffic.json`：包含请求 ID、loader ID、完成状态和当前 frame；原文本摘要仍保留，断言与静默窗口不变。5 组驱动反例测试再次通过。
+- 首次失败 artifact 已保存并校验 SHA-256：`4570f41b6b570e79ef350c66566dec68c1ec98e716bdc8a3f1873cc32e0cb573`，位置 `target/handoff/evidence-c6/ci-default-39816994053.zip`。
+- 第二次 artifact ID `12444401389`，GitHub 报告 SHA-256 `f5eff726bcf4c94acff19e18f424cdb335928ebcb6e520df48023f7e119755fa`；本机保存命令被自动审批拦截（需批准但当前策略不允许申请），未绕过。通过 GitHub job `119965198186` 的完整日志核对 27 项 pass 与退出成功，未声称本机重新校验该 ZIP。
+
 ## 结果
 
 原快照有两项应修；本轮修复后没有剩余阻断或应修项。按用户明确授权进入 C6；C6 的实现、验证与交接另行记录。
@@ -43,6 +52,7 @@
 ## 风险与后续事项
 
 - 外部独立复审、真实 bfcache、人工视觉/辅助技术、Android/macOS 实机和真实公网部署仍没有本轮证据。
+- 远端首次三个网络收尾超时未确定根因；重跑通过不等于稳定性问题已经修复。失败时增加的 JSON 诊断是后续定位入口。
 - C6 完成前不得把发布包、镜像或迁移验收描述为已交付；阶段 C 最终独立评审仍是独立事项。
 - 未合并、未打 tag、未发布；本地旧复审 ZIP 仍固定于 `28859c2`，不包含本轮修复。
 

@@ -1138,6 +1138,11 @@ async function run() {
           const name = `${scenario.name}${index ? `-page${index}` : ''}`;
           await capturePage(page.client, artifactDir, name).catch(() => {});
           await writeFile(path.join(artifactDir, `${name}-traffic.txt`), page.traffic.log().join('\n'), 'utf8').catch(() => {});
+          // Retain request/loader ids and terminal state as well as the readable summary.
+          // A status alone cannot explain why settled() still sees an in-flight request.
+          const frame = await page.client.send('Page.getFrameTree').catch(() => null);
+          await writeFile(path.join(artifactDir, `${name}-traffic.json`),
+            JSON.stringify({ frame, entries: page.traffic.entries }, null, 2), 'utf8').catch(() => {});
         }
       }
       results.push({ name: scenario.name, status: ok ? 'pass' : 'fail', seconds: Math.round((Date.now() - started) / 1000),
