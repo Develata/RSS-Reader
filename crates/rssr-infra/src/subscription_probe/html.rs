@@ -198,9 +198,7 @@ pub(super) fn discover(page_url: &Url, body: &str) -> Vec<FeedDiscoveryCandidate
     let base = match head.base {
         BaseHref::Unusable => None,
         BaseHref::Href(href) => Some(
-            page_url
-                .join(&href)
-                .ok()
+            rssr_domain::join_untrusted_url(page_url, &href)
                 .filter(|u| matches!(u.scheme(), "http" | "https"))
                 .unwrap_or_else(|| page_url.clone()),
         ),
@@ -214,10 +212,10 @@ pub(super) fn discover(page_url: &Url, body: &str) -> Vec<FeedDiscoveryCandidate
             break;
         }
         let resolved = match &base {
-            Some(base) => base.join(&href),
-            None => Url::parse(&href),
+            Some(base) => rssr_domain::join_untrusted_url(base, &href),
+            None => rssr_domain::parse_untrusted_url(&href),
         };
-        if let Ok(url) = resolved
+        if let Some(url) = resolved
             && matches!(url.scheme(), "http" | "https")
             && url.as_str().len() <= MAX_URL_BYTES
         {
@@ -236,6 +234,18 @@ pub(super) fn discover(page_url: &Url, body: &str) -> Vec<FeedDiscoveryCandidate
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn discovery_bounds_dot_segments_without_hiding_ordinary_feeds() {
+        let page: Url = "https://e.test/blog/".parse().unwrap();
+        let abusive = "%2\ne%2\re/".repeat(40);
+        let html = format!(
+            r#"<html><head><base href="{abusive}"><link rel="alternate" type="application/rss+xml" href="{abusive}bad.xml"><link rel="alternate" type="application/rss+xml" href="../feed.xml"></head></html>"#
+        );
+        let feeds = discover(&page, &html);
+        assert_eq!(feeds.len(), 1);
+        assert_eq!(feeds[0].url.as_str(), "https://e.test/feed.xml");
+    }
 
     /// Links are collected once each and at most `MAX_COLLECTED_LINKS` of them, whatever the
     /// page repeats or adds (review C3-R4 R4-02).

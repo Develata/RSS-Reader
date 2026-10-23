@@ -11,8 +11,13 @@ use super::feed_response::{
     FeedResponseStatus, classify_feed_response_status, http_metadata_from_headers,
 };
 
-/// 单个 feed 的抓取上限，包含响应体读取；一个不响应的源不能让整轮刷新永久等待。
-const FEED_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(test)]
+#[path = "feed_http_tests.rs"]
+mod tests;
+
+/// 持续传输的慢速 feed 可超过空闲时限；停滞由读空闲时限结束，涓流由总时限结束。
+const FEED_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+const FEED_READ_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 const FEED_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// 订阅抓取、订阅探测与 WebDAV 请求共用的 User-Agent（RFC 9110 §10.1.5：客户端 SHOULD 发送）。
@@ -23,13 +28,14 @@ pub(crate) fn user_agent() -> String {
     format!("RSS-Reader/{version} (+https://github.com/Develata/RSS-Reader)")
 }
 
-/// 订阅抓取与订阅探测共用的客户端配置：同一个 UA、连接与总时限；地址解析与每一跳重定向
+/// 订阅抓取与订阅探测共用的客户端配置：同一个 UA、连接、读空闲与总时限；地址解析与每一跳重定向
 /// 按出站策略检查（`crate::outbound`）。
 pub(crate) fn feed_client_builder(policy: &OutboundPolicy) -> reqwest::ClientBuilder {
     policy
         .client_builder()
         .user_agent(user_agent())
         .timeout(FEED_REQUEST_TIMEOUT)
+        .read_timeout(FEED_READ_IDLE_TIMEOUT)
         .connect_timeout(FEED_CONNECT_TIMEOUT)
         .redirect(policy.redirect(|attempt| redirect::Policy::default().redirect(attempt)))
 }
@@ -85,7 +91,7 @@ impl FetchClient {
         let mut builder = self.inner.get(url).header(
             header::ACCEPT,
             "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
-        ).timeout(FEED_REQUEST_TIMEOUT);
+        );
 
         if let Some(etag) = &request.etag {
             builder = builder.header(header::IF_NONE_MATCH, etag);

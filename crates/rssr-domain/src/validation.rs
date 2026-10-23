@@ -176,6 +176,9 @@ pub fn validate_config_package(package: &ConfigPackage) -> crate::Result<()> {
 
 /// 解析并归一化一个 feed URL，失败时给出带原始输入的错误。
 pub fn parse_feed_url(raw: &str) -> crate::Result<Url> {
+    if !crate::untrusted_url_is_parseable(raw) {
+        return Err(invalid("feed URL 超过长度或路径复杂度上限"));
+    }
     let url =
         Url::parse(raw).map_err(|error| invalid(format!("无效的 feed URL：{raw}（{error}）")))?;
     if !matches!(url.scheme(), "http" | "https") {
@@ -340,6 +343,22 @@ mod tests {
             let error = parse_feed_url(raw).expect_err("unsupported scheme must fail");
             assert!(error.to_string().contains("HTTP 或 HTTPS"), "{error}");
         }
+    }
+
+    #[test]
+    fn imported_feed_urls_are_bounded_before_parsing() {
+        for raw in [
+            format!("https://e.test/{}", "a".repeat(crate::MAX_UNTRUSTED_URL_BYTES)),
+            format!("https://e.test/{}feed.xml", "%2\ne%2\re/".repeat(40)),
+        ] {
+            let input = package(vec![feed(&raw)], UserSettings::default());
+            let error = validate_config_package(&input).expect_err("input must be refused");
+            assert!(error.to_string().contains("长度或路径复杂度"), "{error}");
+        }
+        assert_eq!(
+            parse_feed_url("https://e.test/a/../feed.xml").unwrap().as_str(),
+            "https://e.test/feed.xml"
+        );
     }
 
     #[test]

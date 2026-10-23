@@ -164,8 +164,9 @@ fn normalize_feed(feed: FeedRsFeed) -> ParsedFeed {
 fn normalize_entry(entry: FeedRsEntry) -> ParsedEntry {
     let title = text_value(entry.title.as_ref()).unwrap_or_else(|| "Untitled entry".to_string());
     // 文章页是 alternate，不是 `replies`/`enclosure`；全无 alternate 时沿用第一条可解析链接。
-    let url = alternate_url(&entry.links)
-        .or_else(|| entry.links.iter().find_map(|link| Url::parse(&link.href).ok()));
+    let url = alternate_url(&entry.links).or_else(|| {
+        entry.links.iter().find_map(|link| rssr_domain::parse_untrusted_url(&link.href))
+    });
     let author = entry.authors.first().map(|author| author.name.clone());
     let summary = entry.summary.as_ref().map(text_content);
     let content_html = entry.content.as_ref().and_then(|content| content.body.clone());
@@ -214,7 +215,7 @@ fn alternate_url(links: &[Link]) -> Option<Url> {
                 rel.strip_prefix(IANA_RELATIONS).unwrap_or(rel).eq_ignore_ascii_case("alternate")
             })
         })
-        .find_map(|link| Url::parse(&link.href).ok())
+        .find_map(|link| rssr_domain::parse_untrusted_url(&link.href))
 }
 
 fn dedup_key_fallback(title: &str, published_at: Option<OffsetDateTime>) -> String {

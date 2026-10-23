@@ -138,7 +138,7 @@ async fn discovery_reads_the_page_after_one_byte_order_mark() {
 }
 
 #[tokio::test]
-async fn feed_body_stall_still_obeys_the_30_second_request_timeout() {
+async fn feed_body_stall_obeys_the_30_second_read_idle_timeout() {
     let error = fetch(response("Content-Length: 100\r\n", b"x"), true, Duration::from_secs(35))
         .await
         .unwrap_err();

@@ -1,0 +1,89 @@
+# v0.2 与主干、公式防护分支的整合
+
+- 日期：2026-10-22
+- 作者 / Agent：Codex
+- 分支：`v0.2-architecture`
+- 当前 HEAD：`5de1068`（整合前）
+- 相关 commit：pending
+- 相关 tag / release：无
+- 状态：`in_progress`（本地实现与回归通过；候选远端验收、独立复审与合并待完成）
+
+## 工作摘要
+
+用户要求先处理未合入工作、复核与验收，再合并；打 tag 前仍等待确认。以已确认的 v0.2 架构为基准，核对主干 `d9ebe35` 的 22 个非 merge 提交及 `feat/reader-mathml` 的 `73f8d6e`，逐项保留产品能力与安全修复。
+
+## 影响范围
+
+- infra：RSS HTTP 超时、Feed 预扫描与现有模型预算、正文和发现页 URL 边界。
+- domain/application：共享的不受信 URL 输入边界。
+- 依赖：`url` 的点段解析修复及其可复现来源。
+- 平台：原生、正式 Web、Pages；所有本机编译输出位于 E 盘。
+
+## 关键变更
+
+- 适配主干 `c64b899` 的 10 秒连接 / 30 秒读空闲 / 120 秒总时限；移除请求级固定 30 秒总超时，避免覆盖共享 client 的设置。抓取与订阅探测共用 builder，保留出站策略、User-Agent 与错误 URL 脱敏。
+- `feat/reader-mathml` 的公式和正文预算已在 `c2e2278` 适配。本轮引入共享 URL 输入边界、`url` 依赖补丁与 Feed 字节预扫描，保留 JSON 作者、媒体评级、模型体积与 UTF-8 固定等 v0.2 防护。
+- Feed 预扫描在 `NsReader` 之前限制命名空间、属性判重工作量与 `xml:base` 累计复制量；随后执行已有模型预算。使用同一 quick-xml 版本与 `Reader::from_str`，不恢复旧分支的编码探测或独立 8 KiB 类型嗅探。已经转成 UTF-8 的正文不能被遗留的 XML 编码声明重新解释。
+- URL 通用输入最多 8 KiB、查询/片段之前最多 64 个点（包括 `%2e`，忽略 TAB/LF/CR）；各用例仍保留原有更小限制。发现页仍用当前流式解析器、50 候选和 2 KiB 输出边界；正文的 opaque `data:image/` 豁免保留。
+- `vendor/url` 是 crates.io `url` 2.5.8，加 `Parser::last_slash_can_be_removed` 一处改动，将根路径点段的反向搜索限制在路径内。逐文件对照本地 registry，除 `PATCH.md` 外仅 `src/parser.rs` 不同；不改版本，不增加第二个 XML 依赖。保留许可证与上游问题草稿。
+- 补入真实 Feed 校准工具；默认忽略，需要显式提供 RSS 文件。不把工具存在当作真实语料验收完成。
+- 尚未开始合并。根检出的任务外修改及其他 worktree 保留。
+
+### 主干独有提交去向
+
+主干是另一路服务器实现；整合以用户确认的 v0.2 架构为准，不重新引入 `rssr-host`、sqlx 双库、BrowserStore 或 feed proxy。按精确提交核对产品语义与安全修复，不能用文件自动合并成功代替这张去向表。
+
+| 主干提交 | 内容与 v0.2 去向 |
+|---|---|
+| `c611578`、`633f2d2`、`1ae7dad` | 服务器模式设计；由 `v0.2-architecture.md`、阶段 C 计划和当前部署契约取代。历史 handoff 保留，旧设计若归档须明确已取代。 |
+| `b0b3099`、`50f61bb`、`f0648ae` | UI 无关 host、Send/Sync、宿主生命周期；对应 `rssr-api::Backend`、infra `LocalBackend` / shared composition 和显式 close，不恢复旧 host crate。 |
+| `c64b899` | 慢速 Feed 超时；本轮补齐，共用 builder 的空闲 / 总时限均有回归。 |
+| `f7233c4` | Feed、发现、图片、WebDAV 的 PublicOnly；当前 `outbound` 已覆盖 URL、DNS 全部答案与每跳重定向，并增加可配置 allow/deny 和错误脱敏。 |
+| `cc4ebda` | host facade / wire protocol；由薄 `rssr-api`、application 公开输入结果、`HttpBackend` 接管，保持单一用例语义。 |
+| `d339066`、`c4d7dd2`、`dbc8e73` | 认证 API、解析器成功路径、Origin、32 并发、读 body 前鉴权、大小和时间边界、IPv6、私有资料目录、端点矩阵；当前 auth / api / outbound / store 对应实现与测试已覆盖。写请求要求明确的可信 Origin + CSRF；当前公共 IPv6 允许列表比旧特殊地址排除表更严格。 |
+| `9594238`、`a067b54`、`1c903ec` | 远程 UI、每页固定后端、401、响应边界；对应正式 Web bootstrap / `HttpBackend` 及 client_tests，包含结果未知与构建标识失配，不恢复浏览器库后备路径。 |
+| `91d5f4e`、`d2615f7` | 匹配的 Linux 服务＋页面包、容器；由 C6 四平台包、同源构建标识、复用受测 Linux artifact 的镜像和卷验收接管。 |
+| `783f0e0`、`176d8b3`、`183a99c` | feed proxy 退役；当前实现已删除，正式 HTTP 测试断言不再提供此接口。旧 proxy 隔离脚本不恢复。 |
+| `16a8d8c` | 测试独立目录；当前真实 HTTP/API 测试分别使用独立临时库，工作区并行测试通过。 |
+| `a57ca5b` | 小视口 smoke 历史证据；保留记录，当前服务器验收与 Pages 验收分别提供候选证据。 |
+
+### 公式分支去向
+
+来源固定为 `73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b`，不读取其正在工作的 checkout。
+
+| 来源内容 | 整合结果 |
+|---|---|
+| MathML / KaTeX 去重、单次树遍历、公式降级、reader CSS | 已在 `c2e2278` 适配，原测试与浏览器正文契约保留。 |
+| HTML tree-builder 预算、纯文本降级、归一化 URL 工作 / 输出预算、重复属性、本地化图片复制计费 | 已适配，保留 v0.2 图片 URL 安全规则与 opaque 地址豁免。 |
+| `5070d71` 空闲超时 | 与主干 `c64b899` 同项，本轮共用实现。 |
+| `1fd6421` 起的领域 URL API、Feed 链接与发现页预检 | 本轮适配；旧 proxy 中同类调用随接口退役，不恢复。 |
+| `fbf2c50` 起的 vendor URL 补丁、预扫描及后续第 2–7 轮修复 | 补丁原样保留；结构预算取最终版本，编码 / 类型选择 / 256 层深度与 v0.2 契约对齐。 |
+| 压力契约、语料校准工具、上游草稿 | 测试与工具补齐；默认跳过外部语料工具，旧性能数字标记为来源历史，不转作当前测量。 |
+| 旧 README / user guide / composition / proxy wiring | 当前文档及 v0.2 接线为准；正文处理相关能力已适配，不引入旧浏览器存储或认证接口。 |
+
+来源分支历史评审不等于本轮适配已经独立复审。
+
+## 验证与验收
+
+- 远端主干与候选已刷新并核对；GitHub 未发现 open issue/PR。
+- 修复前：新增 HTTP 测试 2 pass / 2 fail，复现请求级固定超时覆盖 client 总时限；有效 RSS 的超长 namespace 回归失败，复现进入昂贵命名空间处理前没有上限。日志 `timeout-baseline.log` / `prescan-baseline.log`。
+- 修复后 `cargo test --workspace --locked`：**886 passed / 0 failed / 4 ignored**。包括现有 C3 模型安全契约、4 个真实 TCP 超时用例、新 Feed 预扫描 / URL 合约和既有正文压力测试。四个 ignored 项没有被算作通过。
+- `cargo clippy --workspace --all-targets --locked -- -D warnings`、`cargo fmt --all --check`：通过。
+- wasm Clippy：正式 `rssr-app`、`rssr-app --features pages-demo`、默认 `rssr-infra`、`rssr-infra --tests --features memory-store,http-backend`：通过；新增测试的 feature gate 单独再编译通过。
+- 在隔离的 E 盘目录运行 vendored URL 自带测试：1 个 lib、66 个单元集成测试、WPT URL 数据集、67 个 doc tests 均通过；未把它误算入 workspace 测试。
+- 工作区 URL canary 已通过；另用同一测试文件连接未打补丁的 registry 2.5.8 做隔离 mutation，60.01 秒后按预期失败（exit 101，提示补丁缺失）。未修改正在工作的 vendor 文件。日志 `url-unpatched-canary.log`。
+- `url` 2.5.8 的点段问题 [#1163](https://github.com/servo/rust-url/issues/1163) 与 feed-rs 的 xml:base 复制问题 [#301](https://github.com/feed-rs/feed-rs/issues/301) 仍 open；这不是对全部上游版本的扫描。
+
+本机日志：`target/handoff/integration-20261022/`。所有编译、临时文件和 mutation 的 target 均位于 E 盘。上面是本机结果，新的远端 CI、Pages build、四平台包 / Docker 尚未记录。
+
+## 风险与后续事项
+
+- 字节预扫描必须先于 NsReader 的命名空间处理，且与 v0.2 固定 UTF-8 输入保持一致；不能覆盖现有模型预算。
+- 既有 `576cba4` 的 CI 结果不代替本次改动后的验收。
+- 最终独立复审与实际公网 Pages 验收仍待完成。合并之前更新完整的提交去向表与验证结果。
+- 用户后续授权先完成这些工作再合并；不再将 main 合并列为完全未获授权，但不得越过其“处理完成后”的条件。打 tag / Release 仍需用户最终点头。
+
+## 给下一位 Agent 的备注
+
+- 历史比较只读 Git 对象；工作树 `target/audit-20261009/worktree`。
+- 没有 tag、Release 或 GHCR 发布；禁止在 C 盘编译。

@@ -8,6 +8,7 @@ members = [
     "crates/rssr-domain",
     "crates/rssr-infra",
 ]
+exclude = ["vendor/url"]
 resolver = "2"
 
 [workspace.package]
@@ -54,3 +55,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = { version = "2", features = ["serde"] }
 urlencoding = "2"
 webbrowser = "1"
+
+# Keep the upstream-equivalent dot-segment fix until rust-url#1163 is released.
+[patch.crates-io]
+url = { path = "vendor/url" }

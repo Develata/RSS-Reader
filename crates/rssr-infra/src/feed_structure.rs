@@ -25,6 +25,8 @@
 //! element closes is also taken when the document ends inside it (reviews C3-R10 R10A-01,
 //! C3-R11). A new feed-rs version needs the same reading.
 
+mod preflight;
+
 use std::borrow::Cow;
 
 use anyhow::ensure;
@@ -198,6 +200,7 @@ impl Rating {
 /// names in addresses): that grows with the length of the text, not with its structure, and is not
 /// charged.
 fn xml_model(raw: &str, limit: usize) -> anyhow::Result<usize> {
+    preflight::check_feed_structure(raw)?;
     let mut reader = quick_xml::NsReader::from_str(raw);
     let config = reader.config_mut();
     config.expand_empty_elements = true;

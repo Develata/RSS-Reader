@@ -50,6 +50,9 @@ fn invalid(message: impl Into<String>) -> anyhow::Error {
 
 impl SubscriptionWorkflow {
     pub async fn prepare_subscription(&self, raw_url: &str) -> Result<PrepareSubscriptionOutcome> {
+        if !rssr_domain::untrusted_url_is_parseable(raw_url.trim()) {
+            return Err(invalid("订阅 URL 超过长度或路径复杂度上限"));
+        }
         let url = Url::parse(raw_url.trim())
             .map_err(|error| invalid(format!("订阅 URL 不合法：{error}")))?;
         let url = normalize_feed_url(&url);

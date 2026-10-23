@@ -76,13 +76,8 @@ impl HttpSubscriptionProbe {
         #[cfg(not(target_arch = "wasm32"))]
         self.policy.check_url(url)?;
         #[cfg(not(target_arch = "wasm32"))]
-        let response = self
-            .client
-            .get(url.clone())
-            .timeout(std::time::Duration::from_secs(30))
-            .send()
-            .await
-            .map_err(reqwest::Error::without_url)?;
+        let response =
+            self.client.get(url.clone()).send().await.map_err(reqwest::Error::without_url)?;
         #[cfg(not(target_arch = "wasm32"))]
         let (response, final_url) = {
             let final_url = response.url().clone();

@@ -9,7 +9,12 @@ pub mod listed;
 pub mod repository;
 pub mod search;
 pub mod settings;
+pub mod url_guard;
 pub mod validation;
+pub use url_guard::{
+    MAX_UNTRUSTED_URL_BYTES, MAX_URL_PATH_DOTS, join_untrusted_url, parse_untrusted_url,
+    untrusted_url_is_parseable, url_path_dots,
+};
 
 pub use app_state::{AppStateSnapshot, EntriesWorkspaceState, EntryGroupingPreference};
 pub use config_fingerprint::{ConfigFingerprint, FingerprintFeed};
