@@ -1,0 +1,45 @@
+{
+  "source_sha": "699dcf6b07ef05e5fa0cc967a0cf0020551097ed",
+  "run_id": 39923520596,
+  "artifact_id": 12488995621,
+  "checked_at": "2026-10-23T08:24:49.412Z",
+  "status": "pass",
+  "files": [
+    {
+      "path": "404.html",
+      "bytes": 566,
+      "sha256": "18c11b303c0b2bf63c670fc4b3fae3825c3d22eda714dce6012ce2410728a643",
+      "url": "https://develata.me/RSS-Reader/404.html",
+      "status": 200,
+      "contentEncoding": "gzip",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "path": "assets/rssr-app_bg-dxh53e83b81c9ea66c1.wasm",
+      "bytes": 4992463,
+      "sha256": "abcfef2771b98dfed9e5cc1c056633024234594530917a79acb46973caa21df2",
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app_bg-dxh53e83b81c9ea66c1.wasm",
+      "status": 200,
+      "contentEncoding": "gzip",
+      "contentType": "application/wasm"
+    },
+    {
+      "path": "assets/rssr-app-dxhfd12cf3e69baa26.js",
+      "bytes": 54624,
+      "sha256": "5a7701c2ce960f901a333ecd29588f55bac617c9f23de6518fca5540568e50a0",
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app-dxhfd12cf3e69baa26.js",
+      "status": 200,
+      "contentEncoding": "gzip",
+      "contentType": "application/javascript; charset=utf-8"
+    },
+    {
+      "path": "index.html",
+      "bytes": 566,
+      "sha256": "18c11b303c0b2bf63c670fc4b3fae3825c3d22eda714dce6012ce2410728a643",
+      "url": "https://develata.me/RSS-Reader/index.html",
+      "status": 200,
+      "contentEncoding": "gzip",
+      "contentType": "text/html; charset=utf-8"
+    }
+  ]
+}
