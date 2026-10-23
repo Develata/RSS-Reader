@@ -41,9 +41,9 @@ jobs:
       # 打 tag 发布时签名密钥是硬要求。少了它整段签名逻辑连同 debug 密钥守卫都会被
       # `if: env.ANDROID_RELEASE_READY == 'true'` 跳过，然后安安静静发一个 debug APK——
       # 用户侧的表现就是这次事故本身（覆盖安装「校验失败」），而 CI 全绿。
-      # workflow_dispatch 仍允许降级，方便不碰密钥地验证其它平台。
-      - name: Require Android signing for tag releases
-        if: github.event_name == 'push' && env.ANDROID_RELEASE_READY != 'true'
+      # 手动恢复发布同样会创建正式 Release，也不能降级为 debug APK。
+      - name: Require Android signing for releases
+        if: env.ANDROID_RELEASE_READY != 'true'
         run: |
           echo "::error::tag 发布必须配置 ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD"
           exit 1
@@ -427,9 +427,19 @@ jobs:
           tar -tzf release-assets/rssr-cli-linux-x86_64.tar.gz | grep '^rssr-cli$'
 
       - name: Install package and smoke-test ordinary-user startup
+        env:
+          RELEASE_CHECKS_SHA: ${{ github.workflow_sha }}
         run: |
           sudo apt-get install -y ./release-assets/RSS-Reader-linux-x86_64.deb
-          bash scripts/smoke_linux_deb_unprivileged.sh
+          # A dispatch can repair release checks while keeping the product at its tag.
+          # Read only the smoke script from this workflow's exact commit; never switch
+          # the product checkout or change the already-built package.
+          source_sha=$(git rev-parse HEAD)
+          git fetch --no-tags --depth=1 origin "$RELEASE_CHECKS_SHA"
+          git show "$RELEASE_CHECKS_SHA:scripts/smoke_linux_deb_unprivileged.sh" > "$RUNNER_TEMP/rssr-linux-package-smoke.sh"
+          test "$(git rev-parse HEAD)" = "$source_sha"
+          echo "Release source: $source_sha; smoke checks: $RELEASE_CHECKS_SHA"
+          bash "$RUNNER_TEMP/rssr-linux-package-smoke.sh"
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v7
