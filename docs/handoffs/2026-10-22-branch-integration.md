@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
 - 当前产品实现 HEAD：`2c4f472`（整合前为 `5de1068`）
-- 相关 commit：`bd4a667`（Feed/URL 实现）、`45917d5`（systemd 模板与历史记录）、`f1897a0`（CI 字体）、`2c4f472`（编号公式布局）、`5d89e9e`（补充截图与 Docker 排除项）；字体安装的 APT 配置补齐 `commit: pending`
+- 相关 commit：`bd4a667`（Feed/URL 实现）、`45917d5`（systemd 模板与历史记录）、`f1897a0`（CI 字体）、`2c4f472`（编号公式布局）、`5d89e9e`（补充截图与 Docker 排除项）、`7ab5eb4`（共用 APT 配置）；截图坐标稳定化 `commit: pending`
 - 相关 tag / release：无
 - 状态：`in_progress`（本地实现与回归通过；候选远端验收、独立复审与合并待完成）
 
@@ -121,6 +121,8 @@ Pages artifact `12470067858` 已下载并复算 ZIP SHA-256：`6d3c6823abe2589eb
 - smoke artifact `12471044533` 的 ZIP SHA-256：`77936b137f5881d83710cf3b870e4cddc642732677f7b5c9b3e3173927b2c70c`；snapshot artifact `12470919756`：`652ab988a2cee369e1de92f9c59080eae0a7a61d7021daa46e8866b07a1ca56c`。均已下载复算并匹配 GitHub digest。
 - 完整产品候选的默认主题验收 job `120185756815` 已通过：`--long` **27 / 27 场景、108 checks、0 unexpected console**。核对了 `ci-ui-default` artifact `12472235827` 中的 `assertions.json`；其 ZIP SHA-256 `4ae589140a3527f8f4ca56297a8eed10c634a7fa2e371ab22f5c3d762cc12e8f` 已复算匹配。
 - 新字体安装没有复用此前 native CI 的 APT mirrorlist 修复；同时 Linux Release 的依赖安装仍缺此配置。将同一改写抽成 `scripts/configure_ubuntu_apt.sh`，在三处共用；仅替换 Ubuntu archive 的 Azure 主机，保留 suite、签名与第三方源。字体与原生安装继续使用连接超时 / 重试设置，Linux Release 同步增加这些设置与 10 分钟步骤时限。隔离 Linux fixture 通过（四种配置位置及 suite / Microsoft 来源保留），actionlint、diff check 通过；远端结果待记录。
+- 旧候选 CI 的 Atlas job `120185756733` 日志确认字体安装仍走 Azure 镜像：`01:21:23 UTC` 开始下载 61.2 MB Noto CJK，`01:35:11` 因 15 分钟 job 时限取消，UI 未开始。`7ab5eb4` 的 [Pages 运行 39884707827](https://github.com/Develata/RSS-Reader/actions/runs/39884707827)通过：日志明确改写 `apt-mirrors.txt` 并从 `https://archive.ubuntu.com` 下载 66.0 MB 字体，耗时 3 秒。
+- 对 `7ab5eb4` 的截图复核发现，等待两帧后截视口仍可能回到文章页首，自动内容/布局断言通过不能证明图片截到目标。改用 CDP 的文档绝对坐标与 `captureBeyondViewport` 直接截正文/公式区域，并把区域坐标写入结果；不再依赖截图瞬间的窗口滚动位置。保留的代表截图仍来自已目视通过的 `5d89e9e`，新的确定区域截图待复核；不把错误视口图片替换进去。
 
 ## 风险与后续事项
 
