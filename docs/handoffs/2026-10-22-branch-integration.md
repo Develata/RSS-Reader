@@ -3,10 +3,11 @@
 - 日期：2026-10-22
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
+- 最新验收候选：`94cb58f`；最终证据随本文提交，未改变验收候选的产品实现
 - 当前产品实现 HEAD：`2c4f472`（整合前为 `5de1068`）
-- 相关 commit：`bd4a667`（Feed/URL 实现）、`45917d5`（systemd 模板与历史记录）、`f1897a0`（CI 字体）、`2c4f472`（编号公式布局）、`5d89e9e`（补充截图与 Docker 排除项）、`7ab5eb4`（共用 APT 配置）；截图坐标稳定化 `commit: pending`
+- 相关 commit：`bd4a667`（Feed/URL 实现）、`45917d5`（systemd 模板与历史记录）、`f1897a0`（CI 字体）、`2c4f472`（编号公式布局）、`5d89e9e`（补充截图与 Docker 排除项）、`7ab5eb4`（共用 APT 配置）、`94cb58f`（截图坐标稳定化）
 - 相关 tag / release：无
-- 状态：`in_progress`（本地实现与回归通过；候选远端验收、独立复审与合并待完成）
+- 状态：`validated`（代码移植与分支验收通过；独立复审、main 合并及公网 Pages 验收未完成）
 
 ## 工作摘要
 
@@ -89,7 +90,7 @@
 | Pages fresh RSS / release 构建 / 浏览器验收 | [39880632180](https://github.com/Develata/RSS-Reader/actions/runs/39880632180) | 通过，分支部署跳过 |
 | 四平台 Web 包 / Docker，`all_platforms=true` | [39880639908](https://github.com/Develata/RSS-Reader/actions/runs/39880639908) | 7 / 7 jobs 成功；不推送镜像 |
 
-Pages artifact `12470067858` 已下载并复算 ZIP SHA-256：`6d3c6823abe2589ebae6bd07619a23a65694d7ff86f5cdb2e4df5b7fff6f436a`，与 GitHub digest 相同。快照新抓取于 `2026-10-23 00:53:13 UTC`，每日数学内容已经滚动更新；本轮是 570 个 MathML、144 张公式图片（全部加载）。自动规则通过，但目视发现 CI 截图中文缺字，现有浏览器安装 action 没有安装 CJK 字体；不能把这组截图记成完整目视验收。正在为截图 job 补充 CJK / OpenType math 字体并重新验收。
+Pages artifact `12470067858` 已下载并复算 ZIP SHA-256：`6d3c6823abe2589ebae6bd07619a23a65694d7ff86f5cdb2e4df5b7fff6f436a`，与 GitHub digest 相同。快照新抓取于 `2026-10-23 00:53:13 UTC`，每日数学内容已经滚动更新；本轮是 570 个 MathML、144 张公式图片（全部加载）。自动规则通过，但目视发现 CI 截图中文缺字，现有浏览器安装 action 没有安装 CJK 字体；不能把这组截图记成完整目视验收。随后为截图 job 补充 CJK / OpenType math 字体并重新验收，结果见后续记录。
 
 字体修复仅影响 CI 环境：`setup-browser-tests` 增加显式 `with-fonts` 输入，Pages 与真实 UI 截图 job 安装 Noto CJK 和 Latin Modern Math，通过 fontconfig 检查字体存在；不向产品包添加字体，不给 14 个无截图 WASM 契约 job 增加安装步骤。已用 Debian 包清单确认 `fonts-lmodern` 包含 `latinmodern-math.otf`，actionlint 通过。修复后的远端截图已确认中文可读，详见后续完整候选记录。
 
@@ -99,13 +100,13 @@ Pages artifact `12470067858` 已下载并复算 ZIP SHA-256：`6d3c6823abe2589eb
 - 新抓取的 `2026-10-23 · 平方之后为何更简单` 带一个 MathJax `mlabeledtr`。它不在 [MathML Core 的元素列表](https://www.w3.org/TR/mathml-core/#mathml-elements-and-attributes)中；Chromium 156 将它排成 `block math`，其中 `mtd` 变成 block，公式操作数竖排。原始 MathML 在带 Cambria Math 的独立 Chrome 对照里也复现，排除清洗或缺少字体导致的可能。
 - 同一真实公式只将行设为 `display: table-row` 后，布局与原生 `mtr` 对照相同：公式表高从 184.66 px 降至 74.38 px，符号与编号在正常行内。`reader.css` 仅为 reader 内的 `mlabeledtr` 加此规则；不修改公式 DOM、操作数或消毒策略，也不引入数学渲染脚本。这是保留编号文本的普通表格行兼容布局，不声称实现 MathML 旧版完整的标签定位规则。
 - 新浏览器契约比较带编号行与相同内容的原生行几何尺寸，并检查消毒/重解析/命名空间；修复前 **6 pass / 1 fail**，修复后 **7 / 7 pass**。Pages 对无跨行单元格的编号公式增加行高一致断言，避免只数 `<math>` 而放过排版损坏。
-- 日志与截图在 `formula-probe/`、`numbered-baseline-browser.log`、`numbered-fixed-browser.log`；两个 WASM 测试二进制按 Cargo JSON 的确切 executable 路径保存，未用宽泛通配符猜测产物。Rust fmt 和 JS 语法检查通过；带此 CSS 的完整候选远端验收待记录。
+- 日志与截图在 `formula-probe/`、`numbered-baseline-browser.log`、`numbered-fixed-browser.log`；两个 WASM 测试二进制按 Cargo JSON 的确切 executable 路径保存，未用宽泛通配符猜测产物。Rust fmt 和 JS 语法检查通过；完整候选远端验收见下。
 
 ### 完整产品候选 `2c4f472`
 
 | 工作流 | 运行 | 状态 |
 |---|---|---|
-| CI，`acceptance_long=true` | [39883092648](https://github.com/Develata/RSS-Reader/actions/runs/39883092648) | 运行中，尚未记为通过 |
+| CI，`acceptance_long=true` | [39883092648](https://github.com/Develata/RSS-Reader/actions/runs/39883092648) | 取消：32 jobs 成功，两个字体安装 job 超时；汇总 gate 失败，未记为通过 |
 | Pages fresh RSS / release 构建 / 浏览器验收 | [39883097508](https://github.com/Develata/RSS-Reader/actions/runs/39883097508) | 通过，分支部署跳过 |
 | 四平台 Web 包 / Docker，`all_platforms=true` | [39883102202](https://github.com/Develata/RSS-Reader/actions/runs/39883102202) | 7 / 7 jobs 成功；不推送镜像 |
 
@@ -117,18 +118,32 @@ Pages artifact `12470067858` 已下载并复算 ZIP SHA-256：`6d3c6823abe2589eb
 ### 截图补齐与 APT 配置复用
 
 - `5d89e9e` 的 [Pages 运行 39883947947](https://github.com/Develata/RSS-Reader/actions/runs/39883947947)通过，部署跳过；相对 `2c4f472` 只改截图脚本、Docker 排除项和本记录，产品源码与资源未变。新快照时间 `2026-10-23 01:27:08 UTC`，仍为 570 个 MathML、144 / 144 图片加载成功。已目视确认每日数学的 `(1)` 与公式在同一行，陶哲轩正文的图片公式可读，截图中中文完整。
-- 原样保留的代表截图：[每日数学编号公式](../testing/evidence/2026-10-22-branch-integration/daily-math-formula.png)、[陶哲轩图片公式](../testing/evidence/2026-10-22-branch-integration/tao-formula.png)。这两张是远端 Pages 构建的真实浏览器截图，未编辑图像。
+- 代表截图链接现已更新为最终 `94cb58f` 的原样截图：[每日数学编号公式](../testing/evidence/2026-10-22-branch-integration/daily-math-formula.png)、[陶哲轩图片公式](../testing/evidence/2026-10-22-branch-integration/tao-formula.png)。未编辑图像，来源和每张图片的哈希在最终证据 JSON 中。
 - smoke artifact `12471044533` 的 ZIP SHA-256：`77936b137f5881d83710cf3b870e4cddc642732677f7b5c9b3e3173927b2c70c`；snapshot artifact `12470919756`：`652ab988a2cee369e1de92f9c59080eae0a7a61d7021daa46e8866b07a1ca56c`。均已下载复算并匹配 GitHub digest。
 - 完整产品候选的默认主题验收 job `120185756815` 已通过：`--long` **27 / 27 场景、108 checks、0 unexpected console**。核对了 `ci-ui-default` artifact `12472235827` 中的 `assertions.json`；其 ZIP SHA-256 `4ae589140a3527f8f4ca56297a8eed10c634a7fa2e371ab22f5c3d762cc12e8f` 已复算匹配。
-- 新字体安装没有复用此前 native CI 的 APT mirrorlist 修复；同时 Linux Release 的依赖安装仍缺此配置。将同一改写抽成 `scripts/configure_ubuntu_apt.sh`，在三处共用；仅替换 Ubuntu archive 的 Azure 主机，保留 suite、签名与第三方源。字体与原生安装继续使用连接超时 / 重试设置，Linux Release 同步增加这些设置与 10 分钟步骤时限。隔离 Linux fixture 通过（四种配置位置及 suite / Microsoft 来源保留），actionlint、diff check 通过；远端结果待记录。
+- 新字体安装没有复用此前 native CI 的 APT mirrorlist 修复；同时 Linux Release 的依赖安装仍缺此配置。将同一改写抽成 `scripts/configure_ubuntu_apt.sh`，在三处共用；仅替换 Ubuntu archive 的 Azure 主机，保留 suite、签名与第三方源。字体与原生安装继续使用连接超时 / 重试设置，Linux Release 同步增加这些设置与 10 分钟步骤时限。隔离 Linux fixture 通过（四种配置位置及 suite / Microsoft 来源保留），actionlint、diff check 通过；远端结果见下。未触发 Release 工作流。
 - 旧候选 CI 的 Atlas job `120185756733` 日志确认字体安装仍走 Azure 镜像：`01:21:23 UTC` 开始下载 61.2 MB Noto CJK，`01:35:11` 因 15 分钟 job 时限取消，UI 未开始。`7ab5eb4` 的 [Pages 运行 39884707827](https://github.com/Develata/RSS-Reader/actions/runs/39884707827)通过：日志明确改写 `apt-mirrors.txt` 并从 `https://archive.ubuntu.com` 下载 66.0 MB 字体，耗时 3 秒。
-- 对 `7ab5eb4` 的截图复核发现，等待两帧后截视口仍可能回到文章页首，自动内容/布局断言通过不能证明图片截到目标。改用 CDP 的文档绝对坐标与 `captureBeyondViewport` 直接截正文/公式区域，并把区域坐标写入结果；不再依赖截图瞬间的窗口滚动位置。保留的代表截图仍来自已目视通过的 `5d89e9e`，新的确定区域截图待复核；不把错误视口图片替换进去。
+- 对 `7ab5eb4` 的截图复核发现，等待两帧后截视口仍可能回到文章页首，自动内容/布局断言通过不能证明图片截到目标。改用 CDP 的文档绝对坐标与 `captureBeyondViewport` 直接截正文/公式区域，并把区域坐标写入结果；不再依赖截图瞬间的窗口滚动位置。最终区域截图已目视复核，不把错误视口图片记为公式验收。
+
+### 最终验收候选 `94cb58f`
+
+| 验收 | 运行 / 证据 | 结果 |
+|---|---|---|
+| CI，含 `--long` | [39885292548](https://github.com/Develata/RSS-Reader/actions/runs/39885292548) | **35 / 35 jobs 成功；27 / 27 场景、108 checks、0 unexpected console** |
+| Pages，真实 RSS、release 构建及截图 | [39885298592](https://github.com/Develata/RSS-Reader/actions/runs/39885298592) | 通过，部署跳过 |
+| 四平台 Web 包 / Docker | [39883102202](https://github.com/Develata/RSS-Reader/actions/runs/39883102202)，源码 `2c4f472` | 7 / 7 成功；后续只改文档、截图、上下文排除与安装依赖配置。未将此旧构建标识当成 `94cb58f` 产物 |
+
+- [结构化证据](../testing/evidence/2026-10-22-branch-integration/verification.json)保留确切源 SHA、各 job 状态、真实包/容器检查、artifact ID / digest、来源 RSS 哈希、公式布局与性能数据。已下载的 ZIP 均复算 SHA-256，截图原样保留；未下载的包没有标记为本机复算通过。
+- Pages 最新抓取于 `2026-10-23 01:41:25 UTC`，2 源 / 6 篇，570 个 MathML，144 / 144 张公式图片加载。编号行两格高度同为 60.4375 px；已目视检查编号公式、中文和陶哲轩正文可见图片公式。不是对全部 570 个公式逐一目视检查。
+- `readyMs=530.7`，WASM memory `4,587,520` bytes，最大已观测 long task `99 ms`，未压缩 WASM body `4,992,463` bytes；这些仍是 CI 本地静态服务数据，不是实际公网 Pages 或手机数据。
+- 新 Pages 安装 66 MB 字体仅 2 秒，Atlas 主题也在 2 秒内下载字体并完成实际 UI 回归。旧 Atlas / midnight 的失败日志确认二者均停在 Azure Noto 字体下载，分别在约 905 / 906 秒取消，UI 没有开始。
+- 最终默认主题 artifact `12473025706` 已下载并复算 ZIP SHA-256：`f87a5d9815f4d242da56df3df1bd721a748e77e7cf02b5d6ced45d8093ca89ae`；其中 `default-acceptance/assertions.json` 明确 `long=true`、27 场景、108 检查全部通过且无意外控制台记录。midnight 字体下载 3 秒，实际 UI 回归也通过；没有只重跑后把失败忽略。
 
 ## 风险与后续事项
 
 - 字节预扫描必须先于 NsReader 的命名空间处理，且与 v0.2 固定 UTF-8 输入保持一致；不能覆盖现有模型预算。
 - 既有 `576cba4` 的 CI 结果不代替本次改动后的验收。
-- 最终独立复审与实际公网 Pages 验收仍待完成。合并之前更新完整的提交去向表与验证结果。
+- 主干与公式分支的提交去向表已补齐。最终独立复审仍待完成；通过后在本任务 worktree 解决 main 合并冲突，推送并完成实际公网 Pages 子路径验收。公网部署依赖合入 main，不能用本轮分支静态站验收替代。
 - 新复审包：`target/handoff/2026-10-22-integration-final-review.md`（ignored），包含确切候选、当前 C6 / D / Feed 防护范围与已接受边界；已请求用户确定独立只读审查者，尚未将主审自查记成独立评审。
 - 用户后续授权先完成这些工作再合并；不再将 main 合并列为完全未获授权，但不得越过其“处理完成后”的条件。打 tag / Release 仍需用户最终点头。
 
