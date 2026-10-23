@@ -5,6 +5,12 @@ import { connect, newPage, evaluate, sleep } from './cdp_session.mjs';
 import { pointerClick, fillField } from './server_page.mjs';
 
 const base = process.env.PAGES_TEST_BASE ?? 'http://127.0.0.1:8093/RSS-Reader';
+const loadTimeoutMs = Number(process.env.PAGES_LOAD_TIMEOUT_MS ?? '30000');
+assert.ok(Number.isSafeInteger(loadTimeoutMs) && loadTimeoutMs > 0 && loadTimeoutMs <= 300000,
+  'PAGES_LOAD_TIMEOUT_MS must be an integer from 1 to 300000');
+const imageTimeoutMs = Number(process.env.PAGES_IMAGE_TIMEOUT_MS ?? '5000');
+assert.ok(Number.isSafeInteger(imageTimeoutMs) && imageTimeoutMs > 0 && imageTimeoutMs <= 300000,
+  'PAGES_IMAGE_TIMEOUT_MS must be an integer from 1 to 300000');
 const direct = `${base}/entries/2?pages-smoke=1`;
 const snapshot = JSON.parse(await readFile(process.env.PAGES_SNAPSHOT_PATH ?? 'assets/pages-demo/snapshot.json', 'utf8'));
 const entries = snapshot.feeds.flatMap(({ feed }) => feed.entries);
@@ -50,12 +56,13 @@ client.on('Network.requestWillBeSent', ({ request, requestId, type }) => {
     network.push(request.url);
   }
 });
-async function waitFor(expression) {
-  for (let attempt = 0; attempt < 150; attempt++) {
+async function waitFor(expression, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
     if (await evaluate(client, expression)) return;
     await sleep(200);
   }
-  throw new Error(`Timed out: ${expression}`);
+  throw new Error(`Timed out after ${timeoutMs}ms: ${expression}`);
 }
 try {
   await client.send('Runtime.enable');
@@ -83,7 +90,7 @@ try {
   ` });
   await client.send('Network.setCacheDisabled', { cacheDisabled: true });
   await client.send('Page.navigate', { url: direct });
-  await waitFor(`!!document.querySelector('[data-slot="reader-body-html"]')`);
+  await waitFor(`!!document.querySelector('[data-slot="reader-body-html"]')`, loadTimeoutMs);
   assert.match(await evaluate(client, 'document.body.textContent'), /公开静态演示/);
   assert.ok((await evaluate(client, 'document.body.textContent')).includes(entries[1].title), 'reader shows the fetched RSS title');
   assert.ok(await evaluate(client, `document.querySelector('[data-slot="reader-body-html"]').textContent.trim().length > 100`), 'real article body renders');
@@ -92,7 +99,7 @@ try {
     readyMs: performance.now(),
     wasmMemoryBytes: __pagesMeasure.memories.map(memory => memory.buffer.byteLength),
     longTasks: __pagesMeasure.longTasks,
-    resources: performance.getEntriesByType('resource').map(({name, transferSize, encodedBodySize, decodedBodySize}) => ({name, transferSize, encodedBodySize, decodedBodySize}))
+    resources: performance.getEntriesByType('resource').map(({name, transferSize, encodedBodySize, decodedBodySize, startTime, responseEnd, duration}) => ({name, transferSize, encodedBodySize, decodedBodySize, startTime, responseEnd, duration}))
   })`);
   const heap = await client.send('Runtime.getHeapUsage');
   assert.ok(startup.wasmMemoryBytes.length > 0, 'measure the instantiated SQLite/WASM module');
@@ -104,7 +111,7 @@ try {
   await waitFor(`(${starred}) === 'true'`);
   await evaluate(client, 'globalThis.__pagesSmokeBeforeReload = true');
   await client.send('Page.reload');
-  await waitFor(`!globalThis.__pagesSmokeBeforeReload && !!document.querySelector('[data-slot="reader-body-html"]')`);
+  await waitFor(`!globalThis.__pagesSmokeBeforeReload && !!document.querySelector('[data-slot="reader-body-html"]')`, loadTimeoutMs);
   await waitFor(`document.querySelector('[data-action="toggle-starred"]')?.disabled === false`);
   assert.equal(await evaluate(client, starred), 'false', 'reloading resets the memory library');
   assert.equal(await evaluate(client, "localStorage.getItem('rssr-web-state-v1')"), 'old-library-left-untouched');
@@ -129,15 +136,17 @@ try {
   // All source articles must survive the SQL conversion and remain reachable with attribution.
   for (const [index, entry] of entries.entries()) {
     await client.send('Page.navigate', { url: `${base}/entries/${index + 1}` });
-    await waitFor(`document.querySelector('[data-slot="reader-title"]')?.textContent === ${JSON.stringify(entry.title)}`);
+    await waitFor(`document.querySelector('[data-slot="reader-title"]')?.textContent === ${JSON.stringify(entry.title)}`, loadTimeoutMs);
     await waitFor(`!!document.querySelector('[data-slot="reader-body-html"]')`);
     assert.equal(await evaluate(client, `document.querySelector('[data-action="open-original"]').href`), entry.url);
     assert.ok(await evaluate(client, `document.querySelector('[data-slot="reader-body-html"]').textContent.trim().length > 100`));
-    await evaluate(client, `Promise.race([
-      Promise.all([...document.querySelectorAll('[data-slot="reader-body-html"] img')].map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
-        img.addEventListener('load', resolve, {once:true}); img.addEventListener('error', resolve, {once:true});
-      }))), new Promise(resolve => setTimeout(resolve, 5000))
-    ]).then(() => true)`);
+    // Poll outside Runtime.evaluate so a longer public-network wait does not
+    // outlive the CDP command deadline. Formula assertions below remain strict.
+    const imageWaitStarted = Date.now();
+    while (Date.now() - imageWaitStarted < imageTimeoutMs) {
+      if (await evaluate(client, `[...document.querySelectorAll('[data-slot="reader-body-html"] img')].every(img => img.complete)`)) break;
+      await sleep(200);
+    }
     const rendering = await evaluate(client, `({
       title: document.querySelector('[data-slot="reader-title"]').textContent,
       math: document.querySelectorAll('[data-slot="reader-body-html"] math').length,
@@ -155,6 +164,7 @@ try {
         formula: img.classList.contains('latex')
       }))
     })`);
+    rendering.imageWaitMs = Date.now() - imageWaitStarted;
     articleRendering.push(rendering);
     const raw = entry.content_html ?? '';
     assert.equal(rendering.math, (raw.match(/<math(?:\s|\/?>)/g) ?? []).length, `${entry.title}: every MathML formula survives`);
@@ -200,7 +210,8 @@ try {
   for (const { title } of entries) assert.ok(!persisted.some(value => value.includes(title)), 'no article library in localStorage');
   assert.deepEqual(network, [], 'demo must not fetch feeds or auto-refresh');
   assert.deepEqual(failures, [], 'bundle assets and runtime must load without errors');
-  const result = { status: 'pass', fetched_at: snapshot.fetched_at, feeds: snapshot.feeds.length, articles: entries.length,
+  const result = { status: 'pass', base, loadTimeoutMs, imageTimeoutMs, interactionTimeoutMs: 30000,
+    fetched_at: snapshot.fetched_at, feeds: snapshot.feeds.length, articles: entries.length,
     storage: 'memory-sqlite', reloadResets: true, startup, heap, transfers, articleRendering,
     sourceHashes: snapshot.feeds.map(({ source, sha256 }) => ({ url: source.url, sha256 })), externalImages: [...externalImages.values()] };
   if (process.env.PAGES_SMOKE_LOG_DIR) await writeFile(join(process.env.PAGES_SMOKE_LOG_DIR, 'result.json'), JSON.stringify(result, null, 2));
@@ -208,7 +219,8 @@ try {
 } catch (error) {
   const logDir = process.env.PAGES_SMOKE_LOG_DIR;
   if (logDir) {
-    await writeFile(join(logDir, 'failure.json'), JSON.stringify({ error: String(error), failures, network, articleRendering, externalImages: [...externalImages.values()] }, null, 2));
+    await writeFile(join(logDir, 'failure.json'), JSON.stringify({ error: String(error), base, loadTimeoutMs, imageTimeoutMs,
+      failures, network, transfers, requests: [...requests.values()], articleRendering, externalImages: [...externalImages.values()] }, null, 2));
     try {
       const { data } = await client.send('Page.captureScreenshot');
       await writeFile(join(logDir, 'failure.png'), Buffer.from(data, 'base64'));
@@ -216,5 +228,7 @@ try {
   }
   throw error;
 } finally {
+  // A timed-out navigation may still be downloading. Close only this run's tab.
+  await client.send('Page.close').catch(() => {});
   client.close();
 }

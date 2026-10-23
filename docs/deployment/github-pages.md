@@ -110,6 +110,17 @@ bash scripts/run_wasm_contract_harness.sh test_library_contracts test_library_re
 
 本地 smoke 需要 Node 22+、google-chrome、curl、Python 3.9+，以及已经构建的 release bundle。
 
+部署后另用 `scripts/browser/pages_smoke.mjs` 检查实际公网入口：`PAGES_TEST_BASE` 指向
+deployment URL，`PAGES_SNAPSHOT_PATH` 使用该次部署上传的快照，`CDP_BASE` 指向独立
+Chrome profile 的调试端口，`PAGES_SMOKE_LOG_DIR` 使用本次新建的证据目录。
+公网传输较慢时可显式设置 `PAGES_LOAD_TIMEOUT_MS=180000`（最大 300000）；它只影响
+初次进入、重载与逐篇导航的加载等待，交互仍为 30 秒。图片等待另设
+`PAGES_IMAGE_TIMEOUT_MS=60000`（默认 5000，最大 300000）；使用短 CDP 查询轮询，
+不延长单条 CDP 命令期限，公式图片仍须实际加载并渲染，记录各篇实际等待时间。
+默认加载期限仍为 30 秒，CI 的本地 smoke 总时限不变。结果记录所用期限和真实资源计时，
+不能把延长等待后的功能通过描述成启动性能达标。驱动禁用缓存，结束时关闭本次标签页，
+避免超时后残留下载干扰下次运行。
+
 ## 为什么不复制 HTML 展示页
 
 页面、CSS、路由与交互来自 rssr-app 的同一份源代码，资料库操作复用共享 SQL 仓储。
