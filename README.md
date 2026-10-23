@@ -15,7 +15,7 @@ _Web 版实际界面；订阅与文章使用演示数据。_
 
 RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把订阅、刷新、筛选和阅读放在一条简短的使用路径上；桌面、Web、Android 和 CLI 复用同一套核心能力。桌面与 Android 的资料库留在设备上；自托管 Web 的资料库保存在服务器上，各浏览器登录后访问同一份数据。独立资料库之间可以通过 JSON、OPML 或可选的 WebDAV 交换配置。
 
-本文的实现说明对应 v0.2 开发分支；下方已发布附件表保留 v0.1.22 的历史核对，不能据此认定 v0.2 已发布。 v0.2 的 Web 发布流程改为四个平台的 `rssr-web-<平台>` 服务与页面合包，见 [部署说明](./docs/deployment/web.md#服务与页面发布包)。
+当前发布版本为 [v0.2.0](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0)。Web 提供四个平台的 `rssr-web-<平台>` 服务与页面合包，见 [部署说明](./docs/deployment/web.md#服务与页面发布包)。从 v0.1.x 升级前，请先阅读下方的数据迁移说明，尤其是 macOS 的旧数据目录。
 
 [下载最新版本](https://github.com/Develata/RSS-Reader/releases/latest) · [发布说明](https://github.com/Develata/RSS-Reader/releases) · [English](./docs/README.en.md) · [文档](./docs/README.md) · [报告问题](https://github.com/Develata/RSS-Reader/issues)
 
@@ -29,14 +29,14 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
    | Linux x64 | `RSS-Reader-linux-x86_64.deb` | 在满足包内依赖的系统安装；数据写入当前用户的 XDG 数据目录 |
    | macOS Intel / Apple Silicon | `RSS-Reader-macos-x86_64.tar.gz` / `RSS-Reader-macos-aarch64.tar.gz` | 解压到可写目录，打开 `RSS-Reader.app` |
    | Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | 安装 APK；AAB 是应用商店产物，不能直接安装 |
-   | Web | `RSS-Reader-web.tar.gz` | v0.1.22 的静态附件；当前 v0.2 正式 Web 页面需由匹配构建的 `rssr-web` 提供服务，见 [Web 部署指南](./docs/deployment/web.md) |
+   | Web | `rssr-web-<平台>.tar.gz`（Windows 为 `.zip`） | 解压对应平台的完整服务与页面包，按 [Web 部署指南](./docs/deployment/web.md) 配置并启动；也可使用 Docker 镜像 |
 
 2. 打开应用，点顶栏的订阅图标（RSS 波纹）进入订阅页，输入 RSS / Atom 地址或网站首页并添加订阅。
 3. 点击 **R**（Read / Home）查看文章；已在首页时再次点击 **R** 可手动刷新全部订阅。
 
-上表按已发布的 `v0.1.22` 产物核对；具体变更和验收范围见[本版 Release 说明](https://github.com/Develata/RSS-Reader/releases/tag/v0.1.22)。Android 已有正式签名 APK / AAB，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。
+上表按已发布的 `v0.2.0` 产物核对；另有四平台 CLI 包和 Android AAB，具体变更与验收范围见[本版 Release 说明](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0)。Android APK / AAB 使用与 v0.1.23 相同的正式签名证书，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。Windows 程序未做 Authenticode 签名，macOS 应用未签名或公证。
 
-**Linux 安装包：** `v0.1.17` 已修复旧版 `.deb` 的普通用户写权限和动态库依赖缺失问题。本次 `v0.1.22` 发布流水线也在 Ubuntu 24.04 安装包后，以普通用户在 Xvfb 下两次启动，验证中文与空格路径中的数据库创建和复用。包的最低库版本来自 Ubuntu 24.04 构建环境；其它发行版应先核对 `.deb` 的 `Depends`，不能据此推定旧版发行版兼容。
+**Linux 安装包：** `v0.2.0` 发布流水线在 Ubuntu 24.04 安装包后，以普通用户在 Xvfb 下两次启动，验证中文与空格路径中的单个 `library.sqlite3` 创建、完整性及数据复用。包的最低库版本来自 Ubuntu 24.04 构建环境；其它发行版应先核对 `.deb` 的 `Depends`，不能据此推定旧版发行版兼容。
 
 ## 日常使用
 

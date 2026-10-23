@@ -1,0 +1,49 @@
+{
+  "source_sha": "52b5e9fc9de57767cd0e533ce9d826949139ffb8",
+  "run_id": 39948302751,
+  "artifact_id": 12499271892,
+  "checked_at": "2026-10-23T11:57:38.171Z",
+  "status": "pass",
+  "files": [
+    {
+      "path": "404.html",
+      "bytes": 568,
+      "sha256": "5aa1c5221df9de370183277911ef789c7504212fa21188090e435ce71391b2d8",
+      "url": "https://develata.me/RSS-Reader/404.html",
+      "status": 200,
+      "elapsedMs": 1036,
+      "contentEncoding": "gzip",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "path": "assets/rssr-app-dxh5929bb2e32562889.js",
+      "bytes": 54624,
+      "sha256": "202a6c5f0146c4c050036d7417778c5725a6a908341b353d6bded4c70262e954",
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app-dxh5929bb2e32562889.js",
+      "status": 200,
+      "elapsedMs": 508,
+      "contentEncoding": "gzip",
+      "contentType": "application/javascript; charset=utf-8"
+    },
+    {
+      "path": "assets/rssr-app_bg-dxhe04ac47218921d27.wasm",
+      "bytes": 4992463,
+      "sha256": "3986f4958e20c998ad5e92b1eabd79647885543499b98feb87035006a20a829a",
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app_bg-dxhe04ac47218921d27.wasm",
+      "status": 200,
+      "elapsedMs": 47394,
+      "contentEncoding": "gzip",
+      "contentType": "application/wasm"
+    },
+    {
+      "path": "index.html",
+      "bytes": 568,
+      "sha256": "5aa1c5221df9de370183277911ef789c7504212fa21188090e435ce71391b2d8",
+      "url": "https://develata.me/RSS-Reader/index.html",
+      "status": 200,
+      "elapsedMs": 582,
+      "contentEncoding": "gzip",
+      "contentType": "text/html; charset=utf-8"
+    }
+  ]
+}

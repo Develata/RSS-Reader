@@ -15,9 +15,9 @@ _Actual Web interface with sample subscriptions and articles._
 
 RSS-Reader is a local-first RSS reader built with Rust and Dioxus. Desktop, Web, Android, and CLI share the same core subscription and reading behavior. Desktop and Android keep a library on the device. Self-hosted Web keeps one library on the server, shared by browsers and the CLI using that server data directory. JSON, OPML, and optional WebDAV exchange subscriptions and settings between separate libraries.
 
-Implementation notes below describe the v0.2 development branch, not a published v0.2 release; the asset table retains its historical v0.1.22 verification.
+The current release is [v0.2.0](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0). Before upgrading from v0.1.x, read the data migration notes below, especially the old macOS data location.
 
-The v0.2 release workflow packages the server and its matching page together for Linux x86_64, Windows x86_64, and macOS x86_64 / aarch64 as `rssr-web-<platform>.tar.gz` (Windows: `.zip`). See the [deployment guide](./deployment/web.md); the standalone Pages demo remains separate.
+v0.2.0 packages the server and its matching page together for Linux x86_64, Windows x86_64, and macOS x86_64 / aarch64 as `rssr-web-<platform>.tar.gz` (Windows: `.zip`). See the [deployment guide](./deployment/web.md); the standalone Pages demo remains separate.
 
 [Latest release](https://github.com/Develata/RSS-Reader/releases/latest) · [Release notes](https://github.com/Develata/RSS-Reader/releases) · [中文](../README.md) · [Documentation](./README.md) · [Issues](https://github.com/Develata/RSS-Reader/issues)
 
@@ -31,13 +31,13 @@ Download the appropriate asset from [Releases](https://github.com/Develata/RSS-R
 | Linux x64 | `RSS-Reader-linux-x86_64.deb` | Install where the package dependencies are available; data is stored under the user's XDG data directory |
 | macOS Intel / Apple Silicon | `RSS-Reader-macos-x86_64.tar.gz` / `RSS-Reader-macos-aarch64.tar.gz` | Extract to a writable directory and open `RSS-Reader.app` |
 | Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | Install the APK; the AAB is for app stores |
-| Web | `RSS-Reader-web.tar.gz` | Historical v0.1.22 static asset; the v0.2 Web page requires a matching [`rssr-web`](./deployment/web.md) server build |
+| Web | `rssr-web-<platform>.tar.gz` (Windows: `.zip`) | Extract the complete package, configure and start it using the [deployment guide](./deployment/web.md), or use the Docker image |
 
 Open Subscribe (the RSS-wave icon in the top bar), add an RSS/Atom URL or a website homepage, then select **R** (Read / Home). From another page, R navigates home; when already home, R manually refreshes all feeds. Repeated clicks share the in-flight refresh. On mobile, pull down at the top of Home to request the same refresh.
 
-The table matches the published `v0.1.22` assets; see the [release notes](https://github.com/Develata/RSS-Reader/releases/tag/v0.1.22) for the exact changes and validation scope. Android's signed APK/AAB was built and checked, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine.
+The table matches the published `v0.2.0` assets. Four platform CLI packages and an Android AAB are also available; see the [release notes](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0) for changes and validation scope. Android's APK/AAB uses the same release certificate as v0.1.23, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine. Windows binaries have no Authenticode signature; macOS apps are unsigned and not notarized.
 
-**Linux package:** `v0.1.17` fixes the earlier `.deb` data-directory permission problem and declares its linked library dependencies. The `v0.1.22` release workflow also installed its package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking database creation and reuse in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
+**Linux package:** the `v0.2.0` release workflow installed its package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking creation, integrity and data reuse of the single `library.sqlite3` in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
 
 ## Reading workflow
 
