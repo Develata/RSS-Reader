@@ -13,9 +13,17 @@
 
 /// What goes into the page and the server: watched by Cargo and hashed, the same list for both,
 /// relative to the repository's root. Changes elsewhere (documents, scripts) leave the id.
-/// `icons` is embedded in both (review C3-R2 R2-06).
-const BUILD_INPUTS: [&str; 7] =
-    ["crates", "build-support", "assets", "icons", "Dioxus.toml", "Cargo.toml", "Cargo.lock"];
+/// `icons` is embedded in both; `vendor` contains patched product dependencies.
+const BUILD_INPUTS: [&str; 8] = [
+    "crates",
+    "build-support",
+    "assets",
+    "icons",
+    "vendor",
+    "Dioxus.toml",
+    "Cargo.toml",
+    "Cargo.lock",
+];
 
 /// Sets `RSSR_BUILD_ID` for the crate being built (`env!("RSSR_BUILD_ID")`) and tells Cargo when
 /// to compute it again.

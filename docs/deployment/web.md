@@ -39,7 +39,7 @@ export RSS_READER_WEB_PASSWORD='请替换为自己的强密码'
 
 [Web packages workflow](../../.github/workflows/web-packages.yml) 从一个固定 source SHA 生成统一 `RSSR_BUILD_ID=git-<完整 SHA>`；四个平台均检查解压包并实际启动服务。Linux 在 Debian bookworm 中构建，镜像直接复制这份受测包与同次构建的 CLI，不再次编译。发布流程在容器验收之后推送同一受测镜像；分支上的 Docker 手动验证不推送镜像。检查入口和实际完成情况见 [C6 验证](../testing/web-distribution.md)。
 
-Linux 可使用仓库中的 [systemd 单元示例](./rssr-web.service)：将整包解压到 `/opt/rssr-web`，先创建 `rssr` 系统用户与组，再把单元放入 `/etc/systemd/system/`。创建 root 所有、权限 `0600` 的 `/etc/rssr-web/env`，按模板填写实际 HTTPS `RSS_READER_WEB_PUBLIC_ORIGIN` 和首次启动凭据。单元监听回环 `127.0.0.1:8080`，由本机 HTTPS 反向代理转发；`StateDirectory` 创建仅该用户可访问的 `/var/lib/rssr-web`，同时保存文章库、认证库与出站策略。完成配置后执行 `systemctl daemon-reload` 和 `systemctl enable --now rssr-web`；用 `journalctl -u rssr-web` 检查启动。v0.2 使用 `RSSR_DATA_DIR`，不要再使用旧模板的 `RSS_READER_WEB_DATA_DIR` 或以 `auth.json` 作为活动认证库；已有旧库的导入规则见下文升级说明。
+Linux 可使用仓库中的 [systemd 单元示例](./rssr-web.service)：将整包解压到 `/opt/rssr-web`，先创建 `rssr` 系统用户与组，再把单元放入 `/etc/systemd/system/`。创建 root 所有、权限 `0600` 的 `/etc/rssr-web/env`，按模板填写实际 HTTPS `RSS_READER_WEB_PUBLIC_ORIGIN` 和首次启动凭据。认证库建立后可移除初始化密码 `RSS_READER_WEB_PASSWORD` / `RSS_READER_WEB_PASSWORD_HASH`；`RSS_READER_WEB_USERNAME` 与 `RSS_READER_WEB_PUBLIC_ORIGIN` 必须保留，后续每次启动仍需要它们。单元监听回环 `127.0.0.1:8080`，由本机 HTTPS 反向代理转发；`StateDirectory` 创建仅该用户可访问的 `/var/lib/rssr-web`，同时保存文章库、认证库与出站策略。完成配置后执行 `systemctl daemon-reload` 和 `systemctl enable --now rssr-web`；用 `journalctl -u rssr-web` 检查启动。v0.2 使用 `RSSR_DATA_DIR`，不要再使用旧模板的 `RSS_READER_WEB_DATA_DIR` 或以 `auth.json` 作为活动认证库；已有旧库的导入规则见下文升级说明。
 
 ## 使用已发布镜像
 

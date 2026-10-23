@@ -1,12 +1,12 @@
 # 快速开始：极简个人 RSS 阅读器
 
-操作入口更新于 2026-10-22（v0.2 C4c）；历史 spec/plan 的版本上下文保留。更完整的当前说明见 [使用指南](../../docs/user-guide.md)。
+操作入口更新于 2026-10-23（v0.2 阶段 D）；历史 spec/plan 的版本上下文保留。更完整的当前说明见 [使用指南](../../docs/user-guide.md)。
 
 ## 1. 准备环境
 
 - 安装 Rust 稳定版工具链
 - Dioxus CLI 0.7.9；原生桌面需对应 WebView 系统库，Android 工具链见 [构建说明](../../docs/roadmaps/android-release-roadmap.md)
-- 原生使用单库 `library.sqlite3`；正式 Web 经同源 API 使用服务器资料库，只有 Pages 演示使用 BrowserStore/localStorage；不要求单独安装 SQLite 命令行工具
+- 原生使用单库 `library.sqlite3`；正式 Web 经同源 API 使用服务器资料库；Pages 演示使用共享 SQL 的内存 SQLite，每次重载从预抓取 RSS 重建，BrowserStore 已退役；不要求单独安装 SQLite 命令行工具
 - 如需验证 Web 目标，安装 `wasm32-unknown-unknown` target
 
 ## 2. 初始化与校验

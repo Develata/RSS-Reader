@@ -166,6 +166,10 @@ try {
       }
     }
     assert.equal(rendering.images.filter(img => img.formula).length, (raw.match(/class="latex"/g) ?? []).length, `${entry.title}: formula images survive`);
+    for (const img of rendering.images.filter(img => img.formula)) {
+      assert.ok(img.complete && img.naturalWidth > 0 && img.width > 0,
+        `${entry.title}: formula image must load and render: ${img.src}`);
+    }
     if (process.env.PAGES_SMOKE_LOG_DIR && (index === 0 || index === entries.length - 1)) {
       await evaluate(client, 'document.fonts.ready.then(() => true)');
       const { data } = await client.send('Page.captureScreenshot');

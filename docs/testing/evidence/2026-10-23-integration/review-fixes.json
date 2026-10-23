@@ -1,0 +1,59 @@
+{
+  "reviewed_base": "b749514209d10397287792ada4e35cbbb858f856",
+  "build_id_regression": {
+    "baseline": "failed as expected: vendor-only changes keep dev-7d015998b1e9",
+    "fixed": "passed",
+    "fixed_seconds": 23.02,
+    "independent_fixed_seconds": 23.202,
+    "command": "python scripts/test_build_id.py"
+  },
+  "formula_probe": {
+    "good": {
+      "rendering": {
+        "title": "formula fixture",
+        "math": 0,
+        "mathLayout": [],
+        "labeledRows": [],
+        "images": [
+          {
+            "src": "http://127.0.0.1:60365/good.png",
+            "alt": "",
+            "complete": true,
+            "naturalWidth": 1,
+            "width": 1,
+            "formula": true
+          }
+        ]
+      },
+      "baselinePass": true,
+      "fixedPass": true
+    },
+    "bad": {
+      "rendering": {
+        "title": "formula fixture",
+        "math": 0,
+        "mathLayout": [],
+        "labeledRows": [],
+        "images": [
+          {
+            "src": "http://127.0.0.1:60365/bad.png",
+            "alt": "",
+            "complete": true,
+            "naturalWidth": 0,
+            "width": 16,
+            "formula": true
+          }
+        ]
+      },
+      "baselinePass": true,
+      "fixedPass": false
+    }
+  },
+  "formula_probe_scope": "Chrome 155 real 200/404 images; actual rendering expression and assertion fragment, not full Pages acceptance",
+  "static_checks": [
+    "rustfmt build-support/build_id.rs",
+    "node --check scripts/browser/pages_smoke.mjs",
+    "actionlint -shellcheck='' (remote CI retains its shellcheck check)",
+    "git diff --check"
+  ]
+}

@@ -1,11 +1,12 @@
 # rssr-web v0.2 systemd unit; see docs/deployment/web.md.
 # Unpack the matching service + public/ package into /opt/rssr-web and create
 # the rssr system user/group first. HTTPS terminates at a local reverse proxy.
-# /etc/rssr-web/env must be root-owned, mode 0600, and initially contain:
+# /etc/rssr-web/env must be root-owned, mode 0600, and contain:
 #   RSS_READER_WEB_PUBLIC_ORIGIN=https://reader.example.com
 #   RSS_READER_WEB_USERNAME=...
 #   RSS_READER_WEB_PASSWORD_HASH=... (Argon2; EnvironmentFile does not expand $)
-# After auth.sqlite3 has been created, credentials in the file can be removed.
+# After auth.sqlite3 has been created, remove only the PASSWORD / PASSWORD_HASH
+# seed. Keep USERNAME and PUBLIC_ORIGIN for every subsequent start.
 [Unit]
 Description=RSS-Reader web server (rssr-web)
 After=network-online.target
