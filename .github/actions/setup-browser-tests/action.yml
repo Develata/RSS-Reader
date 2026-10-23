@@ -14,6 +14,7 @@ runs:
       if: inputs.with-fonts == 'true'
       shell: bash
       run: |
+        bash scripts/configure_ubuntu_apt.sh
         apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
         sudo apt-get "${apt_options[@]}" update
         sudo apt-get "${apt_options[@]}" install -y --no-install-recommends fontconfig fonts-noto-cjk fonts-lmodern

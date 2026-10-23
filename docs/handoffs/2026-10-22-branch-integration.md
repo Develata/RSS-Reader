@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
 - 当前产品实现 HEAD：`2c4f472`（整合前为 `5de1068`）
-- 相关 commit：`bd4a667`（Feed/URL 实现）、`45917d5`（systemd 模板与历史记录）、`f1897a0`（CI 字体）、`2c4f472`（编号公式布局）；补充截图与 Docker 排除项 `commit: pending`
+- 相关 commit：`bd4a667`（Feed/URL 实现）、`45917d5`（systemd 模板与历史记录）、`f1897a0`（CI 字体）、`2c4f472`（编号公式布局）、`5d89e9e`（补充截图与 Docker 排除项）；字体安装的 APT 配置补齐 `commit: pending`
 - 相关 tag / release：无
 - 状态：`in_progress`（本地实现与回归通过；候选远端验收、独立复审与合并待完成）
 
@@ -113,6 +113,14 @@ Pages artifact `12470067858` 已下载并复算 ZIP SHA-256：`6d3c6823abe2589eb
 - Pages smoke artifact `12471467214` 的 ZIP SHA-256 为 `8e69c56f6e98e99f7d3febe80e50c95eae188a286603b932b1a1e9c0d94ac6f1`；RSS artifact `12471531982` 为 `20530e4507f28f59ecaa36612b609ba9c0e15c7d9e75f601fa977ab537dd0969`。下载后均复算并与 GitHub digest 对上。
 - 已目视每日数学与陶哲轩文章的标题、正文截图：中文不再缺字，普通 MathML 行内与展示公式可读。原截图只滚到正文开头，编号公式可能在浮动工具栏下方；另一个正文截图还可能早于滚动完成。因此补充即时滚动并等待两帧、将编号公式或图片公式滚到视口中央再截图，补齐可复核的目视证据。这只改截图脚本，不改产品。
 - 启动 `readyMs=480.3`，WASM memory `4,587,520` bytes，最大已观测 long task `75 ms`；本地静态 HTTP 服务传输未压缩 WASM body `4,992,463` bytes。不是公网网络、压缩传输或真实手机性能数据。
+
+### 截图补齐与 APT 配置复用
+
+- `5d89e9e` 的 [Pages 运行 39883947947](https://github.com/Develata/RSS-Reader/actions/runs/39883947947)通过，部署跳过；相对 `2c4f472` 只改截图脚本、Docker 排除项和本记录，产品源码与资源未变。新快照时间 `2026-10-23 01:27:08 UTC`，仍为 570 个 MathML、144 / 144 图片加载成功。已目视确认每日数学的 `(1)` 与公式在同一行，陶哲轩正文的图片公式可读，截图中中文完整。
+- 原样保留的代表截图：[每日数学编号公式](../testing/evidence/2026-10-22-branch-integration/daily-math-formula.png)、[陶哲轩图片公式](../testing/evidence/2026-10-22-branch-integration/tao-formula.png)。这两张是远端 Pages 构建的真实浏览器截图，未编辑图像。
+- smoke artifact `12471044533` 的 ZIP SHA-256：`77936b137f5881d83710cf3b870e4cddc642732677f7b5c9b3e3173927b2c70c`；snapshot artifact `12470919756`：`652ab988a2cee369e1de92f9c59080eae0a7a61d7021daa46e8866b07a1ca56c`。均已下载复算并匹配 GitHub digest。
+- 完整产品候选的默认主题验收 job `120185756815` 已通过：`--long` **27 / 27 场景、108 checks、0 unexpected console**。核对了 `ci-ui-default` artifact `12472235827` 中的 `assertions.json`；其 ZIP SHA-256 `4ae589140a3527f8f4ca56297a8eed10c634a7fa2e371ab22f5c3d762cc12e8f` 已复算匹配。
+- 新字体安装没有复用此前 native CI 的 APT mirrorlist 修复；同时 Linux Release 的依赖安装仍缺此配置。将同一改写抽成 `scripts/configure_ubuntu_apt.sh`，在三处共用；仅替换 Ubuntu archive 的 Azure 主机，保留 suite、签名与第三方源。字体与原生安装继续使用连接超时 / 重试设置，Linux Release 同步增加这些设置与 10 分钟步骤时限。隔离 Linux fixture 通过（四种配置位置及 suite / Microsoft 来源保留），actionlint、diff check 通过；远端结果待记录。
 
 ## 风险与后续事项
 
