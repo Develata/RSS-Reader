@@ -145,6 +145,10 @@ try {
         namespace: math.namespaceURI, width: math.getBoundingClientRect().width,
         height: math.getBoundingClientRect().height
       })),
+      labeledRows: [...document.querySelectorAll('[data-slot="reader-body-html"] mlabeledtr')].map(row => ({
+        hasRowSpan: [...row.children].some(cell => Number(cell.getAttribute('rowspan') ?? 1) > 1),
+        cellHeights: [...row.children].map(cell => cell.getBoundingClientRect().height)
+      })),
       images: [...document.querySelectorAll('[data-slot="reader-body-html"] img')].map(img => ({
         src: img.currentSrc || img.src, alt: img.alt, complete: img.complete,
         naturalWidth: img.naturalWidth, width: img.getBoundingClientRect().width,
@@ -155,6 +159,12 @@ try {
     const raw = entry.content_html ?? '';
     assert.equal(rendering.math, (raw.match(/<math(?:\s|\/?>)/g) ?? []).length, `${entry.title}: every MathML formula survives`);
     assert.ok(rendering.mathLayout.every(math => math.namespace === 'http://www.w3.org/1998/Math/MathML' && math.width > 0 && math.height > 0), `${entry.title}: formulas have MathML layout`);
+    for (const {hasRowSpan, cellHeights} of rendering.labeledRows) {
+      if (!hasRowSpan && cellHeights.length > 1) {
+        assert.ok(Math.min(...cellHeights) > 0 && Math.max(...cellHeights) - Math.min(...cellHeights) < 1,
+          `${entry.title}: formula labels and operands share one table row`);
+      }
+    }
     assert.equal(rendering.images.filter(img => img.formula).length, (raw.match(/class="latex"/g) ?? []).length, `${entry.title}: formula images survive`);
     if (process.env.PAGES_SMOKE_LOG_DIR && (index === 0 || index === entries.length - 1)) {
       await evaluate(client, 'document.fonts.ready.then(() => true)');

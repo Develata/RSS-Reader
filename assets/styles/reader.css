@@ -70,6 +70,12 @@
   overflow-y: hidden;
 }
 
+/* Legacy MathJax numbered rows are outside MathML Core. Without row layout,
+ * Chromium gives their mtd children block layout and stacks formula operands. */
+[data-slot="reader-body-html"] mlabeledtr {
+  display: table-row;
+}
+
 [data-slot="reader-body-html"] a {
   color: var(--accent-strong);
   text-decoration: underline;

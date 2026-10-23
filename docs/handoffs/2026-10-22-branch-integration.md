@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
 - 当前实现 HEAD：`bd4a667`（整合前为 `5de1068`）
-- 相关 commit：`bd4a667`（实现）、`45917d5`（systemd 模板与历史记录）；CI 字体修复 `commit: pending`
+- 相关 commit：`bd4a667`（Feed/URL 实现）、`45917d5`（systemd 模板与历史记录）、`f1897a0`（CI 字体）；编号公式布局修复 `commit: pending`
 - 相关 tag / release：无
 - 状态：`in_progress`（本地实现与回归通过；候选远端验收、独立复审与合并待完成）
 
@@ -91,6 +91,14 @@
 Pages artifact `12470067858` 已下载并复算 ZIP SHA-256：`6d3c6823abe2589ebae6bd07619a23a65694d7ff86f5cdb2e4df5b7fff6f436a`，与 GitHub digest 相同。快照新抓取于 `2026-10-23 00:53:13 UTC`，每日数学内容已经滚动更新；本轮是 570 个 MathML、144 张公式图片（全部加载）。自动规则通过，但目视发现 CI 截图中文缺字，现有浏览器安装 action 没有安装 CJK 字体；不能把这组截图记成完整目视验收。正在为截图 job 补充 CJK / OpenType math 字体并重新验收。
 
 字体修复仅影响 CI 环境：`setup-browser-tests` 增加显式 `with-fonts` 输入，Pages 与真实 UI 截图 job 安装 Noto CJK 和 Latin Modern Math，通过 fontconfig 检查字体存在；不向产品包添加字体，不给 14 个无截图 WASM 契约 job 增加安装步骤。已用 Debian 包清单确认 `fonts-lmodern` 包含 `latinmodern-math.otf`，actionlint 通过；修复后的远端截图验收待记录。
+
+### 新鲜 RSS 触发的编号公式布局问题
+
+- `f1897a0` 的 [Pages 运行 39882215340](https://github.com/Develata/RSS-Reader/actions/runs/39882215340)通过，确认 fontconfig 使用 `Noto Sans CJK SC` 和 `Latin Modern Math`；这解决 CI 缺字环境，但不解决下面的公式结构问题。
+- 新抓取的 `2026-10-23 · 平方之后为何更简单` 带一个 MathJax `mlabeledtr`。它不在 [MathML Core 的元素列表](https://www.w3.org/TR/mathml-core/#mathml-elements-and-attributes)中；Chromium 156 将它排成 `block math`，其中 `mtd` 变成 block，公式操作数竖排。原始 MathML 在带 Cambria Math 的独立 Chrome 对照里也复现，排除清洗或缺少字体导致的可能。
+- 同一真实公式只将行设为 `display: table-row` 后，布局与原生 `mtr` 对照相同：公式表高从 184.66 px 降至 74.38 px，符号与编号在正常行内。`reader.css` 仅为 reader 内的 `mlabeledtr` 加此规则；不修改公式 DOM、操作数或消毒策略，也不引入数学渲染脚本。这是保留编号文本的普通表格行兼容布局，不声称实现 MathML 旧版完整的标签定位规则。
+- 新浏览器契约比较带编号行与相同内容的原生行几何尺寸，并检查消毒/重解析/命名空间；修复前 **6 pass / 1 fail**，修复后 **7 / 7 pass**。Pages 对无跨行单元格的编号公式增加行高一致断言，避免只数 `<math>` 而放过排版损坏。
+- 日志与截图在 `formula-probe/`、`numbered-baseline-browser.log`、`numbered-fixed-browser.log`；两个 WASM 测试二进制按 Cargo JSON 的确切 executable 路径保存，未用宽泛通配符猜测产物。Rust fmt 和 JS 语法检查通过；带此 CSS 的完整候选远端验收待记录。
 
 ## 风险与后续事项
 

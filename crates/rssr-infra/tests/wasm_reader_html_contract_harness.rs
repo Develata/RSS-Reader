@@ -70,6 +70,10 @@ fn render(raw: &str) -> Value {
                 hostClientWidth: second.clientWidth,
                 hostScrollWidth: second.scrollWidth,
                 maxMathWidth: Math.max(0, ...maths.map((node) => node.getBoundingClientRect().width)),
+                tables: [...second.querySelectorAll('mtable')].map((node) => {
+                    const rect = node.getBoundingClientRect();
+                    return {width: rect.width, height: rect.height};
+                }),
             };
             first.remove();
             second.remove();
@@ -177,6 +181,30 @@ fn nested_katex_containers_show_one_copy_each() {
     assert_eq!(result["parsedVerbatim"], true, "{result}");
     assert_eq!(result["maths"], 3, "{result}");
     assert_eq!(result["text"], "abc", "{result}");
+}
+
+#[wasm_bindgen_test]
+fn numbered_formulas_layout_like_native_table_rows() {
+    // MathJax's legacy mlabeledtr appears in the real daily-math feed. Without row layout,
+    // Chromium treats the cells as blocks and stacks the formula's operands vertically.
+    let cells = concat!(
+        r#"<mtd><mtext>(1)</mtext></mtd><mtd><msup><mi>A</mi><mn>2</mn></msup>"#,
+        r#"<mo>≤</mo><mfrac><mrow><mi>N</mi><mo>+</mo><mn>1</mn></mrow><mi>N</mi>"#,
+        r#"</mfrac><mo>+</mo><mi>C</mi></mtd>"#,
+    );
+    let result = render(&format!(
+        r#"<math display="block"><mtable><mlabeledtr>{cells}</mlabeledtr></mtable></math><math display="block"><mtable><mtr>{cells}</mtr></mtable></math>"#
+    ));
+    assert_eq!(result["unsafe"], serde_json::json!([]), "{result}");
+    assert_eq!(result["parsedVerbatim"], true, "{result}");
+    assert_eq!(result["mathNamespaceOk"], true, "{result}");
+    let tables = result["tables"].as_array().unwrap();
+    assert_eq!(tables.len(), 2, "{result}");
+    for dimension in ["width", "height"] {
+        let numbered = tables[0][dimension].as_f64().unwrap();
+        let native = tables[1][dimension].as_f64().unwrap();
+        assert!(native > 0.0 && (numbered - native).abs() < 1.0, "{dimension}: {result}");
+    }
 }
 
 #[wasm_bindgen_test]
