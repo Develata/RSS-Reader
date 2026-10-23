@@ -170,9 +170,21 @@ try {
       await evaluate(client, 'document.fonts.ready.then(() => true)');
       const { data } = await client.send('Page.captureScreenshot');
       await writeFile(join(process.env.PAGES_SMOKE_LOG_DIR, `article-${index + 1}.png`), Buffer.from(data, 'base64'));
-      await evaluate(client, `document.querySelector('[data-slot="reader-body-html"]').scrollIntoView({block: 'start'})`);
+      await evaluate(client, `document.querySelector('[data-slot="reader-body-html"]').scrollIntoView({block: 'start', behavior: 'instant'});
+        new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))`);
       const body = await client.send('Page.captureScreenshot');
       await writeFile(join(process.env.PAGES_SMOKE_LOG_DIR, `article-${index + 1}-body.png`), Buffer.from(body.data, 'base64'));
+      const formulaVisible = await evaluate(client, `(() => {
+        const body = document.querySelector('[data-slot="reader-body-html"]');
+        const formula = body.querySelector('mlabeledtr')?.closest('math') ?? body.querySelector('img.latex');
+        if (!formula) return false;
+        formula.scrollIntoView({block: 'center', behavior: 'instant'});
+        return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))));
+      })()`);
+      if (formulaVisible) {
+        const formula = await client.send('Page.captureScreenshot');
+        await writeFile(join(process.env.PAGES_SMOKE_LOG_DIR, `article-${index + 1}-formula.png`), Buffer.from(formula.data, 'base64'));
+      }
     }
   }
   const persisted = await evaluate(client, `Object.values(localStorage)`);

@@ -3,8 +3,8 @@
 - 日期：2026-10-22
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
-- 当前实现 HEAD：`bd4a667`（整合前为 `5de1068`）
-- 相关 commit：`bd4a667`（Feed/URL 实现）、`45917d5`（systemd 模板与历史记录）、`f1897a0`（CI 字体）；编号公式布局修复 `commit: pending`
+- 当前产品实现 HEAD：`2c4f472`（整合前为 `5de1068`）
+- 相关 commit：`bd4a667`（Feed/URL 实现）、`45917d5`（systemd 模板与历史记录）、`f1897a0`（CI 字体）、`2c4f472`（编号公式布局）；补充截图与 Docker 排除项 `commit: pending`
 - 相关 tag / release：无
 - 状态：`in_progress`（本地实现与回归通过；候选远端验收、独立复审与合并待完成）
 
@@ -28,6 +28,7 @@
 - `vendor/url` 是 crates.io `url` 2.5.8，加 `Parser::last_slash_can_be_removed` 一处改动，将根路径点段的反向搜索限制在路径内。逐文件对照本地 registry，除 `PATCH.md` 外仅 `src/parser.rs` 不同；不改版本，不增加第二个 XML 依赖。保留许可证与上游问题草稿。
 - 补入真实 Feed 校准工具；默认忽略，需要显式提供 RSS 文件。不把工具存在当作真实语料验收完成。
 - 逐文件复核补入主干的 systemd 部署模板，改用 v0.2 的 `RSSR_DATA_DIR`、共享认证/资料目录和明确 HTTPS public origin；保留 StateDirectory、私有权限与服务隔离，不恢复旧数据目录变量或活动 auth.json。
+- 同时保留主干 `.dockerignore` 对 `.claude`、`.workbuddy` 的排除，避免本机 agent worktree / 工具状态进入源码镜像构建上下文。
 - 保留两条来源分支的 13 份历史 handoff，顶部标出确切来源与历史属性。同名超时记录分别保留；旧服务器设计归档，原路径仅指向当前契约，避免引导维护者恢复旧架构。
 - 尚未开始合并。根检出的任务外修改及其他 worktree 保留。
 
@@ -90,7 +91,7 @@
 
 Pages artifact `12470067858` 已下载并复算 ZIP SHA-256：`6d3c6823abe2589ebae6bd07619a23a65694d7ff86f5cdb2e4df5b7fff6f436a`，与 GitHub digest 相同。快照新抓取于 `2026-10-23 00:53:13 UTC`，每日数学内容已经滚动更新；本轮是 570 个 MathML、144 张公式图片（全部加载）。自动规则通过，但目视发现 CI 截图中文缺字，现有浏览器安装 action 没有安装 CJK 字体；不能把这组截图记成完整目视验收。正在为截图 job 补充 CJK / OpenType math 字体并重新验收。
 
-字体修复仅影响 CI 环境：`setup-browser-tests` 增加显式 `with-fonts` 输入，Pages 与真实 UI 截图 job 安装 Noto CJK 和 Latin Modern Math，通过 fontconfig 检查字体存在；不向产品包添加字体，不给 14 个无截图 WASM 契约 job 增加安装步骤。已用 Debian 包清单确认 `fonts-lmodern` 包含 `latinmodern-math.otf`，actionlint 通过；修复后的远端截图验收待记录。
+字体修复仅影响 CI 环境：`setup-browser-tests` 增加显式 `with-fonts` 输入，Pages 与真实 UI 截图 job 安装 Noto CJK 和 Latin Modern Math，通过 fontconfig 检查字体存在；不向产品包添加字体，不给 14 个无截图 WASM 契约 job 增加安装步骤。已用 Debian 包清单确认 `fonts-lmodern` 包含 `latinmodern-math.otf`，actionlint 通过。修复后的远端截图已确认中文可读，详见后续完整候选记录。
 
 ### 新鲜 RSS 触发的编号公式布局问题
 
@@ -99,6 +100,19 @@ Pages artifact `12470067858` 已下载并复算 ZIP SHA-256：`6d3c6823abe2589eb
 - 同一真实公式只将行设为 `display: table-row` 后，布局与原生 `mtr` 对照相同：公式表高从 184.66 px 降至 74.38 px，符号与编号在正常行内。`reader.css` 仅为 reader 内的 `mlabeledtr` 加此规则；不修改公式 DOM、操作数或消毒策略，也不引入数学渲染脚本。这是保留编号文本的普通表格行兼容布局，不声称实现 MathML 旧版完整的标签定位规则。
 - 新浏览器契约比较带编号行与相同内容的原生行几何尺寸，并检查消毒/重解析/命名空间；修复前 **6 pass / 1 fail**，修复后 **7 / 7 pass**。Pages 对无跨行单元格的编号公式增加行高一致断言，避免只数 `<math>` 而放过排版损坏。
 - 日志与截图在 `formula-probe/`、`numbered-baseline-browser.log`、`numbered-fixed-browser.log`；两个 WASM 测试二进制按 Cargo JSON 的确切 executable 路径保存，未用宽泛通配符猜测产物。Rust fmt 和 JS 语法检查通过；带此 CSS 的完整候选远端验收待记录。
+
+### 完整产品候选 `2c4f472`
+
+| 工作流 | 运行 | 状态 |
+|---|---|---|
+| CI，`acceptance_long=true` | [39883092648](https://github.com/Develata/RSS-Reader/actions/runs/39883092648) | 运行中，尚未记为通过 |
+| Pages fresh RSS / release 构建 / 浏览器验收 | [39883097508](https://github.com/Develata/RSS-Reader/actions/runs/39883097508) | 通过，分支部署跳过 |
+| 四平台 Web 包 / Docker，`all_platforms=true` | [39883102202](https://github.com/Develata/RSS-Reader/actions/runs/39883102202) | 7 / 7 jobs 成功；不推送镜像 |
+
+- Pages snapshot 抓取时间 `2026-10-23 01:17:54 UTC`；2 个真实源、6 篇文章、570 个 MathML、144 张公式图片，144 张均加载成功。编号公式的两个单元格实际高度同为 60.4375 px，行布局断言通过。
+- Pages smoke artifact `12471467214` 的 ZIP SHA-256 为 `8e69c56f6e98e99f7d3febe80e50c95eae188a286603b932b1a1e9c0d94ac6f1`；RSS artifact `12471531982` 为 `20530e4507f28f59ecaa36612b609ba9c0e15c7d9e75f601fa977ab537dd0969`。下载后均复算并与 GitHub digest 对上。
+- 已目视每日数学与陶哲轩文章的标题、正文截图：中文不再缺字，普通 MathML 行内与展示公式可读。原截图只滚到正文开头，编号公式可能在浮动工具栏下方；另一个正文截图还可能早于滚动完成。因此补充即时滚动并等待两帧、将编号公式或图片公式滚到视口中央再截图，补齐可复核的目视证据。这只改截图脚本，不改产品。
+- 启动 `readyMs=480.3`，WASM memory `4,587,520` bytes，最大已观测 long task `75 ms`；本地静态 HTTP 服务传输未压缩 WASM body `4,992,463` bytes。不是公网网络、压缩传输或真实手机性能数据。
 
 ## 风险与后续事项
 
