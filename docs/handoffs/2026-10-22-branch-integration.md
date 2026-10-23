@@ -3,8 +3,8 @@
 - 日期：2026-10-22
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
-- 当前 HEAD：`5de1068`（整合前）
-- 相关 commit：pending
+- 当前实现 HEAD：`bd4a667`（整合前为 `5de1068`）
+- 相关 commit：`bd4a667`（已推送）；systemd 模板与后续记录 `commit: pending`
 - 相关 tag / release：无
 - 状态：`in_progress`（本地实现与回归通过；候选远端验收、独立复审与合并待完成）
 
@@ -27,6 +27,8 @@
 - URL 通用输入最多 8 KiB、查询/片段之前最多 64 个点（包括 `%2e`，忽略 TAB/LF/CR）；各用例仍保留原有更小限制。发现页仍用当前流式解析器、50 候选和 2 KiB 输出边界；正文的 opaque `data:image/` 豁免保留。
 - `vendor/url` 是 crates.io `url` 2.5.8，加 `Parser::last_slash_can_be_removed` 一处改动，将根路径点段的反向搜索限制在路径内。逐文件对照本地 registry，除 `PATCH.md` 外仅 `src/parser.rs` 不同；不改版本，不增加第二个 XML 依赖。保留许可证与上游问题草稿。
 - 补入真实 Feed 校准工具；默认忽略，需要显式提供 RSS 文件。不把工具存在当作真实语料验收完成。
+- 逐文件复核补入主干的 systemd 部署模板，改用 v0.2 的 `RSSR_DATA_DIR`、共享认证/资料目录和明确 HTTPS public origin；保留 StateDirectory、私有权限与服务隔离，不恢复旧数据目录变量或活动 auth.json。
+- 保留两条来源分支的 13 份历史 handoff，顶部标出确切来源与历史属性。同名超时记录分别保留；旧服务器设计归档，原路径仅指向当前契约，避免引导维护者恢复旧架构。
 - 尚未开始合并。根检出的任务外修改及其他 worktree 保留。
 
 ### 主干独有提交去向
@@ -42,7 +44,7 @@
 | `cc4ebda` | host facade / wire protocol；由薄 `rssr-api`、application 公开输入结果、`HttpBackend` 接管，保持单一用例语义。 |
 | `d339066`、`c4d7dd2`、`dbc8e73` | 认证 API、解析器成功路径、Origin、32 并发、读 body 前鉴权、大小和时间边界、IPv6、私有资料目录、端点矩阵；当前 auth / api / outbound / store 对应实现与测试已覆盖。写请求要求明确的可信 Origin + CSRF；当前公共 IPv6 允许列表比旧特殊地址排除表更严格。 |
 | `9594238`、`a067b54`、`1c903ec` | 远程 UI、每页固定后端、401、响应边界；对应正式 Web bootstrap / `HttpBackend` 及 client_tests，包含结果未知与构建标识失配，不恢复浏览器库后备路径。 |
-| `91d5f4e`、`d2615f7` | 匹配的 Linux 服务＋页面包、容器；由 C6 四平台包、同源构建标识、复用受测 Linux artifact 的镜像和卷验收接管。 |
+| `91d5f4e`、`d2615f7` | 匹配的 Linux 服务＋页面包、容器；由 C6 四平台包、同源构建标识、复用受测 Linux artifact 的镜像和卷验收接管。本轮另补 systemd 示例，适配当前环境变量与共享数据目录。 |
 | `783f0e0`、`176d8b3`、`183a99c` | feed proxy 退役；当前实现已删除，正式 HTTP 测试断言不再提供此接口。旧 proxy 隔离脚本不恢复。 |
 | `16a8d8c` | 测试独立目录；当前真实 HTTP/API 测试分别使用独立临时库，工作区并行测试通过。 |
 | `a57ca5b` | 小视口 smoke 历史证据；保留记录，当前服务器验收与 Pages 验收分别提供候选证据。 |
@@ -74,13 +76,26 @@
 - 工作区 URL canary 已通过；另用同一测试文件连接未打补丁的 registry 2.5.8 做隔离 mutation，60.01 秒后按预期失败（exit 101，提示补丁缺失）。未修改正在工作的 vendor 文件。日志 `url-unpatched-canary.log`。
 - `url` 2.5.8 的点段问题 [#1163](https://github.com/servo/rust-url/issues/1163) 与 feed-rs 的 xml:base 复制问题 [#301](https://github.com/feed-rs/feed-rs/issues/301) 仍 open；这不是对全部上游版本的扫描。
 
-本机日志：`target/handoff/integration-20261022/`。所有编译、临时文件和 mutation 的 target 均位于 E 盘。上面是本机结果，新的远端 CI、Pages build、四平台包 / Docker 尚未记录。
+- systemd 模板通过 WSL Debian 的 `systemd-analyze verify --man=no`；校验副本只将不存在的安装路径 `ExecStart` 临时替换成 `/bin/true`，没有安装/启停服务。因此这是单元配置静态校验，不是实际 systemd 部署验收。日志 `systemd-verify.log`。
+
+本机日志：`target/handoff/integration-20261022/`。所有编译、临时文件和 mutation 的 target 均位于 E 盘。
+
+`bd4a667` 已推送并启动非发布验收：
+
+| 工作流 | 运行 | 状态 |
+|---|---|---|
+| CI，`acceptance_long=true` | [39880628092](https://github.com/Develata/RSS-Reader/actions/runs/39880628092) | 35 / 35 jobs 成功 |
+| Pages fresh RSS / release 构建 / 浏览器验收 | [39880632180](https://github.com/Develata/RSS-Reader/actions/runs/39880632180) | 通过，分支部署跳过 |
+| 四平台 Web 包 / Docker，`all_platforms=true` | [39880639908](https://github.com/Develata/RSS-Reader/actions/runs/39880639908) | 7 / 7 jobs 成功；不推送镜像 |
+
+Pages artifact `12470067858` 已下载并复算 ZIP SHA-256：`6d3c6823abe2589ebae6bd07619a23a65694d7ff86f5cdb2e4df5b7fff6f436a`，与 GitHub digest 相同。快照新抓取于 `2026-10-23 00:53:13 UTC`，每日数学内容已经滚动更新；本轮是 570 个 MathML、144 张公式图片（全部加载）。自动规则通过，但目视发现 CI 截图中文缺字，现有浏览器安装 action 没有安装 CJK 字体；不能把这组截图记成完整目视验收。正在为截图 job 补充 CJK / OpenType math 字体并重新验收。
 
 ## 风险与后续事项
 
 - 字节预扫描必须先于 NsReader 的命名空间处理，且与 v0.2 固定 UTF-8 输入保持一致；不能覆盖现有模型预算。
 - 既有 `576cba4` 的 CI 结果不代替本次改动后的验收。
 - 最终独立复审与实际公网 Pages 验收仍待完成。合并之前更新完整的提交去向表与验证结果。
+- 新复审包：`target/handoff/2026-10-22-integration-final-review.md`（ignored），包含确切候选、当前 C6 / D / Feed 防护范围与已接受边界；已请求用户确定独立只读审查者，尚未将主审自查记成独立评审。
 - 用户后续授权先完成这些工作再合并；不再将 main 合并列为完全未获授权，但不得越过其“处理完成后”的条件。打 tag / Release 仍需用户最终点头。
 
 ## 给下一位 Agent 的备注

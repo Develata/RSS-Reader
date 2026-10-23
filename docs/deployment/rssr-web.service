@@ -1,0 +1,37 @@
+# rssr-web v0.2 systemd unit; see docs/deployment/web.md.
+# Unpack the matching service + public/ package into /opt/rssr-web and create
+# the rssr system user/group first. HTTPS terminates at a local reverse proxy.
+# /etc/rssr-web/env must be root-owned, mode 0600, and initially contain:
+#   RSS_READER_WEB_PUBLIC_ORIGIN=https://reader.example.com
+#   RSS_READER_WEB_USERNAME=...
+#   RSS_READER_WEB_PASSWORD_HASH=... (Argon2; EnvironmentFile does not expand $)
+# After auth.sqlite3 has been created, credentials in the file can be removed.
+[Unit]
+Description=RSS-Reader web server (rssr-web)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rssr
+Group=rssr
+WorkingDirectory=/opt/rssr-web
+ExecStart=/opt/rssr-web/rssr-web
+EnvironmentFile=/etc/rssr-web/env
+Environment=RSS_READER_WEB_BIND=127.0.0.1:8080
+Environment=RSS_READER_WEB_STATIC_DIR=/opt/rssr-web/public
+Environment=RSS_READER_WEB_ENV=production
+Environment=RSS_READER_WEB_TRUST_PROXY_HEADERS=false
+# library.sqlite3, auth.sqlite3 and outbound.json share this owner's directory.
+Environment=RSSR_DATA_DIR=/var/lib/rssr-web
+StateDirectory=rssr-web
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
