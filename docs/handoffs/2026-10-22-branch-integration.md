@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`v0.2-architecture`
 - 当前实现 HEAD：`bd4a667`（整合前为 `5de1068`）
-- 相关 commit：`bd4a667`（已推送）；systemd 模板与后续记录 `commit: pending`
+- 相关 commit：`bd4a667`（实现）、`45917d5`（systemd 模板与历史记录）；CI 字体修复 `commit: pending`
 - 相关 tag / release：无
 - 状态：`in_progress`（本地实现与回归通过；候选远端验收、独立复审与合并待完成）
 
@@ -89,6 +89,8 @@
 | 四平台 Web 包 / Docker，`all_platforms=true` | [39880639908](https://github.com/Develata/RSS-Reader/actions/runs/39880639908) | 7 / 7 jobs 成功；不推送镜像 |
 
 Pages artifact `12470067858` 已下载并复算 ZIP SHA-256：`6d3c6823abe2589ebae6bd07619a23a65694d7ff86f5cdb2e4df5b7fff6f436a`，与 GitHub digest 相同。快照新抓取于 `2026-10-23 00:53:13 UTC`，每日数学内容已经滚动更新；本轮是 570 个 MathML、144 张公式图片（全部加载）。自动规则通过，但目视发现 CI 截图中文缺字，现有浏览器安装 action 没有安装 CJK 字体；不能把这组截图记成完整目视验收。正在为截图 job 补充 CJK / OpenType math 字体并重新验收。
+
+字体修复仅影响 CI 环境：`setup-browser-tests` 增加显式 `with-fonts` 输入，Pages 与真实 UI 截图 job 安装 Noto CJK 和 Latin Modern Math，通过 fontconfig 检查字体存在；不向产品包添加字体，不给 14 个无截图 WASM 契约 job 增加安装步骤。已用 Debian 包清单确认 `fonts-lmodern` 包含 `latinmodern-math.otf`，actionlint 通过；修复后的远端截图验收待记录。
 
 ## 风险与后续事项
 

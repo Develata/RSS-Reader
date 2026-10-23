@@ -306,6 +306,7 @@ jobs:
         uses: ./.github/actions/setup-browser-tests
         with:
           with-driver: 'false'
+          with-fonts: 'true'
       # 页面对真实 rssr-web（每个夹具重启在新资料库上，见 scripts/browser/server_harness.mjs）。
       - name: Real UI assertions at mobile and desktop viewports
         run: |
