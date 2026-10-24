@@ -121,9 +121,11 @@
 .source-choice small { margin-left: auto; color: var(--muted); white-space: nowrap; }
 .workspace-dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
 .workspace-dialog-actions .button { min-width: 96px; }
-.feed-edit-form { display: grid; gap: 10px; }
+.feed-edit-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .feed-edit-form > label { margin-top: 12px; font-size: 0.9rem; }
 .feed-edit-original { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); }
+.feed-edit-original small { min-width: 0; overflow-wrap: anywhere; }
+.feed-edit-original .text-button { flex-shrink: 0; }
 .text-button { border: 0; min-height: 44px; padding: 4px; background: transparent; color: var(--accent); font: inherit; cursor: pointer; white-space: nowrap; }
 .feed-edit-hint { font-size: 0.8rem; color: var(--muted); line-height: 1.7; }
 .feed-edit-error { color: var(--danger); font-size: 0.88rem; overflow-wrap: anywhere; }

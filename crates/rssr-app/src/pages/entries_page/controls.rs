@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 
 pub(super) fn render_entry_controls(
     facade: &EntriesPageFacade,
+    source_filter_open: Signal<bool>,
     directory_open: bool,
     on_open_directory: EventHandler,
 ) -> Element {
@@ -29,6 +30,7 @@ pub(super) fn render_entry_controls(
                 }
             }
             EntryFilters {
+                source_filter_open,
                 read_filter: facade.read_filter(), starred_filter: facade.starred_filter(),
                 available_sources: facade.source_filter_options().to_vec(), selected_feed_urls: facade.selected_feed_urls().to_vec(),
                 on_change_read_filter: move |value| read.set_read_filter(value),

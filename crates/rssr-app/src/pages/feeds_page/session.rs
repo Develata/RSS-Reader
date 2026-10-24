@@ -27,6 +27,16 @@ impl FeedsPageSession {
         (self.state)()
     }
 
+    pub(crate) fn dismiss_edit(self) -> bool {
+        if self.state.peek().edit_feed_id.is_none() {
+            return false;
+        }
+        // An in-flight save consumes Back too; the reducer keeps its form open
+        // until completion rather than letting navigation discard the result.
+        self.dispatch_intent(FeedsPageIntent::EditClosed);
+        true
+    }
+
     pub(crate) fn reload_tick(self) -> u64 {
         self.state.read().reload_tick
     }
@@ -161,6 +171,36 @@ mod tests {
         dom.rebuild_in_place();
         let session = dom.in_scope(ScopeId::APP, consume_context);
         (dom, session)
+    }
+
+    #[test]
+    fn dismiss_edit_consumes_back_without_leaving_a_save_in_flight() {
+        let (dom, session) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            assert!(!session.dismiss_edit());
+            let mut state = session.state;
+            state.with_mut(|state| {
+                state.edit_feed_id = Some(42);
+                state.edit_busy = true;
+            });
+            assert!(session.dismiss_edit(), "loading dialog closes before navigation");
+            assert!(state.peek().edit_feed_id.is_none());
+            state.with_mut(|state| {
+                state.edit_feed_id = Some(42);
+                state.edit_details = Some(rssr_domain::FeedEditDetails {
+                    feed_id: 42,
+                    url: "https://example.com/feed".into(),
+                    original_title: None,
+                    custom_title: Some("Draft".into()),
+                });
+                state.edit_busy = true;
+            });
+            assert!(session.dismiss_edit(), "saving consumes Back without navigation");
+            assert_eq!(state.peek().edit_feed_id, Some(42));
+            state.with_mut(|state| state.edit_busy = false);
+            assert!(session.dismiss_edit(), "an idle draft can close");
+            assert!(!session.dismiss_edit(), "the following Back can navigate normally");
+        });
     }
 
     fn start_add(session: FeedsPageSession, expected_url: &str) -> oneshot::Sender<bool> {

@@ -29,7 +29,7 @@ use self::{
 use crate::{
     app::AppNav,
     components::status_banner::StatusBanner,
-    hooks::use_mobile_back_navigation::use_mobile_back_navigation,
+    hooks::use_mobile_back_navigation::use_mobile_back_navigation_with_dismiss,
     router::AppRoute,
     ui::{AppShellState, use_reactive_side_effect, use_reactive_task, use_startup_route_bus},
 };
@@ -62,13 +62,25 @@ pub fn FeedEntriesPage(feed_id: i64) -> Element {
 }
 
 fn entries_page_content(feed_id: Option<i64>) -> Element {
-    use_mobile_back_navigation(feed_id.map(|_| AppRoute::FeedsPage {}));
-
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
     let directory_state = use_signal(directory::DirectoryState::default);
     let mut directory_collapsed = use_signal(|| false);
     let mut mobile_directory_open = use_signal(|| false);
+    let source_filter_open = use_signal(|| false);
+    use_mobile_back_navigation_with_dismiss(feed_id.map(|_| AppRoute::FeedsPage {}), move || {
+        let mut source_filter_open = source_filter_open;
+        let mut mobile_directory_open = mobile_directory_open;
+        if *source_filter_open.peek() {
+            source_filter_open.set(false);
+            true
+        } else if *mobile_directory_open.peek() {
+            mobile_directory_open.set(false);
+            true
+        } else {
+            false
+        }
+    });
     let mut directory_was_open = use_signal(|| false);
     use_effect(move || {
         let open = mobile_directory_open();
@@ -85,6 +97,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     use_context_provider(|| directory::DirectoryStore(directory_state));
     let controls = render_entry_controls(
         &facade,
+        source_filter_open,
         mobile_directory_open(),
         EventHandler::new(move |_| {
             directory_collapsed.set(false);

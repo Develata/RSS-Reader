@@ -7,19 +7,19 @@ use rssr_application::OpmlImportOutcome;
 
 pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
     match command {
-        FeedsCommand::LoadEdit { feed_id } => {
+        FeedsCommand::LoadEdit { feed_id, generation } => {
             let result = async { UiServices::shared().await?.feeds().edit_details(feed_id).await }
                 .await
                 .map_err(|err| format!("{err:#}"));
-            feeds_intents(vec![FeedsPageIntent::EditLoaded { feed_id, result }])
+            feeds_intents(vec![FeedsPageIntent::EditLoaded { feed_id, generation, result }])
         }
-        FeedsCommand::SaveEdit { edit } => {
+        FeedsCommand::SaveEdit { edit, generation } => {
             let feed_id = edit.feed_id;
             let result =
                 async { UiServices::shared().await?.feeds().update_subscription(edit).await }
                     .await
                     .map_err(|err| format!("{err:#}"));
-            feeds_intents(vec![FeedsPageIntent::EditSaved { feed_id, result }])
+            feeds_intents(vec![FeedsPageIntent::EditSaved { feed_id, generation, result }])
         }
         FeedsCommand::LoadSnapshot => match UiServices::shared().await {
             Ok(services) => match services.feeds().load_snapshot().await {

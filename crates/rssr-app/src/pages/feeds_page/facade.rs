@@ -27,6 +27,9 @@ impl FeedsPageFacade {
     pub(crate) fn edit_close(&self) {
         self.session.dispatch_intent(super::intent::FeedsPageIntent::EditClosed);
     }
+    pub(super) fn session(&self) -> FeedsPageSession {
+        self.session
+    }
     pub(crate) fn edit_title(&self, value: String) {
         self.session.dispatch_intent(super::intent::FeedsPageIntent::EditTitleChanged(value));
     }

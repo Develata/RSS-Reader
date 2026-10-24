@@ -76,11 +76,22 @@ async function sources(page) {
   await page.locator(action('open-source-filter')).click();
   await chooser.getByRole('checkbox', { name: '全部来源', exact: true }).uncheck();
   await chooser.getByRole('checkbox', { name: 'Alpha', exact: true }).check();
+  await page.waitForFunction(() => document.querySelector('#source-filter-all').indeterminate);
+  assert.equal(await chooser.locator('#source-filter-all').getAttribute('aria-checked'), 'mixed');
+  await chooser.locator('#source-filter-all').press('Space');
+  assert.equal(await chooser.locator('#source-filter-all').isChecked(), true, 'mixed state selects all with the keyboard');
+  await page.waitForFunction(() => !document.querySelector('#source-filter-all').indeterminate);
+  await chooser.locator('#source-filter-all').uncheck();
+  assert.equal(await chooser.locator('#source-filter-all').getAttribute('aria-checked'), 'false');
+  await chooser.getByRole('checkbox', { name: 'Alpha', exact: true }).check();
   assert.equal(await chooser.locator(action('edit-feed')).count(), 0, 'article source popup is filtering only');
   await page.locator(action('apply-source-filter')).click();
   await page.waitForFunction(() => document.querySelector('.source-filter-trigger span').textContent === '…');
   assert.equal(await page.locator(selected).count(), 0);
   assert.deepEqual(await page.locator(`${rows} [data-slot="entry-card-meta"]`).allTextContents().then(texts => [...new Set(texts.map(text => text.split(' · ')[0]))]), ['Alpha']);
+  await page.locator(action('open-source-filter')).click();
+  await page.waitForFunction(() => document.querySelector('#source-filter-all').indeterminate);
+  await page.keyboard.press('Escape');
 }
 
 async function editing(page) {
@@ -154,7 +165,44 @@ async function responsive(page) {
   assert.equal(await page.locator('#source-filter-dialog').count(), 0);
 }
 
-module.exports = { seed, selection, sources, editing, responsive };
+async function editEdges(page) {
+  await page.locator('[data-nav="feeds"]').first().click();
+  const feed = page.locator('[data-feed-id="1"]');
+  await feed.locator(action('remove-feed')).click();
+  assert.equal(await feed.getAttribute('data-state'), 'confirm');
+  await feed.locator(action('edit-feed')).click();
+  await page.locator('#feed-edit-name').waitFor();
+  await page.keyboard.press('Escape');
+  assert.equal(await feed.getAttribute('data-state'), 'idle', 'editing cancels the previous delete confirmation');
+  await feed.locator(action('remove-feed')).click();
+  assert.equal(await feed.getAttribute('data-state'), 'confirm', 'the next delete click only asks for confirmation');
+  await feed.locator(action('edit-feed')).click();
+  await page.locator('#feed-edit-name').waitFor();
+  await page.keyboard.press('Escape');
+  await page.evaluate(async () => {
+    await window.__rssrTestMutateSlice('rssr-web-state-v1', state => {
+      state.feeds.find(feed => feed.id === 1).title = 'LongSourceName'.repeat(35);
+    });
+  });
+  await page.reload();
+  await feed.locator(action('edit-feed')).click();
+  await page.locator('#feed-edit-name').waitFor();
+  for (const width of [1536, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    const metrics = await page.locator('#feed-edit-dialog').evaluate(dialog => ({
+      width: dialog.clientWidth, scrollWidth: dialog.scrollWidth,
+      right: dialog.getBoundingClientRect().right,
+      resetRight: dialog.querySelector('.text-button').getBoundingClientRect().right,
+    }));
+    assert.ok(metrics.scrollWidth <= metrics.width + 1, `long original name fits ${width}px dialog`);
+    assert.ok(metrics.resetRight <= metrics.right, 'reset button remains within the dialog');
+  }
+  await page.getByRole('button', { name: '使用原名', exact: true }).click();
+  assert.equal(await page.locator('#feed-edit-name').inputValue(), '');
+  await page.keyboard.press('Escape');
+}
+
+module.exports = { seed, selection, sources, editing, responsive, editEdges };
 if (require.main === module) (async () => {
   const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN });
@@ -163,7 +211,7 @@ if (require.main === module) (async () => {
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     page.setDefaultTimeout(15000);
     await seed(page, process.env.STATIC_BASE || 'http://127.0.0.1:8097');
-    for (const [name, run] of Object.entries({ selection, sources, editing, responsive })) {
+    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges })) {
       await run(page); console.log(`PASS ${name}`);
     }
     assert.deepEqual(errors, []);

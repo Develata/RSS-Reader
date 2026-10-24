@@ -89,8 +89,11 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 - `mark-selected-read`、`archive-selected` → `EntriesCommand::ApplySelection` → `EntriesListService::apply_entry_batch`；在点击时冻结显式 ID，存储层原子更新。没有选择时禁用，执行中禁止修改勾选。旧 UI 筛选全量预览按钮已退役；CLI 和旧 host 预览接口仍保留。
 - `group-by-source` / `group-by-time` 是单选按钮组；状态筛选四个 icon button 以 `aria-pressed` 表达选择，再次点击取消该条件。
 - `open-source-filter` / `apply-source-filter`：取消、Esc、点外侧只关闭草稿；应用后清空文章选择，空来源集合不允许提交。页面里的“全部”偏好仍用空 URL 列表表达。
+- 来源弹窗的全选框同时提供未选／部分／全选状态；Rust 计算 `aria-checked`，DOM 仅同步原生复选框的 `indeterminate` 属性。部分选中时点击或空格选中全部，再次操作取消全部。
 - `open-directory` / `close-directory`：目录可以收起，≤1000px 默认收起为入口。目录浏览和同页定位保留选择；换页、筛选、搜索或切换视图清空选择。原有目录 Rust 状态与分组 memo 分离，选择不重建分组树。
 - `edit-feed` / `save-feed-edit` 仅在 Subscribe；`FeedsCommand` 经 runtime 调用 `FeedService`，Rust 管理加载、草稿、校验和忙碌状态。native dialog 只负责焦点／模态，DOM 测量负责定位。
+- 来源编辑的异步结果由 `feed_id + edit_generation` 校验，关闭后重新打开同一来源也不会接纳上次访问的迟到结果。打开编辑取消旧的删除／覆盖导入确认；加载中可以关闭，保存中阻止重复提交以及关闭按钮／Esc／Android 返回的弹窗关闭操作。
+- Android 系统返回沿用现有的 dismiss 优先路径：先关闭来源筛选、目录浮层或来源编辑，之后才返回上一页；来源编辑保存中消耗返回操作并等待结果。Web 的 Esc／取消行为保持不变。实机覆盖范围见本轮交接，编译与状态测试不替代系统返回验收。
 - `stats-grid` 中 `data-stat=feeds|entries|unread|archived` 是全局统计；归档计数为手动与自动归档的并集，不重复计数。
 
 SQLite migration `0008_reading_workspace.sql` 只增加 `entries.is_archived` 与 `feeds.custom_title`；BrowserStore 对相同字段使用 serde 默认值读取旧数据。批量写入走单条 SQL 或单个 FLAGS 提交。来源编辑保持 feed ID，地址变化时清除旧缓存验证器并提升 generation，迟到的旧刷新不能覆盖新地址；工作区已选 URL 同步迁移。配置格式未增字段：JSON `title` 和 OPML 显示名导入时作为自定义名，刷新不会覆盖。

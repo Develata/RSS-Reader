@@ -1,7 +1,7 @@
 #[derive(Debug, Clone)]
 pub(crate) enum FeedsCommand {
-    LoadEdit { feed_id: i64 },
-    SaveEdit { edit: rssr_domain::FeedEditRequest },
+    LoadEdit { feed_id: i64, generation: u64 },
+    SaveEdit { edit: rssr_domain::FeedEditRequest, generation: u64 },
     LoadSnapshot,
     AddFeed { raw_url: String, fallback_site_url: Option<url::Url> },
     RefreshFeed { feed_id: i64, feed_title: String },

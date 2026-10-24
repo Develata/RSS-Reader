@@ -12,26 +12,48 @@ pub(crate) struct FeedsPageSnapshot {
 #[derive(Debug, Clone)]
 pub(crate) enum FeedsPageIntent {
     EditRequested(i64),
-    EditLoaded { feed_id: i64, result: Result<rssr_domain::FeedEditDetails, String> },
+    EditLoaded {
+        feed_id: i64,
+        generation: u64,
+        result: Result<rssr_domain::FeedEditDetails, String>,
+    },
     EditTitleChanged(String),
     EditUrlChanged(String),
     EditClosed,
     EditSaveRequested,
-    EditSaved { feed_id: i64, result: Result<(), String> },
-    FeedCandidates { page_url: url::Url, candidates: Vec<rssr_application::FeedDiscoveryCandidate> },
+    EditSaved {
+        feed_id: i64,
+        generation: u64,
+        result: Result<(), String>,
+    },
+    FeedCandidates {
+        page_url: url::Url,
+        candidates: Vec<rssr_application::FeedDiscoveryCandidate>,
+    },
     SelectFeedCandidate(usize),
     CancelFeedCandidates,
 
-    ClearRefreshStatus { revision: u64, message: String },
+    ClearRefreshStatus {
+        revision: u64,
+        message: String,
+    },
     LoadRequested,
     FeedUrlChanged(String),
     ConfigTextChanged(String),
     OpmlTextChanged(String),
     AddFeedRequested,
-    AddFeedFinished { saved: bool },
+    AddFeedFinished {
+        saved: bool,
+    },
     RefreshAllRequested,
-    RefreshFeedRequested { feed_id: i64, feed_title: String },
-    RemoveFeedRequested { feed_id: i64, feed_title: String },
+    RefreshFeedRequested {
+        feed_id: i64,
+        feed_title: String,
+    },
+    RemoveFeedRequested {
+        feed_id: i64,
+        feed_title: String,
+    },
     ExportConfigRequested,
     ImportConfigRequested,
     ExportOpmlRequested,
@@ -41,6 +63,9 @@ pub(crate) enum FeedsPageIntent {
     OpmlTextExported(String),
     PendingConfigImportSet(bool),
     PendingDeleteFeedSet(Option<i64>),
-    SetStatus { message: String, tone: String },
+    SetStatus {
+        message: String,
+        tone: String,
+    },
     BumpReload,
 }

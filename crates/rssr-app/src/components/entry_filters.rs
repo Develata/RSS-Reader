@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 
 #[component]
 pub fn EntryFilters(
+    source_filter_open: Signal<bool>,
     read_filter: ReadFilter,
     starred_filter: StarredFilter,
     available_sources: Vec<(i64, String, String, u32)>,
@@ -16,7 +17,7 @@ pub fn EntryFilters(
     rsx! {
         div { "data-layout": "entry-filters",
             if !available_sources.is_empty() {
-                SourceChooser { available_sources, selected_feed_urls, on_apply: on_change_selected_feed_urls }
+                SourceChooser { open: source_filter_open, available_sources, selected_feed_urls, on_apply: on_change_selected_feed_urls }
             }
             div { class: "entry-status-filters", role: "group", aria_label: "文章状态筛选",
                 FilterButton { icon: "check", label: "仅已读", active: read_filter == ReadFilter::ReadOnly,
@@ -46,11 +47,11 @@ fn FilterButton(
 
 #[component]
 fn SourceChooser(
+    mut open: Signal<bool>,
     available_sources: Vec<(i64, String, String, u32)>,
     selected_feed_urls: Vec<String>,
     on_apply: EventHandler<Vec<String>>,
 ) -> Element {
-    let mut open = use_signal(|| false);
     let mut draft = use_signal(BTreeSet::<String>::new);
     let mut search = use_signal(String::new);
     let all_urls =
@@ -64,6 +65,19 @@ fn SourceChooser(
     let all_for_toggle = all_urls.clone();
     let apply_urls = all_urls.clone();
     let selected_count = draft.read().len();
+    crate::ui::use_reactive_side_effect(
+        (open(), all_selected, selected_count),
+        move |(open, all, count)| {
+            if open {
+                // `indeterminate` is a DOM property, not an HTML attribute. Rust
+                // owns the selection; this adapter only projects its mixed state.
+                let mixed = !all && count > 0;
+                let _ = document::eval(&format!(
+                    "const checkbox = document.getElementById('source-filter-all'); if (checkbox) checkbox.indeterminate = {mixed};"
+                ));
+            }
+        },
+    );
     let query = search().trim().to_lowercase();
     rsx! {
         button { id: "source-filter-trigger", r#type: "button", class: "source-filter-trigger", aria_haspopup: "dialog", aria_expanded: open(),
@@ -81,7 +95,9 @@ fn SourceChooser(
                 }
                 input { class: "text-input", r#type: "search", aria_label: "搜索来源", placeholder: "搜索来源", value: search(), oninput: move |event| search.set(event.value()) }
                 label { class: "source-choice source-choice-all",
-                    input { r#type: "checkbox", checked: all_selected, aria_label: "全部来源", onchange: move |_| draft.set(if all_selected { BTreeSet::new() } else { all_for_toggle.clone() }) }
+                    input { id: "source-filter-all", r#type: "checkbox", checked: all_selected,
+                        aria_checked: if all_selected { "true" } else if selected_count > 0 { "mixed" } else { "false" },
+                        aria_label: "全部来源", onchange: move |_| draft.set(if all_selected { BTreeSet::new() } else { all_for_toggle.clone() }) }
                     span { "全部来源" } small { "已选 {selected_count}" }
                 }
                 div { class: "source-choices",

@@ -3,6 +3,7 @@ use rssr_domain::FeedSummary;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FeedsPageState {
     pub(crate) edit_feed_id: Option<i64>,
+    pub(crate) edit_generation: u64,
     pub(crate) edit_details: Option<rssr_domain::FeedEditDetails>,
     pub(crate) edit_busy: bool,
     pub(crate) edit_error: Option<String>,
@@ -28,6 +29,7 @@ impl FeedsPageState {
     pub(crate) fn new() -> Self {
         Self {
             edit_feed_id: None,
+            edit_generation: 0,
             edit_details: None,
             edit_busy: false,
             edit_error: None,

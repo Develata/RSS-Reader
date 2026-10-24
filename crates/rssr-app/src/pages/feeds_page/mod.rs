@@ -13,15 +13,17 @@ use self::sections::{ConfigExchangeSection, FeedComposeSection, SavedFeedsSectio
 use self::session::FeedsPageSession;
 use crate::{
     app::AppNav, components::status_banner::StatusBanner,
-    hooks::use_mobile_back_navigation::use_mobile_back_navigation, router::AppRoute,
+    hooks::use_mobile_back_navigation::use_mobile_back_navigation_with_dismiss, router::AppRoute,
     ui::use_reactive_task,
 };
 
 #[component]
 pub fn FeedsPage() -> Element {
-    use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
-
     let facade = use_feeds_page_workspace();
+    let session = facade.session();
+    use_mobile_back_navigation_with_dismiss(Some(AppRoute::EntriesPage {}), move || {
+        session.dismiss_edit()
+    });
 
     rsx! {
         section { "data-page": "feeds",
