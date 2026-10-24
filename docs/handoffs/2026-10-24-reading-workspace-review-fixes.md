@@ -74,6 +74,7 @@
 - 独立 Playwright / Edge 浏览器使用隔离的 SPA seed 和 BrowserStore 数据，不接触用户订阅。
 - 实际查看 360px 长来源名编辑弹窗截图，横向没有溢出；名称、重置按钮与 URL 可见，纵向可滚动。截图：`target/reading-workspace-review-long-name.png`。
 - 目录结果及截图：`target/reading-workspace-review-directory/`；日志：`%TEMP%/rssr-review-{repro,app,clippy,web,android,browser,directory}.log`。
+- 用户随后要求查看主页：使用 `542de173` 对应的实际 Web 构建，截取 1920×1080、device scale 1 的默认主页。隔离数据为 72 篇示例文章、每页 8 篇，配中文标题与已读／收藏示例；没有修改 DOM 样式或用户数据。页面错误为 0，截图已目视检查。文件：`C:/Users/QQ/.codex/visualizations/2026/10/22/01a16568-e398-7fb0-9847-e636e6fdecb2/rss-reader-home-542de173-1920x1080.png`。此次仅补截图记录，没有应用代码变更。
 
 ## 结果
 
