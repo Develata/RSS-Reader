@@ -40,6 +40,18 @@ pub(crate) struct ReaderPageState {
 }
 
 impl ReaderPageState {
+    pub(crate) fn load_state(&self, entry_id: i64) -> &'static str {
+        if self.current_entry_id != entry_id {
+            "pending"
+        } else if self.error.is_some() {
+            "error"
+        } else if self.content_loaded {
+            "loaded"
+        } else {
+            "pending"
+        }
+    }
+
     pub(crate) fn new() -> Self {
         Self {
             content_loaded: false,
@@ -86,5 +98,29 @@ impl ReaderPageState {
         self.is_starred = false;
         self.asset_localization_requested = false;
         self.error = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ReaderPageState;
+
+    #[test]
+    fn load_state_tracks_current_content_and_clears_failure_on_retry() {
+        let mut state = ReaderPageState::new();
+        assert_eq!(state.load_state(1), "pending");
+        state.begin_loading(1);
+        assert_eq!(state.load_state(1), "pending");
+        state.content_loaded = true;
+        assert_eq!(state.load_state(1), "loaded");
+        assert_eq!(state.load_state(2), "pending");
+
+        state.error = Some("load failed".into());
+        assert_eq!(state.load_state(1), "error");
+        assert_eq!(state.load_state(2), "pending");
+        state.begin_loading(1);
+        assert_eq!(state.load_state(1), "pending");
+        state.content_loaded = true;
+        assert_eq!(state.load_state(1), "loaded");
     }
 }

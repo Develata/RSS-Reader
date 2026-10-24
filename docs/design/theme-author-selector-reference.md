@@ -373,6 +373,7 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `starred | unstarred`
 - `html | text`
 - `empty | populated`
+- 阅读页根节点：`pending | loaded | error`；`loaded` 表示当前路由文章内容已就绪，加载期间使用 `pending` 和 `aria-busy="true"`。
 
 ### `data-variant`
 

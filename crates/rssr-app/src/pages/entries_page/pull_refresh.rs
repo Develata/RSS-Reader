@@ -49,27 +49,33 @@ impl PullState {
     }
 
     fn update(&mut self, sample: TouchSample, refreshing: bool) -> bool {
-        if refreshing || !sample.at_top || !sample.eligible || sample.touches > 1 {
+        let expected_touches = match sample.kind {
+            TouchKind::Start | TouchKind::Move => 1,
+            TouchKind::End | TouchKind::Cancel => 0,
+        };
+        if refreshing || !sample.at_top || !sample.eligible || sample.touches != expected_touches {
             *self = Self::Idle;
             return false;
         }
         match sample.kind {
             TouchKind::Start => *self = Self::Tracking { x: sample.x, y: sample.y, distance: 0.0 },
-            TouchKind::Move => {
+            TouchKind::Move | TouchKind::End => {
                 if let Self::Tracking { x, y, .. } = *self {
                     let distance = sample.y - y;
-                    if distance < -8.0 || (sample.x - x).abs() > distance.max(12.0) {
+                    let valid_direction =
+                        distance >= -8.0 && (sample.x - x).abs() <= distance.max(12.0);
+                    // The final contact can differ from the last delivered move.
+                    // Release uses that position, and only after the final finger lifts.
+                    if matches!(sample.kind, TouchKind::End) {
+                        *self = Self::Idle;
+                        return valid_direction && distance >= THRESHOLD;
+                    }
+                    if !valid_direction {
                         *self = Self::Idle;
                     } else {
                         *self = Self::Tracking { x, y, distance: distance.max(0.0) };
                     }
                 }
-            }
-            TouchKind::End => {
-                let armed =
-                    matches!(*self, Self::Tracking { distance, .. } if distance >= THRESHOLD);
-                *self = Self::Idle;
-                return armed;
             }
             TouchKind::Cancel => *self = Self::Idle,
         }
@@ -118,7 +124,11 @@ pub(super) fn PullRefresh() -> Element {
 mod tests {
     use super::*;
     fn sample(kind: TouchKind, y: f64) -> TouchSample {
-        TouchSample { kind, x: 10.0, y, at_top: true, eligible: true, touches: 1 }
+        let touches = match kind {
+            TouchKind::Start | TouchKind::Move => 1,
+            TouchKind::End | TouchKind::Cancel => 0,
+        };
+        TouchSample { kind, x: 10.0, y, at_top: true, eligible: true, touches }
     }
 
     #[test]
@@ -135,6 +145,48 @@ mod tests {
         state.update(sample(TouchKind::Start, 100.0), false);
         state.update(sample(TouchKind::Move, 200.0), false);
         assert!(state.update(sample(TouchKind::End, 200.0), false));
+        assert!(!state.update(sample(TouchKind::End, 200.0), false));
+    }
+
+    #[test]
+    fn release_with_another_finger_still_down_does_not_refresh() {
+        let mut state = PullState::default();
+        state.update(sample(TouchKind::Start, 100.0), false);
+        state.update(sample(TouchKind::Move, 200.0), false);
+        assert_eq!(state.phase(), "armed");
+        assert!(!state.update(TouchSample { touches: 1, ..sample(TouchKind::End, 200.0) }, false,));
+        assert_eq!(state.phase(), "idle");
+        assert!(!state.update(sample(TouchKind::End, 200.0), false));
+    }
+
+    #[test]
+    fn release_uses_final_position_instead_of_previous_move() {
+        for (x, y) in [(10.0, 179.0), (150.0, 200.0)] {
+            let mut state = PullState::default();
+            state.update(sample(TouchKind::Start, 100.0), false);
+            state.update(sample(TouchKind::Move, 200.0), false);
+            assert_eq!(state.phase(), "armed");
+            assert!(
+                !state.update(TouchSample { x, touches: 0, ..sample(TouchKind::End, y) }, false,)
+            );
+            assert_eq!(state.phase(), "idle");
+        }
+    }
+
+    #[test]
+    fn release_at_threshold_refreshes_once_and_cancel_never_refreshes() {
+        let mut state = PullState::default();
+        state.update(sample(TouchKind::Start, 100.0), false);
+        state.update(sample(TouchKind::Move, 179.0), false);
+        assert_eq!(state.phase(), "pulling");
+        assert!(state.update(sample(TouchKind::End, 180.0), false));
+        assert!(!state.update(sample(TouchKind::End, 180.0), false));
+
+        state.update(sample(TouchKind::Start, 100.0), false);
+        state.update(sample(TouchKind::Move, 200.0), false);
+        assert_eq!(state.phase(), "armed");
+        assert!(!state.update(sample(TouchKind::Cancel, 200.0), false));
+        assert_eq!(state.phase(), "idle");
         assert!(!state.update(sample(TouchKind::End, 200.0), false));
     }
 

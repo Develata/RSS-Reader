@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkDirectoryContracts } from './directory_contract.mjs';
 import { measureDirectory } from './directory_performance.mjs';
+import { checkPullReleaseContracts } from './pull_refresh_contract.mjs';
 
 import {
   clickSelector,
@@ -323,11 +324,17 @@ async function checkReader(client) {
         rootClientWidth: root.clientWidth,
         rootScrollWidth: root.scrollWidth,
         titleBoundsOk: titleRect.left >= rootRect.left - 1 && titleRect.right <= rootRect.right + 1,
+        title: title.textContent,
+        positionReady: document.querySelector('[data-page="reader"]').dataset.positionReady,
+        busy: document.querySelector('[data-page="reader"]').getAttribute('aria-busy'),
         buttons,
         shortcuts,
       };
     })()`,
   );
+  assertThat('reader measurements use the loaded fixture content',
+    evidence.positionReady === 'true' && evidence.busy === 'false' &&
+    evidence.title.startsWith('用于验证 360 像素宽度阅读页标题'), evidence);
   assertThat('reader title stays inside the viewport', evidence.titleBoundsOk, evidence);
   assertThat('reader page has no horizontal overflow', evidence.rootScrollWidth <= evidence.rootClientWidth + 1, evidence);
   assertThat(
@@ -862,6 +869,7 @@ async function checkHomeRefreshAndGestures(client) {
     const beforePull = requestCount;
     assertThat('short pull stays below threshold', (await touchPull(client, 145, 190)) !== 'armed');
     assertThat('short pull does not refresh', requestCount === beforePull, {beforePull, requestCount});
+    await checkPullReleaseContracts(client, {assertThat, requestCount: () => requestCount});
     await evaluate(client, 'window.scrollTo(0, 350)');
     await touchPull(client, 145, 260);
     assertThat('pull starting away from top does not refresh', requestCount === beforePull, {requestCount});
