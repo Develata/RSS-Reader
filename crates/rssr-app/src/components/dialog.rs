@@ -41,7 +41,14 @@ pub(crate) fn Dialog(
                 let _ = document::eval(&script);
             },
             onkeydown: move |event| {
-                if event.key() == Key::Escape { event.prevent_default(); on_close.call(()); }
+                // Block the native dialog's default dismissal as well as the
+                // Rust close action while the input method is composing text.
+                if event.key() == Key::Escape {
+                    event.prevent_default();
+                    if !event.is_composing() {
+                        on_close.call(());
+                    }
+                }
             },
             onclick: move |_| on_close.call(()),
             div { class: "workspace-dialog-body", onclick: move |event| event.stop_propagation(), {children} }

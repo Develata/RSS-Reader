@@ -400,7 +400,64 @@ async function shortSourceDialog(page) {
   }
 }
 
-module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog };
+async function dialogComposition(page) {
+  await page.setViewportSize({ width: 1536, height: 864 });
+  await seed(page, new URL(page.url()).origin);
+  const cdp = await page.context().newCDPSession(page);
+  const composingEscape = async (input, dialog) => {
+    await input.focus();
+    await input.evaluate(el => {
+      window.__workspaceEscapeComposing = null;
+      el.addEventListener('keydown', event => {
+        window.__workspaceEscapeComposing = event.isComposing;
+      }, { capture: true, once: true });
+    });
+    // Chromium's real composition state, followed by ordinary keyboard input;
+    // not a synthetic key event or a direct call to the dialog's handler.
+    await cdp.send('Input.imeSetComposition', { text: 'zhong', selectionStart: 5, selectionEnd: 5 });
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => window.__workspaceEscapeComposing), true, 'the Escape event must be delivered during composition');
+    assert.equal(await dialog.count(), 1, 'composing Escape must not discard the dialog draft');
+    assert.equal(await dialog.evaluate(el => el.open), true, 'the native dialog must stay open too');
+    await cdp.send('Input.imeSetComposition', { text: '', selectionStart: 0, selectionEnd: 0 });
+  };
+  try {
+    await page.locator('[data-nav="feeds"]').first().click();
+    const feed = page.locator('[data-feed-id="1"]');
+    await feed.locator(action('edit-feed')).click();
+    await page.locator('#feed-edit-name').fill('尚未保存的名称');
+    await page.locator('#feed-edit-url').fill('https://edited.example/feed.xml');
+    await composingEscape(page.locator('#feed-edit-name'), page.locator('#feed-edit-dialog'));
+    assert.equal(await page.locator('#feed-edit-name').inputValue(), '尚未保存的名称');
+    assert.equal(await page.locator('#feed-edit-url').inputValue(), 'https://edited.example/feed.xml');
+    await page.locator(action('save-feed-edit')).click();
+    await page.locator('#feed-edit-dialog').waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.querySelector('[data-feed-id="1"]').dataset.feedTitle === '尚未保存的名称');
+    assert.equal(await feed.getAttribute('data-feed-url'), 'https://edited.example/feed.xml');
+    await feed.locator(action('edit-feed')).click();
+    await page.locator('#feed-edit-name').waitFor();
+    await page.keyboard.press('Escape');
+    await page.locator('#feed-edit-dialog').waitFor({ state: 'detached' });
+
+    await page.locator(action('activate-home')).first().click(); await ready(page);
+    await page.locator(action('select-entry')).first().check();
+    await page.locator(action('open-source-filter')).click();
+    const chooser = page.locator('#source-filter-dialog');
+    await chooser.getByRole('checkbox', { name: '全部来源', exact: true }).uncheck();
+    await chooser.getByRole('checkbox', { name: 'Bravo', exact: true }).check();
+    await composingEscape(chooser.getByRole('searchbox', { name: '搜索来源' }), chooser);
+    assert.equal(await chooser.getByRole('checkbox', { name: 'Bravo', exact: true }).isChecked(), true, 'source draft survives composing Escape');
+    assert.equal(await chooser.getByRole('checkbox', { name: '全部来源', exact: true }).isChecked(), false);
+    await page.keyboard.press('Escape');
+    await chooser.waitFor({ state: 'detached' });
+    assert.equal(await page.locator(selected).count(), 1, 'canceling the source draft preserves article selection');
+    assert.equal(await page.locator('.source-filter-trigger').innerText(), '全部来源', 'canceling does not apply the source draft');
+  } finally {
+    await cdp.detach();
+  }
+}
+
+module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition };
 if (require.main === module) (async () => {
   const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN });
@@ -409,7 +466,7 @@ if (require.main === module) (async () => {
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     page.setDefaultTimeout(15000);
     await seed(page, process.env.STATIC_BASE || 'http://127.0.0.1:8097');
-    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog })) {
+    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition })) {
       await run(page); console.log(`PASS ${name}`);
     }
     assert.deepEqual(errors, []);

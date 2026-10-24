@@ -99,6 +99,7 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 - `open-directory` / `close-directory`：目录可以收起，≤1000px 默认收起为入口。目录浏览和同页定位保留选择；换页、筛选、搜索或切换视图清空选择。原有目录 Rust 状态与分组 memo 分离，选择不重建分组树。
 - `edit-feed` / `save-feed-edit` 仅在 Subscribe；`FeedsCommand` 经 runtime 调用 `FeedService`，Rust 管理加载、草稿、校验和忙碌状态。native dialog 只负责焦点／模态，DOM 测量负责定位。
 - 来源编辑的异步结果由 `feed_id + edit_generation` 校验，关闭后重新打开同一来源也不会接纳上次访问的迟到结果。打开编辑取消旧的删除／覆盖导入确认；加载中可以关闭，保存中阻止重复提交以及关闭按钮／Esc／Android 返回的弹窗关闭操作。
+- 来源筛选和来源编辑中，输入法组词期间的 Esc 不关闭弹窗、不丢弃草稿；同时阻止 native dialog 的默认关闭，避免 Rust 状态仍打开而原生弹窗已关闭。组词结束后的 Esc 沿用取消逻辑，名称／URL 与来源勾选草稿都不自动保存。
 - Android 系统返回沿用现有的 dismiss 优先路径：先关闭来源筛选、目录浮层或来源编辑，之后才返回上一页；来源编辑保存中消耗返回操作并等待结果。Web 的 Esc／取消行为保持不变。实机覆盖范围见本轮交接，编译与状态测试不替代系统返回验收。
 - `stats-grid` 中 `data-stat=feeds|entries|unread|archived` 是全局统计；归档计数为手动与自动归档的并集，不重复计数。
 
