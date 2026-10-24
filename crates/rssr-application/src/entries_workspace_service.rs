@@ -29,6 +29,7 @@ pub struct EntriesWorkspaceService {
     settings_service: SettingsService,
     app_state_service: AppStateService,
     feed_repository: Arc<dyn FeedRepository>,
+    save_gate: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl EntriesWorkspaceService {
@@ -37,7 +38,7 @@ impl EntriesWorkspaceService {
         app_state_service: AppStateService,
         feed_repository: Arc<dyn FeedRepository>,
     ) -> Self {
-        Self { settings_service, app_state_service, feed_repository }
+        Self { settings_service, app_state_service, feed_repository, save_gate: Arc::default() }
     }
 
     pub async fn bootstrap(
@@ -78,6 +79,9 @@ impl EntriesWorkspaceService {
         &self,
         next: EntriesWorkspaceState,
     ) -> anyhow::Result<SaveEntriesWorkspaceOutcome> {
+        // Serialize the comparison as well as the write across service clones.
+        // Otherwise a quick A -> B -> A can skip the final A while B is pending.
+        let _save = self.save_gate.lock().await;
         let current =
             self.app_state_service.load_entries_workspace().await.context("读取文章页偏好失败")?;
         if current == next {
@@ -276,5 +280,83 @@ mod tests {
                 .await
                 .expect("save changed workspace");
         assert!(changed.changed);
+    }
+
+    struct DelayedAppStateRepository {
+        state: Mutex<AppStateSnapshot>,
+        first_save_started: tokio::sync::Notify,
+        release_first_save: tokio::sync::Semaphore,
+        writes: std::sync::atomic::AtomicUsize,
+        fail_first: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl AppStateRepository for DelayedAppStateRepository {
+        async fn load(&self) -> rssr_domain::Result<AppStateSnapshot> {
+            Ok(self.state.lock().unwrap().clone())
+        }
+
+        async fn save(&self, state: &AppStateSnapshot) -> rssr_domain::Result<()> {
+            if self.writes.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                self.first_save_started.notify_one();
+                self.release_first_save.acquire().await.unwrap().forget();
+                if self.fail_first {
+                    return Err(rssr_domain::DomainError::Persistence("first save failed".into()));
+                }
+            }
+            *self.state.lock().unwrap() = state.clone();
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn overlapping_preferences_preserve_the_latest_choice_after_success_or_failure() {
+        use std::{future::Future, task::Poll};
+
+        for fail_first in [false, true] {
+            let repository = Arc::new(DelayedAppStateRepository {
+                state: Mutex::new(AppStateSnapshot::default()),
+                first_save_started: tokio::sync::Notify::new(),
+                release_first_save: tokio::sync::Semaphore::new(0),
+                writes: Default::default(),
+                fail_first,
+            });
+            let service = EntriesWorkspaceService::new(
+                crate::SettingsService::new(Arc::new(SettingsRepositoryStub {
+                    settings: UserSettings::default(),
+                })),
+                crate::AppStateService::new(repository.clone()),
+                Arc::new(FeedRepositoryStub { summaries: Vec::new() }),
+            );
+            let first_service = service.clone();
+            let first = tokio::spawn(async move {
+                first_service
+                    .save_workspace_if_changed(EntriesWorkspaceState {
+                        read_filter: ReadFilter::UnreadOnly,
+                        ..Default::default()
+                    })
+                    .await
+            });
+            repository.first_save_started.notified().await;
+            let latest = EntriesWorkspaceState {
+                read_filter: if fail_first { ReadFilter::ReadOnly } else { ReadFilter::All },
+                ..Default::default()
+            };
+            let second = service.save_workspace_if_changed(latest.clone());
+            tokio::pin!(second);
+            // Poll once while the first write is blocked. The old implementation
+            // returned "unchanged" for All because it still read the initial state.
+            let early = std::future::poll_fn(|cx| Poll::Ready(second.as_mut().poll(cx))).await;
+            let waited = early.is_pending();
+            repository.release_first_save.add_permits(1);
+            assert_eq!(first.await.unwrap().is_err(), fail_first);
+            match early {
+                Poll::Ready(result) => result,
+                Poll::Pending => second.await,
+            }
+            .expect("latest preference save can complete after the older attempt");
+            assert_eq!(repository.state.lock().unwrap().entries_workspace, latest);
+            assert!(waited, "even the unchanged check must wait for the pending save");
+        }
     }
 }

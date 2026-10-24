@@ -352,7 +352,55 @@ async function pendingWrites(page) {
   await page.waitForFunction(() => document.querySelector('[data-position-entry="72"]').dataset.read === 'true');
 }
 
-module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites };
+async function preferenceOrdering(page) {
+  await seed(page, new URL(page.url()).origin);
+  for (const labels of [['仅未读', '仅未读'], ['来源', '时间']]) {
+    const before = await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed');
+    let afterClicks;
+    await holdWrites(page, async () => {
+      for (const name of labels) await page.getByRole('button', { name, exact: true }).click();
+      afterClicks = await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed');
+      assert.equal(afterClicks, 'false', 'the visible filter must already reflect the final All choice');
+    });
+    // Wait for a quiet interval, including continuations that enqueue the next
+    // read/write after the previous storage lock has been released.
+    await page.evaluate(() => { window.__workspaceStorageQuietSince = 0; });
+    await page.waitForFunction(async () => {
+      const locks = await navigator.locks.query();
+      if (locks.held.length || locks.pending.length) window.__workspaceStorageQuietSince = 0;
+      else if (!window.__workspaceStorageQuietSince) window.__workspaceStorageQuietSince = performance.now();
+      return window.__workspaceStorageQuietSince && performance.now() - window.__workspaceStorageQuietSince > 150;
+    });
+    await page.reload(); await ready(page);
+    assert.equal(await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed'), 'false', `rapidly clearing a filter must persist the final All choice (${labels}; before=${before}; afterClicks=${afterClicks})`);
+    assert.equal(await page.locator(action('group-by-time')).getAttribute('aria-pressed'), 'true', 'rapid grouping changes must persist the final Time choice');
+  }
+}
+
+async function shortSourceDialog(page) {
+  for (const [width, height] of [[760, 400], [360, 480]]) {
+    await page.setViewportSize({ width, height });
+    await seed(page, new URL(page.url()).origin);
+    await page.locator(action('open-source-filter')).click();
+    const chooser = page.locator('#source-filter-dialog');
+    const verifyActions = async () => {
+      for (const name of ['取消', '应用']) {
+        const box = await chooser.getByRole('button', { name, exact: true }).boundingBox();
+        assert.ok(box && box.y >= 0 && box.y + box.height <= height - 10, `${width}x${height}: ${name} must be fully visible without scrolling the dialog`);
+      }
+      assert.equal(await chooser.evaluate(el => el.scrollHeight > el.clientHeight + 1), false, 'only the source list should need vertical scrolling');
+    };
+    await verifyActions();
+    await chooser.getByRole('checkbox', { name: '全部来源', exact: true }).uncheck();
+    await chooser.getByRole('checkbox', { name: 'Foxtrot', exact: true }).check();
+    await verifyActions();
+    await chooser.getByRole('button', { name: '应用', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.entries-count').textContent === '12 篇');
+    assert.equal(await page.locator(`${rows} [data-slot="entry-card-meta"]`).evaluateAll(items => items.every(el => el.textContent.startsWith('Foxtrot · '))), true);
+  }
+}
+
+module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog };
 if (require.main === module) (async () => {
   const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN });
@@ -361,7 +409,7 @@ if (require.main === module) (async () => {
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     page.setDefaultTimeout(15000);
     await seed(page, process.env.STATIC_BASE || 'http://127.0.0.1:8097');
-    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites })) {
+    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog })) {
       await run(page); console.log(`PASS ${name}`);
     }
     assert.deepEqual(errors, []);

@@ -109,10 +109,12 @@
 .workspace-dialog[data-anchored="true"] { width: min(336px, calc(100vw - 24px)); }
 .workspace-dialog[data-anchored="true"]::backdrop { background: transparent; }
 .workspace-dialog-body { padding: 16px; }
+.workspace-dialog[data-anchored="true"] .workspace-dialog-body { display: flex; flex-direction: column; box-sizing: border-box; max-height: calc(100dvh - 26px); }
+.workspace-dialog[data-anchored="true"] .workspace-dialog-body > :not(.source-choices) { flex-shrink: 0; }
 .workspace-dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
 .workspace-dialog-heading h2 { margin: 0; font-size: 1.15rem; }
 .workspace-dialog .text-input { width: 100%; box-sizing: border-box; }
-.source-choices { max-height: min(42dvh, 320px); overflow-y: auto; overscroll-behavior: contain; }
+.source-choices { min-height: 0; max-height: min(42dvh, 320px); overflow-y: auto; overscroll-behavior: contain; }
 .source-choice { display: flex; align-items: center; gap: 12px; padding: 10px 8px; min-height: 44px; box-sizing: border-box; cursor: pointer; border-radius: var(--radius-row); }
 .source-choice:hover { background: var(--selection-hover); }
 .source-choice input { flex: 0 0 auto; }

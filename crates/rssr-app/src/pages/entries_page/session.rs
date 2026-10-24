@@ -5,10 +5,8 @@ use dioxus::prelude::*;
 use super::{
     intent::EntriesPageIntent, reducer::dispatch_entries_page_intent, state::EntriesPageState,
 };
-use crate::ui::{
-    EntriesCommand, UiCommand, UiIntent, execute_ui_command, spawn_projected_ui_command,
-};
-use rssr_domain::EntryQuery;
+use crate::ui::{EntriesCommand, UiCommand, UiIntent, execute_ui_command};
+use rssr_domain::{EntriesWorkspaceState, EntryQuery};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct EntriesPageSession {
@@ -181,13 +179,24 @@ impl EntriesPageSession {
             return;
         }
 
-        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::SaveBrowsingPreferences {
-            grouping_mode,
-            show_archived,
-            read_filter,
-            starred_filter,
-            selected_feed_urls,
-        }));
+        self.spawn_preferences_write(
+            EntriesWorkspaceState {
+                grouping_mode,
+                show_archived,
+                read_filter,
+                starred_filter,
+                selected_feed_urls,
+            },
+            |next| {
+                execute_ui_command(UiCommand::Entries(EntriesCommand::SaveBrowsingPreferences {
+                    grouping_mode: next.grouping_mode,
+                    show_archived: next.show_archived,
+                    read_filter: next.read_filter,
+                    starred_filter: next.starred_filter,
+                    selected_feed_urls: next.selected_feed_urls,
+                }))
+            },
+        );
     }
 
     fn can_save_browsing_preferences(self, preferences_loaded: bool) -> bool {
@@ -253,9 +262,31 @@ impl EntriesPageSession {
         dispatch_entries_page_intent(self.state, intent);
     }
 
-    fn spawn_ui_command(self, command: UiCommand) {
-        spawn_projected_ui_command(command, UiIntent::into_entries_page_intent, move |intent| {
-            self.dispatch(intent);
+    fn spawn_preferences_write<F: Future<Output = Vec<UiIntent>> + 'static>(
+        self,
+        next: EntriesWorkspaceState,
+        write: impl FnOnce(EntriesWorkspaceState) -> F + 'static,
+    ) {
+        spawn(async move {
+            // An effect's captured choice can be obsolete by the time its task
+            // starts. Do not enqueue that older choice behind the current save.
+            let current = self.state.with_peek(|state| {
+                state.preferences_load.is_loaded()
+                    && super::state::grouping_mode_preference(state.grouping_mode)
+                        == next.grouping_mode
+                    && state.show_archived == next.show_archived
+                    && state.read_filter == next.read_filter
+                    && state.starred_filter == next.starred_filter
+                    && state.selected_feed_urls == next.selected_feed_urls
+            });
+            if !current {
+                return;
+            }
+            for intent in
+                write(next).await.into_iter().filter_map(UiIntent::into_entries_page_intent)
+            {
+                self.dispatch(intent);
+            }
         });
     }
 }
@@ -287,6 +318,35 @@ mod tests {
             message: "old query failed".into(),
             tone: "error".into(),
         })]
+    }
+
+    #[test]
+    fn queued_preferences_skip_choices_replaced_before_the_task_starts() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let saved = Rc::new(std::cell::RefCell::new(Vec::new()));
+        dom.in_scope(ScopeId::APP, || {
+            let session = EntriesPageSession::new(
+                None,
+                Signal::new(EntriesPageState::new()),
+                Signal::new(0),
+                Signal::new(0),
+            );
+            session.dispatch(EntriesPageIntent::PreferencesLoaded);
+            for read_filter in [ReadFilter::UnreadOnly, ReadFilter::All] {
+                session.dispatch(EntriesPageIntent::SetReadFilter(read_filter));
+                let saved = Rc::clone(&saved);
+                session.spawn_preferences_write(
+                    EntriesWorkspaceState { read_filter, ..Default::default() },
+                    move |next| {
+                        saved.borrow_mut().push(next.read_filter);
+                        async { Vec::new() }
+                    },
+                );
+            }
+        });
+        dom.render_immediate_to_vec();
+        assert_eq!(*saved.borrow(), [ReadFilter::All]);
     }
 
     #[test]
