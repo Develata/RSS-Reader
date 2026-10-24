@@ -5,7 +5,8 @@ use rssr_domain::EntryBatchAction;
 
 pub(super) fn render_bulk_controls(facade: &EntriesPageFacade) -> Element {
     let session = facade.session();
-    let disabled = facade.selected_count() == 0 || facade.bulk_busy();
+    let disabled =
+        facade.selected_count() == 0 || facade.bulk_busy() || facade.has_pending_entry_writes();
     rsx! {
         div { class: "entry-bulk-actions", role: "group", aria_label: "所选文章操作", aria_busy: facade.bulk_busy(),
             button { class: "workspace-icon-button", disabled, title: "将所选文章标为已读", aria_label: "将所选文章标为已读", "data-action": "mark-selected-read",

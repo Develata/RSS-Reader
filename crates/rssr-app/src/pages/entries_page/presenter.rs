@@ -14,7 +14,7 @@ use super::{
 
 /// 投影里持有的条目集合。
 ///
-/// 只对外暴露分组键（下标 + `id` + `feed_title` + `published_at`），**取不到** `title` /
+/// 只对外暴露分组键（下标 + `id` + `feed_id` + `feed_title` + `published_at`），**取不到** `title` /
 /// `is_read` / `is_starred`：因为本类型的相等性刻意忽略这些字段，memo 里缓存的这份数据在
 /// 标记切换后就是过期的。卡片需要的完整条目在渲染时从最新状态解析
 /// （`EntriesPageFacade::entry_at`），不经过这份缓存。
@@ -42,6 +42,7 @@ impl GroupingEntries {
             .map(|(index, entry)| EntryGroupKey {
                 index,
                 id: entry.id,
+                feed_id: entry.feed_id,
                 feed_title: entry.feed_title.as_str(),
                 published_at: entry.published_at,
             })
@@ -52,7 +53,7 @@ impl GroupingEntries {
 impl PartialEq for GroupingEntries {
     /// 相等 ⟺ 由这批条目派生出的分组树完全一致。
     ///
-    /// 只比较分组真正依赖的字段（`id` / `feed_title` / `published_at`）以及数量和顺序。
+    /// 只比较分组真正依赖的字段（`id` / `feed_id` / `feed_title` / `published_at`）以及数量和顺序。
     /// `title` / `is_read` / `is_starred` **刻意不比较**：它们只出现在卡片上，而卡片是渲染时
     /// 按下标从最新状态解析的，不受这份缓存影响。切换已读/收藏因此不再重建分组树。
     ///
@@ -66,6 +67,7 @@ impl PartialEq for GroupingEntries {
                     // 没被改动的条目共享同一个 Arc，指针相等即可短路。
                     Arc::ptr_eq(left, right)
                         || (left.id == right.id
+                            && left.feed_id == right.feed_id
                             && left.published_at == right.published_at
                             && left.published_at.map(|at| at.offset())
                                 == right.published_at.map(|at| at.offset())
@@ -145,7 +147,7 @@ pub(crate) struct EntriesPagePresenter {
 impl EntriesPagePresenter {
     /// 从 [`EntriesPresenterInput`] 派生这一屏要渲染的内容。
     ///
-    /// 归档筛选与计数已经由存储层完成（见 `EntriesPageState::entry_query` 与
+    /// 归档筛选与计数已经由存储层完成（见 `EntriesPageState::entry_query_scope` 与
     /// `EntriesListService::list_entries`），因此这里拿到的条目就是可显示集合，
     /// 不再需要当前时间。输入是一个窄投影，因此本函数只在真正影响输出的字段变化时才会重跑。
     ///
@@ -372,6 +374,53 @@ mod tests {
         leaf_cards(presenter).into_iter().map(|card| card.index).collect()
     }
 
+    #[test]
+    fn source_identity_does_not_depend_on_custom_display_names() {
+        let mut state = EntriesPageState::new();
+        state.grouping_mode = EntryGroupingMode::Source;
+        for names in [["Same", "Same"], ["A/B", "A B"]] {
+            state.entries = vec![
+                entry(1, 10, names[0], "2026-04-04T08:00:00Z"),
+                entry(2, 20, names[1], "2026-04-04T07:00:00Z"),
+            ]
+            .into();
+            let presenter =
+                EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
+            assert_eq!(
+                presenter.directory_sources.len(),
+                2,
+                "different feed IDs keep separate source groups"
+            );
+            assert_ne!(
+                presenter.directory_sources[0].anchor_id, presenter.directory_sources[1].anchor_id,
+                "display-name slugs cannot collide"
+            );
+            let first_anchor = presenter.directory_sources[0].anchor_id.clone();
+            Arc::make_mut(&mut Arc::make_mut(&mut state.entries)[0]).feed_title = "Renamed".into();
+            let renamed =
+                EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
+            assert_eq!(
+                first_anchor, renamed.directory_sources[0].anchor_id,
+                "renaming keeps the navigation identity"
+            );
+        }
+        state.grouping_mode = EntryGroupingMode::Time;
+        state.entries = vec![
+            entry(1, 10, "Same", "2026-04-04T08:00:00Z"),
+            entry(2, 20, "Same", "2026-04-04T07:00:00Z"),
+        ]
+        .into();
+        let presenter =
+            EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
+        assert_eq!(presenter.time_grouped_entries[0].dates[0].sources.len(), 2);
+        let original_input = EntriesPresenterInput::from_state(&state, None);
+        Arc::make_mut(&mut Arc::make_mut(&mut state.entries)[0]).feed_id = 30;
+        assert!(
+            original_input != EntriesPresenterInput::from_state(&state, None),
+            "the grouping memo must track source identity"
+        );
+    }
+
     /// Reproducible CPU projection probe; excludes storage, browser layout and network.
     /// Run alone in release mode with --ignored --nocapture --test-threads=1.
     #[test]
@@ -447,6 +496,7 @@ mod tests {
         state.status = "已将《X》标记为已读。".to_string();
         state.status_tone = "info".to_string();
         state.selected_entry_ids = Arc::new([1].into_iter().collect());
+        state.pending_entry_writes = Arc::new([1].into_iter().collect());
         state.show_archived = !state.show_archived;
         state.read_filter = rssr_domain::ReadFilter::UnreadOnly;
         state.starred_filter = rssr_domain::StarredFilter::StarredOnly;
@@ -731,9 +781,9 @@ mod tests {
         let presenter =
             EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
 
-        assert_eq!(presenter.active_group_anchor.as_deref(), Some("entry-group-beta"));
+        assert_eq!(presenter.active_group_anchor.as_deref(), Some("entry-source-2"));
         assert!(presenter.group_nav_items.iter().any(|item| item.is_active));
         assert!(presenter.directory_sources.iter().any(|item| item.is_active));
-        assert!(presenter.default_expanded_directory_sections.contains("entry-group-beta"));
+        assert!(presenter.default_expanded_directory_sections.contains("entry-source-2"));
     }
 }

@@ -14,6 +14,7 @@ pub(crate) struct EntryGroupKey<'a> {
     /// 在完整可见列表中的下标。分页树是全量键切片出来的子切片，因此两棵树的下标都是绝对下标。
     pub(crate) index: usize,
     pub(crate) id: i64,
+    pub(crate) feed_id: i64,
     pub(crate) feed_title: &'a str,
     /// UI-local timestamp: month, date buckets and cards must use its retained offset.
     pub(crate) published_at: Option<OffsetDateTime>,
@@ -176,11 +177,11 @@ pub(crate) fn group_entries_by_source_tree<'a>(
     entries: &[EntryGroupKey<'a>],
     page_size: usize,
 ) -> Vec<EntrySourceGroup> {
-    let mut groups: BTreeMap<&'a str, (Option<OffsetDateTime>, Vec<EntryGroupKey<'a>>)> =
+    let mut groups: BTreeMap<i64, (Option<OffsetDateTime>, Vec<EntryGroupKey<'a>>)> =
         BTreeMap::new();
 
     for entry in entries {
-        let (latest, items) = groups.entry(entry.feed_title).or_default();
+        let (latest, items) = groups.entry(entry.feed_id).or_default();
         items.push(*entry);
         if latest.is_none() || entry.published_at > *latest {
             *latest = entry.published_at;
@@ -189,12 +190,12 @@ pub(crate) fn group_entries_by_source_tree<'a>(
 
     let mut grouped = groups
         .into_iter()
-        .map(|(feed_title, (latest, items))| {
+        .map(|(feed_id, (latest, items))| {
             (
                 latest,
                 EntrySourceGroup {
-                    anchor_id: group_anchor_id(feed_title),
-                    title: feed_title.to_string(),
+                    anchor_id: format!("entry-source-{feed_id}"),
+                    title: items[0].feed_title.to_string(),
                     subtitle: format!("{} 篇文章", items.len()),
                     target_page: page_for_index(items[0].index, page_size),
                     months: group_source_months(&items, page_size),
@@ -391,16 +392,19 @@ fn group_date_sources<'a>(
 ) -> Vec<EntryDateSourceGroup> {
     // Leaves only expose card references. Build that final vector directly instead of
     // allocating a temporary vector of complete keys and copying it into a second one.
-    let mut groups: BTreeMap<&'a str, Vec<EntryCardRef>> = BTreeMap::new();
+    let mut groups: BTreeMap<(&'a str, i64), Vec<EntryCardRef>> = BTreeMap::new();
 
     for entry in entries {
-        groups.entry(entry.feed_title).or_default().push(EntryCardRef::from_key(entry));
+        groups
+            .entry((entry.feed_title, entry.feed_id))
+            .or_default()
+            .push(EntryCardRef::from_key(entry));
     }
 
     groups
         .into_iter()
-        .map(|(feed_title, items)| {
-            let anchor_id = group_anchor_id(&format!("{}-{}", feed_title, items[0].id));
+        .map(|((feed_title, feed_id), items)| {
+            let anchor_id = format!("entry-date-source-{feed_id}-{}", items[0].id);
             EntryDateSourceGroup {
                 anchor_id,
                 title: feed_title.to_string(),
@@ -483,6 +487,11 @@ mod tests {
         EntryGroupKey {
             index,
             id,
+            feed_id: ["Alpha", "Beta", "Zulu", "未标日期", "来源 甲", "来源 乙"]
+                .iter()
+                .position(|title| *title == feed_title)
+                .expect("known fixture feed") as i64
+                + 1,
             feed_title,
             published_at: published_at
                 .map(|value| OffsetDateTime::parse(value, &Rfc3339).expect("parse published_at")),

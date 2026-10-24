@@ -23,12 +23,14 @@ pub(super) fn render_entry_card_at(
     };
 
     let selected = facade.is_selected(entry.id);
+    let write_pending = facade.entry_write_pending(entry.id);
     render_entry_card(
         entry,
         facade.session(),
         list_edge_state(position, total),
         selected,
         facade.bulk_busy(),
+        write_pending,
     )
 }
 
@@ -38,6 +40,7 @@ fn render_entry_card(
     list_edge: &'static str,
     selected: bool,
     busy: bool,
+    write_pending: bool,
 ) -> Element {
     let read_title = entry.title.clone();
     let starred_title = entry.title.clone();
@@ -72,7 +75,7 @@ fn render_entry_card(
                 if let Some(date) = format_date(entry.published_at) { " · {date}" }
               }
             }
-            div { "data-layout": "entry-card-actions",
+            div { "data-layout": "entry-card-actions", aria_busy: write_pending,
                 button {
                     class: "workspace-icon-button",
                     "data-variant": "secondary",
@@ -81,6 +84,7 @@ fn render_entry_card(
                     aria_label: if entry.is_read { "标为未读" } else { "标为已读" },
                     title: if entry.is_read { "标为未读" } else { "标为已读" },
                     aria_pressed: entry.is_read,
+                    disabled: busy || write_pending,
                     onclick: move |_| {
                         session.toggle_read(read_entry.id, read_title.clone(), read_entry.is_read);
                     },
@@ -94,6 +98,7 @@ fn render_entry_card(
                     aria_label: if entry.is_starred { "取消收藏" } else { "收藏文章" },
                     title: if entry.is_starred { "取消收藏" } else { "收藏文章" },
                     aria_pressed: entry.is_starred,
+                    disabled: busy || write_pending,
                     onclick: move |_| {
                         session.toggle_starred(
                             starred_entry.id,

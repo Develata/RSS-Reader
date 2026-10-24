@@ -34,6 +34,12 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         Arc::make_mut(&mut state.selected_entry_ids).clear();
     }
     match intent {
+        EntriesPageIntent::EntryWriteStarted(id) => {
+            Arc::make_mut(&mut state.pending_entry_writes).insert(id);
+        }
+        EntriesPageIntent::EntryWriteFinished(id) => {
+            Arc::make_mut(&mut state.pending_entry_writes).remove(&id);
+        }
         EntriesPageIntent::ReloadEntries => {
             state.reload_revision = state.reload_revision.wrapping_add(1);
         }

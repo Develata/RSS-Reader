@@ -265,7 +265,94 @@ async function importNames(page) {
   }
 }
 
-module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames };
+async function sourceIdentity(page) {
+  await page.setViewportSize({ width: 1536, height: 864 });
+  await seed(page, new URL(page.url()).origin);
+  await page.locator('[data-nav="feeds"]').first().click();
+  const secondURL = await page.locator('[data-feed-id="2"]').getAttribute('data-feed-url');
+  for (const id of [1, 2]) {
+    await page.locator(`[data-feed-id="${id}"] ${action('edit-feed')}`).click();
+    await page.locator('#feed-edit-name').fill('Same name');
+    await page.locator(action('save-feed-edit')).click();
+    await page.locator('#feed-edit-dialog').waitFor({ state: 'detached' });
+  }
+  await page.locator('[data-action="activate-home"]').first().click(); await ready(page);
+  await page.locator(action('group-by-source')).click();
+  const groups = page.locator(`${rail} [data-directory-kind="group"]`);
+  await groups.filter({ hasText: 'Same name' }).first().waitFor();
+  assert.equal(await groups.count(), 6, 'renaming sources must not merge their directory groups');
+  assert.equal(await groups.filter({ hasText: 'Same name' }).count(), 2);
+  const anchors = await groups.evaluateAll(items => items.map(item => item.dataset.directoryAnchor));
+  assert.equal(new Set(anchors).size, 6, 'source anchors are unique even with identical names');
+  await page.locator(action('select-current-page')).click();
+  assert.equal(await page.locator(selected).count(), 8, 'source grouping still selects exactly this page');
+  await page.locator(action('open-source-filter')).click();
+  const chooser = page.locator('#source-filter-dialog');
+  await chooser.getByRole('checkbox', { name: '全部来源', exact: true }).uncheck();
+  await chooser.getByRole('searchbox', { name: '搜索来源' }).fill(secondURL);
+  await chooser.getByRole('checkbox', { name: 'Same name', exact: true }).check();
+  await page.locator(action('apply-source-filter')).click();
+  await page.waitForFunction(() => document.querySelector('.entries-count').textContent === '12 篇');
+  assert.deepEqual(await page.locator(rows).evaluateAll(items => items.map(item => Number(item.dataset.positionEntry))), [71, 65, 59, 53, 47, 41, 35, 29], 'the second source remains independently selectable');
+}
+
+async function holdWrites(page, interaction) {
+  await page.evaluate(() => {
+    window.__workspaceWriteHeld = false;
+    void navigator.locks.request('rssr-browser-state-v1', async () => {
+      window.__workspaceWriteHeld = true;
+      await new Promise(resolve => { window.__workspaceReleaseWrite = resolve; });
+    });
+  });
+  await page.waitForFunction(() => window.__workspaceWriteHeld);
+  try { await interaction(); }
+  finally { await page.evaluate(() => window.__workspaceReleaseWrite()); }
+}
+
+async function pendingWrites(page) {
+  await seed(page, new URL(page.url()).origin);
+  const first = page.locator(`${rows}[data-position-entry="72"]`);
+  await first.locator(action('select-entry')).check();
+  await holdWrites(page, async () => {
+    await first.locator(action('mark-read')).click();
+    await page.waitForFunction(async () => (await navigator.locks.query()).pending.length > 0);
+    assert.equal(await first.locator(action('mark-read')).isDisabled(), true, 'the pending row rejects repeated writes');
+    assert.equal(await first.locator(action('toggle-starred')).isDisabled(), true);
+    assert.equal(await page.locator(`${rows}[data-position-entry="71"] ${action('mark-read')}`).isDisabled(), false, 'other rows remain usable');
+    assert.equal(await page.locator(action('mark-selected-read')).isDisabled(), true, 'batch waits for outstanding row writes');
+    assert.equal(await page.locator(action('archive-selected')).isDisabled(), true);
+  });
+  await page.waitForFunction(() => document.querySelector('[data-position-entry="72"]').dataset.read === 'true' && !document.querySelector('[data-action="mark-selected-read"]').disabled);
+  await first.locator(action('mark-read')).click();
+  await page.waitForFunction(() => document.querySelector('[data-position-entry="72"]').dataset.read === 'false' && !document.querySelector('[data-position-entry="72"] [data-action="mark-read"]').disabled);
+  await page.locator(`${rows}[data-position-entry="71"] ${action('select-entry')}`).check();
+  await holdWrites(page, async () => {
+    await page.locator(action('archive-selected')).click();
+    await page.waitForFunction(async () => (await navigator.locks.query()).pending.length > 0);
+    assert.equal(await page.locator(`${rows} [data-layout="entry-card-actions"] button`).evaluateAll(buttons => buttons.every(button => button.disabled)), true, 'batch writes block overlapping per-row actions');
+  });
+  await page.waitForFunction(() => !document.querySelector('[data-position-entry="72"]') && !document.querySelector('[data-position-entry="71"]'));
+  await seed(page, new URL(page.url()).origin);
+  await page.evaluate(() => {
+    window.__workspaceOriginalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('rssr-web-entry-flags-v1')) throw new DOMException('review write failure', 'QuotaExceededError');
+      return window.__workspaceOriginalSetItem.call(this, key, value);
+    };
+  });
+  try {
+    await first.locator(action('mark-read')).click();
+    await page.locator('[data-layout="status-banner"][data-state="error"]').waitFor({ state: 'attached' });
+    assert.equal(await first.locator(action('mark-read')).isDisabled(), false, 'a failed write unlocks retry');
+    assert.equal(await first.getAttribute('data-read'), 'false', 'a failed write preserves flags');
+  } finally {
+    await page.evaluate(() => { Storage.prototype.setItem = window.__workspaceOriginalSetItem; });
+  }
+  await first.locator(action('mark-read')).click();
+  await page.waitForFunction(() => document.querySelector('[data-position-entry="72"]').dataset.read === 'true');
+}
+
+module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites };
 if (require.main === module) (async () => {
   const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN });
@@ -274,7 +361,7 @@ if (require.main === module) (async () => {
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     page.setDefaultTimeout(15000);
     await seed(page, process.env.STATIC_BASE || 'http://127.0.0.1:8097');
-    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames })) {
+    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites })) {
       await run(page); console.log(`PASS ${name}`);
     }
     assert.deepEqual(errors, []);

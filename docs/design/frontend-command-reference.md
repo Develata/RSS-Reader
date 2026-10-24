@@ -89,7 +89,9 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 
 - `select-entry`、`select-current-page`：Rust reducer 只接受当前页 ID。`data-selected` 与 `data-read` 分别表示勾选和阅读状态；master 的 `aria-checked` 可为 `mixed`。16px 方框配 44px 点击区域，键盘焦点单独可见。
 - `mark-selected-read`、`archive-selected` → `EntriesCommand::ApplySelection` → `EntriesListService::apply_entry_batch`；在点击时冻结显式 ID，存储层原子更新。没有选择时禁用，执行中禁止修改勾选。旧 UI 筛选全量预览按钮已退役；CLI 和旧 host 预览接口仍保留。
+- 单篇已读／收藏写入期间，该行两种状态操作暂时禁用；当前文章工作区有单篇写入待完成时，批量操作也暂时禁用。批量操作期间禁止发起单篇写入。Rust session 同步检查忙碌状态，拒绝已排队的重复事件；成功或失败均恢复操作，其他行在单篇写入期间仍可使用。
 - `group-by-source` / `group-by-time` 是单选按钮组；状态筛选四个 icon button 以 `aria-pressed` 表达选择，再次点击取消该条件。
+- 来源分组按 `feed_id` 区分身份，自定义名称仅用于显示。目录来源锚点、列表分组标识不依赖名称，同名来源和名称含不同标点的来源不会被合并或产生锚点冲突。目录继续使用完整查询结果的分组投影；全选仍只作用于当前页。
 - `open-source-filter` / `apply-source-filter`：取消、Esc、点外侧只关闭草稿；应用后清空文章选择，空来源集合不允许提交。页面里的“全部”偏好仍用空 URL 列表表达。
 - 来源弹窗的全选框同时提供未选／部分／全选状态；Rust 计算 `aria-checked`，DOM 仅同步原生复选框的 `indeterminate` 属性。部分选中时点击或空格选中全部，再次操作取消全部。
 - `open-directory` / `close-directory`：目录可以收起，≤1000px 默认收起为入口。目录浏览和同页定位保留选择；换页、筛选、搜索或切换视图清空选择。原有目录 Rust 状态与分组 memo 分离，选择不重建分组树。

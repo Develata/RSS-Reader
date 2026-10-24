@@ -31,7 +31,7 @@ impl EntriesPageSession {
         }
     }
     fn spawn_bulk(self, command: EntriesCommand, writing: bool) {
-        if self.state.peek().bulk_busy {
+        if self.state.with_peek(|state| state.bulk_busy || !state.pending_entry_writes.is_empty()) {
             return;
         }
         self.dispatch(EntriesPageIntent::BeginBulk { writing });
@@ -197,11 +197,13 @@ impl EntriesPageSession {
     }
 
     pub(crate) fn toggle_read(self, entry_id: i64, entry_title: String, currently_read: bool) {
-        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::ToggleRead {
-            entry_id,
-            entry_title,
-            currently_read,
-        }));
+        self.spawn_entry_write(entry_id, move || {
+            execute_ui_command(UiCommand::Entries(EntriesCommand::ToggleRead {
+                entry_id,
+                entry_title,
+                currently_read,
+            }))
+        });
     }
 
     pub(crate) fn toggle_starred(
@@ -210,11 +212,41 @@ impl EntriesPageSession {
         entry_title: String,
         currently_starred: bool,
     ) {
-        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::ToggleStarred {
-            entry_id,
-            entry_title,
-            currently_starred,
-        }));
+        self.spawn_entry_write(entry_id, move || {
+            execute_ui_command(UiCommand::Entries(EntriesCommand::ToggleStarred {
+                entry_id,
+                entry_title,
+                currently_starred,
+            }))
+        });
+    }
+
+    fn spawn_entry_write<F: Future<Output = Vec<UiIntent>> + 'static>(
+        self,
+        entry_id: i64,
+        write: impl FnOnce() -> F + 'static,
+    ) {
+        // Check live Rust state as well as disabling buttons: a second event
+        // can already be queued before the DOM has rendered the pending state.
+        if self
+            .state
+            .with_peek(|state| state.bulk_busy || state.pending_entry_writes.contains(&entry_id))
+        {
+            return;
+        }
+        self.dispatch(EntriesPageIntent::EntryWriteStarted(entry_id));
+        spawn(async move {
+            let mut read_changed = false;
+            for intent in write().await.into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                read_changed |=
+                    matches!(&intent, EntriesPageIntent::PatchEntryFlags { is_read: Some(_), .. });
+                self.dispatch(intent);
+            }
+            self.dispatch(EntriesPageIntent::EntryWriteFinished(entry_id));
+            if read_changed {
+                self.bootstrap();
+            }
+        });
     }
 
     pub(crate) fn dispatch(self, intent: EntriesPageIntent) {
@@ -223,12 +255,7 @@ impl EntriesPageSession {
 
     fn spawn_ui_command(self, command: UiCommand) {
         spawn_projected_ui_command(command, UiIntent::into_entries_page_intent, move |intent| {
-            let read_changed =
-                matches!(&intent, EntriesPageIntent::PatchEntryFlags { is_read: Some(_), .. });
             self.dispatch(intent);
-            if read_changed {
-                self.bootstrap();
-            }
         });
     }
 }
@@ -260,6 +287,79 @@ mod tests {
             message: "old query failed".into(),
             tone: "error".into(),
         })]
+    }
+
+    #[test]
+    fn entry_writes_reject_overlap_and_unlock_after_success_or_failure() {
+        for failed in [false, true] {
+            let mut dom = VirtualDom::new(|| rsx! {});
+            dom.rebuild_in_place();
+            let calls = Rc::new(Cell::new(0));
+            let (sender, receiver) = oneshot::channel();
+            let session = dom.in_scope(ScopeId::APP, || {
+                let session = EntriesPageSession::new(
+                    None,
+                    Signal::new(EntriesPageState::new()),
+                    Signal::new(0),
+                    Signal::new(0),
+                );
+                for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                    session.dispatch(intent);
+                }
+                session.dispatch(EntriesPageIntent::ToggleSelected(1));
+                let first = Rc::clone(&calls);
+                session.spawn_entry_write(1, move || {
+                    first.set(first.get() + 1);
+                    async { receiver.await.unwrap() }
+                });
+                let duplicate = Rc::clone(&calls);
+                session.spawn_entry_write(1, move || {
+                    duplicate.set(duplicate.get() + 1);
+                    async { Vec::new() }
+                });
+                // This must be rejected before executing a real batch command.
+                session.apply_selection(rssr_domain::EntryBatchAction::Archive);
+                assert!(!session.snapshot().bulk_busy);
+                session
+            });
+            dom.render_immediate_to_vec();
+            assert_eq!(calls.get(), 1, "a repeated event cannot start a second write");
+            dom.in_scope(ScopeId::APP, || {
+                assert!(session.snapshot().pending_entry_writes.contains(&1))
+            });
+            sender
+                .send(if failed {
+                    failure()
+                } else {
+                    vec![UiIntent::EntriesPage(EntriesPageIntent::PatchEntryFlags {
+                        entry_id: 1,
+                        is_read: None,
+                        is_starred: Some(true),
+                    })]
+                })
+                .unwrap();
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                assert!(session.snapshot().pending_entry_writes.is_empty());
+                let retry = Rc::clone(&calls);
+                session.spawn_entry_write(1, move || {
+                    retry.set(retry.get() + 1);
+                    async { Vec::new() }
+                });
+            });
+            dom.render_immediate_to_vec();
+            assert_eq!(calls.get(), 2, "both success and failure allow the next attempt");
+            dom.in_scope(ScopeId::APP, || {
+                session.dispatch(EntriesPageIntent::BeginBulk { writing: true });
+                let overlap = Rc::clone(&calls);
+                session.spawn_entry_write(1, move || {
+                    overlap.set(overlap.get() + 1);
+                    async { Vec::new() }
+                });
+            });
+            dom.render_immediate_to_vec();
+            assert_eq!(calls.get(), 2, "a bulk write also blocks new per-entry writes");
+        }
     }
 
     #[test]

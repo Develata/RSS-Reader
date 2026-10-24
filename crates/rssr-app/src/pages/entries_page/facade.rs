@@ -48,6 +48,12 @@ impl EntriesPageFacade {
     pub(crate) fn bulk_busy(&self) -> bool {
         self.snapshot.bulk_busy
     }
+    pub(crate) fn entry_write_pending(&self, id: i64) -> bool {
+        self.snapshot.pending_entry_writes.contains(&id)
+    }
+    pub(crate) fn has_pending_entry_writes(&self) -> bool {
+        !self.snapshot.pending_entry_writes.is_empty()
+    }
     /// presenter 由调用方通过 `use_memo` 缓存后传入：它是 state 的纯函数，没必要每次重绘
     /// 都重建一遍分组树。
     pub(crate) fn new(

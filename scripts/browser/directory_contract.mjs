@@ -11,11 +11,11 @@ export const directoryCases = {
     remoteGroup: 'entry-group-2026-年-04-月', remote: 'entry-group-2026-04-02-12',
   },
   source: {
-    group: 'entry-group-alpha', first: 'entry-group-2026-年-09-月-72',
+    group: 'entry-source-1', first: 'entry-group-2026-年-09-月-72',
     next: 'entry-group-2026-年-08-月-60',
-    otherGroup: 'entry-group-bravo', other: 'entry-group-2026-年-09-月-71',
+    otherGroup: 'entry-source-2', other: 'entry-group-2026-年-09-月-71',
     beforeOther: 'entry-group-2026-年-05-月-24',
-    remoteGroup: 'entry-group-alpha', remote: 'entry-group-2026-年-04-月-12',
+    remoteGroup: 'entry-source-1', remote: 'entry-group-2026-年-04-月-12',
   },
 };
 export const rail = '[data-layout="entry-directory-rail"]';
@@ -343,7 +343,7 @@ export async function checkDirectoryContracts(client, env) {
     await scenario(`${mode}-internal-scroll-and-keyboard`, async () => {
       const c = await prepare(mode);
       await scrollAnchor(client,c.first);
-      const distant = mode==='time'?c.remoteGroup:'entry-group-foxtrot';
+      const distant = mode==='time'?c.remoteGroup:'entry-source-6';
       await click(client,group(distant));
       await settle(client, `document.querySelector(${q(group(distant))}).dataset.open === 'true'`, 'manual distant group');
       for (const entry of (await snapshot(client)).groups.filter(g=>g.open!=='true')) {
@@ -391,7 +391,7 @@ export async function checkDirectoryContracts(client, env) {
       const c = await prepare(mode);
       await scrollAnchor(client,c.first);
       await expectActive(client,c.group,c.first);
-      const distantGroup = mode==='time'?c.remoteGroup:'entry-group-foxtrot';
+      const distantGroup = mode==='time'?c.remoteGroup:'entry-source-6';
       if ((await snapshot(client)).groups.find(g=>g.id===distantGroup).open!=='true') {
         await click(client,group(distantGroup));
         await settle(client, `document.querySelector(${q(group(distantGroup))}).dataset.open === 'true'`, 'distant group expansion');
@@ -493,7 +493,7 @@ export async function checkDirectoryContracts(client, env) {
       const target = mode==='source'?'entry-group-2026-年-09-月-67':'entry-group-2026-06-02-36';
       const requestedY = await evaluate(client, `scrollY + document.getElementById(${q(target)}).getBoundingClientRect().top - 80`);
       await userScrollAnchor(client,target);
-      const expectedGroup = mode==='source'?'entry-group-foxtrot':'entry-group-2026-年-06-月';
+      const expectedGroup = mode==='source'?'entry-source-6':'entry-group-2026-年-06-月';
       await expectActive(client,expectedGroup,target);
       const aligned = await evaluate(client, `(() => {
         const root=document.querySelector(${q(rail)}), active=root.querySelector('[data-directory-kind="item"][data-active="true"]');

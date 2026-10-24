@@ -36,6 +36,7 @@ impl PreferencesLoadState {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct EntriesPageState {
     pub(crate) selected_entry_ids: Arc<BTreeSet<i64>>,
+    pub(crate) pending_entry_writes: Arc<BTreeSet<i64>>,
     pub(crate) bulk_busy: bool,
     pub(crate) bulk_writing: bool,
     pub(crate) bulk_generation: u64,
@@ -69,6 +70,7 @@ impl EntriesPageState {
         let workspace = EntriesWorkspaceState::default();
         Self {
             selected_entry_ids: Arc::default(),
+            pending_entry_writes: Arc::default(),
             bulk_busy: false,
             bulk_writing: false,
             bulk_generation: 0,

@@ -198,7 +198,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 }
                             } else {
                                 for group in facade.source_grouped_entries() {
-                                    section { key: "{group.title}", id: "{group.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "source", "data-group-level": "source",
+                                    section { key: "{group.anchor_id}", id: "{group.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "source", "data-group-level": "source",
                                         div { "data-layout": "entry-group-header", "data-group-level": "primary",
                                             h2 { "data-slot": "entry-group-title", "{group.title}" }
                                             p { "data-slot": "entry-group-meta", "{group.subtitle}" }

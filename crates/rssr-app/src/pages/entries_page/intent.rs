@@ -10,6 +10,8 @@ pub(crate) enum EntriesPageIntent {
     TogglePageSelection,
     ClearSelection,
     ReloadEntries,
+    EntryWriteStarted(i64),
+    EntryWriteFinished(i64),
     SelectionApplied { ids: Vec<i64>, action: rssr_domain::EntryBatchAction, count: u64 },
     BeginBulk { writing: bool },
     CancelBulk,
