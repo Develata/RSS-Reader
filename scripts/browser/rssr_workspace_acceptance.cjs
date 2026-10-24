@@ -202,7 +202,70 @@ async function editEdges(page) {
   await page.keyboard.press('Escape');
 }
 
-module.exports = { seed, selection, sources, editing, responsive, editEdges };
+async function queryStability(page) {
+  await page.setViewportSize({ width: 1536, height: 864 });
+  await seed(page, new URL(page.url()).origin);
+  const first = page.locator(`${rows}[data-position-entry="72"]`);
+  const original = await first.innerText();
+  const marker = 'A fresh query loaded this title';
+  await page.evaluate(async marker => {
+    await window.__rssrTestMutateSlice('rssr-web-state-v1', state => {
+      state.entries.find(entry => entry.id === 72).title = marker;
+    });
+  }, marker);
+  // Intentionally cross the archive cutoff clock's second boundary. This
+  // mutation remains invisible until an operation actually reloads the query.
+  await page.waitForTimeout(1100);
+  await first.locator(action('select-entry')).check();
+  await page.waitForTimeout(250);
+  assert.equal(await first.innerText(), original, 'selection must not reload the list');
+  await page.waitForTimeout(1100);
+  await page.locator(action('close-directory')).click();
+  await page.locator(action('open-directory')).click();
+  await page.waitForTimeout(250);
+  assert.equal(await first.innerText(), original, 'directory visibility must not reload the list');
+  assert.equal(await page.locator(selected).count(), 1, 'directory visibility preserves selection');
+  await page.waitForTimeout(1100);
+  await page.locator(action('entry-page-next')).click();
+  await page.waitForFunction(() => document.querySelector('[data-page="entries"]').dataset.positionPage === '2');
+  await page.locator(action('entry-page-previous')).click();
+  await first.waitFor();
+  await page.waitForTimeout(250);
+  assert.equal(await first.innerText(), original, 'local pagination must not reload the list');
+  assert.equal(await page.locator(selected).count(), 0, 'paging still clears selection');
+  await first.locator(action('select-entry')).check();
+  await page.getByRole('button', { name: '仅未读', exact: true }).click();
+  await first.getByText(marker, { exact: true }).waitFor();
+  assert.equal(await page.locator(selected).count(), 0, 'a filter change still queries and clears selection');
+}
+
+async function importNames(page) {
+  for (const format of ['config', 'opml']) {
+    await seed(page, new URL(page.url()).origin);
+    await page.locator('[data-nav="feeds"]').first().click();
+    const feed = page.locator('[data-feed-id="1"]');
+    await feed.locator(action('edit-feed')).click();
+    await page.locator('#feed-edit-name').fill('Imported alias');
+    await page.locator(action('save-feed-edit')).click();
+    await page.locator('#feed-edit-dialog').waitFor({ state: 'detached' });
+    await page.locator(action(`export-${format}`)).click();
+    await page.waitForFunction(format => document.querySelector(`#${format}-text`).value.includes('Imported alias'), format);
+    await page.locator(action(`import-${format}`)).click();
+    if (format === 'config') await page.locator(action('import-config')).click();
+    await page.getByRole('status').filter({ hasText: format === 'config' ? '配置包已导入' : 'OPML 已导入' }).waitFor();
+    assert.equal(await feed.getAttribute('data-feed-title'), 'Imported alias');
+    await feed.locator(action('edit-feed')).click();
+    await page.locator('#feed-edit-name').waitFor();
+    assert.equal(await page.locator('#feed-edit-name').inputValue(), 'Imported alias');
+    assert.equal(await page.locator('.feed-edit-original small').innerText(), '原始名称：Alpha', `${format} preserves the remote title`);
+    await page.getByRole('button', { name: '使用原名', exact: true }).click();
+    await page.locator(action('save-feed-edit')).click();
+    await page.locator('#feed-edit-dialog').waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.querySelector('[data-feed-id="1"]').dataset.feedTitle === 'Alpha');
+  }
+}
+
+module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames };
 if (require.main === module) (async () => {
   const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN });
@@ -211,7 +274,7 @@ if (require.main === module) (async () => {
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     page.setDefaultTimeout(15000);
     await seed(page, process.env.STATIC_BASE || 'http://127.0.0.1:8097');
-    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges })) {
+    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames })) {
       await run(page); console.log(`PASS ${name}`);
     }
     assert.deepEqual(errors, []);

@@ -108,17 +108,21 @@ impl FeedRepository for BrowserFeedRepository {
         self.store
             .update(move |state| {
                 let feeds = new_feeds
-                    .iter()
-                    .map(|new_feed| {
-                        let result = upsert_subscription_in_state(state, new_feed)?;
-                        if let Some(feed) =
-                            state.core.feeds.iter_mut().find(|feed| feed.id == result.id)
-                        {
-                            if new_feed.title.is_some() {
-                                feed.custom_title = normalize_optional_text(new_feed.title.clone());
-                            }
+                    .into_iter()
+                    .map(|mut new_feed| {
+                        // OPML names are aliases, not remotely fetched titles.
+                        let imported_title = new_feed.title.take();
+                        let result = upsert_subscription_in_state(state, &new_feed)?;
+                        let feed = state
+                            .core
+                            .feeds
+                            .iter_mut()
+                            .find(|feed| feed.id == result.id)
+                            .ok_or(DomainError::NotFound)?;
+                        if imported_title.is_some() {
+                            feed.custom_title = normalize_optional_text(imported_title);
                         }
-                        Ok(result)
+                        persisted_feed_to_domain(feed)
                     })
                     .collect::<rssr_domain::Result<Vec<_>>>()?;
                 Ok((feeds, Changes::CORE))

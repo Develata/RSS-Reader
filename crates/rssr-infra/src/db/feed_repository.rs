@@ -385,13 +385,9 @@ impl FeedRepository for SqliteFeedRepository {
             sqlx::query(
                 r#"
                 INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url, custom_title)
-                VALUES (?1, ?2, ?3, ?4, ?4, ?5, NULLIF(?2, ''))
+                VALUES (?1, NULL, ?3, ?4, ?4, ?5, NULLIF(?2, ''))
                 ON CONFLICT(url) DO UPDATE SET
-                    custom_title = CASE WHEN excluded.title IS NULL THEN feeds.custom_title ELSE NULLIF(excluded.title, '') END,
-                    title = CASE
-                        WHEN excluded.title IS NULL THEN feeds.title
-                        ELSE NULLIF(excluded.title, '')
-                    END,
+                    custom_title = CASE WHEN ?2 IS NULL THEN feeds.custom_title ELSE NULLIF(?2, '') END,
                     folder = CASE
                         WHEN excluded.folder IS NULL THEN feeds.folder
                         ELSE NULLIF(excluded.folder, '')

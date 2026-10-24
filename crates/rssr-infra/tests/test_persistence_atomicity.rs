@@ -495,6 +495,14 @@ async fn config_replacement_derives_removals_from_locked_current_state() {
     let (_index_pool, _content_pool, feeds, _entries, _settings, mutations) = fixture().await;
     let retained = add_feed(&feeds, "https://example.com/retained.xml").await;
     let late = add_feed(&feeds, "https://example.com/late.xml").await;
+    feeds
+        .update_subscription(&rssr_domain::FeedEditRequest {
+            feed_id: retained.id,
+            url: retained.url.to_string(),
+            custom_title: Some("Local alias".into()),
+        })
+        .await
+        .unwrap();
 
     let outcome = mutations
         .replace_config(ConfigReplacementPlan {
@@ -513,7 +521,10 @@ async fn config_replacement_derives_removals_from_locked_current_state() {
     let active = feeds.list_feeds().await.unwrap();
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].id, retained.id);
-    assert_eq!(active[0].title, None, "replacement metadata is exact desired state");
+    assert_eq!(active[0].title.as_deref(), Some("Original"));
+    let details = feeds.edit_details(retained.id).await.unwrap();
+    assert_eq!(details.original_title.as_deref(), Some("Original"));
+    assert_eq!(details.custom_title, None, "replacement clears only the configured alias");
     assert!(feeds.get_feed(late.id).await.unwrap().is_none());
 }
 

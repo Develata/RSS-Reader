@@ -142,9 +142,20 @@ impl EntriesPageSession {
             *generation = generation.wrapping_add(1);
             *generation
         });
+        let (flags_revision, reload_revision) =
+            self.state.with_peek(|state| (state.flags_revision, state.reload_revision));
         spawn(async move {
             let intents = query.await;
             if *self.query_generation.peek() != generation {
+                return;
+            }
+            if self.state.peek().flags_revision != flags_revision {
+                // This read may have observed storage before a completed flag or
+                // batch write. Retry the current scope instead of restoring old
+                // flags, reinserting filtered rows, or publishing a stale error.
+                if self.state.peek().reload_revision == reload_revision {
+                    self.dispatch(EntriesPageIntent::ReloadEntries);
+                }
                 return;
             }
             for intent in intents.into_iter().filter_map(UiIntent::into_entries_page_intent) {
@@ -227,7 +238,6 @@ mod tests {
     use super::*;
     use rssr_domain::{EntriesWorkspaceState, EntrySummary, FeedSummary, ReadFilter, UserSettings};
     use std::{cell::Cell, rc::Rc};
-    use time::OffsetDateTime;
     use tokio::sync::oneshot;
 
     fn loaded(entry_id: i64) -> Vec<UiIntent> {
@@ -250,6 +260,62 @@ mod tests {
             message: "old query failed".into(),
             tone: "error".into(),
         })]
+    }
+
+    #[test]
+    fn query_cannot_restore_flags_or_rows_from_before_a_completed_write() {
+        for (unread_only, failed) in [(false, false), (true, false), (false, true)] {
+            let mut dom = VirtualDom::new(|| rsx! {});
+            dom.rebuild_in_place();
+            let (sender, receiver) = oneshot::channel();
+            let session = dom.in_scope(ScopeId::APP, || {
+                let session = EntriesPageSession::new(
+                    None,
+                    Signal::new(EntriesPageState::new()),
+                    Signal::new(0),
+                    Signal::new(0),
+                );
+                session.dispatch(EntriesPageIntent::PreferencesLoaded);
+                if unread_only {
+                    session.dispatch(EntriesPageIntent::SetReadFilter(ReadFilter::UnreadOnly));
+                }
+                for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                    session.dispatch(intent);
+                }
+                session.dispatch(EntriesPageIntent::ToggleSelected(1));
+                session.spawn_entries_query(async { receiver.await.unwrap() });
+                session
+            });
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                session.dispatch(EntriesPageIntent::PatchEntryFlags {
+                    entry_id: 1,
+                    is_read: Some(true),
+                    is_starred: Some(true),
+                })
+            });
+            sender.send(if failed { failure() } else { loaded(1) }).unwrap();
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                let state = session.snapshot();
+                assert_eq!(state.reload_revision, 1, "discarded results schedule a fresh query");
+                assert_ne!(state.status, "old query failed");
+                if unread_only {
+                    assert!(state.entries.is_empty(), "old query cannot reinsert the now-read row");
+                } else {
+                    assert!(
+                        state.entries[0].is_read && state.entries[0].is_starred,
+                        "old query cannot undo confirmed flags"
+                    );
+                    assert!(state.selected_entry_ids.contains(&1));
+                }
+            });
+            dom.in_scope(ScopeId::APP, || session.spawn_entries_query(async { loaded(2) }));
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                assert_eq!(session.snapshot().entries[0].id, 2, "the next query still publishes");
+            });
+        }
     }
 
     fn complete_older_query_after_latest(older_result: Vec<UiIntent>) -> EntriesPageState {
@@ -375,7 +441,7 @@ mod tests {
                 let queries = Rc::clone(&queries);
                 session.spawn_entries_query(async move {
                     let state = session.snapshot();
-                    let query = state.entry_query(None, None, OffsetDateTime::now_utc());
+                    let query = state.entry_query_scope(None, None);
                     assert_eq!(state.page_size(), 50);
                     assert_eq!(query.read_filter, ReadFilter::UnreadOnly);
                     assert_eq!(query.feed_ids, vec![7]);

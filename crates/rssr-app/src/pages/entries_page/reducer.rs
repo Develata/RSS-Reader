@@ -34,6 +34,9 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         Arc::make_mut(&mut state.selected_entry_ids).clear();
     }
     match intent {
+        EntriesPageIntent::ReloadEntries => {
+            state.reload_revision = state.reload_revision.wrapping_add(1);
+        }
         EntriesPageIntent::ClearSelection => {}
         EntriesPageIntent::ToggleSelected(id) => {
             if !state.bulk_busy && state.current_page_entries().iter().any(|entry| entry.id == id) {
@@ -60,7 +63,8 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         EntriesPageIntent::SelectionApplied { ids, action, count } => {
             state.bulk_busy = false;
             state.bulk_writing = false;
-            state.bulk_revision = state.bulk_revision.wrapping_add(1);
+            state.reload_revision = state.reload_revision.wrapping_add(1);
+            state.flags_revision = state.flags_revision.wrapping_add(1);
             let selected = Arc::make_mut(&mut state.selected_entry_ids);
             for id in ids {
                 selected.remove(&id);
@@ -137,6 +141,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             clamp_current_page(state);
         }
         EntriesPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
+            state.flags_revision = state.flags_revision.wrapping_add(1);
             let entries = Arc::make_mut(&mut state.entries);
             if let Some(entry) = entries.iter_mut().find(|entry| entry.id == entry_id) {
                 // 只有被点的那一条需要真正写入，其余条目继续共享原有 Arc。

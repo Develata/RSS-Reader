@@ -59,6 +59,8 @@ CLI 直接复用 `AppUseCases`，不依赖 UI 命令类型。实现边界见
 
 文章列表的 `LoadEntries` 查询保持页面生命周期，并以页面内 generation 校验结果：只有最新发起的查询可发布列表、归档计数和状态，旧查询晚到的成功或失败都被丢弃，避免刷新与筛选切换交错时显示错误结果。该校验不改变写入命令或全局刷新任务的生命周期。
 
+归档截止时间在查询范围、归档设置或刷新代次改变时计算，普通重绘沿用同一时间参数；勾选、目录展开／收起和同一结果集内翻页不触发列表重查。查询期间若已读、收藏或批量写入成功，查询结果视为可能过期：丢弃旧成功／失败并确保按当前范围重新查询，不能覆盖已保存的标记或重新插入已不匹配的文章。没有并发查询时，单条标记仍直接更新当前列表。
+
 首次列表查询还需等待设置、工作区偏好和来源映射全部就绪，避免先按默认分页或筛选显示，再跳到保存的设置。页面内 `Pending / Loaded / Unavailable` 区分等待、成功和读取失败：失败后允许读取文章并保留错误提示，但不保存回退偏好覆盖原值；后续刷新可重试。Bootstrap 不订阅自身的完成状态，避免成功后重复查询来源；独立的 bootstrap generation 丢弃其旧成功和旧失败结果，不与列表查询互相失效。
 
 下拉刷新仅在全局文章页、页面已到顶部且向下拖动至少 80 CSS px 后松手触发；横向、多指、文本选择、表单操作及嵌套滚动区不参与。被动 DOM bridge 只传坐标、滚动和目标事实；Rust 决定 pulling / armed，刷新反馈复用 shell 的 refreshing / finished / error。没有字母 R 快捷键，也没有全局 `touch preventDefault`。
@@ -96,7 +98,7 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 - Android 系统返回沿用现有的 dismiss 优先路径：先关闭来源筛选、目录浮层或来源编辑，之后才返回上一页；来源编辑保存中消耗返回操作并等待结果。Web 的 Esc／取消行为保持不变。实机覆盖范围见本轮交接，编译与状态测试不替代系统返回验收。
 - `stats-grid` 中 `data-stat=feeds|entries|unread|archived` 是全局统计；归档计数为手动与自动归档的并集，不重复计数。
 
-SQLite migration `0008_reading_workspace.sql` 只增加 `entries.is_archived` 与 `feeds.custom_title`；BrowserStore 对相同字段使用 serde 默认值读取旧数据。批量写入走单条 SQL 或单个 FLAGS 提交。来源编辑保持 feed ID，地址变化时清除旧缓存验证器并提升 generation，迟到的旧刷新不能覆盖新地址；工作区已选 URL 同步迁移。配置格式未增字段：JSON `title` 和 OPML 显示名导入时作为自定义名，刷新不会覆盖。
+SQLite migration `0008_reading_workspace.sql` 只增加 `entries.is_archived` 与 `feeds.custom_title`；BrowserStore 对相同字段使用 serde 默认值读取旧数据。批量写入走单条 SQL 或单个 FLAGS 提交。来源编辑保持 feed ID，地址变化时清除旧缓存验证器并提升 generation，迟到的旧刷新不能覆盖新地址；工作区已选 URL 同步迁移。配置格式未增字段：JSON `title` 和 OPML 显示名导入时作为自定义名，刷新不会覆盖；导入不覆盖已有的远端原名，新导入来源在抓取前不伪造远端原名。重新导入后仍可用“使用原名”恢复已有远端名称。
 
 新增 host 路由 `entries/apply_batch`、`feeds/edit_details`、`feeds/update` 供同版本 Web server 使用。未拆 crate、未变更 Reader 布局或扩大配置同步范围。
 

@@ -260,16 +260,34 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         EntriesPageFacade::new(ui, session, Arc::clone(&state_snapshot), presenter.cloned());
     let entry_search = ui.entry_search();
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
-    let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), current_time_utc());
+    let query_scope = state_snapshot.entry_query_scope(feed_id, query_search.clone());
     let preferences_loaded = state_snapshot.preferences_load.is_loaded();
     let entries_ready = state_snapshot.preferences_load.can_load_entries();
     let refresh_revision = ui.refresh_revision();
-    let bulk_revision = state_snapshot.bulk_revision;
+    let reload_revision = state_snapshot.reload_revision;
     let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
     let show_archived = state_snapshot.show_archived;
     let read_filter = state_snapshot.read_filter;
     let starred_filter = state_snapshot.starred_filter;
     let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
+    // Fix the archive clock for a query lifetime. In particular, checking a row
+    // or collapsing the directory must not cause a fresh query a second later.
+    let query_request = (
+        query_scope,
+        show_archived,
+        state_snapshot.archive_after_months,
+        refresh_revision,
+        reload_revision,
+    );
+    let entry_query = use_memo(use_reactive!(|(query_request)| {
+        let (mut query, show_archived, months, ..) = query_request.clone();
+        if !show_archived {
+            query.archive_filter =
+                rssr_domain::ArchiveFilter::exclude_archived(current_time_utc(), months);
+        }
+        query
+    }))
+    .cloned();
 
     use_reactive_side_effect(
         (
@@ -297,7 +315,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     use_reactive_task((feed_id, refresh_revision), move |_| session.bootstrap());
 
     use_reactive_task(
-        (feed_id, entries_ready, entry_query.clone(), refresh_revision, bulk_revision),
+        (feed_id, entries_ready, entry_query.clone(), refresh_revision, reload_revision),
         move |(_, entries_ready, entry_query, _, _)| {
             if entries_ready {
                 session.load_entries_query(entry_query);

@@ -4,7 +4,6 @@ use rssr_domain::{
     ArchiveFilter, EntriesWorkspaceState, EntryGroupingPreference, EntryQuery, EntrySummary,
     FeedSummary, ReadFilter, StarredFilter, UserSettings,
 };
-use time::OffsetDateTime;
 
 pub(crate) const FIRST_PAGE_NUMBER: u32 = 1;
 
@@ -40,7 +39,8 @@ pub(crate) struct EntriesPageState {
     pub(crate) bulk_busy: bool,
     pub(crate) bulk_writing: bool,
     pub(crate) bulk_generation: u64,
-    pub(crate) bulk_revision: u64,
+    pub(crate) reload_revision: u64,
+    pub(crate) flags_revision: u64,
     pub(crate) bulk_notice: Option<String>,
 
     /// Snapshots and presenter inputs share the immutable collection. Flag changes copy
@@ -72,7 +72,8 @@ impl EntriesPageState {
             bulk_busy: false,
             bulk_writing: false,
             bulk_generation: 0,
-            bulk_revision: 0,
+            reload_revision: 0,
+            flags_revision: 0,
             bulk_notice: None,
             entries: Arc::default(),
             archived_count: 0,
@@ -92,25 +93,18 @@ impl EntriesPageState {
         }
     }
 
-    /// 构造这一屏对应的查询。
-    ///
-    /// 归档筛选放在查询里由存储层执行：页面层不再把已归档文章一并读回来再在内存里过滤。
-    /// `now` 由调用方传入，便于测试固定时间。
-    pub(crate) fn entry_query(
+    /// 构造不依赖时钟的查询范围。归档分界由页面 memo 在范围或刷新代次
+    /// 变化时补入；选择、目录和状态文字重绘不能改变查询的时间参数。
+    pub(crate) fn entry_query_scope(
         &self,
         feed_id: Option<i64>,
         search_title: Option<String>,
-        now: OffsetDateTime,
     ) -> EntryQuery {
         EntryQuery {
             feed_id,
             read_filter: self.read_filter,
             starred_filter: self.starred_filter,
-            archive_filter: if self.show_archived {
-                ArchiveFilter::All
-            } else {
-                ArchiveFilter::exclude_archived(now, self.archive_after_months)
-            },
+            archive_filter: ArchiveFilter::All,
             feed_ids: if feed_id.is_some() {
                 Vec::new()
             } else {

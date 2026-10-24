@@ -35,6 +35,69 @@ const SAMPLE_FEED: &str = r#"
 </rss>
 "#;
 
+async fn imported_names_preserve_original_title(config: bool) {
+    use rssr_application::{ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort};
+    use rssr_domain::FeedEditRequest;
+    use rssr_infra::application_adapters::SqlitePersistenceMutations;
+    let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.unwrap();
+    migrate(&pool).await.unwrap();
+    let feeds = SqliteFeedRepository::new(pool.clone());
+    let source = NewFeedSubscription {
+        site_url: None,
+        url: Url::parse("https://example.com/feed").unwrap(),
+        title: Some("Original from feed".into()),
+        folder: None,
+    };
+    let feed = feeds.upsert_subscription(&source).await.unwrap();
+    if config {
+        SqlitePersistenceMutations::new(pool.clone(), pool.clone())
+            .replace_config(ConfigReplacementPlan {
+                feeds: vec![ConfigReplacementFeed {
+                    url: source.url.clone(),
+                    title: Some("Imported alias".into()),
+                    folder: None,
+                }],
+                settings: Default::default(),
+            })
+            .await
+            .unwrap();
+    } else {
+        let saved = feeds
+            .upsert_subscriptions(&[NewFeedSubscription {
+                title: Some("Imported alias".into()),
+                ..source.clone()
+            }])
+            .await
+            .unwrap();
+        assert_eq!(saved[0].title.as_deref(), Some("Imported alias"));
+    }
+    let details = feeds.edit_details(feed.id).await.unwrap();
+    assert_eq!(details.original_title.as_deref(), Some("Original from feed"));
+    assert_eq!(details.custom_title.as_deref(), Some("Imported alias"));
+    feeds
+        .update_subscription(&FeedEditRequest {
+            feed_id: feed.id,
+            url: source.url.to_string(),
+            custom_title: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        feeds.get_feed(feed.id).await.unwrap().unwrap().title.as_deref(),
+        Some("Original from feed")
+    );
+}
+
+#[tokio::test]
+async fn imported_names_preserve_original_title_in_config_replacement() {
+    imported_names_preserve_original_title(true).await;
+}
+
+#[tokio::test]
+async fn imported_names_preserve_original_title_in_opml_merge() {
+    imported_names_preserve_original_title(false).await;
+}
+
 #[tokio::test]
 async fn entry_repository_updates_state_and_supports_search() {
     let backend = NativeSqliteBackend::new("sqlite::memory:");
