@@ -6,6 +6,7 @@ use crate::{
 };
 
 use super::support::{feed_refresh_state_attr, feed_refresh_status_text};
+use crate::components::icon::Icon;
 
 #[component]
 pub(crate) fn SavedFeedsSection(facade: FeedsPageFacade) -> Element {
@@ -34,6 +35,7 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
     let refresh_feed_title = feed.title.clone();
     let delete_feed_title = feed.title.clone();
     let refresh_facade = facade.clone();
+    let edit_facade = facade.clone();
 
     rsx! {
         li {
@@ -67,22 +69,26 @@ fn render_feed_card(feed: &rssr_domain::FeedSummary, facade: FeedsPageFacade) ->
                 p { "data-slot": "confirm-hint", "再次点击「确认删除」将删除订阅：{feed.title}" }
             }
             div { "data-layout": "feed-card-actions",
+                button { class: "workspace-icon-button", "data-action": "edit-feed", aria_label: "编辑来源：{feed.title}", title: "编辑来源", onclick: move |_| edit_facade.edit_feed(feed_id), Icon { name: "edit" } }
                 button {
-                    class: "button",
+                    class: "workspace-icon-button",
                     "data-variant": "secondary",
                     "data-slot": "entry-card-action",
                     "data-action": "refresh-feed",
+                    aria_label: "刷新来源：{feed.title}", title: "刷新来源 · {feed_refresh_status_text(&feed)}",
                     onclick: move |_| refresh_facade.refresh_feed(feed_id, refresh_feed_title.clone()),
-                    "刷新此订阅"
+                    Icon { name: "refresh" }
                 }
                 button {
-                    class: "button",
+                    class: "workspace-icon-button",
                     "data-variant": "{facade.remove_feed_button_variant(feed_id)}",
                     "data-slot": "entry-card-action",
                     "data-state": "{facade.remove_feed_state(feed_id)}",
                     "data-action": "remove-feed",
+                    aria_label: "{facade.remove_feed_button_label(feed_id)}：{feed.title}", title: "{facade.remove_feed_button_label(feed_id)}",
                     onclick: move |_| facade.remove_feed(feed_id, delete_feed_title.clone()),
-                    "{facade.remove_feed_button_label(feed_id)}"
+                    Icon { name: "trash" }
+                    if facade.is_delete_pending_for(feed_id) { span { "确认删除" } }
                 }
             }
         }

@@ -13,6 +13,10 @@ pub trait HealthRepository {
 
 #[async_trait::async_trait]
 pub trait FeedRepository: Send + Sync {
+    async fn edit_details(&self, feed_id: i64) -> crate::Result<crate::FeedEditDetails>;
+    /// 保留订阅 ID、文章与标记；换 URL 时同步迁移来源筛选并使旧刷新任务失效。
+    /// URL 与自定义名称由 application 校验、规范化后传入。
+    async fn update_subscription(&self, edit: &crate::FeedEditRequest) -> crate::Result<()>;
     async fn upsert_subscription(&self, new_feed: &NewFeedSubscription) -> crate::Result<Feed>;
     async fn upsert_subscriptions(
         &self,
@@ -40,6 +44,8 @@ pub trait FeedRepository: Send + Sync {
 
 #[async_trait::async_trait]
 pub trait EntryIndexRepository: Send + Sync {
+    /// 原子地更新明确指定的文章；返回实际发生变化的条目数。
+    async fn apply_entry_batch(&self, request: &crate::EntryBatchRequest) -> crate::Result<u64>;
     async fn preview_mark_read(&self, query: &EntryQuery) -> crate::Result<crate::MarkReadPreview>;
     async fn mark_read_if_unchanged(
         &self,

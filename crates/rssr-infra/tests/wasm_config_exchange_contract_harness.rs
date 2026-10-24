@@ -53,6 +53,7 @@ impl ClockPort for FixedClock {
 
 fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
     PersistedFeed {
+        custom_title: None,
         id,
         url: url.to_string(),
         title: Some(format!("Feed {id}")),
@@ -168,6 +169,7 @@ async fn browser_config_exchange_import_cleans_removed_feed_entries_and_last_ope
         entry_content: PersistedEntryContentSlice { entries: vec![sample_entry_content(1, 2, 1)] },
         entry_flags: PersistedEntryFlagsSlice {
             entries: vec![PersistedEntryFlag {
+                is_archived: false,
                 id: 1,
                 is_read: false,
                 is_starred: false,

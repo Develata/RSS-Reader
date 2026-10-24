@@ -187,14 +187,12 @@ async fn main() -> anyhow::Result<()> {
             let archive_filter = match args.archive_filter {
                 BulkArchiveFilter::All => ArchiveFilter::All,
                 BulkArchiveFilter::Active => cutoff
-                    .map_or(ArchiveFilter::All, |cutoff| ArchiveFilter::ExcludeArchived { cutoff }),
-                BulkArchiveFilter::Archived => match cutoff {
-                    Some(cutoff) => ArchiveFilter::OnlyArchived { cutoff },
-                    None => {
-                        println!("当前归档设置下没有归档文章，待标记 0 篇。");
-                        return Ok(());
-                    }
-                },
+                    .map_or(ArchiveFilter::ExcludeManual, |cutoff| {
+                        ArchiveFilter::ExcludeArchived { cutoff }
+                    }),
+                BulkArchiveFilter::Archived => cutoff.map_or(ArchiveFilter::OnlyManual, |cutoff| {
+                    ArchiveFilter::OnlyArchived { cutoff }
+                }),
             };
             let query = EntryQuery {
                 feed_ids: args.feed_id,

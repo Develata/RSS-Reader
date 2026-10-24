@@ -126,9 +126,9 @@ pub enum StarredFilter {
     UnstarredOnly,
 }
 
-/// 自动归档筛选。
+/// 手动归档与按发布时间自动归档共用的查询筛选。
 ///
-/// 归档只看 `published_at`：没有发布时间的条目永远不算归档（与 [`is_entry_archived`] 一致）。
+/// 自动归档只看 `published_at`；没有发布时间的条目仍可由用户手动归档。
 /// 这个筛选此前是在页面层对全量结果做的内存过滤，意味着每次查询都要把已归档的文章也一并
 /// 读出来再丢掉；放进查询后由存储层直接筛掉，两个平台共用同一套语义。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -136,20 +136,37 @@ pub enum ArchiveFilter {
     /// 不施加归档约束。
     #[default]
     All,
-    /// 只要未归档的：`published_at IS NULL OR published_at >= cutoff`。
+    /// 未启用自动归档时，仅排除手动归档的条目。
+    ExcludeManual,
+    /// 未启用自动归档时，仅统计手动归档的条目。
+    OnlyManual,
+    /// 排除手动归档及发布时间早于 cutoff 的条目。
     ExcludeArchived { cutoff: OffsetDateTime },
-    /// 只要已归档的：`published_at IS NOT NULL AND published_at < cutoff`，用于统计被隐藏的数量。
+    /// 手动归档或发布时间早于 cutoff 的条目，用于统计被隐藏的数量（交集不重复计数）。
     OnlyArchived { cutoff: OffsetDateTime },
 }
 
 impl ArchiveFilter {
-    /// 由「当前时间 + 归档阈值」构造出排除已归档的筛选；阈值为 0 或算不出分界时返回 [`Self::All`]。
+    /// 自动分界不可用时仍保留用户明确设置的手动归档。
     pub fn exclude_archived(now: OffsetDateTime, archive_after_months: u32) -> Self {
         match archive_cutoff_at(now, archive_after_months) {
             Some(cutoff) => Self::ExcludeArchived { cutoff },
-            None => Self::All,
+            None => Self::ExcludeManual,
         }
     }
+}
+
+/// 作用域由用户当前页的勾选冻结，执行时不再按筛选条件扩大集合。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntryBatchRequest {
+    pub entry_ids: Vec<i64>,
+    pub action: EntryBatchAction,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EntryBatchAction {
+    MarkRead,
+    Archive,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]

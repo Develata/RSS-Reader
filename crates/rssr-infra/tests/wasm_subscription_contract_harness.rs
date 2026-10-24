@@ -84,6 +84,7 @@ impl RefreshStorePort for UnusedRefreshStore {
 
 fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
     PersistedFeed {
+        custom_title: None,
         id,
         url: url.to_string(),
         title: Some(format!("Feed {id}")),
@@ -417,6 +418,7 @@ fn navigation_matches_list_order_with_missing_dates_ties_deleted_feeds_and_spars
     state.entry_flags.entries = (1..=128)
         .filter(|id| id % 5 == 0)
         .map(|id| PersistedEntryFlag {
+            is_archived: false,
             id,
             is_read: true,
             is_starred: false,
@@ -486,6 +488,7 @@ async fn browser_bulk_read_matches_sqlite_cases_and_rolls_back_failed_storage() 
     browser.entry_flags.entries = bulk_cases::ROWS
         .iter()
         .map(|&(id, _, _, _, starred, read)| PersistedEntryFlag {
+            is_archived: false,
             id,
             is_read: read,
             is_starred: starred,

@@ -299,3 +299,170 @@ async fn unread_summaries_are_global_idempotent_and_unchanged_on_failure() {
     entries.set_read(all[0].id, false).await.unwrap();
     assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
 }
+
+#[tokio::test]
+async fn selected_batches_are_explicit_atomic_and_manual_archive_preserves_flags() {
+    use rssr_domain::{EntryBatchAction, EntryBatchRequest, EntryIndexRepository};
+    let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.unwrap();
+    migrate(&pool).await.unwrap();
+    let feeds = SqliteFeedRepository::new(pool.clone());
+    let entries = SqliteEntryRepository::new(pool.clone());
+    let feed = feeds
+        .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
+            url: Url::parse("https://example.com/selected").unwrap(),
+            title: Some("Original".into()),
+            folder: None,
+        })
+        .await
+        .unwrap();
+    entries
+        .upsert_entries(feed.id, &FeedParser::new().parse(SAMPLE_FEED).unwrap().entries)
+        .await
+        .unwrap();
+    let all = entries.list_entries(&EntryQuery::default()).await.unwrap();
+    let selected = all[0].id;
+    entries.set_starred(selected, true).await.unwrap();
+    let read = EntryBatchRequest {
+        entry_ids: vec![selected, selected],
+        action: EntryBatchAction::MarkRead,
+    };
+    assert_eq!(entries.apply_entry_batch(&read).await.unwrap(), 1);
+    assert_eq!(entries.apply_entry_batch(&read).await.unwrap(), 0);
+    let all = entries.list_entries(&EntryQuery::default()).await.unwrap();
+    assert!(all.iter().find(|entry| entry.id == selected).unwrap().is_read);
+    assert!(!all.iter().find(|entry| entry.id != selected).unwrap().is_read);
+    sqlx::query("UPDATE entries SET published_at = NULL WHERE id = ?1")
+        .bind(selected)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let archive =
+        EntryBatchRequest { entry_ids: vec![selected], action: EntryBatchAction::Archive };
+    assert_eq!(entries.apply_entry_batch(&archive).await.unwrap(), 1);
+    let visible = entries
+        .list_entries(&EntryQuery {
+            archive_filter: ArchiveFilter::ExcludeManual,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(visible.len(), 1);
+    assert_ne!(visible[0].id, selected);
+    let archived = entries
+        .list_entries(&EntryQuery {
+            archive_filter: ArchiveFilter::OnlyManual,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(archived.len(), 1);
+    assert!(archived[0].is_read && archived[0].is_starred);
+    assert_eq!(
+        entries
+            .count_entries(&EntryQuery {
+                archive_filter: ArchiveFilter::OnlyArchived { cutoff: OffsetDateTime::now_utc() },
+                ..Default::default()
+            })
+            .await
+            .unwrap(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn source_edit_preserves_identity_flags_and_moves_filter_url_while_invalidating_old_refresh()
+{
+    use rssr_domain::{AppStateRepository, AppStateSnapshot, FeedEditRequest};
+    use rssr_infra::db::app_state_repository::SqliteAppStateRepository;
+    let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.unwrap();
+    migrate(&pool).await.unwrap();
+    let feeds = SqliteFeedRepository::new(pool.clone());
+    let entries = SqliteEntryRepository::new(pool.clone());
+    let app_state = SqliteAppStateRepository::new(pool.clone());
+    let feed = feeds
+        .upsert_subscription(&NewFeedSubscription {
+            site_url: None,
+            url: Url::parse("https://example.com/old").unwrap(),
+            title: Some("Original".into()),
+            folder: None,
+        })
+        .await
+        .unwrap();
+    let parsed = FeedParser::new().parse(SAMPLE_FEED).unwrap();
+    entries.upsert_entries(feed.id, &parsed.entries).await.unwrap();
+    let before = entries.list_entries(&EntryQuery::default()).await.unwrap();
+    entries.set_read(before[0].id, true).await.unwrap();
+    entries.set_starred(before[0].id, true).await.unwrap();
+    let old_generation = feeds.get_feed_with_generation(feed.id).await.unwrap().unwrap().1;
+    let mut state = AppStateSnapshot::default();
+    state.entries_workspace.selected_feed_urls.push(feed.url.to_string());
+    app_state.save(&state).await.unwrap();
+    let request = FeedEditRequest {
+        feed_id: feed.id,
+        url: "https://example.com/new".into(),
+        custom_title: Some("My source".into()),
+    };
+    feeds.update_subscription(&request).await.unwrap();
+    let (updated, generation) = feeds.get_feed_with_generation(feed.id).await.unwrap().unwrap();
+    assert_eq!(generation, old_generation + 1);
+    assert_eq!(updated.title.as_deref(), Some("My source"));
+    assert!(
+        feeds.update_feed_metadata_for_generation(feed.id, old_generation, &parsed).await.is_err()
+    );
+    feeds.update_feed_metadata_for_generation(feed.id, generation, &parsed).await.unwrap();
+    assert_eq!(feeds.get_feed(feed.id).await.unwrap().unwrap().title.as_deref(), Some("My source"));
+    let details = feeds.edit_details(feed.id).await.unwrap();
+    assert_eq!(details.original_title.as_deref(), Some("Example Feed"));
+    assert_eq!(
+        app_state.load().await.unwrap().entries_workspace.selected_feed_urls,
+        vec![request.url.clone()]
+    );
+    let after = entries.list_entries(&EntryQuery::default()).await.unwrap();
+    assert_eq!(
+        before.iter().map(|entry| entry.id).collect::<Vec<_>>(),
+        after.iter().map(|entry| entry.id).collect::<Vec<_>>()
+    );
+    assert!(after[0].is_read && after[0].is_starred);
+    assert_eq!(after[0].feed_title, "My source");
+    feeds.update_subscription(&FeedEditRequest { custom_title: None, ..request }).await.unwrap();
+    assert_eq!(
+        feeds.get_feed(feed.id).await.unwrap().unwrap().title.as_deref(),
+        Some("Example Feed")
+    );
+}
+
+#[tokio::test]
+async fn conflicting_source_edit_rolls_back_name_and_url() {
+    use rssr_domain::FeedEditRequest;
+    let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.unwrap();
+    migrate(&pool).await.unwrap();
+    let feeds = SqliteFeedRepository::new(pool);
+    let mut ids = Vec::new();
+    for name in ["one", "two"] {
+        ids.push(
+            feeds
+                .upsert_subscription(&NewFeedSubscription {
+                    site_url: None,
+                    url: Url::parse(&format!("https://example.com/{name}")).unwrap(),
+                    title: Some(name.into()),
+                    folder: None,
+                })
+                .await
+                .unwrap()
+                .id,
+        );
+    }
+    let before = feeds.edit_details(ids[0]).await.unwrap();
+    assert!(
+        feeds
+            .update_subscription(&FeedEditRequest {
+                feed_id: ids[0],
+                url: "https://example.com/two".into(),
+                custom_title: Some("Changed".into())
+            })
+            .await
+            .is_err()
+    );
+    assert_eq!(feeds.edit_details(ids[0]).await.unwrap(), before);
+}

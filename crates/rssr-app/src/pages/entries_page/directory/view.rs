@@ -3,37 +3,23 @@ use crate::pages::entries_page::state::EntryGroupingMode;
 use dioxus::prelude::*;
 
 #[component]
-pub(crate) fn DirectoryTop(model: DirectoryModel) -> Element {
+pub(crate) fn DirectoryRail(
+    model: DirectoryModel,
+    grouping_mode: EntryGroupingMode,
+    on_close: EventHandler,
+) -> Element {
     let DirectoryStore(state) = use_context();
     let state = state.read();
     rsx! {
-        nav { "data-layout": "entry-top-directory", "aria-label": "文章目录",
-            "data-directory-consumer": "top", "data-directory-epoch": "{state.epoch}",
-            "data-directory-revision": "{state.revision}", "data-directory-mode": if state.manual { "manual" } else { "follow" },
-            "data-directory-current-group": state.active().group.as_deref().unwrap_or(""),
-            for item in &model.group_nav_items {
-                button { key: "{item.anchor_id}", "data-layout": "entry-top-directory-chip", r#type: "button",
-                    "data-directory-kind": "group", "data-directory-anchor": "{item.anchor_id}",
-                    "data-directory-page": "{item.target_page}",
-                    "data-active": if state.active().group.as_deref() == Some(&item.anchor_id) { "true" } else { "false" },
-                    span { "data-slot": "entry-directory-title", "{item.title}" }
-                    span { "data-slot": "entry-directory-meta", "{item.subtitle}" }
-                }
-            }
-        }
-    }
-}
-
-#[component]
-pub(crate) fn DirectoryRail(model: DirectoryModel, grouping_mode: EntryGroupingMode) -> Element {
-    let DirectoryStore(state) = use_context();
-    let state = state.read();
-    rsx! {
-        aside { "data-layout": "entry-directory-rail", "data-directory-consumer": "rail",
+        aside { id: "reading-directory", "data-layout": "entry-directory-rail", "data-directory-consumer": "rail",
+            onkeydown: move |event| { if event.key() == Key::Escape { on_close.call(()); } },
             "data-directory-epoch": "{state.epoch}", "data-directory-revision": "{state.revision}",
             "data-directory-mode": if state.manual { "manual" } else { "follow" },
             "data-directory-current-group": state.active().group.as_deref().unwrap_or(""),
-            h2 { "data-slot": "entry-directory-heading", "目录" }
+            div { class: "directory-heading-row",
+                h2 { "data-slot": "entry-directory-heading", "目录" }
+                button { class: "workspace-icon-button", title: "收起目录", aria_label: "收起目录", "data-action": "close-directory", onclick: move |_| on_close.call(()), crate::components::icon::Icon { name: "chevron-right" } }
+            }
             nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
                 if grouping_mode == EntryGroupingMode::Time {
                     for month in &model.directory_months {
@@ -87,7 +73,7 @@ fn toggle(
             "data-can-toggle": "true", "data-open-base": boolean(open), "data-open": boolean(open),
             aria_disabled: "false", aria_expanded: boolean(open),
             span { "data-slot": "entry-directory-title", "{title}" }
-            span { "data-slot": "entry-directory-meta", "{subtitle}" }
+            span { "data-slot": "entry-directory-meta", title: subtitle, "{compact_count(subtitle)}" }
         }
     }
 }
@@ -109,7 +95,11 @@ fn link(
             "data-directory-anchor": anchor, "data-directory-page": "{page}",
             "data-active": boolean(state.active().item.as_deref() == Some(anchor)),
             span { "data-slot": "entry-directory-title", "{title}" }
-            span { "data-slot": "entry-directory-meta", "{subtitle}" }
+            span { "data-slot": "entry-directory-meta", title: subtitle, "{compact_count(subtitle)}" }
         }
     }
+}
+
+fn compact_count(subtitle: &str) -> &str {
+    subtitle.strip_suffix("篇文章").unwrap_or(subtitle).trim()
 }

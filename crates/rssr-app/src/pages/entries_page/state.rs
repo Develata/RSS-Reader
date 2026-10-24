@@ -36,7 +36,7 @@ impl PreferencesLoadState {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct EntriesPageState {
-    pub(crate) bulk_preview: Option<rssr_domain::MarkReadPreview>,
+    pub(crate) selected_entry_ids: Arc<BTreeSet<i64>>,
     pub(crate) bulk_busy: bool,
     pub(crate) bulk_writing: bool,
     pub(crate) bulk_generation: u64,
@@ -56,7 +56,6 @@ pub(crate) struct EntriesPageState {
     pub(crate) grouping_mode: EntryGroupingMode,
     pub(crate) archive_after_months: u32,
     pub(crate) entries_page_size: u32,
-    pub(crate) controls_hidden: bool,
     pub(crate) current_page: u32,
     pub(crate) entries_loaded: bool,
     pub(crate) status: String,
@@ -65,11 +64,11 @@ pub(crate) struct EntriesPageState {
 }
 
 impl EntriesPageState {
-    pub(crate) fn new(initial_controls_hidden: bool) -> Self {
+    pub(crate) fn new() -> Self {
         let settings = UserSettings::default();
         let workspace = EntriesWorkspaceState::default();
         Self {
-            bulk_preview: None,
+            selected_entry_ids: Arc::default(),
             bulk_busy: false,
             bulk_writing: false,
             bulk_generation: 0,
@@ -85,7 +84,6 @@ impl EntriesPageState {
             grouping_mode: entry_grouping_mode_from_preference(workspace.grouping_mode),
             archive_after_months: settings.archive_after_months,
             entries_page_size: settings.entries_page_size.max(1),
-            controls_hidden: initial_controls_hidden,
             current_page: FIRST_PAGE_NUMBER,
             entries_loaded: false,
             status: "正在加载文章列表…".to_string(),
@@ -125,6 +123,14 @@ impl EntriesPageState {
 
     pub(crate) fn page_size(&self) -> usize {
         self.entries_page_size.max(1) as usize
+    }
+
+    pub(crate) fn current_page_entries(&self) -> &[Arc<EntrySummary>] {
+        let start = ((self.current_page.saturating_sub(1) as usize)
+            .saturating_mul(self.page_size()))
+        .min(self.entries.len());
+        let end = start.saturating_add(self.page_size()).min(self.entries.len());
+        &self.entries[start..end]
     }
 
     pub(crate) fn position_key(&self, feed_id: Option<i64>, search: Option<&str>) -> String {
@@ -167,9 +173,11 @@ pub(crate) fn map_selected_feed_urls_to_ids(
     }
 
     let selected = selected_feed_urls.iter().map(String::as_str).collect::<BTreeSet<_>>();
-    feeds
+    let ids = feeds
         .iter()
         .filter(|feed| selected.contains(feed.url.as_str()))
         .map(|feed| feed.id)
-        .collect::<Vec<_>>()
+        .collect::<Vec<_>>();
+    // An obsolete URL must match no subscriptions, never broaden to the empty/all scope.
+    if ids.is_empty() { vec![-1] } else { ids }
 }

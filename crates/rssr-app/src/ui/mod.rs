@@ -22,6 +22,5 @@ pub(crate) use self::{
         use_startup_route_bus, use_web_auth_gate_shell,
     },
     shell_browser::wait_for_refresh_feedback,
-    shell_prefs::{initial_entry_controls_hidden, remember_entry_controls_hidden},
     snapshot::UiIntent,
 };

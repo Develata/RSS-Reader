@@ -278,7 +278,10 @@ impl SqliteFeedRepository {
         Ok(Feed {
             id: row.try_get("id").map_err(map_sqlx_error)?,
             url: parse_url(row.try_get::<String, _>("url").map_err(map_sqlx_error)?)?,
-            title: row.try_get("title").map_err(map_sqlx_error)?,
+            title: row
+                .try_get::<Option<String>, _>("custom_title")
+                .map_err(map_sqlx_error)?
+                .or(row.try_get("title").map_err(map_sqlx_error)?),
             site_url: parse_optional_url(row.try_get("site_url").map_err(map_sqlx_error)?)?,
             description: row.try_get("description").map_err(map_sqlx_error)?,
             icon_url: parse_optional_url(row.try_get("icon_url").map_err(map_sqlx_error)?)?,
@@ -301,6 +304,66 @@ impl SqliteFeedRepository {
 
 #[async_trait::async_trait]
 impl FeedRepository for SqliteFeedRepository {
+    async fn edit_details(&self, feed_id: i64) -> DomainResult<rssr_domain::FeedEditDetails> {
+        let row = sqlx::query(
+            "SELECT url, title, custom_title FROM feeds WHERE id = ?1 AND is_deleted = 0",
+        )
+        .bind(feed_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_error)?
+        .ok_or(DomainError::NotFound)?;
+        Ok(rssr_domain::FeedEditDetails {
+            feed_id,
+            url: row.get("url"),
+            original_title: row.get("title"),
+            custom_title: row.get("custom_title"),
+        })
+    }
+
+    async fn update_subscription(&self, edit: &rssr_domain::FeedEditRequest) -> DomainResult<()> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await.map_err(map_sqlx_error)?;
+        let old_url: String =
+            sqlx::query_scalar("SELECT url FROM feeds WHERE id = ?1 AND is_deleted = 0")
+                .bind(edit.feed_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(map_sqlx_error)?
+                .ok_or(DomainError::NotFound)?;
+        let duplicate: i64 =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM feeds WHERE url = ?1 AND id != ?2)")
+                .bind(&edit.url)
+                .bind(edit.feed_id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(map_sqlx_error)?;
+        if duplicate != 0 {
+            return Err(DomainError::InvalidInput(
+                "该地址已属于另一个订阅，请使用不同的地址".into(),
+            ));
+        }
+        let changed_url = old_url != edit.url;
+        sqlx::query("UPDATE feeds SET url = ?2, custom_title = ?3, updated_at = ?4, generation = generation + ?5, etag = CASE WHEN ?5 THEN NULL ELSE etag END, last_modified = CASE WHEN ?5 THEN NULL ELSE last_modified END, last_fetched_at = CASE WHEN ?5 THEN NULL ELSE last_fetched_at END, last_success_at = CASE WHEN ?5 THEN NULL ELSE last_success_at END, fetch_error = CASE WHEN ?5 THEN NULL ELSE fetch_error END, site_url = CASE WHEN ?5 THEN NULL ELSE site_url END, icon_url = CASE WHEN ?5 THEN NULL ELSE icon_url END, description = CASE WHEN ?5 THEN NULL ELSE description END WHERE id = ?1")
+            .bind(edit.feed_id).bind(&edit.url).bind(&edit.custom_title).bind(now_rfc3339()).bind(changed_url)
+            .execute(&mut *tx).await.map_err(map_sqlx_error)?;
+        if changed_url {
+            let raw: Option<String> =
+                sqlx::query_scalar("SELECT value FROM app_settings WHERE key = 'app_state_v2'")
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(map_sqlx_error)?;
+            if let Some(raw) = raw {
+                let mut state: rssr_domain::AppStateSnapshot = serde_json::from_str(&raw)
+                    .map_err(|e| DomainError::Persistence(e.to_string()))?;
+                state.replace_feed_url(&old_url, &edit.url);
+                let raw = serde_json::to_string(&state)
+                    .map_err(|e| DomainError::Persistence(e.to_string()))?;
+                sqlx::query("UPDATE app_settings SET value = ?1, updated_at = ?2 WHERE key = 'app_state_v2'")
+                    .bind(raw).bind(now_rfc3339()).execute(&mut *tx).await.map_err(map_sqlx_error)?;
+            }
+        }
+        tx.commit().await.map_err(map_sqlx_error)
+    }
     async fn upsert_subscription(&self, new_feed: &NewFeedSubscription) -> DomainResult<Feed> {
         Ok(self.activate_subscription_with_generation(new_feed, false).await?.0)
     }
@@ -321,9 +384,10 @@ impl FeedRepository for SqliteFeedRepository {
 
             sqlx::query(
                 r#"
-                INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url)
-                VALUES (?1, ?2, ?3, ?4, ?4, ?5)
+                INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url, custom_title)
+                VALUES (?1, ?2, ?3, ?4, ?4, ?5, NULLIF(?2, ''))
                 ON CONFLICT(url) DO UPDATE SET
+                    custom_title = CASE WHEN excluded.title IS NULL THEN feeds.custom_title ELSE NULLIF(excluded.title, '') END,
                     title = CASE
                         WHEN excluded.title IS NULL THEN feeds.title
                         ELSE NULLIF(excluded.title, '')
@@ -431,7 +495,7 @@ impl FeedRepository for SqliteFeedRepository {
         let rows = sqlx::query(
             r#"
             SELECT feeds.id,
-                   COALESCE(feeds.title, feeds.url) AS title,
+                   COALESCE(feeds.custom_title, feeds.title, feeds.url) AS title,
                    feeds.url AS url,
                    COALESCE(SUM(CASE WHEN entries.is_read = 0 THEN 1 ELSE 0 END), 0) AS unread_count,
                    COUNT(entries.id) AS entry_count,

@@ -34,6 +34,7 @@ impl BrowserEntryRepository {
                         Some(index) => index,
                         None => {
                             state.entry_flags.entries.push(PersistedEntryFlag {
+                                is_archived: false,
                                 id: entry_id,
                                 is_read: false,
                                 is_starred: false,
@@ -52,6 +53,66 @@ impl BrowserEntryRepository {
 }
 #[async_trait::async_trait]
 impl EntryIndexRepository for BrowserEntryRepository {
+    async fn apply_entry_batch(
+        &self,
+        request: &rssr_domain::EntryBatchRequest,
+    ) -> rssr_domain::Result<u64> {
+        let request = request.clone();
+        self.store
+            .update(move |state| {
+                let active = state
+                    .core
+                    .feeds
+                    .iter()
+                    .filter(|feed| !feed.is_deleted)
+                    .map(|feed| feed.id)
+                    .collect::<HashSet<_>>();
+                let requested = request.entry_ids.into_iter().collect::<HashSet<_>>();
+                let ids = state
+                    .core
+                    .entries
+                    .iter()
+                    .filter(|entry| {
+                        requested.contains(&entry.id) && active.contains(&entry.feed_id)
+                    })
+                    .map(|entry| entry.id)
+                    .collect::<HashSet<_>>();
+                let mut changed = 0;
+                let now = now_utc();
+                let existing =
+                    state.entry_flags.entries.iter().map(|flag| flag.id).collect::<HashSet<_>>();
+                for id in ids.difference(&existing) {
+                    state.entry_flags.entries.push(PersistedEntryFlag {
+                        id: *id,
+                        is_read: false,
+                        is_starred: false,
+                        is_archived: false,
+                        read_at: None,
+                        starred_at: None,
+                    });
+                }
+                for flag in &mut state.entry_flags.entries {
+                    if !ids.contains(&flag.id) {
+                        continue;
+                    }
+                    match request.action {
+                        rssr_domain::EntryBatchAction::MarkRead if !flag.is_read => {
+                            flag.is_read = true;
+                            flag.read_at = Some(now);
+                            changed += 1;
+                        }
+                        rssr_domain::EntryBatchAction::Archive if !flag.is_archived => {
+                            flag.is_archived = true;
+                            changed += 1;
+                        }
+                        _ => {}
+                    }
+                }
+                Ok((changed, if changed == 0 { Changes::NONE } else { Changes::FLAGS }))
+            })
+            .await
+            .map_err(map_store_error)
+    }
     async fn preview_mark_read(
         &self,
         query: &EntryQuery,
@@ -98,6 +159,7 @@ impl EntryIndexRepository for BrowserEntryRepository {
                 }
                 state.entry_flags.entries.extend(missing.into_iter().map(|id| {
                     PersistedEntryFlag {
+                        is_archived: false,
                         id,
                         is_read: true,
                         is_starred: false,

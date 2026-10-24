@@ -23,6 +23,8 @@ const APP_STYLESHEET: &str = concat!(
     include_str!("../../../assets/styles/reader.css"),
     "\n",
     include_str!("../../../assets/styles/responsive.css"),
+    "\n",
+    include_str!("../../../assets/styles/reading-workspace.css"),
 );
 
 #[component]

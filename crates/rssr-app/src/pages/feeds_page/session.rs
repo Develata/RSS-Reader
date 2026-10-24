@@ -237,6 +237,8 @@ mod tests {
             feeds: Vec::new(),
             feed_count: count,
             entry_count: count * 10,
+            unread_count: 0,
+            archived_count: 0,
         })))]
     }
 

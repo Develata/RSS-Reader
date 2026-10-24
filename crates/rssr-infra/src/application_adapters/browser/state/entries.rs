@@ -245,6 +245,7 @@ mod tests {
             updated_at: timestamp,
         });
         state.entry_flags.entries.push(PersistedEntryFlag {
+            is_archived: false,
             id: 1,
             is_read: true,
             is_starred: true,

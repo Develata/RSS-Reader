@@ -33,6 +33,10 @@ impl HostServices {
 
     // ---- entries ----
 
+    pub async fn apply_entry_batch(&self, request: rssr_domain::EntryBatchRequest) -> Result<u64> {
+        self.use_cases.entries_list_service.apply_entry_batch(request).await
+    }
+
     pub async fn preview_mark_read(&self, query: &EntryQuery) -> Result<MarkReadPreview> {
         self.use_cases.entries_list_service.preview_mark_read(query).await
     }
@@ -141,6 +145,13 @@ impl HostServices {
     }
 
     // ---- feeds ----
+
+    pub async fn feed_edit_details(&self, feed_id: i64) -> Result<rssr_domain::FeedEditDetails> {
+        self.use_cases.feed_service.edit_details(feed_id).await
+    }
+    pub async fn update_subscription(&self, edit: rssr_domain::FeedEditRequest) -> Result<()> {
+        self.use_cases.feed_service.update_subscription(edit).await
+    }
 
     pub async fn load_feeds_snapshot(&self) -> Result<FeedsSnapshotOutcome> {
         self.use_cases.feeds_snapshot_service.load_snapshot().await

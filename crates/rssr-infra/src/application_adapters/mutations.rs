@@ -354,10 +354,11 @@ async fn upsert_config_feed(
 
     sqlx::query(
         r#"
-        INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url)
-        VALUES (?1, ?2, ?3, ?4, ?4, NULL)
+        INSERT INTO feeds (url, title, folder, created_at, updated_at, site_url, custom_title)
+        VALUES (?1, ?2, ?3, ?4, ?4, NULL, ?2)
         ON CONFLICT(url) DO UPDATE SET
             title = excluded.title,
+            custom_title = excluded.title,
             folder = excluded.folder,
             site_url = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.site_url END,
             description = CASE WHEN feeds.is_deleted = 1 THEN NULL ELSE feeds.description END,

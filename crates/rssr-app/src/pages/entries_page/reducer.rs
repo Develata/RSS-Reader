@@ -16,41 +16,74 @@ pub(crate) fn dispatch_entries_page_intent(
 }
 
 pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: EntriesPageIntent) {
+    let previous_page = state.current_page;
+    if matches!(&intent, EntriesPageIntent::SetGroupingMode(mode) if *mode == state.grouping_mode) {
+        return;
+    }
+    if matches!(
+        &intent,
+        EntriesPageIntent::ClearSelection
+            | EntriesPageIntent::ClearFilters
+            | EntriesPageIntent::SetGroupingMode(_)
+            | EntriesPageIntent::SetShowArchived(_)
+            | EntriesPageIntent::SetReadFilter(_)
+            | EntriesPageIntent::SetStarredFilter(_)
+            | EntriesPageIntent::SetSelectedFeedUrls(_)
+            | EntriesPageIntent::ApplyLoadedWorkspaceState(_)
+    ) {
+        Arc::make_mut(&mut state.selected_entry_ids).clear();
+    }
     match intent {
+        EntriesPageIntent::ClearSelection => {}
+        EntriesPageIntent::ToggleSelected(id) => {
+            if !state.bulk_busy && state.current_page_entries().iter().any(|entry| entry.id == id) {
+                let selected = Arc::make_mut(&mut state.selected_entry_ids);
+                if !selected.remove(&id) {
+                    selected.insert(id);
+                }
+            }
+        }
+        EntriesPageIntent::TogglePageSelection => {
+            if !state.bulk_busy {
+                let ids = state
+                    .current_page_entries()
+                    .iter()
+                    .map(|entry| entry.id)
+                    .collect::<std::collections::BTreeSet<_>>();
+                state.selected_entry_ids = Arc::new(if ids == *state.selected_entry_ids {
+                    Default::default()
+                } else {
+                    ids
+                });
+            }
+        }
+        EntriesPageIntent::SelectionApplied { ids, action, count } => {
+            state.bulk_busy = false;
+            state.bulk_writing = false;
+            state.bulk_revision = state.bulk_revision.wrapping_add(1);
+            let selected = Arc::make_mut(&mut state.selected_entry_ids);
+            for id in ids {
+                selected.remove(&id);
+            }
+            let verb = match action {
+                rssr_domain::EntryBatchAction::MarkRead => "标为已读",
+                rssr_domain::EntryBatchAction::Archive => "归档",
+            };
+            let message = format!("已{verb} {count} 篇所选文章。");
+            state.bulk_notice = Some(message.clone());
+            state.status = message;
+            state.status_tone = "success".into();
+        }
         EntriesPageIntent::BeginBulk { writing } => {
             state.bulk_generation = state.bulk_generation.wrapping_add(1);
             state.bulk_busy = true;
             state.bulk_writing = writing;
         }
         EntriesPageIntent::CancelBulk => {
-            state.bulk_preview = None;
             if !state.bulk_writing {
                 state.bulk_generation = state.bulk_generation.wrapping_add(1);
                 state.bulk_busy = false;
             }
-        }
-        EntriesPageIntent::BulkPreview(preview) => {
-            let changed = state.bulk_writing;
-            state.bulk_busy = false;
-            state.bulk_writing = false;
-            state.status = if changed {
-                "匹配的未读文章已变化，请重新确认。".into()
-            } else if preview.unread_entry_ids.is_empty() {
-                "当前筛选下没有未读文章。".into()
-            } else {
-                "请确认批量已读范围。".into()
-            };
-            state.status_tone = "info".into();
-            state.bulk_preview = Some(preview);
-        }
-        EntriesPageIntent::BulkApplied(count) => {
-            state.bulk_busy = false;
-            state.bulk_writing = false;
-            state.bulk_preview = None;
-            state.bulk_revision = state.bulk_revision.wrapping_add(1);
-            state.bulk_notice = Some(format!("已将 {count} 篇文章标为已读。"));
-            state.status = format!("已将 {count} 篇文章标为已读。");
-            state.status_tone = "success".into();
         }
         EntriesPageIntent::BulkFailed(message) => {
             state.bulk_busy = false;
@@ -161,7 +194,17 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
         EntriesPageIntent::GoToPreviousPage => {
             state.current_page = state.current_page.saturating_sub(1).max(FIRST_PAGE_NUMBER);
         }
-        EntriesPageIntent::SetControlsHidden(hidden) => state.controls_hidden = hidden,
+    }
+    if previous_page != state.current_page {
+        Arc::make_mut(&mut state.selected_entry_ids).clear();
+    } else if !state.selected_entry_ids.is_empty() {
+        // Refresh/flag updates may remove rows. Never leave invisible articles selected.
+        let start = ((state.current_page.saturating_sub(1) as usize) * state.page_size())
+            .min(state.entries.len());
+        let end = (start + state.page_size()).min(state.entries.len());
+        let entries = &state.entries[start..end];
+        Arc::make_mut(&mut state.selected_entry_ids)
+            .retain(|id| entries.iter().any(|entry| entry.id == *id));
     }
 }
 
@@ -220,8 +263,66 @@ mod tests {
     }
 
     #[test]
+    fn selection_is_page_scoped_and_same_page_directory_navigation_preserves_it() {
+        let mut state = EntriesPageState::new();
+        state.entries_page_size = 2;
+        state.entries = (1..=4).map(|id| Arc::new(entry(id, false))).collect::<Vec<_>>().into();
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::ToggleSelected(3));
+        assert!(state.selected_entry_ids.is_empty(), "cannot select an invisible row");
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::TogglePageSelection);
+        assert_eq!(state.selected_entry_ids.iter().copied().collect::<Vec<_>>(), vec![1, 2]);
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::SetCurrentPage(1));
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::PatchEntryFlags {
+                entry_id: 1,
+                is_read: Some(true),
+                is_starred: None,
+            },
+        );
+        assert_eq!(
+            state.selected_entry_ids.len(),
+            2,
+            "same page jump and metadata updates preserve selection"
+        );
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::SetCurrentPage(2));
+        assert!(state.selected_entry_ids.is_empty());
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::TogglePageSelection);
+        assert_eq!(state.selected_entry_ids.iter().copied().collect::<Vec<_>>(), vec![3, 4]);
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::SetReadFilter(ReadFilter::UnreadOnly),
+        );
+        assert!(state.selected_entry_ids.is_empty());
+    }
+
+    #[test]
+    fn selection_is_reconciled_when_a_selected_row_leaves_the_filter() {
+        let mut state = EntriesPageState::new();
+        state.read_filter = ReadFilter::UnreadOnly;
+        state.entries = vec![Arc::new(entry(1, false)), Arc::new(entry(2, false))].into();
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::TogglePageSelection);
+        reduce_entries_page_intent(
+            &mut state,
+            EntriesPageIntent::PatchEntryFlags {
+                entry_id: 1,
+                is_read: Some(true),
+                is_starred: None,
+            },
+        );
+        assert_eq!(state.selected_entry_ids.iter().copied().collect::<Vec<_>>(), vec![2]);
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::BeginBulk { writing: true });
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::ToggleSelected(2));
+        assert_eq!(
+            state.selected_entry_ids.len(),
+            1,
+            "an in-flight batch freezes selection controls"
+        );
+    }
+
+    #[test]
     fn patch_entry_flags_removes_entry_that_no_longer_matches_filter() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.read_filter = ReadFilter::UnreadOnly;
         state.entries = vec![Arc::new(entry(1, false))].into();
 
@@ -239,7 +340,7 @@ mod tests {
 
     #[test]
     fn set_entries_clamps_current_page() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.current_page = 9;
 
         reduce_entries_page_intent(
@@ -252,7 +353,7 @@ mod tests {
 
     #[test]
     fn changing_filters_resets_current_page() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.current_page = 4;
 
         reduce_entries_page_intent(
@@ -265,7 +366,7 @@ mod tests {
 
     #[test]
     fn changing_page_updates_current_page() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries_page_size = 1;
         state.entries = vec![Arc::new(entry(1, false)), Arc::new(entry(2, false))].into();
 
@@ -276,7 +377,7 @@ mod tests {
 
     #[test]
     fn pagination_clamps_and_preserves_filters_and_source_selection() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries_page_size = 1;
         state.entries = vec![Arc::new(entry(1, false)), Arc::new(entry(2, false))].into();
         state.selected_feed_urls = vec!["https://example.com/中文 feed".into()];
@@ -295,7 +396,7 @@ mod tests {
 
     #[test]
     fn flag_updates_preserve_previous_shared_snapshot() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries = vec![Arc::new(entry(1, false)), Arc::new(entry(2, false))].into();
         let snapshot = state.clone();
         assert!(Arc::ptr_eq(&state.entries, &snapshot.entries));

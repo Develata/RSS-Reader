@@ -643,6 +643,28 @@ impl SqliteEntryRepository {
 
 #[async_trait::async_trait]
 impl EntryIndexRepository for SqliteEntryRepository {
+    async fn apply_entry_batch(
+        &self,
+        request: &rssr_domain::EntryBatchRequest,
+    ) -> DomainResult<u64> {
+        let ids = serde_json::to_string(&request.entry_ids)
+            .map_err(|err| DomainError::InvalidInput(err.to_string()))?;
+        let sql = match request.action {
+            rssr_domain::EntryBatchAction::MarkRead => {
+                "UPDATE entries SET is_read = 1, read_at = ?1, updated_at = ?1 WHERE is_read = 0 AND id IN (SELECT value FROM json_each(?2)) AND feed_id IN (SELECT id FROM feeds WHERE is_deleted = 0)"
+            }
+            rssr_domain::EntryBatchAction::Archive => {
+                "UPDATE entries SET is_archived = 1, updated_at = ?1 WHERE is_archived = 0 AND id IN (SELECT value FROM json_each(?2)) AND feed_id IN (SELECT id FROM feeds WHERE is_deleted = 0)"
+            }
+        };
+        Ok(sqlx::query(sql)
+            .bind(now_rfc3339())
+            .bind(ids)
+            .execute(&self.index_pool)
+            .await
+            .map_err(map_sqlx_error)?
+            .rows_affected())
+    }
     async fn preview_mark_read(
         &self,
         query: &EntryQuery,
@@ -692,7 +714,7 @@ impl EntryIndexRepository for SqliteEntryRepository {
             SELECT entries.id,
                    entries.feed_id,
                    entries.title,
-                   COALESCE(feeds.title, feeds.url) AS feed_title,
+                   COALESCE(feeds.custom_title, feeds.title, feeds.url) AS feed_title,
                    entries.published_at,
                    entries.is_read,
                    entries.is_starred
@@ -1096,17 +1118,23 @@ fn push_entry_query_filters<'a>(qb: &mut QueryBuilder<'a, Sqlite>, query: &'a En
             qb.push(" AND entries.is_starred = 0");
         }
     }
-    // 归档只看 published_at；没有发布时间的条目永远不算归档，必须显式保留 NULL。
+    // 手动归档与时间阈值取并集；没有发布时间的条目仍可手动归档。
     match query.archive_filter {
         ArchiveFilter::All => {}
+        ArchiveFilter::ExcludeManual => {
+            qb.push(" AND entries.is_archived = 0");
+        }
+        ArchiveFilter::OnlyManual => {
+            qb.push(" AND entries.is_archived = 1");
+        }
         ArchiveFilter::ExcludeArchived { cutoff } => {
-            qb.push(" AND (entries.published_at IS NULL OR entries.published_at >= ")
+            qb.push(" AND entries.is_archived = 0 AND (entries.published_at IS NULL OR entries.published_at >= ")
                 .push_bind(format_archive_cutoff(cutoff))
                 .push(")");
         }
         ArchiveFilter::OnlyArchived { cutoff } => {
-            qb.push(" AND entries.published_at IS NOT NULL AND entries.published_at < ")
-                .push_bind(format_archive_cutoff(cutoff));
+            qb.push(" AND (entries.is_archived = 1 OR (entries.published_at IS NOT NULL AND entries.published_at < ")
+                .push_bind(format_archive_cutoff(cutoff)).push("))");
         }
     }
     if let Some(search) = &query.search_title {

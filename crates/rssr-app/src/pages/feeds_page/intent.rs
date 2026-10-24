@@ -2,6 +2,8 @@ use rssr_domain::FeedSummary;
 
 #[derive(Debug, Clone)]
 pub(crate) struct FeedsPageSnapshot {
+    pub(crate) unread_count: usize,
+    pub(crate) archived_count: u64,
     pub(crate) feeds: Vec<FeedSummary>,
     pub(crate) feed_count: usize,
     pub(crate) entry_count: usize,
@@ -9,6 +11,13 @@ pub(crate) struct FeedsPageSnapshot {
 
 #[derive(Debug, Clone)]
 pub(crate) enum FeedsPageIntent {
+    EditRequested(i64),
+    EditLoaded { feed_id: i64, result: Result<rssr_domain::FeedEditDetails, String> },
+    EditTitleChanged(String),
+    EditUrlChanged(String),
+    EditClosed,
+    EditSaveRequested,
+    EditSaved { feed_id: i64, result: Result<(), String> },
     FeedCandidates { page_url: url::Url, candidates: Vec<rssr_application::FeedDiscoveryCandidate> },
     SelectFeedCandidate(usize),
     CancelFeedCandidates,

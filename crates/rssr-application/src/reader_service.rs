@@ -134,6 +134,12 @@ mod tests {
 
     #[async_trait::async_trait]
     impl EntryIndexRepository for EntryIndexRepositoryStub {
+        async fn apply_entry_batch(
+            &self,
+            _request: &rssr_domain::EntryBatchRequest,
+        ) -> rssr_domain::Result<u64> {
+            Err(rssr_domain::DomainError::InvalidInput("batch not used by this test double".into()))
+        }
         async fn preview_mark_read(
             &self,
             _query: &EntryQuery,
@@ -218,6 +224,18 @@ mod tests {
 
     #[async_trait::async_trait]
     impl rssr_domain::FeedRepository for FeedRepositoryStub {
+        async fn edit_details(
+            &self,
+            _feed_id: i64,
+        ) -> rssr_domain::Result<rssr_domain::FeedEditDetails> {
+            Err(rssr_domain::DomainError::NotFound)
+        }
+        async fn update_subscription(
+            &self,
+            _edit: &rssr_domain::FeedEditRequest,
+        ) -> rssr_domain::Result<()> {
+            Err(rssr_domain::DomainError::InvalidInput("edit not used by this test double".into()))
+        }
         async fn upsert_subscription(
             &self,
             _: &rssr_domain::NewFeedSubscription,

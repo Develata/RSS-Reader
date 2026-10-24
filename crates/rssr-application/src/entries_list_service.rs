@@ -40,6 +40,20 @@ pub struct EntriesListService {
 }
 
 impl EntriesListService {
+    pub async fn apply_entry_batch(
+        &self,
+        mut request: rssr_domain::EntryBatchRequest,
+    ) -> anyhow::Result<u64> {
+        anyhow::ensure!(!request.entry_ids.is_empty(), "请先选择文章");
+        anyhow::ensure!(
+            request.entry_ids.len() <= rssr_domain::MAX_ENTRIES_PAGE_SIZE as usize,
+            "所选文章超过单页上限"
+        );
+        anyhow::ensure!(request.entry_ids.iter().all(|id| *id > 0), "文章 ID 不合法");
+        request.entry_ids.sort_unstable();
+        request.entry_ids.dedup();
+        self.entry_repository.apply_entry_batch(&request).await.context("处理所选文章失败")
+    }
     pub async fn preview_mark_read(
         &self,
         query: &EntryQuery,
@@ -74,7 +88,17 @@ impl EntriesListService {
                     .await
                     .context("统计已归档文章数失败")?
             }
-            ArchiveFilter::All | ArchiveFilter::OnlyArchived { .. } => 0,
+            ArchiveFilter::ExcludeManual => self
+                .entry_repository
+                .count_entries(&EntryQuery {
+                    archive_filter: ArchiveFilter::OnlyManual,
+                    ..query.clone()
+                })
+                .await
+                .context("统计已归档文章数失败")?,
+            ArchiveFilter::All | ArchiveFilter::OnlyArchived { .. } | ArchiveFilter::OnlyManual => {
+                0
+            }
         };
 
         Ok(EntriesListOutcome { entries, archived_count })
@@ -124,6 +148,12 @@ mod tests {
 
     #[async_trait::async_trait]
     impl EntryIndexRepository for EntryRepositoryStub {
+        async fn apply_entry_batch(
+            &self,
+            _request: &rssr_domain::EntryBatchRequest,
+        ) -> rssr_domain::Result<u64> {
+            Err(rssr_domain::DomainError::InvalidInput("batch not used by this test double".into()))
+        }
         async fn preview_mark_read(
             &self,
             _query: &EntryQuery,

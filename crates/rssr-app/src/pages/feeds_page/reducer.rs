@@ -17,6 +17,85 @@ pub(crate) fn reduce_feeds_page_intent(
     intent: FeedsPageIntent,
 ) -> Vec<UiCommand> {
     match intent {
+        FeedsPageIntent::EditRequested(feed_id) => {
+            if state.edit_busy && state.edit_details.is_some() {
+                return Vec::new();
+            }
+            state.edit_feed_id = Some(feed_id);
+            state.edit_details = None;
+            state.edit_error = None;
+            state.edit_busy = true;
+            vec![UiCommand::Feeds(FeedsCommand::LoadEdit { feed_id })]
+        }
+        FeedsPageIntent::EditLoaded { feed_id, result } => {
+            if state.edit_feed_id == Some(feed_id) {
+                state.edit_busy = false;
+                match result {
+                    Ok(details) => state.edit_details = Some(details),
+                    Err(error) => state.edit_error = Some(error),
+                }
+            }
+            Vec::new()
+        }
+        FeedsPageIntent::EditTitleChanged(title) => {
+            if !state.edit_busy
+                && let Some(edit) = &mut state.edit_details
+            {
+                edit.custom_title = (!title.is_empty()).then_some(title);
+            }
+            Vec::new()
+        }
+        FeedsPageIntent::EditUrlChanged(url) => {
+            if !state.edit_busy
+                && let Some(edit) = &mut state.edit_details
+            {
+                edit.url = url;
+            }
+            Vec::new()
+        }
+        FeedsPageIntent::EditClosed => {
+            if !state.edit_busy || state.edit_details.is_none() {
+                state.edit_feed_id = None;
+                state.edit_details = None;
+                state.edit_error = None;
+                state.edit_busy = false;
+            }
+            Vec::new()
+        }
+        FeedsPageIntent::EditSaveRequested => {
+            if state.edit_busy {
+                return Vec::new();
+            }
+            let Some(edit) = &state.edit_details else {
+                return Vec::new();
+            };
+            state.edit_busy = true;
+            state.edit_error = None;
+            vec![UiCommand::Feeds(FeedsCommand::SaveEdit {
+                edit: rssr_domain::FeedEditRequest {
+                    feed_id: edit.feed_id,
+                    url: edit.url.clone(),
+                    custom_title: edit.custom_title.clone(),
+                },
+            })]
+        }
+        FeedsPageIntent::EditSaved { feed_id, result } => {
+            if state.edit_feed_id == Some(feed_id) {
+                state.edit_busy = false;
+                match result {
+                    Ok(()) => {
+                        state.edit_feed_id = None;
+                        state.edit_details = None;
+                        state.edit_error = None;
+                        state.reload_tick += 1;
+                        state.status = "来源已更新。".into();
+                        state.status_tone = "success".into();
+                    }
+                    Err(error) => state.edit_error = Some(error),
+                }
+            }
+            Vec::new()
+        }
         FeedsPageIntent::FeedCandidates { page_url, candidates } => {
             if state.adding_feed_url.as_deref() == Some(state.feed_url.as_str()) {
                 state.feed_candidates = Some((page_url, candidates));
@@ -142,6 +221,8 @@ pub(crate) fn reduce_feeds_page_intent(
                 Ok(snapshot) => {
                     state.feed_count = snapshot.feed_count;
                     state.entry_count = snapshot.entry_count;
+                    state.unread_count = snapshot.unread_count;
+                    state.archived_count = snapshot.archived_count;
                     state.feeds = snapshot.feeds;
                 }
                 Err(err) => {

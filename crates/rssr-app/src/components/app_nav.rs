@@ -82,11 +82,7 @@ pub fn AppNav(on_back: Option<EventHandler<()>>) -> Element {
                         }
                         Link { class: "icon-link-button", "data-nav": "settings", to: AppRoute::SettingsPage {}, aria_label: "设置", title: "设置",
                             // 与搜索图标同一描边体系；"⚙" 字符在各平台会落到不同 emoji 字体。
-                            svg { width: "20", height: "20", view_box: "0 0 24 24", fill: "none", stroke: "currentColor", stroke_width: "2", stroke_linecap: "round", "aria-hidden": "true",
-                                path { d: "M4 7h10M18 7h2M4 17h4M12 17h8" }
-                                circle { cx: "16", cy: "7", r: "2" }
-                                circle { cx: "10", cy: "17", r: "2" }
-                            }
+                            crate::components::icon::Icon { name: "gear" }
                         }
                     }
                 }

@@ -92,6 +92,7 @@ async fn browser_refresh_bounds_streams_and_preserves_decoding_and_failures() {
 
 fn sample_feed(id: i64, url: &str, is_deleted: bool) -> PersistedFeed {
     PersistedFeed {
+        custom_title: None,
         id,
         url: url.to_string(),
         title: Some(format!("Feed {id}")),

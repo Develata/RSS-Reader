@@ -59,19 +59,12 @@ pub(crate) struct EntriesPort {
 }
 
 impl EntriesPort {
-    pub(crate) async fn preview_mark_read(
+    pub(crate) async fn apply_entry_batch(
         &self,
-        query: &EntryQuery,
-    ) -> Result<rssr_domain::MarkReadPreview> {
-        self.services.preview_mark_read(query).await
+        request: rssr_domain::EntryBatchRequest,
+    ) -> Result<u64> {
+        self.services.apply_entry_batch(request).await
     }
-    pub(crate) async fn mark_read_if_unchanged(
-        &self,
-        preview: &rssr_domain::MarkReadPreview,
-    ) -> Result<rssr_domain::MarkReadOutcome> {
-        self.services.mark_read_if_unchanged(preview).await
-    }
-
     pub(crate) async fn bootstrap(
         &self,
         input: EntriesBootstrapInput,
@@ -187,6 +180,15 @@ pub(crate) struct FeedsPort {
 }
 
 impl FeedsPort {
+    pub(crate) async fn edit_details(&self, feed_id: i64) -> Result<rssr_domain::FeedEditDetails> {
+        self.services.feed_edit_details(feed_id).await
+    }
+    pub(crate) async fn update_subscription(
+        &self,
+        edit: rssr_domain::FeedEditRequest,
+    ) -> Result<()> {
+        self.services.update_subscription(edit).await
+    }
     pub(crate) async fn load_snapshot(&self) -> Result<FeedsSnapshotOutcome> {
         self.services.load_feeds_snapshot().await
     }

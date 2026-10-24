@@ -141,6 +141,18 @@ mod tests {
 
     #[async_trait::async_trait]
     impl FeedRepository for FeedRepositoryStub {
+        async fn edit_details(
+            &self,
+            _feed_id: i64,
+        ) -> rssr_domain::Result<rssr_domain::FeedEditDetails> {
+            Err(rssr_domain::DomainError::NotFound)
+        }
+        async fn update_subscription(
+            &self,
+            _edit: &rssr_domain::FeedEditRequest,
+        ) -> rssr_domain::Result<()> {
+            Err(rssr_domain::DomainError::InvalidInput("edit not used by this test double".into()))
+        }
         async fn upsert_subscription(
             &self,
             _new_feed: &NewFeedSubscription,

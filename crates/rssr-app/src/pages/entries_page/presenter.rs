@@ -77,7 +77,7 @@ impl PartialEq for GroupingEntries {
 /// presenter 真正依赖的那部分状态。
 ///
 /// Dioxus 的信号订阅粒度是「整个信号」，读任何一个字段都会订阅整份 `EntriesPageState`，
-/// 于是 `SetStatus`、`SetControlsHidden` 这类与分组毫无关系的 intent 也会让 presenter 失效、
+/// 于是 `SetStatus`、`ToggleSelected` 这类与分组毫无关系的 intent 也会让 presenter 失效、
 /// 重建两棵分组树。把依赖收窄成这个投影后，可以用 memo 链：投影 memo 每次状态变化都会重算，
 /// 但它的值没变时，presenter memo 不会重算。
 ///
@@ -379,7 +379,7 @@ mod tests {
     fn measure_entries_projection() {
         use std::{hint::black_box, time::Instant};
         for count in [800, 2000] {
-            let mut state = EntriesPageState::new(true);
+            let mut state = EntriesPageState::new();
             state.entries_page_size = 50;
             state.entries = (0..count)
                 .map(|index| {
@@ -439,14 +439,14 @@ mod tests {
     /// 这些字段一旦被误加进 `EntriesPresenterInput`，分组树就会为状态提示之类的变化重建。
     #[test]
     fn presenter_input_excludes_state_that_does_not_change_rendering() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
         let baseline = EntriesPresenterInput::from_state(&state, None);
 
         // 每次切换已读/收藏都会附带发一条 SetStatus。
         state.status = "已将《X》标记为已读。".to_string();
         state.status_tone = "info".to_string();
-        state.controls_hidden = !state.controls_hidden;
+        state.selected_entry_ids = Arc::new([1].into_iter().collect());
         state.show_archived = !state.show_archived;
         state.read_filter = rssr_domain::ReadFilter::UnreadOnly;
         state.starred_filter = rssr_domain::StarredFilter::StarredOnly;
@@ -467,7 +467,7 @@ mod tests {
     /// 切换已读/收藏不再重建两棵树。
     #[test]
     fn only_grouping_relevant_entry_fields_invalidate_the_projection() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
         let baseline = EntriesPresenterInput::from_state(&state, None);
         let original = (*state.entries[0]).clone();
@@ -542,7 +542,7 @@ mod tests {
     /// 所以这里断言的是「投影字段变化能被看见」，不是「它影响分组」。
     #[test]
     fn presenter_input_includes_every_field_that_changes_rendering() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
         let baseline = EntriesPresenterInput::from_state(&state, None);
 
@@ -572,7 +572,7 @@ mod tests {
     /// 它的下标仍然指向同一批条目。这条测试就是这条不变量的守卫。
     #[test]
     fn reusing_the_cached_tree_keeps_indices_pointing_at_the_same_entries() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries_page_size = 10;
         state.entries = vec![
             entry(1, 1, "Alpha", "2026-04-04T08:00:00Z"),
@@ -609,7 +609,7 @@ mod tests {
     /// 活动锚点为 `None`。分页相关标量在这里也有独立取值（`total_pages == 0`、`page_start == 0`）。
     #[test]
     fn empty_entry_list_produces_an_empty_presenter() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.current_page = 3;
 
         for mode in [EntryGroupingMode::Time, EntryGroupingMode::Source] {
@@ -633,7 +633,7 @@ mod tests {
     /// 若退化成页内相对下标，第 2 页的卡片会解析到第 1 页的条目上。
     #[test]
     fn paged_group_leaves_carry_absolute_indices() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries_page_size = 2;
         state.current_page = 2;
         state.entries = vec![
@@ -658,7 +658,7 @@ mod tests {
     /// 因此 `feed_id` 必须留在投影里，且两条路由要给出不同结果。
     #[test]
     fn browsing_a_single_feed_hides_the_source_filter() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
         state.feeds = vec![feed(1, "Alpha", "https://example.com/alpha.xml")].into();
 
@@ -675,7 +675,7 @@ mod tests {
 
     #[test]
     fn presenter_uses_page_slice_for_rendering_and_full_scope_for_directory() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries_page_size = 2;
         state.current_page = 2;
         state.grouping_mode = EntryGroupingMode::Time;
@@ -718,7 +718,7 @@ mod tests {
 
     #[test]
     fn presenter_marks_directory_item_for_current_page_first_entry() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries_page_size = 1;
         state.current_page = 2;
         state.grouping_mode = EntryGroupingMode::Source;

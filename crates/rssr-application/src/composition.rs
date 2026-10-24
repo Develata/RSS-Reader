@@ -83,10 +83,10 @@ impl AppUseCases {
                 input.feed_repository.clone(),
                 input.entry_index_repository.clone(),
                 input.entry_content_repository.clone(),
-                input.settings_repository,
+                input.settings_repository.clone(),
                 input.opml_codec,
                 input.app_state,
-                input.clock,
+                input.clock.clone(),
             )
             .with_config_replacement_port(input.config_replacement),
             startup_service: StartupService::new(
@@ -100,7 +100,12 @@ impl AppUseCases {
                 app_state_service,
                 input.feed_repository.clone(),
             ),
-            feeds_snapshot_service: FeedsSnapshotService::new(input.feed_repository.clone()),
+            feeds_snapshot_service: FeedsSnapshotService::new(
+                input.feed_repository.clone(),
+                input.entry_index_repository.clone(),
+                input.settings_repository,
+                input.clock,
+            ),
             reader_service: ReaderService::new(
                 input.entry_index_repository,
                 input.entry_content_repository,

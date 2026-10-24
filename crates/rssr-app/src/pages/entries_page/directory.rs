@@ -10,7 +10,7 @@ use super::{
 use crate::ui::use_reactive_side_effect;
 
 mod view;
-pub(super) use view::{DirectoryRail, DirectoryTop};
+pub(super) use view::DirectoryRail;
 
 // Cheap view-prop identity. Presenter metadata can change without changing the
 // directory; resetting interaction state requires the narrower identity below.
@@ -261,7 +261,7 @@ mod tests {
             groups::EntryGroupNavItem, presenter::EntriesPresenterInput, state::EntriesPageState,
         };
         let presenter = EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(
-            &EntriesPageState::new(false),
+            &EntriesPageState::new(),
             None,
         ));
         let before = DirectoryResetIdentity(DirectoryModel(Arc::new(presenter.clone())));

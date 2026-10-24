@@ -23,6 +23,70 @@ impl BrowserFeedRepository {
 
 #[async_trait::async_trait]
 impl FeedRepository for BrowserFeedRepository {
+    async fn edit_details(
+        &self,
+        feed_id: i64,
+    ) -> rssr_domain::Result<rssr_domain::FeedEditDetails> {
+        self.store
+            .read(move |state| {
+                let feed = state
+                    .core
+                    .feeds
+                    .iter()
+                    .find(|feed| feed.id == feed_id && !feed.is_deleted)
+                    .ok_or(DomainError::NotFound)?;
+                Ok(rssr_domain::FeedEditDetails {
+                    feed_id,
+                    url: feed.url.clone(),
+                    original_title: feed.title.clone(),
+                    custom_title: feed.custom_title.clone(),
+                })
+            })
+            .await
+            .map_err(map_store_error)
+    }
+
+    async fn update_subscription(
+        &self,
+        edit: &rssr_domain::FeedEditRequest,
+    ) -> rssr_domain::Result<()> {
+        let edit = edit.clone();
+        self.store
+            .update(move |state| {
+                if state
+                    .core
+                    .feeds
+                    .iter()
+                    .any(|feed| feed.url == edit.url && feed.id != edit.feed_id)
+                {
+                    return Err(DomainError::InvalidInput(
+                        "该地址已属于另一个订阅，请使用不同的地址".into(),
+                    )
+                    .into());
+                }
+                let feed = state
+                    .core
+                    .feeds
+                    .iter_mut()
+                    .find(|feed| feed.id == edit.feed_id && !feed.is_deleted)
+                    .ok_or(DomainError::NotFound)?;
+                let changed_url = feed.url != edit.url;
+                if changed_url {
+                    state.app_state.replace_feed_url(&feed.url, &edit.url);
+                    *state.core.feed_generations.entry(feed.id).or_default() += 1;
+                    reset_remote_feed_state(feed);
+                }
+                feed.url = edit.url;
+                feed.custom_title = edit.custom_title;
+                feed.updated_at = now_utc();
+                Ok((
+                    (),
+                    if changed_url { Changes::CORE | Changes::APP_STATE } else { Changes::CORE },
+                ))
+            })
+            .await
+            .map_err(map_store_error)
+    }
     async fn upsert_subscription(
         &self,
         new_feed: &NewFeedSubscription,
@@ -45,7 +109,17 @@ impl FeedRepository for BrowserFeedRepository {
             .update(move |state| {
                 let feeds = new_feeds
                     .iter()
-                    .map(|new_feed| upsert_subscription_in_state(state, new_feed))
+                    .map(|new_feed| {
+                        let result = upsert_subscription_in_state(state, new_feed)?;
+                        if let Some(feed) =
+                            state.core.feeds.iter_mut().find(|feed| feed.id == result.id)
+                        {
+                            if new_feed.title.is_some() {
+                                feed.custom_title = normalize_optional_text(new_feed.title.clone());
+                            }
+                        }
+                        Ok(result)
+                    })
                     .collect::<rssr_domain::Result<Vec<_>>>()?;
                 Ok((feeds, Changes::CORE))
             })
@@ -164,6 +238,7 @@ pub(super) fn upsert_subscription_in_state(
     } else {
         state.core.next_feed_id += 1;
         let persisted = PersistedFeed {
+            custom_title: None,
             id: state.core.next_feed_id,
             url: normalized_url.to_string(),
             title: normalized_title,
@@ -203,7 +278,7 @@ fn persisted_feed_to_domain(feed: &PersistedFeed) -> rssr_domain::Result<Feed> {
     Ok(Feed {
         id: feed.id,
         url: url::Url::parse(&feed.url).map_err(map_persistence_error)?,
-        title: feed.title.clone(),
+        title: feed.custom_title.clone().or_else(|| feed.title.clone()),
         site_url: feed
             .site_url
             .as_ref()

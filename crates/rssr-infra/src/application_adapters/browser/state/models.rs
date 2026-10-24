@@ -32,6 +32,8 @@ pub struct PersistedState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedFeed {
+    #[serde(default)]
+    pub custom_title: Option<String>,
     pub id: i64,
     pub url: String,
     pub title: Option<String>,
@@ -91,6 +93,8 @@ pub struct PersistedEntryFlagsSlice {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedEntryFlag {
+    #[serde(default)]
+    pub is_archived: bool,
     pub id: i64,
     pub is_read: bool,
     pub is_starred: bool,

@@ -128,6 +128,18 @@ async function userScrollAnchor(client, id) {
   await userWheel(client,delta);
   await settle(client, `Math.abs(document.getElementById(${q(id)}).getBoundingClientRect().top - 80) <= 2`, 'user wheel anchor positioning');
 }
+async function expectTargetAligned(client, id) {
+  // Compact rows can make the last group shorter than one viewport. In that
+  // case scrolling clamps at the document end; the target must still be visible.
+  await settle(client, `(() => {
+    const anchor=document.getElementById(${q(id)}), scroller=document.scrollingElement;
+    if (!anchor) return false;
+    const top=anchor.getBoundingClientRect().top;
+    const inset=parseFloat(getComputedStyle(anchor).scrollMarginTop || 0);
+    const max=Math.max(0,scroller.scrollHeight-scroller.clientHeight);
+    return Math.abs(top-inset)<=2 || (Math.abs(scrollY-max)<=2 && top>=inset && top<innerHeight-80);
+  })()`, 'directory target must align or remain visible at the clamped document end');
+}
 async function expectOnlyOpen(client, id) {
   await settle(client, `(() => { const groups=[...document.querySelectorAll(${q(rail+' [data-layout="entry-directory-toggle"]')})];
     return groups.length===6 && groups.every(e=>e.dataset.open === (e.dataset.directoryAnchor===${q(id)}?'true':'false'));
@@ -139,7 +151,7 @@ export async function snapshot(client) {
     const visible = e => !!e && !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length);
     const state = selector => {
       const root = document.querySelector(selector);
-      return {visible:visible(root), scrollTop:root?.scrollTop, scrollLeft:root?.scrollLeft,
+      return {visible:visible(root), scrollTop:root?.scrollTop ?? 0, scrollLeft:root?.scrollLeft ?? 0,
         maxScrollTop:root ? root.scrollHeight-root.clientHeight : 0,
         groups:[...(root?.querySelectorAll('[data-directory-kind="group"][data-active="true"]') || [])].map(e=>e.dataset.directoryAnchor),
         items:[...(root?.querySelectorAll('[data-directory-kind="item"][data-active="true"]') || [])].map(e=>e.dataset.directoryAnchor)};
@@ -179,7 +191,6 @@ export function directoryHarness(client, env) {
       await evaluate(client, `if (!document.querySelector('[data-page="entries"]')) document.querySelector('[data-action="activate-home"]').click()`);
     }
     await settle(client, `document.querySelector('[data-page="entries"][data-position-ready="true"]') && document.querySelectorAll('[data-position-entry]').length > 0`, 'directory fixture not ready');
-    await evaluate(client, `document.querySelector('[data-action="show-entry-controls"]')?.click()`);
     if (env.native) await setMode(mode === 'time' ? 'source' : 'time');
     await setMode(mode);
     await env.manualScroll();
@@ -193,10 +204,8 @@ export function directoryHarness(client, env) {
     return c;
   }
   async function setMode(mode) {
-    await evaluate(client, `(() => { const select = document.querySelector('[data-field="entry-grouping-mode"]');
-      if (!select) throw new Error('Grouping control missing');
-      if (select.value !== ${q(mode)}) { select.value = ${q(mode)}; select.dispatchEvent(new Event('change',{bubbles:true})); }
-    })()`);
+    await evaluate(client, `document.querySelector('[data-action="group-by-${mode}"]').scrollIntoView({block:'center',behavior:'instant'})`);
+    await click(client, `[data-action="group-by-${mode}"]`);
     await settle(client, `document.querySelector('[data-entry-scroll-anchor][data-grouping-mode="${mode}"]')`, `grouping ${mode} not rendered`);
   }
   return {prepare, setMode};
@@ -230,14 +239,14 @@ export async function checkDirectoryContracts(client, env) {
     check(`rapid navigation ${gap}ms: both distinct targets receive trusted clicks`,
       hits.length===2 && hits[0].anchor===c.remote && hits[1].anchor===last && hits.every(h=>h.trusted),hits);
     await settle(client,`location.hash === ${q('#'+last)} && document.querySelector('[data-slot="entry-pagination-status"]').textContent.trim()==='2 / 2' && !!document.getElementById(${q(last)})`,'latest real cross-page click must win');
-    await settle(client,`Math.abs(document.getElementById(${q(last)}).getBoundingClientRect().top)<=2`,'latest cross-page target must align');
+    await expectTargetAligned(client,last);
     check(`rapid navigation ${gap}ms: latest user target wins`,true,{hits,after:await snapshot(client)});
   });
   for (const mode of ['time', 'source']) {
     await scenario(`${mode}-read-summary-preserves-manual`, async () => {
       const c = await prepare(mode);
       check(`${mode}: read regression uses All feeds and ReadFilter::All`,
-        await evaluate(client, `!!document.querySelector('#source-unread-1') && !document.querySelector('[data-field="read-filter-unread"]').checked && !document.querySelector('[data-field="read-filter-read"]').checked`));
+        await evaluate(client, `document.querySelector('.source-filter-trigger span').textContent === '全部来源' && document.querySelector('[aria-label="仅未读"]').getAttribute('aria-pressed') === 'false' && document.querySelector('[aria-label="仅已读"]').getAttribute('aria-pressed') === 'false'`));
       await scrollAnchor(client,c.first);
       await click(client,group(c.group));
       await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'close current group before read update');
@@ -246,15 +255,10 @@ export async function checkDirectoryContracts(client, env) {
       for (const action of ['toggle-starred','mark-read','mark-read']) {
         const selector = `[data-position-entry="72"] [data-action="${action}"]`;
         const before = await snapshot(client);
-        const label = await evaluate(client, `document.querySelector(${q(selector)}).textContent.trim()`);
-        const count = await evaluate(client, `Number(document.querySelector('#source-unread-1').textContent.split(' ')[1])`);
+        const pressed = await evaluate(client, `document.querySelector(${q(selector)}).getAttribute('aria-pressed')`);
         await click(client,selector);
-        await settle(client, `document.querySelector(${q(selector)}).textContent.trim() !== ${q(label)}`, 'entry flag write must complete');
-        if (action==='mark-read') {
-          const wanted = count + (label==='标已读'?-1:1);
-          await settle(client, `document.querySelector('#source-unread-1').textContent === ${q(`未读 ${wanted} 篇`)}`, 'feed summary bootstrap must finish');
-          check(`${mode}: read update finishes source unread summary refresh`, true, {before:count,after:wanted});
-        }
+        await settle(client, `document.querySelector(${q(selector)}).getAttribute('aria-pressed') !== ${q(pressed)}`, 'entry flag write must complete');
+        // Unread totals moved to Subscribe; rssr_workspace_acceptance checks those values.
         await directoryIdle(client);
         const after = await snapshot(client);
         check(`${mode}: ${action} preserves manual/open state and both scroll positions`,
@@ -415,10 +419,9 @@ export async function checkDirectoryContracts(client, env) {
       await scrollAnchor(client,c.other);
       await expectActive(client,c.otherGroup,c.other);
       const beforeFlag = await snapshot(client);
-      const priorLabel = await evaluate(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').textContent.trim()`);
-      const nextLabel = priorLabel === '收藏' ? '取消收藏' : '收藏';
+      const priorPressed = await evaluate(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').getAttribute('aria-pressed')`);
       await evaluate(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').click()`);
-      await settle(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').textContent.trim() === ${q(nextLabel)}`, 'flag rerender not completed');
+      await settle(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').getAttribute('aria-pressed') !== ${q(priorPressed)}`, 'flag rerender not completed');
       await directoryIdle(client);
       await expectActive(client,c.otherGroup,c.other);
       const afterFlag = await snapshot(client);
@@ -458,37 +461,47 @@ export async function checkDirectoryContracts(client, env) {
       await settle(client, `document.querySelector(${q(group(c.remoteGroup))}).dataset.open === 'true' && document.querySelector(${q(item(c.remote))}).getClientRects().length > 0`, 'remote directory item must finish expanding before navigation');
       await click(client,item(c.remote));
       await settle(client, `document.querySelector('[data-slot="entry-pagination-status"]').textContent.trim() === '2 / 2' && location.hash === ${q('#'+encodeURIComponent(c.remote))} && !!document.getElementById(${q(c.remote)})`, 'cross-page target/hash');
-      await settle(client, `Math.abs(document.getElementById(${q(c.remote)}).getBoundingClientRect().top - parseFloat(getComputedStyle(document.getElementById(${q(c.remote)})).scrollMarginTop || 0)) <= 2`, 'cross-page alignment');
+      await expectTargetAligned(client,c.remote);
       check(`${mode}: cross-page directory navigation reaches target/hash`, true, await snapshot(client));
     });
     if (!env.native) await scenario(`${mode}-consumers`, async () => {
       const c = await prepare(mode);
       await scrollAnchor(client,c.other);
       await expectActive(client,c.otherGroup,c.other);
-      for (const width of [721,720,1280,360]) {
-        const mobile=width<=720;
+      for (const width of [1001,1000,1280,360]) {
+        const mobile=width<=1000;
         await env.setViewport(width,800,mobile,mobile?3:1);
+        await evaluate(client, "window.scrollTo({top:0,behavior:'instant'})");
+        if (!await evaluate(client, `!!document.querySelector(${q(rail)}).getClientRects().length`)) {
+          await click(client,'[data-action="open-directory"]');
+          await settle(client, `!!document.querySelector(${q(rail)}).getClientRects().length`, 'directory opens from collapsed entry');
+        }
         // Responsive layout changes anchor positions. Restore the explicit
         // article target before comparing consumers; do not infer it from JS.
         await scrollAnchor(client,c.other);
-        await expectActive(client,c.otherGroup,c.other,mobile?'top':'rail');
+        await expectActive(client,c.otherGroup,c.other);
         const s = await snapshot(client);
-        const activeWeight=await evaluate(client, `getComputedStyle(document.querySelector(${q((mobile?top:rail)+' [data-directory-kind="group"][data-active="true"] [data-slot="entry-directory-title"]')})).fontWeight`);
-        check(`${mode}: ${width}px uses and emphasizes the visible directory consumer`, s.rail.visible===!mobile && s.top.visible===mobile && Number(activeWeight)>=600, {...s,activeWeight});
+        const activeWeight=await evaluate(client, `getComputedStyle(document.querySelector(${q(rail+' [data-directory-kind="group"][data-active="true"] [data-slot="entry-directory-title"]')})).fontWeight`);
+        check(`${mode}: ${width}px visible directory preserves active path`, s.rail.visible && !s.top.visible && Number(activeWeight)>=600, {...s,activeWeight});
+        if (mobile && width!==360) {
+          await click(client,'[data-action="close-directory"]');
+          const closed = await snapshot(client);
+          check(`${mode}: narrow directory closes without moving articles`, !closed.rail.visible && Math.abs(closed.y-s.y)<=1, {before:s,after:closed});
+        }
       }
       const before = await snapshot(client);
       const target = mode==='source'?'entry-group-2026-年-09-月-67':'entry-group-2026-06-02-36';
       const requestedY = await evaluate(client, `scrollY + document.getElementById(${q(target)}).getBoundingClientRect().top - 80`);
-      await scrollAnchor(client,target);
+      await userScrollAnchor(client,target);
       const expectedGroup = mode==='source'?'entry-group-foxtrot':'entry-group-2026-年-06-月';
-      await expectActive(client,expectedGroup,null,'top');
+      await expectActive(client,expectedGroup,target);
       const aligned = await evaluate(client, `(() => {
-        const root=document.querySelector(${q(top)}), active=root.querySelector('[data-active="true"]');
+        const root=document.querySelector(${q(rail)}), active=root.querySelector('[data-directory-kind="item"][data-active="true"]');
         const r=root.getBoundingClientRect(), a=active.getBoundingClientRect();
-        return {y:scrollY,left:root.scrollLeft,fits:a.left>=r.left-1 && a.right<=r.right+1};
+        return {y:scrollY,top:root.scrollTop,fits:a.top>=r.top-1 && a.bottom<=r.bottom+1};
       })()`);
       const after = await snapshot(client);
-      check(`${mode}: mobile horizontal alignment preserves requested body position`, aligned.left>0 && aligned.fits && Math.abs(after.y-requestedY)<=1, {before,requestedY,aligned,after});
+      check(`${mode}: mobile directory alignment preserves requested body position`, aligned.fits && Math.abs(after.y-requestedY)<=1, {before,requestedY,aligned,after});
       await env.capture(`directory-${mode}-mobile`);
     });
   }

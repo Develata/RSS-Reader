@@ -33,7 +33,11 @@ pub fn list_feeds(state: &BrowserState) -> Vec<FeedSummary> {
         .filter(|feed| !feed.is_deleted)
         .map(|feed| FeedSummary {
             id: feed.id,
-            title: feed.title.clone().unwrap_or_else(|| feed.url.clone()),
+            title: feed
+                .custom_title
+                .clone()
+                .or_else(|| feed.title.clone())
+                .unwrap_or_else(|| feed.url.clone()),
             url: feed.url.clone(),
             unread_count: counts_by_feed.get(&feed.id).map(|(_, unread)| *unread).unwrap_or(0),
             entry_count: counts_by_feed.get(&feed.id).map(|(all, _)| *all).unwrap_or(0),
@@ -63,7 +67,15 @@ pub fn list_entries(state: &BrowserState, query: &EntryQuery) -> Vec<EntrySummar
         .feeds
         .iter()
         .filter(|feed| !feed.is_deleted)
-        .map(|feed| (feed.id, feed.title.clone().unwrap_or_else(|| feed.url.clone())))
+        .map(|feed| {
+            (
+                feed.id,
+                feed.custom_title
+                    .clone()
+                    .or_else(|| feed.title.clone())
+                    .unwrap_or_else(|| feed.url.clone()),
+            )
+        })
         .collect::<HashMap<_, _>>();
 
     // 先在仍带 `created_at` 的持久化条目上排序，再投影成 `EntrySummary`：`EntrySummary` 没有
@@ -264,16 +276,23 @@ where
         StarredFilter::UnstarredOnly if is_starred => return false,
         _ => {}
     }
-    // 与原生端 SQL 保持同一语义：归档只看 published_at，没有发布时间的条目永不算归档。
+    let manually_archived = flags.is_some_and(|flag| flag.is_archived);
     match query.archive_filter {
         ArchiveFilter::All => {}
+        ArchiveFilter::ExcludeManual if manually_archived => return false,
+        ArchiveFilter::OnlyManual if !manually_archived => return false,
+        ArchiveFilter::ExcludeManual | ArchiveFilter::OnlyManual => {}
         ArchiveFilter::ExcludeArchived { cutoff } => {
-            if entry.published_at.is_some_and(|published_at| published_at < cutoff) {
+            if manually_archived
+                || entry.published_at.is_some_and(|published_at| published_at < cutoff)
+            {
                 return false;
             }
         }
         ArchiveFilter::OnlyArchived { cutoff } => {
-            if !entry.published_at.is_some_and(|published_at| published_at < cutoff) {
+            if !manually_archived
+                && !entry.published_at.is_some_and(|published_at| published_at < cutoff)
+            {
                 return false;
             }
         }
@@ -349,6 +368,7 @@ mod tests {
     fn build_state(entry_count: i64) -> BrowserState {
         let now = parse_datetime("2026-04-13T08:00:00Z");
         let feeds = vec![PersistedFeed {
+            custom_title: None,
             id: 1,
             url: "https://example.com/feed.xml".to_string(),
             title: Some("Example Feed".to_string()),
@@ -385,6 +405,7 @@ mod tests {
             .collect();
         let flags = (0..entry_count)
             .map(|id| PersistedEntryFlag {
+                is_archived: false,
                 id: id + 1,
                 is_read: id % 3 == 0,
                 is_starred: id % 5 == 0,
@@ -395,6 +416,7 @@ mod tests {
 
         BrowserState {
             core: PersistedState {
+                feed_generations: Default::default(),
                 next_feed_id: 2,
                 next_entry_id: entry_count + 1,
                 feeds,

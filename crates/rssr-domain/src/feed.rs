@@ -1,6 +1,21 @@
 use time::OffsetDateTime;
 use url::Url;
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FeedEditDetails {
+    pub feed_id: i64,
+    pub url: String,
+    pub original_title: Option<String>,
+    pub custom_title: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FeedEditRequest {
+    pub feed_id: i64,
+    pub url: String,
+    pub custom_title: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Feed {
     pub id: i64,

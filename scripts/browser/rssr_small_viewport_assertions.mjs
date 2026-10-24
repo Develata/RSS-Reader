@@ -146,14 +146,7 @@ async function seedAndNavigate(client, seed, nextPath, marker, themePreset = pre
 }
 
 async function ensureEntryControlsOpen(client) {
-  const hidden = await evaluate(
-    client,
-    `document.querySelector('[data-action="show-entry-controls"]') !== null`,
-  );
-  if (hidden) {
-    await clickSelector(client, '[data-action="show-entry-controls"]');
-  }
-  await selectorExists(client, '[data-layout="entry-controls-panel"]');
+  await selectorExists(client, '.entries-toolbar');
 }
 
 async function captureArtifact(client, name) {
@@ -192,271 +185,43 @@ async function commonPageEvidence(client) {
 
 async function checkEntriesOverflow(client) {
   await ensureEntryControlsOpen(client);
-  const common = await commonPageEvidence(client);
-  assertThat('mobile viewport is exact', common.innerWidth === width && common.innerHeight === height, common);
-  assertThat('entries page has meaningful content', common.path === '/entries' && common.bodyTextLength > 100, common);
-  assertThat('entries page has no framework overlay', common.overlay === null, common);
-  assertThat('entries root has no horizontal overflow', common.scrollWidth <= common.clientWidth + 1, common);
-
-  const geometry = await evaluate(
-    client,
-    `(() => {
-      const chip = [...document.querySelectorAll('[data-layout="entry-filters-source-chip"]')]
-        .find((element) => element.querySelector('span')?.textContent.length > 40);
-      const span = chip?.querySelector('span');
-      const directory = document.querySelector('[data-layout="entry-top-directory"]');
-      const root = document.documentElement.getBoundingClientRect();
-      const titles = [...document.querySelectorAll('[data-slot="entry-card-title"]')]
-        .filter((element) => element.getClientRects().length > 0)
-        .map((element) => {
-          const rect = element.getBoundingClientRect();
-          return { text: element.textContent, left: rect.left, right: rect.right };
-        });
-      const actionRows = [...document.querySelectorAll('[data-layout="entry-card-actions"]')]
-        .filter((element) => element.getClientRects().length > 0)
-        .map((row) => [...row.querySelectorAll('button, a')]
-          .filter((element) => element.getClientRects().length > 0)
-          .map((element) => {
-            const rect = element.getBoundingClientRect();
-            return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
-          }));
-      const overlaps = actionRows.some((row) => row.some((rect, index) => row.slice(index + 1).some((other) =>
-        rect.left < other.right && rect.right > other.left && rect.top < other.bottom && rect.bottom > other.top
-      )));
-      const chipRect = chip?.getBoundingClientRect();
-      const style = span ? getComputedStyle(span) : null;
-      return {
-        chip: chip && span ? {
-          height: chipRect.height,
-          title: chip.getAttribute('title'),
-          ariaLabel: chip.getAttribute('aria-label'),
-          // The nested count has its own aria-describedby text; the control name is the title.
-          text: [...span.childNodes].filter(node => node.nodeType === Node.TEXT_NODE)
-            .map(node => node.textContent).join(''),
-          scrollWidth: span.scrollWidth,
-          clientWidth: span.clientWidth,
-          whiteSpace: style.whiteSpace,
-          textOverflow: style.textOverflow,
-        } : null,
-        directory: directory ? {
-          chips: directory.querySelectorAll('[data-layout="entry-top-directory-chip"]').length,
-          scrollWidth: directory.scrollWidth,
-          clientWidth: directory.clientWidth,
-        } : null,
-        titleBoundsOk: titles.length > 0 && titles.every((title) => title.left >= root.left - 1 && title.right <= root.right + 1),
-        titleCount: titles.length,
-        actionOverlaps: overlaps,
-      };
-    })()`,
-  );
-
-  assertThat('long source chip is present', geometry.chip !== null, geometry);
-  assertThat(
-    'long source name wraps visibly without horizontal clipping',
-    meetsTouchTarget(geometry.chip.height) &&
-      geometry.chip.scrollWidth <= geometry.chip.clientWidth + 1 &&
-      geometry.chip.whiteSpace !== 'nowrap' &&
-      geometry.chip.textOverflow !== 'ellipsis',
-    geometry.chip,
-  );
-  assertThat(
-    'long source chip exposes the full accessible name',
-    geometry.chip.title === geometry.chip.text && geometry.chip.ariaLabel === geometry.chip.text,
-    geometry.chip,
-  );
-  assertThat(
-    'overflow fixture renders a horizontally scrollable month directory',
-    geometry.directory?.chips >= 10 && geometry.directory.scrollWidth > geometry.directory.clientWidth,
-    geometry.directory,
-  );
-  assertThat('entry titles stay inside the viewport', geometry.titleBoundsOk, geometry);
-  assertThat('entry card actions do not overlap', !geometry.actionOverlaps, geometry);
-
-  const sourceScrollSetup = await evaluate(
-    client,
-    `(async () => {
-      const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
-      const seed = grid?.querySelector('[data-layout="entry-filters-source-chip"]');
-      if (!grid || !seed) return null;
-      for (let index = 0; index < 14; index += 1) {
-        const clone = seed.cloneNode(true);
-        clone.dataset.scrollChainFixture = 'true';
-        clone.setAttribute('aria-hidden', 'true');
-        grid.appendChild(clone);
-      }
-      grid.scrollIntoView({block:'center', inline:'nearest', behavior:'instant'});
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const rect = grid.getBoundingClientRect();
-      const maximum = grid.scrollHeight - grid.clientHeight;
-      return {
-        x: (rect.left + rect.right) / 2,
-        y: (rect.top + rect.bottom) / 2,
-        maximum,
-        policy: getComputedStyle(grid).overscrollBehaviorY,
-        pageY: scrollY,
-      };
-    })()`,
-  );
-  assertThat(
-    'source filter enables native vertical scroll chaining',
-    sourceScrollSetup?.maximum > 80 &&
-      ['auto', 'chain'].includes(sourceScrollSetup.policy),
-    sourceScrollSetup,
-  );
-
-  await evaluate(client, `(() => {
-    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
-    grid.scrollTop = (grid.scrollHeight - grid.clientHeight) / 2;
-    window.__sourceScrollBefore = {inner:grid.scrollTop, page:scrollY};
+  const common=await commonPageEvidence(client);
+  assertThat('mobile viewport is exact',common.innerWidth===width && common.innerHeight===height,common);
+  assertThat('entries has content and no horizontal overflow',common.bodyTextLength>100 && common.scrollWidth<=common.clientWidth+1 && common.overlay===null,common);
+  const geometry=await evaluate(client,`(() => {
+    const r=e=>e?.getBoundingClientRect().toJSON();
+    const cards=[...document.querySelectorAll('[data-layout="entry-card"]')];
+    return {titles:cards.map(c=>r(c.querySelector('[data-slot="entry-card-title"]'))),
+      controls:cards.flatMap(c=>[...c.querySelectorAll('button,.entry-select-hit')].map(r)),
+      checkbox:r(document.querySelector('.entry-select-box[type="checkbox"]')),
+      pager:r(document.querySelector('[data-layout="entry-pagination"]')),
+      arrows:[...document.querySelectorAll('[data-layout="entry-pagination"] button')].map(r)};
   })()`);
-  await dispatchTouchScroll(client, sourceScrollSetup, 120);
-  const sourceScrollMiddle = await evaluate(client, `(() => {
-    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
-    return {before:window.__sourceScrollBefore, inner:grid.scrollTop, page:scrollY};
+  assertThat('titles and 44px actions stay in viewport',geometry.titles.every(r=>r.left>=0 && r.right<=width+1) && geometry.controls.every(r=>meetsTouchTarget(r.width,r.height) && r.left>=0 && r.right<=width+1),geometry);
+  assertThat('small checkbox retains a large hit region',geometry.checkbox.width===16 && geometry.checkbox.height===16,geometry.checkbox);
+  assertThat('when paginated, compact pager stays at bottom',!geometry.pager || (geometry.pager.bottom<=height && geometry.pager.bottom>=height-24 && geometry.arrows[1].left-geometry.arrows[0].left<140),geometry.pager);
+  await clickSelector(client,'[data-action="open-source-filter"]');
+  await selectorExists(client,'#source-filter-dialog[open]');
+  const sources=await evaluate(client,`(() => {
+    const d=document.querySelector('#source-filter-dialog'),r=d.getBoundingClientRect();
+    const choices=[...d.querySelectorAll('.source-choices .source-choice')];
+    return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,names:choices.map(c=>{const s=c.querySelector('span'),r=c.getBoundingClientRect();return {text:s.textContent,label:c.querySelector('input').getAttribute('aria-label'),height:r.height,width:s.clientWidth,scrollWidth:s.scrollWidth,whiteSpace:getComputedStyle(s).whiteSpace};})};
   })()`);
-  assertThat(
-    'source filter consumes touch scroll while it has room',
-    sourceScrollMiddle.inner > sourceScrollMiddle.before.inner + 10 &&
-      Math.abs(sourceScrollMiddle.page - sourceScrollMiddle.before.page) <= 2,
-    sourceScrollMiddle,
-  );
-
-  const sourceScrollBottomSetup = await evaluate(client, `(async () => {
-    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
-    grid.scrollTop = grid.scrollHeight - grid.clientHeight;
-    grid.scrollIntoView({block:'center', inline:'nearest', behavior:'instant'});
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const rect = grid.getBoundingClientRect();
-    return {
-      x:(rect.left + rect.right) / 2,
-      y:(rect.top + rect.bottom) / 2,
-      inner:grid.scrollTop,
-      page:scrollY,
-    };
-  })()`);
-  await dispatchTouchScroll(client, sourceScrollBottomSetup, 180);
-  const sourceScrollBottom = await evaluate(client, `(() => {
-    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
-    return {inner:grid.scrollTop, page:scrollY};
-  })()`);
-  assertThat(
-    'source filter hands downward touch scroll to the page at its bottom edge',
-    Math.abs(sourceScrollBottom.inner - sourceScrollBottomSetup.inner) <= 2 &&
-      sourceScrollBottom.page > sourceScrollBottomSetup.page + 10,
-    {before:sourceScrollBottomSetup, after:sourceScrollBottom},
-  );
-
-  const sourceScrollTopSetup = await evaluate(client, `(async () => {
-    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
-    grid.scrollTop = 0;
-    grid.scrollIntoView({block:'center', inline:'nearest', behavior:'instant'});
-    if (scrollY < 120) window.scrollBy({top:120 - scrollY, behavior:'instant'});
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const rect = grid.getBoundingClientRect();
-    return {
-      x:(rect.left + rect.right) / 2,
-      y:(rect.top + rect.bottom) / 2,
-      inner:grid.scrollTop,
-      page:scrollY,
-    };
-  })()`);
-  await dispatchTouchScroll(client, sourceScrollTopSetup, -180);
-  const sourceScrollTop = await evaluate(client, `(() => {
-    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
-    return {inner:grid.scrollTop, page:scrollY};
-  })()`);
-  assertThat(
-    'source filter hands upward touch scroll to the page at its top edge',
-    sourceScrollTopSetup.page > 10 &&
-      sourceScrollTop.inner <= 2 &&
-      sourceScrollTop.page < sourceScrollTopSetup.page - 10,
-    {before:sourceScrollTopSetup, after:sourceScrollTop},
-  );
-
-  await evaluate(client, `(() => {
-    document.querySelectorAll('[data-scroll-chain-fixture="true"]').forEach(element => element.remove());
-    const grid = document.querySelector('[data-layout="entry-filters-source-grid"]');
-    if (grid) grid.scrollTop = 0;
-    delete window.__sourceScrollBefore;
-    window.scrollTo({top:0, behavior:'instant'});
-  })()`);
-
-  const maskStates = await evaluate(
-    client,
-    `(async () => {
-      const directory = document.querySelector('[data-layout="entry-top-directory"]');
-      const maximum = directory.scrollWidth - directory.clientWidth;
-      async function readAt(fraction) {
-        directory.scrollLeft = maximum * fraction;
-        // Headless Chrome may throttle animation frames under CI load. Keep the
-        // style assertion bounded so a stalled frame cannot hang the CDP call.
-        await Promise.race([
-          new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
-          new Promise((resolve) => setTimeout(resolve, 1000)),
-        ]);
-        const style = getComputedStyle(directory);
-        return {
-          fraction,
-          scrollLeft: directory.scrollLeft,
-          maskImage: style.maskImage || style.webkitMaskImage,
-        };
-      }
-      return {
-        maximum,
-        start: await readAt(0),
-        middle: await readAt(0.5),
-        nearEnd: await readAt(0.99),
-        end: await readAt(1),
-      };
-    })()`,
-  );
-  const hasGradient = (state) => state.maskImage && state.maskImage !== 'none';
-  assertThat(
-    'directory overflow hint remains until the end',
-    hasGradient(maskStates.start) && hasGradient(maskStates.middle) && hasGradient(maskStates.nearEnd),
-    maskStates,
-  );
-  assertThat('directory overflow hint disappears at the end', maskStates.end.maskImage === 'none', maskStates);
-
-  const verticalDirectoryTracking = await evaluate(
-    client,
-    `(async () => {
-      const visible = (element) =>
-        !!element && !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
-      const anchors = [...document.querySelectorAll('[data-entry-scroll-anchor]')].filter(visible);
-      const target = anchors[Math.min(anchors.length - 1, Math.max(3, Math.floor(anchors.length * 0.6)))];
-      target?.scrollIntoView({block:'start', inline:'nearest', behavior:'instant'});
-      const requested = scrollY;
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      await new Promise((resolve) => setTimeout(resolve, 80));
-      const rail = document.querySelector('[data-layout="entry-directory-rail"]');
-      const topDirectory = document.querySelector('[data-layout="entry-top-directory"]');
-      return {
-        anchorCount: anchors.length,
-        target: target?.id ?? null,
-        requested,
-        actual: scrollY,
-        delta: scrollY - requested,
-        railDisplay: rail ? getComputedStyle(rail).display : null,
-        topDirectoryDisplay: topDirectory ? getComputedStyle(topDirectory).display : null,
-      };
-    })()`,
-  );
-  assertThat(
-    'mobile directory tracking never rewinds document scroll',
-    verticalDirectoryTracking.anchorCount >= 4 &&
-      verticalDirectoryTracking.requested > 0 &&
-      verticalDirectoryTracking.railDisplay === 'none' &&
-      verticalDirectoryTracking.topDirectoryDisplay !== 'none' &&
-      Math.abs(verticalDirectoryTracking.delta) <= 1,
-    verticalDirectoryTracking,
-  );
-
-  await evaluate(client, `(() => {
-    document.querySelector('[data-layout="entry-top-directory"]').scrollLeft = 0;
-    window.scrollTo({top:0, behavior:'instant'});
-  })()`);
-  await captureArtifact(client, 'entries');
+  assertThat('source dialog fits viewport and full long names wrap',sources.left>=0 && sources.right<=width+1 && sources.bottom<=height+1 && sources.names.some(n=>n.text.length>40) && sources.names.every(n=>n.text===n.label && n.height>=44 && n.scrollWidth<=n.width+1 && n.whiteSpace!=='nowrap'),sources);
+  await captureArtifact(client,'entries-source-popup');
+  await key(client,'Escape','Escape');
+  await setViewport(client,width,Math.min(height,600),true,deviceScaleFactor);
+  await clickSelector(client,'[data-action="open-directory"]');
+  await selectorExists(client,'[data-layout="entry-directory-rail"]');
+  const rail=await evaluate(client,`(() => {const e=document.querySelector('[data-layout="entry-directory-rail"]'),r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,scroll:e.scrollHeight,client:e.clientHeight,count:e.querySelectorAll('[data-directory-kind="group"]').length};})()`);
+  assertThat('long directory scrolls independently within viewport',rail.count>=10 && rail.scroll>rail.client && rail.left>=0 && rail.right<=width+1 && rail.bottom<=height,rail);
+  const beforeY=await evaluate(client,'scrollY');
+  await client.send('Input.dispatchMouseEvent',{type:'mouseWheel',x:(rail.left+rail.right)/2,y:(rail.top+rail.bottom)/2,deltaX:0,deltaY:180});
+  await waitFor(client,`document.querySelector('[data-layout="entry-directory-rail"]').scrollTop>0`);
+  assertThat('directory browsing leaves document position alone',await evaluate(client,'scrollY')===beforeY);
+  await captureArtifact(client,'entries-mobile-directory');
+  await clickSelector(client,'[data-action="close-directory"]');
+  await setViewport(client,width,height,true,deviceScaleFactor);
 }
 
 async function checkSettings(client) {
@@ -513,8 +278,9 @@ async function checkFeeds(client) {
   );
   assertThat('feed titles stay inside the viewport', evidence.titleBoundsOk, evidence);
   assertThat('feeds page has no horizontal overflow', evidence.rootScrollWidth <= evidence.rootClientWidth + 1, evidence);
-  assertThat('feed statistics share one row and leave the address input in view',
-    evidence.stats.length === 2 && Math.abs(evidence.stats[0].top - evidence.stats[1].top) <= 1 &&
+  assertThat('four feed statistics form two rows and leave the address input in view',
+    evidence.stats.length === 4 && Math.abs(evidence.stats[0].top - evidence.stats[1].top) <= 1 &&
+    Math.abs(evidence.stats[2].top - evidence.stats[3].top) <= 1 && evidence.stats[2].top>evidence.stats[0].top &&
     evidence.stats[0].right <= evidence.stats[1].left && evidence.inputBottom <= evidence.viewportHeight, evidence);
   await captureArtifact(client, 'feeds');
 
@@ -696,43 +462,28 @@ async function checkPrimaryWorkflow(client) {
     detachRefresh();
   }
 
-  await seedAndNavigate(client, 'mobile-ui-short', '/entries', '[data-page="entries"][data-position-ready="true"]');
-  await ensureEntryControlsOpen(client);
-  await evaluate(client, `const select = document.querySelector('[data-field="entry-grouping-mode"]'); select.value='source'; select.dispatchEvent(new Event('change', {bubbles:true}))`);
-  await tap('[data-field="search-title"]');
-  await client.send('Input.insertText', {text:'no matching title'});
-  await tap('[data-field="read-filter-read"]');
-  await tap('[data-field="starred-filter-starred"]');
-  await tap('[data-field="entry-source-filter"]');
-  await tap('[data-action="hide-entry-controls"]');
-  await waitFor(client, `document.querySelector('[data-layout="entries-page-state"][data-state="empty"]')?.textContent.includes('当前筛选没有匹配')`);
-  const filtered = await evaluate(client, `(() => {
-    const summary = document.querySelector('[data-slot="entry-filter-summary-text"]');
-    const clear = document.querySelector('[data-action="clear-entry-filters"]').getBoundingClientRect();
-    return {summary:summary.textContent, hidden:!!document.querySelector('[data-action="show-entry-controls"]'),
-      clearWidth:clear.width,clearHeight:clear.height,overflow:document.documentElement.scrollWidth>innerWidth};
-  })()`);
-  assertThat('collapsed filters expose all active conditions and a usable reset',
-    filtered.hidden && ['no matching title','仅已读','仅收藏','来源：'].every(part=>filtered.summary.includes(part)) &&
-    meetsTouchTarget(filtered.clearWidth,filtered.clearHeight) && !filtered.overflow, filtered);
-  await captureArtifact(client, 'entries-filter-summary');
+  await seedAndNavigate(client,'home-reader','/entries','[data-page="entries"][data-position-ready="true"]');
+  await tap('[data-action="group-by-source"]');
+  await tap('[data-action="open-source-filter"]');
+  await tap('#source-filter-dialog .source-choices input');
+  await tap('[data-action="apply-source-filter"]');
+  await tap('[data-action="toggle-search"]');
+  await tap('[data-field="entry-search"]');
+  await client.send('Input.insertText',{text:'no matching title'});
+  await key(client,'Escape','Escape');
+  await tap('[aria-label="仅已读"]');
+  await tap('[aria-label="仅收藏"]');
+  await waitFor(client,`document.querySelector('[data-layout="entries-page-state"][data-state="empty"]')?.textContent.includes('当前筛选没有匹配')`);
+  const summary=await evaluate(client,`document.querySelector('[data-slot="entry-filter-summary-text"]').textContent`);
+  assertThat('always visible filter summary explains every active condition',['no matching title','仅已读','仅收藏','来源：'].every(part=>summary.includes(part)),summary);
+  await tap('.entries-view-options summary');
   await tap('[data-action="clear-entry-filters"]');
-  await selectorExists(client, '[data-slot="entry-card-title"]');
-  const storedWorkspace = `JSON.parse(localStorage.getItem('rssr-web-app-state-v2' +
-    (JSON.parse(localStorage.getItem('rssr-web-commit-v1')).revisions[1] % 2 === 1 ? '-next' : ''))).entries_workspace`;
-  await waitFor(client, `(() => {const state=${storedWorkspace}; return state.read_filter==='all' && state.starred_filter==='all' && state.selected_feed_urls.length===0 && state.grouping_mode==='source';})()`);
-  await navigate(client, `${staticBase}/entries`);
-  await selectorExists(client, '[data-slot="entry-card-title"]');
-  await ensureEntryControlsOpen(client);
-  assertThat('clear filters persists the reset while preserving grouping and archive display', await evaluate(client, `
-    !document.querySelector('[data-layout="entry-filter-summary"]') &&
-    document.querySelector('[data-field="search-title"]').value === '' &&
-    !document.querySelector('[data-field="read-filter-read"]').checked &&
-    !document.querySelector('[data-field="starred-filter-starred"]').checked &&
-    !document.querySelector('[data-field="entry-source-filter"]').checked &&
-    document.querySelector('[data-field="entry-grouping-mode"]').value === 'source' &&
-    document.querySelector('[data-field="show-archived"]').checked &&
-    document.querySelector('[data-page="entries"]').dataset.positionPage === '1'`));
+  await selectorExists(client,'[data-slot="entry-card-title"]');
+  const storedWorkspace=`JSON.parse(localStorage.getItem('rssr-web-app-state-v2'+(JSON.parse(localStorage.getItem('rssr-web-commit-v1')).revisions[1]%2===1?'-next':''))).entries_workspace`;
+  await waitFor(client,`(() => {const s=${storedWorkspace};return s.read_filter==='all' && s.starred_filter==='all' && s.selected_feed_urls.length===0 && s.grouping_mode==='source';})()`);
+  await navigate(client,`${staticBase}/entries`);
+  await selectorExists(client,'[data-slot="entry-card-title"]');
+  assertThat('reset persists without changing grouping',await evaluate(client,`!document.querySelector('[data-layout="entry-filter-summary"]') && document.querySelector('[data-action="group-by-source"]').getAttribute('aria-pressed')==='true' && document.querySelector('[data-page="entries"]').dataset.positionPage==='1'`));
 
   await seedAndNavigate(client, 'home-reader', '/entries/2', '[data-action="open-reader-image"]');
   await beginManualScroll(client);
@@ -776,88 +527,32 @@ async function checkPrimaryWorkflow(client) {
 }
 
 async function checkShortDirectory(client) {
-  await seedAndNavigate(
-    client,
-    'mobile-ui-short',
-    '/entries',
-    '[data-page="entries"]',
-  );
-  await ensureEntryControlsOpen(client);
-  const evidence = await evaluate(
-    client,
-    `(async () => {
-      await Promise.race([
-        new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
-        new Promise((resolve) => setTimeout(resolve, 1000)),
-      ]);
-      const directory = document.querySelector('[data-layout="entry-top-directory"]');
-      const style = getComputedStyle(directory);
-      return {
-        chips: directory.querySelectorAll('[data-layout="entry-top-directory-chip"]').length,
-        scrollWidth: directory.scrollWidth,
-        clientWidth: directory.clientWidth,
-        maskImage: style.maskImage || style.webkitMaskImage,
-      };
-    })()`,
-  );
-  assertThat(
-    'short directory has no overflow',
-    evidence.chips === 1 && evidence.scrollWidth <= evidence.clientWidth + 1,
-    evidence,
-  );
-  assertThat('short directory has no false overflow hint', evidence.maskImage === 'none', evidence);
-  await captureArtifact(client, 'entries-short-directory');
+  await seedAndNavigate(client,'mobile-ui-short','/entries','[data-page="entries"][data-position-ready="true"]');
+  await clickSelector(client,'[data-action="open-directory"]');
+  const evidence=await evaluate(client,`(() => {const d=document.querySelector('[data-layout="entry-directory-rail"]');return {groups:d.querySelectorAll('[data-directory-kind="group"]').length,scroll:d.scrollHeight,client:d.clientHeight};})()`);
+  assertThat('short floating directory does not scroll unnecessarily',evidence.groups===1 && evidence.scroll<=evidence.client+1,evidence);
+  await captureArtifact(client,'entries-short-directory');
+  await clickSelector(client,'[data-action="close-directory"]');
 }
 
 async function checkDesktop(client) {
-  await setViewport(client, 1280, 800, false, 1);
-  await seedAndNavigate(
-    client,
-    'mobile-ui-overflow',
-    '/entries',
-    '[data-layout="entry-directory-rail"]',
-  );
-  await ensureEntryControlsOpen(client);
-  const evidence = await evaluate(
-    client,
-    `(() => {
-      const root = document.documentElement;
-      const rail = document.querySelector('[data-layout="entry-directory-rail"]');
-      const topDirectory = document.querySelector('[data-layout="entry-top-directory"]');
-      const chip = document.querySelector('[data-layout="entry-filters-source-chip"]');
-      return {
-        innerWidth,
-        innerHeight,
-        rootClientWidth: root.clientWidth,
-        rootScrollWidth: root.scrollWidth,
-        railDisplay: getComputedStyle(rail).display,
-        topDirectoryDisplay: getComputedStyle(topDirectory).display,
-        chipHeight: chip.getBoundingClientRect().height,
-      };
-    })()`,
-  );
-  assertThat('desktop viewport is exact', evidence.innerWidth === 1280 && evidence.innerHeight === 800, evidence);
-  assertThat('desktop directory rail remains visible', evidence.railDisplay !== 'none', evidence);
-  assertThat('mobile top directory remains hidden on desktop', evidence.topDirectoryDisplay === 'none', evidence);
-  assertThat('desktop source row keeps touch target', meetsTouchTarget(evidence.chipHeight), evidence);
-  assertThat('desktop entries has no horizontal overflow', evidence.rootScrollWidth <= evidence.rootClientWidth + 1, evidence);
-  await checkDirectoryLabels(client, 'desktop time directory');
-  await captureArtifact(client, 'entries-desktop');
-  await seedAndNavigate(client, 'home-reader', '/entries', '[data-layout="entry-groups"][data-state="populated"]');
-  await ensureEntryControlsOpen(client);
-  await evaluate(client, `const select = document.querySelector('[data-field="entry-grouping-mode"]'); select.value = 'source'; select.dispatchEvent(new Event('change', {bubbles:true}));`);
-  await waitFor(client, `document.querySelector('[data-layout="entry-directory-rail"] [data-slot="entry-directory-title"]').textContent.includes('LongUnbrokenSourceName')`);
-  await checkDirectoryLabels(client, 'desktop source directory');
-  await captureArtifact(client, 'entries-desktop-source-directory');
-  await setViewport(client, width, height, true, deviceScaleFactor);
-  const mobile = await evaluate(client, `(() => {
-    const chip = document.querySelector('[data-layout="entry-top-directory-chip"]');
-    const title = chip.querySelector('[data-slot="entry-directory-title"]');
-    return {text:title.textContent, titleWidth:title.clientWidth, titleScrollWidth:title.scrollWidth,
-      rootWidth:document.documentElement.clientWidth, rootScrollWidth:document.documentElement.scrollWidth};
-  })()`);
-  assertThat('mobile source directory wraps full unbroken names', mobile.text.includes('LongUnbrokenSourceName') && mobile.titleScrollWidth <= mobile.titleWidth + 1 && mobile.rootScrollWidth <= mobile.rootWidth + 1, mobile);
-  await captureArtifact(client, 'entries-mobile-source-directory');
+  await setViewport(client,1280,800,false,1);
+  await seedAndNavigate(client,'mobile-ui-overflow','/entries','[data-layout="entry-directory-rail"]');
+  const evidence=await evaluate(client,`({width:innerWidth,scroll:document.documentElement.scrollWidth,rail:!!document.querySelector('[data-layout="entry-directory-rail"]').getClientRects().length,source:document.querySelector('[data-action="open-source-filter"]').getBoundingClientRect().height})`);
+  assertThat('desktop shows independent directory and keeps source hit target',evidence.rail && evidence.source>=44 && evidence.scroll<=evidence.width+1,evidence);
+  await checkDirectoryLabels(client,'desktop time directory');
+  await captureArtifact(client,'entries-desktop');
+  await seedAndNavigate(client,'home-reader','/entries','[data-layout="entry-groups"][data-state="populated"]');
+  await clickSelector(client,'[data-action="group-by-source"]');
+  await waitFor(client,`document.querySelector('[data-layout="entry-directory-rail"] [data-slot="entry-directory-title"]').textContent.includes('LongUnbrokenSourceName')`);
+  await checkDirectoryLabels(client,'desktop source directory');
+  await captureArtifact(client,'entries-desktop-source-directory');
+  await setViewport(client,width,height,true,deviceScaleFactor);
+  await evaluate(client,'window.scrollTo(0,0)');
+  await clickSelector(client,'[data-action="open-directory"]');
+  await checkDirectoryLabels(client,'mobile source directory');
+  await captureArtifact(client,'entries-mobile-source-directory');
+  await clickSelector(client,'[data-action="close-directory"]');
 }
 
 async function checkDirectoryLabels(client, label) {
@@ -1151,20 +846,16 @@ async function checkHomeRefreshAndGestures(client) {
     await selectorExists(client, '[data-slot="entry-card-title"]');
     await ensureEntryControlsOpen(client);
     assertThat('completed refresh becomes visible in the article list', await evaluate(client, `document.querySelector('[data-slot="entry-pagination-status"]').textContent.includes('/ 8')`));
+    await clickSelector(client,'[data-action="open-source-filter"]');
     const source = await evaluate(client, `(() => {
-      const row = document.querySelector('[data-layout="entry-filters-source-chip"] span');
+      const row = document.querySelector('.source-choices .source-choice span');
       row.scrollIntoView({block:'center'});
       return {text: row.textContent, width: row.clientWidth, scrollWidth: row.scrollWidth, whiteSpace: getComputedStyle(row).whiteSpace,
         rootWidth: document.documentElement.clientWidth, rootScrollWidth: document.documentElement.scrollWidth};
     })()`);
     assertThat('extreme unbroken source remains fully wrapped', source.text.includes('LongUnbrokenSourceName') && source.whiteSpace !== 'nowrap' && source.scrollWidth <= source.width + 1 && source.rootScrollWidth <= source.rootWidth + 1, source);
     await captureArtifact(client, 'sources-full-names');
-    const sources = '[data-field="entry-source-filter"]';
-    await evaluate(client, `const boxes = [...document.querySelectorAll('${sources}')]; boxes[0].click(); boxes[1].click()`);
-    await waitFor(client, `[...document.querySelectorAll('${sources}')].every(x => x.checked)`);
-    await evaluate(client, `[...document.querySelectorAll('${sources}')].forEach(x => x.click())`);
-    await waitFor(client, `[...document.querySelectorAll('${sources}')].every(x => !x.checked)`);
-    await clickSelector(client, '[data-action="hide-entry-controls"]');
+    await key(client,'Escape','Escape');
 
     // Real CDP touch events, not synthetic reducer calls. Start on the page header.
     await evaluate(client, 'window.scrollTo(0, 0)');
@@ -1565,8 +1256,9 @@ async function checkNativeWindow(client, target) {
   }
 
   await ensureEntryControlsOpen(client);
+  await clickSelector(client,'[data-action="open-source-filter"]');
   const sources = await evaluate(client, `(() => {
-    const names = [...document.querySelectorAll('[data-layout="entry-filters-source-chip"] span')];
+    const names = [...document.querySelectorAll('.source-choices .source-choice span')];
     return {longNames:names.filter(el => el.textContent.length > 40).map(el => {
       const s = getComputedStyle(el); return {text:el.textContent, width:el.clientWidth, scrollWidth:el.scrollWidth,
         height:el.clientHeight, scrollHeight:el.scrollHeight, whiteSpace:s.whiteSpace, textOverflow:s.textOverflow};
@@ -1578,7 +1270,7 @@ async function checkNativeWindow(client, target) {
     sources.longNames.length > 0 && sources.longNames.every(item => item.whiteSpace !== 'nowrap' && item.textOverflow !== 'ellipsis' &&
       item.scrollWidth <= item.width + 1 && item.scrollHeight <= item.height + 1) && sources.rootScrollWidth <= sources.rootWidth + 1, sources);
   await captureArtifact(client, 'native-entries-sources');
-  await clickSelector(client, '[data-action="hide-entry-controls"]');
+  await key(client,'Escape','Escape');
   await selectorExists(client, '[data-layout="entry-pagination"]');
   for (let iteration = 0; iteration < 10; iteration++) {
     const before = await evaluate(client, `document.querySelector('[data-slot="entry-pagination-status"]').textContent`);

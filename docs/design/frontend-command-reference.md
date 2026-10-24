@@ -39,7 +39,7 @@ CLI 直接复用 `AppUseCases`，不依赖 UI 命令类型。实现边界见
 
 ### Home、搜索与阅读交互
 
-顶部展开态为 `[R] [搜索图标] [RSS 图标] [滑杆图标] [收起箭头]`，Reader 最左侧增加返回图标。R 同时是 brand / Read / Home，没有独立“文章”导航按钮。
+顶部展开态为 `[R] [搜索图标] [RSS 图标] [齿轮图标] [收起箭头]`，Reader 最左侧增加返回图标。R 同时是 brand / Read / Home，没有独立“文章”导航按钮。
 
 | 稳定接口 | Rust 语义 / 结果 |
 | --- | --- |
@@ -73,15 +73,29 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 
 位置采集发生在操作边界：DOM 捕获阶段的控件点击、阅读区内无修饰键的左右方向键切文、表单提交与浏览器 `popstate`。搜索框光标移动、带修饰键及输入法组词期间的按键不采集位置，阅读快捷键同样放行组词输入。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
 
-`data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好仍被忽略，搜索词与文章筛选折叠偏好保留。`app-nav-shell` 的 `data-state` 为 `normal` / `search` / `collapsed`。
+`data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好仍被忽略，搜索词仍持久化；文章筛选折叠偏好已退役，筛选栏常驻。`app-nav-shell` 的 `data-state` 为 `normal` / `search` / `collapsed`。
 
 `data-action="toggle-nav"` / `data-slot="app-nav-toggle"` 是顶栏最右侧的收起/展开按钮，`aria-expanded` 表示导航展开状态，`aria-controls="app-nav-content"` 指向内容区域。收起时只有箭头按钮可交互，刷新 live region 仍可向辅助技术报告结果。状态由 App shell 在本次运行内共享，跨页保留但不写入配置；收起关闭搜索模式但保留搜索词。Rust 负责显隐与状态，CSS 控制向左收拢后的 44px 占位和窄箭头外观。`AppNav` 实现集中于 `components/app_nav.rs`，原 `app::AppNav` 导出保持兼容。
 
 搜索输入框保持 shell 级状态；窄屏或持久化的旧版侧栏 CSS 把导航压窄时，导航行允许换行，输入框占满下一行。换行预算包含收起按钮预留的 48px，避免新增箭头把输入框挤窄。
 
-文章列表在筛选面板外显示 `entry-filter-summary`，其中 `entry-filter-summary-text` 概括当前搜索、已读、收藏与来源条件；单订阅页不显示未参与查询的来源偏好。`clear-entry-filters` 清空 shell 搜索和上述状态条件，重置第一页，沿既有查询、偏好保存和批量预览取消路径生效；分组、归档显示偏好与路由订阅范围保留。空结果区分没有订阅、订阅尚无文章、文章已归档及当前筛选无匹配，筛选摘要在无匹配时仍提供清除入口。首次文章查询成功后才显示空结果说明；加载中或首次读取失败时只显示相应状态，不推断文章库为空。
+文章列表在筛选栏下显示 `entry-filter-summary`，其中 `entry-filter-summary-text` 概括当前搜索、已读、收藏与来源条件；单订阅页不显示未参与查询的来源偏好。`clear-entry-filters` 清空 shell 搜索和上述状态条件，重置第一页，沿既有查询、偏好保存和清空选择路径生效；分组、归档显示偏好与路由订阅范围保留。空结果区分没有订阅、订阅尚无文章、文章已归档及当前筛选无匹配，筛选摘要在无匹配时仍提供清除入口。首次文章查询成功后才显示空结果说明；加载中或首次读取失败时只显示相应状态，不推断文章库为空。
 
-来源选择继续保留 `entry-filters-source-chip` selector 兼容用户主题，但视觉为带可见 checkbox 的换行选择行；选择区有纵向滚动上限，名称本身不省略。分页只渲染一份 `entry-pagination`，位于页面 panel 的同级，固定于视口下方并预留 safe-area / 内容末尾空间。
+来源选择使用 `open-source-filter` 打开原生 dialog，Rust 管理草稿；全部／部分入口分别显示“全部来源”／“…”。完整名称在可搜索、可滚动的勾选列表内显示。旧 `entry-filters-source-chip` 与来源未读数槽位已退役；统计移至订阅页。分页只渲染一份 `entry-pagination`，位于页面 panel 的同级，固定于视口下方并预留 safe-area / 内容末尾空间。
+
+### 阅读工作区（2026-10-24）
+
+- `select-entry`、`select-current-page`：Rust reducer 只接受当前页 ID。`data-selected` 与 `data-read` 分别表示勾选和阅读状态；master 的 `aria-checked` 可为 `mixed`。16px 方框配 44px 点击区域，键盘焦点单独可见。
+- `mark-selected-read`、`archive-selected` → `EntriesCommand::ApplySelection` → `EntriesListService::apply_entry_batch`；在点击时冻结显式 ID，存储层原子更新。没有选择时禁用，执行中禁止修改勾选。旧 UI 筛选全量预览按钮已退役；CLI 和旧 host 预览接口仍保留。
+- `group-by-source` / `group-by-time` 是单选按钮组；状态筛选四个 icon button 以 `aria-pressed` 表达选择，再次点击取消该条件。
+- `open-source-filter` / `apply-source-filter`：取消、Esc、点外侧只关闭草稿；应用后清空文章选择，空来源集合不允许提交。页面里的“全部”偏好仍用空 URL 列表表达。
+- `open-directory` / `close-directory`：目录可以收起，≤1000px 默认收起为入口。目录浏览和同页定位保留选择；换页、筛选、搜索或切换视图清空选择。原有目录 Rust 状态与分组 memo 分离，选择不重建分组树。
+- `edit-feed` / `save-feed-edit` 仅在 Subscribe；`FeedsCommand` 经 runtime 调用 `FeedService`，Rust 管理加载、草稿、校验和忙碌状态。native dialog 只负责焦点／模态，DOM 测量负责定位。
+- `stats-grid` 中 `data-stat=feeds|entries|unread|archived` 是全局统计；归档计数为手动与自动归档的并集，不重复计数。
+
+SQLite migration `0008_reading_workspace.sql` 只增加 `entries.is_archived` 与 `feeds.custom_title`；BrowserStore 对相同字段使用 serde 默认值读取旧数据。批量写入走单条 SQL 或单个 FLAGS 提交。来源编辑保持 feed ID，地址变化时清除旧缓存验证器并提升 generation，迟到的旧刷新不能覆盖新地址；工作区已选 URL 同步迁移。配置格式未增字段：JSON `title` 和 OPML 显示名导入时作为自定义名，刷新不会覆盖。
+
+新增 host 路由 `entries/apply_batch`、`feeds/edit_details`、`feeds/update` 供同版本 Web server 使用。未拆 crate、未变更 Reader 布局或扩大配置同步范围。
 
 ### 订阅相关
 
@@ -255,9 +269,9 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 - `data-action="activate-home"`
 - `data-action="toggle-search"`
 - `data-action="toggle-nav"`
-- `data-action="show-entry-controls"` / `hide-entry-controls`
+- `data-action="show-entry-controls"` / `hide-entry-controls`（已退役）
 - `data-action="clear-entry-filters"`
-- `data-action="preview-mark-filtered-read"` / `confirm-mark-filtered-read` / `cancel-mark-filtered-read`
+- `data-action="select-entry"` / `select-current-page` / `mark-selected-read` / `archive-selected`（替代旧的按筛选全量预览操作）
 - `data-action="entry-page-previous"`
 - `data-action="entry-page-next"`
 - `data-action="open-reader-image"`
@@ -487,11 +501,11 @@ Web 使用 `_blank` 与 `rel="noopener noreferrer"`，不触发阅读状态重�
 通过 `aria-describedby` 关联“未读 N 篇”，可见数字不重复朗读。
 计数来自 `FeedSummary.unread_count`，不由当前文章集合计算；成功标记后重查订阅汇总，失败不预减计数。
 
-## 按筛选批量已读
+## 批量操作边界
 
-`EntriesCommand::PreviewMarkRead { query }` 冻结当前查询，忽略分页限制，返回排序后的未读 ID 集合；`ConfirmMarkRead { preview }` 在存储锁/事务内重新比较完整集合。变化时返回新预览并要求再次确认，未变化时一次批量写入。查询范围变化取消待确认预览；写入期间拒绝重复提交，已开始的写入不因筛选变化而取消。成功后加载当前查询、夹紧页码并 bootstrap 权威订阅计数。列表状态反馈放在筛选折叠区外。
+文章 UI 使用显式 ID 的 `ApplySelection`，只操作当前页勾选项，规则见上文“阅读工作区”。旧 `EntriesCommand::PreviewMarkRead` / `ConfirmMarkRead` 和对应 UI selector 已退役。
 
-稳定接口：`data-layout=entry-bulk-read`，`data-state=idle|confirm`，`data-action=preview-mark-filtered-read|confirm-mark-filtered-read|cancel-mark-filtered-read`。按钮忙态 disabled/aria-busy，触控目标至少 44px。
+CLI 保留按筛选全范围的预览／确认用例，存储锁或事务内重新比较完整未读集合；匹配变化则重新预览。`active` 排除手动及按时间归档项，`archived` 包含二者并集。该 CLI 行为不得移作文章 UI 的默认批量范围。
 
 ## 订阅自动发现
 

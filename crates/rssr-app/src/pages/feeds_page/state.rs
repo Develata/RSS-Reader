@@ -2,6 +2,12 @@ use rssr_domain::FeedSummary;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FeedsPageState {
+    pub(crate) edit_feed_id: Option<i64>,
+    pub(crate) edit_details: Option<rssr_domain::FeedEditDetails>,
+    pub(crate) edit_busy: bool,
+    pub(crate) edit_error: Option<String>,
+    pub(crate) unread_count: usize,
+    pub(crate) archived_count: u64,
     pub(crate) feed_candidates: Option<(url::Url, Vec<rssr_application::FeedDiscoveryCandidate>)>,
     pub(crate) feed_url: String,
     pub(crate) adding_feed_url: Option<String>,
@@ -21,6 +27,12 @@ pub(crate) struct FeedsPageState {
 impl FeedsPageState {
     pub(crate) fn new() -> Self {
         Self {
+            edit_feed_id: None,
+            edit_details: None,
+            edit_busy: false,
+            edit_error: None,
+            unread_count: 0,
+            archived_count: 0,
             feed_candidates: None,
             feed_url: String::new(),
             adding_feed_url: None,

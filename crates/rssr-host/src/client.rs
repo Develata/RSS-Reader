@@ -191,6 +191,12 @@ macro_rules! backend_methods {
 }
 
 backend_methods! {
+    fn feed_edit_details(&self, feed_id: i64) -> rssr_domain::FeedEditDetails
+        => local(feed_id), remote(c) c.call::<protocol::FeedEditDetails>(&feed_id);
+    fn update_subscription(&self, edit: rssr_domain::FeedEditRequest) -> ()
+        => local(edit), remote(c) c.call::<protocol::UpdateSubscription>(&edit);
+    fn apply_entry_batch(&self, request: rssr_domain::EntryBatchRequest) -> u64
+        => local(request), remote(c) c.call::<protocol::ApplyEntryBatch>(&request);
     fn preview_mark_read(&self, query: &EntryQuery) -> MarkReadPreview
         => local(query), remote(c) c.call::<protocol::PreviewMarkRead>(query);
     fn mark_read_if_unchanged(&self, preview: &MarkReadPreview) -> MarkReadOutcome

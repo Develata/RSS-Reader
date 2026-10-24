@@ -38,3 +38,15 @@ pub struct AppStateSnapshot {
     pub last_opened_feed_id: Option<i64>,
     pub entries_workspace: EntriesWorkspaceState,
 }
+
+impl AppStateSnapshot {
+    pub fn replace_feed_url(&mut self, old_url: &str, new_url: &str) {
+        for url in &mut self.entries_workspace.selected_feed_urls {
+            if url == old_url {
+                *url = new_url.to_string();
+            }
+        }
+        self.entries_workspace.selected_feed_urls.sort();
+        self.entries_workspace.selected_feed_urls.dedup();
+    }
+}

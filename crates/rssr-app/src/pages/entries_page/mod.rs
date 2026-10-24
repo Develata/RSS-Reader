@@ -26,7 +26,6 @@ use self::{
     session::EntriesPageSession,
     state::EntriesPageState,
 };
-use crate::ui::initial_entry_controls_hidden;
 use crate::{
     app::AppNav,
     components::status_banner::StatusBanner,
@@ -68,8 +67,30 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
     let directory_state = use_signal(directory::DirectoryState::default);
+    let mut directory_collapsed = use_signal(|| false);
+    let mut mobile_directory_open = use_signal(|| false);
+    let mut directory_was_open = use_signal(|| false);
+    use_effect(move || {
+        let open = mobile_directory_open();
+        if open == *directory_was_open.peek() {
+            return;
+        }
+        directory_was_open.set(open);
+        let target = if open { "close-directory" } else { "open-directory" };
+        // DOM adapter only moves focus; Rust continues to own open/close and directory state.
+        let _ = document::eval(&format!(
+            "document.querySelector('[data-action={target}]')?.focus({{preventScroll:true}})"
+        ));
+    });
     use_context_provider(|| directory::DirectoryStore(directory_state));
-    let controls = render_entry_controls(&facade);
+    let controls = render_entry_controls(
+        &facade,
+        mobile_directory_open(),
+        EventHandler::new(move |_| {
+            directory_collapsed.set(false);
+            mobile_directory_open.set(true);
+        }),
+    );
     let pagination = render_entry_pagination_controls(&facade);
 
     rsx! {
@@ -79,6 +100,9 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             "data-position-key": facade.position_key(),
             "data-position-page": "{facade.current_page()}",
             "data-position-ready": if facade.positions_ready() { "true" } else { "false" },
+            "data-has-selection": facade.selected_count() > 0,
+            "data-directory-collapsed": directory_collapsed(),
+            "data-mobile-directory-open": mobile_directory_open(),
             directory::DirectoryBridge {
                 model: facade.directory_model(),
                 context_key: facade.position_key(),
@@ -88,11 +112,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             if feed_id.is_none() { pull_refresh::PullRefresh {} }
             div { "data-layout": "entries-layout",
                 div { "data-layout": "entries-main",
-                    div { "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "entries",
-                        div { "data-slot": "page-section-row",
-                            h1 { "data-slot": "page-title", "{entries_page_title(feed_id)}" }
-                        }
-                    }
+                    { controls }
                     if feed_id.is_some() {
                         div { "data-layout": "entries-page-backlink",
                             Link {
@@ -108,9 +128,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                         message: facade.status_message().to_string(),
                         tone: facade.status_tone().to_string(),
                         announce: true,
+                        visually_hidden: facade.entries_loaded() && facade.status_tone() == "info",
                     }
-                    { bulk::render_bulk_controls(&facade) }
-                    { controls }
                     if facade.entries_is_empty() {
                         if facade.entries_loaded() {
                             div { "data-layout": "entries-page-state", "data-state": "empty",
@@ -193,7 +212,11 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     }
                 }
                 if !facade.group_nav_items().is_empty() {
-                    directory::DirectoryRail { model: facade.directory_model(), grouping_mode: facade.grouping_mode() }
+                    if mobile_directory_open() {
+                        button { class: "directory-backdrop", aria_label: "关闭目录", onclick: move |_| mobile_directory_open.set(false) }
+                    }
+                    directory::DirectoryRail { model: facade.directory_model(), grouping_mode: facade.grouping_mode(),
+                        on_close: move |_| { directory_collapsed.set(true); mobile_directory_open.set(false); } }
                 }
             }
         }
@@ -202,7 +225,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
 }
 
 fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> EntriesPageFacade {
-    let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
+    let state = use_signal(EntriesPageState::new);
     let query_generation = use_signal(|| 0);
     let bootstrap_generation = use_signal(|| 0);
     let session = EntriesPageSession::new(feed_id, state, query_generation, bootstrap_generation);
@@ -211,7 +234,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     //
     // 信号订阅粒度是「整个信号」，所以第一个 memo 每次状态变化都会重算——但它很便宜
     // （只做 Arc 指针拷贝与少量标量）。关键在于它的值没变时，第二个 memo 不会重算，
-    // 于是 `SetStatus`（每次切换已读/收藏都会发一条）、`SetControlsHidden` 这类与分组
+    // 于是 `SetStatus`（每次切换已读/收藏都会发一条）、`ToggleSelected` 这类与分组
     // 无关的 intent 不再重建两棵分组树。
     let presenter_input = use_memo(move || {
         session.with_state(|state| EntriesPresenterInput::from_state(state, feed_id))
@@ -253,6 +276,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         // 首次挂载不是筛选切换；异步加载可能先完成，不能随后把恢复页码重置为 1。
         if *previous_search.peek() != next {
             previous_search.set(next);
+            session.dispatch(intent::EntriesPageIntent::ClearSelection);
             session.dispatch(intent::EntriesPageIntent::SetCurrentPage(state::FIRST_PAGE_NUMBER));
         }
     });
@@ -297,8 +321,4 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     );
 
     facade
-}
-
-fn entries_page_title(feed_id: Option<i64>) -> &'static str {
-    if feed_id.is_some() { "订阅文章" } else { "文章" }
 }

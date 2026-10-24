@@ -27,6 +27,22 @@ pub struct FeedService {
 }
 
 impl FeedService {
+    pub async fn edit_details(&self, feed_id: i64) -> Result<rssr_domain::FeedEditDetails> {
+        self.feed_repository.edit_details(feed_id).await.context("读取来源失败")
+    }
+
+    pub async fn update_subscription(&self, mut edit: rssr_domain::FeedEditRequest) -> Result<()> {
+        edit.url = parse_feed_url(edit.url.trim()).context("RSS / Atom 地址不合法")?.to_string();
+        edit.custom_title = edit
+            .custom_title
+            .map(|title| title.trim().to_string())
+            .filter(|title| !title.is_empty());
+        anyhow::ensure!(
+            edit.custom_title.as_ref().is_none_or(|title| title.chars().count() <= 200),
+            "自定义名称不能超过 200 个字"
+        );
+        self.feed_repository.update_subscription(&edit).await.context("保存来源失败")
+    }
     pub fn new(
         feed_repository: Arc<dyn FeedRepository>,
         activation_port: Arc<dyn SubscriptionActivationPort>,
@@ -86,6 +102,18 @@ mod tests {
 
     #[async_trait::async_trait]
     impl FeedRepository for FeedRepositoryStub {
+        async fn edit_details(
+            &self,
+            _feed_id: i64,
+        ) -> rssr_domain::Result<rssr_domain::FeedEditDetails> {
+            Err(rssr_domain::DomainError::NotFound)
+        }
+        async fn update_subscription(
+            &self,
+            _edit: &rssr_domain::FeedEditRequest,
+        ) -> rssr_domain::Result<()> {
+            Err(rssr_domain::DomainError::InvalidInput("edit not used by this test double".into()))
+        }
         async fn upsert_subscription(
             &self,
             new_feed: &NewFeedSubscription,

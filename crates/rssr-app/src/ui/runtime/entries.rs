@@ -9,31 +9,17 @@ use rssr_domain::EntriesWorkspaceState;
 
 pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
     match command {
-        EntriesCommand::PreviewMarkRead { query } => {
+        EntriesCommand::ApplySelection { request } => {
+            let ids = request.entry_ids.clone();
+            let action = request.action;
             let result =
-                async { UiServices::shared().await?.entries().preview_mark_read(&query).await }
+                async { UiServices::shared().await?.entries().apply_entry_batch(request).await }
                     .await;
             vec![UiIntent::EntriesPage(match result {
-                Ok(preview) => EntriesPageIntent::BulkPreview(preview),
-                Err(error) => EntriesPageIntent::BulkFailed(error.to_string()),
+                Ok(count) => EntriesPageIntent::SelectionApplied { ids, action, count },
+                Err(error) => EntriesPageIntent::BulkFailed(format!("{error:#}")),
             })]
         }
-        EntriesCommand::ConfirmMarkRead { preview } => {
-            let result = async {
-                UiServices::shared().await?.entries().mark_read_if_unchanged(&preview).await
-            }
-            .await;
-            vec![UiIntent::EntriesPage(match result {
-                Ok(rssr_domain::MarkReadOutcome::Applied { changed_count }) => {
-                    EntriesPageIntent::BulkApplied(changed_count)
-                }
-                Ok(rssr_domain::MarkReadOutcome::SelectionChanged { preview }) => {
-                    EntriesPageIntent::BulkPreview(preview)
-                }
-                Err(error) => EntriesPageIntent::BulkFailed(error.to_string()),
-            })]
-        }
-
         EntriesCommand::Bootstrap { feed_id, load_preferences, load_feeds } => {
             match UiServices::shared().await {
                 Ok(services) => {

@@ -6,8 +6,7 @@ use super::{
     intent::EntriesPageIntent, reducer::dispatch_entries_page_intent, state::EntriesPageState,
 };
 use crate::ui::{
-    EntriesCommand, UiCommand, UiIntent, execute_ui_command, remember_entry_controls_hidden,
-    spawn_projected_ui_command,
+    EntriesCommand, UiCommand, UiIntent, execute_ui_command, spawn_projected_ui_command,
 };
 use rssr_domain::EntryQuery;
 
@@ -20,15 +19,15 @@ pub(crate) struct EntriesPageSession {
 }
 
 impl EntriesPageSession {
-    pub(crate) fn preview_mark_read(self, query: EntryQuery) {
-        self.spawn_bulk(EntriesCommand::PreviewMarkRead { query }, false);
-    }
-    pub(crate) fn confirm_mark_read(self) {
-        let preview = self.state.peek().bulk_preview.clone();
-        if let Some(preview) = preview
-            && !preview.unread_entry_ids.is_empty()
-        {
-            self.spawn_bulk(EntriesCommand::ConfirmMarkRead { preview }, true);
+    pub(crate) fn apply_selection(self, action: rssr_domain::EntryBatchAction) {
+        let entry_ids = self.state.peek().selected_entry_ids.iter().copied().collect::<Vec<_>>();
+        if !entry_ids.is_empty() {
+            self.spawn_bulk(
+                EntriesCommand::ApplySelection {
+                    request: rssr_domain::EntryBatchRequest { entry_ids, action },
+                },
+                true,
+            );
         }
     }
     fn spawn_bulk(self, command: EntriesCommand, writing: bool) {
@@ -43,7 +42,7 @@ impl EntriesPageSession {
                 return;
             }
             for intent in intents.into_iter().filter_map(UiIntent::into_entries_page_intent) {
-                let applied = matches!(&intent, EntriesPageIntent::BulkApplied(_));
+                let applied = matches!(&intent, EntriesPageIntent::SelectionApplied { .. });
                 self.dispatch(intent);
                 if applied {
                     self.bootstrap();
@@ -208,9 +207,6 @@ impl EntriesPageSession {
     }
 
     pub(crate) fn dispatch(self, intent: EntriesPageIntent) {
-        if let EntriesPageIntent::SetControlsHidden(hidden) = &intent {
-            remember_entry_controls_hidden(*hidden);
-        }
         dispatch_entries_page_intent(self.state, intent);
     }
 
@@ -264,7 +260,7 @@ mod tests {
         let session = dom.in_scope(ScopeId::APP, || {
             let session = EntriesPageSession::new(
                 None,
-                Signal::new(EntriesPageState::new(true)),
+                Signal::new(EntriesPageState::new()),
                 Signal::new(0),
                 Signal::new(0),
             );
@@ -299,7 +295,7 @@ mod tests {
         let mut dom = VirtualDom::new(|| rsx! {});
         dom.rebuild_in_place();
         let session = dom.in_scope(ScopeId::APP, || {
-            let mut state = EntriesPageState::new(true);
+            let mut state = EntriesPageState::new();
             state.entries_page_size = 1;
             let session =
                 EntriesPageSession::new(None, Signal::new(state), Signal::new(0), Signal::new(0));
@@ -344,7 +340,7 @@ mod tests {
         let session = dom.in_scope(ScopeId::APP, || {
             EntriesPageSession::new(
                 None,
-                Signal::new(EntriesPageState::new(true)),
+                Signal::new(EntriesPageState::new()),
                 Signal::new(0),
                 Signal::new(0),
             )
@@ -405,7 +401,7 @@ mod tests {
         let session = dom.in_scope(ScopeId::APP, || {
             let session = EntriesPageSession::new(
                 None,
-                Signal::new(EntriesPageState::new(true)),
+                Signal::new(EntriesPageState::new()),
                 Signal::new(0),
                 Signal::new(0),
             );
@@ -486,7 +482,7 @@ mod tests {
         let session = dom.in_scope(ScopeId::APP, || {
             let session = EntriesPageSession::new(
                 None,
-                Signal::new(EntriesPageState::new(true)),
+                Signal::new(EntriesPageState::new()),
                 Signal::new(0),
                 Signal::new(0),
             );
@@ -530,7 +526,7 @@ mod tests {
         let session = dom.in_scope(ScopeId::APP, || {
             let session = EntriesPageSession::new(
                 None,
-                Signal::new(EntriesPageState::new(true)),
+                Signal::new(EntriesPageState::new()),
                 Signal::new(0),
                 Signal::new(0),
             );

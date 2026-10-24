@@ -44,6 +44,7 @@ pub async fn dispatch(
         };
     }
 
+    route!(protocol::ApplyEntryBatch, |request| s.apply_entry_batch(request));
     route!(protocol::PreviewMarkRead, |query| s.preview_mark_read(&query));
     route!(protocol::MarkReadIfUnchanged, |preview| s.mark_read_if_unchanged(&preview));
     route!(protocol::BootstrapEntries, |input| s.bootstrap_entries(input));
@@ -62,6 +63,8 @@ pub async fn dispatch(
     route!(protocol::ToggleReaderRead, |input| s.toggle_reader_read(input));
     route!(protocol::ToggleReaderStarred, |input| s.toggle_reader_starred(input));
     route!(protocol::LocalizeEntryAssets, |entry_id| s.localize_entry_assets(entry_id));
+    route!(protocol::FeedEditDetails, |feed_id| s.feed_edit_details(feed_id));
+    route!(protocol::UpdateSubscription, |edit| s.update_subscription(edit));
     route!(protocol::LoadFeedsSnapshot, |()| s.load_feeds_snapshot());
     route!(protocol::AddSubscription, |request| s
         .add_subscription(&request.raw_url, request.fallback_site_url));
@@ -169,6 +172,7 @@ mod tests {
                 serde_json::to_value(rssr_domain::EntriesWorkspaceState::default()).unwrap(),
             ),
             ("entries/list", query.clone()),
+            ("entries/apply_batch", json!({"entry_ids": [999], "action": "MarkRead"})),
             ("entries/toggle_read", json!({"entry_id": 999, "currently_read": false})),
             ("entries/toggle_starred", json!({"entry_id": 999, "currently_starred": false})),
             ("shell/resolve_startup_target", json!(null)),
@@ -181,6 +185,11 @@ mod tests {
             ("reader/toggle_starred", json!({"entry_id": 999, "currently_starred": false})),
             ("reader/localize_entry_assets", json!(999)),
             ("feeds/snapshot", json!(null)),
+            ("feeds/edit_details", json!(999)),
+            (
+                "feeds/update",
+                json!({"feed_id": 999, "url": "https://example.invalid/feed.xml", "custom_title": "Example"}),
+            ),
             ("feeds/add_subscription", json!({"raw_url": "not a url", "fallback_site_url": null})),
             ("feeds/refresh_all", json!(null)),
             ("feeds/refresh_feed", json!(999)),
@@ -234,11 +243,26 @@ mod tests {
         assert_eq!(snapshot.feed_count, 1);
         let feed_id = snapshot.feeds[0].id;
 
+        call::<protocol::UpdateSubscription>(
+            &services,
+            &rssr_domain::FeedEditRequest {
+                feed_id,
+                url: "https://example.invalid/renamed.xml".into(),
+                custom_title: Some("My Example".into()),
+            },
+        )
+        .await;
+        let details = call::<protocol::FeedEditDetails>(&services, &feed_id).await;
+        assert_eq!(details.custom_title.as_deref(), Some("My Example"));
+
         let exported = call::<protocol::ExportConfigJson>(&services, &()).await;
         call::<protocol::RemoveFeed>(&services, &feed_id).await;
         assert_eq!(call::<protocol::LoadFeedsSnapshot>(&services, &()).await.feed_count, 0);
         call::<protocol::ImportConfigJson>(&services, &exported).await;
-        assert_eq!(call::<protocol::LoadFeedsSnapshot>(&services, &()).await.feed_count, 1);
+        let restored = call::<protocol::LoadFeedsSnapshot>(&services, &()).await;
+        assert_eq!(restored.feed_count, 1);
+        assert_eq!(restored.feeds[0].title, "My Example");
+        assert_eq!(restored.feeds[0].url.as_str(), "https://example.invalid/renamed.xml");
 
         let workspace = rssr_domain::EntriesWorkspaceState {
             show_archived: true,

@@ -1,3 +1,4 @@
+mod edit;
 mod facade;
 pub(crate) mod intent;
 mod reducer;
@@ -37,11 +38,20 @@ pub fn FeedsPage() -> Element {
                     div { "data-slot": "stat-card-label", "文章数" }
                     div { "data-slot": "stat-card-value", "{facade.total_entry_count()}" }
                 }
+                div { "data-layout": "stat-card", "data-stat": "unread",
+                    div { "data-slot": "stat-card-label", "未读" }
+                    div { "data-slot": "stat-card-value", "{facade.unread_count()}" }
+                }
+                div { "data-layout": "stat-card", "data-stat": "archived",
+                    div { "data-slot": "stat-card-label", "已归档" }
+                    div { "data-slot": "stat-card-value", "{facade.archived_count()}" }
+                }
             }
             StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string(), announce: true }
             FeedComposeSection { facade: facade.clone() }
             SavedFeedsSection { facade: facade.clone() }
-            ConfigExchangeSection { facade }
+            ConfigExchangeSection { facade: facade.clone() }
+            if facade.edit_open() { edit::FeedEditDialog { facade } }
         }
     }
 }

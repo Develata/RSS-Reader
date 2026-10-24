@@ -98,6 +98,9 @@ macro_rules! endpoints {
 }
 
 endpoints! {
+    FeedEditDetails => "feeds/edit_details": i64 => rssr_domain::FeedEditDetails;
+    UpdateSubscription => "feeds/update": rssr_domain::FeedEditRequest => ();
+    ApplyEntryBatch => "entries/apply_batch": rssr_domain::EntryBatchRequest => u64;
     PreviewMarkRead => "entries/preview_mark_read": EntryQuery => MarkReadPreview;
     MarkReadIfUnchanged => "entries/mark_read_if_unchanged": MarkReadPreview => MarkReadOutcome;
     BootstrapEntries => "entries/bootstrap": EntriesBootstrapInput => EntriesBootstrapOutcome;
