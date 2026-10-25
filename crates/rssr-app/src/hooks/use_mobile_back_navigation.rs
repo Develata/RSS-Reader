@@ -6,18 +6,11 @@ use dioxus::prelude::*;
 #[cfg(any(target_os = "android", all(test, not(target_arch = "wasm32"))))]
 mod android_bridge;
 
+#[cfg(any(target_os = "android", all(test, not(target_arch = "wasm32"))))]
+mod back_capture;
+
 #[cfg(target_os = "android")]
-thread_local! {
-    static BACK_CAPTURE_PENDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-#[cfg(target_os = "android")]
-struct BackCaptureGuard;
-#[cfg(target_os = "android")]
-impl Drop for BackCaptureGuard {
-    fn drop(&mut self) {
-        BACK_CAPTURE_PENDING.set(false);
-    }
-}
+static BACK_CAPTURE: back_capture::BackCaptureGate = back_capture::BackCaptureGate::new();
 
 /// The toolbar and native back key share history/fallback policy.
 pub(crate) fn navigate_back(navigator: Navigator, fallback_route: Option<AppRoute>) -> bool {
@@ -30,10 +23,9 @@ pub(crate) fn navigate_back(navigator: Navigator, fallback_route: Option<AppRout
         {
             return false;
         }
-        if BACK_CAPTURE_PENDING.replace(true) {
+        let Some(guard) = BACK_CAPTURE.try_acquire() else {
             return true;
-        }
-        let guard = BackCaptureGuard;
+        };
         let route = history().current_route();
         spawn(async move {
             let _guard = guard;
