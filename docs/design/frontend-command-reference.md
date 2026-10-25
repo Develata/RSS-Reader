@@ -73,6 +73,8 @@ Reader 根节点的 `data-state` 由 Rust 中的当前文章身份、内容完�
 
 位置记忆由 UI runtime 的 `reading_position` 管理，仅保留本次运行内的分页和坐标/锚点；没有 domain/application、数据库或 CLI 契约变化。列表只在初次加载成功后恢复分页，等待 presenter 与页码一致后才进行 DOM 恢复；主动筛选或翻页不会套用旧位置。以文章 ID 和视口偏移定位，找不到时回退到有效滚动范围内的原坐标。Reader 使用正文块锚点与偏移，顶部不因元信息高度变化而离开顶部。DOM bridge 提供测量、导航代次、时钟与用户输入事实，Rust 决定恢复、回退与停止，最多校正 2 秒；用户主动输入或导航会终止校正。图片 dialog 锁定滚动期间不记录临时坐标。
 
+`reading_position/controller.rs` 独立承载保存集合与恢复规则，不依赖 Dioxus。只有保存集合在本次运行中共享；恢复状态和访问代次随每次适配器连接重建，避免重挂载后拒绝新消息。外层负责异步桥接、清理与 Android 返回前捕获。事件使用明确的 Rust 类型；字段完整的未知事件不打断接收，也不触发保存或实际滚动，只有布局事实可产生目标坐标。
+
 返回列表的文章可有 `data-return-highlight="true"`，约 2 秒后移除；这是定位提示，不代表已读。`data-position-key` / `data-position-page` / `data-position-ready` / `data-position-entry` 是内部桥接字段，不作为用户主题接口。Web 页面刷新或应用结束清除位置，位置不参与配置交换。
 
 位置采集发生在操作边界：DOM 捕获阶段的控件点击、阅读区内无修饰键的左右方向键切文、表单提交与浏览器 `popstate`。搜索框光标移动、带修饰键及输入法组词期间的按键不采集位置，阅读快捷键同样放行组词输入。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
