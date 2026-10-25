@@ -1,92 +1,16 @@
 use std::{cell::Cell, rc::Rc};
 
 use dioxus::prelude::*;
-use serde::Deserialize;
 
 use crate::ui::AppShellState;
 
-const THRESHOLD: f64 = 80.0;
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum TouchKind {
-    Start,
-    Move,
-    End,
-    Cancel,
-}
-
-/// DOM facts only; eligibility, direction and threshold policy are resolved below.
-#[derive(Debug, Clone, Copy, Deserialize)]
-struct TouchSample {
-    kind: TouchKind,
-    x: f64,
-    y: f64,
-    at_top: bool,
-    eligible: bool,
-    touches: usize,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-enum PullState {
-    #[default]
-    Idle,
-    Tracking {
-        x: f64,
-        y: f64,
-        distance: f64,
-    },
-}
-
-impl PullState {
-    fn phase(self) -> &'static str {
-        match self {
-            Self::Idle => "idle",
-            Self::Tracking { distance, .. } if distance >= THRESHOLD => "armed",
-            Self::Tracking { distance, .. } if distance > 8.0 => "pulling",
-            Self::Tracking { .. } => "idle",
-        }
-    }
-
-    fn update(&mut self, sample: TouchSample, refreshing: bool) -> bool {
-        let expected_touches = match sample.kind {
-            TouchKind::Start | TouchKind::Move => 1,
-            TouchKind::End | TouchKind::Cancel => 0,
-        };
-        if refreshing || !sample.at_top || !sample.eligible || sample.touches != expected_touches {
-            *self = Self::Idle;
-            return false;
-        }
-        match sample.kind {
-            TouchKind::Start => *self = Self::Tracking { x: sample.x, y: sample.y, distance: 0.0 },
-            TouchKind::Move | TouchKind::End => {
-                if let Self::Tracking { x, y, .. } = *self {
-                    let distance = sample.y - y;
-                    let valid_direction =
-                        distance >= -8.0 && (sample.x - x).abs() <= distance.max(12.0);
-                    // The final contact can differ from the last delivered move.
-                    // Release uses that position, and only after the final finger lifts.
-                    if matches!(sample.kind, TouchKind::End) {
-                        *self = Self::Idle;
-                        return valid_direction && distance >= THRESHOLD;
-                    }
-                    if !valid_direction {
-                        *self = Self::Idle;
-                    } else {
-                        *self = Self::Tracking { x, y, distance: distance.max(0.0) };
-                    }
-                }
-            }
-            TouchKind::Cancel => *self = Self::Idle,
-        }
-        false
-    }
-}
+mod gesture;
+use gesture::{Gesture, Phase, TouchSample};
 
 #[component]
 pub(super) fn PullRefresh() -> Element {
     let shell = use_context::<AppShellState>();
-    let mut state = use_signal(PullState::default);
+    let mut phase = use_signal(Phase::default);
     let bridge = use_hook(|| Rc::new(Cell::new(None::<document::Eval>)));
     let cleanup = Rc::clone(&bridge);
     use_drop(move || {
@@ -99,11 +23,13 @@ pub(super) fn PullRefresh() -> Element {
         async move {
             let mut eval = document::eval(include_str!("pull_refresh.js"));
             bridge.set(Some(eval));
+            // Coordinate changes stay local; only a new visible phase updates UI.
+            let mut gesture = Gesture::default();
             while let Ok(sample) = eval.recv::<TouchSample>().await {
-                let mut next = *state.peek();
-                let refresh = next.update(sample, shell.refresh_state().is_refreshing());
-                if next != *state.peek() {
-                    state.set(next);
+                let refresh = gesture.update(sample, shell.refresh_state().is_refreshing());
+                let next = gesture.phase();
+                if next != *phase.peek() {
+                    phase.set(next);
                 }
                 if refresh {
                     shell.manual_refresh();
@@ -111,101 +37,16 @@ pub(super) fn PullRefresh() -> Element {
             }
         }
     });
-    let phase = state.read().phase();
+    let phase = *phase.read();
+    let state = match phase {
+        Phase::Idle => "idle",
+        Phase::Pulling => "pulling",
+        Phase::Armed => "armed",
+    };
     rsx! {
-        output { "data-slot": "pull-refresh", "data-state": phase, role: "status", aria_live: "polite",
-            if phase == "armed" { "松开刷新" }
-            else if phase == "pulling" { "继续下拉刷新" }
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    fn sample(kind: TouchKind, y: f64) -> TouchSample {
-        let touches = match kind {
-            TouchKind::Start | TouchKind::Move => 1,
-            TouchKind::End | TouchKind::Cancel => 0,
-        };
-        TouchSample { kind, x: 10.0, y, at_top: true, eligible: true, touches }
-    }
-
-    #[test]
-    fn requires_top_threshold_and_release_and_can_disarm() {
-        let mut state = PullState::default();
-        state.update(sample(TouchKind::Start, 100.0), false);
-        state.update(sample(TouchKind::Move, 179.0), false);
-        assert_eq!(state.phase(), "pulling");
-        state.update(sample(TouchKind::Move, 180.0), false);
-        assert_eq!(state.phase(), "armed");
-        state.update(sample(TouchKind::Move, 150.0), false);
-        assert_eq!(state.phase(), "pulling");
-        assert!(!state.update(sample(TouchKind::End, 150.0), false));
-        state.update(sample(TouchKind::Start, 100.0), false);
-        state.update(sample(TouchKind::Move, 200.0), false);
-        assert!(state.update(sample(TouchKind::End, 200.0), false));
-        assert!(!state.update(sample(TouchKind::End, 200.0), false));
-    }
-
-    #[test]
-    fn release_with_another_finger_still_down_does_not_refresh() {
-        let mut state = PullState::default();
-        state.update(sample(TouchKind::Start, 100.0), false);
-        state.update(sample(TouchKind::Move, 200.0), false);
-        assert_eq!(state.phase(), "armed");
-        assert!(!state.update(TouchSample { touches: 1, ..sample(TouchKind::End, 200.0) }, false,));
-        assert_eq!(state.phase(), "idle");
-        assert!(!state.update(sample(TouchKind::End, 200.0), false));
-    }
-
-    #[test]
-    fn release_uses_final_position_instead_of_previous_move() {
-        for (x, y) in [(10.0, 179.0), (150.0, 200.0)] {
-            let mut state = PullState::default();
-            state.update(sample(TouchKind::Start, 100.0), false);
-            state.update(sample(TouchKind::Move, 200.0), false);
-            assert_eq!(state.phase(), "armed");
-            assert!(
-                !state.update(TouchSample { x, touches: 0, ..sample(TouchKind::End, y) }, false,)
-            );
-            assert_eq!(state.phase(), "idle");
-        }
-    }
-
-    #[test]
-    fn release_at_threshold_refreshes_once_and_cancel_never_refreshes() {
-        let mut state = PullState::default();
-        state.update(sample(TouchKind::Start, 100.0), false);
-        state.update(sample(TouchKind::Move, 179.0), false);
-        assert_eq!(state.phase(), "pulling");
-        assert!(state.update(sample(TouchKind::End, 180.0), false));
-        assert!(!state.update(sample(TouchKind::End, 180.0), false));
-
-        state.update(sample(TouchKind::Start, 100.0), false);
-        state.update(sample(TouchKind::Move, 200.0), false);
-        assert_eq!(state.phase(), "armed");
-        assert!(!state.update(sample(TouchKind::Cancel, 200.0), false));
-        assert_eq!(state.phase(), "idle");
-        assert!(!state.update(sample(TouchKind::End, 200.0), false));
-    }
-
-    #[test]
-    fn rejects_scroll_multitouch_horizontal_selection_and_inflight() {
-        for (at_top, eligible, touches, x, refreshing) in [
-            (false, true, 1, 10.0, false),
-            (true, false, 1, 10.0, false),
-            (true, true, 2, 10.0, false),
-            (true, true, 1, 220.0, false),
-            (true, true, 1, 10.0, true),
-        ] {
-            let mut state = PullState::default();
-            state.update(sample(TouchKind::Start, 100.0), false);
-            state.update(
-                TouchSample { at_top, eligible, touches, x, ..sample(TouchKind::Move, 200.0) },
-                refreshing,
-            );
-            assert!(!state.update(sample(TouchKind::End, 200.0), false));
+        output { "data-slot": "pull-refresh", "data-state": state, role: "status", aria_live: "polite",
+            if phase == Phase::Armed { "松开刷新" }
+            else if phase == Phase::Pulling { "继续下拉刷新" }
         }
     }
 }

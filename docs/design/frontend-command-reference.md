@@ -63,7 +63,7 @@ CLI 直接复用 `AppUseCases`，不依赖 UI 命令类型。实现边界见
 
 首次列表查询还需等待设置、工作区偏好和来源映射全部就绪，避免先按默认分页或筛选显示，再跳到保存的设置。页面内 `Pending / Loaded / Unavailable` 区分等待、成功和读取失败：失败后允许读取文章并保留错误提示，但不保存回退偏好覆盖原值；后续刷新可重试。Bootstrap 不订阅自身的完成状态，避免成功后重复查询来源；独立的 bootstrap generation 丢弃其旧成功和旧失败结果，不与列表查询互相失效。
 
-下拉刷新仅在全局文章页、页面已到顶部且向下拖动至少 80 CSS px 后松手触发；松手时须已无剩余触点，并按最终坐标重验距离和方向，不能沿用上一次移动的 armed 状态。横向、多指、文本选择、表单操作及嵌套滚动区不参与。被动 DOM bridge 只传坐标、滚动和目标事实；Rust 决定 pulling / armed，刷新反馈复用 shell 的 refreshing / finished / error。没有字母 R 快捷键，也没有全局 `touch preventDefault`。
+下拉刷新仅在全局文章页、页面已到顶部且向下拖动至少 80 CSS px 后松手触发；松手时须已无剩余触点，并按最终坐标重验距离和方向，不能沿用上一次移动的 armed 状态。横向、多指、文本选择、表单操作均排除；任一嵌套滚动祖先仍能消费当前移动方向时也排除，所有祖先都已到顶部时允许向下拉。没有可用触点坐标的事件取消手势，不保留 armed。被动 DOM bridge 只传当前坐标、页面是否到顶、控件/选区事实及嵌套滚动的双方向余量；`pull_refresh/gesture.rs` 独立管理起点、上一触点、排除条件、阈值、取消与释放，不依赖 Dioxus。嵌套消费按相邻触点方向判断，刷新距离按起点判断；松手也重验这两种距离。界面只订阅 idle / pulling / armed 阶段，刷新反馈复用 shell 的 refreshing / finished / error。没有字母 R 快捷键，也没有全局 `touch preventDefault`。
 
 图片 bridge 仅对已消毒正文中的图片增加点击/键盘入口，不改变 sanitizer。Rust 持有 viewer 状态，原生 modal dialog 承担焦点约束和背景隔离；DOM 适配锁定并恢复滚动。正文、标题、metadata 的选择和复制沿用原生行为，带 modifier 的阅读快捷键继续放行；原生端 release WebView 允许系统右键菜单，不接管剪贴板。
 
