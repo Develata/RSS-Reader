@@ -11,10 +11,15 @@ if (-not $rssrRoot -or $rssrRoot.ExecutablePath -ne $rssrExpected) {
 }
 $rssrIds = [System.Collections.Generic.HashSet[uint32]]::new()
 [void]$rssrIds.Add([uint32]$AppProcessId)
+$rssrById = @{}
+foreach ($rssrProcess in $rssrProcesses) { $rssrById[[uint32]$rssrProcess.ProcessId] = $rssrProcess }
 do {
     $rssrAdded = $false
     foreach ($rssrProcess in $rssrProcesses) {
-        if ($rssrIds.Contains([uint32]$rssrProcess.ParentProcessId)) {
+        # A PID can be reused after an older parent exits. A surviving process
+        # older than this parent instance is not part of the new app's tree.
+        if ($rssrIds.Contains([uint32]$rssrProcess.ParentProcessId) -and
+            $rssrProcess.CreationDate -ge $rssrById[[uint32]$rssrProcess.ParentProcessId].CreationDate) {
             $rssrAdded = $rssrIds.Add([uint32]$rssrProcess.ProcessId) -or $rssrAdded
         }
     }
@@ -27,6 +32,7 @@ $rssrRows = @($rssrProcesses | Where-Object { $rssrIds.Contains([uint32]$_.Proce
         pid = $rssrProcess.ProcessId
         parentPid = $rssrProcess.ParentProcessId
         name = $rssrProcess.Name
+        createdAt = $rssrProcess.CreationDate.ToUniversalTime().ToString('o')
         counterAvailable = $null -ne $rssrCounter
         privateBytes = if ($rssrCounter) { [long]$rssrCounter.PrivateBytes } else { $null }
         privateWorkingSetBytes = if ($rssrCounter) { [long]$rssrCounter.WorkingSetPrivate } else { $null }
