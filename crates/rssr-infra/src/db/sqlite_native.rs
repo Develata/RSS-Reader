@@ -13,6 +13,9 @@ use crate::db::{
     is_memory_database, migrate, migrate_content, storage_backend::StorageBackend,
 };
 
+#[cfg(any(target_os = "android", test))]
+mod android_storage;
+
 #[derive(Debug, Clone)]
 pub struct NativeSqliteBackend {
     connection: NativeConnection,
@@ -136,11 +139,11 @@ impl StorageBackend for NativeSqliteBackend {
 /// 本地可写数据目录：两个数据库和界面偏好始终使用同一解析规则。
 ///
 /// Linux 系统安装包位于 /usr/bin，数据遵循 XDG；便携版仍跟随可执行文件。
-/// Android 和其它桌面平台保留原有路径，避免无意拆分已有数据。
+/// Android 将旧缓存目录完整迁入 Context.filesDir；其它桌面平台保留原有路径。
 pub fn local_data_dir() -> anyhow::Result<PathBuf> {
     #[cfg(target_os = "android")]
     {
-        Ok(local_data_dir_in_base_dir(&android_data_base_dir()?))
+        android_storage::data_dir()
     }
 
     #[cfg(not(target_os = "android"))]
@@ -202,18 +205,6 @@ fn linux_local_data_dir(
         })
         .context("Linux 安装版需要绝对路径 XDG_DATA_HOME 或 HOME 才能保存本地数据")?;
     Ok(data_home.join("rss-reader"))
-}
-
-#[cfg(target_os = "android")]
-fn android_data_base_dir() -> anyhow::Result<PathBuf> {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .filter(|path| !path.as_os_str().is_empty())
-        .or_else(|| {
-            let fallback = std::env::temp_dir();
-            (!fallback.as_os_str().is_empty()).then_some(fallback)
-        })
-        .context("Android 环境未提供可写的 HOME 目录")
 }
 
 const LOCAL_DATA_DIR_NAME: &str = "RSS-Reader";

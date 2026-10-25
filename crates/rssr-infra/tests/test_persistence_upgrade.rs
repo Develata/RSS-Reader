@@ -157,5 +157,20 @@ async fn pre_workspace_database_survives_upgrade_and_reopen() {
     assert_eq!(sync.get::<String, _>("remote_path"), "/rssr.json");
     pool.close().await;
     content_pool.close().await;
-    std::fs::remove_dir_all(directory).unwrap();
+    // Windows may briefly retain SQLite worker file handles after pool close.
+    // Retry only sharing/lock violations; other cleanup errors still fail loudly.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        match std::fs::remove_dir_all(&directory) {
+            Ok(()) => break,
+            Err(error)
+                if cfg!(windows)
+                    && matches!(error.raw_os_error(), Some(32 | 33))
+                    && std::time::Instant::now() < deadline =>
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            Err(error) => panic!("failed to remove persistence fixture: {error}"),
+        }
+    }
 }

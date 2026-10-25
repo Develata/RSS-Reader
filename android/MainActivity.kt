@@ -2,6 +2,7 @@ package dev.dioxus.main
 
 import android.os.Build
 import android.os.Bundle
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import java.nio.charset.StandardCharsets
@@ -9,6 +10,9 @@ import java.nio.charset.StandardCharsets
 typealias BuildConfig = io.github.develata.rssreader.BuildConfig
 
 class MainActivity : WryActivity() {
+    // Dioxus uses Rust route history. WebView fragment history must not consume Back.
+    override val handleBackNavigation: Boolean = false
+
     private data class PendingThemeExport(val css: String)
 
     private var pendingThemeExport: PendingThemeExport? = null
@@ -51,6 +55,16 @@ class MainActivity : WryActivity() {
             enableEdgeToEdge()
         }
         super.onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // JNI only queues input; Rust owns overlay and navigation decisions.
+                if (!dispatchSystemBack()) moveTaskToBack(true)
+            }
+        })
+    }
+
+    fun moveReaderTaskToBackground() {
+        runOnUiThread { moveTaskToBack(true) }
     }
 
     fun requestThemeCssExport(css: String, suggestedName: String) {
@@ -89,6 +103,7 @@ class MainActivity : WryActivity() {
     }
 
     private external fun completeThemeCssExport(status: Int, message: String)
+    private external fun dispatchSystemBack(): Boolean
 
     private companion object {
         const val STATUS_SUCCESS = 0
