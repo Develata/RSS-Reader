@@ -124,6 +124,21 @@ export async function userWheel(client, deltaY) {
   await client.send('Input.dispatchMouseEvent', {type:'mouseWheel',x:100,y:400,deltaX:0,deltaY});
 }
 async function userScrollAnchor(client, id) {
+  // Alignment allows a 2px tolerance, while a smooth jump can still be on its
+  // last frame. Finish that motion before measuring a new wheel delta; otherwise
+  // Chromium can consume the wheel as cancellation of the preceding animation.
+  await evaluate(client, `new Promise((resolve, reject) => {
+    let previous = scrollY, stable = 0, frame;
+    const timeout = setTimeout(() => { cancelAnimationFrame(frame); reject(new Error('main scroll did not settle')); }, 6000);
+    const tick = () => {
+      const current = scrollY;
+      stable = current === previous ? stable + 1 : 0;
+      previous = current;
+      if (stable >= 6) { clearTimeout(timeout); resolve(); }
+      else frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+  })`);
   const delta = await evaluate(client, `document.getElementById(${q(id)}).getBoundingClientRect().top - 80`);
   await userWheel(client,delta);
   await settle(client, `Math.abs(document.getElementById(${q(id)}).getBoundingClientRect().top - 80) <= 2`, 'user wheel anchor positioning');
@@ -507,6 +522,7 @@ export async function checkDirectoryContracts(client, env) {
   }
   await scenario('source-article-navigation', async () => {
     const c = await prepare('source');
+    const navigationHistory = await evaluate(client, `({length:history.length,state:JSON.stringify(history.state)})`);
     const branch = id => `${rail} [data-layout="entry-directory-branch-toggle"][data-directory-anchor="${id}"]`;
     const article = id => `${rail} [data-directory-kind="entry"][data-directory-anchor="entry-card-${id}"]`;
     await settle(client, `!!document.querySelector(${q(article(66))})`, 'current source/month must expose article titles');
@@ -521,6 +537,8 @@ export async function checkDirectoryContracts(client, env) {
     await click(client, article(66));
     await settle(client, `location.hash === '#entry-card-66'`, 'article link must navigate to the exact article');
     await expectTargetAligned(client, 'entry-card-66');
+    check('source: same-page directory jump preserves route history', await evaluate(client,
+      `history.length === ${navigationHistory.length} && JSON.stringify(history.state) === ${q(navigationHistory.state)}`));
     check('source: same-page article navigation keeps selection and manual browsing', await evaluate(client,
       `document.querySelector('[data-position-entry="72"] [data-action="select-entry"]').checked && document.querySelector(${q(rail)}).dataset.directoryMode === 'manual'`));
     await click(client, branch(c.remote));
@@ -530,6 +548,8 @@ export async function checkDirectoryContracts(client, env) {
     await click(client, article(12));
     await settle(client, `location.hash === '#entry-card-12' && document.querySelector('[data-slot="entry-pagination-status"]').textContent.trim() === '2 / 2' && !!document.getElementById('entry-card-12')`, 'cross-page article target');
     await expectTargetAligned(client, 'entry-card-12');
+    check('source: cross-page directory jump preserves route history', await evaluate(client,
+      `history.length === ${navigationHistory.length} && JSON.stringify(history.state) === ${q(navigationHistory.state)}`));
     check('source: cross-page article navigation clears the old selection', await evaluate(client,
       `[...document.querySelectorAll('[data-action="select-entry"]')].every(e=>!e.checked)`));
     // Entry 12 is near the document end, so its jump can legitimately clamp.

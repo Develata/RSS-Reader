@@ -111,7 +111,10 @@ function finishCommand() {
         const element = document.getElementById(navigation.anchor);
         if (element && root.contains(element)) {
             input = {source: null, serial: input.serial + 1, at: 0};
-            if (location.hash !== '#' + encodeURIComponent(navigation.anchor)) location.hash = navigation.anchor;
+            // A directory jump is a position inside this workspace, not a route.
+            // Extra WebView history entries consume Android Back as fragment navigation.
+            const hash = '#' + encodeURIComponent(navigation.anchor);
+            if (location.hash !== hash) history.replaceState(history.state, '', hash);
             element.scrollIntoView({behavior: 'smooth', block: 'start', inline: 'nearest'});
             navigation = null;
         }
