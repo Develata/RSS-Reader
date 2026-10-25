@@ -15,11 +15,14 @@ pub(super) use view::DirectoryRail;
 // Cheap view-prop identity. Presenter metadata can change without changing the
 // directory; resetting interaction state requires the narrower identity below.
 #[derive(Clone)]
-pub(crate) struct DirectoryModel(pub(super) Arc<EntriesPagePresenter>);
+pub(crate) struct DirectoryModel(
+    pub(super) Arc<EntriesPagePresenter>,
+    pub(super) Arc<Vec<Arc<rssr_domain::EntrySummary>>>,
+);
 
 impl PartialEq for DirectoryModel {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
+        Arc::ptr_eq(&self.0, &other.0) && Arc::ptr_eq(&self.1, &other.1)
     }
 }
 
@@ -37,7 +40,7 @@ impl PartialEq for DirectoryResetIdentity {
     fn eq(&self, other: &Self) -> bool {
         let left = &self.0;
         let right = &other.0;
-        left == right
+        Arc::ptr_eq(&left.0, &right.0)
             || (left.current_page == right.current_page
                 && left.page_size == right.page_size
                 && left.page_start == right.page_start
@@ -54,6 +57,7 @@ impl PartialEq for DirectoryResetIdentity {
 struct Path {
     group: Option<String>,
     item: Option<String>,
+    leaf: Option<String>,
 }
 
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -77,13 +81,15 @@ impl DirectoryState {
             self.expanded.contains(anchor)
         } else {
             self.active().group.as_deref() == Some(anchor)
+                || self.active().item.as_deref() == Some(anchor)
         }
     }
 
-    fn enter_manual(&mut self, rendered_group: Option<&str>) -> bool {
+    fn enter_manual(&mut self, rendered_group: Option<&str>, rendered_item: Option<&str>) -> bool {
         if !self.manual {
             self.expanded.clear();
             self.expanded.extend(rendered_group.map(str::to_owned));
+            self.expanded.extend(rendered_item.map(str::to_owned));
             self.manual = true;
             return true;
         }
@@ -96,11 +102,17 @@ impl DirectoryState {
         }
         self.sequence = fact.sequence;
         let first_observation = self.observed.is_none();
-        let path_changed = self.active().group != fact.group || self.active().item != fact.item;
+        let path_changed = self.active().group != fact.group
+            || self.active().item != fact.item
+            || self.active().leaf != fact.leaf;
         let was_manual = self.manual;
         let changed = match fact.kind {
             Kind::Observe | Kind::Follow => {
-                let path = Path { group: fact.group.clone(), item: fact.item.clone() };
+                let path = Path {
+                    group: fact.group.clone(),
+                    item: fact.item.clone(),
+                    leaf: fact.leaf.clone(),
+                };
                 let changed = self.observed.as_ref() != Some(&path)
                     || (matches!(fact.kind, Kind::Follow) && self.manual);
                 self.observed = Some(path);
@@ -110,9 +122,12 @@ impl DirectoryState {
                 }
                 changed
             }
-            Kind::Manual | Kind::Navigate => self.enter_manual(fact.rendered_group.as_deref()),
+            Kind::Manual | Kind::Navigate => {
+                self.enter_manual(fact.rendered_group.as_deref(), fact.rendered_item.as_deref())
+            }
             Kind::SetOpen => {
-                let mut changed = self.enter_manual(fact.rendered_group.as_deref());
+                let mut changed = self
+                    .enter_manual(fact.rendered_group.as_deref(), fact.rendered_item.as_deref());
                 if let Some(anchor) = &fact.anchor {
                     if fact.open {
                         changed |= self.expanded.insert(anchor.clone());
@@ -155,7 +170,9 @@ struct Fact {
     kind: Kind,
     group: Option<String>,
     item: Option<String>,
+    leaf: Option<String>,
     rendered_group: Option<String>,
+    rendered_item: Option<String>,
     anchor: Option<String>,
     #[serde(default)]
     open: bool,
@@ -172,6 +189,7 @@ struct Command {
     align: bool,
     group: Option<String>,
     item: Option<String>,
+    leaf: Option<String>,
     navigate: Option<String>,
     page: Option<u32>,
 }
@@ -192,6 +210,7 @@ pub(super) fn DirectoryBridge(
             initial: Path {
                 group: model.active_group_anchor.clone(),
                 item: model.active_directory_anchor.clone(),
+                leaf: None,
             },
             ..Default::default()
         };
@@ -235,6 +254,7 @@ pub(super) fn DirectoryBridge(
                     align,
                     group: current.active().group.clone(),
                     item: current.active().item.clone(),
+                    leaf: current.active().leaf.clone(),
                     navigate,
                     page: fact.page,
                 };
@@ -264,12 +284,16 @@ mod tests {
             &EntriesPageState::new(),
             None,
         ));
-        let before = DirectoryResetIdentity(DirectoryModel(Arc::new(presenter.clone())));
+        let before =
+            DirectoryResetIdentity(DirectoryModel(Arc::new(presenter.clone()), Arc::default()));
         let mut after = presenter.clone();
         after.source_filter_options.push((1, "Feed".into(), "https://feed.test".into(), 11));
-        assert!(before == DirectoryResetIdentity(DirectoryModel(Arc::new(after.clone()))));
+        assert!(
+            before
+                == DirectoryResetIdentity(DirectoryModel(Arc::new(after.clone()), Arc::default()))
+        );
         after.current_page += 1;
-        assert!(before != DirectoryResetIdentity(DirectoryModel(Arc::new(after))));
+        assert!(before != DirectoryResetIdentity(DirectoryModel(Arc::new(after), Arc::default())));
         let mut after = presenter;
         after.group_nav_items.push(EntryGroupNavItem {
             anchor_id: "new-group".into(),
@@ -278,13 +302,13 @@ mod tests {
             target_page: 1,
             is_active: false,
         });
-        assert!(before != DirectoryResetIdentity(DirectoryModel(Arc::new(after))));
+        assert!(before != DirectoryResetIdentity(DirectoryModel(Arc::new(after), Arc::default())));
     }
 
     fn state() -> DirectoryState {
         DirectoryState {
             epoch: 1,
-            initial: Path { group: Some("a".into()), item: Some("a1".into()) },
+            initial: Path { group: Some("a".into()), item: Some("a1".into()), leaf: None },
             ..Default::default()
         }
     }
@@ -295,7 +319,9 @@ mod tests {
             kind,
             group: Some("a".into()),
             item: Some("a1".into()),
+            leaf: None,
             rendered_group: Some("a".into()),
+            rendered_item: Some("a1".into()),
             anchor: Some("a".into()),
             open: false,
             page: None,
@@ -351,5 +377,47 @@ mod tests {
         stale.epoch = 0;
         assert!(!state.apply(&stale));
         assert!(state == prior);
+    }
+
+    #[test]
+    fn manual_browsing_preserves_the_rendered_month_and_can_close_it() {
+        let mut state = state();
+        assert!(state.is_open("a1"));
+        state.apply(&fact(1, Kind::Manual));
+        assert!(state.is_open("a"));
+        assert!(state.is_open("a1"));
+        let mut close_month = fact(2, Kind::SetOpen);
+        close_month.anchor = Some("a1".into());
+        state.apply(&close_month);
+        assert!(state.is_open("a"));
+        assert!(!state.is_open("a1"));
+        let mut observe = fact(3, Kind::Observe);
+        observe.leaf = Some("entry-card-42".into());
+        assert!(!state.apply(&observe));
+        assert!(!state.is_open("a1"));
+        assert_eq!(state.active().leaf.as_deref(), Some("entry-card-42"));
+        assert!(state.apply(&fact(4, Kind::Follow)));
+        assert!(state.is_open("a1"));
+    }
+
+    #[test]
+    fn follow_reopens_only_the_current_source_and_month_and_tracks_articles() {
+        let mut state = state();
+        state.apply(&fact(1, Kind::Manual));
+        let mut follow = fact(2, Kind::Follow);
+        follow.group = Some("b".into());
+        follow.item = Some("b2".into());
+        follow.leaf = Some("entry-card-8".into());
+        assert!(state.apply(&follow));
+        assert!(!state.is_open("a"));
+        assert!(!state.is_open("a1"));
+        assert!(state.is_open("b"));
+        assert!(state.is_open("b2"));
+        assert!(!state.is_open("b1"));
+        follow.sequence = 3;
+        follow.kind = Kind::Observe;
+        follow.leaf = Some("entry-card-9".into());
+        assert!(state.apply(&follow));
+        assert_eq!(state.active().leaf.as_deref(), Some("entry-card-9"));
     }
 }

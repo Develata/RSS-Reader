@@ -4,18 +4,18 @@ import { evaluate, sleep } from './cdp_session.mjs';
 // from the tracker, DOM order, or the production grouping/selection algorithm.
 export const directoryCases = {
   time: {
-    group: 'entry-group-2026-年-09-月', first: 'entry-group-2026-09-02-72',
-    next: 'entry-group-2026-09-01-66',
-    otherGroup: 'entry-group-2026-年-08-月', other: 'entry-group-2026-08-02-60',
-    beforeOther: 'entry-group-2026-09-01-66',
-    remoteGroup: 'entry-group-2026-年-04-月', remote: 'entry-group-2026-04-02-12',
+    group: 'entry-group-2026-年-09-月', first: 'entry-group-2026-09-02',
+    next: 'entry-group-2026-09-01',
+    otherGroup: 'entry-group-2026-年-08-月', other: 'entry-group-2026-08-02',
+    beforeOther: 'entry-group-2026-09-01',
+    remoteGroup: 'entry-group-2026-年-04-月', remote: 'entry-group-2026-04-02',
   },
   source: {
-    group: 'entry-source-1', first: 'entry-group-2026-年-09-月-72',
-    next: 'entry-group-2026-年-08-月-60',
-    otherGroup: 'entry-source-2', other: 'entry-group-2026-年-09-月-71',
-    beforeOther: 'entry-group-2026-年-05-月-24',
-    remoteGroup: 'entry-source-1', remote: 'entry-group-2026-年-04-月-12',
+    group: 'entry-source-1', first: 'entry-source-1-month-2026-09',
+    next: 'entry-source-1-month-2026-08',
+    otherGroup: 'entry-source-2', other: 'entry-source-2-month-2026-09',
+    beforeOther: 'entry-source-1-month-2026-05',
+    remoteGroup: 'entry-source-1', remote: 'entry-source-1-month-2026-04',
   },
 };
 export const rail = '[data-layout="entry-directory-rail"]';
@@ -232,7 +232,7 @@ export async function checkDirectoryContracts(client, env) {
     }
   }
   for (const gap of [0,4,12,32]) await scenario(`rapid-cross-page-${gap}ms`, async () => {
-    const c = await prepare('time'), last='entry-group-2026-04-01-6';
+    const c = await prepare('time'), last='entry-group-2026-04-01';
     await click(client,group(c.remoteGroup));
     await settle(client,`document.querySelector(${q(group(c.remoteGroup))}).dataset.open === 'true'`,'expand cross-page targets');
     const hits=await clickBurst(client,[item(c.remote),item(last)],gap,true);
@@ -490,7 +490,7 @@ export async function checkDirectoryContracts(client, env) {
         }
       }
       const before = await snapshot(client);
-      const target = mode==='source'?'entry-group-2026-年-09-月-67':'entry-group-2026-06-02-36';
+      const target = mode==='source'?'entry-source-6-month-2026-09':'entry-group-2026-06-02';
       const requestedY = await evaluate(client, `scrollY + document.getElementById(${q(target)}).getBoundingClientRect().top - 80`);
       await userScrollAnchor(client,target);
       const expectedGroup = mode==='source'?'entry-source-6':'entry-group-2026-年-06-月';
@@ -505,6 +505,39 @@ export async function checkDirectoryContracts(client, env) {
       await env.capture(`directory-${mode}-mobile`);
     });
   }
+  await scenario('source-article-navigation', async () => {
+    const c = await prepare('source');
+    const branch = id => `${rail} [data-layout="entry-directory-branch-toggle"][data-directory-anchor="${id}"]`;
+    const article = id => `${rail} [data-directory-kind="entry"][data-directory-anchor="entry-card-${id}"]`;
+    await settle(client, `!!document.querySelector(${q(article(66))})`, 'current source/month must expose article titles');
+    await click(client, '[data-position-entry="72"] [data-action="select-entry"]');
+    await click(client, branch(c.first));
+    await settle(client, `!document.querySelector(${q(article(66))})`, 'closing month unmounts its article nodes');
+    check('source: collapsing the month preserves article selection', await evaluate(client,
+      `document.querySelector('[data-position-entry="72"] [data-action="select-entry"]').checked`));
+    await evaluate(client, `document.querySelector(${q(branch(c.first))}).focus({preventScroll:true})`);
+    await keyPress(client, 'Enter');
+    await settle(client, `!!document.querySelector(${q(article(66))})`, 'keyboard expands article titles');
+    await click(client, article(66));
+    await settle(client, `location.hash === '#entry-card-66'`, 'article link must navigate to the exact article');
+    await expectTargetAligned(client, 'entry-card-66');
+    check('source: same-page article navigation keeps selection and manual browsing', await evaluate(client,
+      `document.querySelector('[data-position-entry="72"] [data-action="select-entry"]').checked && document.querySelector(${q(rail)}).dataset.directoryMode === 'manual'`));
+    await click(client, branch(c.remote));
+    await settle(client, `!!document.querySelector(${q(article(12))})`, 'remote month must expose off-page articles');
+    check('source: article target uses its global page, not the current-page index', await evaluate(client,
+      `document.querySelector(${q(article(12))}).dataset.directoryPage === '2'`));
+    await click(client, article(12));
+    await settle(client, `location.hash === '#entry-card-12' && document.querySelector('[data-slot="entry-pagination-status"]').textContent.trim() === '2 / 2' && !!document.getElementById('entry-card-12')`, 'cross-page article target');
+    await expectTargetAligned(client, 'entry-card-12');
+    check('source: cross-page article navigation clears the old selection', await evaluate(client,
+      `[...document.querySelectorAll('[data-action="select-entry"]')].every(e=>!e.checked)`));
+    // Entry 12 is near the document end, so its jump can legitimately clamp.
+    // Entry 22 is the first article on page 2 and can reach the 80px probe line.
+    await userScrollAnchor(client, 'entry-card-22');
+    await settle(client, `document.querySelector(${q(article(22))})?.getAttribute('aria-current') === 'location'`, 'directory follows the exact visible article');
+    await env.capture('directory-source-articles');
+  });
   await scenario('lifecycle', async () => {
     const c = await prepare('time');
     const installed = await listenerCount(client);

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { checkDirectoryContracts } from './directory_contract.mjs';
 import { measureDirectory } from './directory_performance.mjs';
 import { checkPullReleaseContracts } from './pull_refresh_contract.mjs';
+import { checkSourceFilterContracts } from './source_filter_contract.mjs';
 
 import {
   clickSelector,
@@ -1279,6 +1280,7 @@ async function checkNativeWindow(client, target) {
       item.scrollWidth <= item.width + 1 && item.scrollHeight <= item.height + 1) && sources.rootScrollWidth <= sources.rootWidth + 1, sources);
   await captureArtifact(client, 'native-entries-sources');
   await key(client,'Escape','Escape');
+  await checkSourceFilterContracts(client, assertThat);
   await selectorExists(client, '[data-layout="entry-pagination"]');
   for (let iteration = 0; iteration < 10; iteration++) {
     const before = await evaluate(client, `document.querySelector('[data-slot="entry-pagination-status"]').textContent`);
@@ -1456,7 +1458,11 @@ async function run() {
       await checkNarrowSidebarSearch(client);
       // The default CI theme runs the deeper behavioral contracts once; the
       // existing five-theme layout coverage remains in the shared smoke above.
-      if (!preset) await checkDirectoryContracts(client, directoryEnvironment);
+      if (!preset) {
+        await seedAndNavigate(client, 'home-reader', '/entries', '[data-page="entries"][data-position-ready="true"]');
+        await checkSourceFilterContracts(client, assertThat);
+        await checkDirectoryContracts(client, directoryEnvironment);
+      }
     }
 
     assertThat('browser console has no errors', consoleErrors.length === 0, consoleErrors);

@@ -225,7 +225,10 @@ impl EntriesPageFacade {
     }
 
     pub(super) fn directory_model(&self) -> super::directory::DirectoryModel {
-        super::directory::DirectoryModel(Arc::clone(&self.presenter))
+        super::directory::DirectoryModel(
+            Arc::clone(&self.presenter),
+            Arc::clone(&self.snapshot.entries),
+        )
     }
 
     pub(crate) fn source_filter_options(&self) -> &[(i64, String, String, u32)] {

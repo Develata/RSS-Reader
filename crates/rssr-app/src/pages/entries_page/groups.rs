@@ -114,7 +114,16 @@ pub(crate) struct EntryDirectorySource {
     pub(crate) subtitle: String,
     pub(crate) target_page: u32,
     pub(crate) is_active: bool,
-    pub(crate) months: Vec<EntryDirectoryMonth>,
+    pub(crate) months: Vec<EntryDirectorySourceMonth>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EntryDirectorySourceMonth {
+    pub(crate) anchor_id: String,
+    pub(crate) title: String,
+    pub(crate) subtitle: String,
+    pub(crate) target_page: u32,
+    pub(crate) entry_cards: Vec<EntryCardRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -302,7 +311,6 @@ pub(crate) fn build_month_nav_items(
 pub(crate) fn build_directory_sources(
     groups: &[EntrySourceGroup],
     active_group_anchor: Option<&str>,
-    active_directory_anchor: Option<&str>,
 ) -> Vec<EntryDirectorySource> {
     groups
         .iter()
@@ -315,17 +323,20 @@ pub(crate) fn build_directory_sources(
             months: group
                 .months
                 .iter()
-                .map(|month| EntryDirectoryMonth {
+                .map(|month| EntryDirectorySourceMonth {
                     anchor_id: month.anchor_id.clone(),
                     title: month.title.clone(),
                     subtitle: month.subtitle.clone(),
                     target_page: month.target_page,
-                    is_active: active_directory_anchor == Some(month.anchor_id.as_str()),
-                    dates: Vec::new(),
+                    entry_cards: month.entry_cards.clone(),
                 })
                 .collect(),
         })
         .collect()
+}
+
+pub(crate) fn entry_anchor_id(id: i64) -> String {
+    format!("entry-card-{id}")
 }
 
 pub(crate) fn build_group_nav_items(
@@ -374,7 +385,9 @@ fn group_date_buckets(entries: &[EntryGroupKey<'_>], page_size: usize) -> Vec<En
         .map(|(_, items)| {
             let date =
                 format_date(items[0].published_at).unwrap_or_else(|| "未标注日期".to_string());
-            let anchor_id = group_anchor_id(&format!("{}-{}", date, items[0].id));
+            // The same date can span pages. Its identity must not depend on
+            // whichever article happens to be first in the current page slice.
+            let anchor_id = group_anchor_id(&date);
             EntryDateGroup {
                 anchor_id,
                 title: date,
@@ -420,6 +433,7 @@ fn group_source_months(
     entries: &[EntryGroupKey<'_>],
     page_size: usize,
 ) -> Vec<EntrySourceMonthGroup> {
+    let feed_id = entries.first().map(|entry| entry.feed_id).unwrap_or_default();
     let mut groups: BTreeMap<(i32, u8), Vec<EntryCardRef>> = BTreeMap::new();
     let mut undated_entries = Vec::new();
 
@@ -439,7 +453,7 @@ fn group_source_months(
         .rev()
         .map(|((year, month), items)| {
             let title = format!("{year} 年 {month:02} 月");
-            let anchor_id = group_anchor_id(&format!("{}-{}", title, items[0].id));
+            let anchor_id = format!("entry-source-{feed_id}-month-{year}-{month:02}");
             EntrySourceMonthGroup {
                 anchor_id,
                 title,
@@ -452,7 +466,7 @@ fn group_source_months(
 
     if !undated_entries.is_empty() {
         let title = "未标注日期".to_string();
-        let anchor_id = group_anchor_id(&format!("{}-{}", title, undated_entries[0].id));
+        let anchor_id = format!("entry-source-{feed_id}-month-undated");
         months.push(EntrySourceMonthGroup {
             anchor_id,
             title,
@@ -539,6 +553,21 @@ mod tests {
 
         let source_groups = group_entries_by_source_tree(&entries, 100);
         assert_eq!(cards(&source_groups[0].months[0].entry_cards), vec![(7, 1), (8, 2)]);
+    }
+
+    #[test]
+    fn source_directory_keeps_article_refs_across_pages_including_undated_entries() {
+        let entries = vec![
+            key(0, 21, "Alpha", Some("2026-04-03T08:00:00Z")),
+            key(50, 22, "Alpha", Some("2026-04-02T08:00:00Z")),
+            key(100, 23, "Alpha", None),
+        ];
+        let groups = group_entries_by_source_tree(&entries, 50);
+        let directory = super::build_directory_sources(&groups, None);
+        assert_eq!(cards(&directory[0].months[0].entry_cards), vec![(0, 21), (50, 22)]);
+        assert_eq!(cards(&directory[0].months[1].entry_cards), vec![(100, 23)]);
+        assert_eq!(directory[0].months[1].target_page, 3);
+        assert_eq!(super::entry_anchor_id(23), "entry-card-23");
     }
 
     #[test]

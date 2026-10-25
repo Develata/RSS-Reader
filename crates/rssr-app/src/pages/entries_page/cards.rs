@@ -52,6 +52,7 @@ fn render_entry_card(
     rsx! {
         li {
             key: "{entry.id}",
+            id: super::groups::entry_anchor_id(entry.id),
             "data-layout": "entry-card",
             "data-position-entry": "{entry.id}",
             "data-variant": "reading",

@@ -16,6 +16,7 @@ pub(crate) fn DirectoryRail(
             "data-directory-epoch": "{state.epoch}", "data-directory-revision": "{state.revision}",
             "data-directory-mode": if state.manual { "manual" } else { "follow" },
             "data-directory-current-group": state.active().group.as_deref().unwrap_or(""),
+            "data-directory-current-item": state.active().item.as_deref().unwrap_or(""),
             div { class: "directory-heading-row",
                 h2 { "data-slot": "entry-directory-heading", "目录" }
                 button { class: "workspace-icon-button", title: "收起目录", aria_label: "收起目录", "data-action": "close-directory", onclick: move |_| on_close.call(()), crate::components::icon::Icon { name: "chevron-right" } }
@@ -40,13 +41,64 @@ pub(crate) fn DirectoryRail(
                             div { "data-layout": "entry-directory-grandchildren", "data-directory-section-body": "true",
                                 "data-open-base": boolean(state.is_open(&source.anchor_id)), "data-open": boolean(state.is_open(&source.anchor_id)),
                                 for month in &source.months {
-                                    { link(&state, &source.anchor_id, &month.anchor_id, &month.title, &month.subtitle, month.target_page, false) }
+                                    div { key: "{month.anchor_id}", "data-layout": "entry-directory-month-branch",
+                                        div { class: "directory-month-heading",
+                                            { month_toggle(&state, &month.anchor_id, &month.title) }
+                                            { link(&state, &source.anchor_id, &month.anchor_id, &month.title, &month.subtitle, month.target_page, false) }
+                                        }
+                                        div { id: "directory-articles-{month.anchor_id}", "data-layout": "entry-directory-articles",
+                                            // Article nodes are mounted only for expanded paths. The
+                                            // full directory retains cheap (index, id) references.
+                                            if state.is_open(&source.anchor_id) && state.is_open(&month.anchor_id) {
+                                                for (card, entry) in month.entry_cards.iter().filter_map(|card| model.1.get(card.index).filter(|entry| entry.id == card.id).map(|entry| (card, entry))) {
+                                                    DirectoryArticle { key: "{entry.id}", entry: std::sync::Arc::clone(entry),
+                                                        active: state.active().leaf.as_deref() == Some(&super::super::groups::entry_anchor_id(entry.id)),
+                                                        page: (card.index / model.page_size.max(1)) as u32 + 1 }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+fn month_toggle(state: &DirectoryState, anchor: &str, title: &str) -> Element {
+    let open = state.is_open(anchor);
+    let icon = if open { "chevron-down" } else { "chevron-right" };
+    let verb = if open { "收起" } else { "展开" };
+    rsx! {
+        button {
+            r#type: "button", class: "workspace-icon-button directory-month-toggle",
+            "data-layout": "entry-directory-branch-toggle", "data-directory-anchor": anchor,
+            "data-can-toggle": "true", "data-open": boolean(open),
+            aria_expanded: boolean(open), aria_controls: "directory-articles-{anchor}",
+            aria_label: "{verb}{title}的文章",
+            crate::components::icon::Icon { name: icon }
+        }
+    }
+}
+
+#[component]
+fn DirectoryArticle(
+    entry: std::sync::Arc<rssr_domain::EntrySummary>,
+    active: bool,
+    page: u32,
+) -> Element {
+    let anchor = super::super::groups::entry_anchor_id(entry.id);
+    let title = &entry.title;
+    rsx! {
+        button { r#type: "button", "data-layout": "entry-directory-link",
+            "data-directory-kind": "entry", "data-directory-level": "article",
+            "data-directory-anchor": "{anchor}", "data-directory-page": "{page}",
+            "data-active": boolean(active), aria_current: if active { "location" } else { "false" },
+            aria_label: "定位文章：{title}", title,
+            span { "data-slot": "entry-directory-title", "{title}" }
         }
     }
 }

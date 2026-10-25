@@ -3,6 +3,9 @@ use dioxus::prelude::*;
 use rssr_domain::{ReadFilter, StarredFilter};
 use std::collections::BTreeSet;
 
+mod source_draft;
+use source_draft::{Selection, SourceFilterDraft};
+
 #[component]
 pub fn EntryFilters(
     source_filter_open: Signal<bool>,
@@ -52,19 +55,20 @@ fn SourceChooser(
     selected_feed_urls: Vec<String>,
     on_apply: EventHandler<Vec<String>>,
 ) -> Element {
-    let mut draft = use_signal(BTreeSet::<String>::new);
-    let mut search = use_signal(String::new);
+    let mut draft = use_signal(SourceFilterDraft::default);
     let all_urls =
         available_sources.iter().map(|(_, _, url, _)| url.clone()).collect::<BTreeSet<_>>();
-    let initial = if selected_feed_urls.is_empty() {
-        all_urls.clone()
-    } else {
-        selected_feed_urls.iter().filter(|url| all_urls.contains(*url)).cloned().collect()
-    };
-    let all_selected = *draft.read() == all_urls;
-    let all_for_toggle = all_urls.clone();
+    crate::ui::use_reactive_side_effect(all_urls.clone(), move |urls| {
+        if *open.peek() {
+            draft.write().reconcile(urls);
+        }
+    });
+    let selection = draft.read().selection();
+    let all_selected = selection == Selection::All;
+    let open_urls = all_urls.clone();
+    let applied_urls = selected_feed_urls.clone();
     let apply_urls = all_urls.clone();
-    let selected_count = draft.read().len();
+    let selected_count = draft.read().selected_count();
     crate::ui::use_reactive_side_effect(
         (open(), all_selected, selected_count),
         move |(open, all, count)| {
@@ -78,43 +82,48 @@ fn SourceChooser(
             }
         },
     );
-    let query = search().trim().to_lowercase();
     rsx! {
         button { id: "source-filter-trigger", r#type: "button", class: "source-filter-trigger", aria_haspopup: "dialog", aria_expanded: open(),
             aria_label: if selected_feed_urls.is_empty() { "筛选来源：全部来源".to_string() } else { format!("筛选来源：已选 {} 个", selected_feed_urls.len()) },
             title: "筛选来源", "data-action": "open-source-filter",
-            onclick: move |_| { draft.set(initial.clone()); search.set(String::new()); open.set(true); },
+            onclick: move |_| { draft.set(SourceFilterDraft::begin(open_urls.clone(), &applied_urls)); open.set(true); },
             span { if selected_feed_urls.is_empty() { "全部来源" } else { "…" } }
             Icon { name: "chevron-down" }
         }
         if open() {
-            Dialog { id: "source-filter-dialog", label: "筛选来源", anchor: Some("source-filter-trigger"), on_close: move |_| open.set(false),
+            Dialog { id: "source-filter-dialog", label: "筛选来源", anchor: Some("source-filter-trigger"), on_close: move |_| { draft.write().clear(); open.set(false); },
                 div { class: "workspace-dialog-heading",
                     h2 { "筛选来源" }
-                    button { class: "workspace-icon-button", aria_label: "关闭来源筛选", onclick: move |_| open.set(false), Icon { name: "close" } }
+                    button { class: "workspace-icon-button", aria_label: "关闭来源筛选", onclick: move |_| { draft.write().clear(); open.set(false); }, Icon { name: "close" } }
                 }
-                input { class: "text-input", r#type: "search", aria_label: "搜索来源", placeholder: "搜索来源", value: search(), oninput: move |event| search.set(event.value()) }
+                input { class: "text-input", r#type: "search", aria_label: "搜索来源", placeholder: "搜索来源", value: draft.read().search().to_owned(), oninput: move |event| draft.write().set_search(event.value()) }
                 label { class: "source-choice source-choice-all",
                     input { id: "source-filter-all", r#type: "checkbox", checked: all_selected,
                         aria_checked: if all_selected { "true" } else if selected_count > 0 { "mixed" } else { "false" },
-                        aria_label: "全部来源", onchange: move |_| draft.set(if all_selected { BTreeSet::new() } else { all_for_toggle.clone() }) }
+                        aria_label: "全部来源", onchange: move |_| draft.write().toggle_all() }
                     span { "全部来源" } small { "已选 {selected_count}" }
                 }
                 div { class: "source-choices",
-                    for (id, title, url, _) in available_sources.iter().filter(|(_, title, url, _)| query.is_empty() || title.to_lowercase().contains(&query) || url.to_lowercase().contains(&query)) {
-                        { let url = url.clone(); let checked = draft.read().contains(&url);
+                    for (id, title, url, _) in available_sources.iter().filter(|(_, title, url, _)| draft.read().matches(title, url)) {
+                        { let url = url.clone(); let checked = draft.read().is_selected(&url);
                           rsx! { label { key: "{id}", class: "source-choice",
-                            input { r#type: "checkbox", checked, aria_label: "{title}", onchange: move |event| { if event.checked() { draft.write().insert(url.clone()); } else { draft.write().remove(&url); } } }
+                            input { r#type: "checkbox", checked, aria_label: "{title}", onchange: move |event| draft.write().set_selected(&url, event.checked()) }
                             span { "{title}" }
                           } }
                         }
                     }
                 }
                 div { class: "workspace-dialog-actions",
-                    button { class: "button", "data-variant": "secondary", onclick: move |_| open.set(false), "取消" }
+                    button { class: "button", "data-variant": "secondary", onclick: move |_| { draft.write().clear(); open.set(false); }, "取消" }
                     button { class: "button", disabled: selected_count == 0, "data-action": "apply-source-filter", onclick: move |_| {
-                        let value = if *draft.read() == apply_urls { Vec::new() } else { draft.read().iter().cloned().collect() };
-                        on_apply.call(value); open.set(false);
+                        let value = {
+                            let mut draft = draft.write();
+                            draft.reconcile(apply_urls.clone());
+                            draft.apply_value()
+                        };
+                        if let Some(value) = value {
+                            draft.write().clear(); on_apply.call(value); open.set(false);
+                        }
                     }, "应用" }
                 }
             }

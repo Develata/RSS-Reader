@@ -17,6 +17,7 @@ const listen = (target, type, handler, options = {}) =>
 const visible = e => !!e?.getClientRects().length && !!(e.offsetWidth || e.offsetHeight);
 const consumer = target => target instanceof Element ? target.closest(directorySelector) : null;
 const presentedGroup = target => consumer(target)?.dataset.directoryCurrentGroup || null;
+const presentedItem = target => consumer(target)?.dataset.directoryCurrentItem || null;
 
 function sendNext() {
     if (disposed || inFlight || !pending.size || !epoch) return;
@@ -33,7 +34,7 @@ function queue(key, kind, fields = {}) {
 }
 function selectAnchor() {
     if (dirty) {
-        anchors = [...root.querySelectorAll('[data-entry-scroll-anchor]')];
+        anchors = [...root.querySelectorAll('[data-entry-scroll-anchor], [data-grouping-mode="source"] [data-position-entry]')];
         dirty = false;
     }
     let candidate = null;
@@ -45,7 +46,9 @@ function selectAnchor() {
         break;
     }
     candidate ||= anchors.at(-1);
-    return {group: candidate?.dataset.entryScrollGroupAnchor || null, item: candidate?.dataset.entryScrollAnchor || null};
+    const section = candidate?.closest('[data-entry-scroll-anchor]');
+    return {group: section?.dataset.entryScrollGroupAnchor || null, item: section?.dataset.entryScrollAnchor || null,
+        leaf: candidate?.hasAttribute('data-position-entry') ? candidate.id : null};
 }
 function update() {
     raf = 0;
@@ -80,7 +83,8 @@ function align(command) {
     const rail = root.querySelector('[data-directory-consumer="rail"]');
     if (visible(rail)) {
         const links = [...rail.querySelectorAll('[data-directory-anchor]')];
-        const target = links.find(e => e.dataset.directoryAnchor === command.item && visible(e)) ||
+        const target = links.find(e => e.dataset.directoryAnchor === command.leaf && visible(e)) ||
+            links.find(e => e.dataset.directoryAnchor === command.item && e.dataset.canToggle !== 'true' && visible(e)) ||
             links.find(e => e.dataset.directoryAnchor === command.group && visible(e));
         if (target) {
             const r = rail.getBoundingClientRect(), t = target.getBoundingClientRect();
@@ -147,7 +151,7 @@ function noteInput(event) {
     input = {source: inside ? 'directory' : 'main', serial: input.serial + 1, at: performance.now()};
     if (inside) {
         requestFollow = false;
-        queue('manual', 'manual', {rendered_group: presentedGroup(target), epoch: Number(inside.dataset.directoryEpoch)});
+        queue('manual', 'manual', {rendered_group: presentedGroup(target), rendered_item: presentedItem(target), epoch: Number(inside.dataset.directoryEpoch)});
     }
 }
 function onScroll(event) {
@@ -179,13 +183,14 @@ function onClick(event) {
     // against a possibly newer observation. Click covers mouse/Enter/Space.
     const anchor = button.dataset.directoryAnchor;
     const rendered_group = presentedGroup(button);
+    const rendered_item = presentedItem(button);
     const renderedEpoch = Number(consumer(button).dataset.directoryEpoch);
     input = {source: 'directory', serial: input.serial + 1, at: performance.now()};
     requestFollow = false;
-    if (button.dataset.layout === 'entry-directory-toggle') {
-        queue('toggle:' + anchor, 'set_open', {anchor, open: button.dataset.open !== 'true', rendered_group, epoch: renderedEpoch});
+    if (button.dataset.canToggle === 'true') {
+        queue('toggle:' + anchor, 'set_open', {anchor, open: button.dataset.open !== 'true', rendered_group, rendered_item, epoch: renderedEpoch});
     } else {
-        queue('navigate', 'navigate', {anchor, page: Number(button.dataset.directoryPage), rendered_group,
+        queue('navigate', 'navigate', {anchor, page: Number(button.dataset.directoryPage), rendered_group, rendered_item,
             epoch: renderedEpoch, context_key: root.dataset.positionKey});
     }
 }

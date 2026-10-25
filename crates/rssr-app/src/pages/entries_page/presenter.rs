@@ -280,11 +280,8 @@ impl GroupingOutcome {
             paged_groups.iter().map(|group| group.anchor_id.clone()).collect();
         let (active_group_anchor, active_directory_anchor) =
             find_active_source_anchors(&all_groups, current_entry_index(paged_keys));
-        let directory_sources = build_directory_sources(
-            &all_groups,
-            active_group_anchor.as_deref(),
-            active_directory_anchor.as_deref(),
-        );
+        let directory_sources =
+            build_directory_sources(&all_groups, active_group_anchor.as_deref());
         let group_nav_items = build_group_nav_items(&all_groups, active_group_anchor.as_deref());
 
         Self {
@@ -785,5 +782,32 @@ mod tests {
         assert!(presenter.group_nav_items.iter().any(|item| item.is_active));
         assert!(presenter.directory_sources.iter().any(|item| item.is_active));
         assert!(presenter.default_expanded_directory_sections.contains("entry-source-2"));
+    }
+
+    #[test]
+    fn directory_and_paged_list_share_anchors_when_a_bucket_spans_pages() {
+        let mut state = EntriesPageState::new();
+        state.entries_page_size = 1;
+        state.current_page = 2;
+        state.entries = vec![
+            entry(11, 1, "Alpha", "2026-04-04T08:00:00Z"),
+            entry(12, 1, "Alpha", "2026-04-04T07:00:00Z"),
+        ]
+        .into();
+        state.grouping_mode = EntryGroupingMode::Source;
+        let presenter =
+            EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
+        let month = &presenter.directory_sources[0].months[0];
+        assert_eq!(month.anchor_id, presenter.source_grouped_entries[0].months[0].anchor_id);
+        assert_eq!(presenter.active_directory_anchor.as_deref(), Some(month.anchor_id.as_str()));
+        assert_eq!(month.entry_cards.len(), 2);
+        assert_eq!(month.entry_cards[1].index, 1);
+        assert_eq!(month.entry_cards[1].id, 12);
+        state.grouping_mode = EntryGroupingMode::Time;
+        let presenter =
+            EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
+        let date = &presenter.directory_months[0].dates[0];
+        assert_eq!(date.anchor_id, presenter.time_grouped_entries[0].dates[0].anchor_id);
+        assert_eq!(presenter.active_directory_anchor.as_deref(), Some(date.anchor_id.as_str()));
     }
 }
