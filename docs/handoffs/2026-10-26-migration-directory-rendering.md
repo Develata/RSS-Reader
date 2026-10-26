@@ -4,7 +4,8 @@
 - 作者 / Agent：Codex
 - 分支：`feat/reading-workspace-20261024`
 - 起始 HEAD：`32c64538578d234e5501498dfa99f44ef4e1aae1`
-- 相关 commit：SQL 兼容 `8804e5a`；目录变更为本记录所在的 `perf(entries): unmount hidden directory branches` 提交（提交前 pending，具体 SHA 见 Git log）。
+- 相关 commit：SQL 兼容 `8804e5a`；目录变更 `3b083e8a`；后续提交仅更新本文证据。
+- 推送：已核对远端阅读分支及草稿 PR #32 均包含上述两个源码提交；不合并 main。
 - 相关 tag / release：N/A；本轮不发布、不迁入 v0.2 主线
 - 状态：`validated`（覆盖范围和限制见下文）
 
@@ -67,6 +68,7 @@
 - 测试前后分别备份 `files/RSS-Reader` 和旧 `cache/RSS-Reader`。未卸载、清数据或改写手机数据库。
 - 四个库 `integrity_check` 均 ok；6 个订阅、5000 篇文章、5000 条正文、阅读/收藏/归档、来源自定义名/URL、设置、应用状态和 shell prefs 保留。
 - 索引库 8 条及正文库 1 条迁移历史，在新旧两个目录内均逐字段相等。
+- 实机旧索引库确实混用了换行：版本 1/6/7 为 CRLF，2/3/4/5/8 为 LF；正文库版本 1 为 LF。覆盖安装后的成功打开验证了真实混合历史，而不只是测试生成的库。
 - 比较报告总状态为 `different`：仅当前 files 库的 feeds.last_fetched_at / updated_at 变化；其余表及旧 cache 库逐字段相等。不能把整个归档说成字节相同。
 - 搜索恢复为 `05000`，测试后重新正常冷启动，保留该搜索与原有偏好。
 
@@ -85,6 +87,7 @@
 - C 盘旧基线工作区已获用户清理授权；用户反馈切回 E 盘后，`archive_worktree` 仍报 `The task's primary checkout cannot be removed.`，因此尚未删除，没有绕过保护。所有本轮源文件修改都在 E 盘原仓库。
 - 本轮未跑新的远端全矩阵 CI，不借用旧提交 CI 作为当前提交的证明。没有扩展发布或主线集成范围。
 - 保留原有 `.agents/.specify` 删除、旧 handoff 修改、设计附件和其他未跟踪内容，仅提交本任务文件。
+- 本轮独立浏览器和两个本地测试服务已结束；手机保留新版测试包与恢复后的原搜索。没有关闭用户自己的浏览器或全局 ADB 服务。
 
 ## 给下一位 Agent 的备注
 
