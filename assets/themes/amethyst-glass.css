@@ -248,7 +248,7 @@ body:has(.theme-dark)::before {
 /* ---- 毛玻璃个性 ---- */
 
 [data-layout="app-nav-shell"] {
-  padding: 10px 14px;
+  padding: 0 14px;
   border-color: var(--glass-nav-border);
   border-radius: 20px;
   backdrop-filter: blur(12px);

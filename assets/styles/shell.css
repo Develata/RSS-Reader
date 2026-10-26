@@ -20,8 +20,8 @@
   container-type: inline-size;
   top: calc(8px + var(--safe-area-top));
   z-index: 10;
-  margin: 0 0 14px;
-  padding: 8px;
+  margin: 0 0 6px;
+  padding: 0 6px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-card-sm);
   background: var(--panel-strong);
@@ -31,8 +31,9 @@
 [data-layout="app-nav-topline"] { flex: 1; padding-right: 48px; }
 [data-layout="app-nav-shell"] [data-slot="app-nav-toggle"] {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  /* The static cross-axis position follows themed padding and stays on row one. */
+  top: auto;
+  right: 6px;
   flex: 0 0 44px;
   width: 44px;
   height: 44px;
@@ -74,7 +75,7 @@
 [data-layout="app-nav-topline"], [data-layout="app-nav-links"] {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   min-width: 0;
 }
 
@@ -251,9 +252,36 @@
   outline-offset: 3px;
 }
 
-[data-layout="app-nav-links"] [data-nav][aria-current="page"] {
-  background: var(--accent-soft);
+/* Keep a 44px hit target and unchanged glyphs; only the visible surface is 32px. */
+[data-layout="app-nav-topline"] .icon-link-button {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+[data-layout="app-nav-topline"] .icon-link-button::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  z-index: -1;
+  border: 1px solid var(--line);
+  border-radius: inherit;
+  background: var(--surface-veil);
+  transition: border-color var(--transition-quick), background var(--transition-quick);
+}
+[data-layout="app-nav-topline"] .icon-link-button:hover::before,
+[data-layout="app-nav-topline"] [data-slot="app-nav-brand"][data-refresh-state="refreshing"]::before {
+  border-color: var(--accent-line);
+  background: var(--surface-chip-hover);
+}
+[data-layout="app-nav-topline"] .icon-link-button:active::before {
   border-color: var(--accent);
+  background: var(--accent-soft);
+}
+[data-layout="app-nav-links"] [data-nav][aria-current="page"]::before {
+  border-color: var(--accent);
+  background: var(--accent-soft);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
