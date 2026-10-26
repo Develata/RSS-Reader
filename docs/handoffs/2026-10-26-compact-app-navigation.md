@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`feat/reading-workspace-20261024`
 - 当前代码 HEAD：`6eed78bd8a25488c00b1583eff7dcfdc9485c3e3`
-- 相关 commit：`6eed78bd`（样式）；本交接记录 commit: pending
+- 相关 commit：`6eed78bd`（样式）、`6df57ad3`（初始验收记录）
 - 相关 tag / release：N/A
 - 状态：`validated`
 
@@ -46,7 +46,7 @@
 
 ## 结果与证据
 
-- 代码改动仅含 5 份 CSS，提交为 `6eed78bd`。交接整理时尚未推送，后续只推送当前阅读分支。
+- 代码改动仅含 5 份 CSS，提交为 `6eed78bd`；代码和初始验收记录已推送，`git ls-remote` 核对远端阅读分支为 `6df57ad34065fbf5de4dd41ea413be9883a519ea`。本次状态更新继续随文档提交推送，不涉及 v0.2 主线。
 - 本地证据目录：`target/nav-compact-20261026/`（忽略的构建/验收产物，不纳入 Git）。
 - `before.json` / `after.json`：默认布局实测；`layout-cases.json`：主题宽窄窗口尺寸；`navigation-checks.json`：60 项定向检查；`directory/assertions.json`：144 项目录回归。
 - 最终预览：`home-light-1440x810.png`、`home-dark-1440x810.png`、`home-light-360.png`、`home-dark-360.png`；构建与测试日志为 `build.log`、`contracts.log`、`directory.log`。
