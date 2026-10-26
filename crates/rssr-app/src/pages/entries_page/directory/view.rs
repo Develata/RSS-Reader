@@ -10,19 +10,21 @@ pub(crate) fn DirectoryRail(
 ) -> Element {
     let DirectoryStore(state) = use_context();
     let state = state.read();
+    let epoch = state.epoch();
+    let revision = state.revision();
     rsx! {
         aside { id: "reading-directory", "data-layout": "entry-directory-rail", "data-directory-consumer": "rail",
             onkeydown: move |event| { if event.key() == Key::Escape { on_close.call(()); } },
-            "data-directory-epoch": "{state.epoch}", "data-directory-revision": "{state.revision}",
-            "data-directory-mode": if state.manual { "manual" } else { "follow" },
-            "data-directory-rendered": state.visible,
-            "data-directory-current-group": state.active().group.as_deref().unwrap_or(""),
-            "data-directory-current-item": state.active().item.as_deref().unwrap_or(""),
+            "data-directory-epoch": "{epoch}", "data-directory-revision": "{revision}",
+            "data-directory-mode": if state.is_manual() { "manual" } else { "follow" },
+            "data-directory-rendered": state.is_visible(),
+            "data-directory-current-group": state.active_group().unwrap_or(""),
+            "data-directory-current-item": state.active_item().unwrap_or(""),
             div { class: "directory-heading-row",
                 h2 { "data-slot": "entry-directory-heading", "目录" }
                 button { class: "workspace-icon-button", title: "收起目录", aria_label: "收起目录", "data-action": "close-directory", onclick: move |_| on_close.call(()), crate::components::icon::Icon { name: "chevron-right" } }
             }
-            if state.visible {
+            if state.is_visible() {
               nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
                 if grouping_mode == EntryGroupingMode::Time {
                     for month in &model.directory_months {
@@ -57,7 +59,7 @@ pub(crate) fn DirectoryRail(
                                             if state.is_open(&month.anchor_id) {
                                                 for (card, entry) in month.entry_cards.iter().filter_map(|card| model.1.get(card.index).filter(|entry| entry.id == card.id).map(|entry| (card, entry))) {
                                                     DirectoryArticle { key: "{entry.id}", entry: std::sync::Arc::clone(entry),
-                                                        active: state.active().leaf.as_deref() == Some(&super::super::groups::entry_anchor_id(entry.id)),
+                                                        active: state.active_leaf() == Some(&super::super::groups::entry_anchor_id(entry.id)),
                                                         page: (card.index / model.page_size.max(1)) as u32 + 1 }
                                                 }
                                             }
@@ -128,7 +130,7 @@ fn toggle(
             "data-directory-level": if time { "month" } else { "source" },
             "data-nav": if time { Some("entry-directory-month") } else { None },
             "data-action": if time { None } else if open { Some("collapse-directory-source") } else { Some("expand-directory-source") },
-            "data-active": boolean(state.active().group.as_deref() == Some(anchor)),
+            "data-active": boolean(state.active_group() == Some(anchor)),
             "data-can-toggle": "true", "data-open-base": boolean(open), "data-open": boolean(open),
             aria_disabled: "false", aria_expanded: boolean(open),
             span { "data-slot": "entry-directory-title", "{title}" }
@@ -152,7 +154,7 @@ fn link(
             "data-directory-level": if date { "date" } else { "month" },
             "data-nav": if date { "entry-directory-date" } else { "entry-directory-month" },
             "data-directory-anchor": anchor, "data-directory-page": "{page}",
-            "data-active": boolean(state.active().item.as_deref() == Some(anchor)),
+            "data-active": boolean(state.active_item() == Some(anchor)),
             span { "data-slot": "entry-directory-title", "{title}" }
             span { "data-slot": "entry-directory-meta", title: subtitle, "{compact_count(subtitle)}" }
         }

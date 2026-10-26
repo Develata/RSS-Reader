@@ -75,6 +75,27 @@ const base = process.env.STATIC_BASE || 'http://127.0.0.1:8099';
       assert.equal(new URL(page.url()).pathname, '/entries/1', 'modified/composing keys must not navigate');
       assert.equal(await page.evaluate(() => window.__positionReads), 0,
         'modified/composing keys must not scan reader blocks');
+      // Exercise the Dioxus key mapping as well as the pure Rust policy. Real
+      // browser key events cover both cases; modifier/IME facts below are
+      // synthetic so browser Find/menus cannot steal the test's input focus.
+      for (const [action, lower, upper] of [['mark-read', 'm', 'M'], ['toggle-starred', 'f', 'F']]) {
+        const selector = `[data-action="${action}"]`;
+        const initial = await page.locator(selector).getAttribute('data-state');
+        await page.keyboard.press(lower);
+        await page.waitForFunction(({selector, initial}) => {
+          const button = document.querySelector(selector);
+          return button && button.dataset.state !== initial;
+        }, {selector, initial});
+        await page.keyboard.press(upper);
+        await page.waitForFunction(({selector, initial}) => document.querySelector(selector)?.dataset.state === initial, {selector, initial});
+        for (const excluded of [{ctrlKey:true}, {altKey:true}, {metaKey:true}, {shiftKey:true}, {isComposing:true}]) {
+          await page.evaluate(({key, excluded}) => document.activeElement.dispatchEvent(
+            new KeyboardEvent('keydown', {key, bubbles:true, ...excluded})), {key:lower, excluded});
+          await page.waitForTimeout(100);
+          assert.equal(await page.locator(selector).getAttribute('data-state'), initial,
+            `${lower} must ignore ${JSON.stringify(excluded)}`);
+        }
+      }
       const saved = await y();
       assert(saved > 1000);
       // Browser history has no preceding DOM click: it must capture the departing article.
@@ -109,7 +130,7 @@ const base = process.env.STATIC_BASE || 'http://127.0.0.1:8099';
         assert(Math.abs(await y() - expected) < 4, `${edge} capture`);
       }
       console.log(JSON.stringify({ width, scrollLayoutReads: 0, editingLayoutReads: 0, composingKeys: 'pass', browserBack: 'pass',
-        keyboard: 'pass', nativeCaptureBridge: 'pass', topAndBottom: 'pass' }));
+        keyboard: 'pass', shortcutActions: 'pass', nativeCaptureBridge: 'pass', topAndBottom: 'pass' }));
       assert.deepEqual(errors, [], 'no uncaught browser errors');
       await page.close();
     }
