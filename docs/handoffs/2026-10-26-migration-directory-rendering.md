@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`feat/reading-workspace-20261024`
 - 起始 HEAD：`32c64538578d234e5501498dfa99f44ef4e1aae1`
-- 相关 commit：pending
+- 相关 commit：SQL 兼容 `8804e5a`；目录变更为本记录所在的 `perf(entries): unmount hidden directory branches` 提交（提交前 pending，具体 SHA 见 Git log）。
 - 相关 tag / release：N/A；本轮不发布、不迁入 v0.2 主线
 - 状态：`validated`（覆盖范围和限制见下文）
 

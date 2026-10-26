@@ -15,22 +15,26 @@ pub(crate) fn DirectoryRail(
             onkeydown: move |event| { if event.key() == Key::Escape { on_close.call(()); } },
             "data-directory-epoch": "{state.epoch}", "data-directory-revision": "{state.revision}",
             "data-directory-mode": if state.manual { "manual" } else { "follow" },
+            "data-directory-rendered": state.visible,
             "data-directory-current-group": state.active().group.as_deref().unwrap_or(""),
             "data-directory-current-item": state.active().item.as_deref().unwrap_or(""),
             div { class: "directory-heading-row",
                 h2 { "data-slot": "entry-directory-heading", "目录" }
                 button { class: "workspace-icon-button", title: "收起目录", aria_label: "收起目录", "data-action": "close-directory", onclick: move |_| on_close.call(()), crate::components::icon::Icon { name: "chevron-right" } }
             }
-            nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
+            if state.visible {
+              nav { "data-layout": "entry-directory-nav", "aria-label": "文章目录导航",
                 if grouping_mode == EntryGroupingMode::Time {
                     for month in &model.directory_months {
                         div { "data-layout": "entry-directory-section", key: "{month.anchor_id}",
                             { toggle(&state, &month.anchor_id, &month.title, &month.subtitle, true) }
                             div { "data-layout": "entry-directory-children", "data-directory-section-body": "true",
                                 "data-open-base": boolean(state.is_open(&month.anchor_id)), "data-open": boolean(state.is_open(&month.anchor_id)),
+                              if state.is_open(&month.anchor_id) {
                                 for date in &month.dates {
                                     { link(&state, &month.anchor_id, &date.anchor_id, &date.title, &date.subtitle, date.target_page, true) }
                                 }
+                              }
                             }
                         }
                     }
@@ -40,6 +44,7 @@ pub(crate) fn DirectoryRail(
                             { toggle(&state, &source.anchor_id, &source.title, &source.subtitle, false) }
                             div { "data-layout": "entry-directory-grandchildren", "data-directory-section-body": "true",
                                 "data-open-base": boolean(state.is_open(&source.anchor_id)), "data-open": boolean(state.is_open(&source.anchor_id)),
+                              if state.is_open(&source.anchor_id) {
                                 for month in &source.months {
                                     div { key: "{month.anchor_id}", "data-layout": "entry-directory-month-branch",
                                         div { class: "directory-month-heading",
@@ -49,7 +54,7 @@ pub(crate) fn DirectoryRail(
                                         div { id: "directory-articles-{month.anchor_id}", "data-layout": "entry-directory-articles",
                                             // Article nodes are mounted only for expanded paths. The
                                             // full directory retains cheap (index, id) references.
-                                            if state.is_open(&source.anchor_id) && state.is_open(&month.anchor_id) {
+                                            if state.is_open(&month.anchor_id) {
                                                 for (card, entry) in month.entry_cards.iter().filter_map(|card| model.1.get(card.index).filter(|entry| entry.id == card.id).map(|entry| (card, entry))) {
                                                     DirectoryArticle { key: "{entry.id}", entry: std::sync::Arc::clone(entry),
                                                         active: state.active().leaf.as_deref() == Some(&super::super::groups::entry_anchor_id(entry.id)),
@@ -59,10 +64,12 @@ pub(crate) fn DirectoryRail(
                                         }
                                     }
                                 }
+                              }
                             }
                         }
                     }
                 }
+              }
             }
         }
     }

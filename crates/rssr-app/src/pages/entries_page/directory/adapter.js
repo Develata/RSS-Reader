@@ -8,6 +8,7 @@ let disposed = false, epoch = 0, sequence = 0, inFlight = null;
 let raf = 0, dirty = true, anchors = [], lastPath = '';
 let input = {source: null, serial: 0, at: 0}, reportedInput = 0;
 let requestFollow = false, reflow = false, ack = null, navigation = null;
+let measuredRail = null, reportedVisible = null, lastRailTop = 0;
 // One in flight. Latest explicit intent per control + observation/input keys;
 // pending size is bounded by this context's rendered controls, not scroll rate.
 const pending = new Map();
@@ -54,6 +55,17 @@ function update() {
     raf = 0;
     if (disposed || !root.isConnected) { cleanup(); return; }
     refreshContext();
+    const rail = root.querySelector('[data-directory-consumer="rail"]');
+    if (rail !== measuredRail) {
+        resizeObserver.disconnect();
+        measuredRail = rail;
+        if (rail) resizeObserver.observe(rail);
+    }
+    const displayed = visible(rail);
+    if (displayed !== reportedVisible) {
+        reportedVisible = displayed;
+        queue('visibility', 'visibility', {visible: displayed});
+    }
     const path = selectAnchor(), signature = JSON.stringify(path);
     if (requestFollow || signature !== lastPath) {
         queue(requestFollow ? 'follow' : 'observe', requestFollow ? 'follow' : 'observe', {...path, reflow});
@@ -74,6 +86,7 @@ function refreshContext() {
     pending.clear();
     if (ack) inFlight = null;
     ack = null; lastPath = ''; dirty = true;
+    reportedVisible = null; lastRailTop = 0;
     // An in-flight prior epoch still receives its ack; its result is discarded.
     input = {source: null, serial: input.serial + 1, at: 0};
     requestFollow = false;
@@ -125,6 +138,10 @@ function finishCommand() {
     // acknowledge the version; a frame callback alone is NOT a commit fence.
     const consumers = [...root.querySelectorAll(directorySelector)];
     if (!consumers.every(e => Number(e.dataset.directoryEpoch) === ack.epoch && Number(e.dataset.directoryRevision) >= ack.revision)) return;
+    if (ack.restore_scroll) {
+        const rail = root.querySelector('[data-directory-consumer="rail"]');
+        if (visible(rail)) rail.scrollTop = lastRailTop;
+    }
     if (ack.align && !pending.size) align(ack);
     ack = null; inFlight = null;
     sendNext();
@@ -159,7 +176,12 @@ function noteInput(event) {
 }
 function onScroll(event) {
     const target = event.target;
-    if (consumer(target)) return; // Includes our own rail/top alignment.
+    if (consumer(target)) {
+        if (target === measuredRail && visible(target) && target.dataset.directoryRendered === 'true') {
+            lastRailTop = target.scrollTop;
+        }
+        return; // Includes our own rail/top alignment.
+    }
     const groups = root.querySelector('[data-layout="entry-groups"]');
     const isMain = target === document || target === window ||
         (target instanceof Element && groups && target.contains(groups));
@@ -200,7 +222,7 @@ function onClick(event) {
 function cleanup() {
     if (disposed) return;
     disposed = true;
-    abort.abort(); observer.disconnect(); pending.clear(); navigation = null; ack = null;
+    abort.abort(); observer.disconnect(); resizeObserver.disconnect(); pending.clear(); navigation = null; ack = null;
     if (raf) cancelAnimationFrame(raf);
     if (window[trackerKey]?.cleanup === cleanup) delete window[trackerKey];
 }
@@ -231,10 +253,13 @@ const observer = new MutationObserver(records => {
     if (records.some(m => m.type === 'childList' && !(m.target instanceof Element && consumer(m.target)))) {
         dirty = true; scheduleUpdate();
     }
+    if (records.some(m => m.target === root && m.type === 'attributes')) scheduleUpdate();
     finishCommand();
 });
 observer.observe(root, {subtree: true, childList: true, attributes: true,
-    attributeFilter: ['data-directory-epoch','data-directory-revision','data-position-page','data-position-ready']});
+    attributeFilter: ['data-directory-epoch','data-directory-revision','data-position-page','data-position-ready',
+        'data-directory-collapsed','data-mobile-directory-open']});
+const resizeObserver = new ResizeObserver(() => scheduleUpdate());
 listen(window, 'scroll', onScroll, {capture: true, passive: true});
 listen(window, 'resize', () => scheduleUpdate(true), {passive: true});
 for (const name of ['wheel','touchstart','touchmove','pointerdown','keydown']) listen(document, name, noteInput, {capture: true, passive: true});

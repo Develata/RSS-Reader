@@ -167,6 +167,7 @@ export async function snapshot(client) {
     const state = selector => {
       const root = document.querySelector(selector);
       return {visible:visible(root), scrollTop:root?.scrollTop ?? 0, scrollLeft:root?.scrollLeft ?? 0,
+        currentGroup:root?.dataset.directoryCurrentGroup, currentItem:root?.dataset.directoryCurrentItem,
         maxScrollTop:root ? root.scrollHeight-root.clientHeight : 0,
         groups:[...(root?.querySelectorAll('[data-directory-kind="group"][data-active="true"]') || [])].map(e=>e.dataset.directoryAnchor),
         items:[...(root?.querySelectorAll('[data-directory-kind="item"][data-active="true"]') || [])].map(e=>e.dataset.directoryAnchor)};
@@ -190,8 +191,15 @@ export async function expectActive(client, expectedGroup, expectedItem, consumer
     if (!root || !root.getClientRects().length) return false;
     const groups = root.querySelectorAll('[data-directory-kind="group"][data-active="true"]');
     const items = root.querySelectorAll('[data-directory-kind="item"][data-active="true"]');
-    return groups.length === 1 && groups[0].dataset.directoryAnchor === ${q(expectedGroup)} &&
-      (${q(consumer)} === 'top' || (items.length === 1 && items[0].dataset.directoryAnchor === ${q(expectedItem)}));
+    if (groups.length !== 1 || groups[0].dataset.directoryAnchor !== ${q(expectedGroup)}) return false;
+    if (${q(consumer)} === 'top') return true;
+    // A manually closed branch no longer keeps invisible child DOM nodes.
+    // Check the retained Rust path, then require the exact highlight when open.
+    return root.dataset.directoryCurrentGroup === ${q(expectedGroup)} &&
+      root.dataset.directoryCurrentItem === ${q(expectedItem)} &&
+      (groups[0].dataset.open === 'true'
+        ? items.length === 1 && items[0].dataset.directoryAnchor === ${q(expectedItem)}
+        : items.length === 0);
   })()`, `visible ${consumer} must select ${expectedGroup} / ${expectedItem}`);
 }
 
@@ -258,6 +266,44 @@ export async function checkDirectoryContracts(client, env) {
     check(`rapid navigation ${gap}ms: latest user target wins`,true,{hits,after:await snapshot(client)});
   });
   for (const mode of ['time', 'source']) {
+    await scenario(`${mode}-hidden-tree-preserves-state`, async () => {
+      const c = await prepare(mode);
+      await click(client, '[data-position-entry="72"] [data-action="select-entry"]');
+      await click(client, group(c.group));
+      await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'close current branch');
+      check(`${mode}: closed branch releases its child nodes`, await evaluate(client,
+        `document.querySelector(${q(group(c.group))}).nextElementSibling.childElementCount === 0`));
+      for (const entry of (await snapshot(client)).groups.filter(g => g.open !== 'true')) {
+        await click(client, group(entry.id));
+        await settle(client, `document.querySelector(${q(group(entry.id))}).dataset.open === 'true'`, 'open branches before hiding');
+      }
+      await evaluate(client, `document.querySelector(${q(group(c.group))}).focus({preventScroll:true});
+        window.__directoryListIdentity = [...document.querySelectorAll('[data-position-entry]')];`);
+      const point = await evaluate(client, `(() => {const r=document.querySelector(${q(rail)}).getBoundingClientRect();
+        return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+      await client.send('Input.dispatchMouseEvent', {type:'mouseWheel', ...point, deltaX:0, deltaY:150});
+      await settle(client, `document.querySelector(${q(rail)}).scrollTop > 30`, 'scroll the manual directory');
+      await directoryIdle(client);
+      const before = await snapshot(client);
+      for (const type of ['keyDown','keyUp']) await client.send('Input.dispatchKeyEvent',
+        {type,key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+      await settle(client, `document.querySelector(${q(rail)}).dataset.directoryRendered === 'false' &&
+        !document.querySelector(${q(rail + ' [data-layout="entry-directory-nav"]')})`, 'hidden directory must unmount its tree');
+      await click(client, '[data-action="open-directory"]');
+      await settle(client, `document.querySelector(${q(rail)}).dataset.directoryRendered === 'true'`, 'reopen directory');
+      await directoryIdle(client);
+      const after = await snapshot(client);
+      check(`${mode}: reopening retains manual expansion, scroll and selection`,
+        after.mode === 'manual' && Math.abs(after.rail.scrollTop-before.rail.scrollTop)<=1 &&
+        JSON.stringify(after.groups.map(g=>[g.id,g.open]))===JSON.stringify(before.groups.map(g=>[g.id,g.open])) &&
+        await evaluate(client, `document.querySelector('[data-position-entry="72"] [data-action="select-entry"]').checked`),
+        {before,after});
+      check(`${mode}: directory visibility does not remount article rows`, await evaluate(client,
+        `[...document.querySelectorAll('[data-position-entry]')].every((row,i)=>row===window.__directoryListIdentity[i])`));
+      await evaluate(client, 'delete window.__directoryListIdentity');
+      await userWheel(client, 24);
+      await settle(client, `document.querySelector(${q(rail)}).dataset.directoryMode === 'follow'`, 'main scrolling resumes following after reopening');
+    });
     await scenario(`${mode}-read-summary-preserves-manual`, async () => {
       const c = await prepare(mode);
       check(`${mode}: read regression uses All feeds and ReadFilter::All`,
@@ -488,8 +534,10 @@ export async function checkDirectoryContracts(client, env) {
         await env.setViewport(width,800,mobile,mobile?3:1);
         await evaluate(client, "window.scrollTo({top:0,behavior:'instant'})");
         if (!await evaluate(client, `!!document.querySelector(${q(rail)}).getClientRects().length`)) {
+          await settle(client, `document.querySelector(${q(rail)}).dataset.directoryRendered === 'false' && !document.querySelector(${q(rail+' nav')})`, 'responsive hiding releases the directory tree');
+          check(`${mode}: ${width}px hidden directory has no navigation tree`, true);
           await click(client,'[data-action="open-directory"]');
-          await settle(client, `!!document.querySelector(${q(rail)}).getClientRects().length`, 'directory opens from collapsed entry');
+          await settle(client, `!!document.querySelector(${q(rail)}).getClientRects().length && document.querySelector(${q(rail)}).dataset.directoryRendered === 'true'`, 'directory opens from collapsed entry');
         }
         // Responsive layout changes anchor positions. Restore the explicit
         // article target before comparing consumers; do not infer it from JS.

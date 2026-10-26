@@ -67,6 +67,7 @@ pub(super) struct DirectoryState {
     initial: Path,
     observed: Option<Path>,
     manual: bool,
+    visible: bool,
     expanded: BTreeSet<String>,
     sequence: u64,
 }
@@ -107,6 +108,11 @@ impl DirectoryState {
             || self.active().leaf != fact.leaf;
         let was_manual = self.manual;
         let changed = match fact.kind {
+            Kind::Visibility => {
+                let changed = self.visible != fact.visible;
+                self.visible = fact.visible;
+                changed
+            }
             Kind::Observe | Kind::Follow => {
                 let path = Path {
                     group: fact.group.clone(),
@@ -141,6 +147,9 @@ impl DirectoryState {
         if changed {
             self.revision += 1;
         }
+        if matches!(fact.kind, Kind::Visibility) {
+            return changed && self.visible && !self.manual;
+        }
         !self.manual
             && (first_observation
                 || fact.reflow
@@ -156,6 +165,7 @@ pub(super) struct DirectoryStore(pub(super) Signal<DirectoryState>);
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Kind {
+    Visibility,
     Observe,
     Manual,
     Follow,
@@ -179,6 +189,8 @@ struct Fact {
     page: Option<u32>,
     #[serde(default)]
     reflow: bool,
+    #[serde(default)]
+    visible: bool,
 }
 
 #[derive(Serialize)]
@@ -192,6 +204,7 @@ struct Command {
     leaf: Option<String>,
     navigate: Option<String>,
     page: Option<u32>,
+    restore_scroll: bool,
 }
 
 #[component]
@@ -207,6 +220,7 @@ pub(super) fn DirectoryBridge(
         let next = DirectoryState {
             epoch: previous.epoch + 1,
             revision: previous.revision + 1,
+            visible: previous.visible,
             initial: Path {
                 group: model.active_group_anchor.clone(),
                 item: model.active_directory_anchor.clone(),
@@ -257,6 +271,10 @@ pub(super) fn DirectoryBridge(
                     leaf: current.active().leaf.clone(),
                     navigate,
                     page: fact.page,
+                    restore_scroll: valid
+                        && matches!(fact.kind, Kind::Visibility)
+                        && current.visible
+                        && current.manual,
                 };
                 if current.revision != revision {
                     state.set(current.clone());
@@ -326,8 +344,45 @@ mod tests {
             open: false,
             page: None,
             reflow: false,
+            visible: false,
         }
     }
+    #[test]
+    fn hiding_and_showing_preserves_manual_expansion_and_active_path() {
+        let mut state = state();
+        let mut show = fact(1, Kind::Visibility);
+        show.visible = true;
+        assert!(state.apply(&show));
+        state.apply(&fact(2, Kind::Manual));
+        let mut expand = fact(3, Kind::SetOpen);
+        expand.anchor = Some("b".into());
+        expand.open = true;
+        state.apply(&expand);
+        let expanded = state.expanded.clone();
+        let active = state.active().clone();
+        assert!(!state.apply(&fact(4, Kind::Visibility)));
+        assert!(!state.visible);
+        show.sequence = 5;
+        assert!(!state.apply(&show), "manual reopening must restore scroll, not follow");
+        assert!(state.visible && state.manual);
+        assert!(state.expanded == expanded && *state.active() == active);
+    }
+
+    #[test]
+    fn hidden_directory_tracks_main_scroll_and_reopens_at_current_path() {
+        let mut state = state();
+        state.apply(&fact(1, Kind::Manual));
+        let mut follow = fact(2, Kind::Follow);
+        follow.group = Some("b".into());
+        follow.item = Some("b1".into());
+        state.apply(&follow);
+        assert!(!state.visible && !state.manual);
+        let mut show = fact(3, Kind::Visibility);
+        show.visible = true;
+        assert!(state.apply(&show));
+        assert!(state.is_open("b") && state.is_open("b1") && !state.is_open("a"));
+    }
+
     #[test]
     fn current_group_can_close_and_same_group_user_scroll_resets_all_manual_groups() {
         let mut state = state();
