@@ -1,6 +1,7 @@
 pub mod app_state_repository;
 pub mod entry_repository;
 pub mod feed_repository;
+mod migration_compat;
 pub mod settings_repository;
 pub mod sqlite_native;
 pub mod storage_backend;
@@ -62,12 +63,12 @@ pub(crate) fn is_memory_database(database_url: &str) -> bool {
 }
 
 pub async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
-    MIGRATOR.run(pool).await?;
+    migration_compat::run(pool, &MIGRATOR).await?;
     Ok(())
 }
 
 pub async fn migrate_content(pool: &SqlitePool) -> anyhow::Result<()> {
-    CONTENT_MIGRATOR.run(pool).await?;
+    migration_compat::run(pool, &CONTENT_MIGRATOR).await?;
     Ok(())
 }
 

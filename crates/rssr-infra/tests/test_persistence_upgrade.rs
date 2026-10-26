@@ -8,7 +8,7 @@ use rssr_domain::{
     SettingsRepository, StartupView, ThemeMode, UserSettings,
 };
 use rssr_infra::db::{
-    MIGRATOR, app_state_repository::SqliteAppStateRepository,
+    CONTENT_MIGRATOR, MIGRATOR, app_state_repository::SqliteAppStateRepository,
     entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository,
     settings_repository::SqliteSettingsRepository, sqlite_native::NativeSqliteBackend,
     storage_backend::StorageBackend,
@@ -19,18 +19,23 @@ use sqlx::Row;
 /// upgrade/reopen phases. An in-memory round trip cannot catch lost on-disk data.
 #[tokio::test]
 async fn pre_workspace_database_survives_upgrade_and_reopen() {
+    for newlines in ["lf", "crlf", "mixed"] {
+        upgrade_and_reopen(newlines).await;
+    }
+}
+
+async fn upgrade_and_reopen(newlines: &str) {
     let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
     let directory =
         std::env::temp_dir().join(format!("rssr-upgrade-{}-{nonce}", std::process::id()));
     let backend = NativeSqliteBackend::with_path(directory.join("rss-reader.db"));
     let pool = backend.connect().await.unwrap();
     let content_pool = backend.connect_content().await.unwrap();
-    let legacy = sqlx::migrate::Migrator {
-        migrations: MIGRATOR.iter().filter(|migration| migration.version <= 7).cloned().collect(),
-        ..sqlx::migrate::Migrator::DEFAULT
-    };
+    let legacy = legacy_migrator(&MIGRATOR, 7, newlines);
     legacy.run(&pool).await.unwrap();
-    backend.migrate_content(&content_pool).await.unwrap();
+    legacy_migrator(&CONTENT_MIGRATOR, 1, newlines).run(&content_pool).await.unwrap();
+    let old_history = migration_history(&pool).await;
+    let old_content_history = migration_history(&content_pool).await;
     sqlx::raw_sql(
         r#"
         INSERT INTO feeds (id, url, title, folder, created_at, updated_at)
@@ -85,6 +90,8 @@ async fn pre_workspace_database_survives_upgrade_and_reopen() {
     let content_pool = backend.connect_content().await.unwrap();
     backend.migrate(&pool).await.unwrap();
     backend.migrate_content(&content_pool).await.unwrap();
+    assert_eq!(migration_history(&pool).await[..old_history.len()], old_history);
+    assert_eq!(migration_history(&content_pool).await, old_content_history);
     let entries = SqliteEntryRepository::new_with_content_pool(pool.clone(), content_pool.clone());
     let feeds = SqliteFeedRepository::new(pool.clone());
     let saved_entry = entries.get_entry(100).await.unwrap().unwrap();
@@ -128,6 +135,8 @@ async fn pre_workspace_database_survives_upgrade_and_reopen() {
     let content_pool = backend.connect_content().await.unwrap();
     backend.migrate(&pool).await.unwrap();
     backend.migrate_content(&content_pool).await.unwrap();
+    assert_eq!(migration_history(&pool).await[..old_history.len()], old_history);
+    assert_eq!(migration_history(&content_pool).await, old_content_history);
     let entries = SqliteEntryRepository::new_with_content_pool(pool.clone(), content_pool.clone());
     let feeds = SqliteFeedRepository::new(pool.clone());
     assert_eq!(entries.get_entry(100).await.unwrap().unwrap(), saved_entry);
@@ -173,4 +182,40 @@ async fn pre_workspace_database_survives_upgrade_and_reopen() {
             Err(error) => panic!("failed to remove persistence fixture: {error}"),
         }
     }
+}
+
+fn legacy_migrator(
+    source: &sqlx::migrate::Migrator,
+    last: i64,
+    newlines: &str,
+) -> sqlx::migrate::Migrator {
+    sqlx::migrate::Migrator {
+        migrations: source
+            .iter()
+            .filter(|m| m.version <= last)
+            .map(|m| {
+                let lf = m.sql.replace("\r\n", "\n");
+                let sql = if newlines == "crlf" || (newlines == "mixed" && m.version % 2 == 1) {
+                    lf.replace('\n', "\r\n")
+                } else {
+                    lf
+                };
+                sqlx::migrate::Migration::new(
+                    m.version,
+                    m.description.clone(),
+                    m.migration_type,
+                    sql.into(),
+                    m.no_tx,
+                )
+            })
+            .collect(),
+        ..sqlx::migrate::Migrator::DEFAULT
+    }
+}
+
+async fn migration_history(
+    pool: &rssr_infra::db::SqlitePool,
+) -> Vec<(i64, String, String, bool, Vec<u8>, i64)> {
+    sqlx::query_as("SELECT version, description, installed_on, success, checksum, execution_time FROM _sqlx_migrations ORDER BY version")
+        .fetch_all(pool).await.unwrap()
 }
