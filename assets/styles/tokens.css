@@ -38,13 +38,8 @@
   --reader-font-scale: 1;
 
   /* ---- 第 2 层：应用底色 ---- */
-  --app-bg:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.78), transparent 28%),
-    radial-gradient(circle at top right, rgba(201, 181, 159, 0.16), transparent 24%),
-    linear-gradient(180deg, #f2e9dc 0%, #f9f5ef 36%, #f5efe7 100%);
-  --app-bg-dark:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 32%),
-    linear-gradient(180deg, #151515 0%, #1d1d1d 38%, #191919 100%);
+  --app-bg: #f4efe6;
+  --app-bg-dark: #141414;
 
   /* ---- 第 2 层：边线 ---- */
   --line-soft: rgba(62, 42, 27, 0.08);
