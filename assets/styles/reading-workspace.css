@@ -6,7 +6,7 @@
   --selection-row-bg: color-mix(in srgb, var(--accent) 5%, var(--panel-strong));
   --radius-selection: 3.5px;
   --radius-row: 12px;
-  --workspace-panel-gap: 12px;
+  --workspace-panel-gap: 8px;
 }
 .app-shell [data-page="entries"] {
   padding: 0; border: 0; background: none; box-shadow: none; backdrop-filter: none;
@@ -44,6 +44,11 @@
 .entry-group-toggle { display: inline-flex; padding: 2px; border-radius: var(--radius-control); background: var(--line-soft); }
 .entry-group-toggle button { width: 54px; min-height: 40px; padding: 0; border: 0; border-radius: calc(var(--radius-control) - 2px); background: transparent; color: var(--muted); font: inherit; font-size: 0.85rem; cursor: pointer; }
 .entry-group-toggle button[aria-pressed="true"] { background: var(--panel-strong); color: var(--accent); box-shadow: var(--shadow-soft); }
+/* Align visible text and icons optically without moving their 44px hit areas. */
+.entries-toolbar-title [data-slot="page-title"] { position: relative; top: -2px; }
+.entries-toolbar .entries-count, .entries-toolbar .entry-select-all .entry-select-box { position: relative; top: 3px; }
+.entries-toolbar :is(.entries-toolbar-title, .entry-status-filters, .entry-bulk-actions, .entries-view-options) > .workspace-icon-button,
+.entries-toolbar .source-filter-trigger, .entries-toolbar > .entry-group-toggle button { padding-top: 6px; }
 .entry-filter-summary { margin: 8px 0 0 52px; color: var(--muted); font-size: 0.78rem; overflow-wrap: anywhere; }
 .entries-view-options { position: relative; }
 .entries-view-options summary { list-style: none; }
@@ -167,7 +172,7 @@
 }
 @media (max-width: 600px) {
   [data-page="entries"] [data-layout="entries-main"] { padding: 12px; }
-  .entries-toolbar { display: flex; gap: 8px 4px; }
+  .entries-toolbar { position: relative; display: flex; gap: 8px 4px; }
   .entries-toolbar-title { flex: 1 1 auto; order: 0; }
   .entry-bulk-actions { order: 1; margin: 0; }
   .entries-view-options { order: 2; }
@@ -175,7 +180,7 @@
   .entry-group-toggle { order: 4; margin-left: auto; }
   .entries-toolbar-title [data-slot="page-title"] { font-size: 1.5rem; }
   .entries-count { font-size: 0.75rem; }
-  .directory-open-button { position: absolute; top: 116px; left: 12px; margin: 0; }
+  .directory-open-button { position: absolute; bottom: 0; left: 0; margin: 0; }
   .app-shell [data-page="entries"] [data-layout="entry-card"][data-variant="reading"] { gap: 4px; padding: 10px 0; grid-template-columns: 44px minmax(0, 1fr) 44px; }
   .app-shell [data-page="entries"] [data-layout="entry-card"] [data-layout="entry-card-actions"] { flex-direction: column; }
   .app-shell [data-page="entries"] [data-layout="entry-card"] [data-slot="entry-card-title"] { font-size: 0.94rem; }
