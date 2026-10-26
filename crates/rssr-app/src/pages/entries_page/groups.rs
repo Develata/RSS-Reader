@@ -133,6 +133,7 @@ pub(crate) struct EntryDirectoryDate {
     pub(crate) subtitle: String,
     pub(crate) target_page: u32,
     pub(crate) is_active: bool,
+    pub(crate) entry_cards: Vec<EntryCardRef>,
 }
 
 pub(crate) fn group_entries_by_time_tree(
@@ -286,6 +287,11 @@ pub(crate) fn build_directory_months(
                     subtitle: date.subtitle.clone(),
                     target_page: date.target_page,
                     is_active: active_directory_anchor == Some(date.anchor_id.as_str()),
+                    entry_cards: date
+                        .sources
+                        .iter()
+                        .flat_map(|source| source.entry_cards.iter().copied())
+                        .collect(),
                 })
                 .collect(),
         })

@@ -9,9 +9,9 @@ use super::{
 use crate::ui::use_reactive_side_effect;
 
 mod controller;
+mod transport;
 mod view;
 pub(super) use controller::DirectoryState;
-use controller::Fact;
 pub(super) use view::DirectoryRail;
 
 // Cheap view-prop identity. Presenter metadata can change without changing the
@@ -87,7 +87,7 @@ pub(super) fn DirectoryBridge(
             // the only other writer and always advances the epoch. Publish only
             // render changes, not every observation/sequence acknowledgement.
             let mut current = state.peek().clone();
-            while let Ok(fact) = eval.recv::<Fact>().await {
+            while let Ok(fact) = transport::receive_fact(&mut eval).await {
                 if current.epoch() != state.peek().epoch() {
                     current = state.peek().clone();
                 }
@@ -102,6 +102,10 @@ pub(super) fn DirectoryBridge(
                     break;
                 }
             }
+            // A closed transport must also release the adapter's listeners and
+            // pending work. Ordinary malformed facts are handled inside recv.
+            let _ = eval.send(serde_json::Value::Null);
+            bridge.set(None);
         }
     });
     let epoch = state.read().epoch();

@@ -424,7 +424,7 @@ mod tests {
     #[ignore = "manual performance measurement"]
     fn measure_entries_projection() {
         use std::{hint::black_box, time::Instant};
-        for count in [800, 2000] {
+        for count in [800, 2000, 5000] {
             let mut state = EntriesPageState::new();
             state.entries_page_size = 50;
             state.entries = (0..count)
@@ -809,5 +809,9 @@ mod tests {
         let date = &presenter.directory_months[0].dates[0];
         assert_eq!(date.anchor_id, presenter.time_grouped_entries[0].dates[0].anchor_id);
         assert_eq!(presenter.active_directory_anchor.as_deref(), Some(date.anchor_id.as_str()));
+        assert_eq!(date.entry_cards.len(), 2);
+        assert_eq!(date.entry_cards[0].id, 11);
+        assert_eq!(date.entry_cards[1].id, 12);
+        assert_eq!(date.entry_cards[1].index, 1);
     }
 }

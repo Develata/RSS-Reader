@@ -568,43 +568,44 @@ export async function checkDirectoryContracts(client, env) {
       await env.capture(`directory-${mode}-mobile`);
     });
   }
-  await scenario('source-article-navigation', async () => {
-    const c = await prepare('source');
+  for (const mode of ['time', 'source']) await scenario(`${mode}-article-navigation`, async () => {
+    const c = await prepare(mode), samePageArticle = mode === 'time' ? 71 : 66;
     const navigationHistory = await evaluate(client, `({length:history.length,state:JSON.stringify(history.state)})`);
     const branch = id => `${rail} [data-layout="entry-directory-branch-toggle"][data-directory-anchor="${id}"]`;
     const article = id => `${rail} [data-directory-kind="entry"][data-directory-anchor="entry-card-${id}"]`;
-    await settle(client, `!!document.querySelector(${q(article(66))})`, 'current source/month must expose article titles');
+    await settle(client, `!!document.querySelector(${q(article(samePageArticle))})`, 'current path must expose article titles');
     await click(client, '[data-position-entry="72"] [data-action="select-entry"]');
     await click(client, branch(c.first));
-    await settle(client, `!document.querySelector(${q(article(66))})`, 'closing month unmounts its article nodes');
-    check('source: collapsing the month preserves article selection', await evaluate(client,
+    await settle(client, `!document.querySelector(${q(article(samePageArticle))})`, 'closing the branch unmounts its article nodes');
+    check(`${mode}: collapsing the article branch preserves selection`, await evaluate(client,
       `document.querySelector('[data-position-entry="72"] [data-action="select-entry"]').checked`));
     await evaluate(client, `document.querySelector(${q(branch(c.first))}).focus({preventScroll:true})`);
     await keyPress(client, 'Enter');
-    await settle(client, `!!document.querySelector(${q(article(66))})`, 'keyboard expands article titles');
-    await click(client, article(66));
-    await settle(client, `location.hash === '#entry-card-66'`, 'article link must navigate to the exact article');
-    await expectTargetAligned(client, 'entry-card-66');
-    check('source: same-page directory jump preserves route history', await evaluate(client,
+    await settle(client, `!!document.querySelector(${q(article(samePageArticle))})`, 'keyboard expands article titles');
+    await click(client, article(samePageArticle));
+    await settle(client, `location.hash === '#entry-card-${samePageArticle}'`, 'article link must navigate to the exact article');
+    await expectTargetAligned(client, `entry-card-${samePageArticle}`);
+    check(`${mode}: same-page directory jump preserves route history`, await evaluate(client,
       `history.length === ${navigationHistory.length} && JSON.stringify(history.state) === ${q(navigationHistory.state)}`));
-    check('source: same-page article navigation keeps selection and manual browsing', await evaluate(client,
+    check(`${mode}: same-page article navigation keeps selection and manual browsing`, await evaluate(client,
       `document.querySelector('[data-position-entry="72"] [data-action="select-entry"]').checked && document.querySelector(${q(rail)}).dataset.directoryMode === 'manual'`));
+    if (mode === 'time') await click(client, group(c.remoteGroup));
     await click(client, branch(c.remote));
     await settle(client, `!!document.querySelector(${q(article(12))})`, 'remote month must expose off-page articles');
-    check('source: article target uses its global page, not the current-page index', await evaluate(client,
+    check(`${mode}: article target uses its global page, not the current-page index`, await evaluate(client,
       `document.querySelector(${q(article(12))}).dataset.directoryPage === '2'`));
     await click(client, article(12));
     await settle(client, `location.hash === '#entry-card-12' && document.querySelector('[data-slot="entry-pagination-status"]').textContent.trim() === '2 / 2' && !!document.getElementById('entry-card-12')`, 'cross-page article target');
     await expectTargetAligned(client, 'entry-card-12');
-    check('source: cross-page directory jump preserves route history', await evaluate(client,
+    check(`${mode}: cross-page directory jump preserves route history`, await evaluate(client,
       `history.length === ${navigationHistory.length} && JSON.stringify(history.state) === ${q(navigationHistory.state)}`));
-    check('source: cross-page article navigation clears the old selection', await evaluate(client,
+    check(`${mode}: cross-page article navigation clears the old selection`, await evaluate(client,
       `[...document.querySelectorAll('[data-action="select-entry"]')].every(e=>!e.checked)`));
     // Entry 12 is near the document end, so its jump can legitimately clamp.
     // Entry 22 is the first article on page 2 and can reach the 80px probe line.
     await userScrollAnchor(client, 'entry-card-22');
     await settle(client, `document.querySelector(${q(article(22))})?.getAttribute('aria-current') === 'location'`, 'directory follows the exact visible article');
-    await env.capture('directory-source-articles');
+    await env.capture(`directory-${mode}-articles`);
   });
   await scenario('lifecycle', async () => {
     const c = await prepare('time');

@@ -20,6 +20,7 @@ pub(crate) fn DirectoryRail(
             "data-directory-rendered": state.is_visible(),
             "data-directory-current-group": state.active_group().unwrap_or(""),
             "data-directory-current-item": state.active_item().unwrap_or(""),
+            "data-directory-current-leaf": state.active_leaf().unwrap_or(""),
             div { class: "directory-heading-row",
                 h2 { "data-slot": "entry-directory-heading", "目录" }
                 button { class: "workspace-icon-button", title: "收起目录", aria_label: "收起目录", "data-action": "close-directory", onclick: move |_| on_close.call(()), crate::components::icon::Icon { name: "chevron-right" } }
@@ -34,7 +35,13 @@ pub(crate) fn DirectoryRail(
                                 "data-open-base": boolean(state.is_open(&month.anchor_id)), "data-open": boolean(state.is_open(&month.anchor_id)),
                               if state.is_open(&month.anchor_id) {
                                 for date in &month.dates {
-                                    { link(&state, &month.anchor_id, &date.anchor_id, &date.title, &date.subtitle, date.target_page, true) }
+                                    div { key: "{date.anchor_id}", "data-layout": "entry-directory-date-branch",
+                                        div { class: "directory-month-heading",
+                                            { articles_toggle(&state, &date.anchor_id, &date.title) }
+                                            { link(&state, &month.anchor_id, &date.anchor_id, &date.title, &date.subtitle, date.target_page, true) }
+                                        }
+                                        { articles(&state, &model, &date.anchor_id, &date.entry_cards) }
+                                    }
                                 }
                               }
                             }
@@ -50,20 +57,10 @@ pub(crate) fn DirectoryRail(
                                 for month in &source.months {
                                     div { key: "{month.anchor_id}", "data-layout": "entry-directory-month-branch",
                                         div { class: "directory-month-heading",
-                                            { month_toggle(&state, &month.anchor_id, &month.title) }
+                                            { articles_toggle(&state, &month.anchor_id, &month.title) }
                                             { link(&state, &source.anchor_id, &month.anchor_id, &month.title, &month.subtitle, month.target_page, false) }
                                         }
-                                        div { id: "directory-articles-{month.anchor_id}", "data-layout": "entry-directory-articles",
-                                            // Article nodes are mounted only for expanded paths. The
-                                            // full directory retains cheap (index, id) references.
-                                            if state.is_open(&month.anchor_id) {
-                                                for (card, entry) in month.entry_cards.iter().filter_map(|card| model.1.get(card.index).filter(|entry| entry.id == card.id).map(|entry| (card, entry))) {
-                                                    DirectoryArticle { key: "{entry.id}", entry: std::sync::Arc::clone(entry),
-                                                        active: state.active_leaf() == Some(&super::super::groups::entry_anchor_id(entry.id)),
-                                                        page: (card.index / model.page_size.max(1)) as u32 + 1 }
-                                                }
-                                            }
-                                        }
+                                        { articles(&state, &model, &month.anchor_id, &month.entry_cards) }
                                     }
                                 }
                               }
@@ -77,7 +74,28 @@ pub(crate) fn DirectoryRail(
     }
 }
 
-fn month_toggle(state: &DirectoryState, anchor: &str, title: &str) -> Element {
+fn articles(
+    state: &DirectoryState,
+    model: &DirectoryModel,
+    anchor: &str,
+    cards: &[super::super::groups::EntryCardRef],
+) -> Element {
+    rsx! {
+        div { id: "directory-articles-{anchor}", "data-layout": "entry-directory-articles",
+            // Both grouping modes share identity checks and global page mapping.
+            // Only expanded paths mount article nodes; the projection keeps refs.
+            if state.is_open(anchor) {
+                for (card, entry) in cards.iter().filter_map(|card| model.1.get(card.index).filter(|entry| entry.id == card.id).map(|entry| (card, entry))) {
+                    DirectoryArticle { key: "{entry.id}", entry: std::sync::Arc::clone(entry),
+                        active: state.active_leaf() == Some(&super::super::groups::entry_anchor_id(entry.id)),
+                        page: (card.index / model.page_size.max(1)) as u32 + 1 }
+                }
+            }
+        }
+    }
+}
+
+fn articles_toggle(state: &DirectoryState, anchor: &str, title: &str) -> Element {
     let open = state.is_open(anchor);
     let icon = if open { "chevron-down" } else { "chevron-right" };
     let verb = if open { "收起" } else { "展开" };

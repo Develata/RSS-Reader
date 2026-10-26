@@ -35,7 +35,7 @@ function queue(key, kind, fields = {}) {
 }
 function selectAnchor() {
     if (dirty) {
-        anchors = [...root.querySelectorAll('[data-entry-scroll-anchor], [data-grouping-mode="source"] [data-position-entry]')];
+        anchors = [...root.querySelectorAll('[data-entry-scroll-anchor], [data-position-entry]')];
         dirty = false;
     }
     let candidate = null;
@@ -271,6 +271,16 @@ try {
         const command = await dioxus.recv();
         if (!command) { cleanup(); break; }
         if (disposed) break;
+        if (command.rejected === true) {
+            // This private channel is sequential with one request in flight.
+            // A malformed request may have no usable sequence. Drop it once,
+            // keep pending user input, and remeasure on the next normal update;
+            // never retry an invalid payload in a loop or reset Rust UI state.
+            ack = null; inFlight = null;
+            lastPath = ''; reportedVisible = null;
+            sendNext();
+            continue;
+        }
         if (command.sequence !== inFlight?.sequence) continue;
         if (command.navigate) navigation = {anchor: command.navigate, page: command.page, contextKey: inFlight.context_key};
         ack = command;
