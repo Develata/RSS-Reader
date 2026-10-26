@@ -8,7 +8,9 @@ const options = Object.fromEntries(process.argv.slice(2).reduce((pairs, arg, ind
   if (index % 2 === 0) pairs.push([arg.replace(/^--/, ''), all[index + 1]]);
   return pairs;
 }, []));
-for (const key of ['cdp-base', 'static-base', 'artifact-dir']) {
+const offline = options['offline-fixture'] === 'true';
+if (offline) options['static-base'] = require('./directory_fixture.cjs').origin;
+for (const key of offline ? ['artifact-dir'] : ['cdp-base', 'static-base', 'artifact-dir']) {
   if (!options[key]) throw Error(`Missing --${key}`);
 }
 
@@ -44,8 +46,10 @@ function interceptDirectoryChannel() {
 }
 
 (async () => {
-  const browser = await chromium.connectOverCDP(options['cdp-base']);
+  const browser = offline ? await chromium.launch({channel:'chrome',headless:true})
+    : await chromium.connectOverCDP(options['cdp-base']);
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: 'light' });
+  if (offline) await require('./directory_fixture.cjs').install(context,path.resolve(__dirname,'../..'));
   const page = await context.newPage();
   page.setDefaultTimeout(10000);
   const output = path.resolve(options['artifact-dir']);

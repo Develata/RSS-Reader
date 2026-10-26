@@ -9,6 +9,7 @@ let raf = 0, dirty = true, anchors = [], lastPath = '';
 let input = {source: null, serial: 0, at: 0}, reportedInput = 0;
 let requestFollow = false, reflow = false, ack = null, navigation = null;
 let measuredRail = null, reportedVisible = null, lastRailTop = 0;
+let reveal = null;
 // One in flight. Latest explicit intent per control + observation/input keys;
 // pending size is bounded by this context's rendered controls, not scroll rate.
 const pending = new Map();
@@ -86,7 +87,7 @@ function refreshContext() {
     pending.clear();
     if (ack) inFlight = null;
     ack = null; lastPath = ''; dirty = true;
-    reportedVisible = null; lastRailTop = 0;
+    reportedVisible = null; lastRailTop = 0; reveal = null;
     // An in-flight prior epoch still receives its ack; its result is discarded.
     input = {source: null, serial: input.serial + 1, at: 0};
     requestFollow = false;
@@ -96,7 +97,21 @@ function align(command) {
     const rail = root.querySelector('[data-directory-consumer="rail"]');
     if (visible(rail)) {
         const links = [...rail.querySelectorAll('[data-directory-anchor]')];
-        const target = links.find(e => e.dataset.directoryAnchor === command.leaf && visible(e)) ||
+        const leaf = links.find(e => e.dataset.directoryAnchor === command.leaf && visible(e));
+        const block = command.item && document.getElementById('directory-articles-' + command.item);
+        if (command.leaf && !leaf && block?.dataset.virtualArticles === 'true') {
+            if (!block.__rssrVirtualWindow) return false;
+            if (!reveal || reveal.sequence !== command.sequence || reveal.epoch !== command.epoch) {
+                const request = reveal = {sequence: command.sequence, epoch: command.epoch, done: false};
+                block.__rssrVirtualWindow.reveal(command.leaf).then(() => {
+                    request.done = true;
+                    if (!disposed && reveal === request) finishCommand();
+                });
+                return false;
+            }
+            if (!reveal.done) return false;
+        }
+        const target = leaf ||
             links.find(e => e.dataset.directoryAnchor === command.item && e.dataset.canToggle !== 'true' && visible(e)) ||
             links.find(e => e.dataset.directoryAnchor === command.group && visible(e));
         if (target) {
@@ -115,6 +130,7 @@ function align(command) {
             else if (t.right > right) top.scrollLeft += t.right - right;
         }
     }
+    return true;
 }
 function finishCommand() {
     if (disposed) return;
@@ -142,7 +158,7 @@ function finishCommand() {
         const rail = root.querySelector('[data-directory-consumer="rail"]');
         if (visible(rail)) rail.scrollTop = lastRailTop;
     }
-    if (ack.align && !pending.size) align(ack);
+    if (ack.align && !pending.size && !align(ack)) return;
     ack = null; inFlight = null;
     sendNext();
 }
@@ -237,7 +253,9 @@ function whenSettled() {
             if (disposed || !root.isConnected) { clearTimeout(timer); reject(new Error('Directory disposed')); return; }
             refreshContext();
             const consumers = [...root.querySelectorAll(directorySelector)];
+            const windows = [...root.querySelectorAll('[data-virtual-articles="true"]')];
             const idle = epoch && !raf && !inFlight && !ack && !pending.size && !navigation &&
+                windows.every(e => e.__rssrVirtualWindow?.idle) &&
                 consumers.every(e => Number(e.dataset.directoryEpoch) === epoch);
             stable = idle ? stable + 1 : 0;
             if (stable >= 2) { clearTimeout(timer); resolve({epoch, sequence}); }
@@ -264,6 +282,7 @@ listen(window, 'scroll', onScroll, {capture: true, passive: true});
 listen(window, 'resize', () => scheduleUpdate(true), {passive: true});
 for (const name of ['wheel','touchstart','touchmove','pointerdown','keydown']) listen(document, name, noteInput, {capture: true, passive: true});
 listen(root, 'click', onClick, {capture: true});
+listen(root, 'rssr:directory-window-commit', finishCommand);
 window[trackerKey] = {cleanup, scheduleUpdate, whenSettled};
 scheduleUpdate(true);
 try {

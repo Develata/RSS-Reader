@@ -11,6 +11,8 @@ use crate::ui::use_reactive_side_effect;
 mod controller;
 mod transport;
 mod view;
+mod virtual_articles;
+mod window;
 pub(super) use controller::DirectoryState;
 pub(super) use view::DirectoryRail;
 
@@ -32,6 +34,24 @@ impl std::ops::Deref for DirectoryModel {
     type Target = EntriesPagePresenter;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl DirectoryModel {
+    fn article_cards(&self, anchor: &str) -> &[super::groups::EntryCardRef] {
+        self.directory_months
+            .iter()
+            .flat_map(|month| &month.dates)
+            .find(|date| date.anchor_id == anchor)
+            .map(|date| date.entry_cards.as_slice())
+            .or_else(|| {
+                self.directory_sources
+                    .iter()
+                    .flat_map(|source| &source.months)
+                    .find(|month| month.anchor_id == anchor)
+                    .map(|month| month.entry_cards.as_slice())
+            })
+            .unwrap_or_default()
     }
 }
 

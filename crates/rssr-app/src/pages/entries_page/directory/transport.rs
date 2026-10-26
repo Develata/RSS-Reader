@@ -1,6 +1,7 @@
 //! Eval-channel failure handling; interaction policy remains in the controller.
 use dioxus::prelude::document::{Eval, EvalError};
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use super::controller::Fact;
 
@@ -10,8 +11,12 @@ struct Rejected {
 }
 
 pub(super) async fn receive_fact(eval: &mut Eval) -> Result<Fact, EvalError> {
+    receive_message(eval).await
+}
+
+pub(super) async fn receive_message<T: DeserializeOwned>(eval: &mut Eval) -> Result<T, EvalError> {
     loop {
-        match eval.recv::<Fact>().await {
+        match eval.recv::<T>().await {
             Ok(fact) => return Ok(fact),
             Err(EvalError::Serialization(error)) => {
                 // Eval already consumed this JSON message. Reject just this

@@ -9,6 +9,7 @@ pub(crate) fn DirectoryRail(
     on_close: EventHandler,
 ) -> Element {
     let DirectoryStore(state) = use_context();
+    use_context_provider(super::virtual_articles::Cache::default);
     let state = state.read();
     let epoch = state.epoch();
     let revision = state.revision();
@@ -80,6 +81,12 @@ fn articles(
     anchor: &str,
     cards: &[super::super::groups::EntryCardRef],
 ) -> Element {
+    if state.is_open(anchor) && cards.len() > 80 {
+        return rsx! { super::virtual_articles::VirtualArticles {
+            key: "{state.epoch()}:{anchor}", model: model.clone(), anchor: anchor.to_owned(),
+            epoch: state.epoch(), active: state.active_leaf().map(str::to_owned),
+        }};
+    }
     rsx! {
         div { id: "directory-articles-{anchor}", "data-layout": "entry-directory-articles",
             // Both grouping modes share identity checks and global page mapping.
@@ -112,10 +119,12 @@ fn articles_toggle(state: &DirectoryState, anchor: &str, title: &str) -> Element
 }
 
 #[component]
-fn DirectoryArticle(
+pub(super) fn DirectoryArticle(
     entry: std::sync::Arc<rssr_domain::EntrySummary>,
     active: bool,
     page: u32,
+    #[props(default)] window_index: Option<usize>,
+    #[props(default)] window_count: usize,
 ) -> Element {
     let anchor = super::super::groups::entry_anchor_id(entry.id);
     let title = &entry.title;
@@ -123,6 +132,9 @@ fn DirectoryArticle(
         button { r#type: "button", "data-layout": "entry-directory-link",
             "data-directory-kind": "entry", "data-directory-level": "article",
             "data-directory-anchor": "{anchor}", "data-directory-page": "{page}",
+            "data-virtual-index": window_index,
+            "data-virtual-prev": window_index.and_then(|index| index.checked_sub(1)),
+            "data-virtual-next": window_index.filter(|index| index + 1 < window_count).map(|index| index + 1),
             "data-active": boolean(active), aria_current: if active { "location" } else { "false" },
             aria_label: "定位文章：{title}", title,
             span { "data-slot": "entry-directory-title", "{title}" }
