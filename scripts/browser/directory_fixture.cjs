@@ -17,10 +17,11 @@ exports.install = async (context, repo) => {
       core.feeds.forEach(feed => { feed.url = origin + '/__codex/feed/' + feed.id; });
       if (url.searchParams.get('seed') === 'directory-window') {
         const template = core.entries[0];
-        core.feeds = [core.feeds[0]];
+        const multiple = url.searchParams.get('branches') === '2';
+        core.feeds = core.feeds.slice(0, multiple ? 2 : 1);
         core.entries = Array.from({length:600}, (_, i) => {
           const id = 600 - i;
-          return {...template, id, feed_id:1, external_id:'window-' + id, dedup_key:'window-' + id,
+          return {...template, id, feed_id:multiple && i >= 300 ? 2 : 1, external_id:'window-' + id, dedup_key:'window-' + id,
             url:origin + '/article/' + id, title:`Window ${id} ` + (id % 3 === 0 ? '长标题检验自然换行与变高的目录条目 '.repeat(4) : '短标题'),
             published_at:`2026-09-02 12:${String(Math.floor(id/60)).padStart(2,'0')}:${String(id%60).padStart(2,'0')}.0 +00:00:00`};
         });
@@ -29,6 +30,7 @@ exports.install = async (context, repo) => {
         flags.entries = [];
         content.entries = [];
         app.entries_workspace.grouping_mode = url.searchParams.get('group') || 'source';
+        app.entries_workspace.show_archived = url.searchParams.get('archived') !== 'false';
       }
       const salt = hash('smoke:codex-static-smoke'), passwordHash = hash('smoke\nsmoke-pass-123\n' + salt);
       const next = url.searchParams.get('next') || '/entries';

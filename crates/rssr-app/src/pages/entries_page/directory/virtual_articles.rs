@@ -98,18 +98,21 @@ pub(super) fn VirtualArticles(
     let snapshot = rendered.read();
     // Keep the keyed row VNodes at the iterator root. An extra unkeyed RSX
     // fragment per part would recreate focused buttons when the range shifts.
-    let children = snapshot.view.parts.iter().map(|part| match part {
-        Part::Space { start, height } => rsx! {
+    // A query can shrink the model one render before the reset effect advances
+    // the epoch. Omit obsolete rows; an unkeyed empty VNode would violate the
+    // keyed iterator contract and panic while diffing an archive/filter update.
+    let children = snapshot.view.parts.iter().filter_map(|part| match part {
+        Part::Space { start, height } => Some(rsx! {
             div { key: "space-{start}", "data-window-spacer": "true", aria_hidden: "true",
                 style: "height: {height}px; min-height: {height}px; pointer-events: none;" }
-        },
+        }),
         Part::Row(index) => model.article_cards(&anchor).get(*index)
             .and_then(|card| model.1.get(card.index).filter(|entry| entry.id == card.id).map(|entry| (card, entry)))
             .map(|(card, entry)| rsx! { super::view::DirectoryArticle {
                 key: "{entry.id}", entry: entry.clone(), active: active.as_deref() == Some(&super::super::groups::entry_anchor_id(entry.id)),
                 page: (card.index / model.page_size.max(1)) as u32 + 1,
                 window_index: Some(*index), window_count: count,
-            }}).unwrap_or_else(|| rsx! {}),
+            }}),
     });
     rsx! {
         div { id, "data-layout": "entry-directory-articles", "data-virtual-articles": "true",

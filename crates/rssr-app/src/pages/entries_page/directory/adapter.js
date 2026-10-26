@@ -165,12 +165,15 @@ function finishCommand() {
 function noteInput(event) {
     if (!event.isTrusted) return;
     const target = event.target;
+    const inside = consumer(target);
     if (event.type === 'keydown') {
-        if (!['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(event.key) || event.ctrlKey || event.altKey || event.metaKey) return;
+        // Tab may traverse and scroll a virtual branch. Treat that as manual
+        // directory browsing, but never arm main-list following for outside Tab.
+        const directoryTab = event.key === 'Tab' && inside;
+        if ((!directoryTab && !['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(event.key)) || event.ctrlKey || event.altKey || event.metaKey) return;
         if (target instanceof Element && (target.closest('input,textarea,select,[contenteditable="true"]') ||
             (event.key === ' ' && target.closest('button,a')))) return;
     }
-    const inside = consumer(target);
     if (!inside && target instanceof Element && !root.contains(target) && target !== document.documentElement && target !== document.body) return;
     if (!inside && event.type === 'pointerdown') {
         // A click in content isn't a scroll gesture. Only arm pointer input

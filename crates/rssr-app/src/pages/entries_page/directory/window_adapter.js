@@ -40,7 +40,10 @@ function finish() {
         pending.delete('measure'); signature = '';
     }
     if (command.delta) rail.scrollTop += command.delta;
-    if (command.top != null && command.found) {
+    if (command.top != null && command.found && command.focus != null) {
+        // Only explicit keyboard navigation owns scrolling here. Automatic
+        // reveals materialize a row; the directory controller alone aligns it
+        // after checking newer user intent. A late reveal must not undo a wheel.
         const r = rail.getBoundingClientRect(), b = root.getBoundingClientRect();
         rail.scrollTop += command.top - (r.top + rail.clientTop - b.top);
     }
