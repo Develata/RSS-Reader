@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::UiIntent;
 use rssr_domain::{
     EntriesWorkspaceState, EntrySummary, FeedSummary, ReadFilter, StarredFilter, UserSettings,
 };
@@ -195,6 +196,131 @@ async fn closing_the_app_cancels_pending_article_writes() {
     drop(dom);
     assert_eq!(hold.abandoned(), 1, "closing the app still ends the client wait");
     assert_eq!(hold.waiting(), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn remembering_an_opened_feed_survives_navigation() {
+    let backend = Scripted::over_new_library();
+    let hold = backend.hold("remember_opened_feed");
+    backend.fail_once(
+        "remember_opened_feed",
+        rssr_api::BackendError::new(rssr_api::ErrorCode::OutcomeUnknown, "late opened feed"),
+    );
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(unmount_test_app);
+    dom.rebuild_in_place();
+    let (mut probe, shell) = dom.in_scope(ScopeId::APP, || {
+        (consume_context::<UnmountProbe>(), consume_context::<crate::ui::AppShellState>())
+    });
+    let session = probe.session.peek().unwrap();
+    dom.in_scope(session.owner, || session.remember_opened_feed(1));
+    until_page(&mut dom, || hold.waiting() == 1).await;
+    dom.in_scope(ScopeId::APP, || probe.visible.set(false));
+    dom.render_immediate_to_vec();
+    assert_eq!(hold.abandoned(), 0, "opening a feed is an accepted preference write");
+    hold.release();
+    until_page(&mut dom, || shell.job_notice().is_some()).await;
+    dom.in_scope(ScopeId::APP, || {
+        assert!(shell.job_notice().unwrap().message.contains("late opened feed"));
+    });
+    assert_eq!(backend.calls("remember_opened_feed"), 1, "never retry an uncertain write");
+}
+
+fn complete_article_write(session: EntriesPageSession, bulk: bool) {
+    for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
+        session.dispatch(intent);
+    }
+    if bulk {
+        session.dispatch(EntriesPageIntent::ToggleSelected(1));
+        // The isolated library has no matching rows, but a successful batch still
+        // has to perform the same recovery read as a batch that changed rows.
+        session.apply_selection(rssr_domain::EntryBatchAction::MarkRead);
+    } else {
+        session.spawn_entry_write(1, || async {
+            vec![UiIntent::EntriesPage(EntriesPageIntent::PatchEntryFlags {
+                entry_id: 1,
+                is_read: Some(true),
+                is_starred: None,
+            })]
+        });
+    }
+}
+
+async fn article_followup_recovers_preferences(bulk: bool) {
+    let backend = Scripted::over_new_library();
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let session = page_with_preferences(&mut dom, &EntriesWorkspaceState::default());
+    dom.in_scope(ScopeId::APP, || {
+        session.dispatch(EntriesPageIntent::PreferencesUnavailable(crate::ui::failure::plain(
+            "initial preferences unavailable",
+        )));
+    });
+    let chosen =
+        EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..Default::default() };
+    choose(&mut dom, session, &chosen);
+    dom.in_scope(ScopeId::APP, || complete_article_write(session, bulk));
+    until_page(&mut dom, || session.snapshot().preferences_load.is_loaded()).await;
+    dom.in_scope(ScopeId::APP, || {
+        let state = session.snapshot();
+        assert_eq!(state.workspace(), chosen, "a write's recovery read must keep user filters");
+        assert_eq!(state.recovered_edits, Some(chosen.clone()));
+    });
+    // The effect caused by becoming ready is a recovery, not another user edit.
+    choose(&mut dom, session, &chosen);
+    dom.render_immediate_to_vec();
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn single_write_followup_keeps_filters_chosen_during_preference_failure() {
+    article_followup_recovers_preferences(false).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn batch_write_followup_keeps_filters_chosen_during_preference_failure() {
+    article_followup_recovers_preferences(true).await;
+}
+
+async fn article_followup_preserves_reread(bulk: bool) {
+    let backend = Scripted::over_new_library();
+    let hold = backend.hold("bootstrap_entries");
+    let _host = test_host::install(backend.clone());
+    rssr_api::Backend::update_settings(
+        &*backend,
+        rssr_application::SettingsPatch { entries_page_size: Some(13), ..Default::default() },
+    )
+    .await
+    .unwrap();
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let session = page_with_preferences(&mut dom, &EntriesWorkspaceState::default());
+    dom.in_scope(ScopeId::APP, || session.reread());
+    until_page(&mut dom, || hold.waiting() == 1).await;
+    dom.in_scope(ScopeId::APP, || complete_article_write(session, bulk));
+    until_page(&mut dom, || hold.waiting() == 2).await;
+    hold.release();
+    hold.release();
+    until_page(&mut dom, || !session.snapshot().bootstrap_in_flight).await;
+    dom.in_scope(ScopeId::APP, || {
+        assert_eq!(
+            session.snapshot().entries_page_size,
+            13,
+            "the replacing read must include settings"
+        );
+    });
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn single_write_followup_does_not_lose_an_inflight_settings_reread() {
+    article_followup_preserves_reread(false).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn batch_write_followup_does_not_lose_an_inflight_settings_reread() {
+    article_followup_preserves_reread(true).await;
 }
 
 #[tokio::test(flavor = "current_thread")]

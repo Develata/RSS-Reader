@@ -59,11 +59,6 @@ impl EntriesPageSession {
         UiCommand::Entries(EntriesCommand::Bootstrap { load_preferences, load_feeds: true })
     }
 
-    /// Opening a subscription's page remembers it for the startup view; a failure is shown.
-    pub(crate) fn remember_opened_feed(self, feed_id: i64) {
-        self.spawn_ui_command(UiCommand::Entries(EntriesCommand::RememberOpenedFeed { feed_id }));
-    }
-
     pub(crate) fn load_entries_query(self, query: EntryQuery) {
         let key = self.state.peek().position_key(self.feed_id, query.search_title.as_deref());
         let return_page = (!self.state.peek().entries_loaded)

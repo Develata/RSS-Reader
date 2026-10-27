@@ -514,6 +514,70 @@ async function articleWritesSurviveNavigation(page) {
   }
 }
 
+async function preferencesRecoveredAfterArticleWrites(page) {
+  await page.setViewportSize({ width: 1536, height: 864 });
+  for (const command of ['mark-read', 'mark-selected-read']) {
+    let unavailable = true;
+    const preferenceWrites = [];
+    const track = request => {
+      if (new URL(request.url()).pathname === '/api/v1/workspace' && request.method() !== 'GET') {
+        preferenceWrites.push(request.postData());
+      }
+    };
+    const pattern = '**/api/v1/entries/bootstrap?*';
+    const handler = route => unavailable
+      ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ code: 'unavailable', message: 'initial preferences unavailable' }) })
+      : route.continue();
+    page.on('request', track);
+    await page.route(pattern, handler);
+    try {
+      await seed(page, fixture.origin);
+      assert.ok(await page.locator(rows).count() > 8, 'initial read uses fallback page size');
+      const unread = page.getByRole('button', { name: '仅未读', exact: true });
+      await unread.click();
+      await expect(unread).toHaveAttribute('aria-pressed', 'true');
+      const first = page.locator(`${rows}[data-position-entry="72"]`);
+      if (command === 'mark-selected-read') await first.locator(action('select-entry')).check();
+      unavailable = false;
+      const recovered = page.waitForResponse(response => response.url().includes('/api/v1/entries/bootstrap?') && response.ok());
+      await (command === 'mark-read' ? first.locator(action(command)) : page.locator(action(command))).click();
+      await recovered;
+      // Applying the recovered page size proves the reply reached Rust state;
+      // checking the button immediately after HTTP completion could pass too early.
+      await expect(page.locator(rows)).toHaveCount(8);
+      await expect(unread).toHaveAttribute('aria-pressed', 'true');
+      await expect(first).toHaveCount(0);
+      assert.deepEqual(preferenceWrites, [], 'recovery keeps the choice without saving it');
+    } finally {
+      await page.unroute(pattern, handler);
+      page.off('request', track);
+    }
+  }
+}
+
+async function readerWritesSurviveNavigation(page) {
+  await page.setViewportSize({ width: 1536, height: 864 });
+  for (const command of ['mark-read', 'toggle-starred']) {
+    await seed(page, fixture.origin);
+    const first = page.locator(`${rows}[data-position-entry="72"]`);
+    await first.locator('[data-slot="entry-card-title"]').click();
+    await page.locator('[data-page="reader"][data-position-ready="true"]').waitFor();
+    const saved = page.waitForResponse(response => /\/api\/v1\/entries\/72\/(read|starred)$/.test(new URL(response.url()).pathname) && response.request().method() !== 'GET')
+      .then(response => ({ response }), error => ({ error }));
+    await holdWrites(page, async captured => {
+      await page.locator(`[data-layout="reader-bottom-bar"] ${action(command)}`).click();
+      await captured;
+      await page.locator('[data-nav="back"]').click();
+      await ready(page);
+    });
+    const outcome = await saved;
+    assert.ifError(outcome.error);
+    assert.equal(outcome.response.ok(), true, `${command}: returning to the list keeps the reader write`);
+    if (command === 'mark-read') await expect(first).toHaveAttribute('data-read', 'true');
+    else await expect(first.locator(action('toggle-starred'))).toHaveAttribute('aria-pressed', 'true');
+  }
+}
+
 async function dialogComposition(page) {
   await page.setViewportSize({ width: 1536, height: 864 });
   await seed(page, new URL(page.url()).origin);
@@ -571,7 +635,7 @@ async function dialogComposition(page) {
   }
 }
 
-module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation, reopeningDuringSourceEdit, articleWritesSurviveNavigation };
+module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation, reopeningDuringSourceEdit, articleWritesSurviveNavigation, preferencesRecoveredAfterArticleWrites, readerWritesSurviveNavigation };
 if (require.main === module) (async () => {
   const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN });
@@ -581,7 +645,7 @@ if (require.main === module) (async () => {
     page.setDefaultTimeout(15000);
     await fixture.install(page.context(), require('node:path').resolve(__dirname,'../..'));
     await seed(page, fixture.origin);
-    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation, reopeningDuringSourceEdit, articleWritesSurviveNavigation })) {
+    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation, reopeningDuringSourceEdit, articleWritesSurviveNavigation, preferencesRecoveredAfterArticleWrites, readerWritesSurviveNavigation })) {
       try { await run(page); console.log(`PASS ${name}`); }
       catch (error) {
         const fs = require('node:fs/promises'), path = require('node:path');

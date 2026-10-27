@@ -13,7 +13,6 @@ use super::{
     intent::EntriesPageIntent, reducer::dispatch_entries_page_intent,
     request_lifecycle::EntriesRequestLifecycle, state::EntriesPageState,
 };
-use crate::ui::{UiCommand, UiIntent, spawn_projected_ui_command};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct EntriesPageSession {
@@ -86,12 +85,6 @@ impl EntriesPageSession {
         if supersedes_reread {
             self.reread();
         }
-    }
-
-    fn spawn_ui_command(self, command: UiCommand) {
-        spawn_projected_ui_command(command, UiIntent::into_entries_page_intent, move |intent| {
-            self.dispatch(intent)
-        });
     }
 }
 

@@ -27,7 +27,7 @@ impl EntriesPageSession {
                 let applied = matches!(&intent, EntriesPageIntent::SelectionApplied { .. });
                 self.dispatch(intent);
                 if applied {
-                    self.bootstrap();
+                    self.reread();
                 }
             }
         });
@@ -82,7 +82,9 @@ impl EntriesPageSession {
             }
             self.dispatch(EntriesPageIntent::EntryWriteFinished(entry_id));
             if read_changed {
-                self.bootstrap();
+                // Recovery must keep filters chosen while preferences were
+                // unavailable and replace any in-flight settings read in full.
+                self.reread();
             }
         });
     }

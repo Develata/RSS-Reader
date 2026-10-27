@@ -208,6 +208,7 @@ impl Backend for Scripted {
 
     async fn remember_opened_feed(&self, feed_id: i64) -> Result<()> {
         self.enter("remember_opened_feed")?;
+        self.held("remember_opened_feed").await?;
         self.inner.remember_opened_feed(feed_id).await
     }
 

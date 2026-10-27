@@ -25,6 +25,22 @@ impl WorkspaceSaveQueue {
 }
 
 impl EntriesPageSession {
+    /// Remember an accepted navigation even if the user immediately leaves.
+    pub(crate) fn remember_opened_feed(self, feed_id: i64) {
+        self.shell.spawn_in_shell(async move {
+            let intents =
+                run_ui_command(UiCommand::Entries(EntriesCommand::RememberOpenedFeed { feed_id }))
+                    .await;
+            for intent in intents.into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                if self.state.try_peek().is_ok() {
+                    dioxus::core::Runtime::current().in_scope(self.owner, || self.dispatch(intent));
+                } else if let Some((message, tone)) = super::super::write_feedback::notice(intent) {
+                    self.shell.report_job(message, tone);
+                }
+            }
+        });
+    }
+
     pub(crate) fn save_browsing_preferences(
         self,
         preferences_loaded: bool,

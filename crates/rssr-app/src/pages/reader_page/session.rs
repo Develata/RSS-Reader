@@ -11,11 +11,12 @@ use super::{reducer::dispatch_reader_page_intent, state::ReaderPageState};
 pub(crate) struct ReaderPageSession {
     entry_id: i64,
     state: Signal<ReaderPageState>,
+    owner: ScopeId,
 }
 
 impl ReaderPageSession {
     pub(crate) fn new(entry_id: i64, state: Signal<ReaderPageState>) -> Self {
-        Self { entry_id, state }
+        Self { entry_id, state, owner: dioxus::core::current_scope_id() }
     }
 
     pub(crate) fn snapshot(self) -> ReaderPageState {
@@ -134,7 +135,7 @@ impl ReaderPageSession {
     /// The reader's buttons and shortcuts toggle: they ask for the opposite of what it shows.
     pub(crate) fn toggle_read(self, via_shortcut: bool) {
         let Some(read) = self.known_flags().map(|(read, _)| !read) else { return };
-        self.spawn_ui_command(UiCommand::Reader(ReaderCommand::SetRead {
+        self.spawn_flag_write(UiCommand::Reader(ReaderCommand::SetRead {
             entry_id: self.entry_id,
             read,
             via_shortcut,
@@ -143,7 +144,7 @@ impl ReaderPageSession {
 
     pub(crate) fn toggle_starred(self, via_shortcut: bool) {
         let Some(starred) = self.known_flags().map(|(_, starred)| !starred) else { return };
-        self.spawn_ui_command(UiCommand::Reader(ReaderCommand::SetStarred {
+        self.spawn_flag_write(UiCommand::Reader(ReaderCommand::SetStarred {
             entry_id: self.entry_id,
             starred,
             via_shortcut,
@@ -154,6 +155,38 @@ impl ReaderPageSession {
     fn known_flags(self) -> Option<(bool, bool)> {
         let state = self.state.peek();
         state.flags_known(self.entry_id).then_some((state.is_read, state.is_starred))
+    }
+
+    /// User-confirmed flag writes belong to the app. Reading and automatic image
+    /// localization still belong to the visit; neither should outlive navigation.
+    fn spawn_flag_write(self, command: UiCommand) {
+        let shell = consume_context::<crate::ui::AppShellState>();
+        let generation = self.state.peek().load_generation;
+        shell.spawn_in_shell(async move {
+            let intents = run_ui_command(command).await;
+            let same_visit = self.state.try_peek().is_ok_and(|current| {
+                current.current_entry_id == self.entry_id && current.load_generation == generation
+            });
+            if same_visit {
+                dioxus::core::Runtime::current().in_scope(self.owner, || {
+                    for intent in intents.into_iter().filter_map(UiIntent::into_reader_page_intent)
+                    {
+                        dispatch_reader_page_intent(self.state, intent);
+                    }
+                });
+            } else {
+                for intent in intents.into_iter().filter_map(UiIntent::into_reader_page_intent) {
+                    if let Some(failure) = intent.failure() {
+                        shell.report_job(failure.message(), failure.tone().to_owned());
+                    } else if let super::intent::ReaderPageIntent::SetStatus { message, tone } =
+                        intent
+                    {
+                        shell.report_job(message, tone);
+                    }
+                }
+                shell.reread_now();
+            }
+        });
     }
 
     fn spawn_ui_command(self, command: UiCommand) {
@@ -189,6 +222,118 @@ mod tests {
     use super::*;
     use crate::pages::reader_page::{intent::ReaderPageIntent, state::ReaderPageLoadedContent};
     use tokio::sync::oneshot;
+
+    #[derive(Clone, Copy)]
+    struct WriteProbe {
+        visible: Signal<bool>,
+        session: Signal<Option<ReaderPageSession>>,
+        scope: Signal<Option<ScopeId>>,
+    }
+
+    fn write_test_app() -> Element {
+        let shell = crate::ui::use_app_shell_state();
+        use_context_provider(|| shell);
+        let visible = use_signal(|| true);
+        let session = use_signal(|| None);
+        let scope = use_signal(|| None);
+        use_context_provider(|| WriteProbe { visible, session, scope });
+        rsx! { if visible() { WriteReader {} } }
+    }
+
+    #[component]
+    fn WriteReader() -> Element {
+        let mut probe = use_context::<WriteProbe>();
+        let state = use_signal(ReaderPageState::new);
+        use_hook(|| {
+            let session = ReaderPageSession::new(1, state);
+            dispatch_reader_page_intent(state, ReaderPageIntent::BeginLoading { entry_id: 1 });
+            for intent in
+                loaded(1, "Current").into_iter().filter_map(UiIntent::into_reader_page_intent)
+            {
+                dispatch_reader_page_intent(state, intent);
+            }
+            probe.session.set(Some(session));
+            probe.scope.set(Some(dioxus::core::current_scope_id()));
+        });
+        rsx! {}
+    }
+
+    async fn until_write(dom: &mut VirtualDom, mut done: impl FnMut() -> bool) {
+        for _ in 0..150 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            dom.render_immediate_to_vec();
+            if dom.in_scope(ScopeId::APP, &mut done) {
+                return;
+            }
+        }
+        panic!("reader operation did not finish");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn reader_flag_writes_survive_navigation_without_changing_a_new_visit() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+        for operation in ["set_entry_read", "set_entry_starred"] {
+            let backend = Scripted::over_new_library();
+            let hold = backend.hold(operation);
+            backend.fail_once(
+                operation,
+                rssr_api::BackendError::new(
+                    rssr_api::ErrorCode::OutcomeUnknown,
+                    "late reader flag",
+                ),
+            );
+            let _host = test_host::install(backend.clone());
+            let mut dom = VirtualDom::new(write_test_app);
+            dom.rebuild_in_place();
+            let (mut probe, shell) = dom.in_scope(ScopeId::APP, || {
+                (consume_context::<WriteProbe>(), consume_context::<crate::ui::AppShellState>())
+            });
+            let session = probe.session.peek().unwrap();
+            dom.in_scope(probe.scope.peek().unwrap(), || {
+                if operation == "set_entry_read" {
+                    session.toggle_read(false);
+                } else {
+                    session.toggle_starred(false);
+                }
+            });
+            until_write(&mut dom, || hold.waiting() == 1).await;
+            dom.in_scope(ScopeId::APP, || probe.visible.set(false));
+            dom.render_immediate_to_vec();
+            assert_eq!(hold.abandoned(), 0, "{operation}: navigation must not cancel a flag write");
+            dom.in_scope(ScopeId::APP, || probe.visible.set(true));
+            dom.render_immediate_to_vec();
+            let reopened = probe.session.peek().unwrap();
+            hold.release();
+            until_write(&mut dom, || shell.job_notice().is_some()).await;
+            dom.in_scope(ScopeId::APP, || {
+                assert!(shell.job_notice().unwrap().message.contains("late reader flag"));
+                assert!(shell.library_revision() > 0);
+                let state = reopened.snapshot();
+                assert!(state.status.is_empty(), "the new visit owns its status");
+                assert!(!state.is_read && !state.is_starred);
+                assert_eq!(state.body_text.as_ref(), "Current body");
+            });
+            assert_eq!(backend.calls(operation), 1, "no uncertain write retry");
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn closing_the_app_ends_reader_flag_waits() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+        let backend = Scripted::over_new_library();
+        let hold = backend.hold("set_entry_starred");
+        let _host = test_host::install(backend);
+        let mut dom = VirtualDom::new(write_test_app);
+        dom.rebuild_in_place();
+        let probe = dom.in_scope(ScopeId::APP, consume_context::<WriteProbe>);
+        let session = probe.session.peek().unwrap();
+        dom.in_scope(probe.scope.peek().unwrap(), || session.toggle_starred(false));
+        until_write(&mut dom, || hold.waiting() == 1).await;
+        drop(dom);
+        assert_eq!(hold.abandoned(), 1);
+        assert_eq!(hold.waiting(), 0);
+    }
 
     fn loaded(entry_id: i64, title: &str) -> Vec<UiIntent> {
         vec![UiIntent::ReaderPage(ReaderPageIntent::ApplyLoadedContent {
