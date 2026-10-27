@@ -20,11 +20,11 @@
 
 - `EntriesRequestLifecycle` 只持有初始化与查询两种代次，二者互不失效。页面状态、写入 revision 和完整文章投影继续由既有 `EntriesPageState` 持有；每次请求只捕获少量标量，不克隆列表。
 - 初始化开始时根据当前偏好状态决定是否加载偏好：Pending / Unavailable 加载，Loaded 保留。旧初始化的成功和失败都被拒绝；所有来源摘要仍按原命令加载。
-- Pending 不准入文章查询，不轮询 Future；Unavailable 允许读取文章，保留既有错误提示和禁止保存回退偏好的规则。偏好写入策略本轮仍在 session。
+- Pending 不准入文章查询，不轮询 Future；Unavailable 允许读取文章，保留既有错误提示和禁止保存回退偏好的规则。偏好写入策略和待保存队列在 `session/workspace.rs`，不属于查询代次模型。
 - 查询完成先校验查询身份，再比较 `flags_revision`。旧身份直接丢弃；当前身份若遇到已完成写入，则在尚无新 `reload_revision` 时请求重查，否则仅丢弃。单独增加 reload revision 不等于使查询身份失效。
 - 接纳后按原顺序输出 intent，仅在 `SetEntries` 后插入捕获的返回页码，由现有 reducer 对新结果集约束页码。失败结果、被拒绝结果都不能恢复页码；被拒绝的结果载荷不遍历、不复制。
 - Dioxus 适配器以非订阅读取获取当前事实，先同步取得请求身份，再启动原页面作用域的任务。查询完成时的借用在发布前释放；页面销毁继续取消未完成任务。初始化和查询状态不进入 presenter 输入，也不新增自动查询循环。
-- 本轮不迁移单条/批量写入准入、偏好写入编排、归档时钟或页面查询 effect。保留 facade/session 和 `UiCommand` 边界，不建立通用页面运行时。
+- 单条/批量写入准入、偏好写入编排分别收拢在 `session/articles.rs` 与 `session/workspace.rs`，归档时钟和页面查询 effect 保持原位置。保留 facade/session 和 `UiCommand` 边界，不建立通用页面运行时。具体维护入口见[会话模块说明](../../crates/rssr-app/src/pages/entries_page/session/README.md)。
 
 ## 目录控制器的使用约束
 

@@ -202,11 +202,13 @@ impl Backend for Scripted {
         input: EntriesBootstrapInput,
     ) -> Result<EntriesBootstrapOutcome> {
         self.enter("bootstrap_entries")?;
+        self.held("bootstrap_entries").await?;
         self.inner.bootstrap_entries(input).await
     }
 
     async fn remember_opened_feed(&self, feed_id: i64) -> Result<()> {
         self.enter("remember_opened_feed")?;
+        self.held("remember_opened_feed").await?;
         self.inner.remember_opened_feed(feed_id).await
     }
 
@@ -226,11 +228,13 @@ impl Backend for Scripted {
 
     async fn set_entry_read(&self, entry_id: i64, read: bool) -> Result<EntryFlagOutcome> {
         self.enter("set_entry_read")?;
+        self.held("set_entry_read").await?;
         self.inner.set_entry_read(entry_id, read).await
     }
 
     async fn set_entry_starred(&self, entry_id: i64, starred: bool) -> Result<EntryFlagOutcome> {
         self.enter("set_entry_starred")?;
+        self.held("set_entry_starred").await?;
         self.inner.set_entry_starred(entry_id, starred).await
     }
 
@@ -256,6 +260,7 @@ impl Backend for Scripted {
 
     async fn apply_entry_batch(&self, request: rssr_domain::EntryBatchRequest) -> Result<u64> {
         self.enter("apply_entry_batch")?;
+        self.held("apply_entry_batch").await?;
         self.inner.apply_entry_batch(request).await
     }
     async fn feed_edit_details(&self, feed_id: i64) -> Result<rssr_domain::FeedEditDetails> {

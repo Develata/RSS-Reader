@@ -1,4 +1,4 @@
-use rssr_domain::{EntryGroupingPreference, EntryQuery, ReadFilter, StarredFilter};
+use rssr_domain::{EntriesWorkspaceState, EntryQuery};
 
 #[derive(Debug, Clone)]
 pub(crate) enum EntriesCommand {
@@ -29,10 +29,6 @@ pub(crate) enum EntriesCommand {
         starred: bool,
     },
     SaveBrowsingPreferences {
-        grouping_mode: EntryGroupingPreference,
-        show_archived: bool,
-        read_filter: ReadFilter,
-        starred_filter: StarredFilter,
-        selected_feed_urls: Vec<String>,
+        workspace: EntriesWorkspaceState,
     },
 }

@@ -15,6 +15,7 @@ pub(crate) mod reducer;
 mod request_lifecycle;
 mod session;
 pub(crate) mod state;
+mod write_feedback;
 
 use dioxus::prelude::*;
 
@@ -24,8 +25,7 @@ use self::controls::{render_entry_controls, render_entry_pagination_controls};
 use self::{
     facade::EntriesPageFacade,
     presenter::{EntriesPagePresenter, EntriesPresenterInput},
-    session::EntriesPageSession,
-    state::EntriesPageState,
+    session::use_entries_page_session,
 };
 use crate::{
     app::AppNav,
@@ -247,9 +247,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
 }
 
 fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> EntriesPageFacade {
-    let state = use_signal(EntriesPageState::new);
-    let requests = use_signal(request_lifecycle::EntriesRequestLifecycle::default);
-    let session = EntriesPageSession::new(feed_id, state, requests);
+    let session = use_entries_page_session(feed_id);
     let state_snapshot = Arc::new(session.snapshot());
     // memo 链：先把状态收窄成 presenter 真正依赖的投影，再由它推导 presenter。
     //
@@ -272,11 +270,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let entries_ready = state_snapshot.preferences_load.can_load_entries();
     let reload_revision = state_snapshot.reload_revision;
     let requery_revision = state_snapshot.requery_revision;
-    let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
-    let show_archived = state_snapshot.show_archived;
-    let read_filter = state_snapshot.read_filter;
-    let starred_filter = state_snapshot.starred_filter;
-    let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
+    let workspace = state_snapshot.workspace();
     // 归档分界的“现在”只在挂载、手动刷新完成与查询条件变化时采样；状态提示、查询结果这类
     // 普通重渲染不读时钟，否则 `EntryQuery` 每跨一秒就变化并重发查询（审计 A4）。
     let query_now = use_sampled_clock(
@@ -291,10 +285,10 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         (
             feed_id,
             query_search.clone(),
-            show_archived,
-            read_filter,
-            starred_filter,
-            selected_feed_urls.clone(),
+            workspace.show_archived,
+            workspace.read_filter,
+            workspace.starred_filter,
+            workspace.selected_feed_urls.clone(),
         ),
         move |_| {
             session.dispatch(intent::EntriesPageIntent::CancelBulk);
@@ -334,33 +328,9 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         },
     );
 
-    use_reactive_side_effect(
-        (
-            preferences_loaded,
-            grouping_mode,
-            show_archived,
-            read_filter,
-            starred_filter,
-            selected_feed_urls,
-        ),
-        move |(
-            preferences_loaded,
-            grouping_mode,
-            show_archived,
-            read_filter,
-            starred_filter,
-            selected_feed_urls,
-        )| {
-            session.save_browsing_preferences_with(
-                preferences_loaded,
-                grouping_mode,
-                show_archived,
-                read_filter,
-                starred_filter,
-                selected_feed_urls,
-            );
-        },
-    );
+    use_reactive_side_effect((preferences_loaded, workspace), move |(loaded, workspace)| {
+        session.save_browsing_preferences(loaded, workspace);
+    });
 
     facade
 }

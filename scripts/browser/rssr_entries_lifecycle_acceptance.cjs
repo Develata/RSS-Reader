@@ -1,5 +1,5 @@
 // Same-path baseline/candidate acceptance for Entries request lifecycle extraction.
-// Uses the real Web build with isolated storage and local feed fixtures, no server.
+// Uses the real Web build and same-origin server with an isolated fixture library.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');

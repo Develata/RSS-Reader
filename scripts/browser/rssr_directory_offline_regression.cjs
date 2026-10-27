@@ -15,6 +15,7 @@ const fixture = require('./directory_fixture.cjs');
   const assertions = [], consoleErrors = [];
   page.on('pageerror',error=>consoleErrors.push(error.message));
   const {checkDirectoryContracts} = await import('./directory_contract.mjs');
+  const {capturePage} = await import('./server_page.mjs');
   try {
     await checkDirectoryContracts(client,{
       native:false, consoleErrors,
@@ -27,7 +28,9 @@ const fixture = require('./directory_fixture.cjs');
         await page.goto(fixture.origin+'/__codex/setup-local-auth?seed='+seed+'&next='+encodeURIComponent(route));
         await page.locator('[data-layout="entry-groups"][data-state="populated"]').waitFor();
       },
-      async capture(name){await page.screenshot({path:path.join(output,name+'.png')});},
+      // CDP owns the viewport/DPR here. Playwright's cached default viewport
+      // clips mobile screenshots incorrectly, so capture through the same session.
+      async capture(name){await capturePage(client,output,name);},
       async manualScroll(){
         await page.locator('[data-page="entries"][data-position-ready="true"]').waitFor();
         const point=await page.evaluate(()=>({x:innerWidth/2,y:innerHeight/2}));

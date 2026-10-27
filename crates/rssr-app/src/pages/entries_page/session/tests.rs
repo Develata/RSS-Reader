@@ -1,0 +1,1399 @@
+use super::*;
+use crate::ui::UiIntent;
+use rssr_domain::{
+    EntriesWorkspaceState, EntrySummary, FeedSummary, ReadFilter, StarredFilter, UserSettings,
+};
+use std::{cell::Cell, rc::Rc};
+use tokio::sync::oneshot;
+
+fn new_session(
+    feed_id: Option<i64>,
+    state: Signal<EntriesPageState>,
+    requests: Signal<EntriesRequestLifecycle>,
+) -> EntriesPageSession {
+    EntriesPageSession::new(feed_id, state, requests, Signal::new(WorkspaceSaveQueue::default()))
+}
+
+fn test_app() -> Element {
+    let shell = crate::ui::use_app_shell_state();
+    use_context_provider(|| shell);
+    rsx! {}
+}
+
+#[derive(Clone, Copy)]
+struct UnmountProbe {
+    visible: Signal<bool>,
+    session: Signal<Option<EntriesPageSession>>,
+}
+
+fn unmount_test_app() -> Element {
+    let shell = crate::ui::use_app_shell_state();
+    use_context_provider(|| shell);
+    let visible = use_signal(|| true);
+    let session = use_signal(|| None);
+    use_context_provider(|| UnmountProbe { visible, session });
+    rsx! { if visible() { EntriesProbe {} } }
+}
+
+#[component]
+fn EntriesProbe() -> Element {
+    let mut probe = use_context::<UnmountProbe>();
+    let state = use_signal(EntriesPageState::new);
+    let requests = use_signal(EntriesRequestLifecycle::default);
+    use_hook(|| {
+        let session = new_session(None, state, requests);
+        session.dispatch(EntriesPageIntent::ApplyLoadedWorkspaceState(
+            EntriesWorkspaceState::default(),
+        ));
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        probe.session.set(Some(session));
+    });
+    rsx! {}
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn reopening_entries_waits_for_pending_workspace_writes() {
+    let backend = Scripted::over_new_library();
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let shell = dom.in_scope(ScopeId::APP, consume_context::<crate::ui::AppShellState>);
+    // A source edit owns this boundary until its URL and selected-source
+    // migration commit. The next page must not load the pre-edit baseline.
+    let order = shell.workspace_write_order();
+    let pending_edit = order.lock().await;
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.bootstrap();
+        session
+    });
+    dom.render_immediate_to_vec();
+    assert_eq!(backend.calls("bootstrap_entries"), 0, "wait for the pending source edit");
+    assert!(!dom.in_scope(ScopeId::APP, || session.snapshot().preferences_load.is_loaded()));
+
+    let migrated = EntriesWorkspaceState {
+        selected_feed_urls: vec!["https://example.com/new.xml".into()],
+        ..Default::default()
+    };
+    rssr_api::Backend::save_entries_workspace_if_changed(&*backend, migrated.clone())
+        .await
+        .unwrap();
+    drop(pending_edit);
+    until_page(&mut dom, || session.snapshot().preferences_load.is_loaded()).await;
+    dom.in_scope(ScopeId::APP, || assert_eq!(session.snapshot().workspace(), migrated));
+    let changed = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..migrated };
+    choose(&mut dom, session, &changed);
+    until_saves_end(&mut dom, session, 2, &backend).await;
+    let stored = rssr_api::Backend::bootstrap_entries(
+        &*backend,
+        rssr_application::EntriesBootstrapInput { load_preferences: true, load_feeds: false },
+    )
+    .await
+    .unwrap();
+    assert_eq!(stored.workspace, Some(changed), "filter changes keep the migrated URL");
+}
+
+async fn until_page(dom: &mut VirtualDom, mut done: impl FnMut() -> bool) {
+    for _ in 0..150 {
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work()).await;
+        dom.render_immediate_to_vec();
+        if dom.in_scope(ScopeId::APP, &mut done) {
+            return;
+        }
+    }
+    panic!("page operation did not finish");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn accepted_article_writes_outlive_the_page_and_report_uncertain_results() {
+    use rssr_api::{BackendError, ErrorCode};
+    for operation in ["set_entry_read", "set_entry_starred", "apply_entry_batch"] {
+        let backend = Scripted::over_new_library();
+        let hold = backend.hold(operation);
+        backend.fail_once(operation, BackendError::new(ErrorCode::OutcomeUnknown, "late write"));
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(unmount_test_app);
+        dom.rebuild_in_place();
+        let (mut probe, shell) = dom.in_scope(ScopeId::APP, || {
+            (consume_context::<UnmountProbe>(), consume_context::<crate::ui::AppShellState>())
+        });
+        let session = probe.session.peek().unwrap();
+        dom.in_scope(session.owner, || {
+            for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                session.dispatch(intent);
+            }
+            match operation {
+                "set_entry_read" => session.toggle_read(1, "one".into(), false),
+                "set_entry_starred" => session.toggle_starred(1, "one".into(), false),
+                _ => {
+                    session.dispatch(EntriesPageIntent::ToggleSelected(1));
+                    session.apply_selection(rssr_domain::EntryBatchAction::Archive);
+                }
+            }
+        });
+        until_page(&mut dom, || hold.waiting() == 1).await;
+        dom.in_scope(ScopeId::APP, || probe.visible.set(false));
+        dom.render_immediate_to_vec();
+        assert!(session.state.try_peek().is_err());
+        assert_eq!(hold.abandoned(), 0, "{operation}: navigation must not drop a write");
+        dom.in_scope(ScopeId::APP, || probe.visible.set(true));
+        dom.render_immediate_to_vec();
+        let reopened = probe.session.peek().unwrap();
+        let reopened_status = dom.in_scope(reopened.owner, || reopened.snapshot().status);
+        hold.release();
+        until_page(&mut dom, || shell.job_notice().is_some()).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert!(shell.job_notice().unwrap().message.contains("late write"));
+            assert_eq!(reopened.snapshot().status, reopened_status, "the new page owns its status");
+            assert!(shell.library_revision() > 0, "the current page re-reads the library");
+        });
+        assert_eq!(hold.abandoned(), 0);
+        assert_eq!(backend.calls(operation), 1, "an uncertain write is never retried");
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn article_write_followup_reads_are_owned_by_the_originating_page() {
+    let backend = Scripted::over_new_library();
+    let hold = backend.hold("bootstrap_entries");
+    let _host = test_host::install(backend);
+    let mut dom = VirtualDom::new(unmount_test_app);
+    dom.rebuild_in_place();
+    let mut probe = dom.in_scope(ScopeId::APP, consume_context::<UnmountProbe>);
+    let session = probe.session.peek().unwrap();
+    dom.in_scope(session.owner, || {
+        session.spawn_entry_write(1, || async {
+            vec![UiIntent::EntriesPage(EntriesPageIntent::PatchEntryFlags {
+                entry_id: 1,
+                is_read: Some(true),
+                is_starred: None,
+            })]
+        });
+    });
+    until_page(&mut dom, || hold.waiting() == 1).await;
+    dom.in_scope(ScopeId::APP, || probe.visible.set(false));
+    dom.render_immediate_to_vec();
+    assert_eq!(hold.abandoned(), 1, "a completed write must not leave app-owned page reads");
+    assert_eq!(hold.waiting(), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn closing_the_app_cancels_pending_article_writes() {
+    let backend = Scripted::over_new_library();
+    let hold = backend.hold("set_entry_read");
+    let _host = test_host::install(backend);
+    let mut dom = VirtualDom::new(unmount_test_app);
+    dom.rebuild_in_place();
+    let probe = dom.in_scope(ScopeId::APP, consume_context::<UnmountProbe>);
+    let session = probe.session.peek().unwrap();
+    dom.in_scope(session.owner, || session.toggle_read(1, "one".into(), false));
+    until_page(&mut dom, || hold.waiting() == 1).await;
+    drop(dom);
+    assert_eq!(hold.abandoned(), 1, "closing the app still ends the client wait");
+    assert_eq!(hold.waiting(), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn remembering_an_opened_feed_survives_navigation() {
+    let backend = Scripted::over_new_library();
+    let hold = backend.hold("remember_opened_feed");
+    backend.fail_once(
+        "remember_opened_feed",
+        rssr_api::BackendError::new(rssr_api::ErrorCode::OutcomeUnknown, "late opened feed"),
+    );
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(unmount_test_app);
+    dom.rebuild_in_place();
+    let (mut probe, shell) = dom.in_scope(ScopeId::APP, || {
+        (consume_context::<UnmountProbe>(), consume_context::<crate::ui::AppShellState>())
+    });
+    let session = probe.session.peek().unwrap();
+    dom.in_scope(session.owner, || session.remember_opened_feed(1));
+    until_page(&mut dom, || hold.waiting() == 1).await;
+    dom.in_scope(ScopeId::APP, || probe.visible.set(false));
+    dom.render_immediate_to_vec();
+    assert_eq!(hold.abandoned(), 0, "opening a feed is an accepted preference write");
+    hold.release();
+    until_page(&mut dom, || shell.job_notice().is_some()).await;
+    dom.in_scope(ScopeId::APP, || {
+        assert!(shell.job_notice().unwrap().message.contains("late opened feed"));
+    });
+    assert_eq!(backend.calls("remember_opened_feed"), 1, "never retry an uncertain write");
+}
+
+fn complete_article_write(session: EntriesPageSession, bulk: bool) {
+    for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
+        session.dispatch(intent);
+    }
+    if bulk {
+        session.dispatch(EntriesPageIntent::ToggleSelected(1));
+        // The isolated library has no matching rows, but a successful batch still
+        // has to perform the same recovery read as a batch that changed rows.
+        session.apply_selection(rssr_domain::EntryBatchAction::MarkRead);
+    } else {
+        session.spawn_entry_write(1, || async {
+            vec![UiIntent::EntriesPage(EntriesPageIntent::PatchEntryFlags {
+                entry_id: 1,
+                is_read: Some(true),
+                is_starred: None,
+            })]
+        });
+    }
+}
+
+async fn article_followup_recovers_preferences(bulk: bool) {
+    let backend = Scripted::over_new_library();
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let session = page_with_preferences(&mut dom, &EntriesWorkspaceState::default());
+    dom.in_scope(ScopeId::APP, || {
+        session.dispatch(EntriesPageIntent::PreferencesUnavailable(crate::ui::failure::plain(
+            "initial preferences unavailable",
+        )));
+    });
+    let chosen =
+        EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..Default::default() };
+    choose(&mut dom, session, &chosen);
+    dom.in_scope(ScopeId::APP, || complete_article_write(session, bulk));
+    until_page(&mut dom, || session.snapshot().preferences_load.is_loaded()).await;
+    dom.in_scope(ScopeId::APP, || {
+        let state = session.snapshot();
+        assert_eq!(state.workspace(), chosen, "a write's recovery read must keep user filters");
+        assert_eq!(state.recovered_edits, Some(chosen.clone()));
+    });
+    // The effect caused by becoming ready is a recovery, not another user edit.
+    choose(&mut dom, session, &chosen);
+    dom.render_immediate_to_vec();
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn single_write_followup_keeps_filters_chosen_during_preference_failure() {
+    article_followup_recovers_preferences(false).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn batch_write_followup_keeps_filters_chosen_during_preference_failure() {
+    article_followup_recovers_preferences(true).await;
+}
+
+async fn article_followup_preserves_reread(bulk: bool) {
+    let backend = Scripted::over_new_library();
+    let hold = backend.hold("bootstrap_entries");
+    let _host = test_host::install(backend.clone());
+    rssr_api::Backend::update_settings(
+        &*backend,
+        rssr_application::SettingsPatch { entries_page_size: Some(13), ..Default::default() },
+    )
+    .await
+    .unwrap();
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let session = page_with_preferences(&mut dom, &EntriesWorkspaceState::default());
+    dom.in_scope(ScopeId::APP, || session.reread());
+    until_page(&mut dom, || hold.waiting() == 1).await;
+    dom.in_scope(ScopeId::APP, || complete_article_write(session, bulk));
+    until_page(&mut dom, || hold.waiting() == 2).await;
+    hold.release();
+    hold.release();
+    until_page(&mut dom, || !session.snapshot().bootstrap_in_flight).await;
+    dom.in_scope(ScopeId::APP, || {
+        assert_eq!(
+            session.snapshot().entries_page_size,
+            13,
+            "the replacing read must include settings"
+        );
+    });
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn single_write_followup_does_not_lose_an_inflight_settings_reread() {
+    article_followup_preserves_reread(false).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn batch_write_followup_does_not_lose_an_inflight_settings_reread() {
+    article_followup_preserves_reread(true).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pending_preferences_survive_unmount_and_precede_later_workspace_writes() {
+    let backend = Scripted::over_new_library();
+    let hold = backend.hold("save_entries_workspace_if_changed");
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(unmount_test_app);
+    dom.rebuild_in_place();
+    let (mut probe, shell) = dom.in_scope(ScopeId::APP, || {
+        (consume_context::<UnmountProbe>(), consume_context::<crate::ui::AppShellState>())
+    });
+    let session = dom.in_scope(ScopeId::APP, || probe.session.peek().unwrap());
+    let first = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..Default::default() };
+    let final_choice =
+        EntriesWorkspaceState { starred_filter: StarredFilter::StarredOnly, ..first.clone() };
+    choose(&mut dom, session, &first);
+    choose(&mut dom, session, &final_choice);
+    for _ in 0..100 {
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work()).await;
+        if hold.waiting() == 1 {
+            break;
+        }
+    }
+    assert_eq!(hold.waiting(), 1);
+    dom.in_scope(ScopeId::APP, || probe.visible.set(false));
+    dom.render_immediate_to_vec();
+    assert!(session.state.try_peek().is_err(), "the originating page is gone");
+    assert_eq!(hold.abandoned(), 0, "its active write must not be cancelled");
+    let later_finished = Rc::new(Cell::new(false));
+    let later_finished_copy = Rc::clone(&later_finished);
+    let backend_copy = backend.clone();
+    let expected = final_choice.clone();
+    dom.in_scope(ScopeId::APP, || {
+        shell.spawn_in_shell(async move {
+            let order = shell.workspace_write_order();
+            let _order = order.lock().await;
+            let actual = rssr_api::Backend::bootstrap_entries(
+                &*backend_copy,
+                rssr_application::EntriesBootstrapInput {
+                    load_preferences: true,
+                    load_feeds: false,
+                },
+            )
+            .await
+            .unwrap()
+            .workspace;
+            assert_eq!(
+                actual,
+                Some(expected),
+                "later URL edits see the final source/filter choice"
+            );
+            later_finished_copy.set(true);
+        })
+    });
+    dom.render_immediate_to_vec();
+    assert!(!later_finished.get());
+    hold.release();
+    hold.release();
+    for _ in 0..100 {
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work()).await;
+        if later_finished.get() {
+            break;
+        }
+    }
+    assert!(later_finished.get());
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 2);
+    assert_eq!(hold.abandoned(), 0);
+}
+
+fn loaded(entry_id: i64) -> Vec<UiIntent> {
+    vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries {
+        entries: vec![EntrySummary {
+            id: entry_id,
+            feed_id: 1,
+            title: format!("Entry {entry_id}"),
+            feed_title: "Feed".into(),
+            published_at: None,
+            is_read: false,
+            is_starred: false,
+        }],
+        archived_count: 0,
+        truncated: false,
+    })]
+}
+
+fn failure() -> Vec<UiIntent> {
+    vec![UiIntent::EntriesPage(EntriesPageIntent::SetStatus {
+        message: "old query failed".into(),
+        tone: "error".into(),
+    })]
+}
+
+#[test]
+fn entry_writes_reject_overlap_and_unlock_after_success_or_failure() {
+    for failed in [false, true] {
+        let mut dom = VirtualDom::new(test_app);
+        dom.rebuild_in_place();
+        let calls = Rc::new(Cell::new(0));
+        let (sender, receiver) = oneshot::channel();
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = new_session(
+                None,
+                Signal::new(EntriesPageState::new()),
+                Signal::new(EntriesRequestLifecycle::default()),
+            );
+            for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                session.dispatch(intent);
+            }
+            session.dispatch(EntriesPageIntent::ToggleSelected(1));
+            let first = Rc::clone(&calls);
+            session.spawn_entry_write(1, move || {
+                first.set(first.get() + 1);
+                async { receiver.await.unwrap() }
+            });
+            let duplicate = Rc::clone(&calls);
+            session.spawn_entry_write(1, move || {
+                duplicate.set(duplicate.get() + 1);
+                async { Vec::new() }
+            });
+            // This must be rejected before executing a real batch command.
+            session.apply_selection(rssr_domain::EntryBatchAction::Archive);
+            assert!(!session.snapshot().bulk_busy);
+            session
+        });
+        dom.render_immediate_to_vec();
+        assert_eq!(calls.get(), 1, "a repeated event cannot start a second write");
+        dom.in_scope(ScopeId::APP, || {
+            assert!(session.snapshot().pending_entry_writes.contains(&1))
+        });
+        sender
+            .send(if failed {
+                failure()
+            } else {
+                vec![UiIntent::EntriesPage(EntriesPageIntent::PatchEntryFlags {
+                    entry_id: 1,
+                    is_read: None,
+                    is_starred: Some(true),
+                })]
+            })
+            .unwrap();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert!(session.snapshot().pending_entry_writes.is_empty());
+            let retry = Rc::clone(&calls);
+            session.spawn_entry_write(1, move || {
+                retry.set(retry.get() + 1);
+                async { Vec::new() }
+            });
+        });
+        dom.render_immediate_to_vec();
+        assert_eq!(calls.get(), 2, "both success and failure allow the next attempt");
+        dom.in_scope(ScopeId::APP, || {
+            session.dispatch(EntriesPageIntent::BeginBulk { writing: true });
+            let overlap = Rc::clone(&calls);
+            session.spawn_entry_write(1, move || {
+                overlap.set(overlap.get() + 1);
+                async { Vec::new() }
+            });
+        });
+        dom.render_immediate_to_vec();
+        assert_eq!(calls.get(), 2, "a bulk write also blocks new per-entry writes");
+    }
+}
+
+#[test]
+fn query_cannot_restore_flags_or_rows_from_before_a_completed_write() {
+    for (unread_only, failed) in [(false, false), (true, false), (false, true)] {
+        let mut dom = VirtualDom::new(test_app);
+        dom.rebuild_in_place();
+        let (sender, receiver) = oneshot::channel();
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = new_session(
+                None,
+                Signal::new(EntriesPageState::new()),
+                Signal::new(EntriesRequestLifecycle::default()),
+            );
+            session.dispatch(EntriesPageIntent::PreferencesLoaded);
+            if unread_only {
+                session.dispatch(EntriesPageIntent::SetReadFilter(ReadFilter::UnreadOnly));
+            }
+            for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                session.dispatch(intent);
+            }
+            session.dispatch(EntriesPageIntent::ToggleSelected(1));
+            session.spawn_entries_query(async { receiver.await.unwrap() });
+            session
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            session.dispatch(EntriesPageIntent::PatchEntryFlags {
+                entry_id: 1,
+                is_read: Some(true),
+                is_starred: Some(true),
+            })
+        });
+        sender.send(if failed { failure() } else { loaded(1) }).unwrap();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            let state = session.snapshot();
+            assert_eq!(state.requery_revision, 1, "discarded results schedule a fresh query");
+            assert_ne!(state.status, "old query failed");
+            if unread_only {
+                assert!(state.entries.is_empty(), "old query cannot reinsert the now-read row");
+            } else {
+                assert!(
+                    state.entries[0].is_read && state.entries[0].is_starred,
+                    "old query cannot undo confirmed flags"
+                );
+                assert!(state.selected_entry_ids.contains(&1));
+            }
+        });
+        dom.in_scope(ScopeId::APP, || session.spawn_entries_query(async { loaded(2) }));
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.snapshot().entries[0].id, 2, "the next query still publishes");
+        });
+    }
+}
+
+fn complete_older_query_after_latest(older_result: Vec<UiIntent>) -> EntriesPageState {
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let (older_sender, older_receiver) = oneshot::channel();
+    let (latest_sender, latest_receiver) = oneshot::channel();
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        session.spawn_entries_query(async { older_receiver.await.expect("older query result") });
+        session.spawn_entries_query(async { latest_receiver.await.expect("latest query result") });
+        session
+    });
+    dom.render_immediate_to_vec();
+    latest_sender.send(loaded(2)).expect("deliver latest result");
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        assert_eq!(session.snapshot().entries[0].id, 2);
+    });
+
+    older_sender.send(older_result).expect("deliver older result");
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || session.snapshot())
+}
+
+#[test]
+fn older_query_success_cannot_replace_latest_entries() {
+    let state = complete_older_query_after_latest(loaded(1));
+    assert_eq!(state.entries[0].id, 2);
+    assert_eq!(state.status_tone, "info");
+}
+
+/// 列表查询在已读写入提交前读取了存储；写入成功并已修补列表后，这个仍是“最新一代”的
+/// 旧快照不能把条目恢复成未读。查询代际只防“旧查询覆盖新查询”，不防“旧查询覆盖写入”。
+#[test]
+fn in_flight_query_cannot_resurrect_flags_overwritten_by_a_successful_write() {
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let (stale_sender, stale_receiver) = oneshot::channel();
+    let session = dom.in_scope(ScopeId::APP, || {
+        let mut state = EntriesPageState::new();
+        state.read_filter = ReadFilter::UnreadOnly;
+        let session =
+            new_session(None, Signal::new(state), Signal::new(EntriesRequestLifecycle::default()));
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        session.spawn_entries_query(async { loaded(1) });
+        session
+    });
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        assert_eq!(session.snapshot().entries.len(), 1);
+        // 例如：跨秒重渲染或刷新完成触发了新查询，它先于下面的写入读到“未读”。
+        session.spawn_entries_query(async { stale_receiver.await.expect("stale query result") });
+        // SetRead 成功后 runtime 投递的修补。
+        session.dispatch(EntriesPageIntent::PatchEntryFlags {
+            entry_id: 1,
+            is_read: Some(true),
+            is_starred: None,
+        });
+        assert!(session.snapshot().entries.is_empty(), "read entry leaves UnreadOnly");
+    });
+
+    stale_sender.send(loaded(1)).expect("deliver stale unread snapshot");
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        assert!(
+            session.snapshot().entries.iter().all(|entry| entry.id != 1 || entry.is_read),
+            "a stale snapshot resurrected an entry the user just marked as read"
+        );
+    });
+}
+
+/// 切到 StarredOnly 的查询还在途时收藏了仍显示的条目：那次查询读的是写入前的存储，
+/// 它的空结果不能抹掉这个条目；被作废的查询由新查询接替，带回它（独立评审的反例）。
+#[test]
+fn a_write_during_a_query_supersedes_it_even_when_the_entry_newly_matches() {
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let (stale_sender, stale_receiver) = oneshot::channel();
+    let (fresh_sender, fresh_receiver) = oneshot::channel();
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        session.spawn_entries_query(async { loaded(1) });
+        session
+    });
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        session.dispatch(EntriesPageIntent::SetStarredFilter(StarredFilter::StarredOnly));
+        session.spawn_entries_query(async { stale_receiver.await.expect("stale result") });
+        session.dispatch(EntriesPageIntent::PatchEntryFlags {
+            entry_id: 1,
+            is_read: None,
+            is_starred: Some(true),
+        });
+        assert_eq!(session.snapshot().requery_revision, 1, "the write asks for a new query");
+    });
+
+    stale_sender
+        .send(vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries {
+            entries: Vec::new(),
+            archived_count: 0,
+            truncated: false,
+        })])
+        .expect("deliver the stale empty result");
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        assert!(
+            session.snapshot().entries.iter().any(|entry| entry.id == 1 && entry.is_starred),
+            "the superseded empty result must not wipe the newly starred entry"
+        );
+        // 页面对 requery_revision 的反应：重新发出查询。
+        session.spawn_entries_query(async { fresh_receiver.await.expect("fresh result") });
+    });
+    let mut fresh = loaded(1);
+    if let UiIntent::EntriesPage(EntriesPageIntent::SetEntries { entries, .. }) = &mut fresh[0] {
+        entries[0].is_starred = true;
+    }
+    fresh_sender.send(fresh).expect("deliver the fresh result");
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        let snapshot = session.snapshot();
+        let flags = snapshot.entries.iter().map(|e| (e.id, e.is_starred)).collect::<Vec<_>>();
+        assert_eq!(flags, [(1, true)]);
+        assert!(!snapshot.query_in_flight);
+    });
+}
+
+#[test]
+fn returning_page_is_applied_after_entries_arrive_and_clamped() {
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let session = dom.in_scope(ScopeId::APP, || {
+        let mut state = EntriesPageState::new();
+        state.entries_page_size = 1;
+        let session =
+            new_session(None, Signal::new(state), Signal::new(EntriesRequestLifecycle::default()));
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        session.spawn_entries_query_with_return(
+            async {
+                let mut intents = loaded(1);
+                if let UiIntent::EntriesPage(EntriesPageIntent::SetEntries { entries, .. }) =
+                    &mut intents[0]
+                {
+                    let mut second = entries[0].clone();
+                    second.id = 2;
+                    entries.push(second);
+                }
+                intents
+            },
+            Some(9),
+        );
+        session
+    });
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        assert!(session.snapshot().entries_loaded);
+        assert_eq!(session.snapshot().current_page, 2);
+    });
+}
+
+#[test]
+fn older_query_failure_cannot_replace_latest_status() {
+    let state = complete_older_query_after_latest(failure());
+    assert_eq!(state.entries[0].id, 2);
+    assert_eq!(state.status, "共 1 篇文章。");
+    assert_eq!(state.status_tone, "info");
+}
+
+#[test]
+fn first_query_waits_for_all_preferences_and_source_mapping() {
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let queries = Rc::new(Cell::new(0));
+    let session = dom.in_scope(ScopeId::APP, || {
+        new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        )
+    });
+    let prepare = [
+        EntriesPageIntent::ApplyLoadedSettings(UserSettings {
+            entries_page_size: 50,
+            ..UserSettings::default()
+        }),
+        EntriesPageIntent::ApplyLoadedWorkspaceState(EntriesWorkspaceState {
+            read_filter: ReadFilter::UnreadOnly,
+            selected_feed_urls: vec!["https://example.com/selected".into()],
+            ..EntriesWorkspaceState::default()
+        }),
+        EntriesPageIntent::SetFeeds(vec![FeedSummary {
+            id: 7,
+            title: "Selected source".into(),
+            url: "https://example.com/selected".into(),
+            unread_count: 1,
+            entry_count: 1,
+            last_fetched_at: None,
+            last_success_at: None,
+            fetch_error: None,
+        }]),
+        EntriesPageIntent::PreferencesLoaded,
+    ];
+    for intent in std::iter::once(None).chain(prepare.into_iter().map(Some)) {
+        dom.in_scope(ScopeId::APP, || {
+            if let Some(intent) = intent {
+                session.dispatch(intent);
+            }
+            let queries = Rc::clone(&queries);
+            session.spawn_entries_query(async move {
+                let state = session.snapshot();
+                let query = state.entry_query(None, None, time::OffsetDateTime::UNIX_EPOCH);
+                assert_eq!(state.page_size(), 50);
+                assert_eq!(query.read_filter, ReadFilter::UnreadOnly);
+                assert_eq!(query.feed_ids, Some(vec![7]));
+                queries.set(queries.get() + 1);
+                loaded(1)
+            });
+        });
+        dom.render_immediate_to_vec();
+    }
+    assert_eq!(queries.get(), 1, "no default/partial query may execute");
+    dom.in_scope(ScopeId::APP, || {
+        assert_eq!(session.snapshot().entries.len(), 1);
+        // A pre-bootstrap effect must not save the defaults it captured.
+        assert!(!session.can_save_browsing_preferences(false));
+        assert!(session.can_save_browsing_preferences(true));
+    });
+}
+
+#[test]
+fn unavailable_preferences_allow_reading_without_saving_and_retry_on_refresh() {
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::PreferencesUnavailable(crate::ui::failure::plain(
+            "broken preferences",
+        )));
+        assert!(!session.can_save_browsing_preferences(true));
+        session.spawn_bootstrap(|load_preferences| {
+            assert!(load_preferences, "unavailable preferences are retried");
+            async { Vec::new() }
+        });
+        session.spawn_entries_query(async { loaded(1) });
+        session
+    });
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        let state = session.snapshot();
+        assert_eq!(state.entries.len(), 1);
+        assert!(state.status.contains("broken preferences"));
+        assert_eq!(state.status_tone, "error");
+        assert!(!session.can_save_browsing_preferences(true));
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        assert!(session.can_save_browsing_preferences(true));
+        // A successful retry can keep the same query. Clear the fallback
+        // warning even when no further SetEntries intent is necessary.
+        assert_eq!(session.snapshot().status_tone, "info");
+        assert_eq!(session.snapshot().status, "共 1 篇文章。");
+        session.spawn_bootstrap(|load_preferences| {
+            assert!(!load_preferences, "loaded preferences are retained");
+            async { Vec::new() }
+        });
+        session.spawn_entries_query(async { loaded(2) });
+    });
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        assert_eq!(session.snapshot().status_tone, "info");
+        assert_eq!(session.snapshot().entries[0].id, 2);
+    });
+}
+
+fn bootstrap_loaded(feed_id: i64, page_size: u32) -> Vec<UiIntent> {
+    let url = format!("https://example.com/source/{feed_id}");
+    vec![
+        EntriesPageIntent::ApplyLoadedSettings(UserSettings {
+            entries_page_size: page_size,
+            ..UserSettings::default()
+        }),
+        EntriesPageIntent::ApplyLoadedWorkspaceState(EntriesWorkspaceState {
+            read_filter: ReadFilter::UnreadOnly,
+            selected_feed_urls: vec![url.clone()],
+            ..EntriesWorkspaceState::default()
+        }),
+        EntriesPageIntent::SetFeeds(vec![FeedSummary {
+            id: feed_id,
+            title: format!("Source {feed_id}"),
+            url,
+            unread_count: 1,
+            entry_count: 1,
+            last_fetched_at: None,
+            last_success_at: None,
+            fetch_error: None,
+        }]),
+        EntriesPageIntent::PreferencesLoaded,
+    ]
+    .into_iter()
+    .map(UiIntent::EntriesPage)
+    .collect()
+}
+
+fn complete_older_bootstrap_after_latest(older_result: Vec<UiIntent>) {
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let (older_sender, older_receiver) = oneshot::channel();
+    let (latest_sender, latest_receiver) = oneshot::channel();
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.spawn_bootstrap(|_| async { older_receiver.await.expect("older bootstrap") });
+        session.spawn_bootstrap(|_| async { latest_receiver.await.expect("latest bootstrap") });
+        session
+    });
+    dom.render_immediate_to_vec();
+    latest_sender.send(bootstrap_loaded(7, 50)).expect("deliver latest bootstrap");
+    dom.render_immediate_to_vec();
+    let latest = dom.in_scope(ScopeId::APP, || {
+        let state = session.snapshot();
+        assert!(state.preferences_load.is_loaded());
+        assert_eq!(state.page_size(), 50);
+        assert_eq!(state.feeds[0].id, 7);
+        state
+    });
+    older_sender.send(older_result).expect("deliver older bootstrap");
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || assert_eq!(session.snapshot(), latest));
+}
+
+#[test]
+fn older_bootstrap_success_cannot_replace_latest_preferences_or_source_mapping() {
+    complete_older_bootstrap_after_latest(bootstrap_loaded(1, 100));
+}
+
+#[test]
+fn older_bootstrap_failure_cannot_downgrade_loaded_preferences() {
+    complete_older_bootstrap_after_latest(vec![UiIntent::EntriesPage(
+        EntriesPageIntent::PreferencesUnavailable(crate::ui::failure::plain(
+            "old bootstrap failed",
+        )),
+    )]);
+}
+
+#[test]
+fn bootstrap_and_entry_query_generations_do_not_cancel_each_other() {
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let (bootstrap_sender, bootstrap_receiver) = oneshot::channel();
+    let (query_sender, query_receiver) = oneshot::channel();
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        session.spawn_bootstrap(|_| async { bootstrap_loaded(1, 100) });
+        session.spawn_bootstrap(|_| async { bootstrap_receiver.await.expect("bootstrap") });
+        session.spawn_entries_query(async { query_receiver.await.expect("query") });
+        session
+    });
+    dom.render_immediate_to_vec();
+    bootstrap_sender.send(bootstrap_loaded(7, 50)).expect("deliver bootstrap");
+    dom.render_immediate_to_vec();
+    query_sender.send(loaded(2)).expect("deliver query");
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        let state = session.snapshot();
+        assert_eq!(state.page_size(), 50);
+        assert_eq!(state.feeds[0].id, 7);
+        assert_eq!(state.entries[0].id, 2);
+    });
+}
+
+#[test]
+fn delayed_query_does_not_duplicate_a_bulk_reload_or_restore_old_rows() {
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let (sender, receiver) = oneshot::channel();
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
+            session.dispatch(intent);
+        }
+        session.spawn_entries_query_with_return(async { receiver.await.unwrap() }, Some(9));
+        session
+    });
+    dom.render_immediate_to_vec();
+    let before = dom.in_scope(ScopeId::APP, || {
+        session.dispatch(EntriesPageIntent::SelectionApplied {
+            ids: vec![1],
+            action: rssr_domain::EntryBatchAction::Archive,
+            count: 1,
+        });
+        session.snapshot()
+    });
+    sender.send(loaded(1)).unwrap();
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || assert_eq!(session.snapshot(), before));
+}
+
+#[test]
+fn page_disposal_cancels_pending_bootstrap_and_query_tasks() {
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let (bootstrap_sender, bootstrap_receiver) = oneshot::channel();
+    let (query_sender, query_receiver) = oneshot::channel();
+    dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        session.spawn_bootstrap(|_| async { bootstrap_receiver.await.unwrap() });
+        session.spawn_entries_query(async { query_receiver.await.unwrap() });
+    });
+    dom.render_immediate_to_vec();
+    drop(dom);
+    assert!(bootstrap_sender.send(bootstrap_loaded(7, 50)).is_err());
+    assert!(query_sender.send(loaded(1)).is_err());
+}
+
+/// The browsing preferences are saved only when they differ from the stored ones: the values
+/// a read applied (at start or again) are not written back, and neither are ones just saved
+/// (C4b item 2: a read-only refresh writes nothing).
+#[tokio::test(flavor = "current_thread")]
+async fn only_preferences_the_user_changed_are_saved() {
+    use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+    let backend = Scripted::over_new_library();
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let stored = EntriesWorkspaceState::default();
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::ApplyLoadedWorkspaceState(stored.clone()));
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        session
+    });
+    let save = |workspace: &EntriesWorkspaceState| {
+        session.save_browsing_preferences(true, workspace.clone())
+    };
+    dom.in_scope(ScopeId::APP, || save(&stored));
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 0, "as read");
+
+    let changed = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..stored.clone() };
+    dom.in_scope(ScopeId::APP, || save(&changed));
+    for _ in 0..100 {
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work()).await;
+        if dom.in_scope(ScopeId::APP, || session.snapshot().stored_workspace)
+            == Some(changed.clone())
+        {
+            break;
+        }
+    }
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 1);
+    dom.in_scope(ScopeId::APP, || {
+        assert_eq!(session.snapshot().stored_workspace, Some(changed.clone()));
+        save(&changed);
+    });
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 1, "as saved");
+}
+
+/// A re-read issued before a save of the preferences landed may have read the store before
+/// the save: its answer does not put the saved filters back. A new read replaces it, and the
+/// page keeps what was saved (C4b item 2, R2-03; advisor's trace).
+#[tokio::test(flavor = "current_thread")]
+async fn a_reread_issued_before_a_save_landed_does_not_undo_it() {
+    use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+    let backend = Scripted::over_new_library();
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let before = EntriesWorkspaceState::default();
+    let saved = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..before.clone() };
+    let (sender, receiver) = oneshot::channel::<Vec<UiIntent>>();
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::ApplyLoadedWorkspaceState(before.clone()));
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        // A focus: the re-read reads the store before the save below.
+        session.spawn_bootstrap(|_| async { receiver.await.expect("the early re-read") });
+        session.dispatch(EntriesPageIntent::SetReadFilter(ReadFilter::UnreadOnly));
+        session.save_browsing_preferences(true, saved.clone());
+        session
+    });
+    for _ in 0..100 {
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work()).await;
+        if backend.calls("bootstrap_entries") == 1
+            && !dom.in_scope(ScopeId::APP, || session.snapshot().bootstrap_in_flight)
+        {
+            break;
+        }
+    }
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 1);
+    assert_eq!(backend.calls("bootstrap_entries"), 1, "a new read after the save");
+
+    // The early re-read answers with what it read before the save.
+    sender
+        .send(vec![UiIntent::EntriesPage(EntriesPageIntent::PreferencesReread {
+            settings: UserSettings::default(),
+            workspace: before,
+        })])
+        .expect("deliver");
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        let state = session.snapshot();
+        assert_eq!(state.read_filter, ReadFilter::UnreadOnly, "the saved filter stays");
+        assert_eq!(state.stored_workspace, Some(saved));
+    });
+}
+
+/// A choice made while a save of the preferences is on its way is saved after it, even when
+/// it goes back to what was stored before: the last choice is the one kept (review
+/// C4B-B-05).
+#[tokio::test(flavor = "current_thread")]
+async fn a_choice_made_during_a_save_is_saved_after_it() {
+    use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+    let backend = Scripted::over_new_library();
+    let hold = backend.hold("save_entries_workspace_if_changed");
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let first = EntriesWorkspaceState::default();
+    let second = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..first.clone() };
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::ApplyLoadedWorkspaceState(first.clone()));
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        session
+    });
+    let save = |workspace: &EntriesWorkspaceState| {
+        dom.in_scope(ScopeId::APP, || session.save_browsing_preferences(true, workspace.clone()))
+    };
+    save(&second);
+    save(&first);
+    for _ in 0..100 {
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work()).await;
+        if hold.waiting() == 1 {
+            break;
+        }
+    }
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 1, "one at a time");
+    for _ in 0..2 {
+        hold.release();
+    }
+    for _ in 0..100 {
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work()).await;
+        if dom.in_scope(ScopeId::APP, || {
+            let state = session.snapshot();
+            !state.workspace_saving && backend.calls("save_entries_workspace_if_changed") == 2
+        }) {
+            break;
+        }
+    }
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 2);
+    dom.in_scope(ScopeId::APP, || {
+        assert_eq!(session.snapshot().stored_workspace, Some(first.clone()), "the last choice");
+    });
+    let stored = rssr_api::Backend::bootstrap_entries(
+        &*backend,
+        rssr_application::EntriesBootstrapInput { load_preferences: true, load_feeds: false },
+    )
+    .await
+    .expect("read")
+    .workspace;
+    assert_eq!(stored, Some(first), "the library has it");
+}
+
+/// A page whose preferences were read as `stored`, with the scripted backend.
+fn page_with_preferences(
+    dom: &mut VirtualDom,
+    stored: &EntriesWorkspaceState,
+) -> EntriesPageSession {
+    dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::ApplyLoadedWorkspaceState(stored.clone()));
+        session.dispatch(EntriesPageIntent::PreferencesLoaded);
+        session
+    })
+}
+
+/// What the page's save effect does for `workspace` (the filters it shows).
+fn choose(dom: &mut VirtualDom, session: EntriesPageSession, workspace: &EntriesWorkspaceState) {
+    dom.in_scope(ScopeId::APP, || {
+        session.dispatch(EntriesPageIntent::SetReadFilter(workspace.read_filter));
+        session.save_browsing_preferences(true, workspace.clone())
+    })
+}
+
+async fn until_saves_end(
+    dom: &mut VirtualDom,
+    session: EntriesPageSession,
+    calls: usize,
+    backend: &Scripted,
+) {
+    for _ in 0..150 {
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work()).await;
+        if backend.calls("save_entries_workspace_if_changed") == calls
+            && !dom.in_scope(ScopeId::APP, || session.snapshot().workspace_saving)
+        {
+            return;
+        }
+    }
+    panic!("the saves did not end");
+}
+
+use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+/// A re-read that answers while a save is on its way and the user's next choice waits does
+/// not replace that choice, and nothing it read is saved (review C4B-B-R2-03).
+#[tokio::test(flavor = "current_thread")]
+async fn a_reread_during_a_save_leaves_the_users_choice() {
+    let backend = Scripted::over_new_library();
+    let hold = backend.hold("save_entries_workspace_if_changed");
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let a = EntriesWorkspaceState::default();
+    let b = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..a.clone() };
+    let c = EntriesWorkspaceState { read_filter: ReadFilter::ReadOnly, ..a.clone() };
+    let session = page_with_preferences(&mut dom, &a);
+    choose(&mut dom, session, &b);
+    choose(&mut dom, session, &a);
+    // Another browser stored C; a focus re-read brings it while B's save is on its way.
+    dom.in_scope(ScopeId::APP, || {
+        session.spawn_bootstrap(|_| async move {
+            vec![UiIntent::EntriesPage(EntriesPageIntent::PreferencesReread {
+                settings: UserSettings::default(),
+                workspace: c,
+            })]
+        })
+    });
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        let state = session.snapshot();
+        assert_eq!(state.workspace(), a, "the user's choice stays shown");
+        assert_eq!(state.workspace_wanted, Some(a.clone()), "and waits");
+    });
+    for _ in 0..2 {
+        hold.release();
+    }
+    until_saves_end(&mut dom, session, 2, &backend).await;
+    dom.in_scope(ScopeId::APP, || {
+        assert_eq!(session.snapshot().stored_workspace, Some(a.clone()), "the last choice");
+    });
+}
+
+/// A save whose outcome is unknown may have been stored: the user's next choice, made while
+/// it was on its way, is still saved after it (review C4B-B-R2-04).
+#[tokio::test(flavor = "current_thread")]
+async fn a_choice_after_a_save_of_unknown_outcome_is_saved() {
+    use rssr_api::{BackendError, ErrorCode};
+
+    let backend = Scripted::over_new_library();
+    let hold = backend.hold("save_entries_workspace_if_changed");
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let a = EntriesWorkspaceState::default();
+    let b = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..a.clone() };
+    let session = page_with_preferences(&mut dom, &a);
+    choose(&mut dom, session, &b);
+    choose(&mut dom, session, &a);
+    backend.fail_once(
+        "save_entries_workspace_if_changed",
+        BackendError::new(ErrorCode::OutcomeUnknown, "结果未知"),
+    );
+    for _ in 0..2 {
+        hold.release();
+    }
+    until_saves_end(&mut dom, session, 2, &backend).await;
+    dom.in_scope(ScopeId::APP, || {
+        let state = session.snapshot();
+        assert_eq!(state.stored_workspace, Some(a.clone()), "the choice was saved after it");
+        assert_eq!(state.workspace(), a);
+    });
+}
+
+/// After the preferences could not be read and the user chose filters, a read that recovers
+/// them makes the page ready, keeps the user's filters and saves nothing by itself; the
+/// user's next change is saved (review C4B-B-R2-06).
+#[tokio::test(flavor = "current_thread")]
+async fn a_recovering_read_keeps_the_users_filters_without_saving_them() {
+    let backend = Scripted::over_new_library();
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let fallback = EntriesWorkspaceState::default();
+    let chosen = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..fallback.clone() };
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::PreferencesUnavailable(crate::ui::failure::plain(
+            "读不到",
+        )));
+        session
+    });
+    choose(&mut dom, session, &chosen);
+    dom.in_scope(ScopeId::APP, || {
+        session.dispatch(EntriesPageIntent::PreferencesReread {
+            settings: UserSettings::default(),
+            workspace: fallback.clone(),
+        });
+        assert!(session.snapshot().preferences_load.is_loaded());
+        assert_eq!(session.snapshot().workspace(), chosen);
+    });
+    // The save effect fires when the page becomes ready: not the user's change.
+    choose(&mut dom, session, &chosen);
+    for _ in 0..10 {
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work()).await;
+    }
+    assert_eq!(backend.calls("save_entries_workspace_if_changed"), 0, "the read saved nothing");
+
+    let next = EntriesWorkspaceState { read_filter: ReadFilter::ReadOnly, ..fallback };
+    choose(&mut dom, session, &next);
+    until_saves_end(&mut dom, session, 1, &backend).await;
+    dom.in_scope(ScopeId::APP, || {
+        assert_eq!(session.snapshot().stored_workspace, Some(next.clone()));
+    });
+}
+
+/// Only the save effect's firing for the recovered filters is skipped: going back to the
+/// stored filters and then to the recovered ones again saves the last choice (review
+/// C4B-B-R3-01).
+#[tokio::test(flavor = "current_thread")]
+async fn a_recovered_choice_made_again_later_is_saved() {
+    let backend = Scripted::over_new_library();
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let stored = EntriesWorkspaceState::default();
+    let recovered = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..stored.clone() };
+    let session = dom.in_scope(ScopeId::APP, || {
+        let session = new_session(
+            None,
+            Signal::new(EntriesPageState::new()),
+            Signal::new(EntriesRequestLifecycle::default()),
+        );
+        session.dispatch(EntriesPageIntent::PreferencesUnavailable(crate::ui::failure::plain(
+            "读不到",
+        )));
+        session
+    });
+    choose(&mut dom, session, &recovered);
+    dom.in_scope(ScopeId::APP, || {
+        session.dispatch(EntriesPageIntent::PreferencesReread {
+            settings: UserSettings::default(),
+            workspace: stored.clone(),
+        });
+    });
+    choose(&mut dom, session, &recovered); // the page becoming ready: skipped
+    choose(&mut dom, session, &stored); // the stored ones: nothing to save
+    choose(&mut dom, session, &recovered); // the user's last choice
+    until_saves_end(&mut dom, session, 1, &backend).await;
+    dom.in_scope(ScopeId::APP, || {
+        assert_eq!(session.snapshot().stored_workspace, Some(recovered.clone()));
+    });
+}
+
+/// A read of the preferences issued before a save that ended with an unknown outcome does
+/// not tell the baseline: a new read does (review C4B-B-R3-02).
+#[tokio::test(flavor = "current_thread")]
+async fn a_read_issued_before_an_unknown_save_does_not_tell_the_baseline() {
+    use rssr_api::{BackendError, ErrorCode};
+
+    let backend = Scripted::over_new_library();
+    let _host = test_host::install(backend.clone());
+    let mut dom = VirtualDom::new(test_app);
+    dom.rebuild_in_place();
+    let a = EntriesWorkspaceState::default();
+    let b = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..a.clone() };
+    let c = EntriesWorkspaceState { read_filter: ReadFilter::ReadOnly, ..a.clone() };
+    let session = page_with_preferences(&mut dom, &a);
+    let (sender, receiver) = oneshot::channel::<Vec<UiIntent>>();
+    dom.in_scope(ScopeId::APP, || {
+        session.spawn_bootstrap(|_| async { receiver.await.expect("the early read") });
+    });
+    backend.fail_once(
+        "save_entries_workspace_if_changed",
+        BackendError::new(ErrorCode::OutcomeUnknown, "结果未知"),
+    );
+    choose(&mut dom, session, &b);
+    until_saves_end(&mut dom, session, 1, &backend).await;
+    for _ in 0..50 {
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work()).await;
+        if !dom.in_scope(ScopeId::APP, || session.snapshot().bootstrap_in_flight) {
+            break;
+        }
+    }
+    assert_eq!(backend.calls("bootstrap_entries"), 1, "a new read after the unknown save");
+    // The early read answers with what it read before the save.
+    sender
+        .send(vec![UiIntent::EntriesPage(EntriesPageIntent::PreferencesReread {
+            settings: UserSettings::default(),
+            workspace: c,
+        })])
+        .expect("deliver");
+    dom.render_immediate_to_vec();
+    dom.in_scope(ScopeId::APP, || {
+        let state = session.snapshot();
+        assert_eq!(state.stored_workspace, Some(a.clone()), "what the library holds");
+        assert_eq!(state.workspace(), b, "the user's choice stays shown");
+    });
+}

@@ -509,11 +509,13 @@ async fn ui_commands_produce_the_recorded_intents() {
         .run(
             "save browsing preferences",
             entries(EntriesCommand::SaveBrowsingPreferences {
-                grouping_mode: EntryGroupingPreference::Source,
-                show_archived: true,
-                read_filter: ReadFilter::UnreadOnly,
-                starred_filter: StarredFilter::All,
-                selected_feed_urls: vec![server.url("/a.xml")],
+                workspace: rssr_domain::EntriesWorkspaceState {
+                    grouping_mode: EntryGroupingPreference::Source,
+                    show_archived: true,
+                    read_filter: ReadFilter::UnreadOnly,
+                    starred_filter: StarredFilter::All,
+                    selected_feed_urls: vec![server.url("/a.xml")],
+                },
             }),
         )
         .await;
@@ -521,11 +523,13 @@ async fn ui_commands_produce_the_recorded_intents() {
         .run(
             "save the same browsing preferences",
             entries(EntriesCommand::SaveBrowsingPreferences {
-                grouping_mode: EntryGroupingPreference::Source,
-                show_archived: true,
-                read_filter: ReadFilter::UnreadOnly,
-                starred_filter: StarredFilter::All,
-                selected_feed_urls: vec![server.url("/a.xml")],
+                workspace: rssr_domain::EntriesWorkspaceState {
+                    grouping_mode: EntryGroupingPreference::Source,
+                    show_archived: true,
+                    read_filter: ReadFilter::UnreadOnly,
+                    starred_filter: StarredFilter::All,
+                    selected_feed_urls: vec![server.url("/a.xml")],
+                },
             }),
         )
         .await;
