@@ -3,9 +3,9 @@
 - 日期：2026-10-27
 - 作者 / Agent：Codex
 - 分支：`codex/integrate-reading-workspace-20261027`
-- 当前 HEAD：原 PR #32 `6109380b1563ddb1a8812a654980729a9eb9ac3b`，集成提交准备中
+- 当前 HEAD：`6a605dc856d63155c7514bb653cc34fb2d907ab1`；本记录与自然目录测试适配作为后续提交保存
 - main：`48bcaf69fd8d00050847827a69f7cc15a2525b17`
-- 相关 commit：#24 集成 `bfd2f3b6ce056d1a6617323fb60b02c6541b0b88`；#32 commit: pending（本记录随集成提交保存）
+- 相关 commit：#24 集成 `bfd2f3b6`；#32 语义集成 `31b541b2`，合并当前 main `6a605dc8`
 - 相关 tag / release：N/A
 - 状态：`draft`，最终远端门禁以 PR #32 当前 head 的检查结果为准。
 
@@ -59,14 +59,14 @@
   移除 `--no-serve` 后失败项单独通过，验证优化器失败阻断及同日志目录成功重跑。
 - Chrome workspace：13 组通过（workspace-3）；lifecycle、window acceptance、window review、transport 均通过（各 -3 证据）。
 - Chrome directory boundaries：11 组通过（directory-boundaries-5），含筛选末页返回与过期消息。
-- 现有完整服务器 CDP 回归：regression-4 执行中；此前发现隐藏刷新时间，已恢复显示并重跑。
+- 现有服务器 CDP 回归：regression-4 前 395 条通过，末项自然目录仍按旧挂载 / 日期 ID 判断；适配后单独重跑自然目录 23 条全通过（directory-scroll-5），控制台无错误。远端将重跑完整组合。
 - Node API traffic / server acceptance：10 项通过；相关脚本语法检查通过。
 - 原生 seeder：真实 Rust 工具创建独立 library.sqlite3、100 篇 / 6 来源、24 长正文及 RSS，见 reading-seeder-2。
 - 初次高并发构建遇 Windows 分页内存不足，限制并发后通过；没有将环境失败记作通过。
 
 ## 结果
 
-#24 已合并；#32 完成冲突文本与 v0.2 语义接入，准备推送当前集成结果。
+#24 已合并；#32 已推送 v0.2 集成结果，GitHub 确认可合并；补齐自然目录按需挂载与新日期锚点的回归适配。
 远端完整 SHA 对应的全部 CI / Pages 门禁为合并条件。
 
 ## 风险与后续事项

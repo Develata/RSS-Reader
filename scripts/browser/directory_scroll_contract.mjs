@@ -5,10 +5,10 @@ import { rail, group, click, settle, directoryIdle } from './directory_contract.
 const october = 'entry-group-2026-年-10-月';
 const september = 'entry-group-2026-年-09-月';
 const march = 'entry-group-2026-年-03-月';
-const octoberMiddle = 'entry-group-2026-10-03-1003';
-const septemberFirst = 'entry-group-2026-09-16-916';
-const septemberMiddle = 'entry-group-2026-09-08-908';
-const marchLast = 'entry-group-2026-03-01-301';
+const octoberMiddle = 'entry-group-2026-10-03';
+const septemberFirst = 'entry-group-2026-09-16';
+const septemberMiddle = 'entry-group-2026-09-08';
+const marchLast = 'entry-group-2026-03-01';
 const q = JSON.stringify;
 
 async function geometry(client) {
@@ -118,9 +118,9 @@ export async function checkDirectoryScroll(client, env) {
   await env.manualScroll();
   await wheel(client,false,-100000);
   const initial=await geometry(client);
-  check('fixed fixture has eight months, four October dates and sixteen September dates',
+  check('fixed fixture has eight months and four mounted October dates; collapsed months defer their rows',
     initial.groups.length===8 && initial.groups[0].id===october && initial.groups[0].dates===4 &&
-    initial.groups[1].id===september && initial.groups[1].dates===16,initial);
+    initial.groups[1].id===september && initial.groups.slice(1).every(g=>g.dates===0),initial);
   check('start at true page top with natural single-month following',initial.y===0&&onlyOpen(initial,october)&&
     initial.rail.rect.top>parseFloat(initial.rail.css.top),initial);
   await shortWheel('page top');
@@ -139,6 +139,8 @@ export async function checkDirectoryScroll(client, env) {
   await click(client,group(september));
   await settle(client, `document.querySelector(${q(group(september))}).dataset.open==='true'`, 'other month may expand');
   const expanded=await wheel(client,true,200);
+  check('expanding September mounts all sixteen fixture dates',
+    expanded.before.groups.find(g=>g.id===september).dates===16,expanded.before);
   check('manual expansion creates real overflow and wheel moves only the rail',
     expanded.before.rail.scrollHeight-expanded.before.rail.clientHeight>50 && expanded.after.rail.scrollTop>expanded.before.rail.scrollTop+20 &&
     trustedWheel(expanded)&&manual(expanded)&&isolated(expanded),expanded);
