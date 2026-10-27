@@ -4,9 +4,9 @@
 - 作者 / Agent：Codex
 - 分支：`feat/reading-workspace-20261024`
 - 修改前 HEAD：`d2054f91`
-- 相关 commit：pending
+- 相关 commit：代码与契约 `badf7fae`；最终 Penpot 记录为本文件最新提交，准确提交号见 `git log -1 -- docs/handoffs/2026-10-27-directory-right-disclosure.md`。
 - 相关 tag / release：N/A；未 push、未发布。
-- 状态：`validated`（代码）；Penpot 已更新，最终命名版本待保存。
+- 状态：`validated`（代码及 Penpot 局部同步）。
 
 ## 工作摘要
 
@@ -46,7 +46,8 @@
 - 16 张当前画板：86 个父级箭头、43 个分支箭头移到右侧，69 个文章条目使用 8px 容器缩进；原画板 ID、分类与主题保留。
 - 导出发现手机标题残留旧换行缓存，已逐页面切换文本增长方式重新排版；最终几何检查确认文字宽度没有超过标题容器，单行／双行与实测相符。
 - 默认桌面、手机来源目录、搜索目录和 Amethyst 桌面实际导出复核通过。全量几何检查无问题，`currentFile.validate()` 返回空错误列表，当前画板范围没有遗漏的旧左侧父级箭头。
-- 最终命名版本及代码来源标记将在本次代码提交后保存并回读。
+- 最终 Penpot rev 369，55 张画板与 55 个唯一 capture-key 保留；16 张相关画板新增 `directory-right-source=badf7fae`，00 使用说明更新为右侧箭头与 8px 缩进。
+- 命名版本 `Right-side directory disclosure · badf7fae · 2026-10-27` 已保存并通过 `findVersions()` 回读，创建时间 `2026-10-27T13:05:58.998Z`，非自动保存版本。
 
 ## 风险与后续事项
 
@@ -59,4 +60,5 @@
 
 - 证据目录：`C:/Users/QQ/.codex/visualizations/2026/10/26/01a1779a-f271-7ec2-ab70-c1ef756f9ffb`。
 - 浏览器证据：`directory-right-desktop.png`、`directory-right-mobile.png`、`directory-right-mobile-source.png`、`directory-right-dark.png`、`directory-right-desktop-geometry.json`、`directory-right-amethyst-geometry.json`。
+- Penpot 审计与导出：`penpot-directory-right-audit.json`、`penpot-directory-right-desktop.png`、`penpot-directory-right-mobile.png`、`penpot-directory-right-amethyst.png`；保存版本、全部目标几何及文字回读已记录。
 - 本记录取代此前箭头与间距记录中的“标题与父级标签左对齐”和“38px 文章容器缩进”；5px 分支箭头和 44px 点击区域继续适用。

@@ -1,5 +1,7 @@
 # 目录展开箭头与条目间距修正
 
+后续变更：用户要求右侧展开并减少左侧空白，代码 `badf7fae` / Penpot rev 369 已取代本记录中的 38px 缩进与父子标题齐平方案；见[右侧箭头与缩进交接](./2026-10-27-directory-right-disclosure.md)。本记录保留当时版本的实施与验证事实。
+
 - 日期：2026-10-27
 - 作者 / Agent：Codex
 - 分支：`feat/reading-workspace-20261024`
