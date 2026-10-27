@@ -2,7 +2,7 @@
 
 文章列表返回定位使用 `[data-layout="entry-card"][data-return-highlight="true"]`，短暂显示淡背景；不得把它解释为已读或收藏状态。主题应避免在这里改变尺寸、位置或加入闪烁动画。内部 `data-position-*` 字段用于 DOM 测量，不是主题稳定接口。
 
-来源目录包含来源、月份和文章三级；时间目录包含月份、日期和文章三级。月份 / 日期文字沿用 `entry-directory-link` 定位，独立的 `entry-directory-branch-toggle` 展开文章；文章按钮使用 `entry-directory-link[data-directory-level="article"]`，当前文章带 `aria-current="location"`。主题应保留展开箭头的点击范围及键盘焦点，允许文章标题两行显示；展开层级不改变主列表的勾选语义。折叠路径的文章节点不常驻 DOM。
+来源目录包含来源、月份和文章三级；时间目录包含月份、日期和文章三级。月份 / 日期文字沿用 `entry-directory-link` 定位，右侧独立的 `entry-directory-branch-toggle` 展开文章；文章按钮使用 `entry-directory-link[data-directory-level="article"]`，当前文章带 `aria-current="location"`。默认样式将各级箭头统一放在右侧，文章容器仅保留 8px 左缩进；标签先于展开按钮的 DOM 顺序与视觉、键盘顺序一致。主题应保留展开箭头的点击范围及键盘焦点，允许文章标题两行显示；展开层级不改变主列表的勾选语义。折叠路径的文章节点不常驻 DOM。
 
 这份文档面向自定义主题作者，记录当前 UI 中可长期依赖的稳定样式接口。
 

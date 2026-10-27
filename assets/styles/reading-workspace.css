@@ -93,23 +93,24 @@
 .directory-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
 .directory-heading-row [data-slot="entry-directory-heading"] { margin-left: 4px; font-size: 1rem; }
 [data-page="entries"] [data-layout="entry-directory-toggle"], [data-page="entries"] [data-layout="entry-directory-link"] { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px; border-radius: var(--radius-row); transform: none; }
-[data-page="entries"] [data-layout="entry-directory-toggle"]::before { content: ""; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); flex: 0 0 6px; }
-[data-page="entries"] [data-layout="entry-directory-toggle"][data-open="true"]::before { transform: rotate(45deg); }
+[data-page="entries"] [data-layout="entry-directory-toggle"] { position: relative; min-height: 44px; padding-right: 48px; }
+[data-page="entries"] [data-layout="entry-directory-toggle"]::before { content: ""; position: absolute; right: 19px; top: 50%; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-50%) rotate(-45deg); }
+[data-page="entries"] [data-layout="entry-directory-toggle"][data-open="true"]::before { transform: translateY(-50%) rotate(45deg); }
 [data-page="entries"] [data-slot="entry-directory-title"] { flex: 1 1 auto; font-size: 0.8rem; font-weight: 400; }
 [data-page="entries"] [data-slot="entry-directory-meta"] { flex: 0 0 auto; font-size: 0.7rem; color: var(--muted); }
 [data-page="entries"] [data-layout="entry-directory-children"], [data-page="entries"] [data-layout="entry-directory-grandchildren"] { padding-left: 6px; border: 0; gap: 2px; }
 [data-page="entries"] [data-layout="entry-directory-link"][data-active="true"] { color: var(--accent); background: var(--accent-soft); }
 [data-page="entries"] [data-layout="entry-directory-nav"] { gap: 2px; }
 .directory-month-heading { display: flex; align-items: center; min-width: 0; }
-.directory-month-heading > [data-layout="entry-directory-link"] { flex: 1; min-width: 0; padding-left: 2px; }
+.directory-month-heading > [data-layout="entry-directory-link"] { flex: 1; min-width: 0; min-height: 44px; padding-left: 8px; }
 .directory-month-heading [data-slot="entry-directory-title"] { font-size: 0.75rem; white-space: nowrap; }
 .directory-month-heading > [data-layout="entry-directory-link"] { gap: 4px; padding-right: 4px; }
 .directory-month-toggle { flex: 0 0 44px; width: 44px; height: 44px; }
 .directory-month-toggle svg { display: none; }
 .directory-month-toggle::before { content: ""; width: 5px; height: 5px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); flex: 0 0 5px; }
 .directory-month-toggle[data-open="true"]::before { transform: rotate(45deg); }
-/* Align article text with the branch label: 44px toggle + 2px label inset. */
-[data-layout="entry-directory-articles"] { display: grid; min-width: 0; padding-left: 38px; }
+/* A small content indent preserves hierarchy without reserving an icon column. */
+[data-layout="entry-directory-articles"] { display: grid; min-width: 0; padding-left: 8px; }
 [data-page="entries"] [data-directory-level="article"] { min-height: 44px; padding: 4px 8px; }
 [data-page="entries"] [data-directory-level="article"] [data-slot="entry-directory-title"] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 1.5; }
 [data-page="entries"] [data-position-entry] { scroll-margin-top: 80px; }

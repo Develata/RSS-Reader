@@ -38,8 +38,8 @@ pub(crate) fn DirectoryRail(
                                 for date in &month.dates {
                                     div { key: "{date.anchor_id}", "data-layout": "entry-directory-date-branch",
                                         div { class: "directory-month-heading",
-                                            { articles_toggle(&state, &date.anchor_id, &date.title) }
                                             { link(&state, &month.anchor_id, &date.anchor_id, &date.title, &date.subtitle, date.target_page, true) }
+                                            { articles_toggle(&state, &date.anchor_id, &date.title) }
                                         }
                                         { articles(&state, &model, &date.anchor_id, &date.entry_cards) }
                                     }
@@ -58,8 +58,8 @@ pub(crate) fn DirectoryRail(
                                 for month in &source.months {
                                     div { key: "{month.anchor_id}", "data-layout": "entry-directory-month-branch",
                                         div { class: "directory-month-heading",
-                                            { articles_toggle(&state, &month.anchor_id, &month.title) }
                                             { link(&state, &source.anchor_id, &month.anchor_id, &month.title, &month.subtitle, month.target_page, false) }
+                                            { articles_toggle(&state, &month.anchor_id, &month.title) }
                                         }
                                         { articles(&state, &model, &month.anchor_id, &month.entry_cards) }
                                     }
