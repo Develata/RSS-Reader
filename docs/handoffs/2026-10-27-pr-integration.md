@@ -3,7 +3,7 @@
 - 日期：2026-10-27
 - 作者 / Agent：Codex
 - 分支：`codex/integrate-reading-workspace-20261027`
-- 当前 HEAD：`2a07d6c7c84a82a4d6e9b8ac76d9c8eae7753b9d`；保存生命周期修复与本记录同批提交，提交号见 Git 历史
+- 当前 HEAD：`dd8534401462da67edcb1fe3e5e2675cf6daa0cc`；列表等待修正与本记录同批提交，提交号见 Git 历史
 - main：`48bcaf69fd8d00050847827a69f7cc15a2525b17`
 - 相关 commit：#24 集成 `bfd2f3b6`；#32 语义集成 `31b541b2`，合并当前 main `6a605dc8`
 - 相关 tag / release：N/A
@@ -71,7 +71,8 @@
   初次全套延迟测试在换库时遇旧页面请求触发认证恢复；测试夹具先停止旧文档再换库后通过，产品内导航用例仍保持原样。
   lifecycle、window acceptance、window review、transport 均通过（各 -3 证据）。
 - Chrome directory boundaries：11 组通过（directory-boundaries-5），含筛选末页返回与过期消息。
-- 现有服务器完整 CDP 回归：418 条全通过（regression-final），控制台无错误。此前自然目录旧挂载 / 日期 ID 断言已适配，单独 23 条同样通过（directory-scroll-5）。
+- 现有服务器完整 CDP 回归：418 条全通过（regression-final）；保存生命周期修复及列表等待修正后再跑
+  418 条全通过（regression-save-fixed），两轮控制台均无错误。自然目录单独 23 条同样通过（directory-scroll-5）。
 - 完整服务器验收 `run_server_web_regression.sh --suite acceptance --long`：27 场景、108 检查全部通过，
   含后台超时、延迟跳转、未知结果、两浏览器同步；见 acceptance-save-fixed。
 - Node API traffic / server acceptance：10 项通过；相关脚本语法检查通过。
@@ -91,7 +92,10 @@
 - b768a017 的 CI 已通过 33 项（含 Android 打包与四个主题）；reading-workspace 在连续缩放后立即测量弹窗位置失败。补充两帧布局等待并保持原有严格边界，增加失败 HTML / 截图；本地 13 组重跑通过。最终远端测试及合并状态须按 PR #32 最新 head 复核。
 - 2a07d6c7 的 CI 33 项成功，reading-workspace 来源筛选检查早于异步列表完成，default 验收仍读取已移除的状态文字，聚合门禁失败。
   筛选等待真实列表返回；已读/收藏断言改查当前卡片状态和操作按钮 aria-pressed，保留行为验证。
-  人为增加 150 ms 真实 API 延迟另复现偏好保存随页面销毁而取消；本次修复任务所有权和写入顺序。
+  人为增加 150 ms 真实 API 延迟另复现偏好保存随页面销毁而取消；dd853440 修复任务所有权和写入顺序。
+- dd853440 的 CI 34/36 成功（含 reading-workspace、Android、四个主题），Pages 构建成功。
+  default 深度回归在清空搜索后、列表尚未返回时点击文章；失败 HTML 的筛选范围已是空搜索，列表仍为空。
+  元数据/时区测试现在先等目标文章出现，再注入拒绝写入，原断言与故障注入保持。
 
 ## 给下一位 Agent 的备注
 

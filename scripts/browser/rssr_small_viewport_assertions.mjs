@@ -1706,6 +1706,9 @@ async function checkReaderMetadataAndTime(client) {
     const archived = await readSourceCount();
     assertThat('marking unread in the list updates the count; search and archive filters do not change it',
       searched === '· 1' && archived === '· 1', {searched, archived});
+    // Source counts do not wait for the filtered article query. Clearing search
+    // and changing the archive filter may still be replacing its empty results.
+    await selectorExists(client, '#entry-card-2 [data-action="mark-read"]');
     // A flag write the server refuses (formerly a failing browser storage): the counts stay.
     await withFailedRequests(client, '*/api/v1/entries/2/read*',
       {status: 503, error: {code: 'unavailable', message: '服务器繁忙（测试）'}}, async () => {
