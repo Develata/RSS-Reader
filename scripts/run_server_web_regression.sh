@@ -35,13 +35,14 @@ node_bin="${NODE_BIN:-node}"
 viewport="360,800"
 preset=""
 directory_only="false"
+directory_scroll_only="false"
 long="false"
 server_bin=""
 fixture_bin=""
 static_dir=""
 
 usage() {
-  echo "Usage: $0 [--suite regression|theme-matrix|feed-smoke|acceptance] [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--chrome-bin BIN] [--viewport WIDTH,HEIGHT] [--preset PRESET] [--directory-only] [--long] [--server-bin BIN] [--fixture-bin BIN] [--static-dir DIR]" >&2
+  echo "Usage: $0 [--suite regression|theme-matrix|feed-smoke|acceptance] [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--chrome-bin BIN] [--viewport WIDTH,HEIGHT] [--preset PRESET] [--directory-only|--directory-scroll-only] [--long] [--server-bin BIN] [--fixture-bin BIN] [--static-dir DIR]" >&2
   exit 1
 }
 
@@ -57,6 +58,7 @@ while [[ $# -gt 0 ]]; do
     --viewport) viewport="${2:?missing viewport value}"; shift 2 ;;
     --preset) preset="${2:?missing preset value}"; shift 2 ;;
     --directory-only) directory_only="true"; shift ;;
+    --directory-scroll-only) directory_scroll_only="true"; shift ;;
     --long) long="true"; shift ;;
     --server-bin) server_bin="${2:?missing server bin value}"; shift 2 ;;
     --fixture-bin) fixture_bin="${2:?missing fixture bin value}"; shift 2 ;;
@@ -69,8 +71,8 @@ case "$suite" in
   regression|theme-matrix|feed-smoke|acceptance) ;;
   *) echo "Unknown suite '${suite}'" >&2; usage ;;
 esac
-if [[ "$suite" != regression && ( -n "$preset" || "$directory_only" == true ) ]]; then
-  echo "--preset and --directory-only apply to the regression suite only" >&2
+if [[ "$suite" != regression && ( -n "$preset" || "$directory_only" == true || "$directory_scroll_only" == true ) ]]; then
+  echo "--preset and directory options apply to the regression suite only" >&2
   exit 1
 fi
 if [[ "$suite" != acceptance && "$long" == true ]]; then
@@ -272,7 +274,7 @@ else
   driver_args+=(--suite "$suite" --width "$viewport_width" --height "$viewport_height" --dpr 3)
 fi
 if [[ "$suite" == regression ]]; then
-  driver_args+=(--preset "$preset" --directory-only "$directory_only")
+  driver_args+=(--preset "$preset" --directory-only "$directory_only" --directory-scroll-only "$directory_scroll_only")
 fi
 
 case "$suite" in
@@ -312,6 +314,7 @@ cat >"$summary_file" <<EOF
 - viewport：${viewport_line}
 - preset：${preset:-default}
 - directory-only：${directory_only}
+- directory-scroll-only：${directory_scroll_only}
 - 页面：${static_dir}
 - 服务器：${server_bin}
 - chrome：${chrome_bin}

@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkDirectoryContracts } from './directory_contract.mjs';
+import { checkDirectoryScroll } from './directory_scroll_contract.mjs';
 import { measureDirectory } from './directory_performance.mjs';
 
 import {
@@ -66,7 +67,7 @@ const preset = cli.get('--preset') ?? process.env.THEME_PRESET ?? '';
 // run adding and reading a subscription).
 const suite = cli.get('--suite') ?? 'regression';
 if (!['regression', 'theme-matrix', 'feed-smoke'].includes(suite)) throw new Error(`unknown suite ${suite}`);
-if (suite !== 'regression' && (cli.has('--native-target') || cli.get('--directory-only') === 'true' || cli.has('--directory-perf'))) {
+if (suite !== 'regression' && (cli.has('--native-target') || cli.get('--directory-only') === 'true' || cli.get('--directory-scroll-only') === 'true' || cli.has('--directory-perf'))) {
   throw new Error(`--suite ${suite} runs on the server only, without directory options`);
 }
 if (suite === 'theme-matrix' && preset) throw new Error('--suite theme-matrix runs every theme; --preset does not apply');
@@ -77,6 +78,7 @@ if (suite === 'theme-matrix' && preset) throw new Error('--suite theme-matrix ru
 // directory-contract --data-dir <the app's data directory> --feed-base <url>`).
 const nativeTarget = cli.get('--native-target');
 const directoryOnly = cli.get('--directory-only') === 'true';
+const directoryScrollOnly = cli.get('--directory-scroll-only') === 'true';
 if (cli.has('--native-target') && !nativeTarget.trim()) {
   throw new Error('--native-target must identify an existing Dioxus WebView');
 }
@@ -2187,14 +2189,17 @@ async function run() {
       capture: name => captureArtifact(client, name),
       manualScroll: () => beginManualScroll(client, 'entries'),
     };
-    if (nativeTarget && (directoryOnly || cli.has('--directory-perf'))) {
+    if (nativeTarget && (directoryOnly || directoryScrollOnly || cli.has('--directory-perf'))) {
       nativeEvidence = {targetId:page.id, browser:await client.send('Browser.getVersion'),
         window:await evaluate(client, '({url:location.href,userAgent:navigator.userAgent,width:innerWidth,height:innerHeight,dpr:devicePixelRatio})')};
     }
     if (cli.has('--directory-perf')) {
       await measureDirectory(client, directoryEnvironment, cli.get('--directory-perf'), artifactDir);
+    } else if (directoryScrollOnly) {
+      await checkDirectoryScroll(client, directoryEnvironment);
     } else if (directoryOnly) {
       await checkDirectoryContracts(client, directoryEnvironment);
+      if (!nativeTarget) await checkDirectoryScroll(client, directoryEnvironment);
     } else if (nativeTarget) {
       await checkNativeWindow(client, page);
     } else if (suite === 'theme-matrix') {
@@ -2231,6 +2236,7 @@ async function run() {
         await checkReadingPosition(client);
         await checkReaderMetadataAndTime(client);
         await checkDirectoryContracts(client, directoryEnvironment);
+        await checkDirectoryScroll(client, directoryEnvironment);
       }
     }
 
