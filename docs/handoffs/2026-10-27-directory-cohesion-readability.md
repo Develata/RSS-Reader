@@ -67,3 +67,9 @@
 - 自动化证据：`target/directory-cohesion-20261027/release-regression/acceptance.json`、`target/directory-cohesion-20261027/release-window/acceptance.json`；初次失败窗口回执在同目录的 `window/acceptance.json`。
 - 交互证据：`C:/Users/QQ/.codex/visualizations/2026/10/26/01a1779a-f271-7ec2-ab70-c1ef756f9ffb/directory-cohesion-desktop-geometry.json`、`directory-cohesion-desktop.png`、`directory-cohesion-mobile.png`。
 - 视觉比较基准为同证据目录的 `directory-right-desktop-geometry.json`；不要用旧 `directory-month-*` 内部类名作为新的主题契约，稳定接口继续用 `data-layout` / `data-slot`。
+
+## 同日后续处理
+
+上述 wasm-opt 未通过项已由[后续构建修复](2026-10-27-wasm-opt-release-build.md)关闭：
+明确使用 dx 0.7.9 和 `--debug-symbols false` 后，完整 `-Oz` 优化、打包及新产物的 172 项
+浏览器断言通过。前文保留本轮首次验收的历史事实，最终构建身份与边界见后续记录。

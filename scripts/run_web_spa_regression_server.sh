@@ -33,7 +33,7 @@ done
 if [[ "$skip_build" != "true" ]]; then
   echo "Building rssr-app web bundle (${profile})..."
   if [[ "$profile" == "release" ]]; then
-    dx build --platform web --package rssr-app --release --locked >/dev/null
+    dx build --platform web --package rssr-app --release --locked --debug-symbols false >/dev/null
   else
     dx build --platform web --package rssr-app --locked >/dev/null
   fi

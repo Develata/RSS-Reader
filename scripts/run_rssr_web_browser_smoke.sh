@@ -69,7 +69,7 @@ summary_file="$log_dir/summary.md"
 if [[ "$skip_build" != "true" ]]; then
   echo "Building rssr-app web bundle (${profile})..."
   if [[ "$profile" == "release" ]]; then
-    dx build --platform web --package rssr-app --release >/dev/null
+    dx build --platform web --package rssr-app --release --debug-symbols false >/dev/null
   else
     dx build --platform web --package rssr-app >/dev/null
   fi

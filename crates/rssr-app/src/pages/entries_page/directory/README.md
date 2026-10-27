@@ -32,7 +32,7 @@
 1. `cargo fmt --all --check`
 2. `cargo test -p rssr-app --locked directory::`
 3. `cargo clippy -p rssr-app --all-targets --locked -- -D warnings`
-4. `dx build --platform web --package rssr-app --release --locked`
+4. 使用与锁文件匹配的 dx 0.7.9：`dx build --platform web --package rssr-app --release --locked --debug-symbols false`。release 保留完整优化，省去会触发本机 Binaryen DWARF 写出异常的调试信息；不要仅凭 dx 退出 0 判断优化成功，见[构建验收说明](../../../../../../docs/testing/release-ui-runner.md#web-release-构建约定)。
 5. 用 `PUBLIC_DIR=target/dx/rssr-app/release/web/public` 指向刚构建的产物，依次执行已有脚本 `scripts/browser/rssr_directory_offline_regression.cjs` 和 `scripts/browser/rssr_directory_window_acceptance.cjs`。脚本使用隔离无头 Chrome 和离线样例；依赖解析按本机已有 Playwright 安装设置。
 
 身份／分页规则修改需覆盖过期 ID、越界引用、页边界；视图／样式修改需覆盖时间与来源分组、手机浮层、鼠标／键盘展开。窗口路径修改还需检查焦点、跨页和收起后恢复；专项入口见下列契约。
