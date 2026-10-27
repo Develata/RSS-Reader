@@ -65,7 +65,7 @@ Web 装配与存储边界核对：2026-10-22（v0.2 C4c）。
 - SQLite / native 实现
 - browser persisted-state 实现
 - parser / fetch / WebDAV / OPML / JSON codec
-- 原生/服务器单库 `library.sqlite3`，正式 Web 的 `HttpBackend` 传输，以及仅演示使用的 `BrowserStore` 分片、Web Locks 与版本化提交
+- 原生 / 服务器单库 `library.sqlite3`、正式 Web 的 `HttpBackend` 传输，以及 Pages 演示复用共享 SQL 的内存 SQLite；不保留 BrowserStore 持久化路径
 
 这层实现存储、网络、解析等端口；业务结果和流程规则仍由 application 定义。
 

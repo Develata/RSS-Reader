@@ -147,8 +147,11 @@ async function responsive(page) {
   assert.equal(await page.locator('#source-filter-dialog').isVisible(), true);
   await page.setViewportSize({ width: 1536, height: 864 });
   await page.setViewportSize({ width: 360, height: 800 });
+  // setViewportSize acknowledges emulation before resize callbacks/layout finish.
+  // The anchored dialog repositions on resize; observe the presented frame.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const box = await page.locator('#source-filter-dialog').boundingBox();
-  assert.ok(box.x >= 0 && box.x + box.width <= 361 && box.y >= 0 && box.y + box.height <= 801);
+  assert.ok(box.x >= 0 && box.x + box.width <= 361 && box.y >= 0 && box.y + box.height <= 801, JSON.stringify(box));
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#source-filter-dialog').count(), 0);
 }
@@ -451,7 +454,15 @@ if (require.main === module) (async () => {
     await fixture.install(page.context(), require('node:path').resolve(__dirname,'../..'));
     await seed(page, fixture.origin);
     for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition })) {
-      await run(page); console.log(`PASS ${name}`);
+      try { await run(page); console.log(`PASS ${name}`); }
+      catch (error) {
+        const fs = require('node:fs/promises'), path = require('node:path');
+        const output = path.resolve(process.env.ARTIFACT_DIR || 'target/workspace-server-regression');
+        await fs.mkdir(output, {recursive:true});
+        await fs.writeFile(path.join(output, `failure-${name}.html`), await page.content());
+        await page.screenshot({path:path.join(output, `failure-${name}.png`)});
+        throw error;
+      }
     }
     assert.deepEqual(errors, []);
     console.log('PASS no page errors');

@@ -3,11 +3,11 @@
 - 日期：2026-10-27
 - 作者 / Agent：Codex
 - 分支：`codex/integrate-reading-workspace-20261027`
-- 当前 HEAD：`6a605dc856d63155c7514bb653cc34fb2d907ab1`；本记录与自然目录测试适配作为后续提交保存
+- 当前 HEAD：`b768a01760378c4a442463c30714287c0548d8cd`；本记录随 CI 测试时序修正保存
 - main：`48bcaf69fd8d00050847827a69f7cc15a2525b17`
 - 相关 commit：#24 集成 `bfd2f3b6`；#32 语义集成 `31b541b2`，合并当前 main `6a605dc8`
 - 相关 tag / release：N/A
-- 状态：`draft`，最终远端门禁以 PR #32 当前 head 的检查结果为准。
+- 状态：`validated`（本地）；最终远端门禁以 PR #32 当前 head 的检查结果为准。
 
 ## 工作摘要
 
@@ -57,9 +57,9 @@
   `-release-final.log` 明确执行 Binaryen 129 wasm-opt，带 `--strip-debug`，无优化器错误。
 - release-ui 单测 3 项通过；黑盒 27 项中 24 通过、2 平台跳过、1 废弃参数失败。
   移除 `--no-serve` 后失败项单独通过，验证优化器失败阻断及同日志目录成功重跑。
-- Chrome workspace：13 组通过（workspace-3）；lifecycle、window acceptance、window review、transport 均通过（各 -3 证据）。
+- Chrome workspace：13 组通过（workspace-final）；lifecycle、window acceptance、window review、transport 均通过（各 -3 证据）。
 - Chrome directory boundaries：11 组通过（directory-boundaries-5），含筛选末页返回与过期消息。
-- 现有服务器 CDP 回归：regression-4 前 395 条通过，末项自然目录仍按旧挂载 / 日期 ID 判断；适配后单独重跑自然目录 23 条全通过（directory-scroll-5），控制台无错误。远端将重跑完整组合。
+- 现有服务器完整 CDP 回归：418 条全通过（regression-final），控制台无错误。此前自然目录旧挂载 / 日期 ID 断言已适配，单独 23 条同样通过（directory-scroll-5）。
 - Node API traffic / server acceptance：10 项通过；相关脚本语法检查通过。
 - 原生 seeder：真实 Rust 工具创建独立 library.sqlite3、100 篇 / 6 来源、24 长正文及 RSS，见 reading-seeder-2。
 - 初次高并发构建遇 Windows 分页内存不足，限制并发后通过；没有将环境失败记作通过。
@@ -74,7 +74,7 @@
 - 新增归档 schema 为向前迁移，不承诺旧程序打开升级后的库。
 - 本轮没有 Android 实机或桌面全流程手工验收，存储 / 浏览器测试不等价于实机验收。
 - 本轮未修改 Penpot；历史 handoff 的旧构建结果不能当作本次集成验收。
-- 远端测试及合并状态须按 PR #32 最新 head 复核。
+- b768a017 的 CI 已通过 33 项（含 Android 打包与四个主题）；reading-workspace 在连续缩放后立即测量弹窗位置失败。补充两帧布局等待并保持原有严格边界，增加失败 HTML / 截图；本地 13 组重跑通过。最终远端测试及合并状态须按 PR #32 最新 head 复核。
 
 ## 给下一位 Agent 的备注
 
