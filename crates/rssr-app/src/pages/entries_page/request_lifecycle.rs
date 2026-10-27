@@ -1,10 +1,8 @@
 //! Page-local initialization/query rules, independent of the UI executor.
 //!
 //! The adapter owns task lifetimes and publishes the returned intents. This model
-//! owns request identities and the pending preference choice; revisions and article
-//! data stay in page state. Bootstrap and queries have separate generations.
-
-use std::{cell::RefCell, rc::Rc};
+//! owns read request identities; revisions and article data stay in page state.
+//! Bootstrap and queries have separate generations. Preference writes live in session/workspace.
 
 use super::{intent::EntriesPageIntent, state::EntriesPageState};
 
@@ -12,9 +10,6 @@ use super::{intent::EntriesPageIntent, state::EntriesPageState};
 pub(super) struct EntriesRequestLifecycle {
     bootstrap_generation: u64,
     query_generation: u64,
-    /// The app-owned writer retains this slot after the page's signals are dropped.
-    /// Only the latest queued choice matters; never retain the article/page snapshot.
-    pub(super) workspace_wanted: Rc<RefCell<Option<rssr_domain::EntriesWorkspaceState>>>,
 }
 
 #[derive(Debug, Clone, Copy)]

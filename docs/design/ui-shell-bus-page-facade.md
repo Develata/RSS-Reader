@@ -99,7 +99,7 @@ Web 装配与存储边界核对：2026-10-22（v0.2 C4c）。
 
 页面 session 还负责自己发起的异步结果归属：Entries 只接纳最新查询，Reader 按文章身份及加载代际隔离迟到结果，Settings 保存区分提交快照与后续草稿。这些均为 UI 生命周期状态，不下沉到 domain / application，也不让 CSS 决定业务命令。
 
-Entries 的初始化/查询代次、接纳/重查和返回页码顺序由页面内普通 Rust 模块 `request_lifecycle.rs` 决定；session 保留 Dioxus 任务作用域、命令执行及状态发布。具体边界见[原生界面前置模块](./native-ui-preparation.md)，单条/批量写入与偏好保存的编排仍由现有 session 承接。
+Entries 的初始化/查询代次、接纳/重查和返回页码顺序由页面内普通 Rust 模块 `request_lifecycle.rs` 决定；session 保留 Dioxus 任务作用域、命令执行及状态发布。会话内部由 `session/queries.rs`、`session/workspace.rs`、`session/articles.rs` 分别负责读取、偏好保存、文章写入；保存队列与查询代次独立，`write_feedback.rs` 只投影文案。页面通过一个装配 hook 获取会话，偏好以 `EntriesWorkspaceState` 整体传至 Backend。维护入口和生命周期约束见[会话模块说明](../../crates/rssr-app/src/pages/entries_page/session/README.md)，普通 Rust 请求规则见[原生界面前置模块](./native-ui-preparation.md)。
 
 不再负责：
 
@@ -171,8 +171,8 @@ Entries 的初始化/查询代次、接纳/重查和返回页码顺序由页面�
 `runtime` 是模块，不存在名为 `UiRuntime` 的结构体。入口 `execute_ui_command` 负责：
 
 - 接收 `UiCommand`
-- 调用 `AppServices`
-- 访问 application 用例及 host capability（不直接拼装仓储或平台 I/O）
+- 经 `runtime/backend.rs` 获取 `Arc<dyn Backend>`，由装配层提供本地或 HTTP 实现
+- 调用 Backend 用例接口（不直接拼装仓储、平台 I/O 或 application 服务）
 - 产出 `Vec<UiIntent>`
 
 当前实现见：

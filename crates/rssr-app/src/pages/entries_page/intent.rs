@@ -99,15 +99,3 @@ impl EntriesPageIntent {
         }
     }
 }
-
-/// The same receipt is shown on the originating page or by the shell after navigation.
-pub(super) fn selection_applied_message(
-    action: rssr_domain::EntryBatchAction,
-    count: u64,
-) -> String {
-    let verb = match action {
-        rssr_domain::EntryBatchAction::MarkRead => "标为已读",
-        rssr_domain::EntryBatchAction::Archive => "归档",
-    };
-    format!("已{verb} {count} 篇所选文章。")
-}

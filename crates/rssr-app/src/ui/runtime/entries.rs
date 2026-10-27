@@ -6,7 +6,6 @@ use crate::{
     },
 };
 use rssr_application::{EntriesBootstrapInput, EntriesBootstrapOutcome, EntryFlagOutcome};
-use rssr_domain::EntriesWorkspaceState;
 
 pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
     match command {
@@ -76,22 +75,11 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                 async { backend().await?.set_entry_starred(entry_id, starred).await }.await;
             entry_flag_intents(Flag::Starred, entry_id, &entry_title, result)
         }
-        EntriesCommand::SaveBrowsingPreferences {
-            grouping_mode,
-            show_archived,
-            read_filter,
-            starred_filter,
-            selected_feed_urls,
-        } => {
-            let next = EntriesWorkspaceState {
-                grouping_mode,
-                show_archived,
-                read_filter,
-                starred_filter,
-                selected_feed_urls,
-            };
-            let saved = next.clone();
-            match async { backend().await?.save_entries_workspace_if_changed(next).await }.await {
+        EntriesCommand::SaveBrowsingPreferences { workspace } => {
+            let saved = workspace.clone();
+            match async { backend().await?.save_entries_workspace_if_changed(workspace).await }
+                .await
+            {
                 Ok(true) | Ok(false) => {
                     entries_intents(vec![EntriesPageIntent::WorkspaceSaved(saved)])
                 }
@@ -177,7 +165,7 @@ fn entry_flag_intents(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rssr_domain::UserSettings;
+    use rssr_domain::{EntriesWorkspaceState, UserSettings};
 
     #[test]
     fn bootstrap_opens_query_gate_after_settings_workspace_and_feeds() {

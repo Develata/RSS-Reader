@@ -75,7 +75,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             for id in ids {
                 selected.remove(&id);
             }
-            let message = super::intent::selection_applied_message(action, count);
+            let message = super::write_feedback::selection_applied_message(action, count);
             state.bulk_notice = Some(message.clone());
             state.status = message;
             state.status_tone = "success".into();
