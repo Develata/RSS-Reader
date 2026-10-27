@@ -99,6 +99,8 @@
 
 页面 session 还负责自己发起的异步结果归属：Entries 只接纳最新查询，Reader 按文章身份及加载代际隔离迟到结果，Settings 保存区分提交快照与后续草稿。这些均为 UI 生命周期状态，不下沉到 domain / application，也不让 CSS 决定业务命令。
 
+Entries 的初始化/查询代次、接纳/重查和返回页码顺序由页面内普通 Rust 模块 `request_lifecycle.rs` 决定；session 保留 Dioxus 任务作用域、命令执行及状态发布。具体边界见[原生界面前置模块](./native-ui-preparation.md)，单条/批量写入与偏好保存的编排仍由现有 session 承接。
+
 不再负责：
 
 - 直接拉 `AppServices::shared()`

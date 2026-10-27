@@ -362,12 +362,15 @@ async function preferenceOrdering(page) {
       afterClicks = await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed');
       assert.equal(afterClicks, 'false', 'the visible filter must already reflect the final All choice');
     });
-    // Wait for a quiet interval, including continuations that enqueue the next
-    // read/write after the previous storage lock has been released.
+    // A quiet lock interval alone can precede the next save continuation. Require
+    // the final committed preference as well, before unloading its page tasks.
     await page.evaluate(() => { window.__workspaceStorageQuietSince = 0; });
     await page.waitForFunction(async () => {
       const locks = await navigator.locks.query();
-      if (locks.held.length || locks.pending.length) window.__workspaceStorageQuietSince = 0;
+      const key = window.__rssrTestStateKey('rssr-web-app-state-v2');
+      const workspace = JSON.parse(localStorage.getItem(key))?.entries_workspace;
+      const saved = workspace?.read_filter === 'all' && workspace.grouping_mode === 'time';
+      if (!saved || locks.held.length || locks.pending.length) window.__workspaceStorageQuietSince = 0;
       else if (!window.__workspaceStorageQuietSince) window.__workspaceStorageQuietSince = performance.now();
       return window.__workspaceStorageQuietSince && performance.now() - window.__workspaceStorageQuietSince > 150;
     });

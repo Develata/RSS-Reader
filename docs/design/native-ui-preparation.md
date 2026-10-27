@@ -12,8 +12,19 @@
 | `pages/entries_page/directory/controller.rs` | 上下文重置、活动路径、展开集合、跟随/手动、消息校验、回复和导航请求 | presenter 身份、Dioxus signal、事件桥接、渲染确认、滚动执行 |
 | `pages/entries_page/directory/window.rs` | 可变行高缓存、可见范围、占位高度、测量变化时的锚点补偿、未挂载目标与焦点保留 | 当前挂载行与视口测量、同步键盘默认动作、提交确认后的滚动/聚焦 |
 | `hooks/reader_shortcut_policy.rs` | 阅读快捷键、修饰键/输入法排除 | 将平台键盘输入映射为普通 Rust 值，执行导航和 session 命令 |
+| `pages/entries_page/request_lifecycle.rs` | 初始化/查询的独立代次、偏好就绪准入、旧结果过滤、写入后重查决策、列表到达后的返回页码顺序 | 页面任务作用域、命令执行、位置存储读取、signal 发布与既有查询触发 effect |
 
 这些模块不直接查询数据库或网络。业务动作继续走 facade/session → `UiCommand` → runtime → application/host。前端交互状态不下沉到 application/domain，不建立另一份文章数据或第二套业务状态。
+
+## 文章工作区请求生命周期的使用约束
+
+- `EntriesRequestLifecycle` 只持有初始化与查询两种代次，二者互不失效。页面状态、写入 revision 和完整文章投影继续由既有 `EntriesPageState` 持有；每次请求只捕获少量标量，不克隆列表。
+- 初始化开始时根据当前偏好状态决定是否加载偏好：Pending / Unavailable 加载，Loaded 保留。旧初始化的成功和失败都被拒绝；所有来源摘要仍按原命令加载。
+- Pending 不准入文章查询，不轮询 Future；Unavailable 允许读取文章，保留既有错误提示和禁止保存回退偏好的规则。偏好写入策略本轮仍在 session。
+- 查询完成先校验查询身份，再比较 `flags_revision`。旧身份直接丢弃；当前身份若遇到已完成写入，则在尚无新 `reload_revision` 时请求重查，否则仅丢弃。单独增加 reload revision 不等于使查询身份失效。
+- 接纳后按原顺序输出 intent，仅在 `SetEntries` 后插入捕获的返回页码，由现有 reducer 对新结果集约束页码。失败结果、被拒绝结果都不能恢复页码；被拒绝的结果载荷不遍历、不复制。
+- Dioxus 适配器以非订阅读取获取当前事实，先同步取得请求身份，再启动原页面作用域的任务。查询完成时的借用在发布前释放；页面销毁继续取消未完成任务。初始化和查询状态不进入 presenter 输入，也不新增自动查询循环。
+- 本轮不迁移单条/批量写入准入、偏好写入编排、归档时钟或页面查询 effect。保留 facade/session 和 `UiCommand` 边界，不建立通用页面运行时。
 
 ## 目录控制器的使用约束
 
@@ -55,6 +66,7 @@ DOM 几何测量、原生对话框焦点/模态、同步阻止链接或空格默
 ## 验证入口
 
 - 纯状态与策略：`cargo test -p rssr-app --locked`。
+- 初始化/查询适配：`scripts/browser/rssr_entries_lifecycle_acceptance.cjs`，通过离线 fixture 覆盖选择、筛选、写入失败/重试、偏好重开、查询稳定性，以及桌面/小视口搜索、刷新和阅读返回。基线和候选分别指定 `ARTIFACT_DIR`，构建目录可由 `PUBLIC_DIR` 指定。
 - 目录实际行为：`scripts/browser/rssr_small_viewport_assertions.mjs --directory-only true`，包含日期/来源/文章层级、跨页、手动/跟随、显隐和选择保持。
 - 不启动预览服务的回归：先构建 Web release 包，再运行 `scripts/browser/rssr_directory_offline_regression.cjs` 和 `rssr_directory_window_acceptance.cjs`。Playwright 在隔离无头 Chrome 内提供构建文件与测试数据；后一脚本覆盖 600 篇单分支、变高行、焦点、跨页、显隐恢复及损坏测量通道。`rssr_directory_transport_acceptance.cjs --offline-fixture true --artifact-dir <path>` 同样可离线回归旧目录通道。
 - `scripts/browser/rssr_directory_window_boundaries.cjs` 延迟真实 Rust/WASM 回复，覆盖筛选/翻页/分组/返回后的旧焦点、被取代的跨页定位，以及来源筛选后末页正文返回的位置恢复。`rssr_directory_window_review.cjs` 补充手动浏览与自动跟随交错、隐藏时变宽和批量操作。

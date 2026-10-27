@@ -3,7 +3,8 @@ use std::future::Future;
 use dioxus::prelude::*;
 
 use super::{
-    intent::EntriesPageIntent, reducer::dispatch_entries_page_intent, state::EntriesPageState,
+    intent::EntriesPageIntent, reducer::dispatch_entries_page_intent,
+    request_lifecycle::EntriesRequestLifecycle, state::EntriesPageState,
 };
 use crate::ui::{EntriesCommand, UiCommand, UiIntent, execute_ui_command};
 use rssr_domain::{EntriesWorkspaceState, EntryQuery};
@@ -12,8 +13,7 @@ use rssr_domain::{EntriesWorkspaceState, EntryQuery};
 pub(crate) struct EntriesPageSession {
     feed_id: Option<i64>,
     state: Signal<EntriesPageState>,
-    query_generation: Signal<u64>,
-    bootstrap_generation: Signal<u64>,
+    requests: Signal<EntriesRequestLifecycle>,
 }
 
 impl EntriesPageSession {
@@ -52,10 +52,9 @@ impl EntriesPageSession {
     pub(crate) fn new(
         feed_id: Option<i64>,
         state: Signal<EntriesPageState>,
-        query_generation: Signal<u64>,
-        bootstrap_generation: Signal<u64>,
+        requests: Signal<EntriesRequestLifecycle>,
     ) -> Self {
-        Self { feed_id, state, query_generation, bootstrap_generation }
+        Self { feed_id, state, requests }
     }
 
     pub(crate) fn snapshot(self) -> EntriesPageState {
@@ -75,38 +74,33 @@ impl EntriesPageSession {
     }
 
     pub(crate) fn bootstrap(self) {
-        self.spawn_bootstrap(execute_ui_command(self.bootstrap_command()));
+        self.spawn_bootstrap(|load_preferences| {
+            execute_ui_command(UiCommand::Entries(EntriesCommand::Bootstrap {
+                feed_id: self.feed_id,
+                load_preferences,
+                load_feeds: true,
+            }))
+        });
     }
 
-    fn spawn_bootstrap(mut self, bootstrap: impl Future<Output = Vec<UiIntent>> + 'static) {
-        // Refresh may start a new bootstrap while an older initialization is
-        // still waiting. Its stale success or failure must not replace the newer
-        // preferences/source map. Queries use a separate generation because
-        // both operations are allowed to run concurrently after initialization.
-        let generation = self.bootstrap_generation.with_mut(|generation| {
-            *generation = generation.wrapping_add(1);
-            *generation
-        });
+    fn spawn_bootstrap<F: Future<Output = Vec<UiIntent>> + 'static>(
+        mut self,
+        bootstrap: impl FnOnce(bool) -> F,
+    ) {
+        // Peek: initialization must not subscribe to its own readiness changes.
+        let request = self
+            .state
+            .with_peek(|state| self.requests.with_mut(|requests| requests.begin_bootstrap(state)));
+        let bootstrap = bootstrap(request.load_preferences);
         spawn(async move {
             let intents = bootstrap.await;
-            if *self.bootstrap_generation.peek() != generation {
+            if !self.requests.peek().accepts_bootstrap(request) {
                 return;
             }
             for intent in intents.into_iter().filter_map(UiIntent::into_entries_page_intent) {
                 self.dispatch(intent);
             }
         });
-    }
-
-    fn bootstrap_command(self) -> UiCommand {
-        // Reading readiness must not subscribe the bootstrap effect to its own
-        // completion and start a second feed-summary query.
-        let load_preferences = !self.state.peek().preferences_load.is_loaded();
-        UiCommand::Entries(EntriesCommand::Bootstrap {
-            feed_id: self.feed_id,
-            load_preferences,
-            load_feeds: true,
-        })
     }
 
     pub(crate) fn load_entries_query(self, query: EntryQuery) {
@@ -130,38 +124,20 @@ impl EntriesPageSession {
         query: impl Future<Output = Vec<UiIntent>> + 'static,
         return_page: Option<u32>,
     ) {
-        if !self.state.peek().preferences_load.can_load_entries() {
-            return;
-        }
-        // Query and refresh changes can overlap: a slower earlier query must not replace
-        // the latest list or its status. This token belongs to the page, not the global
-        // refresh task; other commands (including flag writes) keep their own lifecycle.
-        let generation = self.query_generation.with_mut(|generation| {
-            *generation = generation.wrapping_add(1);
-            *generation
+        let request = self.state.with_peek(|state| {
+            self.requests.with_mut(|requests| requests.begin_query(state, return_page))
         });
-        let (flags_revision, reload_revision) =
-            self.state.with_peek(|state| (state.flags_revision, state.reload_revision));
+        let Some(request) = request else {
+            return;
+        };
         spawn(async move {
             let intents = query.await;
-            if *self.query_generation.peek() != generation {
-                return;
-            }
-            if self.state.peek().flags_revision != flags_revision {
-                // This read may have observed storage before a completed flag or
-                // batch write. Retry the current scope instead of restoring old
-                // flags, reinserting filtered rows, or publishing a stale error.
-                if self.state.peek().reload_revision == reload_revision {
-                    self.dispatch(EntriesPageIntent::ReloadEntries);
-                }
-                return;
-            }
-            for intent in intents.into_iter().filter_map(UiIntent::into_entries_page_intent) {
-                let loaded = matches!(&intent, EntriesPageIntent::SetEntries { .. });
+            let completion =
+                self.state.with_peek(|state| self.requests.peek().complete_query(request, state));
+            for intent in completion
+                .intents(intents.into_iter().filter_map(UiIntent::into_entries_page_intent))
+            {
                 self.dispatch(intent);
-                if loaded && let Some(page) = return_page {
-                    self.dispatch(EntriesPageIntent::SetCurrentPage(page));
-                }
             }
         });
     }
@@ -329,8 +305,7 @@ mod tests {
             let session = EntriesPageSession::new(
                 None,
                 Signal::new(EntriesPageState::new()),
-                Signal::new(0),
-                Signal::new(0),
+                Signal::new(EntriesRequestLifecycle::default()),
             );
             session.dispatch(EntriesPageIntent::PreferencesLoaded);
             for read_filter in [ReadFilter::UnreadOnly, ReadFilter::All] {
@@ -360,8 +335,7 @@ mod tests {
                 let session = EntriesPageSession::new(
                     None,
                     Signal::new(EntriesPageState::new()),
-                    Signal::new(0),
-                    Signal::new(0),
+                    Signal::new(EntriesRequestLifecycle::default()),
                 );
                 for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
                     session.dispatch(intent);
@@ -432,8 +406,7 @@ mod tests {
                 let session = EntriesPageSession::new(
                     None,
                     Signal::new(EntriesPageState::new()),
-                    Signal::new(0),
-                    Signal::new(0),
+                    Signal::new(EntriesRequestLifecycle::default()),
                 );
                 session.dispatch(EntriesPageIntent::PreferencesLoaded);
                 if unread_only {
@@ -487,8 +460,7 @@ mod tests {
             let session = EntriesPageSession::new(
                 None,
                 Signal::new(EntriesPageState::new()),
-                Signal::new(0),
-                Signal::new(0),
+                Signal::new(EntriesRequestLifecycle::default()),
             );
             session.dispatch(EntriesPageIntent::PreferencesLoaded);
             session
@@ -523,8 +495,11 @@ mod tests {
         let session = dom.in_scope(ScopeId::APP, || {
             let mut state = EntriesPageState::new();
             state.entries_page_size = 1;
-            let session =
-                EntriesPageSession::new(None, Signal::new(state), Signal::new(0), Signal::new(0));
+            let session = EntriesPageSession::new(
+                None,
+                Signal::new(state),
+                Signal::new(EntriesRequestLifecycle::default()),
+            );
             session.dispatch(EntriesPageIntent::PreferencesLoaded);
             session.spawn_entries_query_with_return(
                 async {
@@ -567,8 +542,7 @@ mod tests {
             EntriesPageSession::new(
                 None,
                 Signal::new(EntriesPageState::new()),
-                Signal::new(0),
-                Signal::new(0),
+                Signal::new(EntriesRequestLifecycle::default()),
             )
         });
         let prepare = [
@@ -628,16 +602,15 @@ mod tests {
             let session = EntriesPageSession::new(
                 None,
                 Signal::new(EntriesPageState::new()),
-                Signal::new(0),
-                Signal::new(0),
+                Signal::new(EntriesRequestLifecycle::default()),
             );
             session
                 .dispatch(EntriesPageIntent::PreferencesUnavailable("broken preferences".into()));
             assert!(!session.can_save_browsing_preferences(true));
-            assert!(matches!(
-                session.bootstrap_command(),
-                UiCommand::Entries(EntriesCommand::Bootstrap { load_preferences: true, .. })
-            ));
+            session.spawn_bootstrap(|load_preferences| {
+                assert!(load_preferences, "unavailable preferences are retried");
+                async { Vec::new() }
+            });
             session.spawn_entries_query(async { loaded(1) });
             session
         });
@@ -654,14 +627,10 @@ mod tests {
             // warning even when no further SetEntries intent is necessary.
             assert_eq!(session.snapshot().status_tone, "info");
             assert_eq!(session.snapshot().status, "共 1 篇文章。");
-            assert!(matches!(
-                session.bootstrap_command(),
-                UiCommand::Entries(EntriesCommand::Bootstrap {
-                    load_preferences: false,
-                    load_feeds: true,
-                    ..
-                })
-            ));
+            session.spawn_bootstrap(|load_preferences| {
+                assert!(!load_preferences, "loaded preferences are retained");
+                async { Vec::new() }
+            });
             session.spawn_entries_query(async { loaded(2) });
         });
         dom.render_immediate_to_vec();
@@ -709,11 +678,10 @@ mod tests {
             let session = EntriesPageSession::new(
                 None,
                 Signal::new(EntriesPageState::new()),
-                Signal::new(0),
-                Signal::new(0),
+                Signal::new(EntriesRequestLifecycle::default()),
             );
-            session.spawn_bootstrap(async { older_receiver.await.expect("older bootstrap") });
-            session.spawn_bootstrap(async { latest_receiver.await.expect("latest bootstrap") });
+            session.spawn_bootstrap(|_| async { older_receiver.await.expect("older bootstrap") });
+            session.spawn_bootstrap(|_| async { latest_receiver.await.expect("latest bootstrap") });
             session
         });
         dom.render_immediate_to_vec();
@@ -753,12 +721,11 @@ mod tests {
             let session = EntriesPageSession::new(
                 None,
                 Signal::new(EntriesPageState::new()),
-                Signal::new(0),
-                Signal::new(0),
+                Signal::new(EntriesRequestLifecycle::default()),
             );
             session.dispatch(EntriesPageIntent::PreferencesLoaded);
-            session.spawn_bootstrap(async { bootstrap_loaded(1, 100) });
-            session.spawn_bootstrap(async { bootstrap_receiver.await.expect("bootstrap") });
+            session.spawn_bootstrap(|_| async { bootstrap_loaded(1, 100) });
+            session.spawn_bootstrap(|_| async { bootstrap_receiver.await.expect("bootstrap") });
             session.spawn_entries_query(async { query_receiver.await.expect("query") });
             session
         });
@@ -773,5 +740,59 @@ mod tests {
             assert_eq!(state.feeds[0].id, 7);
             assert_eq!(state.entries[0].id, 2);
         });
+    }
+
+    #[test]
+    fn delayed_query_does_not_duplicate_a_bulk_reload_or_restore_old_rows() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let (sender, receiver) = oneshot::channel();
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = EntriesPageSession::new(
+                None,
+                Signal::new(EntriesPageState::new()),
+                Signal::new(EntriesRequestLifecycle::default()),
+            );
+            session.dispatch(EntriesPageIntent::PreferencesLoaded);
+            for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                session.dispatch(intent);
+            }
+            session.spawn_entries_query_with_return(async { receiver.await.unwrap() }, Some(9));
+            session
+        });
+        dom.render_immediate_to_vec();
+        let before = dom.in_scope(ScopeId::APP, || {
+            session.dispatch(EntriesPageIntent::SelectionApplied {
+                ids: vec![1],
+                action: rssr_domain::EntryBatchAction::Archive,
+                count: 1,
+            });
+            session.snapshot()
+        });
+        sender.send(loaded(1)).unwrap();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || assert_eq!(session.snapshot(), before));
+    }
+
+    #[test]
+    fn page_disposal_cancels_pending_bootstrap_and_query_tasks() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let (bootstrap_sender, bootstrap_receiver) = oneshot::channel();
+        let (query_sender, query_receiver) = oneshot::channel();
+        dom.in_scope(ScopeId::APP, || {
+            let session = EntriesPageSession::new(
+                None,
+                Signal::new(EntriesPageState::new()),
+                Signal::new(EntriesRequestLifecycle::default()),
+            );
+            session.dispatch(EntriesPageIntent::PreferencesLoaded);
+            session.spawn_bootstrap(|_| async { bootstrap_receiver.await.unwrap() });
+            session.spawn_entries_query(async { query_receiver.await.unwrap() });
+        });
+        dom.render_immediate_to_vec();
+        drop(dom);
+        assert!(bootstrap_sender.send(bootstrap_loaded(7, 50)).is_err());
+        assert!(query_sender.send(loaded(1)).is_err());
     }
 }

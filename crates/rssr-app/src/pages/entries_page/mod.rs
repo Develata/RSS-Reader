@@ -12,6 +12,7 @@ pub(crate) mod intent;
 mod presenter;
 mod pull_refresh;
 mod reducer;
+mod request_lifecycle;
 mod session;
 mod state;
 
@@ -239,9 +240,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
 
 fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> EntriesPageFacade {
     let state = use_signal(EntriesPageState::new);
-    let query_generation = use_signal(|| 0);
-    let bootstrap_generation = use_signal(|| 0);
-    let session = EntriesPageSession::new(feed_id, state, query_generation, bootstrap_generation);
+    let requests = use_signal(request_lifecycle::EntriesRequestLifecycle::default);
+    let session = EntriesPageSession::new(feed_id, state, requests);
     let state_snapshot = Arc::new(session.snapshot());
     // memo 链：先把状态收窄成 presenter 真正依赖的投影，再由它推导 presenter。
     //
