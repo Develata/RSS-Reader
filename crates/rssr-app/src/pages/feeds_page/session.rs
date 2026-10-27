@@ -114,8 +114,15 @@ impl FeedsPageSession {
                         FeedsCommand::ImportConfig { .. } | FeedsCommand::SaveEdit { .. }
                     )
                 );
+            let workspace_order =
+                matches!(command, UiCommand::Feeds(FeedsCommand::SaveEdit { .. }))
+                    .then(|| self.shell.workspace_write_order());
             let task = execute(command);
             let completion = async move {
+                let _workspace_order = match workspace_order {
+                    Some(order) => Some(order.lock_owned().await),
+                    None => None,
+                };
                 let intents = task.await;
                 // Every page re-reads what the job or the import may have changed, including a
                 // settings page opened meanwhile (review C4B-B-03).

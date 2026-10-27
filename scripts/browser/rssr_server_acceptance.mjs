@@ -200,7 +200,8 @@ const staleBuild = (page) => page.faults.add({
 });
 
 const card = (id) => `li[data-layout="entry-card"][data-position-entry="${id}"]`;
-const cardMeta = (page, id) => evaluate(page.client, `document.querySelector('${card(id)} [data-slot="entry-card-meta"]')?.textContent ?? ''`);
+// Reading/starred state lives on the card and its actions; metadata only contains source/date.
+const cardRead = (page, id) => evaluate(page.client, `document.querySelector('${card(id)}')?.dataset.read`);
 
 /// Activates a CDP target (the others in its window become hidden).
 const activate = (targetId) => browser.send('Target.activateTarget', { targetId });
@@ -305,7 +306,7 @@ define('unknown-write-then-reread', {}, async (s) => {
   const afterWrite = main.traffic.since(mark).findIndex((r) => r.method === 'PUT');
   s.check('the page reread (read only) after it', main.traffic.since(mark).slice(afterWrite + 1)
     .some((r) => r.method === 'GET' && r.path === '/api/v1/entries'), main.traffic.log(mark));
-  s.check('the reread shows the stored state', (await cardMeta(main, 2)).includes('已读'), await cardMeta(main, 2));
+  s.check('the reread shows the stored state', await cardRead(main, 2) === 'true', await cardRead(main, 2));
   const shown = await banner(main, BANNER.entries);
   s.check('no success receipt: the outcome stays unknown', shown.state === 'unknown' && !shown.text.includes('已将'), shown);
 });
@@ -494,7 +495,7 @@ define('reread-triggers', {}, async (s) => {
   await triggerAll(main);
   await checkReread(s, main, '/entries: focus, visible and online together', mark,
     ['/api/v1/entries/bootstrap', '/api/v1/entries', '/api/v1/settings']);
-  s.check('/entries: the reread shows what another session changed meanwhile', (await cardMeta(main, 2)).includes('已读'), await cardMeta(main, 2));
+  s.check('/entries: the reread shows what another session changed meanwhile', await cardRead(main, 2) === 'true', await cardRead(main, 2));
   for (const [route, marker, reads] of [
     ['/feeds', FEEDS, ['/api/v1/feeds', '/api/v1/settings']],
     ['/settings', SETTINGS, ['/api/v1/settings']],
@@ -519,14 +520,14 @@ define('reread-triggers', {}, async (s) => {
   await activate(main.target.id);
   await waitFor(main.client, '!document.hidden');
   await checkReread(s, main, '/entries: the tab hidden and shown (visible and focus)', mark, ['/api/v1/entries/bootstrap', '/api/v1/entries']);
-  s.check('/entries: shown again, the page has the change', (await cardMeta(main, 2)).includes('未读'), await cardMeta(main, 2));
+  s.check('/entries: shown again, the page has the change', await cardRead(main, 2) === 'false', await cardRead(main, 2));
   await elsewhereSetRead(2, true);
   mark = main.traffic.mark();
   await main.client.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   await sleep(300);
   await main.client.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   await checkReread(s, main, '/entries: offline and online again', mark, ['/api/v1/entries/bootstrap', '/api/v1/entries']);
-  s.check('/entries: back online, the page has the change', (await cardMeta(main, 2)).includes('已读'), await cardMeta(main, 2));
+  s.check('/entries: back online, the page has the change', await cardRead(main, 2) === 'true', await cardRead(main, 2));
   // A list preference changed by another session (only unread): the reread brings it to the page,
   // whose preference-saving effect sees the filter change; it must not write it back (review
   // C4C2-03). The list is read again for the new filter, so reads are not counted here.
@@ -554,14 +555,14 @@ define('two-browsers', {}, async (s) => {
   await selectorExists(other.client, ENTRIES, 30000);
   other.server.build.verify();
   await pointerClick(main.client, `${card(2)} [data-action="mark-read"]`);
-  await waitFor(main.client, `document.querySelector('${card(2)} [data-slot="entry-card-meta"]').textContent.includes('已读')`);
+  await waitFor(main.client, `document.querySelector('${card(2)}')?.dataset.read === 'true'`);
   await triggerFocus(other);
-  await waitFor(other.client, `document.querySelector('${card(2)} [data-slot="entry-card-meta"]').textContent.includes('已读')`);
+  await waitFor(other.client, `document.querySelector('${card(2)}')?.dataset.read === 'true'`);
   s.check('a change in one browser shows in the other after a reread', true);
   await pointerClick(other.client, `${card(1)} [data-action="toggle-starred"]`);
-  await waitFor(other.client, `document.querySelector('${card(1)} [data-slot="entry-card-meta"]').textContent.includes('已收藏')`);
+  await waitFor(other.client, `document.querySelector('${card(1)} [data-action="toggle-starred"]')?.getAttribute('aria-pressed') === 'true'`);
   await triggerFocus(main);
-  await waitFor(main.client, `document.querySelector('${card(1)} [data-slot="entry-card-meta"]').textContent.includes('已收藏')`);
+  await waitFor(main.client, `document.querySelector('${card(1)} [data-action="toggle-starred"]')?.getAttribute('aria-pressed') === 'true'`);
   s.check('and the other way round', true);
 });
 
@@ -984,7 +985,7 @@ define('http-backend-only', {}, async (s) => {
   await seedDemo('/entries', ENTRIES);
   const mark = main.traffic.mark();
   await pointerClick(main.client, `${card(2)} [data-action="mark-read"]`);
-  await waitFor(main.client, `document.querySelector('${card(2)} [data-slot="entry-card-meta"]').textContent.includes('已读')`);
+  await waitFor(main.client, `document.querySelector('${card(2)}')?.dataset.read === 'true'`);
   await main.traffic.settled();
   const store = await evaluate(main.client, `Object.keys(localStorage).filter(k => k.startsWith('rssr-web-'))`);
   s.check('no library in the browser (no browser-store keys)', store.length === 0, store);

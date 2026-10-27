@@ -383,6 +383,7 @@ jobs:
             target/ci-workspace/*/*.json
             target/ci-workspace/*/*.log
             target/ci-workspace/*/*.png
+            target/ci-workspace/*/*.html
           retention-days: 7
 
   wasm-contract-build:
@@ -572,7 +573,7 @@ jobs:
   # Keep the former required-check name stable, now aggregating every module.
   lint-and-test:
     if: always()
-    needs: [workspace, format, test-tools, release-ui-runner, native-module, web-smoke, web-ui, wasm-contract-build, wasm-browser-contract, android-smoke]
+    needs: [workspace, format, test-tools, release-ui-runner, native-module, web-smoke, web-ui, reading-workspace, wasm-contract-build, wasm-browser-contract, android-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

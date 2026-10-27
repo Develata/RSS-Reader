@@ -1,6 +1,7 @@
 // Run against the isolated real-server fixture; all article state is stored by the server.
 // NODE_PATH resolves the locally installed Playwright; CHROME_BIN is optional.
 const assert = require('node:assert/strict');
+const { expect } = require('playwright/test');
 const fixture = require('./directory_fixture.cjs');
 const rows = '[data-layout="entry-card"]';
 const action = name => `[data-action="${name}"]`;
@@ -13,6 +14,9 @@ async function ready(page) {
 }
 
 async function seed(page, base) {
+  // Replacing the fixture library invalidates its session. Stop the old document
+  // first so a delayed old request cannot trigger recovery during the reseed.
+  await page.goto('about:blank');
   await page.goto(`${base}/__codex/setup-local-auth?seed=directory-contract&workspace=true&next=/entries`);
   await ready(page);
 }
@@ -75,6 +79,9 @@ async function sources(page) {
   assert.equal(await chooser.locator(action('edit-feed')).count(), 0, 'article source popup is filtering only');
   await page.locator(action('apply-source-filter')).click();
   await page.waitForFunction(() => document.querySelector('.source-filter-trigger span').textContent === '…');
+  // The selected-scope label is immediate, while the real server list is async.
+  // Wait for this fixture's filtered total before inspecting the returned rows.
+  await page.waitForFunction(() => document.querySelector('.entries-count').textContent === '12 篇');
   assert.equal(await page.locator(selected).count(), 0);
   assert.deepEqual(await page.locator(`${rows} [data-slot="entry-card-meta"]`).allTextContents().then(texts => [...new Set(texts.map(text => text.split(' · ')[0]))]), ['Alpha']);
   await page.locator(action('open-source-filter')).click();
@@ -109,10 +116,11 @@ async function editing(page) {
   await page.keyboard.press('Escape');
   await page.locator('#feed-edit-dialog').waitFor({ state: 'detached' });
   await page.locator('[data-action="activate-home"]').first().click(); await ready(page);
-  assert.equal(await page.locator('.source-filter-trigger span').innerText(), '…');
-  assert.equal(await page.locator('[data-position-entry="72"]').getAttribute('data-read'), 'true');
-  assert.equal(await page.locator('.entries-count').innerText(), '12 篇', 'URL edit keeps selected source scope');
-  assert.equal(await page.locator(`${rows} [data-slot="entry-card-meta"]`).first().innerText(), '少数派 · 精选 · 2026-09-02');
+  // Home may briefly present cached rows before reloading the edited URL scope.
+  await expect(page.locator('.source-filter-trigger span')).toHaveText('…');
+  await expect(page.locator('[data-position-entry="72"]')).toHaveAttribute('data-read', 'true');
+  await expect(page.locator('.entries-count'), 'URL edit keeps selected source scope').toHaveText('12 篇');
+  await expect(page.locator(`${rows} [data-slot="entry-card-meta"]`).first()).toHaveText('少数派 · 精选 · 2026-09-02');
 }
 
 async function responsive(page) {
@@ -386,6 +394,58 @@ async function shortSourceDialog(page) {
   }
 }
 
+// Hold a real preference write across navigation. The queued final choice must
+// finish before a feed URL edit migrates the selected source in the same library.
+async function preferencesSurviveNavigation(page) {
+  await page.setViewportSize({ width: 1536, height: 864 });
+  await seed(page, new URL(page.url()).origin);
+  let release, seen;
+  const gate = new Promise(resolve => { release = resolve; });
+  const captured = new Promise(resolve => { seen = resolve; });
+  const pending = [];
+  const handler = route => {
+    seen();
+    const continued = gate.then(() => route.continue());
+    pending.push(continued);
+    return continued;
+  };
+  await page.route('**/api/v1/workspace', handler);
+  try {
+    await page.locator(action('open-source-filter')).click();
+    const chooser = page.locator('#source-filter-dialog');
+    await chooser.getByRole('checkbox', { name: '全部来源', exact: true }).uncheck();
+    await chooser.getByRole('checkbox', { name: 'Alpha', exact: true }).check();
+    await page.locator(action('apply-source-filter')).click();
+    await captured;
+    await page.getByRole('button', { name: '仅未读', exact: true }).click();
+    await expect(page.getByRole('button', { name: '仅未读', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('[data-nav="feeds"]').first().click();
+    const feed = page.locator('[data-feed-id="1"]');
+    await feed.waitFor();
+    const editedURL = `${await feed.getAttribute('data-feed-url')}?navigation=1`;
+    await feed.locator(action('edit-feed')).click();
+    await page.locator('#feed-edit-url').fill(editedURL);
+    await page.locator(action('save-feed-edit')).click();
+    release();
+    await Promise.all(pending);
+    await page.locator('#feed-edit-dialog').waitFor({ state: 'detached' });
+    await page.locator('[data-action="activate-home"]').first().click();
+    await ready(page);
+    await expect(page.locator('.source-filter-trigger span')).toHaveText('…');
+    await expect(page.getByRole('button', { name: '仅未读', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const stored = await page.evaluate(async () => {
+      const input = encodeURIComponent(JSON.stringify({load_preferences:true,load_feeds:false}));
+      return (await (await fetch('/api/v1/entries/bootstrap?input=' + input)).json()).workspace;
+    });
+    assert.deepEqual(stored.selected_feed_urls, [editedURL], 'the final source choice is migrated after pending saves finish');
+    assert.equal(stored.read_filter, 'unread_only', 'the queued choice survives leaving its page');
+  } finally {
+    release();
+    await Promise.all(pending);
+    await page.unroute('**/api/v1/workspace', handler);
+  }
+}
+
 async function dialogComposition(page) {
   await page.setViewportSize({ width: 1536, height: 864 });
   await seed(page, new URL(page.url()).origin);
@@ -443,7 +503,7 @@ async function dialogComposition(page) {
   }
 }
 
-module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition };
+module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation };
 if (require.main === module) (async () => {
   const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN });
@@ -453,7 +513,7 @@ if (require.main === module) (async () => {
     page.setDefaultTimeout(15000);
     await fixture.install(page.context(), require('node:path').resolve(__dirname,'../..'));
     await seed(page, fixture.origin);
-    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition })) {
+    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation })) {
       try { await run(page); console.log(`PASS ${name}`); }
       catch (error) {
         const fs = require('node:fs/promises'), path = require('node:path');
