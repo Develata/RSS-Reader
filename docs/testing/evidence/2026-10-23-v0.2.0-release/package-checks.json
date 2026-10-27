@@ -1,0 +1,71 @@
+[
+  {
+    "artifactId": 12498504967,
+    "status": "pass",
+    "build_id": "git-43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321",
+    "checks": [
+      "package hashes and WASM id",
+      "new library",
+      "login",
+      "static index",
+      "matching build writes",
+      "old build rejected without mutation"
+    ]
+  },
+  {
+    "artifactId": 12498579505,
+    "status": "pass",
+    "build_id": "git-43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321",
+    "checks": [
+      "package hashes and WASM id",
+      "new library",
+      "login",
+      "static index",
+      "matching build writes",
+      "old build rejected without mutation"
+    ]
+  },
+  {
+    "artifactId": 12499611189,
+    "status": "pass",
+    "build_id": "git-43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321",
+    "checks": [
+      "package hashes and WASM id",
+      "new library",
+      "login",
+      "static index",
+      "matching build writes",
+      "old build rejected without mutation"
+    ]
+  },
+  {
+    "artifactId": 12499695903,
+    "status": "pass",
+    "build_id": "git-43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321",
+    "checks": [
+      "package hashes and WASM id",
+      "new library",
+      "login",
+      "static index",
+      "matching build writes",
+      "old build rejected without mutation"
+    ]
+  },
+  {
+    "artifactId": 12499237410,
+    "status": "pass",
+    "build_id": "git-43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321",
+    "image": "rss-reader-smoke:43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321",
+    "checks": [
+      "new data volume, login and matching build write",
+      "old build rejected without mutation",
+      "image server is the exact packaged binary",
+      "owner CLI shares the running server library",
+      "CLI rejects root and unrelated uid for owner data",
+      "owner CLI backup while server runs",
+      "graceful restart retains session and data",
+      "read-only legacy credential volume migrates unchanged; old session rejected",
+      "migrated credentials survive removal of the legacy mount"
+    ]
+  }
+]

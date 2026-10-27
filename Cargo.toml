@@ -1,13 +1,14 @@
 [workspace]
 members = [
+    "crates/rssr-api",
     "crates/rssr-app",
     "crates/rssr-cli",
     "crates/rssr-web",
     "crates/rssr-application",
     "crates/rssr-domain",
     "crates/rssr-infra",
-    "crates/rssr-host",
 ]
+exclude = ["vendor/url"]
 resolver = "2"
 
 [workspace.package]
@@ -25,22 +26,26 @@ async-trait = "0.1"
 axum = { version = "0.8", features = ["form", "http1", "tokio"] }
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 dioxus = { version = "0.7.9", features = ["router"] }
 dioxus-router = "0.7.9"
-feed-rs = "2"
+# Exact: rssr-infra `feed_structure` mirrors how this version reads and copies a feed; read its
+# parsers again before changing it.
+feed-rs = "=2.4.0"
 getrandom = { version = "0.2", features = ["js"] }
 hmac = "0.12"
 percent-encoding = "2"
-quick-xml = "0.37"
+quick-xml = "0.41"
 rand_core = { version = "0.6", features = ["getrandom"] }
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "rustls-tls"] }
 rfd = "0.17"
+# One bundled SQLite for the library (rssr-infra) and the authentication database (rssr-web).
+rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-sqlx = { version = "0.8", default-features = false, features = ["macros", "migrate", "runtime-tokio-rustls", "sqlite", "time"] }
+subtle = "2.6"
 thiserror = "2"
 tokio = { version = "1", default-features = false, features = ["macros", "sync", "time"] }
 time = { version = "0.3", features = ["formatting", "macros", "parsing", "serde", "serde-human-readable"] }
@@ -50,3 +55,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = { version = "2", features = ["serde"] }
 urlencoding = "2"
 webbrowser = "1"
+
+# Keep the upstream-equivalent dot-segment fix until rust-url#1163 is released.
+[patch.crates-io]
+url = { path = "vendor/url" }

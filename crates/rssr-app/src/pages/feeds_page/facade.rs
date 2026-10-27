@@ -39,7 +39,7 @@ impl FeedsPageFacade {
     pub(crate) fn edit_save(&self) {
         self.session.dispatch_intent(super::intent::FeedsPageIntent::EditSaveRequested);
     }
-    pub(crate) fn unread_count(&self) -> usize {
+    pub(crate) fn unread_count(&self) -> u64 {
         self.snapshot.unread_count
     }
     pub(crate) fn archived_count(&self) -> u64 {
@@ -138,11 +138,11 @@ impl FeedsPageFacade {
         &self.snapshot.feeds
     }
 
-    pub(crate) fn total_feed_count(&self) -> usize {
+    pub(crate) fn total_feed_count(&self) -> u64 {
         self.snapshot.feed_count
     }
 
-    pub(crate) fn total_entry_count(&self) -> usize {
+    pub(crate) fn total_entry_count(&self) -> u64 {
         self.snapshot.entry_count
     }
 

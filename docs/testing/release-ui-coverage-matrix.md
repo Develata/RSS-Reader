@@ -1,95 +1,34 @@
 # 发布前 UI 覆盖矩阵
 
-这份矩阵用于回答两个问题：
+2026-10-22 按 v0.2 C4c 的当前入口核对。此表描述覆盖能力，不是本次执行结果；实际命令、commit/tree、计数和失败保存在对应 handoff。执行步骤见 [发布清单](./release-ui-regression-checklist.md)。
 
-- 当前发布前 UI 回归，**已经固定覆盖了什么**
-- 现在还剩哪些项，**仍然需要手工浏览器回归**
+“自动化”表示已有可重复断言；“截图复核”需要人工查看本次产物；“实机待验”不能用浏览器模拟代替。
 
-它不是执行清单本身。
-执行入口仍以 [发布前 UI 回归清单](./release-ui-regression-checklist.md) 为准。
+| 能力 | 入口 | 状态 / 边界 |
+| --- | --- | --- |
+| app wasm 构建、单元测试、内置主题契约 | `bash scripts/run_release_ui_regression.sh` | 自动化；不等于页面已验收 |
+| 原生共享用例契约 | 三个 `test_library_*_contract_harness`；聚合门禁 | 自动化，真实 SQLite |
+| 原生 / 演示共享 SQL 契约 | `bash scripts/run_wasm_contract_harness.sh test_library_refresh_contract_harness test_library_subscription_contract_harness test_library_config_exchange_contract_harness` | 自动化，独立浏览器；不能替代 HttpBackend |
+| 服务器 API、认证、HttpBackend | `cargo test --locked -p rssr-web` | 自动化，含真实路由与故障注入 |
+| 正式 Web 内部路由、列表、订阅、设置、阅读页 | `bash scripts/run_server_web_regression.sh --suite regression` | 自动化，真实登录与 SQLite 夹具 |
+| 手机/桌面几何、导航、搜索、触控、分页、图片、键盘与文字选择 | `regression`，用 `--preset` 选择主题 | 自动化 + 截图复核；WebView2 / Android 另验 |
+| 阅读位置、元信息与本地时间、来源计数 | `regression` 与相关 app 测试 | 自动化，沿用同一驱动 |
+| Reader 五主题 | `--suite theme-matrix` | 自动化 + 截图复核；不穷举配色/视口 |
+| 新库登录、添加订阅、服务器刷新、文章列表 | `--suite feed-smoke` | 自动化，本地独立 feed 服务；不证明公网可达 |
+| 反向代理同源 cookie、Origin、CSRF | `--suite acceptance` | 自动化，本地代理夹具 |
+| 结果未知、零自动重发、只读刷新合并、跨浏览器可见性 | `--suite acceptance` | 自动化，检查实际 API 请求与可见状态 |
+| 草稿/CSS、恢复后编辑、存储失败、停止离开、构建不匹配 | `--suite acceptance --long` | 自动化；本标签页 sessionStorage，不自动保存 |
+| 长任务、后台标签时限、页面切换与重载 | `--suite acceptance --long` | 自动化；常规 CI 跳过三个长场景，手动 CI 可启用 `acceptance_long` |
+| 启动失败、状态提示可见、恶意正文不执行脚本 | `--suite acceptance` | 自动化；不代替辅助技术实机检查 |
+| 乱序列表、Reader 旧结果、Settings 保存中的编辑 | app session/runtime 测试 | 自动化，受控任务完成顺序 |
+| SQLite 刷新原子性、失败重试 | `test_library_application_refresh_store_adapter`、`test_library_persistence_atomicity` | 自动化，真实资料库 |
+| CLI stdout / stderr 与配置交换 | `cargo test --locked -p rssr-cli --test test_stdout_contract` | 自动化，真实进程；不等于 Web 页面 |
+| 服务器认证 smoke | 聚合入口 `--with-rssr-web` | 自动化，含真实登录/退出与 `/api/v1/session` |
+| Pages 演示启动、路由、状态保留与网络禁用 | `bash scripts/test_pages.sh`（先构建演示包） | 独立构建与验收 |
+| WebDAV 上传/下载的实际部署 UI、真实远端 feed | 手工页面 + 当前部署 | 需单独留证，不用 fake 或本地 feed 替代 |
+| Android 长按选择、系统返回、图片手势；macOS 交互 | 对应实机与 handoff | 实机待验，浏览器模拟不构成证据 |
+| 发布构建标识、旧页面对新服务器 | C6 | 本轮范围外，尚不作为完成项 |
 
-## 口径
+推荐先跑 `bash scripts/run_release_ui_regression.sh --full`，再单独跑 `bash scripts/run_server_web_regression.sh --suite acceptance --long`，最后复看本次截图并补实际部署/实机项。`--full` 的固定组只有 theme-matrix、regression、feed-smoke；CI 的四个非默认主题还需分别用 `--preset` 跑 regression。
 
-状态按证据分为：
-
-- `自动化`：可在本地或 CI 中直接执行，结果可重复
-- `固定 smoke`：已有固定脚本/固定入口，但仍偏 smoke 或需人工看产物
-- `手工`：当前仍主要依赖人工浏览器回归
-- `实机待验`：实现/构建可用，但尚无对应设备交互证据
-
-优先级分三类：
-
-- `P1`：发布前必须确认
-- `P2`：建议发布前确认
-- `P3`：按风险补充
-
-## 覆盖矩阵
-
-| 能力项 | 当前状态 | 入口 | 优先级 | 备注 |
-| --- | --- | --- | --- | --- |
-| `rssr-app` Web 构建与单测 | 自动化 | `bash scripts/run_release_ui_regression.sh --no-serve` | P1 | 已串行覆盖 `cargo check/test` |
-| builtin theme 契约 | 自动化 | `cargo test -p rssr-app --test test_builtin_theme_contracts` | P1 | 防止内置主题回退到旧 selector |
-| `rssr-infra` host + browser contract harness | 自动化 | `bash scripts/run_release_ui_regression.sh --no-serve --with-browser-contracts` | P1 | 串行覆盖 refresh / subscription / config exchange 的 sqlite 与 wasm/browser harness |
-| `rssr-web` 单测 | 自动化 | `bash scripts/run_release_ui_regression.sh --no-serve --with-rssr-web` | P1 | 已纳入统一预检 |
-| 静态 Web `/entries` / `/feeds` / `/settings` 路由可达 | 固定 smoke | `bash scripts/run_static_web_browser_smoke.sh` | P1 | 依赖同源 local auth helper |
-| 静态 Web 真实阅读页 `/entries/2` | 固定 smoke | `bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2` | P1 | 已固定 demo seed |
-| 静态 Web 阅读页 多主题矩阵 | 固定 smoke | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_reader_theme_matrix.sh` | P1 | 默认主题 + 4 个内置主题 |
-| 静态 Web 小视口关键路径 | 自动化 | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_small_viewport_smoke.sh` | P1 | 默认 `360×800` / DPR 3；确定性长/短 fixture，覆盖几何、computed-style、可访问性、console 与桌面回归断言 |
-| Home / search / manual refresh / pull / pagination / image viewer | 自动化 | `scripts/run_static_web_small_viewport_smoke.sh` + `rssr-app` reducer/resolver 单测 | P1 | 整轮 RSS 请求计数、真实 tap 命中、图片卸载/重开、DOM 稳定、触摸阈值、鼠标选择/复制；复用既有固定 smoke |
-| Entries 并发列表查询结果顺序 | 自动化 | `cargo test --locked -p rssr-app --bin rssr-app pages::entries_page::session::tests` | P1 | 实际 Dioxus task + oneshot 控制完成次序，旧成功/失败不能覆盖最新结果 |
-| Reader 旧异步结果隔离、Settings 保存草稿 | 自动化 | `rssr-app` Reader / Settings session 测试 | P1 | 实际 VirtualDom + oneshot：A→B→A、保存中编辑、重复保存、失败重试 |
-| 订阅重复提交、进行中编辑、快照乱序 | 自动化 | Feeds session / runtime 测试 + 既有 small viewport smoke | P1 | Rust oneshot 与实际浏览器暂停首刷请求，验证 pending、重试、下一地址保留和旧快照拒绝 |
-| SQLite 刷新写失败后重试 | 自动化 | `cargo test --locked -p rssr-infra --test test_application_refresh_store_adapter` | P1 | 真实索引 / 正文库 trigger 注入失败，重试完整抓取，成功后恢复条件请求 |
-| wasm runner 产物身份与并发隔离 | 自动化 | CI `test-tools` / `wasm-contract-build` + 三个 wasm 执行 job；原有单模块入口 | P1 | Cargo 一次准备真实 wasm，拒绝残缺/重复产物，再分模块并发执行；独立配置/profile，std-only Rust 子进程测试覆盖失败清理；不能替代真实浏览器契约 |
-| CLI 结构化 stdout / stderr | 自动化 | `cargo test --locked -p rssr-cli --test test_stdout_contract` | P1 | 实际 CLI 进程，JSON / OPML 导出再导入、中文空格路径、失败非零；无目标或双目标刷新在建库前拒绝 |
-| 字号偏好、正文链接 / 长代码、Enter 订阅 | 自动化 | `scripts/run_static_web_small_viewport_smoke.sh` | P1 | 真实保存字号后手机 / 桌面生效，局部代码滚动，表单与刷新互不误触 |
-| Android 选择手柄、系统返回、图片缩放 | 实机待验 | Android 实机 + 本轮 handoff | P1 | Web touch emulation 不证明原生 WebView / 系统交互 |
-| `rssr-web` 登录 / 会话 / `/feeds` `/settings` 基础壳 | 自动化 | `bash scripts/run_release_ui_regression.sh --with-rssr-web` | P1 | 已覆盖登录、`/session-probe`、登出 |
-| 静态 Web 阅读页 多主题下的视觉细节 | 固定 smoke + 手工结论 | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_reader_theme_matrix.sh` + 查看 `target/static-web-reader-theme-matrix/<ts>/*.png` | P2 | 2026-04-10 基线已人工通过；后续发布仍需复看新产物 |
-| 静态 Web 小视口下的视觉细节 | 自动化 + 截图复核 | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_static_web_small_viewport_smoke.sh` + 查看 `target/static-web-small-viewport-smoke/<ts>/*.png` | P2 | 结构性回归由断言阻断；色彩、层次等主观视觉细节仍建议复看截图 |
-| `rssr-web` 浏览器态下真实添加订阅并完成首次刷新 | 固定 smoke | `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 或 `bash scripts/run_rssr_web_browser_feed_smoke.sh` | P2 | 现已用同源 helper + 本地 feed fixture 自动化 |
-| `rssr-web` 服务端模式下真实远端 feed 导入后的页面更新 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` | P2 | 公开 selector 已稳定；真实远端源依赖 DNS、网络和站点策略，需单独留证 |
-| WebDAV 上传/下载 UI 实页回归 | 手工 | 发布前清单 + 浏览器手工 | P2 | 自动化更多停留在 lower-level gates |
-| 多主题下 `/entries` `/feeds` `/settings` 的视觉细节 | 手工 | 发布前清单 + 浏览器手工 | P2 | 内置主题契约已自动化，但视觉仍建议 spot check |
-| 真实远端 feed 首次刷新后的 列表 / 阅读页 浏览器态 | 手工 | 发布前清单 + 浏览器手工 | P2 | 受远端源波动和 CORS（静态 Web）/ 服务端模式形态影响 |
-| 小视口下 `rssr-web` 部署壳登录后路径 | 手工 | `bash scripts/run_rssr_web_browser_smoke.sh` + 手工调视口 | P3 | 当前小视口 smoke 只固定了静态 Web |
-
-## 当前结论
-
-CI 执行关系、按 crate / theme / harness 的并发上限和失败汇总见[主线验证矩阵](mainline-validation-matrix.md#github-ci-并发矩阵)。工作流中的 Web UI 矩阵直接运行这里的既有 small viewport assertions，不维护另一份验收规则。
-
-当前发布前回归已经把这几类 **P1** 能力固定下来：
-
-- `rssr-app` / `rssr-web` / `rssr-infra` 的核心自动化门禁
-- 静态 Web 的真实内部页入口
-- 静态 Web 的 阅读页 多主题矩阵
-- 静态 Web 的小视口关键路径
-- `rssr-web` 的基础登录壳
-
-所以现在的主要缺口，不再是“没有固定入口”，而是：
-
-- 仍有少量 **浏览器视觉判断** 需要人工看截图或实机页面
-- `rssr-web` 浏览器态下对真实远端 feed 的首刷行为仍主要靠手工补充
-- 当前 deploy-shell 自动化已经覆盖了同源 fixture feed 的登录后添加与刷新链路
-
-## 推荐发布前顺序
-
-1. 先跑：
-
-```bash
-bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web --with-browser-contracts --with-fixed-smokes
-```
-
-2. 如果只想分步执行固定 smoke，再跑：
-
-```bash
-bash scripts/run_static_web_reader_theme_matrix.sh
-bash scripts/run_static_web_small_viewport_smoke.sh
-bash scripts/run_rssr_web_browser_feed_smoke.sh
-```
-
-3. 最后补最少量人工浏览器确认：
-
-- 看多主题 阅读页 截图是否可接受
-- 看小视口截图是否可接受
-- 如本次发布涉及真实远端 feed 行为，再按固定 selector 手工补一次 `rssr-web` 浏览器态真实添加订阅
+控制台错误不能笼统忽略：报告意外条目（必须为零）及每个被忽略条目的原因。运行成功不证明独立评审、CI 或人工验收完成。统一构建和证据规则见 [服务器浏览器回归](./server-web-regression.md)。

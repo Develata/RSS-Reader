@@ -45,7 +45,7 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 - 自动刷新
 - 自动归档
 - JSON / OPML / WebDAV 配置交换
-- Web 部署态登录保护与服务端模式（服务端抓取 feed）
+- Web 部署态登录保护与 feed 代理
 - Android Debug APK 构建链路
 - Windows / macOS / Linux / Web / Docker 发布 workflow
 
@@ -68,7 +68,7 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
   - SQLite、抓取、解析、OPML、配置交换基础设施
 - `crates/rssr-web`
   - Web 部署态服务端包装层
-  - 登录、会话、服务端模式 API（`/api/v1`，服务端抓取 feed）、静态资源托管
+  - 登录、会话、feed 代理、静态资源托管
 - `crates/rssr-cli`
   - CLI 入口
 
@@ -102,7 +102,7 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 - [crates/rssr-app/src/bootstrap/web/AGENTS.md](../crates/rssr-app/src/bootstrap/web/AGENTS.md)
 - [crates/rssr-app/src/pages/AGENTS.md](../crates/rssr-app/src/pages/AGENTS.md)
 - [crates/rssr-web/src/auth/AGENTS.md](../crates/rssr-web/src/auth/AGENTS.md)
-- [crates/rssr-infra/src/db/AGENTS.md](../crates/rssr-infra/src/db/AGENTS.md)
+- [crates/rssr-infra/src/store/AGENTS.md](../crates/rssr-infra/src/store/AGENTS.md)
 - [crates/rssr-application/src/import_export_service/AGENTS.md](../crates/rssr-application/src/import_export_service/AGENTS.md)
 
 它们的定位是：
@@ -158,7 +158,7 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 - 登录页
 - 会话 cookie
 - 登录限速
-- 服务端模式（经 `/api/v1` 由服务端抓取 feed）
+- feed 代理
 - 静态资源托管
 
 它不是阅读器核心领域逻辑的归宿。
@@ -166,9 +166,9 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 ### 3. Web 与纯静态 Web 有边界差异
 
 - `dx serve --platform web --package rssr-app`
-  - 受浏览器 CORS 限制（只做浏览器直连，无代理回退）
+  - 受浏览器 CORS 限制
 - `rssr-web` / Docker 部署态
-  - 服务端模式：由服务端抓取 feed，不受浏览器 CORS 限制
+  - 有服务端 `/feed-proxy`
   - 能支持更多受限 feed 源
 
 不要把“纯浏览器 Web 能否读某些 feed”当成解析器格式问题。
@@ -209,8 +209,9 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
   - 原因是生成工程的 `targetSdk/compileSdk` 没真正改到
   - 现在 [prepare_android_bundle.py](../scripts/prepare_android_bundle.py) 会 patch 生成的 Gradle 文件到 `34`
 - 之前出现过：
-  - 返回键直接退出 app
-  - 现在已经接成优先走应用内导航
+  - 返回键直接退出 app，或在点过首页目录后按返回没反应
+  - 原因（2026-10-18 查明）：tao 在 Android 上不送按键事件，返回键一直由 wry 的 `WryActivity` 沿 WebView 历史后退或交给系统退出，应用内导航从未接上；WebView 历史里只有目录写下的页内锚点
+  - 现在 `MainActivity` 关掉 `handleBackNavigation`，经 JNI 通知 Rust（`use_mobile_back_navigation.rs`）：先关图片查看器，再回上一页或首页；首页按一次提示“再按一次返回键退出”，5 秒内再按退到后台。2026-10-19 真机确认；阅读页 ← 按钮同步后退（此前在 Android 上先等位置采集，经首页回到阅读页后会卡住数秒）
 - 之前出现过：
   - 按 Home 回桌面，再回 app 后点击无响应
   - 当前已加 `Resumed / Focused(true)` 时恢复窗口可见与焦点
@@ -269,12 +270,12 @@ RSS-Reader 现在已经不是 MVP 脚手架，而是一个较完整的多端个�
 
 ### 快捷键
 
-阅读页当前快捷键：
+阅读页当前快捷键（整个阅读页生效，输入框与可编辑区域内不生效）：
 
 - `M`：切换已读
 - `F`：切换收藏
-- `←`：上一未读
-- `→`：下一未读
+- `K` / `←`：上一未读
+- `J` / `→`：下一未读
 
 ---
 

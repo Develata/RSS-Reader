@@ -1,9 +1,12 @@
 mod commands;
+pub(crate) mod drafts;
+pub(crate) mod failure;
 mod helpers;
 pub(crate) mod reading_position;
-mod runtime;
+pub(crate) mod recovery;
+pub(crate) mod runtime;
 mod shell;
-mod shell_browser;
+pub(crate) mod shell_browser;
 mod shell_prefs;
 mod shell_state;
 mod snapshot;
@@ -13,13 +16,14 @@ pub(crate) use self::{
         EntriesCommand, FeedsCommand, ReaderCommand, SettingsCommand, ShellCommand, UiCommand,
     },
     helpers::{
-        apply_projected_ui_intents, collect_projected_ui_command, spawn_projected_ui_command,
-        use_reactive_side_effect, use_reactive_task, visit_ui_command,
+        apply_projected_ui_intents, spawn_projected_ui_command, use_reactive_side_effect,
+        use_reactive_task,
     },
+    recovery::run_ui_command,
     runtime::execute_ui_command,
     shell::{
         AppShellState, use_app_nav_shell, use_app_shell_state, use_authenticated_shell_bus,
-        use_startup_route_bus, use_web_auth_gate_shell,
+        use_reread_triggers, use_startup_route_bus,
     },
     shell_browser::wait_for_refresh_feedback,
     snapshot::UiIntent,

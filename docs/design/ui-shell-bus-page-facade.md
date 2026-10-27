@@ -1,6 +1,6 @@
 # UI Shell / Bus / Page Facade 边界
 
-当前实现核对：2026-09-30。
+Web 装配与存储边界核对：2026-10-22（v0.2 C4c）。
 
 ## 目的
 
@@ -65,7 +65,7 @@
 - SQLite / native 实现
 - browser persisted-state 实现
 - parser / fetch / WebDAV / OPML / JSON codec
-- 原生索引与正文双库，以及 browser `BrowserStore` 的分片、Web Locks 与版本化提交
+- 原生/服务器单库 `library.sqlite3`，正式 Web 的 `HttpBackend` 传输，以及仅演示使用的 `BrowserStore` 分片、Web Locks 与版本化提交
 
 这层实现存储、网络、解析等端口；业务结果和流程规则仍由 application 定义。
 

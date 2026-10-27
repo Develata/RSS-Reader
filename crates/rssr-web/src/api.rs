@@ -1,747 +1,737 @@
-//! 服务端模式的 `/api/v1`：把 [`rssr_host::protocol`] 的端点暴露给浏览器端。
+//! The reader's HTTP API (v0.2 phase C, C3): every [`Backend`] operation under `/api/v1`
+//! ([`rssr_api::protocol`]), answered from the server's own library. Five network-heavy
+//! operations run as background jobs ([`crate::jobs`]): the request starts the job, the client
+//! polls it.
 //!
-//! 调用条件在读取请求体之前检查（`guard`）：有效会话（否则 401，不重定向到登录页）、恰好一个
-//! `Content-Type: application/json`、恰好一个匹配的协议版本头，以及与服务地址同源的 `Origin`（若带）。
-//! 自定义头与 JSON 类型让跨源请求必须先经预检，而本服务不返回任何 CORS 许可；`Origin` 校验是额外一层。
-//!
-//! 调用在独立任务里执行：浏览器断开或刷新页面不会中断进行中的刷新或写入。同时在途的调用数有上限，
-//! 准入许可随任务持有到完成，饱和时返回 503。
-use std::sync::Arc;
+//! [`routes`] goes behind the session check of [`crate::auth::with_auth`], which also checks the
+//! Origin and the CSRF token of every write. Here:
+//! - every request under `/api` gets an id ([`protocol::REQUEST_ID_HEADER`],
+//!   [`assign_request_id`]), which every error carries, the authentication's included;
+//! - a write must carry this build's identifier ([`protocol::BUILD_HEADER`]): a page of another
+//!   build is refused before anything runs; its reads are answered;
+//! - at most [`MAX_OPERATIONS`] operations run at once, and [`MAX_IMPORTS`] import; more are
+//!   refused at once, never queued. The slots are taken before the body is read, so bodies being
+//!   received are bounded too; a body is received within [`RECEIVE_LIMIT`]. An operation runs in
+//!   its own task that holds its slots until it ends, so a client that goes away neither cancels
+//!   a write halfway nor frees the slots early. Jobs have their own bounds ([`crate::jobs`]); a
+//!   poll takes no operation slot (it only waits) but one of [`MAX_POLLS`];
+//! - bodies and structured reads' parameters are bounded (the limits in [`protocol`]); a write
+//!   without a body refuses one;
+//! - every answer is JSON and is not cached; the log records an error's request id and code,
+//!   never its message (it may quote a subscription's address with its credentials).
+
+use std::{future::Future, sync::Arc, time::Duration};
 
 use axum::{
     Json, Router,
-    extract::{Path, Request, State},
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    body::Bytes,
+    extract::{
+        DefaultBodyLimit, FromRequest, FromRequestParts, Path, RawQuery, Request, State,
+        rejection::PathRejection,
+    },
+    http::{HeaderValue, StatusCode, header, request::Parts},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post, put},
 };
-use rssr_host::{
-    HostServices,
-    protocol::{ApiError, CAPABILITIES_PATH, Capabilities, PROTOCOL_HEADER, PROTOCOL_VERSION},
-    server::{DispatchError, dispatch},
+use rand_core::{OsRng, RngCore};
+use rssr_api::{
+    Backend, BackendError, ErrorCode,
+    protocol::{
+        self, AddSubscription, ImportConfigJson, ImportOpml, JobCreated, JobId, JobResult,
+        RemoteConfig, SetRead, SetStarred, routes,
+    },
 };
-use tokio::sync::Semaphore;
+use rssr_application::{EntriesBootstrapInput, MAX_MESSAGE_BYTES, SettingsPatch, truncate_marked};
+use rssr_domain::{EntriesWorkspaceState, EntryQuery, MarkReadPreview};
+use serde::{Serialize, de::DeserializeOwned};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tracing::{error, info, warn};
 
-use crate::auth::{AuthConfig, request_has_valid_session};
+use crate::{
+    auth::{is_api, is_safe},
+    jobs::Jobs,
+};
 
-/// 导入的配置包与 OPML 都是整段文本，放宽到 16 MiB。
-const MAX_API_BODY_BYTES: usize = 16 * 1024 * 1024;
-/// 读完请求体的期限。只对已通过守卫的请求生效，防止慢速上传长期占住连接与缓冲。
-const BODY_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
-/// 同时在途的接口调用上限。单用户的界面远用不到这么多；它只防失控的重试或滥用耗尽连接与内存。
-const MAX_IN_FLIGHT_CALLS: usize = 32;
+/// This build's identifier (`build-support/build_id.rs`).
+pub(crate) const BUILD_ID: &str = env!("RSSR_BUILD_ID");
+/// Operations running at once; each holds store work or network work.
+const MAX_OPERATIONS: usize = 32;
+/// Imports running at once; each parses a document of up to 4 MiB.
+const MAX_IMPORTS: usize = 1;
+/// Polls of jobs waiting at once.
+const MAX_POLLS: usize = 64;
+/// The reader's image localization may take up to 245 s (24 images of 10 s, plus 5 s); a request
+/// gives up after this.
+const LOCALIZE_LIMIT: Duration = Duration::from_secs(60);
+/// How long receiving a body may take once its slots are taken (4 MiB at about 0.5 Mbit/s).
+const RECEIVE_LIMIT: Duration = Duration::from_secs(60);
+
+pub(crate) type SharedBackend = Arc<dyn Backend + Send + Sync>;
 
 #[derive(Clone)]
 pub(crate) struct ApiState {
-    config: Arc<AuthConfig>,
-    services: HostServices,
-    admission: Arc<Semaphore>,
+    backend: SharedBackend,
+    build_id: Arc<str>,
+    operations: Arc<Semaphore>,
+    imports: Arc<Semaphore>,
+    polls: Arc<Semaphore>,
+    localize_limit: Duration,
+    receive_limit: Duration,
+    answer_limit: usize,
+    jobs: Jobs,
 }
 
 impl ApiState {
-    pub(crate) fn new(config: Arc<AuthConfig>, services: HostServices) -> Self {
-        Self::with_capacity(config, services, MAX_IN_FLIGHT_CALLS)
+    pub(crate) fn new(backend: SharedBackend) -> Self {
+        Self::with(backend, BUILD_ID, LOCALIZE_LIMIT)
     }
 
-    fn with_capacity(config: Arc<AuthConfig>, services: HostServices, capacity: usize) -> Self {
-        Self { config, services, admission: Arc::new(Semaphore::new(capacity)) }
+    pub(crate) fn with(backend: SharedBackend, build_id: &str, localize_limit: Duration) -> Self {
+        Self {
+            backend,
+            build_id: Arc::from(build_id),
+            operations: Arc::new(Semaphore::new(MAX_OPERATIONS)),
+            imports: Arc::new(Semaphore::new(MAX_IMPORTS)),
+            polls: Arc::new(Semaphore::new(MAX_POLLS)),
+            localize_limit,
+            receive_limit: RECEIVE_LIMIT,
+            answer_limit: protocol::MAX_ANSWER_BYTES,
+            jobs: Jobs::new(),
+        }
+    }
+
+    /// Test only: a shorter time to receive a body.
+    #[cfg(test)]
+    pub(crate) fn receiving_within(mut self, limit: Duration) -> Self {
+        self.receive_limit = limit;
+        self
+    }
+
+    /// Test only: a smaller bound on the answers sent.
+    #[cfg(test)]
+    pub(crate) fn answering_within(mut self, limit: usize) -> Self {
+        self.answer_limit = limit;
+        self
+    }
+
+    /// Test only: takes every operation slot.
+    #[cfg(test)]
+    pub(crate) fn exhaust_operations(&self) -> OwnedSemaphorePermit {
+        Arc::clone(&self.operations)
+            .try_acquire_many_owned(MAX_OPERATIONS as u32)
+            .expect("all operation slots")
+    }
+
+    /// Test only: takes every poll slot.
+    #[cfg(test)]
+    pub(crate) fn exhaust_polls(&self) -> OwnedSemaphorePermit {
+        Arc::clone(&self.polls).try_acquire_many_owned(MAX_POLLS as u32).expect("all poll slots")
+    }
+
+    /// Test only: admits jobs that never finish until no more are admitted.
+    #[cfg(test)]
+    pub(crate) fn fill_jobs(&self) {
+        self.jobs.fill();
+    }
+
+    /// Test only: takes the import slot.
+    #[cfg(test)]
+    pub(crate) fn exhaust_imports(&self) -> OwnedSemaphorePermit {
+        Arc::clone(&self.imports).try_acquire_many_owned(MAX_IMPORTS as u32).expect("import slot")
     }
 }
 
-pub(crate) fn router<S: Clone + Send + Sync + 'static>(state: ApiState) -> Router<S> {
+/// The application's routes (every [`Backend`] operation), for [`crate::auth::with_auth`] to put
+/// behind the session check. A route's own body limit takes precedence over the default.
+pub(crate) fn routes<S: Clone + Send + Sync + 'static>(state: ApiState) -> Router<S> {
+    let imports = DefaultBodyLimit::max(protocol::MAX_IMPORT_BODY_BYTES);
     Router::new()
-        .route(CAPABILITIES_PATH, get(capabilities))
         .route(
-            "/api/v1/{*endpoint}",
-            post(call_endpoint).layer(middleware::from_fn_with_state(state.clone(), guard)),
+            routes::SETTINGS,
+            get(load_settings)
+                .patch(update_settings)
+                .layer(DefaultBodyLimit::max(protocol::MAX_SETTINGS_BODY_BYTES)),
         )
-        .layer(middleware::map_response(no_store))
+        .route(routes::STARTUP_TARGET, get(resolve_startup_target))
+        .route(routes::ENTRIES_BOOTSTRAP, get(bootstrap_entries))
+        .route(routes::OPENED_FEED, put(remember_opened_feed))
+        .route(routes::WORKSPACE, put(save_entries_workspace))
+        .route(routes::ENTRIES, get(list_entries))
+        .route(routes::ENTRY, get(load_reader_entry))
+        .route(routes::ENTRY_READ, put(set_entry_read))
+        .route(routes::ENTRY_STARRED, put(set_entry_starred))
+        .route(routes::ENTRY_ASSETS, post(localize_entry_assets))
+        .route(
+            routes::MARK_READ,
+            get(preview_mark_read)
+                .post(mark_read_if_unchanged)
+                .layer(DefaultBodyLimit::max(protocol::MAX_MARK_READ_BODY_BYTES)),
+        )
+        .route(routes::FEEDS, get(load_feeds_snapshot))
+        .route(routes::ENTRY_BATCH, post(apply_entry_batch))
+        .route(routes::FEED, delete(remove_feed).get(feed_edit_details).patch(update_subscription))
+        .route(routes::CONFIG_JSON, get(export_config_json).put(import_config_json).layer(imports))
+        .route(routes::CONFIG_OPML, get(export_opml).post(import_opml).layer(imports))
+        .route(routes::JOB_REFRESH_ALL, post(start_refresh_all))
+        .route(routes::JOB_REFRESH_FEED, post(start_refresh_feed))
+        .route(routes::JOB_ADD_SUBSCRIPTION, post(start_add_subscription))
+        .route(routes::JOB_REMOTE_PUSH, post(start_remote_push))
+        .route(routes::JOB_REMOTE_PULL, post(start_remote_pull))
+        .route(routes::JOB, get(poll_job))
+        .route_layer(DefaultBodyLimit::max(protocol::MAX_BODY_BYTES))
+        .route_layer(middleware::from_fn_with_state(state.clone(), api_context))
         .with_state(state)
 }
 
-async fn capabilities() -> Response {
-    Json(Capabilities::server()).into_response()
-}
+/// A request's id: 64 random bits as 16 hex digits.
+#[derive(Clone)]
+pub(crate) struct RequestId(Arc<str>);
 
-/// 在请求体被读取之前拒绝不合格的调用，未登录的客户端无法让服务端缓冲请求体。
-async fn guard(State(state): State<ApiState>, request: Request, next: Next) -> Response {
-    match reject_request(&state.config, request.headers()) {
-        Some(rejection) => rejection,
-        None => next.run(request).await,
+impl RequestId {
+    fn new() -> Self {
+        let mut bytes = [0_u8; 8];
+        OsRng.fill_bytes(&mut bytes);
+        Self(bytes.iter().map(|byte| format!("{byte:02x}")).collect::<String>().into())
     }
 }
 
-async fn call_endpoint(
-    State(state): State<ApiState>,
-    Path(endpoint): Path<String>,
-    request: Request,
-) -> Response {
-    let read = axum::body::to_bytes(request.into_body(), MAX_API_BODY_BYTES);
-    let body = match tokio::time::timeout(BODY_READ_TIMEOUT, read).await {
-        Ok(Ok(body)) => body,
-        Ok(Err(_)) => {
-            return error_response(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                ApiError::message("请求体读取失败或超过 16 MiB 上限"),
-            );
+/// Every request under `/api` gets an id, before anything can refuse it: errors carry it in
+/// their body ([`failure`]) and every answer in [`protocol::REQUEST_ID_HEADER`] (review C3-R1
+/// F14). The outermost layer of the application.
+pub(crate) async fn assign_request_id(mut request: Request, next: Next) -> Response {
+    if !is_api(request.uri().path()) {
+        return next.run(request).await;
+    }
+    let id = RequestId::new();
+    request.extensions_mut().insert(id.clone());
+    let mut response = next.run(request).await;
+    if let Ok(value) = HeaderValue::from_str(&id.0) {
+        response.headers_mut().insert(protocol::REQUEST_ID_HEADER, value);
+    }
+    response
+}
+
+/// An error answer under `/api`: the code's HTTP status, the error as JSON with the request's
+/// id, not cached; its message shortened to [`MAX_MESSAGE_BYTES`], so the answer fits
+/// [`protocol::MAX_SMALL_ANSWER_BYTES`] (review C4A-R2-02). The log records the id and the code;
+/// never the message, which may quote a subscription's address with its credentials (review
+/// C3-R1 F05).
+pub(crate) fn failure(error: BackendError, id: Option<&RequestId>) -> Response {
+    let error =
+        BackendError { message: truncate_marked(error.message, MAX_MESSAGE_BYTES), ..error };
+    let request_id = id.map_or("-", |id| &id.0);
+    let code = error.code.as_str();
+    match error.code {
+        ErrorCode::Storage
+        | ErrorCode::Internal
+        | ErrorCode::Unavailable
+        | ErrorCode::OutcomeUnknown => {
+            warn!(request_id, code, "请求失败");
         }
-        Err(_) => {
-            return error_response(
-                StatusCode::REQUEST_TIMEOUT,
-                ApiError::message("请求体读取超时"),
-            );
-        }
+        _ => info!(request_id, code, "请求被拒绝"),
+    }
+    let error = match id {
+        Some(id) => error.with_request_id(id.0.as_ref()),
+        None => error,
     };
-    let Ok(permit) = state.admission.clone().try_acquire_owned() else {
-        return error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            ApiError::message("服务端繁忙，请稍后重试"),
-        );
-    };
-
-    let services = state.services.clone();
-    let task_endpoint = endpoint.clone();
-    let outcome = tokio::spawn(async move {
-        let _permit = permit;
-        dispatch(&services, &task_endpoint, &body).await
-    })
-    .await;
-
-    match outcome {
-        Ok(Ok(json)) => {
-            ([(header::CONTENT_TYPE, HeaderValue::from_static("application/json"))], json)
-                .into_response()
-        }
-        Ok(Err(DispatchError::UnknownEndpoint)) => {
-            error_response(StatusCode::NOT_FOUND, ApiError::message("未知的接口"))
-        }
-        Ok(Err(DispatchError::BadRequest(message))) => error_response(
-            StatusCode::BAD_REQUEST,
-            ApiError::message(format!("请求参数无效：{message}")),
-        ),
-        Ok(Err(DispatchError::Failed(error))) => {
-            tracing::debug!(endpoint = %endpoint, error = %format!("{error:#}"), "接口调用失败");
-            error_response(StatusCode::UNPROCESSABLE_ENTITY, ApiError::from_anyhow(&error))
-        }
-        Err(join_error) => {
-            tracing::error!(endpoint = %endpoint, error = %join_error, "接口任务异常退出");
-            error_response(StatusCode::INTERNAL_SERVER_ERROR, ApiError::message("服务端内部错误"))
-        }
-    }
-}
-
-/// 不满足调用条件时返回拒绝响应。
-fn reject_request(config: &AuthConfig, headers: &HeaderMap) -> Option<Response> {
-    if !request_has_valid_session(config, headers) {
-        return Some(error_response(
-            StatusCode::UNAUTHORIZED,
-            ApiError::message("未登录或会话已过期，请重新登录"),
-        ));
-    }
-    // 恰好一个 Content-Type，且是 JSON；重复的头不按"第一个"放行。
-    let is_json = single_header(headers, header::CONTENT_TYPE.as_str())
-        .and_then(|value| value.split(';').next())
-        .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("application/json"));
-    if !is_json {
-        return Some(error_response(
-            StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            ApiError::message("接口只接受 application/json"),
-        ));
-    }
-    let protocol_matches = single_header(headers, PROTOCOL_HEADER)
-        .is_some_and(|value| value.trim() == PROTOCOL_VERSION.to_string());
-    if !protocol_matches {
-        return Some(error_response(
-            StatusCode::CONFLICT,
-            ApiError::message("页面与服务端版本不一致，请刷新页面"),
-        ));
-    }
-    if !origin_matches_host(config, headers) {
-        return Some(error_response(StatusCode::FORBIDDEN, ApiError::message("拒绝跨源请求")));
-    }
-    // 声明的长度超限时立即拒绝，不等请求体；没有声明长度的分块请求由读取时的上限兜底。
-    let declared_too_large = single_header(headers, header::CONTENT_LENGTH.as_str())
-        .and_then(|value| value.trim().parse::<u64>().ok())
-        .is_some_and(|length| length > MAX_API_BODY_BYTES as u64);
-    if declared_too_large {
-        return Some(error_response(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            ApiError::message("请求体超过 16 MiB 上限"),
-        ));
-    }
-    None
-}
-
-/// 恰好出现一次且是可见 ASCII 的头部值；缺失、重复或含非法字节都返回 `None`。
-fn single_header<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
-    let mut values = headers.get_all(name).iter();
-    match (values.next(), values.next()) {
-        (Some(value), None) => value.to_str().ok(),
-        _ => None,
-    }
-}
-
-/// 同源校验。没有 `Origin` 时放行（浏览器的跨源 POST 都会带）；带了就必须恰好一个、
-/// 是规范的 HTTP(S) 源（不含路径），并与服务地址的 scheme、主机、端口一致。
-///
-/// 服务地址取自 `Host`；只有开启 `trust_proxy_headers` 时才改用 `X-Forwarded-Host` /
-/// `X-Forwarded-Proto`。后端不知道外部 scheme 时（没有可信的转发头），`secure_cookie`
-/// 开启即要求 https，否则接受 http 与 https。
-fn origin_matches_host(config: &AuthConfig, headers: &HeaderMap) -> bool {
-    if headers.get(header::ORIGIN).is_none() {
-        return true;
-    }
-    let Some(raw_origin) = single_header(headers, header::ORIGIN.as_str()) else {
-        return false;
-    };
-    let Ok(origin) = url::Url::parse(raw_origin) else {
-        return false;
-    };
-    if !matches!(origin.scheme(), "http" | "https")
-        || origin.origin().ascii_serialization() != raw_origin
-    {
-        return false;
-    }
-    let Some(origin_host) = origin.host_str() else {
-        return false;
-    };
-    let origin_authority = match origin.port() {
-        Some(port) => format!("{origin_host}:{port}"),
-        None => origin_host.to_string(),
-    };
-
-    let forwarded = |name: &str| {
-        config
-            .trust_proxy_headers
-            .then(|| single_header(headers, name))
-            .flatten()
-            .and_then(|value| value.split(',').next())
-            .map(str::trim)
-    };
-    let expected_scheme =
-        forwarded("x-forwarded-proto").or_else(|| config.secure_cookie.then_some("https"));
-    if expected_scheme.is_some_and(|scheme| !scheme.eq_ignore_ascii_case(origin.scheme())) {
-        return false;
-    }
-    let Some(request_authority) =
-        forwarded("x-forwarded-host").or_else(|| single_header(headers, header::HOST.as_str()))
-    else {
-        return false;
-    };
-    let request_authority = request_authority.trim();
-    request_authority.eq_ignore_ascii_case(&origin_authority)
-        || default_port_elided(request_authority, origin.scheme())
-            .is_some_and(|authority| authority.eq_ignore_ascii_case(&origin_authority))
-}
-
-/// `Host: example.com:443` 与 `Origin: https://example.com` 是同一个地址。
-fn default_port_elided<'a>(authority: &'a str, scheme: &str) -> Option<&'a str> {
-    let default_port = match scheme {
-        "https" => ":443",
-        "http" => ":80",
-        _ => return None,
-    };
-    authority.strip_suffix(default_port)
-}
-
-fn error_response(status: StatusCode, error: ApiError) -> Response {
-    (status, Json(error)).into_response()
-}
-
-/// `/api` 下的全部响应（含 405、413 等框架生成的）都不缓存。
-async fn no_store(mut response: Response) -> Response {
+    let status =
+        StatusCode::from_u16(error.code.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let mut response = (status, Json(error)).into_response();
     response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }
+
+/// Every answer of the application's routes: writes only from this build, not cached.
+async fn api_context(State(state): State<ApiState>, request: Request, next: Next) -> Response {
+    let same_build = request
+        .headers()
+        .get(protocol::BUILD_HEADER)
+        .is_some_and(|value| value.as_bytes() == state.build_id.as_bytes());
+    let mut response = if is_safe(request.method()) || same_build {
+        next.run(request).await
+    } else {
+        let message = "页面与服务器的版本不一致，请重新加载页面";
+        failure(
+            BackendError::new(ErrorCode::BuildMismatch, message),
+            request.extensions().get::<RequestId>(),
+        )
+    };
+    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+fn busy() -> BackendError {
+    BackendError::new(ErrorCode::Unavailable, "服务器繁忙，请稍后再试")
+}
+
+fn internal() -> BackendError {
+    BackendError::new(ErrorCode::Internal, "服务器内部错误")
+}
+
+/// What every handler has: the state, the request's id and whether it is a write.
+struct Ctx {
+    state: ApiState,
+    id: RequestId,
+    write: bool,
+}
+
+impl FromRequestParts<ApiState> for Ctx {
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, state: &ApiState) -> Result<Self, Response> {
+        // `assign_request_id` puts it there; a handler reached another way still gets an id.
+        let id = parts.extensions.get::<RequestId>().cloned().unwrap_or_else(RequestId::new);
+        Ok(Self { state: state.clone(), id, write: !is_safe(&parts.method) })
+    }
+}
+
+/// A handler's error, answered with the request's id.
+struct Failure {
+    error: BackendError,
+    id: RequestId,
+}
+
+impl IntoResponse for Failure {
+    fn into_response(self) -> Response {
+        failure(self.error, Some(&self.id))
+    }
+}
+
+/// The slots an operation holds until it ends.
+struct Slots {
+    _operation: OwnedSemaphorePermit,
+    _import: Option<OwnedSemaphorePermit>,
+}
+
+impl Ctx {
+    fn fail(&self, error: BackendError) -> Failure {
+        Failure { error, id: self.id.clone() }
+    }
+
+    fn invalid(&self, message: impl Into<String>) -> Failure {
+        self.fail(BackendError::new(ErrorCode::InvalidInput, message))
+    }
+
+    /// The id in the path.
+    fn path_id(&self, path: PathParam) -> Result<i64, Failure> {
+        path.ok()
+            .and_then(|Path(raw)| raw.parse().ok())
+            .ok_or_else(|| self.invalid("路径中的 id 无效"))
+    }
+
+    /// The value of the query parameter `name`, which appears at most once.
+    fn parameter(&self, raw: Option<&str>, name: &str) -> Result<Option<String>, Failure> {
+        let raw = raw.unwrap_or_default();
+        if raw.len() > protocol::MAX_QUERY_PARAMETER_BYTES {
+            return Err(self.fail(BackendError::new(ErrorCode::TooLarge, "查询参数过长")));
+        }
+        let mut values = url::form_urlencoded::parse(raw.as_bytes())
+            .filter(|(key, _)| key == name)
+            .map(|(_, value)| value.into_owned());
+        let value = values.next();
+        if values.next().is_some() {
+            return Err(self.invalid(format!("查询参数 {name} 重复")));
+        }
+        Ok(value)
+    }
+
+    /// The JSON in the query parameter `name` of a structured read.
+    fn query<T: DeserializeOwned>(&self, raw: Option<String>, name: &str) -> Result<T, Failure> {
+        let value = self
+            .parameter(raw.as_deref(), name)?
+            .ok_or_else(|| self.invalid(format!("缺少查询参数 {name}")))?;
+        serde_json::from_str(&value)
+            .map_err(|error| self.invalid(format!("查询参数 {name} 无效：{error}")))
+    }
+
+    /// An operation slot, or `unavailable` at once.
+    fn admit(&self) -> Result<Slots, Failure> {
+        let operation = Arc::clone(&self.state.operations)
+            .try_acquire_owned()
+            .map_err(|_| self.fail(busy()))?;
+        Ok(Slots { _operation: operation, _import: None })
+    }
+
+    /// The import slot and an operation slot, or `unavailable` at once.
+    fn admit_import(&self) -> Result<Slots, Failure> {
+        let import =
+            Arc::clone(&self.state.imports).try_acquire_owned().map_err(|_| self.fail(busy()))?;
+        let slots = self.admit()?;
+        Ok(Slots { _import: Some(import), ..slots })
+    }
+
+    /// The body of `request`, bounded by its route's limit and received within the state's
+    /// limit. Called with the request's slots held, so the bodies being received are as many as
+    /// the slots (review C3-R1 F03).
+    async fn receive(&self, request: Request) -> Result<Bytes, Failure> {
+        match tokio::time::timeout(self.state.receive_limit, Bytes::from_request(request, &()))
+            .await
+        {
+            Ok(Ok(body)) => Ok(body),
+            Ok(Err(rejection)) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+                Err(self.fail(BackendError::new(ErrorCode::TooLarge, "请求体过大")))
+            }
+            Ok(Err(_)) => Err(self.invalid("无法读取请求体")),
+            Err(_) => Err(self.invalid("接收请求体超时")),
+        }
+    }
+
+    /// The JSON body of a write.
+    async fn json<T: DeserializeOwned>(&self, request: Request) -> Result<T, Failure> {
+        let body = self.receive(request).await?;
+        serde_json::from_slice(&body).map_err(|error| self.invalid(format!("请求体无效：{error}")))
+    }
+
+    /// A write that takes no body refuses one (review C3-R1 F13).
+    async fn no_body(&self, request: Request) -> Result<(), Failure> {
+        let body = self.receive(request).await?;
+        if body.is_empty() { Ok(()) } else { Err(self.invalid("此接口不接受请求体")) }
+    }
+
+    /// A job's input, received under an operation slot that is released before the job is
+    /// submitted (jobs have their own admission).
+    async fn job_input<T: DeserializeOwned>(&self, request: Request) -> Result<T, Failure> {
+        let _slots = self.admit()?;
+        self.json(request).await
+    }
+
+    /// A job that takes no input refuses a body, received under an operation slot.
+    async fn job_without_input(&self, request: Request) -> Result<(), Failure> {
+        let _slots = self.admit()?;
+        self.no_body(request).await
+    }
+
+    /// Starts `operation` as a background job: `202` and its id, or `unavailable` when no more
+    /// jobs are admitted. The operation's future is only made here; it runs once admitted.
+    fn start<F, Fut>(self, operation: F) -> Response
+    where
+        F: FnOnce(SharedBackend) -> Fut,
+        Fut: Future<Output = rssr_api::Result<JobResult>> + Send + 'static,
+    {
+        let job = operation(Arc::clone(&self.state.backend));
+        match self.state.jobs.submit(&self.id.0, job) {
+            Ok(job_id) => (StatusCode::ACCEPTED, Json(JobCreated { job_id })).into_response(),
+            Err(error) => failure(error, Some(&self.id)),
+        }
+    }
+
+    /// A result over the answers' bound is not sent (review C4A-R2-02): a read says so; a write
+    /// has run, and the page cannot see what it changed.
+    fn too_large(&self) -> BackendError {
+        let mib = self.state.answer_limit / (1024 * 1024);
+        if self.write {
+            let message =
+                format!("操作已执行，但它的结果超过网页端能接收的 {mib} MiB，无法返回，请刷新查看");
+            BackendError::new(ErrorCode::OutcomeUnknown, message)
+        } else {
+            let message = format!("结果超过网页端能接收的 {mib} MiB，无法在网页端打开");
+            BackendError::new(ErrorCode::TooLarge, message)
+        }
+    }
+
+    /// Runs `operation` in its own task holding `slots` until it ends, and answers its result.
+    async fn run<T, F, Fut>(self, slots: Slots, operation: F) -> Response
+    where
+        T: Serialize + Send + 'static,
+        F: FnOnce(SharedBackend) -> Fut + Send + 'static,
+        Fut: Future<Output = rssr_api::Result<T>> + Send + 'static,
+    {
+        let backend = Arc::clone(&self.state.backend);
+        let task = tokio::spawn(async move {
+            let _slots = slots;
+            operation(backend).await
+        });
+        match task.await {
+            Ok(Ok(value)) => match serde_json::to_vec(&value) {
+                Ok(body) if body.len() > self.state.answer_limit => {
+                    failure(self.too_large(), Some(&self.id))
+                }
+                Ok(body) => ([(header::CONTENT_TYPE, "application/json")], body).into_response(),
+                Err(error) => {
+                    error!(request_id = %self.id.0, %error, "无法编码结果");
+                    failure(internal(), Some(&self.id))
+                }
+            },
+            Ok(Err(error)) => failure(error, Some(&self.id)),
+            Err(error) => {
+                error!(request_id = %self.id.0, %error, "操作的任务异常结束");
+                failure(internal(), Some(&self.id))
+            }
+        }
+    }
+}
+
+type Answer = Result<Response, Failure>;
+type PathParam = Result<Path<String>, PathRejection>;
+
+async fn load_settings(ctx: Ctx) -> Answer {
+    let slots = ctx.admit()?;
+    Ok(ctx.run(slots, |backend| async move { backend.load_settings().await }).await)
+}
+
+async fn update_settings(ctx: Ctx, request: Request) -> Answer {
+    let slots = ctx.admit()?;
+    let patch: SettingsPatch = ctx.json(request).await?;
+    Ok(ctx.run(slots, move |backend| async move { backend.update_settings(patch).await }).await)
+}
+
+async fn resolve_startup_target(ctx: Ctx) -> Answer {
+    let slots = ctx.admit()?;
+    Ok(ctx.run(slots, |backend| async move { backend.resolve_startup_target().await }).await)
+}
+
+async fn bootstrap_entries(ctx: Ctx, RawQuery(raw): RawQuery) -> Answer {
+    let input: EntriesBootstrapInput = ctx.query(raw, "input")?;
+    let slots = ctx.admit()?;
+    Ok(ctx.run(slots, move |backend| async move { backend.bootstrap_entries(input).await }).await)
+}
+
+async fn remember_opened_feed(ctx: Ctx, path: PathParam, request: Request) -> Answer {
+    let feed_id = ctx.path_id(path)?;
+    let slots = ctx.admit()?;
+    ctx.no_body(request).await?;
+    Ok(ctx
+        .run(slots, move |backend| async move { backend.remember_opened_feed(feed_id).await })
+        .await)
+}
+
+async fn save_entries_workspace(ctx: Ctx, request: Request) -> Answer {
+    let slots = ctx.admit()?;
+    let workspace: EntriesWorkspaceState = ctx.json(request).await?;
+    Ok(ctx
+        .run(slots, move |backend| async move {
+            backend.save_entries_workspace_if_changed(workspace).await
+        })
+        .await)
+}
+
+async fn list_entries(ctx: Ctx, RawQuery(raw): RawQuery) -> Answer {
+    let query: EntryQuery = ctx.query(raw, "query")?;
+    let slots = ctx.admit()?;
+    Ok(ctx.run(slots, move |backend| async move { backend.list_entries(&query).await }).await)
+}
+
+async fn load_reader_entry(ctx: Ctx, path: PathParam) -> Answer {
+    let entry_id = ctx.path_id(path)?;
+    let slots = ctx.admit()?;
+    Ok(ctx
+        .run(slots, move |backend| async move { backend.load_reader_entry(entry_id).await })
+        .await)
+}
+
+async fn set_entry_read(ctx: Ctx, path: PathParam, request: Request) -> Answer {
+    let entry_id = ctx.path_id(path)?;
+    let slots = ctx.admit()?;
+    let SetRead { read } = ctx.json(request).await?;
+    Ok(ctx
+        .run(slots, move |backend| async move { backend.set_entry_read(entry_id, read).await })
+        .await)
+}
+
+async fn set_entry_starred(ctx: Ctx, path: PathParam, request: Request) -> Answer {
+    let entry_id = ctx.path_id(path)?;
+    let slots = ctx.admit()?;
+    let SetStarred { starred } = ctx.json(request).await?;
+    Ok(ctx
+        .run(
+            slots,
+            move |backend| async move { backend.set_entry_starred(entry_id, starred).await },
+        )
+        .await)
+}
+
+/// The reader's image localization, given up after the state's limit. Giving up cancels the
+/// downloads, but the body is written once at the end, compare-and-set: when the limit falls on
+/// that write, it may still commit. The body is then either the original or the localized one,
+/// never a mixture, and the answer is `outcome_unknown` (review C3-R1 F06; C4 design review
+/// C4D-R1 B1: a client must tell it from a refusal before anything ran, which stays
+/// `unavailable`).
+async fn localize_entry_assets(ctx: Ctx, path: PathParam, request: Request) -> Answer {
+    let entry_id = ctx.path_id(path)?;
+    let slots = ctx.admit()?;
+    ctx.no_body(request).await?;
+    let limit = ctx.state.localize_limit;
+    Ok(ctx
+        .run(slots, move |backend| async move {
+            tokio::time::timeout(limit, backend.localize_entry_assets(entry_id))
+                .await
+                .unwrap_or_else(|_| {
+                    let message = "图片本地化超过时限，结果未知：请重新打开文章";
+                    Err(BackendError::new(ErrorCode::OutcomeUnknown, message))
+                })
+        })
+        .await)
+}
+
+async fn preview_mark_read(ctx: Ctx, RawQuery(raw): RawQuery) -> Answer {
+    let query: EntryQuery = ctx.query(raw, "query")?;
+    let slots = ctx.admit()?;
+    Ok(ctx.run(slots, move |backend| async move { backend.preview_mark_read(&query).await }).await)
+}
+
+async fn mark_read_if_unchanged(ctx: Ctx, request: Request) -> Answer {
+    let slots = ctx.admit()?;
+    let preview: MarkReadPreview = ctx.json(request).await?;
+    Ok(ctx
+        .run(slots, move |backend| async move { backend.mark_read_if_unchanged(&preview).await })
+        .await)
+}
+
+async fn apply_entry_batch(ctx: Ctx, request: Request) -> Answer {
+    let slots = ctx.admit()?;
+    let batch: rssr_domain::EntryBatchRequest = ctx.json(request).await?;
+    Ok(ctx.run(slots, move |backend| async move { backend.apply_entry_batch(batch).await }).await)
+}
+
+async fn feed_edit_details(ctx: Ctx, path: PathParam) -> Answer {
+    let feed_id = ctx.path_id(path)?;
+    let slots = ctx.admit()?;
+    Ok(ctx.run(slots, move |backend| async move { backend.feed_edit_details(feed_id).await }).await)
+}
+
+async fn update_subscription(ctx: Ctx, path: PathParam, request: Request) -> Answer {
+    let feed_id = ctx.path_id(path)?;
+    let slots = ctx.admit()?;
+    let mut edit: rssr_domain::FeedEditRequest = ctx.json(request).await?;
+    // The authenticated route owns identity; a body cannot redirect it to another feed.
+    edit.feed_id = feed_id;
+    Ok(ctx.run(slots, move |backend| async move { backend.update_subscription(edit).await }).await)
+}
+
+async fn load_feeds_snapshot(ctx: Ctx) -> Answer {
+    let slots = ctx.admit()?;
+    Ok(ctx.run(slots, |backend| async move { backend.load_feeds_snapshot().await }).await)
+}
+
+async fn remove_feed(ctx: Ctx, path: PathParam, request: Request) -> Answer {
+    let feed_id = ctx.path_id(path)?;
+    let slots = ctx.admit()?;
+    ctx.no_body(request).await?;
+    Ok(ctx.run(slots, move |backend| async move { backend.remove_feed(feed_id).await }).await)
+}
+
+async fn export_config_json(ctx: Ctx) -> Answer {
+    let slots = ctx.admit()?;
+    Ok(ctx.run(slots, |backend| async move { backend.export_config_json().await }).await)
+}
+
+async fn import_config_json(ctx: Ctx, request: Request) -> Answer {
+    let slots = ctx.admit_import()?;
+    let ImportConfigJson { raw, expected } = ctx.json(request).await?;
+    Ok(ctx
+        .run(slots, move |backend| async move { backend.import_config_json(&raw, &expected).await })
+        .await)
+}
+
+async fn export_opml(ctx: Ctx) -> Answer {
+    let slots = ctx.admit()?;
+    Ok(ctx.run(slots, |backend| async move { backend.export_opml().await }).await)
+}
+
+async fn import_opml(ctx: Ctx, request: Request) -> Answer {
+    let slots = ctx.admit_import()?;
+    let ImportOpml { raw } = ctx.json(request).await?;
+    Ok(ctx.run(slots, move |backend| async move { backend.import_opml(&raw).await }).await)
+}
+
+async fn start_refresh_all(ctx: Ctx, request: Request) -> Answer {
+    ctx.job_without_input(request).await?;
+    Ok(ctx.start(|backend| async move { Ok(JobResult::RefreshAll(backend.refresh_all().await?)) }))
+}
+
+async fn start_refresh_feed(ctx: Ctx, path: PathParam, request: Request) -> Answer {
+    let feed_id = ctx.path_id(path)?;
+    ctx.job_without_input(request).await?;
+    Ok(ctx.start(move |backend| async move {
+        Ok(JobResult::RefreshFeed(backend.refresh_feed(feed_id).await?))
+    }))
+}
+
+async fn start_add_subscription(ctx: Ctx, request: Request) -> Answer {
+    let AddSubscription { raw_url, fallback_site_url } = ctx.job_input(request).await?;
+    Ok(ctx.start(move |backend| async move {
+        let outcome = backend.add_subscription(&raw_url, fallback_site_url).await?;
+        Ok(JobResult::AddSubscription(outcome))
+    }))
+}
+
+async fn start_remote_push(ctx: Ctx, request: Request) -> Answer {
+    let RemoteConfig { endpoint, remote_path } = ctx.job_input(request).await?;
+    Ok(ctx.start(move |backend| async move {
+        let outcome = backend.push_remote_config(&endpoint, &remote_path).await?;
+        Ok(JobResult::RemoteConfigPush(outcome))
+    }))
+}
+
+async fn start_remote_pull(ctx: Ctx, request: Request) -> Answer {
+    let RemoteConfig { endpoint, remote_path } = ctx.job_input(request).await?;
+    Ok(ctx.start(move |backend| async move {
+        let outcome = backend.pull_remote_config(&endpoint, &remote_path).await?;
+        Ok(JobResult::RemoteConfigPull(outcome))
+    }))
+}
+
+/// A job's status, after waiting up to `wait_ms` (a plain integer, at most
+/// `protocol::MAX_JOB_WAIT`) for it to finish. An id that is malformed, unknown, expired,
+/// evicted or from before a restart is `status_unavailable`. A poll takes one of [`MAX_POLLS`]
+/// slots while it waits (review C3-R1 F10).
+async fn poll_job(ctx: Ctx, path: PathParam, RawQuery(raw): RawQuery) -> Answer {
+    let wait_ms = match ctx.parameter(raw.as_deref(), "wait_ms")? {
+        None => 0,
+        Some(value) => value.parse::<u64>().map_err(|_| ctx.invalid("wait_ms 必须是非负整数"))?,
+    };
+    let _slot = Arc::clone(&ctx.state.polls).try_acquire_owned().map_err(|_| ctx.fail(busy()))?;
+    let id = path.ok().and_then(|Path(raw)| JobId::parse(&raw));
+    let status = match id {
+        Some(id) => ctx.state.jobs.status(&id, Duration::from_millis(wait_ms)).await,
+        None => None,
+    };
+    let status = status.ok_or_else(|| {
+        ctx.fail(BackendError::new(
+            ErrorCode::StatusUnavailable,
+            "任务的状态已不可用（已过期、被淘汰或服务器重启过），请重新读取相关数据",
+        ))
+    })?;
+    Ok(([(header::CONTENT_TYPE, "application/json")], status).into_response())
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
-    use axum::Router;
-    use reqwest::StatusCode;
-    use rssr_host::protocol::{ApiError, Capabilities, PROTOCOL_HEADER};
-    use rssr_infra::outbound::OutboundPolicy;
+    use super::*;
 
-    use super::{ApiState, router};
-    use crate::{
-        auth::test_support,
-        library::{LibraryConfig, open_library},
-    };
+    #[derive(Clone, Default)]
+    struct Captured(Arc<Mutex<Vec<u8>>>);
 
-    struct TestServer {
-        base: String,
-        cookie: String,
-        client: reqwest::Client,
-        data_dir: std::path::PathBuf,
-        server: tokio::task::JoinHandle<()>,
-        /// 与服务端共用同一个文章库的进程内服务，用来比较远程与本地调用的结果。
-        local: rssr_host::HostServices,
-    }
-
-    impl TestServer {
-        async fn start() -> Self {
-            Self::start_with_capacity(super::MAX_IN_FLIGHT_CALLS).await
+    impl std::io::Write for Captured {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
         }
 
-        async fn start_with_capacity(capacity: usize) -> Self {
-            // 进程号 + 进程内计数器：并行启动的测试即使拿到同一个时间戳，目录也不会相同。
-            static NEXT_DIR: std::sync::atomic::AtomicUsize =
-                std::sync::atomic::AtomicUsize::new(0);
-            let data_dir = std::env::temp_dir().join(format!(
-                "rssr-web-api-{}-{}-{}",
-                std::process::id(),
-                NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .expect("clock after epoch")
-                    .as_nanos()
-            ));
-            let services = open_library(&LibraryConfig {
-                data_dir: data_dir.clone(),
-                outbound: OutboundPolicy::PublicOnly,
-            })
-            .await
-            .expect("open library");
-            let config = Arc::new(test_support::config());
-            let cookie = test_support::session_cookie(&config);
-            let local = services.clone();
-            let app: Router = router(ApiState::with_capacity(config, services, capacity));
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let base = format!("http://{}", listener.local_addr().unwrap());
-            let server = tokio::spawn(async move {
-                axum::serve(listener, app).await.unwrap();
-            });
-            // The machine may have HTTP(S)_PROXY set; local test traffic must not go through it.
-            let client = reqwest::Client::builder().no_proxy().build().unwrap();
-            Self { base, cookie, client, data_dir, server, local }
-        }
-
-        /// 带会话 cookie，但不带内容类型与协议头。
-        fn bare_post(&self, endpoint: &str) -> reqwest::RequestBuilder {
-            self.client
-                .post(format!("{}/api/v1/{endpoint}", self.base))
-                .header(reqwest::header::COOKIE, &self.cookie)
-        }
-
-        fn post(&self, endpoint: &str) -> reqwest::RequestBuilder {
-            self.bare_post(endpoint)
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
-                .header(PROTOCOL_HEADER, "1")
-        }
-
-        fn stop(self) {
-            self.server.abort();
-            let _ = std::fs::remove_dir_all(&self.data_dir);
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
         }
     }
 
+    /// The log records an error's request id and code, not its message (review C3-R1 F05).
     #[test]
-    fn origin_check_covers_default_ports_and_trusted_forwarded_host() {
-        use axum::http::{HeaderMap, HeaderValue};
-
-        fn headers(pairs: &[(&'static str, &'static str)]) -> HeaderMap {
-            let mut map = HeaderMap::new();
-            for (name, value) in pairs {
-                map.append(*name, HeaderValue::from_static(value));
+    fn errors_are_logged_without_their_message() {
+        let captured = Captured::default();
+        let writer = captured.clone();
+        let subscriber =
+            tracing_subscriber::fmt().with_writer(move || writer.clone()).with_ansi(false).finish();
+        let id = RequestId::new();
+        tracing::subscriber::with_default(subscriber, || {
+            for code in [ErrorCode::InvalidInput, ErrorCode::Unavailable] {
+                let secret = "https://user:password@example.test/rss?token=secret";
+                failure(BackendError::new(code, format!("重复的 feed URL：{secret}")), Some(&id));
             }
-            map
-        }
-        let direct = test_support::config();
-        let mut behind_proxy = test_support::config();
-        behind_proxy.trust_proxy_headers = true;
-
-        assert!(super::origin_matches_host(&direct, &headers(&[("host", "example.com")])));
-        assert!(super::origin_matches_host(
-            &direct,
-            &headers(&[("host", "example.com"), ("origin", "https://example.com")])
-        ));
-        assert!(super::origin_matches_host(
-            &direct,
-            &headers(&[("host", "example.com:443"), ("origin", "https://example.com")])
-        ));
-        assert!(!super::origin_matches_host(
-            &direct,
-            &headers(&[("host", "example.com:8443"), ("origin", "https://example.com")])
-        ));
-        assert!(!super::origin_matches_host(
-            &direct,
-            &headers(&[("host", "example.com"), ("origin", "null")])
-        ));
-        // A reverse proxy that rewrites Host: only a trusted X-Forwarded-Host can restore it.
-        let proxied = [
-            ("host", "127.0.0.1:8080"),
-            ("x-forwarded-host", "example.com"),
-            ("origin", "https://example.com"),
-        ];
-        assert!(!super::origin_matches_host(&direct, &headers(&proxied)));
-        assert!(super::origin_matches_host(&behind_proxy, &headers(&proxied)));
-
-        // Origins are serialized origins only: no path, exactly one header.
-        assert!(!super::origin_matches_host(
-            &direct,
-            &headers(&[("host", "example.com"), ("origin", "https://example.com/path")])
-        ));
-        assert!(!super::origin_matches_host(
-            &direct,
-            &headers(&[
-                ("host", "example.com"),
-                ("origin", "https://example.com"),
-                ("origin", "https://example.com"),
-            ])
-        ));
-        // The scheme counts: Secure-cookie deployments are https, and a trusted proxy's
-        // X-Forwarded-Proto overrides that.
-        let mut secure = test_support::config();
-        secure.secure_cookie = true;
-        assert!(!super::origin_matches_host(
-            &secure,
-            &headers(&[("host", "example.com"), ("origin", "http://example.com")])
-        ));
-        assert!(super::origin_matches_host(
-            &secure,
-            &headers(&[("host", "example.com"), ("origin", "https://example.com")])
-        ));
-        assert!(!super::origin_matches_host(
-            &behind_proxy,
-            &headers(&[
-                ("host", "127.0.0.1:8080"),
-                ("x-forwarded-host", "example.com"),
-                ("x-forwarded-proto", "http"),
-                ("origin", "https://example.com"),
-            ])
-        ));
-    }
-
-    /// 只发请求头、不发请求体：守卫必须在读取请求体之前作答，否则这个请求会一直挂着。
-    async fn status_line_without_body(base: &str, extra_headers: &str) -> String {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let address = base.trim_start_matches("http://");
-        let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
-        let request = format!(
-            "POST /api/v1/settings/load HTTP/1.1\r\nHost: {address}\r\n{extra_headers}\r\n"
-        );
-        socket.write_all(request.as_bytes()).await.unwrap();
-        let mut response = vec![0; 1024];
-        let read =
-            tokio::time::timeout(std::time::Duration::from_secs(5), socket.read(&mut response))
-                .await
-                .unwrap_or_else(|_| panic!("no answer before the body for: {extra_headers}"))
-                .unwrap();
-        String::from_utf8_lossy(&response[..read]).lines().next().unwrap_or_default().to_string()
-    }
-
-    #[tokio::test]
-    async fn rejections_happen_before_the_body_is_read() {
-        let server = TestServer::start().await;
-
-        let anonymous = status_line_without_body(
-            &server.base,
-            "Content-Type: application/json\r\nx-rssr-protocol: 1\r\nContent-Length: 1000000\r\n",
-        )
-        .await;
-        assert!(anonymous.contains("401"), "unexpected status line: {anonymous}");
-
-        let oversized = status_line_without_body(
-            &server.base,
-            &format!(
-                "Cookie: {}\r\nContent-Type: application/json\r\nx-rssr-protocol: 1\r\nContent-Length: {}\r\n",
-                server.cookie,
-                super::MAX_API_BODY_BYTES + 1
-            ),
-        )
-        .await;
-        assert!(oversized.contains("413"), "unexpected status line: {oversized}");
-
-        server.stop();
-    }
-
-    #[tokio::test]
-    async fn saturated_admission_returns_503_json() {
-        let server = TestServer::start_with_capacity(0).await;
-        let response = server.post("settings/load").body("null").send().await.unwrap();
-        assert_eq!(response.headers().get(reqwest::header::CACHE_CONTROL).unwrap(), "no-store");
-        let (status, error) = error_of(response).await;
-        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-        assert!(error.messages[0].contains("繁忙"));
-        server.stop();
-    }
-
-    async fn error_of(response: reqwest::Response) -> (StatusCode, ApiError) {
-        let status = response.status();
-        (status, response.json().await.expect("error body is ApiError JSON"))
-    }
-
-    fn remote_backend(server: &TestServer, with_session: bool) -> rssr_host::client::ApiClient {
-        let mut headers = reqwest::header::HeaderMap::new();
-        if with_session {
-            headers.insert(reqwest::header::COOKIE, server.cookie.parse().unwrap());
-        }
-        let http = reqwest::Client::builder().no_proxy().default_headers(headers).build().unwrap();
-        rssr_host::client::ApiClient::new(http, server.base.clone())
-    }
-
-    /// 浏览器端将使用的远程后端，经真实的 `/api/v1` 往返：结果与错误链都和进程内调用一致。
-    #[tokio::test]
-    async fn remote_backend_round_trips_through_the_api() {
-        use rssr_host::client::{Backend, RemoteServices};
-
-        let server = TestServer::start().await;
-        let client = remote_backend(&server, true);
-        client.capabilities().await.expect("server mode");
-        let backend = Backend::Remote(RemoteServices::new(client));
-
-        let settings = rssr_domain::UserSettings {
-            refresh_interval_minutes: 45,
-            ..rssr_domain::UserSettings::default()
-        };
-        backend.save_settings(&settings).await.unwrap();
-        assert_eq!(backend.load_settings().await.unwrap(), settings);
-
-        let opml = r#"<?xml version="1.0"?><opml version="2.0"><head/><body><outline type="rss" text="Example" xmlUrl="https://example.invalid/feed.xml"/></body></opml>"#;
-        backend.import_opml(opml).await.unwrap();
-        assert_eq!(backend.load_feeds_snapshot().await.unwrap().feed_count, 1);
-        let listed = backend.list_entries(&rssr_domain::EntryQuery::default()).await.unwrap();
-        assert!(listed.entries.is_empty());
-
-        let error = backend
-            .add_subscription("http://127.0.0.1:1/feed.xml", None)
-            .await
-            .expect_err("PublicOnly refuses a loopback feed");
-        assert!(format!("{error:#}").contains("内网或本地地址"), "unexpected error: {error:#}");
-        let local_error = server
-            .local
-            .add_subscription("http://127.0.0.1:1/feed.xml", None)
-            .await
-            .expect_err("the same call in process fails the same way");
-        assert_eq!(error.to_string(), local_error.to_string());
-        assert_eq!(format!("{error:#}"), format!("{local_error:#}"));
-
-        server.stop();
-    }
-
-    static UNAUTHORIZED_SEEN: std::sync::atomic::AtomicBool =
-        std::sync::atomic::AtomicBool::new(false);
-
-    fn mark_unauthorized() {
-        UNAUTHORIZED_SEEN.store(true, std::sync::atomic::Ordering::SeqCst);
-    }
-
-    #[tokio::test]
-    async fn remote_backend_calls_the_unauthorized_handler_on_401() {
-        let server = TestServer::start().await;
-        let client = remote_backend(&server, false).on_unauthorized(mark_unauthorized);
-        let error = client
-            .call::<rssr_host::protocol::LoadSettings>(&())
-            .await
-            .expect_err("no session must fail");
-        assert!(error.to_string().contains("登录"), "unexpected error: {error:#}");
-        assert!(UNAUTHORIZED_SEEN.load(std::sync::atomic::Ordering::SeqCst));
-        server.stop();
-    }
-
-    /// 静态托管的 SPA 回退对任意路径返回 200 HTML，不能被当成服务端模式。
-    #[tokio::test]
-    async fn capabilities_probe_ignores_an_spa_fallback_page() {
-        let app = Router::new().fallback(|| async {
-            axum::response::Html("<!doctype html><title>RSS-Reader</title>")
         });
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let base = format!("http://{}", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let http = reqwest::Client::builder().no_proxy().build().unwrap();
-        let client = rssr_host::client::ApiClient::new(http, base);
-        assert!(client.capabilities().await.is_err(), "an SPA fallback page is not server mode");
-        server.abort();
-    }
-
-    /// 服务端暂时故障时，探测必须报错而不是给出“不是服务端”的结论，否则页面会改用本地存储。
-    #[tokio::test]
-    async fn capabilities_probe_reports_a_server_error_instead_of_local_mode() {
-        let app = Router::new().fallback(|| async {
-            (axum::http::StatusCode::SERVICE_UNAVAILABLE, "upstream unavailable")
-        });
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let base = format!("http://{}", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let http = reqwest::Client::builder().no_proxy().build().unwrap();
-        let error = rssr_host::client::ApiClient::new(http, base)
-            .capabilities()
-            .await
-            .expect_err("a 503 is an error, not a verdict");
-        assert!(format!("{error:#}").contains("503"), "unexpected error: {error:#}");
-        server.abort();
-    }
-
-    /// 只回状态行与响应头、正文停住的服务端。
-    async fn stalled_response_server(head: &'static str) -> (String, tokio::task::JoinHandle<()>) {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let base = format!("http://{}", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.unwrap();
-            let mut request = vec![0; 8192];
-            let _ = socket.read(&mut request).await;
-            socket.write_all(head.as_bytes()).await.unwrap();
-            std::future::pending::<()>().await;
-        });
-        (base, server)
-    }
-
-    static STALLED_UNAUTHORIZED_SEEN: std::sync::atomic::AtomicBool =
-        std::sync::atomic::AtomicBool::new(false);
-
-    fn mark_stalled_unauthorized() {
-        STALLED_UNAUTHORIZED_SEEN.store(true, std::sync::atomic::Ordering::SeqCst);
-    }
-
-    #[tokio::test]
-    async fn unauthorized_is_handled_from_the_status_line_even_if_the_body_stalls() {
-        let (base, server) = stalled_response_server(
-            "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{",
-        )
-        .await;
-        let http = reqwest::Client::builder().no_proxy().build().unwrap();
-        let client = rssr_host::client::ApiClient::new(http, base)
-            .on_unauthorized(mark_stalled_unauthorized);
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            client.call::<rssr_host::protocol::LoadSettings>(&()),
-        )
-        .await
-        .expect("a 401 must not wait for its body");
-        assert!(result.is_err());
-        assert!(STALLED_UNAUTHORIZED_SEEN.load(std::sync::atomic::Ordering::SeqCst));
-        server.abort();
-    }
-
-    #[tokio::test]
-    async fn oversized_responses_are_refused_before_buffering() {
-        let (base, server) = stalled_response_server(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 900000000\r\n\r\n",
-        )
-        .await;
-        let http = reqwest::Client::builder().no_proxy().build().unwrap();
-        let client = rssr_host::client::ApiClient::new(http, base);
-        let error = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            client.call::<rssr_host::protocol::LoadSettings>(&()),
-        )
-        .await
-        .expect("a declared oversized body must be refused without waiting")
-        .expect_err("oversized response");
-        assert!(format!("{error:#}").contains("上限"), "unexpected error: {error:#}");
-        server.abort();
-    }
-
-    #[tokio::test]
-    async fn capabilities_are_public_and_identify_server_mode() {
-        let server = TestServer::start().await;
-        let response =
-            server.client.get(format!("{}/api/v1/capabilities", server.base)).send().await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(response.json::<Capabilities>().await.unwrap(), Capabilities::server());
-        server.stop();
-    }
-
-    #[tokio::test]
-    async fn requests_without_session_json_protocol_or_same_origin_are_rejected() {
-        let server = TestServer::start().await;
-        let url = format!("{}/api/v1/settings/load", server.base);
-
-        let (status, error) = error_of(
-            server
-                .client
-                .post(&url)
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
-                .header(PROTOCOL_HEADER, "1")
-                .body("null")
-                .send()
-                .await
-                .unwrap(),
-        )
-        .await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED);
-        assert!(error.messages[0].contains("登录"));
-
-        let response = server
-            .bare_post("settings/load")
-            .header(reqwest::header::CONTENT_TYPE, "text/plain")
-            .header(PROTOCOL_HEADER, "1")
-            .body("null")
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
-
-        let response = server
-            .bare_post("settings/load")
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .header(PROTOCOL_HEADER, "999")
-            .body("null")
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::CONFLICT);
-
-        let response = server
-            .post("settings/load")
-            .header(reqwest::header::ORIGIN, "http://evil.example")
-            .body("null")
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-
-        let response = server
-            .post("settings/load")
-            .header(reqwest::header::ORIGIN, server.base.clone())
-            .body("null")
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK, "same-origin request must pass");
-
-        server.stop();
-    }
-
-    #[tokio::test]
-    async fn endpoints_return_typed_json_and_typed_errors() {
-        let server = TestServer::start().await;
-
-        let response = server.post("settings/load").body("null").send().await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(response.headers().get(reqwest::header::CACHE_CONTROL).unwrap(), "no-store");
-        let settings: rssr_domain::UserSettings = response.json().await.unwrap();
-        assert_eq!(settings, rssr_domain::UserSettings::default());
-
-        let (status, _) =
-            error_of(server.post("feeds/drop_database").body("null").send().await.unwrap()).await;
-        assert_eq!(status, StatusCode::NOT_FOUND);
-
-        let (status, _) =
-            error_of(server.post("reader/load_entry").body("\"x\"").send().await.unwrap()).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-
-        // PublicOnly: the server must refuse to probe a loopback feed on the user's behalf.
-        let (status, error) = error_of(
-            server
-                .post("feeds/add_subscription")
-                .body(r#"{"raw_url":"http://127.0.0.1:1/feed.xml","fallback_site_url":null}"#)
-                .send()
-                .await
-                .unwrap(),
-        )
-        .await;
-        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-        assert!(
-            error.messages.iter().any(|message| message.contains("内网或本地地址")),
-            "unexpected error chain: {:?}",
-            error.messages
-        );
-
-        server.stop();
+        let log = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+        assert!(log.contains(&*id.0) && log.contains("invalid_input"), "{log}");
+        assert!(!log.contains("password") && !log.contains("token"), "{log}");
     }
 }

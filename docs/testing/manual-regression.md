@@ -10,8 +10,8 @@
 ## 验收准备与 Windows 原生隔离
 
 - 记录执行日期、完整 commit SHA、构建模式、产物路径与哈希、操作系统、浏览器或 WebView 版本、视口、显示缩放、主题和数据规模。每项填写“通过 / 失败 / 未运行”，并保留具体观察、截图或日志。
-- Web 使用独立浏览器 profile。Windows 原生将本次构建的 exe 及所需资源复制到独立、可写的临时目录，避免使用日常安装目录和用户数据库。
-- Windows 数据目录按 **exe 所在目录**决定，不按当前工作目录决定。测试数据库应位于 `<exe目录>/RSS-Reader/rss-reader.db` 与 `rss-reader-content.db`，界面偏好也位于该 `RSS-Reader` 目录。只改变 working directory 或 WebView2 profile 不能隔离 SQLite。
+- 正式 Web 使用独立浏览器 profile 与测试服务器资料库，入口见 [服务器浏览器回归](./server-web-regression.md)；Pages 演示单独构建验收。Windows 原生将本次构建的 exe 及所需资源复制到独立、可写的临时目录，避免使用日常安装目录和用户数据库。
+- Windows 数据目录按 **exe 所在目录**决定，不按当前工作目录决定。测试资料库应位于 `<exe目录>/RSS-Reader/library.sqlite3`（v0.1.x 为 `rss-reader.db` 与 `rss-reader-content.db`），界面偏好也位于该 `RSS-Reader` 目录。只改变 working directory 或 WebView2 profile 不能隔离 SQLite。
 - 启动前，仅为本次子进程设置 `WEBVIEW2_USER_DATA_FOLDER` 到独立测试目录，核对实际使用的 profile 路径；避免全局修改环境变量或复用运行中的 profile。环境覆盖方式见 [Microsoft WebView2 环境创建说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/webview2-idl#createcorewebview2environmentwithoptions)。
 - GUI 检查串行执行，保留用户已有窗口；只结束本次启动的实例。删除、导入与主题移除使用测试数据。重启持久化检查使用同一测试 exe 路径与 profile。
 - 单次结果保存到 `target/**/summary.md`，交付摘要放 `docs/handoffs/`；本文件保留可复用清单和空白模板。
@@ -155,6 +155,7 @@ node scripts/browser/rssr_small_viewport_assertions.mjs \
 - 分别通过关闭按钮、背景与 Esc 关闭，确认正文滚动位置和焦点恢复；重复开关后背景仍可滚动，无残留浮层。
 - 键盘聚焦正文图片后用 Enter / 空格打开；打开后焦点进入查看器，关闭按钮可操作。
 - 图片打开时离开 Reader 再返回，正文仍可滚动。Android 系统返回应先关图片，再返回才离开 Reader；pinch 缩放单独记录实机结果。
+- Android 系统返回（有设备时执行）：Reader、订阅、设置、订阅文章列表逐页返回到上一页，没有上一页时回首页；首页按一次出现“再按一次返回键退出”，5 秒内再按应用退到后台，超过 5 秒提示消失、需重新按两次；在首页点过目录项后按返回同样有效；退到后台再回来，提示不残留。
 
 ### 13. Android 下拉刷新（有设备时执行）
 

@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Exercise a real legacy CLI -> candidate SQLite upgrade using synthetic data only.
+"""Exercise a real legacy CLI -> candidate v0.2 import using synthetic data only.
 
 Both executables must be supplied explicitly. The output directory must not exist;
 no existing user database is accepted. The legacy executable creates schema and
 ingests feeds through its public CLI. Only favorites (no CLI command) are seeded
-with SQL. Original databases, command logs and every failed/retried copy survive.
+with SQL. The candidate imports copies of that library into a new `library.sqlite3`
+through its own CLI (`--data-dir`). Original databases, command logs and every
+failed/retried copy survive.
 """
 
 import argparse
 import base64
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import struct
@@ -25,7 +28,14 @@ from pathlib import Path
 
 
 DB_NAMES = ("rss-reader.db", "rss-reader-content.db")
+LIBRARY = "library.sqlite3"
+CREATION_LOCK = LIBRARY + ".create-lock"
+APPLICATION_ID = 0x52535352
 CSS = ":root { --release-upgrade-sentinel: v0121; }"
+# Released v0.1.x index migrations the importer accepts as a prefix (v0.1.21 has 1-5,
+# v0.1.22 and v0.1.23 have 1-7).
+RELEASED_MIGRATIONS = 7
+TICKETS = ("refresh_issued", "refresh_published", "refresh_diagnosed")
 
 
 def fixture_image():
@@ -36,38 +46,35 @@ def fixture_image():
     png += chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b"")
     return "data:image/png;base64," + base64.b64encode(png).decode()
 
-
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
 
 def database_url(directory):
     return "sqlite://" + (directory / DB_NAMES[0]).as_posix() + "?mode=rwc"
 
 
+def rows(conn, sql):
+    conn.row_factory = sqlite3.Row
+    return [dict(row) for row in conn.execute(sql)]
+
+
 def snapshot(directory):
+    """Every row of every v0.1 table the import maps, the migration history and the
+    AUTOINCREMENT high-water marks."""
     result = {}
-    for name, tables in (
-        (DB_NAMES[0], ("feeds", "entries", "app_settings", "sync_sources")),
-        (DB_NAMES[1], ("entry_contents",)),
-    ):
-        with sqlite3.connect(directory / name) as conn:
-            assert conn.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
-            assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
-            conn.row_factory = sqlite3.Row
-            for table in tables:
-                rows = [dict(row) for row in conn.execute(f'SELECT * FROM "{table}" ORDER BY 1')]
-                # 0006 adds a fence; compare all pre-existing columns byte-for-byte.
-                if table == "feeds":
-                    for row in rows:
-                        row.pop("generation", None)
-                result[table] = rows
-    return result
-
-
-def versions(directory):
     with sqlite3.connect(directory / DB_NAMES[0]) as conn:
-        return conn.execute("SELECT version, success FROM _sqlx_migrations ORDER BY version").fetchall()
+        assert conn.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+        for table in ("feeds", "entries", "app_settings", "sync_sources"):
+            result[table] = rows(conn, f'SELECT * FROM "{table}" ORDER BY 1')
+        result["sqlite_sequence"] = rows(conn, "SELECT name, seq FROM sqlite_sequence ORDER BY name")
+        result["migrations"] = [
+            list(row) for row in conn.execute("SELECT version, success FROM _sqlx_migrations ORDER BY version")
+        ]
+    with sqlite3.connect(directory / DB_NAMES[1]) as conn:
+        assert conn.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
+        result["entry_contents"] = rows(conn, "SELECT * FROM entry_contents ORDER BY entry_id")
+    return result
 
 
 def checkpoint(directory):
@@ -81,6 +88,65 @@ def copy_databases(source, destination):
     for name in DB_NAMES:
         shutil.copy2(source / name, destination / name)
     return destination
+
+
+def scratch_files(directory):
+    """Files next to the library other than the library, its WAL side files and its creation lock."""
+    return sorted(
+        path.name for path in directory.iterdir()
+        if path.name.startswith(LIBRARY + ".") and path.name != CREATION_LOCK
+    )
+
+
+def verify_imported(directory, expected):
+    """The library in `directory` holds every row of `expected` under the documented rules."""
+    with sqlite3.connect(directory / LIBRARY) as conn:
+        assert conn.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert conn.execute("PRAGMA application_id").fetchone()[0] == APPLICATION_ID
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        feeds = rows(conn, "SELECT * FROM feeds ORDER BY id")
+        entries = rows(conn, "SELECT * FROM entries ORDER BY id")
+        bodies = rows(conn, "SELECT * FROM entry_contents ORDER BY entry_id")
+        documents = {row["key"]: row for row in rows(conn, "SELECT * FROM app_settings")}
+        sequence = {row["name"]: row["seq"] for row in rows(conn, "SELECT name, seq FROM sqlite_sequence")}
+
+    # Feeds: every v0.1 column kept (generation included); names are source titles; tickets start at 0.
+    assert len(feeds) == len(expected["feeds"])
+    for old, new in zip(expected["feeds"], feeds):
+        assert {column: new[column] for column in old} == old, (old, new)
+        assert new["custom_title"] is None
+        assert all(new[ticket] == 0 for ticket in TICKETS), new
+
+    # Bodies: kept for live entries, without the redundant feed_id; has_content follows them.
+    live = {entry["id"] for entry in entries}
+    expected_bodies = [
+        {column: value for column, value in body.items() if column != "feed_id"}
+        for body in expected["entry_contents"] if body["entry_id"] in live
+    ]
+    assert bodies == expected_bodies
+    with_body = {body["entry_id"] for body in bodies}
+
+    # Entries: every v0.1 column kept except has_content (derived); title_search is the folded title
+    # (the fixture titles are ASCII, where Python's str.lower() agrees with Rust's to_lowercase()).
+    assert len(entries) == len(expected["entries"])
+    for old, new in zip(expected["entries"], entries):
+        kept = {column: value for column, value in old.items() if column != "has_content"}
+        assert {column: new[column] for column in kept} == kept, (old, new)
+        assert new["has_content"] == int(new["id"] in with_body), new
+        assert new["title_search"] == new["title"].lower(), new
+
+    # Documents: same JSON and time; nothing else.
+    assert sorted(documents) == sorted(row["key"] for row in expected["app_settings"]), documents
+    for old in expected["app_settings"]:
+        new = documents[old["key"]]
+        assert json.loads(new["value"]) == json.loads(old["value"]), (old, new)
+        assert new["updated_at"] == old["updated_at"], (old, new)
+
+    # AUTOINCREMENT marks: ids are never reused.
+    for old in expected["sqlite_sequence"]:
+        if old["name"] in ("feeds", "entries"):
+            assert sequence[old["name"]] == old["seq"], (old, sequence)
 
 
 class Fixture(BaseHTTPRequestHandler):
@@ -119,6 +185,16 @@ class Fixture(BaseHTTPRequestHandler):
         pass
 
 
+def lock_file(handle):
+    """Takes the exclusive lock the candidate takes on the creation lock file."""
+    if os.name == "nt":
+        import msvcrt
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--legacy-cli", type=Path, required=True)
@@ -134,25 +210,39 @@ def main():
         "checks": [],
         "limitations": [
             "Favorites seeded with SQL after legacy CLI ingestion (legacy CLI has no star command).",
-            "Forced process termination covers migration lock wait, not power loss during disk flush.",
+            "Shapes the legacy CLI cannot produce are seeded with SQL too: a re-added subscription's "
+            "generation (releases with migration 0006), an entry removed above the highest id (its "
+            "body left as an orphan), and app state.",
+            "Covers the split layout written by the legacy release; the inline v0.1.0-v0.1.6 layout "
+            "is covered by fixture tests only.",
+            "Forced process termination covers the creation-lock wait, not power loss during disk flush.",
             "Does not certify GUI, Android hardware, signing, or other platform packages.",
         ],
     }
     commands = []
+    environment = {key: value for key, value in os.environ.items() if key != "RSSR_DATA_DIR"}
 
     def record(name):
         report["checks"].append({"name": name, "status": "passed"})
         print("PASS " + name, flush=True)
 
-    def run(binary, directory, *command, expect_success=True):
-        argv = [str(binary), "--database-url", database_url(directory), *command]
-        result = subprocess.run(argv, capture_output=True, timeout=90)
+    def execute(argv, expect_success):
+        result = subprocess.run(argv, capture_output=True, timeout=90, env=environment)
         commands.append({"argv": argv, "exit_code": result.returncode,
                          "stdout": result.stdout.decode("utf-8", "replace"),
                          "stderr": result.stderr.decode("utf-8", "replace")})
         (root / "commands.json").write_text(json.dumps(commands, ensure_ascii=False, indent=2), encoding="utf-8")
         assert (result.returncode == 0) == expect_success, commands[-1]
         return result
+
+    def run_legacy(directory, *command, expect_success=True):
+        return execute([str(legacy), "--database-url", database_url(directory), *command], expect_success)
+
+    def candidate_argv(directory, *command):
+        return [str(candidate), "--data-dir", str(directory), *command]
+
+    def run_candidate(directory, *command, expect_success=True):
+        return execute(candidate_argv(directory, *command), expect_success)
 
     try:
         original = root / "legacy-original"
@@ -161,105 +251,125 @@ def main():
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            run(legacy, original, "list-feeds")
+            run_legacy(original, "list-feeds")
             for name in ("alpha", "bravo", "charlie"):
-                run(legacy, original, "add-feed", f"http://127.0.0.1:{server.server_port}/{name}.xml",
-                    "--folder", "Upgrade fixture")
-            run(legacy, original, "save-settings", "--theme", "dark", "--reader-font-scale", "1.2",
-                "--refresh-interval-minutes", "1440", "--archive-after-months", "1200", "--custom-css", CSS)
-            run(legacy, original, "mark-read", "--feed-id", "1", "--yes")
+                run_legacy(original, "add-feed", f"http://127.0.0.1:{server.server_port}/{name}.xml",
+                           "--folder", "Upgrade fixture")
+            run_legacy(original, "save-settings", "--theme", "dark", "--reader-font-scale", "1.2",
+                       "--refresh-interval-minutes", "1440", "--archive-after-months", "1200",
+                       "--custom-css", CSS)
+            run_legacy(original, "mark-read", "--feed-id", "1", "--yes")
         finally:
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
         with sqlite3.connect(original / DB_NAMES[0]) as conn:
             conn.execute("UPDATE entries SET is_starred=1, starred_at=created_at WHERE id % 7 = 0")
-        run(legacy, original, "show-settings")
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(feeds)")]
+            if "generation" in columns:
+                conn.execute("UPDATE feeds SET generation = 2 WHERE id = 2")
+            removed = conn.execute(
+                "DELETE FROM entries WHERE id = (SELECT MAX(id) FROM entries) "
+                "AND is_read = 0 AND is_starred = 0"
+            ).rowcount
+            assert removed == 1, "the highest entry is expected unread and not starred"
+            conn.execute(
+                "INSERT INTO app_settings (key, value, updated_at) VALUES ('app_state_v2', ?, ?)",
+                (json.dumps({"last_opened_feed_id": 2}), "2026-05-01T08:00:00Z"),
+            )
+        run_legacy(original, "show-settings")
+        checkpoint(original)
         expected = snapshot(original)
-        assert versions(original) == [(i, 1) for i in range(1, 6)]
+        legacy_last = len(expected["migrations"])
+        assert expected["migrations"] == [[i, 1] for i in range(1, legacy_last + 1)], expected["migrations"]
+        assert 5 <= legacy_last <= RELEASED_MIGRATIONS, expected["migrations"]
+        report["legacy_migrations"] = legacy_last
         assert len(expected["feeds"]) == 3
-        assert len(expected["entries"]) == len(expected["entry_contents"]) == 144
+        assert len(expected["entries"]) == 143 and len(expected["entry_contents"]) == 144
+        entry_mark = {row["name"]: row["seq"] for row in expected["sqlite_sequence"]}["entries"]
+        assert entry_mark > max(row["id"] for row in expected["entries"]), entry_mark
         assert sum(row["is_read"] for row in expected["entries"]) == 48
         assert sum(row["is_starred"] for row in expected["entries"]) == 20
         assert CSS in json.dumps(expected["app_settings"])
-        checkpoint(original)
+        assert expected["sync_sources"] == [], "sync_sources is not imported; the release never wrote it"
         original_hashes = {name: digest(original / name) for name in DB_NAMES}
         report["original_sha256"] = original_hashes
         (root / "legacy-snapshot.json").write_text(json.dumps(expected, ensure_ascii=False, indent=2), encoding="utf-8")
-        record("legacy binary created migrations 1-5, 3 subscriptions, 144 bodies, 48 read, 20 starred, settings and CSS")
+        record(f"legacy binary created migrations 1-{legacy_last}, 3 subscriptions, 144 bodies, 48 read, 20 starred, settings and CSS; "
+               "SQL seeded a generation, a removed highest entry and app state")
 
-        def verify_upgraded(directory):
-            assert versions(directory) == [(i, 1) for i in range(1, 8)]
-            assert snapshot(directory) == expected
-            with sqlite3.connect(directory / DB_NAMES[0]) as conn:
-                assert conn.execute("SELECT DISTINCT generation FROM feeds").fetchall() == [(0,)]
-                assert conn.execute("SELECT COUNT(*) FROM content_gc_queue").fetchone() == (0,)
-                assert conn.execute("SELECT legacy_reconciled FROM content_gc_state WHERE id=1").fetchone() == (1,)
+        imported = copy_databases(original, root / "import-success")
+        result = run_candidate(imported, "list-feeds")
+        verify_imported(imported, expected)
+        log = result.stderr.decode("utf-8", "replace")
+        assert "orphan_bodies: 1" in log and "missing_bodies: 0" in log, log
+        assert scratch_files(imported) == [], scratch_files(imported)
+        assert {name: digest(imported / name) for name in DB_NAMES} == original_hashes
+        record("candidate imports every feed, entry, body, document and id mark; generation, times and "
+               "flags kept; custom names empty; tickets 0; the v0.1 files are unchanged")
 
-        upgraded = copy_databases(original, root / "upgrade-success")
-        run(candidate, upgraded, "list-feeds")
-        verify_upgraded(upgraded)
-        record("0006 and 0007 upgrade preserve every pre-existing data column and body")
         for _ in range(3):
-            result = run(candidate, upgraded, "show-settings")
-            assert CSS in result.stdout.decode()
-            verify_upgraded(upgraded)
-        record("three independent candidate restarts preserve data and custom CSS")
+            result = run_candidate(imported, "show-settings")
+            assert CSS in result.stdout.decode("utf-8", "replace")
+            verify_imported(imported, expected)
+        # The import runs once: later changes to the v0.1 files are not picked up.
+        with sqlite3.connect(imported / DB_NAMES[0]) as conn:
+            conn.execute("UPDATE feeds SET title = 'changed after import' WHERE id = 1")
+        run_candidate(imported, "list-feeds")
+        verify_imported(imported, expected)
+        record("three independent candidate restarts preserve data and custom CSS; the import is not repeated")
 
-        for failed_version in (6, 7):
-            directory = copy_databases(original, root / f"fail-migration-{failed_version}")
-            with sqlite3.connect(directory / DB_NAMES[0]) as conn:
-                conn.execute(
-                    "CREATE TRIGGER qa_fail_migration BEFORE INSERT ON _sqlx_migrations "
-                    f"WHEN NEW.version={failed_version} BEGIN SELECT RAISE(ABORT, 'qa injected failure'); END"
-                )
-            result = run(candidate, directory, "list-feeds", expect_success=False)
-            assert b"qa injected failure" in result.stderr
-            assert versions(directory) == [(i, 1) for i in range(1, failed_version)]
-            assert snapshot(directory) == expected
-            with sqlite3.connect(directory / DB_NAMES[0]) as conn:
-                if failed_version == 6:
-                    assert "generation" not in [row[1] for row in conn.execute("PRAGMA table_info(feeds)")]
-                else:
-                    assert conn.execute("SELECT name FROM sqlite_master WHERE name LIKE 'content_gc_%'").fetchall() == []
-                conn.execute("DROP TRIGGER qa_fail_migration")
-            run(candidate, directory, "list-feeds")
-            verify_upgraded(directory)
-            record(f"migration {failed_version} injected failure rolls back DDL/history; retry succeeds")
+        refused = copy_databases(original, root / "refuse-unknown-migration")
+        with sqlite3.connect(refused / DB_NAMES[0]) as conn:
+            conn.execute(
+                "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) "
+                "VALUES (?, 'unknown', TRUE, x'00', 0)", (legacy_last + 1,)
+            )
+        result = run_candidate(refused, "list-feeds", expect_success=False)
+        # Within the released range the checksum gives it away; past it, the version does.
+        reason = "与发布版本不一致" if legacy_last < RELEASED_MIGRATIONS else "未发布的迁移"
+        assert reason in result.stderr.decode("utf-8", "replace"), commands[-1]
+        assert not (refused / LIBRARY).exists() and scratch_files(refused) == []
+        with sqlite3.connect(refused / DB_NAMES[0]) as conn:
+            conn.execute("DELETE FROM _sqlx_migrations WHERE version = ?", (legacy_last + 1,))
+        run_candidate(refused, "list-feeds")
+        verify_imported(refused, expected)
+        record(f"an unknown migration {legacy_last + 1} is refused without creating a library; the fixed copy imports")
 
-        interrupted = copy_databases(original, root / "interrupted-lock-wait")
-        with sqlite3.connect(interrupted / DB_NAMES[0]) as blocker:
-            blocker.execute("BEGIN IMMEDIATE")
-            argv = [str(candidate), "--database-url", database_url(interrupted), "list-feeds"]
+        stale = copy_databases(original, root / "stale-scratch-files")
+        for name in ("importing", "import-index", "import-content", "importing-journal"):
+            (stale / f"{LIBRARY}.{name}").write_bytes(b"left by a killed import")
+        run_candidate(stale, "list-feeds")
+        verify_imported(stale, expected)
+        assert scratch_files(stale) == [], scratch_files(stale)
+        record("scratch files left by a killed import are replaced; the import completes and cleans up")
+
+        waiting = copy_databases(original, root / "interrupted-lock-wait")
+        with (waiting / CREATION_LOCK).open("wb") as holder:
+            lock_file(holder)
             with (root / "interrupted-process.log").open("wb") as log:
-                process = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT)
+                process = subprocess.Popen(candidate_argv(waiting, "list-feeds"), stdout=log,
+                                           stderr=subprocess.STDOUT, env=environment)
                 try:
                     time.sleep(1)
-                    assert process.poll() is None, "candidate did not wait for locked legacy database"
+                    assert process.poll() is None, "candidate did not wait for the creation lock"
                     process.kill()
                     process.wait(timeout=10)
                 finally:
                     if process.poll() is None:
                         process.kill()
                         process.wait(timeout=10)
-            blocker.rollback()
-        assert versions(interrupted) == [(i, 1) for i in range(1, 6)]
-        assert snapshot(interrupted) == expected
-        run(candidate, interrupted, "list-feeds")
-        verify_upgraded(interrupted)
-        record("forced termination while legacy database is write locked; restart upgrades safely")
+        assert not (waiting / LIBRARY).exists() and scratch_files(waiting) == []
+        run_candidate(waiting, "list-feeds")
+        verify_imported(waiting, expected)
+        record("forced termination while another creator holds the lock leaves nothing; restart imports")
 
-        checkpoint(upgraded)
-        downgrade = copy_databases(upgraded, root / "unsupported-downgrade-probe")
-        result = run(legacy, downgrade, "list-feeds", expect_success=False)
-        assert b"previously applied" in result.stderr and b"missing" in result.stderr
-        assert snapshot(downgrade) == expected
-        record("legacy binary refuses new migration history; old binary is not a rollback strategy")
+        run_legacy(imported, "list-feeds")
         restored = copy_databases(original, root / "restore-original-to-legacy")
-        run(legacy, restored, "list-feeds")
+        run_legacy(restored, "list-feeds")
         assert snapshot(restored) == expected
         assert {name: digest(original / name) for name in DB_NAMES} == original_hashes
-        record("restoring both original database files works with old binary; originals remain byte identical")
+        record("the legacy binary still opens its untouched files after an import; originals remain byte identical")
         report["status"] = "passed"
     except Exception as error:
         report["status"] = "failed"

@@ -24,13 +24,15 @@
 
 ### Web / 浏览器 smoke
 
+- [服务器模式浏览器回归（统一入口）](./server-web-regression.md)：regression、theme-matrix、feed-smoke、acceptance；长验收加 `--long`。
+- [Web 服务包与容器验收](./web-distribution.md)：四平台服务包、真实旧页面、镜像复用与旧认证卷迁移。
+
 - [`rssr-web` 浏览器手工 Smoke](./rssr-web-browser-smoke.md)
 - [`rssr-web` 浏览器自动 Feed Smoke](./rssr-web-browser-feed-smoke.md)
-- [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
-- [Static Web 阅读页 `/entries/:entry_id` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
-- [Static Web 小视口 Smoke](./static-web-small-viewport-smoke.md)
-- [Web 多标签存储一致性脚本](../../scripts/browser/rssr_storage_consistency_acceptance.cjs)：复用 SPA regression server，`STATIC_BASE` 指向服务；覆盖两视口、并发标记、失败发布与重试，使用已安装的 Playwright / Chromium。
-- [Windows Chrome 可见窗口回归](./windows-chrome-visible-regression.md)
+- [旧静态入口的迁移说明](./static-web-browser-smoke.md)
+- [Web 阅读页 `/entries/:entry_id` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
+- [Web 小视口 Smoke](./static-web-small-viewport-smoke.md)
+- 正式 Web 多浏览器可见性、只读刷新与草稿：统一入口的 `acceptance`；原生与演示共用 SQL 契约，浏览器执行器另验。
 - [Chrome MCP 目标浏览器](./chrome-mcp-target.md)
 
 ### 重构 / 约束
@@ -61,8 +63,8 @@
 - 先看 [发布前 UI 覆盖矩阵](./release-ui-coverage-matrix.md)，确认哪些已经自动化、哪些还要人工补。
 - 再按 [发布前 UI 回归清单](./release-ui-regression-checklist.md) 执行。
 - 本次如果涉及真实阅读页、多主题或小视口，额外补：
-  - `bash scripts/run_static_web_reader_theme_matrix.sh`
-  - `bash scripts/run_static_web_small_viewport_smoke.sh`
+  - `bash scripts/run_server_web_regression.sh --suite theme-matrix`
+  - `bash scripts/run_server_web_regression.sh --suite regression`
 
 ### 主线验证 / CI 补查
 

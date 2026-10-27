@@ -9,7 +9,11 @@
 //! 演进。正文的解析、归一化与消毒属于基础设施职责，页面层只负责显示，所以统一放在这里。
 
 mod live_display;
+mod math;
+mod parse_budget;
+mod plain_text;
 mod reader;
+mod url_guard;
 
 pub use live_display::normalize_html_for_live_display;
 pub use reader::{looks_like_html_fragment, sanitize_reader_html};

@@ -11,7 +11,7 @@ pub fn EntryFilters(
     source_filter_open: Signal<bool>,
     read_filter: ReadFilter,
     starred_filter: StarredFilter,
-    available_sources: Vec<(i64, String, String, u32)>,
+    available_sources: Vec<(i64, String, String, u64)>,
     selected_feed_urls: Vec<String>,
     on_change_read_filter: EventHandler<ReadFilter>,
     on_change_starred_filter: EventHandler<StarredFilter>,
@@ -51,7 +51,7 @@ fn FilterButton(
 #[component]
 fn SourceChooser(
     mut open: Signal<bool>,
-    available_sources: Vec<(i64, String, String, u32)>,
+    available_sources: Vec<(i64, String, String, u64)>,
     selected_feed_urls: Vec<String>,
     on_apply: EventHandler<Vec<String>>,
 ) -> Element {
@@ -104,11 +104,12 @@ fn SourceChooser(
                     span { "全部来源" } small { "已选 {selected_count}" }
                 }
                 div { class: "source-choices",
-                    for (id, title, url, _) in available_sources.iter().filter(|(_, title, url, _)| draft.read().matches(title, url)) {
+                    for (id, title, url, unread) in available_sources.iter().filter(|(_, title, url, _)| draft.read().matches(title, url)) {
                         { let url = url.clone(); let checked = draft.read().is_selected(&url);
-                          rsx! { label { key: "{id}", class: "source-choice",
-                            input { r#type: "checkbox", checked, aria_label: "{title}", onchange: move |event| draft.write().set_selected(&url, event.checked()) }
+                          rsx! { label { key: "{id}", class: "source-choice", "data-layout": "entry-filters-source-chip",
+                            input { r#type: "checkbox", checked, aria_label: "{title}", aria_describedby: "source-unread-{id}", "data-field": "entry-source-filter", onchange: move |event| draft.write().set_selected(&url, event.checked()) }
                             span { "{title}" }
+                            small { id: "source-unread-{id}", "data-slot": "entry-filters-source-unread-count", aria_label: "未读 {unread} 篇", "· {unread}" }
                           } }
                         }
                     }

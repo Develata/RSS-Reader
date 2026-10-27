@@ -2,39 +2,87 @@ name: Docker
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - "v*"
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      all_platforms:
+        description: Also verify Windows and both macOS Web packages (no publishing)
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      use_existing_package:
+        type: boolean
+        default: false
+      build_id:
+        type: string
+        default: ''
+      source_sha:
+        type: string
+        default: ''
+      image_tag:
+        type: string
+        default: ''
 
 permissions:
   contents: read
   packages: write
 
-concurrency:
-  group: docker-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  publish-image:
+  build-package:
+    if: ${{ !inputs.use_existing_package }}
+    uses: ./.github/workflows/web-packages.yml
+    with:
+      source_ref: ${{ github.sha }}
+      all_platforms: ${{ inputs.all_platforms == true }}
+
+  image:
+    needs: build-package
+    if: ${{ always() && !cancelled() && (needs.build-package.result == 'success' || inputs.use_existing_package) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     env:
-      SMOKE_IMAGE: rss-reader-smoke:${{ github.sha }}
-      SHOULD_PUSH_IMAGE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      SMOKE_IMAGE: rss-reader-smoke:${{ inputs.source_sha || needs.build-package.outputs.source_sha }}
+      RSSR_BUILD_ID: ${{ inputs.build_id || needs.build-package.outputs.build_id }}
+      SHOULD_PUSH_IMAGE: ${{ inputs.use_existing_package && inputs.image_tag != '' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Cleanup runner
-        uses: ./.github/actions/cleanup-github-runner
+      - uses: actions/checkout@v7
         with:
-          prune-docker: "true"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
+          ref: ${{ inputs.source_sha || needs.build-package.outputs.source_sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-package-linux-x86_64
+          path: target/web-package
+      - name: Prepare the exact verified Linux package for the image
+        run: |
+          python3 scripts/package_web.py unpack target/web-package/rssr-web-linux-x86_64.tar.gz target/c6-image/package
+          (cd target/web-package/image && sha256sum --check cli.sha256)
+          cp target/web-package/image/rssr-cli target/c6-image/package/rssr-cli
+          chmod 755 target/c6-image/package/rssr-cli
+          cp Dockerfile target/c6-image/Dockerfile
+      - uses: docker/setup-buildx-action@v4
+      - name: Build smoke image from the package
+        uses: docker/build-push-action@v7
+        with:
+          context: target/c6-image
+          target: packaged
+          load: true
+          tags: ${{ env.SMOKE_IMAGE }}
+          cache-from: type=gha,scope=web-runtime
+          cache-to: type=gha,scope=web-runtime,mode=max
+      - name: Verify new volume, legacy migration and owner CLI
+        run: |
+          python3 scripts/smoke_web_container.py --image "$SMOKE_IMAGE" --build-id "$RSSR_BUILD_ID" --package target/c6-image/package --logs target/c6-container-check
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: c6-container-check
+          path: target/c6-container-check/
+          if-no-files-found: ignore
       - name: Log in to GHCR
         if: env.SHOULD_PUSH_IMAGE == 'true'
         uses: docker/login-action@v4
@@ -42,68 +90,25 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract Docker metadata
+      - name: Extract image tags
         if: env.SHOULD_PUSH_IMAGE == 'true'
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/develata/rss-reader
+          flavor: latest=${{ !contains(inputs.image_tag, '-') }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=tag
-            type=sha
-
-      - name: Build smoke image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./Dockerfile
-          load: true
-          tags: ${{ env.SMOKE_IMAGE }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Smoke-test container runtime
-        run: |
-          set -euo pipefail
-          CONTAINER_NAME="rss-reader-smoke"
-          trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true' EXIT
-
-          docker run -d \
-            --name "$CONTAINER_NAME" \
-            -p 18080:8080 \
-            -e RSS_READER_WEB_USERNAME=smoke \
-            -e RSS_READER_WEB_PASSWORD=smoke-pass \
-            -e RSS_READER_WEB_ENV=development \
-            -e RSS_READER_WEB_SECURE_COOKIE=false \
-            "$SMOKE_IMAGE"
-
-          for ((attempt = 1; attempt <= 20; attempt++)); do
-            if curl --fail --silent --connect-timeout 2 --max-time 3 http://127.0.0.1:18080/healthz >/dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-
-          echo "container health check failed" >&2
-          docker logs "$CONTAINER_NAME" || true
-          exit 1
-
-      - name: Build and push image
+            type=raw,value=${{ inputs.image_tag }}
+            type=raw,value=sha-${{ inputs.source_sha }}
+      - name: Push the tested image
         if: env.SHOULD_PUSH_IMAGE == 'true'
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Skip image push on non-tag refs
-        if: env.SHOULD_PUSH_IMAGE != 'true'
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          echo "Docker image push is disabled for ${GITHUB_REF}."
-          echo "This workflow only publishes images for version tags (refs/tags/v*)."
+          while IFS= read -r tag; do
+            docker tag "$SMOKE_IMAGE" "$tag"
+            docker push "$tag"
+          done <<< "$IMAGE_TAGS"
+      - name: Non-publishing verification
+        if: env.SHOULD_PUSH_IMAGE != 'true'
+        run: echo 'Image verified locally on the runner; no registry push.'

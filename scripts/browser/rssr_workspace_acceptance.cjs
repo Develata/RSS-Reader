@@ -1,7 +1,7 @@
-// Run against the SPA regression server with an isolated browser profile.
+// Run against the isolated real-server fixture; all article state is stored by the server.
 // NODE_PATH resolves the locally installed Playwright; CHROME_BIN is optional.
 const assert = require('node:assert/strict');
-const { installStorageHelpers } = require('./storage_helpers.cjs');
+const fixture = require('./directory_fixture.cjs');
 const rows = '[data-layout="entry-card"]';
 const action = name => `[data-action="${name}"]`;
 const selected = `${rows}[data-selected="true"]`;
@@ -13,19 +13,7 @@ async function ready(page) {
 }
 
 async function seed(page, base) {
-  await installStorageHelpers(page.context());
-  await page.goto(`${base}/__codex/setup-local-auth?seed=directory-contract&next=/entries`);
-  await ready(page);
-  await page.evaluate(async () => {
-    await window.__rssrTestMutateSlice('rssr-web-state-v1', state => {
-      state.settings.entries_page_size = 8;
-      state.settings.archive_after_months = 120;
-    });
-    await window.__rssrTestMutateSlice('rssr-web-app-state-v2', state => {
-      state.entries_workspace.show_archived = false;
-    });
-  });
-  await page.reload();
+  await page.goto(`${base}/__codex/setup-local-auth?seed=directory-contract&workspace=true&next=/entries`);
   await ready(page);
 }
 
@@ -108,13 +96,13 @@ async function editing(page) {
   await page.locator('#feed-edit-dialog [role="alert"]').waitFor();
   assert.equal(await page.locator('#feed-edit-name').inputValue(), '少数派 · 精选', 'failed save preserves draft');
   assert.equal(await page.locator('[data-feed-id="1"]').getAttribute('data-feed-title'), 'Alpha');
-  await page.locator('#feed-edit-url').fill(`${oldURL}&edited=1`);
+  await page.locator('#feed-edit-url').fill(`${oldURL}?edited=1`);
   await page.locator(action('save-feed-edit')).click();
   await page.locator('#feed-edit-dialog').waitFor({ state: 'detached' });
   await page.waitForFunction(() => document.querySelector('[data-feed-id="1"]').dataset.feedTitle === '少数派 · 精选');
   await page.locator('[data-feed-id="1"] [data-action="edit-feed"]').click();
   assert.equal(await page.locator('#feed-edit-name').inputValue(), '少数派 · 精选');
-  assert.equal(await page.locator('#feed-edit-url').inputValue(), `${oldURL}&edited=1`);
+  assert.equal(await page.locator('#feed-edit-url').inputValue(), `${oldURL}?edited=1`);
   await page.getByRole('button', { name: '使用原名', exact: true }).click();
   assert.equal(await page.locator('#feed-edit-name').inputValue(), '');
   await page.locator('#feed-edit-name').fill('少数派 · 精选');
@@ -179,12 +167,7 @@ async function editEdges(page) {
   await feed.locator(action('edit-feed')).click();
   await page.locator('#feed-edit-name').waitFor();
   await page.keyboard.press('Escape');
-  await page.evaluate(async () => {
-    await window.__rssrTestMutateSlice('rssr-web-state-v1', state => {
-      state.feeds.find(feed => feed.id === 1).title = 'LongSourceName'.repeat(35);
-    });
-  });
-  await page.reload();
+  await page.goto(`${fixture.origin}/__codex/setup-local-auth?seed=directory-contract&long-title=true&next=/feeds`);
   await feed.locator(action('edit-feed')).click();
   await page.locator('#feed-edit-name').waitFor();
   for (const width of [1536, 360]) {
@@ -207,14 +190,11 @@ async function queryStability(page) {
   await seed(page, new URL(page.url()).origin);
   const first = page.locator(`${rows}[data-position-entry="72"]`);
   const original = await first.innerText();
-  const marker = 'A fresh query loaded this title';
-  await page.evaluate(async marker => {
-    await window.__rssrTestMutateSlice('rssr-web-state-v1', state => {
-      state.entries.find(entry => entry.id === 72).title = marker;
-    });
-  }, marker);
+  let queries = 0;
+  const countQuery = request => { if (new URL(request.url()).pathname === '/api/v1/entries') queries++; };
+  page.on('request', countQuery);
   // Intentionally cross the archive cutoff clock's second boundary. This
-  // mutation remains invisible until an operation actually reloads the query.
+  // local operations must not issue another list query.
   await page.waitForTimeout(1100);
   await first.locator(action('select-entry')).check();
   await page.waitForTimeout(250);
@@ -234,8 +214,12 @@ async function queryStability(page) {
   assert.equal(await first.innerText(), original, 'local pagination must not reload the list');
   assert.equal(await page.locator(selected).count(), 0, 'paging still clears selection');
   await first.locator(action('select-entry')).check();
-  await page.getByRole('button', { name: '仅未读', exact: true }).click();
-  await first.getByText(marker, { exact: true }).waitFor();
+  await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/entries'),
+    page.getByRole('button', { name: '仅未读', exact: true }).click(),
+  ]);
+  assert.equal(queries, 1, 'only the filter change queries the server');
+  page.off('request', countQuery);
   assert.equal(await page.locator(selected).count(), 0, 'a filter change still queries and clears selection');
 }
 
@@ -297,25 +281,29 @@ async function sourceIdentity(page) {
 }
 
 async function holdWrites(page, interaction) {
-  await page.evaluate(() => {
-    window.__workspaceWriteHeld = false;
-    void navigator.locks.request('rssr-browser-state-v1', async () => {
-      window.__workspaceWriteHeld = true;
-      await new Promise(resolve => { window.__workspaceReleaseWrite = resolve; });
-    });
-  });
-  await page.waitForFunction(() => window.__workspaceWriteHeld);
-  try { await interaction(); }
-  finally { await page.evaluate(() => window.__workspaceReleaseWrite()); }
+  let release, seen;
+  const gate = new Promise(resolve => { release = resolve; });
+  const captured = new Promise(resolve => { seen = resolve; });
+  const pending = [];
+  const handler = async route => {
+    if (route.request().method() === 'GET') return route.continue();
+    seen();
+    const continued = gate.then(() => route.continue());
+    pending.push(continued);
+    await continued;
+  };
+  await page.route('**/api/v1/**', handler);
+  try { await interaction(captured); }
+  finally { release(); await Promise.all(pending); await page.unroute('**/api/v1/**', handler); }
 }
 
 async function pendingWrites(page) {
   await seed(page, new URL(page.url()).origin);
   const first = page.locator(`${rows}[data-position-entry="72"]`);
   await first.locator(action('select-entry')).check();
-  await holdWrites(page, async () => {
+  await holdWrites(page, async captured => {
     await first.locator(action('mark-read')).click();
-    await page.waitForFunction(async () => (await navigator.locks.query()).pending.length > 0);
+    await captured;
     assert.equal(await first.locator(action('mark-read')).isDisabled(), true, 'the pending row rejects repeated writes');
     assert.equal(await first.locator(action('toggle-starred')).isDisabled(), true);
     assert.equal(await page.locator(`${rows}[data-position-entry="71"] ${action('mark-read')}`).isDisabled(), false, 'other rows remain usable');
@@ -326,27 +314,23 @@ async function pendingWrites(page) {
   await first.locator(action('mark-read')).click();
   await page.waitForFunction(() => document.querySelector('[data-position-entry="72"]').dataset.read === 'false' && !document.querySelector('[data-position-entry="72"] [data-action="mark-read"]').disabled);
   await page.locator(`${rows}[data-position-entry="71"] ${action('select-entry')}`).check();
-  await holdWrites(page, async () => {
+  await holdWrites(page, async captured => {
     await page.locator(action('archive-selected')).click();
-    await page.waitForFunction(async () => (await navigator.locks.query()).pending.length > 0);
+    await captured;
     assert.equal(await page.locator(`${rows} [data-layout="entry-card-actions"] button`).evaluateAll(buttons => buttons.every(button => button.disabled)), true, 'batch writes block overlapping per-row actions');
   });
   await page.waitForFunction(() => !document.querySelector('[data-position-entry="72"]') && !document.querySelector('[data-position-entry="71"]'));
   await seed(page, new URL(page.url()).origin);
-  await page.evaluate(() => {
-    window.__workspaceOriginalSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (key.startsWith('rssr-web-entry-flags-v1')) throw new DOMException('review write failure', 'QuotaExceededError');
-      return window.__workspaceOriginalSetItem.call(this, key, value);
-    };
-  });
+  const refuse = route => route.fulfill({status:503, contentType:'application/json',
+    body:JSON.stringify({code:'unavailable',message:'review write failure'})});
+  await page.route('**/api/v1/entries/72/read', refuse);
   try {
     await first.locator(action('mark-read')).click();
     await page.locator('[data-layout="status-banner"][data-state="error"]').waitFor({ state: 'attached' });
     assert.equal(await first.locator(action('mark-read')).isDisabled(), false, 'a failed write unlocks retry');
     assert.equal(await first.getAttribute('data-read'), 'false', 'a failed write preserves flags');
   } finally {
-    await page.evaluate(() => { Storage.prototype.setItem = window.__workspaceOriginalSetItem; });
+    await page.unroute('**/api/v1/entries/72/read', refuse);
   }
   await first.locator(action('mark-read')).click();
   await page.waitForFunction(() => document.querySelector('[data-position-entry="72"]').dataset.read === 'true');
@@ -357,22 +341,18 @@ async function preferenceOrdering(page) {
   for (const labels of [['仅未读', '仅未读'], ['来源', '时间']]) {
     const before = await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed');
     let afterClicks;
-    await holdWrites(page, async () => {
-      for (const name of labels) await page.getByRole('button', { name, exact: true }).click();
+    await holdWrites(page, async captured => {
+      await page.getByRole('button', { name: labels[0], exact: true }).click();
+      await captured;
+      await page.getByRole('button', { name: labels[1], exact: true }).click();
       afterClicks = await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed');
       assert.equal(afterClicks, 'false', 'the visible filter must already reflect the final All choice');
     });
-    // A quiet lock interval alone can precede the next save continuation. Require
-    // the final committed preference as well, before unloading its page tasks.
-    await page.evaluate(() => { window.__workspaceStorageQuietSince = 0; });
+    // Read the persisted server preference before unloading page tasks.
     await page.waitForFunction(async () => {
-      const locks = await navigator.locks.query();
-      const key = window.__rssrTestStateKey('rssr-web-app-state-v2');
-      const workspace = JSON.parse(localStorage.getItem(key))?.entries_workspace;
-      const saved = workspace?.read_filter === 'all' && workspace.grouping_mode === 'time';
-      if (!saved || locks.held.length || locks.pending.length) window.__workspaceStorageQuietSince = 0;
-      else if (!window.__workspaceStorageQuietSince) window.__workspaceStorageQuietSince = performance.now();
-      return window.__workspaceStorageQuietSince && performance.now() - window.__workspaceStorageQuietSince > 150;
+      const input = encodeURIComponent(JSON.stringify({load_preferences:true,load_feeds:false}));
+      const {workspace} = await (await fetch('/api/v1/entries/bootstrap?input=' + input)).json();
+      return workspace?.read_filter === 'all' && workspace.grouping_mode === 'time';
     });
     await page.reload(); await ready(page);
     assert.equal(await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed'), 'false', `rapidly clearing a filter must persist the final All choice (${labels}; before=${before}; afterClicks=${afterClicks})`);
@@ -468,7 +448,8 @@ if (require.main === module) (async () => {
     const page = await browser.newPage({ viewport: { width: 1536, height: 864 } });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     page.setDefaultTimeout(15000);
-    await seed(page, process.env.STATIC_BASE || 'http://127.0.0.1:8097');
+    await fixture.install(page.context(), require('node:path').resolve(__dirname,'../..'));
+    await seed(page, fixture.origin);
     for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition })) {
       await run(page); console.log(`PASS ${name}`);
     }

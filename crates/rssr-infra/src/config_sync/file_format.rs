@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use std::{fs, path::Path};
 
 use rssr_domain::ConfigPackage;
@@ -12,11 +13,13 @@ pub fn decode_config_package(raw: &str) -> anyhow::Result<ConfigPackage> {
     Ok(package)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn read_config_package(path: impl AsRef<Path>) -> anyhow::Result<ConfigPackage> {
     let raw = fs::read_to_string(path)?;
     decode_config_package(&raw)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn write_config_package(path: impl AsRef<Path>, package: &ConfigPackage) -> anyhow::Result<()> {
     let raw = encode_config_package(package)?;
     fs::write(path, raw)?;

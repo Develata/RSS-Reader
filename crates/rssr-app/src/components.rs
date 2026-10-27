@@ -1,4 +1,5 @@
 pub mod app_nav;
+pub mod app_notices;
 pub(crate) mod dialog;
 pub mod entry_filters;
 pub(crate) mod icon;

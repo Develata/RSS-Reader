@@ -1,15 +1,9 @@
-#[cfg(target_arch = "wasm32")]
-pub mod browser;
-#[cfg(not(target_arch = "wasm32"))]
-mod mutations;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
 mod non_refresh;
 #[cfg(not(target_arch = "wasm32"))]
 mod refresh;
 
+#[cfg(any(not(target_arch = "wasm32"), feature = "memory-store"))]
+pub use non_refresh::InfraOpmlCodec;
 #[cfg(not(target_arch = "wasm32"))]
-pub use mutations::{SqlitePersistenceMutations, cleanup_pending_entry_content};
-#[cfg(not(target_arch = "wasm32"))]
-pub use non_refresh::{InfraOpmlCodec, SqliteAppStateAdapter};
-#[cfg(not(target_arch = "wasm32"))]
-pub use refresh::{InfraFeedRefreshSource, SqliteRefreshStore};
+pub use refresh::InfraFeedRefreshSource;

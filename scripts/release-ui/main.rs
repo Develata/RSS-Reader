@@ -9,8 +9,8 @@ use serde::Serialize;
 use std::{
     collections::HashSet,
     fs::{self, File, OpenOptions},
-    io::{self, BufRead, BufReader, Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
+    io::{self, BufRead, BufReader, Write},
+    net::TcpListener,
     path::{Path, PathBuf},
     process::Command,
     sync::atomic::Ordering,
@@ -24,7 +24,6 @@ enum State {
     Pending,
     Skipped,
     Running,
-    Serving,
     Passed,
     Reused,
     Failed,
@@ -37,7 +36,6 @@ impl State {
             Self::Pending => "pending",
             Self::Skipped => "skipped",
             Self::Running => "running",
-            Self::Serving => "serving (manual checks required)",
             Self::Passed => "passed",
             Self::Reused => "reused (--skip-build)",
             Self::Failed => "failed",
@@ -76,14 +74,9 @@ impl Report {
     fn group(&self, group: &str) -> State {
         let states: Vec<_> =
             self.steps.iter().filter(|s| s.step.group == group).map(|s| s.status).collect();
-        for priority in [
-            State::Failed,
-            State::Interrupted,
-            State::Serving,
-            State::Running,
-            State::Blocked,
-            State::Pending,
-        ] {
+        for priority in
+            [State::Failed, State::Interrupted, State::Running, State::Blocked, State::Pending]
+        {
             if states.contains(&priority) {
                 return priority;
             }
@@ -101,7 +94,7 @@ impl Report {
         // Persist after every transition; terminal failures never remain pending.
         fs::write(self.log_dir.join("summary.json"), serde_json::to_vec_pretty(self)?)?;
         let mut summary = format!(
-            "# 发布前 UI 预检结果\n\n- started (Unix ms)：{}\n- commit：{}\n- profile：{}\n- 静态 Web 端口：{}\n- rssr-web 端口：{}\n- 日志目录：{}\n- outcome：{}\n- exit code：{:?}\n\n## 状态\n\n",
+            "# 发布前 UI 预检结果\n\n- started (Unix ms)：{}\n- commit：{}\n- profile：{}\n- 固定 smoke 端口基准：{}\n- rssr-web 端口：{}\n- 日志目录：{}\n- outcome：{}\n- exit code：{:?}\n\n## 状态\n\n",
             self.started_unix_ms,
             self.commit,
             self.profile,
@@ -117,7 +110,6 @@ impl Report {
             ("Web bundle", "bundle"),
             ("rssr-web smoke", "web"),
             ("固定 smoke 套件", "fixed"),
-            ("静态 Web + SPA fallback", "spa"),
         ] {
             summary.push_str(&format!("- {label}：{}\n", self.group(group).label()));
         }
@@ -133,7 +125,7 @@ impl Report {
                 stage.detail.replace(['\n', '\r', '|'], " ")
             ));
         }
-        summary.push_str("\n## 日志与产物\n\n- rssr-web 服务日志：rssr-web.log\n- 固定 smoke 目录：static-web-reader-theme-matrix / static-web-small-viewport-smoke / rssr-web-browser-feed-smoke\n\n## 结果记录补充\n\n- 执行环境：\n- env-limited 项：\n- host / sqlite contract harness：\n- wasm / browser contract harness：\n- /entries：\n- /feeds：\n- /settings：\n- /reader/{entry_id}：\n- 静态 reader seed smoke：\n- 默认主题：\n- Atlas Sidebar：\n- Newsprint：\n- Amethyst Glass：\n- Midnight Ledger：\n- 是否允许发布（需手工结论）：\n");
+        summary.push_str("\n## 日志与产物\n\n- rssr-web 服务日志：rssr-web.log\n- 固定 smoke 目录：server-web-theme-matrix / server-web-regression / server-web-feed-smoke\n\n## 结果记录补充\n\n- 执行环境：\n- env-limited 项：\n- host / sqlite contract harness：\n- wasm / browser contract harness：\n- /entries：\n- /feeds：\n- /settings：\n- /reader/{entry_id}：\n- reader seed smoke：\n- 默认主题：\n- Atlas Sidebar：\n- Newsprint：\n- Amethyst Glass：\n- Midnight Ledger：\n- 是否允许发布（需手工结论）：\n");
         fs::write(self.log_dir.join("summary.md"), summary)
     }
 }
@@ -254,26 +246,6 @@ fn command(step: &Step, options: &Options, root: &Path, log_dir: &Path) -> io::R
     Ok(command)
 }
 
-fn spa_ready(port: u16) -> bool {
-    let address: SocketAddr = ([127, 0, 0, 1], port).into();
-    let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_millis(200)) else {
-        return false;
-    };
-    let timeout = Some(Duration::from_millis(200));
-    if stream.set_read_timeout(timeout).is_err() || stream.set_write_timeout(timeout).is_err() {
-        return false;
-    }
-    if stream.write_all(b"GET /entries HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n").is_err() {
-        return false;
-    }
-    let mut bytes = [0; 128];
-    let Ok(count) = stream.read(&mut bytes) else {
-        return false;
-    };
-    let response = String::from_utf8_lossy(&bytes[..count]);
-    response.starts_with("HTTP/1.0 200 ") || response.starts_with("HTTP/1.1 200 ")
-}
-
 fn execute(
     index: usize,
     report: &mut Report,
@@ -297,7 +269,8 @@ fn execute(
     if let Some(port) = step.port {
         available_port(port)?;
     }
-    if step.name == "small-viewport" {
+    if step.program == "bash" && matches!(step.group, "web" | "fixed") {
+        // The wrapper puts Chrome's DevTools port 10000 above the server port.
         available_port(step.port.unwrap() + 10000)?;
     }
     let log = report.log_dir.join(step.log);
@@ -331,34 +304,6 @@ fn execute(
     let mut child = OwnedProcess::spawn(command(&step, options, root, &report.log_dir)?, &log)?;
     report.steps[index].pid = Some(child.id());
     report.write()?;
-    if step.name == "spa" {
-        let deadline = Instant::now() + Duration::from_secs(30);
-        loop {
-            tail.drain()?;
-            if let Some(status) = child.try_wait()? {
-                child.stop(0)?;
-                let code = process::exit_code(status);
-                report.steps[index].detail = format!("SPA exited before readiness (exit {code})");
-                return Ok(if code == 0 { 1 } else { code });
-            }
-            if cancelled.load(Ordering::SeqCst) != 0 {
-                return process::wait(&mut child, &mut tail, cancelled);
-            }
-            if spa_ready(options.port) && child.try_wait()?.is_none() {
-                break;
-            }
-            if Instant::now() >= deadline {
-                return Err(io::Error::other("SPA did not become ready within 30 seconds"));
-            }
-            thread::sleep(Duration::from_millis(80));
-        }
-        report.steps[index].status = State::Serving;
-        report.write()?;
-        console.send(false, format!(
-            "SPA ready at http://127.0.0.1:{}/entries; manually check /feeds, /settings and /__codex/setup-local-auth?username=smoke&password=smoke-pass-123&seed=reader-demo&next=/entries/2. Ctrl+C stops it.\n",
-            options.port
-        ).as_bytes());
-    }
     let code = process::wait(&mut child, &mut tail, cancelled)?;
     if step.name == "web-bundle" && code == 0 {
         // dx 0.7 can log an optimizer failure, keep the unoptimized input, and exit 0.
@@ -378,9 +323,6 @@ fn execute(
             )));
         }
     }
-    if step.name == "spa" && cancelled.load(Ordering::SeqCst) == 0 && code == 0 {
-        return Err(io::Error::other("SPA exited unexpectedly after readiness"));
-    }
     Ok(code)
 }
 
@@ -391,7 +333,7 @@ fn run(options: Options, console: &Console) -> io::Result<i32> {
         .clone()
         .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
         .canonicalize()?;
-    if !root.join("scripts/run_web_spa_regression_server.sh").is_file() {
+    if !root.join("scripts/run_server_web_regression.sh").is_file() {
         return Err(io::Error::other("--repo-root must point to RSS-Reader"));
     }
     let log_dir = root.join(options.log_dir.clone().unwrap_or_else(|| {

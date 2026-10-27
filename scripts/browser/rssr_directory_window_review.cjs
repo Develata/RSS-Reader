@@ -8,7 +8,7 @@ const fixture=require('./directory_fixture.cjs');
 (async()=>{
   const output=path.resolve(process.env.ARTIFACT_DIR||'target/directory-window-review-20261026');
   await fs.mkdir(output,{recursive:true});
-  const browser=await chromium.launch({channel:'chrome',headless:true});
+  const browser=await chromium.launch({executablePath:process.env.CHROME_BIN,channel:process.env.CHROME_BIN?undefined:'chrome',headless:true});
   const context=await browser.newContext({viewport:{width:1440,height:900}});
   await fixture.install(context,path.resolve(__dirname,'../..'));
   await context.addInitScript(()=>{

@@ -13,7 +13,11 @@
 
 _Actual Web interface with sample subscriptions and articles._
 
-RSS-Reader is a local-first RSS reader built with Rust and Dioxus. Desktop, Web, Android, and CLI share the same core subscription and reading behavior. Your article library stays on the current device; JSON, OPML, and optional WebDAV exchange subscriptions and settings.
+RSS-Reader is a local-first RSS reader built with Rust and Dioxus. Desktop, Web, Android, and CLI share the same core subscription and reading behavior. Desktop and Android keep a library on the device. Self-hosted Web keeps one library on the server, shared by browsers and the CLI using that server data directory. JSON, OPML, and optional WebDAV exchange subscriptions and settings between separate libraries.
+
+The current release is [v0.2.0](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0). Before upgrading from v0.1.x, read the data migration notes below, especially the old macOS data location.
+
+v0.2.0 packages the server and its matching page together for Linux x86_64, Windows x86_64, and macOS x86_64 / aarch64 as `rssr-web-<platform>.tar.gz` (Windows: `.zip`). See the [deployment guide](./deployment/web.md); the standalone Pages demo remains separate.
 
 [Latest release](https://github.com/Develata/RSS-Reader/releases/latest) · [Release notes](https://github.com/Develata/RSS-Reader/releases) · [中文](../README.md) · [Documentation](./README.md) · [Issues](https://github.com/Develata/RSS-Reader/issues)
 
@@ -27,13 +31,13 @@ Download the appropriate asset from [Releases](https://github.com/Develata/RSS-R
 | Linux x64 | `RSS-Reader-linux-x86_64.deb` | Install where the package dependencies are available; data is stored under the user's XDG data directory |
 | macOS Intel / Apple Silicon | `RSS-Reader-macos-x86_64.tar.gz` / `RSS-Reader-macos-aarch64.tar.gz` | Extract to a writable directory and open `RSS-Reader.app` |
 | Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | Install the APK; the AAB is for app stores |
-| Web | `RSS-Reader-web.tar.gz` | Static site bundle; use [`rssr-web`](./deployment/web.md) for login and a same-origin feed proxy |
+| Web | `rssr-web-<platform>.tar.gz` (Windows: `.zip`) | Extract the complete package, configure and start it using the [deployment guide](./deployment/web.md), or use the Docker image |
 
 Open Subscribe (the RSS-wave icon in the top bar), add an RSS/Atom URL or a website homepage, then select **R** (Read / Home). From another page, R navigates home; when already home, R manually refreshes all feeds. Repeated clicks share the in-flight refresh. On mobile, pull down at the top of Home to request the same refresh.
 
-The table matches the published `v0.1.22` assets; see the [release notes](https://github.com/Develata/RSS-Reader/releases/tag/v0.1.22) for the exact changes and validation scope. Android's signed APK/AAB was built and checked, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine.
+The table matches the published `v0.2.0` assets. Four platform CLI packages and an Android AAB are also available; see the [release notes](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0) for changes and validation scope. Android's APK/AAB uses the same release certificate as v0.1.23, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine. Windows binaries have no Authenticode signature; macOS apps are unsigned and not notarized.
 
-**Linux package:** `v0.1.17` fixes the earlier `.deb` data-directory permission problem and declares its linked library dependencies. The `v0.1.22` release workflow also installed its package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking database creation and reuse in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
+**Linux package:** the `v0.2.0` release workflow installed its package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking creation, integrity and data reuse of the single `library.sqlite3` in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
 
 ## Reading workflow
 
@@ -50,13 +54,17 @@ The table matches the published `v0.1.22` assets; see the [release notes](https:
 
 ## Local data and limits
 
-The Linux `/usr/bin` installation stores data in `$XDG_DATA_HOME/rss-reader/` (or `~/.local/share/rss-reader/` when unset). Windows, macOS, and portable Linux builds continue to use `RSS-Reader/` next to the executable. The directory contains the SQLite index and article-body databases plus `shell-prefs.json`. Exit the app before backing up the whole directory, including any SQLite WAL files. Data created by an earlier root-run package under `/usr/bin/RSS-Reader/` is not migrated automatically; after exiting, back it up and have an administrator copy the complete directory to the new location and give it to the user. Android stores its databases in the app sandbox; uninstalling removes local data. Web stores serialized state in that browser's `localStorage`; clearing site data removes the local article library.
+The Linux `/usr/bin` installation stores data in `$XDG_DATA_HOME/rss-reader/` (or `~/.local/share/rss-reader/` when unset); macOS uses `~/Library/Application Support/RSS-Reader/`; Windows and portable Linux builds use `RSS-Reader/` next to the executable. From v0.2 the directory holds one library, `library.sqlite3` (subscriptions, articles, bodies and settings), plus `shell-prefs.json`; SQLite's `-wal`/`-shm` files and `library.sqlite3.create-lock` are normal companions. Exit the app before backing up the whole directory. When upgrading from v0.1.x, the first start imports the old databases in the same data directory (`rss-reader.db`, `rss-reader-content.db`) one way into the new library and leaves the old files untouched; close every old version first. A failed import does not create an empty library. On macOS, v0.1.x kept its data inside the app bundle (`RSS-Reader/` next to the executable, usually `RSS-Reader.app/Contents/MacOS/RSS-Reader/`), which replacing the bundle deletes: before upgrading, quit the old version and copy every file in that directory (`rss-reader.db`, `rss-reader-content.db`, and any `-wal`/`-shm` files) into `~/Library/Application Support/RSS-Reader/`, then start the new version (before the first start of either the new desktop app or the new CLI). Data created by an earlier root-run package under `/usr/bin/RSS-Reader/` is not migrated automatically; after exiting, back it up and have an administrator copy the complete directory to the new location and give it to the user. Android stores its databases in the app sandbox; uninstalling removes local data. Formal Web stores its library in the server data directory; clearing browser site data does not delete that library. See the server backup procedure in the [deployment guide](./deployment/web.md).
 
-Web requires HTTPS (localhost is allowed) and Web Locks support. New-version tabs coordinate writes through versioned commits; storage errors preserve the previous commit. Reload all older tabs after an upgrade. Another tab does not replace the body currently being read; returning to the list or querying again reads the latest state.
+Formal Web uses the same-origin `/api/v1` through `HttpBackend`; feed fetching and automatic refresh run on the server. Focus, visibility, reconnection and completed jobs trigger read-only updates without replacing the body being read or pending edits. A build mismatch offers a reload and tries to keep settings/CSS edits in this tab’s `sessionStorage`; restored edits are not saved automatically.
 
-A separately extracted Linux CLI remains portable and uses its own executable-adjacent database by default. To manage the installed desktop app's database, pass the global `--database-url` option pointing to the installed data directory's `rss-reader.db`.
+**Upgrading from the old Web build:** browser articles, read flags and favorites are not migrated. Export a JSON configuration or OPML in the old version, import it after signing in to the new server, then fetch feeds again. Formal Web is no longer an offline reader and does not fall back to the old browser library. Preserve old site data if you still need those articles. The [Pages demo](./deployment/github-pages.md) loads prefetched RSS into in-memory SQLite. Reloading resets library changes; online feed operations, WebDAV and automatic refresh are disabled.
 
-The reader caches the body provided by the feed; it does not fetch the source page to reconstruct full text. Desktop and Android attempt to localize body images. The static web bundle fetches feeds directly from the browser and can be blocked by feed CORS policies; the login-protected `rssr-web` host runs in server mode, where the server fetches feeds itself (or use the desktop app). JSON, OPML, and WebDAV exchange subscriptions and settings, **not** article bodies, read history, or favorites across devices. See the [Web deployment guide](./deployment/web.md).
+The Pages demo preloads real RSS articles from Develata's Daily Math and Terence Tao's blog. Its CI fetches a small snapshot before building, retaining the original article links; visitors do not fetch or refresh feeds. Existing browser data is preserved.
+
+A separately extracted Linux CLI remains portable and uses its own executable-adjacent data directory by default. To manage the installed desktop app's library, pass the global `--data-dir` option (or set `RSSR_DATA_DIR`) to the installed data directory.
+
+The reader caches the body provided by the feed; it does not fetch the source page to reconstruct full text. Desktop, Android and the server attempt to localize body images. Formal Web sends reader operations to its own server; it does not fetch feeds directly from the browser. The old feed proxy endpoint has been retired. JSON, OPML, and WebDAV exchange subscriptions and settings, **not** article bodies, read history, or favorites across devices. See the [Web deployment guide](./deployment/web.md).
 
 The product stays focused on subscriptions, reading, basic settings, and basic configuration exchange. See the [functional design philosophy](./design/functional-design-philosophy.md).
 
@@ -70,7 +78,8 @@ cargo run --locked -p rssr-cli -- --help
 
 rustup target add wasm32-unknown-unknown
 cargo install dioxus-cli --version 0.7.9 --locked
-dx serve --platform web --package rssr-app --locked
+bash scripts/run_rssr_web_browser_smoke.sh
+bash scripts/run_server_web_regression.sh --suite acceptance --long
 ```
 
 ```bash
@@ -85,7 +94,7 @@ The [mainline validation matrix](./testing/mainline-validation-matrix.md) explai
 ## More documentation
 
 - [Detailed user guide](./user-guide.md) (Chinese): subscriptions, reading, themes, WebDAV, and backups.
-- [Web / Docker deployment](./deployment/web.md): GHCR, Compose, login, and server mode.
+- [Web / Docker deployment](./deployment/web.md): the server library, same-origin API, login, and backups.
 - [Android build and acceptance status](./roadmaps/android-release-roadmap.md).
 - [Design](./design/README.md), [testing](./testing/README.md), and [contributing](../CONTRIBUTING.md).
 - [MIT License](../LICENSE).

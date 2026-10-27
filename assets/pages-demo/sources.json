@@ -1,0 +1,12 @@
+[
+  {
+    "title": "Develata · 每日数学",
+    "url": "https://develata.me/rss/daily-math.xml",
+    "max_entries": 5
+  },
+  {
+    "title": "Terence Tao · What's new",
+    "url": "https://terrytao.wordpress.com/feed/",
+    "max_entries": 1
+  }
+]

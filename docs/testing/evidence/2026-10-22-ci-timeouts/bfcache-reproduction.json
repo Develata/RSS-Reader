@@ -1,0 +1,566 @@
+{
+  "date": "2026-10-22",
+  "source_before_fix": "2b09f16eb1288c23f5e8a283e92124960c783db7",
+  "environment": {
+    "os": "Ubuntu 24.04 in Docker Desktop",
+    "chrome": "156.0.8078.47",
+    "image": "sha256:e535c112d0594a367d057eaa5ce190aecf8e5add1a1579daeba9b2a218168431"
+  },
+  "original_ci": {
+    "run": 39816994053,
+    "job": 119959031736,
+    "source": "129996af85798c07c623255be88e18a5706426d1",
+    "scenarios": [
+      "reader-recovers-without-localizing",
+      "settings-read-fails-at-start",
+      "http-backend-only"
+    ],
+    "error": "the page did not settle: GET /api/v1/settings",
+    "limit": "The original artifact did not record request or loader ids; individual attribution is unproven."
+  },
+  "minimal_reproduction": {
+    "server": "GET /api/v1/settings: HTTP 200, Content-Length 7, write {\"x\": then write 1} after 1000 ms.",
+    "page": "Start fetch, wait for response headers, navigate from /a to /b, call settled(), then navigate back.",
+    "results": [
+      {
+        "intercept": false,
+        "error": "Error: the page did not settle: GET /api/v1/settings",
+        "before": [
+          {
+            "id": "130.3",
+            "loaderId": "487E9C563924600C4F89828FC0924032",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691534745,
+            "done": false,
+            "redirects": [],
+            "status": 200
+          }
+        ],
+        "restored": {
+          "frame": {
+            "id": "FD25DD2045F12E94320C703D9C571DD8",
+            "loaderId": "487E9C563924600C4F89828FC0924032",
+            "url": "http://127.0.0.1:8167/a",
+            "domainAndRegistry": "",
+            "securityOrigin": "http://127.0.0.1:8167",
+            "securityOriginDetails": {
+              "isLocalhost": true
+            },
+            "mimeType": "text/html",
+            "adFrameStatus": {
+              "adFrameType": "none"
+            },
+            "secureContextType": "SecureLocalhost",
+            "crossOriginIsolatedContextType": "NotIsolated",
+            "gatedAPIFeatures": []
+          },
+          "type": "BackForwardCacheRestore"
+        },
+        "after": [
+          {
+            "id": "130.3",
+            "loaderId": "487E9C563924600C4F89828FC0924032",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691534745,
+            "done": true,
+            "redirects": [],
+            "status": 200
+          }
+        ]
+      },
+      {
+        "intercept": true,
+        "error": "Error: the page did not settle: GET /api/v1/settings",
+        "before": [
+          {
+            "id": "153.3",
+            "loaderId": "819B9C26E645690F4AA5E23C331B42AB",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691556136,
+            "done": false,
+            "redirects": [],
+            "status": 200
+          }
+        ],
+        "restored": {
+          "frame": {
+            "id": "979461467033F5B1D1CB5D6A0F71C8FE",
+            "loaderId": "819B9C26E645690F4AA5E23C331B42AB",
+            "url": "http://127.0.0.1:8167/a",
+            "domainAndRegistry": "",
+            "securityOrigin": "http://127.0.0.1:8167",
+            "securityOriginDetails": {
+              "isLocalhost": true
+            },
+            "mimeType": "text/html",
+            "adFrameStatus": {
+              "adFrameType": "none"
+            },
+            "secureContextType": "SecureLocalhost",
+            "crossOriginIsolatedContextType": "NotIsolated",
+            "gatedAPIFeatures": []
+          },
+          "type": "BackForwardCacheRestore"
+        },
+        "after": [
+          {
+            "id": "153.3",
+            "loaderId": "819B9C26E645690F4AA5E23C331B42AB",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691556136,
+            "done": true,
+            "redirects": [],
+            "status": 200
+          }
+        ]
+      }
+    ],
+    "selected_events": [
+      {
+        "at": 556,
+        "page": 1,
+        "method": "Page.frameNavigated",
+        "event": {
+          "frame": {
+            "id": "FD25DD2045F12E94320C703D9C571DD8",
+            "loaderId": "487E9C563924600C4F89828FC0924032",
+            "url": "http://127.0.0.1:8167/a",
+            "domainAndRegistry": "",
+            "securityOrigin": "http://127.0.0.1:8167",
+            "securityOriginDetails": {
+              "isLocalhost": true
+            },
+            "mimeType": "text/html",
+            "adFrameStatus": {
+              "adFrameType": "none"
+            },
+            "secureContextType": "SecureLocalhost",
+            "crossOriginIsolatedContextType": "NotIsolated",
+            "gatedAPIFeatures": []
+          },
+          "type": "Navigation"
+        }
+      },
+      {
+        "at": 766,
+        "page": 1,
+        "method": "Network.requestWillBeSent",
+        "event": {
+          "requestId": "130.3",
+          "loaderId": "487E9C563924600C4F89828FC0924032",
+          "documentURL": "http://127.0.0.1:8167/a",
+          "timestamp": 1208.088299,
+          "wallTime": 1792691534.744906,
+          "initiator": {
+            "type": "script",
+            "stack": {
+              "callFrames": [
+                {
+                  "functionName": "",
+                  "scriptId": "3",
+                  "url": "",
+                  "lineNumber": 0,
+                  "columnNumber": 29
+                }
+              ]
+            }
+          },
+          "redirectHasExtraInfo": false,
+          "type": "Fetch",
+          "frameId": "FD25DD2045F12E94320C703D9C571DD8",
+          "hasUserGesture": false,
+          "request": {
+            "url": "http://127.0.0.1:8167/api/v1/settings",
+            "method": "GET"
+          }
+        }
+      },
+      {
+        "at": 805,
+        "page": 1,
+        "method": "Network.responseReceived",
+        "event": {
+          "requestId": "130.3",
+          "loaderId": "487E9C563924600C4F89828FC0924032",
+          "timestamp": 1208.12708,
+          "type": "Fetch",
+          "hasExtraInfo": true,
+          "frameId": "FD25DD2045F12E94320C703D9C571DD8",
+          "response": {
+            "url": "http://127.0.0.1:8167/api/v1/settings",
+            "status": 200,
+            "timing": {
+              "requestTime": 1208.088685,
+              "proxyStart": -1,
+              "proxyEnd": -1,
+              "dnsStart": -1,
+              "dnsEnd": -1,
+              "connectStart": -1,
+              "connectEnd": -1,
+              "sslStart": -1,
+              "sslEnd": -1,
+              "workerStart": -1,
+              "workerReady": -1,
+              "workerFetchStart": -1,
+              "workerRespondWithSettled": -1,
+              "sendStart": 0.314,
+              "sendEnd": 0.361,
+              "pushStart": 0,
+              "pushEnd": 0,
+              "receiveHeadersStart": 1.201,
+              "receiveHeadersEnd": 1.24
+            },
+            "encodedDataLength": 154,
+            "fromDiskCache": false
+          }
+        }
+      },
+      {
+        "at": 805,
+        "page": 1,
+        "method": "Network.dataReceived",
+        "event": {
+          "requestId": "130.3",
+          "timestamp": 1208.127305,
+          "dataLength": 5,
+          "encodedDataLength": 5
+        }
+      },
+      {
+        "at": 812,
+        "page": 1,
+        "method": "Page.frameNavigated",
+        "event": {
+          "frame": {
+            "id": "FD25DD2045F12E94320C703D9C571DD8",
+            "loaderId": "43FC5AEC449CFD9713EF7B56991D9AF9",
+            "url": "http://127.0.0.1:8167/b",
+            "domainAndRegistry": "",
+            "securityOrigin": "http://127.0.0.1:8167",
+            "securityOriginDetails": {
+              "isLocalhost": true
+            },
+            "mimeType": "text/html",
+            "adFrameStatus": {
+              "adFrameType": "none"
+            },
+            "secureContextType": "SecureLocalhost",
+            "crossOriginIsolatedContextType": "NotIsolated",
+            "gatedAPIFeatures": []
+          },
+          "type": "Navigation"
+        }
+      },
+      {
+        "at": 21282,
+        "page": 1,
+        "method": "settled.fail",
+        "event": {
+          "open": [
+            {
+              "id": "130.3",
+              "loaderId": "487E9C563924600C4F89828FC0924032",
+              "method": "GET",
+              "path": "/api/v1/settings",
+              "query": "",
+              "origin": "http://127.0.0.1:8167",
+              "at": 1792691534745,
+              "done": true,
+              "redirects": [],
+              "status": 200
+            }
+          ],
+          "frame": {
+            "frameTree": {
+              "frame": {
+                "id": "FD25DD2045F12E94320C703D9C571DD8",
+                "loaderId": "43FC5AEC449CFD9713EF7B56991D9AF9",
+                "url": "http://127.0.0.1:8167/b",
+                "domainAndRegistry": "",
+                "securityOrigin": "http://127.0.0.1:8167",
+                "securityOriginDetails": {
+                  "isLocalhost": true
+                },
+                "mimeType": "text/html",
+                "adFrameStatus": {
+                  "adFrameType": "none"
+                },
+                "secureContextType": "SecureLocalhost",
+                "crossOriginIsolatedContextType": "NotIsolated",
+                "gatedAPIFeatures": []
+              }
+            }
+          },
+          "error": "Error: the page did not settle: GET /api/v1/settings"
+        }
+      },
+      {
+        "at": 21283,
+        "page": 1,
+        "method": "Network.getResponseBody.error",
+        "event": {
+          "requestId": "130.3",
+          "error": "Error: {\"code\":-32000,\"message\":\"No resource with given identifier found\"}"
+        }
+      },
+      {
+        "at": 21283,
+        "page": 1,
+        "method": "timeout.responseBody",
+        "event": {
+          "id": "130.3",
+          "error": "Error: {\"code\":-32000,\"message\":\"No resource with given identifier found\"}"
+        }
+      },
+      {
+        "at": 21292,
+        "page": 1,
+        "method": "Page.frameNavigated",
+        "event": {
+          "frame": {
+            "id": "FD25DD2045F12E94320C703D9C571DD8",
+            "loaderId": "487E9C563924600C4F89828FC0924032",
+            "url": "http://127.0.0.1:8167/a",
+            "domainAndRegistry": "",
+            "securityOrigin": "http://127.0.0.1:8167",
+            "securityOriginDetails": {
+              "isLocalhost": true
+            },
+            "mimeType": "text/html",
+            "adFrameStatus": {
+              "adFrameType": "none"
+            },
+            "secureContextType": "SecureLocalhost",
+            "crossOriginIsolatedContextType": "NotIsolated",
+            "gatedAPIFeatures": []
+          },
+          "type": "BackForwardCacheRestore"
+        }
+      },
+      {
+        "at": 21293,
+        "page": 1,
+        "method": "Network.loadingFinished",
+        "event": {
+          "requestId": "130.3",
+          "timestamp": 1209.090893,
+          "encodedDataLength": 161
+        }
+      },
+      {
+        "at": 21896,
+        "page": 1,
+        "method": "settled.pass",
+        "event": {}
+      }
+    ]
+  },
+  "fixed_reproduction": {
+    "results": [
+      {
+        "intercept": false,
+        "before": [
+          {
+            "id": "131.3",
+            "loaderId": "B503E02BFB1E6BCF06C9A757B3094ACB",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691853820,
+            "done": false,
+            "redirects": [],
+            "status": 200
+          }
+        ],
+        "after": [
+          {
+            "id": "131.3",
+            "loaderId": "B503E02BFB1E6BCF06C9A757B3094ACB",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691853820,
+            "done": false,
+            "redirects": [],
+            "status": 200
+          }
+        ]
+      },
+      {
+        "intercept": true,
+        "before": [
+          {
+            "id": "153.3",
+            "loaderId": "2ED0B7FF150DBAC7264E60FAA7FE6837",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691854747,
+            "done": false,
+            "redirects": [],
+            "status": 200
+          }
+        ],
+        "after": [
+          {
+            "id": "153.3",
+            "loaderId": "2ED0B7FF150DBAC7264E60FAA7FE6837",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691854747,
+            "done": false,
+            "redirects": [],
+            "status": 200
+          }
+        ]
+      }
+    ]
+  },
+  "fixed_restore_with_held_body": {
+    "method": "Hold the old response body indefinitely, settle /b, restore /a, require settled() to time out until the body is explicitly released.",
+    "results": [
+      {
+        "intercept": false,
+        "before": [
+          {
+            "id": "130.3",
+            "loaderId": "D315C1FE5E354D6C68FE8571FE1DC81B",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691925559,
+            "done": false,
+            "redirects": [],
+            "status": 200
+          }
+        ],
+        "restored": {
+          "frame": {
+            "id": "69BFCDB588B8AF8D00C89E1D92673467",
+            "loaderId": "D315C1FE5E354D6C68FE8571FE1DC81B",
+            "url": "http://127.0.0.1:8167/a",
+            "domainAndRegistry": "",
+            "securityOrigin": "http://127.0.0.1:8167",
+            "securityOriginDetails": {
+              "isLocalhost": true
+            },
+            "mimeType": "text/html",
+            "adFrameStatus": {
+              "adFrameType": "none"
+            },
+            "secureContextType": "SecureLocalhost",
+            "crossOriginIsolatedContextType": "NotIsolated",
+            "gatedAPIFeatures": []
+          },
+          "type": "BackForwardCacheRestore"
+        },
+        "after": [
+          {
+            "id": "130.3",
+            "loaderId": "D315C1FE5E354D6C68FE8571FE1DC81B",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691925559,
+            "done": true,
+            "redirects": [],
+            "status": 200
+          }
+        ]
+      },
+      {
+        "intercept": true,
+        "before": [
+          {
+            "id": "154.3",
+            "loaderId": "A300B4EEA639F654705938C53D771192",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691927450,
+            "done": false,
+            "redirects": [],
+            "status": 200
+          }
+        ],
+        "restored": {
+          "frame": {
+            "id": "50238557BE33665A92EE82F39B18AD80",
+            "loaderId": "A300B4EEA639F654705938C53D771192",
+            "url": "http://127.0.0.1:8167/a",
+            "domainAndRegistry": "",
+            "securityOrigin": "http://127.0.0.1:8167",
+            "securityOriginDetails": {
+              "isLocalhost": true
+            },
+            "mimeType": "text/html",
+            "adFrameStatus": {
+              "adFrameType": "none"
+            },
+            "secureContextType": "SecureLocalhost",
+            "crossOriginIsolatedContextType": "NotIsolated",
+            "gatedAPIFeatures": []
+          },
+          "type": "BackForwardCacheRestore"
+        },
+        "after": [
+          {
+            "id": "154.3",
+            "loaderId": "A300B4EEA639F654705938C53D771192",
+            "method": "GET",
+            "path": "/api/v1/settings",
+            "query": "",
+            "origin": "http://127.0.0.1:8167",
+            "at": 1792691927450,
+            "done": true,
+            "redirects": [],
+            "status": 200
+          }
+        ]
+      }
+    ]
+  },
+  "mutations": [
+    {
+      "mutation": "all-documents",
+      "exit": 1,
+      "killed": true
+    },
+    {
+      "mutation": "headers-as-finished",
+      "exit": 1,
+      "killed": true
+    },
+    {
+      "mutation": "no-event-quiet-reset",
+      "exit": 1,
+      "killed": true
+    }
+  ],
+  "local_raw_sha256": {
+    "probe-restore-events.json": "162fc5c20130774dfa1f669b1d6ae99633276dcde244d1f99f23d8cef6e7d99c",
+    "probe-fixed-events.json": "de785ec84c07bf60c5ed2d9a170d57c5a8cdb18141b573688d693399121e47bb",
+    "probe-fixed-restore-events.json": "96ad5dac8613a7866f936ea32c1a297c557a7527d6ed68a94bd9e21d5eae0744",
+    "probe-navigation-events.json": "3ed5c81f2082796e9a8b7c0711d7cd9d9aea5e21e4f0b5bf458f51ffbc825377"
+  }
+}

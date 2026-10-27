@@ -13,7 +13,9 @@
 
 _Web 版实际界面；订阅与文章使用演示数据。_
 
-RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把订阅、刷新、筛选和阅读放在一条简短的使用路径上；桌面、Web、Android 和 CLI 复用同一套核心能力。文章库留在当前设备，配置可以通过 JSON、OPML 或可选的 WebDAV 迁移。
+RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把订阅、刷新、筛选和阅读放在一条简短的使用路径上；桌面、Web、Android 和 CLI 复用同一套核心能力。桌面与 Android 的资料库留在设备上；自托管 Web 的资料库保存在服务器上，各浏览器登录后访问同一份数据。独立资料库之间可以通过 JSON、OPML 或可选的 WebDAV 交换配置。
+
+当前发布版本为 [v0.2.0](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0)。Web 提供四个平台的 `rssr-web-<平台>` 服务与页面合包，见 [部署说明](./docs/deployment/web.md#服务与页面发布包)。从 v0.1.x 升级前，请先阅读下方的数据迁移说明，尤其是 macOS 的旧数据目录。
 
 [下载最新版本](https://github.com/Develata/RSS-Reader/releases/latest) · [发布说明](https://github.com/Develata/RSS-Reader/releases) · [English](./docs/README.en.md) · [文档](./docs/README.md) · [报告问题](https://github.com/Develata/RSS-Reader/issues)
 
@@ -27,15 +29,14 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
    | Linux x64 | `RSS-Reader-linux-x86_64.deb` | 在满足包内依赖的系统安装；数据写入当前用户的 XDG 数据目录 |
    | macOS Intel / Apple Silicon | `RSS-Reader-macos-x86_64.tar.gz` / `RSS-Reader-macos-aarch64.tar.gz` | 解压到可写目录，打开 `RSS-Reader.app` |
    | Android ARM64 | `RSS-Reader-android-arm64-v8a-release.apk` | 安装 APK；AAB 是应用商店产物，不能直接安装 |
-   | Linux x64 自托管服务端 | `rssr-web-linux-x86_64.tar.gz` | 与桌面版等价的 Web 服务：文章库在服务器的 SQLite，浏览器登录后使用；部署见 [Web 部署指南](./docs/deployment/web.md#linux-二进制部署不使用-docker)，也可使用同源的 Docker 镜像 |
-   | Web | `RSS-Reader-web.tar.gz` | 静态站点包；需要受保护的登录和跨域 feed 代抓时使用 [Web 部署指南](./docs/deployment/web.md) |
+   | Web | `rssr-web-<平台>.tar.gz`（Windows 为 `.zip`） | 解压对应平台的完整服务与页面包，按 [Web 部署指南](./docs/deployment/web.md) 配置并启动；也可使用 Docker 镜像 |
 
 2. 打开应用，点顶栏的订阅图标（RSS 波纹）进入订阅页，输入 RSS / Atom 地址或网站首页并添加订阅。
 3. 点击 **R**（Read / Home）查看文章；已在首页时再次点击 **R** 可手动刷新全部订阅。
 
-上表按已发布的 `v0.1.22` 产物核对；具体变更和验收范围见[本版 Release 说明](https://github.com/Develata/RSS-Reader/releases/tag/v0.1.22)。Android 已有正式签名 APK / AAB，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。
+上表按已发布的 `v0.2.0` 产物核对；另有四平台 CLI 包和 Android AAB，具体变更与验收范围见[本版 Release 说明](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0)。Android APK / AAB 使用与 v0.1.23 相同的正式签名证书，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。Windows 程序未做 Authenticode 签名，macOS 应用未签名或公证。
 
-**Linux 安装包：** `v0.1.17` 已修复旧版 `.deb` 的普通用户写权限和动态库依赖缺失问题。本次 `v0.1.22` 发布流水线也在 Ubuntu 24.04 安装包后，以普通用户在 Xvfb 下两次启动，验证中文与空格路径中的数据库创建和复用。包的最低库版本来自 Ubuntu 24.04 构建环境；其它发行版应先核对 `.deb` 的 `Depends`，不能据此推定旧版发行版兼容。
+**Linux 安装包：** `v0.2.0` 发布流水线在 Ubuntu 24.04 安装包后，以普通用户在 Xvfb 下两次启动，验证中文与空格路径中的单个 `library.sqlite3` 创建、完整性及数据复用。包的最低库版本来自 Ubuntu 24.04 构建环境；其它发行版应先核对 `.deb` 的 `Depends`，不能据此推定旧版发行版兼容。
 
 ## 日常使用
 
@@ -45,9 +46,9 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
 - **设置与迁移：** 滑杆图标进入设置，支持内置主题和自定义 CSS；JSON / OPML 用于配置交换，可选 WebDAV 同步配置。
 - **继续阅读：** 本次运行内返回列表会恢复分页及文章所在位置，短暂标示刚打开的文章；重新打开文章会恢复阅读位置。位置在点击操作、快捷键切文或前进／返回时采集，不随滚动反复扫描正文。重启应用或刷新 Web 页面后清除，不影响已读状态。
 - **收起导航：** 顶栏最右侧的窄箭头可向左收起 Read、搜索、订阅和设置，只留下展开按钮；手机与桌面均可用，同次运行中切页保持状态。
-- **自动化：** `rssr-cli` 支持订阅管理、刷新、设置和配置导入导出；运行 `cargo run --locked -p rssr-cli -- --help` 查看命令。
+- **自动化：** `rssr-cli` 支持订阅管理、刷新、设置、配置导入导出与资料库备份（`backup <文件>`）；运行 `cargo run --locked -p rssr-cli -- --help` 查看命令。
 
-Reader 快捷键仅在阅读区获得焦点时生效：`M` 切换已读、`F` 切换收藏、`←` / `→` 跳转上一篇 / 下一篇未读。搜索框内、输入法组词期间与带 Ctrl / Cmd 等修饰键的原生编辑操作不会触发阅读快捷键或位置采集。
+Reader 快捷键在整个阅读页生效，不需要先点阅读区：`M` 切换已读、`F` 切换收藏、`K` 或 `←` 跳转上一篇未读、`J` 或 `→` 跳转下一篇未读；文章加载完成前已读与收藏不可切换。输入框与可编辑区域内、输入法组词期间、按住不放的重复、图片查看器打开时，以及带 Ctrl / Cmd 等修饰键的原生编辑操作，不会触发阅读快捷键或位置采集。阅读页底栏固定在窗口底部，不随文章长短移动。
 
 ### 按筛选批量已读
 
@@ -61,15 +62,18 @@ Reader 快捷键仅在阅读区获得焦点时生效：`M` 切换已读、`F` �
 
 手动刷新显示实际新增篇数，重复刷新或仅内容更新显示“没有新文章”。部分失败同时显示成功订阅的新增数与失败信息；全部失败显示错误。成功反馈3秒、错误6秒。阅读页仍只显示图标反馈，自动刷新保持静默，CLI显示每个订阅和合计新增数。
 
-添加订阅与刷新都限制单次响应为 8 MiB（解压后字节及转码后的 UTF-8 文本），超限会报告失败并保留既有文章。Web 重复取得完全相同的正文时跳过正文存储写入；大量正文实际变化时仍有整片存储成本。
+添加订阅与刷新都限制单次响应为 8 MiB（解压后字节及转码后的 UTF-8 文本），超限会报告失败并保留既有文章。解析之前还会检查 feed 的结构与解析结果的估计大小：元素嵌套不超过 256 层，`xml:base` 同时生效不超过 16 个、每个不超过 2 KiB，单个标签的属性不超过 256 个，按条目与地址估计的解析结果不超过 64 MiB（数万个条目、每条只有少量文字的 feed 会超过；解析器复制的媒体评级与 JSON Feed 作者也计入），一个媒体对象最多 16 个评级，JSON Feed 一个作者列表最多 64 个作者、对象不能写成数组；时长与媒体时间里的数字不超过 12 位、只能是 ASCII 数字；JSON 嵌套最多 128 层；正文文字里不能含无法解析的字符引用（如 `&#0;`）；超限同样报告失败。正式 Web 由服务器提交刷新结果；浏览器不再序列化文章正文分片。
 
 ## 本地数据与边界
 
-Linux `/usr/bin` 安装版在 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`）保存数据；Windows、macOS 和 Linux 便携版仍在可执行文件同目录的 `RSS-Reader/` 保存数据。目录中包含 `rss-reader.db`（索引）、`rss-reader-content.db`（正文），还可能有 `shell-prefs.json`。SQLite 的 `-wal`、`-shm` 是正常附属文件；备份时先退出应用，再复制整个目录。旧版如曾以管理员身份在 `/usr/bin/RSS-Reader/` 产生数据，升级后不会自动迁移；请在应用退出后备份并由管理员将完整目录复制到新位置、改为当前用户所有。Android 使用应用沙箱内的本地 SQLite；卸载应用会清除本地数据，请先导出配置。单独托管的静态 Web 包将状态序列化保存到当前浏览器的 `localStorage`，它与桌面数据库互不共享，清除站点数据也会清除本地文章库；由 `rssr-web` 托管时文章库在服务器的 SQLite 里（见 [Web 部署指南](./docs/deployment/web.md)）。
+Linux `/usr/bin` 安装版在 `$XDG_DATA_HOME/rss-reader/`（未设置时为 `~/.local/share/rss-reader/`）保存数据；macOS 在 `~/Library/Application Support/RSS-Reader/`；Windows 和 Linux 便携版在可执行文件同目录的 `RSS-Reader/`。v0.2 起目录中是一个资料库 `library.sqlite3`（订阅、文章、正文与设置），还可能有 `shell-prefs.json`；SQLite 的 `-wal`、`-shm` 与 `library.sqlite3.create-lock` 是正常附属文件。备份：`rssr-cli backup <文件>` 在应用运行时也能写出资料库的一致副本（目标必须不存在；CLI 不在同一目录时用 `--data-dir` 指向数据目录）；也可以先退出应用，再复制整个目录。从 v0.1.x 升级时，首次启动会把同一数据目录中的旧库（`rss-reader.db`、`rss-reader-content.db`）单向导入新资料库，旧文件原样保留；升级前须关闭所有旧版程序，导入失败时不会创建空库。macOS 的 v0.1.x 把数据放在应用包内（可执行文件旁的 `RSS-Reader/`，通常是 `RSS-Reader.app/Contents/MacOS/RSS-Reader/`），替换应用包会把它一起删除：升级前先退出旧版，把该目录中的全部文件（`rss-reader.db`、`rss-reader-content.db` 以及可能存在的 `-wal`、`-shm` 文件）复制到 `~/Library/Application Support/RSS-Reader/`，再启动新版（桌面端或 CLI 任一新版首次启动之前完成）。旧版如曾以管理员身份在 `/usr/bin/RSS-Reader/` 产生数据，升级后不会自动迁移；请在应用退出后备份并由管理员将完整目录复制到新位置、改为当前用户所有。Android 使用应用沙箱内的本地 SQLite；卸载应用会清除本地数据，请先导出配置。正式 Web 的资料库由服务器保存，浏览器清除站点数据不会删除服务器文章；备份与恢复见 [Web 部署指南](./docs/deployment/web.md)。
 
-RSS-Reader 缓存 feed 提供的正文，不主动抓取原网站补全全文。桌面端和 Android 会尽量把正文图片本地化；Web 通常保留远端图片地址，能否显示还取决于站点防盗链、HTTPS 和网络策略。JSON / OPML / WebDAV 交换的是订阅与设置，**不是文章库、已读状态或收藏的跨设备同步**。直接运行静态 Web 包时只会由浏览器直连抓取，某些 feed 会因 CORS 无法刷新；部署 `rssr-web` 后由服务端抓取（服务端模式），或改用桌面端，见 [Web 部署指南](./docs/deployment/web.md)。
+RSS-Reader 缓存 feed 提供的正文，不主动抓取原网站补全全文。桌面、Android 与服务器会尽量把正文图片本地化；仍使用远端地址的图片受防盗链、HTTPS 与网络策略影响。JSON / OPML / WebDAV 只交换订阅与设置；同一服务器的浏览器和 CLI 直接访问同一资料库，各设备自己的资料库之间不复制文章或阅读状态。
 
-Web 需通过 HTTPS（本机可用 localhost）在支持 Web Locks 的浏览器中运行。同一站点的多个新版标签页可安全修改已读与收藏；存储失败会报错并保留此前提交的数据。升级后请重新加载所有旧标签页。页面不会自动替换另一标签正在看的正文，返回列表或重新加载时读取最新数据；详见[用户指南](./docs/user-guide.md)。
+正式 Web 经同源 `/api/v1` 使用服务器，订阅抓取与自动刷新由服务器负责。页面重新获得焦点、可见、联网或任务结束时只读刷新，保留正在编辑的内容与阅读正文。页面版本不匹配时提示重新加载；设置草稿（含 CSS）会尝试保留到本标签页的 `sessionStorage`，恢复后仍需手动保存。
+
+**从旧版 Web 升级：**浏览器中的文章、已读和收藏不会迁移到服务器。升级前在旧版导出 JSON 配置或 OPML，登录新版后导入，再由服务器抓取订阅。正式 Web 不再支持离线阅读，也不会把旧浏览器库当作离线后备；不要在保留旧文章之前清除旧站点数据。[Pages 演示](./docs/deployment/github-pages.md) 使用预抓取 RSS 与内存 SQLite，资料库操作重新加载即重置，在线订阅、WebDAV 和自动刷新禁用。
+
 
 项目的长期范围是订阅、阅读、基本设置和基础配置交换；不做推荐流、社交平台或 AI 内容加工。设计依据见[功能设计哲学](./docs/design/functional-design-philosophy.md)。
 
@@ -81,10 +85,13 @@ Web 需通过 HTTPS（本机可用 localhost）在支持 Web Locks 的浏览器�
 # 桌面端
 cargo run --locked -p rssr-app
 
-# Web 开发
+# Web 开发：同一源码构建页面与服务器，经真实登录使用
 rustup target add wasm32-unknown-unknown
 cargo install dioxus-cli --version 0.7.9 --locked
-dx serve --platform web --package rssr-app --locked
+bash scripts/run_rssr_web_browser_smoke.sh
+
+# 正式 Web 自动验收（临时资料库与本地 feed 夹具）
+bash scripts/run_server_web_regression.sh --suite acceptance --long
 
 # CLI
 cargo run --locked -p rssr-cli -- --help
@@ -104,10 +111,10 @@ cargo check --locked -p rssr-app --target wasm32-unknown-unknown
 ## 发布与文档
 
 - [使用指南](./docs/user-guide.md)：订阅、搜索、阅读、主题、WebDAV 和本地备份。
-- [Web / Docker 部署与登录配置](./docs/deployment/web.md)：GHCR、Compose、生产环境、服务端模式。
-- [GitHub Pages 静态演示](./docs/deployment/github-pages.md)：真实 Dioxus Web bundle、合成样例、CORS 能力降级。
+- [Web / Docker 部署与登录配置](./docs/deployment/web.md)：服务器资料库、同源 API、登录与备份。
+- [GitHub Pages 静态演示](./docs/deployment/github-pages.md)：真实 Dioxus Web bundle、预载每日数学与陶哲轩博客的 RSS 文章快照、禁用在线订阅操作。
 - [Android 构建与验收状态](./docs/roadmaps/android-release-roadmap.md)：本地 APK、签名与待测设备行为。
 - [文档索引](./docs/README.md)：设计、测试、交接记录。
 - [贡献说明](./CONTRIBUTING.md) · [MIT License](./LICENSE)。
 
-常见问题：Windows 运行通常需要 WebView2 Runtime；Web 直连 feed 受目标站点 CORS 策略影响；CLI 附件面向脚本和高级用户，普通阅读只需应用附件。若 Android 安装遇到签名不匹配，先确认当前包与已安装版本的签名身份；卸载前务必导出配置，避免丢失本地数据。
+常见问题：Windows 运行通常需要 WebView2 Runtime；正式 Web 需要服务器在线，feed 由服务器抓取；CLI 附件面向脚本和高级用户，普通阅读只需应用附件。若 Android 安装遇到签名不匹配，先确认当前包与已安装版本的签名身份；卸载前务必导出配置，避免丢失本地数据。

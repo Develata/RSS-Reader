@@ -1,20 +1,20 @@
-# Static Web 小视口 Smoke
+# Web 小视口 Smoke（服务器模式）
 
-这份 smoke 是静态 `rssr-app` Web 入口的确定性移动端 UI 门禁。它不读取开发机已有的 localStorage，而是用仓库内 fixture 分别覆盖长内容和短目录场景，并在浏览器内执行 computed-style、几何与可访问性断言。
+这份 smoke 是正式 `rssr-app` Web 的移动端 UI 门禁。它在真实 `rssr-web` 上使用全新 SQLite 夹具资料库，经真实登录分别覆盖长内容和短目录场景，并执行 computed-style、几何与可访问性断言。旧文件名仅为兼容引用；统一契约见 [服务器浏览器回归](./server-web-regression.md)。
 
 ## 脚本
 
-- [`scripts/run_static_web_small_viewport_smoke.sh`](../../scripts/run_static_web_small_viewport_smoke.sh)
+- [`scripts/run_server_web_regression.sh`](../../scripts/run_server_web_regression.sh)
 
 ## 最短用法
 
 ```bash
-bash scripts/run_static_web_small_viewport_smoke.sh
+bash scripts/run_server_web_regression.sh
 ```
 
 默认行为：
 
-- 构建并启动带 SPA fallback 的静态 Web 服务；
+- 从同一检出构建页面、服务器与夹具工具，启动有 SPA 回退的真实服务器；
 - 启动隔离 profile 的 Chrome，通过 CDP 固定为 `360×800`、DPR 3、mobile/touch emulation；
 - 依次载入 `mobile-ui-overflow`、`mobile-ui-short` 与 `home-reader` fixture；
 - 在 `/entries`、`/feeds`、`/settings`、`/entries/2` 和 `1280×800` 桌面回归上执行断言；
@@ -24,13 +24,13 @@ bash scripts/run_static_web_small_viewport_smoke.sh
 ## 常用参数
 
 ```bash
-bash scripts/run_static_web_small_viewport_smoke.sh --skip-build
-bash scripts/run_static_web_small_viewport_smoke.sh --viewport 430,932
-bash scripts/run_static_web_small_viewport_smoke.sh --preset newsprint
-bash scripts/run_static_web_small_viewport_smoke.sh --release
+bash scripts/run_server_web_regression.sh --skip-build
+bash scripts/run_server_web_regression.sh --viewport 430,932
+bash scripts/run_server_web_regression.sh --preset newsprint
+bash scripts/run_server_web_regression.sh --release
 ```
 
-发布聚合入口 `bash scripts/run_release_ui_regression.sh --with-fixed-smokes --no-serve` 会自动调用此门禁，并继承聚合入口的 debug/release profile。
+发布聚合入口 `bash scripts/run_release_ui_regression.sh --with-fixed-smokes` 会自动调用此门禁，并继承聚合入口的 debug/release profile。
 
 HTTP 端口由 `--port` 指定（默认 8091，允许 1..55535），CDP 使用该端口加 10000。脚本启动前拒绝已占用的任一端口，就绪检查和断言完成时都确认本次子进程仍在运行；不能借用开发机旧服务取得通过结果。HTTP 探测具有连接 / 请求超时，失败或中断时只清理本次启动的服务和浏览器，终止等待有上限。本地 GUI 验收继续串行执行；GitHub 矩阵使用独立 runner。
 
@@ -44,7 +44,7 @@ HTTP 端口由 `--port` 指定（默认 8091，允许 1..55535），CDP 使用�
 - console error 与应用错误 overlay 均为零；
 - 展开导航时 R / Reader 返回可见，收起时仅保留展开箭头，所有顶栏图标有可访问名称、title 和 44px 点击区域；旧导航折叠偏好不再隐藏 R；
 - 搜索开关、Esc、Enter 与订阅 / 设置导航；检查非 reduced-motion 下搜索展开动画的实际 computed declaration；输入法 composing 的 Esc 不收起搜索；只有首页再次点击 R 才发起刷新；
-- CDP 暂停真实同源 RSS 请求，验证 R 与自动刷新合并，整轮完成后每个 fixture feed 恰好请求一次；连续 R / Feeds 刷新去重、页面卸载后整轮继续、Reader DOM 与滚动不受刷新影响、部分失败后可重试；
+- 本地 feed 服务扣住服务器的 RSS 请求，验证连续 R 刷新的合并，整轮完成后每个 fixture feed 恰好请求一次；连续 R / Feeds 刷新去重、页面卸载后整轮继续、Reader DOM 与滚动不受刷新影响、部分失败后可重试；
 - Reader 中刷新进行、成功和失败反馈均不覆盖标题；保留 live region、完整 title 以及 R 的结果小标记（DOM 断言不等同于辅助技术实机验收）；
 - 单份分页在页面中部仍位于视口，翻页后回到起点；真实 CDP touch 验证短拖动、非顶部不触发，以及顶部阈值和 R 共用刷新状态；
 - 图片采用原渲染 data URI，原 sanitizer 仍剔除 inline handler；原生 modal、Esc / Enter / 关闭按钮 / 背景、焦点和滚动恢复；`2000×12000` 竖图与 `12000×2000` 横图限制在查看器视口内；
@@ -56,7 +56,7 @@ HTTP 端口由 `--port` 指定（默认 8091，允许 1..55535），CDP 使用�
 - 小屏订阅页的两个辅助统计同排显示，地址输入仍位于视口内。
 - 订阅页在操作前已有空的 polite / atomic 状态区域，导出结果更新同一个 DOM 节点且不抢焦点；静态说明不自动播报。
 - Reader 的具名快捷键区域、关联说明、收藏 `aria-pressed` 与状态一致，四个装饰图标不进入可访问名称。
-- 首页启动刷新后，订阅页“刷新全部”同步禁用、显示忙态和较低透明度；任务结束后恢复可用文案和 `aria-busy="false"`。
+- 页面发起刷新后，订阅页“刷新全部”同步禁用、显示忙态；任务结束后恢复。服务器启动刷新在载入夹具时已完成，浏览器不启动自动刷新循环。
 
 Android 实机长按选择手柄、系统返回、pinch zoom，以及 macOS Cmd+C/Cmd+A 不由 Chrome touch emulation 代替验收。未接实机时必须保持未验证。
 
@@ -64,17 +64,17 @@ Android 实机长按选择手柄、系统返回、pinch zoom，以及 macOS Cmd+
 
 ## 结果记录
 
-脚本会在 `target/static-web-small-viewport-smoke/<timestamp>/` 生成：
+脚本会在 `target/server-web-regression/regression/<timestamp>/` 生成：
 
 - `assertions.json`：每条断言、实测几何、console/error-overlay 汇总；
 - 各场景 DOM dump；
 - 各场景 PNG 截图；
-- Chrome、静态服务与 runner 日志；
+- Chrome、服务器、feed 夹具与构建日志；
 - `summary.md`。
 
 ## 基线与扩展验收
 
-目录行为回归现由默认主题 CI 入口实际执行，包含独立的时间/来源分组 fixture、96px 边界、Enter/Space 潜在偏好、导航及生命周期；详见[目录契约与性能基线](./directory-regression-baseline.md)。`--directory-only` 可单独复现。基线活动组键盘 bug 的失败预期保持开启，因此相关 draft 的 default UI job 会失败，不能由其它主题通过推定整体通过。可选性能采样必须显式传 `--directory-perf`，不属于每次 CI 自动运行内容。
+目录行为回归现由默认主题 CI 入口实际执行，包含独立的时间/来源分组 fixture、96px 边界、Enter/Space 潜在偏好、导航及生命周期；详见[目录契约与性能基线](./directory-regression-baseline.md)。`--directory-only` 可单独复现。历史失败与性能采样仅属于相应基线，不作为当前分支的结果；性能采样由底层驱动另行执行，不属于每次 CI 的自动内容，也不是 Shell 入口参数。
 
 断言数量以本次 `assertions.json` 为准。2026-09-22 的初版及后续扩展保留在对应 handoff；2026-09-26 五主题复验见 [集成记录](../handoffs/2026-09-26-integration-revalidation.md)。历史通过不证明新构建通过。
 

@@ -33,18 +33,17 @@ mod tests {
 
     #[async_trait::async_trait]
     impl FeedRepository for FeedRepositoryStub {
-        async fn edit_details(
+        async fn upsert_subscriptions(
             &self,
-            _feed_id: i64,
-        ) -> rssr_domain::Result<rssr_domain::FeedEditDetails> {
-            Err(rssr_domain::DomainError::NotFound)
+            new_feeds: &[rssr_domain::NewFeedSubscription],
+        ) -> rssr_domain::Result<Vec<rssr_domain::Feed>> {
+            let mut feeds = Vec::with_capacity(new_feeds.len());
+            for new_feed in new_feeds {
+                feeds.push(self.upsert_subscription(new_feed).await?);
+            }
+            Ok(feeds)
         }
-        async fn update_subscription(
-            &self,
-            _edit: &rssr_domain::FeedEditRequest,
-        ) -> rssr_domain::Result<()> {
-            Err(rssr_domain::DomainError::InvalidInput("edit not used by this test double".into()))
-        }
+
         async fn upsert_subscription(
             &self,
             _new_feed: &NewFeedSubscription,
@@ -78,6 +77,7 @@ mod tests {
                 id: 7,
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 title: Some("Example".to_string()),
+                source_title: None,
                 site_url: None,
                 description: None,
                 icon_url: None,

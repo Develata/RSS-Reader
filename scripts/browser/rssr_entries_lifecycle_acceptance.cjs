@@ -29,7 +29,7 @@ async function searchRefreshReturn(page, width) {
   await page.waitForFunction(() => document.querySelectorAll('[data-layout="entry-card"]').length === 8);
   await search.press('Escape');
 
-  const feedRequested = page.waitForRequest(request => new URL(request.url()).pathname.startsWith('/__codex/feed/'));
+  const feedRequested = page.waitForRequest(request => request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/jobs/refresh-all');
   await page.locator(action('activate-home')).click();
   await feedRequested;
   await page.waitForFunction(() => ['finished', 'error'].includes(document.querySelector('[data-slot="manual-refresh-status"]').dataset.state));
@@ -51,15 +51,24 @@ async function searchRefreshReturn(page, width) {
   const repo = path.resolve(__dirname, '../..');
   const output = path.resolve(process.env.ARTIFACT_DIR || 'target/entries-lifecycle-20261027/acceptance');
   await fs.mkdir(output, { recursive: true });
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ executablePath: process.env.CHROME_BIN, channel: process.env.CHROME_BIN ? undefined : 'chrome', headless: true });
   const context = await browser.newContext({ viewport: { width: 1536, height: 864 } });
   await fixture.install(context, repo);
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
-  const results = [], pageErrors = [], consoleErrors = [];
+  const results = [], pageErrors = [], consoleErrors = [], expectedConsoleErrors = [];
+  let currentScenario;
   page.on('pageerror', error => pageErrors.push(error.message));
-  page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
+  page.on('console', message => {
+    if (message.type() !== 'error') return;
+    const record = {text:message.text(), url:message.location().url};
+    if (currentScenario === 'pendingWrites' && record.url === fixture.origin + '/api/v1/entries/72/read'
+        && record.text === 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)') {
+      expectedConsoleErrors.push(record);
+    } else consoleErrors.push(record);
+  });
   const scenario = async (name, run) => {
+    currentScenario = name;
     try {
       const evidence = await run();
       results.push({ name, pass: true, evidence });
@@ -88,10 +97,11 @@ async function searchRefreshReturn(page, width) {
       await scenario('search-refresh-return-' + width, () => searchRefreshReturn(page, width));
     }
     assert.deepEqual(pageErrors, [], 'no uncaught page errors');
-    assert.deepEqual(consoleErrors, [], 'no console errors');
+    assert.deepEqual(consoleErrors, [], 'no unexpected console errors');
+    assert.equal(expectedConsoleErrors.length, 1, 'the one explicitly refused write is recorded');
     console.log(JSON.stringify({ passed: results.length, pageErrors, consoleErrors }));
   } finally {
-    await fs.writeFile(path.join(output, 'acceptance.json'), JSON.stringify({ results, pageErrors, consoleErrors }, null, 2));
+    await fs.writeFile(path.join(output, 'acceptance.json'), JSON.stringify({ results, pageErrors, consoleErrors, expectedConsoleErrors }, null, 2));
     await browser.close();
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

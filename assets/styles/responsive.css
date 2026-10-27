@@ -216,8 +216,9 @@
     padding-top: 18px;
   }
 
-  [data-layout="reader-pagination"][data-context="feed"] {
-    margin-bottom: 84px;
+  /* 窄屏底栏 74px 高、离底 10px。 */
+  .app-shell:has([data-layout="reader-bottom-bar"]) {
+    padding-bottom: calc(100px + var(--safe-area-bottom));
   }
 
   [data-layout="reader-bottom-bar"] {

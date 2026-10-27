@@ -1,8 +1,10 @@
 use anyhow::Result;
 use rssr_domain::ConfigPackage;
 
-pub(super) fn import_field(value: Option<String>, existed: bool) -> Option<String> {
-    if existed { value.or(Some(String::new())) } else { value }
+/// 导入的名称和分组总是“设置或清除”：文件里没有就清除（空串），不管订阅原来是否存在、是否
+/// 已被删除。以前按导入前的订阅快照区分，重新激活已删除的订阅时会留下旧值（审计 B6）。
+pub(super) fn import_field(value: Option<String>) -> String {
+    value.unwrap_or_default()
 }
 
 /// 配置包校验的唯一实现在 `rssr_domain::validation`，这里只做错误类型转换。

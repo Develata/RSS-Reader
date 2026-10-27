@@ -1,19 +1,19 @@
+use std::{cell::Cell, rc::Rc};
+
 use dioxus::core::{Runtime, current_scope_id};
 use dioxus::prelude::*;
 use dioxus_router::Navigator;
-use rssr_domain::UserSettings;
 
 use crate::{
     router::AppRoute,
-    status::{set_status_error, set_status_info},
-    ui::shell_browser::{complete_web_auth_transition, wait_for_refresh_feedback},
+    status::set_status,
+    theme::ThemeController,
+    ui::failure::{TONE_UNKNOWN, UiFailure},
+    ui::recovery::{APP_RECOVERY, DRAFT_NOT_KEPT},
+    ui::shell_browser::{sleep, wait_for_refresh_feedback},
     ui::shell_prefs::{initial_entry_search, remember_entry_search},
     ui::shell_state::{HomeAction, ManualRefreshState, NavMode, resolve_home_action},
-    ui::{ShellCommand, UiCommand, UiIntent, collect_projected_ui_command, visit_ui_command},
-    web_auth::{
-        ServerGateProbe, WebAuthState, auth_state, configured_username, login, probe_server_gate,
-        recover_from_expired_server_session, setup_credentials,
-    },
+    ui::{ShellCommand, UiCommand, UiIntent, run_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -21,7 +21,36 @@ pub(crate) struct AppShellState {
     entry_search: Signal<String>,
     nav_mode: Signal<NavMode>,
     refresh: Signal<ManualRefreshState>,
+    /// Manual refreshes finished; their feedback is dismissed only while no later one finished.
     refresh_revision: Signal<u64>,
+    /// Bumped when what the pages show may be stale: each page then re-reads it, read-only
+    /// (C4b item 2). A manual refresh's end bumps it at once; other triggers through
+    /// [`AppShellState::request_reread`].
+    library_revision: Signal<u64>,
+    /// The settings page is open: it re-reads the settings itself, the shell does not.
+    settings_page_open: Signal<bool>,
+    /// A job's result whose page was left (C4b item 3), until dismissed or it times out.
+    job_notice: Signal<Option<JobNotice>>,
+    /// Bumped by every job notice: a timeout dismisses only its own.
+    job_notice_revision: Signal<u64>,
+    /// The open settings page's edits not stored yet, kept before the page is reloaded or leaves
+    /// to sign in (C4b item 4).
+    settings_draft: Signal<Option<rssr_application::SettingsPatch>>,
+    /// Why the settings could not be read at start, until they are (C4b item 5).
+    settings_failure: Signal<Option<UiFailure>>,
+    /// Why the startup page could not be resolved, until dismissed: the startup page is replaced
+    /// at once, its own status with it (C4b item 5; review C4B-A-R3-03).
+    startup_failure: Signal<Option<UiFailure>>,
+    settings_loading: Signal<bool>,
+    /// The start got to the backend and started the periodic refresh: later reads of the
+    /// settings (retry, recovery, re-read) only read (review C4B-B-07).
+    auto_refresh_started: Signal<bool>,
+    /// A read of the settings was asked for while one was on its way: one more follows it, so
+    /// the request is not lost (review C4B-B-06).
+    settings_reread_wanted: Signal<bool>,
+    /// A read of the settings failed after settings were applied, with the app's count of applied
+    /// settings then: shown until settings are applied again (review C4B-B-08).
+    settings_reread_failure: Signal<Option<(UiFailure, u64)>>,
     owner: ScopeId,
 }
 
@@ -38,8 +67,77 @@ impl AppShellState {
     pub(crate) fn refresh_state(self) -> ManualRefreshState {
         self.refresh.read().clone()
     }
-    pub(crate) fn refresh_revision(self) -> u64 {
-        *self.refresh_revision.read()
+    /// What the pages subscribe to for their read-only refresh (C4b item 2).
+    pub(crate) fn library_revision(self) -> u64 {
+        *self.library_revision.read()
+    }
+
+    /// Asks every page to re-read what it shows (read-only). A request waits [`REREAD_WINDOW`]
+    /// and re-reads only if no re-read was issued since it was made: requests arriving together
+    /// (the page becoming visible, the window gaining focus, the network coming back) make one,
+    /// and a re-read issued meanwhile (a manual refresh ended) covers them.
+    pub(crate) fn request_reread(mut self) {
+        let requested_at = *self.library_revision.peek();
+        self.spawn_in_shell(async move {
+            sleep(REREAD_WINDOW).await;
+            if *self.library_revision.peek() == requested_at {
+                self.library_revision += 1;
+            }
+        });
+    }
+
+    /// Asks every page to re-read at once: a job ended (success or failure may have committed
+    /// part of it, C4b item 3). Requests still waiting are covered by it.
+    pub(crate) fn reread_now(mut self) {
+        self.library_revision += 1;
+    }
+
+    /// Shows the result of a job whose page was left, above every page (C4b item 3). It goes like
+    /// the manual refresh's feedback: after 3 s, or 6 s for a failure or an unknown outcome,
+    /// unless dismissed or replaced before.
+    pub(crate) fn report_job(mut self, message: String, tone: String) {
+        let lasting = tone == "error" || tone == TONE_UNKNOWN;
+        self.job_notice.set(Some(JobNotice { message, tone }));
+        self.job_notice_revision += 1;
+        let shown = *self.job_notice_revision.peek();
+        self.spawn_in_shell(async move {
+            sleep(std::time::Duration::from_secs(if lasting { 6 } else { 3 })).await;
+            if *self.job_notice_revision.peek() == shown {
+                self.job_notice.set(None);
+            }
+        });
+    }
+
+    pub(crate) fn job_notice(self) -> Option<JobNotice> {
+        self.job_notice.read().clone()
+    }
+
+    pub(crate) fn dismiss_job_notice(mut self) {
+        self.job_notice.set(None);
+    }
+
+    /// The settings page is open (`true`) or was closed: while it is open it re-reads the
+    /// settings itself and applies them, so the shell does not read them a second time.
+    pub(crate) fn set_settings_page_open(mut self, open: bool) {
+        self.settings_page_open.set(open);
+        if !open {
+            self.set_settings_draft(None);
+        }
+    }
+
+    /// The settings page's edits not stored yet (`None`: none), as they change (C4b item 4). Once
+    /// the page is leaving, the kept draft follows them (review C4C2-02); when it cannot, the page
+    /// stays and says so (review C4C2-R2-01).
+    pub(crate) fn set_settings_draft(mut self, draft: Option<rssr_application::SettingsPatch>) {
+        if crate::ui::drafts::follow(draft.as_ref()).is_err() {
+            *DRAFT_NOT_KEPT.write() = *APP_RECOVERY.peek();
+        }
+        self.settings_draft.set(draft);
+    }
+
+    /// The draft to keep before the page leaves (not reactive).
+    pub(crate) fn settings_draft(self) -> Option<rssr_application::SettingsPatch> {
+        self.settings_draft.peek().clone()
     }
 
     /// All manual refresh triggers use this synchronous gate and the App-owned task.
@@ -51,25 +149,18 @@ impl AppShellState {
         Runtime::current().in_scope(self.owner, || {
             spawn(async move {
                 let intents =
-                    crate::ui::execute_ui_command(UiCommand::Shell(ShellCommand::ManualRefresh))
-                        .await;
-                let mut failed = true;
-                let mut completed = false;
-                for intent in intents {
-                    if let Some((message, tone)) = intent.into_status() {
-                        failed = tone == "error";
-                        completed = true;
-                        self.refresh.set(ManualRefreshState::Finished { message, failed });
-                    }
-                }
-                if !completed {
-                    self.refresh.set(ManualRefreshState::Finished {
-                        message: "刷新未返回结果。".to_string(),
-                        failed,
-                    });
-                }
+                    crate::ui::run_ui_command(UiCommand::Shell(ShellCommand::ManualRefresh)).await;
+                let (message, tone) = intents
+                    .into_iter()
+                    .rev()
+                    .find_map(UiIntent::into_status)
+                    .unwrap_or_else(|| ("刷新未返回结果。".to_string(), "error".to_string()));
+                // A failure, or an outcome that may have happened, stays longer.
+                let failed = tone == "error" || tone == TONE_UNKNOWN;
+                self.refresh.set(ManualRefreshState::Finished { message, tone });
                 // Failed batches can still have committed some subscriptions.
                 self.refresh_revision += 1;
+                self.reread_now();
                 let completed_revision = *self.refresh_revision.peek();
                 spawn(async move {
                     wait_for_refresh_feedback(std::time::Duration::from_secs(if failed {
@@ -86,9 +177,135 @@ impl AppShellState {
         });
     }
 
+    /// Reads the settings the shell applies (at start, and again on retry). The failure stays
+    /// shown until settings from the library are applied, by this read or by a page (the settings
+    /// page reads them, a configuration import replaces them); a read issued before such an
+    /// application does not overwrite it (C4b items 2 and 5; design review C4D-R2 R2-03, R2-04).
+    pub(crate) fn load_settings(self, theme: ThemeController) {
+        self.read_settings(theme, self.settings_read_command());
+    }
+
+    /// Only a read once the start got to the backend and started the periodic refresh; the start
+    /// itself until then, on every path (retry, recovery, re-read; review C4B-B-R2-05).
+    fn settings_read_command(self) -> ShellCommand {
+        if *self.auto_refresh_started.peek() {
+            ShellCommand::LoadSettings
+        } else {
+            ShellCommand::LoadAuthenticatedShell
+        }
+    }
+
+    /// Reads the settings again after a re-read failed (the notice's retry), whether or not the
+    /// settings page is open.
+    pub(crate) fn retry_settings_read(self, theme: ThemeController) {
+        self.read_settings(theme, self.settings_read_command());
+    }
+
+    /// The shell's read-only refresh: the settings again, applied like the start's (the same
+    /// ordering against settings a page applied meanwhile), unless the settings page is open and
+    /// reads them itself (C4b item 2).
+    pub(crate) fn reread_settings(self, theme: ThemeController) {
+        if *self.settings_page_open.peek() {
+            return;
+        }
+        self.read_settings(theme, self.settings_read_command());
+    }
+
+    fn read_settings(mut self, theme: ThemeController, command: ShellCommand) {
+        if *self.settings_loading.peek() {
+            // Kept for after the read on its way, which may have read before what this request
+            // is about (review C4B-B-06).
+            self.settings_reread_wanted.set(true);
+            return;
+        }
+        self.settings_loading.set(true);
+        let issued = theme.stored_count();
+        Runtime::current().in_scope(self.owner, || {
+            spawn(async move {
+                let intents = run_ui_command(UiCommand::Shell(command)).await;
+                self.settings_loading.set(false);
+                for intent in intents {
+                    match intent {
+                        UiIntent::AutoRefreshStarted => self.auto_refresh_started.set(true),
+                        UiIntent::AuthenticatedShellLoaded(snapshot) => {
+                            // The read worked: an earlier re-read's failure is over. Its settings
+                            // apply unless settings were applied since it was issued.
+                            self.settings_reread_failure.set(None);
+                            if theme.stored_count() == issued {
+                                theme.store(snapshot.settings);
+                            }
+                        }
+                        UiIntent::Failed(failure) => match theme.stored_count() {
+                            0 => self.settings_failure.set(Some(failure)),
+                            applied => self.settings_reread_failure.set(Some((failure, applied))),
+                        },
+                        _ => {}
+                    }
+                }
+                if theme.stored_count() > 0 {
+                    self.settings_failure.set(None);
+                }
+                if *self.settings_reread_wanted.peek() {
+                    self.settings_reread_wanted.set(false);
+                    self.reread_settings(theme);
+                }
+            });
+        });
+    }
+
+    /// Why reading the settings again failed, while no settings were applied since: the app
+    /// keeps showing the ones it had (review C4B-B-08; reactive).
+    pub(crate) fn settings_reread_failure(self, theme: ThemeController) -> Option<UiFailure> {
+        let failure = self.settings_reread_failure.read().clone();
+        failure
+            .filter(|(_, applied)| theme.stored_revision() == *applied)
+            .map(|(failure, _)| failure)
+    }
+
+    /// Why the settings could not be read, while they have not been: settings applied from the
+    /// library by any page end it, not only this read (design review C4D-R2 R2-04).
+    pub(crate) fn settings_failure(self, theme: ThemeController) -> Option<UiFailure> {
+        if theme.has_stored() {
+            return None;
+        }
+        self.settings_failure.read().clone()
+    }
+
+    /// Why the startup page could not be resolved (the app opened all entries instead).
+    pub(crate) fn startup_failure(self) -> Option<UiFailure> {
+        self.startup_failure.read().clone()
+    }
+
+    pub(crate) fn report_startup_failure(mut self, failure: UiFailure) {
+        self.startup_failure.set(Some(failure));
+    }
+
+    pub(crate) fn dismiss_startup_failure(mut self) {
+        self.startup_failure.set(None);
+    }
+
+    pub(crate) fn settings_loading(self) -> bool {
+        *self.settings_loading.read()
+    }
+
     pub(crate) fn submit_search(self, navigator: Navigator) {
         navigator.push(AppRoute::EntriesPage {});
     }
+
+    /// 在 App 作用域里运行任务，页面卸载不会取消它。只给完成后还要改全局状态的命令用
+    /// （例如配置导入替换了设置，审计 E1）；页面自己的回执要先确认页面仍然挂载。
+    pub(crate) fn spawn_in_shell(self, task: impl std::future::Future<Output = ()> + 'static) {
+        Runtime::current().in_scope(self.owner, || {
+            spawn(task);
+        });
+    }
+}
+
+/// A job's result shown above every page (C4b item 3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct JobNotice {
+    pub(crate) message: String,
+    pub(crate) tone: String,
 }
 
 pub(crate) fn use_app_shell_state() -> AppShellState {
@@ -97,6 +314,17 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
         nav_mode: use_signal(NavMode::default),
         refresh: use_signal(ManualRefreshState::default),
         refresh_revision: use_signal(|| 0),
+        library_revision: use_signal(|| 0),
+        settings_page_open: use_signal(|| false),
+        job_notice: use_signal(|| None),
+        job_notice_revision: use_signal(|| 0),
+        settings_draft: use_signal(|| None),
+        settings_failure: use_signal(|| None),
+        startup_failure: use_signal(|| None),
+        settings_loading: use_signal(|| false),
+        auto_refresh_started: use_signal(|| false),
+        settings_reread_wanted: use_signal(|| false),
+        settings_reread_failure: use_signal(|| None),
         owner: current_scope_id(),
     }
 }
@@ -168,40 +396,49 @@ pub(crate) fn use_app_nav_shell() -> AppNavShell {
     }
 }
 
-pub(crate) fn use_authenticated_shell_bus(
-    mut auth: Signal<WebAuthState>,
-    mut settings: Signal<UserSettings>,
-) {
-    use_resource(move || async move {
-        let current_auth = auth();
-        if current_auth == WebAuthState::PendingServerProbe {
-            // 关键：门禁存在时**不能**回落到 local_auth_state()。本地浏览器门禁与服务端登录
-            // 是两套互不相关的凭据，回落会把用户引去创建一组永远用不上的本地凭据。
-            match probe_server_gate().await {
-                ServerGateProbe::Authenticated => auth.set(WebAuthState::Authenticated),
-                // 明确收到了「未通过认证」的应答：跳服务端登录页，这是这类部署唯一的恢复路径。
-                ServerGateProbe::SessionExpired => recover_from_expired_server_session(),
-                // 探测本身失败（离线、网络抖动）时**不跳转**：Web 端的数据在 localStorage 里，
-                // 断网时页面本可以继续渲染，跳去 /login 只会得到一个加载失败的页面，
-                // 把一个还能用的会话直接毁掉。
-                //
-                // 直接放行是安全的：客户端这道门禁不是安全边界——服务端的 require_auth 对每个
-                // 请求都会重新校验，会话真的失效时相关请求自然会失败。
-                ServerGateProbe::Unreachable => auth.set(WebAuthState::Authenticated),
-                // 没有服务端门禁，才轮到本地判定（含回环主机检查）。
-                ServerGateProbe::Absent => auth.set(auth_state()),
-            }
-            return;
+/// Loads the shell's settings once at start ([`AppShellState::load_settings`]). The Web page is
+/// served only after the server's login, so the page itself has no gate (phase C, C4a).
+///
+/// When the start failed and a page then applies settings from the library, the backend works
+/// again: the shell reads once more to complete its start (review C4B-A-03); the periodic refresh
+/// starts with the start's read whenever it got to the backend, and is not started again
+/// (review C4B-B-07). The read does not undo the page's settings (`load_settings`'s ordering).
+pub(crate) fn use_authenticated_shell_bus(shell: AppShellState, theme: ThemeController) {
+    use_hook(move || shell.load_settings(theme));
+    use_effect(move || {
+        if theme.has_stored() && shell.settings_failure.peek().is_some() {
+            shell.load_settings(theme);
         }
+    });
+    // The shell's read-only refresh: on every bump after the start (C4b item 2).
+    use_effect(move || {
+        if shell.library_revision() > 0 {
+            shell.reread_settings(theme);
+        }
+    });
+}
 
-        if current_auth == WebAuthState::Authenticated {
-            for snapshot in collect_projected_ui_command(
-                UiCommand::Shell(ShellCommand::LoadAuthenticatedShell),
-                UiIntent::into_authenticated_shell_loaded,
-            )
-            .await
-            {
-                settings.set(snapshot.settings);
+/// How long the shell gathers re-read requests into one (C4b item 2).
+pub(crate) const REREAD_WINDOW: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// The page re-reads what it shows when it becomes visible again, the window gains focus or the
+/// network comes back (C4b item 2). The page's listeners only name the event; each one is a
+/// request to the shell, inside the App's scope, which gathers them. The listeners go with the App.
+pub(crate) fn use_reread_triggers(shell: AppShellState) {
+    let bridge = use_hook(|| Rc::new(Cell::new(None::<document::Eval>)));
+    let cleanup = Rc::clone(&bridge);
+    use_drop(move || {
+        if let Some(eval) = cleanup.get() {
+            let _ = eval.send(());
+        }
+    });
+    use_future(move || {
+        let bridge = Rc::clone(&bridge);
+        async move {
+            let mut eval = document::eval(include_str!("reread_triggers.js"));
+            bridge.set(Some(eval));
+            while eval.recv::<String>().await.is_ok() {
+                shell.request_reread();
             }
         }
     });
@@ -209,130 +446,453 @@ pub(crate) fn use_authenticated_shell_bus(
 
 pub(crate) fn use_startup_route_bus(
     navigator: Navigator,
-    mut status: Signal<String>,
-    mut status_tone: Signal<String>,
-) {
-    use_resource(move || async move {
-        visit_ui_command(UiCommand::Shell(ShellCommand::ResolveStartupRoute), |intent| {
-            if let Some(snapshot) = intent.clone().into_startup_route_resolved() {
-                let _ = navigator.replace(snapshot.route);
-                return;
-            }
-            if let Some((message, tone)) = intent.into_status() {
-                if tone == "error" {
-                    set_status_error(status, status_tone, message);
-                } else {
-                    status_tone.set(tone);
-                    status.set(message);
-                }
-            }
-        })
-        .await;
-    });
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct WebAuthGateShell {
-    state: WebAuthState,
-    username: Signal<String>,
-    password: Signal<String>,
     status: Signal<String>,
     status_tone: Signal<String>,
-}
-
-impl WebAuthGateShell {
-    pub(crate) fn title(self) -> &'static str {
-        match self.state {
-            WebAuthState::NeedsSetup => "初始化 Web 登录",
-            WebAuthState::NeedsLogin => "登录 RSS-Reader",
-            WebAuthState::Authenticated | WebAuthState::PendingServerProbe => "验证登录状态",
-        }
-    }
-
-    pub(crate) fn intro(self) -> &'static str {
-        match self.state {
-            WebAuthState::NeedsSetup => {
-                "当前只在本地浏览器使用场景下启用了数据保护。首次进入这个浏览器环境时，需要先设置一组本地用户名和密码。"
-            }
-            WebAuthState::NeedsLogin => {
-                "请输入先前设置的用户名和密码，解锁当前浏览器里的本地阅读器数据。"
-            }
-            WebAuthState::Authenticated | WebAuthState::PendingServerProbe => {
-                "正在确认当前登录状态，请稍候。"
-            }
-        }
-    }
-
-    pub(crate) fn submit_label(self) -> &'static str {
-        match self.state {
-            WebAuthState::NeedsSetup => "保存并进入",
-            WebAuthState::NeedsLogin => "登录",
-            WebAuthState::Authenticated | WebAuthState::PendingServerProbe => "继续",
-        }
-    }
-
-    pub(crate) fn username(self) -> String {
-        (self.username)()
-    }
-
-    pub(crate) fn password(self) -> String {
-        (self.password)()
-    }
-
-    pub(crate) fn status(self) -> String {
-        (self.status)()
-    }
-
-    pub(crate) fn status_tone(self) -> String {
-        (self.status_tone)()
-    }
-
-    pub(crate) fn set_username(mut self, value: String) {
-        self.username.set(value);
-    }
-
-    pub(crate) fn set_password(mut self, value: String) {
-        self.password.set(value);
-    }
-
-    pub(crate) fn submit(mut self, on_authenticated: EventHandler<()>) {
-        let next_username = self.username().trim().to_string();
-        let next_password = self.password();
-        let result = match self.state {
-            WebAuthState::NeedsSetup => setup_credentials(&next_username, &next_password),
-            WebAuthState::NeedsLogin => login(&next_username, &next_password),
-            WebAuthState::Authenticated | WebAuthState::PendingServerProbe => Ok(()),
-        };
-
-        match result {
-            Ok(()) => {
-                set_status_info(self.status, self.status_tone, "验证通过，正在进入阅读器。");
-                self.password.set(String::new());
-                complete_web_auth_transition(on_authenticated);
-            }
-            Err(err) => {
-                set_status_error(self.status, self.status_tone, err);
-            }
-        }
-    }
-}
-
-pub(crate) fn use_web_auth_gate_shell(state: WebAuthState) -> WebAuthGateShell {
-    let mut username = use_signal(String::new);
-    let password = use_signal(String::new);
-    let status =
-        use_signal(|| "当前处于本地浏览器保护模式。首次使用请先设置用户名和密码。".to_string());
-    let status_tone = use_signal(|| "info".to_string());
-
-    use_effect(move || {
-        if state == WebAuthState::NeedsLogin
-            && username().is_empty()
-            && let Some(default_username) = configured_username()
-            && !default_username.is_empty()
-        {
-            username.set(default_username);
-        }
+) {
+    let shell = use_context::<AppShellState>();
+    use_resource(move || async move {
+        shell
+            .resolve_startup(status, status_tone, move |route| {
+                let _ = navigator.replace(route);
+            })
+            .await;
     });
+}
 
-    WebAuthGateShell { state, username, password, status, status_tone }
+impl AppShellState {
+    /// Resolves where the app starts and goes there; a failure is kept for the notice above every
+    /// page, since the startup page goes away with the route (C4b item 5; review C4B-A-R3-03).
+    pub(crate) async fn resolve_startup(
+        self,
+        status: Signal<String>,
+        status_tone: Signal<String>,
+        navigate: impl FnOnce(AppRoute),
+    ) {
+        let intents = run_ui_command(UiCommand::Shell(ShellCommand::ResolveStartupRoute)).await;
+        let (route, failure) = startup_resolution(intents);
+        if let Some(failure) = failure {
+            set_status(status, status_tone, failure.message(), failure.tone());
+            self.report_startup_failure(failure);
+        }
+        if let Some(route) = route {
+            navigate(route);
+        }
+    }
+}
+
+/// Where the startup resolution goes, and why it failed if it did.
+fn startup_resolution(intents: Vec<UiIntent>) -> (Option<AppRoute>, Option<UiFailure>) {
+    let (mut route, mut failure) = (None, None);
+    for intent in intents {
+        match intent {
+            UiIntent::StartupRouteResolved(snapshot) => route = Some(snapshot.route),
+            UiIntent::Failed(failed) => failure = Some(failed),
+            _ => {}
+        }
+    }
+    (route, failure)
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use std::time::Duration;
+
+    use dioxus::prelude::*;
+    use rssr_api::{BackendError, ErrorCode};
+    use rssr_domain::{ThemeMode, UserSettings};
+
+    use super::{AppShellState, use_app_shell_state, use_authenticated_shell_bus};
+    use crate::theme::{ThemeController, use_theme_controller};
+    use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+    fn harness() -> Element {
+        let theme = use_theme_controller();
+        let shell = use_app_shell_state();
+        use_context_provider(|| theme);
+        use_context_provider(|| shell);
+        use_authenticated_shell_bus(shell, theme);
+        rsx! {}
+    }
+
+    fn contexts(dom: &VirtualDom) -> (AppShellState, ThemeController) {
+        dom.in_scope(ScopeId::APP, || (consume_context(), consume_context()))
+    }
+
+    /// Runs the app's tasks until the shell's settings read has ended.
+    async fn settle(dom: &mut VirtualDom, shell: AppShellState) {
+        for _ in 0..200 {
+            let _ = tokio::time::timeout(Duration::from_millis(20), dom.wait_for_work()).await;
+            dom.render_immediate_to_vec();
+            if !dom.in_scope(ScopeId::APP, || shell.settings_loading()) {
+                return;
+            }
+        }
+        panic!("the settings read did not end");
+    }
+
+    /// Settings that cannot be read at start are a visible failure, not silent defaults; it stays
+    /// until settings are read, and a retry that reads them clears it (C4b item 5).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_failed_settings_read_stays_until_settings_are_read() {
+        let backend = Scripted::over_new_library();
+        backend.fail("load_settings", BackendError::new(ErrorCode::Network, "网络中断"));
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            let failure = shell.settings_failure(theme).expect("a visible failure");
+            assert_eq!(failure.message(), "读取设置失败：网络中断");
+            assert_eq!(theme.stored_count(), 0, "no settings applied");
+        });
+
+        dom.in_scope(ScopeId::APP, || shell.load_settings(theme));
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert!(shell.settings_failure(theme).is_some(), "a failed retry keeps it");
+        });
+
+        backend.heal("load_settings");
+        dom.in_scope(ScopeId::APP, || shell.load_settings(theme));
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(shell.settings_failure(theme), None);
+            assert_eq!(theme.stored_count(), 1);
+        });
+        assert_eq!(backend.calls("load_settings"), 3);
+    }
+
+    /// After a failed start, settings a page applies from the library (the settings page read
+    /// them, an import replaced them) end the failure as well, with no retry (design review
+    /// C4D-R2 R2-04).
+    #[tokio::test(flavor = "current_thread")]
+    async fn settings_a_page_applies_after_a_failed_start_end_the_failure() {
+        let backend = Scripted::over_new_library();
+        backend.fail("load_settings", BackendError::new(ErrorCode::Network, "网络中断"));
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert!(shell.settings_failure(theme).is_some());
+            assert_eq!(backend.calls("ensure_auto_refresh_started"), 1, "started regardless");
+        });
+        // The settings page saves (or reads) settings: they are the library's.
+        backend.heal("load_settings");
+        let patch =
+            rssr_application::SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() };
+        let stored = rssr_api::Backend::update_settings(&*backend, patch).await.unwrap();
+        dom.in_scope(ScopeId::APP, || {
+            theme.store(stored);
+            assert_eq!(shell.settings_failure(theme), None);
+        });
+        // The page's settings show the backend works again: the shell completes its start; its
+        // read gives the library's settings, the ones the page applied.
+        dom.render_immediate_to_vec();
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
+            assert_eq!(shell.settings_failure.peek().clone(), None);
+        });
+        assert_eq!(backend.calls("load_settings"), 2);
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 1, "started once (C4B-B-07)");
+    }
+
+    /// Settings a page applied while the shell's read was on its way are newer than what the
+    /// read returns: the read does not undo them, and the failure is gone (design review C4D-R2
+    /// R2-03, R2-04).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_read_issued_before_a_page_applied_settings_does_not_undo_them() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        let saved = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+        dom.in_scope(ScopeId::APP, || theme.store(saved.clone()));
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().theme, ThemeMode::Dark, "the page's settings stay");
+            assert_eq!(theme.stored_count(), 1, "the read was not applied");
+            assert_eq!(shell.settings_failure(theme), None);
+        });
+        assert_eq!(backend.calls("load_settings"), 1);
+    }
+
+    /// `resolve_startup` with a failed resolution, of each class: it goes to all entries and the
+    /// shell (not the startup page) keeps the failure until dismissed (review C4B-A-R3-03). It
+    /// does not mount the startup page or render the notice: that the notice stays after the
+    /// route is replaced is the browser acceptance's (C4c; review C4B-A-R4-01).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_failed_startup_resolution_is_kept_by_the_shell() {
+        use crate::router::AppRoute;
+
+        let errors = [
+            BackendError::new(ErrorCode::Network, "原因"),
+            BackendError::new(ErrorCode::OutcomeUnknown, "原因"),
+            BackendError::new(ErrorCode::OutcomeUnknown, "原因")
+                .with_reason(ErrorCode::Unauthenticated),
+            BackendError::new(ErrorCode::Unauthenticated, "原因"),
+            BackendError::new(ErrorCode::BuildMismatch, "原因"),
+        ];
+        for error in errors {
+            let code = (error.code, error.reason);
+            let backend = Scripted::over_new_library();
+            backend.fail("resolve_startup_target", error.clone());
+            let _host = test_host::install(backend.clone());
+            let mut dom = VirtualDom::new(harness);
+            dom.rebuild_in_place();
+            let (shell, _) = contexts(&dom);
+            settle(&mut dom, shell).await;
+            let went = dom.in_scope(ScopeId::APP, || {
+                let went = Signal::new(None);
+                let status = Signal::new(String::new());
+                let tone = Signal::new(String::new());
+                spawn(async move {
+                    let mut went = went;
+                    shell.resolve_startup(status, tone, move |route| went.set(Some(route))).await;
+                });
+                went
+            });
+            for _ in 0..200 {
+                let _ = tokio::time::timeout(Duration::from_millis(20), dom.wait_for_work()).await;
+                if dom.in_scope(ScopeId::APP, || went.peek().is_some()) {
+                    break;
+                }
+            }
+            dom.in_scope(ScopeId::APP, || {
+                assert_eq!(*went.peek(), Some(AppRoute::EntriesPage {}), "{code:?}");
+                let failure = shell.startup_failure().expect("kept for the notice");
+                assert_eq!(failure.error, error);
+                shell.dismiss_startup_failure();
+                assert_eq!(shell.startup_failure(), None);
+            });
+        }
+    }
+
+    /// Runs the app's tasks until `done` holds.
+    async fn run_until(dom: &mut VirtualDom, what: &str, mut done: impl FnMut() -> bool) {
+        for _ in 0..300 {
+            let _ = tokio::time::timeout(Duration::from_millis(20), dom.wait_for_work()).await;
+            dom.render_immediate_to_vec();
+            if dom.in_scope(ScopeId::APP, &mut done) {
+                return;
+            }
+        }
+        panic!("{what}");
+    }
+
+    /// Lets the re-read window pass with the app running, then the reads it started end.
+    async fn past_the_window(dom: &mut VirtualDom, shell: AppShellState) {
+        let until = tokio::time::Instant::now() + super::REREAD_WINDOW * 2;
+        while tokio::time::Instant::now() < until {
+            let _ = tokio::time::timeout(Duration::from_millis(20), dom.wait_for_work()).await;
+            dom.render_immediate_to_vec();
+        }
+        settle(dom, shell).await;
+    }
+
+    /// Re-read requests arriving together (visible, focus, online) make one re-read: one bump of
+    /// the library revision, and the shell reads its settings once more, starting nothing
+    /// (C4b item 2).
+    #[tokio::test(flavor = "current_thread")]
+    async fn rereads_requested_together_read_once() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        assert_eq!(backend.calls("load_settings"), 1);
+
+        dom.in_scope(ScopeId::APP, || {
+            for _ in 0..3 {
+                shell.request_reread();
+            }
+        });
+        run_until(&mut dom, "the re-read", || backend.calls("load_settings") == 2).await;
+        past_the_window(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(*shell.library_revision.peek(), 1, "one re-read");
+            assert_eq!(theme.stored_count(), 2, "its settings applied");
+        });
+        assert_eq!(backend.calls("load_settings"), 2);
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 1, "nothing started again");
+
+        // Later requests make another.
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "the second re-read", || backend.calls("load_settings") == 3).await;
+        dom.in_scope(ScopeId::APP, || assert_eq!(*shell.library_revision.peek(), 2));
+    }
+
+    /// While the settings page is open it reads the settings itself: the shell does not read them
+    /// a second time for the same re-read.
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_shell_leaves_the_settings_to_an_open_settings_page() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, _) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            shell.set_settings_page_open(true);
+            shell.request_reread();
+        });
+        run_until(&mut dom, "the bump", || *shell.library_revision.peek() == 1).await;
+        past_the_window(&mut dom, shell).await;
+        assert_eq!(backend.calls("load_settings"), 1);
+    }
+
+    /// A manual refresh that ends within the window re-reads already: the requests waiting are
+    /// covered by it, and no second re-read follows.
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_manual_refresh_ending_in_the_window_covers_the_requests() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, _) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            shell.request_reread();
+            shell.manual_refresh();
+        });
+        run_until(&mut dom, "the refresh", || *shell.library_revision.peek() == 1).await;
+        past_the_window(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || assert_eq!(*shell.library_revision.peek(), 1));
+        assert_eq!(backend.calls("refresh_all"), 1);
+        assert_eq!(backend.calls("load_settings"), 2, "the start and one re-read");
+    }
+
+    /// A command whose outcome is unknown may have changed the library: the pages re-read
+    /// (C4b item 2). A plain failure asks for nothing.
+    #[tokio::test(flavor = "current_thread")]
+    async fn an_unknown_outcome_asks_for_a_reread() {
+        use crate::ui::commands::{SettingsCommand, UiCommand};
+
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, _) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        let save = || {
+            UiCommand::Settings(SettingsCommand::UpdateSettings {
+                patch: rssr_application::SettingsPatch::default(),
+                success_message: String::new(),
+            })
+        };
+        for (code, rereads) in [(ErrorCode::Network, 0), (ErrorCode::OutcomeUnknown, 1)] {
+            backend.fail("update_settings", BackendError::new(code, "原因"));
+            let done = dom.in_scope(ScopeId::APP, || {
+                let mut done = Signal::new(false);
+                let command = save();
+                spawn(async move {
+                    crate::ui::run_ui_command(command).await;
+                    done.set(true);
+                });
+                done
+            });
+            run_until(&mut dom, "the save", || *done.peek()).await;
+            past_the_window(&mut dom, shell).await;
+            dom.in_scope(ScopeId::APP, || {
+                assert_eq!(*shell.library_revision.peek(), rereads, "{code:?}");
+            });
+        }
+    }
+
+    /// A re-read asked for while the shell's settings read is on its way is not lost: one more
+    /// read follows it (review C4B-B-06).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_reread_asked_for_during_a_read_follows_it() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, _) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        let hold = backend.hold("load_settings");
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "the re-read waits", || hold.waiting() == 1).await;
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        past_the_window_while(&mut dom).await;
+        assert_eq!(backend.calls("load_settings"), 2, "one read on its way");
+        hold.release();
+        run_until(&mut dom, "the follow-up read", || backend.calls("load_settings") == 3).await;
+        hold.release();
+        settle(&mut dom, shell).await;
+    }
+
+    /// Reading the settings again can fail after settings were applied: the failure is shown
+    /// (the app keeps the settings it had) until settings are applied again (review C4B-B-08).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_failed_settings_reread_is_shown_until_settings_are_applied() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        backend.fail("load_settings", BackendError::new(ErrorCode::Network, "网络中断"));
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "the failed re-read", || backend.calls("load_settings") == 2).await;
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            let failure = shell.settings_reread_failure(theme).expect("shown");
+            assert_eq!(failure.message(), "读取设置失败：网络中断");
+            assert_eq!(shell.settings_failure(theme), None, "not the start's failure");
+            // A page applies settings from the library: the failure is over.
+            theme.store(UserSettings::default());
+            assert_eq!(shell.settings_reread_failure(theme), None);
+        });
+
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "another failed re-read", || backend.calls("load_settings") == 3).await;
+        settle(&mut dom, shell).await;
+        assert!(dom.in_scope(ScopeId::APP, || shell.settings_reread_failure(theme)).is_some());
+        backend.heal("load_settings");
+        dom.in_scope(ScopeId::APP, || shell.retry_settings_read(theme));
+        run_until(&mut dom, "the retry", || backend.calls("load_settings") == 4).await;
+        settle(&mut dom, shell).await;
+        assert_eq!(dom.in_scope(ScopeId::APP, || shell.settings_reread_failure(theme)), None);
+    }
+
+    /// Runs the app's tasks for the re-read window without waiting for reads to end.
+    async fn past_the_window_while(dom: &mut VirtualDom) {
+        let until = tokio::time::Instant::now() + super::REREAD_WINDOW * 2;
+        while tokio::time::Instant::now() < until {
+            let _ = tokio::time::timeout(Duration::from_millis(20), dom.wait_for_work()).await;
+            dom.render_immediate_to_vec();
+        }
+    }
+
+    /// The start could not open the backend, so the periodic refresh did not start; a later
+    /// re-read that works completes the start, whatever path it takes (review C4B-B-R2-05).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_reread_completes_a_start_that_never_reached_the_backend() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        test_host::fail_open(Some(BackendError::new(ErrorCode::Network, "打不开")));
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        assert!(dom.in_scope(ScopeId::APP, || shell.settings_failure(theme)).is_some());
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 0);
+
+        test_host::fail_open(None);
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "the re-read", || backend.calls("load_settings") == 1).await;
+        settle(&mut dom, shell).await;
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 1, "the start completed");
+        dom.in_scope(ScopeId::APP, || assert_eq!(shell.settings_failure(theme), None));
+
+        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        run_until(&mut dom, "a later re-read", || backend.calls("load_settings") == 2).await;
+        settle(&mut dom, shell).await;
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 1, "and only once");
+    }
 }

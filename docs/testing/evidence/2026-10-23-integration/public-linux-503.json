@@ -1,0 +1,111 @@
+{
+  "error": "Error: Timed out after 180000ms: !!document.querySelector('[data-slot=\"reader-body-html\"]')",
+  "base": "https://develata.me/RSS-Reader",
+  "loadTimeoutMs": 180000,
+  "imageTimeoutMs": 60000,
+  "failures": [
+    {
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app_bg-dxh53e83b81c9ea66c1.wasm",
+      "status": 503,
+      "type": "Fetch"
+    },
+    {
+      "timestamp": 1792746708239.128,
+      "exceptionDetails": {
+        "exceptionId": 1,
+        "text": "Uncaught (in promise)",
+        "lineNumber": 1,
+        "columnNumber": 2285,
+        "scriptId": "6",
+        "url": "https://develata.me/RSS-Reader/assets/rssr-app-dxhfd12cf3e69baa26.js",
+        "stackTrace": {
+          "callFrames": [
+            {
+              "functionName": "Rt",
+              "scriptId": "6",
+              "url": "https://develata.me/RSS-Reader/assets/rssr-app-dxhfd12cf3e69baa26.js",
+              "lineNumber": 1,
+              "columnNumber": 2285
+            },
+            {
+              "functionName": "st",
+              "scriptId": "6",
+              "url": "https://develata.me/RSS-Reader/assets/rssr-app-dxhfd12cf3e69baa26.js",
+              "lineNumber": 1,
+              "columnNumber": 3819
+            }
+          ]
+        },
+        "exception": {
+          "type": "object",
+          "subtype": "error",
+          "className": "Error",
+          "description": "Error: failed to fetch Wasm: 503  fetching 'https://develata.me/RSS-Reader/assets/rssr-app_bg-dxh53e83b81c9ea66c1.wasm'\n    at Rt (https://develata.me/RSS-Reader/assets/rssr-app-dxhfd12cf3e69baa26.js:2:2286)\n    at st (https://develata.me/RSS-Reader/assets/rssr-app-dxhfd12cf3e69baa26.js:2:3820)",
+          "objectId": "8912085631630126970.2.1",
+          "preview": {
+            "type": "object",
+            "subtype": "error",
+            "description": "Error: failed to fetch Wasm: 503  fetching 'https://develata.me/RSS-Reader/assets/rssr-app_bg-dxh53e83b81c9ea66c1.wasm'\n    at Rt (https://develata.me/RSS-Reader/assets/rssr-app-dxhfd12cf3e69baa26.js:2:2286)\n    at st (https://develata.me/RSS-Reader/assets/rssr-app-dxhfd12cf3e69baa26.js:2:3820)",
+            "overflow": false,
+            "properties": [
+              {
+                "name": "stack",
+                "type": "string",
+                "value": "Error: failed to fetch Wasm: 503  fetching 'https:…der/assets/rssr-app-dxhfd12cf3e69baa26.js:2:3820)"
+              },
+              {
+                "name": "message",
+                "type": "string",
+                "value": "failed to fetch Wasm: 503  fetching 'https://devel…ader/assets/rssr-app_bg-dxh53e83b81c9ea66c1.wasm'"
+              }
+            ]
+          }
+        },
+        "executionContextId": 2
+      }
+    }
+  ],
+  "network": [],
+  "transfers": [
+    {
+      "url": "https://develata.me/RSS-Reader/entries/2?pages-smoke=1",
+      "type": "Document",
+      "encodedDataLength": 692
+    },
+    {
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app-dxhfd12cf3e69baa26.js",
+      "type": "Script",
+      "encodedDataLength": 15273
+    },
+    {
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app_bg-dxh53e83b81c9ea66c1.wasm",
+      "type": "Fetch",
+      "encodedDataLength": 55052
+    },
+    {
+      "url": "https://develata.me/favicon.ico",
+      "type": "Other",
+      "encodedDataLength": 959
+    }
+  ],
+  "requests": [
+    {
+      "url": "https://develata.me/RSS-Reader/entries/2?pages-smoke=1",
+      "type": "Document"
+    },
+    {
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app-dxhfd12cf3e69baa26.js",
+      "type": "Script"
+    },
+    {
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app_bg-dxh53e83b81c9ea66c1.wasm",
+      "type": "Fetch"
+    },
+    {
+      "url": "https://develata.me/favicon.ico",
+      "type": "Other"
+    }
+  ],
+  "articleRendering": [],
+  "externalImages": []
+}

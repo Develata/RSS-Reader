@@ -6,6 +6,11 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+    inputs:
+      acceptance_long:
+        description: Include the server acceptance scenarios that wait 30 seconds or more
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,9 +45,9 @@ jobs:
           members = set(metadata['workspace_members'])
           packages = sorted(p['name'] for p in metadata['packages'] if p['id'] in members)
           infra = next(p for p in metadata['packages'] if p['name'] == 'rssr-infra')
-          harnesses = sorted(t['name'] for t in infra['targets']
-                            if 'test' in t['kind'] and t['name'].startswith('wasm_')
-                            and t['name'].endswith('_contract_harness'))
+          harnesses = sorted(infra['metadata']['rssr']['wasm-contracts'])
+          targets = {t['name'] for t in infra['targets'] if 'test' in t['kind']}
+          assert set(harnesses) <= targets, 'unknown shared SQL test target'
           with open('Cargo.lock', 'rb') as source:
               versions = {p['version'] for p in tomllib.load(source)['package']
                           if p['name'] == 'wasm-bindgen'}
@@ -70,6 +75,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Check browser traffic tracking and acceptance error reporting
+        run: node --test scripts/browser/api_traffic.test.mjs scripts/browser/server_acceptance.test.mjs
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
@@ -97,6 +107,10 @@ jobs:
         run: bash scripts/test_prepare_linux_deb.sh
       - name: Check macOS bundle metadata adapter
         run: python3 scripts/test_prepare_macos_bundle.py
+      - name: Check Web package integrity and extraction
+        run: python3 scripts/test_package_web.py
+      - name: Check shared build identifiers and dependency change tracking
+        run: python3 scripts/test_build_id.py
 
   release-ui-runner:
     runs-on: ${{ matrix.os }}
@@ -150,9 +164,12 @@ jobs:
 
       - name: Install system dependencies
         if: matrix.package == 'rssr-app'
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          bash scripts/configure_ubuntu_apt.sh
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y \
             pkg-config \
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
@@ -188,6 +205,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Setup WASM C toolchain
+        uses: ./.github/actions/setup-wasm-c-toolchain
+
       - name: Cleanup runner
         uses: ./.github/actions/cleanup-github-runner
 
@@ -207,21 +227,45 @@ jobs:
         with:
           version: ${{ env.DIOXUS_CLI_VERSION }}
 
-      # 原生模块 job 的 clippy 看不到 cfg(target_arch = "wasm32") 分支；
-      # 这里对 wasm 目标跑 clippy（覆盖 rssr-app 及其路径依赖），成本与 cargo check 相当。
-      - name: Wasm target Clippy
+      # 分别检查正式 Web、静态演示和 infra feature 组合；原生 job 看不到 wasm 分支。
+      - name: Formal Web Clippy
         run: cargo clippy --locked -p rssr-app --target wasm32-unknown-unknown -- -D warnings
+
+      - name: Pages demo Clippy
+        run: cargo clippy --locked -p rssr-app --target wasm32-unknown-unknown --features pages-demo -- -D warnings
+
+      - name: Wasm infra Clippy without adapters
+        run: cargo clippy --locked -p rssr-infra --target wasm32-unknown-unknown -- -D warnings
+
+      - name: Wasm infra adapter and test Clippy
+        run: cargo clippy --locked -p rssr-infra --target wasm32-unknown-unknown --features memory-store,http-backend --tests -- -D warnings
 
       - name: Web bundle smoke
         run: |
           dx bundle --platform web --package rssr-app --release --locked --debug-symbols false --out-dir target/web-dist
           test -s target/dx/rssr-app/release/web/public/index.html
 
+      # 页面与服务器出自同一次检出，构建标识（dev-<commit>）一致；服务器拒绝其它构建页面的写请求。
+      - name: Build the server and the fixture tool for UI jobs
+        run: |
+          cargo build --release --locked -p rssr-web
+          cargo build --release --locked -p rssr-infra --example browser_fixture_library
+
       - name: Share the exact Web build with UI jobs
         uses: actions/upload-artifact@v7
         with:
           name: ci-web-public
           path: target/dx/rssr-app/release/web/public/
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Share the server of the same build with UI jobs
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-web-server
+          path: |
+            target/release/rssr-web
+            target/release/examples/browser_fixture_library
           if-no-files-found: error
           retention-days: 3
 
@@ -236,6 +280,7 @@ jobs:
         preset: [default, atlas-sidebar, newsprint, amethyst-glass, midnight-ledger]
     env:
       PRESET: ${{ matrix.preset }}
+      ACCEPTANCE_LONG: ${{ inputs.acceptance_long && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -246,26 +291,98 @@ jobs:
         with:
           name: ci-web-public
           path: target/dx/rssr-app/release/web/public/
+      - uses: actions/download-artifact@v8
+        with:
+          name: ci-web-server
+          path: target/ci-server/
       - name: Setup Chrome for Testing
         uses: ./.github/actions/setup-browser-tests
         with:
           with-driver: 'false'
+          with-fonts: 'true'
+      # 页面对真实 rssr-web（每个夹具重启在新资料库上，见 scripts/browser/server_harness.mjs）。
       - name: Real UI assertions at mobile and desktop viewports
         run: |
-          args=(--release --skip-build --chrome-bin "$HOME/.local/bin/google-chrome" --log-dir "target/ci-ui/$PRESET")
-          if [[ "$PRESET" != default ]]; then args+=(--preset "$PRESET"); fi
-          bash scripts/run_static_web_small_viewport_smoke.sh "${args[@]}"
+          # Artifacts do not keep the executable bit.
+          chmod +x target/ci-server/rssr-web target/ci-server/examples/browser_fixture_library
+          args=(--release --chrome-bin "$HOME/.local/bin/google-chrome"
+            --server-bin target/ci-server/rssr-web
+            --fixture-bin target/ci-server/examples/browser_fixture_library
+            --static-dir target/dx/rssr-app/release/web/public)
+          preset_args=()
+          if [[ "$PRESET" != default ]]; then preset_args=(--preset "$PRESET"); fi
+          bash scripts/run_server_web_regression.sh "${args[@]}" "${preset_args[@]}" --log-dir "target/ci-ui/$PRESET"
+          if [[ "$PRESET" == default ]]; then
+            bash scripts/run_server_web_regression.sh "${args[@]}" --suite theme-matrix --log-dir "target/ci-ui/$PRESET-theme-matrix"
+            bash scripts/run_server_web_regression.sh "${args[@]}" --suite feed-smoke --log-dir "target/ci-ui/$PRESET-feed-smoke"
+            # 常规 CI 跑短场景；手动运行可选择纳入等待 30 秒以上的长场景。
+            acceptance_args=()
+            if [[ "$ACCEPTANCE_LONG" == true ]]; then acceptance_args=(--long); fi
+            bash scripts/run_server_web_regression.sh "${args[@]}" --suite acceptance "${acceptance_args[@]}" --log-dir "target/ci-ui/$PRESET-acceptance"
+          fi
       - name: Preserve UI evidence even on failure
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: ci-ui-${{ matrix.preset }}
           path: |
-            target/ci-ui/${{ matrix.preset }}/*.json
-            target/ci-ui/${{ matrix.preset }}/*.md
-            target/ci-ui/${{ matrix.preset }}/*.log
-            target/ci-ui/${{ matrix.preset }}/*.png
-            target/ci-ui/${{ matrix.preset }}/*.html
+            target/ci-ui/${{ matrix.preset }}*/*.json
+            target/ci-ui/${{ matrix.preset }}*/*.md
+            target/ci-ui/${{ matrix.preset }}*/*.log
+            target/ci-ui/${{ matrix.preset }}*/*.png
+            target/ci-ui/${{ matrix.preset }}*/*.html
+            target/ci-ui/${{ matrix.preset }}*/*-traffic.txt
+          retention-days: 7
+
+  reading-workspace:
+    needs: web-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: ci-web-public
+          path: target/dx/rssr-app/release/web/public/
+      - uses: actions/download-artifact@v8
+        with:
+          name: ci-web-server
+          path: target/ci-server/
+      - uses: ./.github/actions/setup-browser-tests
+        with:
+          with-driver: 'false'
+          with-fonts: 'true'
+      - name: Reading workspace against the same real server build
+        run: |
+          npm install --no-save --ignore-scripts --prefix target/ci-playwright playwright@1.64.1
+          export NODE_PATH="$PWD/target/ci-playwright/node_modules"
+          export CHROME_BIN="$HOME/.local/bin/google-chrome"
+          export RSSR_WEB_BIN="$PWD/target/ci-server/rssr-web"
+          export RSSR_FIXTURE_BIN="$PWD/target/ci-server/examples/browser_fixture_library"
+          chmod +x "$RSSR_WEB_BIN" "$RSSR_FIXTURE_BIN"
+          for suite in workspace entries_lifecycle directory_window directory_window_boundaries directory_window_review; do
+            script="rssr_${suite}_acceptance.cjs"
+            if [[ "$suite" == directory_window_boundaries || "$suite" == directory_window_review ]]; then script="rssr_${suite}.cjs"; fi
+            export ARTIFACT_DIR="$PWD/target/ci-workspace/$suite"
+            mkdir -p "$ARTIFACT_DIR"
+            node "scripts/browser/$script" > "$ARTIFACT_DIR/run.log" 2>&1 || { cat "$ARTIFACT_DIR/run.log"; exit 1; }
+          done
+          export ARTIFACT_DIR="$PWD/target/ci-workspace/transport"
+          mkdir -p "$ARTIFACT_DIR"
+          node scripts/browser/rssr_directory_transport_acceptance.cjs --offline-fixture true --artifact-dir "$ARTIFACT_DIR" > "$ARTIFACT_DIR/run.log" 2>&1 || { cat "$ARTIFACT_DIR/run.log"; exit 1; }
+      - name: Preserve workspace evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-reading-workspace
+          path: |
+            target/ci-workspace/*/*.json
+            target/ci-workspace/*/*.log
+            target/ci-workspace/*/*.png
           retention-days: 7
 
   wasm-contract-build:
@@ -275,6 +392,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Setup WASM C toolchain
+        uses: ./.github/actions/setup-wasm-c-toolchain
 
       - name: Cleanup runner
         uses: ./.github/actions/cleanup-github-runner
@@ -416,8 +536,8 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-dx${{ env.DIOXUS_CLI_VERSION }}-
 
-      - name: Android target smoke check
-        run: cargo check --locked -p rssr-app --target aarch64-linux-android
+      - name: Android app and CLI target smoke check
+        run: cargo check --locked -p rssr-app -p rssr-cli --target aarch64-linux-android
 
       - name: Android bundle smoke
         run: |

@@ -2,6 +2,8 @@
 
 > Status checked against source on 2026-09-30. The initial consolidation is implemented; dated checks below remain historical evidence. Follow-up work is driven by a concrete boundary problem, not by an unfinished migration checklist.
 
+> v0.2 update (2026-10-23): the service inventory below describes the original consolidation. `SettingsSyncService` has since been folded into `ImportExportService`: `RemoteConfigPullOutcome` includes the applied settings with the import result, so the UI does not need a second settings reload. The current browser adapter contract is recorded under Truth Sources below; see also [v0.2 architecture](./v0.2-architecture.md).
+
 ## Purpose
 
 This plan defines the next architecture step after the UI runtime and host capability narrowing
@@ -273,7 +275,7 @@ semantic is stable enough to justify its own use case.
 - Durable settings: `SettingsRepository`
 - App workspace state and last-opened feed: `AppStateRepository` through `AppStateService`
 - Config exchange payload: `ImportExportService` and config package v2 schema
-- Browser persistence: infra `BrowserStore`, four logical shards with versioned commits published under Web Locks. Legacy keys such as `rssr-web-app-state-v2` are migration input, not a direct-write API.
+- Web adapters (phase D, 2026-10-23): formal Web uses infra `HttpBackend` and the server library. The Pages demo uses `memory-store` with the shared SQL repositories and in-memory SQLite, rebuilt from a prefetched RSS snapshot on each load. `BrowserStore` is retired; neither build reads or writes the legacy browser article library.
 
 No UI cache, CLI state, browser helper seed, or smoke fixture may become a parallel truth source.
 

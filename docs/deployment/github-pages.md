@@ -1,6 +1,6 @@
 # GitHub Pages：真实 Dioxus Web 静态演示
 
-基线：`dbe68e11fdbf93769bfa876831113a17928108ab`（main / v0.1.20 发布记录）。
+实现核对：2026-10-22，v0.2 阶段 D。此页仅说明 `pages-demo` 静态演示；正式 Web 的同源 API 与服务器资料库见 [Web 部署](./web.md)。演示使用单连接内存 SQLite，重新加载页面即重置资料库。
 
 ## 一次性仓库配置
 
@@ -20,6 +20,7 @@
 ## 构建与路由
 
 ```bash
+cargo run --locked -p rssr-infra --example pages_snapshot
 dx build --platform web --package rssr-app --release --locked \
   --features pages-demo --base-path /RSS-Reader --debug-symbols false
 python3 scripts/prepare_pages.py target/dx/rssr-app/release/web/public
@@ -28,7 +29,7 @@ PAGES_BASE_PATH=/RSS-Reader bash scripts/test_pages.sh
 
 CLI 与项目依赖一致，固定为 Dioxus 0.7.9。上传整个
 `target/dx/rssr-app/release/web/public`，包含 index、JS、WASM 和全部资源。
-不上传源码、SQLite、认证信息或回归 server 的 `__codex` 辅助接口。
+不上传源码、用户数据库文件、认证信息或回归 server 的 `__codex` 辅助接口。
 
 Dioxus 0.7.9 的 `--base-path` 同时控制资源前缀和 WebHistory。
 继续使用原始 `AppRoute`、`Router` 与 `Link`，无需给各页面手工添加仓库名前缀。
@@ -47,29 +48,39 @@ release 的路由前缀来自编译配置；改 base path 必须重新构建，�
 
 `pages-demo` 为默认关闭的构建 feature，仅 wasm32 生效。构建直接运行同一个 App，
 在原有 app shell 内显示一条公开静态演示说明。演示没有服务端账户和访问控制，
-不生成测试密码；该 feature 下跳过本地浏览器门禁，方便 localhost 验收。
+不生成测试密码；本地浏览器口令门禁已删除，演示直接进入。
 常规 Web / rssr-web / desktop / Android 构建不启用它。
 
-首次初始化复用 `tests/fixtures/browser_state/reader_demo_{core,app_state,entry_flags,entry_content}.json`，
-四份样例由 Rust `include_str!` 编入 WASM，并用真实持久化类型反序列化。
-在 `BrowserStore::open_with_initial_state` 中，判断存储是否全新和 seed 发布使用
-同一个 Web Lock，发布走既有 copy-on-write slices 与 commit key。
-已有 commit、legacy slice 或 staging slice 都不会被 seed 覆盖。
-用户删除全部订阅后不会在刷新页面时被重新灌入样例，升级部署也不会重置数据。
-损坏数据报错并保留，禁止悄悄恢复样例。存储写入失败时初始化报错；若已建立空数据库，
-下一次进入保留这个空库，不会自动重试覆盖。需要重新体验样例时可使用全新浏览器配置。
+每次重新加载使用 `assets/pages-demo/snapshot.json` 的真实 RSS 文章快照，
+由 Rust `include_str!` 编入 WASM，并经共享的订阅与刷新仓储端口写入内存资料库。
+`assets/pages-demo/sources.json` 指定两个公开源：Develata 每日数学最近 5 篇、
+Terence Tao 博客最近 1 篇。保留 RSS 提供的标题、作者、发布时间、正文与原文链接。
+测试用的合成 `reader_demo_*` 夹具继续供固定回归使用，不再作为 Pages 的展示内容。
 
-注意：当前 BrowserStore 的 localStorage key 按 **origin** 共享，URL 子路径并不提供隔离。
-本补丁保留这个既有存储约定，不清空已有数据；同一 `develata.github.io` origin 下
-其他 RSS-Reader 构建也会读到这些 key。若需要相互隔离，应采用独立 origin。
-公开部署只提供静态样例资源，不上传访问者 localStorage。
+Pages workflow 在构建前运行 Rust `pages_snapshot`，复用产品的 RSS/Atom 解析器。
+它在 CI 主机抓取源，不要求源允许浏览器 CORS；单个请求总超时 40 秒，最多 3 次跳转，
+每份 RSS 及最终快照分别不超过 2 MiB。按发布时间选取少量正文，按源条目标识去重；
+任一源失败、没有可读条目或超过上限则构建失败，不发布半份数据，也不悄悄使用旧快照。
+快照记录抓取时间、原始 RSS 的 SHA-256 与最终地址，并作为 7 天 workflow artifact 保留。
+没有定时刷新任务；运行一次 Pages 构建才更新一次内容。仓库保留已抓取快照，
+本地离线构建可跳过上述 `cargo run`。手动刷新快照后需重新编译 WASM。
+
+页面用 `LocalBackend` 和 `compose_offline_library_use_cases` 复用原生/服务器的 SQL
+仓储、迁移器与用例。连接归页面线程的 `thread_local`，句柄只有索引及任务状态，
+不使用 Worker、OPFS、IndexedDB、Web Locks 或 localStorage 文章库。每个任务一个事务，
+排队取消立即释放闭包，准入等待和 SQL 运行各有期限。同步 SQL 执行期间事件循环不能
+同时处理取消；progress handler 按浏览器时钟中断超期语句，任务之间让出事件循环。
+
+阅读、收藏、导入配置、删除订阅等只影响当前页面的内存库，重新加载全部重置。
+设备外观偏好由设备壳单独保存，不属于演示资料库。旧版浏览器文章库不读取、不迁移、
+不清除；不同标签页不共享演示资料库。初始化失败时报告错误，不暴露初始化了一半的库。
 
 | 能力 | Pages 演示行为 |
 | --- | --- |
-| 文章列表、阅读、搜索、已读、收藏、主题 | 使用原有 UI、用例和 BrowserStore |
-| 添加订阅、单 feed 刷新、全部刷新 | 在 Web RefreshPort 入口返回清晰错误，不发网络请求 |
+| 文章列表、阅读、搜索、已读、收藏、主题 | 使用原有 UI、用例和共享 SQL 仓储；资料库重载即重置 |
+| 添加订阅、单 feed 刷新、全部刷新 | LocalHost 与 composition 网络端口均拒绝操作 |
 | 自动刷新 | 不启动调度器，即使设置中存在刷新间隔 |
-| 远端配置 push/pull | 在 Web RemoteConfigPort 入口阻断 |
+| 远端配置 push/pull | LocalHost 拒绝，不装配浏览器 WebDAV 客户端 |
 | 本地配置导入导出 | 保留原实现，不承诺导入后能拉取在线文章 |
 | 原文链接、用户导入正文的外部图片 | 仍可能访问第三方；不是完整离线沙盒 |
 
@@ -81,25 +92,40 @@ CORS 是浏览器对跨源请求的限制，Pages 无法通过静态文件为第
 
 workflow 在发布前运行 `scripts/test_pages.sh`：使用临时 Chrome profile 和一个模拟
 Pages HTTP 404 行为的静态 server，检查真实阅读器挂载、JS/WASM 加载、子路径路由、
-收藏切换后重载不被 seed 覆盖、手动刷新被明确阻断以及未产生跨源 feed 请求。
+收藏切换后重载重置、手动刷新被明确阻断以及未产生 feed/API 请求。
+逐篇核对真实标题、正文和原文链接，检查来源名称和旧存储哨兵不被覆盖。
+result.json 记录传输字节、页面就绪时间、WASM 线性内存、JS heap 与主线程 long tasks；
+本地 server 不压缩响应，不能把其传输量当成 GitHub CDN 压缩后的下载量。
+正文外部图片按浏览器 `Image` 类型单独记录，不计作 feed 请求；同源资源或其他跨源请求失败仍会失败。
 这个 server 不包含任何认证或 seed 注入 helper，因此能发现生产入口漏初始化的问题。
 验收使用 OS 分配的端口和独立 Chrome profile，支持同机并行；失败保留日志、网络错误与截图，
 CI 上传到 `pages-smoke-<run_id>-<attempt>`（保留三天）。本地可设置 `PAGES_PUBLIC_DIR`
 使用非默认构建目录。浏览器/服务启动失败立即报错，CDP 验收有 120 秒总超时。
-已有 wasm subscription contract harness 增加 seed 并发、已有空库、损坏数据保留测试，
-继续由仓库原 CI 执行。可单独运行：
+SQL 案例在 native 和 Chrome 两端运行同一份源码，执行器专有行为另用 `wasm_memory_store`。
+旧三个 harness 及存储层已退役，69 项行为去向见 [迁移对照](../testing/phase-d-browser-contract-migration.md)。例如：
 
 ```bash
-bash scripts/run_wasm_contract_harness.sh wasm_subscription_contract_harness
+bash scripts/run_wasm_contract_harness.sh test_library_contracts test_library_refresh_tickets wasm_memory_store
 ```
 
 本地 smoke 需要 Node 22+、google-chrome、curl、Python 3.9+，以及已经构建的 release bundle。
 
+部署后另用 `scripts/browser/pages_smoke.mjs` 检查实际公网入口：`PAGES_TEST_BASE` 指向
+deployment URL，`PAGES_SNAPSHOT_PATH` 使用该次部署上传的快照，`CDP_BASE` 指向独立
+Chrome profile 的调试端口，`PAGES_SMOKE_LOG_DIR` 使用本次新建的证据目录。
+公网传输较慢时可显式设置 `PAGES_LOAD_TIMEOUT_MS=180000`（最大 300000）；它只影响
+初次进入、重载与逐篇导航的加载等待，交互仍为 30 秒。图片等待另设
+`PAGES_IMAGE_TIMEOUT_MS=60000`（默认 5000，最大 300000）；使用短 CDP 查询轮询，
+不延长单条 CDP 命令期限，公式图片仍须实际加载并渲染，记录各篇实际等待时间。
+默认加载期限仍为 30 秒，CI 的本地 smoke 总时限不变。结果记录所用期限和真实资源计时，
+不能把延长等待后的功能通过描述成启动性能达标。驱动禁用缓存，结束时关闭本次标签页，
+避免超时后残留下载干扰下次运行。
+
 ## 为什么不复制 HTML 展示页
 
-页面、CSS、路由、交互状态与持久化仍来自 rssr-app 的同一份源代码。
+页面、CSS、路由与交互来自 rssr-app 的同一份源代码，资料库操作复用共享 SQL 仓储。
 后续修改阅读器、主题或移动布局时，Pages 自动编译同一个提交并运行实际 bundle 验收。
-仅部署配置、合成初始数据和宿主网络能力有所区别；没有第二套 DOM/CSS/模拟交互需要同步。
+仅部署配置、预抓取初始数据和宿主网络能力有所区别；没有第二套 DOM/CSS/模拟交互需要同步。
 
 ## 实现依据
 
@@ -133,7 +159,9 @@ bash scripts/run_wasm_contract_harness.sh wasm_subscription_contract_harness
 
 ## 模块边界
 
-`demo.rs` 拥有演示策略与样例选择；App 只渲染说明，Web host ports 负责拒绝不支持的操作。
-BrowserStore 仅暴露通用的“未初始化才设置初值”能力，不依赖 Pages、fixture 或 feature。
-初始化独立于常规 transaction，后者保留原实现；二者共享 Web Lock、取消处理和 cache
-访问执行器。日常读写不携带 seed 对象，也不增加 localStorage 存在性扫描。
+`demo.rs` 读取快照并经仓储端口建库；App 渲染演示说明；Web host 禁用网络和自动刷新。
+`store/wasm_executor.rs` 只管页面线程上的连接和任务。composition 统一装配仓储，
+原生使用网络端口，演示使用拒绝网络的端口，SQL 核心不依赖 Pages。
+
+WASM SQLite 的 C 部分需要支持 wasm 的 clang 和 llvm-ar；必要时设置
+`CC_wasm32_unknown_unknown` 与 `AR_wasm32_unknown_unknown` 指向工具路径。

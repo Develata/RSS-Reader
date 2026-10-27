@@ -1,21 +1,39 @@
-// Isolated Playwright fixture: no HTTP listener, personal profile or external feeds.
-const fs = require('node:fs/promises');
+// Isolated real-server fixture for the Playwright directory/workspace contracts.
+// Requires the page, rssr-web and browser_fixture_library from the same build.
 const path = require('node:path');
-const crypto = require('node:crypto');
+const fs = require('node:fs/promises');
 const origin = 'http://127.0.0.1:8119';
-const keys = ['rssr-web-state-v1', 'rssr-web-app-state-v2', 'rssr-web-entry-flags-v1', 'rssr-web-entry-content-v1'];
+const contexts = new WeakMap();
 exports.origin = origin;
+exports.get = page => contexts.get(page.context());
 exports.install = async (context, repo) => {
-  const publicRoot = path.resolve(repo, process.env.PUBLIC_DIR || 'target/dx/rssr-app/release/web/public');
-  const hash = s => crypto.createHash('sha256').update(s).digest('base64url');
-  await context.route(origin + '/**', async route => {
+  const { startHarness } = await import('./server_harness.mjs');
+  const artifacts = path.resolve(process.env.ARTIFACT_DIR || 'target/workspace-server-regression');
+  await fs.mkdir(artifacts, { recursive: true });
+  const suffix = process.platform === 'win32' ? '.exe' : '';
+  const target = process.env.CARGO_TARGET_DIR || path.join(repo, 'target');
+  const harness = await startHarness({
+    serverBin: process.env.RSSR_WEB_BIN || path.join(target, 'debug/rssr-web' + suffix),
+    fixtureBin: process.env.RSSR_FIXTURE_BIN || path.join(target, 'debug/examples/browser_fixture_library' + suffix),
+    staticDir: path.resolve(repo, process.env.PUBLIC_DIR || 'target/dx/rssr-app/release/web/public'),
+    seedsDir: path.join(repo, 'tests/fixtures/browser_state'), themesDir: path.join(repo, 'assets/themes'),
+    workDir: path.join(artifacts, 'server-work'), artifactDir: artifacts,
+    port: 8119, username: 'smoke', password: 'smoke-pass-123',
+  });
+  contexts.set(context, harness);
+  context.on('close', () => { void harness.close().catch(console.error); });
+  await context.route(origin + '/__codex/setup-local-auth**', async route => {
     const url = new URL(route.request().url());
-    if (url.pathname === '/__codex/setup-local-auth') {
-      const states = await Promise.all(['core', 'app_state', 'entry_flags', 'entry_content'].map(async suffix =>
-        JSON.parse(await fs.readFile(path.join(repo, 'tests/fixtures/browser_state/directory_contract_' + suffix + '.json'), 'utf8'))));
-      const [core, app, flags, content] = states;
-      core.feeds.forEach(feed => { feed.url = origin + '/__codex/feed/' + feed.id; });
-      if (url.searchParams.get('seed') === 'directory-window') {
+    const windowSeed = url.searchParams.get('seed') === 'directory-window';
+    const seed = windowSeed ? 'directory-contract' : url.searchParams.get('seed');
+    const session = await harness.server.useSeed(seed, { edit: ({core, app_state: app, entry_flags: flags, entry_content: content}) => {
+      if (url.searchParams.get('workspace') === 'true') {
+        core.settings.entries_page_size = 8;
+        core.settings.archive_after_months = 120;
+        app.entries_workspace.show_archived = false;
+      }
+      if (url.searchParams.get('long-title') === 'true') core.feeds[0].title = 'LongSourceName'.repeat(35);
+      if (windowSeed) {
         const template = core.entries[0];
         const multiple = url.searchParams.get('branches') === '2';
         core.feeds = core.feeds.slice(0, multiple ? 2 : 1);
@@ -32,24 +50,13 @@ exports.install = async (context, repo) => {
         app.entries_workspace.grouping_mode = url.searchParams.get('group') || 'source';
         app.entries_workspace.show_archived = url.searchParams.get('archived') !== 'false';
       }
-      const salt = hash('smoke:codex-static-smoke'), passwordHash = hash('smoke\nsmoke-pass-123\n' + salt);
-      const next = url.searchParams.get('next') || '/entries';
-      if (!next.startsWith('/') || next.startsWith('//')) throw new Error('Fixture next must be local');
-      await route.fulfill({contentType:'text/html; charset=utf-8', body:`<!doctype html><meta charset="utf-8"><script>
-        localStorage.clear(); sessionStorage.clear();
-        localStorage.setItem('rssr-web-auth-config-v1', ${JSON.stringify('smoke\n' + passwordHash + '\n' + salt)});
-        sessionStorage.setItem('rssr-web-auth-session-v1', ${JSON.stringify(hash('smoke:' + passwordHash))});
-        ${keys.map((key,i)=>`localStorage.setItem(${JSON.stringify(key)},${JSON.stringify(JSON.stringify(states[i]))});`).join('\n')}
-        location.replace(${JSON.stringify(next)});
-      </script>`});
-      return;
-    }
-    if (url.pathname.startsWith('/__codex/feed/')) { await route.fulfill({status:304}); return; }
-    if (url.pathname.startsWith('/api/')) { await route.fulfill({status:404}); return; }
-    const requested = path.resolve(publicRoot, '.' + decodeURIComponent(url.pathname));
-    if (requested !== publicRoot && !requested.startsWith(publicRoot + path.sep)) throw new Error('Outside fixture root');
-    const file = await fs.stat(requested).then(s=>s.isFile()?requested:null).catch(()=>null) || path.join(publicRoot,'index.html');
-    const mime = {'.js':'text/javascript','.css':'text/css','.wasm':'application/wasm','.html':'text/html','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon','.woff2':'font/woff2'};
-    await route.fulfill({body:await fs.readFile(file),contentType:mime[path.extname(file)] || 'application/octet-stream'});
+    }});
+    const split = session.cookie.indexOf('=');
+    await context.addCookies([{name:session.cookie.slice(0,split), value:session.cookie.slice(split+1), url:origin, httpOnly:true, sameSite:'Strict'}]);
+    const next = url.searchParams.get('next') || '/entries';
+    if (!next.startsWith('/') || next.startsWith('//')) throw new Error('Fixture next must be local');
+    // A new fixture library starts with an empty device search. Ordinary reloads
+    // keep device preferences and the server's persisted workspace unchanged.
+    await route.fulfill({contentType:'text/html; charset=utf-8', body:`<!doctype html><meta charset="utf-8"><script>localStorage.removeItem('rssr-entry-search');location.replace(${JSON.stringify(next)});</script>`});
   });
 };

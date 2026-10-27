@@ -18,9 +18,11 @@ use self::{
     sync::{SettingsPageSyncSession, SettingsPageSyncState, WebDavSettingsCard},
 };
 use crate::{
-    app::AppNav, components::status_banner::StatusBanner,
-    hooks::use_mobile_back_navigation::use_mobile_back_navigation, theme::ThemeController,
-    ui::use_reactive_task,
+    app::AppNav,
+    components::status_banner::StatusBanner,
+    hooks::use_mobile_back_navigation::use_mobile_back_navigation,
+    theme::ThemeController,
+    ui::{AppShellState, use_reactive_task},
 };
 
 #[component]
@@ -32,7 +34,8 @@ pub fn SettingsPage() -> Element {
     let save_state = use_signal(SettingsPageSaveState::new);
     let save_session = SettingsPageSaveSession::new(save_state, session);
     let sync_state = use_signal(SettingsPageSyncState::new);
-    let sync_session = SettingsPageSyncSession::new(sync_state, session);
+    let shell = use_context::<AppShellState>();
+    let sync_session = SettingsPageSyncSession::new(sync_state, session, shell);
     let facade = SettingsPageFacade::new(
         session,
         save_session,
@@ -42,7 +45,11 @@ pub fn SettingsPage() -> Element {
     );
     let repository_facade = facade.clone();
 
-    use_reactive_task((), move |_| {
+    // Read at start, and again for every read-only refresh (C4b item 2). While open, the page
+    // reads the settings for the shell too.
+    use_hook(move || shell.set_settings_page_open(true));
+    use_drop(move || shell.set_settings_page_open(false));
+    use_reactive_task(shell.library_revision(), move |_| {
         session.load();
     });
 

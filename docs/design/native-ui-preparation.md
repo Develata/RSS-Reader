@@ -14,7 +14,7 @@
 | `hooks/reader_shortcut_policy.rs` | 阅读快捷键、修饰键/输入法排除 | 将平台键盘输入映射为普通 Rust 值，执行导航和 session 命令 |
 | `pages/entries_page/request_lifecycle.rs` | 初始化/查询的独立代次、偏好就绪准入、旧结果过滤、写入后重查决策、列表到达后的返回页码顺序 | 页面任务作用域、命令执行、位置存储读取、signal 发布与既有查询触发 effect |
 
-这些模块不直接查询数据库或网络。业务动作继续走 facade/session → `UiCommand` → runtime → application/host。前端交互状态不下沉到 application/domain，不建立另一份文章数据或第二套业务状态。
+这些模块不直接查询数据库或网络。业务动作继续走 facade/session → `UiCommand` → runtime → `Backend` → application；平台 I/O 由 infra 的本地或 HTTP 适配器承担。前端交互状态不下沉到 application/domain，不建立另一份文章数据或第二套业务状态。
 
 ## 文章工作区请求生命周期的使用约束
 

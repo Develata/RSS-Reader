@@ -2,7 +2,7 @@
 
 根目录 [README.md](../README.md) 面向首次使用；这里按部署、开发和验收任务提供下一步入口。历史记录说明当时做过什么，当前行为以源码、发布说明及长期文档为准。
 
-本轮文档核对日期：2026-09-30，源码基线 `dbe68e1`。当前使用与接口说明持续维护；带日期的审查、handoff 和已关闭 spec 保留历史上下文，不代表最新版本已完成相同验收。
+本轮 Web 文档核对日期：2026-10-22，源码基线 `b417653`（v0.2 C4c）。正式 Web 使用服务器资料库；Pages 演示仍使用浏览器样例库。当前使用与接口说明持续维护；带日期的审查、handoff 和已关闭 spec 保留历史上下文，不代表最新版本已完成相同验收，也不表示 v0.2 已发布。
 
 ## 从哪里开始
 
@@ -10,7 +10,8 @@
 
 如果你要部署或开发，按任务进入：
 
-- 部署带登录的 `rssr-web`（服务端模式）：[Web / Docker 部署](./deployment/web.md)。
+- 部署带登录、同源 API 与服务器资料库的 Web 版：[Web / Docker 部署](./deployment/web.md)。
+- 从旧版 Web 升级（文章不迁移、正式 Web 不再离线可读）：[升级说明](./deployment/web.md#从-v01-升级)。
 - 查询订阅、阅读、主题和备份细节：[使用指南](./user-guide.md)。
 - 构建 Android 或了解实机验收缺口：[Android 构建与验收状态](./roadmaps/android-release-roadmap.md)。
 - 修改业务或 UI：[功能设计哲学](./design/functional-design-philosophy.md)、[前端命令与界面接口清单](./design/frontend-command-reference.md)。
@@ -69,12 +70,14 @@
 ### 架构审查与收敛
 
 - [架构审查报告（2026-04）](./architecture-review-2026-04.md)
+- [工程审计报告（2026-10）](./engineering-audit-2026-10.md)
 - [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)
 - [Agent 交接记录](./handoffs/README.md)
 
 这组文档主要回答：
 
 - 2026-04 这轮架构审查最初指出了哪些边界失真
+- 2026-10 审计在 v0.1.23 基线上发现了哪些一致性、抓取稳健性、Web 存储与构建可复现性问题，哪些已有确定性红测试
 - 哪些 application façade 已经删除，哪些 use case 明确保留
 - 当前 application naming baseline 和后续收敛顺序是什么
 - 最近一轮 agent 工作已经做到哪里，还有哪些边界仍在收敛中

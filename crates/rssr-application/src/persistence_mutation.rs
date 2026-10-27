@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rssr_domain::{Feed, NewFeedSubscription, UserSettings};
+use rssr_domain::{ConfigFingerprint, Feed, NewFeedSubscription, UserSettings};
 use url::Url;
 
 #[derive(Debug, Clone)]
@@ -13,18 +13,26 @@ pub struct ConfigReplacementFeed {
 pub struct ConfigReplacementPlan {
     pub feeds: Vec<ConfigReplacementFeed>,
     pub settings: UserSettings,
+    /// The configuration the caller read; the store refuses with
+    /// [`rssr_domain::DomainError::Conflict`] when its current configuration differs.
+    pub expected: ConfigFingerprint,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ConfigReplacementOutcome {
     pub removed_feed_count: usize,
     pub settings_updated: bool,
+    /// The settings committed by the replacement.
+    pub settings: UserSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActivatedSubscription {
     pub feed: Feed,
     pub generation: i64,
+    /// Ticket for the response fetched before activation (the add flow's prepared fetch),
+    /// issued in the activation transaction together with the subscription generation.
+    pub ticket: crate::RefreshTicket,
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -49,9 +57,18 @@ pub trait SubscriptionRemovalPort: Send + Sync {
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+pub trait SettingsUpdatePort: Send + Sync {
+    /// In one write of the store: merges `patch` into the stored settings with
+    /// [`crate::SettingsPatch::merge`], saves the result when it differs, and returns it.
+    async fn update_settings(&self, patch: crate::SettingsPatch) -> Result<UserSettings>;
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait ConfigReplacementPort: Send + Sync {
-    /// Replace the persisted configuration from desired state. Implementations must derive the
-    /// removal diff only after acquiring their backend write lock/transaction.
+    /// Replace the persisted configuration from desired state. Implementations must compare
+    /// `plan.expected` and derive the removal diff only after acquiring their backend write
+    /// lock/transaction.
     async fn replace_config(&self, plan: ConfigReplacementPlan)
     -> Result<ConfigReplacementOutcome>;
 }

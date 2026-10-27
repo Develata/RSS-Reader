@@ -1,4 +1,5 @@
-// Run the existing small-directory contracts with in-browser fixtures, without a server.
+// Run the small-directory contracts against the isolated real-server fixture.
+// Historical filename retained for callers; no BrowserStore or mocked API is used.
 const {chromium} = require('playwright');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -7,7 +8,7 @@ const fixture = require('./directory_fixture.cjs');
   const repo = path.resolve(__dirname,'../..');
   const output = path.resolve(process.env.ARTIFACT_DIR || 'target/directory-window-20261026/regression');
   await fs.mkdir(output,{recursive:true});
-  const browser = await chromium.launch({channel:'chrome',headless:true});
+  const browser = await chromium.launch({executablePath:process.env.CHROME_BIN,channel:process.env.CHROME_BIN?undefined:'chrome',headless:true});
   const context = await browser.newContext();
   await fixture.install(context,repo);
   const page = await context.newPage(), client = await context.newCDPSession(page);

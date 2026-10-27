@@ -1,5 +1,5 @@
-use anyhow::{Context, Result, bail};
-use rssr_domain::normalize_feed_url;
+use anyhow::Result;
+use rssr_domain::{DomainError, normalize_feed_url};
 use url::Url;
 
 use crate::{FeedRefreshUpdate, SubscriptionWorkflow};
@@ -43,11 +43,21 @@ impl PreparedSubscription {
     }
 }
 
+/// A request the user can correct.
+fn invalid(message: impl Into<String>) -> anyhow::Error {
+    DomainError::InvalidInput(message.into()).into()
+}
+
 impl SubscriptionWorkflow {
     pub async fn prepare_subscription(&self, raw_url: &str) -> Result<PrepareSubscriptionOutcome> {
-        let url = normalize_feed_url(&Url::parse(raw_url.trim()).context("订阅 URL 不合法")?);
+        if !rssr_domain::untrusted_url_is_parseable(raw_url.trim()) {
+            return Err(invalid("订阅 URL 超过长度或路径复杂度上限"));
+        }
+        let url = Url::parse(raw_url.trim())
+            .map_err(|error| invalid(format!("订阅 URL 不合法：{error}")))?;
+        let url = normalize_feed_url(&url);
         if !matches!(url.scheme(), "http" | "https") {
-            bail!("订阅只支持 HTTP 或 HTTPS 地址。");
+            return Err(invalid("订阅只支持 HTTP 或 HTTPS 地址。"));
         }
         self.feed_service.ensure_not_subscribed(&url).await?;
         match self.probe.probe(&url).await? {
@@ -68,7 +78,9 @@ impl SubscriptionWorkflow {
                         }
                     }
                     return match found.len() {
-                        0 => bail!("该网页未发现可用的 RSS/Atom 订阅地址，请提供 feed URL。"),
+                        0 => {
+                            Err(invalid("该网页未发现可用的 RSS/Atom 订阅地址，请提供 feed URL。"))
+                        }
                         1 => Ok(PrepareSubscriptionOutcome::Ready(
                             found.remove(0).with_fallback_site_url(Some(page_url)),
                         )),
@@ -97,7 +109,7 @@ impl SubscriptionWorkflow {
                         ))
                     }
                     SubscriptionProbeOutcome::Html { .. } => {
-                        bail!("发现的地址仍是网页，请提供可用的 RSS/Atom 地址。")
+                        Err(invalid("发现的地址仍是网页，请提供可用的 RSS/Atom 地址。"))
                     }
                 }
             }

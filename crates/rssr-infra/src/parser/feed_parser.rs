@@ -11,6 +11,6 @@ impl FeedParser {
     }
 
     pub fn parse(&self, raw: &str) -> anyhow::Result<ParsedFeed> {
-        parse_feed_xml(raw, true)
+        parse_feed_xml(raw)
     }
 }

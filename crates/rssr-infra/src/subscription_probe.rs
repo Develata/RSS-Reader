@@ -9,15 +9,15 @@ use rssr_application::{
 use url::Url;
 
 use crate::feed_body::read_feed_text;
+use crate::remote_failure::{invalid, network};
 
 pub const MAX_SUBSCRIPTION_BYTES: usize = crate::feed_body::MAX_FEED_RESPONSE_BYTES;
 
 #[derive(Clone)]
 pub struct HttpSubscriptionProbe {
     client: reqwest::Client,
-    /// 首跳的 IP 字面量检查；域名与重定向由 `client` 自身按同一策略检查。
     #[cfg(not(target_arch = "wasm32"))]
-    outbound: crate::outbound::OutboundPolicy,
+    policy: crate::outbound::OutboundPolicy,
 }
 
 impl HttpSubscriptionProbe {
@@ -25,17 +25,29 @@ impl HttpSubscriptionProbe {
         Self {
             client,
             #[cfg(not(target_arch = "wasm32"))]
-            outbound: crate::outbound::OutboundPolicy::Unrestricted,
+            policy: crate::outbound::OutboundPolicy::Unrestricted,
         }
     }
 
-    /// `client` 必须按同一个 `outbound` 构建（见 `fetch::client::feed_http_client`）。
+    /// 原生端探测与订阅刷新共用同一套客户端配置（User-Agent、连接与总时限）。
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn with_outbound(
-        client: reqwest::Client,
-        outbound: crate::outbound::OutboundPolicy,
-    ) -> Self {
-        Self { client, outbound }
+    pub fn with_feed_client() -> Self {
+        Self::new(
+            crate::fetch::client::feed_client_builder(
+                &crate::outbound::OutboundPolicy::Unrestricted,
+            )
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new()),
+        )
+    }
+
+    /// The feed client configuration under `policy`; a client that cannot be built is an error.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_policy(policy: crate::outbound::OutboundPolicy) -> Result<Self> {
+        let client = crate::fetch::client::feed_client_builder(&policy)
+            .build()
+            .context("创建订阅探测客户端失败")?;
+        Ok(Self { client, policy })
     }
 }
 
@@ -44,26 +56,37 @@ impl HttpSubscriptionProbe {
 impl SubscriptionProbePort for HttpSubscriptionProbe {
     async fn probe(&self, url: &Url) -> Result<SubscriptionProbeOutcome> {
         if !matches!(url.scheme(), "http" | "https") {
-            bail!("订阅只支持 HTTP 或 HTTPS 地址。");
+            return Err(invalid(anyhow::anyhow!("订阅只支持 HTTP 或 HTTPS 地址。")));
         }
+        let (final_url, metadata, content_type, body) = self.fetch(url).await.map_err(network)?;
+        // Only the feed parse takes the process-wide parse slot: discovery's work is bounded and
+        // its memory small, and a page that makes it work hard should not hold up refresh.
+        let feed = {
+            #[cfg(not(target_arch = "wasm32"))]
+            let _slot = crate::feed_normalization::PARSE_SLOTS.acquire().await;
+            parse_subscription_feed(&body)
+        };
+        classify(final_url, metadata, &content_type, &body, feed).map_err(invalid)
+    }
+}
+
+impl HttpSubscriptionProbe {
+    /// The response for `url`: its final address, validators, content type and text.
+    async fn fetch(&self, url: &Url) -> Result<(Url, RefreshHttpMetadata, String, String)> {
         #[cfg(not(target_arch = "wasm32"))]
-        self.outbound.check_url(url)?;
+        self.policy.check_url(url)?;
         #[cfg(not(target_arch = "wasm32"))]
-        // 超时由原生组装时传入的 client 统一约束（见 `fetch::client::FEED_TIMEOUTS`）。
-        let response = self.client.get(url.clone()).send().await?;
+        let response =
+            self.client.get(url.clone()).send().await.map_err(reqwest::Error::without_url)?;
         #[cfg(not(target_arch = "wasm32"))]
         let (response, final_url) = {
             let final_url = response.url().clone();
             (response, final_url)
         };
-        #[cfg(target_arch = "wasm32")]
-        let (response, final_url) =
-            crate::application_adapters::browser::feed::web_fetch_subscription_response(
-                &self.client,
-                url.as_str(),
-            )
-            .await?;
-        let response = response.error_for_status().context("订阅探测返回非成功状态")?;
+        let response = response
+            .error_for_status()
+            .map_err(reqwest::Error::without_url)
+            .context("订阅探测返回非成功状态")?;
         let metadata = RefreshHttpMetadata {
             etag: response
                 .headers()
@@ -83,7 +106,7 @@ impl SubscriptionProbePort for HttpSubscriptionProbe {
             .unwrap_or("")
             .to_string();
         let body = read_feed_text(response).await?;
-        classify_subscription_response(final_url, metadata, &content_type, &body)
+        Ok((final_url, metadata, content_type, body))
     }
 }
 
@@ -93,10 +116,29 @@ pub fn classify_subscription_response(
     content_type: &str,
     body: &str,
 ) -> Result<SubscriptionProbeOutcome> {
+    classify(url, metadata, content_type, body, parse_subscription_feed(body))
+}
+
+/// The feed `body` holds, if it is one within the size bound.
+fn parse_subscription_feed(body: &str) -> Option<crate::feed_normalization::ParsedFeed> {
+    if body.len() > MAX_SUBSCRIPTION_BYTES {
+        return None;
+    }
+    crate::feed_normalization::parse_feed_xml(body).ok()
+}
+
+/// What `body` is, given the feed parsed from it, if any.
+fn classify(
+    url: Url,
+    metadata: RefreshHttpMetadata,
+    content_type: &str,
+    body: &str,
+    feed: Option<crate::feed_normalization::ParsedFeed>,
+) -> Result<SubscriptionProbeOutcome> {
     if body.len() > MAX_SUBSCRIPTION_BYTES {
         bail!("订阅响应超过 8 MiB 上限。");
     }
-    if let Ok(parsed) = crate::feed_normalization::parse_feed_xml(body, false) {
+    if let Some(parsed) = feed {
         return Ok(SubscriptionProbeOutcome::Feed {
             url: rssr_domain::normalize_feed_url(&url),
             update: FeedRefreshUpdate { metadata, feed: map_parsed_feed(parsed) },

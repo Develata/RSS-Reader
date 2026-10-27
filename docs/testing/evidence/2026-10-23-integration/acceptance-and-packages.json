@@ -1,0 +1,310 @@
+{
+  "sourceSha": "699dcf6b07ef05e5fa0cc967a0cf0020551097ed",
+  "acceptance": {
+    "artifactId": 12488873333,
+    "status": "pass",
+    "long": true,
+    "scenarios": 27,
+    "checks": 108,
+    "unexpectedConsole": 0,
+    "cases": [
+      {
+        "name": "proxy-origin-cookie-csrf",
+        "status": "pass",
+        "seconds": 3,
+        "checks": 5,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "proxy-redirects-api",
+        "status": "pass",
+        "seconds": 2,
+        "checks": 4,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "unknown-write-then-reread",
+        "status": "pass",
+        "seconds": 2,
+        "checks": 6,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "malformed-answers",
+        "status": "pass",
+        "seconds": 8,
+        "checks": 3,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "malformed-poll-backoff",
+        "status": "pass",
+        "seconds": 32,
+        "checks": 1,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "read-failure",
+        "status": "pass",
+        "seconds": 1,
+        "checks": 1,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "job-survives-page-switch",
+        "status": "pass",
+        "seconds": 2,
+        "checks": 1,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "reload-loses-the-job",
+        "status": "pass",
+        "seconds": 4,
+        "checks": 3,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "job-ends-after-the-page-was-left",
+        "status": "pass",
+        "seconds": 3,
+        "checks": 2,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "page-gone-stops-polling",
+        "status": "pass",
+        "seconds": 10,
+        "checks": 1,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "reread-triggers",
+        "status": "pass",
+        "seconds": 10,
+        "checks": 24,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "two-browsers",
+        "status": "pass",
+        "seconds": 4,
+        "checks": 2,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "build-mismatch-keeps-edits",
+        "status": "pass",
+        "seconds": 3,
+        "checks": 6,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "draft-storage-unavailable",
+        "status": "pass",
+        "seconds": 2,
+        "checks": 2,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "restored-draft-then-sign-in",
+        "status": "pass",
+        "seconds": 3,
+        "checks": 3,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "stopped-departure-restores-once",
+        "status": "pass",
+        "seconds": 5,
+        "checks": 5,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "stopped-departure-then-saved",
+        "status": "pass",
+        "seconds": 3,
+        "checks": 5,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "slow-departure-lands-late",
+        "status": "pass",
+        "seconds": 36,
+        "checks": 1,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "later-edit-not-kept-stays",
+        "status": "pass",
+        "seconds": 7,
+        "checks": 3,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "reader-recovers-without-localizing",
+        "status": "pass",
+        "seconds": 3,
+        "checks": 3,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "reader-malicious-body",
+        "status": "pass",
+        "seconds": 2,
+        "checks": 3,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "settings-read-fails-at-start",
+        "status": "pass",
+        "seconds": 3,
+        "checks": 4,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "startup-target-fails",
+        "status": "pass",
+        "seconds": 8,
+        "checks": 2,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "failures-and-unknowns-visible",
+        "status": "pass",
+        "seconds": 6,
+        "checks": 13,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "http-backend-only",
+        "status": "pass",
+        "seconds": 2,
+        "checks": 2,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "no-browser-periodic-refresh",
+        "status": "pass",
+        "seconds": 3,
+        "checks": 1,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      },
+      {
+        "name": "background-tab-time-limit",
+        "status": "pass",
+        "seconds": 37,
+        "checks": 2,
+        "failedChecks": 0,
+        "unexpectedConsole": 0
+      }
+    ]
+  },
+  "packageResults": [
+    {
+      "artifactId": 12487349811,
+      "platform": "linux-x86_64",
+      "sha256": "7518c32b90a081780b839d881f37645341888e2dac6f460e2cd8ef73f16f335a",
+      "status": "pass",
+      "build_id": "git-699dcf6b07ef05e5fa0cc967a0cf0020551097ed",
+      "checks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    },
+    {
+      "artifactId": 12488054676,
+      "platform": "windows-x86_64",
+      "sha256": "31b17f0eee8f39990c9b33e55447978ff7af2efbc5ffff6039dd7863845afa33",
+      "status": "pass",
+      "build_id": "git-699dcf6b07ef05e5fa0cc967a0cf0020551097ed",
+      "checks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    },
+    {
+      "artifactId": 12488243494,
+      "platform": "macos-x86_64",
+      "sha256": "7518c32b90a081780b839d881f37645341888e2dac6f460e2cd8ef73f16f335a",
+      "status": "pass",
+      "build_id": "git-699dcf6b07ef05e5fa0cc967a0cf0020551097ed",
+      "checks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    },
+    {
+      "artifactId": 12488019307,
+      "platform": "macos-aarch64",
+      "sha256": "7518c32b90a081780b839d881f37645341888e2dac6f460e2cd8ef73f16f335a",
+      "status": "pass",
+      "build_id": "git-699dcf6b07ef05e5fa0cc967a0cf0020551097ed",
+      "checks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    },
+    {
+      "artifactId": 12489245819,
+      "platform": "container",
+      "sha256": "7acd15395c9b7cc66303631b52cdfc02095645f338b994e04ab6e2fbecf30e48",
+      "status": "pass",
+      "build_id": "git-699dcf6b07ef05e5fa0cc967a0cf0020551097ed",
+      "image": "rss-reader-smoke:699dcf6b07ef05e5fa0cc967a0cf0020551097ed",
+      "checks": [
+        "new data volume, login and matching build write",
+        "old build rejected without mutation",
+        "image server is the exact packaged binary",
+        "owner CLI shares the running server library",
+        "CLI rejects root and unrelated uid for owner data",
+        "owner CLI backup while server runs",
+        "graceful restart retains session and data",
+        "read-only legacy credential volume migrates unchanged; old session rejected",
+        "migrated credentials survive removal of the legacy mount"
+      ]
+    }
+  ]
+}

@@ -69,7 +69,7 @@ pub(super) fn background_task() {
         let vm = unsafe { JavaVM::from_raw(context.vm().cast()) }?;
         let mut env = vm.attach_current_thread()?;
         let activity = unsafe { JObject::from_raw(context.context().cast()) };
-        if let Err(error) = env.call_method(&activity, "moveReaderTaskToBackground", "()V", &[]) {
+        if let Err(error) = env.call_method(&activity, "exitToBackground", "()V", &[]) {
             let _ = env.exception_clear();
             return Err(error.into());
         }

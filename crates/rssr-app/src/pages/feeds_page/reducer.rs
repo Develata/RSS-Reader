@@ -47,7 +47,7 @@ pub(crate) fn reduce_feeds_page_intent(
                 state.edit_busy = false;
                 match result {
                     Ok(details) => state.edit_details = Some(details),
-                    Err(error) => state.edit_error = Some(error),
+                    Err(error) => state.edit_error = Some(error.message()),
                 }
             }
             Vec::new()
@@ -108,13 +108,15 @@ pub(crate) fn reduce_feeds_page_intent(
                         state.status = "来源已更新。".into();
                         state.status_tone = "success".into();
                     }
-                    Err(error) => state.edit_error = Some(error),
+                    Err(error) => state.edit_error = Some(error.message()),
                 }
             }
             Vec::new()
         }
-        FeedsPageIntent::FeedCandidates { page_url, candidates } => {
-            if state.adding_feed_url.as_deref() == Some(state.feed_url.as_str()) {
+        FeedsPageIntent::FeedCandidates { token, page_url, candidates } => {
+            if token == state.add_token
+                && state.adding_feed_url.as_deref() == Some(state.feed_url.as_str())
+            {
                 state.feed_candidates = Some((page_url, candidates));
                 state.status = "发现多个订阅，请选择一个地址。".into();
                 state.status_tone = "info".into();
@@ -136,9 +138,11 @@ pub(crate) fn reduce_feeds_page_intent(
             let Some(candidate) = candidates.get(index) else {
                 return Vec::new();
             };
+            state.add_token = state.add_token.wrapping_add(1);
             let command = FeedsCommand::AddFeed {
                 raw_url: candidate.url.to_string(),
                 fallback_site_url: Some(page_url.clone()),
+                token: state.add_token,
             };
             state.adding_feed_url = Some(state.feed_url.clone());
             state.feed_candidates = None;
@@ -174,12 +178,17 @@ pub(crate) fn reduce_feeds_page_intent(
             }
             clear_pending_confirmations(state);
             state.adding_feed_url = Some(state.feed_url.clone());
+            state.add_token = state.add_token.wrapping_add(1);
             vec![UiCommand::Feeds(FeedsCommand::AddFeed {
                 raw_url: state.feed_url.clone(),
                 fallback_site_url: None,
+                token: state.add_token,
             })]
         }
-        FeedsPageIntent::AddFeedFinished { saved } => {
+        FeedsPageIntent::AddFeedFinished { token, saved } => {
+            if token != state.add_token {
+                return Vec::new();
+            }
             // Adding includes the first network refresh. Keep a new address typed while
             // that request was running; only the successfully submitted draft is cleared.
             if let Some(submitted_url) = state.adding_feed_url.take()
@@ -215,6 +224,12 @@ pub(crate) fn reduce_feeds_page_intent(
         }
         FeedsPageIntent::ImportConfigRequested => {
             state.pending_delete_feed = None;
+            let Some(expected) = state.fingerprint.clone() else {
+                state.pending_config_import = false;
+                state.status = "订阅列表尚未载入，载入后再导入配置。".to_string();
+                state.status_tone = "info".to_string();
+                return Vec::new();
+            };
             if !state.pending_config_import {
                 state.pending_config_import = true;
                 state.status = "导入配置会按配置包覆盖当前订阅集合，并清理缺失订阅的本地文章；再次点击才会执行。"
@@ -223,7 +238,10 @@ pub(crate) fn reduce_feeds_page_intent(
                 return Vec::new();
             }
 
-            vec![UiCommand::Feeds(FeedsCommand::ImportConfig { raw: state.config_text.clone() })]
+            vec![UiCommand::Feeds(FeedsCommand::ImportConfig {
+                raw: state.config_text.clone(),
+                expected,
+            })]
         }
         FeedsPageIntent::ExportOpmlRequested => {
             clear_pending_confirmations(state);
@@ -236,15 +254,30 @@ pub(crate) fn reduce_feeds_page_intent(
         FeedsPageIntent::SnapshotLoaded(result) => {
             match result {
                 Ok(snapshot) => {
+                    // A confirmation was asked against the configuration shown; it changed, so
+                    // the destructive step asks again (C4b item 2).
+                    let changed = state
+                        .fingerprint
+                        .as_ref()
+                        .is_some_and(|shown| *shown != snapshot.fingerprint);
+                    if changed
+                        && (state.pending_config_import || state.pending_delete_feed.is_some())
+                    {
+                        clear_pending_confirmations(state);
+                        state.status_revision = state.status_revision.wrapping_add(1);
+                        state.status = "订阅或设置已变化，请重新确认。".to_string();
+                        state.status_tone = "info".to_string();
+                    }
                     state.feed_count = snapshot.feed_count;
                     state.entry_count = snapshot.entry_count;
                     state.unread_count = snapshot.unread_count;
                     state.archived_count = snapshot.archived_count;
                     state.feeds = snapshot.feeds;
+                    state.fingerprint = Some(snapshot.fingerprint);
                 }
-                Err(err) => {
-                    state.status = err;
-                    state.status_tone = "error".to_string();
+                Err(failure) => {
+                    state.status = failure.message();
+                    state.status_tone = failure.tone().to_string();
                 }
             }
             Vec::new()
@@ -272,10 +305,18 @@ pub(crate) fn reduce_feeds_page_intent(
             state.status_tone = tone;
             Vec::new()
         }
+        FeedsPageIntent::Failed(failure) => {
+            state.status_revision = state.status_revision.wrapping_add(1);
+            state.status = failure.message();
+            state.status_tone = failure.tone().to_string();
+            Vec::new()
+        }
         FeedsPageIntent::BumpReload => {
             state.reload_tick += 1;
             Vec::new()
         }
+        // 外观属于 shell 而不是订阅页状态，`FeedsPageSession` 在进入 reducer 之前处理。
+        FeedsPageIntent::SettingsReplaced(_) => Vec::new(),
     }
 }
 
@@ -335,7 +376,7 @@ mod tests {
             FeedsPageIntent::EditLoaded {
                 feed_id: 42,
                 generation: older,
-                result: Err("old read failed".into()),
+                result: Err(crate::ui::failure::plain("old read failed")),
             },
         );
         assert!(state.edit_busy);
@@ -373,11 +414,11 @@ mod tests {
             FeedsPageIntent::EditSaved {
                 feed_id: 42,
                 generation: latest,
-                result: Err("save failed".into()),
+                result: Err(crate::ui::failure::plain("save failed")),
             },
         );
         assert!(!state.edit_busy);
-        assert_eq!(state.edit_error.as_deref(), Some("save failed"));
+        assert_eq!(state.edit_error.as_deref(), Some("测试失败：save failed"));
         assert_eq!(state.edit_details.unwrap().custom_title.as_deref(), Some("My draft"));
     }
 
@@ -416,9 +457,32 @@ mod tests {
         }
     }
 
+    fn loaded_state() -> FeedsPageState {
+        let mut state = FeedsPageState::new();
+        state.fingerprint = Some(fingerprint());
+        state
+    }
+
+    fn fingerprint() -> rssr_domain::ConfigFingerprint {
+        rssr_domain::ConfigFingerprint::compute(Vec::new(), &rssr_domain::UserSettings::default())
+    }
+
+    /// Until a snapshot is shown there is no configuration to replace knowingly.
+    #[test]
+    fn import_config_waits_for_the_snapshot() {
+        let mut state = FeedsPageState::new();
+        state.pending_config_import = true;
+
+        let effects = reduce_feeds_page_intent(&mut state, FeedsPageIntent::ImportConfigRequested);
+
+        assert!(effects.is_empty());
+        assert!(!state.pending_config_import);
+        assert!(state.status.contains("尚未载入"));
+    }
+
     #[test]
     fn import_config_first_request_sets_pending_without_command() {
-        let mut state = FeedsPageState::new();
+        let mut state = loaded_state();
 
         let effects = reduce_feeds_page_intent(&mut state, FeedsPageIntent::ImportConfigRequested);
 
@@ -433,7 +497,7 @@ mod tests {
 
     #[test]
     fn import_config_confirmed_request_emits_execution_command() {
-        let mut state = FeedsPageState::new();
+        let mut state = loaded_state();
         state.pending_config_import = true;
         state.config_text = "{\"feeds\":[]}".to_string();
 
@@ -441,8 +505,9 @@ mod tests {
 
         assert_eq!(effects.len(), 1);
         match &effects[0] {
-            UiCommand::Feeds(FeedsCommand::ImportConfig { raw }) => {
+            UiCommand::Feeds(FeedsCommand::ImportConfig { raw, expected }) => {
                 assert_eq!(raw, "{\"feeds\":[]}");
+                assert_eq!(expected, &fingerprint());
             }
             other => panic!("unexpected effect: {other:?}"),
         }
@@ -495,7 +560,7 @@ mod tests {
 
     #[test]
     fn switching_confirmation_domains_clears_previous_pending_state() {
-        let mut state = FeedsPageState::new();
+        let mut state = loaded_state();
         state.pending_delete_feed = Some(42);
 
         let effects = reduce_feeds_page_intent(&mut state, FeedsPageIntent::ImportConfigRequested);
@@ -503,5 +568,84 @@ mod tests {
         assert!(effects.is_empty());
         assert_eq!(state.pending_delete_feed, None);
         assert!(state.pending_config_import);
+    }
+
+    fn snapshot_of(title: &str) -> FeedsPageIntent {
+        let feed = rssr_domain::FingerprintFeed {
+            id: 7,
+            url: "https://example.com/feed.xml",
+            generation: 1,
+            custom_title: Some(title),
+            folder: None,
+        };
+        FeedsPageIntent::SnapshotLoaded(Ok(crate::pages::feeds_page::intent::FeedsPageSnapshot {
+            unread_count: 0,
+            archived_count: 0,
+            feeds: Vec::new(),
+            feed_count: 1,
+            entry_count: 0,
+            fingerprint: rssr_domain::ConfigFingerprint::compute(
+                vec![feed],
+                &rssr_domain::UserSettings::default(),
+            ),
+        }))
+    }
+
+    /// A confirmation asked against the configuration shown is dropped when a read shows it
+    /// changed (another browser, a job): the destructive step asks again (C4b item 2). The same
+    /// configuration read again keeps it; the first read has nothing to compare.
+    #[test]
+    fn a_changed_configuration_drops_waiting_confirmations() {
+        let mut state = FeedsPageState::new();
+        state.pending_config_import = true;
+        reduce_feeds_page_intent(&mut state, snapshot_of("A"));
+        assert!(state.pending_config_import, "the first read");
+
+        reduce_feeds_page_intent(&mut state, snapshot_of("A"));
+        assert!(state.pending_config_import, "unchanged");
+
+        reduce_feeds_page_intent(&mut state, snapshot_of("B"));
+        assert!(!state.pending_config_import);
+        assert_eq!(state.status, "订阅或设置已变化，请重新确认。");
+
+        state.pending_delete_feed = Some(7);
+        reduce_feeds_page_intent(&mut state, snapshot_of("C"));
+        assert_eq!(state.pending_delete_feed, None);
+    }
+
+    /// An add's results apply to that add only: an older one's end or candidates do not release
+    /// the gate of the add now running (C4b item 3, R2-02).
+    #[test]
+    fn an_add_result_reaches_only_its_operation() {
+        let mut state = FeedsPageState::new();
+        state.feed_url = "https://example.com".into();
+        let commands = reduce_feeds_page_intent(&mut state, FeedsPageIntent::AddFeedRequested);
+        let [UiCommand::Feeds(FeedsCommand::AddFeed { token, .. })] = commands.as_slice() else {
+            panic!("{commands:?}")
+        };
+        let token = *token;
+        let older = token.wrapping_sub(1);
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::FeedCandidates {
+                token: older,
+                page_url: "https://example.com".parse().unwrap(),
+                candidates: Vec::new(),
+            },
+        );
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::AddFeedFinished { token: older, saved: true },
+        );
+        assert!(state.adding_feed_url.is_some(), "still adding");
+        assert!(state.feed_candidates.is_none());
+        assert_eq!(state.feed_url, "https://example.com");
+
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::AddFeedFinished { token, saved: true },
+        );
+        assert!(state.adding_feed_url.is_none());
+        assert!(state.feed_url.is_empty());
     }
 }

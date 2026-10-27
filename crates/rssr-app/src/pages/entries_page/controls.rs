@@ -1,4 +1,5 @@
 use super::{facade::EntriesPageFacade, intent::EntriesPageIntent, state::EntryGroupingMode};
+use crate::components::status_banner::StatusBanner;
 use crate::components::{entry_filters::EntryFilters, icon::Icon};
 use dioxus::prelude::*;
 
@@ -49,6 +50,12 @@ pub(super) fn render_entry_controls(
                     button { class: "button", "data-variant": "secondary", "data-action": "clear-entry-filters", onclick: move |_| clear.clear_filters(), "清除筛选" }
                 }
             }
+        }
+        if facade.entries_truncated() {
+            StatusBanner { message: facade.truncated_entries_message(), tone: "info".to_string() }
+        }
+        if facade.archived_entry_count() > 0 && !facade.show_archived() {
+            p { class: "entry-archive-summary", "{facade.archived_entries_message()}" }
         }
         if let Some(summary) = facade.active_filter_summary() {
             p { class: "entry-filter-summary", "data-layout": "entry-filter-summary", span { "data-slot": "entry-filter-summary-text", "{summary}" } }
