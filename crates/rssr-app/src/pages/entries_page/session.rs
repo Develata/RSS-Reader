@@ -36,12 +36,11 @@ impl EntriesPageSession {
         }
         self.dispatch(EntriesPageIntent::BeginBulk { writing });
         let generation = self.state.peek().bulk_generation;
-        spawn(async move {
-            let intents = run_ui_command(UiCommand::Entries(command)).await;
+        self.spawn_article_mutation(run_ui_command(UiCommand::Entries(command)), move |intents| {
             if self.state.peek().bulk_generation != generation {
                 return;
             }
-            for intent in intents.into_iter().filter_map(UiIntent::into_entries_page_intent) {
+            for intent in intents {
                 let applied = matches!(&intent, EntriesPageIntent::SelectionApplied { .. });
                 self.dispatch(intent);
                 if applied {
@@ -94,7 +93,12 @@ impl EntriesPageSession {
             .with_peek(|state| self.requests.with_mut(|requests| requests.begin_bootstrap(state)));
         let bootstrap = bootstrap(request.load_preferences);
         self.dispatch(EntriesPageIntent::BootstrapStarted);
+        let order = self.shell.workspace_write_order();
         spawn(async move {
+            // A page opened during an earlier save/URL edit must read its committed
+            // baseline before it can save filters. Do not hold the boundary during
+            // this read: generations still allow a newer read to supersede it.
+            drop(order.lock().await);
             let intents = bootstrap.await;
             if !self.requests.peek().accepts_bootstrap(request) {
                 return;
@@ -338,9 +342,9 @@ impl EntriesPageSession {
             return;
         }
         self.dispatch(EntriesPageIntent::EntryWriteStarted(entry_id));
-        spawn(async move {
+        self.spawn_article_mutation(async move { write().await }, move |intents| {
             let mut read_changed = false;
-            for intent in write().await.into_iter().filter_map(UiIntent::into_entries_page_intent) {
+            for intent in intents {
                 read_changed |=
                     matches!(&intent, EntriesPageIntent::PatchEntryFlags { is_read: Some(_), .. });
                 self.dispatch(intent);
@@ -348,6 +352,43 @@ impl EntriesPageSession {
             self.dispatch(EntriesPageIntent::EntryWriteFinished(entry_id));
             if read_changed {
                 self.bootstrap();
+            }
+        });
+    }
+
+    /// Accepted article writes belong to the app, like preference saves. Only
+    /// their presentation belongs to this page. Re-enter its scope so follow-up
+    /// reads are cancelled on navigation rather than inheriting the app lifetime.
+    fn spawn_article_mutation(
+        self,
+        write: impl Future<Output = Vec<UiIntent>> + 'static,
+        complete: impl FnOnce(Vec<EntriesPageIntent>) + 'static,
+    ) {
+        self.shell.spawn_in_shell(async move {
+            let intents: Vec<_> =
+                write.await.into_iter().filter_map(UiIntent::into_entries_page_intent).collect();
+            if self.state.try_peek().is_ok() {
+                dioxus::core::Runtime::current().in_scope(self.owner, || complete(intents));
+            } else {
+                for intent in intents {
+                    if let Some(failure) = intent.failure() {
+                        self.shell.report_job(failure.message(), failure.tone().to_owned());
+                    } else {
+                        match intent {
+                            EntriesPageIntent::SetStatus { message, tone } => {
+                                self.shell.report_job(message, tone);
+                            }
+                            EntriesPageIntent::SelectionApplied { action, count, .. } => {
+                                self.shell.report_job(
+                                    super::intent::selection_applied_message(action, count),
+                                    "success".to_owned(),
+                                );
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                self.shell.reread_now();
             }
         });
     }
@@ -425,6 +466,158 @@ mod tests {
             probe.session.set(Some(session));
         });
         rsx! {}
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn reopening_entries_waits_for_pending_workspace_writes() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(test_app);
+        dom.rebuild_in_place();
+        let shell = dom.in_scope(ScopeId::APP, consume_context::<crate::ui::AppShellState>);
+        // A source edit owns this boundary until its URL and selected-source
+        // migration commit. The next page must not load the pre-edit baseline.
+        let order = shell.workspace_write_order();
+        let pending_edit = order.lock().await;
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = EntriesPageSession::new(
+                None,
+                Signal::new(EntriesPageState::new()),
+                Signal::new(EntriesRequestLifecycle::default()),
+            );
+            session.bootstrap();
+            session
+        });
+        dom.render_immediate_to_vec();
+        assert_eq!(backend.calls("bootstrap_entries"), 0, "wait for the pending source edit");
+        assert!(!dom.in_scope(ScopeId::APP, || session.snapshot().preferences_load.is_loaded()));
+
+        let migrated = EntriesWorkspaceState {
+            selected_feed_urls: vec!["https://example.com/new.xml".into()],
+            ..Default::default()
+        };
+        rssr_api::Backend::save_entries_workspace_if_changed(&*backend, migrated.clone())
+            .await
+            .unwrap();
+        drop(pending_edit);
+        until_page(&mut dom, || session.snapshot().preferences_load.is_loaded()).await;
+        dom.in_scope(ScopeId::APP, || assert_eq!(session.snapshot().workspace(), migrated));
+        let changed = EntriesWorkspaceState { read_filter: ReadFilter::UnreadOnly, ..migrated };
+        choose(&mut dom, session, &changed);
+        until_saves_end(&mut dom, session, 2, &backend).await;
+        let stored = rssr_api::Backend::bootstrap_entries(
+            &*backend,
+            rssr_application::EntriesBootstrapInput { load_preferences: true, load_feeds: false },
+        )
+        .await
+        .unwrap();
+        assert_eq!(stored.workspace, Some(changed), "filter changes keep the migrated URL");
+    }
+
+    async fn until_page(dom: &mut VirtualDom, mut done: impl FnMut() -> bool) {
+        for _ in 0..150 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            dom.render_immediate_to_vec();
+            if dom.in_scope(ScopeId::APP, &mut done) {
+                return;
+            }
+        }
+        panic!("page operation did not finish");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn accepted_article_writes_outlive_the_page_and_report_uncertain_results() {
+        use rssr_api::{BackendError, ErrorCode};
+        for operation in ["set_entry_read", "set_entry_starred", "apply_entry_batch"] {
+            let backend = Scripted::over_new_library();
+            let hold = backend.hold(operation);
+            backend
+                .fail_once(operation, BackendError::new(ErrorCode::OutcomeUnknown, "late write"));
+            let _host = test_host::install(backend.clone());
+            let mut dom = VirtualDom::new(unmount_test_app);
+            dom.rebuild_in_place();
+            let (mut probe, shell) = dom.in_scope(ScopeId::APP, || {
+                (consume_context::<UnmountProbe>(), consume_context::<crate::ui::AppShellState>())
+            });
+            let session = probe.session.peek().unwrap();
+            dom.in_scope(session.owner, || {
+                for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                    session.dispatch(intent);
+                }
+                match operation {
+                    "set_entry_read" => session.toggle_read(1, "one".into(), false),
+                    "set_entry_starred" => session.toggle_starred(1, "one".into(), false),
+                    _ => {
+                        session.dispatch(EntriesPageIntent::ToggleSelected(1));
+                        session.apply_selection(rssr_domain::EntryBatchAction::Archive);
+                    }
+                }
+            });
+            until_page(&mut dom, || hold.waiting() == 1).await;
+            dom.in_scope(ScopeId::APP, || probe.visible.set(false));
+            dom.render_immediate_to_vec();
+            assert!(session.state.try_peek().is_err());
+            assert_eq!(hold.abandoned(), 0, "{operation}: navigation must not drop a write");
+            dom.in_scope(ScopeId::APP, || probe.visible.set(true));
+            dom.render_immediate_to_vec();
+            let reopened = probe.session.peek().unwrap();
+            let reopened_status = dom.in_scope(reopened.owner, || reopened.snapshot().status);
+            hold.release();
+            until_page(&mut dom, || shell.job_notice().is_some()).await;
+            dom.in_scope(ScopeId::APP, || {
+                assert!(shell.job_notice().unwrap().message.contains("late write"));
+                assert_eq!(
+                    reopened.snapshot().status,
+                    reopened_status,
+                    "the new page owns its status"
+                );
+                assert!(shell.library_revision() > 0, "the current page re-reads the library");
+            });
+            assert_eq!(hold.abandoned(), 0);
+            assert_eq!(backend.calls(operation), 1, "an uncertain write is never retried");
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn article_write_followup_reads_are_owned_by_the_originating_page() {
+        let backend = Scripted::over_new_library();
+        let hold = backend.hold("bootstrap_entries");
+        let _host = test_host::install(backend);
+        let mut dom = VirtualDom::new(unmount_test_app);
+        dom.rebuild_in_place();
+        let mut probe = dom.in_scope(ScopeId::APP, consume_context::<UnmountProbe>);
+        let session = probe.session.peek().unwrap();
+        dom.in_scope(session.owner, || {
+            session.spawn_entry_write(1, || async {
+                vec![UiIntent::EntriesPage(EntriesPageIntent::PatchEntryFlags {
+                    entry_id: 1,
+                    is_read: Some(true),
+                    is_starred: None,
+                })]
+            });
+        });
+        until_page(&mut dom, || hold.waiting() == 1).await;
+        dom.in_scope(ScopeId::APP, || probe.visible.set(false));
+        dom.render_immediate_to_vec();
+        assert_eq!(hold.abandoned(), 1, "a completed write must not leave app-owned page reads");
+        assert_eq!(hold.waiting(), 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn closing_the_app_cancels_pending_article_writes() {
+        let backend = Scripted::over_new_library();
+        let hold = backend.hold("set_entry_read");
+        let _host = test_host::install(backend);
+        let mut dom = VirtualDom::new(unmount_test_app);
+        dom.rebuild_in_place();
+        let probe = dom.in_scope(ScopeId::APP, consume_context::<UnmountProbe>);
+        let session = probe.session.peek().unwrap();
+        dom.in_scope(session.owner, || session.toggle_read(1, "one".into(), false));
+        until_page(&mut dom, || hold.waiting() == 1).await;
+        drop(dom);
+        assert_eq!(hold.abandoned(), 1, "closing the app still ends the client wait");
+        assert_eq!(hold.waiting(), 0);
     }
 
     #[tokio::test(flavor = "current_thread")]

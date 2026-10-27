@@ -304,7 +304,7 @@ async function holdWrites(page, interaction) {
     await continued;
   };
   await page.route('**/api/v1/**', handler);
-  try { await interaction(captured); }
+  try { await interaction(captured, release); }
   finally { release(); await Promise.all(pending); await page.unroute('**/api/v1/**', handler); }
 }
 
@@ -446,6 +446,74 @@ async function preferencesSurviveNavigation(page) {
   }
 }
 
+async function reopeningDuringSourceEdit(page) {
+  await page.setViewportSize({ width: 1536, height: 864 });
+  await seed(page, new URL(page.url()).origin);
+  await page.locator(action('open-source-filter')).click();
+  const chooser = page.locator('#source-filter-dialog');
+  await chooser.getByRole('checkbox', { name: '全部来源', exact: true }).uncheck();
+  await chooser.getByRole('checkbox', { name: 'Alpha', exact: true }).check();
+  const selectedSource = page.waitForResponse(response => response.url().endsWith('/api/v1/workspace') && response.request().method() === 'PUT');
+  await page.locator(action('apply-source-filter')).click();
+  assert.equal((await selectedSource).ok(), true);
+  await page.locator('[data-nav="feeds"]').first().click();
+  const feed = page.locator('[data-feed-id="1"]');
+  await feed.waitFor();
+  const editedURL = `${await feed.getAttribute('data-feed-url')}?return-during-save=1`;
+  await feed.locator(action('edit-feed')).click();
+  await page.locator('#feed-edit-url').fill(editedURL);
+  await holdWrites(page, async (captured, release) => {
+    await page.locator(action('save-feed-edit')).click();
+    await captured;
+    // Browser history can leave a native modal even while its save is pending.
+    await page.goBack();
+    await page.locator('[data-page="entries"]').waitFor();
+    assert.equal(await page.locator('[data-page="entries"]').getAttribute('data-position-ready'), 'false', 'new page waits for the source edit before loading its preferences');
+    release();
+    await ready(page);
+  });
+  await expect(page.locator('.entries-count')).toHaveText('12 篇');
+  const savedFilter = page.waitForResponse(response => response.url().endsWith('/api/v1/workspace') && response.request().method() === 'PUT');
+  await page.getByRole('button', { name: '仅未读', exact: true }).click();
+  assert.equal((await savedFilter).ok(), true);
+  const stored = await page.evaluate(async () => {
+    const input = encodeURIComponent(JSON.stringify({load_preferences:true,load_feeds:false}));
+    return (await (await fetch('/api/v1/entries/bootstrap?input=' + input)).json()).workspace;
+  });
+  assert.deepEqual(stored.selected_feed_urls, [editedURL], 'the reopened page must not write the old URL back');
+  assert.equal(stored.read_filter, 'unread_only');
+}
+
+async function articleWritesSurviveNavigation(page) {
+  await page.setViewportSize({ width: 1536, height: 864 });
+  for (const command of ['mark-read', 'toggle-starred', 'mark-selected-read', 'archive-selected']) {
+    await seed(page, new URL(page.url()).origin);
+    const countBefore = Number.parseInt(await page.locator('.entries-count').innerText(), 10);
+    const first = page.locator(`${rows}[data-position-entry="72"]`);
+    const bulk = ['mark-selected-read', 'archive-selected'].includes(command);
+    if (bulk) await first.locator(action('select-entry')).check();
+    const saved = page.waitForResponse(response => response.url().includes('/api/v1/entries/') && response.request().method() !== 'GET');
+    await holdWrites(page, async captured => {
+      await (bulk ? page.locator(action(command)) : first.locator(action(command))).click();
+      await captured;
+      await page.locator('[data-nav="feeds"]').first().click();
+      await page.locator('[data-feed-id="1"]').waitFor();
+    });
+    assert.equal((await saved).ok(), true, `${command}: navigation does not abort an accepted write`);
+    await page.locator(action('activate-home')).first().click();
+    await ready(page);
+    if (command === 'archive-selected') {
+      await expect(first).toHaveCount(0);
+      await expect(page.locator('.entries-count')).toHaveText(`${countBefore - 1} 篇`);
+    } else if (command === 'toggle-starred') {
+      await expect(first.locator(action('toggle-starred'))).toHaveAttribute('aria-pressed', 'true');
+    } else {
+      await expect(first).toHaveAttribute('data-read', 'true');
+      assert.equal(await page.locator(`${rows}[data-read="true"]`).count(), 1, 'only the accepted row changes');
+    }
+  }
+}
+
 async function dialogComposition(page) {
   await page.setViewportSize({ width: 1536, height: 864 });
   await seed(page, new URL(page.url()).origin);
@@ -503,7 +571,7 @@ async function dialogComposition(page) {
   }
 }
 
-module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation };
+module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation, reopeningDuringSourceEdit, articleWritesSurviveNavigation };
 if (require.main === module) (async () => {
   const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN });
@@ -513,7 +581,7 @@ if (require.main === module) (async () => {
     page.setDefaultTimeout(15000);
     await fixture.install(page.context(), require('node:path').resolve(__dirname,'../..'));
     await seed(page, fixture.origin);
-    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation })) {
+    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation, reopeningDuringSourceEdit, articleWritesSurviveNavigation })) {
       try { await run(page); console.log(`PASS ${name}`); }
       catch (error) {
         const fs = require('node:fs/promises'), path = require('node:path');

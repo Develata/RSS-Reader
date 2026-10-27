@@ -53,6 +53,7 @@ pub(crate) struct AppShellState {
     settings_reread_failure: Signal<Option<(UiFailure, u64)>>,
     /// Preference writes and feed URL edits share one ordering boundary. A URL edit
     /// must migrate the last selected source, including saves from a page just left.
+    /// New page reads wait at this boundary before loading their preference baseline.
     workspace_write_order: Signal<Arc<tokio::sync::Mutex<()>>>,
     owner: ScopeId,
 }

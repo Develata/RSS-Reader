@@ -75,11 +75,7 @@ pub(crate) fn reduce_entries_page_intent(state: &mut EntriesPageState, intent: E
             for id in ids {
                 selected.remove(&id);
             }
-            let verb = match action {
-                rssr_domain::EntryBatchAction::MarkRead => "标为已读",
-                rssr_domain::EntryBatchAction::Archive => "归档",
-            };
-            let message = format!("已{verb} {count} 篇所选文章。");
+            let message = super::intent::selection_applied_message(action, count);
             state.bulk_notice = Some(message.clone());
             state.status = message;
             state.status_tone = "success".into();
